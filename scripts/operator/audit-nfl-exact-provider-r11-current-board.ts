@@ -48,6 +48,39 @@ function isActionable(market: MarketEdgeDto): boolean {
   return ["Best Angle", "Lean"].includes(market.verdict?.label ?? "");
 }
 
+function compareBoards(beforeGames: DailyEdgeGameDto[], afterGames: DailyEdgeGameDto[]) {
+  const beforeByGame = new Map(beforeGames.map((game) => [game.id, game]));
+  const impact = {
+    promotions: 0,
+    demotions: 0,
+    sideChanges: 0,
+    probabilityChanges: 0,
+    byMarket: {
+      moneyline: { promotions: 0, demotions: 0 },
+      spread: { promotions: 0, demotions: 0 },
+      total: { promotions: 0, demotions: 0 },
+    },
+  };
+  for (const game of afterGames) {
+    const prior = beforeByGame.get(game.id);
+    if (!prior) continue;
+    for (const [market, row] of marketRows(game)) {
+      const before = market === "moneyline" ? prior.markets.moneyline : market === "spread" ? prior.markets.first_inning : prior.markets.total;
+      if (!isActionable(before) && isActionable(row)) {
+        impact.promotions += 1;
+        impact.byMarket[market].promotions += 1;
+      }
+      if (isActionable(before) && !isActionable(row)) {
+        impact.demotions += 1;
+        impact.byMarket[market].demotions += 1;
+      }
+      if (before.pick !== row.pick) impact.sideChanges += 1;
+      if (before.modelProb !== row.modelProb) impact.probabilityChanges += 1;
+    }
+  }
+  return impact;
+}
+
 async function main(): Promise<void> {
   if (process.argv.includes("--apply")) throw new Error("This audit is read-only; --apply is prohibited.");
   const now = new Date(); const season = 2026;
@@ -69,6 +102,31 @@ async function main(): Promise<void> {
       id: `audit-${index}`, providerGameId: payload.game.providerGameId, stage: payload.stage,
       capturedAt: payload.capturedAt, gameStartAt: payload.game.scheduledStart,
       payloadSha256: "audit-only", payload,
+    })),
+  ]);
+  const legacyCounterfactualPayloads = payloads.map((payload) => {
+    const currentSeasonQuarterback = Object.values(payload.coverage.quarterbackHistory ?? {})
+      .some((quarterback) => quarterback.historySource === "current_season_completed_games");
+    const verifiedClear = payload.injuries?.verifiedClear === true;
+    if (!currentSeasonQuarterback && !verifiedClear) return payload;
+    const hold = currentSeasonQuarterback ? "quarterback_history_unmatched" : "injury_report_unavailable";
+    return {
+      ...payload,
+      ...(verifiedClear ? { injuries: null } : {}),
+      decisions: { ...payload.decisions, evaluatedBets: [], outcomeConfidence: [] },
+      coverage: {
+        ...payload.coverage,
+        ...(verifiedClear ? { injuries: false } : {}),
+        healthHolds: [...new Set([...payload.coverage.healthHolds, hold])].sort(),
+      },
+    } satisfies NflForwardEvidencePayload;
+  });
+  const sameInputLegacy = buildNflWeekOneHeldMemberFixture([
+    ...existing,
+    ...legacyCounterfactualPayloads.map((payload, index) => ({
+      id: `audit-legacy-${index}`, providerGameId: payload.game.providerGameId, stage: payload.stage,
+      capturedAt: payload.capturedAt, gameStartAt: payload.game.scheduledStart,
+      payloadSha256: "audit-legacy-only", payload,
     })),
   ]);
   const baselineByGame = new Map(baseline.snapshot.games.map((game) => [game.id, game]));
@@ -108,10 +166,15 @@ async function main(): Promise<void> {
     }
   }
   console.log(JSON.stringify({
-    release: "nfl_exact_provider_r11_current_board_audit_2026_10_15_r1",
+    release: "nfl_personnel_coverage_repair_current_board_audit_2026_10_15_r2",
     readOnly: true, writes: 0, season, week,
     baseline: summarize(baseline.snapshot.games), candidate: summarize(candidate.snapshot.games),
     boardImpact,
+    sameInputRepairImpact: {
+      legacy: summarize(sameInputLegacy.snapshot.games),
+      candidate: summarize(candidate.snapshot.games),
+      boardImpact: compareBoards(sameInputLegacy.snapshot.games, candidate.snapshot.games),
+    },
     writer: result,
     holds: payloads.filter((payload) => payload.coverage.healthHolds.length > 0).map((payload) => ({
       game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
@@ -130,7 +193,8 @@ async function main(): Promise<void> {
       reader: payload.outcomeForecast.noWeightMarketReader ?? null,
       targetExclusion: payload.coverage.forecastTargetExclusion,
       healthHolds: payload.coverage.healthHolds,
-      quarterbackContext: payload.decisions.shadowEvaluatedBets?.[0]?.quarterbackContext ?? null,
+      quarterbackContext: payload.coverage.quarterbackHistory ??
+        payload.decisions.shadowEvaluatedBets?.[0]?.quarterbackContext ?? null,
       expectedQuarterbacks: {
         away: payload.startersAndDepth.away.expectedStartingQuarterback,
         home: payload.startersAndDepth.home.expectedStartingQuarterback,

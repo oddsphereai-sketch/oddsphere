@@ -6,6 +6,7 @@ import type {
   NflForwardOperationalOpening,
   NflForwardTeamDepthSnapshot,
 } from "./nflForwardEvidence";
+import type { NflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
 import {
   NFL_T60_MAX_CAPTURE_LAG_MINUTES,
   NFL_T60_TARGET_MINUTES,
@@ -13,7 +14,7 @@ import {
 } from "./nflRegularDecisionEvidence";
 
 export const NFL_R6_SHADOW_DECISION_SCHEMA_RELEASE =
-  "nfl_shadow_exact_price_decision_tuple_2026_08_22_r1" as const;
+  "nfl_shadow_exact_price_decision_tuple_2026_10_15_r2_current_season_qb_identity" as const;
 export const NFL_R6_RUNTIME_ARTIFACT_RELEASE =
   "nfl_r6_moneyline_runtime_artifact_2026_08_22_r1" as const;
 export const NFL_R6_MONEYLINE_MODEL_RELEASE =
@@ -21,6 +22,8 @@ export const NFL_R6_MONEYLINE_MODEL_RELEASE =
 export const NFL_R6_MONEYLINE_CALIBRATION_RELEASE =
   "nfl_market_led_price_calibration_shadow_2026_08_22_r6" as const;
 export const NFL_R6_MONEYLINE_DECISION_RELEASE =
+  "nfl_market_led_moneyline_lean_shadow_2026_10_15_r7_current_season_qb_identity" as const;
+export const NFL_R6_ARTIFACT_DECISION_RELEASE =
   "nfl_market_led_moneyline_lean_shadow_2026_08_22_r6" as const;
 export const NFL_R6_SOURCE_POINT_MODEL_RELEASE =
   "nfl_pregame_market_residual_shadow_2026_08_21_r2" as const;
@@ -60,8 +63,8 @@ export type NflR6ShadowMoneylineDecision = {
     projectedHomeMargin: number;
   } | null;
   quarterbackContext: {
-    away: { name: string | null; historyMatched: boolean; status: "confirmed" | "projected" | "unknown" };
-    home: { name: string | null; historyMatched: boolean; status: "confirmed" | "projected" | "unknown" };
+    away: { name: string | null; historyMatched: boolean; historySource: QuarterbackHistorySource; status: "confirmed" | "projected" | "unknown" };
+    home: { name: string | null; historyMatched: boolean; historySource: QuarterbackHistorySource; status: "confirmed" | "projected" | "unknown" };
   };
   health: {
     blockingReasons: string[];
@@ -71,7 +74,7 @@ export type NflR6ShadowMoneylineDecision = {
   runtimeArtifactRelease: typeof NFL_R6_RUNTIME_ARTIFACT_RELEASE;
   modelRelease: typeof NFL_R6_MONEYLINE_MODEL_RELEASE;
   calibrationRelease: typeof NFL_R6_MONEYLINE_CALIBRATION_RELEASE;
-  decisionRelease: typeof NFL_R6_MONEYLINE_DECISION_RELEASE;
+  decisionRelease: typeof NFL_R6_ARTIFACT_DECISION_RELEASE;
   sourcePointModelRelease: typeof NFL_R6_SOURCE_POINT_MODEL_RELEASE;
 };
 
@@ -145,10 +148,13 @@ type QuarterbackState = {
   dropbacks: number;
 };
 
+type QuarterbackHistorySource = "frozen_artifact" | "current_season_completed_games" | "unmatched";
+
 type QuarterbackContext = QuarterbackState & {
   id: string | null;
   name: string | null;
   matched: boolean;
+  historySource: QuarterbackHistorySource;
   status: "confirmed" | "projected" | "unknown";
   continuity: number;
   logDropbacks: number;
@@ -220,6 +226,7 @@ export function buildNflR6ShadowMoneylineDecision(args: {
   capturedAt: string;
   t60LagMinutes: number | null;
   coverageHealthHolds: string[];
+  currentSeasonState?: NflPlayerPropsCurrentSeasonState | null;
 }): NflR6ShadowMoneylineDecision {
   const evaluatedAt = isoTimestamp(args.capturedAt, "capturedAt");
   const startsAt = Date.parse(args.game.scheduledStart);
@@ -231,11 +238,23 @@ export function buildNflR6ShadowMoneylineDecision(args: {
   });
   const adjustedAwayDepth = availabilityAdjustedQuarterbackDepth(args.startersAndDepth.away, args.injuries);
   const adjustedHomeDepth = availabilityAdjustedQuarterbackDepth(args.startersAndDepth.home, args.injuries);
-  const awayQb = quarterbackContext(adjustedAwayDepth, normalizeTeam(args.game.away.abbreviation));
-  const homeQb = quarterbackContext(adjustedHomeDepth, normalizeTeam(args.game.home.abbreviation));
+  const awayQb = quarterbackContext(
+    adjustedAwayDepth,
+    normalizeTeam(args.game.away.abbreviation),
+    args.game.season,
+    args.game.providerWeek,
+    args.currentSeasonState ?? null,
+  );
+  const homeQb = quarterbackContext(
+    adjustedHomeDepth,
+    normalizeTeam(args.game.home.abbreviation),
+    args.game.season,
+    args.game.providerWeek,
+    args.currentSeasonState ?? null,
+  );
   const qbContext = {
-    away: { name: awayQb.name, historyMatched: awayQb.matched, status: awayQb.status },
-    home: { name: homeQb.name, historyMatched: homeQb.matched, status: homeQb.status },
+    away: { name: awayQb.name, historyMatched: awayQb.matched, historySource: awayQb.historySource, status: awayQb.status },
+    home: { name: homeQb.name, historyMatched: homeQb.matched, historySource: homeQb.historySource, status: homeQb.status },
   };
   const quarterbackReasons = uniqueSorted([
     awayQb.status !== "confirmed" ? `away_quarterback_${awayQb.status}_not_confirmed` : null,
@@ -435,20 +454,40 @@ function baseDecision(
   };
 }
 
-function quarterbackContext(depth: NflForwardTeamDepthSnapshot, team: string): QuarterbackContext {
+function quarterbackContext(
+  depth: NflForwardTeamDepthSnapshot,
+  team: string,
+  predictionSeason: number,
+  predictionWeek: number,
+  currentSeasonState: NflPlayerPropsCurrentSeasonState | null,
+): QuarterbackContext {
   const starter = depth.expectedStartingQuarterback;
   const name = starter?.name?.trim() || null;
-  const id = name ? artifact.quarterbackNameToId[normalizeScheduleName(name)] ?? null : null;
-  const state = id ? artifact.quarterbackStates[id] : null;
+  const artifactId = name ? artifact.quarterbackNameToId[normalizeScheduleName(name)] ?? null : null;
+  const currentRows = starter?.playerId && currentSeasonState?.season === predictionSeason
+    ? currentSeasonState.stats.filter((row) =>
+        row.playerId === starter.playerId &&
+        row.season === predictionSeason &&
+        normalizeTeam(row.team) === team &&
+        row.week < predictionWeek &&
+        row.passing_attempts > 0)
+    : [];
+  const currentDropbacks = currentRows.reduce((sum, row) => sum + row.passing_attempts, 0);
+  const currentSeasonMatched = currentDropbacks > 0;
+  const id = artifactId ?? (currentSeasonMatched ? `current-season:${starter?.playerId}` : null);
+  const state = artifactId ? artifact.quarterbackStates[artifactId] : null;
   const fallback = { epa: 0, cpoe: 0, sackRate: 0.07, turnoverRate: 0.022, dropbacks: 0 };
-  const values = state ?? fallback;
+  const values = state ?? (currentSeasonMatched ? { ...fallback, dropbacks: currentDropbacks } : fallback);
   return {
     ...values,
     id,
     name,
     matched: id !== null,
+    historySource: artifactId
+      ? "frozen_artifact"
+      : currentSeasonMatched ? "current_season_completed_games" : "unmatched",
     status: depth.starterStatus,
-    continuity: Number(id !== null && artifact.teamStates[team]?.lastQbId === id),
+    continuity: Number(artifactId !== null && artifact.teamStates[team]?.lastQbId === artifactId),
     logDropbacks: Math.log1p(values.dropbacks),
   };
 }
@@ -834,7 +873,7 @@ function assertArtifact(): void {
     artifact.artifactRelease !== NFL_R6_RUNTIME_ARTIFACT_RELEASE
     || artifact.modelRelease !== NFL_R6_MONEYLINE_MODEL_RELEASE
     || artifact.calibrationRelease !== NFL_R6_MONEYLINE_CALIBRATION_RELEASE
-    || artifact.decisionRelease !== NFL_R6_MONEYLINE_DECISION_RELEASE
+    || artifact.decisionRelease !== NFL_R6_ARTIFACT_DECISION_RELEASE
     || artifact.sourcePointModelRelease !== NFL_R6_SOURCE_POINT_MODEL_RELEASE
     || artifact.shadowOnly !== true
     || artifact.policy.maximumActionsPerWeek !== null

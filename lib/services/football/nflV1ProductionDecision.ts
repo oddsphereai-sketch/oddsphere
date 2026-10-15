@@ -17,11 +17,11 @@ export const NFL_V1_PRODUCTION_MODEL_RELEASE =
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
   "nfl_v1_daily_edge_calibration_2026_10_15_r27_foundational_no_weight_score" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_10_15_r35_foundational_no_weight_score" as const;
+  "nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_10_15_r35_foundational_no_weight_score" as const;
+  "nfl_v1_grade_policy_2026_10_15_r36_personnel_coverage_repair" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_10_15_r32_foundational_no_weight_score" as const;
+  "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair" as const;
 
 export const NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.01 as const;
 export const NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;

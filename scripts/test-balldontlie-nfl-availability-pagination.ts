@@ -4,6 +4,7 @@ import {
   fetchBalldontlieNflSlateAvailability,
   mergeNflAvailabilityWithPrior,
   nflAvailabilityRequestBudgetMaximum,
+  NFL_AVAILABILITY_TRANSIENT_RETRIES_PER_BATCH,
   NFL_DESIGNATION_MAX_PAGES_PER_BATCH,
   NFL_DESIGNATION_TEAM_BATCH_SIZE,
   NFL_INJURY_MAX_PAGES,
@@ -70,6 +71,7 @@ async function main(): Promise<void> {
   assert.equal(NFL_INJURY_MAX_PAGES, 8);
   assert.equal(NFL_DESIGNATION_TEAM_BATCH_SIZE, 8);
   assert.equal(NFL_DESIGNATION_MAX_PAGES_PER_BATCH, 8);
+  assert.equal(NFL_AVAILABILITY_TRANSIENT_RETRIES_PER_BATCH, 2);
   const matchup = {
     id: "nfl-1392280",
     awayTeam: "TB",
@@ -77,7 +79,7 @@ async function main(): Promise<void> {
     awayTeamId: 28,
     homeTeamId: 19,
   };
-  assert.equal(nflAvailabilityRequestBudgetMaximum([matchup]), 16);
+  assert.equal(nflAvailabilityRequestBudgetMaximum([matchup]), 20);
 
   const result = await fetchBalldontlieNflSlateAvailability([matchup], {
     apiKey: "test",
@@ -166,8 +168,83 @@ async function main(): Promise<void> {
   assert.deepEqual(partialBatchCalls, [
     ["/nfl/v1/player_designations", "1", "2", "3", "4", "5", "6", "7", "8"],
     ["/nfl/v1/player_designations", "9", "10"],
+    ["/nfl/v1/player_designations", "9", "10"],
+    ["/nfl/v1/player_designations", "9", "10"],
     ["/nfl/v1/player_injuries", "9", "10"],
   ], "provider batches must be sequential and unresolved teams alone use the legacy fallback");
+
+  let transientAttempts = 0;
+  const transientRetry = await fetchBalldontlieNflSlateAvailability([matchup], {
+    apiKey: "test",
+    season: 2026,
+    week: 5,
+    seasonType: 2,
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/player_injuries")) {
+        throw new Error("legacy fallback must not run after a recovered designation request");
+      }
+      transientAttempts += 1;
+      if (transientAttempts === 1) {
+        return new Response("rate limited", {
+          status: 429,
+          headers: { "content-type": "text/plain", "retry-after": "0" },
+        });
+      }
+      return jsonResponse({
+        data: [designationRow({
+          gameId: 1392280,
+          team: "TB",
+          teamName: "Tampa Bay Buccaneers",
+          firstName: "Baker",
+          lastName: "Mayfield",
+          gameStatus: "out",
+          updatedAt: "2026-10-15T21:30:05.381Z",
+        })],
+        meta: { next_cursor: null },
+      });
+    },
+  });
+  assert.equal(transientAttempts, 2, "a transient designation failure receives a bounded retry");
+  assert.equal(transientRetry?.length, 1);
+  assert.equal(transientRetry?.[0]?.teams[0]?.players[0]?.name, "Baker Mayfield");
+
+  const clearReport = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflDesignationGames([
+    designationRow({
+      gameId: 1392280,
+      team: "TB",
+      teamName: "Tampa Bay Buccaneers",
+      firstName: "Healthy",
+      lastName: "Player",
+      practiceStatus: "full",
+      updatedAt: "2026-10-15T21:30:05.381Z",
+    }),
+    designationRow({
+      gameId: 1392280,
+      team: "DAL",
+      teamName: "Dallas Cowboys",
+      firstName: "Another Healthy",
+      lastName: "Player",
+      practiceStatus: "full",
+      updatedAt: "2026-10-15T21:30:05.381Z",
+    }),
+  ], [matchup]);
+  assert.equal(clearReport[0]?.verifiedClear, true);
+  assert.equal(clearReport[0]?.reportUpdatedAt, "2026-10-15T21:30:05.381Z");
+  assert.equal(clearReport[0]?.teams.reduce((sum, team) => sum + team.players.length, 0), 0);
+  const oneSidedClearReport = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflDesignationGames([
+    designationRow({
+      gameId: 1392280,
+      team: "TB",
+      teamName: "Tampa Bay Buccaneers",
+      firstName: "Healthy",
+      lastName: "Player",
+      practiceStatus: "full",
+      updatedAt: "2026-10-15T21:30:05.381Z",
+    }),
+  ], [matchup]);
+  assert.equal(oneSidedClearReport[0]?.verifiedClear, false,
+    "a one-team provider omission cannot verify the entire matchup clear");
 
   const normalized = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflInjuryTeams([
     {
@@ -210,6 +287,21 @@ async function main(): Promise<void> {
     mergeNflAvailabilityWithPrior({ ...partial, teams: partial.teams.map((team) => ({ ...team, players: [] })) }, prior),
     prior,
     "a successful empty response must not erase the last verified exact-game report",
+  );
+  const verifiedClear = {
+    ...partial,
+    verifiedClear: true,
+    teams: partial.teams.map((team) => ({ ...team, players: [] })),
+  };
+  assert.deepEqual(
+    mergeNflAvailabilityWithPrior(verifiedClear, prior),
+    verifiedClear,
+    "exact-game designation rows that verify a clear report replace an older non-clear report",
+  );
+  assert.deepEqual(
+    mergeNflAvailabilityWithPrior(verifiedClear, null),
+    verifiedClear,
+    "a verified clear report remains available even without a prior non-empty report",
   );
   const merged = mergeNflAvailabilityWithPrior(partial, prior);
   assert.equal(merged?.teams[0]?.players[0]?.name, "Current Buc");

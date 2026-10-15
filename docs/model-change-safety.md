@@ -1,5 +1,39 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: NFL personnel coverage repair
+
+On 2026-10-15 Daniel Mengel directed Oddsphere to repair the false NFL personnel holds after the
+published board treated Tampa Bay replacement quarterback Jalon Daniels as historically unknown
+despite his exact provider identity and completed 2026 NFL passing history, and after an all-clear
+injury response was misclassified as missing for Washington-San Francisco. This exception is limited to the
+target-safe identity and collection-continuity correction documented in
+`docs/model-audits/2026-10-15-nfl-personnel-coverage-repair-predeclaration.md`.
+
+For future unlocked rows, a quarterback absent from the frozen preseason identity artifact may
+satisfy the existing history gate only when the selected depth-chart player has an exact provider
+player ID and at least one passing attempt in the exact prediction season and team, in a completed game strictly before the
+prediction week for that exact team. The frozen quarterback features remain authoritative when
+present; a current-season-only match uses observed prior attempts for experience and neutral
+advanced-stat priors rather than inventing EPA, CPOE, sack, or turnover performance. A player with
+no exact completed-game history remains held.
+
+The bounded injury collector may retry transient 408/425/429/5xx or network failures at most twice
+per team batch, honoring a Retry-After delay capped at two seconds. Exact-game designation rows for
+both scheduled teams that normalize to no reportable injuries are preserved as a verified clear report rather than discarded
+as a provider omission; a response with no exact-game rows remains unavailable and cannot erase
+last-known evidence. Non-transient failures retain the existing game-scoped legacy fallback and
+last-known exact-game continuity. Cadence, provider scope, sole
+writer, sport lease, model coefficients, calibration, market-reader rules, thresholds, stakes, and
+locked payloads remain unchanged.
+
+Publication requires focused identity, pagination, writer, immutable-reader, and full model-change
+tests; a zero-write same-input board report with every promotion and demotion; latest-main
+integration safety; protected PR checks; and live proof of release identity, injury coverage,
+quarterback source, board coherence, sole writer/lease, and unchanged locks. Roll back the complete
+r33/r36/r22/r63/r45/r37 release family if a future-only game qualifies a quarterback, an unknown
+player passes the gate, retries exceed the declared request ceiling, a verified report disappears,
+the board contracts unexpectedly, or any stored lock changes.
+
 ## Owner-approved correctness exception: NFL personnel-evidence eligibility
 
 On 2026-10-15 Daniel Mengel directed Oddsphere to repair the recurring NFL injury-report and
