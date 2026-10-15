@@ -164,6 +164,9 @@ async function main(): Promise<void> {
   const datasets = selectedDatasets();
   const samplePagesRaw = value("--sample-pages");
   const sample = samplePagesRaw !== undefined;
+  if (!sample && (datasets.length !== ALL_DATASETS.length || ALL_DATASETS.some((dataset) => !datasets.includes(dataset)))) {
+    throw new Error("A full NBA research capture must include games, box, advanced, and opening_odds.");
+  }
   const maxPages = sample ? positiveInteger("--sample-pages") : 1_000;
   const requestIntervalMs = Number(
     value("--request-interval-ms") ?? process.env.NBA_BDL_REQUEST_INTERVAL_MS ?? "125",
@@ -172,9 +175,17 @@ async function main(): Promise<void> {
     throw new Error("--request-interval-ms must be an integer from 0 through 60000.");
   }
 
-  const outputDirectory = path.resolve(
-    value("--output") ?? path.join("nba-research", "raw", NBA_BDL_HISTORICAL_RESEARCH_RELEASE, String(season)),
-  );
+  const capturedAt = new Date().toISOString();
+  const defaultLeaf = sample
+    ? `sample-${capturedAt.replace(/[:.]/g, "-")}-${datasets.join("-")}`
+    : "complete";
+  const outputDirectory = path.resolve(value("--output") ?? path.join(
+    "nba-research",
+    "raw",
+    NBA_BDL_HISTORICAL_RESEARCH_RELEASE,
+    String(season),
+    defaultLeaf,
+  ));
   await mkdir(outputDirectory, { recursive: true });
 
   const manifests: Partial<Record<NbaBdlHistoricalDataset, DatasetManifest>> = {};
@@ -265,7 +276,7 @@ async function main(): Promise<void> {
 
   const manifest = {
     release: NBA_BDL_HISTORICAL_RESEARCH_RELEASE,
-    capturedAt: new Date().toISOString(),
+    capturedAt,
     season,
     sample,
     scoreBacktestEligible: !sample &&
