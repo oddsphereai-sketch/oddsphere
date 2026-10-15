@@ -98,7 +98,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_09_r60_provider_feed_continuity" as const;
+  "nfl_forward_evidence_writer_2026_10_15_r61_personnel_evidence_eligibility" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -411,7 +411,7 @@ export async function runNflForwardEvidenceWriter(args: {
     const playbookCoverage = completePlaybookSplits(playbookSplits);
     const sharpCoverage = completeSharpApiNflSplitSet(sharpSplits ?? undefined);
     const weatherCoverage = plan.stage === "unlocked" || weather.status !== "provider_unavailable";
-    const holds = [
+    const collectedEvidenceHolds = [
       !rosterAndDepth ? "roster_depth_unavailable" : null,
       !expectedQuarterbacks ? "expected_quarterback_unavailable" : null,
       injuries === null ? "injury_report_unavailable" : null,
@@ -433,8 +433,12 @@ export async function runNflForwardEvidenceWriter(args: {
       stage: plan.stage,
       capturedAt,
       t60LagMinutes,
-      coverageHealthHolds: holds,
+      coverageHealthHolds: collectedEvidenceHolds,
     });
+    const holds = [...new Set([
+      ...collectedEvidenceHolds,
+      ...shadowMoneyline.health.blockingReasons,
+    ])].sort();
     const weeklyRawSignal = !paidProjectionShadow && currentSeasonState && current.spread &&
       !hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId)
       ? buildNflWeeklyPossessionMargin({

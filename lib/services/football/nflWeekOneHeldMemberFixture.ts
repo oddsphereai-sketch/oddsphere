@@ -46,7 +46,14 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_09_r42_provider_feed_continuity" as const;
+  "nfl_weekly_member_fixture_2026_10_15_r43_personnel_evidence_eligibility" as const;
+
+const NFL_PERSONNEL_PRECEDING_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity" as const;
+const NFL_PERSONNEL_PRECEDING_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_13_r33_moneyline_price_tier" as const;
+const NFL_PERSONNEL_LEGACY_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_09_r32_provider_feed_continuity" as const;
 
 const NFL_PROFESSIONAL_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_09_r29_professional_market_authority" as const;
@@ -235,6 +242,10 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_PERSONNEL_PRECEDING_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_PERSONNEL_PRECEDING_DECISION_RELEASE ||
+        decision.decisionRelease === NFL_PERSONNEL_LEGACY_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_PROFESSIONAL_PRECEDING_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_PROFESSIONAL_PRECEDING_DECISION_RELEASE)) ||
