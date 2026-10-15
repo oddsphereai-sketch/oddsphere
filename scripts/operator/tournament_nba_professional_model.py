@@ -731,6 +731,17 @@ def select_reference_market_marriage(
 ) -> dict[str, Any]:
     """Select bounded market weights before the confirmation season is opened."""
     marriage_fit, threshold_selection, split = chronological_market_marriage_partition(frame)
+    provenance = frame.get(
+        "evaluation_market_provenance",
+        pd.Series("unavailable", index=frame.index),
+    ).fillna("unavailable").astype(str)
+    provenance_counts = {
+        str(key): int(value) for key, value in provenance.value_counts().sort_index().items()
+    }
+    timestamped_selection_authority = bool(
+        len(provenance) > 0
+        and (provenance == "balldontlie_timestamped_opening").all()
+    )
     fit_home = independent_home[:split]
     fit_away = independent_away[:split]
     threshold_home = independent_home[split:]
@@ -821,12 +832,15 @@ def select_reference_market_marriage(
     return {
         "method": "earlier_selection_market_weights_later_selection_action_thresholds",
         "readerValidationStatus": "opening_reference_only_not_line_movement_or_splits_validation",
+        "selectionMarketProvenance": provenance_counts,
+        "timestampedSelectionAuthority": timestamped_selection_authority,
         "selectionRows": int(len(frame)),
         "weightSelectionRows": int(len(marriage_fit)),
         "thresholdSelectionRows": int(len(threshold_selection)),
         "selected": selected,
         "gatePassed": bool(
-            selected["relativeJointScore"] < 0.998
+            timestamped_selection_authority
+            and selected["relativeJointScore"] < 0.998
             and (
                 selected["marginIndependentWeight"] < 1.0
                 or selected["totalIndependentWeight"] < 1.0
@@ -1575,6 +1589,7 @@ def main() -> None:
         ),
         "marketWinnerNetCorrectionsNonnegative": market_correction_ledger["netCorrections"] >= 0,
         "marketMarriageSelectedBeforeConfirmation": True,
+        "timestampedMarketSelectionValidated": bool(market_marriage["timestampedSelectionAuthority"]),
         "historicalMovementReaderValidated": False,
         "historicalSplitsReaderValidated": False,
         **actionable_benchmark_gates,

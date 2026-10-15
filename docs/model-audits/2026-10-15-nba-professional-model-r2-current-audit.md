@@ -424,6 +424,10 @@ score error by materially worsening winner accuracy, Brier score, log loss, or
 an actionable market. An opening-reference blend is not labeled a fully
 validated reader: movement and split gates remain false until timestamped
 sequences exist.
+The report also counts the provenance used to select the market weights. A
+weight chosen from the public pregame reference remains sensitivity analysis
+only because its sportsbook and observation time are unknown; the
+`timestampedMarketSelectionValidated` gate cannot pass on those rows.
 
 A paginated read-only production query on October 15 found 121,885 NBA
 `line_history` rows, but they covered only 22 preseason games from October

@@ -167,6 +167,9 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["marketOnlyConfirmation"]["games"] == 48
     assert report["finalCombinedConfirmation"] == report["confirmation"]
     assert report["marketMarriage"]["readerValidationStatus"] == "opening_reference_only_not_line_movement_or_splits_validation"
+    assert report["marketMarriage"]["selectionMarketProvenance"] == {"synthetic_test_only": 48}
+    assert report["marketMarriage"]["timestampedSelectionAuthority"] is False
+    assert report["marketMarriage"]["gatePassed"] is False
     assert report["marketMarriage"]["weightSelectionRows"] > 0
     assert report["marketMarriage"]["thresholdSelectionRows"] > 0
     assert report["marketMarriage"]["weightSelectionRows"] + report["marketMarriage"]["thresholdSelectionRows"] == 48
@@ -179,6 +182,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["finalProductGatePassed"] is False
     assert report["finalProductGates"]["historicalMovementReaderValidated"] is False
     assert report["finalProductGates"]["historicalSplitsReaderValidated"] is False
+    assert report["finalProductGates"]["timestampedMarketSelectionValidated"] is False
     assert report["confirmationProbabilityCalibration"]["developmentRows"] > 0
     assert report["confirmationProbabilityCalibration"]["calibrationRows"] > 0
     assert report["confirmationProbabilityCalibration"]["method"].startswith("strictly_earlier_fit")
