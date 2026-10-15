@@ -35,14 +35,14 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_09_r14_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_15_r32_member_decision_evidence");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_15_r35_member_decision_evidence");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_15_r25_receptions_reference_required");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_15_r27_receptions_reference_required");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_15_r31_member_decision_evidence");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_15_r15_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_15_r33_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_15_r36_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_15_r26_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_15_r28_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_15_r32_independent_rushing_yards");
 assert.equal(expectedRoleArtifact.release,
-  "nfl_player_props_expected_role_runtime_2026_10_09_r6_receiving_yards");
+  "nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
 assert.deepEqual(expectedRoleArtifact.marketFeatures, []);
 assert.equal("receptions" in expectedRoleArtifact, true,
@@ -53,6 +53,11 @@ assert.equal(expectedRoleArtifact.receptions.probability.challengerWeight, 0,
   "the board-flattening Receptions probability challenger cannot displace the incumbent head");
 assert.equal(expectedRoleArtifact.receptions.probability.challengerQualified, false);
 assert.equal(expectedRoleArtifact.receptions.probability.incumbentRetained, true);
+assert.deepEqual(expectedRoleArtifact.rushingYards.challengerPositions, ["RB"]);
+assert.equal(expectedRoleArtifact.rushingYards.probability.challengerWeight, 1);
+assert.deepEqual(expectedRoleArtifact.rushingYards.probability.challengerPositions, ["RB"]);
+assert.equal(expectedRoleArtifact.rushingYards.probability.challengerQualified, true);
+assert.equal(expectedRoleArtifact.rushingYards.probability.incumbentRetained, true);
 assert.equal(expectedRoleArtifact.receivingYards.blendWeight, 0.5);
 assert.deepEqual(expectedRoleArtifact.receivingYards.positions, ["WR"]);
 assert.equal(expectedRoleArtifact.receivingYards.yardsPerTargetLower, 0);
@@ -67,14 +72,28 @@ assert.equal(expectedRoleArtifact.passingYards.probability.challengerQualified, 
 assert.equal(expectedRoleArtifact.passingYards.probability.incumbentRetained, true);
 assert.equal(expectedRoleArtifact.rushingYards.blendWeight, 0.75);
 assert.deepEqual(Object.keys(expectedRoleArtifact.rushingYards.groups).sort(), ["BACK", "QB", "WR"]);
-assert.equal(expectedRoleArtifact.rushingYards.probability.challengerWeight, 0,
-  "the failed Rushing Yards probability challenger cannot enter the independent point head");
-assert.equal(expectedRoleArtifact.rushingYards.probability.challengerQualified, false);
+assert.equal(expectedRoleArtifact.rushingYards.probability.challengerWeight, 1,
+  "the qualified RB residual challenger owns RB probability only");
+assert.equal(expectedRoleArtifact.rushingYards.probability.challengerQualified, true);
 assert.equal(expectedRoleArtifact.rushingYards.probability.incumbentRetained, true);
-assert.equal(
+assert.notEqual(
   nflPlayerPropsOverProbability("rushing_yards", 10, 45.5, { foundationProjection: 55, position: "RB" }),
   nflPlayerPropsOverProbability("rushing_yards", 100, 45.5, { foundationProjection: 55, position: "RB" }),
-  "the retained Rushing Yards probability head has zero challenger influence",
+  "the qualified RB residual challenger responds to the RB candidate center",
+);
+assert.equal(
+  nflPlayerPropsOverProbability("rushing_yards", 10, 45.5, { foundationProjection: 55, position: "WR" }),
+  nflPlayerPropsOverProbability("rushing_yards", 100, 45.5, { foundationProjection: 55, position: "WR" }),
+  "the RB-only probability challenger cannot change a WR probability",
+);
+assert.equal(
+  nflPlayerPropsOverProbability("rushing_yards", 10, 45.5, {
+    foundationProjection: 55, position: "RB", forceFoundation: true,
+  }),
+  nflPlayerPropsOverProbability("rushing_yards", 100, 45.5, {
+    foundationProjection: 55, position: "RB", forceFoundation: true,
+  }),
+  "the same-input control can force the exact preceding RB distribution",
 );
 assert.equal(
   nflPlayerPropsOverProbability("passing_yards", 100, 225.5, { foundationProjection: 240, position: "QB" }),
@@ -109,28 +128,53 @@ assert.equal(nflPlayerPropsCurrentGameAvailability({
 }, "2026-09-29T00:15:00.000Z")?.status, "Injured Reserve",
 "a persistent injured-reserve designation never expires under the game-status rule");
 verifyNflPlayerPropsRuntimeParity(1e-9);
-const rushingRoleRows = ["Runner One", "Runner Two"].map((playerName, index) => ({
-  gameId: "rushing-role-game", playerName, team: "NE", opponent: "NYJ", position: "RB",
+const rushingRoleRows = [
+  { playerName: "Quarterback One", position: "QB", attempts: 5, share: 0.18, propOffered: true },
+  { playerName: "Runner One", position: "RB", attempts: 14, share: 0.52, propOffered: true },
+  { playerName: "Runner Two", position: "RB", attempts: 5, share: 0.20, propOffered: false },
+  { playerName: "Receiver One", position: "WR", attempts: 2, share: 0.10, propOffered: false },
+].map((player, index) => ({
+  gameId: "rushing-role-game", playerName: player.playerName, team: "NE", opponent: "NYJ",
+  position: player.position,
   featureAsOf: "2026-10-08T12:00:00.000Z", roleFingerprint: `role-${index}`,
-  scoreEligible: true, healthHolds: [], propOffered: index === 0,
+  scoreEligible: true, healthHolds: [], propOffered: player.propOffered,
   teamImpliedPoints: 21, teamImpliedTouchdowns: 3, expectedQuarterback: null,
   availability: {
     listed: false, status: null, detail: null, reportedAt: null, reportUpdatedAt: null,
     source: "BALLDONTLIE" as const,
   },
-  features: { position_rb: 1, is_home: 1 },
+  features: { [`position_${player.position.toLowerCase()}`]: 1, is_home: 1 },
   expectedRoleFeatures: {
-    position_rb: 1, is_home: 1, external_depth_listed: 1,
-    prior_rushing_attempts_avg3: index === 0 ? 14 : 5,
-    prior_rush_attempt_share_avg3: index === 0 ? 0.7 : 0.3,
+    [`position_${player.position.toLowerCase()}`]: 1, is_home: 1, external_depth_listed: 1,
+    prior_rushing_attempts_avg3: player.attempts,
+    prior_rush_attempt_share_avg3: player.share,
   },
 }));
 const rushingRoleScores = scoreNflPlayerPropsRuntimeFeatureRows(rushingRoleRows);
+const rushingRoleScoresWithOfferPresenceReversed = scoreNflPlayerPropsRuntimeFeatureRows(
+  rushingRoleRows.map((row) => ({ ...row, propOffered: !row.propOffered })),
+);
+const precedingRushingRoleScores = scoreNflPlayerPropsRuntimeFeatureRows(rushingRoleRows, {
+  auditPrecedingRushingYardsOnly: true,
+});
+let changedRbRushingYards = 0;
 for (const row of rushingRoleRows) {
-  const score = rushingRoleScores.get(`${row.gameId}|${row.playerName.toLowerCase().replace(/[^a-z0-9]/g, "")}`)!;
+  const key = `${row.gameId}|${row.playerName.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
+  const score = rushingRoleScores.get(key)!;
+  const reversedOfferScore = rushingRoleScoresWithOfferPresenceReversed.get(key)!;
+  const preceding = precedingRushingRoleScores.get(key)!;
   assert.ok(Number.isFinite(score.projections.rushing_yards));
   assert.ok(Number.isFinite(score.foundationProjections?.rushing_yards));
+  assert.equal(score.projections.rushing_yards, reversedOfferScore.projections.rushing_yards,
+    "sportsbook-offer presence cannot enter the independent Rushing Yards projection");
+  if (row.position === "RB") {
+    changedRbRushingYards += Number(score.projections.rushing_yards !== preceding.projections.rushing_yards);
+  } else {
+    assert.equal(score.projections.rushing_yards, preceding.projections.rushing_yards,
+      "the RB-only Rushing Yards head cannot change QB or WR centers");
+  }
 }
+assert.ok(changedRbRushingYards > 0, "the qualified RB-only Rushing Yards point head is active");
 const receivingRoleRows = [
   { playerName: "Receiver One", position: "WR", propOffered: true, targetShare: 0.24 },
   { playerName: "Tight End Two", position: "TE", propOffered: false, targetShare: 0.17 },

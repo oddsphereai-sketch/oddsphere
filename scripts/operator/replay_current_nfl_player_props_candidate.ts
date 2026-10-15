@@ -42,6 +42,7 @@ type FrozenDecision = {
   sportsbook: string; provider: string; observedAt: string; lockAt: string; state: "locked" | "unlocked";
   grade: NflPlayerPropsGrade; finalProbability: number; projection: number | null; expectedValue: number;
   healthHolds: string[]; marketEvidenceId?: string;
+  forecastContext?: { position?: string | null };
 };
 
 type FrozenSnapshot = {
@@ -109,7 +110,7 @@ async function main(): Promise<void> {
   const offers = exactOffers(frozen.memberDecisions, capture)
     .filter((offer) => eligible.has(offer.canonicalGameId));
   const gameIds = [...new Set(offers.map((offer) => offer.canonicalGameId))];
-  const build = (auditPrecedingReceivingYardsOnly: boolean) => gameIds.flatMap((gameId) => {
+  const build = (auditPrecedingRushingYardsOnly: boolean) => gameIds.flatMap((gameId) => {
     const gameOffers = offers.filter((offer) => offer.canonicalGameId === gameId);
     return buildNflPlayerPropsRuntimeBoard({
       offers: gameOffers,
@@ -117,7 +118,7 @@ async function main(): Promise<void> {
       evaluatedAt: frozen.board.evaluatedAt,
       captureMarketEvidence: false,
       auditIncumbentMarketArbitration: false,
-      auditPrecedingReceivingYardsOnly,
+      auditPrecedingRushingYardsOnly,
     }).decisions;
   }) as CandidateDecision[];
   const control = build(true);
@@ -128,7 +129,7 @@ async function main(): Promise<void> {
   const comparison = compare(control, candidate);
   const storedSnapshotComparison = compare(incumbent, candidate);
   const result = {
-    release: "nfl_player_props_current_snapshot_candidate_replay_2026_10_09_r2_same_input_control",
+    release: "nfl_player_props_current_snapshot_candidate_replay_2026_10_15_r3_independent_rushing_yards",
     readOnly: true, writes: 0, providerCalls: 0,
     sourceSnapshot: input,
     season: frozen.season, week: frozen.week, evaluatedAt: frozen.board.evaluatedAt,
@@ -150,6 +151,7 @@ function compare(incumbent: FrozenDecision[], candidate: CandidateDecision[]): R
   const changes = shared.map((key) => [before.get(key)!, after.get(key)!] as const);
   const promotions = changes.filter(([first, second]) => !actionable(first.grade) && actionable(second.grade));
   const demotions = changes.filter(([first, second]) => actionable(first.grade) && !actionable(second.grade));
+  const sideChanges = changes.filter(([first, second]) => forecastSide(first) !== forecastSide(second));
   const summarize = (rows: Array<FrozenDecision | CandidateDecision>) => ({
     rows: rows.length,
     actionable: rows.filter((row) => actionable(row.grade)).length,
@@ -162,6 +164,7 @@ function compare(incumbent: FrozenDecision[], candidate: CandidateDecision[]): R
   const transition = ([first, second]: readonly [FrozenDecision, CandidateDecision]) => ({
     gameId: first.gameId, playerName: first.playerName, market: first.market, line: first.line, side: first.side,
     sportsbook: first.sportsbook, beforeProjection: first.projection, afterProjection: second.projection,
+    position: first.forecastContext?.position ?? second.forecastContext?.position ?? null,
     beforeProbability: first.finalProbability, afterProbability: second.finalProbability,
     beforeForecast: forecastSide(first), afterForecast: forecastSide(second),
     beforeGrade: first.grade, afterGrade: second.grade,
@@ -172,7 +175,8 @@ function compare(incumbent: FrozenDecision[], candidate: CandidateDecision[]): R
     addedCandidateRows: [...after.keys()].filter((key) => !before.has(key)).length,
     projectionChanges: changes.filter(([first, second]) => first.projection !== second.projection).length,
     probabilityChanges: changes.filter(([first, second]) => first.finalProbability !== second.finalProbability).length,
-    forecastSideChanges: changes.filter(([first, second]) => forecastSide(first) !== forecastSide(second)).length,
+    forecastSideChanges: sideChanges.length,
+    forecastSideChangeDetails: sideChanges.map(transition),
     gradeChanges: changes.filter(([first, second]) => first.grade !== second.grade).length,
     gradeChangeDetails: changes.filter(([first, second]) => first.grade !== second.grade).map(transition),
     promotions: promotions.length,
@@ -189,6 +193,22 @@ function compare(incumbent: FrozenDecision[], candidate: CandidateDecision[]): R
       forecastSideChanges: changes.filter(([first, second]) => first.market === market && forecastSide(first) !== forecastSide(second)).length,
       gradeChanges: changes.filter(([first, second]) => first.market === market && first.grade !== second.grade).length,
     }])),
+    rushingYardsByPosition: Object.fromEntries(
+      [...new Set(changes.filter(([first]) => first.market === "rushing_yards")
+        .map(([first, second]) => first.forecastContext?.position ?? second.forecastContext?.position ?? "UNKNOWN"))]
+        .sort()
+        .map((position) => {
+          const positionRows = changes.filter(([first, second]) => first.market === "rushing_yards"
+            && (first.forecastContext?.position ?? second.forecastContext?.position ?? "UNKNOWN") === position);
+          return [position, {
+            rows: positionRows.length,
+            projectionChanges: positionRows.filter(([first, second]) => first.projection !== second.projection).length,
+            probabilityChanges: positionRows.filter(([first, second]) => first.finalProbability !== second.finalProbability).length,
+            forecastSideChanges: positionRows.filter(([first, second]) => forecastSide(first) !== forecastSide(second)).length,
+            gradeChanges: positionRows.filter(([first, second]) => first.grade !== second.grade).length,
+          }];
+        }),
+    ),
   };
 }
 
