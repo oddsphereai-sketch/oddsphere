@@ -58,6 +58,11 @@ import {
 } from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
+import { currentDailyEdgeBoardDate } from "../../dates/slateDate";
+import {
+  loadNbaRollingSchedule,
+  nbaMemberAnalysisEligible,
+} from "./nbaRollingSchedule";
 
 /**
  * Phase 7H — internal NBA pipeline result. Returned by
@@ -370,6 +375,42 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
  * canonical entry point for `/api/lab/daily-edge?sport=nba`.
  */
 export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeResponse> {
+  const currentBoardDate = currentDailyEdgeBoardDate("nba");
+  const includeRollingSchedule = date >= currentBoardDate;
+  const rollingSchedule = includeRollingSchedule
+    ? await loadNbaRollingSchedule(currentBoardDate)
+    : undefined;
+
+  // Schedule visibility is deliberately independent of prediction
+  // visibility. Preseason/offseason dates and manually selected future dates
+  // never run or expose the member model; they return only the official
+  // rolling schedule contract.
+  if (!nbaMemberAnalysisEligible(date, currentBoardDate)) {
+    return {
+      as_of: new Date().toISOString(),
+      sport: "nba",
+      date,
+      requested_date: date,
+      fallback_used: false,
+      slateState: "no_data",
+      slate_status: null,
+      last_slate_update_at: null,
+      nbaRollingSchedule: rollingSchedule,
+      games: [],
+    };
+  }
+
   const { nbaDto, openPricesByGame } = await buildNbaDailyEdgePipeline(date);
-  return adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame });
+  const response = adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame });
+  if (rollingSchedule) {
+    // Preserve the analyzed current-day lifecycle, including completed cards
+    // through the normal ET rollover. The schedule layer independently drops
+    // finals, and this identity filter prevents a pregame/live duplicate.
+    const analyzedGameIds = new Set(response.games.map((game) => game.external_id));
+    response.nbaRollingSchedule = {
+      ...rollingSchedule,
+      games: rollingSchedule.games.filter((game) => !analyzedGameIds.has(game.externalId)),
+    };
+  }
+  return response;
 }

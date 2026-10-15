@@ -47,6 +47,7 @@ import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
   MarketEdgeDto,
+  NbaRollingScheduleDto,
 } from "../../lib/labTypes";
 import type {
   MarketDecision,
@@ -1237,7 +1238,7 @@ export function SportRail({ sport }: { sport: Sport }) {
                       ? "border-white/[0.06] bg-white/[0.02] text-gray-400 hover:border-violet-400/30 hover:bg-violet-500/[0.06] cursor-pointer"
                       : "border-white/[0.06] bg-white/[0.02] text-gray-400"
                 }`}
-                aria-label={`${s.label} — ${s.memberAvailable && !s.inSeason ? "offseason model" : isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
+                aria-label={`${s.label} — ${s.scheduleLive && !s.inSeason ? "schedule live" : s.memberAvailable && !s.inSeason ? "offseason model" : isActive ? "active model" : isClickable ? "switch to this sport" : "coming soon"}`}
               >
                 {/* Circular icon container — tinted violet for active,
                     neutral for inactive. The container itself, not just
@@ -1270,7 +1271,7 @@ export function SportRail({ sport }: { sport: Sport }) {
                         Active
                       </span>
                     ) : s.memberAvailable ? (
-                      s.inSeason ? "Live" : "Offseason"
+                      s.inSeason ? "Live" : s.scheduleLive ? "Schedule live" : "Offseason"
                     ) : (
                       "Coming Soon"
                     )}
@@ -3953,6 +3954,104 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+function formatNbaScheduleDay(slateDate: string): string {
+  const timestamp = Date.parse(`${slateDate}T12:00:00.000Z`);
+  if (!Number.isFinite(timestamp)) return slateDate;
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(timestamp));
+}
+
+function nbaScheduleStatusLabel(status: string): string {
+  if (status === "STATUS_POSTPONED") return "Postponed";
+  if (status === "STATUS_DELAYED") return "Delayed";
+  if (
+    status === "STATUS_IN_PROGRESS" ||
+    status === "STATUS_HALFTIME" ||
+    status === "STATUS_END_PERIOD" ||
+    status === "STATUS_SUSPENDED"
+  ) return "In progress";
+  return "Scheduled";
+}
+
+function NbaRollingScheduleBoard({ schedule }: { schedule: NbaRollingScheduleDto }) {
+  if (schedule.games.length === 0) return null;
+  const gamesByDate = schedule.games.reduce<Map<string, NbaRollingScheduleDto["games"]>>(
+    (groups, game) => {
+      const current = groups.get(game.slateDate) ?? [];
+      current.push(game);
+      groups.set(game.slateDate, current);
+      return groups;
+    },
+    new Map(),
+  );
+
+  return (
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 py-6" aria-labelledby="nba-seven-day-schedule">
+      <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.18em] font-bold text-orange-300/80">
+            Official schedule
+          </p>
+          <h2 id="nba-seven-day-schedule" className="mt-1 text-xl sm:text-2xl font-black text-white">
+            NBA · Next 7 Days
+          </h2>
+        </div>
+        <p className="max-w-2xl text-[12px] leading-relaxed text-gray-400 sm:text-right">
+          Matchups are live now. Picks, probabilities, grades, and prices stay blank until the game-day model and market checks clear.
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        {[...gamesByDate.entries()].map(([slateDate, games]) => (
+          <div key={slateDate}>
+            <div className="mb-2 flex items-center gap-3">
+              <h3 className="text-[11px] uppercase tracking-[0.15em] font-bold text-gray-300">
+                {formatNbaScheduleDay(slateDate)}
+              </h3>
+              <div className="h-px flex-1 bg-white/[0.07]" aria-hidden="true" />
+              <span className="text-[10px] tabular-nums text-gray-600">
+                {games.length} {games.length === 1 ? "game" : "games"}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {games.map((game) => (
+                <article
+                  key={game.id}
+                  className="rounded-xl border border-white/[0.08] bg-gradient-to-b from-white/[0.035] to-black/[0.10] p-4 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.65)]"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <TeamBadge abbr={game.awayTeam} logo={game.awayTeamLogo} size={30} />
+                      <span className="text-sm font-black text-white">{game.awayTeam}</span>
+                      <span className="text-[11px] text-gray-600">@</span>
+                      <TeamBadge abbr={game.homeTeam} logo={game.homeTeamLogo} size={30} />
+                      <span className="text-sm font-black text-white">{game.homeTeam}</span>
+                    </div>
+                    <LocalTime
+                      value={game.gameStartAt}
+                      className="shrink-0 text-[11px] tabular-nums font-semibold text-gray-300"
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
+                    <span className="text-[10px] uppercase tracking-[0.13em] font-bold text-gray-500">
+                      {nbaScheduleStatusLabel(game.status)}
+                    </span>
+                    <span className="text-[10px] text-gray-500">Analysis opens game day</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function LoadingState() {
   return <EmptyState message="Loading tonight's slate…" />;
 }
@@ -4854,7 +4953,8 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
       </ShellChrome>
     );
   }
-  if (!data || games.length === 0) {
+  const nbaRollingSchedule = sport === "nba" ? data?.nbaRollingSchedule : undefined;
+  if (!data || (games.length === 0 && (nbaRollingSchedule?.games.length ?? 0) === 0)) {
     // Phase 6B.4 — honest empty state by slateState. The API tells us
     // WHY there are no games (draft / hidden / pending / stale fallback
     // failed / no_data). Phase 7J adds sport-aware copy so NBA's
@@ -4862,6 +4962,13 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
     // progress.
     const message = emptyStateMessageFor(data?.slateState, sport);
     return <ShellChrome sport={sport}><EmptyState message={message} /></ShellChrome>;
+  }
+  if (games.length === 0 && nbaRollingSchedule) {
+    return (
+      <ShellChrome sport={sport}>
+        <NbaRollingScheduleBoard schedule={nbaRollingSchedule} />
+      </ShellChrome>
+    );
   }
 
   const selectedGame = selectedGameId
@@ -5039,6 +5146,12 @@ export default function DailyEdgeShell({ sport }: { sport: Sport }): ReactNode {
           </div>
         )}
       </main>
+
+      {nbaRollingSchedule && nbaRollingSchedule.games.length > 0 ? (
+        <div className="border-t border-white/[0.05]">
+          <NbaRollingScheduleBoard schedule={nbaRollingSchedule} />
+        </div>
+      ) : null}
 
       {/* Mobile bottom sheet — opens on card tap; closes via × / scrim / Esc.
           Prev/Next buttons walk the FILTERED games list (same as the

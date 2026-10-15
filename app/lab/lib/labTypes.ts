@@ -1119,6 +1119,28 @@ export type SlateState =
   | "temporarily_unavailable"
   | "no_data";
 
+export type NbaRollingScheduleGameDto = {
+  id: string;
+  externalId: number;
+  slateDate: string;
+  gameStartAt: string;
+  status: string;
+  awayTeam: string;
+  awayTeamDisplayName: string;
+  awayTeamLogo: string;
+  homeTeam: string;
+  homeTeamDisplayName: string;
+  homeTeamLogo: string;
+  venue: string | null;
+};
+
+export type NbaRollingScheduleDto = {
+  release: string;
+  anchorDate: string;
+  throughDate: string;
+  games: NbaRollingScheduleGameDto[];
+};
+
 export type DailyEdgeResponse = {
   as_of: string;
   /** Versioned member-only mapping; internal held state remains unchanged. */
@@ -1166,6 +1188,11 @@ export type DailyEdgeResponse = {
    * "as of HH:MM" label in the UI separate from response `as_of`.
    */
   last_slate_update_at: string | null;
+  /**
+   * NBA-only schedule layer for the active seven-day member window. These
+   * rows carry no projection, probability, pick, grade, price, or stake.
+   */
+  nbaRollingSchedule?: NbaRollingScheduleDto;
   games: DailyEdgeGameDto[];
 };
 
