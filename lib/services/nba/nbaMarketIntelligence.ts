@@ -245,13 +245,17 @@ export function coherentNoVigReference(opts: {
   market: "moneyline" | "spread" | "total";
   pickSide: "home" | "away" | "over" | "under";
   pickLine: number | null;
+  /** Evaluated quote book(s); they cannot also author the fair reference. */
+  excludedSportsbooks?: ReadonlyArray<string>;
 }): { probability: number | null; books: string[] } {
   const otherSide = opts.pickSide === "home" ? "away"
     : opts.pickSide === "away" ? "home"
     : opts.pickSide === "over" ? "under" : "over";
   const byBook = new Map<string, { pick: NbaLineRow | null; other: NbaLineRow | null }>();
+  const excluded = new Set((opts.excludedSportsbooks ?? []).map((book) => book.trim().toLowerCase()));
   for (const line of opts.lines) {
     if (line.market_type !== opts.market || line.odds_american === null) continue;
+    if (excluded.has(line.sportsbook.trim().toLowerCase())) continue;
     const expectedLine = opts.market === "moneyline" ? null
       : opts.market === "spread" && opts.pickLine !== null && line.side === otherSide ? -opts.pickLine
       : opts.pickLine;
@@ -394,7 +398,13 @@ function buildMl(
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
 
-  const noVigPick = pickSide === "home" ? consensus.mlHomeNoVig : consensus.mlAwayNoVig;
+  const noVigPick = coherentNoVigReference({
+    lines,
+    market: "moneyline",
+    pickSide,
+    pickLine: null,
+    excludedSportsbooks: pickBest.row ? [pickBest.row.sportsbook] : [],
+  }).probability;
 
   const exact = exactLineProbability({ prediction, spreadHome: null, total: null });
   const modelHomeProb = exact?.mlHome ?? (
@@ -512,7 +522,13 @@ function buildSpread(
   const otherOdds = otherBest.row?.odds_american ?? null;
   const pickLine = pickTargetLine;
 
-  const noVigPick = coherentNoVigReference({ lines, market: "spread", pickSide, pickLine }).probability;
+  const noVigPick = coherentNoVigReference({
+    lines,
+    market: "spread",
+    pickSide,
+    pickLine,
+    excludedSportsbooks: pickBest.row ? [pickBest.row.sportsbook] : [],
+  }).probability;
 
   const modelProb = exact?.spreadHome === null || exact?.spreadHome === undefined
     ? prediction.spread_confidence / 100
@@ -646,7 +662,13 @@ function buildTotal(
   const otherBest = bestPriceFor(lines, "total", otherSide, line);
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
-  const noVigPick = coherentNoVigReference({ lines, market: "total", pickSide, pickLine: line }).probability;
+  const noVigPick = coherentNoVigReference({
+    lines,
+    market: "total",
+    pickSide,
+    pickLine: line,
+    excludedSportsbooks: pickBest.row ? [pickBest.row.sportsbook] : [],
+  }).probability;
 
   const modelProb = exact?.totalOver === null || exact?.totalOver === undefined
     ? prediction.total_confidence / 100

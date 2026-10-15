@@ -27,6 +27,15 @@ const moneyline = coherentNoVigReference({
 });
 assert.equal(moneyline.books.length, 2);
 assert(moneyline.probability !== null && moneyline.probability > 0.56 && moneyline.probability < 0.59);
+const targetExcludedMoneyline = coherentNoVigReference({
+  lines: rows,
+  market: "moneyline",
+  pickSide: "home",
+  pickLine: null,
+  excludedSportsbooks: ["CIRCA"],
+});
+assert.deepEqual(targetExcludedMoneyline.books, ["pinnacle"]);
+assert.notEqual(targetExcludedMoneyline.probability, moneyline.probability);
 
 const spread = coherentNoVigReference({
   lines: rows,

@@ -3166,20 +3166,30 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (active from 2026-10-20)
 
-- Model / prediction record: `nba_v2_independent_first_2026_10_06_r1`
-- Market marriage: `nba_market_marriage_2026_10_06_r1_independent_first`
-- Grade policy: `nba_grade_policy_2026_10_06_r1_coherent_exact_price`
-- Lock coherence: `nba_lock_coherence_2026_10_06_r1_official_and_context_tuple`
+- Model / prediction record: `nba_professional_unified_2026_10_15_r2_portable_ridge`
+- Market marriage: `nba_market_marriage_2026_10_15_r2_unified_25_75`
+- Grade policy: `nba_grade_policy_2026_10_15_r2_calibrated_residual_exact_price`
+- Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline and total; Spread remains the existing context-only card market
 
-The October 6 r1 release corrects NBA season identity, excludes unfinished/preseason rows from the
+The October 15 r2 release replaces the hand-built score formula for future unlocked rows with the
+portable, leakage-safe ratings-and-schedule ridge artifact selected on 2024-25 and confirmed once
+on 2025-26. A compact five-season bootstrap plus append-only finalized current-season inputs
+reproduces its 75 selected point-in-time fields. The final projection gives 25% weight to the
+independent margin and Total and 75% to complete multi-book pregame consensus; a verified
+first-tracked spread move of at least two points may only determine the sign of the remaining
+spread residual. One final score owns Moneyline, Spread, Total, probabilities, exact-price grades,
+lock snapshots, and tracking. Target-book prices remain excluded from the fair reference and
+public splits remain context-only. Existing locked rows retain exact payload precedence.
+
+The superseded October 6 r1 release corrected NBA season identity, excluded unfinished/preseason rows from the
 early-season sample, uses the regular-season context outside the playoffs, and replaces the old
 continuous market-grounded score with the independent possession/efficiency/Four-Factors score. A
 regressed prior-season handoff owns October-November until current-season evidence accumulates. Market
 evidence remains downstream for exact-line probability, coherent same-book fair-price economics and
 grades. Spread and Total are solved at the exact displayed consensus line; books or handicap points are
 never crossed to fabricate a no-vig pair. Missing selected-side price/fair evidence cannot create an
-actionable grade. No unvalidated NBA score flip is active.
+actionable grade.
 
 The existing pregame sweep now performs a bounded final NBA line refresh and sole-writer pass at T-60,
 verifies a coherent current-release Moneyline/Total tuple plus the captured context Spread, and only then
@@ -3191,7 +3201,7 @@ explicit limitations: `docs/model-audits/2026-10-06-nba-independent-first-regula
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_15_r5_espn_season_identity`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_15_r6_professional_state`
 - NBA member schedule release: `nba_rolling_member_schedule_2026_10_15_r1_schedule_only`
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`

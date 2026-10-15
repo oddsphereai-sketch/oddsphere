@@ -1,7 +1,7 @@
 import { NBA_PREDICTION_RECORD_RELEASE } from "../../automodel/nba/nbaChampionRuntime";
 
 export const NBA_LOCK_COHERENCE_RELEASE =
-  "nba_lock_coherence_2026_10_06_r1_official_and_context_tuple" as const;
+  "nba_lock_coherence_2026_10_15_r2_unified_score_tuple" as const;
 
 export type NbaLockRow = {
   game_id: number;

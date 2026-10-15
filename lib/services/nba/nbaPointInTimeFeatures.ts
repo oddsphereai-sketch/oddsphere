@@ -21,6 +21,8 @@ export type NbaHistoricalGame = {
   awayScore: number;
 };
 
+export type NbaUpcomingGame = Omit<NbaHistoricalGame, "homeScore" | "awayScore">;
+
 export type NbaHistoricalPlayerBox = {
   rowId: number;
   gameId: number;
@@ -1158,10 +1160,16 @@ function updateEloRatings(args: {
 
 export function buildNbaPointInTimeFeatures(args: {
   games: NbaHistoricalGame[];
+  upcomingGames?: NbaUpcomingGame[];
   boxes: NbaHistoricalPlayerBox[];
   advanced?: NbaHistoricalPlayerAdvanced[];
+  /** Runtime optimization: replay all state but emit only requested games. */
+  emitGameIds?: ReadonlySet<number>;
 }): NbaPointInTimeFeatureRow[] {
-  const games = [...args.games].sort((left, right) =>
+  const games: Array<NbaHistoricalGame | NbaUpcomingGame> = [
+    ...args.games,
+    ...(args.upcomingGames ?? []),
+  ].sort((left, right) =>
     Date.parse(left.startTime) - Date.parse(right.startTime) || left.gameId - right.gameId);
   const boxesByGame = new Map<number, NbaHistoricalPlayerBox[]>();
   for (const box of args.boxes) {
@@ -1228,6 +1236,69 @@ export function buildNbaPointInTimeFeatures(args: {
       }
       activeStrengthSeason = game.season;
     }
+    const league = leagueRating(leagueObservations);
+    const venue = NBA_VENUES[game.homeTeam] ?? null;
+    if (args.emitGameIds === undefined || args.emitGameIds.has(game.gameId)) {
+      const homeHistory = observationsByTeam.get(game.homeTeamId) ?? [];
+      const awayHistory = observationsByTeam.get(game.awayTeamId) ?? [];
+      const leagueRegime = leagueRegimeFeatures(leagueObservations, game.season);
+      const homeAdjusted = adjustedRatings.get(game.homeTeamId) ?? { offense: 0, defense: 0 };
+      const awayAdjusted = adjustedRatings.get(game.awayTeamId) ?? { offense: 0, defense: 0 };
+      const homeElo = eloRatings.get(game.homeTeamId) ?? ELO_INITIAL_RATING;
+      const awayElo = eloRatings.get(game.awayTeamId) ?? ELO_INITIAL_RATING;
+      const homeFeatureState = teamFeatures({
+        observations: homeHistory,
+        season: game.season,
+        startMs,
+        adjusted: {
+          offense: league + homeAdjusted.offense,
+          defense: league + homeAdjusted.defense,
+        },
+        venue,
+        isHome: true,
+      });
+      const awayFeatureState = teamFeatures({
+        observations: awayHistory,
+        season: game.season,
+        startMs,
+        adjusted: {
+          offense: league + awayAdjusted.offense,
+          defense: league + awayAdjusted.defense,
+        },
+        venue,
+        isHome: false,
+      });
+      output.push({
+        release: NBA_POINT_IN_TIME_FEATURE_RELEASE,
+        game_id: game.gameId,
+        season: game.season,
+        feature_cutoff: game.startTime,
+        home_team_id: game.homeTeamId,
+        away_team_id: game.awayTeamId,
+        home_team: game.homeTeam,
+        away_team: game.awayTeam,
+        league_off_rating: league,
+        ...leagueRegime,
+        elo_home_rating: homeElo,
+        elo_away_rating: awayElo,
+        elo_rating_delta: homeElo - awayElo,
+        elo_home_win_probability: eloHomeWinProbability(homeElo, awayElo),
+        ...prefixed("home", homeFeatureState),
+        ...prefixed("away", awayFeatureState),
+        ...matchupFeatures({ home: homeFeatureState, away: awayFeatureState, league }),
+        target_home_score: "homeScore" in game ? game.homeScore : null,
+        target_away_score: "awayScore" in game ? game.awayScore : null,
+        target_home_margin: "homeScore" in game ? game.homeScore - game.awayScore : null,
+        target_total: "homeScore" in game ? game.homeScore + game.awayScore : null,
+        target_home_win: "homeScore" in game ? (game.homeScore > game.awayScore ? 1 : 0) : null,
+      });
+    }
+
+    // Future scheduled games consume the exact same pregame state but never
+    // invent a box score or update team/league strength. This is the runtime
+    // bridge for the portable model's selected point-in-time features.
+    if (!("homeScore" in game)) continue;
+
     const gameBoxes = boxesByGame.get(game.gameId) ?? [];
     const gameAdvanced = advancedByGame.get(game.gameId) ?? [];
     const homeBox = aggregateTeamBox(game.homeTeamId, gameBoxes);
@@ -1238,62 +1309,6 @@ export function buildNbaPointInTimeFeatures(args: {
     if (!Number.isFinite(possessions) || possessions <= 0) {
       throw new Error(`NBA game ${game.gameId} has invalid possession evidence.`);
     }
-
-    const homeHistory = observationsByTeam.get(game.homeTeamId) ?? [];
-    const awayHistory = observationsByTeam.get(game.awayTeamId) ?? [];
-    const league = leagueRating(leagueObservations);
-    const leagueRegime = leagueRegimeFeatures(leagueObservations, game.season);
-    const homeAdjusted = adjustedRatings.get(game.homeTeamId) ?? { offense: 0, defense: 0 };
-    const awayAdjusted = adjustedRatings.get(game.awayTeamId) ?? { offense: 0, defense: 0 };
-    const homeElo = eloRatings.get(game.homeTeamId) ?? ELO_INITIAL_RATING;
-    const awayElo = eloRatings.get(game.awayTeamId) ?? ELO_INITIAL_RATING;
-    const venue = NBA_VENUES[game.homeTeam] ?? null;
-    const homeFeatureState = teamFeatures({
-      observations: homeHistory,
-      season: game.season,
-      startMs,
-      adjusted: {
-        offense: league + homeAdjusted.offense,
-        defense: league + homeAdjusted.defense,
-      },
-      venue,
-      isHome: true,
-    });
-    const awayFeatureState = teamFeatures({
-      observations: awayHistory,
-      season: game.season,
-      startMs,
-      adjusted: {
-        offense: league + awayAdjusted.offense,
-        defense: league + awayAdjusted.defense,
-      },
-      venue,
-      isHome: false,
-    });
-    output.push({
-      release: NBA_POINT_IN_TIME_FEATURE_RELEASE,
-      game_id: game.gameId,
-      season: game.season,
-      feature_cutoff: game.startTime,
-      home_team_id: game.homeTeamId,
-      away_team_id: game.awayTeamId,
-      home_team: game.homeTeam,
-      away_team: game.awayTeam,
-      league_off_rating: league,
-      ...leagueRegime,
-      elo_home_rating: homeElo,
-      elo_away_rating: awayElo,
-      elo_rating_delta: homeElo - awayElo,
-      elo_home_win_probability: eloHomeWinProbability(homeElo, awayElo),
-      ...prefixed("home", homeFeatureState),
-      ...prefixed("away", awayFeatureState),
-      ...matchupFeatures({ home: homeFeatureState, away: awayFeatureState, league }),
-      target_home_score: game.homeScore,
-      target_away_score: game.awayScore,
-      target_home_margin: game.homeScore - game.awayScore,
-      target_total: game.homeScore + game.awayScore,
-      target_home_win: game.homeScore > game.awayScore ? 1 : 0,
-    });
 
     const homeObservation = observation({
       season: game.season,

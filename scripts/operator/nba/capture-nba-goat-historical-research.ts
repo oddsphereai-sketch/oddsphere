@@ -42,6 +42,8 @@ const ALL_DATASETS: readonly NbaBdlHistoricalDataset[] = [
   "advanced",
   "opening_odds",
 ];
+const OPTIONAL_DATASETS: readonly NbaBdlHistoricalDataset[] = ["current_odds"];
+const SUPPORTED_DATASETS: readonly NbaBdlHistoricalDataset[] = [...ALL_DATASETS, ...OPTIONAL_DATASETS];
 const SEASON_TYPES: readonly NbaBdlHistoricalSeasonType[] = ["regular", "ist"];
 
 function value(name: string): string | undefined {
@@ -65,7 +67,7 @@ function selectedDatasets(): NbaBdlHistoricalDataset[] {
   const raw = value("--datasets");
   if (!raw) return [...ALL_DATASETS];
   const selected = raw.split(",").map((item) => item.trim()).filter(Boolean);
-  const invalid = selected.filter((item) => !ALL_DATASETS.includes(item as NbaBdlHistoricalDataset));
+  const invalid = selected.filter((item) => !SUPPORTED_DATASETS.includes(item as NbaBdlHistoricalDataset));
   if (invalid.length > 0) throw new Error(`Unknown NBA datasets: ${invalid.join(", ")}.`);
   return [...new Set(selected as NbaBdlHistoricalDataset[])];
 }
@@ -196,7 +198,7 @@ async function collectGamesBySeasonType(args: {
 }
 
 async function collectExactGameBatches(args: {
-  dataset: "box" | "advanced" | "opening_odds";
+  dataset: "box" | "advanced" | "opening_odds" | "current_odds";
   gameIds: number[];
   outputDirectory: string;
   batchSize: number;
@@ -300,7 +302,8 @@ async function main(): Promise<void> {
   const datasets = selectedDatasets();
   const samplePagesRaw = value("--sample-pages");
   const sample = samplePagesRaw !== undefined;
-  if (!sample && (datasets.length !== ALL_DATASETS.length || ALL_DATASETS.some((dataset) => !datasets.includes(dataset)))) {
+  const supplemental = hasFlag("--supplemental");
+  if (!sample && !supplemental && (datasets.length !== ALL_DATASETS.length || ALL_DATASETS.some((dataset) => !datasets.includes(dataset)))) {
     throw new Error("A full NBA research capture must include games, box, advanced, and opening_odds.");
   }
   const maxPages = sample ? positiveInteger("--sample-pages") : 1_000;
@@ -309,10 +312,12 @@ async function main(): Promise<void> {
   const boxBatchSize = positiveInteger("--box-batch-size", batchSize);
   const advancedBatchSize = positiveInteger("--advanced-batch-size", batchSize);
   const openingOddsBatchSize = positiveInteger("--opening-odds-batch-size", batchSize);
+  const currentOddsBatchSize = positiveInteger("--current-odds-batch-size", batchSize);
   for (const [flag, size] of [
     ["--box-batch-size", boxBatchSize],
     ["--advanced-batch-size", advancedBatchSize],
     ["--opening-odds-batch-size", openingOddsBatchSize],
+    ["--current-odds-batch-size", currentOddsBatchSize],
   ] as const) {
     if (size > 50) throw new Error(`${flag} must be from 1 through 50.`);
   }
@@ -322,6 +327,9 @@ async function main(): Promise<void> {
   const importedExpectedGames = value("--expected-games");
   if (importedGamesFile && (!importedGamesSha256 || !importedExpectedGames)) {
     throw new Error("--games-file requires --games-sha256 and --expected-games.");
+  }
+  if (supplemental && !importedGamesFile) {
+    throw new Error("--supplemental requires --games-file so the exact season game scope is immutable.");
   }
   const requestIntervalMs = Number(
     value("--request-interval-ms") ?? process.env.NBA_BDL_REQUEST_INTERVAL_MS ?? "125",
@@ -444,6 +452,36 @@ async function main(): Promise<void> {
     }
   }
 
+  if (datasets.includes("current_odds")) {
+    if (season < 2025) {
+      manifests.current_odds = {
+        file: "",
+        rows: 0,
+        requests: 0,
+        complete: false,
+        sha256: "",
+        note: "BALLDONTLIE current odds are available only from the 2025 season onward.",
+      };
+    } else {
+      const result = await collectExactGameBatches({
+        dataset: "current_odds", gameIds, outputDirectory, batchSize: currentOddsBatchSize,
+        maxPages, requestIntervalMs, sample, resume,
+      });
+      const rows = result.rows;
+      const written = await writeJsonl({ outputDirectory, dataset: "current_odds", rows });
+      manifests.current_odds = {
+        ...written,
+        rows: rows.length,
+        requests: result.requests,
+        complete: result.complete,
+        batches: result.batches,
+        reused_batches: result.reusedBatches,
+        missing_game_ids: result.missingGameIds,
+        exclusions: { out_of_scope_rows: 0 },
+      };
+    }
+  }
+
   const manifest = {
     release: NBA_BDL_HISTORICAL_RESEARCH_RELEASE,
     capturedAt,
@@ -453,6 +491,7 @@ async function main(): Promise<void> {
       box: boxBatchSize,
       advanced: advancedBatchSize,
       opening_odds: openingOddsBatchSize,
+      current_odds: currentOddsBatchSize,
     },
     scoreBacktestEligible: !sample &&
       manifests.games?.complete === true &&
@@ -463,6 +502,13 @@ async function main(): Promise<void> {
       manifests.box?.complete === true &&
       manifests.advanced?.complete === true &&
       manifests.opening_odds?.complete === true,
+    exactCurrentPriceBacktestEligible: !sample &&
+      manifests.games?.complete === true &&
+      manifests.current_odds?.complete === true,
+    exactOpenToCurrentMovementBacktestEligible: !sample &&
+      manifests.games?.complete === true &&
+      manifests.opening_odds?.complete === true &&
+      manifests.current_odds?.complete === true,
     finalGames: finalGames.length,
     gameIdentitySha256: createHash("sha256").update(gameIds.sort((a, b) => a - b).join(",")).digest("hex"),
     datasets: manifests,

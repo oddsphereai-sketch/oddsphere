@@ -5,10 +5,12 @@
  * flow can be driven by the upcoming /api/cron/nba-daily-refresh route.
  * The operator stays as a thin CLI wrapper.
  *
- * What this does (preserved byte-for-byte from the pre-7K operator):
+ * What this does:
  *   • Loads NBA games + teams for the requested date.
- *   • Fetches NBA odds from SharpAPI /odds?league=nba&date=YYYY-MM-DD
- *     (limit-paginated). Skips alternate / non-main-line rows.
+ *   • Fetches the current NBA board from SharpAPI /odds, one canonical
+ *     game market at a time, using cursor pagination. SharpAPI does not
+ *     document a `date` filter on this endpoint; slate isolation happens
+ *     locally through exact home/away matching against the requested games.
  *   • Matches each odds row to one of our `games` rows by team-name
  *     overlap (display_name + last-token fallback).
  *   • Normalizes market + side, builds (game_id, market_type,
@@ -66,6 +68,15 @@ export type RefreshNbaLinesResult = {
   parsed: number;
   linesWritten: number;
   lineHistoryWritten: number;
+  /** Canonical main-line snapshot used by dry-run board-impact audits. */
+  canonicalLines: Array<{
+    gameId: number;
+    marketType: "moneyline" | "spread" | "total";
+    sportsbook: string;
+    side: "home" | "away" | "over" | "under";
+    lineValue: number | null;
+    oddsAmerican: number | null;
+  }>;
   errors: string[];
 };
 
@@ -107,6 +118,9 @@ type SharpOddsRow = {
   sport?: string;
   is_main_line?: boolean;
   is_alternate_line?: boolean;
+  is_stale_pregame_price?: boolean;
+  is_live?: boolean;
+  event_start_time?: string;
   last_seen_at?: string;
   wire_received_at?: string;
 };
@@ -193,23 +207,85 @@ function impliedProbability(american: number | null): number | null {
   return Math.abs(american) / (Math.abs(american) + 100);
 }
 
-async function fetchNbaOddsPaginated(
-  date: string,
+const NBA_GAME_MARKETS = ["moneyline", "point_spread", "total_points"] as const;
+const MAX_PAGES_PER_NBA_GAME_MARKET = 25;
+
+type SharpEventRow = {
+  id?: string;
+  event_id?: string;
+  home_team?: string;
+  away_team?: string;
+  event_start_time?: string;
+  start_time?: string;
+  league?: string;
+};
+
+export async function fetchNbaCurrentEvents(
   apiKey: string,
   log: (msg: string) => void,
+  fetchImpl: typeof fetch = fetch,
+): Promise<SharpEventRow[]> {
+  const all: SharpEventRow[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const cursorQuery = cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`;
+    const response = await fetchImpl(
+      `${SHARP_API_BASE}/events?league=nba&limit=100${cursorQuery}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+    );
+    if (!response.ok) {
+      throw new Error(`SharpAPI NBA /events page=${page + 1} HTTP ${response.status}`);
+    }
+    const body = (await response.json()) as {
+      data?: SharpEventRow[];
+      pagination?: { has_more?: boolean; next_cursor?: string | null };
+    };
+    all.push(...(body.data ?? []));
+    const next = body.pagination?.next_cursor ?? null;
+    if (!body.pagination?.has_more || next === null || next === "") return all;
+    cursor = next;
+  }
+  log("  ✗ /events hit the 10-page safety cap");
+  throw new Error("SharpAPI NBA /events exceeded the 10-page safety cap");
+}
+
+export async function fetchNbaCurrentOddsBoard(
+  apiKey: string,
+  log: (msg: string) => void,
+  fetchImpl: typeof fetch = fetch,
+  eventIds: readonly string[] = [],
 ): Promise<SharpOddsRow[]> {
   const all: SharpOddsRow[] = [];
-  for (let offset = 0; offset < 1000; offset += 100) {
-    const url = `${SHARP_API_BASE}/odds?league=nba&date=${date}&limit=100&offset=${offset}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
-    if (!res.ok) {
-      log(`  ✗ /odds page offset=${offset} HTTP ${res.status}`);
-      break;
+  const targets: Array<{ market: typeof NBA_GAME_MARKETS[number]; eventId: string | null }> =
+    eventIds.length > 0
+      ? eventIds.flatMap((eventId) => NBA_GAME_MARKETS.map((market) => ({ market, eventId })))
+      : NBA_GAME_MARKETS.map((market) => ({ market, eventId: null }));
+  for (const { market, eventId } of targets) {
+    let cursor: string | null = null;
+    for (let page = 0; page < MAX_PAGES_PER_NBA_GAME_MARKET; page++) {
+      const cursorQuery = cursor === null ? "" : `&cursor=${encodeURIComponent(cursor)}`;
+      const eventQuery = eventId === null ? "" : `&event_id=${encodeURIComponent(eventId)}`;
+      const url = `${SHARP_API_BASE}/odds?league=nba&market_type=${market}${eventQuery}&limit=100${cursorQuery}`;
+      const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+      if (!res.ok) {
+        log(`  ✗ /odds market=${market} event=${eventId ?? "all"} page=${page + 1} HTTP ${res.status}`);
+        break;
+      }
+      const j = (await res.json()) as {
+        data?: SharpOddsRow[];
+        pagination?: { has_more?: boolean; next_cursor?: string | null };
+      };
+      const items = j.data ?? [];
+      all.push(...items);
+      const next = j.pagination?.next_cursor ?? null;
+      if (!j.pagination?.has_more || next === null || next === "") break;
+      cursor = next;
+      if (page === MAX_PAGES_PER_NBA_GAME_MARKET - 1) {
+        throw new Error(
+          `SharpAPI NBA /odds market=${market} event=${eventId ?? "all"} exceeded the ${MAX_PAGES_PER_NBA_GAME_MARKET}-page safety cap`,
+        );
+      }
     }
-    const j = (await res.json()) as { data?: SharpOddsRow[] };
-    const items = j.data ?? [];
-    all.push(...items);
-    if (items.length < 100) break;
   }
   return all;
 }
@@ -222,19 +298,6 @@ async function loadNbaGamesForSlateDate(slateDate: string): Promise<GameRow[]> {
     .eq("slate_date", slateDate);
   if (error !== null) throw new Error(`load NBA games failed: ${error.message}`);
   return ((data as unknown) ?? []) as GameRow[];
-}
-
-/**
- * Derive the set of UTC dates (YYYY-MM-DD) that SharpAPI should be
- * queried for, given the matched games. SharpAPI's /odds endpoint
- * filters by UTC date, so a single ET slate with a late tip lives
- * under the NEXT UTC date. NBA evenings typically have one UTC date;
- * a mixed matinee + late-tip slate would have two.
- */
-function sharpApiDatesForGames(games: GameRow[]): string[] {
-  const set = new Set<string>();
-  for (const g of games) set.add(g.game_date.slice(0, 10));
-  return [...set].sort();
 }
 
 async function loadNbaTeams(): Promise<TeamRow[]> {
@@ -267,6 +330,27 @@ function matchGame(
     if (homeMatches && awayMatches) return g;
   }
   return null;
+}
+
+function eventIdsForGames(
+  events: readonly SharpEventRow[],
+  games: GameRow[],
+  teamById: Map<number, TeamRow>,
+): string[] {
+  const ids = new Set<string>();
+  for (const event of events) {
+    const eventId = event.id ?? event.event_id;
+    const home = event.home_team;
+    const away = event.away_team;
+    const startsAt = event.event_start_time ?? event.start_time;
+    if (!eventId || !home || !away || !startsAt) continue;
+    const game = matchGame(home, away, games, teamById);
+    if (!game) continue;
+    const distanceMs = Math.abs(Date.parse(startsAt) - Date.parse(game.game_date));
+    if (!Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000) continue;
+    ids.add(eventId);
+  }
+  return [...ids].sort();
 }
 
 function buildLinePayload(
@@ -332,6 +416,7 @@ export async function refreshNbaLines(
       parsed: 0,
       linesWritten: 0,
       lineHistoryWritten: 0,
+      canonicalLines: [],
       errors,
     };
   }
@@ -340,17 +425,17 @@ export async function refreshNbaLines(
   const teams = await loadNbaTeams();
   const teamById = new Map<number, TeamRow>(teams.map((t) => [t.id, t]));
 
-  // 3. Fetch SharpAPI odds for each distinct UTC date in the slate.
-  // NBA evenings typically yield one UTC date; mixed matinee + late-tip
-  // slates can span two. Distinct UTC dates are derived from the matched
-  // games' game_date column.
-  const sharpApiDates = sharpApiDatesForGames(games);
-  log(`SharpAPI fetch dates (UTC): ${sharpApiDates.join(", ")}`);
-  const oddsRows: SharpOddsRow[] = [];
-  for (const sharpDate of sharpApiDates) {
-    const batch = await fetchNbaOddsPaginated(sharpDate, opts.sharpApiKey, log);
-    oddsRows.push(...batch);
-  }
+  // 3. Discover the provider's exact event ids, then fetch only those events'
+  // three game markets. SharpAPI does not document a date filter; its old
+  // ignored `date` query made this writer download an unrelated board. Event
+  // identity plus team and start-time matching prevents future same-pair games
+  // and thousands of alternate lines from exhausting global pagination.
+  const events = await fetchNbaCurrentEvents(opts.sharpApiKey, log);
+  const eventIds = eventIdsForGames(events, games, teamById);
+  log(`SharpAPI matched event ids: ${eventIds.length}`);
+  const oddsRows = eventIds.length === 0
+    ? []
+    : await fetchNbaCurrentOddsBoard(opts.sharpApiKey, log, fetch, eventIds);
   log(`SharpAPI /odds rows fetched: ${oddsRows.length}`);
 
   // 4. Match + normalize + build payloads.
@@ -360,6 +445,7 @@ export async function refreshNbaLines(
   const payloads: LineUpsertPayload[] = [];
 
   for (const r of oddsRows) {
+    if (r.is_live === true || r.is_stale_pregame_price === true) continue;
     const home = r.home_team;
     const away = r.away_team;
     if (!home || !away) {
@@ -409,10 +495,11 @@ export async function refreshNbaLines(
   //   1. If any row in the group has is_main_line=true → take that.
   //   2. Otherwise → take the row with American odds closest to -110.
   //
-  // This is intentionally lossy for line_history (we still archive all
-  // observations via the line_history append below — that uses the same
-  // `payloads` array). The dedupe applies only to the `lines` upsert path
-  // where (game,market,side,sportsbook) needs a single canonical row.
+  // The same canonical snapshot is written to both `lines` and
+  // `line_history`. Archiving every unflagged alternate as if it were the
+  // main line makes an opening-to-current reader invent movement within a
+  // single provider response. Alternate-line prices require their own
+  // price-aware contract rather than contaminating main-line chronology.
   type Tagged = LineUpsertPayload & { _is_main_flag?: boolean | null };
   const dedupeByGroup = new Map<string, Tagged>();
   for (const p of payloads as Tagged[]) {
@@ -433,10 +520,19 @@ export async function refreshNbaLines(
   const dedupedPayloads: LineUpsertPayload[] = [...dedupeByGroup.values()].map(
     (p) => {
       // Strip the tracking tag before write — schema doesn't have it.
-      const { _is_main_flag: _unused, ...rest } = p as Tagged;
-      return rest as LineUpsertPayload;
+      const rest = { ...p };
+      delete rest._is_main_flag;
+      return rest;
     },
   );
+  const canonicalLines: RefreshNbaLinesResult["canonicalLines"] = dedupedPayloads.map((line) => ({
+    gameId: line.game_id,
+    marketType: line.market_type as "moneyline" | "spread" | "total",
+    sportsbook: line.sportsbook,
+    side: line.side as "home" | "away" | "over" | "under",
+    lineValue: line.line_value,
+    oddsAmerican: line.odds_american,
+  }));
 
   log(
     `\nProcessed: matched=${matched} unmatched=${unmatched} parsed=${parsed}`,
@@ -464,6 +560,7 @@ export async function refreshNbaLines(
       parsed,
       linesWritten: 0,
       lineHistoryWritten: 0,
+      canonicalLines,
       errors,
     };
   }
@@ -508,7 +605,7 @@ export async function refreshNbaLines(
 
   // 7. line_history append-only snapshot (Phase v0c-DE).
   const nowIso = new Date().toISOString();
-  const historyRows: LineHistoryPayload[] = payloads.map((p) => ({
+  const historyRows: LineHistoryPayload[] = dedupedPayloads.map((p) => ({
     game_id: p.game_id,
     market_type: p.market_type,
     player_id: null,
@@ -541,6 +638,7 @@ export async function refreshNbaLines(
     parsed,
     linesWritten,
     lineHistoryWritten,
+    canonicalLines,
     errors,
   };
 }

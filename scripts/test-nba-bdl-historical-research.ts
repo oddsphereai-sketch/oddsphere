@@ -99,6 +99,14 @@ async function main(): Promise<void> {
     }),
     /requires exact dates or game IDs/,
   );
+  await assert.rejects(
+    () => fetchNbaBdlHistoricalRows({
+      dataset: "current_odds",
+      apiKey: "test-key",
+      fetchImpl,
+    }),
+    /requires exact dates or game IDs/,
+  );
   assert.equal(nbaBdlProviderGameId({ id: 9, game: { id: 90 } }), 90);
   assert.equal(nbaBdlProviderGameId({ id: 9, game_id: 91 }), 91);
   assert.equal(nbaBdlProviderGameId({ id: 9 }), 9);
@@ -111,6 +119,13 @@ async function main(): Promise<void> {
   assert.equal(advancedUrl.searchParams.get("period"), "0");
   assert.equal(advancedUrl.searchParams.has("season_type"), false);
   assert.deepEqual(advancedUrl.searchParams.getAll("game_ids[]"), ["18446819", "18446820"]);
+
+  const currentOddsUrl = __NBA_BDL_HISTORICAL_TEST__.buildUrl({
+    dataset: "current_odds",
+    gameIds: [18446819, 18446820],
+  });
+  assert.equal(currentOddsUrl.pathname, "/v2/odds");
+  assert.deepEqual(currentOddsUrl.searchParams.getAll("game_ids[]"), ["18446819", "18446820"]);
 
   const operatorSource = readFileSync(
     new URL("operator/nba/capture-nba-goat-historical-research.ts", import.meta.url),
@@ -127,6 +142,8 @@ async function main(): Promise<void> {
   assert.match(operatorSource, /--resume/);
   assert.match(operatorSource, /--advanced-batch-size/);
   assert.match(operatorSource, /--opening-odds-batch-size/);
+  assert.match(operatorSource, /--current-odds-batch-size/);
+  assert.match(operatorSource, /--supplemental requires --games-file/);
   assert.match(operatorSource, /batchSizes/);
   assert.match(operatorSource, /missing_game_ids/);
   assert.match(operatorSource, /dataset: "box", gameIds/);

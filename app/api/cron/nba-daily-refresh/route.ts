@@ -45,6 +45,7 @@
  */
 
 import { cronHandler } from "@/lib/cron/runCron";
+import { supabase } from "@/lib/db/supabase";
 import { currentSlateDate } from "@/lib/dates/slateDate";
 import {
   seedNbaGames,
@@ -54,9 +55,10 @@ import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsS
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { nbaScheduleSeedDates } from "@/lib/services/nba/nbaRollingSchedule";
+import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_15_r5_espn_season_identity";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_15_r6_professional_state";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -68,6 +70,16 @@ function currentNbaRatingsSeason(now: Date): number {
   const utcMonth = now.getUTCMonth(); // 0 = Jan, 9 = Oct
   const utcYear = now.getUTCFullYear();
   return utcMonth >= 9 ? utcYear + 1 : utcYear;
+}
+
+/** BALLDONTLIE keys an NBA season by its starting calendar year. */
+function currentNbaProviderSeason(now: Date): number {
+  return now.getUTCMonth() >= 9 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+}
+
+function recentUtcDates(now: Date, count: number): string[] {
+  return Array.from({ length: count }, (_, index) =>
+    new Date(now.getTime() - index * 86_400_000).toISOString().slice(0, 10));
 }
 
 /**
@@ -107,10 +119,15 @@ export async function GET(request: Request): Promise<Response> {
       if (!sharpApiKey) {
         throw new Error("SHARPAPI_KEY missing from env");
       }
+      const balldontlieApiKey = process.env.BALLDONTLIE_API_KEY;
+      if (!balldontlieApiKey) {
+        throw new Error("BALLDONTLIE_API_KEY missing from env");
+      }
 
       const now = new Date();
       const etDateDashed = currentSlateDate("nba"); // YYYY-MM-DD
       const season = currentNbaRatingsSeason(now);
+      const providerSeason = currentNbaProviderSeason(now);
 
       const stepLog = (label: string) => (msg: string) => {
         console.log(`[nba-daily-refresh:${label}] ${msg}`);
@@ -124,6 +141,7 @@ export async function GET(request: Request): Promise<Response> {
         refresh_release: NBA_DAILY_REFRESH_RELEASE,
         slate_date_et: etDateDashed,
         ratings_season: season,
+        provider_season: providerSeason,
         mode: intraday ? "intraday_market" : "daily_full",
       };
 
@@ -168,6 +186,26 @@ export async function GET(request: Request): Promise<Response> {
         gamesUpserted: seedTotals.gamesUpserted,
       };
 
+      // ─── Step 2: append finalized point-in-time model inputs ──────
+      // Full daily runs recover up to seven missed dates even when today's
+      // slate is empty. Intraday cycles stay market-only.
+      const professionalInputs = intraday
+        ? {
+            release: "skipped_intraday",
+            providerRequests: 0,
+            finalGamesFound: 0,
+            alreadyStored: 0,
+            written: 0,
+          }
+        : await collectNbaProfessionalGameInputs({
+            supabase,
+            season: providerSeason,
+            dates: recentUtcDates(now, 7),
+            apiKey: balldontlieApiKey,
+            apply: true,
+          });
+      stepDetails.professional_game_inputs = professionalInputs;
+
       // No NBA today → clean success exit. Ratings + lines have
       // nothing to attach to; no point firing the BBR scrape or
       // SharpAPI hit.
@@ -183,6 +221,7 @@ export async function GET(request: Request): Promise<Response> {
           records_updated:
             seedTotals.teamsUpserted +
             seedTotals.gamesUpserted +
+            professionalInputs.written +
             (responseSnapshot?.ok ? 1 : 0),
           partial: partial || responseSnapshot?.ok === false,
           error_message: responseSnapshot?.ok === false
@@ -199,7 +238,7 @@ export async function GET(request: Request): Promise<Response> {
         };
       }
 
-      // ─── Step 2: refreshNbaTeamRatings ────────────────────────────
+      // ─── Step 3: refreshNbaTeamRatings ────────────────────────────
       console.log(`[nba-daily-refresh] step=ratings  season=${season}  mode=${intraday ? "skip" : "full"}`);
       const ratingsResult = intraday
         ? {
@@ -240,7 +279,7 @@ export async function GET(request: Request): Promise<Response> {
       if (!intraday && ratingsResult.seasonFetchStatus === "failed") partial = true;
       if (ratingsResult.errors.length > 0) partial = true;
 
-      // ─── Step 3: refreshNbaLines ──────────────────────────────────
+      // ─── Step 4: refreshNbaLines ──────────────────────────────────
       // Passes the ET slate-date. Service filters by games.slate_date
       // and derives the SharpAPI UTC date(s) from the matched games'
       // game_date column. Late ET tips that live in UTC the next day
@@ -286,6 +325,7 @@ export async function GET(request: Request): Promise<Response> {
         seedTotals.teamsUpserted +
         seedTotals.gamesUpserted +
         ratingsResult.written +
+        professionalInputs.written +
         linesResult.linesWritten +
         linesResult.lineHistoryWritten +
         (responseSnapshot?.ok ? 1 : 0);

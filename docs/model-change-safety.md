@@ -505,6 +505,48 @@ demotions: zero; actionable count: four to four. The same deep audit moves from
 eight critical findings to zero. No provider call, writer, schedule, database
 write, model coefficient, copy, label, or layout changes.
 
+## Owner-directed provisional exception: NBA professional unified projection r2
+
+On 2026-10-15 Daniel Mengel explicitly directed Oddsphere to stop treating the
+independent model and market reader as separate products and to make the final
+site score, all three sides, probabilities, grades, locks, and tracking one
+coherent NBA forecast before opening night. This exception is limited to the r2
+release family and evidence in
+`docs/model-audits/2026-10-15-nba-professional-model-r2-current-audit.md`.
+
+The portable ratings-and-schedule ridge scorer is frozen from the 2024-25
+selection partition and was confirmed once on the untouched 2025-26 regular
+season. Production may give 25% authority to that independent margin and Total
+and 75% to complete multi-book pregame consensus. A first-tracked-per-book
+spread move of at least two points may only determine the sign of the remaining
+spread residual. Public splits cannot alter a score, side, probability, or
+grade. The sportsbook supplying the evaluated exact price is excluded from its
+fair reference. One reconciled margin/Total pair must reconstruct both team
+scores and own Moneyline, Spread, Total, probabilities, grades, future locks,
+and tracking.
+
+On 1,224 confirmation games the unified score improves team-score, margin, and
+Total MAE from 9.562/11.345/15.237 to 9.209/10.806/14.665; winner direction from
+68.14% to 69.61%; Brier from 0.20468 to 0.19354; and main Spread from 48.86% to
+52.94%. Total direction is only 51.80% and is not a standalone profitability
+claim. The exact October 20-21 current-board rehearsal covers all 14 games and
+42 markets: actionables move 12 to 10 through four promotions and six
+demotions, with six side changes. This contraction is explicit, comes primarily
+from replacing the incumbent's overconfident Total/Spread probabilities with
+the confirmed residual distribution, and still leaves ten actionables; it must
+not be concealed or enlarged with unvalidated thresholds. Owner approval of
+this complete r2 publication is required before merge.
+
+Current-season state is append-only finalized BALLDONTLIE game/aggregate-box
+input under the existing `prediction_pipeline:nba` writer lease. A missing
+state table, incomplete provider identity, malformed artifact, absent tip time,
+or feature-release mismatch fails the incoming snapshot and preserves the last
+known-good board. Existing locked records remain byte-for-byte immutable and
+retain reader precedence. Publication requires the migration, focused NBA
+tests, full model-change verification, latest-main integration safety,
+protected PR checks, and post-deploy proof of release identity, artifact parity,
+collector coverage, sole writer/lease, board coherence, and unchanged locks.
+
 ## Owner-approved provisional exception: NBA independent-first regular-season r1
 
 On 2026-10-06 Daniel Mengel explicitly directed Oddsphere to prepare the NBA regular-season model with

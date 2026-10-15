@@ -106,6 +106,59 @@ export type CreateNbaRecordsResult = {
   errors: Array<{ game_id: number | null; market: string; reason: string }>;
 };
 
+export type ExistingNbaPredictionRecord = {
+  id: number;
+  game_id: number;
+  market: string;
+  model_version: string;
+  locked_at: string | null;
+};
+
+/**
+ * Resolve the one mutable/immutable record that owns each game-market slot.
+ * A lock from any historical model release always wins. A single unlocked
+ * legacy row may be migrated in place to the new release; ambiguous duplicate
+ * rows fail closed instead of allowing a second public recommendation.
+ */
+export function resolveExistingNbaPredictionRecords(
+  rows: readonly ExistingNbaPredictionRecord[],
+): {
+  byKey: Map<string, ExistingNbaPredictionRecord>;
+  conflicts: Map<string, string>;
+} {
+  const grouped = new Map<string, ExistingNbaPredictionRecord[]>();
+  for (const row of rows) {
+    const key = `${row.game_id}::${row.market}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
+  }
+  const byKey = new Map<string, ExistingNbaPredictionRecord>();
+  const conflicts = new Map<string, string>();
+  for (const [key, candidates] of grouped) {
+    const locked = candidates.filter((row) => row.locked_at !== null);
+    if (locked.length === 1) {
+      byKey.set(key, locked[0]!);
+      continue;
+    }
+    if (locked.length > 1) {
+      conflicts.set(key, `multiple immutable NBA records occupy ${key}`);
+      continue;
+    }
+    const current = candidates.filter(
+      (row) => row.model_version === NBA_PREDICTION_RECORD_MODEL_VERSION,
+    );
+    if (current.length === 1 && candidates.length === 1) {
+      byKey.set(key, current[0]!);
+      continue;
+    }
+    if (current.length === 0 && candidates.length === 1) {
+      byKey.set(key, candidates[0]!);
+      continue;
+    }
+    conflicts.set(key, `ambiguous unlocked NBA records occupy ${key}`);
+  }
+  return { byKey, conflicts };
+}
+
 // Translate NBA recommendation grade into the v17 prediction_records
 // public play_grade taxonomy. Falls back to "lean" — the safest neutral
 // when the source grade doesn't map cleanly.
@@ -186,6 +239,7 @@ function buildNbaSpreadDisplayedContext(opts: {
 
 function buildSnapshot(opts: {
   dto: NbaDailyEdgeDto;
+  gameDto: NbaDailyEdgeDto["games"][number];
   matchup: string;
   market: "moneyline" | "total";
   intel: MarketIntelligence;
@@ -228,6 +282,9 @@ function buildSnapshot(opts: {
     as_of: opts.dto.as_of,
     matchup: opts.matchup,
     market: opts.market,
+    // Future locked readers can restore the exact member DTO instead of
+    // reinterpreting an immutable row through newer model/reader semantics.
+    nba_game_dto_at_capture: opts.gameDto,
     pick_label: opts.intel.pick_label,
     rationale: opts.intel.rationale,
     // Predicted scores persisted for audit + calibration. These come
@@ -317,13 +374,13 @@ export async function createNbaPredictionRecords(
   result.scanned = games.length;
   if (games.length === 0) return result;
 
-  // Pull existing rows for this slate so we can dedupe + respect locks.
+  // Pull every release for this slate. Filtering to the current release would
+  // make an older immutable lock invisible immediately after a model bump.
   const { data: existingRows, error: exErr } = await opts.supabase
     .from("prediction_records")
     .select("id, game_id, market, model_version, locked_at")
     .eq("sport", "nba")
-    .eq("slate_date", opts.slateDate)
-    .eq("model_version", NBA_PREDICTION_RECORD_MODEL_VERSION);
+    .eq("slate_date", opts.slateDate);
   if (exErr) {
     result.errors.push({
       game_id: null,
@@ -332,15 +389,10 @@ export async function createNbaPredictionRecords(
     });
     return result;
   }
-  const existingByKey = new Map<string, { id: number; locked_at: string | null }>();
-  for (const r of (existingRows ?? []) as Array<{
-    id: number;
-    game_id: number;
-    market: string;
-    locked_at: string | null;
-  }>) {
-    existingByKey.set(`${r.game_id}::${r.market}`, { id: r.id, locked_at: r.locked_at });
-  }
+  const existingResolution = resolveExistingNbaPredictionRecords(
+    (existingRows ?? []) as ExistingNbaPredictionRecord[],
+  );
+  const existingByKey = existingResolution.byKey;
 
   const now = new Date();
   const nowIso = now.toISOString();
@@ -364,6 +416,12 @@ export async function createNbaPredictionRecords(
     const dataQualityTier = g.data_quality_tier ?? null;
 
     for (const market of ["moneyline", "total"] as const) {
+      const recordKey = `${game_id}::${market}`;
+      const existingConflict = existingResolution.conflicts.get(recordKey);
+      if (existingConflict) {
+        result.errors.push({ game_id, market, reason: existingConflict });
+        continue;
+      }
       const intel = market === "moneyline" ? g.intelligence.ml : g.intelligence.total;
       if (intel.pick_side === null) {
         result.skippedHeld++;
@@ -378,7 +436,7 @@ export async function createNbaPredictionRecords(
         });
         continue;
       }
-      const existing = existingByKey.get(`${game_id}::${market}`);
+      const existing = existingByKey.get(recordKey);
       if (existing !== undefined && existing.locked_at !== null) {
         result.skippedLocked++;
         result.proposed.push({
@@ -422,7 +480,7 @@ export async function createNbaPredictionRecords(
         line_value: market === "total" ? intel.consensus_line : null,
         odds_american: intel.current_price.odds_american,
         odds_decimal: null,
-        model_used: "nbaAutoModelV2_independent_first",
+        model_used: "nba_professional_unified",
         model_version: NBA_PREDICTION_RECORD_MODEL_VERSION,
         prediction_source: "nba_daily_edge",
         confidence: intel.effective_confidence,
@@ -452,6 +510,7 @@ export async function createNbaPredictionRecords(
         snapshot_json: {
           ...buildSnapshot({
             dto: nbaDto,
+            gameDto: g,
             matchup,
             market,
             intel,
@@ -471,10 +530,10 @@ export async function createNbaPredictionRecords(
         // Pre-lock refresh: row exists and is NOT yet locked. Update
         // with current pipeline output so the card never goes stale
         // between morning ingest and T-60 lock. Frozen-at-insert
-        // columns (game_id, sport, market, model_version, etc.) are
-        // omitted from the update payload — they identify the row,
-        // not the prediction. When lockNow=true, this update IS the
-        // lock event (locked_at flips to nowIso).
+        // columns (game_id, sport, market, etc.) are omitted. A sole unlocked
+        // row from the prior release is advanced in place so a release bump
+        // cannot create two public records for one game-market. Locked legacy
+        // rows were returned above and can never reach this path.
         const snapshotWithProvenance = {
           ...(row.snapshot_json as Record<string, unknown>),
           refreshed_from_pipeline_at: nowIso,
@@ -482,6 +541,9 @@ export async function createNbaPredictionRecords(
           refreshed_from_pipeline_reason: "pre_lock_intel_refresh",
         };
         const updatePayload: Partial<PredictionRecordRow> = {
+          ...(existing.model_version === NBA_PREDICTION_RECORD_MODEL_VERSION
+            ? {}
+            : { model_version: NBA_PREDICTION_RECORD_MODEL_VERSION }),
           pick: row.pick,
           side: row.side,
           line_value: row.line_value,

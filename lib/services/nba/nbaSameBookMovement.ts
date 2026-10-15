@@ -17,6 +17,13 @@ export type NbaComparableOpening = {
   observedAt: string;
 };
 
+export type NbaConsensusOpeningSpread = {
+  spreadHome: number;
+  observedAt: string;
+  sportsbooks: string[];
+  basis: "first_tracked_per_book_consensus";
+};
+
 function normalizedBook(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -28,6 +35,56 @@ function lineToken(market: NbaMovementMarket, line: number | null): string | nul
 
 function implied(american: number): number {
   return american > 0 ? 100 / (american + 100) : -american / (-american + 100);
+}
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]!
+    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+/**
+ * Reconstructs the first tracked multi-book home spread for a game. This is
+ * deliberately not called a provider opener: each included book contributes
+ * its earliest canonical home-spread observation before the current snapshot.
+ */
+export function selectNbaConsensusOpeningSpread(args: {
+  rows: readonly NbaMovementHistoryRow[];
+  externalGameId: number;
+  acceptedSportsbooks: readonly string[];
+  currentObservedAt: string | null;
+  maximumConsensusOutlier?: number;
+}): NbaConsensusOpeningSpread | null {
+  const currentObservedMs = Date.parse(args.currentObservedAt ?? "");
+  if (!Number.isFinite(currentObservedMs)) return null;
+  const accepted = new Set(args.acceptedSportsbooks.map(normalizedBook));
+  if (accepted.size === 0) return null;
+  const firstByBook = new Map<string, NbaMovementHistoryRow>();
+  for (const row of args.rows) {
+    const book = normalizedBook(row.sportsbook);
+    const observedMs = Date.parse(row.observedAt ?? "");
+    if (
+      row.externalGameId !== args.externalGameId || row.market !== "spread" ||
+      row.side !== "home" || row.line === null || !Number.isFinite(row.line) ||
+      !accepted.has(book) || !Number.isFinite(observedMs) || observedMs >= currentObservedMs
+    ) continue;
+    const existing = firstByBook.get(book);
+    if (!existing || observedMs < Date.parse(existing.observedAt!)) firstByBook.set(book, row);
+  }
+  if (firstByBook.size === 0) return null;
+  const center = median([...firstByBook.values()].map((row) => row.line!));
+  const maximumOutlier = args.maximumConsensusOutlier ?? 4;
+  const retained = [...firstByBook.entries()].filter(([, row]) =>
+    Math.abs(row.line! - center) <= maximumOutlier);
+  if (retained.length === 0) return null;
+  return {
+    spreadHome: median(retained.map(([, row]) => row.line!)),
+    observedAt: new Date(Math.min(...retained.map(([, row]) => Date.parse(row.observedAt!)))).toISOString(),
+    sportsbooks: retained.map(([book]) => book).sort(),
+    basis: "first_tracked_per_book_consensus",
+  };
 }
 
 /**

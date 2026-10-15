@@ -69,7 +69,7 @@ const cronSource = readFileSync(
   "utf8",
 );
 assert.match(cronSource, /nbaScheduleSeedDates\(etDateDashed, intraday\)/);
-assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_15_r5_espn_season_identity/);
+assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_15_r6_professional_state/);
 assert.match(cronSource, /nba_daily_refresh_schedule_only/);
 assert.match(cronSource, /leaseGroup:\s*"prediction_pipeline"/);
 assert.match(cronSource, /requireLease:\s*true/);

@@ -7,6 +7,7 @@ import {
   type NbaHistoricalPlayerAdvanced,
   type NbaHistoricalGame,
   type NbaHistoricalPlayerBox,
+  type NbaUpcomingGame,
 } from "../lib/services/nba/nbaPointInTimeFeatures";
 
 function game(args: {
@@ -112,6 +113,33 @@ const games = [third, first, second];
 const boxes = [first, second, third].flatMap(boxesFor);
 const advanced = [first, second, third].flatMap(advancedFor);
 const rows = buildNbaPointInTimeFeatures({ games, boxes, advanced });
+
+const upcoming: NbaUpcomingGame = {
+  gameId: 4,
+  season: 2025,
+  startTime: "2025-10-27T23:00:00.000Z",
+  homeTeamId: 1,
+  awayTeamId: 2,
+  homeTeam: "ATL",
+  awayTeam: "BOS",
+};
+const upcomingRows = buildNbaPointInTimeFeatures({ games, boxes, advanced, upcomingGames: [upcoming] });
+const upcomingFeature = upcomingRows.at(-1)!;
+assert.equal(upcomingFeature.game_id, 4);
+assert.equal(upcomingFeature.target_home_score, null);
+assert.equal(upcomingFeature.target_away_score, null);
+assert.equal(typeof upcomingFeature.home_offRating_5, "number");
+const finalizedUpcoming = { ...upcoming, homeScore: 111, awayScore: 109 };
+const finalizedUpcomingRows = buildNbaPointInTimeFeatures({
+  games: [...games, finalizedUpcoming],
+  boxes: [...boxes, ...boxesFor(finalizedUpcoming)],
+  advanced: [...advanced, ...advancedFor(finalizedUpcoming)],
+});
+assert.deepEqual(
+  withoutTargets(upcomingFeature as Record<string, unknown>),
+  withoutTargets(finalizedUpcomingRows.at(-1)! as Record<string, unknown>),
+  "an upcoming game must receive the exact historical pregame feature state without a synthetic outcome",
+);
 
 assert.deepEqual(rows.map((row) => row.game_id), [1, 2, 3], "games must be processed chronologically");
 assert.equal(rows[0]?.home_current_games, 0);

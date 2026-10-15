@@ -818,6 +818,139 @@ following large moves. Because the source is consensus open/close rather than
 the exact same-book T-60 sequence and price, no live movement-reader rule is
 authorized by this audit.
 
+### Unified final-score confirmation
+
+The earlier result above tested movement in isolation. The final-product audit
+instead froze the separately selected all-game two-point reader before opening
+confirmation, selected only the score-blend weights on 2024-25, and then
+reconstructed one home score, away score, margin, Total, winner, Spread side,
+and alternate-line ladder. The selected recipe gives 25% authority to the
+independent margin and Total and 75% to the complete pregame consensus. When
+the home-spread move is at least two points, its direction owns the sign of the
+remaining model-versus-current-line spread residual; its magnitude remains
+bounded by the reconciled model disagreement.
+
+On the untouched 1,224-game 2025-26 confirmation set, this one coherent tuple
+improves the independent benchmark as follows:
+
+| Metric | Independent | Unified final |
+| --- | ---: | ---: |
+| Team-score MAE | 9.562 | 9.209 |
+| Margin MAE | 11.345 | 10.806 |
+| Total MAE | 15.237 | 14.665 |
+| Winner accuracy | 68.14% | 69.61% |
+| Home-win Brier | 0.20468 | 0.19354 |
+| Main Spread | 598-626, 48.86% | 648-576, 52.94% |
+| Favorable +3 | 57.43% | 62.01% |
+| Favorable +6 | 66.83% | 70.92% |
+
+The unified main-spread 95% Wilson lower bound is 50.14%. At a hypothetical
+flat -110 it returns +13.09 units, +1.07% ROI; this is not an exact-price
+claim. Favorites are 268-238 (52.96%) and underdogs are 380-338 (52.92%). The
+movement-active cohort is 245-194 (55.81%); the movement-inactive cohort is
+403-382 (51.34%). Every game retains a prediction. The +3 and +6 accuracy
+figures are retained, but their economics remain unavailable until their exact
+prices are captured; they must never be priced as though they were -110.
+
+The score and winner gates pass, as does the main-spread historical performance
+gate. The Total side against the sharper closing line remains only 634-590
+(51.80%) and is not independently profitable evidence. The separately selected
+opening-line actionable Total lane remains 470-392 (54.52%) with +24.68 units
+and +3.54% exact-price ROI on 697 priced decisions. These are different line
+and decision populations and must not be blended into one advertised record.
+
+BALLDONTLIE GOAT documents historical opening odds with `opened_at`, but its
+regular odds endpoint returned zero rows when probed for completed 2025-26
+games. The probe was stopped after three 50-game batches. GOAT therefore does
+not retroactively supply the missing same-book T-60/closing sequence. Its
+regular odds endpoint is now represented as `current_odds`, never
+`closing_odds`; it can support prospective capture only. The unified historical
+recipe has cleared its performance gate but still lacks production authority
+until the exact same-book opening/current/T-60 sequence, target-book exclusion,
+and exact main/+3/+6 prices are proven for the runtime path.
+
+### Runtime-parity and current-board repair
+
+The historical candidate is not the score engine currently used by the member
+route. The site still calls the hand-built
+`nba_v2_independent_first_2026_10_06_r1` efficiency formula, while the
+confirmation above starts from the selected `ratings_schedule`, coherent
+margin-plus-Total ridge model. Applying the 25/75 reconciliation to the old
+runtime would therefore be a different, unvalidated model. A portable
+TypeScript scorer now implements the selected deployment-artifact transform;
+25 rows scored independently in Python and TypeScript agree to a maximum
+absolute difference of `2.8422e-13`. The runtime gap is now closed by a compact,
+versioned five-season bootstrap and an append-only current-season finalized-game
+input. The compact artifact stores one aggregate team box per game because none
+of the selected 75 fields consumes player-level rotation detail. Twelve rows
+spanning all five seasons reproduce every selected feature to less than
+`1e-10`; two opening-night games score through the complete runtime path in
+under one second in the focused test. The daily sole writer collects bounded
+finalized BALLDONTLIE game/box evidence into
+`nba_professional_game_inputs`; the runtime fails closed on a missing table,
+unknown team identity, malformed row, artifact mismatch, or missing tip time.
+
+The first current-board audit also found a separate feed defect. The NBA line
+refresh sent `/odds?league=nba&date=...`, although SharpAPI documents league,
+market, sportsbook, and cursor filters—not a date filter. The provider ignored
+the parameter and the old offset loop fetched an unrelated board, producing
+zero matches and zero stored lines for all 14 scheduled October 20-22 games.
+The corrected reader discovers exact provider event IDs, verifies team and
+start-time identity, then fetches `moneyline`, `point_spread`, and
+`total_points` independently with cursor pagination and rejects live/stale
+rows. A credential-backed October 20 dry run moved from 2,000 fetched / zero
+matched / zero parsed to three matched event IDs, 940 matched raw observations,
+and 316 canonical line rows across the three scheduled games.
+
+Main-line history now stores the same canonical per-book rows used by the
+current `lines` table. It no longer archives multiple unflagged alternates from
+one response as though they were successive main-line movement. A separate
+alternate-price contract remains required for +3/+6 economics. The movement
+reader's live input is explicitly `first_tracked_per_book_consensus`, not a
+provider-labeled opener, until a true opener source is joined.
+
+The candidate price reader now also excludes the sportsbook supplying the
+evaluated best price before constructing the exact-line, two-sided no-vig fair
+reference for Moneyline, Spread, and Total. If no independent comparison book
+remains, the fair probability is unavailable and the existing grade path cannot
+promote the quote. Split observations remain context-only; no ticket/handle row
+can alter the score or grade in this candidate.
+
+### Current-board promotion/demotion rehearsal
+
+A credential-backed, read-only rehearsal used the corrected exact-event
+SharpAPI collector and the same DTO/grade code intended for production. It
+covered all three October 20 games and all eleven October 21 games: 14 games,
+42 markets, and 1,316 canonical per-book line rows. The incumbent produced 12
+Lean/Best Angle markets; r2 produced 10, with four promotions, six demotions,
+and six side changes. October 20 moved 3 to 2 actionables (one promotion, two
+demotions); October 21 moved 9 to 8 (three promotions, four demotions).
+
+The contraction is explicit rather than a hidden no-play device. All four
+promotions are Moneyline reads created by the confirmed scorer. Five of the six
+demotions are Spread/Total reads whose incumbent probabilities were materially
+more confident than the r2 residual calibration; the sixth is a Moneyline
+demotion. Historical confirmation does not justify lowering the 55%
+actionability boundary to restore those rows: unified Total direction is only
+51.80%, and movement-inactive Spread is 51.34%. R2 therefore retains ten real
+actionables instead of manufacturing two replacements from unvalidated
+thresholds. The paired local audit artifacts are
+`nba_professional_r43_current_board/2026-10-20.json` and
+`nba_professional_r43_current_board/2026-10-21.json`.
+
+The release-transition audit also found that the NBA writer previously looked
+up only its current `model_version`, which could make an older immutable lock
+invisible after a release bump. The candidate now resolves all releases for the
+game/market slot, gives any single locked row unconditional precedence, fails
+closed on ambiguous duplicates, and advances only a sole unlocked legacy row
+in place. Future lock snapshots store the complete NBA game DTO in both
+official-market records; the paired reader accepts it only when the records are
+byte-identical, so later model or DTO changes cannot reinterpret the score,
+sides, probabilities, grades, or prices members saw. Focused tests cover old
+lock precedence, duplicate-lock rejection, exact DTO restoration, mismatch
+failure, and complete score/pick/exact-price/grade-input coherence. The full
+repository `verify:model-change` gate passed after these changes.
+
 ## Upset-aware evaluation
 
 An upset is evaluated against a timestamp-valid, de-vigged pregame market

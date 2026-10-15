@@ -10,7 +10,7 @@
 export const NBA_BDL_HISTORICAL_RESEARCH_RELEASE =
   "nba_bdl_historical_research_2026_10_15_r2_resumable_game_scoped" as const;
 
-export type NbaBdlHistoricalDataset = "games" | "box" | "advanced" | "opening_odds";
+export type NbaBdlHistoricalDataset = "games" | "box" | "advanced" | "opening_odds" | "current_odds";
 export type NbaBdlHistoricalSeasonType = "regular" | "ist";
 
 export type NbaBdlHistoricalFetch = {
@@ -32,6 +32,7 @@ const ENDPOINTS: Record<NbaBdlHistoricalDataset, string> = {
   box: "https://api.balldontlie.io/v1/stats",
   advanced: "https://api.balldontlie.io/nba/v2/stats/advanced",
   opening_odds: "https://api.balldontlie.io/nba/v2/odds/opening",
+  current_odds: "https://api.balldontlie.io/v2/odds",
 };
 
 const DEFAULT_MAX_PAGES = 1_000;
@@ -143,11 +144,14 @@ export async function fetchNbaBdlHistoricalRows(args: {
   if (args.season !== undefined && (!Number.isInteger(args.season) || args.season < 1996 || args.season > 2100)) {
     throw new Error("NBA historical season must be an integer from 1996 through 2100.");
   }
-  if (args.dataset !== "opening_odds" && args.season === undefined && (args.gameIds?.length ?? 0) === 0) {
-    throw new Error(`NBA historical ${args.dataset} requires a season or exact game IDs.`);
+  if (
+    args.dataset !== "opening_odds" && args.dataset !== "current_odds" &&
+    args.season === undefined && (args.gameIds?.length ?? 0) === 0 && (args.dates?.length ?? 0) === 0
+  ) {
+    throw new Error(`NBA historical ${args.dataset} requires a season, exact dates, or exact game IDs.`);
   }
-  if (args.dataset === "opening_odds" && (args.dates?.length ?? 0) === 0 && (args.gameIds?.length ?? 0) === 0) {
-    throw new Error("NBA opening-odds research requires exact dates or game IDs.");
+  if ((args.dataset === "opening_odds" || args.dataset === "current_odds") && (args.dates?.length ?? 0) === 0 && (args.gameIds?.length ?? 0) === 0) {
+    throw new Error(`NBA ${args.dataset.replace("_", "-")} research requires exact dates or game IDs.`);
   }
   const maxPages = args.maxPages ?? DEFAULT_MAX_PAGES;
   const maxRetries = args.maxRetries ?? DEFAULT_MAX_RETRIES;
