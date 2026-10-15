@@ -1247,10 +1247,12 @@ check(
     candidateSource.includes("useState(initialReaderRequested)"),
 );
 check(
-  "available offseason models remain selectable but are not presented as active today",
-  DAILY_EDGE_SPORTS.filter((sport) => sport.memberAvailable && !sport.inSeason).every(
+  "available offseason models remain selectable while schedule-only models are labeled separately",
+  DAILY_EDGE_SPORTS.filter((sport) => sport.memberAvailable && !sport.inSeason && !sport.scheduleLive).every(
     (sport) => DAILY_EDGE_SPORT_AVAILABILITY[sport.key]?.statusLabel === "No games today",
   ) &&
+    DAILY_EDGE_SPORT_AVAILABILITY.nba?.statusLabel ===
+      (DAILY_EDGE_SPORTS.find((sport) => sport.key === "nba")?.inSeason ? "Active" : "Schedule live") &&
     candidateSource.includes("Model available") &&
     candidateSource.includes("instead of showing games from an older date"),
 );

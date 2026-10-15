@@ -171,6 +171,7 @@ import {
 } from "../../../../lib/services/publicSplitsDisplayOverlay";
 import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import { populateDailyEdgeDraftKingsFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
+import { NBA_ROLLING_SCHEDULE_RELEASE } from "@/lib/services/nba/nbaRollingSchedule";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 
 export const dynamic = "force-dynamic";
@@ -6726,13 +6727,14 @@ export async function GET(request: Request) {
         ? currentDailyEdgeBoardDate(sport)
         : currentSlateDate(sport);
 
-  // NBA may continue ingesting and rehearsing during preseason, but its
-  // member board launches with the regular season. Enforce that boundary
-  // before the response-snapshot fast path so a cached preseason payload
-  // cannot leak cards onto a tab that correctly says there are no games.
-  // The closed window preserves valid prior-season history while allowing
-  // the 2026-27 board to turn on automatically at the October 20 opener.
-  if (sport === "nba" && !isPublicallyTracked("nba", requestedDate)) {
+  // Schedule-only visibility applies to the current/future rolling window,
+  // never to a cached historical preseason rehearsal. Preserve the original
+  // fail-closed boundary for older untracked dates before the snapshot path.
+  if (
+    sport === "nba" &&
+    requestedDate < currentDailyEdgeBoardDate("nba") &&
+    !isPublicallyTracked("nba", requestedDate)
+  ) {
     return Response.json({
       as_of: new Date().toISOString(),
       sport,
@@ -6827,6 +6829,10 @@ export async function GET(request: Request) {
     const presentationOutdated =
       snapshot?.payload.memberPresentation?.releaseId !==
       DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID;
+    const nbaScheduleContractOutdated =
+      sport === "nba" &&
+      requestedDate >= currentDailyEdgeBoardDate("nba") &&
+      snapshot?.payload.nbaRollingSchedule?.release !== NBA_ROLLING_SCHEDULE_RELEASE;
     // A stale snapshot is still the intentionally retained last-known-good
     // member board. Serve it immediately and let the scheduled sole writer
     // publish the next snapshot. Rebuilding the full board synchronously here
@@ -6838,7 +6844,15 @@ export async function GET(request: Request) {
     const recoveredPayload = !rolloverFallback && presentationOutdated
       ? await recoverExpiredDailyEdgeSnapshot(snapshotKey, url)
       : null;
-    const payload = recoveredPayload ?? snapshot?.payload ?? null;
+    const recoveredNbaSchedulePayload =
+      !rolloverFallback && !recoveredPayload && nbaScheduleContractOutdated
+        ? await recoverExpiredDailyEdgeSnapshot(snapshotKey, url)
+        : null;
+    const payload =
+      recoveredPayload ??
+      recoveredNbaSchedulePayload ??
+      (nbaScheduleContractOutdated ? null : snapshot?.payload) ??
+      null;
     if (payload) {
       // Stored snapshots may predate the latest provider display overlay. Keep
       // the cached fast path coherent too; this is an in-memory display-only

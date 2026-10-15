@@ -46,13 +46,17 @@
 
 import { cronHandler } from "@/lib/cron/runCron";
 import { currentSlateDate } from "@/lib/dates/slateDate";
-import { seedNbaGames } from "@/lib/services/nba/seedNbaGamesService";
+import {
+  seedNbaGames,
+  type SeedNbaGamesResult,
+} from "@/lib/services/nba/seedNbaGamesService";
 import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsService";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import { nbaScheduleSeedDates } from "@/lib/services/nba/nbaRollingSchedule";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_07_r3_readiness_gated_rollover";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_15_r4_rolling_seven_day_slate";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -106,7 +110,6 @@ export async function GET(request: Request): Promise<Response> {
 
       const now = new Date();
       const etDateDashed = currentSlateDate("nba"); // YYYY-MM-DD
-      const etDateEspn = dashedToEspnDate(etDateDashed);
       const season = currentNbaRatingsSeason(now);
 
       const stepLog = (label: string) => (msg: string) => {
@@ -125,47 +128,76 @@ export async function GET(request: Request): Promise<Response> {
       };
 
       // ─── Step 1: seedNbaGames ─────────────────────────────────────
+      const seedDates = nbaScheduleSeedDates(etDateDashed, intraday);
       console.log(
-        `[nba-daily-refresh] step=seed  date=${etDateDashed}  season=${season}`,
+        `[nba-daily-refresh] step=seed  dates=${seedDates.join(",")}  season=${season}`,
       );
-      const seedResult = await seedNbaGames({
-        dryRun: false,
-        dateOverride: etDateEspn,
-        logger: stepLog("seed"),
-      });
+      const seedResults: Array<{ date: string; result: SeedNbaGamesResult }> = [];
+      for (const seedDate of seedDates) {
+        const result = await seedNbaGames({
+          dryRun: false,
+          dateOverride: dashedToEspnDate(seedDate),
+          logger: stepLog(`seed:${seedDate}`),
+        });
+        seedResults.push({ date: seedDate, result });
+        if (result.errors.length > 0) partial = true;
+      }
+      const currentSeedResult = seedResults.find((entry) => entry.date === etDateDashed)?.result;
+      if (!currentSeedResult) {
+        throw new Error(`NBA rolling seed omitted current slate date ${etDateDashed}`);
+      }
+      const seedTotals = seedResults.reduce(
+        (total, entry) => ({
+          teamsUpserted: total.teamsUpserted + entry.result.teamsUpserted,
+          gamesUpserted: total.gamesUpserted + entry.result.gamesUpserted,
+        }),
+        { teamsUpserted: 0, gamesUpserted: 0 },
+      );
       stepDetails.seed = {
-        mode: seedResult.mode,
-        primaryEventsFound: seedResult.primaryEventsFound,
-        uniqueEvents: seedResult.uniqueEvents,
-        teamsUpserted: seedResult.teamsUpserted,
-        gamesUpserted: seedResult.gamesUpserted,
-        gamesSkippedMissingTeam: seedResult.gamesSkippedMissingTeam,
-        errorCount: seedResult.errors.length,
+        dates: seedResults.map(({ date, result }) => ({
+          date,
+          mode: result.mode,
+          primaryEventsFound: result.primaryEventsFound,
+          uniqueEvents: result.uniqueEvents,
+          teamsUpserted: result.teamsUpserted,
+          gamesUpserted: result.gamesUpserted,
+          gamesSkippedMissingTeam: result.gamesSkippedMissingTeam,
+          errorCount: result.errors.length,
+        })),
+        teamsUpserted: seedTotals.teamsUpserted,
+        gamesUpserted: seedTotals.gamesUpserted,
       };
 
       // No NBA today → clean success exit. Ratings + lines have
       // nothing to attach to; no point firing the BBR scrape or
       // SharpAPI hit.
-      if (seedResult.mode === "no-events") {
-        const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
-          sport: "nba",
-          date: etDateDashed,
-          source: "nba_daily_refresh_empty_slate",
-        });
+      if (currentSeedResult.mode === "no-events") {
+        const responseSnapshot = partial
+          ? null
+          : await refreshDailyEdgeResponseSnapshot({
+              sport: "nba",
+              date: etDateDashed,
+              source: "nba_daily_refresh_schedule_only",
+            });
         return {
-          records_updated: responseSnapshot.ok ? 1 : 0,
-          partial: !responseSnapshot.ok,
-          error_message: responseSnapshot.ok
-            ? null
-            : `NBA empty-slate snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`,
+          records_updated:
+            seedTotals.teamsUpserted +
+            seedTotals.gamesUpserted +
+            (responseSnapshot?.ok ? 1 : 0),
+          partial: partial || responseSnapshot?.ok === false,
+          error_message: responseSnapshot?.ok === false
+            ? `NBA schedule-only snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
+            : null,
           details: {
             ...stepDetails,
-            outcome: "no_nba_today",
-            response_snapshot: responseSnapshot,
+            outcome: "no_nba_today_schedule_window_refreshed",
+            response_snapshot: responseSnapshot ?? {
+              skipped: true,
+              reason: "incomplete_schedule_seed_cycle",
+            },
           },
         };
       }
-      if (seedResult.errors.length > 0) partial = true;
 
       // ─── Step 2: refreshNbaTeamRatings ────────────────────────────
       console.log(`[nba-daily-refresh] step=ratings  season=${season}  mode=${intraday ? "skip" : "full"}`);
@@ -251,8 +283,8 @@ export async function GET(request: Request): Promise<Response> {
 
       // ─── records_updated: tally useful writes only ────────────────
       const recordsUpdated =
-        seedResult.teamsUpserted +
-        seedResult.gamesUpserted +
+        seedTotals.teamsUpserted +
+        seedTotals.gamesUpserted +
         ratingsResult.written +
         linesResult.linesWritten +
         linesResult.lineHistoryWritten +
