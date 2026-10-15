@@ -89,6 +89,28 @@ Wilson Under 66.5, Javonte Williams Under 70.5, and Kyren Williams Under 69.5; e
 to Watchlist. No Lean or Best Angle is promoted or demoted, so the board is neither flattened nor
 padded.
 
+## Natural production verification
+
+The first natural post-deploy snapshot was generated at `2026-10-15T20:21:10.909Z`. All 142 live
+Rushing Yards rows carry model r26 and calibration r28, and all were still unlocked. The reader
+reported `publicationEligible=true`, `trackingEligible=true`, the sole
+`prediction_pipeline:nfl` writer lease, and zero incoherent rows across 1,212 member rows.
+
+The four actionable Rushing Yards decisions in that live quote set were:
+
+| Player | Side / line | Exact price | Independent projection | Grade |
+| --- | ---: | ---: | ---: | --- |
+| Bijan Robinson | Under 90.5 | BetMGM -115 | 86.0093 | Lean |
+| D'Andre Swift | Under 74.5 | DraftKings -113 | 68.1325 | Best Angle |
+| Jonathan Taylor | Under 89.5 | DraftKings -112 | 84.1906 | Lean |
+| Aaron Rodgers | Over 0.5 | FanDuel +102 | 1.0375 | Best Angle |
+
+Each row's side agrees with its independent projection relative to the quoted line, its exact price
+and grade are present on the same unlocked decision, and each carries decision r32. These four rows
+are a natural production observation with newer football features and book quotes. They are not a
+same-input replay and therefore do not establish promotions or demotions relative to the frozen
+Week 6 rehearsal. No stored locked record was eligible for reinterpretation or rewrite.
+
 ## Release and safety contract
 
 - expected-role artifact: `nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards`
