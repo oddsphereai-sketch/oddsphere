@@ -123,8 +123,7 @@ function gameRowPayloadFromEspn(
   homeTeamId: number | null,
   awayTeamId: number | null,
 ): Record<string, unknown> {
-  const season = Number.parseInt(event.start_time.slice(0, 4), 10);
-  const postseason = event.postseason_note !== null;
+  const seasonIdentity = nbaGameSeasonIdentity(event);
   return {
     external_id: Number.parseInt(event.espn_event_id, 10),
     sport: "nba",
@@ -137,9 +136,9 @@ function gameRowPayloadFromEspn(
     // ET sports-day, matching buildNbaDailyEdgePipeline / prediction_records /
     // tracking-refresh. Late tips would file under the wrong UTC slate.
     slate_date: computeSlateDate("nba", event.start_time),
-    season,
-    season_type: postseason ? "postseason" : "regular",
-    postseason,
+    season: seasonIdentity.season,
+    season_type: seasonIdentity.seasonType,
+    postseason: seasonIdentity.postseason,
     status: espnStatusToOurs(event.status),
     home_score: event.home.score,
     away_score: event.away.score,
@@ -152,6 +151,25 @@ function gameRowPayloadFromEspn(
     first_inning_runs: null,
     venue: event.venue_name,
     attendance: null,
+  };
+}
+
+export function nbaGameSeasonIdentity(event: Pick<CanonicalNbaEvent,
+  "season_year" | "season_type" | "start_time" | "postseason_note"
+>): {
+  season: number;
+  seasonType: "preseason" | "regular" | "postseason";
+  postseason: boolean;
+} {
+  const fallbackSeason = Number.parseInt(event.start_time.slice(0, 4), 10);
+  const season = event.season_year !== null && Number.isInteger(event.season_year)
+    ? event.season_year
+    : fallbackSeason;
+  const seasonType = event.season_type ?? (event.postseason_note !== null ? "postseason" : "regular");
+  return {
+    season,
+    seasonType,
+    postseason: seasonType === "postseason",
   };
 }
 
