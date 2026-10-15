@@ -52,6 +52,8 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "away_offRating_5": away_off + rng.normal(0, 1),
             "home_defRating_5": home_def + rng.normal(0, 1),
             "away_defRating_5": away_def + rng.normal(0, 1),
+            "home_margin_5": home_off - home_def + rng.normal(0, 1),
+            "away_margin_5": away_off - away_def + rng.normal(0, 1),
             "home_pace_15": pace,
             "away_pace_15": pace + rng.normal(0, 1),
             "home_pace_prior": pace - 1,
@@ -218,6 +220,8 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         "minimumUsableFraction": 0.8,
     }
     assert report["selected"]["jointSelectionScore"] > 0
+    assert "home_margin_5" in tournament.feature_catalog(replay_frame)["ratings"]
+    assert "away_margin_5" in tournament.feature_catalog(replay_frame)["ratings"]
     assert report["confirmation"]["games"] == 48
     assert report["independentConfirmation"]["games"] == 48
     assert report["marketOnlyConfirmation"]["games"] == 48

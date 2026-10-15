@@ -371,7 +371,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r25_meaningful_actionable_price_sample`. Its
+`nba_professional_tournament_2026_10_15_r26_recent_margin_features`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -397,6 +397,12 @@ half-life candidates. Recency weighting applies only to the model-fitting rows;
 it cannot move an outcome into an earlier feature cutoff or calibration block.
 The unweighted candidates remain in the same tournament, so recent form must
 outperform stable multi-season coefficients rather than being assumed better.
+
+The rating-family candidates include each team's leakage-safe 5-game,
+15-game, and prior-season scoring-margin form alongside opponent-adjusted
+offense, defense, pace, and Elo. These columns were present in the feature
+artifact but are now explicitly declared rather than silently omitted from
+every candidate family.
 
 Probability uncertainty is never estimated from the same fitted rows used to
 train the score heads. Within each development block, an earlier partition fits
