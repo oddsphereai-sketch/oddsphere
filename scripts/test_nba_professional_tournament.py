@@ -50,6 +50,16 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "home_team": f"H{game_index % 30}",
             "away_team": f"A{(game_index + 9) % 30}",
             "league_off_rating": 110 + season_index,
+            "league_current_season_team_games": game_index * 2,
+            "league_prior_season_team_games": 96,
+            "league_current_season_off_rating": 110 + season_index,
+            "league_prior_season_off_rating": 109 + season_index,
+            "league_current_vs_prior_off_rating_delta": 1.0,
+            "league_regime_off_rating": 110 + season_index,
+            "league_current_season_pace": pace,
+            "league_prior_season_pace": pace - 1,
+            "league_current_vs_prior_pace_delta": 1.0,
+            "league_regime_pace": pace,
             "elo_home_rating": 1510 + home_off - away_off,
             "elo_away_rating": 1490 + away_off - home_off,
             "elo_rating_delta": 20 + 2 * (home_off - away_off),
@@ -319,7 +329,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         "minimum_model_probability_edge_vs_no_vig_opening_consensus"
     )
     assert set(report["actionableBenchmarkGates"]) == {
-        "moneylineAccuracyMeetsLifetimeReference",
+        "winnerDirectionAccuracyMeetsLifetimeMoneylineReference",
         "totalAccuracyMeetsLifetimeReference",
         "spreadExactPricePositive",
         "totalExactPricePositive",
@@ -331,6 +341,10 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         "requiresCompleteSportsbookProvenance": True,
         "requiresPositiveUnits": True,
     }
+    assert report["confirmationSeasonRegimeCohorts"]
+    assert sum(row["games"] for row in report["confirmationSeasonRegimeCohorts"]) == 48
+    assert all("teamScoreSignedBias" in row for row in report["confirmationSeasonRegimeCohorts"])
+    assert "no preserved game ledger" in report["publishedR1ComparisonLimitation"]
     assert len(predictions) == 48
     first_prediction = json.loads(predictions[0])
     assert first_prediction["causeAttribution"]["status"] == "not_attributed"

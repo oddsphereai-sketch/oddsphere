@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r33_abstaining_market_selection"
+RELEASE = "nba_professional_tournament_2026_10_15_r35_comparable_benchmark_gates"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r13_season_regime_state"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r13_abstaining_market_selection"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r15_comparable_benchmark_gates"
 MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
 MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
 MINIMUM_SELECTION_WILSON_LOWER = 0.50
@@ -1704,6 +1704,52 @@ def rolling_origin_stability(
     return rows
 
 
+def season_regime_cohorts(
+    frame: pd.DataFrame,
+    home: np.ndarray,
+    away: np.ndarray,
+) -> list[dict[str, Any]]:
+    """Expose early-to-established season bias instead of hiding it in a pooled mean."""
+    progress = frame["league_current_season_team_games"].to_numpy(float)
+    actual_home = frame["target_home_score"].to_numpy(float)
+    actual_away = frame["target_away_score"].to_numpy(float)
+    actual_margin = actual_home - actual_away
+    actual_total = actual_home + actual_away
+    predicted_margin = home - away
+    predicted_total = home + away
+    definitions = (
+        ("opening_0_99_team_games", progress < 100),
+        ("early_100_299_team_games", (progress >= 100) & (progress < 300)),
+        ("established_300_plus_team_games", progress >= 300),
+    )
+    output: list[dict[str, Any]] = []
+    for label, mask in definitions:
+        if not mask.any():
+            continue
+        team_errors = np.concatenate([
+            home[mask] - actual_home[mask],
+            away[mask] - actual_away[mask],
+        ])
+        output.append({
+            "cohort": label,
+            "games": int(mask.sum()),
+            "actualPointsPerTeam": float(actual_total[mask].mean() / 2),
+            "predictedPointsPerTeam": float(predicted_total[mask].mean() / 2),
+            "teamScoreSignedBias": float(team_errors.mean()),
+            "teamScoreMae": float(np.abs(team_errors).mean()),
+            "marginSignedBias": float((predicted_margin[mask] - actual_margin[mask]).mean()),
+            "marginMae": float(np.abs(predicted_margin[mask] - actual_margin[mask]).mean()),
+            "totalSignedBias": float((predicted_total[mask] - actual_total[mask]).mean()),
+            "totalMae": float(np.abs(predicted_total[mask] - actual_total[mask]).mean()),
+            "winnerAccuracy": float(((predicted_margin[mask] > 0) == (actual_margin[mask] > 0)).mean()),
+            "meanLeagueRegimeOffRating": float(
+                frame.loc[mask, "league_regime_off_rating"].mean()
+            ),
+            "meanLeagueRegimePace": float(frame.loc[mask, "league_regime_pace"].mean()),
+        })
+    return output
+
+
 def main() -> None:
     args = parse_args()
     frame = validate(read_jsonl(args.features))
@@ -1938,10 +1984,9 @@ def main() -> None:
         for market, details in actionable_selection.items()
     }
     actionable_benchmark_gates = {
-        "moneylineAccuracyMeetsLifetimeReference": (
-            actionable_confirmation["moneyline"] is not None and
-            actionable_confirmation["moneyline"]["accuracy"] is not None and
-            actionable_confirmation["moneyline"]["accuracy"] >= PRODUCT_LIFETIME_REFERENCE["moneyline"]["accuracy"]
+        "winnerDirectionAccuracyMeetsLifetimeMoneylineReference": (
+            final_confirmation_metrics["winnerAccuracy"] >=
+            PRODUCT_LIFETIME_REFERENCE["moneyline"]["accuracy"]
         ),
         "totalAccuracyMeetsLifetimeReference": (
             actionable_confirmation["total"] is not None and
@@ -2047,7 +2092,10 @@ def main() -> None:
         str(selected["architecture"]),
     )
 
-    r1_comparable = confirmation_season == R1_CONFIRMATION["season"] and len(confirmation) == R1_CONFIRMATION["games"]
+    # The legacy aggregate has no preserved per-game ledger, cutoff identity,
+    # or release artifact. Matching season and row count does not make it a
+    # paired comparison; keep it as a descriptive benchmark only.
+    r1_comparable = False
     r1_gates = None
     if r1_comparable:
         r1_gates = {
@@ -2227,8 +2275,15 @@ def main() -> None:
         "confirmationWinnerChangesVsRatingBaseline": correction_ledger,
         "confirmationUncertainty": uncertainty,
         "rollingOriginStability": stability,
+        "confirmationSeasonRegimeCohorts": season_regime_cohorts(
+            confirmation, final_home, final_away
+        ),
         "publishedR1Confirmation": R1_CONFIRMATION,
         "publishedR1DirectlyComparable": r1_comparable,
+        "publishedR1ComparisonLimitation": (
+            "Descriptive benchmark only: the legacy aggregate has no preserved game ledger, "
+            "feature cutoffs, or release artifact for a paired comparison."
+        ),
         "publishedR1Gates": r1_gates,
         "productLifetimeReference": PRODUCT_LIFETIME_REFERENCE,
         "actionableThresholdSelection": actionable_selection,
