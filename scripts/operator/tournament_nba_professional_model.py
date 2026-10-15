@@ -20,9 +20,11 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r24_complete_actionable_price_coverage"
+RELEASE = "nba_professional_tournament_2026_10_15_r25_meaningful_actionable_price_sample"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r11_invalid_odds_quarantine"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r4_complete_price_coverage"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r5_meaningful_price_sample"
+MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
+MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -680,11 +682,7 @@ def select_actionable_thresholds(
             )
             for threshold in thresholds
         ]
-        eligible = [
-            candidate for candidate in candidates
-            if candidate["bets"] >= minimum_bets
-            and candidate["exactPriceCoverage"] == 1.0
-        ]
+        eligible = [candidate for candidate in candidates if candidate["bets"] >= minimum_bets]
         if market == "moneyline":
             eligible.sort(key=lambda item: (
                 -(item["exactPrice"]["roi"] if item["exactPrice"] else -math.inf),
@@ -1786,22 +1784,28 @@ def main() -> None:
         ),
         "spreadExactPricePositive": (
             actionable_confirmation["spread"] is not None and
-            actionable_confirmation["spread"]["exactPriceCoverage"] == 1.0 and
+            actionable_confirmation["spread"]["exactPriceCoverage"] is not None and
+            actionable_confirmation["spread"]["exactPriceCoverage"] >= MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE and
             actionable_confirmation["spread"]["exactPrice"] is not None and
+            actionable_confirmation["spread"]["exactPrice"]["bets"] >= MINIMUM_CONFIRMATION_EXACT_PRICE_BETS and
             actionable_confirmation["spread"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["spread"]["exactPrice"]["units"] > 0
         ),
         "totalExactPricePositive": (
             actionable_confirmation["total"] is not None and
-            actionable_confirmation["total"]["exactPriceCoverage"] == 1.0 and
+            actionable_confirmation["total"]["exactPriceCoverage"] is not None and
+            actionable_confirmation["total"]["exactPriceCoverage"] >= MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE and
             actionable_confirmation["total"]["exactPrice"] is not None and
+            actionable_confirmation["total"]["exactPrice"]["bets"] >= MINIMUM_CONFIRMATION_EXACT_PRICE_BETS and
             actionable_confirmation["total"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["total"]["exactPrice"]["units"] > 0
         ),
         "moneylineExactPricePositive": (
             actionable_confirmation["moneyline"] is not None and
-            actionable_confirmation["moneyline"]["exactPriceCoverage"] == 1.0 and
+            actionable_confirmation["moneyline"]["exactPriceCoverage"] is not None and
+            actionable_confirmation["moneyline"]["exactPriceCoverage"] >= MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE and
             actionable_confirmation["moneyline"]["exactPrice"] is not None and
+            actionable_confirmation["moneyline"]["exactPrice"]["bets"] >= MINIMUM_CONFIRMATION_EXACT_PRICE_BETS and
             actionable_confirmation["moneyline"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["moneyline"]["exactPrice"]["units"] > 0
         ),
@@ -2062,6 +2066,12 @@ def main() -> None:
         "actionableThresholdSelection": actionable_selection,
         "actionableConfirmation": actionable_confirmation,
         "actionableBenchmarkGates": actionable_benchmark_gates,
+        "actionableExactPriceGate": {
+            "minimumBets": MINIMUM_CONFIRMATION_EXACT_PRICE_BETS,
+            "minimumSignalCoverage": MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE,
+            "requiresCompleteSportsbookProvenance": True,
+            "requiresPositiveUnits": True,
+        },
         "finalProductGates": final_product_gates,
         "finalProductGatePassed": final_product_gate_passed,
         "promotionAuthorized": False,

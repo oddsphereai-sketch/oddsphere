@@ -307,6 +307,12 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         "totalExactPricePositive",
         "moneylineExactPricePositive",
     }
+    assert report["actionableExactPriceGate"] == {
+        "minimumBets": 100,
+        "minimumSignalCoverage": 0.75,
+        "requiresCompleteSportsbookProvenance": True,
+        "requiresPositiveUnits": True,
+    }
     assert len(predictions) == 48
     first_prediction = json.loads(predictions[0])
     assert first_prediction["causeAttribution"]["status"] == "not_attributed"

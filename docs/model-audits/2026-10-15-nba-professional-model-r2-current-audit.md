@@ -371,7 +371,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r24_complete_actionable_price_coverage`. Its
+`nba_professional_tournament_2026_10_15_r25_meaningful_actionable_price_sample`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -424,11 +424,13 @@ supplied it. The confirmation report discloses sportsbook counts and coverage
 for each priced result, and the row-level ledger retains the exact book beside
 each Moneyline, Spread, and Total price. A numeric quote without recoverable
 book provenance may remain descriptive but cannot silently satisfy an
-authoritative exact-price gate. An actionable threshold is also ineligible
-unless every decision in its selection sample has an exact nonzero price, and
-the confirmation economics gate fails unless that 100% decision-price
-coverage persists. Missing provider prices cannot disappear from an ROI
-denominator.
+authoritative exact-price gate. Thresholds may be selected on the documented
+opening line when the older season lacks recoverable prices, but confirmation
+economics are graded only on genuine exact prices. That gate requires at least
+100 priced decisions, exact-price coverage of at least 75% of all qualifying
+signals, complete sportsbook provenance for the priced decisions, and positive
+units. The report keeps the full signal count and priced-bet count separate;
+missing provider prices cannot disappear from an ROI denominator.
 
 Provider `null`, empty, and zero American-price fields are quarantined as
 missing for that market rather than numerically coerced. Legitimate zero-point
