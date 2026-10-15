@@ -64,7 +64,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_15_r52_reference_priority" as const;
+  "nfl_player_props_writer_2026_10_15_r53_member_decision_evidence" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -153,6 +153,11 @@ export type NflPlayerPropsWriterResult = {
   currentSeasonTeamStatsAdded: number;
   currentSeasonStatsAdded: number;
   memberRows: number;
+  decisionSupportTelemetry: {
+    rows: number;
+    qualifiedReferenceRows: number;
+    legacyLockedRowsWithoutSupport: number;
+  };
   counts: Record<string, number>;
   heldDiagnostics: number;
   trackingRows: number;
@@ -478,6 +483,15 @@ export async function runNflPlayerPropsProductionWriter(args: {
     currentSeasonTeamStatsAdded: currentSeason.teamStatsAdded,
     currentSeasonStatsAdded: currentSeason.statsAdded,
     memberRows: snapshot.memberDecisions.length,
+    decisionSupportTelemetry: {
+      rows: snapshot.memberDecisions.filter((row) => row.decisionSupport !== undefined).length,
+      qualifiedReferenceRows: snapshot.memberDecisions.filter((row) => (
+        row.decisionSupport?.qualifiedReference.availability === "available"
+      )).length,
+      legacyLockedRowsWithoutSupport: snapshot.memberDecisions.filter((row) => (
+        row.state === "locked" && row.decisionSupport === undefined
+      )).length,
+    },
     counts: snapshot.board.counts,
     heldDiagnostics: snapshot.board.counts.Held,
     trackingRows: buildNflPlayerPropsTrackingRows(snapshot).length,

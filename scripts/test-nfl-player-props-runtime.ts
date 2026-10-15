@@ -36,11 +36,11 @@ import {
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
 assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_09_r14_independent_receiving_yards");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_15_r31_receptions_reference_required");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_15_r34_receptions_reference_required");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_15_r32_member_decision_evidence");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_15_r35_member_decision_evidence");
 assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_15_r25_receptions_reference_required");
 assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_15_r27_receptions_reference_required");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_15_r30_receptions_reference_required");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_15_r31_member_decision_evidence");
 assert.equal(expectedRoleArtifact.release,
   "nfl_player_props_expected_role_runtime_2026_10_09_r6_receiving_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
@@ -284,6 +284,19 @@ assert.notEqual(
   oneBook.decisions.find((row) => row.side === "over")?.finalProbability,
   "qualified cross-line receptions evidence changes the final posterior instead of being display-only",
 );
+const sourceAwareOver = sourceAwareReceptions.decisions.find((row) => row.side === "over");
+assert.equal(sourceAwareOver?.qualifiedReferenceEvidence?.books[0]?.sportsbook, "pinnacle");
+assert.equal(sourceAwareOver?.qualifiedReferenceEvidence?.books[0]?.sourceLine, 5.5);
+assert.equal(sourceAwareOver?.qualifiedReferenceEvidence?.books[0]?.targetLine, 4.5);
+assert.equal(sourceAwareOver?.decisionSupport?.qualifiedReference.availability, "available",
+  "newly evaluated source-aware rows preserve their qualified reference provenance for the member contract");
+assert.equal(sourceAwareOver?.decisionSupport?.probability.publishedSelectedSide, sourceAwareOver?.finalProbability);
+assert.ok(Number.isInteger(sourceAwareOver?.decisionSupport?.probability.fairAmericanPrice));
+assert.equal(sourceAwareOver?.decisionSupport?.movement.prior, null);
+assert.equal(sourceAwareOver?.decisionSupport?.movement.priorAvailability,
+  "unavailable_not_persisted_in_member_snapshot", "missing intermediate movement is explicit rather than invented");
+assert.equal(sourceAwareOver?.decisionSupport?.featureEvidence.percentileAvailability,
+  "unavailable_no_validated_reference_distribution", "unvalidated feature percentiles remain explicitly unavailable");
 const unqualifiedRushingTarget: NflPlayerPropsExactOffer = {
   ...baseOffer,
   offerKey: "rushing-target",
@@ -647,8 +660,12 @@ for (const board of [oneBook, twoBooks, evaluationOnlyPassing, crossLinePassing,
 assert.ok(divergent.decisions.every((row) => row.healthHolds.includes("model_market_divergence_implausible")));
 assert.equal(divergent.counts.Held, 0, "gross divergence remains a completed No Play prediction rather than suppressing the row");
 
-function withoutBookEvidence<T extends { bookEvidence: unknown }>(row: T): Omit<T, "bookEvidence"> {
-  return Object.fromEntries(Object.entries(row).filter(([key]) => key !== "bookEvidence")) as Omit<T, "bookEvidence">;
+function withoutBookEvidence<T extends { bookEvidence: unknown; decisionSupport?: unknown }>(
+  row: T,
+): Omit<T, "bookEvidence" | "decisionSupport"> {
+  return Object.fromEntries(
+    Object.entries(row).filter(([key]) => key !== "bookEvidence" && key !== "decisionSupport"),
+  ) as Omit<T, "bookEvidence" | "decisionSupport">;
 }
 
 console.log("NFL player-props portable runtime parity and decision primitives passed.");
