@@ -151,6 +151,10 @@ def prepare_frame(
         *availability_groups["combined"],
     ]))
     player_features = [name for name in player_features if name in frame.columns]
+    # This historical FTN rusher flag is not retained in the production player-
+    # state artifact. Exclude it before selection so research and runtime consume
+    # the same independently available feature contract.
+    player_features = [name for name in player_features if name != "external_ftn_rusher_is_rpo_lag1"]
     team_features = [
         name for name in [*groups["base"], *groups["state"]]
         if name == "is_home" or name.startswith((
@@ -379,15 +383,17 @@ def main() -> None:
             team_features,
             unique_test,
             str(spec["efficiencyMode"]),
-            set(unique_test["row_id"]),
         )
         component_by_row = pd.Series(unique_component, index=unique_test["row_id"])
         current_component = component_by_row.reindex(replay["row_id"]).to_numpy(float)
-        current_candidate = np.clip(
+        rb_candidate = np.clip(
             (1.0 - float(spec["weight"])) * current_candidate
             + float(spec["weight"]) * current_component,
             0.0,
             None,
+        )
+        current_candidate = np.where(
+            replay["position"].eq("RB").to_numpy(), rb_candidate, current_candidate,
         )
         actual = replay["actual"].to_numpy(float)
         reference = replay["independentProjection"].to_numpy(float)
@@ -395,6 +401,7 @@ def main() -> None:
         reference_current = metrics(actual, reference)
         candidate_current = metrics(actual, current_candidate)
         current_gate = {
+            "candidatePositions": ["RB"],
             "reference": reference_current,
             "candidate": candidate_current,
             "directionReference": direction(actual, reference, lines),
