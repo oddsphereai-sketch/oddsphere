@@ -104,9 +104,14 @@ collection; the deadline does not justify promoting an unproven candidate.
 
 The frozen score tournament uses seasons before 2024-25 for fitting, 2024-25 for feature-family,
 architecture and regularization selection, and 2025-26 as the one-time confirmation block. It
-compares rating-only, rating-plus-schedule, Four-Factors, and rotation-enriched ridge candidates,
-with both direct team-score and joint margin/Total heads. The tournament writes research artifacts
-only and hard-codes `promotionAuthorized: false`; score results alone cannot change production.
+compares rating-only, rating-plus-schedule, Four-Factors, and rotation-enriched candidates with
+direct team-score and joint margin/Total heads. The bounded estimator grid includes closed-form
+ridge, iteratively reweighted Huber ridge, and deterministic hinge-spline ridge; it uses only the
+repository's NumPy runtime and does not depend on an undeclared training library. The final report
+adds prior rolling-origin stability, a deterministic 2,000-sample game-cluster bootstrap, and every
+winner correction and harm versus the simple rating baseline. The tournament writes research
+artifacts only and hard-codes `promotionAuthorized: false`; score results alone cannot change
+production.
 
 ## Initial shadow schema
 

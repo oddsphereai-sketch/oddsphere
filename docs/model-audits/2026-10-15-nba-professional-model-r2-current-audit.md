@@ -295,6 +295,15 @@ performance, or board coverage. Statistical uncertainty is game-clustered.
 One aggregate win is insufficient: results are segmented by month, rest state,
 injury certainty, projected pace, favorite size, and home/away status.
 
+The executable tournament release is now
+`nba_professional_tournament_2026_10_15_r5_bounded_model_stability`. Its
+predeclared model grid is reproducible with the repository's NumPy runtime:
+closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
+hinge-spline ridge. It records rolling-origin stability before confirmation,
+2,000 deterministic game-cluster bootstrap samples, and the complete winner
+correction/harm ledger versus the simple adjusted-rating baseline. These are
+selection safeguards, not evidence that a candidate has already qualified.
+
 ## Upset-aware evaluation
 
 An upset is evaluated against a timestamp-valid, de-vigged pregame market

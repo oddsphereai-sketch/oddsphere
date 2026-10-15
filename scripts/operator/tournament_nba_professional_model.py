@@ -18,13 +18,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.impute import SimpleImputer
-from sklearn.linear_model import Ridge
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r4_error_ledger"
+RELEASE = "nba_professional_tournament_2026_10_15_r5_bounded_model_stability"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r3"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -164,35 +160,140 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
     return groups
 
 
-def pipeline(alpha: float) -> Pipeline:
-    return Pipeline([
-        ("impute", SimpleImputer(strategy="median", add_indicator=True)),
-        ("scale", StandardScaler()),
-        ("ridge", Ridge(alpha=alpha)),
-    ])
+def candidate_model_specs() -> list[dict[str, Any]]:
+    """Return the predeclared, bounded-complexity estimator grid."""
+    return [
+        *[{"family": "ridge", "alpha": alpha} for alpha in (0.1, 1.0, 10.0, 100.0, 1000.0)],
+        {"family": "huber_ridge", "alpha": 1.0, "epsilon": 1.35},
+        {"family": "huber_ridge", "alpha": 10.0, "epsilon": 1.75},
+        {"family": "spline_ridge", "alpha": 10.0, "knots": [0.75]},
+        {"family": "spline_ridge", "alpha": 100.0, "knots": [0.75, 1.5]},
+    ]
+
+
+def design_matrices(
+    train: pd.DataFrame,
+    evaluate: pd.DataFrame,
+    features: list[str],
+    model: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    raw_train = train[features].to_numpy(float)
+    raw_evaluate = evaluate[features].to_numpy(float)
+    missing_columns = np.isnan(raw_train).any(axis=0)
+    medians = np.nanmedian(raw_train, axis=0)
+    medians = np.where(np.isfinite(medians), medians, 0.0)
+    train_missing = np.isnan(raw_train)
+    evaluate_missing = np.isnan(raw_evaluate)
+    x_train = np.where(train_missing, medians, raw_train)
+    x_evaluate = np.where(evaluate_missing, medians, raw_evaluate)
+    if missing_columns.any():
+        x_train = np.column_stack([x_train, train_missing[:, missing_columns].astype(float)])
+        x_evaluate = np.column_stack([x_evaluate, evaluate_missing[:, missing_columns].astype(float)])
+    means = x_train.mean(axis=0)
+    deviations = x_train.std(axis=0)
+    deviations = np.where(deviations > 1e-12, deviations, 1.0)
+    x_train = (x_train - means) / deviations
+    x_evaluate = (x_evaluate - means) / deviations
+    if model["family"] == "spline_ridge":
+        base_train = np.clip(x_train, -5.0, 5.0)
+        base_evaluate = np.clip(x_evaluate, -5.0, 5.0)
+        train_parts = [base_train]
+        evaluate_parts = [base_evaluate]
+        for knot in model["knots"]:
+            threshold = float(knot)
+            train_parts.extend([
+                np.maximum(0.0, base_train - threshold),
+                np.maximum(0.0, -base_train - threshold),
+            ])
+            evaluate_parts.extend([
+                np.maximum(0.0, base_evaluate - threshold),
+                np.maximum(0.0, -base_evaluate - threshold),
+            ])
+        x_train = np.column_stack(train_parts)
+        x_evaluate = np.column_stack(evaluate_parts)
+    return x_train, x_evaluate, {
+        "features": features,
+        "missingIndicatorColumns": [features[index] for index in np.flatnonzero(missing_columns)],
+        "designColumns": int(x_train.shape[1]),
+    }
+
+
+def solve_ridge(
+    x: np.ndarray,
+    y: np.ndarray,
+    alpha: float,
+    weights: np.ndarray | None = None,
+) -> np.ndarray:
+    design = np.column_stack([x, np.ones(len(x))])
+    if weights is None:
+        weighted_design = design
+        weighted_y = y
+    else:
+        root = np.sqrt(weights)
+        weighted_design = design * root[:, None]
+        weighted_y = y * root
+    penalty = np.eye(design.shape[1]) * alpha
+    penalty[-1, -1] = 0.0
+    system = weighted_design.T @ weighted_design + penalty
+    target = weighted_design.T @ weighted_y
+    try:
+        return np.linalg.solve(system, target)
+    except np.linalg.LinAlgError:
+        return np.linalg.pinv(system) @ target
+
+
+def fit_regressor(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    model: dict[str, Any],
+) -> np.ndarray:
+    coefficients = solve_ridge(x_train, y_train, float(model["alpha"]))
+    if model["family"] != "huber_ridge":
+        return coefficients
+    design = np.column_stack([x_train, np.ones(len(x_train))])
+    epsilon = float(model["epsilon"])
+    for _ in range(50):
+        residual = y_train - design @ coefficients
+        center = np.median(residual)
+        scale = 1.4826 * np.median(np.abs(residual - center))
+        if not np.isfinite(scale) or scale <= 1e-9:
+            break
+        standardized = np.abs(residual - center) / scale
+        weights = np.ones(len(residual))
+        outliers = standardized > epsilon
+        weights[outliers] = epsilon / standardized[outliers]
+        updated = solve_ridge(x_train, y_train, float(model["alpha"]), weights)
+        if np.max(np.abs(updated - coefficients)) < 1e-7:
+            coefficients = updated
+            break
+        coefficients = updated
+    return coefficients
+
+
+def predict_regressor(x: np.ndarray, coefficients: np.ndarray) -> np.ndarray:
+    return np.column_stack([x, np.ones(len(x))]) @ coefficients
 
 
 def fit_predict(
     train: pd.DataFrame,
     evaluate: pd.DataFrame,
     features: list[str],
-    alpha: float,
+    model: dict[str, Any],
     architecture: str,
-) -> tuple[np.ndarray, np.ndarray, dict[str, Pipeline]]:
-    x_train = train[features]
-    x_evaluate = evaluate[features]
-    models: dict[str, Pipeline] = {}
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    x_train, x_evaluate, design = design_matrices(train, evaluate, features, model)
+    models: dict[str, Any] = {"design": design, "model": model}
     if architecture == "team_scores":
         for target in ("target_home_score", "target_away_score"):
-            models[target] = pipeline(alpha).fit(x_train, train[target])
-        home = models["target_home_score"].predict(x_evaluate)
-        away = models["target_away_score"].predict(x_evaluate)
+            models[target] = fit_regressor(x_train, train[target].to_numpy(float), model)
+        home = predict_regressor(x_evaluate, models["target_home_score"])
+        away = predict_regressor(x_evaluate, models["target_away_score"])
         return home, away, models
     if architecture == "margin_total":
         for target in ("target_home_margin", "target_total"):
-            models[target] = pipeline(alpha).fit(x_train, train[target])
-        margin = models["target_home_margin"].predict(x_evaluate)
-        total = models["target_total"].predict(x_evaluate)
+            models[target] = fit_regressor(x_train, train[target].to_numpy(float), model)
+        margin = predict_regressor(x_evaluate, models["target_home_margin"])
+        total = predict_regressor(x_evaluate, models["target_total"])
         return (total + margin) / 2, (total - margin) / 2, models
     raise ValueError(f"unsupported architecture {architecture}")
 
@@ -606,6 +707,121 @@ def rating_baseline(frame: pd.DataFrame, home_advantage: float) -> tuple[np.ndar
     )
 
 
+def residual_sigmas(
+    frame: pd.DataFrame,
+    home: np.ndarray,
+    away: np.ndarray,
+) -> tuple[float, float]:
+    return (
+        float(np.std(frame["target_home_margin"].to_numpy(float) - (home - away), ddof=1)),
+        float(np.std(frame["target_total"].to_numpy(float) - (home + away), ddof=1)),
+    )
+
+
+def winner_corrections_and_harms(
+    frame: pd.DataFrame,
+    candidate_home: np.ndarray,
+    candidate_away: np.ndarray,
+    baseline_home: np.ndarray,
+    baseline_away: np.ndarray,
+) -> dict[str, int]:
+    actual_home_win = frame["target_home_margin"].to_numpy(float) > 0
+    candidate_correct = ((candidate_home - candidate_away) > 0) == actual_home_win
+    baseline_correct = ((baseline_home - baseline_away) > 0) == actual_home_win
+    return {
+        "corrections": int((candidate_correct & ~baseline_correct).sum()),
+        "harms": int((~candidate_correct & baseline_correct).sum()),
+        "netCorrections": int(candidate_correct.sum() - baseline_correct.sum()),
+        "unchangedCorrect": int((candidate_correct & baseline_correct).sum()),
+        "unchangedWrong": int((~candidate_correct & ~baseline_correct).sum()),
+    }
+
+
+def bootstrap_confirmation(
+    frame: pd.DataFrame,
+    candidate_home: np.ndarray,
+    candidate_away: np.ndarray,
+    baseline_home: np.ndarray,
+    baseline_away: np.ndarray,
+    samples: int = 2_000,
+) -> dict[str, Any]:
+    """Deterministic game-cluster bootstrap for metric levels and paired deltas."""
+    actual_home = frame["target_home_score"].to_numpy(float)
+    actual_away = frame["target_away_score"].to_numpy(float)
+    actual_margin = actual_home - actual_away
+    actual_total = actual_home + actual_away
+    candidate_margin = candidate_home - candidate_away
+    candidate_total = candidate_home + candidate_away
+    baseline_margin = baseline_home - baseline_away
+    baseline_total = baseline_home + baseline_away
+    arrays = {
+        "teamScoreMae": (
+            (np.abs(candidate_home - actual_home) + np.abs(candidate_away - actual_away)) / 2,
+            (np.abs(baseline_home - actual_home) + np.abs(baseline_away - actual_away)) / 2,
+        ),
+        "marginMae": (np.abs(candidate_margin - actual_margin), np.abs(baseline_margin - actual_margin)),
+        "totalMae": (np.abs(candidate_total - actual_total), np.abs(baseline_total - actual_total)),
+        "winnerAccuracy": (
+            ((candidate_margin > 0) == (actual_margin > 0)).astype(float),
+            ((baseline_margin > 0) == (actual_margin > 0)).astype(float),
+        ),
+    }
+    rng = np.random.default_rng(20261015)
+    indexes = rng.integers(0, len(frame), size=(samples, len(frame)))
+    output: dict[str, Any] = {
+        "method": "deterministic_game_cluster_bootstrap",
+        "samples": samples,
+        "seed": 20261015,
+        "deltaConvention": "candidate_minus_rating_baseline; negative is better for error, positive is better for accuracy",
+        "metrics": {},
+    }
+    for name, (candidate, baseline) in arrays.items():
+        candidate_samples = candidate[indexes].mean(axis=1)
+        delta_samples = candidate_samples - baseline[indexes].mean(axis=1)
+        output["metrics"][name] = {
+            "candidate": float(candidate.mean()),
+            "candidate95Interval": [
+                float(np.quantile(candidate_samples, 0.025)),
+                float(np.quantile(candidate_samples, 0.975)),
+            ],
+            "ratingBaseline": float(baseline.mean()),
+            "pairedDelta": float(candidate.mean() - baseline.mean()),
+            "pairedDelta95Interval": [
+                float(np.quantile(delta_samples, 0.025)),
+                float(np.quantile(delta_samples, 0.975)),
+            ],
+        }
+    return output
+
+
+def rolling_origin_stability(
+    frame: pd.DataFrame,
+    selection_season: int,
+    features: list[str],
+    model: dict[str, Any],
+    architecture: str,
+) -> list[dict[str, Any]]:
+    """Report prior-season stability without consulting confirmation outcomes."""
+    rows: list[dict[str, Any]] = []
+    seasons = sorted(int(value) for value in frame["season"].unique())
+    for evaluation_season in seasons:
+        if evaluation_season > selection_season:
+            continue
+        train = frame[frame["season"] < evaluation_season].copy()
+        evaluate = frame[frame["season"] == evaluation_season].copy()
+        if train.empty or evaluate.empty:
+            continue
+        home, away, _ = fit_predict(train, evaluate, features, model, architecture)
+        train_home, train_away, _ = fit_predict(train, train, features, model, architecture)
+        margin_sigma, total_sigma = residual_sigmas(train, train_home, train_away)
+        rows.append({
+            "trainingSeasons": sorted(int(value) for value in train["season"].unique()),
+            "evaluationSeason": evaluation_season,
+            "metrics": metrics(evaluate, home, away, margin_sigma, total_sigma),
+        })
+    return rows
+
+
 def main() -> None:
     args = parse_args()
     frame = validate(read_jsonl(args.features))
@@ -623,24 +839,19 @@ def main() -> None:
         raise ValueError("NBA tournament has an empty chronological partition")
 
     groups = feature_catalog(frame)
-    alphas = [0.1, 1.0, 10.0, 100.0, 1000.0]
+    model_specs = candidate_model_specs()
     candidates: list[dict[str, Any]] = []
     for group_name, features in groups.items():
         for architecture in ("team_scores", "margin_total"):
-            for alpha in alphas:
-                home, away, _ = fit_predict(train, selection, features, alpha, architecture)
-                train_home, train_away, _ = fit_predict(train, train, features, alpha, architecture)
-                margin_sigma = float(np.std(
-                    train["target_home_margin"].to_numpy(float) - (train_home - train_away), ddof=1,
-                ))
-                total_sigma = float(np.std(
-                    train["target_total"].to_numpy(float) - (train_home + train_away), ddof=1,
-                ))
+            for model in model_specs:
+                home, away, _ = fit_predict(train, selection, features, model, architecture)
+                train_home, train_away, _ = fit_predict(train, train, features, model, architecture)
+                margin_sigma, total_sigma = residual_sigmas(train, train_home, train_away)
                 candidates.append({
                     "group": group_name,
                     "featureCount": len(features),
                     "architecture": architecture,
-                    "alpha": alpha,
+                    "model": model,
                     "selection": metrics(selection, home, away, margin_sigma, total_sigma),
                 })
     baseline_home, baseline_away = rating_baseline(selection, 2.2)
@@ -675,22 +886,17 @@ def main() -> None:
         fit,
         confirmation,
         selected_features,
-        float(selected["alpha"]),
+        dict(selected["model"]),
         str(selected["architecture"]),
     )
     fit_home, fit_away, _ = fit_predict(
         fit,
         fit,
         selected_features,
-        float(selected["alpha"]),
+        dict(selected["model"]),
         str(selected["architecture"]),
     )
-    margin_sigma = float(np.std(
-        fit["target_home_margin"].to_numpy(float) - (fit_home - fit_away), ddof=1,
-    ))
-    total_sigma = float(np.std(
-        fit["target_total"].to_numpy(float) - (fit_home + fit_away), ddof=1,
-    ))
+    margin_sigma, total_sigma = residual_sigmas(fit, fit_home, fit_away)
     confirmation_metrics = metrics(confirmation, home, away, margin_sigma, total_sigma)
 
     confirmation_baseline_home, confirmation_baseline_away = rating_baseline(confirmation, 2.2)
@@ -700,6 +906,27 @@ def main() -> None:
         confirmation_baseline_away,
         baseline_margin_sigma,
         baseline_total_sigma,
+    )
+    correction_ledger = winner_corrections_and_harms(
+        confirmation,
+        home,
+        away,
+        confirmation_baseline_home,
+        confirmation_baseline_away,
+    )
+    uncertainty = bootstrap_confirmation(
+        confirmation,
+        home,
+        away,
+        confirmation_baseline_home,
+        confirmation_baseline_away,
+    )
+    stability = rolling_origin_stability(
+        frame[frame["season"] < confirmation_season].copy(),
+        selection_season,
+        selected_features,
+        dict(selected["model"]),
+        str(selected["architecture"]),
     )
 
     r1_comparable = confirmation_season == R1_CONFIRMATION["season"] and len(confirmation) == R1_CONFIRMATION["games"]
@@ -779,6 +1006,9 @@ def main() -> None:
             "totalSigma": total_sigma,
         },
         "confirmationRatingBaseline": confirmation_baseline,
+        "confirmationWinnerChangesVsRatingBaseline": correction_ledger,
+        "confirmationUncertainty": uncertainty,
+        "rollingOriginStability": stability,
         "publishedR1Confirmation": R1_CONFIRMATION,
         "publishedR1DirectlyComparable": r1_comparable,
         "publishedR1Gates": r1_gates,

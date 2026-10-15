@@ -135,6 +135,15 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert isinstance(report["selectionGatePassed"], bool)
     assert report["selected"]["featureCount"] > 0
     assert report["confirmation"]["games"] == 48
+    assert report["selected"]["model"]["family"] in {"ridge", "huber_ridge", "spline_ridge"}
+    assert report["confirmationWinnerChangesVsRatingBaseline"]["corrections"] >= 0
+    assert report["confirmationWinnerChangesVsRatingBaseline"]["harms"] >= 0
+    assert report["confirmationUncertainty"]["samples"] == 2000
+    assert set(report["confirmationUncertainty"]["metrics"]) == {
+        "teamScoreMae", "marginMae", "totalMae", "winnerAccuracy",
+    }
+    assert report["rollingOriginStability"]
+    assert all(row["evaluationSeason"] <= 2024 for row in report["rollingOriginStability"])
     assert report["publishedR1DirectlyComparable"] is False
     assert report["confirmation"]["upsetEvaluation"]["games"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["spread"]["games"] == 48
