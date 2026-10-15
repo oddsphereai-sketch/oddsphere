@@ -254,6 +254,18 @@ distance/speed into five-game, 15-game, and prior-season windows. The raw
 provider fields are not assumed predictive. The tournament decides whether
 each family adds stable score or calibration value beyond the simple baselines.
 
+Feature release `nba_point_in_time_features_2026_10_15_r5_rotation_travel`
+also adds a dynamic Elo benchmark, explicit offense-versus-opponent-defense
+and Four-Factor matchup edges, prior-game player-minute rotation overlap,
+rolling expected rotation size/concentration, venue-to-venue great-circle
+travel, east/west time-zone direction, road-trip position, and venue altitude.
+Every field is constructed before the predicted game's result becomes
+available, and the mutation test proves that changing a game's final box or
+tracking rows cannot change that game's own feature state. The historical
+rotation fields describe continuity entering the game; they do not pretend to
+know the current game's participants. Timestamped injury status and projected
+current-game minutes remain a separate required input and promotion gate.
+
 ## Acute player-absence experiment
 
 The model must not encode `star out = automatic loss` or a generic fixed-point
@@ -313,13 +325,18 @@ One aggregate win is insufficient: results are segmented by month, rest state,
 injury certainty, projected pace, favorite size, and home/away status.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r5_bounded_model_stability`. Its
+`nba_professional_tournament_2026_10_15_r6_rotation_travel_calibration_gate`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
-hinge-spline ridge. It records rolling-origin stability before confirmation,
-2,000 deterministic game-cluster bootstrap samples, and the complete winner
-correction/harm ledger versus the simple adjusted-rating baseline. These are
-selection safeguards, not evidence that a candidate has already qualified.
+hinge-spline ridge. Feature-family ablations separately test ratings,
+ratings-plus-schedule/travel, Four Factors, prior-rotation continuity, and
+tracking/style interactions rather than assuming the largest feature set is
+best. Selection requires lower team-score MAE without material margin, Total,
+winner-accuracy, Brier, or log-loss regression versus the simple rating
+baseline. It records rolling-origin stability before confirmation, 2,000
+deterministic game-cluster bootstrap samples, and the complete winner
+correction/harm ledger versus that baseline. These are selection safeguards,
+not evidence that a candidate has already qualified.
 
 ## Upset-aware evaluation
 

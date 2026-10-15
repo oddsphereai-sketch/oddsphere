@@ -64,6 +64,14 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "away_games_last_4_days": 2,
             "home_games_last_7_days": 3,
             "away_games_last_7_days": 3,
+            "home_travel_distance_miles": 450,
+            "away_travel_distance_miles": 700,
+            "home_time_zones_eastward": 0,
+            "away_time_zones_eastward": 1,
+            "home_consecutive_road_games_before": 0,
+            "away_consecutive_road_games_before": 2,
+            "home_venue_altitude_feet": 500,
+            "away_venue_altitude_feet": 500,
             "home_efg_5": 0.54 + rng.normal(0, 0.02),
             "away_efg_5": 0.53 + rng.normal(0, 0.02),
             "home_turnoverRate_5": 0.13 + rng.normal(0, 0.01),
@@ -84,6 +92,10 @@ for season_index, season in enumerate((2023, 2024, 2025)):
             "away_top8MinutesShare_5": 0.91,
             "home_rotationMinutesEntropy_5": 2.2,
             "away_rotationMinutesEntropy_5": 2.2,
+            "home_rotation_expected_players_5": 9,
+            "away_rotation_expected_players_5": 10,
+            "home_rotation_continuity_5": 0.88,
+            "away_rotation_continuity_5": 0.82,
             "home_pointsPaintShare_5": 0.42 + rng.normal(0, 0.02),
             "away_pointsPaintShare_5": 0.41 + rng.normal(0, 0.02),
             "home_deflectionsPer100_5": 8.5 + rng.normal(0, 0.5),
@@ -134,6 +146,8 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["promotionAuthorized"] is False
     assert isinstance(report["selectionGatePassed"], bool)
     assert report["selected"]["featureCount"] > 0
+    assert report["selectionGate"]["homeWinBrierMaximumRegression"] == 0.0
+    assert report["selectionGate"]["homeWinLogLossMaximumRegression"] == 0.005
     assert report["confirmation"]["games"] == 48
     assert report["selected"]["model"]["family"] in {"ridge", "huber_ridge", "spline_ridge"}
     assert report["confirmationWinnerChangesVsRatingBaseline"]["corrections"] >= 0
@@ -174,5 +188,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert not any(name.startswith("evaluation_") for name in selected_features)
     assert "home_pointsPaintShare_5" in selected_features
     assert "away_usageConcentration_5" in selected_features
+    assert "home_rotation_continuity_5" in selected_features
+    assert "away_travel_distance_miles" in selected_features
 
 print("NBA professional tournament chronological and promotion-boundary tests passed.")

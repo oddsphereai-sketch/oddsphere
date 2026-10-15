@@ -18,14 +18,15 @@ function game(args: {
   homeTeamId?: number;
   awayTeamId?: number;
 }): NbaHistoricalGame {
+  const abbreviations: Record<number, string> = { 1: "ATL", 2: "BOS", 3: "BKN", 4: "CHA" };
   return {
     gameId: args.id,
     season: args.season,
     startTime: `${args.date}T23:00:00.000Z`,
     homeTeamId: args.homeTeamId ?? 1,
     awayTeamId: args.awayTeamId ?? 2,
-    homeTeam: `T${args.homeTeamId ?? 1}`,
-    awayTeam: `T${args.awayTeamId ?? 2}`,
+    homeTeam: abbreviations[args.homeTeamId ?? 1] ?? `T${args.homeTeamId ?? 1}`,
+    awayTeam: abbreviations[args.awayTeamId ?? 2] ?? `T${args.awayTeamId ?? 2}`,
     homeScore: args.homeScore,
     awayScore: args.awayScore,
   };
@@ -114,6 +115,9 @@ const rows = buildNbaPointInTimeFeatures({ games, boxes, advanced });
 
 assert.deepEqual(rows.map((row) => row.game_id), [1, 2, 3], "games must be processed chronologically");
 assert.equal(rows[0]?.home_current_games, 0);
+assert.equal(rows[0]?.elo_home_rating, 1500);
+assert.equal(rows[0]?.elo_away_rating, 1500);
+assert.equal(typeof rows[0]?.elo_home_win_probability, "number");
 assert.equal(rows[1]?.home_current_games, 0);
 assert.equal(rows[1]?.home_prior_games, 1);
 assert.equal(rows[1]?.home_offRating_5, null);
@@ -121,8 +125,43 @@ assert.equal(typeof rows[1]?.home_offRating_prior, "number");
 assert.equal(rows[2]?.home_current_games, 1);
 assert.equal(typeof rows[2]?.home_offRating_5, "number");
 assert.equal(typeof rows[2]?.home_pointsPaintShare_5, "number");
+assert.equal(rows[2]?.home_rotation_expected_players_5, 5);
+assert.equal(typeof rows[2]?.matchup_home_efg_edge_5, "number");
+assert.equal(typeof rows[2]?.baseline_expected_margin_pp100, "number");
+assert.notEqual(rows[2]?.elo_home_rating, rows[2]?.elo_away_rating);
 assert.equal(rows[2]?.home_games_last_4_days, 1);
 assert.equal(rows[2]?.home_back_to_back, 0);
+assert.equal(typeof rows[2]?.home_travel_distance_miles, "number");
+assert.equal(rows[2]?.home_venue_altitude_feet, 1050);
+
+const travelFirst = game({
+  id: 30,
+  season: 2025,
+  date: "2025-11-05",
+  homeScore: 105,
+  awayScore: 101,
+  homeTeamId: 2,
+  awayTeamId: 1,
+});
+const travelSecond = game({
+  id: 31,
+  season: 2025,
+  date: "2025-11-08",
+  homeScore: 109,
+  awayScore: 103,
+  homeTeamId: 1,
+  awayTeamId: 3,
+});
+const travelRows = buildNbaPointInTimeFeatures({
+  games: [travelFirst, travelSecond],
+  boxes: [...boxesFor(travelFirst), ...boxesFor(travelSecond)],
+  advanced: [...advancedFor(travelFirst), ...advancedFor(travelSecond)],
+});
+assert.ok(Number(travelRows[1]?.home_travel_distance_miles) > 800);
+assert.ok(Number(travelRows[1]?.home_westward_travel_miles) > 800);
+assert.equal(travelRows[1]?.home_eastward_travel_miles, 0);
+assert.equal(travelRows[1]?.home_time_zones_westward, 0);
+assert.equal(travelRows[1]?.home_time_zones_eastward, 0);
 
 const changedSecond = { ...second, homeScore: 90, awayScore: 130 };
 const changedRows = buildNbaPointInTimeFeatures({

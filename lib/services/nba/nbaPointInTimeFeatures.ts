@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r3" as const;
+  "nba_point_in_time_features_2026_10_15_r5_rotation_travel" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;
@@ -128,9 +128,17 @@ type TeamObservation = {
   usageConcentration: number | null;
   distancePer48: number | null;
   speedWeighted: number | null;
+  playerMinutes: Record<string, number>;
+  venueLatitude: number | null;
+  venueLongitude: number | null;
+  venueTimeZoneBand: number | null;
+  venueAltitudeFeet: number | null;
+  isHome: boolean;
 };
 
 type AdjustedRating = { offense: number; defense: number };
+
+type EloRating = number;
 
 type PendingOutcome = {
   availableAtMs: number;
@@ -141,6 +149,53 @@ type PendingOutcome = {
 };
 
 const CONSERVATIVE_RESULT_AVAILABILITY_HOURS = 5;
+const ELO_INITIAL_RATING = 1500;
+const ELO_HOME_ADVANTAGE = 65;
+const ELO_K_FACTOR = 20;
+const ELO_OFFSEASON_CARRY = 0.75;
+
+type NbaVenue = {
+  latitude: number;
+  longitude: number;
+  timeZoneBand: 0 | 1 | 2 | 3;
+  altitudeFeet: number;
+};
+
+// Time-zone bands are Eastern=0 through Pacific=3. Coordinates are arena
+// locations, not team centroids, so travel is measured from the last game's
+// venue to the upcoming game's venue for both home and away teams.
+const NBA_VENUES: Record<string, NbaVenue> = {
+  ATL: { latitude: 33.7573, longitude: -84.3963, timeZoneBand: 0, altitudeFeet: 1050 },
+  BOS: { latitude: 42.3662, longitude: -71.0621, timeZoneBand: 0, altitudeFeet: 20 },
+  BKN: { latitude: 40.6826, longitude: -73.9754, timeZoneBand: 0, altitudeFeet: 35 },
+  CHA: { latitude: 35.2251, longitude: -80.8392, timeZoneBand: 0, altitudeFeet: 750 },
+  CHI: { latitude: 41.8807, longitude: -87.6742, timeZoneBand: 1, altitudeFeet: 595 },
+  CLE: { latitude: 41.4965, longitude: -81.6882, timeZoneBand: 0, altitudeFeet: 650 },
+  DAL: { latitude: 32.7905, longitude: -96.8103, timeZoneBand: 1, altitudeFeet: 430 },
+  DEN: { latitude: 39.7487, longitude: -105.0077, timeZoneBand: 2, altitudeFeet: 5280 },
+  DET: { latitude: 42.3410, longitude: -83.0550, timeZoneBand: 0, altitudeFeet: 600 },
+  GSW: { latitude: 37.7680, longitude: -122.3877, timeZoneBand: 3, altitudeFeet: 10 },
+  HOU: { latitude: 29.7508, longitude: -95.3621, timeZoneBand: 1, altitudeFeet: 45 },
+  IND: { latitude: 39.7640, longitude: -86.1555, timeZoneBand: 0, altitudeFeet: 715 },
+  LAC: { latitude: 33.9535, longitude: -118.3392, timeZoneBand: 3, altitudeFeet: 130 },
+  LAL: { latitude: 34.0430, longitude: -118.2673, timeZoneBand: 3, altitudeFeet: 270 },
+  MEM: { latitude: 35.1382, longitude: -90.0506, timeZoneBand: 1, altitudeFeet: 260 },
+  MIA: { latitude: 25.7814, longitude: -80.1870, timeZoneBand: 0, altitudeFeet: 10 },
+  MIL: { latitude: 43.0451, longitude: -87.9172, timeZoneBand: 1, altitudeFeet: 620 },
+  MIN: { latitude: 44.9795, longitude: -93.2760, timeZoneBand: 1, altitudeFeet: 830 },
+  NOP: { latitude: 29.9490, longitude: -90.0821, timeZoneBand: 1, altitudeFeet: 5 },
+  NYK: { latitude: 40.7505, longitude: -73.9934, timeZoneBand: 0, altitudeFeet: 35 },
+  OKC: { latitude: 35.4634, longitude: -97.5151, timeZoneBand: 1, altitudeFeet: 1200 },
+  ORL: { latitude: 28.5392, longitude: -81.3839, timeZoneBand: 0, altitudeFeet: 90 },
+  PHI: { latitude: 39.9012, longitude: -75.1720, timeZoneBand: 0, altitudeFeet: 20 },
+  PHX: { latitude: 33.4457, longitude: -112.0712, timeZoneBand: 2, altitudeFeet: 1085 },
+  POR: { latitude: 45.5316, longitude: -122.6668, timeZoneBand: 3, altitudeFeet: 50 },
+  SAC: { latitude: 38.5802, longitude: -121.4997, timeZoneBand: 3, altitudeFeet: 30 },
+  SAS: { latitude: 29.4270, longitude: -98.4375, timeZoneBand: 1, altitudeFeet: 650 },
+  TOR: { latitude: 43.6435, longitude: -79.3791, timeZoneBand: 0, altitudeFeet: 250 },
+  UTA: { latitude: 40.7683, longitude: -111.9011, timeZoneBand: 2, altitudeFeet: 4225 },
+  WAS: { latitude: 38.8981, longitude: -77.0209, timeZoneBand: 0, altitudeFeet: 25 },
+};
 
 export type NbaPointInTimeFeatureRow = {
   release: typeof NBA_POINT_IN_TIME_FEATURE_RELEASE;
@@ -490,6 +545,8 @@ function observation(args: {
   opponent: TeamBox;
   possessions: number;
   advanced: NbaHistoricalPlayerAdvanced[];
+  venue: NbaVenue | null;
+  isHome: boolean;
 }): TeamObservation {
   const teamPossessions = possessionEstimate(args.team);
   const opponentPossessions = possessionEstimate(args.opponent);
@@ -510,6 +567,12 @@ function observation(args: {
     opponentFreeThrowRate: ratio(args.opponent.fta, args.opponent.fga),
     ...rotationFeatures(args.team),
     ...advancedFeatures({ rows: args.advanced, box: args.team, possessions: args.possessions }),
+    playerMinutes: Object.fromEntries(args.team.players.map((row) => [String(row.playerId), row.minutes])),
+    venueLatitude: args.venue?.latitude ?? null,
+    venueLongitude: args.venue?.longitude ?? null,
+    venueTimeZoneBand: args.venue?.timeZoneBand ?? null,
+    venueAltitudeFeet: args.venue?.altitudeFeet ?? null,
+    isHome: args.isHome,
   };
 }
 
@@ -532,15 +595,113 @@ function windowMean(
     typeof value === "number" && Number.isFinite(value)));
 }
 
-function scheduleFeatures(observations: TeamObservation[], startMs: number): Record<string, number | null> {
+function rotationOverlap(left: Record<string, number>, right: Record<string, number>): number | null {
+  const leftTotal = Object.values(left).reduce((total, value) => total + value, 0);
+  const rightTotal = Object.values(right).reduce((total, value) => total + value, 0);
+  if (leftTotal <= 0 || rightTotal <= 0) return null;
+  const players = new Set([...Object.keys(left), ...Object.keys(right)]);
+  let overlap = 0;
+  for (const player of players) {
+    overlap += Math.min((left[player] ?? 0) / leftTotal, (right[player] ?? 0) / rightTotal);
+  }
+  return overlap;
+}
+
+function rotationHistoryFeatures(observations: TeamObservation[]): Record<string, number | null> {
+  const recent = observations.slice(-5);
+  if (recent.length === 0) {
+    return {
+      rotation_expected_players_5: null,
+      rotation_expected_top1_minutes_5: null,
+      rotation_continuity_5: null,
+      rotation_latest_vs_recent_5: null,
+    };
+  }
+  const expectedMinutes = new Map<string, number>();
+  for (const row of recent) {
+    for (const [player, playerMinutes] of Object.entries(row.playerMinutes)) {
+      expectedMinutes.set(player, (expectedMinutes.get(player) ?? 0) + playerMinutes / recent.length);
+    }
+  }
+  const consecutiveOverlaps = recent.slice(1).flatMap((row, index) => {
+    const value = rotationOverlap(recent[index]!.playerMinutes, row.playerMinutes);
+    return value === null ? [] : [value];
+  });
+  const prior = recent.slice(0, -1);
+  const recentBeforeLatest: Record<string, number> = {};
+  if (prior.length > 0) {
+    for (const row of prior) {
+      for (const [player, playerMinutes] of Object.entries(row.playerMinutes)) {
+        recentBeforeLatest[player] = (recentBeforeLatest[player] ?? 0) + playerMinutes / prior.length;
+      }
+    }
+  }
+  return {
+    rotation_expected_players_5: [...expectedMinutes.values()].filter((value) => value >= 5).length,
+    rotation_expected_top1_minutes_5: Math.max(...expectedMinutes.values()),
+    rotation_continuity_5: mean(consecutiveOverlaps),
+    rotation_latest_vs_recent_5: prior.length > 0
+      ? rotationOverlap(recent.at(-1)!.playerMinutes, recentBeforeLatest)
+      : null,
+  };
+}
+
+function radians(value: number): number {
+  return value * Math.PI / 180;
+}
+
+function haversineMiles(left: TeamObservation, venue: NbaVenue): number | null {
+  if (left.venueLatitude === null || left.venueLongitude === null) return null;
+  const latitudeDelta = radians(venue.latitude - left.venueLatitude);
+  const longitudeDelta = radians(venue.longitude - left.venueLongitude);
+  const startLatitude = radians(left.venueLatitude);
+  const endLatitude = radians(venue.latitude);
+  const chord = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * 3958.8 * Math.asin(Math.sqrt(chord));
+}
+
+function scheduleFeatures(
+  observations: TeamObservation[],
+  startMs: number,
+  venue: NbaVenue | null,
+  isHome: boolean,
+): Record<string, number | null> {
   const priorStarts = observations.map((row) => row.startMs);
   const lastStart = priorStarts.at(-1);
   const hoursSinceLast = lastStart === undefined ? null : (startMs - lastStart) / 3_600_000;
+  const lastObservation = observations.at(-1);
+  const travelDistance = lastObservation && venue ? haversineMiles(lastObservation, venue) : null;
+  const longitudeShift = lastObservation?.venueLongitude !== null &&
+      lastObservation?.venueLongitude !== undefined && venue
+    ? venue.longitude - lastObservation.venueLongitude
+    : null;
+  const zoneShift = lastObservation?.venueTimeZoneBand !== null &&
+      lastObservation?.venueTimeZoneBand !== undefined && venue
+    ? lastObservation.venueTimeZoneBand - venue.timeZoneBand
+    : null;
+  let consecutiveRoadGames = 0;
+  if (!isHome) {
+    for (let index = observations.length - 1; index >= 0 && !observations[index]!.isHome; index -= 1) {
+      consecutiveRoadGames += 1;
+    }
+  }
   return {
     rest_days: hoursSinceLast === null ? null : Math.max(0, hoursSinceLast / 24 - 1),
     back_to_back: hoursSinceLast !== null && hoursSinceLast <= 30 ? 1 : 0,
     games_last_4_days: priorStarts.filter((time) => startMs - time <= 4 * 86_400_000).length,
     games_last_7_days: priorStarts.filter((time) => startMs - time <= 7 * 86_400_000).length,
+    travel_distance_miles: travelDistance,
+    eastward_travel_miles: travelDistance !== null && longitudeShift !== null && longitudeShift > 0 ? travelDistance : 0,
+    westward_travel_miles: travelDistance !== null && longitudeShift !== null && longitudeShift < 0 ? travelDistance : 0,
+    time_zones_eastward: zoneShift === null ? null : Math.max(0, zoneShift),
+    time_zones_westward: zoneShift === null ? null : Math.max(0, -zoneShift),
+    consecutive_road_games_before: consecutiveRoadGames,
+    venue_altitude_feet: venue?.altitudeFeet ?? null,
+    altitude_change_feet: venue && lastObservation?.venueAltitudeFeet !== null &&
+        lastObservation?.venueAltitudeFeet !== undefined
+      ? venue.altitudeFeet - lastObservation.venueAltitudeFeet
+      : null,
   };
 }
 
@@ -549,6 +710,8 @@ function teamFeatures(args: {
   season: number;
   startMs: number;
   adjusted: AdjustedRating;
+  venue: NbaVenue | null;
+  isHome: boolean;
 }): Record<string, number | null> {
   const current = args.observations.filter((row) => row.season === args.season);
   const priorSeasons = args.observations.filter((row) => row.season < args.season);
@@ -606,7 +769,134 @@ function teamFeatures(args: {
   values.total_rating_sd_10 = standardDeviation(
     current.slice(-10).map((row) => row.offRating + row.defRating),
   );
-  return { ...values, ...scheduleFeatures(args.observations, args.startMs) };
+  return {
+    ...values,
+    ...rotationHistoryFeatures(current.length > 0 ? current : prior),
+    ...scheduleFeatures(args.observations, args.startMs, args.venue, args.isHome),
+  };
+}
+
+function numericFeature(
+  values: Record<string, number | null>,
+  key: string,
+): number | null {
+  const value = values[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function pairFeature(
+  left: Record<string, number | null>,
+  leftKey: string,
+  right: Record<string, number | null>,
+  rightKey: string,
+  combine: (leftValue: number, rightValue: number) => number,
+): number | null {
+  const leftValue = numericFeature(left, leftKey);
+  const rightValue = numericFeature(right, rightKey);
+  return leftValue === null || rightValue === null ? null : combine(leftValue, rightValue);
+}
+
+/**
+ * Predeclared basketball interactions. Raw home/away columns force a linear
+ * learner to rediscover every matchup equation independently. These explicit
+ * edges express offense-versus-opponent-defense, pace, style, and schedule
+ * relationships while retaining the exact same point-in-time evidence.
+ */
+function matchupFeatures(args: {
+  home: Record<string, number | null>;
+  away: Record<string, number | null>;
+  league: number;
+}): Record<string, number | null> {
+  const result: Record<string, number | null> = {};
+  const homeOffense = numericFeature(args.home, "adjusted_offense");
+  const homeDefense = numericFeature(args.home, "adjusted_defense");
+  const awayOffense = numericFeature(args.away, "adjusted_offense");
+  const awayDefense = numericFeature(args.away, "adjusted_defense");
+  result.baseline_expected_margin_pp100 =
+    homeOffense === null || homeDefense === null || awayOffense === null || awayDefense === null
+      ? null
+      : homeOffense + awayDefense - awayOffense - homeDefense;
+  result.baseline_expected_total_pp100 =
+    homeOffense === null || homeDefense === null || awayOffense === null || awayDefense === null
+      ? null
+      : homeOffense + awayDefense + awayOffense + homeDefense - 2 * args.league;
+
+  for (const window of ["5", "15", "prior"] as const) {
+    result[`matchup_pace_mean_${window}`] = pairFeature(
+      args.home, `pace_${window}`, args.away, `pace_${window}`,
+      (home, away) => (home + away) / 2,
+    );
+    result[`matchup_pace_abs_delta_${window}`] = pairFeature(
+      args.home, `pace_${window}`, args.away, `pace_${window}`,
+      (home, away) => Math.abs(home - away),
+    );
+    result[`matchup_home_efg_edge_${window}`] = pairFeature(
+      args.home, `efg_${window}`, args.away, `opponentEfg_${window}`,
+      (offense, allowed) => offense - allowed,
+    );
+    result[`matchup_away_efg_edge_${window}`] = pairFeature(
+      args.away, `efg_${window}`, args.home, `opponentEfg_${window}`,
+      (offense, allowed) => offense - allowed,
+    );
+    result[`matchup_home_turnover_edge_${window}`] = pairFeature(
+      args.away, `opponentTurnoverRate_${window}`, args.home, `turnoverRate_${window}`,
+      (forced, committed) => forced - committed,
+    );
+    result[`matchup_away_turnover_edge_${window}`] = pairFeature(
+      args.home, `opponentTurnoverRate_${window}`, args.away, `turnoverRate_${window}`,
+      (forced, committed) => forced - committed,
+    );
+    result[`matchup_home_rebound_edge_${window}`] = pairFeature(
+      args.home, `offensiveReboundRate_${window}`, args.away, `opponentOffensiveReboundRate_${window}`,
+      (offense, allowed) => offense - allowed,
+    );
+    result[`matchup_away_rebound_edge_${window}`] = pairFeature(
+      args.away, `offensiveReboundRate_${window}`, args.home, `opponentOffensiveReboundRate_${window}`,
+      (offense, allowed) => offense - allowed,
+    );
+    result[`matchup_home_free_throw_edge_${window}`] = pairFeature(
+      args.home, `freeThrowRate_${window}`, args.away, `opponentFreeThrowRate_${window}`,
+      (offense, allowed) => offense - allowed,
+    );
+    result[`matchup_away_free_throw_edge_${window}`] = pairFeature(
+      args.away, `freeThrowRate_${window}`, args.home, `opponentFreeThrowRate_${window}`,
+      (offense, allowed) => offense - allowed,
+    );
+    for (const key of [
+      "pointsPaintShare",
+      "pointsFastBreakShare",
+      "pointsSecondChanceShare",
+      "pointsOffTurnoversShare",
+      "passesPer100",
+      "touchesPer100",
+      "deflectionsPer100",
+      "contestedShotsPer100",
+      "defendedAtRimFgPct",
+      "reboundChancesPer100",
+      "usageConcentration",
+    ] as const) {
+      result[`matchup_${key}_delta_${window}`] = pairFeature(
+        args.home, `${key}_${window}`, args.away, `${key}_${window}`,
+        (home, away) => home - away,
+      );
+    }
+  }
+  result.matchup_rest_days_edge = pairFeature(
+    args.home, "rest_days", args.away, "rest_days", (home, away) => home - away,
+  );
+  result.matchup_games_last_4_days_edge = pairFeature(
+    args.home, "games_last_4_days", args.away, "games_last_4_days", (home, away) => home - away,
+  );
+  result.matchup_games_last_7_days_edge = pairFeature(
+    args.home, "games_last_7_days", args.away, "games_last_7_days", (home, away) => home - away,
+  );
+  result.matchup_margin_volatility_sum_10 = pairFeature(
+    args.home, "margin_sd_10", args.away, "margin_sd_10", (home, away) => home + away,
+  );
+  result.matchup_total_volatility_sum_10 = pairFeature(
+    args.home, "total_rating_sd_10", args.away, "total_rating_sd_10", (home, away) => home + away,
+  );
+  return result;
 }
 
 function prefixed(prefix: "home" | "away", values: Record<string, number | null>): Record<string, number | null> {
@@ -640,6 +930,25 @@ function updateAdjustedRatings(args: {
   });
 }
 
+function eloHomeWinProbability(home: EloRating, away: EloRating): number {
+  return 1 / (1 + 10 ** (-(home + ELO_HOME_ADVANTAGE - away) / 400));
+}
+
+function updateEloRatings(args: {
+  ratings: Map<number, EloRating>;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeMargin: number;
+}): void {
+  const home = args.ratings.get(args.homeTeamId) ?? ELO_INITIAL_RATING;
+  const away = args.ratings.get(args.awayTeamId) ?? ELO_INITIAL_RATING;
+  const expected = eloHomeWinProbability(home, away);
+  const outcome = args.homeMargin > 0 ? 1 : 0;
+  const adjustment = ELO_K_FACTOR * (outcome - expected);
+  args.ratings.set(args.homeTeamId, home + adjustment);
+  args.ratings.set(args.awayTeamId, away - adjustment);
+}
+
 export function buildNbaPointInTimeFeatures(args: {
   games: NbaHistoricalGame[];
   boxes: NbaHistoricalPlayerBox[];
@@ -662,8 +971,10 @@ export function buildNbaPointInTimeFeatures(args: {
   const observationsByTeam = new Map<number, TeamObservation[]>();
   const leagueObservations: TeamObservation[] = [];
   const adjustedRatings = new Map<number, AdjustedRating>();
+  const eloRatings = new Map<number, EloRating>();
   const pendingOutcomes: PendingOutcome[] = [];
   const output: NbaPointInTimeFeatureRow[] = [];
+  let activeEloSeason: number | null = null;
 
   for (const game of games) {
     const startMs = Date.parse(game.startTime);
@@ -686,6 +997,23 @@ export function buildNbaPointInTimeFeatures(args: {
         homeOffRating: finalized.homeObservation.offRating,
         awayOffRating: finalized.awayObservation.offRating,
       });
+      updateEloRatings({
+        ratings: eloRatings,
+        homeTeamId: finalized.homeTeamId,
+        awayTeamId: finalized.awayTeamId,
+        homeMargin: finalized.homeObservation.margin,
+      });
+    }
+    if (activeEloSeason !== game.season) {
+      if (activeEloSeason !== null) {
+        for (const [teamId, rating] of eloRatings) {
+          eloRatings.set(
+            teamId,
+            ELO_INITIAL_RATING + (rating - ELO_INITIAL_RATING) * ELO_OFFSEASON_CARRY,
+          );
+        }
+      }
+      activeEloSeason = game.season;
     }
     const gameBoxes = boxesByGame.get(game.gameId) ?? [];
     const gameAdvanced = advancedByGame.get(game.gameId) ?? [];
@@ -703,6 +1031,31 @@ export function buildNbaPointInTimeFeatures(args: {
     const league = leagueRating(leagueObservations);
     const homeAdjusted = adjustedRatings.get(game.homeTeamId) ?? { offense: 0, defense: 0 };
     const awayAdjusted = adjustedRatings.get(game.awayTeamId) ?? { offense: 0, defense: 0 };
+    const homeElo = eloRatings.get(game.homeTeamId) ?? ELO_INITIAL_RATING;
+    const awayElo = eloRatings.get(game.awayTeamId) ?? ELO_INITIAL_RATING;
+    const venue = NBA_VENUES[game.homeTeam] ?? null;
+    const homeFeatureState = teamFeatures({
+      observations: homeHistory,
+      season: game.season,
+      startMs,
+      adjusted: {
+        offense: league + homeAdjusted.offense,
+        defense: league + homeAdjusted.defense,
+      },
+      venue,
+      isHome: true,
+    });
+    const awayFeatureState = teamFeatures({
+      observations: awayHistory,
+      season: game.season,
+      startMs,
+      adjusted: {
+        offense: league + awayAdjusted.offense,
+        defense: league + awayAdjusted.defense,
+      },
+      venue,
+      isHome: false,
+    });
     output.push({
       release: NBA_POINT_IN_TIME_FEATURE_RELEASE,
       game_id: game.gameId,
@@ -713,24 +1066,13 @@ export function buildNbaPointInTimeFeatures(args: {
       home_team: game.homeTeam,
       away_team: game.awayTeam,
       league_off_rating: league,
-      ...prefixed("home", teamFeatures({
-        observations: homeHistory,
-        season: game.season,
-        startMs,
-        adjusted: {
-          offense: league + homeAdjusted.offense,
-          defense: league + homeAdjusted.defense,
-        },
-      })),
-      ...prefixed("away", teamFeatures({
-        observations: awayHistory,
-        season: game.season,
-        startMs,
-        adjusted: {
-          offense: league + awayAdjusted.offense,
-          defense: league + awayAdjusted.defense,
-        },
-      })),
+      elo_home_rating: homeElo,
+      elo_away_rating: awayElo,
+      elo_rating_delta: homeElo - awayElo,
+      elo_home_win_probability: eloHomeWinProbability(homeElo, awayElo),
+      ...prefixed("home", homeFeatureState),
+      ...prefixed("away", awayFeatureState),
+      ...matchupFeatures({ home: homeFeatureState, away: awayFeatureState, league }),
       target_home_score: game.homeScore,
       target_away_score: game.awayScore,
       target_home_margin: game.homeScore - game.awayScore,
@@ -747,6 +1089,8 @@ export function buildNbaPointInTimeFeatures(args: {
       opponent: awayBox,
       possessions,
       advanced: gameAdvanced.filter((row) => row.teamId === game.homeTeamId),
+      venue,
+      isHome: true,
     });
     const awayObservation = observation({
       season: game.season,
@@ -757,6 +1101,8 @@ export function buildNbaPointInTimeFeatures(args: {
       opponent: homeBox,
       possessions,
       advanced: gameAdvanced.filter((row) => row.teamId === game.awayTeamId),
+      venue,
+      isHome: false,
     });
     pendingOutcomes.push({
       availableAtMs: startMs + CONSERVATIVE_RESULT_AVAILABILITY_HOURS * 3_600_000,
@@ -775,4 +1121,7 @@ export const __NBA_POINT_IN_TIME_FEATURE_TEST__ = {
   minutes,
   possessionEstimate,
   rotationFeatures,
+  rotationOverlap,
+  matchupFeatures,
+  eloHomeWinProbability,
 };

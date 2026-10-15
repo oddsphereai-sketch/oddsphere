@@ -20,8 +20,8 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r5_bounded_model_stability"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r3"
+RELEASE = "nba_professional_tournament_2026_10_15_r6_rotation_travel_calibration_gate"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r5_rotation_travel"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -133,11 +133,22 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
     def chosen(tokens: tuple[str, ...]) -> list[str]:
         return [column for column in numeric if any(token in column for token in tokens)]
 
-    ratings = chosen(("league_off_rating", "adjusted_", "offRating_", "defRating_", "pace_", "current_games", "prior_games"))
-    schedule = chosen(("rest_days", "back_to_back", "games_last_4_days", "games_last_7_days"))
-    four_factors = chosen(("efg_", "turnoverRate_", "offensiveReboundRate_", "freeThrowRate_", "opponent"))
-    volatility = chosen(("margin_sd_", "total_rating_sd_"))
-    rotation = chosen(("rotationPlayers_", "top3MinutesShare_", "top8MinutesShare_", "rotationMinutesEntropy_"))
+    ratings = chosen(("league_off_rating", "adjusted_", "offRating_", "defRating_", "pace_", "current_games", "prior_games", "elo_", "baseline_"))
+    schedule = chosen((
+        "rest_days", "back_to_back", "games_last_4_days", "games_last_7_days",
+        "travel_", "time_zones_", "consecutive_road_games_", "venue_altitude_", "altitude_change_",
+    ))
+    four_factors = chosen((
+        "efg_", "turnoverRate_", "offensiveReboundRate_", "freeThrowRate_", "opponent",
+        "matchup_home_efg_", "matchup_away_efg_", "matchup_home_turnover_",
+        "matchup_away_turnover_", "matchup_home_rebound_", "matchup_away_rebound_",
+        "matchup_home_free_throw_", "matchup_away_free_throw_", "matchup_pace_",
+    ))
+    volatility = chosen(("margin_sd_", "total_rating_sd_", "matchup_margin_volatility_", "matchup_total_volatility_"))
+    rotation = chosen((
+        "rotationPlayers_", "top3MinutesShare_", "top8MinutesShare_", "rotationMinutesEntropy_",
+        "rotation_expected_", "rotation_continuity_", "rotation_latest_",
+    ))
     tracking_style = chosen((
         "pointsPaintShare_", "pointsFastBreakShare_", "pointsSecondChanceShare_",
         "pointsOffTurnoversShare_", "passesPer100_", "touchesPer100_",
@@ -145,11 +156,18 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
         "contestedShotsPer100_", "defendedAtRimAttemptsPer100_", "defendedAtRimFgPct_",
         "reboundChancesPer100_", "rotationEstimatedNetRating_", "usageWeighted_",
         "usageMax_", "usageConcentration_", "distancePer48_", "speedWeighted_",
+        "matchup_pointsPaintShare_", "matchup_pointsFastBreakShare_",
+        "matchup_pointsSecondChanceShare_", "matchup_pointsOffTurnoversShare_",
+        "matchup_passesPer100_", "matchup_touchesPer100_", "matchup_deflectionsPer100_",
+        "matchup_contestedShotsPer100_", "matchup_defendedAtRimFgPct_",
+        "matchup_reboundChancesPer100_", "matchup_usageConcentration_",
     ))
     groups = {
         "ratings": sorted(set(ratings)),
         "ratings_schedule": sorted(set(ratings + schedule)),
         "four_factors_schedule": sorted(set(ratings + schedule + four_factors + volatility)),
+        "rotation_schedule": sorted(set(ratings + schedule + four_factors + volatility + rotation)),
+        "tracking_style": sorted(set(ratings + schedule + four_factors + volatility + rotation + tracking_style)),
         "all_declared": sorted(set(
             ratings + schedule + four_factors + volatility + rotation + tracking_style
         )),
@@ -867,6 +885,7 @@ def main() -> None:
     )
     candidates.sort(key=lambda item: (
         item["selection"]["teamScoreMae"],
+        item["selection"]["homeWinBrier"],
         item["selection"]["marginMae"],
         item["selection"]["totalMae"],
     ))
@@ -876,6 +895,8 @@ def main() -> None:
         and item["selection"]["marginMae"] <= selection_baseline["marginMae"] + 0.10
         and item["selection"]["totalMae"] <= selection_baseline["totalMae"] + 0.10
         and item["selection"]["winnerAccuracy"] >= selection_baseline["winnerAccuracy"] - 0.005
+        and item["selection"]["homeWinBrier"] <= selection_baseline["homeWinBrier"]
+        and item["selection"]["homeWinLogLoss"] <= selection_baseline["homeWinLogLoss"] + 0.005
     ]
     selected = eligible_candidates[0] if eligible_candidates else candidates[0]
     selection_gate_passed = bool(eligible_candidates)
@@ -998,6 +1019,8 @@ def main() -> None:
             "marginMaeMaximumRegression": 0.10,
             "totalMaeMaximumRegression": 0.10,
             "winnerAccuracyMaximumRegression": 0.005,
+            "homeWinBrierMaximumRegression": 0.0,
+            "homeWinLogLossMaximumRegression": 0.005,
         },
         "selectionBaseline": selection_baseline,
         "confirmation": confirmation_metrics,
