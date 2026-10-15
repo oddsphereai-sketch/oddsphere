@@ -69,6 +69,89 @@ type ReferenceMarketRow = {
   ML_Away: number;
 };
 
+type ConsensusOpeningRow = {
+  date: string;
+  home: string;
+  away: string;
+  homeProbability: number;
+  homeSpread: number;
+  total: number;
+};
+
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let value = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index]!;
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === "," && !quoted) {
+      values.push(value);
+      value = "";
+    } else {
+      value += character;
+    }
+  }
+  if (quoted) throw new Error("NBA consensus CSV contains an unterminated quoted field.");
+  values.push(value);
+  return values;
+}
+
+async function consensusOpeningRows(csvPath: string): Promise<{
+  rows: ConsensusOpeningRow[];
+  sha256: string;
+}> {
+  const body = await readFile(csvPath, "utf8");
+  const lines = body.split(/\r?\n/).filter((line) => line.length > 0);
+  const header = parseCsvLine(lines[0] ?? "");
+  const required = [
+    "date_et",
+    "season_type",
+    "stage",
+    "home_team",
+    "away_team",
+    "open_home_win_prob",
+    "open_spread_home",
+    "open_total",
+  ];
+  const indexes = new Map(required.map((name) => {
+    const index = header.indexOf(name);
+    if (index < 0) throw new Error(`NBA consensus CSV is missing ${name}.`);
+    return [name, index] as const;
+  }));
+  const cell = (values: string[], name: string): string => values[indexes.get(name)!] ?? "";
+  const rows: ConsensusOpeningRow[] = [];
+  for (let lineNumber = 1; lineNumber < lines.length; lineNumber += 1) {
+    const values = parseCsvLine(lines[lineNumber]!);
+    if (values.length !== header.length) {
+      throw new Error(`NBA consensus CSV row ${lineNumber + 1} has ${values.length} fields; expected ${header.length}.`);
+    }
+    if (cell(values, "season_type").toLowerCase() !== "regular") continue;
+    if (cell(values, "stage").toLowerCase() !== "regular season") continue;
+    const homeProbability = Number(cell(values, "open_home_win_prob"));
+    const homeSpread = Number(cell(values, "open_spread_home"));
+    const total = Number(cell(values, "open_total"));
+    if (!(homeProbability > 0 && homeProbability < 1) || !Number.isFinite(homeSpread) || !Number.isFinite(total)) {
+      throw new Error(`NBA consensus CSV row ${lineNumber + 1} has an invalid opening market.`);
+    }
+    rows.push({
+      date: cell(values, "date_et"),
+      home: cell(values, "home_team"),
+      away: cell(values, "away_team"),
+      homeProbability,
+      homeSpread,
+      total,
+    });
+  }
+  return { rows, sha256: createHash("sha256").update(body).digest("hex") };
+}
+
 function implied(american: number): number {
   return american > 0 ? 100 / (american + 100) : -american / (-american + 100);
 }
@@ -179,14 +262,32 @@ async function main(): Promise<void> {
       }
     }
   }
+  const consensusInputs: { path: string; sha256: string; rows: number }[] = [];
+  const consensusByIdentity = new Map<string, ConsensusOpeningRow>();
+  for (const rawPath of values("--reference-consensus-csv")) {
+    const csvPath = path.resolve(rawPath);
+    const parsed = await consensusOpeningRows(csvPath);
+    consensusInputs.push({ path: csvPath, sha256: parsed.sha256, rows: parsed.rows.length });
+    for (const row of parsed.rows) {
+      const key = `${row.date}::${row.home}::${row.away}`;
+      if (consensusByIdentity.has(key)) throw new Error(`NBA consensus opening contains duplicate ${key}.`);
+      consensusByIdentity.set(key, row);
+    }
+  }
   let referenceMarketMatches = 0;
+  let consensusOpeningMatches = 0;
+  let legacyReferenceMatches = 0;
   const featureRows = buildNbaPointInTimeFeatures({ games, boxes, advanced }).map((row) => {
     const market = openingMarketByGame.get(row.game_id);
     const identity = rawIdentityByGame.get(row.game_id);
-    const reference = identity
-      ? referenceByIdentity.get(`${identity.date}::${identity.home}::${identity.away}`)
+    const identityKey = identity ? `${identity.date}::${identity.home}::${identity.away}` : null;
+    const consensus = identityKey ? consensusByIdentity.get(identityKey) : undefined;
+    const reference = identityKey
+      ? referenceByIdentity.get(identityKey)
       : undefined;
-    if (!market && reference) referenceMarketMatches += 1;
+    if (!market && consensus) consensusOpeningMatches += 1;
+    if (!market && !consensus && reference) legacyReferenceMatches += 1;
+    if (!market && (consensus || reference)) referenceMarketMatches += 1;
     const home = reference ? implied(Number(reference.ML_Home)) : null;
     const away = reference ? implied(Number(reference.ML_Away)) : null;
     const noVigHome = home !== null && away !== null && home + away > 0 ? home / (home + away) : null;
@@ -194,17 +295,19 @@ async function main(): Promise<void> {
       ...row,
       evaluation_market_provenance: market
         ? "balldontlie_timestamped_opening"
+        : consensus
+          ? "independent_multibook_consensus_documented_opening_snapshot_timestamp_unavailable"
         : reference
           ? "public_pregame_reference_timestamp_unknown"
           : "unavailable",
-      evaluation_opening_market_home_probability: market?.homeWinProbability ?? noVigHome,
-      evaluation_opening_moneyline_home_price: market?.homeMoneylinePrice ?? reference?.ML_Home ?? null,
-      evaluation_opening_moneyline_away_price: market?.awayMoneylinePrice ?? reference?.ML_Away ?? null,
-      evaluation_opening_home_spread: market?.homeSpread ?? (reference ? -Number(reference.Spread) : null),
+      evaluation_opening_market_home_probability: market?.homeWinProbability ?? consensus?.homeProbability ?? noVigHome,
+      evaluation_opening_moneyline_home_price: market?.homeMoneylinePrice ?? (consensus ? null : reference?.ML_Home) ?? null,
+      evaluation_opening_moneyline_away_price: market?.awayMoneylinePrice ?? (consensus ? null : reference?.ML_Away) ?? null,
+      evaluation_opening_home_spread: market?.homeSpread ?? consensus?.homeSpread ?? (reference ? -Number(reference.Spread) : null),
       evaluation_opening_home_cover_probability: market?.homeCoverProbability ?? null,
       evaluation_opening_home_spread_price: market?.homeSpreadPrice ?? null,
       evaluation_opening_away_spread_price: market?.awaySpreadPrice ?? null,
-      evaluation_opening_total: market?.total ?? reference?.OU ?? null,
+      evaluation_opening_total: market?.total ?? consensus?.total ?? reference?.OU ?? null,
       evaluation_opening_over_probability: market?.overProbability ?? null,
       evaluation_opening_over_price: market?.overPrice ?? null,
       evaluation_opening_under_price: market?.underPrice ?? null,
@@ -244,6 +347,9 @@ async function main(): Promise<void> {
     openingTotalGames: [...openingMarketByGame.values()].filter((market) =>
       market.total !== null && market.overProbability !== null).length,
     referenceMarketMatches,
+    consensusOpeningMatches,
+    legacyReferenceMatches,
+    consensusOpeningInputs: consensusInputs,
     referenceMarketProvenance: referenceSqlite
       ? "public pregame reference; observation timestamp and source book unknown; evaluation only"
       : null,

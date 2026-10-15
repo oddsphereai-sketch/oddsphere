@@ -178,6 +178,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["marketMarriage"]["readerValidationStatus"] == "opening_reference_only_not_line_movement_or_splits_validation"
     assert report["marketMarriage"]["selectionMarketProvenance"] == {"synthetic_test_only": 48}
     assert report["marketMarriage"]["timestampedSelectionAuthority"] is False
+    assert report["marketMarriage"]["documentedOpeningSelectionAuthority"] is False
     assert report["marketMarriage"]["gatePassed"] is False
     assert report["marketMarriage"]["weightSelectionRows"] > 0
     assert report["marketMarriage"]["thresholdSelectionRows"] > 0
@@ -191,6 +192,7 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["finalProductGatePassed"] is False
     assert report["finalProductGates"]["historicalMovementReaderValidated"] is False
     assert report["finalProductGates"]["historicalSplitsReaderValidated"] is False
+    assert report["finalProductGates"]["documentedOpeningMarketSelectionValidated"] is False
     assert report["finalProductGates"]["timestampedMarketSelectionValidated"] is False
     assert report["confirmationProbabilityCalibration"]["developmentRows"] > 0
     assert report["confirmationProbabilityCalibration"]["calibrationRows"] > 0
@@ -218,6 +220,9 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         assert (threshold is None) == (confirmation is None)
         if confirmation is not None:
             assert confirmation["bets"] >= 0
+    assert report["actionableThresholdSelection"]["moneyline"]["candidates"][0]["selectionRule"] == (
+        "minimum_model_probability_edge_vs_no_vig_opening_consensus"
+    )
     assert set(report["actionableBenchmarkGates"]) == {
         "moneylineAccuracyMeetsLifetimeReference",
         "totalAccuracyMeetsLifetimeReference",

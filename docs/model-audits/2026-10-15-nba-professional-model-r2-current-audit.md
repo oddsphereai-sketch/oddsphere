@@ -275,7 +275,7 @@ uncontested shooting, matchup field-goal defense, screen assists, and offensive
 and defensive rebound chances. Nullable provider fields stay missing and gain
 explicit missingness indicators; they are never filled with a favorable value.
 
-Feature release `nba_point_in_time_features_2026_10_15_r6_expanded_advanced`
+Feature release `nba_point_in_time_features_2026_10_15_r7_consensus_opening_evaluation`
 also adds a dynamic Elo benchmark, explicit offense-versus-opponent-defense
 and Four-Factor matchup edges, prior-game player-minute rotation overlap,
 rolling expected rotation size/concentration, venue-to-venue great-circle
@@ -359,7 +359,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r14_chronological_market_marriage`. Its
+`nba_professional_tournament_2026_10_15_r15_consensus_opening_selection`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -452,6 +452,18 @@ SHA-256
 It contains 1,224 labeled regular-season rows and omits six NBA Cup knockout
 games, so it cannot replace the canonical BDL season identity or become a
 model-selection source.
+
+The matching 2024-25 consensus CSV has SHA-256
+`e756b4c09c3ac56070f95ad8b6de78fc1b95a1df1049825a5f329d7ce57968cc`.
+Its documentation defines the opening fields as the median across bookmaker
+brands after proportional vig removal; the file reports a median of 17 books
+per game. It also has 1,224 regular-season rows and omits the six NBA Cup
+knockout games. It may select a bounded score-level opening-market blend and
+probability-edge threshold on the 2024-25 selection season, with missing Cup
+games falling back to the independent forecast. It cannot supply exact
+opening prices, a recoverable snapshot time, same-book movement, or splits.
+Those limitations remain separate hard gates; they are not repaired by the
+consensus label.
 
 A preliminary 50-game match against the available BDL opening-price sample
 found median absolute source differences of 1.0 spread point, 2.0 total

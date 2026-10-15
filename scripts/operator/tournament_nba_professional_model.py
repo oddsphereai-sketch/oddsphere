@@ -20,8 +20,8 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r14_chronological_market_marriage"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r6_expanded_advanced"
+RELEASE = "nba_professional_tournament_2026_10_15_r15_consensus_opening_selection"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r7_consensus_opening_evaluation"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -414,16 +414,21 @@ def actionable_candidate_report(
     predicted_total = home + away
     if market == "moneyline":
         probability = np.clip(normal_cdf(predicted_margin / max(margin_sigma, 1e-6)), 0.001, 0.999)
-        selected_first = probability >= 0.5
+        market_home_probability = frame["evaluation_opening_market_home_probability"].to_numpy(float)
+        selected_first = probability >= market_home_probability
         selected_probability = np.where(selected_first, probability, 1 - probability)
+        selected_market_probability = np.where(
+            selected_first, market_home_probability, 1 - market_home_probability
+        )
         first_price = frame["evaluation_opening_moneyline_home_price"].to_numpy(float)
         second_price = frame["evaluation_opening_moneyline_away_price"].to_numpy(float)
         price = np.where(selected_first, first_price, second_price)
-        profit = np.where(price > 0, price / 100, 100 / -price)
-        expected_value = selected_probability * profit - (1 - selected_probability)
-        eligible = np.isfinite(price) & (price != 0) & (expected_value >= threshold)
+        eligible = (
+            np.isfinite(market_home_probability)
+            & (selected_probability - selected_market_probability >= threshold)
+        )
         wins = selected_first == (actual_margin > 0)
-        selection_rule = "minimum_model_expected_value_at_exact_opening_price"
+        selection_rule = "minimum_model_probability_edge_vs_no_vig_opening_consensus"
     elif market == "spread":
         line = frame["evaluation_opening_home_spread"].to_numpy(float)
         probability = np.clip(normal_cdf(
@@ -739,9 +744,20 @@ def select_reference_market_marriage(
     provenance_counts = {
         str(key): int(value) for key, value in provenance.value_counts().sort_index().items()
     }
+    minimum_authoritative_rows = max(100, math.ceil(len(provenance) * 0.95))
+    timestamped_rows = provenance == "balldontlie_timestamped_opening"
+    documented_rows = provenance.isin({
+            "balldontlie_timestamped_opening",
+            "independent_multibook_consensus_documented_opening_snapshot_timestamp_unavailable",
+    })
+    unavailable_rows = provenance == "unavailable"
     timestamped_selection_authority = bool(
-        len(provenance) > 0
-        and (provenance == "balldontlie_timestamped_opening").all()
+        int(timestamped_rows.sum()) >= minimum_authoritative_rows
+        and (timestamped_rows | unavailable_rows).all()
+    )
+    documented_opening_selection_authority = bool(
+        int(documented_rows.sum()) >= minimum_authoritative_rows
+        and (documented_rows | unavailable_rows).all()
     )
     fit_home = independent_home[:split]
     fit_away = independent_away[:split]
@@ -835,12 +851,14 @@ def select_reference_market_marriage(
         "readerValidationStatus": "opening_reference_only_not_line_movement_or_splits_validation",
         "selectionMarketProvenance": provenance_counts,
         "timestampedSelectionAuthority": timestamped_selection_authority,
+        "documentedOpeningSelectionAuthority": documented_opening_selection_authority,
+        "minimumAuthoritativeSelectionRows": minimum_authoritative_rows,
         "selectionRows": int(len(frame)),
         "weightSelectionRows": int(len(marriage_fit)),
         "thresholdSelectionRows": int(len(threshold_selection)),
         "selected": selected,
         "gatePassed": bool(
-            timestamped_selection_authority
+            documented_opening_selection_authority
             and selected["relativeJointScore"] < 0.998
             and (
                 selected["marginIndependentWeight"] < 1.0
@@ -1605,6 +1623,9 @@ def main() -> None:
         ),
         "marketWinnerNetCorrectionsNonnegative": market_correction_ledger["netCorrections"] >= 0,
         "marketMarriageSelectedBeforeConfirmation": True,
+        "documentedOpeningMarketSelectionValidated": bool(
+            market_marriage["documentedOpeningSelectionAuthority"]
+        ),
         "timestampedMarketSelectionValidated": bool(market_marriage["timestampedSelectionAuthority"]),
         "historicalMovementReaderValidated": False,
         "historicalSplitsReaderValidated": False,
