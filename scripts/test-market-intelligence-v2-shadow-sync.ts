@@ -1,4 +1,5 @@
 import {
+  MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE,
   assessAdvertisedSharpHistoryCoverage,
   dedupeSharpApiHistorySplitObservations,
   assessSharpApiSplitSlateAlignment,
@@ -21,6 +22,12 @@ import type { MarketSplitObservationV2 } from "../lib/types/domain/MarketIntelli
 let pass = 0;
 let fail = 0;
 const failures: string[] = [];
+
+check(
+  "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
+  MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
+    "market_intelligence_v2_shadow_capture_2026_10_15_r1_nba_per_book_forward",
+);
 
 function check(label: string, ok: boolean, detail?: string): void {
   if (ok) pass++;
@@ -198,6 +205,56 @@ check(
   "WNBA key normalizes known team names",
   marketIntelligenceGameKey("wnba", "Los Angeles Sparks", "Toronto Tempo") === "LA@TOR",
 );
+check(
+  "NBA key normalizes full provider team names to canonical abbreviations",
+  marketIntelligenceGameKey("nba", "New York Knicks", "Philadelphia 76ers") === "NYK@PHI",
+);
+check(
+  "NBA key normalizes common Los Angeles provider aliases",
+  marketIntelligenceGameKey("nba", "L.A. Lakers", "Los Angeles Clippers") === "LAL@LAC",
+);
+{
+  const nbaRows = [
+    {
+      event_id: "nba_new_york_knicks_philadelphia_76ers_2026-10-20",
+      league: "nba",
+      away_team: "New York Knicks",
+      home_team: "Philadelphia 76ers",
+      sportsbook: "draftkings",
+    },
+    {
+      event_id: "nba_golden_state_warriors_los_angeles_lakers_2026-10-20",
+      league: "nba",
+      away_team: "Golden State Warriors",
+      home_team: "Los Angeles Lakers",
+      sportsbook: "betmgm",
+    },
+  ];
+  const nbaSlate = [
+    { awayAbbr: "NYK", homeAbbr: "PHI" },
+    { awayAbbr: "GSW", homeAbbr: "LAL" },
+  ];
+  const aligned = assessSharpApiSplitSlateAlignment(
+    nbaRows,
+    nbaSlate,
+    [],
+    "2026-10-20",
+    "nba",
+  );
+  check(
+    "NBA per-book SharpAPI rows clear exact-date slate identity without becoming consensus",
+    aligned.aligned && aligned.currentSlateMatches === 2 && aligned.verifiedCurrentRows === 2,
+  );
+  check(
+    "NBA SharpAPI verification rejects a matching team row stamped for another slate",
+    selectVerifiedSharpApiCurrentRows(
+      [{ ...nbaRows[0], event_id: "nba_new_york_knicks_philadelphia_76ers_2026-10-19" }],
+      nbaSlate,
+      "2026-10-20",
+      "nba",
+    ).length === 0,
+  );
+}
 check(
   "Unregistered Playbook sports fall back to stable mascot keys",
   marketIntelligenceGameKey("nfl", "Buffalo Bills", "Houston Texans") === "bills@texans",

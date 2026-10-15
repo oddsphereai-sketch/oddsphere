@@ -130,6 +130,17 @@ Last reviewed: 2026-10-15
   until NBA-specific validation clears it. No model, probability, side, projection, grade, stake,
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
+- NBA Market Intelligence V2 shadow capture is
+  `market_intelligence_v2_shadow_capture_2026_10_15_r1_nba_per_book_forward`. The existing leased
+  refresh may store exact-date, exact-matchup SharpAPI NBA split rows with their real source book.
+  DraftKings ticket/handle observations and BetMGM ticket-only observations remain distinct; no
+  row is relabeled as consensus and no missing handle is inferred. NBA provider-history calls stay
+  disabled until their per-book contract is implemented, so repeated current snapshots create the
+  forward trail. NBA remains `audit_required`: the capture has zero model, score, side,
+  probability, market, grade, actionability, stake, lock, tracking, member-display, copy, label, or
+  layout authority. The independent model remains NBA-specific; only the evidence and evaluation
+  contract is shared across sports. Evidence and rollback:
+  `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
