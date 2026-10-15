@@ -270,8 +270,11 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         threshold = report["actionableThresholdSelection"][market]["selected"]
         confirmation = report["actionableConfirmation"][market]
         assert (threshold is None) == (confirmation is None)
+        if threshold is not None:
+            assert threshold["exactPriceCoverage"] == 1.0
         if confirmation is not None:
             assert confirmation["bets"] >= 0
+            assert confirmation["exactPriceCoverage"] == 1.0
     large_threshold_frame = tournament.pd.DataFrame(index=range(500))
     for column in (
         "target_home_margin", "target_total",
@@ -290,6 +293,10 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
         18.0,
     )
     assert all(details["minimumSelectionBets"] == 100 for details in large_thresholds.values())
+    assert all(
+        details["selected"] is None or details["selected"]["exactPriceCoverage"] == 1.0
+        for details in large_thresholds.values()
+    )
     assert report["actionableThresholdSelection"]["moneyline"]["candidates"][0]["selectionRule"] == (
         "minimum_model_probability_edge_vs_no_vig_opening_consensus"
     )

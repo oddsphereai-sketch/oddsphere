@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r10_exact_price_provenance" as const;
+  "nba_point_in_time_features_2026_10_15_r11_invalid_odds_quarantine" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;

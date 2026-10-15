@@ -41,8 +41,15 @@ function integer(value: unknown): number | null {
 }
 
 function finite(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && value.trim().length === 0) return null;
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function american(value: unknown): number | null {
+  const number = finite(value);
+  return number === 0 ? null : number;
 }
 
 function string(value: unknown): string | null {
@@ -80,15 +87,15 @@ export function normalizeNbaHistoricalOpeningOdds(
     gameId,
     vendor: vendor.toLowerCase(),
     openedAt: new Date(openedAt).toISOString(),
-    moneylineHomeOdds: finite(row.moneyline_home_odds),
-    moneylineAwayOdds: finite(row.moneyline_away_odds),
+    moneylineHomeOdds: american(row.moneyline_home_odds),
+    moneylineAwayOdds: american(row.moneyline_away_odds),
     spreadHomeValue: finite(row.spread_home_value),
-    spreadHomeOdds: finite(row.spread_home_odds),
+    spreadHomeOdds: american(row.spread_home_odds),
     spreadAwayValue: finite(row.spread_away_value),
-    spreadAwayOdds: finite(row.spread_away_odds),
+    spreadAwayOdds: american(row.spread_away_odds),
     totalValue: finite(row.total_value),
-    totalOverOdds: finite(row.total_over_odds),
-    totalUnderOdds: finite(row.total_under_odds),
+    totalOverOdds: american(row.total_over_odds),
+    totalUnderOdds: american(row.total_under_odds),
   };
 }
 

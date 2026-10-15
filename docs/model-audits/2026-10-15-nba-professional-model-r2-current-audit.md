@@ -281,7 +281,7 @@ uncontested shooting, matchup field-goal defense, screen assists, and offensive
 and defensive rebound chances. Nullable provider fields stay missing and gain
 explicit missingness indicators; they are never filled with a favorable value.
 
-Feature release `nba_point_in_time_features_2026_10_15_r10_exact_price_provenance`
+Feature release `nba_point_in_time_features_2026_10_15_r11_invalid_odds_quarantine`
 also adds a dynamic Elo benchmark, explicit offense-versus-opponent-defense
 and Four-Factor matchup edges, prior-game player-minute rotation overlap,
 rolling expected rotation size/concentration, venue-to-venue great-circle
@@ -371,7 +371,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r22_feature_quality_gate`. Its
+`nba_professional_tournament_2026_10_15_r24_complete_actionable_price_coverage`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,
@@ -424,7 +424,18 @@ supplied it. The confirmation report discloses sportsbook counts and coverage
 for each priced result, and the row-level ledger retains the exact book beside
 each Moneyline, Spread, and Total price. A numeric quote without recoverable
 book provenance may remain descriptive but cannot silently satisfy an
-authoritative exact-price gate.
+authoritative exact-price gate. An actionable threshold is also ineligible
+unless every decision in its selection sample has an exact nonzero price, and
+the confirmation economics gate fails unless that 100% decision-price
+coverage persists. Missing provider prices cannot disappear from an ROI
+denominator.
+
+Provider `null`, empty, and zero American-price fields are quarantined as
+missing for that market rather than numerically coerced. Legitimate zero-point
+pick'em lines remain valid. The completed 2025-26 capture still has full
+advanced-stat team coverage, while exact opening-market availability is
+reported separately by market instead of being inferred from the presence of
+an odds row.
 
 The tournament also writes a season-by-season coverage record for every
 declared pregame feature, including selected status, finite-value coverage,

@@ -70,6 +70,30 @@ const result = nbaOpeningHomeProbabilityByGame({
 assert.equal(result.size, 1, "post-tip odds must not become a pregame evaluation label");
 assert.ok((result.get(10) ?? 0) > 0.58 && (result.get(10) ?? 0) < 0.62);
 
+const missingPrices = normalizeNbaHistoricalOpeningOdds({
+  id: 5,
+  game_id: 12,
+  vendor: "BetParx",
+  opened_at: "2025-10-20T14:00:00Z",
+  moneyline_home_odds: null,
+  moneyline_away_odds: null,
+  spread_home_value: "0",
+  spread_home_odds: 0,
+  spread_away_value: "0",
+  spread_away_odds: "",
+  total_value: null,
+  total_over_odds: null,
+  total_under_odds: undefined,
+});
+assert.equal(missingPrices.moneylineHomeOdds, null);
+assert.equal(missingPrices.moneylineAwayOdds, null);
+assert.equal(missingPrices.spreadHomeValue, 0, "a pick'em line is valid");
+assert.equal(missingPrices.spreadHomeOdds, null, "zero is not valid American odds");
+assert.equal(missingPrices.spreadAwayOdds, null);
+assert.equal(missingPrices.totalValue, null);
+assert.equal(missingPrices.totalOverOdds, null);
+assert.equal(missingPrices.totalUnderOdds, null);
+
 const markets = nbaOpeningMarketByGame({
   rows,
   gameStartById: new Map([

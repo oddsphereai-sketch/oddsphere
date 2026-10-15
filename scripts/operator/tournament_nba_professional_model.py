@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r22_feature_quality_gate"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r10_exact_price_provenance"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r2_verified_replay"
+RELEASE = "nba_professional_tournament_2026_10_15_r24_complete_actionable_price_coverage"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r11_invalid_odds_quarantine"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r4_complete_price_coverage"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -637,6 +637,7 @@ def actionable_candidate_report(
     bets = int(eligible.sum())
     win_count = int(selected_wins.sum())
     priced = eligible & np.isfinite(price) & (price != 0)
+    priced_bets = int(priced.sum())
     return {
         "market": market,
         "selectionRule": selection_rule,
@@ -648,6 +649,7 @@ def actionable_candidate_report(
         "wilson95Lower": wilson_lower_bound(win_count, bets),
         "brier": float(np.square(selected_probability_values - selected_wins.astype(float)).mean())
             if bets > 0 else None,
+        "exactPriceCoverage": float(priced_bets / bets) if bets > 0 else None,
         "exactPrice": exact_price_return(
             wins[priced], price[priced], sportsbook[priced]
         ) if priced.any() else None,
@@ -678,7 +680,11 @@ def select_actionable_thresholds(
             )
             for threshold in thresholds
         ]
-        eligible = [candidate for candidate in candidates if candidate["bets"] >= minimum_bets]
+        eligible = [
+            candidate for candidate in candidates
+            if candidate["bets"] >= minimum_bets
+            and candidate["exactPriceCoverage"] == 1.0
+        ]
         if market == "moneyline":
             eligible.sort(key=lambda item: (
                 -(item["exactPrice"]["roi"] if item["exactPrice"] else -math.inf),
@@ -1780,18 +1786,21 @@ def main() -> None:
         ),
         "spreadExactPricePositive": (
             actionable_confirmation["spread"] is not None and
+            actionable_confirmation["spread"]["exactPriceCoverage"] == 1.0 and
             actionable_confirmation["spread"]["exactPrice"] is not None and
             actionable_confirmation["spread"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["spread"]["exactPrice"]["units"] > 0
         ),
         "totalExactPricePositive": (
             actionable_confirmation["total"] is not None and
+            actionable_confirmation["total"]["exactPriceCoverage"] == 1.0 and
             actionable_confirmation["total"]["exactPrice"] is not None and
             actionable_confirmation["total"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["total"]["exactPrice"]["units"] > 0
         ),
         "moneylineExactPricePositive": (
             actionable_confirmation["moneyline"] is not None and
+            actionable_confirmation["moneyline"]["exactPriceCoverage"] == 1.0 and
             actionable_confirmation["moneyline"]["exactPrice"] is not None and
             actionable_confirmation["moneyline"]["exactPrice"]["sportsbookCoverage"] == 1.0 and
             actionable_confirmation["moneyline"]["exactPrice"]["units"] > 0
