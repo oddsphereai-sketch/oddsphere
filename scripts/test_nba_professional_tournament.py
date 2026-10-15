@@ -181,6 +181,25 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert len(deployment_candidate["design"]["designMeans"]) == deployment_candidate["design"]["preSplineDesignColumns"]
     assert deployment_candidate["coefficients"]
     assert deployment_candidate["trainingSeasons"] == [2023, 2024, 2025]
+    replay_frame = tournament.pd.DataFrame(rows)
+    replay_home, replay_away = tournament.predict_deployment_candidate(
+        replay_frame,
+        deployment_candidate,
+    )
+    direct_home, direct_away, _ = tournament.fit_predict(
+        replay_frame,
+        replay_frame,
+        deployment_candidate["design"]["features"],
+        deployment_candidate["model"],
+        deployment_candidate["architecture"],
+    )
+    assert np.allclose(replay_home, direct_home, atol=1e-10)
+    assert np.allclose(replay_away, direct_away, atol=1e-10)
+    expected_coefficients = deployment_candidate["design"]["designColumns"] + 1
+    assert all(
+        len(coefficients) == expected_coefficients
+        for coefficients in deployment_candidate["coefficients"].values()
+    )
     assert isinstance(report["selectionGatePassed"], bool)
     assert report["selected"]["featureCount"] > 0
     assert report["featureCoverage"]["features"] == len(feature_coverage["rows"])

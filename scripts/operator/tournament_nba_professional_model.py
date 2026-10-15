@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r20_reproducible_deployment_candidate"
+RELEASE = "nba_professional_tournament_2026_10_15_r21_verified_deployment_replay"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r10_exact_price_provenance"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r1_reproducible_state"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r2_verified_replay"
 R1_CONFIRMATION = {
     "season": 2025,
     "games": 1230,
@@ -385,6 +385,68 @@ def fit_regressor(
 
 def predict_regressor(x: np.ndarray, coefficients: np.ndarray) -> np.ndarray:
     return np.column_stack([x, np.ones(len(x))]) @ coefficients
+
+
+def deployment_design_matrix(frame: pd.DataFrame, design: dict[str, Any]) -> np.ndarray:
+    """Reconstruct the fitted design matrix using only exported candidate state."""
+    features = [str(feature) for feature in design["features"]]
+    missing_feature_indices = [
+        features.index(str(feature)) for feature in design["missingIndicatorColumns"]
+    ]
+    raw = frame[features].to_numpy(float)
+    medians = np.asarray(design["rawFeatureMedians"], dtype=float)
+    if raw.shape[1] != len(medians):
+        raise ValueError("deployment feature and median dimensions differ")
+    missing = np.isnan(raw)
+    transformed = np.where(missing, medians, raw)
+    if missing_feature_indices:
+        transformed = np.column_stack([
+            transformed,
+            missing[:, missing_feature_indices].astype(float),
+        ])
+    means = np.asarray(design["designMeans"], dtype=float)
+    deviations = np.asarray(design["designStandardDeviations"], dtype=float)
+    if transformed.shape[1] != len(means) or len(means) != len(deviations):
+        raise ValueError("deployment standardization dimensions differ")
+    transformed = (transformed - means) / deviations
+    knots = [float(knot) for knot in design["splineKnots"]]
+    if knots:
+        base = np.clip(transformed, -5.0, 5.0)
+        parts = [base]
+        for threshold in knots:
+            parts.extend([
+                np.maximum(0.0, base - threshold),
+                np.maximum(0.0, -base - threshold),
+            ])
+        transformed = np.column_stack(parts)
+    if transformed.shape[1] != int(design["designColumns"]):
+        raise ValueError("replayed deployment design has unexpected dimensions")
+    return transformed
+
+
+def predict_deployment_candidate(
+    frame: pd.DataFrame,
+    artifact: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Score rows from the portable candidate artifact without refitting."""
+    transformed = deployment_design_matrix(frame, artifact["design"])
+    coefficients = {
+        target: np.asarray(values, dtype=float)
+        for target, values in artifact["coefficients"].items()
+    }
+    expected_coefficient_count = transformed.shape[1] + 1
+    if any(len(values) != expected_coefficient_count for values in coefficients.values()):
+        raise ValueError("deployment coefficient and design dimensions differ")
+    if artifact["architecture"] == "team_scores":
+        return (
+            predict_regressor(transformed, coefficients["target_home_score"]),
+            predict_regressor(transformed, coefficients["target_away_score"]),
+        )
+    if artifact["architecture"] == "margin_total":
+        margin = predict_regressor(transformed, coefficients["target_home_margin"])
+        total = predict_regressor(transformed, coefficients["target_total"])
+        return (total + margin) / 2, (total - margin) / 2
+    raise ValueError(f"unsupported deployment architecture {artifact['architecture']}")
 
 
 def fit_predict(
