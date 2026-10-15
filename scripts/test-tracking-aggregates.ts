@@ -98,7 +98,7 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("tracking aggregate contract preserves UCL calendar results across releases", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v14_ucl_calendar_release_continuity_2026_10_15");
+check("tracking aggregate contract preserves UCL frozen member forecasts", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v15_ucl_frozen_forecast_continuity_2026_10_15");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
@@ -109,11 +109,39 @@ check("UCL receives its own competition display bucket", trackingDisplaySport(uc
 check("locked UCL records are eligible", isTrackingRecordEligible(uclRecord));
 check("unlocked UCL records are excluded", !isTrackingRecordEligible({ ...uclRecord, locked_at: null }));
 check("held UCL records are excluded from W/L", !isTrackingRecordEligible({ ...uclRecord, held: true }));
+const recoverableHeldUcl = {
+  ...uclRecord,
+  market: "total",
+  pick: null,
+  side: null,
+  odds_american: null,
+  market_probability: null,
+  held: true,
+  hold_reason: "missing_coherent_current_price",
+  snapshot_json: {
+    competition: "uefa_champions_league",
+    member_market_at_capture: {
+      held: true,
+      currentPriceAmerican: null,
+      marketFairProb: null,
+      soccerTotalContext: { displayed_side: "over" },
+    },
+  },
+} as PredictionRecordRow;
+check("frozen UCL missing-price forecast remains eligible for prediction accuracy", isTrackingRecordEligible(recoverableHeldUcl));
 check("current UCL model+calibration release is admitted", isCurrentUclTrackingRelease(uclRecord));
 check("older UCL model release remains outside Current release", !isCurrentUclTrackingRelease({ ...uclRecord, model_version: "ucl_prior" }));
 check("older UCL calibration release remains outside Current release", !isCurrentUclTrackingRelease({ ...uclRecord, calibration_version: "ucl_prior" }));
 const uclMarkets = ["match_result", "double_chance", "total", "btts"] as const;
 const completeUcl = uclMarkets.map((market, index) => ({ ...uclRecord, id: 500 + index, market } as PredictionRecordRow));
+const recoverableUclCohort = completeUcl.map((row) => row.market === "total"
+  ? { ...recoverableHeldUcl, id: row.id, game_id: row.game_id, external_id: row.external_id }
+  : row);
+check(
+  "tracking scope recovers the exact frozen UCL side without changing the source row",
+  selectTrackingRecordsByScope(recoverableUclCohort).calendarRecords.find((row) => row.market === "total")?.side === "over"
+    && recoverableHeldUcl.side === null,
+);
 check("partial UCL DB lock cannot enter tracking", filterCompleteUclTrackingCohorts(completeUcl.slice(0, 3)).length === 0);
 check("complete four-market UCL DB lock enters tracking", filterCompleteUclTrackingCohorts(completeUcl).length === 4);
 check("one held manifest row still proves atomic completeness before held-row exclusion", filterCompleteUclTrackingCohorts(completeUcl.map((row) => row.market === "total" ? { ...row, held: true } : row)).length === 4);

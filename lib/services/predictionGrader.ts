@@ -47,6 +47,10 @@ import type {
   GradeResult,
   TrackedMarketV17,
 } from "../types/domain/Tracking";
+import {
+  UCL_TRACKING_FORECAST_CONTINUITY_RELEASE,
+  uclFrozenTrackingForecastSide,
+} from "./ucl/uclTrackingForecastContinuity";
 
 /**
  * Outcome inputs from the games table + (for FI) operator manual entry
@@ -279,18 +283,24 @@ function gradeSpread(inputs: GradeInputs): PredictionGradeRow {
  */
 export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
   const { record, game, source } = inputs;
+  const uclFrozenForecastSide = uclFrozenTrackingForecastSide(record);
+  const gradingInputs: GradeInputs = uclFrozenForecastSide === null
+    ? inputs
+    : { ...inputs, record: { ...record, pick: uclFrozenForecastSide, side: uclFrozenForecastSide } };
 
   // Void / postponed handling — surfaces before any market-specific check.
   if (isVoidStatus(game.status)) {
     return emptyGrade(record, "void", source, `game status=${game.status}`);
   }
 
-  // A UCL Held row is an atomic-lock manifest entry, not a scored forecast.
-  // It remains immutable/auditable but can never become a synthetic W/L when
-  // an exact price (and therefore canonical evaluated side) was unavailable.
+  // A UCL held row without a frozen displayed forecast remains an unscored
+  // manifest entry. A missing-price row whose exact immutable member payload
+  // retained the displayed side is a real forecast and is graded below; null
+  // odds keep it ROI-ineligible without erasing it from prediction accuracy.
   if (
     record.held === true
     && (record.competition ?? record.snapshot_json?.competition) === "uefa_champions_league"
+    && uclFrozenForecastSide === null
   ) {
     return emptyGrade(record, "void", source, "UCL market held at lock: excluded from accuracy and ROI");
   }
@@ -361,7 +371,15 @@ export function gradePrediction(inputs: GradeInputs): PredictionGradeRow {
   // push handling), and BTTS. Routed by sport so the shared `total` market
   // doesn't fall into the MLB runs-total path.
   if (record.sport === "soccer" || record.sport === "ucl") {
-    return gradeSoccer(inputs);
+    const graded = gradeSoccer(gradingInputs);
+    if (uclFrozenForecastSide === null || record.held !== true) return graded;
+    return {
+      ...graded,
+      grade_notes: [
+        graded.grade_notes,
+        `${UCL_TRACKING_FORECAST_CONTINUITY_RELEASE}: exact frozen member forecast; price unavailable and ROI-ineligible`,
+      ].filter(Boolean).join(" | "),
+    };
   }
 
   // Final game — grade per market.

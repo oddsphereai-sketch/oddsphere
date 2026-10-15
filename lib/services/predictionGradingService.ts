@@ -34,6 +34,7 @@ import type {
 } from "../types/domain/Tracking";
 import { computeSlateDate } from "../dates/slateDate";
 import { filterCompleteUclLockManifestCohorts } from "./ucl/uclLockManifest";
+import { uclFrozenTrackingForecastSide } from "./ucl/uclTrackingForecastContinuity";
 
 function staleWnbaSlateVoidGrade(
   record: PredictionRecordRow,
@@ -245,10 +246,14 @@ export async function gradePredictionsForSlate(args: {
     return true;
   });
   // Establish the exact four-market immutable UCL manifest before excluding
-  // held rows. Held rows prove lock completeness but remain grading-ineligible.
+  // held rows. A held row is grading-eligible only when its own immutable
+  // member payload retained the exact displayed forecast; null odds still
+  // keep that record outside price ROI.
   const records = filterCompleteUclLockManifestCohorts(competitionFiltered).filter((record) => {
     const competition = record.competition ?? record.snapshot_json?.competition;
-    return competition !== "uefa_champions_league" || record.held !== true;
+    return competition !== "uefa_champions_league"
+      || record.held !== true
+      || uclFrozenTrackingForecastSide(record) !== null;
   });
   result.recordsLoaded = records.length;
   if (records.length === 0) return result;

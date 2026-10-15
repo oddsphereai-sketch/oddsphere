@@ -43,6 +43,10 @@ import {
 } from "../automodel/nhlRegularModelV1";
 import { nhlGameTypeFromExternalId } from "./nhl/nhlScheduleIdentity";
 import {
+  uclFrozenTrackingForecastSide,
+  withUclFrozenTrackingForecast,
+} from "./ucl/uclTrackingForecastContinuity";
+import {
   buildAlternateLineCategories,
   type AlternateLinePerformance,
   type AlternateLineSourceRow,
@@ -84,7 +88,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v14_ucl_calendar_release_continuity_2026_10_15" as const;
+  "tracking_aggregate_v15_ucl_frozen_forecast_continuity_2026_10_15" as const;
 
 const UCL_PRIOR_ALT_LINE_MODEL_RELEASE =
   "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
@@ -244,7 +248,10 @@ function isTossUp(r: PredictionRecordRow): boolean {
  * null-side Held manifest rows after proving four-market completeness.
  */
 export function isTrackingRecordEligible(record: PredictionRecordRow): boolean {
-  if (isUclTrackingRecord(record)) return record.locked_at !== null && record.held !== true;
+  if (isUclTrackingRecord(record)) {
+    return record.locked_at !== null
+      && (record.held !== true || uclFrozenTrackingForecastSide(record) !== null);
+  }
   if (record.sport === "nhl") {
     return record.locked_at !== null
       && NHL_REGULAR_TRANSITION_MODEL_RELEASES.includes(
@@ -286,12 +293,14 @@ export function selectTrackingRecordsByScope(records: PredictionRecordRow[]): {
     isPublicallyTracked(record.sport, record.slate_date),
   );
   const calendarRecords = dedupePredictionRecordsForTracking(
-    filterCompleteUclTrackingCohorts(publicRecords).filter(isTrackingRecordEligible),
+    filterCompleteUclTrackingCohorts(publicRecords)
+      .filter(isTrackingRecordEligible)
+      .map(withUclFrozenTrackingForecast),
   ).filter((record) => !isTossUp(record));
   const currentReleaseRecords = dedupePredictionRecordsForTracking(
     filterCompleteUclTrackingCohorts(
       publicRecords.filter(isCurrentUclTrackingRelease),
-    ).filter(isTrackingRecordEligible),
+    ).filter(isTrackingRecordEligible).map(withUclFrozenTrackingForecast),
   ).filter((record) => !isTossUp(record));
   return { calendarRecords, currentReleaseRecords };
 }
@@ -817,7 +826,7 @@ export async function computeTrackingAggregate(opts: {
       && record.model_version === UCL_PRIOR_ALT_LINE_MODEL_RELEASE
       && record.calibration_version === UCL_PRIOR_ALT_LINE_CALIBRATION_RELEASE,
     ),
-  ).filter(isTrackingRecordEligible);
+  ).filter(isTrackingRecordEligible).map(withUclFrozenTrackingForecast);
   const priorUclRecords = dedupePredictionRecordsForTracking(priorUclManifest)
     .filter((record) => !isTossUp(record));
 

@@ -7,6 +7,10 @@ import { supabase } from "../lib/db/supabase";
 import { ingestUclFinalScores } from "../lib/services/ucl/uclScoreIngestService";
 import { gradePrediction } from "../lib/services/predictionGrader";
 import { isTrackingRecordEligible } from "../lib/services/trackingAggregateService";
+import {
+  UCL_TRACKING_FORECAST_CONTINUITY_RELEASE,
+  withUclFrozenTrackingForecast,
+} from "../lib/services/ucl/uclTrackingForecastContinuity";
 import { gradePredictionsForSlate } from "../lib/services/predictionGradingService";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import type { DailyEdgeResponse } from "../app/lab/lib/labTypes";
@@ -44,6 +48,13 @@ function writerClient(operations: Operation[]) {
 function market(side: string, price: number | null) {
   const marketFairProb = price === null ? null : 0.52;
   const expectedValue = price === null ? null : 0.6 * (price > 0 ? 1 + price / 100 : 1 + 100 / Math.abs(price)) - 1;
+  const context = side === "home" || side === "draw" || side === "away"
+    ? { soccerMatchResultContext: { displayed_side: side } }
+    : side === "home_or_draw" || side === "away_or_draw" || side === "home_or_away"
+      ? { soccerDoubleChanceContext: { displayed_side: side } }
+      : side === "over" || side === "under"
+        ? { soccerTotalContext: { displayed_side: side } }
+        : { soccerBttsContext: { displayed_side: side } };
   return {
     pick: side, modelProb: 0.6, marketFairProb,
     priceAmerican: price, modelMarketGapPct: marketFairProb === null ? null : 8,
@@ -53,6 +64,7 @@ function market(side: string, price: number | null) {
     verdict: { key: "no_play", label: "No Play" }, riskLine: "UCL validation hold",
     soccerPriceBoard: price === null ? null : { rows: [{ side, selected: true }] },
     publicSplits: [], oddsTrail: [], status: {},
+    ...context,
   };
 }
 
@@ -85,6 +97,12 @@ assert.deepEqual(write.lockedRecordIds, [77]);
 assert.equal(operations.some((operation) => operation.kind === "upsert" && operation.payload?.market === "total"), false);
 const missingBtts = operations.find((operation) => operation.kind === "upsert" && operation.payload?.market === "btts");
 assert.equal(missingBtts?.payload?.held, true, "always-missing market locks as an explicit held row");
+assert.equal(missingBtts?.payload?.pick, "yes", "missing exact price never erases the displayed UCL forecast side");
+assert.equal(missingBtts?.payload?.side, "yes");
+assert.equal(
+  (missingBtts?.payload?.snapshot_json as Record<string, unknown> | undefined)?.tracking_forecast_continuity_release,
+  UCL_TRACKING_FORECAST_CONTINUITY_RELEASE,
+);
 assert.equal(typeof missingBtts?.payload?.locked_at, "string");
 
 function lockVerificationClient(rows: Array<{ external_id: number; market: string; locked_at: string | null }>) {
@@ -229,6 +247,46 @@ for (const trackedMarket of ["match_result", "double_chance", "total", "btts"] a
   assert.equal(isTrackingRecordEligible(heldRecord), false, `${trackedMarket} held row contributes zero public W/L`);
 }
 
+const recoveredCases = [
+  { market: "total", side: "over", result: "loss", line_value: 2.5 },
+  { market: "btts", side: "yes", result: "loss", line_value: null },
+  { market: "double_chance", side: "home_or_draw", result: "win", line_value: null },
+] as const;
+for (const recoveredCase of recoveredCases) {
+  const frozenMember = market(recoveredCase.side, null);
+  const legacyRecord = {
+    ...write.proposed[0],
+    id: 950 + recoveredCases.indexOf(recoveredCase),
+    market: recoveredCase.market,
+    pick: null,
+    side: null,
+    line_value: recoveredCase.line_value,
+    odds_american: null,
+    market_probability: null,
+    held: true,
+    hold_reason: "missing_coherent_current_price",
+    no_bet: true,
+    locked_at: "2026-09-08T16:45:00Z",
+    snapshot_json: {
+      competition: "uefa_champions_league",
+      member_market_at_capture: frozenMember,
+    },
+  } as PredictionRecordRow;
+  const recoveredGrade = gradePrediction({
+    record: legacyRecord,
+    game: { status: "final", home_score: 2, away_score: 0, first_inning_runs: null },
+    source: "auto_score_ingest",
+  });
+  assert.equal(recoveredGrade.result, recoveredCase.result, `${recoveredCase.market} grades the exact frozen displayed forecast`);
+  assert.match(recoveredGrade.grade_notes ?? "", /frozen member forecast.*ROI-ineligible/);
+  assert.equal(isTrackingRecordEligible(legacyRecord), true, `${recoveredCase.market} frozen displayed forecast enters accuracy`);
+  assert.equal(legacyRecord.pick, null, "recovery never mutates the immutable row");
+  assert.deepEqual(
+    { pick: withUclFrozenTrackingForecast(legacyRecord).pick, side: withUclFrozenTrackingForecast(legacyRecord).side, held: withUclFrozenTrackingForecast(legacyRecord).held },
+    { pick: recoveredCase.side, side: recoveredCase.side, held: false },
+  );
+}
+
 function uclGradingClient(rows: PredictionRecordRow[]) {
   return {
     from(table: string) {
@@ -280,6 +338,28 @@ const completeGrade = await gradePredictionsForSlate({
 });
 assert.equal(completeGrade.recordsLoaded, 4, "the exact four-market UCL lock manifest is settlement-eligible");
 assert.equal(completeGrade.upsertedCount, 4, "the complete UCL manifest reaches the grader");
+const missingPriceTotal = {
+  ...completeGradingManifest.find((row) => row.market === "total")!,
+  pick: null,
+  side: null,
+  odds_american: null,
+  market_probability: null,
+  held: true,
+  hold_reason: "missing_coherent_current_price",
+  snapshot_json: {
+    competition: "uefa_champions_league",
+    member_market_at_capture: market("over", null),
+  },
+} as PredictionRecordRow;
+const recoverableGradeManifest = completeGradingManifest.map((row) => row.market === "total" ? missingPriceTotal : row);
+const recoveredManifestGrade = await gradePredictionsForSlate({
+  sport: "soccer", slateDate: "2026-09-08", apply: false,
+  supabase: uclGradingClient(recoverableGradeManifest),
+  source: "auto_score_ingest", competition: "uefa_champions_league",
+});
+assert.equal(recoveredManifestGrade.recordsLoaded, 4, "a complete UCL manifest retains its frozen missing-price forecast");
+assert.equal(recoveredManifestGrade.upsertedCount, 4, "the settlement service grades the recovered forecast instead of discarding it");
+assert.deepEqual(recoveredManifestGrade.computed, { wins: 4, losses: 0, pushes: 0, voids: 0, pending: 0 });
 
 const lockedMarket = { immutable: "locked-price-probability-grade-evidence" };
 const previous = { date: "2026-09-08", games: [{ external_id: 34, id: "old", sport: "soccer", lockState: "locked", lockedAt: "2026-09-08T16:45:00Z", gameStartAt: kickoff, markets: lockedMarket, soccerProjection: { home: 1.2 } }] } as unknown as DailyEdgeResponse;
