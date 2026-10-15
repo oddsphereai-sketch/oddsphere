@@ -20,6 +20,10 @@ import {
 } from "@/lib/services/football/nflMarketState";
 import { buildNflNamedMarketSequenceAuthority } from "@/lib/services/football/nflNamedMarketSequence";
 import { buildNflProfessionalMarketAuthority } from "@/lib/services/football/nflProfessionalMarketAuthority";
+import {
+  canonicalHomeSpreadLine,
+  settleHistoricalMarket,
+} from "./nfl-historical-settlement";
 
 type Market = NflMarketStateMarket;
 type Side = NflMarketStateSide;
@@ -404,21 +408,29 @@ function signalsForGame(game: Omit<Game, "signals">, market: Market): Signal[] {
 
 function marketLine(game: Game, market: Market): number | null {
   const decision = game.payload.decisions.evaluatedBets.find((value) => value.market === market);
-  if (decision?.evaluatedQuote.line !== undefined) return decision.evaluatedQuote.line;
+  if (decision?.evaluatedQuote.line !== undefined) {
+    if (market !== "spread" || decision.evaluatedQuote.line === null) return decision.evaluatedQuote.line;
+    return canonicalHomeSpreadLine({
+      selectedLine: decision.evaluatedQuote.line,
+      selectedTeam: decision.side,
+      homeTeam: game.home,
+      awayTeam: game.away,
+    });
+  }
   return market === "spread" ? game.payload.market.current.spread?.homeLine ?? null
     : market === "total" ? game.payload.market.current.total?.line ?? null : null;
 }
 
-function settle(game: Game, market: Market, side: Side): Result | null {
+function settle(game: Game, market: Market, side: Side, cushion = 0): Result | null {
   if (game.actualHome === null || game.actualAway === null) return null;
-  const actualMargin = game.actualHome - game.actualAway;
-  const line = marketLine(game, market);
-  const value = market === "moneyline" ? actualMargin
-    : market === "spread" && line !== null ? actualMargin + line
-      : market === "total" && line !== null ? game.actualHome + game.actualAway - line : null;
-  if (value === null) return null;
-  if (Math.abs(value) < 1e-9) return "push";
-  return sign(value) === side ? "win" : "loss";
+  return settleHistoricalMarket({
+    market,
+    side,
+    actualHome: game.actualHome,
+    actualAway: game.actualAway,
+    canonicalLine: marketLine(game, market),
+    cushion,
+  });
 }
 
 function authoritativeSide(game: Game, market: Market): Side | null {
@@ -434,7 +446,7 @@ function authoritativeSide(game: Game, market: Market): Side | null {
 function exactPrice(game: Game, market: Market, side: Side): number | null {
   const decision = game.payload.decisions.evaluatedBets.find((value) => value.market === market);
   const targetBook = canonical(decision?.evaluatedQuote.sportsbook ?? game.payload.market.current.sportsbook);
-  const targetLine = decision?.evaluatedQuote.line ?? marketLine(game, market);
+  const targetLine = marketLine(game, market);
   const books = [game.payload.market.current, ...game.payload.market.currentBooks];
   const quote = books.find((book) => {
     if (canonical(book.sportsbook) !== targetBook) return false;
@@ -665,6 +677,22 @@ function candidateSummary(games: Game[], policy: CandidatePolicy) {
     const resolved = results.filter((row) => row.result !== "push");
     const wins = resolved.filter((row) => row.result === "win").length;
     const changed = results.filter((row) => row.incumbent !== null && row.candidate !== row.incumbent);
+    const alternateLineSummary = (selected: typeof results) => market === "moneyline" ? null : Object.fromEntries([3, 6].map((cushion) => {
+      const alternateResults = selected.map((row) => settle(row.game, market, row.candidate, cushion));
+      const alternateResolved = alternateResults.filter((result): result is Exclude<Result, "push"> =>
+        result !== null && result !== "push");
+      const alternateWins = alternateResolved.filter((result) => result === "win").length;
+      const alternatePushes = alternateResults.filter((result) => result === "push").length;
+      return [`plus${cushion}`, {
+        wins: alternateWins,
+        losses: alternateResolved.length - alternateWins,
+        pushes: alternatePushes,
+        accuracy: alternateResolved.length ? alternateWins / alternateResolved.length : null,
+      }];
+    }));
+    const paidProjectionResults = results.filter((row) => row.game.payload.paidProjectionShadow !== undefined);
+    const paidProjectionResolved = paidProjectionResults.filter((row) => row.result !== "push");
+    const paidProjectionWins = paidProjectionResolved.filter((row) => row.result === "win").length;
     return [market, {
       rows: results.length,
       wins,
@@ -675,6 +703,15 @@ function candidateSummary(games: Game[], policy: CandidatePolicy) {
       changed: changed.length,
       corrections: changed.filter((row) => row.result === "win" && row.incumbentResult === "loss").length,
       harms: changed.filter((row) => row.result === "loss" && row.incumbentResult === "win").length,
+      alternateLines: alternateLineSummary(results),
+      paidProjectionCohort: {
+        rows: paidProjectionResults.length,
+        wins: paidProjectionWins,
+        losses: paidProjectionResolved.length - paidProjectionWins,
+        pushes: paidProjectionResults.length - paidProjectionResolved.length,
+        accuracy: paidProjectionResolved.length ? paidProjectionWins / paidProjectionResolved.length : null,
+        alternateLines: alternateLineSummary(paidProjectionResults),
+      },
       byWeek: Object.fromEntries([...new Set(results.map((row) => row.game.week))].map((week) => {
         const selected = results.filter((row) => row.game.week === week);
         const selectedResolved = selected.filter((row) => row.result !== "push");
@@ -993,6 +1030,14 @@ async function main() {
     jointMoneylineSpread: jointMarketLedger(games),
     lossesAndConflicts: interactionLedger(games),
   };
+  if (process.argv.includes("--qualified-candidate")) {
+    console.log(JSON.stringify({
+      release: report.release,
+      coverage: report.coverage,
+      candidate: candidates.qualified_professional_composite,
+    }, null, 2));
+    return;
+  }
   if (process.argv.includes("--qualified")) {
     console.log(JSON.stringify({
       qualifiedTotalSignal: signalScorecards.qualified_target_excluded_total_number,

@@ -1,5 +1,15 @@
 # NFL Daily Edge professional market authority r29 result
 
+> **October 15, 2026 correction:** The retrospective audit used an evaluated
+> away-team spread as though it were a home-team spread. The reported
+> `38-25-2` candidate Spread record and every conclusion derived from that
+> orientation are invalid and must not be used. Production stored the selected
+> team's line correctly; this defect was in the research settlement audit, not
+> in a locked member payload. The corrected release-pure scoreboard, exact
+> runtime paid-score replay, alternate-line results, and loss decomposition are
+> recorded in
+> `docs/model-audits/2026-10-15-nfl-release-pure-loss-and-model-scorecard.md`.
+
 Status: production candidate; publication requires protected-PR checks and explicit owner approval.
 
 Date: 2026-10-09
