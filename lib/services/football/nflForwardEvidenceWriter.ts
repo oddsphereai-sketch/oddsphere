@@ -45,8 +45,10 @@ import {
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
 import {
+  buildNflIndependentScoreBaseForecast,
   buildNflPaidTeamScoreBaseForecast,
   buildNflMarketEvidenceOutcomeForecast,
+  buildNflNoWeightMarketEvidenceOutcomeForecast,
   getNflV1WeekOneOutcomeForecast,
   hasNflV1WeekOneOutcomeForecast,
   NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
@@ -91,6 +93,11 @@ import {
 import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 import {
+  buildNflExactProviderIndependentScore,
+  buildNflExactProviderScoreContext,
+  NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
+} from "./nflExactProviderScoreRuntime";
+import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
   shouldRefreshNflPaidProjectionShadows,
@@ -98,7 +105,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_15_r61_personnel_evidence_eligibility" as const;
+  "nfl_forward_evidence_writer_2026_10_15_r62_foundational_no_weight_score" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -153,6 +160,8 @@ export async function runNflForwardEvidenceWriter(args: {
   auditPayloads?: (payloads: NflForwardEvidencePayload[]) => void;
   /** Test/audit-only provider injection; production always uses the default fetcher. */
   sharpSplitsFetcher?: typeof fetchSharpApiNflSplits;
+  /** Explicit foundational-score gate. Locked rows retain stored payload precedence. */
+  exactProviderCandidate?: boolean;
 }): Promise<NflForwardWriterResult> {
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
@@ -239,19 +248,22 @@ export async function runNflForwardEvidenceWriter(args: {
     requiredGameIds: plannedGameIds,
     now: args.now,
   });
-  const [rosters, availability, linesResult, splitsResult, sharpResult, circaAttempt, currentSeasonState, paidProjectionFetch] = await Promise.all([
-    fetchBalldontlieNflTeamDepthSnapshots({
-      teams: criticalTeams,
-      season: args.season,
-      capturedAt: args.now,
-      apiKey: args.balldontlieApiKey,
-    }),
-    fetchBalldontlieNflSlateAvailability(availabilityMatchups, {
-      apiKey: args.balldontlieApiKey,
-      season: args.season,
-      week: args.week,
-      seasonType: 2,
-    }),
+  // BALLDONTLIE enforces a shared request ceiling across its NFL endpoints.
+  // Serialize its roster and availability cursor chains so a parallel burst
+  // cannot silently turn one failed injury batch into a missing slate.
+  const rosters = await fetchBalldontlieNflTeamDepthSnapshots({
+    teams: criticalTeams,
+    season: args.season,
+    capturedAt: args.now,
+    apiKey: args.balldontlieApiKey,
+  });
+  const availability = await fetchBalldontlieNflSlateAvailability(availabilityMatchups, {
+    apiKey: args.balldontlieApiKey,
+    season: args.season,
+    week: args.week,
+    seasonType: 2,
+  });
+  const [linesResult, splitsResult, sharpResult, circaAttempt, currentSeasonState, paidProjectionFetch] = await Promise.all([
     playbook.lines("nfl").then((result) => result.body.data ?? []).catch(() => null),
     playbook.splits("nfl").then((result) => result.body.data ?? []).catch(() => null),
     (args.sharpSplitsFetcher ?? fetchSharpApiNflSplits)({
@@ -448,25 +460,41 @@ export async function runNflForwardEvidenceWriter(args: {
           marketHomeMargin: -current.spread.homeLine,
         })
       : null;
+    const exactProviderScore = args.exactProviderCandidate && currentSeasonState
+      ? buildNflExactProviderIndependentScore({
+          currentSeasonState,
+          context: buildNflExactProviderScoreContext({ game: plan.game, currentSeasonState, weather }),
+        })
+      : null;
     const legacyBaseOutcome = getNflV1WeekOneOutcomeForecast({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
-      weeklyFallback: shadowMoneyline.footballProjection && current.total
+      weeklyFallback: exactProviderScore
+        ? {
+            projectedHomeMargin: exactProviderScore.expectedHomeMargin,
+            marketTotal: exactProviderScore.expectedTotal,
+          }
+        : shadowMoneyline.footballProjection && current.total
         ? {
             projectedHomeMargin: shadowMoneyline.footballProjection.projectedHomeMargin,
             marketTotal: current.total.line,
           }
         : undefined,
     });
-    const baseOutcome = paidProjectionShadow
+    const baseOutcome = exactProviderScore
+      ? buildNflIndependentScoreBaseForecast({
+          baseForecast: legacyBaseOutcome,
+          independentScore: exactProviderScore,
+        })
+      : paidProjectionShadow
       ? buildNflPaidTeamScoreBaseForecast({
           baseForecast: legacyBaseOutcome,
           paidTeamScore: paidProjectionShadow,
         })
       : legacyBaseOutcome;
     const incumbentOutcome = shadowMoneyline.footballProjection
-      ? buildNflMarketEvidenceOutcomeForecast({
+      ? (exactProviderScore ? buildNflNoWeightMarketEvidenceOutcomeForecast : buildNflMarketEvidenceOutcomeForecast)({
           baseForecast: baseOutcome,
           footballHomeMargin: shadowMoneyline.footballProjection.projectedHomeMargin,
           current,
@@ -530,6 +558,13 @@ export async function runNflForwardEvidenceWriter(args: {
         sharpSplits,
         excludedFamiliesByMarket,
       }),
+      ...(exactProviderScore ? {
+        marketOutcomeBuilder: buildNflNoWeightMarketEvidenceOutcomeForecast,
+        // If the evaluated sportsbook cannot be removed from a stable market
+        // tuple, absence of target-free evidence is neutral. Do not allow the
+        // target's own quote to become the categorical correction evidence.
+        fallbackOutcome: baseOutcome,
+      } : {}),
     });
     const { outcome, production } = resolved;
     assertFootballCrossMarketCoherence({
@@ -626,7 +661,7 @@ export async function runNflForwardEvidenceWriter(args: {
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
     };
-    const hasTargetFreePrior = Boolean(paidProjectionShadow) || hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
+    const hasTargetFreePrior = Boolean(exactProviderScore) || Boolean(paidProjectionShadow) || hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
     const contextualEvidenceCapture = buildNflForwardContextCapture({
       payload,
       captureCurrentBooks: contextCurrentBooks,
@@ -634,7 +669,9 @@ export async function runNflForwardEvidenceWriter(args: {
       independentForecast: baseOutcome,
       independentTargetFree: hasTargetFreePrior,
       independentRelease: hasTargetFreePrior
-        ? paidProjectionShadow
+        ? exactProviderScore
+          ? NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE
+          : paidProjectionShadow
           ? NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
           : NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,

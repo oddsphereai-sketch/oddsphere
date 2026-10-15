@@ -20,7 +20,7 @@ import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import type { NflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity" as const;
+  "nfl_target_excluded_market_outcome_2026_10_15_r14_independent_fallback" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -75,6 +75,8 @@ export function resolveNflTargetExcludedProduction(args: {
   professionalMarketAuthorityFactory?: (
     excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
   ) => NflProfessionalMarketAuthority;
+  marketOutcomeBuilder?: typeof buildNflMarketEvidenceOutcomeForecast;
+  fallbackOutcome?: NflV1WeekOneOutcomeForecast;
 }): {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
@@ -101,7 +103,7 @@ export function resolveNflTargetExcludedProduction(args: {
       marginExcludedSportsbooks: [] as string[],
       totalExcludedSportsbooks: [] as string[],
     };
-    const outcome = { ...args.incumbentOutcome, targetExclusion };
+    const outcome = { ...(args.fallbackOutcome ?? args.incumbentOutcome), targetExclusion };
     return { outcome, production: buildProduction(outcome), targetExclusion };
   };
   if (!args.shadowMoneyline.footballProjection || !args.current.spread || !args.current.total) {
@@ -153,7 +155,7 @@ export function resolveNflTargetExcludedProduction(args: {
           total: excluded.total,
         })
       : args.professionalMarketAuthority;
-    const outcomeCandidate = buildNflMarketEvidenceOutcomeForecast({
+    const outcomeCandidate = (args.marketOutcomeBuilder ?? buildNflMarketEvidenceOutcomeForecast)({
       baseForecast: args.baseOutcome,
       footballHomeMargin: args.shadowMoneyline.footballProjection.projectedHomeMargin,
       current: targetFreeCurrent,

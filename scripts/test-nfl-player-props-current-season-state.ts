@@ -3,6 +3,7 @@ import {
   NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
   readNflPlayerPropsCurrentSeasonState,
   refreshNflPlayerPropsCurrentSeasonState,
+  type NflPlayerPropsCurrentSeasonState,
 } from "../lib/services/football/nflPlayerPropsCurrentSeasonState";
 import { applyNflPlayerPropsCurrentSeasonFeatures } from "../lib/services/football/nflPlayerPropsRuntime";
 
@@ -77,6 +78,34 @@ async function main(): Promise<void> {
   });
   assert.equal(cached.apiCalls, 0);
   assert.equal(cached.state, refreshed.state);
+
+  const seeded: NflPlayerPropsCurrentSeasonState = {
+    release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
+    season: 2026,
+    completeThroughWeek: 5,
+    updatedAt: "2026-10-13T12:00:00.000Z",
+    games: [], teamStats: [], playMetrics: [], stats: [],
+  };
+  const playCapture = await refreshNflPlayerPropsCurrentSeasonState({
+    season: 2026, week: 7, now: "2026-10-20T12:00:00.000Z", apiKey: "test", previous: seeded,
+    fetchImpl: async (request) => {
+      const url = new URL(String(request));
+      if (url.pathname.endsWith("/games")) return json({ data: [game(60, "BUF", "NYJ", 24, 17, "2026-10-18T17:00:00.000Z", 6)], meta: {} });
+      if (url.pathname.endsWith("/stats")) return json({ data: [stat(60, 60, "Week Six Player", "BUF", { rushing_attempts: 10 })], meta: {} });
+      if (url.pathname.endsWith("/team_stats")) return json({ data: [teamStat(60, "BUF"), teamStat(60, "NYJ")], meta: {} });
+      assert.equal(url.pathname.endsWith("/plays"), true);
+      return json({ data: [
+        { type_slug: "pass-reception", text: "(No Huddle) J.Allen pass to K.Coleman for 24 yards.", stat_yardage: 24, team: { abbreviation: "BUF" } },
+        { type_slug: "rush", text: "B.Hall right tackle for 12 yards.", stat_yardage: 12, team: { abbreviation: "NYJ" } },
+      ], meta: {} });
+    },
+  });
+  assert.equal(playCapture.apiCalls, 4);
+  assert.equal(playCapture.playMetricsAdded, 2);
+  assert.deepEqual(playCapture.state.playMetrics.map((row) => ({ team: row.team, valid: row.validPlays, explosive: row.explosiveRate, noHuddle: row.noHuddleRate })), [
+    { team: "BUF", valid: 1, explosive: 1, noHuddle: 1 },
+    { team: "NYJ", valid: 1, explosive: 1, noHuddle: 0 },
+  ]);
 
   const legacyState = {
     release: "nfl_player_props_current_season_state_2026_09_16_r1_prior_final_games",
@@ -201,9 +230,9 @@ function teamStat(gameId: number, team: string, values: Record<string, number | 
     possession_time: "30:00", ...values,
   };
 }
-function game(id: number, home: string, away: string, homeScore: number, awayScore: number, date: string): Record<string, unknown> {
+function game(id: number, home: string, away: string, homeScore: number, awayScore: number, date: string, week = 1): Record<string, unknown> {
   return {
-    id, season: 2026, week: 1, date, status_state: "final",
+    id, season: 2026, week, date, status_state: "final",
     home_team_score: homeScore, visitor_team_score: awayScore,
     home_team: { abbreviation: home }, visitor_team: { abbreviation: away },
   };

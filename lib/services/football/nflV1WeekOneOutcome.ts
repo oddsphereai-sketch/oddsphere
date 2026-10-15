@@ -28,15 +28,15 @@ export const NFL_V1_OUTCOME_PROBABILITY_RELEASE =
 export const NFL_V1_REPRESENTATIVE_SCORE_POLICY_RELEASE =
   "nfl_v1_representative_score_2026_08_23_r2" as const;
 export const NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE =
-  "nfl_v1_weekly_paid_team_score_2026_10_09_r15_provider_feed_continuity" as const;
+  "nfl_v1_weekly_independent_team_score_2026_10_15_r16_foundational_no_weight_score" as const;
 export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
-  "nfl_pooled_discrete_residual_distribution_2026_10_09_r14_provider_feed_continuity" as const;
+  "nfl_pooled_discrete_residual_distribution_2026_10_15_r15_foundational_no_weight_score" as const;
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
-  "nfl_v1_weekly_pooled_discrete_probability_2026_10_09_r14_provider_feed_continuity" as const;
+  "nfl_v1_weekly_pooled_discrete_probability_2026_10_15_r15_foundational_no_weight_score" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_10_09_r15_provider_feed_continuity" as const;
+  "nfl_v1_market_evidence_outcome_2026_10_15_r16_no_weight_reader" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_10_09_r14_provider_feed_continuity" as const;
+  "nfl_v1_market_evidence_representative_score_2026_10_15_r15_no_weight_reader" as const;
 export const NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE =
   "nfl_v1_paid_team_score_model_2026_10_08_r4_named_sequence" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
@@ -59,6 +59,8 @@ export const NFL_V1_CROSS_MARKET_WINNER_COHERENCE_RELEASE =
 export const NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP = 1 as const;
 export const NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP = 8 as const;
 export const NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP = 10 as const;
+export const NFL_V1_NO_WEIGHT_MARKET_READER_RELEASE =
+  "nfl_v1_no_weight_market_reader_2026_10_15_r1" as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -94,7 +96,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_05_r9_winner_coherence"
       | "nfl_target_excluded_market_outcome_2026_10_08_r10_named_sequence"
       | "nfl_target_excluded_market_outcome_2026_10_09_r11_market_state_identity"
-      | "nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity";
+      | "nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity"
+      | "nfl_target_excluded_market_outcome_2026_10_15_r14_independent_fallback";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -105,7 +108,7 @@ export type NflV1WeekOneOutcomeForecast = {
   marketEvidence?: {
     release: typeof NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE;
     representativeScoreRelease: typeof NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE;
-    marketWeight: typeof NFL_V1_MARKET_WEIGHT;
+    marketWeight: typeof NFL_V1_MARKET_WEIGHT | 0;
     weeklyRawSignal?: {
       release: typeof NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE;
       independentHomeMargin: number;
@@ -170,6 +173,17 @@ export type NflV1WeekOneOutcomeForecast = {
     appliedTotalShiftPoints: number;
     weakHomeMarginReversalRejected: boolean;
     weakTotalReversalRejected: boolean;
+  };
+  noWeightMarketReader?: {
+    release: typeof NFL_V1_NO_WEIGHT_MARKET_READER_RELEASE;
+    policy: "categorical_authority_only_no_scalar_blend";
+    independentHomeMargin: number;
+    independentTotal: number;
+    finalHomeMargin: number;
+    finalTotal: number;
+    winnerCorrectionApplied: boolean;
+    professionalSpreadCorrectionApplied: boolean;
+    qualifiedTotalCorrectionApplied: boolean;
   };
 };
 
@@ -276,6 +290,38 @@ export function buildNflPaidTeamScoreBaseForecast(args: {
     totalDistribution: shiftedDistribution(
       args.baseForecast.totalDistribution,
       args.paidTeamScore.projectedTotal,
+      true,
+    ),
+  });
+}
+
+/** Re-center the frozen score-distribution shape on a market-free score model. */
+export function buildNflIndependentScoreBaseForecast(args: {
+  baseForecast: NflV1WeekOneOutcomeForecast;
+  independentScore: {
+    expectedHomeMargin: number;
+    expectedTotal: number;
+    marketInputPolicy: "prohibited_from_independent_score";
+  };
+}): NflV1WeekOneOutcomeForecast {
+  if (!Number.isFinite(args.independentScore.expectedHomeMargin)
+    || !Number.isFinite(args.independentScore.expectedTotal)
+    || args.independentScore.expectedTotal <= Math.abs(args.independentScore.expectedHomeMargin)
+    || args.independentScore.marketInputPolicy !== "prohibited_from_independent_score") {
+    throw new Error(`NFL independent score is invalid for ${args.baseForecast.providerGameId}.`);
+  }
+  return outcomeFromDistributions({
+    providerGameId: args.baseForecast.providerGameId,
+    awayTeam: args.baseForecast.awayTeam,
+    homeTeam: args.baseForecast.homeTeam,
+    marginDistribution: shiftedDistribution(
+      args.baseForecast.marginDistribution,
+      args.independentScore.expectedHomeMargin,
+      false,
+    ),
+    totalDistribution: shiftedDistribution(
+      args.baseForecast.totalDistribution,
+      args.independentScore.expectedTotal,
       true,
     ),
   });
@@ -617,6 +663,96 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       appliedTotalShiftPoints: finalTotal - calibratedTotal,
       weakHomeMarginReversalRejected: guardedMargin.reversalRejected,
       weakTotalReversalRejected: guardedTotal.reversalRejected,
+    },
+  };
+}
+
+/**
+ * Runs the established reader only to classify qualified evidence, then
+ * applies categorical boundary corrections to the independent score. No
+ * market line, price, split, or movement signal is averaged into the score.
+ */
+export function buildNflNoWeightMarketEvidenceOutcomeForecast(
+  args: Parameters<typeof buildNflMarketEvidenceOutcomeForecast>[0],
+): NflV1WeekOneOutcomeForecast {
+  if (!args.current.spread || !args.current.total) return args.baseForecast;
+  const reader = buildNflMarketEvidenceOutcomeForecast(args);
+  const evidence = reader.marketEvidence;
+  if (!evidence) return args.baseForecast;
+  const independentHomeMargin = args.baseForecast.expectedHomeScore - args.baseForecast.expectedAwayScore;
+  const independentTotal = args.baseForecast.expectedHomeScore + args.baseForecast.expectedAwayScore;
+  let finalHomeMargin = independentHomeMargin;
+  let finalTotal = independentTotal;
+  let winnerCorrectionApplied = false;
+  let professionalSpreadCorrectionApplied = false;
+  let qualifiedTotalCorrectionApplied = false;
+
+  if (evidence.winnerCoherence?.status === "authorized") {
+    const desired = Math.sign(reader.expectedHomeScore - reader.expectedAwayScore);
+    if (desired !== 0 && Math.sign(finalHomeMargin) !== desired) {
+      finalHomeMargin = -finalHomeMargin;
+      winnerCorrectionApplied = true;
+    }
+  }
+  const marketHomeMargin = -args.current.spread.homeLine;
+  if (evidence.spreadDirection?.status === "available"
+    && evidence.spreadDirection.reason?.startsWith("professional_market_")) {
+    const desired = evidence.spreadDirection.side === "home" ? 1 : -1;
+    if (Math.sign(finalHomeMargin - marketHomeMargin) !== desired) {
+      finalHomeMargin = 2 * marketHomeMargin - finalHomeMargin;
+      professionalSpreadCorrectionApplied = true;
+    }
+  }
+  if (evidence.totalDirection?.status === "available" && evidence.totalDirection.side) {
+    const desired = evidence.totalDirection.side === "over" ? 1 : -1;
+    if (Math.sign(finalTotal - args.current.total.line) !== desired) {
+      finalTotal = 2 * args.current.total.line - finalTotal;
+      qualifiedTotalCorrectionApplied = true;
+    }
+  }
+
+  const independentHomeCoverProbability = distributionSideProbability(
+    args.baseForecast.marginDistribution,
+    (margin) => margin + args.current.spread!.homeLine,
+  );
+  const independentOverProbability = distributionSideProbability(
+    args.baseForecast.totalDistribution,
+    (points) => points - args.current.total!.line,
+  );
+  const outcome = outcomeFromDistributions({
+    providerGameId: args.baseForecast.providerGameId,
+    awayTeam: args.baseForecast.awayTeam,
+    homeTeam: args.baseForecast.homeTeam,
+    marginDistribution: shiftedDistribution(args.baseForecast.marginDistribution, finalHomeMargin, false),
+    totalDistribution: shiftedDistribution(args.baseForecast.totalDistribution, finalTotal, true),
+  });
+  return {
+    ...outcome,
+    marketEvidence: {
+      ...evidence,
+      marketWeight: 0,
+      calibratedCore: {
+        source: null,
+        rawHomeCoverProbability: independentHomeCoverProbability,
+        calibratedHomeCoverProbability: independentHomeCoverProbability,
+        rawOverProbability: independentOverProbability,
+        calibratedOverProbability: independentOverProbability,
+        calibratedHomeMargin: independentHomeMargin,
+        calibratedTotal: independentTotal,
+      },
+      appliedHomeMarginShiftPoints: finalHomeMargin - independentHomeMargin,
+      appliedTotalShiftPoints: finalTotal - independentTotal,
+    },
+    noWeightMarketReader: {
+      release: NFL_V1_NO_WEIGHT_MARKET_READER_RELEASE,
+      policy: "categorical_authority_only_no_scalar_blend",
+      independentHomeMargin,
+      independentTotal,
+      finalHomeMargin,
+      finalTotal,
+      winnerCorrectionApplied,
+      professionalSpreadCorrectionApplied,
+      qualifiedTotalCorrectionApplied,
     },
   };
 }

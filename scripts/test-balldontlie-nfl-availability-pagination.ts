@@ -137,6 +137,38 @@ async function main(): Promise<void> {
     "a valid fifth legacy page remains a silent fallback instead of a slate-wide failure");
   assert.equal(legacy?.[0]?.teams.reduce((sum, team) => sum + team.players.length, 0), 5);
 
+  const partialBatchMatchups = Array.from({ length: 5 }, (_, index) => ({
+    id: `partial-${index}`,
+    awayTeam: `A${index}`,
+    homeTeam: `H${index}`,
+    awayTeamId: index * 2 + 1,
+    homeTeamId: index * 2 + 2,
+  }));
+  const partialBatchCalls: string[][] = [];
+  const partialBatchFetch: typeof fetch = async (input) => {
+    const url = new URL(String(input));
+    const teamIds = url.searchParams.getAll("team_ids[]");
+    partialBatchCalls.push([url.pathname, ...teamIds]);
+    if (url.pathname.endsWith("/player_designations") && teamIds.includes("9")) {
+      return new Response("rate limited", { status: 429, headers: { "content-type": "text/plain" } });
+    }
+    return jsonResponse({ data: [], meta: { next_cursor: null } });
+  };
+  const partialBatch = await fetchBalldontlieNflSlateAvailability(partialBatchMatchups, {
+    apiKey: "test",
+    fetchImpl: partialBatchFetch,
+    season: 2026,
+    week: 5,
+    seasonType: 2,
+  });
+  assert.equal(partialBatch?.length, 5,
+    "one failed designation batch must fall back only for its unresolved games instead of invalidating the slate");
+  assert.deepEqual(partialBatchCalls, [
+    ["/nfl/v1/player_designations", "1", "2", "3", "4", "5", "6", "7", "8"],
+    ["/nfl/v1/player_designations", "9", "10"],
+    ["/nfl/v1/player_injuries", "9", "10"],
+  ], "provider batches must be sequential and unresolved teams alone use the legacy fallback");
+
   const normalized = __BALLDONTLIE_NFL_AVAILABILITY_TEST__.normalizeNflInjuryTeams([
     {
       player: { first_name: "Alex", last_name: "Example", team: { abbreviation: "TB" } },

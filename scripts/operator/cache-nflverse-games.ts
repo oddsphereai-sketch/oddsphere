@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const CACHE_RELEASE = "football_nflverse_games_cache_2026_08_19_r1" as const;
+const CACHE_RELEASE = "football_nflverse_games_cache_2026_10_15_r2_independent_rebuild" as const;
 const SOURCE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
 
 async function main() {

@@ -1,12 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE =
-  "nfl_player_props_current_season_state_2026_09_25_r3_team_boxscore_capture" as const;
+  "nfl_player_props_current_season_state_2026_10_15_r4_game_model_play_capture" as const;
 const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_PRECEDING_RELEASE =
   "nfl_player_props_current_season_state_2026_09_16_r1_prior_final_games" as const;
+const NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_TEAM_BOX_RELEASE =
+  "nfl_player_props_current_season_state_2026_09_25_r3_team_boxscore_capture" as const;
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM = 4 as const;
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM = 20 as const;
 export const NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM = 8 as const;
+export const NFL_PLAYER_PROPS_CURRENT_SEASON_PLAYS_PAGE_MAXIMUM = 4 as const;
+export const NFL_GAME_MODEL_PLAY_STATE_SEED_COMPLETE_THROUGH_WEEK = 5 as const;
 const BDL_BASE_URL = "https://api.balldontlie.io/nfl/v1";
 
 export type NflPlayerPropsCurrentSeasonStat = {
@@ -75,6 +79,20 @@ export type NflPlayerPropsCurrentSeasonTeamStat = {
   possessionTimeSeconds: number;
 };
 
+export type NflPlayerPropsCurrentSeasonPlayMetric = {
+  gameId: string;
+  season: number;
+  week: number;
+  scheduledStart: string;
+  team: string;
+  opponent: string;
+  validPlays: number;
+  explosivePlays: number;
+  noHuddlePlays: number;
+  explosiveRate: number;
+  noHuddleRate: number;
+};
+
 export type NflPlayerPropsCurrentSeasonState = {
   release: typeof NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE;
   season: number;
@@ -82,6 +100,7 @@ export type NflPlayerPropsCurrentSeasonState = {
   updatedAt: string;
   games: NflPlayerPropsCurrentSeasonGame[];
   teamStats: NflPlayerPropsCurrentSeasonTeamStat[];
+  playMetrics: NflPlayerPropsCurrentSeasonPlayMetric[];
   stats: NflPlayerPropsCurrentSeasonStat[];
 };
 
@@ -91,6 +110,7 @@ export type NflPlayerPropsCurrentSeasonRefresh = {
   gamesDiscovered: number;
   gamesAdded: number;
   teamStatsAdded: number;
+  playMetricsAdded: number;
   statsAdded: number;
 };
 
@@ -122,7 +142,7 @@ export async function refreshNflPlayerPropsCurrentSeasonState(args: {
   const base = previous ?? emptyState(args.season, args.now);
   const targetWeek = args.week - 1;
   if (targetWeek <= base.completeThroughWeek) {
-    return { state: base, apiCalls: 0, gamesDiscovered: 0, gamesAdded: 0, teamStatsAdded: 0, statsAdded: 0 };
+    return { state: base, apiCalls: 0, gamesDiscovered: 0, gamesAdded: 0, teamStatsAdded: 0, playMetricsAdded: 0, statsAdded: 0 };
   }
   const fetchImpl = args.fetchImpl ?? fetch;
   const games = await fetchPriorGames({
@@ -170,6 +190,26 @@ export async function refreshNflPlayerPropsCurrentSeasonState(args: {
   if (incompleteTeamStats.length) {
     throw new Error(`NFL props current-season team stats are incomplete for ${incompleteTeamStats.length} final games.`);
   }
+  const playMetricGameIds = new Set(base.playMetrics.map((row) => row.gameId));
+  const gamesNeedingPlayMetrics = completed.filter((game) =>
+    game.week > NFL_GAME_MODEL_PLAY_STATE_SEED_COMPLETE_THROUGH_WEEK && !playMetricGameIds.has(game.gameId));
+  const playMetrics = gamesNeedingPlayMetrics.length
+    ? await fetchPlayMetrics({ games: gamesNeedingPlayMetrics, apiKey: args.apiKey, fetchImpl })
+    : { rows: [] as NflPlayerPropsCurrentSeasonPlayMetric[], calls: 0 };
+  const playMetricTeams = new Map<string, Set<string>>();
+  for (const row of playMetrics.rows) {
+    const teams = playMetricTeams.get(row.gameId) ?? new Set<string>();
+    teams.add(row.team);
+    playMetricTeams.set(row.gameId, teams);
+  }
+  const incompletePlayMetrics = gamesNeedingPlayMetrics.filter((game) => {
+    const teams = playMetricTeams.get(game.gameId);
+    return playMetrics.rows.filter((row) => row.gameId === game.gameId).length !== 2
+      || teams?.size !== 2 || !teams?.has(game.homeTeam) || !teams?.has(game.awayTeam);
+  });
+  if (incompletePlayMetrics.length) {
+    throw new Error(`NFL current-season play metrics are incomplete for ${incompletePlayMetrics.length} final games.`);
+  }
   const allPriorGamesFinal = games.rows.length > 0 && games.rows.every((game) => game.status === "final");
   const state: NflPlayerPropsCurrentSeasonState = {
     release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
@@ -178,14 +218,16 @@ export async function refreshNflPlayerPropsCurrentSeasonState(args: {
     updatedAt: new Date(now).toISOString(),
     games: [...base.games, ...missingGames].sort(compareGame),
     teamStats: [...base.teamStats, ...teamStats.rows].sort(compareTeamStat),
+    playMetrics: [...base.playMetrics, ...playMetrics.rows].sort(comparePlayMetric),
     stats: [...base.stats, ...stats.rows].sort(compareStat),
   };
   return {
     state,
-    apiCalls: games.calls + stats.calls + teamStats.calls,
+    apiCalls: games.calls + stats.calls + teamStats.calls + playMetrics.calls,
     gamesDiscovered: games.rows.length,
     gamesAdded: missingGames.length,
     teamStatsAdded: teamStats.rows.length,
+    playMetricsAdded: playMetrics.rows.length,
     statsAdded: stats.rows.length,
   };
 }
@@ -301,6 +343,82 @@ async function fetchTeamStats(args: {
     if (!cursor) return { rows: rows.sort(compareTeamStat), calls };
   }
   throw new Error("NFL props current-season team stats exceeded its pagination budget.");
+}
+
+async function fetchPlayMetrics(args: {
+  games: NflPlayerPropsCurrentSeasonGame[];
+  apiKey: string;
+  fetchImpl: typeof fetch;
+}): Promise<{ rows: NflPlayerPropsCurrentSeasonPlayMetric[]; calls: number }> {
+  const results = await Promise.all(args.games.map(async (game) => {
+    const observations = new Map<string, { valid: number; explosive: number; noHuddle: number }>([
+      [game.homeTeam, { valid: 0, explosive: 0, noHuddle: 0 }],
+      [game.awayTeam, { valid: 0, explosive: 0, noHuddle: 0 }],
+    ]);
+    let cursor: string | null = null;
+    let calls = 0;
+    for (let page = 0; page < NFL_PLAYER_PROPS_CURRENT_SEASON_PLAYS_PAGE_MAXIMUM; page += 1) {
+      const url = new URL(`${BDL_BASE_URL}/plays`);
+      url.searchParams.set("game_id", game.gameId);
+      url.searchParams.set("per_page", "100");
+      if (cursor) url.searchParams.set("cursor", cursor);
+      const body = await request(url, args.apiKey, args.fetchImpl, "plays");
+      calls += 1;
+      for (const value of body.data) applyPlayObservation(value, game, observations);
+      cursor = nextCursor(body.meta);
+      if (!cursor) {
+        const rows = [...observations].map(([team, count]) => {
+          if (count.valid < 1) throw new Error(`NFL play feed has no valid offensive plays for ${team} in ${game.gameId}.`);
+          return {
+            gameId: game.gameId, season: game.season, week: game.week,
+            scheduledStart: game.scheduledStart, team,
+            opponent: team === game.homeTeam ? game.awayTeam : game.homeTeam,
+            validPlays: count.valid, explosivePlays: count.explosive,
+            noHuddlePlays: count.noHuddle,
+            explosiveRate: count.explosive / count.valid,
+            noHuddleRate: count.noHuddle / count.valid,
+          } satisfies NflPlayerPropsCurrentSeasonPlayMetric;
+        });
+        return { rows, calls };
+      }
+    }
+    throw new Error(`NFL plays exceeded its pagination budget for game ${game.gameId}.`);
+  }));
+  return {
+    rows: results.flatMap((result) => result.rows).sort(comparePlayMetric),
+    calls: results.reduce((sum, result) => sum + result.calls, 0),
+  };
+}
+
+function applyPlayObservation(
+  value: unknown,
+  game: NflPlayerPropsCurrentSeasonGame,
+  observations: Map<string, { valid: number; explosive: number; noHuddle: number }>,
+): void {
+  const row = record(value);
+  const slug = text(row.type_slug)?.toLowerCase() ?? "";
+  const description = text(row.text) ?? "";
+  if (/\b(kneel|spike|aborted)\b/i.test(description)) return;
+  const pass = slug === "pass-reception" || slug === "pass-incompletion" || slug === "passing-touchdown"
+    || slug === "pass-interception-return" || slug === "sack" || /\bpass(?:es|ed)?\b/i.test(description);
+  const rush = slug === "rush" || slug === "rushing-touchdown"
+    || (!pass && /\b(?:left|right|up the middle|scrambles)\b/i.test(description));
+  if (!pass && !rush) return;
+  const listedTeam = normalizeTeamRecord(row.team);
+  if (!listedTeam) return;
+  const opponentTurnover = slug === "pass-interception-return" || slug === "fumble-recovery-opponent";
+  const team = opponentTurnover
+    ? (listedTeam === game.homeTeam ? game.awayTeam : listedTeam === game.awayTeam ? game.homeTeam : null)
+    : listedTeam;
+  const count = team ? observations.get(team) : null;
+  if (!count) return;
+  count.valid += 1;
+  if (/\(No Huddle\)/i.test(description)) count.noHuddle += 1;
+  const rawYards = strictNumeric(row.stat_yardage);
+  const firstGain = description.match(/\bfor (-?\d+) yards?\b/i);
+  const yards = opponentTurnover && firstGain ? Number(firstGain[1]) : rawYards ?? 0;
+  const completedPass = pass && slug !== "pass-incompletion" && slug !== "sack" && slug !== "pass-interception-return";
+  if ((completedPass && yards >= 20) || (rush && yards >= 10)) count.explosive += 1;
 }
 
 async function request(url: URL, apiKey: string, fetchImpl: typeof fetch, label: string): Promise<{ data: unknown[]; meta?: Record<string, unknown> }> {
@@ -441,6 +559,25 @@ function parseState(value: unknown, season: number): NflPlayerPropsCurrentSeason
       updatedAt: row.updatedAt,
       games: [],
       teamStats: [],
+      playMetrics: [],
+      stats: row.stats as NflPlayerPropsCurrentSeasonStat[],
+    };
+  }
+  if (row.release === NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_TEAM_BOX_RELEASE
+    && row.season === season
+    && Number.isInteger(row.completeThroughWeek)
+    && typeof row.updatedAt === "string"
+    && Array.isArray(row.games)
+    && Array.isArray(row.teamStats)
+    && Array.isArray(row.stats)) {
+    return {
+      release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
+      season,
+      completeThroughWeek: row.completeThroughWeek as number,
+      updatedAt: row.updatedAt,
+      games: row.games as NflPlayerPropsCurrentSeasonGame[],
+      teamStats: row.teamStats as NflPlayerPropsCurrentSeasonTeamStat[],
+      playMetrics: [],
       stats: row.stats as NflPlayerPropsCurrentSeasonStat[],
     };
   }
@@ -450,18 +587,20 @@ function parseState(value: unknown, season: number): NflPlayerPropsCurrentSeason
     && typeof row.updatedAt === "string"
     && Array.isArray(row.games)
     && Array.isArray(row.teamStats)
+    && Array.isArray(row.playMetrics)
     && Array.isArray(row.stats)
       ? value as NflPlayerPropsCurrentSeasonState
       : null;
 }
 
 function emptyState(season: number, now: string): NflPlayerPropsCurrentSeasonState {
-  return { release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE, season, completeThroughWeek: 0, updatedAt: new Date(now).toISOString(), games: [], teamStats: [], stats: [] };
+  return { release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE, season, completeThroughWeek: 0, updatedAt: new Date(now).toISOString(), games: [], teamStats: [], playMetrics: [], stats: [] };
 }
 function snapshotKey(season: number): string { return `nfl::player-props-current-season::${season}`; }
 function nextCursor(meta: Record<string, unknown> | undefined): string | null { const value = meta?.next_cursor; return typeof value === "number" || typeof value === "string" ? String(value) : null; }
 function compareGame(a: NflPlayerPropsCurrentSeasonGame, b: NflPlayerPropsCurrentSeasonGame): number { return a.week - b.week || a.gameId.localeCompare(b.gameId); }
 function compareTeamStat(a: NflPlayerPropsCurrentSeasonTeamStat, b: NflPlayerPropsCurrentSeasonTeamStat): number { return a.week - b.week || a.gameId.localeCompare(b.gameId) || a.team.localeCompare(b.team); }
+function comparePlayMetric(a: NflPlayerPropsCurrentSeasonPlayMetric, b: NflPlayerPropsCurrentSeasonPlayMetric): number { return a.week - b.week || a.gameId.localeCompare(b.gameId) || a.team.localeCompare(b.team); }
 function compareStat(a: NflPlayerPropsCurrentSeasonStat, b: NflPlayerPropsCurrentSeasonStat): number { return a.week - b.week || a.gameId.localeCompare(b.gameId) || a.playerId.localeCompare(b.playerId); }
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" ? value as Record<string, unknown> : {}; }
 function text(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }

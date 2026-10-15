@@ -48,6 +48,7 @@ const state: NflPlayerPropsCurrentSeasonState = {
   completeThroughWeek: 1,
   updatedAt: "2026-09-18T00:00:00.000Z",
   games: [],
+  playMetrics: [],
   stats: [],
   teamStats: [teamStat("PHI", "TEN", true), teamStat("TEN", "PHI", false)],
 };

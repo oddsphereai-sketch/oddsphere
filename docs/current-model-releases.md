@@ -164,6 +164,27 @@ Last reviewed: 2026-10-15
 
 ## NFL Daily Edge generalized weekly production release
 
+### Foundational independent score plus no-weight market reader (r32 candidate)
+
+- Candidate member / model / calibration / decision / grade are
+  `nfl_v1_member_release_2026_10_15_r32_foundational_no_weight_score` /
+  `nfl_v1_daily_edge_model_2026_10_15_r28_foundational_no_weight_score` /
+  `nfl_v1_daily_edge_calibration_2026_10_15_r27_foundational_no_weight_score` /
+  `nfl_v1_daily_edge_decision_2026_10_15_r35_foundational_no_weight_score` /
+  `nfl_v1_grade_policy_2026_10_15_r35_foundational_no_weight_score`.
+- The r11 independent score consumes completed-game opponent-adjusted football statistics and
+  context, with sportsbook inputs prohibited. Market evidence remains a separate categorical reader
+  with `marketWeight: 0`; incomplete target-excluded evidence falls back to the untouched independent
+  forecast. The prior wholesale marriage is not used.
+- On the exact 32-game paid/evidence cohort the target-free candidate is 23-8-1 Moneyline,
+  18-11-3 Spread, 23-9 Spread +3, 25-7 Spread +6, 22-10 Total, 23-9 Total +3, and 24-8 Total +6.
+  This is opened retrospective evidence on a smaller, different cohort than the supplied 62-64-bet
+  competitor season and is not a normalized superiority claim.
+- The Week 6 zero-write board is 16 to 17 actionables with 7 promotions and 6 demotions. Publication
+  set is collector/writer/fixture/snapshot r21/r62/r44/r36. The r31 personnel family is the immediate
+  immutable predecessor. Exact results, ingestion repair, holds, gates, and rollback are in
+  `docs/model-audits/2026-10-15-nfl-foundational-no-weight-score-r32-result.md`.
+
 ### Personnel-evidence eligibility (r31 candidate)
 
 - Candidate member / model / calibration / decision / grade are

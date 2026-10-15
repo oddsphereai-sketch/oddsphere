@@ -19,7 +19,10 @@ import urllib.error
 import urllib.request
 
 
-CACHE_RELEASE = "nfl_real_model_source_cache_2016_2025_2026_09_28_r2_official_stats"
+CACHE_RELEASES = {
+    (2016, 2025): "nfl_real_model_source_cache_2016_2025_2026_10_15_r3_independent_rebuild",
+    (2016, 2026): "nfl_real_model_source_cache_2016_2026_2026_10_15_r4_exact_replay",
+}
 DEFAULT_START = 2016
 DEFAULT_END = 2025
 BASE = "https://github.com/nflverse/nflverse-data/releases/download"
@@ -92,8 +95,8 @@ def main() -> None:
     parser.add_argument("--end", type=int, default=DEFAULT_END)
     parser.add_argument("--datasets", nargs="+", choices=sorted(DATASETS), default=sorted(DATASETS))
     args = parser.parse_args()
-    if args.start < 1999 or args.end > DEFAULT_END or args.start > args.end:
-        raise SystemExit("season range must be ordered and end no later than the completed 2025 season")
+    if (args.start, args.end) not in CACHE_RELEASES:
+        raise SystemExit("approved ranges are 2016-2025 or 2016-2026 exact-replay cache")
 
     root = pathlib.Path.cwd() / "football-research" / "cache" / "nflverse" / "real-model-r1"
     files: list[dict[str, object]] = []
@@ -115,7 +118,7 @@ def main() -> None:
                 print(f"{dataset:14} {season}: UNAVAILABLE ({error})")
 
     manifest = {
-        "cacheRelease": CACHE_RELEASE,
+        "cacheRelease": CACHE_RELEASES[(args.start, args.end)],
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "seasonRange": [args.start, args.end],
         "datasetsRequested": args.datasets,
@@ -123,7 +126,9 @@ def main() -> None:
         "failures": failures,
         "totalBytes": sum(int(item["bytes"]) for item in files),
     }
-    manifest_path = root / "manifest.json"
+    manifest_path = root / (
+        "manifest.json" if args.end == 2025 else "manifest-2016-2026-exact-replay.json"
+    )
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"manifest: {manifest_path}")
     print(f"downloaded/cache-verified files: {len(files)}; unavailable: {len(failures)}")
