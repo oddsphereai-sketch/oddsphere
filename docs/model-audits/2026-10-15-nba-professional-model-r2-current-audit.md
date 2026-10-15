@@ -53,6 +53,10 @@ audit, not a historical backtest:
   the opening spread/Total number in that DTO, and the opening and current
   prices need not be from the same sportsbook. This is not a valid basis for
   steam, reverse-line-movement, resistance, or buyback classification.
+  The r2 candidate now exposes an opening price only when game, market, side,
+  sportsbook, and exact Spread/Total number all match the evaluated current
+  quote. This repairs basic price-comparison identity but does not, by itself,
+  authorize any of those movement classifications.
 - The stored official NBA sample contained ten locked `nba_v0_2026` records:
   five Moneylines and five Totals. Moneyline was 1-4 and Total was 3-2. Only
   eight records retained predicted scores; across those four games, team-score

@@ -54,6 +54,11 @@ import {
 } from "./nbaOpportunitiesClient";
 import type { NbaLineRow } from "./nbaMarketIntelligence";
 import {
+  selectNbaComparableOpening,
+  type NbaMovementHistoryRow,
+  type NbaMovementMarket,
+} from "./nbaSameBookMovement";
+import {
   adaptNbaToDailyEdgeResponse,
   type NbaPickSideOpenPrices,
 } from "./adaptNbaToDailyEdgeResponse";
@@ -204,15 +209,14 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }
   }
 
-  // Earliest-recorded price per (game, market, side) → "line open" lookup.
-  // Mirrors the MLB extractor in /api/lab/daily-edge so the Reader's line
-  // move row renders for NBA the same way.
-  const openByGameMarketSide = new Map<string, number | null>();
+  // Preserve the complete history rows so opening comparison can require the
+  // same sportsbook and exact Spread/Total line as the evaluated current quote.
+  const movementHistory: NbaMovementHistoryRow[] = [];
   if ((gameRows ?? []).length > 0) {
     const dbIds = (gameRows ?? []).map((g) => g.id);
     const { data: histRows } = await supabase
       .from("line_history")
-      .select("game_id, market_type, side, odds_american, recorded_at, sportsbook")
+      .select("game_id, market_type, side, line_value, odds_american, recorded_at, sportsbook")
       .in("game_id", dbIds)
       .in("market_type", ["moneyline", "spread", "total"])
       .order("recorded_at", { ascending: true });
@@ -220,44 +224,26 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       game_id: number;
       market_type: string;
       side: string | null;
+      line_value: number | null;
       odds_american: number | null;
       recorded_at: string | null;
       sportsbook: string | null;
-    }>).filter((r) => !isBlockedSportsbook(r.sportsbook)); // never open off a blocked book
-    const toImplied = (a: number | null): number | null =>
-      a === null ? null : a > 0 ? 100 / (a + 100) : -a / (-a + 100);
-    // 2026-06-13 — opener outlier guard. The opener is the EARLIEST observed
-    // price per side, but a rejected/corrupted book can be that earliest row and
-    // fake a huge line move (e.g. fliff lists tonight's -205 Spurs favorite at
-    // +385 — teams flipped — AND quotes a normal -205, so comparing opener vs
-    // "current" fails). Compare each candidate to the MEDIAN implied probability
-    // across ALL observed lines for that side instead — corrupted outliers can't
-    // move the median — and skip candidates > 0.30 off it. The first sane
-    // earliest line wins.
-    const impliedByKey = new Map<string, number[]>();
+    }>).filter((r) => !isBlockedSportsbook(r.sportsbook));
     for (const r of rows) {
       const ext = dbIdToExt.get(r.game_id);
-      if (ext === undefined) continue;
-      const imp = toImplied(r.odds_american);
-      if (imp === null) continue;
-      const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
-      (impliedByKey.get(key) ?? impliedByKey.set(key, []).get(key)!).push(imp);
-    }
-    const medianImpliedByKey = new Map<string, number>();
-    for (const [key, arr] of impliedByKey) {
-      const s = [...arr].sort((a, b) => a - b);
-      medianImpliedByKey.set(key, s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2);
-    }
-    const OPENER_OUTLIER = 0.30;
-    for (const r of rows) {
-      const ext = dbIdToExt.get(r.game_id);
-      if (ext === undefined) continue;
-      const key = `${ext}::${r.market_type}::${r.side ?? "null"}`;
-      if (openByGameMarketSide.has(key)) continue;
-      const med = medianImpliedByKey.get(key);
-      const op = toImplied(r.odds_american);
-      if (med !== undefined && op !== null && Math.abs(op - med) > OPENER_OUTLIER) continue;
-      openByGameMarketSide.set(key, r.odds_american);
+      if (
+        ext === undefined || r.side === null || r.sportsbook === null ||
+        !["moneyline", "spread", "total"].includes(r.market_type)
+      ) continue;
+      movementHistory.push({
+        externalGameId: ext,
+        market: r.market_type as NbaMovementMarket,
+        side: r.side,
+        sportsbook: r.sportsbook,
+        line: r.line_value,
+        americanPrice: r.odds_american,
+        observedAt: r.recorded_at,
+      });
     }
   }
 
@@ -348,21 +334,29 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     games,
   };
 
-  // Build per-game open-price map keyed on each market's *picked* side.
-  // Adapter then surfaces these as `lineOpenAmerican` so the line move
-  // renderer can compare them to `priceAmerican`.
+  // Surface only a comparable same-book, same-line opening price. Missing
+  // identity is unavailable—not permission to compare unrelated quotes.
   const openPricesByGame = new Map<number, NbaPickSideOpenPrices>();
   for (const g of games) {
     const ext = g.game_external_id;
     const intel = g.intelligence;
-    const lookup = (market: "moneyline" | "spread" | "total", pickSide: string | null): number | null => {
-      if (pickSide === null) return null;
-      return openByGameMarketSide.get(`${ext}::${market}::${pickSide}`) ?? null;
+    const lookup = (
+      market: NbaMovementMarket,
+      value: typeof intel.ml,
+    ): number | null => {
+      return selectNbaComparableOpening({
+        rows: movementHistory,
+        externalGameId: ext,
+        market,
+        side: value.pick_side,
+        sportsbook: value.current_price.sportsbook,
+        line: value.consensus_line,
+      })?.americanPrice ?? null;
     };
     openPricesByGame.set(ext, {
-      ml: lookup("moneyline", intel.ml.pick_side),
-      total: lookup("total", intel.total.pick_side),
-      spread: lookup("spread", intel.spread.pick_side),
+      ml: lookup("moneyline", intel.ml),
+      total: lookup("total", intel.total),
+      spread: lookup("spread", intel.spread),
     });
   }
 
