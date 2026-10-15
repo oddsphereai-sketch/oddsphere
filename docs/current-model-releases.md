@@ -303,6 +303,27 @@ Last reviewed: 2026-10-10
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 14 late-pregame lock recovery correction: sole writer / member
+  fixture / game lifecycle / compact snapshot / reader advance to
+  `cfb_forward_evidence_writer_2026_10_14_r119_late_pregame_lock_recovery` /
+  `cfb_v1_member_fixture_2026_10_14_r90_late_pregame_lock_recovery` /
+  `cfb_member_game_lifecycle_2026_10_14_r2_late_pregame_lock_recovery` /
+  `cfb_forward_member_snapshot_2026_10_14_r50_late_pregame_lock_recovery` /
+  `cfb_member_snapshot_reader_2026_10_14_r35_late_pregame_lock_recovery`.
+  The official on-time T-60 definition and tracking release remain unchanged.
+  When an incident leaves exactly one append-only current-release T-60 payload
+  before kickoff, held solely because its capture exceeded the 20-minute
+  tolerance, the member reader now freezes that published forecast at its real
+  capture timestamp instead of continuing to display a past-tense scheduled
+  lock as forthcoming. The predicate rejects unlocked/post-kickoff rows,
+  actionable decisions, incomplete market outlooks, additional health failures,
+  and all prior-release reinterpretation. WKU-Sam Houston therefore retains its
+  three accuracy-only records at 7:39:48 PM EDT and renders that same actual
+  lock time; it is not mislabeled as an on-time 7:00 PM lock. Scores, sides,
+  probabilities, prices, grades, stakes, provider cadence, and stored evidence
+  are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-14-cfb-late-pregame-lock-recovery.md`.
+
 - October 14 legacy-recovery lock isolation correction: sole writer / official
   tracking advance to
   `cfb_forward_evidence_writer_2026_10_14_r118_legacy_recovery_candidate_isolation` /
@@ -337,9 +358,9 @@ Last reviewed: 2026-10-10
   `cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability` /
   `cfb_v1_daily_edge_decision_2026_10_14_r51_correct_qb_final_winner_coordinator`.
   Production reader / tuple / evidence / member remain r39 / r38 / r46 / r63
-  with the correct-QB final-winner suffix; the sole writer is the r118
-  legacy-recovery isolation release above. Fixture / outcome /
-  compact snapshot / reader / tracking are r89 / r79 / r49 / r34 / r48. The r50
+  with the correct-QB final-winner suffix; the sole writer is the r119
+  late-pregame recovery release above. Fixture / outcome /
+  compact snapshot / reader / tracking are r90 / r79 / r50 / r35 / r48. The r50
   and r49 locked decision layers retain exact stored precedence. Historical,
   parity, current-board, gate, and rollback evidence:
   `docs/model-audits/2026-10-14-cfb-correct-qb-final-winner-coordinator.md`.

@@ -67,6 +67,7 @@ import {
   CFB_FORWARD_INJURY_CONTRACT_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_CONTINUITY_PREVIOUS_MEMBER_RELEASE,
   CFB_FORWARD_PROVIDER_FEED_PREVIOUS_MEMBER_RELEASE,
+  isCfbPublishedLateT60RecoveryPayload,
   isCfbPublishedT60AccuracyLockPayload,
   isCfbPreT60PublishedPayloadRecovery,
   CFB_FORWARD_PUBLICATION_PREVIOUS_MEMBER_RELEASE,
@@ -117,11 +118,11 @@ import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_14_r89_correct_qb_final_winner_coordinator" as const;
+  "cfb_v1_member_fixture_2026_10_14_r90_late_pregame_lock_recovery" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_14_r79_correct_qb_final_winner_coordinator" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
-  "cfb_member_game_lifecycle_2026_10_09_r1_3am_locked_game_retention" as const;
+  "cfb_member_game_lifecycle_2026_10_14_r2_late_pregame_lock_recovery" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
 const CFB_PRE_DIRECTIONAL_MEMBER_RELEASE = "cfb_v1_member_release_2026_08_28_r14_expanded_sharp_budget" as const;
 const CFB_PRE_DIRECTIONAL_DECISION_RELEASE = "cfb_v1_daily_edge_decision_2026_08_28_r11_market_scoped_data_quality" as const;
@@ -1063,7 +1064,8 @@ function immutableLockOverlayRows(
 }
 
 function isValidImmutableBoundaryT60(row: CfbForwardStoredEvidence): boolean {
-  if (isCfbPreT60PublishedPayloadRecovery(row.payload)) return true;
+  if (isCfbPreT60PublishedPayloadRecovery(row.payload) ||
+    isCfbPublishedLateT60RecoveryPayload(row.payload)) return true;
   const lag = row.payload.t60LagMinutes;
   const officialLock = row.stage === "t60" &&
     row.payload.stage === "t60" &&
