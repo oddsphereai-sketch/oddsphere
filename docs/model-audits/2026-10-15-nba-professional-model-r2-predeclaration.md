@@ -79,6 +79,24 @@ cutoff. Random row splits and end-of-season averages applied backward are prohib
 historical prices or pregame availability cannot be recovered, that slice may test score error or
 probability calibration but cannot support a units, ROI or market-reader claim.
 
+The first point-in-time builder treats a finalized result as unavailable until five hours after tip.
+This conservative delay prevents a same-evening or simultaneous game from consuming a result that
+was still in progress at its own tip. Its candidate matrix includes short/current/prior offensive and
+defensive efficiency, opponent scoring efficiency, pace, Four Factors, online opponent-adjusted
+ratings, rest and compressed-schedule context, volatility, and rotation depth/concentration. A
+no-leakage test changes one finalized score and requires that game's own pregame vector to remain
+identical while only later eligible games change.
+
+Research basis for the candidate families includes the NBA's per-possession advanced-stat framework,
+the modern Four Factors literature, peer-reviewed NBA travel/rest work, and regularized adjusted
+plus-minus literature. These motivate candidates; they do not determine production coefficients:
+
+- https://www.nba.com/stats/help/glossary
+- https://arxiv.org/abs/2305.13032
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC8636381/
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC7925613/
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC7447047/
+
 The October 20 decision is a go/no-go gate. A candidate that clears the independent-model,
 market-reader, coherence and operational checks may replace r1 under new release identifiers. If
 the evidence is incomplete, r1 remains the production fallback while r2 continues forward shadow
