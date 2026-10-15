@@ -281,7 +281,7 @@ uncontested shooting, matchup field-goal defense, screen assists, and offensive
 and defensive rebound chances. Nullable provider fields stay missing and gain
 explicit missingness indicators; they are never filled with a favorable value.
 
-Feature release `nba_point_in_time_features_2026_10_15_r11_invalid_odds_quarantine`
+Feature release `nba_point_in_time_features_2026_10_15_r12_date_only_start_fallback`
 also adds a dynamic Elo benchmark, explicit offense-versus-opponent-defense
 and Four-Factor matchup edges, prior-game player-minute rotation overlap,
 rolling expected rotation size/concentration, venue-to-venue great-circle
@@ -371,7 +371,7 @@ movement, CLV, split, or market-reader claim. Every row carries that provenance;
 2025-26 BALLDONTLIE timestamped openings take precedence when available.
 
 The executable tournament release is now
-`nba_professional_tournament_2026_10_15_r26_recent_margin_features`. Its
+`nba_professional_tournament_2026_10_15_r27_date_only_start_fallback`. Its
 predeclared model grid is reproducible with the repository's NumPy runtime:
 closed-form ridge, robust iteratively reweighted Huber ridge, and bounded
 hinge-spline ridge. Feature-family ablations separately test ratings,

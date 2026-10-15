@@ -258,6 +258,22 @@ const normalizedGame = normalizeNbaHistoricalGame({
   visitor_team: { id: 11, abbreviation: "hou" },
 });
 assert.equal(normalizedGame.homeTeam, "OKC");
+const normalizedDateOnlyGame = normalizeNbaHistoricalGame({
+  id: 11,
+  season: 2022,
+  date: "2022-12-02",
+  datetime: null,
+  status_state: "final",
+  home_team_score: 116,
+  visitor_team_score: 120,
+  home_team: { id: 2, abbreviation: "bos" },
+  visitor_team: { id: 16, abbreviation: "mia" },
+});
+assert.equal(
+  normalizedDateOnlyGame.startTime,
+  "2022-12-02T12:00:00.000Z",
+  "a valid provider date keeps a finalized historical game when its datetime is absent",
+);
 const normalizedBox = normalizeNbaHistoricalPlayerBox({
   id: 50,
   min: "30:30",

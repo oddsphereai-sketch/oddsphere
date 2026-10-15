@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r11_invalid_odds_quarantine" as const;
+  "nba_point_in_time_features_2026_10_15_r12_date_only_start_fallback" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;
@@ -298,7 +298,12 @@ export function normalizeNbaHistoricalGame(row: Record<string, unknown>): NbaHis
   const away = object(row.visitor_team);
   const gameId = integer(row.id);
   const season = integer(row.season);
-  const start = string(row.datetime);
+  const datetime = string(row.datetime);
+  const date = string(row.date);
+  // BALLDONTLIE's 2022-12-02 archive omits `datetime` for all eleven games.
+  // A noon-UTC date fallback preserves day ordering and rest calculations;
+  // no team plays twice that date, so it cannot leak another same-day result.
+  const start = datetime ?? (date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T12:00:00.000Z` : null);
   const startMs = start ? Date.parse(start) : Number.NaN;
   const homeTeamId = integer(home?.id);
   const awayTeamId = integer(away?.id);

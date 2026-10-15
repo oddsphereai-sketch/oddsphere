@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r26_recent_margin_features"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r11_invalid_odds_quarantine"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r6_recent_margin_features"
+RELEASE = "nba_professional_tournament_2026_10_15_r27_date_only_start_fallback"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r12_date_only_start_fallback"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r7_date_only_start_fallback"
 MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
 MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
 R1_CONFIRMATION = {
