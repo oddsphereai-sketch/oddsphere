@@ -37,7 +37,7 @@ assert.equal(canonicalNflPlayerPropMarket("player_total_receptions"), "reception
 assert.equal(canonicalNflPlayerPropMarket("player_total_rush_attempts"), "rushing_attempts");
 assert.equal(canonicalNflPlayerPropMarket("player_rushing_+_receiving_yards"), "rushing_receiving_yards");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
-assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_12_r11_regular_season_identity_capacity");
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_15_r12_pinnacle_reference_capture");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",
@@ -162,6 +162,10 @@ assert.equal(sharp.rows[0]?.market, "passing_yards");
 const reconciledSharp = __NFL_PLAYER_PROPS_COLLECTOR_TEST__.reconcileSharpRowsToSlate(sharp.rows, games);
 assert.equal(reconciledSharp.unmatchedRows, 0);
 assert.equal(reconciledSharp.rows[0]?.canonicalGameId, "424129");
+assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.dedupeObservations([
+  reconciledSharp.rows[0]!,
+  { ...reconciledSharp.rows[0]!, fetchedAt: "2026-08-20T16:01:00Z" },
+]).length, 1, "the isolated reference lane cannot duplicate an existing provider observation");
 
 const observations = [...bdl.rows, ...opening.rows, ...reconciledSharp.rows];
 const coverage = summarizeNflPlayerPropsCoverage(observations);
@@ -205,6 +209,8 @@ assert.throws(
 
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.bdlConcurrency, 3);
 assert.ok(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages <= 8);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpReferencePages, 4);
+assert.deepEqual(NFL_PLAYER_PROPS_COLLECTION_LIMITS.sharpReferenceResearchBooks, ["pinnacle"]);
 
 function bdlTwoWay(id: number, vendor: string, propType: string, line: number) {
   return {

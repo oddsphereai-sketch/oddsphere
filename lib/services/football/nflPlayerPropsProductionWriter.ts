@@ -9,6 +9,7 @@ import { buildNflPlayerPropsExactBoard } from "./nflPlayerPropsMarketBoard";
 import {
   buildNflPlayerPropsRuntimeBoard,
   buildNflPlayerPropsRuntimeFeatureRows,
+  buildNflPlayerPropsRuntimeMarketEvidence,
   NFL_PLAYER_PROPS_BOARD_RELEASE,
   NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
   NFL_PLAYER_PROPS_DECISION_RELEASE,
@@ -55,21 +56,22 @@ import {
 } from "./nflPlayerPropsPrivateTrackingStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_12_r49_regular_season_identity_capacity" as const;
+  "nfl_player_props_writer_2026_10_15_r50_pinnacle_reference_capture" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
   + 2 * NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxGames
   + Math.ceil(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities / NFL_PLAYER_PROPS_COLLECTION_LIMITS.playerIdentityBatchSize)
   + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages
-) as 53;
+  + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpReferencePages
+) as 63;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 103;
+) as 113;
 
 export type NflPlayerPropsForecastTelemetry = {
   forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
@@ -116,6 +118,10 @@ export type NflPlayerPropsWriterResult = {
   observations: number;
   playerIdentities: number;
   exactOffers: number;
+  referenceResearchObservations: number;
+  referenceResearchOffers: number;
+  referenceResearchCaptureIdentities: number;
+  referenceResearchRetainedBooks: Record<string, number>;
   featureRows: number;
   scoreEligibleFeatures: number;
   currentSeasonStateApiCalls: number;
@@ -214,10 +220,18 @@ export async function runNflPlayerPropsProductionWriter(args: {
   apply: boolean;
   ballDontLieApiKey: string;
   sharpApiKey?: string;
+  /** Read-only candidate only; production application is forbidden. */
+  auditSourceAwareMarketReading?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsWriterResult> {
+  if (args.apply && args.auditSourceAwareMarketReading === true) {
+    throw new Error("NFL props source-aware candidate cannot run with production writes enabled.");
+  }
   verifyNflPlayerPropsRuntimeParity();
-  const priorCurrentSeasonState = await readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season });
+  const [priorCurrentSeasonState, previous] = await Promise.all([
+    readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season }),
+    readNflPlayerPropsSnapshot({ client: args.client, season: args.season, week: args.week }),
+  ]);
   const currentSeason = await refreshNflPlayerPropsCurrentSeasonState({
     season: args.season,
     week: args.week,
@@ -233,6 +247,8 @@ export async function runNflPlayerPropsProductionWriter(args: {
     includeOpenings: NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS,
     ballDontLieApiKey: args.ballDontLieApiKey,
     sharpApiKey: args.sharpApiKey,
+    includeReferenceResearch: args.auditSourceAwareMarketReading === true
+      || shouldCaptureNflPlayerPropsReferenceResearch({ now: args.now, previous }),
     fetchImpl: args.fetchImpl,
   });
   const evidence = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
@@ -250,13 +266,49 @@ export async function runNflPlayerPropsProductionWriter(args: {
     )),
   };
   const offers = buildNflPlayerPropsExactBoard({ snapshots: [eligibleSnapshot], evaluatedAt: args.now });
+  const referenceResearchSnapshot = {
+    ...eligibleSnapshot,
+    observations: [
+      ...eligibleSnapshot.observations,
+      ...collection.referenceResearchObservations.filter((row) => (
+        row.canonicalGameId !== null && eligibleGameIds.has(row.canonicalGameId)
+      )),
+    ],
+  };
+  const referenceResearchOffers = collection.referenceResearchObservations.length > 0
+    ? buildNflPlayerPropsExactBoard({ snapshots: [referenceResearchSnapshot], evaluatedAt: args.now })
+    : offers;
+  const sourceAwareReferenceOffers = referenceResearchOffers.filter((offer) => (
+    ["pinnacle", "novig"].includes(offer.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, ""))
+  ));
   const features = buildNflPlayerPropsRuntimeFeatureRows({
     snapshot: eligibleSnapshot,
     context,
     currentSeasonState: currentSeason.state,
   });
   const nextBoard = buildNflPlayerPropsRuntimeBoard({ offers, features, evaluatedAt: args.now });
-  const previous = await readNflPlayerPropsSnapshot({ client: args.client, season: args.season, week: args.week });
+  const sourceAwareCandidateBoard = args.auditSourceAwareMarketReading === true
+    ? buildNflPlayerPropsRuntimeBoard({
+        offers,
+        referenceOffers: sourceAwareReferenceOffers,
+        features,
+        evaluatedAt: args.now,
+        auditSourceAwareMarketReading: true,
+      })
+    : null;
+  const referenceResearchMarketEvidence = collection.referenceResearchObservations.length > 0
+    ? buildNflPlayerPropsRuntimeMarketEvidence({
+      offers: referenceResearchOffers,
+      decisions: nextBoard.decisions,
+      evaluatedAt: args.now,
+    }).capture
+    : nextBoard.marketEvidence;
+  const referenceResearchRetainedBooks = Object.fromEntries(
+    [...new Set((referenceResearchMarketEvidence?.i ?? []).flatMap((identity) => identity[2].map((book) => book[0])))]
+      .sort()
+      .map((sportsbook) => [sportsbook, (referenceResearchMarketEvidence?.i ?? [])
+        .reduce((count, identity) => count + identity[2].filter((book) => book[0] === sportsbook).length, 0)]),
+  );
   const snapshot = reconcileNflPlayerPropsProductionSnapshot({
     season: args.season,
     week: args.week,
@@ -264,21 +316,29 @@ export async function runNflPlayerPropsProductionWriter(args: {
     nextBoard,
     previous,
   });
-  const candidateImpact = args.apply ? undefined : compareNflPlayerPropsCandidateImpact(
-    reconcileNflPlayerPropsProductionSnapshot({
-      season: args.season,
-      week: args.week,
-      evaluatedAt: args.now,
-      nextBoard: buildNflPlayerPropsRuntimeBoard({
-        offers,
-        features,
+  const candidateImpact = sourceAwareCandidateBoard
+    ? compareNflPlayerPropsCandidateImpact(snapshot, reconcileNflPlayerPropsProductionSnapshot({
+        season: args.season,
+        week: args.week,
         evaluatedAt: args.now,
-        auditPrecedingReceptionsOnly: true,
-      }),
-      previous,
-    }),
-    snapshot,
-  );
+        nextBoard: sourceAwareCandidateBoard,
+        previous,
+      }))
+    : args.apply ? undefined : compareNflPlayerPropsCandidateImpact(
+        reconcileNflPlayerPropsProductionSnapshot({
+          season: args.season,
+          week: args.week,
+          evaluatedAt: args.now,
+          nextBoard: buildNflPlayerPropsRuntimeBoard({
+            offers,
+            features,
+            evaluatedAt: args.now,
+            auditPrecedingReceptionsOnly: true,
+          }),
+          previous,
+        }),
+        snapshot,
+      );
   const liveImpact = !args.apply && previous
     ? compareNflPlayerPropsCandidateImpact(previous, snapshot)
     : undefined;
@@ -302,7 +362,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     ? await captureNflPlayerPropsMarketObserverSafely(() => captureNflPlayerPropsMarketObserver({
       client: args.client,
       snapshot,
-      currentMarketEvidence: nextBoard.marketEvidence,
+      currentMarketEvidence: referenceResearchMarketEvidence,
       evaluatedAt: args.now,
       maximumLockQuoteAgeHours: nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours,
       writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
@@ -335,6 +395,10 @@ export async function runNflPlayerPropsProductionWriter(args: {
     observations: collection.snapshot.observations.length,
     playerIdentities: collection.snapshot.providerCoverage.balldontlie?.playersWithProviderIdentity ?? 0,
     exactOffers: offers.length,
+    referenceResearchObservations: collection.referenceResearchObservations.length,
+    referenceResearchOffers: referenceResearchOffers.length,
+    referenceResearchCaptureIdentities: referenceResearchMarketEvidence?.i.length ?? 0,
+    referenceResearchRetainedBooks,
     featureRows: features.length,
     scoreEligibleFeatures: features.filter((row) => row.scoreEligible).length,
     currentSeasonStateApiCalls: currentSeason.apiCalls,
@@ -365,6 +429,24 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...(privateTrackingCapture?.error ? ["NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"] : []),
     ])].sort(),
   };
+}
+
+export function shouldCaptureNflPlayerPropsReferenceResearch(args: {
+  now: string;
+  previous: NflPlayerPropsProductionSnapshot | null;
+}): boolean {
+  const now = Date.parse(args.now);
+  if (!Number.isFinite(now)) throw new Error("NFL props reference-capture time is invalid.");
+  if (!args.previous) return true;
+  // The route wakes every 15 minutes. One complete pull per UTC hour captures
+  // ordinary movement; an extra pull in the lock window preserves the final
+  // pregame comparison without quadrupling the all-day provider load.
+  if (new Date(now).getUTCMinutes() < 15) return true;
+  return args.previous.memberDecisions.some((row) => {
+    if (row.state !== "unlocked") return false;
+    const minutesToStart = (Date.parse(row.scheduledStart) - now) / 60_000;
+    return minutesToStart >= 45 && minutesToStart <= 90;
+  });
 }
 
 function compareNflPlayerPropsCandidateImpact(

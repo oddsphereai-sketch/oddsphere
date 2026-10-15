@@ -7,16 +7,18 @@ loadEnvConfig(process.cwd());
 async function main(): Promise<void> {
   const season = Number(argument("season") ?? 2026);
   const week = Number(argument("week") ?? 2);
+  const now = argument("now") ?? new Date().toISOString();
   const url = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
   const serviceKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
   const result = await runNflPlayerPropsProductionWriter({
     client: createClient(url, serviceKey, { auth: { persistSession: false } }),
     season,
     week,
-    now: new Date().toISOString(),
+    now,
     apply: false,
     ballDontLieApiKey: requiredEnv("BALLDONTLIE_API_KEY"),
     sharpApiKey: process.env.SHARPAPI_KEY,
+    auditSourceAwareMarketReading: argument("source-aware") === "true",
   });
   console.log(JSON.stringify({ readOnly: true, season, week, ...result }, null, 2));
 }

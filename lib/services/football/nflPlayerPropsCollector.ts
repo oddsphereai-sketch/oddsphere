@@ -19,6 +19,11 @@ const BDL_BASE_URL = "https://api.balldontlie.io/nfl/v1";
 const MAX_GAMES = 18;
 const MAX_SHARP_PAGES = 8;
 const SHARP_PAGE_SIZE = 200;
+const SHARP_REFERENCE_RESEARCH_BOOKS = [
+  { sportsbook: "pinnacle", maximumPages: 4 },
+  { sportsbook: "novig", maximumPages: 6 },
+] as const;
+const MAX_SHARP_REFERENCE_PAGES = 10;
 const BDL_CONCURRENCY = 3;
 const MAX_PLAYER_IDENTITIES = 768;
 const MAX_PLAYER_IDENTITIES_PER_GAME = 64;
@@ -29,6 +34,8 @@ type Envelope = { data?: unknown; meta?: { next_cursor?: unknown } | null };
 
 export type NflPlayerPropsCollectionResult = {
   snapshot: NflPlayerPropsObservationSnapshot;
+  /** Additive internal evidence. Never enters the production forecast board. */
+  referenceResearchObservations: readonly NflPlayerPropPriceObservation[];
   normalization: {
     balldontlie: ReturnType<typeof normalizeBalldontlieNflPlayerProps>;
     balldontlieOpenings: ReturnType<typeof normalizeBalldontlieNflPlayerProps>;
@@ -43,6 +50,7 @@ export async function collectNflPlayerPropsObservations(args: {
   includeOpenings?: boolean;
   ballDontLieApiKey?: string;
   sharpApiKey?: string;
+  includeReferenceResearch?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsCollectionResult> {
   const fetchImpl = args.fetchImpl ?? fetch;
@@ -137,6 +145,7 @@ export async function collectNflPlayerPropsObservations(args: {
   if (bdlPlayerIds.some((id) => !identities.has(id))) healthFindings.push("BALLDONTLIE_PLAYER_IDENTITY_INCOMPLETE");
 
   const sharpRaw: unknown[] = [];
+  const sharpReferenceRaw: unknown[] = [];
   let sharpComplete = false;
   if (sharpKey) {
     const sharp = new SharpApiClient(sharpKey);
@@ -178,6 +187,56 @@ export async function collectNflPlayerPropsObservations(args: {
       cursor = next.cursor;
     }
     if (!sharpComplete) healthFindings.push("SHARPAPI_PROPS_TRUNCATED_BY_PAGE_BUDGET");
+
+    // The unfiltered catalog is large enough that later-book rows can fall
+    // beyond the generic pagination ceiling. Capture Pinnacle main lines in a
+    // separate bounded research lane. These rows are returned separately and
+    // cannot alter the published board until a release-pure outcome audit
+    // validates a source-aware policy.
+    if (args.includeReferenceResearch === true) {
+      for (const reference of SHARP_REFERENCE_RESEARCH_BOOKS) {
+        const { sportsbook } = reference;
+        let referenceOffset = 0;
+        let referenceCursor: string | null = null;
+        let referenceComplete = false;
+        try {
+          for (let page = 0; page < reference.maximumPages; page += 1) {
+            const response = await sharp.fetch<unknown[]>({
+              path: "/odds",
+              query: {
+                league: "nfl",
+                market: "props",
+                is_live: false,
+                sportsbook,
+                is_main_line: true,
+                limit: SHARP_PAGE_SIZE,
+                ...(referenceCursor ? { cursor: referenceCursor } : { offset: referenceOffset }),
+              },
+              signal: AbortSignal.timeout(20_000),
+              retryRateLimitInternally: false,
+            });
+            sharpRequests += 1;
+            if (!Array.isArray(response.data)) throw new Error(`SharpAPI ${sportsbook} NFL props returned malformed data.`);
+            sharpReferenceRaw.push(...response.data);
+            const next = nextSharpPropsPage(response.pagination, referenceOffset);
+            if (response.pagination?.has_more !== true) {
+              referenceComplete = true;
+              break;
+            }
+            if (!next) break;
+            referenceOffset = next.offset;
+            referenceCursor = next.cursor;
+          }
+        } catch (error) {
+          // This lane is diagnostic-only. It must never interrupt the sole
+          // authoritative production writer or erase a last-known-good board.
+          healthFindings.push(error instanceof SharpApiRateLimitError
+            ? `SHARPAPI_PROPS_REFERENCE_RATE_LIMITED:${sportsbook}`
+            : `SHARPAPI_PROPS_REFERENCE_CAPTURE_FAILED:${sportsbook}`);
+        }
+        if (!referenceComplete) healthFindings.push(`SHARPAPI_PROPS_REFERENCE_INCOMPLETE:${sportsbook}`);
+      }
+    }
   } else {
     healthFindings.push("SHARPAPI_KEY_MISSING");
   }
@@ -190,6 +249,12 @@ export async function collectNflPlayerPropsObservations(args: {
     rows: sharpReconciliation.rows,
     rejectedRows: sharpAll.rejectedRows + sharpAll.rows.length - sharpRowsInWindow.length + sharpReconciliation.unmatchedRows,
   };
+  const sharpReferenceAll = normalizeSharpNflPlayerProps({ values: sharpReferenceRaw, fetchedAt });
+  const sharpReferenceRowsInWindow = sharpReferenceAll.rows.filter((row) => inSlateWindow(row.scheduledStart, games));
+  const sharpReferenceReconciliation = reconcileSharpRowsToSlate(sharpReferenceRowsInWindow, games);
+  if (sharpReferenceReconciliation.unmatchedRows > 0) {
+    healthFindings.push("SHARPAPI_PROP_REFERENCE_EVENT_IDENTITY_UNMATCHED");
+  }
 
   if (bdlCurrent.rows.length === 0) healthFindings.push("BALLDONTLIE_PLAYER_PROPS_EMPTY");
   if (sharpKey && sharpReconciliation.rows.length === 0) healthFindings.push("SHARPAPI_PLAYER_PROPS_EMPTY_FOR_SLATE");
@@ -215,6 +280,7 @@ export async function collectNflPlayerPropsObservations(args: {
   });
   return {
     snapshot,
+    referenceResearchObservations: dedupeObservations(sharpReferenceReconciliation.rows),
     normalization: {
       balldontlie: bdlCurrent,
       balldontlieOpenings: bdlOpenings,
@@ -420,6 +486,8 @@ function iso(value: unknown): string | null {
 export const NFL_PLAYER_PROPS_COLLECTION_LIMITS = {
   maxGames: MAX_GAMES,
   maxSharpPages: MAX_SHARP_PAGES,
+  maxSharpReferencePages: MAX_SHARP_REFERENCE_PAGES,
+  sharpReferenceResearchBooks: SHARP_REFERENCE_RESEARCH_BOOKS,
   sharpPageSize: SHARP_PAGE_SIZE,
   bdlConcurrency: BDL_CONCURRENCY,
   maxPlayerIdentities: MAX_PLAYER_IDENTITIES,
@@ -437,4 +505,15 @@ export const __NFL_PLAYER_PROPS_COLLECTOR_TEST__ = {
   nextSharpPropsPage,
   shouldStopSharpPropsPagination,
   collectBoundedPlayerIdentities,
+  dedupeObservations,
 };
+
+function dedupeObservations(rows: readonly NflPlayerPropPriceObservation[]): NflPlayerPropPriceObservation[] {
+  const unique = new Map<string, NflPlayerPropPriceObservation>();
+  for (const row of rows) {
+    const key = [row.provider, row.providerObservationId, row.side, row.line].join("|");
+    const previous = unique.get(key);
+    if (!previous || Date.parse(row.fetchedAt) > Date.parse(previous.fetchedAt)) unique.set(key, row);
+  }
+  return [...unique.values()];
+}
