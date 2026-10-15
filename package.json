@@ -31,6 +31,7 @@
     "audit:daily-edge": "tsx --env-file=.env.local scripts/operator/audit-daily-edge-integrity.ts",
     "audit:wnba-action-promotion-evidence": "tsx --env-file=.env.local scripts/operator/audit-wnba-action-promotion-stability.ts",
     "test:wnba-action-promotion-evidence": "tsx scripts/test-wnba-action-promotion-stability.ts",
+    "test:nba-goat": "tsx scripts/test-nba-bdl-goat-team-features.ts",
     "audit:mlb-unified-candidate": "tsx --env-file=.env.local scripts/operator/audit-mlb-unified-candidate.ts",
     "audit:mlb-props-shadow-pitcher": "tsx --env-file=.env.local scripts/operator/audit-mlb-props-shadow-pitcher.ts",
     "audit:mlb-props-shadow-results": "tsx --env-file=.env.local scripts/operator/audit-mlb-props-shadow-results.ts",
