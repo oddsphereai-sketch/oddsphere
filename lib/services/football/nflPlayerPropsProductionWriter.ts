@@ -64,7 +64,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_15_r54_reference_cache_persistence" as const;
+  "nfl_player_props_writer_2026_10_15_r55_provider_alias_dedupe" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1

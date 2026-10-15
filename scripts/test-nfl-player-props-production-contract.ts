@@ -127,8 +127,8 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r43_decision_support_evidence");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_15_r54_reference_cache_persistence");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r44_provider_alias_dedupe");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_15_r55_provider_alias_dedupe");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_15_r31_member_decision_evidence");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -207,6 +207,20 @@ assert.deepEqual([...new Set(canonicalLadder.map((row) => row.line))], [230.5],
   "cross-book main-line votes select one actual consensus line instead of alternate ladders");
 assert.deepEqual([...new Set(canonicalLadder.map((row) => row.side))].sort(), ["over", "under"],
   "the selected listed line retains both exact sides");
+
+const providerAliasRows: NflPlayerPropsRuntimeDecision[] = [
+  { ...decision, playerName: "Marvin Mims Jr.", sportsbook: "BetMGM", market: "receptions", line: 1.5,
+    side: "under", americanPrice: -160, observedAt: "2026-10-15T16:59:17.294Z", provider: "balldontlie" },
+  { ...decision, playerName: "Marvin Mims", sportsbook: "betmgm", market: "receptions", line: 1.5,
+    side: "under", americanPrice: -160, observedAt: "2026-10-15T16:06:25.177Z", provider: "sharpapi" },
+  { ...decision, playerName: "Marvin Mims", sportsbook: "BetMGM", market: "receptions", line: 1.5,
+    side: "over", americanPrice: 130, observedAt: "2026-10-15T16:59:17.294Z", provider: "balldontlie" },
+];
+const canonicalProviderAliases = selectNflPlayerPropsCanonicalLines(providerAliasRows);
+assert.equal(canonicalProviderAliases.length, 2,
+  "one provider alias cannot duplicate the same canonical sportsbook side");
+assert.equal(canonicalProviderAliases.find((row) => row.side === "under")?.playerName, "Marvin Mims Jr.",
+  "the freshest exact sportsbook-side row wins across normalized provider aliases");
 
 const canonicalUnlocked = reconcileNflPlayerPropsProductionSnapshot({
   season: 2026,

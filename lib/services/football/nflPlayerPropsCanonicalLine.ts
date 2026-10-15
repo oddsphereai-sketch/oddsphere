@@ -22,7 +22,7 @@ type LineSummary<T> = {
 
 /**
  * Returns one consensus main line for every game/player/category while
- * preserving every exact-price row at that selected line.
+ * preserving one freshest exact-price row per sportsbook/side at that selected line.
  */
 export function selectNflPlayerPropsCanonicalLines<T extends NflPlayerPropsCanonicalLineRow>(
   rows: readonly T[],
@@ -36,9 +36,17 @@ export function selectNflPlayerPropsCanonicalLines<T extends NflPlayerPropsCanon
   const selected = new Set<T>();
   for (const scopeRows of scopes.values()) {
     const line = selectCanonicalLine(scopeRows);
-    for (const row of scopeRows) {
-      if (row.line === line) selected.add(row);
+    const freshestByBookSide = new Map<string, T>();
+    for (const row of scopeRows.filter((candidate) => candidate.line === line)) {
+      const key = `${normalize(row.sportsbook)}|${row.side}`;
+      const previous = freshestByBookSide.get(key);
+      if (!previous || canonicalRowRecency(row) > canonicalRowRecency(previous)
+        || (canonicalRowRecency(row) === canonicalRowRecency(previous)
+          && row.americanPrice > previous.americanPrice)) {
+        freshestByBookSide.set(key, row);
+      }
     }
+    for (const row of freshestByBookSide.values()) selected.add(row);
   }
   return rows.filter((row) => selected.has(row));
 }
@@ -131,6 +139,11 @@ function median(values: readonly number[]): number {
 
 function implied(price: number): number {
   return price < 0 ? -price / (-price + 100) : 100 / (price + 100);
+}
+
+function canonicalRowRecency(row: NflPlayerPropsCanonicalLineRow): number {
+  const observedAt = Date.parse(row.observedAt);
+  return Number.isFinite(observedAt) ? observedAt : 0;
 }
 
 function normalizePlayerIdentity(value: string): string {
