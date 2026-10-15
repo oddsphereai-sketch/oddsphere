@@ -189,8 +189,9 @@ three-point adjustment or by treating the favorable-cushion curve as edge.
 The curve is balanced enough to retain the competitor-comparable checkpoints:
 at +3/+6, selected Spread favorites were 58.03%/67.32% and underdogs were
 59.58%/69.20%; actionable Total Overs were 59.22%/66.87% and Unders were
-60.38%/64.69%. This does not rescue the main-line Spread lane. Spread remains
-No Play because no selection-frozen threshold or exact-price gate passed.
+60.38%/64.69%. This did not rescue the earlier score-only main-line Spread
+lane. The all-game movement-reader candidate above supersedes that interim
+endpoint while its exact-price validation continues prospectively.
 
 The GOAT opening archive contains 7,354 rows across 1,230 games and 13 books,
 with zero duplicate game/book keys. It stores one opening quote per game/book,
