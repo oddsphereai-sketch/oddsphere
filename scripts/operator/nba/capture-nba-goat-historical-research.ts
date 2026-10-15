@@ -31,6 +31,7 @@ type DatasetManifest = {
   batches?: number;
   reused_batches?: number;
   missing_game_ids?: number[];
+  imported_source_sha256?: string;
   exclusions?: Record<string, number>;
   note?: string;
 };
@@ -147,6 +148,29 @@ async function readJsonl(absolute: string): Promise<Record<string, unknown>[]> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
+}
+
+async function readVerifiedGameIndex(args: {
+  absolute: string;
+  expectedSha256: string;
+  expectedGames: number;
+  season: number;
+}): Promise<Record<string, unknown>[]> {
+  const body = await readFile(args.absolute, "utf8");
+  const actualSha256 = createHash("sha256").update(body).digest("hex");
+  if (actualSha256 !== args.expectedSha256.toLowerCase()) {
+    throw new Error(
+      `NBA imported game index checksum mismatch: expected ${args.expectedSha256}, received ${actualSha256}.`,
+    );
+  }
+  const rows = await readJsonl(args.absolute);
+  if (rows.length !== args.expectedGames) {
+    throw new Error(`NBA imported game index expected ${args.expectedGames} rows, received ${rows.length}.`);
+  }
+  if (rows.some((row) => integer(row.season) !== args.season)) {
+    throw new Error(`NBA imported game index contains a row outside season ${args.season}.`);
+  }
+  return rows;
 }
 
 async function collectGamesBySeasonType(args: {
@@ -277,6 +301,12 @@ async function main(): Promise<void> {
   const batchSize = positiveInteger("--batch-size", 10);
   if (batchSize > 50) throw new Error("--batch-size must be from 1 through 50.");
   const resume = hasFlag("--resume");
+  const importedGamesFile = value("--games-file");
+  const importedGamesSha256 = value("--games-sha256");
+  const importedExpectedGames = value("--expected-games");
+  if (importedGamesFile && (!importedGamesSha256 || !importedExpectedGames)) {
+    throw new Error("--games-file requires --games-sha256 and --expected-games.");
+  }
   const requestIntervalMs = Number(
     value("--request-interval-ms") ?? process.env.NBA_BDL_REQUEST_INTERVAL_MS ?? "125",
   );
@@ -298,7 +328,17 @@ async function main(): Promise<void> {
   await mkdir(outputDirectory, { recursive: true });
 
   const manifests: Partial<Record<NbaBdlHistoricalDataset, DatasetManifest>> = {};
-  const gameFetch = await collectGamesBySeasonType({ season, maxPages, requestIntervalMs });
+  const importedGames = importedGamesFile
+    ? await readVerifiedGameIndex({
+        absolute: path.resolve(importedGamesFile),
+        expectedSha256: importedGamesSha256 as string,
+        expectedGames: positiveInteger("--expected-games"),
+        season,
+      })
+    : null;
+  const gameFetch = importedGames
+    ? { rows: importedGames, requests: 0, complete: true }
+    : await collectGamesBySeasonType({ season, maxPages, requestIntervalMs });
   const rawGames = stableRows("games", gameFetch.rows);
   const finalGames = rawGames.filter((row) => isFinalGame(row) && isOfficialRegularSeasonGame(row));
   const nonfinalGames = rawGames.filter((row) => !isFinalGame(row)).length;
@@ -310,6 +350,7 @@ async function main(): Promise<void> {
       rows: finalGames.length,
       requests: gameFetch.requests,
       complete: !sample && gameFetch.complete,
+      imported_source_sha256: importedGames ? importedGamesSha256?.toLowerCase() : undefined,
       exclusions: {
         nonfinal_games: nonfinalGames,
         non_official_regular_games: nonOfficialRegularGames,

@@ -128,6 +128,8 @@ async function main(): Promise<void> {
   assert.match(operatorSource, /missing_game_ids/);
   assert.match(operatorSource, /dataset: "box", gameIds/);
   assert.match(operatorSource, /dataset: "advanced", gameIds/);
+  assert.match(operatorSource, /--games-file requires --games-sha256 and --expected-games/);
+  assert.match(operatorSource, /imported game index checksum mismatch/);
 
   console.log("NBA BALLDONTLIE historical research capture tests passed.");
 }
