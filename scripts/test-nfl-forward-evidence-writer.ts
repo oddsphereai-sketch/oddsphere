@@ -336,6 +336,8 @@ assert.match(route, /requireLease: true/);
 assert.match(route, /publication_attempted/);
 assert.match(route, /tracking_attempted: result\.trackingAttempted/);
 assert.match(route, /resolveNflForwardWeek/);
+assert.match(route, /exactProviderCandidate: true/,
+  "production must explicitly activate the foundational independent score");
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
 const evidenceRuntime = readFileSync(path.resolve("lib/services/football/nflForwardEvidence.ts"), "utf8");
 const coherenceIndex = writer.indexOf("assertFootballCrossMarketCoherence({");
@@ -349,6 +351,9 @@ assert.doesNotMatch(
   "the sole writer must not bypass target-excluded outcome resolution with the legacy direct grade builder",
 );
 assert.match(writer, /resolveNflTargetExcludedProduction/);
+assert.match(writer, /buildNflNoWeightMarketEvidenceOutcomeForecast/);
+assert.match(writer, /fallbackOutcome: baseOutcome/,
+  "missing target-free market evidence must preserve the independent score");
 assert.equal((writer.match(/buildNflProfessionalMarketAuthority\(\{/g) ?? []).length, 1,
   "professional authority must be built only inside the evaluated-family exclusion loop");
 assert.equal((writer.match(/buildNflNamedMarketSequenceAuthority\(\{/g) ?? []).length, 1,
@@ -365,7 +370,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_15_r61_personnel_evidence_eligibility/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_15_r62_foundational_no_weight_score/);
 assert.match(writer, /mergeNflAvailabilityWithPrior/);
 assert.match(
   writer,

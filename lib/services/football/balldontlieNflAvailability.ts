@@ -102,13 +102,23 @@ export async function fetchBalldontlieNflSlateAvailability(
 
   try {
     const suppliedTeamIds = matchups.flatMap((matchup) => [matchup.awayTeamId, matchup.homeTeamId]);
-    const teamIds = suppliedTeamIds.every((value): value is number => Number.isInteger(value))
-      ? suppliedTeamIds
+    const teamIdByAbbreviation = suppliedTeamIds.every((value): value is number => Number.isInteger(value))
+      ? new Map(matchups.flatMap((matchup) => [
+          [matchup.awayTeam, matchup.awayTeamId!] as const,
+          [matchup.homeTeam, matchup.homeTeamId!] as const,
+        ]))
       : await fetchNflTeamIds(requestedTeams, apiKey, fetchImpl);
-    if (teamIds === null || teamIds.length !== requestedTeams.size) return null;
+    if (teamIdByAbbreviation === null || teamIdByAbbreviation.size !== requestedTeams.size) return null;
+    const teamIds = [...teamIdByAbbreviation.values()];
+    const coveredMatchups = (coveredTeamIds: ReadonlySet<number>) => matchups.filter((matchup) => {
+      const awayId = teamIdByAbbreviation.get(matchup.awayTeam);
+      const homeId = teamIdByAbbreviation.get(matchup.homeTeam);
+      return awayId !== undefined && homeId !== undefined && coveredTeamIds.has(awayId) && coveredTeamIds.has(homeId);
+    });
+    const output = new Map<string, DailyEdgeGameAvailability>();
 
     if (validDesignationScope(options)) {
-      const designationRows = await fetchDesignationRows({
+      const designationRead = await fetchDesignationRows({
         apiKey,
         fetchImpl,
         teamIds,
@@ -116,30 +126,44 @@ export async function fetchBalldontlieNflSlateAvailability(
         week: options.week,
         seasonType: options.seasonType,
       });
-      if (designationRows !== null) {
-        const normalized = normalizeNflDesignationGames(designationRows, matchups);
-        if (normalized !== null) return normalized;
+      if (designationRead !== null) {
+        for (const availability of normalizeNflDesignationGames(
+          designationRead.rows,
+          coveredMatchups(designationRead.coveredTeamIds),
+        )) output.set(availability.eventId, availability);
+        if (output.size === matchups.length) return [...output.values()];
       }
     }
 
-    const rows = await fetchLegacyInjuryRows({ apiKey, fetchImpl, teamIds });
-    if (rows === null) return null;
-    const teams = normalizeNflInjuryTeams(rows, requestedTeams);
+    const unresolved = matchups.filter((matchup) => !output.has(matchup.id));
+    const unresolvedTeamIds = [...new Set(unresolved.flatMap((matchup) => [
+      teamIdByAbbreviation.get(matchup.awayTeam),
+      teamIdByAbbreviation.get(matchup.homeTeam),
+    ]).filter((value): value is number => value !== undefined))];
+    const legacyRead = await fetchLegacyInjuryRows({ apiKey, fetchImpl, teamIds: unresolvedTeamIds });
+    if (legacyRead === null) return output.size ? [...output.values()] : null;
+    const legacyMatchups = coveredMatchups(legacyRead.coveredTeamIds)
+      .filter((matchup) => !output.has(matchup.id));
+    const legacyTeams = new Set(legacyMatchups.flatMap((matchup) => [matchup.awayTeam, matchup.homeTeam]));
+    const teams = normalizeNflInjuryTeams(legacyRead.rows, legacyTeams);
     const teamByAbbreviation = new Map(teams.map((team) => [team.abbreviation, team]));
     const reportUpdatedAt = latestPlayerReportTime(teams);
-    return matchups.map((matchup) => ({
-      eventId: matchup.id,
-      awayTeam: matchup.awayTeam,
-      homeTeam: matchup.homeTeam,
-      source: "BALLDONTLIE",
-      sourceLabel: "BALLDONTLIE NFL injury report",
-      sourceUrl: NFL_INJURIES_DOCS,
-      reportUpdatedAt,
-      teams: [
-        teamByAbbreviation.get(matchup.awayTeam) ?? emptyTeam(matchup.awayTeam),
-        teamByAbbreviation.get(matchup.homeTeam) ?? emptyTeam(matchup.homeTeam),
-      ],
-    }));
+    for (const matchup of legacyMatchups) {
+      output.set(matchup.id, {
+        eventId: matchup.id,
+        awayTeam: matchup.awayTeam,
+        homeTeam: matchup.homeTeam,
+        source: "BALLDONTLIE",
+        sourceLabel: "BALLDONTLIE NFL injury report",
+        sourceUrl: NFL_INJURIES_DOCS,
+        reportUpdatedAt,
+        teams: [
+          teamByAbbreviation.get(matchup.awayTeam) ?? emptyTeam(matchup.awayTeam),
+          teamByAbbreviation.get(matchup.homeTeam) ?? emptyTeam(matchup.homeTeam),
+        ],
+      });
+    }
+    return output.size ? [...output.values()] : null;
   } catch {
     return null;
   }
@@ -162,11 +186,15 @@ async function fetchDesignationRows(args: {
   season: number;
   week: number;
   seasonType: 1 | 2 | 3;
-}): Promise<BdlNflDesignationRow[] | null> {
+}): Promise<{ rows: BdlNflDesignationRow[]; coveredTeamIds: Set<number> } | null> {
   const batches = chunk(args.teamIds, NFL_DESIGNATION_TEAM_BATCH_SIZE);
-  const results = await Promise.all(batches.map(async (teamIds) => {
+  const results: Array<{ rows: BdlNflDesignationRow[]; coveredTeamIds: Set<number> } | null> = [];
+  // Keep provider batches sequential. Bursting four cursor chains in parallel
+  // intermittently rate-limited one batch and used to poison the entire slate.
+  for (const teamIds of batches) {
     const rows: BdlNflDesignationRow[] = [];
     let cursor: string | null = null;
+    let result: { rows: BdlNflDesignationRow[]; coveredTeamIds: Set<number> } | null = null;
     for (let page = 0; page < NFL_DESIGNATION_MAX_PAGES_PER_BATCH; page += 1) {
       const params = new URLSearchParams({
         season: String(args.season),
@@ -177,40 +205,56 @@ async function fetchDesignationRows(args: {
       for (const teamId of teamIds) params.append("team_ids[]", String(teamId));
       if (cursor) params.set("cursor", cursor);
       const body = await fetchJsonPage(`${NFL_DESIGNATIONS_ENDPOINT}?${params.toString()}`, args.apiKey, args.fetchImpl);
-      if (body === null) return null;
+      if (body === null) break;
       rows.push(...body.data.filter((row): row is BdlNflDesignationRow => row !== null && typeof row === "object"));
       cursor = pageCursor(body.meta);
-      if (!cursor) return rows;
+      if (!cursor) {
+        result = { rows, coveredTeamIds: new Set(teamIds) };
+        break;
+      }
     }
-    return null;
-  }));
-  if (results.some((rows) => rows === null)) return null;
-  return results.flatMap((rows) => rows ?? []);
+    results.push(result);
+  }
+  const successful = results.filter((value): value is NonNullable<typeof value> => value !== null);
+  if (successful.length === 0) return null;
+  return {
+    rows: successful.flatMap((value) => value.rows),
+    coveredTeamIds: new Set(successful.flatMap((value) => [...value.coveredTeamIds])),
+  };
 }
 
 async function fetchLegacyInjuryRows(args: {
   apiKey: string;
   fetchImpl: typeof fetch;
   teamIds: number[];
-}): Promise<BdlNflInjuryRow[] | null> {
+}): Promise<{ rows: BdlNflInjuryRow[]; coveredTeamIds: Set<number> } | null> {
   const batches = chunk(args.teamIds, NFL_DESIGNATION_TEAM_BATCH_SIZE);
-  const results = await Promise.all(batches.map(async (teamIds) => {
+  const results: Array<{ rows: BdlNflInjuryRow[]; coveredTeamIds: Set<number> } | null> = [];
+  for (const teamIds of batches) {
     const rows: BdlNflInjuryRow[] = [];
     let cursor: string | null = null;
+    let result: { rows: BdlNflInjuryRow[]; coveredTeamIds: Set<number> } | null = null;
     for (let page = 0; page < NFL_INJURY_MAX_PAGES; page += 1) {
       const params = new URLSearchParams({ per_page: "100" });
       for (const teamId of teamIds) params.append("team_ids[]", String(teamId));
       if (cursor) params.set("cursor", cursor);
       const body = await fetchJsonPage(`${NFL_INJURIES_ENDPOINT}?${params.toString()}`, args.apiKey, args.fetchImpl);
-      if (body === null) return null;
+      if (body === null) break;
       rows.push(...body.data.filter((row): row is BdlNflInjuryRow => row !== null && typeof row === "object"));
       cursor = pageCursor(body.meta);
-      if (!cursor) return rows;
+      if (!cursor) {
+        result = { rows, coveredTeamIds: new Set(teamIds) };
+        break;
+      }
     }
-    return null;
-  }));
-  if (results.some((rows) => rows === null)) return null;
-  return results.flatMap((rows) => rows ?? []);
+    results.push(result);
+  }
+  const successful = results.filter((value): value is NonNullable<typeof value> => value !== null);
+  if (successful.length === 0) return null;
+  return {
+    rows: successful.flatMap((value) => value.rows),
+    coveredTeamIds: new Set(successful.flatMap((value) => [...value.coveredTeamIds])),
+  };
 }
 
 async function fetchJsonPage(
@@ -240,7 +284,7 @@ function chunk<T>(values: T[], size: number): T[][] {
 function normalizeNflDesignationGames(
   rows: BdlNflDesignationRow[],
   matchups: NflAvailabilityMatchup[],
-): DailyEdgeGameAvailability[] | null {
+): DailyEdgeGameAvailability[] {
   const matchupsByGame = new Map(matchups.map((matchup) => [providerGameId(matchup.id), matchup]));
   const rowsByGame = new Map<string, BdlNflDesignationRow[]>();
   for (const row of rows) {
@@ -257,10 +301,6 @@ function normalizeNflDesignationGames(
   const output: DailyEdgeGameAvailability[] = [];
   for (const matchup of matchups) {
     const gameRows = rowsByGame.get(providerGameId(matchup.id)) ?? [];
-    const representedTeams = new Set(gameRows
-      .map((row) => stringValue(row.team?.abbreviation)?.toUpperCase() ?? null)
-      .filter((value): value is string => value !== null));
-    if (!representedTeams.has(matchup.awayTeam) || !representedTeams.has(matchup.homeTeam)) return null;
     const teams = [matchup.awayTeam, matchup.homeTeam].map((abbreviation) => {
       const teamRows = gameRows.filter((row) => stringValue(row.team?.abbreviation)?.toUpperCase() === abbreviation);
       const players = teamRows.map(normalizeNflDesignationPlayer)
@@ -351,7 +391,7 @@ async function fetchNflTeamIds(
   requestedTeams: ReadonlySet<string>,
   apiKey: string,
   fetchImpl: typeof fetch,
-): Promise<number[] | null> {
+): Promise<Map<string, number> | null> {
   const response = await fetchImpl(NFL_TEAMS_ENDPOINT, {
     headers: { Authorization: apiKey, accept: "application/json" },
   });
@@ -366,8 +406,7 @@ async function fetchNflTeamIds(
     const id = typeof team.id === "number" && Number.isInteger(team.id) ? team.id : null;
     if (abbreviation && id !== null && requestedTeams.has(abbreviation)) ids.set(abbreviation, id);
   }
-  return [...requestedTeams].map((abbreviation) => ids.get(abbreviation) ?? null)
-    .filter((id): id is number => id !== null);
+  return ids;
 }
 
 function normalizeNflInjuryTeams(

@@ -22,9 +22,9 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 
-FEATURE_RELEASE = "nfl_real_pregame_features_2016_2025_2026_08_19_r1"
-SOURCE_RELEASE = "nfl_real_model_source_cache_2016_2025_2026_08_19_r1"
-SCHEDULE_RELEASE = "football_nflverse_games_cache_2026_08_19_r1"
+FEATURE_RELEASE = "nfl_real_pregame_features_2016_2025_2026_10_15_r2_independent_rebuild"
+SOURCE_RELEASE = "nfl_real_model_source_cache_2016_2025_2026_10_15_r3_independent_rebuild"
+SCHEDULE_RELEASE = "football_nflverse_games_cache_2026_10_15_r2_independent_rebuild"
 
 METRIC_PRIORS = {
     "epa": 0.0,
@@ -77,6 +77,10 @@ def normalize_team(value: Any) -> str:
     return {"LAR": "LA", "WSH": "WAS", "OAK": "LV", "SD": "LAC", "STL": "LA"}.get(team, team)
 
 
+def normalize_name(value: Any) -> str:
+    return "".join(character for character in str(value or "").lower() if character.isalnum())
+
+
 def ewm(previous: float, observed: float, alpha: float) -> float:
     if not math.isfinite(observed):
         return previous
@@ -123,10 +127,14 @@ class QbState:
         self.dropbacks *= QB_OFFSEASON_CARRY
 
 
-def load_verified_manifest(root: pathlib.Path) -> tuple[dict[str, Any], dict[tuple[str, int], pathlib.Path]]:
-    manifest_path = root / "football-research/cache/nflverse/real-model-r1/manifest.json"
+def load_verified_manifest(
+    root: pathlib.Path,
+    manifest_name: str = "manifest.json",
+    expected_release: str = SOURCE_RELEASE,
+) -> tuple[dict[str, Any], dict[tuple[str, int], pathlib.Path]]:
+    manifest_path = root / "football-research/cache/nflverse/real-model-r1" / manifest_name
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("cacheRelease") != SOURCE_RELEASE or manifest.get("failures"):
+    if manifest.get("cacheRelease") != expected_release or manifest.get("failures"):
         raise RuntimeError("NFL source manifest release/failures do not match the feature contract")
     paths: dict[tuple[str, int], pathlib.Path] = {}
     for item in manifest["files"]:
@@ -141,7 +149,7 @@ def load_verified_manifest(root: pathlib.Path) -> tuple[dict[str, Any], dict[tup
 
 def aggregate_pbp(paths: dict[tuple[str, int], pathlib.Path]) -> pd.DataFrame:
     seasons: list[pd.DataFrame] = []
-    for season in range(2016, 2026):
+    for season in sorted(value for dataset, value in paths if dataset == "pbp"):
         raw = pq.read_table(paths[("pbp", season)], columns=PBP_COLUMNS).to_pandas()
         raw = raw[(raw["season_type"] == "REG") & raw["posteam"].notna() & raw["defteam"].notna()].copy()
         raw["posteam"] = raw["posteam"].map(normalize_team)
@@ -221,15 +229,53 @@ def aggregate_pbp(paths: dict[tuple[str, int], pathlib.Path]) -> pd.DataFrame:
     return pd.concat(seasons, ignore_index=True)
 
 
-def injury_features(paths: dict[tuple[str, int], pathlib.Path]) -> dict[tuple[int, int, str], dict[str, float]]:
-    result: dict[tuple[int, int, str], dict[str, float]] = {}
+def prior_snap_share_history(paths: dict[tuple[str, int], pathlib.Path]) -> dict[tuple[int, int, str, str], float]:
+    """Return player snap shares known before each week.
+
+    The same-week snap row is applied only after that week's priors are locked.
+    A player's last team is part of the key, while the rolling state follows the
+    player through an offseason or team change.
+    """
+    records: list[tuple[int, int, str, str, float]] = []
+    for season in sorted(value for dataset, value in paths if dataset == "snap_counts"):
+        frame = pq.read_table(
+            paths[("snap_counts", season)],
+            columns=["season", "game_type", "week", "player", "team", "offense_pct", "defense_pct", "st_pct"],
+        ).to_pandas()
+        frame = frame[frame["game_type"].eq("REG")].copy()
+        frame["team"] = frame["team"].map(normalize_team)
+        frame["player_key"] = frame["player"].map(normalize_name)
+        frame["snap_share"] = frame[["offense_pct", "defense_pct", "st_pct"]].fillna(0.0).max(axis=1).clip(0.0, 1.0)
+        for row in frame.itertuples(index=False):
+            if row.player_key:
+                records.append((season, int(row.week), str(row.team), str(row.player_key), float(row.snap_share)))
+
+    state: dict[str, float] = {}
+    priors: dict[tuple[int, int, str, str], float] = {}
+    by_week: defaultdict[tuple[int, int], list[tuple[str, str, float]]] = defaultdict(list)
+    for season, week, team, player_key, snap_share in records:
+        by_week[(season, week)].append((team, player_key, snap_share))
+    for season_week in sorted(by_week):
+        season, week = season_week
+        for team, player_key, _ in by_week[season_week]:
+            priors[(season, week, team, player_key)] = state.get(player_key, 0.25)
+        for _, player_key, snap_share in by_week[season_week]:
+            state[player_key] = ewm(state.get(player_key, 0.25), snap_share, 0.45)
+    return priors
+
+
+def injury_features(
+    paths: dict[tuple[str, int], pathlib.Path],
+    prior_snap_shares: dict[tuple[int, int, str, str], float],
+) -> dict[tuple[int, int, str], dict[str, Any]]:
+    result: dict[tuple[int, int, str], dict[str, Any]] = {}
     position_weight = defaultdict(lambda: 1.0, {
         "QB": 2.5, "T": 1.2, "OT": 1.2, "G": 1.2, "OG": 1.2, "C": 1.2,
         "WR": 1.05, "TE": 1.05, "RB": 0.9, "CB": 1.0, "S": 1.0,
         "DE": 1.0, "DT": 1.0, "LB": 1.0,
     })
     status_weight = {"out": 1.0, "doubtful": 0.75, "questionable": 0.35}
-    for season in range(2016, 2026):
+    for season in sorted(value for dataset, value in paths if dataset == "injuries"):
         frame = pq.read_table(paths[("injuries", season)]).to_pandas()
         season_type = frame["season_type"].eq("REG") if "season_type" in frame.columns else pd.Series(False, index=frame.index)
         game_type = frame["game_type"].eq("REG") if "game_type" in frame.columns else pd.Series(True, index=frame.index)
@@ -237,23 +283,39 @@ def injury_features(paths: dict[tuple[str, int], pathlib.Path]) -> dict[tuple[in
         frame["team"] = frame["team"].map(normalize_team)
         frame["status_norm"] = frame["report_status"].fillna("").astype(str).str.lower().str.strip()
         frame["status_weight"] = frame["status_norm"].map(status_weight).fillna(0.0)
-        frame["position_weight"] = frame["position"].fillna("").astype(str).str.upper().map(position_weight)
+        frame["position_weight"] = (
+            frame["position"].fillna("").astype(str).str.upper().map(position_weight).fillna(1.0)
+        )
         frame["weighted"] = frame["status_weight"] * frame["position_weight"]
+        frame["prior_snap_share"] = frame.apply(
+            lambda row: prior_snap_shares.get(
+                (season, int(row["week"]), str(row["team"]), normalize_name(row["full_name"])),
+                0.25,
+            ),
+            axis=1,
+        )
+        frame["snap_weighted"] = frame["weighted"] * (0.25 + 0.75 * frame["prior_snap_share"])
         frame["qb_weighted"] = frame["weighted"].where(frame["position"].fillna("").astype(str).str.upper().eq("QB"), 0.0)
         frame["out_count"] = frame["status_norm"].eq("out").astype(float)
         for (week, team), group in frame.groupby(["week", "team"], observed=True):
             result[(season, int(week), str(team))] = {
                 "injury_weight": float(group["weighted"].sum()),
+                "injury_snap_weight": float(group["snap_weighted"].sum()),
                 "qb_injury_weight": float(group["qb_weighted"].sum()),
                 "out_count": float(group["out_count"].sum()),
                 "injury_reported_count": float(group["status_weight"].gt(0).sum()),
+                "player_status_weights": {
+                    str(row.gsis_id): float(row.status_weight)
+                    for row in group.itertuples(index=False)
+                    if row.gsis_id is not None and not pd.isna(row.gsis_id) and float(row.status_weight) > 0.0
+                },
             }
     return result
 
 
 def roster_continuity(paths: dict[tuple[str, int], pathlib.Path]) -> dict[tuple[int, int, str], float]:
     records: list[tuple[int, int, str, set[str]]] = []
-    for season in range(2016, 2026):
+    for season in sorted(value for dataset, value in paths if dataset == "weekly_rosters"):
         frame = pq.read_table(paths[("weekly_rosters", season)], columns=["season", "week", "team", "gsis_id"]).to_pandas()
         frame["team"] = frame["team"].map(normalize_team)
         frame = frame[frame["gsis_id"].notna()]
@@ -268,7 +330,7 @@ def roster_continuity(paths: dict[tuple[str, int], pathlib.Path]) -> dict[tuple[
     return result
 
 
-def load_schedule(root: pathlib.Path) -> tuple[pd.DataFrame, dict[str, Any], str]:
+def load_schedule(root: pathlib.Path, end_season: int = 2025) -> tuple[pd.DataFrame, dict[str, Any], str]:
     manifest_path = root / "football-research/cache/nflverse/games.latest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("cacheRelease") != SCHEDULE_RELEASE:
@@ -279,7 +341,7 @@ def load_schedule(root: pathlib.Path) -> tuple[pd.DataFrame, dict[str, Any], str
         raise RuntimeError("schedule checksum mismatch")
     games = pd.read_csv(path, low_memory=False)
     games = games[
-        (games["season"].between(2016, 2025))
+        (games["season"].between(2016, end_season))
         & (games["game_type"] == "REG")
         & games["home_score"].notna()
         & games["away_score"].notna()
@@ -305,8 +367,9 @@ def state_features(prefix: str, state: TeamState, row: dict[str, float]) -> None
 def build_features(
     schedule: pd.DataFrame,
     game_metrics: pd.DataFrame,
-    injuries: dict[tuple[int, int, str], dict[str, float]],
+    injuries: dict[tuple[int, int, str], dict[str, Any]],
     continuity: dict[tuple[int, int, str], float],
+    feature_release: str = FEATURE_RELEASE,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     metrics_by_key = {
         (str(row.game_id), str(row.posteam)): row._asdict()
@@ -349,7 +412,7 @@ def build_features(
             home_state = snapshot(home)
             away_state = snapshot(away)
             row: dict[str, Any] = {
-                "feature_release": FEATURE_RELEASE,
+                "feature_release": feature_release,
                 "game_id": game_id,
                 "season": season,
                 "week": week,
@@ -392,19 +455,28 @@ def build_features(
             ]:
                 injury = injuries.get((season, week, team), {})
                 row[f"{side}_injury_weight"] = injury.get("injury_weight", math.nan)
+                row[f"{side}_injury_snap_weight"] = injury.get("injury_snap_weight", math.nan)
                 row[f"{side}_qb_injury_weight"] = injury.get("qb_injury_weight", math.nan)
                 row[f"{side}_out_count"] = injury.get("out_count", math.nan)
                 row[f"{side}_injury_reported_count"] = injury.get("injury_reported_count", math.nan)
                 row[f"{side}_roster_continuity"] = continuity.get((season, week, team), math.nan)
-                qb_id_raw = getattr(game, f"{side}_qb_id")
-                qb_id = None if pd.isna(qb_id_raw) else str(qb_id_raw)
+                # The schedule's current-game QB field is populated from the
+                # completed game and is not a trustworthy pregame starter
+                # timestamp. Use only the quarterback known from prior games;
+                # current expected-QB evidence is applied by the forward
+                # personnel layer rather than leaked into historical features.
+                qb_id = state.last_qb_id
                 qb_state = qbs[qb_id] if qb_id else QbState()
+                player_status_weights = injury.get("player_status_weights", {})
+                row[f"{side}_last_qb_injury_weight"] = (
+                    float(player_status_weights.get(qb_id, 0.0)) if qb_id else 0.0
+                )
                 row[f"{side}_qb_epa"] = qb_state.epa
                 row[f"{side}_qb_cpoe"] = qb_state.cpoe
                 row[f"{side}_qb_sack_rate"] = qb_state.sack_rate
                 row[f"{side}_qb_turnover_rate"] = qb_state.turnover_rate
                 row[f"{side}_qb_log_dropbacks"] = math.log1p(qb_state.dropbacks)
-                row[f"{side}_qb_same_as_last_start"] = float(qb_id is not None and state.last_qb_id == qb_id)
+                row[f"{side}_qb_same_as_last_start"] = float(qb_id is not None)
                 coach = str(getattr(game, f"{side}_coach") or "").strip() or None
                 row[f"{side}_coach_continuity"] = float(coach is not None and state.last_coach == coach)
             rows.append(row)
@@ -466,8 +538,8 @@ def build_features(
 
     features = pd.DataFrame(rows).sort_values(["season", "week", "game_id"]).reset_index(drop=True)
     state_artifact = {
-        "featureRelease": FEATURE_RELEASE,
-        "trainedThrough": "2025-12-31",
+        "featureRelease": feature_release,
+        "trainedThrough": str(features["gameday"].max()),
         "teamStates": {
             team: {
                 "offFast": state.off_fast, "offSlow": state.off_slow,
@@ -494,7 +566,8 @@ def main() -> None:
     source_manifest, paths = load_verified_manifest(root)
     schedule, schedule_manifest, schedule_checksum = load_schedule(root)
     aggregates = aggregate_pbp(paths)
-    injuries = injury_features(paths)
+    snap_share_priors = prior_snap_share_history(paths)
+    injuries = injury_features(paths, snap_share_priors)
     continuity = roster_continuity(paths)
     features, states = build_features(schedule, aggregates, injuries, continuity)
     if len(features) < 2_500 or features["game_id"].nunique() != len(features):

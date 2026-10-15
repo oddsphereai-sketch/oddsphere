@@ -9,6 +9,8 @@ export type NflPreviewTeam = {
   id: number;
   abbreviation: string;
   name: string;
+  conference?: string;
+  division?: string;
 };
 
 export type NflPreviewGame = {
@@ -17,6 +19,7 @@ export type NflPreviewGame = {
   season: number;
   scheduledStart: string;
   status: string;
+  venue?: string;
   awayScore?: number | null;
   homeScore?: number | null;
   away: NflPreviewTeam;
@@ -387,6 +390,7 @@ function normalizeGame(value: unknown): NflPreviewGame | null {
     season,
     scheduledStart,
     status: text(row.status_state) ?? text(row.status) ?? "scheduled",
+    ...(text(row.venue) ? { venue: text(row.venue)! } : {}),
     ...(awayScore === null ? {} : { awayScore }),
     ...(homeScore === null ? {} : { homeScore }),
     away,
@@ -399,7 +403,13 @@ function normalizeTeam(value: unknown): NflPreviewTeam | null {
   const id = integer(row.id);
   const abbreviation = text(row.abbreviation)?.toUpperCase() ?? null;
   const name = text(row.full_name) ?? [text(row.location), text(row.name)].filter(Boolean).join(" ");
-  return id === null || !abbreviation || !name ? null : { id, abbreviation, name };
+  const conference = text(row.conference)?.toUpperCase();
+  const division = text(row.division)?.toUpperCase();
+  return id === null || !abbreviation || !name ? null : {
+    id, abbreviation, name,
+    ...(conference ? { conference } : {}),
+    ...(division ? { division } : {}),
+  };
 }
 
 function selectRepresentativeBookByGame(

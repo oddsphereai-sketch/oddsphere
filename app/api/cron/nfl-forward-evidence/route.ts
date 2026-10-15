@@ -79,6 +79,7 @@ export async function GET(request: Request): Promise<Response> {
       playbookApiKey,
       sharpApiKey,
       weatherProvider,
+      exactProviderCandidate: true,
     });
     let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
     let playerPropsError: string | null = null;

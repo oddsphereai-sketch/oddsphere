@@ -207,6 +207,40 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const foundationalPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_15_r35_personnel_evidence_eligibility";
+  const foundationalPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_15_r43_personnel_evidence_eligibility";
+  const foundationalPreviousPayload = {
+    ...snapshot,
+    snapshotRelease: foundationalPreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_15_r31_personnel_evidence_eligibility",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_15_r34_personnel_evidence_eligibility",
+    fixtureRelease: foundationalPreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: foundationalPreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    foundationalPreviousSnapshotRelease,
+    foundationalPreviousFixtureRelease,
+    foundationalPreviousPayload.memberRelease,
+    foundationalPreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = foundationalPreviousPayload;
+  const foundationalContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(foundationalContinuityRead?.snapshotRelease, foundationalPreviousSnapshotRelease);
+  assert.equal(foundationalContinuityRead?.fixture.heldMemberFixtureRelease, foundationalPreviousFixtureRelease);
+  assert.equal(JSON.stringify(foundationalContinuityRead?.fixture), JSON.stringify(foundationalPreviousPayload.fixture));
+
   const personnelPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_09_r34_provider_feed_continuity";
   const personnelPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_09_r42_provider_feed_continuity";
   const personnelPreviousPayload = {

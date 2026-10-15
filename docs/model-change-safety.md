@@ -1370,3 +1370,22 @@ writer, r3 reader, r5 refresh, complete prices, one lease and immutable prior
 locks. Hold or roll back on mixed releases, lost coverage, a partial quote
 replacing last-known-good data, score/side contradiction, writer overlap,
 reader failure or mobile navigation overlap.
+
+## Owner-approved provisional exception: NFL foundational no-weight score r32
+
+On 2026-10-15 Daniel Mengel explicitly directed Oddsphere to stop scalar-weighting market evidence
+into the NFL independent score, repair the model now, and advance a tested improvement without an
+extended waiting period. This exception is limited to the r32 release family documented in
+`docs/model-audits/2026-10-15-nfl-foundational-no-weight-score-r32-result.md`.
+
+The independent runtime must prohibit line, price, movement, and split inputs. The market reader may
+operate only after the independent score exists, must record zero scalar weight, must exclude the
+evaluated sportsbook family, and must fall back to the untouched independent result when a stable
+target-free tuple is unavailable. Existing locked payloads remain immutable. Exact-game injury and
+quarterback identity gates remain fail-closed.
+
+This owner-directed promotion accepts the opened 32-game cohort and the balanced 7-promotion /
+6-demotion current-board rehearsal as provisional evidence. It does not convert the supplied
+competitor percentages into a same-cohort superiority claim. Publication still requires focused and
+full model-change tests, latest-main integration safety, protected PR checks, and live proof of the
+r32 releases, complete state, one sport lease, one writer, lock precedence, and reader coherence.

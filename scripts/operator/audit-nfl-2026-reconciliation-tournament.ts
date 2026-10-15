@@ -299,7 +299,7 @@ function decisionResult(game: Game, market: Market, side: string, line: number |
   return value > 0 ? "win" : value < 0 ? "loss" : "push";
 }
 
-function projectionResult(replay: Replay, market: Market): Result {
+function projectionResult(replay: Replay, market: Market, cushion = 0): Result {
   const { game, forecast } = replay;
   const margin = forecast.expectedHomeScore - forecast.expectedAwayScore;
   const total = forecast.expectedHomeScore + forecast.expectedAwayScore;
@@ -314,7 +314,8 @@ function projectionResult(replay: Replay, market: Market): Result {
     : market === "spread"
       ? game.actualHome - game.actualAway + line.spread!.homeLine
       : game.actualHome + game.actualAway - line.total!.line;
-  return Math.abs(actual) < 1e-9 ? "push" : (actual >= 0 ? 1 : -1) === side ? "win" : "loss";
+  const sideAdjusted = side * actual + cushion;
+  return Math.abs(sideAdjusted) < 1e-9 ? "push" : sideAdjusted > 0 ? "win" : "loss";
 }
 
 function replay(game: Game, variant: Variant): Replay {
@@ -411,7 +412,24 @@ function summarize(rows: Replay[]) {
     const results = rows.map((row) => projectionResult(row, market));
     const resolved = results.filter((value) => value !== "push");
     const wins = resolved.filter((value) => value === "win").length;
-    return [market, { wins, losses: resolved.length - wins, pushes: results.length - resolved.length, accuracy: resolved.length ? wins / resolved.length : null }];
+    const alternateLines = market === "moneyline" ? null : Object.fromEntries([3, 6].map((cushion) => {
+      const alternateResults = rows.map((row) => projectionResult(row, market, cushion));
+      const alternateResolved = alternateResults.filter((value) => value !== "push");
+      const alternateWins = alternateResolved.filter((value) => value === "win").length;
+      return [`plus${cushion}`, {
+        wins: alternateWins,
+        losses: alternateResolved.length - alternateWins,
+        pushes: alternateResults.length - alternateResolved.length,
+        accuracy: alternateResolved.length ? alternateWins / alternateResolved.length : null,
+      }];
+    }));
+    return [market, {
+      wins,
+      losses: resolved.length - wins,
+      pushes: results.length - resolved.length,
+      accuracy: resolved.length ? wins / resolved.length : null,
+      alternateLines,
+    }];
   }));
   const betting = Object.fromEntries(MARKETS.map((market) => {
     const decisions = rows.flatMap((row) => {
@@ -859,6 +877,39 @@ async function main() {
   if (process.argv.includes("--professional")) {
     const names = ["current", "marketStateIdentityOnly", "professionalMarketReader"];
     console.log(JSON.stringify(Object.fromEntries(names.map((name) => [name, report.variants[name]])), null, 2));
+    return;
+  }
+  if (process.argv.includes("--scorecard")) {
+    const names = ["independentOnly", "current", "professionalMarketReader"];
+    console.log(JSON.stringify({
+      games: report.games,
+      sharpSplitGames: report.sharpSplitGames,
+      variants: Object.fromEntries(names.map((name) => {
+        const value = report.variants[name]!;
+        return [name, {
+          summary: value.summary,
+          impactVersusCurrent: value.versusCurrent && Object.fromEntries(
+            Object.entries(value.versusCurrent).map(([market, impact]) => [market, {
+              sideChanges: impact.sideChanges,
+              corrections: impact.corrections,
+              harms: impact.harms,
+              promotions: impact.promotions,
+              demotions: impact.demotions,
+            }]),
+          ),
+          impactVersusIndependent: value.versusIndependent && Object.fromEntries(
+            Object.entries(value.versusIndependent).map(([market, impact]) => [market, {
+              sideChanges: impact.sideChanges,
+              corrections: impact.corrections,
+              harms: impact.harms,
+              promotions: impact.promotions,
+              demotions: impact.demotions,
+            }]),
+          ),
+        }];
+      })),
+      professionalLossClasses: report.professionalLossReview.byCategory,
+    }, null, 2));
     return;
   }
   if (process.env.NFL_MARKET_AUDIT_SUMMARY_ONLY === "1") {
