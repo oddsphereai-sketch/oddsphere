@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 
 export const NFL_PLAYER_PROPS_REFERENCE_OFFER_STORE_RELEASE =
-  "nfl_player_props_reference_offer_store_2026_10_15_r2_complete_pairs" as const;
+  "nfl_player_props_reference_offer_store_2026_10_15_r3_snapshot_schema" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_OFFER_MAXIMUM = 2_500 as const;
 export const NFL_PLAYER_PROPS_REFERENCE_OFFER_MAXIMUM_JSON_BYTES = 4_000_000 as const;
 
@@ -48,9 +48,16 @@ export async function writeNflPlayerPropsReferenceOffers(args: {
   }
   const { error } = await args.client.from("lab_response_snapshots").upsert({
     snapshot_key: key(args.season, args.week),
+    kind: "daily_edge",
+    sport: "nfl",
+    slate_date: null,
     payload: snapshot,
+    payload_version: NFL_PLAYER_PROPS_REFERENCE_OFFER_STORE_RELEASE,
     source: NFL_PLAYER_PROPS_REFERENCE_OFFER_STORE_RELEASE,
+    generated_at: args.updatedAt,
     expires_at: new Date(Date.parse(args.updatedAt) + 14 * 24 * 3_600_000).toISOString(),
+    stale_until: new Date(Date.parse(args.updatedAt) + 14 * 24 * 3_600_000).toISOString(),
+    updated_at: args.updatedAt,
   }, { onConflict: "snapshot_key" });
   if (error) throw new Error(`NFL props reference-offer write failed: ${error.message}`);
 }
