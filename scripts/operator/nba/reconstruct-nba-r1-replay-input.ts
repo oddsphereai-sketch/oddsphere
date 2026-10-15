@@ -26,6 +26,7 @@ type OddsRow = {
   Win_Margin: number;
   Days_Rest_Home: number;
   Days_Rest_Away: number;
+  market_available?: boolean;
 };
 
 type BdlGame = {
@@ -71,7 +72,7 @@ if (!sqlitePath || !bdlGamesPath || !outputPath) {
 const historical = [
   ...sqliteRows(sqlitePath, "2023-24"),
   ...sqliteRows(sqlitePath, "2024-25"),
-];
+].map((row) => ({ ...row, market_available: true }));
 const available2025 = sqliteRows(sqlitePath, "odds_2025-26");
 const availableByGame = new Map(available2025.map((row) => [
   `${row.Date}::${row.Home}::${row.Away}`,
@@ -111,6 +112,7 @@ const reconstructed = games.map((game): OddsRow => {
     Win_Margin: margin,
     Days_Rest_Home: rest(home),
     Days_Rest_Away: rest(away),
+    market_available: matched !== null,
   };
   lastPlayed.set(home, game.date);
   lastPlayed.set(away, game.date);
@@ -120,6 +122,7 @@ const reconstructed = games.map((game): OddsRow => {
 const header = [
   "Date", "Home", "Away", "OU", "Spread", "ML_Home", "ML_Away",
   "Points", "Win_Margin", "Days_Rest_Home", "Days_Rest_Away", "market_home_prob",
+  "market_available",
 ];
 const rows = [...historical, ...reconstructed].map((row) => [
   row.Date,
@@ -134,6 +137,7 @@ const rows = [...historical, ...reconstructed].map((row) => [
   row.Days_Rest_Home,
   row.Days_Rest_Away,
   noVigHome(row.ML_Home, row.ML_Away),
+  row.market_available === true ? "true" : "false",
 ]);
 writeFileSync(outputPath, `${[header, ...rows].map((row) => row.map(csv).join(",")).join("\n")}\n`);
 console.log(JSON.stringify({

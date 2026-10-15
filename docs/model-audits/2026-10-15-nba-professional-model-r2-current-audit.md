@@ -87,6 +87,14 @@ winner accuracy, 48.55% Spread direction, and 49.82% Total direction. That
 replay validates the prior-only independent architecture, not complete runtime
 parity, exact-price economics, or the current market reader.
 
+The later reconstructed score-path audit is narrower. It remains valid for its
+1,230-game independent score diagnostics, but only 553 rows have exact market
+data. An earlier reconstructed report accidentally scored neutral placeholders
+as real market rows, creating false 60.85% ATS and 29.02% market-winner
+headlines. The corrected market-eligible subset is 47.36% ATS and 50.27% on
+Totals for the independent model; it is incomplete and cannot supersede the
+published baseline or qualify a market correction.
+
 ## What the runtime actually uses
 
 The independent score consumes season-level offensive rating, defensive

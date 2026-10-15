@@ -65,9 +65,20 @@ it is eligible for independent-score diagnosis only and is ineligible to restate
 Total performance.
 
 The reconstruction selected a closely related residual state model and produced 9.511 team-score
-MAE, 11.391 margin MAE, 15.050 total MAE, and 68.37% winner accuracy. Because this is not an exact
-reproduction of the published aggregates, its cohorts are directional diagnostic evidence, not a
-replacement claim about r1.
+MAE, 11.391 margin MAE, 15.050 total MAE, and 68.37% winner accuracy across all 1,230 score-eligible
+games. Because this is not an exact reproduction of the published aggregates, its cohorts are
+directional diagnostic evidence, not a replacement claim about r1.
+
+The first reconstructed report incorrectly allowed 677 neutral market placeholders into market
+metrics. That made the all-game independent Spread direction appear to be 60.85% and made the closing
+market's winner accuracy appear to be 29.02%; neither number was valid. The corrected audit carries
+an explicit `market_available` flag and excludes those rows from every market benchmark, market
+marriage, Spread, and Total claim. On the 553-game market-eligible subset, the independent model was
+64.20% on winner direction, 47.36% ATS direction, and 50.27% on Total direction. The 65/35
+model/closing-market blend improved winner direction to 66.00% and reduced margin MAE from 10.942 to
+10.707, but it did not improve ATS or Total direction. This subset is incomplete and not a promotion
+sample; it proves only that the prior apparent 60.85% ATS result was a placeholder artifact and that
+market corrections need a complete point-in-time replay before they can be trusted.
 
 The most important findings are:
 

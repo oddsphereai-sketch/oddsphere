@@ -24,6 +24,7 @@ type Game = {
   marketTotal: number;
   marketHomeMargin: number;
   marketHomeProbability: number;
+  marketAvailable: boolean;
   restHome: number;
   restAway: number;
 };
@@ -54,6 +55,7 @@ type Metric = {
 
 type Report = {
   independent: Metric;
+  independentMarketEligible: Metric;
   marketGrounded65: Metric;
   marketBenchmark: Metric;
   crossing: Record<string, Metric>;
@@ -85,7 +87,8 @@ type PredictionLedgerRow = {
   marketHomeMargin: number;
   marketTotal: number;
   marketHomeProbability: number;
-  errorContext: "winner_correct" | "model_and_market_favorite_lost" | "model_upset_call_failed" | "market_pickem";
+  marketAvailable: boolean;
+  errorContext: "winner_correct" | "model_and_market_favorite_lost" | "model_upset_call_failed" | "market_pickem" | "market_unavailable";
   causeAttribution: "not_attributed_requires_postgame_component_evidence";
 };
 
@@ -120,6 +123,7 @@ function parseCsv(path: string): Game[] {
     points: index("Points"), margin: index("Win_Margin"),
     restHome: index("Days_Rest_Home"), restAway: index("Days_Rest_Away"),
     marketHomeProbability: index("market_home_prob"),
+    marketAvailable: header.indexOf("market_available"),
   };
   const games: Game[] = [];
   for (const line of lines) {
@@ -153,6 +157,9 @@ function parseCsv(path: string): Game[] {
       // positive when the home team is favored, negative when it is the dog.
       marketHomeMargin: spreadMagnitude,
       marketHomeProbability,
+      marketAvailable: col.marketAvailable < 0
+        ? true
+        : ["1", "true", "yes"].includes((row[col.marketAvailable] ?? "").trim().toLowerCase()),
       restHome,
       restAway,
     });
@@ -281,14 +288,21 @@ function replay(
         totalAbsoluteError: Math.abs(predictedTotal - actualTotal),
         winnerCorrect,
         spreadDirectionCorrect:
-          spreadPrediction === 0 || spreadResult === 0 ? null : Math.sign(spreadPrediction) === Math.sign(spreadResult),
+          !game.marketAvailable || spreadPrediction === 0 || spreadResult === 0
+            ? null
+            : Math.sign(spreadPrediction) === Math.sign(spreadResult),
         totalDirectionCorrect:
-          totalPrediction === 0 || totalResult === 0 ? null : Math.sign(totalPrediction) === Math.sign(totalResult),
+          !game.marketAvailable || totalPrediction === 0 || totalResult === 0
+            ? null
+            : Math.sign(totalPrediction) === Math.sign(totalResult),
         marketHomeMargin: game.marketHomeMargin,
         marketTotal: game.marketTotal,
         marketHomeProbability: game.marketHomeProbability,
+        marketAvailable: game.marketAvailable,
         errorContext: winnerCorrect
           ? "winner_correct"
+          : !game.marketAvailable
+            ? "market_unavailable"
           : marketPickem
             ? "market_pickem"
             : predictedHomeWin === marketHomeFavorite
@@ -300,6 +314,7 @@ function replay(
 
     const report = reports.get(game.season) ?? {
       independent: blankMetric(),
+      independentMarketEligible: blankMetric(),
       marketGrounded65: blankMetric(),
       marketBenchmark: blankMetric(),
       crossing: Object.fromEntries(CROSSING_THRESHOLDS.map((threshold) => [String(threshold), blankMetric()])),
@@ -307,37 +322,41 @@ function replay(
     reports.set(game.season, report);
     addMetric(report.independent, game, projectedHome, projectedAway);
 
-    const independentMargin = projectedHome - projectedAway;
-    const independentTotal = projectedHome + projectedAway;
-    const groundedMargin = 0.65 * independentMargin + 0.35 * game.marketHomeMargin;
-    const groundedTotal = 0.65 * independentTotal + 0.35 * game.marketTotal;
-    addMetric(
-      report.marketGrounded65,
-      game,
-      (groundedTotal + groundedMargin) / 2,
-      (groundedTotal - groundedMargin) / 2,
-    );
-    addMetric(
-      report.marketBenchmark,
-      game,
-      (game.marketTotal + game.marketHomeMargin) / 2,
-      (game.marketTotal - game.marketHomeMargin) / 2,
-    );
-    for (const threshold of CROSSING_THRESHOLDS) {
-      const marketFavoriteProbability = Math.max(
-        game.marketHomeProbability,
-        1 - game.marketHomeProbability,
-      );
-      const winnerDisagrees = Math.sign(independentMargin) !== Math.sign(game.marketHomeMargin);
-      const finalMargin = winnerDisagrees && marketFavoriteProbability >= threshold
-        ? game.marketHomeMargin
-        : independentMargin;
+    if (game.marketAvailable) {
+      addMetric(report.independentMarketEligible, game, projectedHome, projectedAway);
+
+      const independentMargin = projectedHome - projectedAway;
+      const independentTotal = projectedHome + projectedAway;
+      const groundedMargin = 0.65 * independentMargin + 0.35 * game.marketHomeMargin;
+      const groundedTotal = 0.65 * independentTotal + 0.35 * game.marketTotal;
       addMetric(
-        report.crossing[String(threshold)]!,
+        report.marketGrounded65,
         game,
-        (independentTotal + finalMargin) / 2,
-        (independentTotal - finalMargin) / 2,
+        (groundedTotal + groundedMargin) / 2,
+        (groundedTotal - groundedMargin) / 2,
       );
+      addMetric(
+        report.marketBenchmark,
+        game,
+        (game.marketTotal + game.marketHomeMargin) / 2,
+        (game.marketTotal - game.marketHomeMargin) / 2,
+      );
+      for (const threshold of CROSSING_THRESHOLDS) {
+        const marketFavoriteProbability = Math.max(
+          game.marketHomeProbability,
+          1 - game.marketHomeProbability,
+        );
+        const winnerDisagrees = Math.sign(independentMargin) !== Math.sign(game.marketHomeMargin);
+        const finalMargin = winnerDisagrees && marketFavoriteProbability >= threshold
+          ? game.marketHomeMargin
+          : independentMargin;
+        addMetric(
+          report.crossing[String(threshold)]!,
+          game,
+          (independentTotal + finalMargin) / 2,
+          (independentTotal - finalMargin) / 2,
+        );
+      }
     }
 
     const homeResidual = clip(game.actualHome - projectedHome, parameters.residualCap);
@@ -417,6 +436,7 @@ const selectedReport = Object.fromEntries(
     String(season),
     {
       independent: finalize(report.independent),
+      independentMarketEligible: finalize(report.independentMarketEligible),
       selectedDecisionCrossing: finalize(report.crossing[String(selectedCrossingThreshold)]!),
       incumbentMarketGrounded65: finalize(report.marketGrounded65),
       closingMarketBenchmark: finalize(report.marketBenchmark),
@@ -431,6 +451,14 @@ const report = {
   candidates: candidates.length,
   selectedParameters: selected.parameters,
   selectedCrossingThreshold,
+  marketEligibility: Object.fromEntries([...selectedReports].map(([season, value]) => [
+    String(season),
+    {
+      eligibleGames: value.independentMarketEligible.games,
+      totalGames: value.independent.games,
+      coverage: value.independentMarketEligible.games / value.independent.games,
+    },
+  ])),
   report: selectedReport,
   topFiveSelection: candidates.slice(0, 5).map((candidate) => ({
     parameters: candidate.parameters,
