@@ -7,7 +7,7 @@
  */
 
 export const NBA_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_point_in_time_features_2026_10_15_r12_date_only_start_fallback" as const;
+  "nba_point_in_time_features_2026_10_15_r13_season_regime_state" as const;
 
 export type NbaHistoricalGame = {
   gameId: number;
@@ -192,6 +192,7 @@ const ELO_HOME_ADVANTAGE = 65;
 const ELO_K_FACTOR = 20;
 const ELO_OFFSEASON_CARRY = 0.75;
 const ADJUSTED_RATING_OFFSEASON_CARRY = 0.75;
+const LEAGUE_REGIME_PRIOR_TEAM_GAMES = 60;
 
 type NbaVenue = {
   latitude: number;
@@ -1068,6 +1069,51 @@ function leagueRating(observations: TeamObservation[]): number {
   return mean(observations.slice(-300).map((row) => row.offRating)) ?? 110;
 }
 
+/**
+ * Expose the current scoring/pace environment separately from the prior
+ * season. The smoothed fields use a small prior equivalent (30 NBA games,
+ * two team observations per game) so a new season can move away from last
+ * year's environment without treating opening night as a fully known regime.
+ * Every value is computed strictly from finalized games before the cutoff.
+ */
+function leagueRegimeFeatures(
+  observations: TeamObservation[],
+  season: number,
+): Record<string, number | null> {
+  const current = observations.filter((row) => row.season === season).slice(-300);
+  const earlier = observations.filter((row) => row.season < season);
+  const priorSeason = earlier.length > 0
+    ? Math.max(...earlier.map((row) => row.season))
+    : null;
+  const prior = priorSeason === null
+    ? []
+    : earlier.filter((row) => row.season === priorSeason).slice(-300);
+  const currentOffense = mean(current.map((row) => row.offRating));
+  const priorOffense = mean(prior.map((row) => row.offRating));
+  const currentPace = mean(current.map((row) => row.pace));
+  const priorPace = mean(prior.map((row) => row.pace));
+  const currentWeight = current.length / (current.length + LEAGUE_REGIME_PRIOR_TEAM_GAMES);
+  const smoothed = (currentValue: number | null, priorValue: number | null, fallback: number): number => {
+    if (currentValue === null) return priorValue ?? fallback;
+    if (priorValue === null) return currentValue;
+    return currentValue * currentWeight + priorValue * (1 - currentWeight);
+  };
+  return {
+    league_current_season_team_games: current.length,
+    league_prior_season_team_games: prior.length,
+    league_current_season_off_rating: currentOffense,
+    league_prior_season_off_rating: priorOffense,
+    league_current_vs_prior_off_rating_delta:
+      currentOffense === null || priorOffense === null ? null : currentOffense - priorOffense,
+    league_regime_off_rating: smoothed(currentOffense, priorOffense, 110),
+    league_current_season_pace: currentPace,
+    league_prior_season_pace: priorPace,
+    league_current_vs_prior_pace_delta:
+      currentPace === null || priorPace === null ? null : currentPace - priorPace,
+    league_regime_pace: smoothed(currentPace, priorPace, 100),
+  };
+}
+
 function updateAdjustedRatings(args: {
   ratings: Map<number, AdjustedRating>;
   league: number;
@@ -1196,6 +1242,7 @@ export function buildNbaPointInTimeFeatures(args: {
     const homeHistory = observationsByTeam.get(game.homeTeamId) ?? [];
     const awayHistory = observationsByTeam.get(game.awayTeamId) ?? [];
     const league = leagueRating(leagueObservations);
+    const leagueRegime = leagueRegimeFeatures(leagueObservations, game.season);
     const homeAdjusted = adjustedRatings.get(game.homeTeamId) ?? { offense: 0, defense: 0 };
     const awayAdjusted = adjustedRatings.get(game.awayTeamId) ?? { offense: 0, defense: 0 };
     const homeElo = eloRatings.get(game.homeTeamId) ?? ELO_INITIAL_RATING;
@@ -1233,6 +1280,7 @@ export function buildNbaPointInTimeFeatures(args: {
       home_team: game.homeTeam,
       away_team: game.awayTeam,
       league_off_rating: league,
+      ...leagueRegime,
       elo_home_rating: homeElo,
       elo_away_rating: awayElo,
       elo_rating_delta: homeElo - awayElo,
@@ -1291,4 +1339,5 @@ export const __NBA_POINT_IN_TIME_FEATURE_TEST__ = {
   rotationOverlap,
   matchupFeatures,
   eloHomeWinProbability,
+  leagueRegimeFeatures,
 };

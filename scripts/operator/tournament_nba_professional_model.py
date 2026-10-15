@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r29_regime_anchored_residuals"
-FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r12_date_only_start_fallback"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r9_regime_anchored_residuals"
+RELEASE = "nba_professional_tournament_2026_10_15_r30_season_regime_state"
+FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r13_season_regime_state"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r10_season_regime_state"
 MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
 MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
 R1_CONFIRMATION = {
@@ -148,11 +148,11 @@ def feature_catalog(frame: pd.DataFrame) -> dict[str, list[str]]:
         return [column for column in numeric if any(token in column for token in tokens)]
 
     ratings = chosen((
-        "league_off_rating", "adjusted_", "offRating_", "defRating_", "pace_",
+        "league_", "adjusted_", "offRating_", "defRating_", "pace_",
         "home_margin_", "away_margin_", "current_games", "prior_games", "elo_", "baseline_",
     ))
-    elo = chosen(("league_off_rating", "elo_"))
-    adjusted_ratings = chosen(("league_off_rating", "adjusted_", "baseline_", "pace_prior"))
+    elo = chosen(("league_", "elo_"))
+    adjusted_ratings = chosen(("league_", "adjusted_", "baseline_", "pace_prior"))
     schedule = chosen((
         "rest_days", "back_to_back", "games_last_4_days", "games_last_7_days",
         "travel_", "time_zones_", "consecutive_road_games_", "venue_altitude_", "altitude_change_",

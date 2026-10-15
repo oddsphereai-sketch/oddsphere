@@ -127,6 +127,15 @@ assert.equal(rows[1]?.home_travel_distance_miles, null);
 assert.equal(rows[1]?.home_games_last_4_days, 0);
 assert.equal(rows[1]?.home_games_last_7_days, 0);
 assert.equal(rows[1]?.home_consecutive_road_games_before, 0);
+assert.equal(rows[1]?.league_current_season_team_games, 0);
+assert.equal(rows[1]?.league_prior_season_team_games, 2);
+assert.equal(rows[1]?.league_current_season_off_rating, null);
+assert.equal(typeof rows[1]?.league_prior_season_off_rating, "number");
+assert.equal(
+  rows[1]?.league_regime_off_rating,
+  rows[1]?.league_prior_season_off_rating,
+  "opening night must inherit the immediately prior season's league regime",
+);
 
 const sameSeasonSecond = { ...second, season: first.season };
 const sameSeasonRows = buildNbaPointInTimeFeatures({
@@ -154,6 +163,10 @@ assert.equal(rows[2]?.home_games_last_4_days, 1);
 assert.equal(rows[2]?.home_back_to_back, 0);
 assert.equal(typeof rows[2]?.home_travel_distance_miles, "number");
 assert.equal(rows[2]?.home_venue_altitude_feet, 1050);
+assert.equal(rows[2]?.league_current_season_team_games, 2);
+assert.equal(typeof rows[2]?.league_current_season_off_rating, "number");
+assert.equal(typeof rows[2]?.league_current_vs_prior_off_rating_delta, "number");
+assert.equal(typeof rows[2]?.league_regime_pace, "number");
 
 const travelFirst = game({
   id: 30,
@@ -241,10 +254,16 @@ const simultaneousRows = buildNbaPointInTimeFeatures({
   advanced: [...advancedFor(simultaneousA), ...advancedFor(simultaneousB)],
 });
 assert.equal(simultaneousRows[0]?.league_off_rating, 110);
+assert.equal(simultaneousRows[0]?.league_current_season_team_games, 0);
 assert.equal(
   simultaneousRows[1]?.league_off_rating,
   110,
   "a simultaneous game's final score must not enter another game's pregame state",
+);
+assert.equal(
+  simultaneousRows[1]?.league_current_season_team_games,
+  0,
+  "a simultaneous game's regime evidence must remain unavailable before finalization",
 );
 
 const normalizedGame = normalizeNbaHistoricalGame({
