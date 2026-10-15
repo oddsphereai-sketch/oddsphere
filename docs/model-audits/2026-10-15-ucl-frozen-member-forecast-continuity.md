@@ -57,7 +57,7 @@ An unavailable price can therefore remove a wager evaluation, but it cannot eras
 - Historical prediction-accuracy rows restored: 12
 - Historical ROI rows restored: 0
 
-Settlement release advances to `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`. Tracking aggregate contract advances to `tracking_aggregate_v15_ucl_frozen_forecast_continuity_2026_10_15`; cache and stored-snapshot namespaces advance with it.
+Settlement release advances to `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`. Tracking aggregate contract advances to `tracking_aggregate_v16_ucl_projected_forecast_continuity_2026_10_15`; cache and stored-snapshot namespaces advance with it. The aggregate's bounded PostgREST projection includes `member_market_at_capture`; this is required so a cold read can apply the same immutable recovery without loading full historical snapshot blobs.
 
 ## Validation and rollback
 

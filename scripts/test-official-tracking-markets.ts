@@ -137,9 +137,9 @@ check("legacy-compatible tracking route applies official eligibility before aggr
   /const publiclyTrackedRows = allRows\.filter\([\s\S]{0,180}isPublicallyTracked/.test(trackingRouteSource) &&
   /buildAllTime\(publiclyTrackedRows\)/.test(trackingRouteSource));
 check("tracking caches are release-bumped so prior-contract counts cannot survive deployment",
-  trackingFoundationRouteSource.includes("member-tracking-aggregate-v9-ucl-frozen-forecast-continuity") &&
-  snapshotKeySource.includes("tracking-foundation-r6-ucl-frozen-forecast-continuity") &&
-  snapshotWriterSource.includes("tracking-foundation-v4-ucl-frozen-forecast-continuity") &&
+  trackingFoundationRouteSource.includes("member-tracking-aggregate-v10-ucl-projected-forecast-continuity") &&
+  snapshotKeySource.includes("tracking-foundation-r7-ucl-projected-forecast-continuity") &&
+  snapshotWriterSource.includes("tracking-foundation-v5-ucl-projected-forecast-continuity") &&
   snapshotKeySource.includes("tracking::all::nba-preseason-only-window-r2"));
 
 // assertOfficialTrackingMarket — happy path doesn't throw

@@ -88,7 +88,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v15_ucl_frozen_forecast_continuity_2026_10_15" as const;
+  "tracking_aggregate_v16_ucl_projected_forecast_continuity_2026_10_15" as const;
 
 const UCL_PRIOR_ALT_LINE_MODEL_RELEASE =
   "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
@@ -325,6 +325,7 @@ type Row = {
 };
 
 type TrackingRecordProjection = PredictionRecordRow & {
+  member_market_at_capture?: unknown;
   tracking_display_grade_override?: string | null;
   member_facing_grade?: string | null;
   tracking_correction_release?: string | null;
@@ -373,6 +374,10 @@ const TRACKING_RECORD_SELECT = [
   "published_at",
   "created_at",
   "competition:snapshot_json->>competition",
+  // Required by UCL's immutable legacy continuity reader. Keep this bounded
+  // projection in sync with uclFrozenTrackingForecastSide; omitting it makes
+  // a cold aggregate lose the exact side already frozen on the member card.
+  "member_market_at_capture:snapshot_json->member_market_at_capture",
   // Pull only the two member-grade values used by this aggregate. Selecting
   // the complete snapshot_json blob for every historical record made a cold
   // member Tracking request transfer thousands of large audit payloads.

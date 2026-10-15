@@ -64,7 +64,7 @@ const loadSharedTrackingAggregate = unstable_cache(
       includeLaunchDay: false,
     });
   },
-  ["member-tracking-aggregate-v9-ucl-frozen-forecast-continuity"],
+  ["member-tracking-aggregate-v10-ucl-projected-forecast-continuity"],
   { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
 );
 

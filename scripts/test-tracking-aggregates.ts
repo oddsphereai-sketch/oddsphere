@@ -98,7 +98,7 @@ const eplRecord = (locked_at: string | null, id = 1, created_at = "2026-08-19T12
   competition: "english_premier_league",
   snapshot_json: null,
 } as PredictionRecordRow);
-check("tracking aggregate contract preserves UCL frozen member forecasts", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v15_ucl_frozen_forecast_continuity_2026_10_15");
+check("tracking aggregate contract preserves projected UCL frozen member forecasts", TRACKING_AGGREGATE_CONTRACT_VERSION === "tracking_aggregate_v16_ucl_projected_forecast_continuity_2026_10_15");
 check("unlocked EPL row is excluded from official tracking", !isTrackingRecordEligible(eplRecord(null)));
 check("locked EPL row is officially tracking-eligible", isTrackingRecordEligible(eplRecord("2026-08-21T18:00:00Z")));
 check("EPL receives a separate member-facing competition key", trackingDisplaySport(eplRecord("2026-08-21T18:00:00Z")) === "epl");
@@ -129,6 +129,15 @@ const recoverableHeldUcl = {
   },
 } as PredictionRecordRow;
 check("frozen UCL missing-price forecast remains eligible for prediction accuracy", isTrackingRecordEligible(recoverableHeldUcl));
+const projectedRecoverableHeldUcl = {
+  ...recoverableHeldUcl,
+  snapshot_json: null,
+  member_market_at_capture: recoverableHeldUcl.snapshot_json?.member_market_at_capture,
+} as PredictionRecordRow;
+check(
+  "bounded aggregate projection preserves the frozen UCL forecast without the full snapshot blob",
+  isTrackingRecordEligible(projectedRecoverableHeldUcl),
+);
 check("current UCL model+calibration release is admitted", isCurrentUclTrackingRelease(uclRecord));
 check("older UCL model release remains outside Current release", !isCurrentUclTrackingRelease({ ...uclRecord, model_version: "ucl_prior" }));
 check("older UCL calibration release remains outside Current release", !isCurrentUclTrackingRelease({ ...uclRecord, calibration_version: "ucl_prior" }));
@@ -248,6 +257,7 @@ check(
 check("scheduled tracking refresh includes soccer for active EPL settlement", /DEFAULT_SPORTS[^;]+"soccer"/.test(trackingCronSource));
 check("EPL grading is competition-scoped and locked-only", /sport === "soccer"[\s\S]{0,300}english_premier_league[\s\S]{0,200}locked_at/.test(gradingSource));
 check("bounded tracking reads retain the projected EPL competition identity", aggregateSource.includes('"competition:snapshot_json->>competition"'));
+check("bounded tracking reads retain the frozen UCL member forecast", aggregateSource.includes('"member_market_at_capture:snapshot_json->member_market_at_capture"'));
 check("tracking consistency audit uses the same EPL display-sport projection", consistencyAuditSource.includes("trackingDisplaySport(row.record)"));
 
 console.log("\n━━━ Brier score sanity (manual computation) ━━━");
