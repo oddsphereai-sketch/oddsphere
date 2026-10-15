@@ -120,6 +120,63 @@ timestamped BALLDONTLIE cohort specifically, direction was 49.85%; the better
 MAE and Brier by shrinking weak opinions, but improved continuous error is not
 permission to publish economically losing Spread selections.
 
+### Selective classifier and movement-reader continuation
+
+The audit did not stop at the failed residual model, and `No Play` is not the
+intended product design. Release
+`nba_selective_spread_challenger_2026_10_15_r2_four_season` added the public
+2022-23 pregame-reference market to the chronology, then tested regularized
+logistic, histogram-gradient, and extra-trees cover classifiers across edge,
+market topology, ratings, schedule, Four Factors, and rotation inputs. It also
+tested fixed favorite, underdog, home, away, line-size, and season-stage lanes.
+The policy that looked best before confirmation—away sides at classifier
+confidence 0.53—went 124-99 (55.61%) in 2024 after going 62-45 (57.94%) in
+2023, but collapsed to 132-143 (48.00%) in 2025. This is a rejected candidate,
+not a reason to hide 2025 games or manufacture a narrower post-hoc subgroup.
+
+Release `nba_spread_movement_reader_2026_10_15_r1_all_game` then tested the
+new information the score-only candidates lacked. It joined the documented
+multibook open and close for every available regular-season game and required
+every recipe to return a side on every game. The reader selected on 2024 was:
+
+1. compute the independent model's edge against the current/closing spread;
+2. when the home spread moved at least two points from open to close, follow
+   that movement direction; and
+3. otherwise retain the independent side.
+
+| Reader result at closing line | Main | Favorable +3 | Favorable +6 |
+|---|---:|---:|---:|
+| 2024 selection | 632-591-1 (51.68%) | 766-457-1 (62.63%) | 866-357-1 (70.81%) |
+| 2025 confirmation | 648-576-0 (52.94%) | 759-465-0 (62.01%) | 868-356-0 (70.92%) |
+| Two-season orientation | 1280-1167-1 (52.31%) | 1525-922-1 (62.32%) | 1734-713-1 (70.86%) |
+
+This is the first reader that improved main-line direction in both the
+selection and confirmation seasons: +1.96 percentage points in 2024 and +4.08
+points in 2025 versus the independent side evaluated at the same closing
+line. The adjacent follow-movement thresholds from 0.5 through 2.0 points all
+landed between 52.94% and 53.68% in 2025, so the confirmation is not isolated
+to one exact cutoff. In 2025, the frozen all-game reader was 54.75% on home
+selections, 51.14% on away selections, 52.96% on favorites, and 52.92% on
+underdogs. Those subgroups are disclosure, not separately selected rules.
+
+The evidence is directionally useful but not yet permission to claim a
+profitable main-line betting release. The pooled main-line result has a 50.33%
+Wilson lower bound, but at a flat -110 it is -3.36 units and -0.14% ROI. The
+source retains closing lines and fair probabilities, not exact closing Spread
+prices, and its captured manifest did not authorize movement-rule selection.
+Historical public/sharp splits also remain unavailable. Accordingly, the
+reader is the 2026 prospective candidate and produces a side for every game;
+economic promotion still depends on the exact live price and the new locked
+ledger rather than a blanket `No Play` label.
+
+The fixed +3/+6 ladder is retained. Across the two reader seasons its pooled
+empirical break-even prices are -165.40 and -243.20. The more conservative
+Wilson-lower price ceilings are -152.42 at +3 and -222.90 at +6. A live
+alternate can qualify only when its exact offered price is better than the
+applicable ceiling; the ledger must store line, price, book, provider/fetch
+timestamps, locked decision time, and release. This creates actual candidate
+plays without pretending that a favorable line is valuable at any price.
+
 This isolates the remaining paths. A better generic score or residual model
 has not produced stable ATS signal. The current market blend cannot correct a
 side because blending toward the evaluated line preserves the independent
@@ -154,7 +211,8 @@ The product decision is therefore:
 - retain +3 and +6 for Spread and Total as same-cohort, competitor-comparable
   favorable-cushion tracking;
 - label the curves as alternate-line diagnostics rather than historical bets;
-- keep NBA alternate wagers No Play for launch; and
+- emit a prospective alternate candidate only when the exact live price is
+  better than the frozen conservative ceiling; and
 - prospectively archive the exact main line/price, alternate line/price,
   sportsbook, provider/fetch timestamps, locked decision timestamp, and model
   and calibration releases. Only that ledger can validate alternate-line ROI.
