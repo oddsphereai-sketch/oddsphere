@@ -510,7 +510,7 @@ check(
 check(
   "Service applies official public tracking start boundary before member aggregation",
   SERVICE.includes("isPublicallyTracked") &&
-    /publicStartFiltered[\s\S]{0,300}isPublicallyTracked\(r\.sport, r\.slate_date\)/.test(SERVICE),
+    /publicRecords[\s\S]{0,300}isPublicallyTracked\(record\.sport, record\.slate_date\)/.test(SERVICE),
 );
 check(
   "Service prefers explicit tracking display override before member_facing_at_lock",
@@ -579,7 +579,7 @@ check(
 check(
   "API shares the five-minute aggregate cache across server instances",
   API.includes("unstable_cache") &&
-    API.includes('"member-tracking-aggregate-v7-alternate-line-performance"') &&
+    API.includes('"member-tracking-aggregate-v8-ucl-calendar-release-continuity"') &&
     API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
 );
 check(
@@ -615,7 +615,7 @@ check(
 );
 check(
   "Service filters out pending from recentlySettled",
-  /settledRows\s*=\s*rows\.filter[\s\S]{0,200}result !== "pending"/.test(SERVICE),
+  /settledRows\s*=\s*calendarRows\.filter[\s\S]{0,200}result !== "pending"/.test(SERVICE),
 );
 check(
   "Page declares RecentlySettledRow type",

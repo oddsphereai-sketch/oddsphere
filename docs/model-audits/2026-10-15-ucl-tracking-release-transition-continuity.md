@@ -32,6 +32,8 @@ The calendar scope owns yesterday, trailing week, trailing month, daily trend, r
 
 The repair does not mutate, reconstruct, relabel, or reinterpret a locked record. It adds no member-facing copy or labels.
 
+The member aggregate cache advances to `member-tracking-aggregate-v8-ucl-calendar-release-continuity`, the stored snapshot key advances to `tracking-foundation-r5-ucl-calendar-release-continuity`, and the writer stamps `tracking-foundation-v3-ucl-calendar-release-continuity`. This prevents a valid pre-repair cached payload from taking precedence over the repaired reader after deployment.
+
 ## Verification
 
 The repaired reader replayed the same production rows as:
