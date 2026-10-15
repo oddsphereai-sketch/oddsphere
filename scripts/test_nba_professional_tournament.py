@@ -15,6 +15,16 @@ from scripts.operator import tournament_nba_professional_model as tournament
 
 
 rng = np.random.default_rng(20261015)
+all_missing_train = tournament.pd.DataFrame({"available": [1.0, 2.0], "later_only": [np.nan, np.nan]})
+all_missing_evaluate = tournament.pd.DataFrame({"available": [3.0], "later_only": [4.0]})
+missing_x_train, missing_x_evaluate, _ = tournament.design_matrices(
+    all_missing_train,
+    all_missing_evaluate,
+    ["available", "later_only"],
+    {"family": "ridge", "alpha": 1.0},
+)
+assert np.isfinite(missing_x_train).all()
+assert np.isfinite(missing_x_evaluate).all()
 start = datetime(2023, 1, 1, tzinfo=timezone.utc)
 rows = []
 game_id = 1

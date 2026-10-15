@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r27_date_only_start_fallback"
+RELEASE = "nba_professional_tournament_2026_10_15_r28_all_missing_calibration_feature"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r12_date_only_start_fallback"
-DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r7_date_only_start_fallback"
+DEPLOYMENT_CANDIDATE_RELEASE = "nba_professional_deployment_candidate_2026_10_15_r8_all_missing_calibration_feature"
 MINIMUM_CONFIRMATION_EXACT_PRICE_BETS = 100
 MINIMUM_CONFIRMATION_EXACT_PRICE_COVERAGE = 0.75
 R1_CONFIRMATION = {
@@ -315,8 +315,9 @@ def design_matrices(
     raw_train = train[features].to_numpy(float)
     raw_evaluate = evaluate[features].to_numpy(float)
     missing_columns = np.isnan(raw_train).any(axis=0)
-    medians = np.nanmedian(raw_train, axis=0)
-    medians = np.where(np.isfinite(medians), medians, 0.0)
+    finite_columns = np.isfinite(raw_train).any(axis=0)
+    medians = np.zeros(raw_train.shape[1], dtype=float)
+    medians[finite_columns] = np.nanmedian(raw_train[:, finite_columns], axis=0)
     train_missing = np.isnan(raw_train)
     evaluate_missing = np.isnan(raw_evaluate)
     x_train = np.where(train_missing, medians, raw_train)
