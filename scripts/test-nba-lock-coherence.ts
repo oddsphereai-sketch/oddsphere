@@ -14,6 +14,7 @@ const snapshot = {
 };
 const rows: NbaLockRow[] = [
   { game_id: 1, market: "moneyline", pick: "home", line_value: null, model_version: NBA_PREDICTION_RECORD_RELEASE, locked_at: null, snapshot_json: snapshot },
+  { game_id: 1, market: "spread", pick: "home", line_value: -4.5, model_version: NBA_PREDICTION_RECORD_RELEASE, locked_at: null, snapshot_json: snapshot },
   { game_id: 1, market: "total", pick: "over", line_value: 228.5, model_version: NBA_PREDICTION_RECORD_RELEASE, locked_at: null, snapshot_json: snapshot },
 ];
 
@@ -47,15 +48,9 @@ assert.deepEqual(resolvedLegacyUnlocked.byKey.get("2::moneyline"), legacyUnlocke
 assert.deepEqual(
   assessNbaLockCoherence({
     gameIds: [1],
-    rows: rows.map((row) => ({
-      ...row,
-      snapshot_json: {
-        ...snapshot,
-        displayed_context_markets: {
-          spread: { displayed_at_lock: true, side: "away", line: 4.5, pick: "AWAY +4.5" },
-        },
-      },
-    })),
+    rows: rows.map((row) => row.market === "spread"
+      ? { ...row, pick: "away", line_value: 4.5 }
+      : row),
   }).blockedGameIds,
   [1],
 );

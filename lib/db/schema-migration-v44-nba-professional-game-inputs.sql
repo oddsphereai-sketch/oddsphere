@@ -30,6 +30,8 @@ CREATE INDEX IF NOT EXISTS idx_nba_professional_game_inputs_season_time
 ALTER TABLE public.nba_professional_game_inputs ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.nba_professional_game_inputs FROM anon, authenticated;
 GRANT SELECT, INSERT ON TABLE public.nba_professional_game_inputs TO service_role;
+REVOKE ALL ON SEQUENCE public.nba_professional_game_inputs_id_seq FROM anon, authenticated;
+GRANT USAGE, SELECT ON SEQUENCE public.nba_professional_game_inputs_id_seq TO service_role;
 
 COMMENT ON TABLE public.nba_professional_game_inputs IS
   'Append-only finalized BALLDONTLIE game and aggregate team-box inputs for replaying the released NBA point-in-time model. Existing rows are immutable.';

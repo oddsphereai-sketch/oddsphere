@@ -45,6 +45,13 @@ export function applyNbaLockedMemberSnapshotPrecedence(args: {
       .map((row) => readStoredGameDto(row.snapshot_json))
       .filter((row): row is NbaDailyEdgeGameDto => row !== null);
     if (stored.length === 0) return game;
+    const markets = new Set(lockedRows.map((row) => row.market));
+    if (
+      lockedRows.length !== 3 || stored.length !== 3 ||
+      !["moneyline", "spread", "total"].every((market) => markets.has(market))
+    ) {
+      throw new Error(`NBA locked member DTO is incomplete for game_id=${dbId}`);
+    }
     const identity = JSON.stringify(stored[0]);
     if (
       stored.some((row) => row.game_external_id !== game.game_external_id || JSON.stringify(row) !== identity)

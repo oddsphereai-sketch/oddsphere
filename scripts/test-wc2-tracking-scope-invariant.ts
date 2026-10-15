@@ -131,16 +131,16 @@ test("every non-tracked market is NOT in the official soccer registry", () => {
   }
 });
 
-// ─── 3. MLB / NBA / NHL registries unchanged ────────────────────────
+// ─── 3. MLB / NBA / NHL registry invariants ─────────────────────────
 
 test("MLB tracked markets unchanged: moneyline, total, first_inning", () => {
   const mlb = [...OFFICIAL_TRACKING_MARKETS.mlb].sort();
   assert(JSON.stringify(mlb) === JSON.stringify(["first_inning", "moneyline", "total"]), `MLB drifted: ${mlb.join(",")}`);
 });
 
-test("NBA tracked markets unchanged: moneyline, total", () => {
+test("NBA tracks moneyline, total, and prospectively launched spread", () => {
   const nba = [...OFFICIAL_TRACKING_MARKETS.nba].sort();
-  assert(JSON.stringify(nba) === JSON.stringify(["moneyline", "total"]), `NBA drifted: ${nba.join(",")}`);
+  assert(JSON.stringify(nba) === JSON.stringify(["moneyline", "spread", "total"]), `NBA drifted: ${nba.join(",")}`);
 });
 
 test("NHL regular-season launch tracks moneyline, total, and puck line", () => {

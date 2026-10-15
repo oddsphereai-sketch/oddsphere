@@ -921,7 +921,8 @@ can alter the score or grade in this candidate.
 A credential-backed, read-only rehearsal used the corrected exact-event
 SharpAPI collector and the same DTO/grade code intended for production. It
 covered all three October 20 games and all eleven October 21 games: 14 games,
-42 markets, and 1,316 canonical per-book line rows. The incumbent produced 12
+42 markets, and 1,317 canonical per-book line rows in the final prepublication
+rerun. The incumbent produced 12
 Lean/Best Angle markets; r2 produced 10, with four promotions, six demotions,
 and six side changes. October 20 moved 3 to 2 actionables (one promotion, two
 demotions); October 21 moved 9 to 8 (three promotions, four demotions).
@@ -938,18 +939,32 @@ thresholds. The paired local audit artifacts are
 `nba_professional_r43_current_board/2026-10-20.json` and
 `nba_professional_r43_current_board/2026-10-21.json`.
 
+After reviewing that exact impact, the owner approved the r2 cutover and
+prospective official Spread tracking beginning October 20 with no historical
+backfill. The writer, coherence gate, and T-60 lifecycle therefore treat
+Moneyline, Spread, and Total as one three-row official tuple; the older
+context-only Spread findings above remain historical descriptions of r1, not
+the r2 publication contract.
+
 The release-transition audit also found that the NBA writer previously looked
 up only its current `model_version`, which could make an older immutable lock
 invisible after a release bump. The candidate now resolves all releases for the
 game/market slot, gives any single locked row unconditional precedence, fails
 closed on ambiguous duplicates, and advances only a sole unlocked legacy row
-in place. Future lock snapshots store the complete NBA game DTO in both
+in place. Future lock snapshots store the complete NBA game DTO in all three
 official-market records; the paired reader accepts it only when the records are
 byte-identical, so later model or DTO changes cannot reinterpret the score,
 sides, probabilities, grades, or prices members saw. Focused tests cover old
 lock precedence, duplicate-lock rejection, exact DTO restoration, mismatch
 failure, and complete score/pick/exact-price/grade-input coherence. The full
 repository `verify:model-change` gate passed after these changes.
+
+The final direct member-pipeline rehearsal also proved the intended deployment
+fail-closed behavior: the primary Supabase PostgREST schema cache does not yet
+contain `nba_professional_game_inputs`, so no r2 member response can be
+published until migration v44 is applied and the same rehearsal returns the r2
+release with coherent scores. This is a deployment gate, not permission to
+fall back to default features or silently run the old model under the r2 ID.
 
 ## Upset-aware evaluation
 

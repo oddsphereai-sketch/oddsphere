@@ -185,13 +185,13 @@ async function loadSlateCandidates(
         .in("game_id", gameIds)
         .eq("sport", "nba")
         .eq("model_version", NBA_PREDICTION_RECORD_RELEASE)
-        .in("market", ["moneyline", "total"]);
+        .in("market", ["moneyline", "spread", "total"]);
       if (nbaError) {
         throw new Error(`pregame-sweep NBA lock lookup failed: ${nbaError.message}`);
       }
       for (const gameId of gameIds) {
         const rows = (nbaRows ?? []).filter((row) => row.game_id === gameId);
-        const locked = rows.length === 2 && rows.every((row) => row.locked_at !== null)
+        const locked = rows.length === 3 && rows.every((row) => row.locked_at !== null)
           ? rows.map((row) => row.locked_at as string).sort()[0]!
           : null;
         lockByGame.set(gameId, locked);
@@ -245,12 +245,12 @@ async function applyLocks(
         .eq("game_id", g.game_id)
         .eq("sport", "nba")
         .eq("model_version", NBA_PREDICTION_RECORD_RELEASE)
-        .in("market", ["moneyline", "total"])
+        .in("market", ["moneyline", "spread", "total"])
         .is("locked_at", null)
         .select("id, market");
-      if (nbaLockError || (lockedRows ?? []).length !== 2) {
+      if (nbaLockError || (lockedRows ?? []).length !== 3) {
         errors.push(
-          `game_id=${g.game_id}: NBA official-market lock failed: ${nbaLockError?.message ?? `updated ${(lockedRows ?? []).length}/2 rows`}`,
+          `game_id=${g.game_id}: NBA official-market lock failed: ${nbaLockError?.message ?? `updated ${(lockedRows ?? []).length}/3 rows`}`,
         );
         continue;
       }
@@ -266,7 +266,7 @@ async function applyLocks(
           game_id: g.game_id,
           external_id: g.external_id,
           game_date: g.game_date,
-          markets: ["moneyline", "total"],
+          markets: ["moneyline", "spread", "total"],
           model_version: NBA_PREDICTION_RECORD_RELEASE,
           locked_at: lockedAt,
         },

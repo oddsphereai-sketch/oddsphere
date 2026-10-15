@@ -5,11 +5,11 @@
  * P1-1 (2026-06-10) — codifies the corrected product direction:
  *   • Public tracking markets per sport:
  *       MLB: moneyline, total, first_inning
- *       NBA: moneyline, total
+ *       NBA: moneyline, total, spread (prospective 2026-27 launch)
  *       NHL: moneyline, total, spread (puck line)
  *       WNBA: moneyline, total, spread
  *   • Context-only displayed markets per sport:
- *       NBA: spread (rendered in DailyEdgeShell as `Sprd*`)
+ *       NBA: none
  *   • Other sports (CBB, UCL): empty until intentional
  *     product launch.
  *   • Unknown / unregistered (sport, market) tuples FAIL CLOSED
@@ -45,11 +45,11 @@ check("MLB first_inning officially tracked", isOfficiallyTrackedMarket("mlb", "f
 check("MLB spread NOT officially tracked", isOfficiallyTrackedMarket("mlb", "spread") === false);
 check("MLB context-only is empty", getContextOnlyDisplayMarkets("mlb").length === 0);
 
-// NBA — moneyline + total tracked; spread is context-only
+// NBA — all three standard markets tracked prospectively from 2026-27
 check("NBA moneyline officially tracked", isOfficiallyTrackedMarket("nba", "moneyline") === true);
 check("NBA total officially tracked", isOfficiallyTrackedMarket("nba", "total") === true);
-check("NBA spread NOT officially tracked", isOfficiallyTrackedMarket("nba", "spread") === false);
-check("NBA spread is context-only", isContextOnlyDisplayMarket("nba", "spread") === true);
+check("NBA spread officially tracked", isOfficiallyTrackedMarket("nba", "spread") === true);
+check("NBA spread is not context-only", isContextOnlyDisplayMarket("nba", "spread") === false);
 check("NBA first_inning NOT officially tracked", isOfficiallyTrackedMarket("nba", "first_inning") === false);
 
 // NHL — moneyline + total + spread (puck-line) are officially tracked
@@ -107,8 +107,8 @@ check("Unknown market 'frobnicate' NOT context-only for any sport (NBA probe)", 
 // Registry shape — verify constants directly
 check("OFFICIAL_TRACKING_MARKETS.mlb = [moneyline, total, first_inning]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.mlb) === JSON.stringify(["moneyline", "total", "first_inning"]));
-check("OFFICIAL_TRACKING_MARKETS.nba = [moneyline, total]",
-  JSON.stringify(OFFICIAL_TRACKING_MARKETS.nba) === JSON.stringify(["moneyline", "total"]));
+check("OFFICIAL_TRACKING_MARKETS.nba = [moneyline, total, spread]",
+  JSON.stringify(OFFICIAL_TRACKING_MARKETS.nba) === JSON.stringify(["moneyline", "total", "spread"]));
 check("OFFICIAL_TRACKING_MARKETS.nhl = [moneyline, total, spread]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.nhl) === JSON.stringify(["moneyline", "total", "spread"]));
 check("OFFICIAL_TRACKING_MARKETS.soccer = [match_result, total, btts, double_chance]",
@@ -119,8 +119,8 @@ check("OFFICIAL_TRACKING_MARKETS.nfl = [moneyline, total, spread]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.nfl) === JSON.stringify(["moneyline", "total", "spread"]));
 check("OFFICIAL_TRACKING_MARKETS.cfb = [moneyline, total, spread]",
   JSON.stringify(OFFICIAL_TRACKING_MARKETS.cfb) === JSON.stringify(["moneyline", "total", "spread"]));
-check("CONTEXT_ONLY_DISPLAY_MARKETS.nba = [spread]",
-  JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nba) === JSON.stringify(["spread"]));
+check("CONTEXT_ONLY_DISPLAY_MARKETS.nba is empty",
+  JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nba) === JSON.stringify([]));
 check("CONTEXT_ONLY_DISPLAY_MARKETS.nhl is empty",
   JSON.stringify(CONTEXT_ONLY_DISPLAY_MARKETS.nhl) === JSON.stringify([]));
 check("NBA retains its existing public history rather than receiving a new launch boundary",
@@ -137,10 +137,10 @@ check("legacy-compatible tracking route applies official eligibility before aggr
   /const publiclyTrackedRows = allRows\.filter\([\s\S]{0,180}isPublicallyTracked/.test(trackingRouteSource) &&
   /buildAllTime\(publiclyTrackedRows\)/.test(trackingRouteSource));
 check("tracking caches are release-bumped so prior-contract counts cannot survive deployment",
-  trackingFoundationRouteSource.includes("member-tracking-aggregate-v10-ucl-projected-forecast-continuity") &&
-  snapshotKeySource.includes("tracking-foundation-r7-ucl-projected-forecast-continuity") &&
-  snapshotWriterSource.includes("tracking-foundation-v5-ucl-projected-forecast-continuity") &&
-  snapshotKeySource.includes("tracking::all::nba-preseason-only-window-r2"));
+  trackingFoundationRouteSource.includes("member-tracking-aggregate-v11-nba-spread-official") &&
+  snapshotKeySource.includes("tracking-foundation-r8-nba-spread-official") &&
+  snapshotWriterSource.includes("tracking-foundation-v6-nba-spread-official") &&
+  snapshotKeySource.includes("tracking::all::nba-spread-official-r3"));
 
 // assertOfficialTrackingMarket — happy path doesn't throw
 let assertHappyOk = true;
@@ -167,13 +167,8 @@ try {
 }
 check("assertOfficialTrackingMarket allows all officially-tracked markets", assertHappyOk);
 
-let assertNbaSpreadThrew = false;
-try {
-  assertOfficialTrackingMarket("nba", "spread");
-} catch {
-  assertNbaSpreadThrew = true;
-}
-check("assertOfficialTrackingMarket throws for NBA context-only spread", assertNbaSpreadThrew);
+assertOfficialTrackingMarket("nba", "spread");
+check("assertOfficialTrackingMarket allows NBA spread", true);
 
 // assertOfficialTrackingMarket — throws for unsupported NHL first-inning
 let assertNhlFirstInningThrew = false;

@@ -65,6 +65,7 @@ const migration = readFileSync(
 );
 assert.match(migration, /UNIQUE \(collector_release, provider_game_id\)/);
 assert.match(migration, /GRANT SELECT, INSERT/);
+assert.match(migration, /GRANT USAGE, SELECT ON SEQUENCE/);
 assert.doesNotMatch(migration, /GRANT[\s\S]*UPDATE/);
 
 console.log("NBA professional game inputs: aggregate parity and append-only storage contract passed.");

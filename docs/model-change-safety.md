@@ -513,6 +513,9 @@ site score, all three sides, probabilities, grades, locks, and tracking one
 coherent NBA forecast before opening night. This exception is limited to the r2
 release family and evidence in
 `docs/model-audits/2026-10-15-nba-professional-model-r2-current-audit.md`.
+Daniel then explicitly approved the reported 12-to-10 actionable-board impact,
+the additive current-state migration, the r2 production cutover, and prospective
+official NBA Spread tracking beginning October 20 with no historical backfill.
 
 The portable ratings-and-schedule ridge scorer is frozen from the 2024-25
 selection partition and was confirmed once on the untouched 2025-26 regular
@@ -534,10 +537,13 @@ claim. The exact October 20-21 current-board rehearsal covers all 14 games and
 demotions, with six side changes. This contraction is explicit, comes primarily
 from replacing the incumbent's overconfident Total/Spread probabilities with
 the confirmed residual distribution, and still leaves ten actionables; it must
-not be concealed or enlarged with unvalidated thresholds. Owner approval of
-this complete r2 publication is required before merge.
+not be concealed or enlarged with unvalidated thresholds. The owner explicitly
+approved this complete r2 publication and its prospective Spread launch on
+2026-10-15.
 
-Current-season state is append-only finalized BALLDONTLIE game/aggregate-box
+Moneyline, Spread, and Total are all official prospective markets for this
+release and lock atomically as one three-row tuple. Current-season state is
+append-only finalized BALLDONTLIE game/aggregate-box
 input under the existing `prediction_pipeline:nba` writer lease. A missing
 state table, incomplete provider identity, malformed artifact, absent tip time,
 or feature-release mismatch fails the incoming snapshot and preserves the last

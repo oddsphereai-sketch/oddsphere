@@ -29,11 +29,15 @@ import { publicSplitsSupported } from "../../config/publicSplitsCapability";
 import { buildNbaFeatureSnapshotsWithProvenance } from "./featureSnapshot";
 import { fetchEspnNbaInjuries } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
-import { buildNbaMarketConsensus } from "../../automodel/nba/nbaMarketConsensus";
 import {
   assertNbaChampionRuntime,
   NBA_MARKET_MARRIAGE_RELEASE,
 } from "../../automodel/nba/nbaChampionRuntime";
+import {
+  buildNbaProfessionalRuntimeFeatures,
+  NBA_PROFESSIONAL_MODEL_ARTIFACT,
+  selectNbaProfessionalPortableFeatures,
+} from "../../automodel/nba/nbaProfessionalRuntimeArtifacts";
 import { etSlateDateToUtcWindow } from "./etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -69,6 +73,23 @@ import {
   loadNbaRollingSchedule,
   nbaMemberAnalysisEligible,
 } from "./nbaRollingSchedule";
+import {
+  applyNbaProfessionalCandidate,
+  buildNbaProfessionalCandidate,
+} from "./nbaProfessionalCandidate";
+import { loadNbaProfessionalCurrentState } from "./nbaProfessionalGameInputs";
+import {
+  applyNbaLockedMemberSnapshotPrecedence,
+  type NbaLockedMemberRecord,
+} from "./nbaLockedMemberSnapshot";
+
+function nbaProviderSeasonForSlate(date: string): number {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+  if (!match) throw new Error(`Invalid NBA slate date: ${date}`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  return month >= 7 ? year : year - 1;
+}
 
 /**
  * Phase 7H — internal NBA pipeline result. Returned by
@@ -140,6 +161,26 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }
   }
   const provenanceByGame = new Map(provenance.map((p) => [p.game_external_id, p]));
+  const providerSeason = nbaProviderSeasonForSlate(date);
+  const currentState = snapshots.length === 0
+    ? { games: [], boxes: [] }
+    : await loadNbaProfessionalCurrentState({ supabase, season: providerSeason });
+  const professionalFeatures = buildNbaProfessionalRuntimeFeatures({
+    upcomingGames: snapshots.map((snapshot) => {
+      if (snapshot.game_time_iso === null) {
+        throw new Error(`NBA professional runtime game ${snapshot.game_external_id} has no tip time.`);
+      }
+      return {
+        gameId: snapshot.game_external_id,
+        season: providerSeason,
+        startTime: snapshot.game_time_iso,
+        homeTeam: snapshot.home_team.abbreviation,
+        awayTeam: snapshot.away_team.abbreviation,
+      };
+    }),
+    currentGames: currentState.games,
+    currentBoxes: currentState.boxes,
+  });
 
   // Resolve external_id → games.id so we can pull lines from DB.
   const gameExternalIds = snapshots.map((s) => s.game_external_id);
@@ -247,13 +288,23 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }
   }
 
-  const games: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
+  const dynamicGames: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
     const prov = provenanceByGame.get(s.game_external_id);
     if (prov === undefined) return [];
     const lines = linesByExtId.get(s.game_external_id) ?? [];
-    const pred = runNbaAutoModelV2(s, "t60_locked", {
+    const baseline = runNbaAutoModelV2(s, "t60_locked", {
       bookCount: new Set(lines.map((line) => line.sportsbook)).size,
     });
+    const featureRow = professionalFeatures.get(s.game_external_id);
+    if (!featureRow) throw new Error(`Missing NBA professional feature row for ${s.game_external_id}.`);
+    const candidate = buildNbaProfessionalCandidate({
+      artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
+      featureRow: selectNbaProfessionalPortableFeatures(featureRow),
+      lines,
+      history: movementHistory,
+      externalGameId: s.game_external_id,
+    });
+    const pred = applyNbaProfessionalCandidate({ baseline, candidate });
     const splitsRow = matchSplitsRow(
       splits,
       s.home_team.abbreviation,
@@ -272,45 +323,60 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       splitsRow,
       opportunities: gameOpps,
     });
-    // Internal-only market-marriage audit. The score remains independent-first;
-    // robust same-book market evidence still informs exact-price economics and
-    // grades through buildNbaGameIntelligence. No unvalidated continuous market
-    // blend or split-only flip is allowed to rewrite the score.
-    const consensus = buildNbaMarketConsensus(lines
-      .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
-      .map((line) => ({
-        sportsbook: line.sportsbook,
-        market_type: line.market_type as "moneyline" | "spread" | "total",
-        side: line.side!,
-        line_value: line.line_value,
-        odds_american: line.odds_american,
-      })));
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,
-      independent_primary: true,
+      independent_primary: false,
       independent_projection: {
-        home_score: pred.predicted_home_score,
-        away_score: pred.predicted_away_score,
-        total: pred.predicted_total,
-        margin_home: pred.predicted_home_score - pred.predicted_away_score,
+        home_score: candidate.independent.homeScore,
+        away_score: candidate.independent.awayScore,
+        total: candidate.independent.total,
+        margin_home: candidate.independent.marginHome,
       },
       market_consensus: {
-        home_moneyline_probability: consensus.mlHomeNoVig,
-        spread_home: consensus.spreadHome,
-        total: consensus.totalLine,
-        strength: consensus.consensusStrength,
+        home_moneyline_probability: candidate.consensus.mlHomeNoVig,
+        spread_home: candidate.consensus.spreadHome,
+        total: candidate.consensus.totalLine,
+        strength: candidate.consensus.consensusStrength,
         accepted_books: {
-          moneyline: consensus.mlAcceptedBooks,
-          spread: consensus.spreadAcceptedBooks,
-          total: consensus.totalAcceptedBooks,
+          moneyline: candidate.consensus.mlAcceptedBooks,
+          spread: candidate.consensus.spreadAcceptedBooks,
+          total: candidate.consensus.totalAcceptedBooks,
         },
       },
       forecast_correction: {
-        applied: false,
-        reason: "no NBA forecast correction has cleared chronological validation",
+        applied: candidate.final.marketApplied.margin || candidate.final.marketApplied.total,
+        release: candidate.final.release,
+        movement_applied: candidate.final.movementApplied,
+        opening_spread_home: candidate.openingSpread?.spreadHome ?? null,
+        final_projection: {
+          home_score: candidate.final.homeScore,
+          away_score: candidate.final.awayScore,
+          total: candidate.final.total,
+          margin_home: candidate.final.marginHome,
+        },
       },
     };
     return [dto];
+  });
+
+  const externalToDbId = new Map<number, number>();
+  for (const [dbId, ext] of dbIdToExt.entries()) externalToDbId.set(ext, dbId);
+  let lockedRows: NbaLockedMemberRecord[] = [];
+  if ((gameRows ?? []).length > 0) {
+    const { data, error } = await supabase
+      .from("prediction_records")
+      .select("game_id,market,locked_at,snapshot_json")
+      .eq("sport", "nba")
+      .eq("slate_date", date)
+      .in("game_id", (gameRows ?? []).map((game) => game.id))
+      .not("locked_at", "is", null);
+    if (error) throw new Error(`NBA locked member snapshot lookup failed: ${error.message}`);
+    lockedRows = (data ?? []) as NbaLockedMemberRecord[];
+  }
+  const games = applyNbaLockedMemberSnapshotPrecedence({
+    games: dynamicGames,
+    dbIdByExternalId: externalToDbId,
+    rows: lockedRows,
   });
 
   const marketSignalsCapability =
@@ -360,9 +426,6 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       spread: lookup("spread", intel.spread),
     });
   }
-
-  const externalToDbId = new Map<number, number>();
-  for (const [dbId, ext] of dbIdToExt.entries()) externalToDbId.set(ext, dbId);
 
   return { nbaDto, openPricesByGame, dbIdByExternalId: externalToDbId };
 }

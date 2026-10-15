@@ -15,7 +15,7 @@ const locked = {
   intelligence: { ml: { pick_side: "home" } },
 } as NbaDailyEdgeGameDto;
 const map = new Map([[9001, 44]]);
-const rows = ["moneyline", "total"].map((market) => ({
+const rows = ["moneyline", "spread", "total"].map((market) => ({
   game_id: 44,
   market,
   locked_at: "2026-10-20T22:00:00.000Z",
@@ -30,6 +30,12 @@ const restored = applyNbaLockedMemberSnapshotPrecedence({
 assert.deepEqual(restored, [locked]);
 assert.notEqual(restored[0], dynamic);
 
+assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({
+  games: [dynamic],
+  dbIdByExternalId: map,
+  rows: rows.slice(0, 2),
+}), /locked member DTO is incomplete/);
+
 const legacy = applyNbaLockedMemberSnapshotPrecedence({
   games: [dynamic],
   dbIdByExternalId: map,
@@ -43,6 +49,7 @@ assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({
   rows: [
     rows[0]!,
     { ...rows[1]!, snapshot_json: { nba_game_dto_at_capture: dynamic } },
+    rows[2]!,
   ],
 }), /locked member DTO mismatch/);
 
