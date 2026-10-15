@@ -215,11 +215,30 @@ with tempfile.TemporaryDirectory(prefix="nba-tournament-test-") as temporary:
     assert report["confirmation"]["openingMarketEvaluation"]["spread"]["exactPrice"]["bets"] == 48
     assert report["confirmation"]["openingMarketEvaluation"]["total"]["exactPrice"]["bets"] == 48
     for market in ("moneyline", "spread", "total"):
+        assert report["actionableThresholdSelection"][market]["minimumSelectionBets"] == 20
         threshold = report["actionableThresholdSelection"][market]["selected"]
         confirmation = report["actionableConfirmation"][market]
         assert (threshold is None) == (confirmation is None)
         if confirmation is not None:
             assert confirmation["bets"] >= 0
+    large_threshold_frame = tournament.pd.DataFrame(index=range(500))
+    for column in (
+        "target_home_margin", "target_total",
+        "evaluation_opening_market_home_probability",
+        "evaluation_opening_moneyline_home_price", "evaluation_opening_moneyline_away_price",
+        "evaluation_opening_home_spread", "evaluation_opening_home_spread_price",
+        "evaluation_opening_away_spread_price", "evaluation_opening_total",
+        "evaluation_opening_over_price", "evaluation_opening_under_price",
+    ):
+        large_threshold_frame[column] = 1.0
+    large_thresholds = tournament.select_actionable_thresholds(
+        large_threshold_frame,
+        np.full(500, 2.0),
+        np.full(500, 1.0),
+        12.0,
+        18.0,
+    )
+    assert all(details["minimumSelectionBets"] == 100 for details in large_thresholds.values())
     assert report["actionableThresholdSelection"]["moneyline"]["candidates"][0]["selectionRule"] == (
         "minimum_model_probability_edge_vs_no_vig_opening_consensus"
     )

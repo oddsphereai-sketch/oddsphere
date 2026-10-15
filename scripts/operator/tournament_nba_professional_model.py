@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 
-RELEASE = "nba_professional_tournament_2026_10_15_r16_offseason_strength_regression"
+RELEASE = "nba_professional_tournament_2026_10_15_r17_actionable_sample_floor"
 FEATURE_RELEASE = "nba_point_in_time_features_2026_10_15_r9_offseason_strength_regression"
 R1_CONFIRMATION = {
     "season": 2025,
@@ -486,7 +486,10 @@ def select_actionable_thresholds(
     margin_sigma: float,
     total_sigma: float,
 ) -> dict[str, Any]:
-    minimum_bets = min(100, max(20, len(frame) // 10))
+    # The threshold partition is the later 40% of the selection season. A
+    # full NBA season therefore has enough rows to require 100 decisions;
+    # small synthetic contract fixtures retain a proportional floor.
+    minimum_bets = min(100, max(20, math.ceil(len(frame) * 0.25)))
     grids = {
         "moneyline": (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.10),
         "spread": (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08),
