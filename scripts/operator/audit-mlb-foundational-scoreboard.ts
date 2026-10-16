@@ -93,6 +93,34 @@ type ErrorMetric = {
   winnerPct: number;
 };
 
+type MlProbabilityMetric = {
+  n: number;
+  wins: number;
+  losses: number;
+  accuracy: number | null;
+  brier: number | null;
+  logLoss: number | null;
+  homePickPct: number | null;
+  upsetPicks: number;
+  upsetWins: number;
+  upsetAccuracy: number | null;
+  correctionsVsMarketFavorite: number;
+  harmsVsMarketFavorite: number;
+  netCorrectionsVsMarketFavorite: number;
+  units: number;
+};
+
+type MlProbabilityRow = {
+  game: Game;
+  probabilityHome: number;
+};
+
+type MlFeatureSpec = {
+  name: string;
+  featureNames: string[];
+  values: (game: Game) => number[] | null;
+};
+
 type CandidateTotalDecision = {
   side: TotalSide;
   meanSide: TotalSide;
@@ -338,6 +366,292 @@ function marketMlSide(game: Game): Side | null {
 function marketUnderdogSide(game: Game): Side | null {
   const favorite = marketMlSide(game);
   return favorite === null ? null : favorite === "home" ? "away" : "home";
+}
+
+function clampProbability(value: number): number {
+  return Math.min(1 - 1e-6, Math.max(1e-6, value));
+}
+
+function logit(value: number): number {
+  const probability = clampProbability(value);
+  return Math.log(probability / (1 - probability));
+}
+
+function sigmoid(value: number): number {
+  if (value >= 0) return 1 / (1 + Math.exp(-value));
+  const exponential = Math.exp(value);
+  return exponential / (1 + exponential);
+}
+
+function mlWinnerHome(game: Game): number {
+  return game.home > game.away ? 1 : 0;
+}
+
+function independentMargin(game: Game): number | null {
+  return num(v22(game.ml ?? game.total).independent_home_diff);
+}
+
+function matchupFeatures(game: Game): number[] | null {
+  const audit = v22(game.ml ?? game.total);
+  const factors = obj(obj(audit.feature_capture).factors);
+  const home = obj(factors.home);
+  const away = obj(factors.away);
+  const starter = obj(obj(audit.feature_capture).starter);
+  const homeStarterEra = num(obj(starter.home).season_era);
+  const awayStarterEra = num(obj(starter.away).season_era);
+  const homeOffense = num(home.offense);
+  const awayOffense = num(away.offense);
+  const homePitchingOpponentFactor = num(home.pitcher_factor_opp);
+  const awayPitchingOpponentFactor = num(away.pitcher_factor_opp);
+  const homeBullpenOpponentFactor = num(home.bullpen_factor_opp);
+  const awayBullpenOpponentFactor = num(away.bullpen_factor_opp);
+  if (
+    homeStarterEra === null || awayStarterEra === null ||
+    homeOffense === null || awayOffense === null ||
+    homePitchingOpponentFactor === null || awayPitchingOpponentFactor === null ||
+    homeBullpenOpponentFactor === null || awayBullpenOpponentFactor === null
+  ) return null;
+  return [
+    awayStarterEra - homeStarterEra,
+    homeOffense - awayOffense,
+    homePitchingOpponentFactor - awayPitchingOpponentFactor,
+    homeBullpenOpponentFactor - awayBullpenOpponentFactor,
+  ];
+}
+
+function fitLogisticModel(
+  rows: Array<{ values: number[]; outcome: number }>,
+  ridgePenalty = 0.05,
+): { means: number[]; scales: number[]; weights: number[] } | null {
+  if (!rows.length) return null;
+  const width = rows[0].values.length;
+  const means = Array.from({ length: width }, (_, index) =>
+    rows.reduce((sum, row) => sum + row.values[index], 0) / rows.length);
+  const scales = Array.from({ length: width }, (_, index) => {
+    const variance = rows.reduce((sum, row) => sum + (row.values[index] - means[index]) ** 2, 0) / rows.length;
+    return Math.max(Math.sqrt(variance), 1e-6);
+  });
+  const standardized = rows.map((row) => ({
+    values: row.values.map((value, index) => (value - means[index]) / scales[index]),
+    outcome: row.outcome,
+  }));
+  const weights = Array(width + 1).fill(0) as number[];
+  for (let iteration = 0; iteration < 4000; iteration++) {
+    const gradient = Array(width + 1).fill(0) as number[];
+    for (const row of standardized) {
+      const linear = weights[0] + row.values.reduce((sum, value, index) => sum + value * weights[index + 1], 0);
+      const error = sigmoid(linear) - row.outcome;
+      gradient[0] += error;
+      row.values.forEach((value, index) => { gradient[index + 1] += error * value; });
+    }
+    const learningRate = 0.08 / Math.sqrt(1 + iteration / 250);
+    weights[0] -= learningRate * gradient[0] / standardized.length;
+    for (let index = 1; index < weights.length; index++) {
+      const regularizedGradient = gradient[index] / standardized.length + ridgePenalty * weights[index];
+      weights[index] -= learningRate * regularizedGradient;
+    }
+  }
+  return { means, scales, weights };
+}
+
+function predictLogistic(
+  model: { means: number[]; scales: number[]; weights: number[] },
+  values: number[],
+): number {
+  const linear = model.weights[0] + values.reduce((sum, value, index) =>
+    sum + ((value - model.means[index]) / model.scales[index]) * model.weights[index + 1], 0);
+  return sigmoid(linear);
+}
+
+function mlProbabilityMetric(rows: MlProbabilityRow[]): MlProbabilityMetric {
+  let wins = 0;
+  let losses = 0;
+  let brier = 0;
+  let logLoss = 0;
+  let homePicks = 0;
+  let upsetPicks = 0;
+  let upsetWins = 0;
+  let corrections = 0;
+  let harms = 0;
+  let units = 0;
+  for (const row of rows) {
+    const probability = clampProbability(row.probabilityHome);
+    const outcome = mlWinnerHome(row.game);
+    const side: Side = probability >= 0.5 ? "home" : "away";
+    const marketSide = marketMlSide(row.game);
+    const result = mlOutcome(row.game, side);
+    if (side === "home") homePicks++;
+    if (result === "win") wins++;
+    if (result === "loss") losses++;
+    units += profit(mlSideOdds(row.game, side), result);
+    brier += (probability - outcome) ** 2;
+    logLoss += -(outcome * Math.log(probability) + (1 - outcome) * Math.log(1 - probability));
+    if (marketSide && side !== marketSide) {
+      upsetPicks++;
+      if (result === "win") {
+        upsetWins++;
+        corrections++;
+      } else {
+        harms++;
+      }
+    }
+  }
+  const n = rows.length;
+  return {
+    n,
+    wins,
+    losses,
+    accuracy: n ? round(wins / n, 4) : null,
+    brier: n ? round(brier / n, 5) : null,
+    logLoss: n ? round(logLoss / n, 5) : null,
+    homePickPct: n ? round(homePicks / n, 4) : null,
+    upsetPicks,
+    upsetWins,
+    upsetAccuracy: upsetPicks ? round(upsetWins / upsetPicks, 4) : null,
+    correctionsVsMarketFavorite: corrections,
+    harmsVsMarketFavorite: harms,
+    netCorrectionsVsMarketFavorite: corrections - harms,
+    units: round(units),
+  };
+}
+
+function probabilityWindows(games: Game[], rows: MlProbabilityRow[]): Record<string, MlProbabilityMetric> {
+  return Object.fromEntries((['train', 'validation', 'holdout'] as const).map((partition) => [
+    partition,
+    mlProbabilityMetric(rows.filter((row) => chronologicalLabel(games, row.game) === partition)),
+  ]));
+}
+
+function selectiveMarketOverrideRows(
+  rows: MlProbabilityRow[],
+  minimumCandidateConfidence: number,
+): MlProbabilityRow[] {
+  return rows.flatMap((row) => {
+    const marketProbabilityHome = homeMarketProbability(row.game.ml);
+    const marketSide = marketMlSide(row.game);
+    if (marketProbabilityHome === null || marketSide === null) return [];
+    const candidateSide: Side = row.probabilityHome >= 0.5 ? "home" : "away";
+    const candidateConfidence = candidateSide === "home" ? row.probabilityHome : 1 - row.probabilityHome;
+    return [{
+      game: row.game,
+      probabilityHome: candidateSide !== marketSide && candidateConfidence >= minimumCandidateConfidence
+        ? row.probabilityHome
+        : marketProbabilityHome,
+    }];
+  });
+}
+
+function selectiveMarketOverrideAudit(games: Game[], predictions: MlProbabilityRow[]): Record<string, unknown> {
+  const fixedThresholds = [0.5, 0.525, 0.55, 0.575, 0.6, 0.625, 0.65];
+  const candidates = fixedThresholds.map((threshold) => {
+    const rows = selectiveMarketOverrideRows(predictions, threshold);
+    const trainRows = rows.filter((row) => chronologicalLabel(games, row.game) === "train");
+    return { threshold, rows, trainMetric: mlProbabilityMetric(trainRows) };
+  });
+  const eligible = candidates.filter((candidate) =>
+    candidate.trainMetric.upsetPicks >= 10 && candidate.trainMetric.netCorrectionsVsMarketFavorite > 0);
+  const selected = [...eligible].sort((a, b) =>
+    b.trainMetric.netCorrectionsVsMarketFavorite - a.trainMetric.netCorrectionsVsMarketFavorite ||
+    (a.trainMetric.brier ?? Number.POSITIVE_INFINITY) - (b.trainMetric.brier ?? Number.POSITIVE_INFINITY) ||
+    b.threshold - a.threshold)[0] ?? null;
+  return {
+    protocol: "Threshold selected from a fixed grid on train only; at least 10 train overrides required; validation and holdout remain untouched.",
+    trainThresholdSearch: Object.fromEntries(candidates.map((candidate) => [candidate.threshold.toFixed(3), candidate.trainMetric])),
+    selectedThreshold: selected?.threshold ?? null,
+    selected: selected ? {
+      all: mlProbabilityMetric(selected.rows),
+      chronology: probabilityWindows(games, selected.rows),
+    } : null,
+  };
+}
+
+function moneylineArchitectureAudit(games: Game[]): Record<string, unknown> {
+  const specs: MlFeatureSpec[] = [
+    {
+      name: "marketOnly",
+      featureNames: ["market_home_logit"],
+      values: (game) => {
+        const market = homeMarketProbability(game.ml);
+        return market === null ? null : [logit(market)];
+      },
+    },
+    {
+      name: "independentOnly",
+      featureNames: ["independent_home_margin"],
+      values: (game) => {
+        const margin = independentMargin(game);
+        return margin === null ? null : [margin];
+      },
+    },
+    {
+      name: "marketPlusIndependent",
+      featureNames: ["market_home_logit", "independent_home_margin"],
+      values: (game) => {
+        const market = homeMarketProbability(game.ml);
+        const margin = independentMargin(game);
+        return market === null || margin === null ? null : [logit(market), margin];
+      },
+    },
+    {
+      name: "marketIndependentAndMatchups",
+      featureNames: [
+        "market_home_logit",
+        "independent_home_margin",
+        "away_minus_home_starter_era",
+        "home_minus_away_offense_factor",
+        "home_minus_away_pitcher_opponent_factor",
+        "home_minus_away_bullpen_opponent_factor",
+      ],
+      values: (game) => {
+        const market = homeMarketProbability(game.ml);
+        const margin = independentMargin(game);
+        const matchups = matchupFeatures(game);
+        return market === null || margin === null || !matchups ? null : [logit(market), margin, ...matchups];
+      },
+    },
+  ];
+
+  const models = Object.fromEntries(specs.map((spec) => {
+    const eligible = games.flatMap((game) => {
+      const values = spec.values(game);
+      return values ? [{ game, values, outcome: mlWinnerHome(game) }] : [];
+    });
+    const train = eligible.filter((row) => chronologicalLabel(games, row.game) === "train");
+    const model = fitLogisticModel(train);
+    if (!model) return [spec.name, { error: "no train rows" }];
+    const predictions = eligible.map((row) => ({
+      game: row.game,
+      probabilityHome: predictLogistic(model, row.values),
+    }));
+    const marketRows = eligible.flatMap((row) => {
+      const probabilityHome = homeMarketProbability(row.game.ml);
+      return probabilityHome === null ? [] : [{ game: row.game, probabilityHome }];
+    });
+    return [spec.name, {
+      protocol: "fixed architecture; standardized ridge logistic fit on first 60% only; later 40% untouched",
+      featureNames: spec.featureNames,
+      eligibleGames: eligible.length,
+      trainGames: train.length,
+      coefficientsStandardized: {
+        intercept: round(model.weights[0], 5),
+        ...Object.fromEntries(spec.featureNames.map((name, index) => [name, round(model.weights[index + 1], 5)])),
+      },
+      candidate: {
+        all: mlProbabilityMetric(predictions),
+        chronology: probabilityWindows(games, predictions),
+      },
+      selectiveMarketOverride: selectiveMarketOverrideAudit(games, predictions),
+      pairedMarketProbabilityBaseline: {
+        all: mlProbabilityMetric(marketRows),
+        chronology: probabilityWindows(games, marketRows),
+      },
+    }];
+  }));
+
+  return {
+    decisionRule: "A challenger must beat the paired market-favorite accuracy baseline on both validation and holdout, improve probability quality, and retain selective upset corrections. Units are diagnostic, not the selection objective.",
+    models,
+  };
 }
 
 function storedTotalSide(game: Game): TotalSide | null {
@@ -1191,6 +1505,54 @@ function changedSides(games: Game[], candidate: (g: Game) => Side | null): Recor
     if (oldResult === "win" && newResult === "loss") harms++;
   }
   return { flips, corrections, harms, netCorrections: corrections - harms };
+}
+
+function moneylineOverrideCohorts(
+  games: Game[],
+  candidate: (game: Game) => Side | null,
+): Record<string, unknown> {
+  type OverrideRow = { game: Game; candidateSide: Side; category: string };
+  const rows: OverrideRow[] = [];
+  for (const game of games) {
+    const marketSide = marketMlSide(game);
+    const candidateSide = candidate(game);
+    const marketHome = homeMarketProbability(game.ml);
+    if (!marketSide || !candidateSide || candidateSide === marketSide || marketHome === null) continue;
+    const favoriteProbability = Math.max(marketHome, 1 - marketHome);
+    const margin = independentMargin(game);
+    const categories = [
+      `favorite_strength:${favoriteProbability < 0.55 ? "lt55" : favoriteProbability < 0.6 ? "55to60" : favoriteProbability < 0.65 ? "60to65" : "gte65"}`,
+      `favorite_location:${marketSide}`,
+      `data_quality:${qualityTier(game)}`,
+      `independent_margin:${margin === null ? "missing" : Math.abs(margin) < 0.5 ? "lt0_5" : Math.abs(margin) < 1 ? "0_5to1" : "gte1"}`,
+    ];
+    for (const category of categories) rows.push({ game, candidateSide, category });
+  }
+  const summarize = (values: OverrideRow[]) => {
+    const wins = values.filter((row) => mlOutcome(row.game, row.candidateSide) === "win").length;
+    const losses = values.length - wins;
+    return {
+      overrides: values.length,
+      corrections: wins,
+      harms: losses,
+      netCorrections: wins - losses,
+      overrideAccuracy: values.length ? round(wins / values.length, 4) : null,
+    };
+  };
+  const categories = [...new Set(rows.map((row) => row.category))].sort();
+  return {
+    overall: summarize(rows.filter((row) => row.category.startsWith("favorite_strength:"))),
+    cohorts: Object.fromEntries(categories.map((category) => {
+      const values = rows.filter((row) => row.category === category);
+      return [category, {
+        all: summarize(values),
+        chronology: Object.fromEntries((['train', 'validation', 'holdout'] as const).map((partition) => [
+          partition,
+          summarize(values.filter((row) => chronologicalLabel(games, row.game) === partition)),
+        ])),
+      }];
+    })),
+  };
 }
 
 function totalFlipAudit(
@@ -2704,6 +3066,7 @@ async function main(): Promise<void> {
     },
     scoreModels,
     moneyline: pack(mlRules),
+    moneylineArchitectureAudit: moneylineArchitectureAudit(games),
     pairedCandidateCohort: {
       games: candidateCohort.length,
       scoreModels: {
@@ -2747,6 +3110,17 @@ async function main(): Promise<void> {
       storedIndependentInsteadOfShipped: changedSides(games, (g) => projectedMlSide(g, "independent_home_diff")),
       storedPosteriorInsteadOfShipped: changedSides(games, (g) => projectedMlSide(g, "posterior_home_diff")),
       marketFavoriteInsteadOfShipped: changedSides(games, marketMlSide),
+    },
+    moneylineOverrideCohorts: {
+      shippedInsteadOfMarketFavorite: moneylineOverrideCohorts(games, storedMlSide),
+      storedIndependentInsteadOfMarketFavorite: moneylineOverrideCohorts(
+        games,
+        (game) => projectedMlSide(game, "independent_home_diff"),
+      ),
+      storedPosteriorInsteadOfMarketFavorite: moneylineOverrideCohorts(
+        games,
+        (game) => projectedMlSide(game, "posterior_home_diff"),
+      ),
     },
     totalCandidateFlipAudit: {
       versusShipped: totalFlipAudit(candidateCohort, storedTotalSide, (g) => candidateTotalSide(g, "arithmetic_preserve_margin")),

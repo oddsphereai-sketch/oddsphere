@@ -169,6 +169,42 @@ This does not authorize deleting the market reader. It identifies where the curr
 probability, and reader layers need distinct responsibilities instead of blending the offered price
 into the independent probability and then reading that market a second time.
 
+## Moneyline predictive-value audit
+
+Moneyline profit does not prove predictive lift. Across 1,486 games with a frozen market anchor,
+blindly selecting the market favorite is 868-618 (58.41%) but loses 9.02 units at the recorded
+prices. The shipped final side is 864-624 across 1,488 games and +25.01 units. On the exact paired
+rows, the shipped model's 281 departures from the favorite correct 138 favorite losses and create
+143 new losses: **five net accuracy harms**. The price/value result is real, but it is not evidence
+that the model calls more winners than the favorite baseline.
+
+The audit therefore fits four fixed ridge-logistic architectures on the first 60% only and evaluates
+the later 40% without refitting: market probability alone; independent margin alone; market plus
+independent margin; and market/independent plus captured starter, offense, opposing-pitcher, and
+bullpen matchup factors. It also tests a fixed-grid, train-selected policy that leaves the favorite
+unchanged unless the fitted model makes a sufficiently confident upset call.
+
+| Architecture | Validation | Validation favorite | Holdout | Holdout favorite | Verdict |
+|---|---:|---:|---:|---:|---|
+| Independent only | 58.72% | 61.07% | 54.88% | 60.61% | Rejected |
+| Market + independent | **62.42%** | 61.07% | 58.92% | **60.61%** | Rejected; does not repeat |
+| Market + independent + matchups | 61.17% | **61.51%** | 59.04% | **60.41%** | Rejected |
+
+The selective-override policy does not rescue the result. Market plus independent makes 22 upset
+overrides in validation, corrects 13 and harms nine (+4 net), then makes 15 in holdout, corrects five
+and harms ten (-5 net). The richer matchup version is -1 net in validation and -4 in holdout. No
+candidate beats the paired favorite baseline in both later windows, so **no Moneyline challenger is
+approved**.
+
+The failure is not simply poor input coverage. High-quality shipped overrides are 55.17% in
+validation but 46.55% in holdout. Large independent disagreements (absolute margin at least one
+run) are especially unstable: the shipped rule is +4 net corrections in validation and -11 in
+holdout. The current independent inputs can occasionally find a valuable upset, but their upset
+ranking is not temporally stable enough to own the winner. The next Moneyline iteration must add
+prior-only expected-quality, bullpen-availability, lineup, platoon, defense, rest, and travel
+features and prove incremental correction lift with rolling-origin validation. It must not be a
+favorite/underdog heuristic or a threshold fitted on all settled games.
+
 ## Exact current-writer replay
 
 The audit reconstructs the current r91 writer inputs from immutable lock snapshots and replays both
@@ -332,7 +368,9 @@ tests. They are not permission to add many correlated factors at once.
 - V2.2 records enabled/applied, legacy Total, and candidate Total in audit output.
 - The operator audit now includes the exact frozen-evidence r91 writer A/B, train-only score-gap
   calibration, scoped Candidate C, miss-distance ladders, naive run-line baselines, train-only
-  action-policy search, cross-market grade-integrity count, and paired promotion/demotion counts.
+  action-policy search, cross-market grade-integrity count, paired promotion/demotion counts,
+  train-only Moneyline architecture comparisons, selective upset overrides, and chronological
+  override-cohort stability.
 - Default behavior remains disabled.
 - Focused MLB model tests: 182 passed, 0 failed.
 - TypeScript: passed.
@@ -353,11 +391,14 @@ Before this candidate can affect a member forecast:
    be described as untouched validation.
 4. Do not promote the run-line selector. First capture run-line prices/history and build a selector
    that beats the same-cohort always-underdog baseline after favorite/underdog and price normalization.
-5. Bump every affected release identifier and update `docs/current-model-releases.md` in the same
+5. Do not promote a Moneyline challenger until it beats the paired favorite baseline in both
+   validation and chronological confirmation while retaining calibrated probabilities and selective
+   upset corrections. The current four architectures and their train-selected override policies fail.
+6. Bump every affected release identifier and update `docs/current-model-releases.md` in the same
    production commit.
-6. Run `npm run verify:model-change`, focused MLB suites, the no-write current-board rehearsal,
+7. Run `npm run verify:model-change`, focused MLB suites, the no-write current-board rehearsal,
    latest-main integration safety, protected PR checks, and post-deploy live proof.
-7. Obtain explicit owner approval for the production promotion.
+8. Obtain explicit owner approval for the production promotion.
 
 Rollback for the current shadow work is deletion of the disabled option and audit script; active
 production remains the October 9 r91 family with October 16 input-eligibility v3.
