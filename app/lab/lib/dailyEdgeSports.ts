@@ -3,11 +3,25 @@ import type { Sport } from "@/lib/types/domain/Sport";
 export type DailyEdgeSportDefinition = {
   key: Sport;
   label: string;
+  navigationTier: "flagship" | "core" | "specialist" | "planned";
   memberAvailable: boolean;
   inSeason?: boolean;
   /** Official fixtures are visible while analyzed model cards remain closed. */
   scheduleLive?: boolean;
 };
+
+export type DailyEdgeSportAvailability = {
+  isLive: boolean;
+  comingSoonLabel?: string;
+  statusLabel?: string;
+};
+
+export type DailyEdgeSportActivity = {
+  gameCount: number;
+  checkedAt: string;
+};
+
+export type DailyEdgeSportActivityMap = Partial<Record<Sport, DailyEdgeSportActivity>>;
 
 const NHL_2026_REGULAR_SEASON_START_MS = Date.parse("2026-09-29T04:00:00.000Z");
 const NBA_2026_MEMBER_BOARD_START_MS = Date.parse("2026-10-14T04:00:00.000Z");
@@ -18,20 +32,21 @@ const NBA_2026_MEMBER_BOARD_START_MS = Date.parse("2026-10-14T04:00:00.000Z");
  * enable a writer, prediction model, tracking scope, or publication job.
  */
 export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
-  { key: "mlb", label: "MLB", memberAvailable: true, inSeason: true },
-  { key: "wnba", label: "WNBA", memberAvailable: true, inSeason: true },
-  { key: "soccer", label: "Soccer", memberAvailable: true, inSeason: true },
-  { key: "nfl", label: "NFL", memberAvailable: true, inSeason: true },
-  { key: "cfb", label: "CFB", memberAvailable: true, inSeason: true },
-  { key: "nhl", label: "NHL", memberAvailable: true, inSeason: Date.now() >= NHL_2026_REGULAR_SEASON_START_MS },
+  { key: "nfl", label: "NFL", navigationTier: "flagship", memberAvailable: true, inSeason: true },
+  { key: "cfb", label: "CFB", navigationTier: "flagship", memberAvailable: true, inSeason: true },
   {
     key: "nba",
     label: "NBA",
+    navigationTier: "flagship",
     memberAvailable: true,
     inSeason: Date.now() >= NBA_2026_MEMBER_BOARD_START_MS,
   },
-  { key: "cbb", label: "CBB", memberAvailable: false },
-  { key: "ucl", label: "UCL", memberAvailable: false, inSeason: false },
+  { key: "nhl", label: "NHL", navigationTier: "core", memberAvailable: true, inSeason: Date.now() >= NHL_2026_REGULAR_SEASON_START_MS },
+  { key: "mlb", label: "MLB", navigationTier: "core", memberAvailable: true, inSeason: true },
+  { key: "soccer", label: "Soccer", navigationTier: "core", memberAvailable: true, inSeason: true },
+  { key: "wnba", label: "WNBA", navigationTier: "specialist", memberAvailable: true, inSeason: true },
+  { key: "cbb", label: "CBB", navigationTier: "planned", memberAvailable: false },
+  { key: "ucl", label: "UCL", navigationTier: "planned", memberAvailable: false, inSeason: false },
 ] as const;
 
 export const DAILY_EDGE_SPORT_KEYS: Sport[] = DAILY_EDGE_SPORTS.map(
@@ -61,7 +76,7 @@ export const AVAILABLE_DAILY_EDGE_SPORTS: Sport[] = DAILY_EDGE_SPORTS
   .map((definition) => definition.key);
 
 export const DAILY_EDGE_SPORT_AVAILABILITY: Partial<
-  Record<Sport, { isLive: boolean; comingSoonLabel?: string; statusLabel?: string }>
+  Record<Sport, DailyEdgeSportAvailability>
 > = Object.fromEntries(
   DAILY_EDGE_SPORTS.map((definition) => [
     definition.key,
@@ -70,11 +85,65 @@ export const DAILY_EDGE_SPORT_AVAILABILITY: Partial<
       comingSoonLabel: definition.memberAvailable ? undefined : "Coming soon",
       statusLabel: definition.memberAvailable
         ? definition.inSeason
-          ? "Active"
+          ? "In season"
           : definition.scheduleLive
             ? "Schedule live"
-          : "No games today"
+          : "Offseason"
         : undefined,
     },
   ]),
 );
+
+const DAILY_EDGE_STATUS_PRIORITY: Record<string, number> = {
+  Active: 0,
+  "In season": 1,
+  "Schedule live": 2,
+  "No games today": 3,
+  Offseason: 4,
+};
+
+const DAILY_EDGE_NAVIGATION_TIER_PRIORITY: Record<DailyEdgeSportDefinition["navigationTier"], number> = {
+  flagship: 0,
+  core: 1,
+  specialist: 2,
+  planned: 3,
+};
+
+const DAILY_EDGE_DEFINITION_BY_SPORT = new Map(
+  DAILY_EDGE_SPORTS.map((definition) => [definition.key, definition] as const),
+);
+
+/**
+ * Product hierarchy is the primary contract: an active specialist model must
+ * not jump ahead of a flagship model. Activity then orders models inside the
+ * same tier, so a live core board leads an empty core board without turning
+ * the entire selector into a volatile game-count ranking.
+ */
+export function orderDailyEdgeSportKeys(
+  sports: readonly Sport[],
+  availability: Partial<Record<Sport, DailyEdgeSportAvailability>> = DAILY_EDGE_SPORT_AVAILABILITY,
+): Sport[] {
+  return sports
+    .map((sport, registryIndex) => ({ sport, registryIndex }))
+    .sort((left, right) => {
+      const leftDefinition = DAILY_EDGE_DEFINITION_BY_SPORT.get(left.sport);
+      const rightDefinition = DAILY_EDGE_DEFINITION_BY_SPORT.get(right.sport);
+      const leftNavigationTier = leftDefinition
+        ? DAILY_EDGE_NAVIGATION_TIER_PRIORITY[leftDefinition.navigationTier]
+        : DAILY_EDGE_NAVIGATION_TIER_PRIORITY.planned;
+      const rightNavigationTier = rightDefinition
+        ? DAILY_EDGE_NAVIGATION_TIER_PRIORITY[rightDefinition.navigationTier]
+        : DAILY_EDGE_NAVIGATION_TIER_PRIORITY.planned;
+      if (leftNavigationTier !== rightNavigationTier) return leftNavigationTier - rightNavigationTier;
+      const leftAvailability = availability[left.sport];
+      const rightAvailability = availability[right.sport];
+      const leftTier = leftAvailability?.isLive === false
+        ? 5
+        : DAILY_EDGE_STATUS_PRIORITY[leftAvailability?.statusLabel ?? ""] ?? 2;
+      const rightTier = rightAvailability?.isLive === false
+        ? 5
+        : DAILY_EDGE_STATUS_PRIORITY[rightAvailability?.statusLabel ?? ""] ?? 2;
+      return leftTier - rightTier || left.registryIndex - right.registryIndex;
+    })
+    .map(({ sport }) => sport);
+}
