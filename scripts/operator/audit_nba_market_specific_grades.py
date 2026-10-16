@@ -334,6 +334,7 @@ def selection_gates(result: dict[str, Any], market: str) -> dict[str, bool]:
     best = result["bestAngle"]
     lean = result["lean"]
     halves = result["actionableChronologicalHalves"]
+    impact = result["boardImpact"]
     return {
         "minimumActionables": actionable["decisions"] >= 200,
         "minimumHalfSamples": all(value["decisions"] >= 60 for value in halves.values()),
@@ -352,6 +353,9 @@ def selection_gates(result: dict[str, Any], market: str) -> dict[str, bool]:
             value["accuracy"] is not None and value["accuracy"] >= 0.50
             for value in halves.values()
         ),
+        "pairedActionablePath": (
+            impact["actionableDemotions"] == 0 or impact["actionablePromotions"] > 0
+        ),
     }
 
 
@@ -360,6 +364,7 @@ def confirmation_gates(result: dict[str, Any], market: str) -> dict[str, bool]:
     best = result["bestAngle"]
     lean = result["lean"]
     halves = result["actionableChronologicalHalves"]
+    impact = result["boardImpact"]
     return {
         "minimumActionables": actionable["decisions"] >= 150,
         "minimumHalfSamples": all(value["decisions"] >= 45 for value in halves.values()),
@@ -377,6 +382,9 @@ def confirmation_gates(result: dict[str, Any], market: str) -> dict[str, bool]:
         "halvesNotBelowHalf": all(
             value["accuracy"] is not None and value["accuracy"] >= 0.50
             for value in halves.values()
+        ),
+        "pairedActionablePath": (
+            impact["actionableDemotions"] == 0 or impact["actionablePromotions"] > 0
         ),
     }
 
