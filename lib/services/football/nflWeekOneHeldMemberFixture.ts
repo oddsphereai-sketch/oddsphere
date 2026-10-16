@@ -46,7 +46,7 @@ import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_15_r45_personnel_coverage_repair" as const;
+  "nfl_weekly_member_fixture_2026_10_16_r46_availability_adjusted_starter_authority" as const;
 
 const NFL_FOUNDATIONAL_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_15_r32_foundational_no_weight_score" as const;
@@ -1014,7 +1014,7 @@ function buildHeldMarket(input: HeldMarketInput): MarketEdgeDto {
         source: "computed",
       },
       {
-        label: "Expected quarterbacks · provider depth chart",
+        label: "Expected quarterbacks · availability-adjusted depth chart",
         awayValue: `${expectedAwayQuarterback} · ${titleCase(input.payload.startersAndDepth.away.starterStatus)}`,
         homeValue: `${expectedHomeQuarterback} · ${titleCase(input.payload.startersAndDepth.home.starterStatus)}`,
         source: "feature_snapshot",

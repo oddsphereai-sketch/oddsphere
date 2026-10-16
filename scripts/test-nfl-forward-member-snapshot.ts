@@ -207,6 +207,39 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const personnelCoveragePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_15_r37_personnel_coverage_repair";
+  const personnelCoveragePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_15_r45_personnel_coverage_repair";
+  const personnelCoveragePreviousPayload = {
+    ...snapshot,
+    snapshotRelease: personnelCoveragePreviousSnapshotRelease,
+    fixtureRelease: personnelCoveragePreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: personnelCoveragePreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    personnelCoveragePreviousSnapshotRelease,
+    personnelCoveragePreviousFixtureRelease,
+    personnelCoveragePreviousPayload.memberRelease,
+    personnelCoveragePreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = personnelCoveragePreviousPayload;
+  const personnelCoverageContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(personnelCoverageContinuityRead?.snapshotRelease, personnelCoveragePreviousSnapshotRelease);
+  assert.equal(personnelCoverageContinuityRead?.fixture.heldMemberFixtureRelease, personnelCoveragePreviousFixtureRelease);
+  assert.equal(JSON.stringify(personnelCoverageContinuityRead?.fixture), JSON.stringify(personnelCoveragePreviousPayload.fixture),
+    "the r37 locked member fixture must retain exact stored precedence");
+
   const foundationalPreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_15_r36_foundational_no_weight_score";
   const foundationalPreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_15_r44_foundational_no_weight_score";
   const foundationalPreviousPayload = {
