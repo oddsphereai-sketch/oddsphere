@@ -1500,6 +1500,80 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     const records = diagnosticRows.filter(filter).map((row) => row.record);
     return { all: recordMetric(gamesById, records), chronology: chronology(records) };
   };
+  const unitDeltaGroups = new Map<string, {
+    rows: number;
+    baselineUnits: number;
+    candidateUnits: number;
+    unitDelta: number;
+    bothPriced: number;
+    baselineOnlyPriced: number;
+    candidateOnlyPriced: number;
+    neitherPriced: number;
+  }>();
+  const addUnitDelta = (
+    group: string,
+    before: WriterRecord,
+    after: WriterRecord,
+    game: Game,
+  ): void => {
+    const baselineOutcome = before.side === "over" || before.side === "under"
+      ? before.line_value === null ? null : totalOutcome(before.side, before.line_value, game)
+      : null;
+    const candidateOutcome = after.side === "over" || after.side === "under"
+      ? after.line_value === null ? null : totalOutcome(after.side, after.line_value, game)
+      : null;
+    const baselinePriced = baselineOutcome !== null && baselineOutcome !== "push" && before.odds_american !== null;
+    const candidatePriced = candidateOutcome !== null && candidateOutcome !== "push" && after.odds_american !== null;
+    const baselineUnits = baselinePriced ? profit(before.odds_american, baselineOutcome) : 0;
+    const candidateUnits = candidatePriced ? profit(after.odds_american, candidateOutcome) : 0;
+    const value = unitDeltaGroups.get(group) ?? {
+      rows: 0,
+      baselineUnits: 0,
+      candidateUnits: 0,
+      unitDelta: 0,
+      bothPriced: 0,
+      baselineOnlyPriced: 0,
+      candidateOnlyPriced: 0,
+      neitherPriced: 0,
+    };
+    value.rows++;
+    value.baselineUnits += baselineUnits;
+    value.candidateUnits += candidateUnits;
+    value.unitDelta += candidateUnits - baselineUnits;
+    if (baselinePriced && candidatePriced) value.bothPriced++;
+    else if (baselinePriced) value.baselineOnlyPriced++;
+    else if (candidatePriced) value.candidateOnlyPriced++;
+    else value.neitherPriced++;
+    unitDeltaGroups.set(group, value);
+  };
+  for (const before of baseTotals) {
+    const after = candidateByKey.get(`${before.game_id}:total`);
+    const game = gamesById.get(before.game_id);
+    if (!after || !game) continue;
+    const beforeOutcome = before.side === "over" || before.side === "under"
+      ? before.line_value === null ? null : totalOutcome(before.side, before.line_value, game)
+      : null;
+    const afterOutcome = after.side === "over" || after.side === "under"
+      ? after.line_value === null ? null : totalOutcome(after.side, after.line_value, game)
+      : null;
+    const group = before.side === after.side
+      ? "unchanged_side"
+      : beforeOutcome === "loss" && afterOutcome === "win"
+        ? "corrected_loss_to_win"
+        : beforeOutcome === "win" && afterOutcome === "loss"
+          ? "harmed_win_to_loss"
+          : "other_flip_or_push";
+    addUnitDelta(group, before, after, game);
+    addUnitDelta("all", before, after, game);
+  }
+  const unitDeltaDecomposition = Object.fromEntries(
+    [...unitDeltaGroups.entries()].map(([group, value]) => [group, {
+      ...value,
+      baselineUnits: round(value.baselineUnits),
+      candidateUnits: round(value.candidateUnits),
+      unitDelta: round(value.unitDelta),
+    }]),
+  );
   return {
     contract: "current production writer replayed read-only over frozen lock evidence; current r91 writer applied equally to incumbent and train-only score-gap candidate",
     scoreGapCalibration: {
@@ -1540,6 +1614,7 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       promoted: recordMetric(gamesById, promoted),
       demoted: recordMetric(gamesById, demoted),
     },
+    unitDeltaDecomposition,
     moneylineIntegrity: {
       incumbentRows: baseMl.length,
       candidateRows: candidateMl.length,

@@ -206,6 +206,28 @@ from -2.47% to +2.23% ROI. It is not ready to promote because action calibration
 That last point is a cross-market architecture defect: changing the Total probability must not
 silently retier a Moneyline whose side, win probability, and projected margin are unchanged.
 
+### Unit accounting and claim boundary
+
+The +45.30u difference between the incumbent (-23.80u) and Candidate B (+21.49u) is a diagnostic
+flat-stake replay of **every priced final Total prediction**, not the return of the recommended
+action board. Of 1,180 replayed games, 964 decided rows have a frozen price and 216 rows are either
+unpriced or pushes. Candidate B flips 317 sides:
+
+| Side relationship | Rows | Both sides priced | Incumbent units | Candidate units | Delta |
+|---|---:|---:|---:|---:|---:|
+| Unchanged side | 863 | 718 | +6.57u | +6.57u | 0.00u |
+| Corrected loss to win | 166 | 132 | -132.00u | +128.92u | +260.92u |
+| Harmed win to loss | 150 | 114 | +101.63u | -114.00u | -215.63u |
+| Other flip/push | 1 | 0 | 0.00u | 0.00u | 0.00u |
+| **All** | **1,180** | **964** | **-23.80u** | **+21.49u** | **+45.30u** |
+
+This reconciles exactly: 166 corrections minus 150 harms create 16 net wins, while unequal plus-
+money payouts on the priced flips produce the additional unit difference. It does not justify a
+production profit claim. The actual Candidate B actionable board is only 25-17-1 and +6.50u overall,
+then 6-7 in validation and 0-2 in holdout; its Best Angle count is zero. Competitor screenshots do
+not include prices or units, and the historical run-line locks do not contain run-line prices, so
+neither competitor-unit comparisons nor run-line unit claims are available.
+
 ## Best Angle and board impact
 
 The structural candidate's pure-model Total grades, before writer-time confirmation and quality
