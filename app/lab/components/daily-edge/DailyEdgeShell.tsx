@@ -4001,7 +4001,7 @@ function NbaRollingScheduleBoard({ schedule }: { schedule: NbaRollingScheduleDto
           </h2>
         </div>
         <p className="max-w-2xl text-[12px] leading-relaxed text-gray-400 sm:text-right">
-          Matchups are live now. Picks, probabilities, grades, and prices stay blank until the game-day model and market checks clear.
+          These matchups could not clear the complete model-and-market coverage gate. The last coherent analyzed board remains authoritative.
         </p>
       </div>
 
@@ -4040,7 +4040,7 @@ function NbaRollingScheduleBoard({ schedule }: { schedule: NbaRollingScheduleDto
                     <span className="text-[10px] uppercase tracking-[0.13em] font-bold text-gray-500">
                       {nbaScheduleStatusLabel(game.status)}
                     </span>
-                    <span className="text-[10px] text-gray-500">Analysis opens game day</span>
+                    <span className="text-[10px] text-gray-500">Analysis temporarily unavailable</span>
                   </div>
                 </article>
               ))}

@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-15
+Last reviewed: 2026-10-16
 
 ## Cross-sport confidence / execution contract
 
@@ -3170,7 +3170,7 @@ The tracking follow-up is recorded in
 The paired live-slate replay is recorded in
 `docs/model-audits/2026-08-11-daily-edge-fi-probable-availability-r27.md`.
 
-## NBA regular-season champion (active from 2026-10-20)
+## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
 - Model / prediction record: `nba_professional_unified_2026_10_15_r2_portable_ridge`
 - Market marriage: `nba_market_marriage_2026_10_15_r2_unified_25_75`
@@ -3208,18 +3208,32 @@ actionable grade.
 The existing pregame sweep now performs a bounded final NBA line refresh and sole-writer pass at T-60,
 verifies one coherent current-release Moneyline/Spread/Total tuple, and only then
 locks all three official rows. Prior locks remain immutable. An official schedule-only layer may show the next
-seven ET dates beginning October 14, one week before the October 20 opener, but analyzed game cards remain closed through October 19 and future
-dates remain schedule-only. Current-day regular-season model behavior begins on October 20. Evidence and
-explicit limitations: `docs/model-audits/2026-10-06-nba-independent-first-regular-season-r1.md` and
-`docs/model-audits/2026-10-15-nba-rolling-seven-day-member-schedule.md`.
+seven ET dates beginning October 14, one week before the October 20 opener. The October 16 r2 member-board
+activation replaces those schedule placeholders with the same shared Daily Edge cards and reader used by
+other sports. Every eligible regular-season game in the rolling window receives the frozen r2 unified
+projection; the read path creates no tracking row and official records still begin only at T-60 on October 20.
+Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent-first-regular-season-r1.md`,
+`docs/model-audits/2026-10-15-nba-rolling-seven-day-member-schedule.md`, and
+`docs/model-audits/2026-10-16-nba-rolling-daily-edge-activation.md`.
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_15_r6_professional_state`
-- NBA member schedule release: `nba_rolling_member_schedule_2026_10_15_r1_schedule_only`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_16_r7_rolling_predictions`
+- NBA member board release: `nba_rolling_member_board_2026_10_16_r2_analyzed_predictions`
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
-- NBA member-board eligibility: `nba_member_board_window_2026_10_15_r2_schedule_analysis_separation`; schedule-only cards may show eligible October 20+ games in the active seven-day window, but they expose no model or market output; analyzed cards remain unavailable for preseason and future dates, while current-day regular-season model behavior begins unchanged on `2026-10-20`
+- NBA member-board eligibility: `nba_member_board_window_2026_10_16_r3_rolling_analysis`; every officially tracked regular-season date in the active seven-day window is analyzed, while preseason/offseason and dates beyond the bounded window remain ineligible. This reader eligibility does not create an official record before the existing T-60 lock lifecycle.
+
+The October 16 NBA r7 operational release turns the previously seeded seven-day schedule into one
+coherent analyzed member board. The current board date remains the snapshot key, while each distinct
+eligible slate date runs the unchanged r2 champion and adapts into the shared Daily Edge card/reader
+contract. The board fails closed if any official schedule identity lacks an analyzed game. Full daily
+cycles refresh every seeded date with games; intraday line cycles are bounded to the two nearest active
+game dates while schedule seeding retains its existing current/far-edge scope. The model, calibration,
+25/75 marriage, grade thresholds, stake policy, single writer,
+`prediction_pipeline:nba` lease, T-60 locking, and official-tracking start are unchanged. The opening
+October 20-22 window moves from zero analyzed member cards to 16 games / 48 prediction markets without
+rewriting any stored lock. Evidence: `docs/model-audits/2026-10-16-nba-rolling-daily-edge-activation.md`.
 - NHL refresh release: `nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate`
 - NHL schedule: stable-input refresh once daily at `45 11 * * *`; volatile seed/line/split/prediction/snapshot refresh hourly at `18 6-10 * * *` and every 30 minutes at `18,48 0-5,12-23 * * *`; all writes fail closed unless `NHL_CRON_ENABLED=true`
 

@@ -6,8 +6,9 @@
  *   1. seedNbaGames           → upserts teams + games for the slate.
  *   2. refreshNbaTeamRatings  → scrapes Basketball Reference and
  *                                upserts nba_team_ratings.
- *   3. refreshNbaLines        → fetches SharpAPI /odds and upserts
- *                                `lines` + appends `line_history`.
+ *   3. refreshNbaLines        → fetches SharpAPI /odds for bounded rolling
+ *                                game dates, upserts `lines`, and appends
+ *                                `line_history`.
  *   4. response snapshot      → computes the existing authoritative member
  *                                DTO and publishes the date readiness key.
  *
@@ -54,11 +55,14 @@ import {
 import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsService";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
-import { nbaScheduleSeedDates } from "@/lib/services/nba/nbaRollingSchedule";
+import {
+  loadNbaRollingSchedule,
+  nbaScheduleSeedDates,
+} from "@/lib/services/nba/nbaRollingSchedule";
 import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_15_r6_professional_state";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_16_r7_rolling_predictions";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -206,38 +210,6 @@ export async function GET(request: Request): Promise<Response> {
           });
       stepDetails.professional_game_inputs = professionalInputs;
 
-      // No NBA today → clean success exit. Ratings + lines have
-      // nothing to attach to; no point firing the BBR scrape or
-      // SharpAPI hit.
-      if (currentSeedResult.mode === "no-events") {
-        const responseSnapshot = partial
-          ? null
-          : await refreshDailyEdgeResponseSnapshot({
-              sport: "nba",
-              date: etDateDashed,
-              source: "nba_daily_refresh_schedule_only",
-            });
-        return {
-          records_updated:
-            seedTotals.teamsUpserted +
-            seedTotals.gamesUpserted +
-            professionalInputs.written +
-            (responseSnapshot?.ok ? 1 : 0),
-          partial: partial || responseSnapshot?.ok === false,
-          error_message: responseSnapshot?.ok === false
-            ? `NBA schedule-only snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
-            : null,
-          details: {
-            ...stepDetails,
-            outcome: "no_nba_today_schedule_window_refreshed",
-            response_snapshot: responseSnapshot ?? {
-              skipped: true,
-              reason: "incomplete_schedule_seed_cycle",
-            },
-          },
-        };
-      }
-
       // ─── Step 3: refreshNbaTeamRatings ────────────────────────────
       console.log(`[nba-daily-refresh] step=ratings  season=${season}  mode=${intraday ? "skip" : "full"}`);
       const ratingsResult = intraday
@@ -280,29 +252,82 @@ export async function GET(request: Request): Promise<Response> {
       if (ratingsResult.errors.length > 0) partial = true;
 
       // ─── Step 4: refreshNbaLines ──────────────────────────────────
-      // Passes the ET slate-date. Service filters by games.slate_date
-      // and derives the SharpAPI UTC date(s) from the matched games'
-      // game_date column. Late ET tips that live in UTC the next day
-      // are still found.
-      console.log(`[nba-daily-refresh] step=lines  slateDate=${etDateDashed}`);
-      const linesResult = await refreshNbaLines({
-        slateDate: etDateDashed,
-        sharpApiKey,
-        dryRun: false,
-        logger: stepLog("lines"),
-      });
+      // The member product is a rolling seven-day analyzed board. A full
+      // cycle refreshes every seeded date that actually has games. Intraday
+      // stays bounded to the two nearest active game dates in the rolling
+      // window so opening prices continue to mature without multiplying a
+      // 30-minute run by all seven calendar dates.
+      const lineDates = intraday
+        ? Array.from(new Set(
+            (await loadNbaRollingSchedule(etDateDashed)).games.map((game) => game.slateDate),
+          )).sort().slice(0, 2)
+        : seedResults
+            .filter((entry) => entry.result.mode !== "no-events")
+            .map((entry) => entry.date);
+      const lineResults: Array<{
+        date: string;
+        result: Awaited<ReturnType<typeof refreshNbaLines>>;
+      }> = [];
+      const lineFailures: Array<{ date: string; error: string }> = [];
+      for (const lineDate of lineDates) {
+        console.log(`[nba-daily-refresh] step=lines  slateDate=${lineDate}`);
+        try {
+          lineResults.push({
+            date: lineDate,
+            result: await refreshNbaLines({
+              slateDate: lineDate,
+              sharpApiKey,
+              dryRun: false,
+              logger: stepLog(`lines:${lineDate}`),
+            }),
+          });
+        } catch (error) {
+          partial = true;
+          lineFailures.push({
+            date: lineDate,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      const lineTotals = lineResults.reduce(
+        (total, entry) => ({
+          gamesInDb: total.gamesInDb + entry.result.gamesInDb,
+          oddsRowsFetched: total.oddsRowsFetched + entry.result.oddsRowsFetched,
+          matched: total.matched + entry.result.matched,
+          unmatched: total.unmatched + entry.result.unmatched,
+          parsed: total.parsed + entry.result.parsed,
+          linesWritten: total.linesWritten + entry.result.linesWritten,
+          lineHistoryWritten: total.lineHistoryWritten + entry.result.lineHistoryWritten,
+          errorCount: total.errorCount + entry.result.errors.length,
+        }),
+        {
+          gamesInDb: 0,
+          oddsRowsFetched: 0,
+          matched: 0,
+          unmatched: 0,
+          parsed: 0,
+          linesWritten: 0,
+          lineHistoryWritten: 0,
+          errorCount: 0,
+        },
+      );
       stepDetails.lines = {
-        mode: linesResult.mode,
-        gamesInDb: linesResult.gamesInDb,
-        oddsRowsFetched: linesResult.oddsRowsFetched,
-        matched: linesResult.matched,
-        unmatched: linesResult.unmatched,
-        parsed: linesResult.parsed,
-        linesWritten: linesResult.linesWritten,
-        lineHistoryWritten: linesResult.lineHistoryWritten,
-        errorCount: linesResult.errors.length,
+        dates: lineResults.map(({ date, result }) => ({
+          date,
+          mode: result.mode,
+          gamesInDb: result.gamesInDb,
+          oddsRowsFetched: result.oddsRowsFetched,
+          matched: result.matched,
+          unmatched: result.unmatched,
+          parsed: result.parsed,
+          linesWritten: result.linesWritten,
+          lineHistoryWritten: result.lineHistoryWritten,
+          errorCount: result.errors.length,
+        })),
+        failures: lineFailures,
+        ...lineTotals,
       };
-      if (linesResult.errors.length > 0) partial = true;
+      if (lineTotals.errorCount > 0) partial = true;
 
       // The date-keyed response snapshot is the readiness boundary for the
       // 3 AM ET member rollover. A partial source cycle must not replace the
@@ -312,7 +337,7 @@ export async function GET(request: Request): Promise<Response> {
         : await refreshDailyEdgeResponseSnapshot({
             sport: "nba",
             date: etDateDashed,
-            source: "nba_daily_refresh",
+            source: "nba_daily_refresh_rolling_board",
           });
       stepDetails.response_snapshot = responseSnapshot ?? {
         skipped: true,
@@ -326,8 +351,8 @@ export async function GET(request: Request): Promise<Response> {
         seedTotals.gamesUpserted +
         ratingsResult.written +
         professionalInputs.written +
-        linesResult.linesWritten +
-        linesResult.lineHistoryWritten +
+        lineTotals.linesWritten +
+        lineTotals.lineHistoryWritten +
         (responseSnapshot?.ok ? 1 : 0);
 
       return {
