@@ -131,7 +131,7 @@ Last reviewed: 2026-10-16
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_16_r3_paginated_nba_price_window`. The existing leased
+  `market_intelligence_v2_shadow_capture_2026_10_16_r4_canonical_nba_team_identity`. The existing leased
   refresh may store exact-date, exact-matchup SharpAPI NBA split rows with their real source book
   for the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
@@ -145,11 +145,16 @@ Last reviewed: 2026-10-16
   layout authority. R3 deterministically paginates the complete rolling-window `lines` read and
   fails closed when an exact count changes or a page is short; this repairs a 1,000-row response
   ceiling that stored future splits without their future price observations. The independent model
-  remains NBA-specific; only the evidence and evaluation contract is shared across sports. Evidence and rollback:
+  remains NBA-specific; only the evidence and evaluation contract is shared across sports. R4
+  canonicalizes both stored-game and provider team identities and explicitly maps the six ESPN
+  abbreviation variants (`GS`, `NO`, `NY`, `SA`, `UTAH`, and `WSH`) before exact matchup comparison.
+  It repairs missing opening-night DraftKings fallback rows without loosening date, league,
+  orientation, or unknown-team gates. Evidence and rollback:
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
-  `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`.
+  `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`, plus
+  `docs/model-audits/2026-10-16-nba-split-fallback-team-identity-result.md`.
 - NBA internal professional market reader is
-  `nba_professional_market_reader_2026_10_16_r4_total_disagreement_authority`. It consumes the
+  `nba_professional_market_reader_2026_10_16_r5_canonical_split_identity`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
   prediction pipeline. It excludes the independent model's best-execution sportsbook by market,
   removes vig before comparing price movement, and fails closed on incomplete pagination, stale
@@ -3259,11 +3264,11 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_16_r5_market_specific_grades`
-- Market marriage: `nba_market_marriage_2026_10_16_r4_independent_first_total_disagreement`
+- Model / prediction record: `nba_professional_unified_2026_10_16_r6_canonical_split_identity`
+- Market marriage: `nba_market_marriage_2026_10_16_r5_canonical_split_identity`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
-- Internal market reader: `nba_professional_market_reader_2026_10_16_r4_total_disagreement_authority`
+- Internal market reader: `nba_professional_market_reader_2026_10_16_r5_canonical_split_identity`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled

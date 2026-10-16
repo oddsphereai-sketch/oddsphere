@@ -1,7 +1,7 @@
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_PROFESSIONAL_MARKET_READER_RELEASE =
-  "nba_professional_market_reader_2026_10_16_r4_total_disagreement_authority" as const;
+  "nba_professional_market_reader_2026_10_16_r5_canonical_split_identity" as const;
 
 export type NbaReaderSide = "home" | "away" | "over" | "under";
 type Direction = -1 | 1;

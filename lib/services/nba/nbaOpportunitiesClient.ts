@@ -10,6 +10,8 @@
  * Read-only. No DB writes.
  */
 
+import { normalizeTeamAbbr } from "../../providers/playbook/playbookTeamNormalizer";
+
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
 
 type OpportunityRowRaw = {
@@ -188,8 +190,8 @@ const NBA_ABBR_TO_NICKNAME: Record<string, string> = {
 };
 
 function teamMatchKey(input: string): string {
-  const upper = input.toUpperCase().trim();
-  const nick = NBA_ABBR_TO_NICKNAME[upper];
+  const canonical = normalizeTeamAbbr("nba", input) ?? input.toUpperCase().trim();
+  const nick = NBA_ABBR_TO_NICKNAME[canonical];
   if (nick !== undefined) return nick;
   return input.toLowerCase().trim();
 }

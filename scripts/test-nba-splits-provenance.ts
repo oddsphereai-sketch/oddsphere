@@ -4,6 +4,10 @@ import {
   type NbaSplitsRow,
 } from "../lib/services/nba/nbaSplitsClient";
 import {
+  matchOpportunitiesForGame,
+  type NbaOpportunity,
+} from "../lib/services/nba/nbaOpportunitiesClient";
+import {
   publicSplitsDisplaySupported,
   publicSplitsSupported,
 } from "../lib/config/publicSplitsCapability";
@@ -54,6 +58,75 @@ assert.equal(
   "draftkings",
   "the selected split row must prefer same-book ticket+handle evidence without collapsing books",
 );
+
+const aliasMatchups = [
+  { databaseAway: "GS", databaseHome: "LAL", providerAway: "Golden State Warriors", providerHome: "Los Angeles Lakers" },
+  { databaseAway: "NO", databaseHome: "NY", providerAway: "New Orleans Pelicans", providerHome: "New York Knicks" },
+  { databaseAway: "OKC", databaseHome: "SA", providerAway: "Oklahoma City Thunder", providerHome: "San Antonio Spurs" },
+  { databaseAway: "UTAH", databaseHome: "WSH", providerAway: "Utah Jazz", providerHome: "Washington Wizards" },
+] as const;
+
+function matchupRow(providerAway: string, providerHome: string): NbaSplitsRow {
+  return {
+    ...draftKings,
+    event_id: `${providerAway}@${providerHome}`,
+    away_team: providerAway,
+    home_team: providerHome,
+  };
+}
+
+function matchupOpportunity(providerAway: string, providerHome: string): NbaOpportunity {
+  return {
+    id: `${providerAway}@${providerHome}`,
+    event_id: `${providerAway}@${providerHome}`,
+    event_name: null,
+    away_team: providerAway,
+    home_team: providerHome,
+    market_type: "moneyline",
+    side: "home",
+    line: null,
+    sportsbook: "draftkings",
+    sharp_book: "circa",
+    odds_american: -110,
+    no_vig_odds_american: -105,
+    fair_probability: 0.51,
+    ev_percentage: 1,
+    kelly_percent: 0,
+    confidence: 0.5,
+    market_width: 0.02,
+    cross_ref_count: 3,
+    cross_ref_dispersion: 0.01,
+    book_count: 4,
+    oldest_odds_age_seconds: 60,
+    possibly_stale: false,
+    is_alternate_line: false,
+    is_live: false,
+    detected_at: "2026-10-16T16:00:00Z",
+    warnings: [],
+    devig_method: "multiplicative",
+    display_selection: providerHome,
+  };
+}
+
+for (const matchup of aliasMatchups) {
+  assert.ok(
+    matchSplitsRow(
+      [matchupRow(matchup.providerAway, matchup.providerHome)],
+      matchup.databaseHome,
+      matchup.databaseAway,
+    ),
+    `split matching must canonicalize ${matchup.databaseAway}@${matchup.databaseHome}`,
+  );
+  assert.equal(
+    matchOpportunitiesForGame(
+      [matchupOpportunity(matchup.providerAway, matchup.providerHome)],
+      matchup.databaseHome,
+      matchup.databaseAway,
+    ).length,
+    1,
+    `opportunity matching must canonicalize ${matchup.databaseAway}@${matchup.databaseHome}`,
+  );
+}
 assert.equal(
   publicSplitsSupported("nba"),
   false,

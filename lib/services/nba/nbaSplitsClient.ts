@@ -14,6 +14,8 @@
  * Read-only. No DB writes. No external state.
  */
 
+import { normalizeTeamAbbr } from "../../providers/playbook/playbookTeamNormalizer";
+
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
 
 /** Raw shape of the per-market sub-object in /splits row (best-effort). */
@@ -173,9 +175,10 @@ const NBA_ABBR_TO_NICKNAME: Record<string, string> = {
 };
 
 function teamMatchKey(input: string): string {
-  // Prefer nickname lookup; fall back to lowercased raw token.
-  const upper = input.toUpperCase().trim();
-  const nick = NBA_ABBR_TO_NICKNAME[upper];
+  // Resolve every provider/database alias through the shared NBA registry so
+  // ESPN forms such as NY/SA/GS cannot diverge from NYK/SAS/GSW here.
+  const canonical = normalizeTeamAbbr("nba", input) ?? input.toUpperCase().trim();
+  const nick = NBA_ABBR_TO_NICKNAME[canonical];
   if (nick !== undefined) return nick;
   return input.toLowerCase().trim();
 }

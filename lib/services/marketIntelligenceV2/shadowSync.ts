@@ -75,7 +75,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_shadow_capture_2026_10_16_r3_paginated_nba_price_window";
+  "market_intelligence_v2_shadow_capture_2026_10_16_r4_canonical_nba_team_identity";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -247,7 +247,10 @@ export function selectVerifiedSharpApiCurrentRows(
   requestedSlateDate: string,
   sport: Sport = "mlb",
 ): SharpSplitRowWithTeams[] {
-  const currentPairs = new Set(currentGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
+  const currentPairs = new Set(currentGames.flatMap((game) => {
+    const key = marketIntelligenceGameKey(sport, game.awayAbbr, game.homeAbbr);
+    return key === null ? [] : [key];
+  }));
   return rows.filter((row) => {
     const league = String(row.league ?? "").toLowerCase();
     if (league && league !== sport) return false;
@@ -273,7 +276,10 @@ export function selectVerifiedSharpApiWindowRows(
   const canonicalGames = new Set(
     games.flatMap((game) => game.slateDate === null
       ? []
-      : [`${game.slateDate}|${game.awayAbbr}@${game.homeAbbr}`]),
+      : (() => {
+          const key = marketIntelligenceGameKey(sport, game.awayAbbr, game.homeAbbr);
+          return key === null ? [] : [`${game.slateDate}|${key}`];
+        })()),
   );
   return rows.filter((row) => {
     const league = String(row.league ?? "").toLowerCase();
@@ -322,8 +328,14 @@ export function assessSharpApiSplitSlateAlignment(
     else if (eventDate === requestedSlateDate) eventDateMatches++;
     else eventDateMismatches++;
   }
-  const currentPairs = new Set(currentGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
-  const previousPairs = new Set(previousGames.map((game) => `${game.awayAbbr}@${game.homeAbbr}`));
+  const currentPairs = new Set(currentGames.flatMap((game) => {
+    const key = marketIntelligenceGameKey(sport, game.awayAbbr, game.homeAbbr);
+    return key === null ? [] : [key];
+  }));
+  const previousPairs = new Set(previousGames.flatMap((game) => {
+    const key = marketIntelligenceGameKey(sport, game.awayAbbr, game.homeAbbr);
+    return key === null ? [] : [key];
+  }));
   const currentSlateMatches = Array.from(rowPairs).filter((key) => currentPairs.has(key)).length;
   const previousSlateMatches = Array.from(rowPairs).filter((key) => previousPairs.has(key)).length;
   const validPairs = rowPairs.size;
@@ -975,7 +987,8 @@ async function collectSharpApiSplits(opts: {
 
   const gamesByKey = new Map<string, GameRef[]>();
   for (const game of opts.games) {
-    const key = `${game.awayAbbr}@${game.homeAbbr}`;
+    const key = marketIntelligenceGameKey(opts.sport, game.awayAbbr, game.homeAbbr);
+    if (key === null) continue;
     const list = gamesByKey.get(key) ?? [];
     list.push(game);
     gamesByKey.set(key, list);
