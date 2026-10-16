@@ -83,6 +83,13 @@ import {
   applyNbaLockedMemberSnapshotPrecedence,
   type NbaLockedMemberRecord,
 } from "./nbaLockedMemberSnapshot";
+import {
+  buildNbaProfessionalMarketReader,
+  type NbaReaderPriceRow,
+  type NbaReaderSplitRow,
+} from "./nbaProfessionalMarketReader";
+
+const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
 
 function nbaProviderSeasonForSlate(date: string): number {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
@@ -90,6 +97,22 @@ function nbaProviderSeasonForSlate(date: string): number {
   const year = Number(match[1]);
   const month = Number(match[2]);
   return month >= 7 ? year : year - 1;
+}
+
+function bestExecutionSportsbook(args: {
+  lines: readonly NbaLineRow[];
+  market: "moneyline" | "spread" | "total";
+  side: "home" | "away" | "over" | "under";
+  line: number | null;
+}): string | null {
+  return args.lines
+    .filter((row) =>
+      row.market_type === args.market && row.side === args.side && row.odds_american !== null &&
+      (args.market === "moneyline" || (
+        row.line_value !== null && args.line !== null && Math.abs(row.line_value - args.line) < 0.01
+      )))
+    .sort((left, right) => (right.odds_american ?? -Infinity) - (left.odds_american ?? -Infinity))[0]
+    ?.sportsbook ?? null;
 }
 
 /**
@@ -289,6 +312,160 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     }
   }
 
+  // Internal decision evidence only. This is deliberately separate from the
+  // member-card adapter: the pipeline reads the market; the adapter only
+  // renders the forecast that the pipeline has already produced.
+  const readerEvidenceErrors: string[] = [];
+  const readerSplitRowsByGame = new Map<number, NbaReaderSplitRow[]>();
+  if (gameExternalIds.length > 0) {
+    type ReaderSplitDbRow = {
+      canonical_event_id: string;
+      provider: string;
+      source_book: string;
+      source_type: string;
+      market_type: string;
+      selection_key: string;
+      bets_pct: number | null;
+      money_pct: number | null;
+      market_line: number | null;
+      source_observed_at: string | null;
+      fetched_at: string;
+    };
+    const rows: ReaderSplitDbRow[] = [];
+    let expectedSplitRows: number | null = null;
+    for (
+      let from = 0;
+      expectedSplitRows === null || from < expectedSplitRows;
+      from += NBA_READER_EVIDENCE_PAGE_SIZE
+    ) {
+      const page = await supabase
+        .from("market_split_observations_v2")
+        .select(
+          "id, canonical_event_id, provider, source_book, source_type, market_type, selection_key, bets_pct, money_pct, market_line, source_observed_at, fetched_at",
+          { count: "exact" },
+        )
+        .eq("league", "nba")
+        .in("canonical_event_id", gameExternalIds.map(String))
+        .order("id", { ascending: true })
+        .range(from, from + NBA_READER_EVIDENCE_PAGE_SIZE - 1);
+      if (page.error) {
+        readerEvidenceErrors.push("split_observation_lookup_failed");
+        break;
+      }
+      if (typeof page.count !== "number") {
+        readerEvidenceErrors.push("split_observation_count_unavailable");
+        break;
+      }
+      expectedSplitRows ??= page.count;
+      if (page.count !== expectedSplitRows) {
+        readerEvidenceErrors.push("split_observation_count_changed_during_read");
+        break;
+      }
+      const data = (page.data ?? []) as ReaderSplitDbRow[];
+      const expectedPageRows = Math.min(
+        NBA_READER_EVIDENCE_PAGE_SIZE,
+        expectedSplitRows - from,
+      );
+      if (data.length !== expectedPageRows) {
+        readerEvidenceErrors.push("split_observation_page_truncated");
+        break;
+      }
+      rows.push(...data);
+    }
+    for (const row of rows) {
+      const externalId = Number(row.canonical_event_id);
+      if (!Number.isFinite(externalId) || !["moneyline", "spread", "total"].includes(row.market_type)) continue;
+      const gameReaderRows = readerSplitRowsByGame.get(externalId) ?? [];
+      gameReaderRows.push({
+        provider: row.provider,
+        sourceBook: row.source_book,
+        sourceType: row.source_type,
+        market: row.market_type as NbaMovementMarket,
+        selectionKey: row.selection_key,
+        betsPct: row.bets_pct,
+        moneyPct: row.money_pct,
+        marketLine: row.market_line,
+        sourceObservedAt: row.source_observed_at,
+        fetchedAt: row.fetched_at,
+      });
+      readerSplitRowsByGame.set(externalId, gameReaderRows);
+    }
+  }
+
+  const readerPriceRowsByGame = new Map<number, NbaReaderPriceRow[]>();
+  if (gameExternalIds.length > 0) {
+    type ReaderPriceDbRow = {
+      canonical_event_id: string;
+      sportsbook: string;
+      sharp_book: boolean;
+      market_type: string;
+      selection_key: string;
+      american_price: number | null;
+      line: number | null;
+      provider_timestamp: string | null;
+      fetched_at: string;
+    };
+    const rows: ReaderPriceDbRow[] = [];
+    let expectedPriceRows: number | null = null;
+    for (
+      let from = 0;
+      expectedPriceRows === null || from < expectedPriceRows;
+      from += NBA_READER_EVIDENCE_PAGE_SIZE
+    ) {
+      const page = await supabase
+        .from("market_price_observations_v2")
+        .select(
+          "id, canonical_event_id, sportsbook, sharp_book, market_type, selection_key, american_price, line, provider_timestamp, fetched_at",
+          { count: "exact" },
+        )
+        .eq("league", "nba")
+        .in("canonical_event_id", gameExternalIds.map(String))
+        .order("id", { ascending: true })
+        .range(from, from + NBA_READER_EVIDENCE_PAGE_SIZE - 1);
+      if (page.error) {
+        readerEvidenceErrors.push("price_observation_lookup_failed");
+        break;
+      }
+      if (typeof page.count !== "number") {
+        readerEvidenceErrors.push("price_observation_count_unavailable");
+        break;
+      }
+      expectedPriceRows ??= page.count;
+      if (page.count !== expectedPriceRows) {
+        readerEvidenceErrors.push("price_observation_count_changed_during_read");
+        break;
+      }
+      const data = (page.data ?? []) as ReaderPriceDbRow[];
+      const expectedPageRows = Math.min(
+        NBA_READER_EVIDENCE_PAGE_SIZE,
+        expectedPriceRows - from,
+      );
+      if (data.length !== expectedPageRows) {
+        readerEvidenceErrors.push("price_observation_page_truncated");
+        break;
+      }
+      rows.push(...data);
+    }
+    for (const row of rows) {
+      const externalId = Number(row.canonical_event_id);
+      if (!Number.isFinite(externalId) || !["moneyline", "spread", "total"].includes(row.market_type)) continue;
+      const gameReaderRows = readerPriceRowsByGame.get(externalId) ?? [];
+      gameReaderRows.push({
+        sportsbook: row.sportsbook,
+        sharpBook: row.sharp_book,
+        market: row.market_type as NbaMovementMarket,
+        selectionKey: row.selection_key,
+        americanPrice: row.american_price,
+        line: row.line,
+        providerTimestamp: row.provider_timestamp,
+        fetchedAt: row.fetched_at,
+      });
+      readerPriceRowsByGame.set(externalId, gameReaderRows);
+    }
+  }
+
+  const readerEvaluatedAt = new Date().toISOString();
+
   const dynamicGames: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
     const prov = provenanceByGame.get(s.game_external_id);
     if (prov === undefined) return [];
@@ -304,6 +481,45 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       lines,
       history: movementHistory,
       externalGameId: s.game_external_id,
+    });
+    const independentMlSide = candidate.independent.marginHome >= 0 ? "home" as const : "away" as const;
+    const independentSpreadSide = candidate.consensus.spreadHome === null ||
+      candidate.independent.marginHome + candidate.consensus.spreadHome >= 0
+      ? "home" as const : "away" as const;
+    const independentTotalSide = candidate.consensus.totalLine === null ||
+      candidate.independent.total - candidate.consensus.totalLine >= 0
+      ? "over" as const : "under" as const;
+    const spreadExecutionLine = candidate.consensus.spreadHome === null ? null
+      : independentSpreadSide === "home" ? candidate.consensus.spreadHome : -candidate.consensus.spreadHome;
+    const reader = buildNbaProfessionalMarketReader({
+      evaluatedAt: readerEvaluatedAt,
+      priceRows: readerPriceRowsByGame.get(s.game_external_id) ?? [],
+      splitRows: readerSplitRowsByGame.get(s.game_external_id) ?? [],
+      evidenceErrors: readerEvidenceErrors,
+      selectedLines: {
+        spreadHome: candidate.consensus.spreadHome,
+        total: candidate.consensus.totalLine,
+      },
+      excludedSportsbooksByMarket: {
+        moneyline: [bestExecutionSportsbook({
+          lines,
+          market: "moneyline",
+          side: independentMlSide,
+          line: null,
+        }) ?? ""],
+        spread: [bestExecutionSportsbook({
+          lines,
+          market: "spread",
+          side: independentSpreadSide,
+          line: spreadExecutionLine,
+        }) ?? ""],
+        total: [bestExecutionSportsbook({
+          lines,
+          market: "total",
+          side: independentTotalSide,
+          line: candidate.consensus.totalLine,
+        }) ?? ""],
+      },
     });
     const pred = applyNbaProfessionalCandidate({ baseline, candidate });
     const splitsRow = matchSplitsRow(
@@ -356,6 +572,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
           margin_home: candidate.final.marginHome,
         },
       },
+      market_reader: reader,
     };
     return [dto];
   });

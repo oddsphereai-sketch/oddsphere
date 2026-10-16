@@ -148,6 +148,16 @@ Last reviewed: 2026-10-16
   remains NBA-specific; only the evidence and evaluation contract is shared across sports. Evidence and rollback:
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`.
+- NBA internal professional market reader is
+  `nba_professional_market_reader_2026_10_16_r1_observation_only`. It consumes the
+  provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
+  prediction pipeline while remaining strictly `observation_only`. It excludes the independent
+  model's best-execution sportsbook by market, removes vig before comparing price movement, and
+  fails closed on incomplete pagination, stale flow, missing sequences, reversal/buyback, or book
+  disagreement. It is not the member card/display reader, does not numerically blend the projection
+  toward consensus, and has zero score, side, probability, grade, actionability, stake, lock,
+  tracking, copy, label, or layout authority. Evidence and promotion boundary:
+  `docs/model-audits/2026-10-16-nba-professional-market-reader-r1.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
