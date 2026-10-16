@@ -230,6 +230,33 @@ const exactFailedEconomics = assessMlbLockCoherence({
 assert.deepEqual(exactFailedEconomics.coherentGameIds, [31215]);
 assert.deepEqual(exactFailedEconomics.errors, []);
 
+const persistedNumericPrecision = assessMlbLockCoherence({
+  gameIds: [31215],
+  expectedRows: [{
+    ...failedEconomicsExpected,
+    model_probability: 0.6082113250521155,
+    market_probability: 0.5075275292498278,
+  }],
+  storedRows: [{
+    ...failedEconomicsStored,
+    model_probability: 0.608211,
+    market_probability: 0.507528,
+    snapshot_json: {
+      ...failedEconomicsStored.snapshot_json,
+      action_promotion_stability_v1: {
+        ...failedEconomicsStored.snapshot_json.action_promotion_stability_v1,
+        exactPriceExpectedValue: expectedValueAtAmericanOdds(0.6082113250521155, failedEconomicsExpected.odds_american),
+      },
+    },
+  }],
+});
+assert.deepEqual(
+  persistedNumericPrecision.coherentGameIds,
+  [31215],
+  "six-decimal prediction_records serialization must not block an otherwise exact failed-economics lock",
+);
+assert.deepEqual(persistedNumericPrecision.errors, []);
+
 expectFailedEconomicsBlocked("different side", {
   ...failedEconomicsStored,
   pick: "home",
