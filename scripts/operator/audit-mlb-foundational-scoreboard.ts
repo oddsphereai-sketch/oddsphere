@@ -335,6 +335,11 @@ function marketMlSide(game: Game): Side | null {
   return p === null ? null : p >= 0.5 ? "home" : "away";
 }
 
+function marketUnderdogSide(game: Game): Side | null {
+  const favorite = marketMlSide(game);
+  return favorite === null ? null : favorite === "home" ? "away" : "home";
+}
+
 function storedTotalSide(game: Game): TotalSide | null {
   return game.total?.side === "over" || game.total?.side === "under" ? game.total.side : null;
 }
@@ -557,6 +562,146 @@ function totalsByRule(
   });
 }
 
+type LineLadderRow = {
+  gameId: number;
+  date: string;
+  side: string;
+  signedMargin: number;
+  main: Outcome;
+  plus1: Outcome;
+  plus2: Outcome;
+};
+
+function lineLadderBucket(signedMargin: number): string {
+  if (signedMargin > 0) return "main_win";
+  if (signedMargin === 0) return "main_push";
+  if (signedMargin > -1) return "rescued_by_plus1";
+  if (signedMargin === -1) return "push_at_plus1";
+  if (signedMargin > -2) return "rescued_by_plus2";
+  if (signedMargin === -2) return "push_at_plus2";
+  return "still_loses_plus2";
+}
+
+function summarizeLineLadderRows(rows: LineLadderRow[]): Record<string, unknown> {
+  const asMetric = (key: "main" | "plus1" | "plus2"): Metric => metric(rows.map((row) => ({
+    gameId: row.gameId,
+    date: row.date,
+    release: "line_ladder_diagnostic",
+    outcome: row[key],
+    odds: null,
+  })));
+  const buckets = new Map<string, number>();
+  for (const row of rows) {
+    const key = lineLadderBucket(row.signedMargin);
+    buckets.set(key, (buckets.get(key) ?? 0) + 1);
+  }
+  const sortedMargins = rows.map((row) => row.signedMargin).sort((a, b) => a - b);
+  const middle = Math.floor(sortedMargins.length / 2);
+  const median = sortedMargins.length === 0
+    ? null
+    : sortedMargins.length % 2 === 1
+      ? sortedMargins[middle]
+      : (sortedMargins[middle - 1] + sortedMargins[middle]) / 2;
+  return {
+    rows: rows.length,
+    main: asMetric("main"),
+    plus1: asMetric("plus1"),
+    plus2: asMetric("plus2"),
+    meanSignedMargin: rows.length
+      ? round(rows.reduce((sum, row) => sum + row.signedMargin, 0) / rows.length)
+      : null,
+    medianSignedMargin: median === null ? null : round(median),
+    missDistanceBuckets: Object.fromEntries([
+      "main_win",
+      "main_push",
+      "rescued_by_plus1",
+      "push_at_plus1",
+      "rescued_by_plus2",
+      "push_at_plus2",
+      "still_loses_plus2",
+    ].map((key) => [key, {
+      n: buckets.get(key) ?? 0,
+      pct: rows.length ? round((buckets.get(key) ?? 0) / rows.length, 4) : null,
+    }])),
+  };
+}
+
+function lineLadderDiagnostics(
+  rows: LineLadderRow[],
+  chronologyUniverse: Game[],
+): Record<string, unknown> {
+  const gameMap = new Map(chronologyUniverse.map((game) => [game.gameId, game]));
+  const sides = [...new Set(rows.map((row) => row.side))].sort();
+  return {
+    all: summarizeLineLadderRows(rows),
+    chronology: Object.fromEntries((['train', 'validation', 'holdout'] as const).map((part) => [
+      part,
+      summarizeLineLadderRows(rows.filter((row) => {
+        const game = gameMap.get(row.gameId);
+        return game !== undefined && chronologicalLabel(chronologyUniverse, game) === part;
+      })),
+    ])),
+    bySide: Object.fromEntries(sides.map((side) => {
+      const sideRows = rows.filter((row) => row.side === side);
+      return [side, {
+        all: summarizeLineLadderRows(sideRows),
+        chronology: Object.fromEntries((['train', 'validation', 'holdout'] as const).map((part) => [
+          part,
+          summarizeLineLadderRows(sideRows.filter((row) => {
+            const game = gameMap.get(row.gameId);
+            return game !== undefined && chronologicalLabel(chronologyUniverse, game) === part;
+          })),
+        ])),
+      }];
+    })),
+  };
+}
+
+function totalLineLadderRows(
+  games: Game[],
+  sideFn: (game: Game) => TotalSide | null,
+): LineLadderRow[] {
+  return games.flatMap((game) => {
+    const side = sideFn(game);
+    const line = totalLine(game);
+    if (!side || line === null) return [];
+    const actual = game.home + game.away;
+    const signedMargin = side === "over" ? actual - line : line - actual;
+    return [{
+      gameId: game.gameId,
+      date: game.date,
+      side,
+      signedMargin,
+      main: totalOutcome(side, line, game),
+      plus1: totalOutcome(side, side === "over" ? line - 1 : line + 1, game),
+      plus2: totalOutcome(side, side === "over" ? line - 2 : line + 2, game),
+    }];
+  });
+}
+
+function runLineLadderRows(
+  games: Game[],
+  sideFn: (game: Game) => Side | null,
+): LineLadderRow[] {
+  return games.flatMap((game) => {
+    const side = sideFn(game);
+    if (!side) return [];
+    const line = lineForSelectedRunLine(game, side);
+    if (line === null) return [];
+    const scoreMargin = side === "home" ? game.home - game.away : game.away - game.home;
+    const signedMargin = scoreMargin + line;
+    return [{
+      gameId: game.gameId,
+      date: game.date,
+      side: line < 0 ? "favorite_minus_1_5" : "underdog_plus_1_5",
+      signedMargin,
+      main: handicapOutcome(side, line, game),
+      plus1: handicapOutcome(side, line + 1, game),
+      plus2: handicapOutcome(side, line + 2, game),
+    }];
+  });
+}
+
 function summarizeChronology(games: Game[], rows: PickRow[]): Record<string, Metric> {
   const gameMap = new Map(games.map((g) => [g.gameId, g]));
   return Object.fromEntries(["train", "validation", "holdout"].map((part) => [
@@ -674,6 +819,13 @@ function storedPosteriorScore(game: Game): Scores | null {
   const audit = v22(game.total ?? game.ml);
   const home = num(audit.posterior_home_runs);
   const away = num(audit.posterior_away_runs);
+  return home !== null && away !== null ? { home, away } : null;
+}
+
+function storedIndependentScore(game: Game): Scores | null {
+  const audit = v22(game.total ?? game.ml);
+  const home = num(audit.independent_home_runs);
+  const away = num(audit.independent_away_runs);
   return home !== null && away !== null ? { home, away } : null;
 }
 
@@ -802,10 +954,15 @@ function candidateTotalDecision(
   };
 }
 
-function fitScoreGapCalibration(games: Game[], chronologyUniverse: Game[]): ScoreGapCalibration {
+function fitScoreGapCalibration(
+  games: Game[],
+  chronologyUniverse: Game[],
+  scoreForGame: (game: Game) => Scores | null = (game) =>
+    candidatePosterior(game, "arithmetic_preserve_margin"),
+): ScoreGapCalibration {
   const training = games.flatMap((game) => {
     if (chronologicalLabel(chronologyUniverse, game) !== "train") return [];
-    const score = candidatePosterior(game, "arithmetic_preserve_margin");
+    const score = scoreForGame(game);
     const line = totalLine(game);
     if (!score || line === null) return [];
     const actualTotal = game.home + game.away;
@@ -837,9 +994,10 @@ function fitScoreGapCalibration(games: Game[], chronologyUniverse: Game[]): Scor
 function scoreGapTotalDecision(
   game: Game,
   calibration: ScoreGapCalibration,
+  scoreOverride: Scores | null = null,
 ): CandidateTotalDecision | null {
   const row = game.total;
-  const score = candidatePosterior(game, "arithmetic_preserve_margin");
+  const score = scoreOverride ?? candidatePosterior(game, "arithmetic_preserve_margin");
   const line = totalLine(game);
   if (!row || !score || line === null) return null;
   const z = Math.max(-20, Math.min(20,
@@ -1101,10 +1259,57 @@ function qualityTier(game: Game): "high" | "medium" | "low" | "fallback" {
   return value === "high" || value === "medium" || value === "low" ? value : "fallback";
 }
 
+type StructuralRepairScope = "high_quality_only" | "exclude_bad_or_weak" | "good_or_strong";
+
+function structuralRepairApplies(game: Game, scope: StructuralRepairScope): boolean {
+  const audit = v22(game.total ?? game.ml);
+  const starter = obj(obj(audit.feature_capture).starter);
+  const homeEra = num(obj(starter.home).season_era);
+  const awayEra = num(obj(starter.away).season_era);
+  const averageStarterEra = homeEra !== null && awayEra !== null
+    ? (homeEra + awayEra) / 2
+    : null;
+  const factors = obj(obj(audit.feature_capture).factors);
+  const homeBullpen = num(obj(factors.home).bullpen_factor_opp);
+  const awayBullpen = num(obj(factors.away).bullpen_factor_opp);
+  const averageBullpenFactor = homeBullpen !== null && awayBullpen !== null
+    ? (homeBullpen + awayBullpen) / 2
+    : null;
+  if (qualityTier(game) !== "high" || averageStarterEra === null || averageBullpenFactor === null) {
+    return false;
+  }
+  if (scope === "high_quality_only") return true;
+  if (scope === "exclude_bad_or_weak") {
+    return averageStarterEra < 4.75 && averageBullpenFactor < 1.05;
+  }
+  return averageStarterEra <= 3.75 || averageBullpenFactor <= 0.95;
+}
+
+function scopedStructuralPosterior(game: Game, scope: StructuralRepairScope): Scores | null {
+  return structuralRepairApplies(game, scope)
+    ? candidatePosterior(game, "arithmetic_preserve_margin")
+    : storedPosteriorScore(game);
+}
+
+function scopedStructuralIndependent(game: Game, scope: StructuralRepairScope): Scores | null {
+  return structuralRepairApplies(game, scope)
+    ? inningsWeightedIndependent(game, "arithmetic_preserve_margin")
+    : storedIndependentScore(game);
+}
+
+function scopedStructuralTotalSide(game: Game, scope: StructuralRepairScope): TotalSide | null {
+  const score = scopedStructuralPosterior(game, scope);
+  const line = totalLine(game);
+  if (!score || line === null) return null;
+  return score.home + score.away >= line ? "over" : "under";
+}
+
 function predictionFromSnapshot(
   game: Game,
   candidate: boolean,
   scoreGapCalibration: ScoreGapCalibration | null = null,
+  preserveScoreGapProbability = false,
+  structuralScope: StructuralRepairScope | null = null,
 ): WriterPrediction | null {
   const sourceRow = game.total ?? game.ml;
   if (!sourceRow) return null;
@@ -1126,11 +1331,15 @@ function predictionFromSnapshot(
   let ouProb = baselineOuProb;
   let sportSpecific = { ...sourceSnapshot };
   if (candidate) {
-    const candidateScores = candidatePosterior(game, "arithmetic_preserve_margin");
-    const independent = inningsWeightedIndependent(game, "arithmetic_preserve_margin");
+    const candidateScores = structuralScope === null
+      ? candidatePosterior(game, "arithmetic_preserve_margin")
+      : scopedStructuralPosterior(game, structuralScope);
+    const independent = structuralScope === null
+      ? inningsWeightedIndependent(game, "arithmetic_preserve_margin")
+      : scopedStructuralIndependent(game, structuralScope);
     const decision = scoreGapCalibration === null
       ? candidateTotalDecision(game)
-      : scoreGapTotalDecision(game, scoreGapCalibration);
+      : scoreGapTotalDecision(game, scoreGapCalibration, candidateScores);
     const line = totalLine(game);
     const noVig = totalNoVigProbability(game);
     if (!candidateScores || !independent || !decision || line === null) return null;
@@ -1199,10 +1408,14 @@ function predictionFromSnapshot(
       ou_requires_market_confirmation: decision.requiresMarketConfirmation,
       total_regime_calibration: {
         ...originalCalibration,
-        applied: scoreGapCalibration === null && originalCalibration.applied === true,
+        applied: scoreGapCalibration === null
+          ? originalCalibration.applied === true
+          : preserveScoreGapProbability,
         reason: scoreGapCalibration === null
           ? originalCalibration.reason
-          : "replaced_by_train_only_independent_score_gap_logistic_head",
+          : preserveScoreGapProbability
+            ? "train_only_independent_score_gap_probability_already_calibrated"
+            : "replaced_by_train_only_independent_score_gap_logistic_head",
         modelOverProbabilityBefore: decision.regularizedOverProbability,
         modelOverProbabilityAfter: decision.calibratedOverProbability,
       },
@@ -1372,9 +1585,16 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
   const abbreviations = await loadTeamAbbreviations(writerGames);
   const gamesById = new Map(games.map((game) => [game.gameId, game]));
   const scoreGapCalibration = fitScoreGapCalibration(games, chronologyUniverse);
+  const scopedScoreGapCalibration = fitScoreGapCalibration(
+    games,
+    chronologyUniverse,
+    (game) => scopedStructuralPosterior(game, "exclude_bad_or_weak"),
+  );
   const baselineRecords: WriterRecord[] = [];
   const structuralRecords: WriterRecord[] = [];
   const candidateRecords: WriterRecord[] = [];
+  const candidatePreservedProbabilityRecords: WriterRecord[] = [];
+  const candidateScopedRecords: WriterRecord[] = [];
   const omitted = { missingGame: 0, missingBaseline: 0, missingCandidate: 0, missingLines: 0 };
   const dates = [...new Set(games.map((game) => game.date))].sort();
   for (const date of dates) {
@@ -1383,6 +1603,8 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     const baselinePredictions = new Map<number, WriterPrediction>();
     const structuralPredictions = new Map<number, WriterPrediction>();
     const candidatePredictions = new Map<number, WriterPrediction>();
+    const candidatePreservedProbabilityPredictions = new Map<number, WriterPrediction>();
+    const candidateScopedPredictions = new Map<number, WriterPrediction>();
     const oddsByGameId = new Map<number, ReturnType<typeof buildGameOddsSnapshot>>();
     const linesByGameId = new Map<number, ReadonlyArray<WriterLine>>();
     const openersByGameId = new Map<number, ReadonlyArray<WriterOpener>>();
@@ -1393,15 +1615,33 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       const baseline = predictionFromSnapshot(game, false);
       const structural = predictionFromSnapshot(game, true);
       const candidate = predictionFromSnapshot(game, true, scoreGapCalibration);
+      const candidatePreservedProbability = predictionFromSnapshot(
+        game,
+        true,
+        scoreGapCalibration,
+        true,
+      );
+      const candidateScoped = predictionFromSnapshot(
+        game,
+        true,
+        scopedScoreGapCalibration,
+        true,
+        "exclude_bad_or_weak",
+      );
       const evidence = writerEvidence(game);
       if (!writerGame) { omitted.missingGame++; continue; }
       if (!baseline) { omitted.missingBaseline++; continue; }
-      if (!structural || !candidate) { omitted.missingCandidate++; continue; }
+      if (!structural || !candidate || !candidatePreservedProbability || !candidateScoped) {
+        omitted.missingCandidate++;
+        continue;
+      }
       if (evidence.lines.length === 0) { omitted.missingLines++; continue; }
       slateGames.push(writerGame);
       baselinePredictions.set(game.gameId, baseline);
       structuralPredictions.set(game.gameId, structural);
       candidatePredictions.set(game.gameId, candidate);
+      candidatePreservedProbabilityPredictions.set(game.gameId, candidatePreservedProbability);
+      candidateScopedPredictions.set(game.gameId, candidateScoped);
       const startMs = writerGame.game_date === null ? undefined : Date.parse(writerGame.game_date) - 60 * 60 * 1_000;
       oddsByGameId.set(game.gameId, buildGameOddsSnapshot(evidence.lines, {
         gameId: game.gameId,
@@ -1427,6 +1667,14 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     baselineRecords.push(...buildPredictionRecordsFromSlate({ ...common, predictionByGameId: baselinePredictions }));
     structuralRecords.push(...buildPredictionRecordsFromSlate({ ...common, predictionByGameId: structuralPredictions }));
     candidateRecords.push(...buildPredictionRecordsFromSlate({ ...common, predictionByGameId: candidatePredictions }));
+    candidatePreservedProbabilityRecords.push(...buildPredictionRecordsFromSlate({
+      ...common,
+      predictionByGameId: candidatePreservedProbabilityPredictions,
+    }));
+    candidateScopedRecords.push(...buildPredictionRecordsFromSlate({
+      ...common,
+      predictionByGameId: candidateScopedPredictions,
+    }));
   }
   const total = (records: WriterRecord[]) => records.filter((record) => record.market === "total");
   const ml = (records: WriterRecord[]) => records.filter((record) => record.market === "moneyline");
@@ -1435,8 +1683,12 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
   const baseTotals = total(baselineRecords);
   const structuralTotals = total(structuralRecords);
   const candidateTotals = total(candidateRecords);
+  const candidatePreservedProbabilityTotals = total(candidatePreservedProbabilityRecords);
+  const candidateScopedTotals = total(candidateScopedRecords);
   const baseMl = ml(baselineRecords);
   const candidateMl = ml(candidateRecords);
+  const candidatePreservedProbabilityMl = ml(candidatePreservedProbabilityRecords);
+  const candidateScopedMl = ml(candidateScopedRecords);
   const baseByKey = new Map(baselineRecords.map((record) => [`${record.game_id}:${record.market}`, record]));
   const candidateByKey = new Map(candidateRecords.map((record) => [`${record.game_id}:${record.market}`, record]));
   const deltas = { totalSideFlips: 0, totalCorrections: 0, totalHarms: 0, totalPromotions: 0, totalDemotions: 0, mlSideChanges: 0, mlGradeChanges: 0 };
@@ -1479,6 +1731,31 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       }),
     )]),
   );
+  const byGradeChronology = (records: WriterRecord[]) => Object.fromEntries(
+    [...new Set(records.map((record) => record.play_grade ?? "ungraded"))].sort().map((grade) => {
+      const gradeRecords = records.filter((record) => (record.play_grade ?? "ungraded") === grade);
+      return [grade, {
+        all: recordMetric(gamesById, gradeRecords),
+        chronology: chronology(gradeRecords),
+      }];
+    }),
+  );
+  const groupedRecordMetrics = (
+    records: WriterRecord[],
+    keyFn: (record: WriterRecord) => string,
+  ) => {
+    const groups = new Map<string, WriterRecord[]>();
+    for (const record of records) {
+      const key = keyFn(record);
+      groups.set(key, [...(groups.get(key) ?? []), record]);
+    }
+    return Object.fromEntries([...groups.entries()]
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([key, groupRecords]) => [key, {
+        all: recordMetric(gamesById, groupRecords),
+        chronology: chronology(groupRecords),
+      }]));
+  };
   const compactCandidate = (records: WriterRecord[]) => ({
     totals: recordMetric(gamesById, records),
     actionableTotals: recordMetric(gamesById, records.filter(actionable)),
@@ -1496,10 +1773,394 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     if (!game || !score || record.line_value === null) return [];
     return [{ record, gap: score.home + score.away - record.line_value }];
   });
+  const preservedProbabilityDiagnosticRows = candidatePreservedProbabilityTotals.flatMap((record) => {
+    const game = gamesById.get(record.game_id);
+    const score = game ? candidatePosterior(game, "arithmetic_preserve_margin") : null;
+    if (!game || !score || record.line_value === null) return [];
+    return [{ record, gap: score.home + score.away - record.line_value }];
+  });
+  const scopedDiagnosticRows = candidateScopedTotals.flatMap((record) => {
+    const game = gamesById.get(record.game_id);
+    const score = game ? scopedStructuralPosterior(game, "exclude_bad_or_weak") : null;
+    if (!game || !score || record.line_value === null) return [];
+    return [{ record, gap: score.home + score.away - record.line_value }];
+  });
   const diagnostic = (filter: (row: typeof diagnosticRows[number]) => boolean) => {
     const records = diagnosticRows.filter(filter).map((row) => row.record);
     return { all: recordMetric(gamesById, records), chronology: chronology(records) };
   };
+  type ActionPolicy = {
+    minModelProbability: number;
+    minProjectionGap: number;
+    minEdgePp: number;
+    minAmericanOdds: number;
+    rejectAdverseMovement: boolean;
+  };
+  const actionRows = preservedProbabilityDiagnosticRows.filter((row) =>
+    !row.record.held &&
+    !row.record.no_bet &&
+    !row.record.provisional &&
+    row.record.play_grade === "market_aligned" &&
+    row.record.odds_american !== null &&
+    row.record.model_probability !== null &&
+    row.record.edge !== null,
+  );
+  const lineDirection = (record: WriterRecord): string =>
+    String(obj(record.snapshot_json).line_movement && obj(obj(record.snapshot_json).line_movement).direction || "unknown");
+  const qualifiesPolicy = (row: typeof diagnosticRows[number], policy: ActionPolicy): boolean =>
+    row.record.model_probability !== null &&
+    row.record.edge !== null &&
+    row.record.odds_american !== null &&
+    row.record.model_probability >= policy.minModelProbability &&
+    Math.abs(row.gap) >= policy.minProjectionGap &&
+    row.record.edge >= policy.minEdgePp &&
+    row.record.odds_american >= policy.minAmericanOdds &&
+    (!policy.rejectAdverseMovement || lineDirection(row.record) !== "against_pick");
+  const policyMetric = (
+    policy: ActionPolicy,
+    part: "train" | "validation" | "holdout" | "all",
+  ): Metric => recordMetric(
+    gamesById,
+    actionRows.filter((row) => {
+      const game = gamesById.get(row.record.game_id);
+      return qualifiesPolicy(row, policy) && (
+        part === "all" ||
+        (game !== undefined && chronologicalLabel(chronologyUniverse, game) === part)
+      );
+    }).map((row) => row.record),
+  );
+  const wilsonLower95 = (wins: number, decided: number): number => {
+    if (decided === 0) return 0;
+    const z = 1.96;
+    const p = wins / decided;
+    const denominator = 1 + z * z / decided;
+    const center = p + z * z / (2 * decided);
+    const spread = z * Math.sqrt((p * (1 - p) + z * z / (4 * decided)) / decided);
+    return (center - spread) / denominator;
+  };
+  const policyCandidates: Array<{
+    policy: ActionPolicy;
+    train: Metric;
+    wilsonLower95: number;
+  }> = [];
+  const allPolicyResults: typeof policyCandidates = [];
+  for (const minModelProbability of [0.51, 0.52, 0.53, 0.54]) {
+    for (const minProjectionGap of [0.25, 0.5, 0.75, 1]) {
+      for (const minEdgePp of [0, 1, 2, 3]) {
+        for (const minAmericanOdds of [-150, -130, -115]) {
+          const policy: ActionPolicy = {
+            minModelProbability,
+            minProjectionGap,
+            minEdgePp,
+            minAmericanOdds,
+            rejectAdverseMovement: false,
+          };
+          const train = policyMetric(policy, "train");
+          const evaluated = {
+            policy,
+            train,
+            wilsonLower95: round(wilsonLower95(train.wins, train.decided), 4),
+          };
+          allPolicyResults.push(evaluated);
+          if (train.decided < 63 || train.decided > 188 || train.roiPct === null || train.roiPct < 0) continue;
+          policyCandidates.push(evaluated);
+        }
+      }
+    }
+  }
+  policyCandidates.sort((a, b) =>
+    b.wilsonLower95 - a.wilsonLower95 ||
+    (b.train.roiPct ?? -Infinity) - (a.train.roiPct ?? -Infinity) ||
+    b.train.decided - a.train.decided,
+  );
+  const bestWilsonLower = policyCandidates[0]?.wilsonLower95 ?? null;
+  const nearBestTrainPolicies = bestWilsonLower === null
+    ? []
+    : policyCandidates.filter((candidatePolicy) =>
+        candidatePolicy.wilsonLower95 >= bestWilsonLower - 0.01);
+  const selectedPolicy = [...nearBestTrainPolicies].sort((a, b) =>
+    b.train.decided - a.train.decided ||
+    b.wilsonLower95 - a.wilsonLower95 ||
+    (b.train.roiPct ?? -Infinity) - (a.train.roiPct ?? -Infinity),
+  )[0] ?? null;
+  const boardSizedPolicies = allPolicyResults.filter((result) =>
+    result.train.decided >= 63 && result.train.decided <= 188,
+  );
+  const topBoardSizedByRoi = [...boardSizedPolicies]
+    .sort((a, b) =>
+      (b.train.roiPct ?? -Infinity) - (a.train.roiPct ?? -Infinity) ||
+      b.wilsonLower95 - a.wilsonLower95,
+    )
+    .slice(0, 5);
+  const numericDistribution = (values: number[]): Record<string, number | null> => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const quantile = (p: number): number | null => {
+      if (sorted.length === 0) return null;
+      const index = (sorted.length - 1) * p;
+      const lower = Math.floor(index);
+      const upper = Math.ceil(index);
+      const value = lower === upper
+        ? sorted[lower]
+        : sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
+      return round(value, 4);
+    };
+    return {
+      n: sorted.length,
+      min: quantile(0),
+      p10: quantile(0.1),
+      p25: quantile(0.25),
+      median: quantile(0.5),
+      p75: quantile(0.75),
+      p90: quantile(0.9),
+      max: quantile(1),
+    };
+  };
+  const featureDistribution = (part: "train" | "validation" | "holdout" | "all") => {
+    const rows = actionRows.filter((row) => {
+      const game = gamesById.get(row.record.game_id);
+      return part === "all" || (
+        game !== undefined && chronologicalLabel(chronologyUniverse, game) === part
+      );
+    });
+    return {
+      rows: rows.length,
+      modelProbability: numericDistribution(rows.flatMap((row) =>
+        row.record.model_probability === null ? [] : [row.record.model_probability])),
+      absoluteProjectionGap: numericDistribution(rows.map((row) => Math.abs(row.gap))),
+      edgePp: numericDistribution(rows.flatMap((row) => row.record.edge === null ? [] : [row.record.edge])),
+      oddsAmerican: numericDistribution(rows.flatMap((row) =>
+        row.record.odds_american === null ? [] : [row.record.odds_american])),
+    };
+  };
+  const actionCalibrationSearch = {
+    contract: "paired shadow: inherited losing Leans are demoted and replacement actions are promoted only from candidate-side Market Aligned rows using a fixed, interpretable grid selected on train only; validation and holdout do not participate in selection",
+    family: {
+      minModelProbability: [0.51, 0.52, 0.53, 0.54],
+      minProjectionGap: [0.25, 0.5, 0.75, 1],
+      minEdgePp: [0, 1, 2, 3],
+      minAmericanOdds: [-150, -130, -115],
+      rejectAdverseMovement: false,
+      trainBoardConstraint: "63-188 decided rows (10%-30% of the 626-game training block)",
+      selectionMetric: "largest training board within 1 percentage point of the best 95% Wilson lower bound, then Wilson bound and ROI",
+    },
+    prePolicyEligibleRows: actionRows.length,
+    prePolicyEligible: {
+      all: recordMetric(gamesById, actionRows.map((row) => row.record)),
+      chronology: chronology(actionRows.map((row) => row.record)),
+    },
+    featureDistribution: Object.fromEntries(
+      (["all", "train", "validation", "holdout"] as const).map((part) => [
+        part,
+        featureDistribution(part),
+      ]),
+    ),
+    evaluatedPolicies: allPolicyResults.length,
+    boardSizedTrainPolicies: boardSizedPolicies.length,
+    qualifyingTrainPolicies: policyCandidates.length,
+    selected: selectedPolicy === null ? null : {
+      policy: selectedPolicy.policy,
+      trainWilsonLower95: selectedPolicy.wilsonLower95,
+      all: policyMetric(selectedPolicy.policy, "all"),
+      train: selectedPolicy.train,
+      validation: policyMetric(selectedPolicy.policy, "validation"),
+      holdout: policyMetric(selectedPolicy.policy, "holdout"),
+    },
+    topTrainPolicies: policyCandidates.slice(0, 10).map((candidatePolicy) => ({
+      policy: candidatePolicy.policy,
+      trainWilsonLower95: candidatePolicy.wilsonLower95,
+      train: candidatePolicy.train,
+      validation: policyMetric(candidatePolicy.policy, "validation"),
+      holdout: policyMetric(candidatePolicy.policy, "holdout"),
+    })),
+    topBoardSizedTrainPoliciesByRoi: topBoardSizedByRoi.map((candidatePolicy) => ({
+      policy: candidatePolicy.policy,
+      trainWilsonLower95: candidatePolicy.wilsonLower95,
+      train: candidatePolicy.train,
+      validation: policyMetric(candidatePolicy.policy, "validation"),
+      holdout: policyMetric(candidatePolicy.policy, "holdout"),
+    })),
+  };
+  const scopedActionRows = scopedDiagnosticRows.filter((row) =>
+    !row.record.held &&
+    !row.record.no_bet &&
+    !row.record.provisional &&
+    row.record.play_grade === "market_aligned" &&
+    row.record.odds_american !== null &&
+    row.record.model_probability !== null &&
+    row.record.edge !== null,
+  );
+  const scopedPolicyMetric = (
+    policy: ActionPolicy,
+    part: "train" | "validation" | "holdout" | "all",
+  ): Metric => recordMetric(
+    gamesById,
+    scopedActionRows.filter((row) => {
+      const game = gamesById.get(row.record.game_id);
+      return qualifiesPolicy(row, policy) && (
+        part === "all" ||
+        (game !== undefined && chronologicalLabel(chronologyUniverse, game) === part)
+      );
+    }).map((row) => row.record),
+  );
+  const scopedPolicyCandidates: typeof policyCandidates = [];
+  const allScopedPolicyResults: typeof policyCandidates = [];
+  for (const minModelProbability of [0.51, 0.52, 0.53, 0.54]) {
+    for (const minProjectionGap of [0.25, 0.5, 0.75, 1]) {
+      for (const minEdgePp of [0, 1, 2, 3]) {
+        for (const minAmericanOdds of [-150, -130, -115]) {
+          const policy: ActionPolicy = {
+            minModelProbability,
+            minProjectionGap,
+            minEdgePp,
+            minAmericanOdds,
+            rejectAdverseMovement: false,
+          };
+          const train = scopedPolicyMetric(policy, "train");
+          const evaluated = {
+            policy,
+            train,
+            wilsonLower95: round(wilsonLower95(train.wins, train.decided), 4),
+          };
+          allScopedPolicyResults.push(evaluated);
+          if (train.decided < 63 || train.decided > 188 || train.roiPct === null || train.roiPct < 0) continue;
+          scopedPolicyCandidates.push(evaluated);
+        }
+      }
+    }
+  }
+  scopedPolicyCandidates.sort((a, b) =>
+    b.wilsonLower95 - a.wilsonLower95 ||
+    (b.train.roiPct ?? -Infinity) - (a.train.roiPct ?? -Infinity) ||
+    b.train.decided - a.train.decided,
+  );
+  const scopedBestWilsonLower = scopedPolicyCandidates[0]?.wilsonLower95 ?? null;
+  const scopedNearBestTrainPolicies = scopedBestWilsonLower === null
+    ? []
+    : scopedPolicyCandidates.filter((candidatePolicy) =>
+        candidatePolicy.wilsonLower95 >= scopedBestWilsonLower - 0.01);
+  const selectedScopedPolicy = [...scopedNearBestTrainPolicies].sort((a, b) =>
+    b.train.decided - a.train.decided ||
+    b.wilsonLower95 - a.wilsonLower95 ||
+    (b.train.roiPct ?? -Infinity) - (a.train.roiPct ?? -Infinity),
+  )[0] ?? null;
+  const scopedBoardSizedPolicies = allScopedPolicyResults.filter((result) =>
+    result.train.decided >= 63 && result.train.decided <= 188,
+  );
+  const scopedActionCalibrationSearch = {
+    contract: "paired shadow over the scoped structural candidate: inherited Leans are demoted and replacement actions are promoted only from candidate-side Market Aligned rows; the fixed grid and selection rule use training only",
+    prePolicyEligibleRows: scopedActionRows.length,
+    prePolicyEligible: {
+      all: recordMetric(gamesById, scopedActionRows.map((row) => row.record)),
+      chronology: chronology(scopedActionRows.map((row) => row.record)),
+    },
+    evaluatedPolicies: allScopedPolicyResults.length,
+    boardSizedTrainPolicies: scopedBoardSizedPolicies.length,
+    qualifyingTrainPolicies: scopedPolicyCandidates.length,
+    selected: selectedScopedPolicy === null ? null : {
+      policy: selectedScopedPolicy.policy,
+      trainWilsonLower95: selectedScopedPolicy.wilsonLower95,
+      all: scopedPolicyMetric(selectedScopedPolicy.policy, "all"),
+      train: selectedScopedPolicy.train,
+      validation: scopedPolicyMetric(selectedScopedPolicy.policy, "validation"),
+      holdout: scopedPolicyMetric(selectedScopedPolicy.policy, "holdout"),
+    },
+    topTrainPolicies: scopedPolicyCandidates.slice(0, 10).map((candidatePolicy) => ({
+      policy: candidatePolicy.policy,
+      trainWilsonLower95: candidatePolicy.wilsonLower95,
+      train: candidatePolicy.train,
+      validation: scopedPolicyMetric(candidatePolicy.policy, "validation"),
+      holdout: scopedPolicyMetric(candidatePolicy.policy, "holdout"),
+    })),
+  };
+  const scopedSelectedActionRecords = selectedScopedPolicy === null
+    ? []
+    : scopedActionRows
+        .filter((row) => qualifiesPolicy(row, selectedScopedPolicy.policy))
+        .map((row) => row.record);
+  const incumbentActionKeys = new Set(
+    baseTotals.filter(actionable).map((record) => `${record.game_id}:${record.market}`),
+  );
+  const scopedSelectedActionKeys = new Set(
+    scopedSelectedActionRecords.map((record) => `${record.game_id}:${record.market}`),
+  );
+  const retainedScopedActions = scopedSelectedActionRecords.filter((record) =>
+    incumbentActionKeys.has(`${record.game_id}:${record.market}`));
+  const promotedScopedActions = scopedSelectedActionRecords.filter((record) =>
+    !incumbentActionKeys.has(`${record.game_id}:${record.market}`));
+  const demotedIncumbentActions = baseTotals.filter((record) =>
+    actionable(record) && !scopedSelectedActionKeys.has(`${record.game_id}:${record.market}`));
+  const scopedByKey = new Map(
+    candidateScopedRecords.map((record) => [`${record.game_id}:${record.market}`, record]),
+  );
+  const scopedDeltas = {
+    totalSideFlips: 0,
+    totalCorrections: 0,
+    totalHarms: 0,
+    totalPromotions: 0,
+    totalDemotions: 0,
+    mlSideChanges: 0,
+    mlGradeChanges: 0,
+  };
+  for (const [key, before] of baseByKey) {
+    const after = scopedByKey.get(key);
+    if (!after) continue;
+    if (before.market === "moneyline") {
+      if (before.side !== after.side) scopedDeltas.mlSideChanges++;
+      if (
+        before.play_grade !== after.play_grade ||
+        before.best_angle !== after.best_angle ||
+        before.no_bet !== after.no_bet
+      ) scopedDeltas.mlGradeChanges++;
+      continue;
+    }
+    const game = gamesById.get(before.game_id);
+    if (
+      before.side !== after.side && game &&
+      before.line_value !== null && after.line_value !== null &&
+      (before.side === "over" || before.side === "under") &&
+      (after.side === "over" || after.side === "under")
+    ) {
+      scopedDeltas.totalSideFlips++;
+      const oldOutcome = totalOutcome(before.side, before.line_value, game);
+      const newOutcome = totalOutcome(after.side, after.line_value, game);
+      if (oldOutcome === "loss" && newOutcome === "win") scopedDeltas.totalCorrections++;
+      if (oldOutcome === "win" && newOutcome === "loss") scopedDeltas.totalHarms++;
+    }
+    if (!actionable(before) && actionable(after)) scopedDeltas.totalPromotions++;
+    if (actionable(before) && !actionable(after)) scopedDeltas.totalDemotions++;
+  }
+  const writerLineLadder = (records: WriterRecord[]) => lineLadderDiagnostics(
+    records.flatMap((record) => {
+      const game = gamesById.get(record.game_id);
+      if (
+        !game ||
+        (record.side !== "over" && record.side !== "under") ||
+        record.line_value === null
+      ) return [];
+      const actual = game.home + game.away;
+      const signedMargin = record.side === "over"
+        ? actual - record.line_value
+        : record.line_value - actual;
+      return [{
+        gameId: game.gameId,
+        date: game.date,
+        side: record.side,
+        signedMargin,
+        main: totalOutcome(record.side, record.line_value, game),
+        plus1: totalOutcome(
+          record.side,
+          record.side === "over" ? record.line_value - 1 : record.line_value + 1,
+          game,
+        ),
+        plus2: totalOutcome(
+          record.side,
+          record.side === "over" ? record.line_value - 2 : record.line_value + 2,
+          game,
+        ),
+      }];
+    }),
+    chronologyUniverse,
+  );
   const unitDeltaGroups = new Map<string, {
     rows: number;
     baselineUnits: number;
@@ -1574,6 +2235,51 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       unitDelta: round(value.unitDelta),
     }]),
   );
+  const candidatePreservedByKey = new Map(
+    candidatePreservedProbabilityRecords.map((record) => [`${record.game_id}:${record.market}`, record]),
+  );
+  const fixedSlotReplay = (slots: WriterRecord[]) => {
+    const candidateSlotRecords = slots.flatMap((slot) => {
+      const record = candidatePreservedByKey.get(`${slot.game_id}:${slot.market}`);
+      return record ? [record] : [];
+    });
+    let sideChanges = 0;
+    let corrections = 0;
+    let harms = 0;
+    for (const slot of slots) {
+      const after = candidatePreservedByKey.get(`${slot.game_id}:${slot.market}`);
+      const game = gamesById.get(slot.game_id);
+      if (
+        !after || !game || slot.side === after.side ||
+        (slot.side !== "over" && slot.side !== "under") ||
+        (after.side !== "over" && after.side !== "under") ||
+        slot.line_value === null || after.line_value === null
+      ) continue;
+      sideChanges++;
+      const beforeOutcome = totalOutcome(slot.side, slot.line_value, game);
+      const afterOutcome = totalOutcome(after.side, after.line_value, game);
+      if (beforeOutcome === "loss" && afterOutcome === "win") corrections++;
+      if (beforeOutcome === "win" && afterOutcome === "loss") harms++;
+    }
+    return {
+      slots: slots.length,
+      matchedCandidateRows: candidateSlotRecords.length,
+      incumbent: {
+        all: recordMetric(gamesById, slots),
+        chronology: chronology(slots),
+      },
+      candidateDirectionOnSameSlots: {
+        all: recordMetric(gamesById, candidateSlotRecords),
+        chronology: chronology(candidateSlotRecords),
+      },
+      sideChanges,
+      corrections,
+      harms,
+      netCorrections: corrections - harms,
+    };
+  };
+  const incumbentActionableSlots = baseTotals.filter(actionable);
+  const incumbentBestAngleSlots = baseTotals.filter((record) => record.best_angle);
   return {
     contract: "current production writer replayed read-only over frozen lock evidence; current r91 writer applied equally to incumbent and train-only score-gap candidate",
     scoreGapCalibration: {
@@ -1581,6 +2287,12 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       intercept: round(scoreGapCalibration.intercept, 6),
       slope: round(scoreGapCalibration.slope, 6),
       trainingPolicy: "fit only on the first chronological block; validation and holdout are untouched",
+    },
+    scopedScoreGapCalibration: {
+      ...scopedScoreGapCalibration,
+      intercept: round(scopedScoreGapCalibration.intercept, 6),
+      slope: round(scopedScoreGapCalibration.slope, 6),
+      trainingPolicy: "fit only on the first chronological block using the scoped score; validation and holdout are untouched",
     },
     eligibleGames: games.length,
     replayedGames: new Set(candidateTotals.map((record) => record.game_id)).size,
@@ -1604,6 +2316,99 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       bestAngleTotals: recordMetric(gamesById, candidateTotals.filter((record) => record.best_angle)),
       chronology: chronology(candidateTotals),
     },
+    candidatePreservedProbability: {
+      note: "train-only score-gap probability is treated as already calibrated so the legacy price-conditioned probability fit is not applied a second time",
+      ...compactCandidate(candidatePreservedProbabilityTotals),
+      totalsByGrade: byGradeChronology(candidatePreservedProbabilityTotals),
+      diagnostics: {
+        byActionRule: groupedRecordMetrics(candidatePreservedProbabilityTotals, (record) =>
+          String(obj(obj(record.snapshot_json).decision_pipeline).action_rule_id ?? "none")),
+        bySide: groupedRecordMetrics(candidatePreservedProbabilityTotals, (record) =>
+          String(record.side ?? "none")),
+        byLineDirection: groupedRecordMetrics(candidatePreservedProbabilityTotals, (record) =>
+          String(obj(obj(record.snapshot_json).line_movement).direction ?? "unknown")),
+      },
+      moneylineIntegrity: {
+        rows: candidatePreservedProbabilityMl.length,
+        sideChanges: baseMl.filter((before) => {
+          const after = candidatePreservedProbabilityMl.find((record) => record.game_id === before.game_id);
+          return after !== undefined && before.side !== after.side;
+        }).length,
+        gradeOrActionChanges: baseMl.filter((before) => {
+          const after = candidatePreservedProbabilityMl.find((record) => record.game_id === before.game_id);
+          return after !== undefined && (
+            before.play_grade !== after.play_grade ||
+            before.best_angle !== after.best_angle ||
+            before.no_bet !== after.no_bet
+          );
+        }).length,
+      },
+    },
+    candidateScopedExcludeBadOrWeak: {
+      note: "train-only score-gap probability over the scoped structural repair: use the innings-weighted score only for high-quality rows whose average starter ERA is below 4.75 and average bullpen factor is below 1.05; otherwise preserve the locked model score path",
+      ...compactCandidate(candidateScopedTotals),
+      totalsByGrade: byGradeChronology(candidateScopedTotals),
+      diagnostics: {
+        byActionRule: groupedRecordMetrics(candidateScopedTotals, (record) =>
+          String(obj(obj(record.snapshot_json).decision_pipeline).action_rule_id ?? "none")),
+        bySide: groupedRecordMetrics(candidateScopedTotals, (record) => String(record.side ?? "none")),
+        byLineDirection: groupedRecordMetrics(candidateScopedTotals, (record) =>
+          String(obj(obj(record.snapshot_json).line_movement).direction ?? "unknown")),
+        byAbsoluteScoreGap: {
+          lt0_5: recordMetric(gamesById, scopedDiagnosticRows.filter((row) => Math.abs(row.gap) < 0.5).map((row) => row.record)),
+          from0_5To1: recordMetric(gamesById, scopedDiagnosticRows.filter((row) => Math.abs(row.gap) >= 0.5 && Math.abs(row.gap) < 1).map((row) => row.record)),
+          from1To1_5: recordMetric(gamesById, scopedDiagnosticRows.filter((row) => Math.abs(row.gap) >= 1 && Math.abs(row.gap) < 1.5).map((row) => row.record)),
+          gte1_5: recordMetric(gamesById, scopedDiagnosticRows.filter((row) => Math.abs(row.gap) >= 1.5).map((row) => row.record)),
+        },
+      },
+      moneylineIntegrity: {
+        rows: candidateScopedMl.length,
+        sideChanges: baseMl.filter((before) => {
+          const after = candidateScopedMl.find((record) => record.game_id === before.game_id);
+          return after !== undefined && before.side !== after.side;
+        }).length,
+        gradeOrActionChanges: baseMl.filter((before) => {
+          const after = candidateScopedMl.find((record) => record.game_id === before.game_id);
+          return after !== undefined && (
+            before.play_grade !== after.play_grade ||
+            before.best_angle !== after.best_angle ||
+            before.no_bet !== after.no_bet
+          );
+        }).length,
+      },
+    },
+    alternateLineMissDistance: {
+      incumbent: writerLineLadder(baseTotals),
+      candidate: writerLineLadder(candidateTotals),
+      candidatePreservedProbability: writerLineLadder(candidatePreservedProbabilityTotals),
+      candidateScopedExcludeBadOrWeak: writerLineLadder(candidateScopedTotals),
+    },
+    actionCalibrationSearch,
+    scopedActionCalibrationSearch,
+    scopedSelectedBoardImpact: {
+      finalCandidateBoard: {
+        all: recordMetric(gamesById, scopedSelectedActionRecords),
+        chronology: chronology(scopedSelectedActionRecords),
+      },
+      incumbentActionableRows: baseTotals.filter(actionable).length,
+      candidateActionableRows: scopedSelectedActionRecords.length,
+      retained: {
+        rows: retainedScopedActions.length,
+        candidateDirection: recordMetric(gamesById, retainedScopedActions),
+      },
+      promoted: {
+        rows: promotedScopedActions.length,
+        candidateDirection: recordMetric(gamesById, promotedScopedActions),
+      },
+      demoted: {
+        rows: demotedIncumbentActions.length,
+        incumbentDirection: recordMetric(gamesById, demotedIncumbentActions),
+      },
+    },
+    scopedDeltas: {
+      ...scopedDeltas,
+      netTotalCorrections: scopedDeltas.totalCorrections - scopedDeltas.totalHarms,
+    },
     boardImpact: {
       incumbentTotalRows: baseTotals.length,
       candidateTotalRows: candidateTotals.length,
@@ -1613,6 +2418,10 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       candidateBestAngles: candidateTotals.filter((record) => record.best_angle).length,
       promoted: recordMetric(gamesById, promoted),
       demoted: recordMetric(gamesById, demoted),
+    },
+    fixedIncumbentSlotReplay: {
+      actionable: fixedSlotReplay(incumbentActionableSlots),
+      bestAngle: fixedSlotReplay(incumbentBestAngleSlots),
     },
     unitDeltaDecomposition,
     moneylineIntegrity: {
@@ -1716,6 +2525,7 @@ async function main(): Promise<void> {
     shippedMlSide: storedMlSide,
     storedIndependentSide: (g: Game) => projectedMlSide(g, "independent_home_diff"),
     marketFavoriteSide: marketMlSide,
+    marketUnderdogSide,
     arithmeticInningsPosteriorSide: (g: Game) => candidateSide(g, "arithmetic"),
     inningsWeightedRunLineProbabilitySide: candidateRunLineSide,
   })) {
@@ -1753,6 +2563,18 @@ async function main(): Promise<void> {
     arithmeticInningsPosteriorPlus1: totalsByRule(games, (g) => candidateTotalSide(g, "arithmetic"), 1),
     arithmeticInningsPosteriorPlus2: totalsByRule(games, (g) => candidateTotalSide(g, "arithmetic"), 2),
     arithmeticInningsPreserveMarginPosterior: totalsByRule(games, (g) => candidateTotalSide(g, "arithmetic_preserve_margin")),
+    scopedStructuralHighQualityOnly: totalsByRule(
+      games,
+      (g) => scopedStructuralTotalSide(g, "high_quality_only"),
+    ),
+    scopedStructuralExcludeBadOrWeak: totalsByRule(
+      games,
+      (g) => scopedStructuralTotalSide(g, "exclude_bad_or_weak"),
+    ),
+    scopedStructuralGoodOrStrong: totalsByRule(
+      games,
+      (g) => scopedStructuralTotalSide(g, "good_or_strong"),
+    ),
     arithmeticInningsPreserveMarginPosteriorPlus1: totalsByRule(games, (g) => candidateTotalSide(g, "arithmetic_preserve_margin"), 1),
     arithmeticInningsPreserveMarginPosteriorPlus2: totalsByRule(games, (g) => candidateTotalSide(g, "arithmetic_preserve_margin"), 2),
     inningsWeightedCandidateModelLayer: totalsByRule(games, (g) => candidateTotalDecision(g)?.side ?? null),
@@ -1804,6 +2626,18 @@ async function main(): Promise<void> {
     shipped: totalsByRule(candidateCohort, storedTotalSide),
     storedPosteriorDirection: totalsByRule(candidateCohort, (g) => projectionTotalSide(g, "posterior_total")),
     arithmeticInningsPreserveMarginPosterior: totalsByRule(candidateCohort, (g) => candidateTotalSide(g, "arithmetic_preserve_margin")),
+    scopedStructuralHighQualityOnly: totalsByRule(
+      candidateCohort,
+      (g) => scopedStructuralTotalSide(g, "high_quality_only"),
+    ),
+    scopedStructuralExcludeBadOrWeak: totalsByRule(
+      candidateCohort,
+      (g) => scopedStructuralTotalSide(g, "exclude_bad_or_weak"),
+    ),
+    scopedStructuralGoodOrStrong: totalsByRule(
+      candidateCohort,
+      (g) => scopedStructuralTotalSide(g, "good_or_strong"),
+    ),
     inningsWeightedCandidateModelLayer: totalsByRule(candidateCohort, (g) => candidateTotalDecision(g)?.side ?? null),
     inningsWeightedCandidateRawProbability: totalsByRule(candidateCohort, (g) => candidateTotalDecision(g)?.rawProbabilitySide ?? null),
     inningsWeightedCandidateRegularizedProbability: totalsByRule(candidateCohort, (g) => candidateTotalDecision(g)?.regularizedProbabilitySide ?? null),
@@ -1836,6 +2670,7 @@ async function main(): Promise<void> {
   for (const [name, sideFn] of Object.entries({
     shippedMlSide: storedMlSide,
     storedPosteriorSide: (g: Game) => projectedMlSide(g, "posterior_home_diff"),
+    marketUnderdogSide,
     inningsWeightedPreserveMarginSide: (g: Game) => candidateSide(g, "arithmetic_preserve_margin"),
     inningsWeightedRunLineProbabilitySide: candidateRunLineSide,
   })) {
@@ -1881,6 +2716,21 @@ async function main(): Promise<void> {
         arithmeticInningsPreserveMarginPosterior: scoreRule(
           candidateCohort,
           (game) => candidatePosterior(game, "arithmetic_preserve_margin"),
+          games,
+        ),
+        scopedStructuralHighQualityOnly: scoreRule(
+          candidateCohort,
+          (game) => scopedStructuralPosterior(game, "high_quality_only"),
+          games,
+        ),
+        scopedStructuralExcludeBadOrWeak: scoreRule(
+          candidateCohort,
+          (game) => scopedStructuralPosterior(game, "exclude_bad_or_weak"),
+          games,
+        ),
+        scopedStructuralGoodOrStrong: scoreRule(
+          candidateCohort,
+          (game) => scopedStructuralPosterior(game, "good_or_strong"),
           games,
         ),
       },
@@ -1947,6 +2797,23 @@ async function main(): Promise<void> {
       games,
       (game) => candidateTotalDecision(game, true),
     ),
+    alternateLineMissDistance: {
+      publishedTotals: lineLadderDiagnostics(
+        totalLineLadderRows(games, storedTotalSide),
+        games,
+      ),
+      candidateTotals: lineLadderDiagnostics(
+        totalLineLadderRows(
+          candidateCohort,
+          (game) => candidateTotalSide(game, "arithmetic_preserve_margin"),
+        ),
+        games,
+      ),
+      candidateRunLine: lineLadderDiagnostics(
+        runLineLadderRows(candidateCohort, candidateRunLineSide),
+        games,
+      ),
+    },
     currentWriterReplay: writerReplay,
     runLineDerived: pack(runLineRules),
     totals: pack(totalRules),
