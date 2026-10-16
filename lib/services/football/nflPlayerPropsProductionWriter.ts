@@ -62,9 +62,14 @@ import {
   readNflPlayerPropsReferenceOffers,
   writeNflPlayerPropsReferenceOffers,
 } from "./nflPlayerPropsReferenceOfferStore";
+import {
+  captureNflPlayerPropsResearchOfferUniverse,
+  captureNflPlayerPropsResearchOfferUniverseSafely,
+  type NflPlayerPropsResearchOfferUniverseSafeResult,
+} from "./nflPlayerPropsResearchOfferUniverseStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_15_r56_independent_rushing_yards" as const;
+  "nfl_player_props_writer_2026_10_16_r57_research_offer_universe" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -170,6 +175,7 @@ export type NflPlayerPropsWriterResult = {
   healthFindings: string[];
   forecastTelemetry: NflPlayerPropsForecastTelemetry;
   marketObserverCapture: NflPlayerPropsMarketObserverSafeResult | null;
+  researchOfferUniverseCapture: NflPlayerPropsResearchOfferUniverseSafeResult | null;
   privateTrackingCapture: NflPlayerPropsPrivateTrackingSafeResult | null;
   candidateImpact?: NflPlayerPropsCandidateImpact;
   liveImpact?: NflPlayerPropsCandidateImpact;
@@ -436,6 +442,22 @@ export async function runNflPlayerPropsProductionWriter(args: {
       writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
     }))
     : null;
+  // This isolated archive consumes the retail and source-aware exact-offer
+  // boards already built from this cycle's bounded production collection. It
+  // never forces the conditional reference lane, reuses only observations
+  // fetched in this cycle, makes no provider requests, and is failure-isolated
+  // after snapshot, lock/tracking, closing, and settlement.
+  const researchOfferUniverseCapture = args.apply
+    ? await captureNflPlayerPropsResearchOfferUniverseSafely(() => captureNflPlayerPropsResearchOfferUniverse({
+      client: args.client,
+      season: args.season,
+      week: args.week,
+      offers: [...offers, ...sourceAwareReferenceOffers],
+      evaluatedAt: args.now,
+      maximumLockQuoteAgeHours: nflPlayerPropsRuntimePolicy().maximumQuoteAgeHours,
+      writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
+    }))
+    : null;
   // The private diagnostic archive is also last and failure-isolated. It
   // records every already-locked decision, including No Plays and alternate
   // lines, without changing the public board or the official actionable ledger.
@@ -503,6 +525,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     apiCallsMaximum,
     forecastTelemetry: summarizeNflPlayerPropsForecastTelemetry(snapshot),
     marketObserverCapture,
+    researchOfferUniverseCapture,
     privateTrackingCapture,
     ...(candidateImpact ? { candidateImpact } : {}),
     ...(liveImpact ? { liveImpact } : {}),
@@ -512,6 +535,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...(settlement.deferredGames > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_GAMES_DEFERRED:${settlement.deferredGames}`] : []),
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),
       ...(marketObserverCapture?.error ? ["NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED"] : []),
+      ...(researchOfferUniverseCapture?.error ? ["NFL_PLAYER_PROPS_RESEARCH_OFFER_UNIVERSE_CAPTURE_FAILED"] : []),
       ...(privateTrackingCapture?.error ? ["NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"] : []),
       ...(referenceOfferCacheError ? ["NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"] : []),
       ...(!sourceAwareReferenceOffersAvailable ? ["NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"] : []),
