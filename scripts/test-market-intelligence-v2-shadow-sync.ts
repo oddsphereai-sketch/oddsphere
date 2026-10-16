@@ -1,5 +1,6 @@
 import {
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE,
+  collectCompleteCountedPages,
   assessAdvertisedSharpHistoryCoverage,
   dedupeSharpApiHistorySplitObservations,
   assessSharpApiSplitSlateAlignment,
@@ -28,7 +29,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_shadow_capture_2026_10_15_r2_nba_rolling_window",
+    "market_intelligence_v2_shadow_capture_2026_10_16_r3_paginated_nba_price_window",
 );
 
 function check(label: string, ok: boolean, detail?: string): void {
@@ -396,6 +397,31 @@ check(
 );
 
 async function runAsyncChecks(): Promise<void> {
+  {
+    const source = Array.from({ length: 2_305 }, (_, index) => index);
+    const calls: Array<[number, number]> = [];
+    const rows = await collectCompleteCountedPages<number>({
+      label: "test rows",
+      loadPage: async (from, to) => {
+        calls.push([from, to]);
+        return { rows: source.slice(from, to + 1), count: source.length, error: null };
+      },
+    });
+    check(
+      "Counted pagination reads the complete NBA line set beyond the Supabase 1,000-row ceiling",
+      rows.length === 2_305 && calls.length === 3 && rows.at(-1) === 2_304,
+    );
+    let rejectedTruncation = false;
+    try {
+      await collectCompleteCountedPages<number>({
+        label: "truncated test rows",
+        loadPage: async () => ({ rows: [1], count: 2, error: null }),
+      });
+    } catch (error) {
+      rejectedTruncation = /truncated/.test(error instanceof Error ? error.message : String(error));
+    }
+    check("Counted pagination fails closed on a short page", rejectedTruncation);
+  }
   {
     const originalFetch = globalThis.fetch;
     let calls = 0;

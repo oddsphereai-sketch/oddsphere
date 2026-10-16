@@ -75,7 +75,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_shadow_capture_2026_10_15_r2_nba_rolling_window";
+  "market_intelligence_v2_shadow_capture_2026_10_16_r3_paginated_nba_price_window";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -370,6 +370,41 @@ export type MarketIntelligenceV2ShadowSyncResult = {
 
 const MARKET_TYPES: readonly MarketIntelligenceMarketType[] = ["moneyline", "spread", "total"];
 const SHARP_BOOKS = new Set(["pinnacle", "bookmaker", "circa"]);
+const CURRENT_LINE_PAGE_SIZE = 1000;
+
+export async function collectCompleteCountedPages<T>(args: {
+  pageSize?: number;
+  label: string;
+  loadPage: (from: number, to: number) => Promise<{
+    rows: T[];
+    count: number | null;
+    error: string | null;
+  }>;
+}): Promise<T[]> {
+  const pageSize = args.pageSize ?? CURRENT_LINE_PAGE_SIZE;
+  if (!Number.isInteger(pageSize) || pageSize <= 0) {
+    throw new Error(`${args.label} requires a positive integer page size`);
+  }
+  const rows: T[] = [];
+  let expectedRows: number | null = null;
+  for (let from = 0; expectedRows === null || from < expectedRows; from += pageSize) {
+    const page = await args.loadPage(from, from + pageSize - 1);
+    if (page.error) throw new Error(`${args.label} failed: ${page.error}`);
+    if (page.count === null) {
+      throw new Error(`${args.label} returned no exact count; truncation cannot be excluded`);
+    }
+    expectedRows ??= page.count;
+    if (page.count !== expectedRows) {
+      throw new Error(`${args.label} changed during pagination: initial=${expectedRows} current=${page.count}`);
+    }
+    const expectedPageRows = Math.min(pageSize, expectedRows - from);
+    if (page.rows.length !== expectedPageRows) {
+      throw new Error(`${args.label} truncated: offset=${from} expected=${expectedPageRows} received=${page.rows.length}`);
+    }
+    rows.push(...page.rows);
+  }
+  return rows;
+}
 
 function externalMarketId(game: GameRef, market: MarketIntelligenceMarketType): string {
   return `${game.externalId}:${market}`;
@@ -512,16 +547,30 @@ async function loadPriceObservations(opts: {
 }): Promise<MarketPriceObservationV2[]> {
   if (opts.games.length === 0) return [];
   const gameById = new Map(opts.games.map((g) => [g.id, g]));
-  const { data, error } = await opts.supabase
-    .from("lines")
-    .select("game_id, market_type, sportsbook, side, line_value, odds_american, odds_decimal, implied_probability, fetched_at")
-    .in("game_id", opts.games.map((g) => g.id))
-    .in("market_type", [...MARKET_TYPES])
-    .is("player_id", null);
-  if (error) throw new Error(`lines fetch failed: ${error.message}`);
+  const rows = await collectCompleteCountedPages<LineRow>({
+    label: "lines fetch",
+    loadPage: async (from, to) => {
+      const page = await opts.supabase
+        .from("lines")
+        .select(
+          "id, game_id, market_type, sportsbook, side, line_value, odds_american, odds_decimal, implied_probability, fetched_at",
+          { count: "exact" },
+        )
+        .in("game_id", opts.games.map((g) => g.id))
+        .in("market_type", [...MARKET_TYPES])
+        .is("player_id", null)
+        .order("id", { ascending: true })
+        .range(from, to);
+      return {
+        rows: (page.data ?? []) as LineRow[],
+        count: page.count,
+        error: page.error?.message ?? null,
+      };
+    },
+  });
 
   const out: MarketPriceObservationV2[] = [];
-  for (const r of (data ?? []) as LineRow[]) {
+  for (const r of rows) {
     const game = gameById.get(r.game_id);
     if (!game) continue;
     if (isBlockedSportsbook(r.sportsbook)) continue;

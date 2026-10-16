@@ -131,7 +131,7 @@ Last reviewed: 2026-10-16
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_15_r2_nba_rolling_window`. The existing leased
+  `market_intelligence_v2_shadow_capture_2026_10_16_r3_paginated_nba_price_window`. The existing leased
   refresh may store exact-date, exact-matchup SharpAPI NBA split rows with their real source book
   for the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
@@ -142,8 +142,10 @@ Last reviewed: 2026-10-16
   disabled until their per-book contract is implemented, so repeated current snapshots create the
   forward trail. NBA remains `audit_required`: the capture has zero model, score, side,
   probability, market, grade, actionability, stake, lock, tracking, member-display, copy, label, or
-  layout authority. The independent model remains NBA-specific; only the evidence and evaluation
-  contract is shared across sports. Evidence and rollback:
+  layout authority. R3 deterministically paginates the complete rolling-window `lines` read and
+  fails closed when an exact count changes or a page is short; this repairs a 1,000-row response
+  ceiling that stored future splits without their future price observations. The independent model
+  remains NBA-specific; only the evidence and evaluation contract is shared across sports. Evidence and rollback:
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
