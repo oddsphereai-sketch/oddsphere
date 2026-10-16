@@ -1,7 +1,7 @@
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_PROFESSIONAL_MARKET_READER_RELEASE =
-  "nba_professional_market_reader_2026_10_16_r1_observation_only" as const;
+  "nba_professional_market_reader_2026_10_16_r2_conditional_spread_only" as const;
 
 export type NbaReaderSide = "home" | "away" | "over" | "under";
 type Direction = -1 | 1;
@@ -80,7 +80,7 @@ export type NbaProfessionalMarketRead = {
 export type NbaProfessionalMarketReader = {
   release: typeof NBA_PROFESSIONAL_MARKET_READER_RELEASE;
   policy: "categorical_evidence_no_consensus_weight";
-  authority: "observation_only";
+  authority: "conditional_spread_only";
   evidenceStatus: "complete" | "unavailable";
   evidenceErrors: string[];
   evaluatedAt: string;
@@ -145,7 +145,7 @@ export function buildNbaProfessionalMarketReader(args: {
   return {
     release: NBA_PROFESSIONAL_MARKET_READER_RELEASE,
     policy: "categorical_evidence_no_consensus_weight",
-    authority: "observation_only",
+    authority: "conditional_spread_only",
     evidenceStatus: evidenceErrors.length === 0 ? "complete" : "unavailable",
     evidenceErrors,
     evaluatedAt: args.evaluatedAt,

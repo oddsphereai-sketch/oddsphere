@@ -5,6 +5,7 @@ import {
   type NbaReaderPriceRow,
   type NbaReaderSplitRow,
 } from "../lib/services/nba/nbaProfessionalMarketReader";
+import { selectNbaQualifiedSpreadRead } from "../lib/services/nba/nbaProfessionalCandidate";
 
 const game = 401909088;
 const evaluatedAt = "2026-10-20T22:00:00.000Z";
@@ -75,7 +76,7 @@ const ml = buildNbaProfessionalMarketReader({
 });
 assert.equal(ml.release, NBA_PROFESSIONAL_MARKET_READER_RELEASE);
 assert.equal(ml.policy, "categorical_evidence_no_consensus_weight");
-assert.equal(ml.authority, "observation_only");
+assert.equal(ml.authority, "conditional_spread_only");
 assert.equal(ml.evidenceStatus, "complete");
 assert.equal(ml.reads.moneyline.status, "qualified");
 assert.equal(ml.reads.moneyline.side, "home");
@@ -95,6 +96,22 @@ assert.equal(reverseFlow.reads.spread.status, "qualified");
 assert.equal(reverseFlow.reads.spread.side, "away");
 assert.equal(reverseFlow.reads.spread.reason, "reverse_flow_resistance");
 assert.equal(reverseFlow.reads.spread.resistance, "reverse_flow");
+assert.equal(selectNbaQualifiedSpreadRead(reverseFlow), null, "one-point movement remains observation-only");
+
+const strongSpreadAway = ["pinnacle", "bookmaker"].flatMap((book) => [
+  ...pair({ market: "spread", book, at: "2026-10-20T20:00:00.000Z", firstLine: -4, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book, at: "2026-10-20T21:00:00.000Z", firstLine: -2, firstPrice: 105, secondPrice: -125 }),
+]);
+const qualifiedSpread = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: strongSpreadAway,
+  splitRows: [split({ market: "spread", side: "home", bets: 42, money: 62, line: -2 })],
+  selectedLines: { spreadHome: -2, total: null },
+});
+assert.deepEqual(selectNbaQualifiedSpreadRead(qualifiedSpread), {
+  side: "away",
+  magnitudePoints: 2,
+});
 
 const targetExcluded = buildNbaProfessionalMarketReader({
   evaluatedAt,

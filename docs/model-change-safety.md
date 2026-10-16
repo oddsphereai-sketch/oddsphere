@@ -1,5 +1,43 @@
 # Model change safety protocol
 
+## Owner-directed provisional exception: NBA independent-first categorical spread reader r3
+
+On 2026-10-16 Daniel Mengel explicitly rejected the NBA r2 projection's fixed 25% independent / 75%
+market-consensus blend as market anchoring and directed Oddsphere to make the independent model the
+primary forecast while retaining a sharp, evidence-based market reader. This exception is limited to
+the release family and evidence documented in
+`docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`.
+
+For future unlocked rows, the portable NBA score model owns 100% of the starting margin and Total.
+There is no scalar consensus weight. Only a complete, target-book-excluded Spread read may alter the
+score, and only when at least two persistent same-direction same-book number trails each move by at
+least two points, at least one trail is from a named sharp book, and the professional reader has
+resolved reversal, buyback, cross-book disagreement, freshness, pagination, two-sided coherence, and
+line-matched flow. A qualified categorical read may re-orient the independent residual across the
+current spread; it cannot shrink the forecast toward consensus. Moneyline is derived from that one
+coherent final margin. Total remains independent until a separately validated Total rule is released.
+
+The chronological historical evidence uses public consensus opening-to-closing movement only as a
+proxy because authentic historical same-book NBA chronology and source-specific split history are not
+available. The stricter production rule is therefore provisional and must be evaluated prospectively
+by release identifier and locked timestamp. Existing locked payloads retain unconditional precedence.
+No second writer, alternate lease, independent refresh path, historical rewrite, inferred split, or
+cross-book synthetic trail is authorized; the existing writer retains `prediction_pipeline:nba`.
+
+The frozen proxy improves the sealed 2025-26 confirmation set from 48.86% to 52.94% on main Spread,
+57.43% to 62.01% at +3, 66.83% to 70.92% at +6, and 68.14% to 69.28% on winner direction while
+improving margin MAE from 11.35 to 11.05 and Brier from 0.20468 to 0.19874. Total accuracy remains
+51.80% and is unchanged. The exact 14-game opening-board rehearsal changes actionables from 10 to 19
+through 15 promotions and 6 demotions, with 5 pick changes and zero nonpositive-EV promotions.
+
+Publication requires the reproducible chronological proxy audit, current-board promotion/demotion
+report, focused projection/reader/candidate/display/lock tests, TypeScript, full model-change
+verification, latest-main integration safety, protected PR checks, and live proof of release identity,
+single-writer lease, evidence coverage, coherent score/pick tuples, and unchanged locks. Roll back
+future unlocked computation to the r2 release family on mixed release identity, lock mutation,
+synthetic evidence, unexplained board contraction, reader/writer disagreement, or prospective harm;
+the rollback may not rewrite an r3 lock.
+
 ## Owner-approved correctness exception: MLB official short-slate single-starter continuity
 
 On 2026-10-16 Daniel Mengel explicitly approved restoring an official ALCS matchup that the

@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runNbaAutoModelV2 } from "../../../lib/automodel/nba/nbaAutoModelV2";
 import { buildNbaMarketConsensus } from "../../../lib/automodel/nba/nbaMarketConsensus";
+import { computeNbaMarketProbabilities } from "../../../lib/automodel/nba/nbaDistribution";
 import {
   buildNbaProfessionalRuntimeFeatures,
   NBA_PROFESSIONAL_MODEL_ARTIFACT,
@@ -21,7 +22,7 @@ import {
 } from "../../../lib/services/nba/nbaProfessionalCandidate";
 import { refreshNbaLines } from "../../../lib/services/nba/refreshNbaLinesService";
 
-const RELEASE = "nba_professional_current_board_audit_2026_10_15_r1";
+const RELEASE = "nba_professional_current_board_audit_2026_10_16_r2_independent_first";
 const date = process.argv[2] ?? "2026-10-20";
 const sharpApiKey = process.env.SHARPAPI_KEY;
 if (!sharpApiKey) throw new Error("SHARPAPI_KEY is required.");
@@ -84,6 +85,22 @@ const featureRows = buildNbaProfessionalRuntimeFeatures({
 });
 const provenance = new Map(built.provenance.map((row) => [row.game_external_id, row]));
 const actionable = (grade: string) => grade === "best_angle" || grade === "lean";
+const compactDecision = (value: ReturnType<typeof buildNbaDailyEdgeGameDto>["intelligence"]["ml"]) => {
+  const price = value.current_price.odds_american;
+  const probability = value.model_prob_on_pick;
+  const profit = price === null ? null : price > 0 ? price / 100 : 100 / -price;
+  return {
+    pick: value.pick_side,
+    grade: value.grade,
+    probability,
+    selectedPrice: price,
+    expectedReturn: probability === null || profit === null
+      ? null
+      : probability * profit - (1 - probability),
+    edgeProbabilityPp: value.edge_prob_pp,
+    edgePoints: value.edge_points,
+  };
+};
 const comparisons = built.snapshots.map((rawSnapshot) => {
   const lines = linesByExternal.get(rawSnapshot.game_external_id) ?? [];
   const consensus = buildNbaMarketConsensus(lines.map((line) => ({
@@ -126,18 +143,63 @@ const comparisons = built.snapshots.map((rawSnapshot) => {
     history: [],
     externalGameId: snapshot.game_external_id,
   });
-  const professional = applyNbaProfessionalCandidate({ baseline, candidate });
-  const incumbentDto = buildNbaDailyEdgeGameDto({
+  const r2Margin = candidate.consensus.spreadHome === null
+    ? candidate.independent.marginHome
+    : 0.25 * candidate.independent.marginHome + 0.75 * -candidate.consensus.spreadHome;
+  const r2Total = candidate.consensus.totalLine === null
+    ? candidate.independent.total
+    : 0.25 * candidate.independent.total + 0.75 * candidate.consensus.totalLine;
+  const r2Final = {
+    ...candidate.final,
+    homeScore: (r2Total + r2Margin) / 2,
+    awayScore: (r2Total - r2Margin) / 2,
+    marginHome: r2Margin,
+    total: r2Total,
+    spreadResidual: candidate.consensus.spreadHome === null
+      ? null
+      : r2Margin + candidate.consensus.spreadHome,
+    movementQualified: false,
+    movementApplied: false,
+    marketApplied: {
+      margin: candidate.consensus.spreadHome !== null,
+      total: candidate.consensus.totalLine !== null,
+    },
+  };
+  const r2Probabilities = computeNbaMarketProbabilities({
+    projected_home_margin: r2Final.marginHome,
+    projected_total: r2Final.total,
+    market_spread_home: candidate.consensus.spreadHome,
+    market_total: candidate.consensus.totalLine,
+    margin_sd_base: NBA_PROFESSIONAL_MODEL_ARTIFACT.distribution!.marginSigma,
+    total_sd_base: NBA_PROFESSIONAL_MODEL_ARTIFACT.distribution!.totalSigma,
+  });
+  const r2Candidate = {
+    ...candidate,
+    final: r2Final,
+    probabilities: r2Probabilities,
+    picks: {
+      moneyline: r2Final.marginHome >= 0 ? "home" as const : "away" as const,
+      spread: r2Probabilities.spread_home_cover_prob === null
+        ? null
+        : r2Probabilities.spread_home_cover_prob >= 0.5 ? "home" as const : "away" as const,
+      total: r2Probabilities.total_over_prob === null
+        ? null
+        : r2Probabilities.total_over_prob >= 0.5 ? "over" as const : "under" as const,
+    },
+  };
+  const r2Prediction = applyNbaProfessionalCandidate({ baseline, candidate: r2Candidate });
+  const r3Prediction = applyNbaProfessionalCandidate({ baseline, candidate });
+  const r2Dto = buildNbaDailyEdgeGameDto({
     snapshot,
-    prediction: baseline,
+    prediction: r2Prediction,
     provenance: prov,
     lines,
     splitsRow: null,
     opportunities: [],
   });
-  const professionalDto = buildNbaDailyEdgeGameDto({
+  const r3Dto = buildNbaDailyEdgeGameDto({
     snapshot,
-    prediction: professional,
+    prediction: r3Prediction,
     provenance: prov,
     lines,
     splitsRow: null,
@@ -147,17 +209,17 @@ const comparisons = built.snapshots.map((rawSnapshot) => {
     gameExternalId: snapshot.game_external_id,
     matchup: `${snapshot.away_team.abbreviation}@${snapshot.home_team.abbreviation}`,
     books: new Set(lines.map((line) => line.sportsbook)).size,
-    incumbentScore: [baseline.predicted_away_score, baseline.predicted_home_score],
+    r2FinalScore: [r2Final.awayScore, r2Final.homeScore],
     professionalIndependentScore: [candidate.independent.awayScore, candidate.independent.homeScore],
-    professionalFinalScore: [candidate.final.awayScore, candidate.final.homeScore],
+    r3FinalScore: [candidate.final.awayScore, candidate.final.homeScore],
     market: { spreadHome: consensus.spreadHome, total: consensus.totalLine },
     markets: (["ml", "spread", "total"] as const).map((market) => {
-      const incumbent = incumbentDto.intelligence[market];
-      const proposed = professionalDto.intelligence[market];
+      const incumbent = r2Dto.intelligence[market];
+      const proposed = r3Dto.intelligence[market];
       return {
         market,
-        incumbent: { pick: incumbent.pick_side, grade: incumbent.grade, probability: incumbent.model_prob_on_pick },
-        professional: { pick: proposed.pick_side, grade: proposed.grade, probability: proposed.model_prob_on_pick },
+        r2: compactDecision(incumbent),
+        r3: compactDecision(proposed),
         promotion: !actionable(incumbent.grade) && actionable(proposed.grade),
         demotion: actionable(incumbent.grade) && !actionable(proposed.grade),
       };
@@ -180,20 +242,24 @@ const report = {
   boardImpact: {
     games: comparisons.length,
     markets: markets.length,
-    incumbentActionable: markets.filter((row) => actionable(row.incumbent.grade)).length,
-    professionalActionable: markets.filter((row) => actionable(row.professional.grade)).length,
+    r2Actionable: markets.filter((row) => actionable(row.r2.grade)).length,
+    r3Actionable: markets.filter((row) => actionable(row.r3.grade)).length,
     promotions: markets.filter((row) => row.promotion).length,
     demotions: markets.filter((row) => row.demotion).length,
-    pickChanges: markets.filter((row) => row.incumbent.pick !== row.professional.pick).length,
+    pickChanges: markets.filter((row) => row.r2.pick !== row.r3.pick).length,
+    promotedNonpositiveExpectedReturn: markets.filter((row) =>
+      row.promotion && (row.r3.expectedReturn === null || row.r3.expectedReturn <= 0)
+    ).length,
   },
   limitations: [
-    "Opening-night board has no prospective same-book movement history yet; the validated movement residual is inactive.",
+    "This rehearsal compares the released r2 25/75 formula with r3's independent-first state before a qualifying reader correction.",
+    "The live reader remains fail-closed unless two persistent same-direction number trails, including a named book, clear two points.",
     "Public splits are intentionally excluded from score and grade changes until source-qualified NBA validation exists.",
     "This is a read-only current-price rehearsal, not an outcome-accuracy estimate.",
   ],
   comparisons,
 };
-const output = path.resolve(`nba-research/reports/nba_professional_r43_current_board/${date}.json`);
+const output = path.resolve(`nba-research/reports/nba_professional_r44_independent_first_current_board/${date}.json`);
 await mkdir(path.dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 console.log(JSON.stringify({ output, ...report.boardImpact, provider: report.provider }, null, 2));

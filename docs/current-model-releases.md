@@ -149,15 +149,17 @@ Last reviewed: 2026-10-16
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`.
 - NBA internal professional market reader is
-  `nba_professional_market_reader_2026_10_16_r1_observation_only`. It consumes the
+  `nba_professional_market_reader_2026_10_16_r2_conditional_spread_only`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
-  prediction pipeline while remaining strictly `observation_only`. It excludes the independent
-  model's best-execution sportsbook by market, removes vig before comparing price movement, and
-  fails closed on incomplete pagination, stale flow, missing sequences, reversal/buyback, or book
-  disagreement. It is not the member card/display reader, does not numerically blend the projection
-  toward consensus, and has zero score, side, probability, grade, actionability, stake, lock,
-  tracking, copy, label, or layout authority. Evidence and promotion boundary:
-  `docs/model-audits/2026-10-16-nba-professional-market-reader-r1.md`.
+  prediction pipeline. It excludes the independent model's best-execution sportsbook by market,
+  removes vig before comparing price movement, and fails closed on incomplete pagination, stale
+  flow, missing sequences, reversal/buyback, or book disagreement. It is not the member card/display
+  reader and never numerically blends the projection toward consensus. Its only forecast authority
+  is a categorical Spread correction when at least two persistent same-direction same-book number
+  trails each clear two points and at least one is a named sharp book; Moneyline then follows the one
+  coherent final margin. Price-only, split-only, Moneyline, and Total reads remain observational.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
@@ -3225,9 +3227,11 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_15_r2_portable_ridge`
-- Market marriage: `nba_market_marriage_2026_10_15_r2_unified_25_75`
-- Grade policy: `nba_grade_policy_2026_10_15_r2_calibrated_residual_exact_price`
+- Model / prediction record: `nba_professional_unified_2026_10_16_r3_independent_first_reader`
+- Market marriage: `nba_market_marriage_2026_10_16_r3_independent_first_categorical_spread`
+- Grade policy: `nba_grade_policy_2026_10_16_r3_independent_first_reader_probabilities`
+- Point-projection policy: `nba_unified_final_projection_2026_10_16_r2_independent_first_reader`
+- Internal market reader: `nba_professional_market_reader_2026_10_16_r2_conditional_spread_only`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -3239,15 +3243,25 @@ The paired live-slate replay is recorded in
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
 
-The October 15 r2 release replaces the hand-built score formula for future unlocked rows with the
-portable, leakage-safe ratings-and-schedule ridge artifact selected on 2024-25 and confirmed once
-on 2025-26. A compact five-season bootstrap plus append-only finalized current-season inputs
-reproduces its 75 selected point-in-time fields. The final projection gives 25% weight to the
-independent margin and Total and 75% to complete multi-book pregame consensus; a verified
-first-tracked spread move of at least two points may only determine the sign of the remaining
-spread residual. One final score owns Moneyline, Spread, Total, probabilities, exact-price grades,
-lock snapshots, and tracking. Target-book prices remain excluded from the fair reference and
-public splits remain context-only. Existing locked rows retain exact payload precedence.
+The October 16 r3 release retains the portable, leakage-safe ratings-and-schedule ridge artifact
+selected on 2024-25 and confirmed once on 2025-26, but removes r2's fixed 25% independent / 75%
+market-consensus score blend for future unlocked rows. The independent model now owns 100% of the
+starting margin and Total. A complete target-book-excluded categorical Spread read may re-orient the
+independent residual across the current spread only after two persistent same-direction two-point
+same-book number trails, including at least one named sharp book, clear every reader quality gate.
+Moneyline follows the resulting coherent margin; Total remains independent. One final score owns
+Moneyline, Spread, Total, probabilities, exact-price grades, lock snapshots, and tracking. Existing
+locked rows retain exact payload precedence.
+
+The public-consensus historical proxy improves the sealed 2025-26 confirmation set from 48.86% to
+52.94% on main Spread, 57.43% to 62.01% at +3, 66.83% to 70.92% at +6, and 68.14% to 69.28% on
+winner direction. Team-score MAE is 9.54, margin MAE is 11.05, Total MAE remains 15.24, and Total
+direction remains 51.80%. Because the historical market files do not contain authentic same-book
+chronology, production promotion is provisional and release-pure prospective evaluation is required.
+The 14-game October 20-21 opening-board rehearsal changes actionables from 10 to 19 through 15
+promotions and 6 demotions, with 5 pick changes and zero nonpositive-EV promotions. Evidence and
+rollback are recorded in
+`docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`.
 
 The superseded October 6 r1 release corrected NBA season identity, excluded unfinished/preseason rows from the
 early-season sample, uses the regular-season context outside the playoffs, and replaces the old
