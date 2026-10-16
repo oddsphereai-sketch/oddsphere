@@ -23,6 +23,7 @@ import {
 } from "./nbaMarketIntelligence";
 import type { NbaSplitsRow } from "./nbaSplitsClient";
 import type { NbaOpportunity } from "./nbaOpportunitiesClient";
+import type { NbaSpreadReaderStats } from "./nbaSpreadReaderStats";
 
 const ET_TIMEZONE = "America/New_York";
 
@@ -183,6 +184,12 @@ export type NbaDailyEdgeGameDto = {
     total: number;
     spread_home: number;
   };
+  /**
+   * Point-in-time professional-model inputs used to explain the Spread read.
+   * Optional so exact legacy locked snapshots remain readable without being
+   * reconstructed or mutated.
+   */
+  spread_reader_stats?: NbaSpreadReaderStats;
   intelligence: NbaGameIntelligence;
   quick_read: string;
   sources: SourceBadges;
@@ -252,6 +259,7 @@ export function buildNbaDailyEdgeGameDto(opts: {
   lines: NbaLineRow[];
   splitsRow: NbaSplitsRow | null;
   opportunities: NbaOpportunity[];
+  spreadReaderStats?: NbaSpreadReaderStats;
 }): NbaDailyEdgeGameDto {
   const intel = buildNbaGameIntelligence({
     snapshot: opts.snapshot,
@@ -284,6 +292,9 @@ export function buildNbaDailyEdgeGameDto(opts: {
       total: opts.prediction.predicted_total,
       spread_home: opts.prediction.predicted_spread_home,
     },
+    ...(opts.spreadReaderStats === undefined
+      ? {}
+      : { spread_reader_stats: opts.spreadReaderStats }),
     intelligence: intel,
     quick_read: composeQuickRead(intel, opts.snapshot),
     sources: intel.sources,

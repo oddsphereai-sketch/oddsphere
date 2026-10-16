@@ -50,6 +50,9 @@ export const TWO_SIDED_KEY_STAT_LABELS: ReadonlySet<string> = new Set([
   "Starter 1st-inning WHIP",
   "Top-of-order OPS",
   "Starter ERA (season)",
+  "Adjusted net rating",
+  "Adjusted offensive efficiency",
+  "Adjusted defensive efficiency",
 ]);
 
 /**
