@@ -1,9 +1,9 @@
 # MLB foundational scoreboard and innings-weighted Total shadow
 
-Date: 2026-10-16  
-Status: **shadow/audit only; not an active MLB release**  
-Historical window: 2026-06-07 through 2026-10-15  
-Locked unique games: 1,488  
+Date: 2026-10-16
+Status: **shadow/audit only; not an active MLB release**
+Historical window: 2026-06-07 through 2026-10-15
+Locked unique games: 1,488
 Exact counterfactual cohort: 1,192 games with preserved feature capture and an exactly reconstructable uncapped posterior
 
 ## Decision
@@ -18,9 +18,12 @@ independent home-away margin exactly. This prevents a Total repair from silently
 Moneyline winner.
 
 The structural candidate improves score and Total results in chronological validation and holdout.
-It does not repair the run-line model, and a full production promotion still requires an exact
-current-release writer replay, a new release family, current-board promotion/demotion evidence,
-owner approval, and live verification.
+The audit now also replays the exact current production writer over frozen lock evidence and tests
+a standalone run-line distribution selector. It found a real Total-side and run-line accuracy
+improvement, but it also proved that the current Total action classifier does not transfer to the
+new probability head: it flattens the board and its resulting actionable subset fails the untouched
+validation/holdout gate. The projection and side candidates therefore remain shadow-only pending a
+replacement action-calibration rule, frozen run-line prices, owner approval, and live verification.
 
 ## Evidence contract
 
@@ -105,13 +108,24 @@ The candidate's independent and posterior margins equal the stored margins. On t
 the stored posterior winner is 692-500 (58.05%) and remains 692-500. The shipped final Moneyline is
 691-501 (57.97%). The candidate does not discard the market reader or create a new Moneyline head.
 
-### Run-line limitation
+### Standalone run-line selector
 
-Because the Moneyline margin is intentionally preserved, paired derived run-line accuracy also
-stays unchanged at 563-629 (47.23%), 757-435 (63.51%) at favorable +1, and 778-414 (65.27%) at
-favorable +2. This does not meet the screenshot run-line benchmark. Run line needs its own priced,
-locked evidence capture and a margin/run-distribution candidate; it cannot be honestly presented
-as solved by the Total repair.
+Reusing the Moneyline side for the run line is the architectural error behind the 47% baseline.
+The shadow now evaluates each actual market favorite/underdog ±1.5 pair with the joint Poisson run
+distribution and chooses the higher cover-probability side independently of the Moneyline pick.
+
+| Window | Standard run line | Favorable +1 | Favorable +2 |
+|---|---:|---:|---:|
+| All 1,192 | **692-500, 58.05%** | **844-348, 70.81%** | **913-279, 76.59%** |
+| Train 626 | 58.31% | 69.97% | 75.88% |
+| Validation 282 | 58.87% | 73.05% | 79.43% |
+| Holdout 284 | 56.69% | 70.42% | 75.35% |
+| Screenshot benchmark | 54.35% | 66.45% | 72.01% |
+
+This is a stable accuracy improvement in every chronological block and exceeds each screenshot
+percentage on the unequal cohort. It is not yet an ROI or value claim: historical locks did not
+store run-line prices, so the price-aware market reader, units, CLV, and actionable tiers cannot be
+validated retrospectively. Forward run-line line/price capture is still a production prerequisite.
 
 ## Probability, market reader, and final-board findings
 
@@ -140,7 +154,57 @@ Current historical layer attribution also shows:
   the full window and improves holdout from 46.80% to 51.18%.
 
 This does not authorize deleting the market reader. It identifies where the current score,
-probability, and reader layers need a release-pure full-writer replay together.
+probability, and reader layers need distinct responsibilities instead of blending the offered price
+into the independent probability and then reading that market a second time.
+
+## Exact current-writer replay
+
+The audit reconstructs the current r91 writer inputs from immutable lock snapshots and replays both
+the incumbent and candidate with identical frozen lines, openers, splits, prices, and game metadata.
+It covers 1,180 of 1,192 candidate games; 12 are explicitly omitted because `lines_at_lock` is empty.
+No database writes occur.
+
+### Candidate A: repaired score plus incumbent Poisson/regime head
+
+| Output | Incumbent current-writer replay | Candidate A |
+|---|---:|---:|
+| Final Total record | 600-573-7, 51.15%, -23.80u | **616-557-7, 52.51%, -5.16u** |
+| Actionable Totals | 130-112, 53.72%, +3.30u | 88-80, 52.38%, -0.50u |
+| Best Angles | 26-16, 61.90%, +6.56u | 4-1, 80.00%, +2.47u |
+| Actionable board size | 242 | 168 |
+| Best Angle count | 42 | 5 |
+
+Candidate A corrects 16 net final Total decisions, but its holdout final record remains 138-146 and
+the action board gets both smaller and worse. This fails the promotion gate even though aggregate
+side accuracy improves.
+
+### Candidate B: train-only independent score-gap probability
+
+The second replay removes market-price regularization and trailing regime weighting from the
+independent probability head. Direction comes from the repaired score relative to the line. A
+zero-intercept logistic slope (0.084810) is fitted on 618 decided training games only; validation
+and holdout are untouched. The market remains fully available to the downstream writer as a reader,
+price, movement, and split signal.
+
+| Partition | Incumbent final record | Candidate B final record |
+|---|---:|---:|
+| All replayed | 600-573-7, 51.15%, -23.80u | **616-557-7, 52.51%, +21.49u** |
+| Train | 326-293-7, 52.67%, +9.57u | **330-289-7, 53.31%, +19.38u** |
+| Validation | 136-134, 50.37%, -14.04u | **139-131, 51.48%, -1.14u** |
+| Holdout | 138-146, 48.59%, -19.34u | **147-137, 51.76%, +3.26u** |
+
+This is the strongest exact final-side candidate: it improves accuracy and price-weighted units in
+all three chronological blocks, keeps every Moneyline side unchanged, and converts the full replay
+from -2.47% to +2.23% ROI. It is not ready to promote because action calibration is not transferable:
+
+- actionable Totals fall from 242 to 43 and Best Angles from 42 to zero;
+- the 43 candidate Leans are 25-17-1 overall, but only 6-7 in validation and 0-2 in holdout;
+- 12 newly promoted rows are 9-2-1, while 211 demoted incumbent actions are still 114-97 and +3.16u;
+- Moneyline side is invariant, but 37 Moneyline grades/actions move because `computeConfidence`
+  currently couples Moneyline confidence to the Total probability.
+
+That last point is a cross-market architecture defect: changing the Total probability must not
+silently retier a Moneyline whose side, win probability, and projected margin are unchanged.
 
 ## Best Angle and board impact
 
@@ -159,9 +223,10 @@ candidate base board is smaller and stronger than the 193-game incumbent base-el
 rows at 18-13 (+9.12% ROI) and removes 149 rows at 77-70-2 (-1.85% ROI); the removed cohort is
 19-19 in validation and 11-17 in holdout.
 
-Those are base model grades, not final writer grades. The full writer can still suppress, flip, or
-promote rows using movement, split conflict, price, reconciliation, and release-specific rules.
-No production board-count claim is valid until that writer is replayed exactly.
+Those base grades looked encouraging in isolation, but the exact writer replay above supersedes
+them for production decisions. It proves that the current writer suppresses most of the candidate
+board and that the remaining action cohort is not stable out of sample. This is precisely why the
+candidate is not being promoted from its pure-model numbers.
 
 ## Feature coverage still missing from the independent model
 
@@ -186,6 +251,8 @@ tests. They are not permission to add many correlated factors at once.
 - The option blends starter/bullpen factors by expected innings for every starter.
 - It recomposes team scores from candidate Total plus incumbent margin.
 - V2.2 records enabled/applied, legacy Total, and candidate Total in audit output.
+- The operator audit now includes the exact frozen-evidence r91 writer A/B, train-only score-gap
+  calibration, cross-market grade-integrity count, and standalone run-line distribution replay.
 - Default behavior remains disabled.
 - Focused MLB model tests: 182 passed, 0 failed.
 - TypeScript: passed.
@@ -196,16 +263,18 @@ tests. They are not permission to add many correlated factors at once.
 
 Before this candidate can affect a member forecast:
 
-1. Replay the exact current projection/calibration/decision/rule family through the full
-   `predictionRecordService` path, including r90 Total opposition and all r91 grade policies.
-2. Report exact final sides, probabilities, scores, promotions, demotions, actionable counts,
-   grades, prices, and locks—not only pure-model base grades.
-3. Freeze and capture run-line prices/history forward; do not infer official ROI from Moneyline.
-4. Bump every affected release identifier and update `docs/current-model-releases.md` in the same
+1. Replace and chronologically validate the Total action classifier so the improved final side does
+   not flatten the board or promote a validation/holdout-negative Lean cohort.
+2. Decouple Moneyline confidence/grade from Total probability and prove the Moneyline public tuple
+   remains invariant when only the Total head changes.
+3. Freeze and capture run-line prices/history forward; replay the new 58.05% run-line selector
+   through price, market-reader, grade, alternate-line, and Best Angle logic before publication.
+4. Report the final paired promotion/demotion cohorts and board-count impact for every market.
+5. Bump every affected release identifier and update `docs/current-model-releases.md` in the same
    production commit.
-5. Run `npm run verify:model-change`, focused MLB suites, the no-write current-board rehearsal,
+6. Run `npm run verify:model-change`, focused MLB suites, the no-write current-board rehearsal,
    latest-main integration safety, protected PR checks, and post-deploy live proof.
-6. Obtain explicit owner approval for the production promotion.
+7. Obtain explicit owner approval for the production promotion.
 
 Rollback for the current shadow work is deletion of the disabled option and audit script; active
 production remains the October 9 r91 family with October 16 input-eligibility v3.
