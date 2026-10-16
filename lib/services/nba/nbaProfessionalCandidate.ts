@@ -51,6 +51,34 @@ export function selectNbaQualifiedSpreadRead(
 }
 
 /**
+ * Promote only the historical Total failure mode that repeated across both
+ * seasons: two persistent named-book number trails, each five points or more.
+ * A smaller move, a retail trail, price-only evidence, or incomplete reader
+ * state remains observational and cannot alter the score.
+ */
+export function selectNbaQualifiedTotalRead(
+  reader: NbaProfessionalMarketReader | null | undefined,
+): { side: "over" | "under"; magnitudePoints: number } | null {
+  const read = reader?.reads.total;
+  if (
+    reader?.evidenceStatus !== "complete" ||
+    read?.status !== "qualified" ||
+    (read.side !== "over" && read.side !== "under")
+  ) return null;
+  const supporting = read.trails.filter((trail) =>
+    trail.sourceClass === "named" &&
+    trail.direction === read.side &&
+    trail.numberDirection === read.side &&
+    trail.numberDelta !== null &&
+    Math.abs(trail.numberDelta) >= 5 &&
+    trail.persistenceTimeShare >= 2 / 3
+  );
+  if (supporting.length < 2) return null;
+  const magnitudePoints = median(supporting.map((trail) => Math.abs(trail.numberDelta!)));
+  return magnitudePoints === null ? null : { side: read.side, magnitudePoints };
+}
+
+/**
  * Pure assembly of the professional NBA candidate. One final margin/total pair
  * owns the representative score and all three market directions.
  */
@@ -93,6 +121,7 @@ export function buildNbaProfessionalCandidate(args: {
     currentTotal: consensus.totalLine,
     openingSpreadHome: openingSpread?.spreadHome ?? null,
     qualifiedSpreadRead: selectNbaQualifiedSpreadRead(args.marketReader),
+    qualifiedTotalRead: selectNbaQualifiedTotalRead(args.marketReader),
   });
   const probabilities = computeNbaMarketProbabilities({
     projected_home_margin: final.marginHome,
@@ -134,6 +163,8 @@ export function buildNbaProfessionalCandidate(args: {
       finalPicks: picks,
       spreadReadQualified: final.movementQualified,
       spreadCorrectionApplied: final.movementApplied,
+      totalReadQualified: final.totalMovementQualified,
+      totalCorrectionApplied: final.totalMovementApplied,
       effects: {
         moneyline: independentPicks.moneyline !== picks.moneyline
           ? "flipped_by_validated_spread_score" as const
@@ -143,7 +174,11 @@ export function buildNbaProfessionalCandidate(args: {
           : final.movementQualified
             ? "confirmed_by_validated_spread_read" as const
             : "unchanged_no_qualified_spread_read" as const,
-        total: "unchanged_no_validated_total_authority" as const,
+        total: independentPicks.total !== picks.total
+          ? "flipped_by_validated_total_read" as const
+          : final.totalMovementQualified
+            ? "confirmed_by_validated_total_read" as const
+            : "unchanged_no_qualified_total_read" as const,
       },
     },
   };
@@ -213,6 +248,9 @@ export function applyNbaProfessionalCandidate(args: {
         candidate.final.movementApplied
           ? "Qualified target-excluded categorical Spread reader changed the final margin; no consensus weight was applied."
           : "Independent score remained authoritative; no categorical Spread correction was applied.",
+        candidate.final.totalMovementApplied
+          ? "Qualified target-excluded categorical Total disagreement changed the final total; no consensus weight was applied."
+          : "Independent total remained authoritative; no categorical Total correction was applied.",
       ],
     },
     v1_probabilities: candidate.probabilities,

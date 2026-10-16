@@ -1,7 +1,7 @@
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_PROFESSIONAL_MARKET_READER_RELEASE =
-  "nba_professional_market_reader_2026_10_16_r3_explicit_forecast_authority" as const;
+  "nba_professional_market_reader_2026_10_16_r4_total_disagreement_authority" as const;
 
 export type NbaReaderSide = "home" | "away" | "over" | "under";
 type Direction = -1 | 1;
@@ -80,11 +80,11 @@ export type NbaProfessionalMarketRead = {
 export type NbaProfessionalMarketReader = {
   release: typeof NBA_PROFESSIONAL_MARKET_READER_RELEASE;
   policy: "categorical_evidence_no_consensus_weight";
-  authority: "conditional_spread_with_coherent_moneyline_effect";
+  authority: "conditional_spread_and_total_with_coherent_score_effects";
   forecastAuthority: {
     moneyline: "indirect_only_from_validated_spread_score";
     spread: "conditional_categorical_score_correction";
-    total: "observation_only_pending_validation";
+    total: "conditional_categorical_score_correction";
   };
   evidenceStatus: "complete" | "unavailable";
   evidenceErrors: string[];
@@ -150,11 +150,11 @@ export function buildNbaProfessionalMarketReader(args: {
   return {
     release: NBA_PROFESSIONAL_MARKET_READER_RELEASE,
     policy: "categorical_evidence_no_consensus_weight",
-    authority: "conditional_spread_with_coherent_moneyline_effect",
+    authority: "conditional_spread_and_total_with_coherent_score_effects",
     forecastAuthority: {
       moneyline: "indirect_only_from_validated_spread_score",
       spread: "conditional_categorical_score_correction",
-      total: "observation_only_pending_validation",
+      total: "conditional_categorical_score_correction",
     },
     evidenceStatus: evidenceErrors.length === 0 ? "complete" : "unavailable",
     evidenceErrors,

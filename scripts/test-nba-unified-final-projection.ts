@@ -85,6 +85,60 @@ assert.equal(alreadyAligned.movementApplied, false);
 assert.equal(alreadyAligned.marginHome, 6);
 assert.equal(alreadyAligned.total, 220);
 
+const totalDisagreementFlip = buildNbaUnifiedFinalProjection({
+  independentHomeScore: 106,
+  independentAwayScore: 104,
+  currentSpreadHome: -1,
+  currentTotal: 218,
+  openingSpreadHome: -1,
+  qualifiedTotalRead: { side: "over", magnitudePoints: 5 },
+});
+assert.equal(NBA_UNIFIED_FINAL_RECIPE.totalMovementThreshold, 5);
+assert.equal(NBA_UNIFIED_FINAL_RECIPE.minimumTotalResidual, 5);
+assert.equal(totalDisagreementFlip.totalMovementQualified, true);
+assert.equal(totalDisagreementFlip.totalMovementApplied, true);
+assert.equal(totalDisagreementFlip.totalResidual, 8);
+assert.equal(totalDisagreementFlip.total, 226);
+assert.equal(totalDisagreementFlip.marketApplied.total, true);
+assert.ok(Math.abs(totalDisagreementFlip.homeScore + totalDisagreementFlip.awayScore - 226) < 1e-9);
+assert.ok(Math.abs(totalDisagreementFlip.homeScore - totalDisagreementFlip.awayScore - 2) < 1e-9);
+
+const totalMoveBelowThreshold = buildNbaUnifiedFinalProjection({
+  independentHomeScore: 106,
+  independentAwayScore: 104,
+  currentSpreadHome: -1,
+  currentTotal: 218,
+  openingSpreadHome: -1,
+  qualifiedTotalRead: { side: "over", magnitudePoints: 4.5 },
+});
+assert.equal(totalMoveBelowThreshold.totalMovementQualified, false);
+assert.equal(totalMoveBelowThreshold.totalMovementApplied, false);
+assert.equal(totalMoveBelowThreshold.total, 210);
+
+const totalEdgeBelowThreshold = buildNbaUnifiedFinalProjection({
+  independentHomeScore: 108,
+  independentAwayScore: 106,
+  currentSpreadHome: -1,
+  currentTotal: 218,
+  openingSpreadHome: -1,
+  qualifiedTotalRead: { side: "over", magnitudePoints: 5 },
+});
+assert.equal(totalEdgeBelowThreshold.totalMovementQualified, false);
+assert.equal(totalEdgeBelowThreshold.totalMovementApplied, false);
+assert.equal(totalEdgeBelowThreshold.total, 214);
+
+const totalAlreadyAligned = buildNbaUnifiedFinalProjection({
+  independentHomeScore: 114,
+  independentAwayScore: 110,
+  currentSpreadHome: -2,
+  currentTotal: 218,
+  openingSpreadHome: -2,
+  qualifiedTotalRead: { side: "over", magnitudePoints: 5 },
+});
+assert.equal(totalAlreadyAligned.totalMovementQualified, true);
+assert.equal(totalAlreadyAligned.totalMovementApplied, false);
+assert.equal(totalAlreadyAligned.total, 224);
+
 assert.throws(() => buildNbaUnifiedFinalProjection({
   independentHomeScore: Number.NaN,
   independentAwayScore: 100,

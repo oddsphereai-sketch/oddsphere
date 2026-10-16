@@ -1,5 +1,34 @@
 # Model change safety protocol
 
+## Owner-directed provisional exception: NBA Total disagreement reader r4
+
+On 2026-10-16 Daniel Mengel directed Oddsphere to move beyond diagnosis and repair the NBA model by
+reviewing its losses and implementing a stable accuracy improvement. This exception is limited to the
+five-point Total disagreement rule and release family documented in
+`docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-predeclaration.md`.
+
+For future unlocked rows, the portable score model continues to own 100% of the starting Total. A
+complete, target-book-excluded professional reader may categorically re-orient the independent Total
+residual only when at least two persistent named-book Total number trails each moved five points in
+the same direction, and the independent residual against the current selected Total remains at least
+five points in the opposite direction. The absolute residual is preserved; no consensus weight or
+continuous market blend is introduced. The final margin and corrected Total reconstruct one coherent
+pair of team scores that owns sides, probabilities, grades, locks, and tracking.
+
+The reader fails closed on missing or incomplete evidence, target-book contamination, a retail-only or
+price-only move, movement or independent edge below five points, staleness, reversal, buyback, or book
+disagreement. An aligned qualified read confirms the independent forecast but does not move it. The
+historical proxy improves both 2024-25 selection and 2025-26 confirmation Total direction and score
+error, but authentic historical same-book chronology is unavailable; the production rule is therefore
+provisional and must be evaluated prospectively by release and locked timestamp. Existing locks retain
+unconditional payload precedence, and the sole writer retains `prediction_pipeline:nba`.
+
+Publication requires the reproducible audit, focused boundary/fail-closed/coherence/lock tests, exact
+current-board promotion/demotion report, TypeScript, full model-change verification, latest-main
+integration safety, protected PR checks, and live release/lease/evidence/coherence/lock proof. Roll back
+future unlocked computation to the r3 family on mixed identity, synthetic evidence, lock mutation,
+unexplained board contraction, incoherence, or prospective harm; rollback cannot rewrite an r4 lock.
+
 ## Owner-directed provisional exception: NBA independent-first categorical spread reader r3
 
 On 2026-10-16 Daniel Mengel explicitly rejected the NBA r2 projection's fixed 25% independent / 75%

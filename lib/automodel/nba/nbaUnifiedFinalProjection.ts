@@ -1,7 +1,7 @@
 /**
  * Pure NBA independent-first final-score reconciliation. The score model owns
- * the starting margin and total. A separately qualified categorical spread
- * read may re-orient only the residual against the current spread; no fixed
+ * the starting margin and total. Separately qualified categorical reads may
+ * re-orient only their residuals against the current lines; no fixed
  * market-consensus weight is allowed.
  *
  * It is not activated by merely importing it. Production callers must supply
@@ -10,17 +10,24 @@
  */
 
 export const NBA_UNIFIED_FINAL_PROJECTION_CANDIDATE_RELEASE =
-  "nba_unified_final_projection_2026_10_16_r2_independent_first_reader" as const;
+  "nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader" as const;
 
 export const NBA_UNIFIED_FINAL_RECIPE = {
   marginIndependentWeight: 1,
   totalIndependentWeight: 1,
   spreadMovementThreshold: 2,
   minimumSpreadResidual: 0.25,
+  totalMovementThreshold: 5,
+  minimumTotalResidual: 5,
 } as const;
 
 export type NbaQualifiedSpreadRead = {
   side: "home" | "away";
+  magnitudePoints: number;
+};
+
+export type NbaQualifiedTotalRead = {
+  side: "over" | "under";
   magnitudePoints: number;
 };
 
@@ -31,6 +38,7 @@ export type NbaUnifiedFinalProjectionInput = {
   currentTotal: number | null;
   openingSpreadHome: number | null;
   qualifiedSpreadRead?: NbaQualifiedSpreadRead | null;
+  qualifiedTotalRead?: NbaQualifiedTotalRead | null;
 };
 
 export type NbaUnifiedFinalProjection = {
@@ -42,6 +50,9 @@ export type NbaUnifiedFinalProjection = {
   spreadResidual: number | null;
   movementQualified: boolean;
   movementApplied: boolean;
+  totalResidual: number | null;
+  totalMovementQualified: boolean;
+  totalMovementApplied: boolean;
   marketApplied: {
     margin: boolean;
     total: boolean;
@@ -77,7 +88,7 @@ export function buildNbaUnifiedFinalProjection(
   const marketMargin = currentSpreadHome === null ? null : -currentSpreadHome;
 
   let margin = independentMargin;
-  const total = independentTotal;
+  let total = independentTotal;
 
   const spreadSupport = openingSpreadHome === null || currentSpreadHome === null
     ? null
@@ -102,6 +113,23 @@ export function buildNbaUnifiedFinalProjection(
     margin = marketMargin! + adjustedResidual;
   }
 
+  let totalResidual: number | null = currentTotal === null ? null : total - currentTotal;
+  const qualifiedTotalRead = input.qualifiedTotalRead ?? null;
+  const totalMovementQualified = qualifiedTotalRead !== null &&
+    Number.isFinite(qualifiedTotalRead.magnitudePoints) &&
+    qualifiedTotalRead.magnitudePoints >= NBA_UNIFIED_FINAL_RECIPE.totalMovementThreshold &&
+    currentTotal !== null && totalResidual !== null &&
+    Math.abs(totalResidual) >= NBA_UNIFIED_FINAL_RECIPE.minimumTotalResidual;
+  let totalMovementApplied = false;
+  if (totalMovementQualified && totalResidual !== null && qualifiedTotalRead !== null) {
+    const direction = qualifiedTotalRead.side === "over" ? 1 : -1;
+    totalMovementApplied = Math.sign(totalResidual) !== direction;
+    if (totalMovementApplied) {
+      totalResidual = direction * Math.abs(totalResidual);
+      total = currentTotal! + totalResidual;
+    }
+  }
+
   return {
     release: NBA_UNIFIED_FINAL_PROJECTION_CANDIDATE_RELEASE,
     homeScore: (total + margin) / 2,
@@ -111,9 +139,12 @@ export function buildNbaUnifiedFinalProjection(
     spreadResidual,
     movementQualified,
     movementApplied,
+    totalResidual,
+    totalMovementQualified,
+    totalMovementApplied,
     marketApplied: {
       margin: movementApplied,
-      total: false,
+      total: totalMovementApplied,
     },
     audit: {
       independentMarginHome: independentMargin,
