@@ -103,6 +103,17 @@ assert.ok(result.final.marginHome > 2, "qualified home movement must flip the re
 assert.equal(result.picks.moneyline, "home");
 assert.equal(result.picks.spread, "home");
 assert.equal(result.picks.total, "over");
+assert.deepEqual(result.readerDecisionAudit, {
+  independentPicks: { moneyline: "away", spread: "away", total: "over" },
+  finalPicks: { moneyline: "home", spread: "home", total: "over" },
+  spreadReadQualified: true,
+  spreadCorrectionApplied: true,
+  effects: {
+    moneyline: "flipped_by_validated_spread_score",
+    spread: "flipped_by_validated_spread_read",
+    total: "unchanged_no_validated_total_authority",
+  },
+});
 assert.ok(Math.abs(result.final.homeScore + result.final.awayScore - result.final.total) < 1e-9);
 assert.ok(Math.abs(result.final.homeScore - result.final.awayScore - result.final.marginHome) < 1e-9);
 

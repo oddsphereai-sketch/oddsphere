@@ -102,6 +102,24 @@ export function buildNbaProfessionalCandidate(args: {
     margin_sd_base: args.artifact.distribution.marginSigma,
     total_sd_base: args.artifact.distribution.totalSigma,
   });
+  const independentPicks = {
+    moneyline: independent.marginHome >= 0 ? "home" as const : "away" as const,
+    spread: consensus.spreadHome === null
+      ? null
+      : independent.marginHome + consensus.spreadHome >= 0 ? "home" as const : "away" as const,
+    total: consensus.totalLine === null
+      ? null
+      : independent.total - consensus.totalLine >= 0 ? "over" as const : "under" as const,
+  };
+  const picks = {
+    moneyline: final.marginHome >= 0 ? "home" as const : "away" as const,
+    spread: probabilities.spread_home_cover_prob === null
+      ? null
+      : probabilities.spread_home_cover_prob >= 0.5 ? "home" as const : "away" as const,
+    total: probabilities.total_over_prob === null
+      ? null
+      : probabilities.total_over_prob >= 0.5 ? "over" as const : "under" as const,
+  };
   return {
     modelRelease: args.artifact.release,
     independent,
@@ -110,14 +128,23 @@ export function buildNbaProfessionalCandidate(args: {
     marketReader: args.marketReader ?? null,
     final,
     probabilities,
-    picks: {
-      moneyline: final.marginHome >= 0 ? "home" as const : "away" as const,
-      spread: probabilities.spread_home_cover_prob === null
-        ? null
-        : probabilities.spread_home_cover_prob >= 0.5 ? "home" as const : "away" as const,
-      total: probabilities.total_over_prob === null
-        ? null
-        : probabilities.total_over_prob >= 0.5 ? "over" as const : "under" as const,
+    picks,
+    readerDecisionAudit: {
+      independentPicks,
+      finalPicks: picks,
+      spreadReadQualified: final.movementQualified,
+      spreadCorrectionApplied: final.movementApplied,
+      effects: {
+        moneyline: independentPicks.moneyline !== picks.moneyline
+          ? "flipped_by_validated_spread_score" as const
+          : "unchanged_no_direct_moneyline_authority" as const,
+        spread: independentPicks.spread !== picks.spread
+          ? "flipped_by_validated_spread_read" as const
+          : final.movementQualified
+            ? "confirmed_by_validated_spread_read" as const
+            : "unchanged_no_qualified_spread_read" as const,
+        total: "unchanged_no_validated_total_authority" as const,
+      },
     },
   };
 }

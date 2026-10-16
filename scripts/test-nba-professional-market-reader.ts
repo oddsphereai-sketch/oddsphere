@@ -76,7 +76,12 @@ const ml = buildNbaProfessionalMarketReader({
 });
 assert.equal(ml.release, NBA_PROFESSIONAL_MARKET_READER_RELEASE);
 assert.equal(ml.policy, "categorical_evidence_no_consensus_weight");
-assert.equal(ml.authority, "conditional_spread_only");
+assert.equal(ml.authority, "conditional_spread_with_coherent_moneyline_effect");
+assert.deepEqual(ml.forecastAuthority, {
+  moneyline: "indirect_only_from_validated_spread_score",
+  spread: "conditional_categorical_score_correction",
+  total: "observation_only_pending_validation",
+});
 assert.equal(ml.evidenceStatus, "complete");
 assert.equal(ml.reads.moneyline.status, "qualified");
 assert.equal(ml.reads.moneyline.side, "home");
