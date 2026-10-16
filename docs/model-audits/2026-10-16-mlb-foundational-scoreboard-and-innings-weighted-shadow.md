@@ -24,11 +24,14 @@ and a replacement action policy that remains positive in each chronological bloc
 the earlier run-line conclusion: a naive always-underdog +1.5 baseline is more accurate than the
 distribution selector at the main line, so no run-line model improvement is claimed.
 
-The scoped Total candidate is not active. Its scope was discovered during an already-opened 2026
-analysis, the current writer still allows a Total-only change to retier 31 Moneylines, and the new
-action board improves units but is 0.50 percentage points less accurate than the incumbent action
-board. Those are immediate implementation/selection issues, not a recommendation to wait for weeks
-of shadow tracking.
+The scoped Total candidate is not active. The final audit resolves the earlier action-accuracy
+tradeoff with a two-layer grade contract: final-board price/value qualification is required first,
+then the independent Poisson/regime grade separates Best Angle, Lean, and Watchlist. The resulting
+177-play actionable board is 103-74 (58.19%, +21.84u), including 46 Best Angles at 29-17 (63.04%,
++9.74u). It is positive in development, opened validation, and chronological confirmation and
+retains 76% of the 233-play repaired board rather than flattening it. The candidate's structural
+scope was still discovered during an already-opened 2026 analysis, so activation remains an
+owner-approved future-unlocked release rather than a retroactive claim.
 
 ## Evidence contract
 
@@ -62,10 +65,10 @@ Unique-game historical output across mixed release eras:
 | Derived run line favorable +1 | 938-548, 63.12% | 1626-821, 66.45% | Material unresolved weakness. |
 | Derived run line favorable +2 | 960-526, 64.60% | 1762-685, 72.01% | Material unresolved weakness. |
 
-Run-line results are accuracy-only mathematical derivations. Historical locks contain zero spread
-rows in `lines_at_lock`, and MLB `line_history` contains no frozen spread observations. Official
-run-line ROI, CLV, and exact alternate-price comparisons therefore cannot be claimed from this
-history.
+Run-line results in the baseline table are accuracy-only mathematical derivations. A later
+price-aware audit recovered 825 same-book ±1.5 pairs from retained pregame `lines` rows, but those
+rows are mutable last-retained observations rather than immutable T-60 snapshots. They can falsify
+a proposed selector, but they cannot establish official historical run-line tracking or CLV.
 
 ## Architecture diagnosis
 
@@ -379,11 +382,46 @@ underdog +1.5** baseline exactly. For the full affine posterior cohort that is 8
 contain zero demonstrated selection lift. They are a property of the alternate line, not proof of
 model skill, and must not be promoted or advertised as such.
 
+The price-aware retained-row audit confirms the rejection. It requires a real-book same-book
+home/away ±1.5 pair observed from 48 hours through one hour before first pitch. Across 825 paired
+games, always taking the underdog is 477-348 (57.82%) but **-51.94u**; the stored and repaired
+Poisson selectors are both 470-355 (56.97%) and -45.03u. A train-only favorite-cover classifier
+selects the favorite only 24 times, remains 477-348 overall, and falls to -53.86u. Its late
+101-game block is positive, but validation is worse than the underdog baseline, so it is not stable
+enough to ship. The correct conclusion is not “take every underdog”; it is that MLB run-line
+selection remains unconfirmed and should stay out of the public prediction board.
+
 ### Final-grade and market-reader diagnostics
 
-Three fixed, predeclared Best Angle thresholds were tested inside Candidate C's 233-row qualified
-board. None remained positive in holdout: balanced was 15-18, strict 9-11, and conservative 6-7.
-High model probability alone is therefore not a valid MLB Total Best Angle ranker yet.
+Three probability/edge-only Best Angle thresholds were tested inside Candidate C's 233-row
+qualified board. None remained positive in holdout: balanced was 15-18, strict 9-11, and
+conservative 6-7. High model probability alone is therefore not a valid MLB Total Best Angle
+ranker.
+
+The successful calibration uses the independent statistical grade as a second gate rather than
+inventing a still-higher confidence cutoff. Candidate C first has to pass the train-selected final
+board contract: writer-qualified Market Aligned side, model probability at least 51%, absolute
+projection gap at least 0.5 runs, nonnegative offered edge, and price no worse than -150. Then:
+
+- an independent statistical `Best Angle` remains **Best Angle**;
+- an independent statistical `Market Aligned` row becomes **Lean**;
+- a legacy statistical Lean/No Bet becomes **Watchlist**.
+
+This produces a meaningful hierarchy:
+
+| Final grade | Record | Accuracy | Units | Development | Validation | Confirmation |
+|---|---:|---:|---:|---:|---:|---:|
+| Best Angle | **29-17 (46)** | **63.04%** | **+9.74u** | 11-6 | 9-7 | 9-4 |
+| Lean | **74-57 (131)** | **56.49%** | **+12.11u** | 37-28 | 18-17 | 19-12 |
+| Watchlist | 21-35 (56) | 37.50% | -13.41u | 4-10 | 4-3 | 13-22 |
+| Actionable total | **103-74 (177)** | **58.19%** | **+21.84u** | 48-34 | 27-24 | 28-16 |
+
+The board is smaller but not flattened: 177 of 233 repaired opportunities stay actionable and 46
+remain Best Angles. Relative to the incumbent 242-action board, the final contract retains 38
+actions (24-14, +8.21u), promotes 139 (79-60, +13.64u), and demotes 204. The demoted incumbent
+cohort is positive in development but loses in both later blocks (25-26 validation, 24-26
+confirmation). That later-period separation is the key safety result: the policy both promotes a
+winning cohort and removes a cohort that stopped transferring.
 
 The existing market reader is informative, but the relationship is not a simple "follow the move"
 rule. Within the Candidate C action board:
@@ -402,8 +440,26 @@ show why the market reader must remain a separate arbitration layer: both blindl
 blindly fading line movement fail.
 
 The current conclusion is narrow: Candidate C is a real Total-direction improvement through the
-complete product, while Moneyline margin calibration, run-line selection, and a new Total Best Angle
-tier remain unproven. Production stays unchanged until the grade boundary is confirmed prospectively.
+complete product and the two-layer Total grade hierarchy is a viable production candidate.
+Moneyline margin calibration and run-line selection remain rejected. Production stays unchanged
+until the candidate is versioned, reviewed, explicitly approved, and deployed only for future
+unlocked rows.
+
+## Moneyline and run-line disposition
+
+The existing Moneyline should be preserved. On the exact 1,341-game full-writer cohort it is
+770-571 (57.42%, +8.52u); its 499 actionables are 310-189 (62.12%, +24.97u), and its 148 Best
+Angles are 101-47 (68.24%, +14.92u). Actionables remain above 61% in each chronological block.
+The Total-only candidate preserves every Moneyline side, so the Total repair does not discard the
+existing Moneyline architecture or market reader.
+
+Run line is not production-confirmed. The repository now contains a behavior-neutral r2 forward
+capture candidate that freezes up to four coherent, same-book main ±1.5 pairs and their same-book
+openers on the unlocked Moneyline snapshot. It rejects alternates, crossed books, incoherent side
+numbers, stale/future rows, and side timestamps more than two minutes apart. The capture is
+`production_gate_enabled=false`: it changes no forecast, side, probability, grade, price, stake,
+lock, or public tracking row. Once deployed, future T-60 locks will finally support an honest
+price-normalized run-line model audit.
 
 ## Feature coverage still missing from the independent model
 
@@ -431,8 +487,9 @@ tests. They are not permission to add many correlated factors at once.
 - The operator audit now includes the exact frozen-evidence r91 writer A/B, train-only score-gap
   calibration, scoped Candidate C, miss-distance ladders, naive run-line baselines, train-only
   action-policy search, cross-market grade-integrity count, paired promotion/demotion counts,
-  train-only Moneyline architecture comparisons, selective upset overrides, and chronological
-  override-cohort stability.
+  train-only Moneyline architecture comparisons, selective upset overrides, chronological
+  override-cohort stability, a price-aware run-line falsification test, and the final two-layer
+  Best Angle/Lean/Watchlist calibration.
 - Default behavior remains disabled.
 - Focused MLB model tests: 182 passed, 0 failed.
 - TypeScript: passed.
@@ -443,16 +500,16 @@ tests. They are not permission to add many correlated factors at once.
 
 Before this candidate can affect a member forecast:
 
-1. Resolve the remaining action-accuracy tradeoff: Candidate C's 233-row board is profitable in all
-   chronological blocks, but 53.22% is below the incumbent action board's 53.72%. Freeze either a
-   higher-accuracy selection rule or an explicit evidence-backed multi-objective acceptance.
+1. Freeze the documented 177-play two-layer grade contract in a versioned, future-unlocked runtime
+   candidate. Do not substitute one of the rejected probability-only Best Angle thresholds.
 2. Decouple Moneyline confidence/grade from Total probability and prove the Moneyline public tuple
    remains invariant when only the Total head changes.
 3. Freeze the structural scope as a versioned model artifact or choose the more principled unscoped
    innings-weighted repair. The scoped thresholds were found in an opened 2026 analysis and must not
    be described as untouched validation.
-4. Do not promote the run-line selector. First capture run-line prices/history and build a selector
-   that beats the same-cohort always-underdog baseline after favorite/underdog and price normalization.
+4. Do not promote the run-line selector. Deploy the behavior-neutral r2 price capture first, then
+   require a selector to beat the same-cohort always-underdog baseline after favorite/underdog and
+   price normalization on release-separated immutable evidence.
 5. Do not promote a Moneyline challenger until it beats the paired favorite baseline in both
    validation and chronological confirmation while retaining calibrated probabilities and selective
    upset corrections. The current four architectures and their train-selected override policies fail.

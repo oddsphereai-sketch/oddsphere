@@ -148,15 +148,25 @@ const currentLines: MlbFullGameCaptureLineRow[] = books.flatMap(([sportsbook, ho
   { market_type: "moneyline", side: "away", sportsbook, odds_american: away, line_value: null, fetched_at: `2026-09-02T15:59:${24 + index}.000Z` },
   { market_type: "total", side: "over", sportsbook, odds_american: -108 - index, line_value: 8.5, fetched_at: `2026-09-02T15:58:${20 + index}.000Z` },
   { market_type: "total", side: "under", sportsbook, odds_american: -112 + index, line_value: 8.5, fetched_at: `2026-09-02T15:58:${24 + index}.000Z` },
+  { market_type: "spread", side: "home", sportsbook, odds_american: 145 + index, line_value: 1.5, fetched_at: `2026-09-02T15:57:${20 + index}.000Z` },
+  { market_type: "spread", side: "away", sportsbook, odds_american: -165 - index, line_value: -1.5, fetched_at: `2026-09-02T15:57:${24 + index}.000Z` },
   // This other-market pair must never leak into full-game evidence.
   { market_type: "first_inning_total", side: "over", sportsbook, odds_american: -300, line_value: 0.5, fetched_at: `2026-09-02T15:59:${20 + index}.000Z` },
   { market_type: "first_inning_total", side: "under", sportsbook, odds_american: 240, line_value: 0.5, fetched_at: `2026-09-02T15:59:${24 + index}.000Z` },
 ]);
+currentLines.push(
+  { market_type: "spread", side: "home", sportsbook: "Book Alt", odds_american: -110, line_value: -2.5, fetched_at: "2026-09-02T15:57:40.000Z" },
+  { market_type: "spread", side: "away", sportsbook: "Book Alt", odds_american: -110, line_value: 2.5, fetched_at: "2026-09-02T15:57:41.000Z" },
+  { market_type: "spread", side: "home", sportsbook: "Book Bad", odds_american: -110, line_value: 1.5, fetched_at: "2026-09-02T15:57:42.000Z" },
+  { market_type: "spread", side: "away", sportsbook: "Book Bad", odds_american: -110, line_value: 1.5, fetched_at: "2026-09-02T15:57:43.000Z" },
+);
 const openers = books.flatMap(([sportsbook], index) => [
   { game_id: 22, market_type: "moneyline", side: "home", sportsbook, odds_american: -120 - index, line_value: null, recorded_at: `2026-09-02T12:00:0${index}.000Z` },
   { game_id: 22, market_type: "moneyline", side: "away", sportsbook, odds_american: 108 + index, line_value: null, recorded_at: `2026-09-02T12:00:1${index}.000Z` },
   { game_id: 22, market_type: "total", side: "over", sportsbook, odds_american: -105, line_value: 8.5, recorded_at: `2026-09-02T12:01:0${index}.000Z` },
   { game_id: 22, market_type: "total", side: "under", sportsbook, odds_american: -115, line_value: 8.5, recorded_at: `2026-09-02T12:01:1${index}.000Z` },
+  { game_id: 22, market_type: "spread", side: "home", sportsbook, odds_american: 138 + index, line_value: 1.5, recorded_at: `2026-09-02T12:02:0${index}.000Z` },
+  { game_id: 22, market_type: "spread", side: "away", sportsbook, odds_american: -158 - index, line_value: -1.5, recorded_at: `2026-09-02T12:02:1${index}.000Z` },
 ]);
 const records = [record("moneyline"), record("total"), record("first_inning")];
 const captured = attachMlbFullGameForwardEvidence({
@@ -212,6 +222,27 @@ const circaOpening = asObject(circa.opening);
 equal(circaOpening.positive_odds_american, -121, "opener is the same book");
 equal(circaOpening.negative_odds_american, 109, "opener complement is the same book");
 check(!mlArtifact.named_book_pairs.some((pair) => pair.line === 0.5), "FI rows cannot leak into full-game pair capture");
+const runLineEvidence = asObject(mlArtifact.related_run_line_evidence);
+equal(runLineEvidence.production_gate_enabled, false, "run-line evidence cannot alter production decisions");
+equal(runLineEvidence.canonical_scope, "same_book_main_run_line_plus_or_minus_1_5", "run-line scope is explicit");
+const runLinePairs = runLineEvidence.named_book_pairs as Array<Record<string, unknown>>;
+equal(runLinePairs.length, 4, "bounded run-line context retains the four named books");
+check(!runLinePairs.some((pair) => pair.normalized_sportsbook === "bookalt"), "alternate run-line numbers are excluded");
+check(!runLinePairs.some((pair) => pair.normalized_sportsbook === "bookbad"), "incoherent same-sign run-line pairs are excluded");
+const runLineRejected = asObject(runLineEvidence.rejected_counts);
+equal(runLineRejected.non_main_line, 2, "alternate run-line sides are counted explicitly");
+equal(runLineRejected.incoherent_pair, 1, "incoherent complementary-side pair is counted explicitly");
+const pinnacleRunLine = runLinePairs.find((pair) => pair.normalized_sportsbook === "pinnacle");
+check(pinnacleRunLine, "Pinnacle run-line pair is retained");
+equal(pinnacleRunLine.home_line, 1.5, "run-line home number is preserved");
+equal(pinnacleRunLine.away_line, -1.5, "run-line away number is preserved");
+const pinnacleRunLineCurrent = asObject(pinnacleRunLine.current);
+equal(pinnacleRunLineCurrent.home_odds_american, 145, "run-line home price is preserved");
+equal(pinnacleRunLineCurrent.away_odds_american, -165, "run-line away price is preserved");
+const pinnacleRunLineOpening = asObject(pinnacleRunLine.opening);
+equal(pinnacleRunLineOpening.home_odds_american, 138, "same-book run-line opener home price is preserved");
+equal(pinnacleRunLineOpening.away_odds_american, -158, "same-book run-line opener away price is preserved");
+equal(totalArtifact.related_run_line_evidence, null, "run-line evidence is stored once per game on Moneyline only");
 equal(mlArtifact.publication_correction.score_derived_side, "away", "score-derived winner is frozen");
 equal(mlArtifact.publication_correction.published_side, "home", "published correction side is frozen separately");
 equal(mlArtifact.publication_correction.published_side_matches_score, false, "legacy publication mismatch is explicit");
@@ -259,6 +290,8 @@ const stressLines: MlbFullGameCaptureLineRow[] = stressBooks.flatMap((sportsbook
   { market_type: "moneyline", side: "away", sportsbook, odds_american: 100 + index, fetched_at: "2026-09-02T15:59:10.000Z" },
   { market_type: "total", side: "over", sportsbook, odds_american: -110, line_value: 8.5, fetched_at: "2026-09-02T15:59:00.000Z" },
   { market_type: "total", side: "under", sportsbook, odds_american: -110, line_value: 8.5, fetched_at: "2026-09-02T15:59:10.000Z" },
+  { market_type: "spread", side: "home", sportsbook, odds_american: 120 + index, line_value: 1.5, fetched_at: "2026-09-02T15:58:00.000Z" },
+  { market_type: "spread", side: "away", sportsbook, odds_american: -140 - index, line_value: -1.5, fetched_at: "2026-09-02T15:58:10.000Z" },
 ]);
 function stressCapture(lines: MlbFullGameCaptureLineRow[]) {
   return attachMlbFullGameForwardEvidence({
@@ -296,12 +329,21 @@ equal(
 check(Number(stressOmitted.named_book_pairs) >= 24, "stress capture reports count/byte-cap pair omissions");
 check(Number(stressOmitted.source_aware_splits) > 0, "stress capture reports split omissions");
 check(Number(stressOmitted.sharp_signals) > 0, "stress capture reports signal omissions");
+const stressRunLine = asObject(stressMlA.related_run_line_evidence);
+equal((stressRunLine.named_book_pairs as unknown[]).length, 4, "stress capture retains the bounded run-line pair count");
+equal(stressRunLine.omitted_pair_count, 36, "stress capture accounts for omitted run-line pairs");
 check(stressMlA.payload_bytes <= MLB_FULLGAME_MARKET_EVIDENCE_MAX_MARKET_BYTES, "stress artifact obeys byte cap");
 
 const serviceSource = readFileSync(new URL("../lib/services/predictionRecordService.ts", import.meta.url), "utf8");
 equal((serviceSource.match(/\.from\(/g) ?? []).length, 16, "capture adds zero DB query paths");
 equal((serviceSource.match(/\.upsert\(/g) ?? []).length, 1, "capture adds zero upsert paths");
 equal((serviceSource.match(/\.insert\(/g) ?? []).length, 1, "capture adds zero insert paths");
+check(serviceSource.includes('"spread::home"'), "writer threads home run-line history into forward capture");
+check(serviceSource.includes('"spread::away"'), "writer threads away run-line history into forward capture");
+check(
+  serviceSource.includes('marketTypes: ["moneyline", "total", "spread", "first_inning_total"]'),
+  "writer loads current run-line rows without adding a query path",
+);
 const captureSource = readFileSync(new URL("../lib/services/mlb/mlbFullGameForwardEvidenceCapture.ts", import.meta.url), "utf8");
 equal((captureSource.match(/\.from\(/g) ?? []).length, 0, "pure capture has no DB reads");
 equal((captureSource.match(/fetch\(/g) ?? []).length, 0, "pure capture has no provider calls");

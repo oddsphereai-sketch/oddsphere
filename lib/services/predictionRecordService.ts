@@ -6385,6 +6385,8 @@ export function buildPredictionRecordsFromSlate(args: {
       "moneyline::away",
       "total::over",
       "total::under",
+      "spread::home",
+      "spread::away",
     ].flatMap((suffix) => args.historyByKey?.get(`${game.id}::${suffix}`) ?? []);
     const captured = attachMlbFullGameForwardEvidence({
       records: gameRecords,
@@ -6587,7 +6589,7 @@ export async function createPredictionRecords(
       gameIds,
       // 2026-06-15: include first_inning_total so the FI record can thread its
       // real lock price (was excluded → FI odds_american hardcoded null).
-      marketTypes: ["moneyline", "total", "first_inning_total"],
+      marketTypes: ["moneyline", "total", "spread", "first_inning_total"],
       context: `prediction-record prices mlb/${slateDate}`,
     }) as LineRowForOdds[];
   } else {
@@ -6595,7 +6597,7 @@ export async function createPredictionRecords(
       .from("lines")
       .select("game_id, market_type, side, sportsbook, odds_american, line_value, fetched_at")
       .in("game_id", gameIds)
-      .in("market_type", ["moneyline", "total", "first_inning_total"])
+      .in("market_type", ["moneyline", "total", "spread", "first_inning_total"])
       .is("player_id", null);
     lineRowsForOdds = (data ?? []) as LineRowForOdds[];
   }
@@ -6625,7 +6627,7 @@ export async function createPredictionRecords(
         .from("line_history")
         .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
         .eq("game_id", gid)
-        .in("market_type", ["moneyline", "total", "first_inning_total"])
+        .in("market_type", ["moneyline", "total", "spread", "first_inning_total"])
         .is("player_id", null)
         .neq("sportsbook", "splits_consensus")
         .not("odds_american", "is", null)
@@ -6684,7 +6686,7 @@ export async function createPredictionRecords(
     .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
     .eq("is_opener", true)
     .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "total"])
+    .in("market_type", ["moneyline", "total", "spread"])
     .is("player_id", null);
   const flagged = (flaggedOpenerRows ?? []) as LineHistoryOpenerRow[];
 
@@ -6703,7 +6705,7 @@ export async function createPredictionRecords(
         .from("line_history")
         .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
         .eq("game_id", gid)
-        .in("market_type", ["moneyline", "total"])
+        .in("market_type", ["moneyline", "total", "spread"])
         .is("player_id", null)
         .order("recorded_at", { ascending: true })
         .limit(400)

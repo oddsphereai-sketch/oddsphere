@@ -2094,6 +2094,16 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
 
+- October 16 MLB run-line forward evidence candidate advances only the additive full-game evidence
+  contract to `mlb_fullgame_market_evidence_capture_2026_10_16_r2_run_line_context` (`mlbfgme2`).
+  The existing sole prediction-record writer reuses its bounded current/history/opener reads to
+  freeze up to four coherent same-book main ±1.5 pairs on each future unlocked Moneyline snapshot.
+  The evidence is explicitly capture-only and cannot alter a forecast, side, probability, score,
+  price, grade, stake, lock, tracking row, or reader. MLB spread remains context-only and is not an
+  official prediction market. Evidence and rollback:
+  `docs/model-audits/2026-10-16-mlb-run-line-forward-evidence-r2.md`; rollback restores the r1
+  filter/contract for future unlocked snapshots and preserves every already locked r2 payload.
+
 - October 16 official short-slate starter continuity advances only input eligibility to
   `mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16`.
   On an official one- or two-game postseason slate, an exact game whose stored missing starter

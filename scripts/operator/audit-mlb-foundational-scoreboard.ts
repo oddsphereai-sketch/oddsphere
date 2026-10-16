@@ -195,6 +195,15 @@ type WriterSplit = NonNullable<WriterArgs["sourceAwareSplitsByGameId"]> extends 
   ? Value
   : never;
 
+type RunLinePriceRow = {
+  game_id: number;
+  side: string | null;
+  sportsbook: string;
+  odds_american: number | null;
+  line_value: number | null;
+  fetched_at: string | null;
+};
+
 const COMPETITOR = {
   source: "owner-provided screenshot; methodology not yet normalized",
   moneyline: { wins: 1366, losses: 1081, pct: 1366 / 2447 },
@@ -2420,6 +2429,177 @@ function writerEvidence(game: Game): {
   return { lines, openers, signals, splits };
 }
 
+async function runLinePriceAudit(games: Game[]): Promise<Record<string, unknown>> {
+  const writerGames = await loadWriterGames(games);
+  const rows: RunLinePriceRow[] = [];
+  const ids = games.map((game) => game.gameId);
+  for (let index = 0; index < ids.length; index += 100) {
+    const chunk = ids.slice(index, index + 100);
+    for (let start = 0; ; start += 1000) {
+      const { data, error } = await supabase
+        .from("lines")
+        .select("game_id,side,sportsbook,odds_american,line_value,fetched_at")
+        .in("game_id", chunk)
+        .eq("market_type", "spread")
+        .range(start, start + 999);
+      if (error) throw new Error(`run-line price read failed: ${error.message}`);
+      rows.push(...((data ?? []) as RunLinePriceRow[]));
+      if ((data ?? []).length < 1000) break;
+    }
+  }
+  const syntheticBooks = new Set(["splits_consensus", "locked_snapshot", "recommendation_snapshot"]);
+  const eligibleRows = rows.filter((row) => {
+    const writerGame = writerGames.get(row.game_id);
+    const startMs = writerGame?.game_date ? Date.parse(writerGame.game_date) : Number.NaN;
+    const fetchedMs = row.fetched_at ? Date.parse(row.fetched_at) : Number.NaN;
+    return (row.side === "home" || row.side === "away") &&
+      row.odds_american !== null && row.line_value !== null &&
+      Math.abs(row.line_value) === 1.5 && !syntheticBooks.has(row.sportsbook) &&
+      Number.isFinite(startMs) && Number.isFinite(fetchedMs) &&
+      fetchedMs <= startMs - 60 * 60 * 1000 &&
+      fetchedMs >= startMs - 48 * 60 * 60 * 1000;
+  });
+  const byGameBook = new Map<string, RunLinePriceRow[]>();
+  for (const row of eligibleRows) {
+    const key = `${row.game_id}:${row.sportsbook}`;
+    byGameBook.set(key, [...(byGameBook.get(key) ?? []), row]);
+  }
+  type PairedRunLine = {
+    game: Game;
+    book: string;
+    favoriteSide: Side;
+    favoriteOdds: number;
+    underdogOdds: number;
+    favoriteMarketProbability: number;
+    storedFavoriteCoverProbability: number;
+    candidateFavoriteCoverProbability: number;
+    candidateFavoriteMargin: number;
+    mlFavoriteProbability: number;
+    outcome: number;
+  };
+  const pairedByGame = new Map<number, PairedRunLine>();
+  for (const values of byGameBook.values()) {
+    const home = values.find((row) => row.side === "home");
+    const away = values.find((row) => row.side === "away");
+    if (
+      !home || !away || home.line_value === null || away.line_value === null ||
+      home.odds_american === null || away.odds_american === null ||
+      home.line_value !== -away.line_value
+    ) continue;
+    const homeMs = home.fetched_at ? Date.parse(home.fetched_at) : Number.NaN;
+    const awayMs = away.fetched_at ? Date.parse(away.fetched_at) : Number.NaN;
+    if (!Number.isFinite(homeMs) || !Number.isFinite(awayMs) || Math.abs(homeMs - awayMs) > 30 * 60 * 1000) continue;
+    const game = games.find((candidateGame) => candidateGame.gameId === home.game_id);
+    const stored = game ? storedPosteriorScore(game) : null;
+    const candidate = game ? scopedStructuralPosterior(game, "exclude_bad_or_weak") : null;
+    const mlHome = game ? homeMarketProbability(game.ml) : null;
+    if (!game || !stored || !candidate || mlHome === null) continue;
+    const favoriteSide: Side = home.line_value < 0 ? "home" : "away";
+    const favoriteRow = favoriteSide === "home" ? home : away;
+    const underdogRow = favoriteSide === "home" ? away : home;
+    const favoriteOdds = favoriteRow.odds_american;
+    const underdogOdds = underdogRow.odds_american;
+    const favoriteLine = favoriteRow.line_value;
+    if (favoriteOdds === null || underdogOdds === null || favoriteLine === null) continue;
+    const favoriteImplied = americanImpliedProbability(favoriteOdds);
+    const underdogImplied = americanImpliedProbability(underdogOdds);
+    if (favoriteImplied === null || underdogImplied === null) continue;
+    const denominator = favoriteImplied + underdogImplied;
+    if (denominator < 0.95 || denominator > 1.2) continue;
+    const storedFavoriteCoverProbability = favoriteSide === "home"
+      ? homeMinus1_5Probability(stored.home, stored.away)
+      : homeMinus1_5Probability(stored.away, stored.home);
+    const candidateFavoriteCoverProbability = favoriteSide === "home"
+      ? homeMinus1_5Probability(candidate.home, candidate.away)
+      : homeMinus1_5Probability(candidate.away, candidate.home);
+    const candidateFavoriteMargin = favoriteSide === "home"
+      ? candidate.home - candidate.away
+      : candidate.away - candidate.home;
+    const outcome = handicapOutcome(favoriteSide, favoriteLine, game) === "win" ? 1 : 0;
+    const paired: PairedRunLine = {
+      game,
+      book: favoriteRow.sportsbook,
+      favoriteSide,
+      favoriteOdds,
+      underdogOdds,
+      favoriteMarketProbability: favoriteImplied / denominator,
+      storedFavoriteCoverProbability,
+      candidateFavoriteCoverProbability,
+      candidateFavoriteMargin,
+      mlFavoriteProbability: favoriteSide === "home" ? mlHome : 1 - mlHome,
+      outcome,
+    };
+    const existing = pairedByGame.get(game.gameId);
+    const existingTime = existing
+      ? Math.max(...eligibleRows.filter((row) => row.game_id === game.gameId && row.sportsbook === existing.book)
+        .map((row) => row.fetched_at ? Date.parse(row.fetched_at) : Number.NEGATIVE_INFINITY))
+      : Number.NEGATIVE_INFINITY;
+    const pairTime = Math.max(homeMs, awayMs);
+    if (!existing || pairTime > existingTime) pairedByGame.set(game.gameId, paired);
+  }
+  const paired = [...pairedByGame.values()].sort((a, b) => a.game.date.localeCompare(b.game.date));
+  const featureNames = [
+    "market_favorite_cover_logit",
+    "candidate_favorite_cover_logit",
+    "candidate_favorite_margin",
+    "moneyline_favorite_logit",
+  ];
+  const features = (row: PairedRunLine) => [
+    logit(row.favoriteMarketProbability),
+    logit(row.candidateFavoriteCoverProbability),
+    row.candidateFavoriteMargin,
+    logit(row.mlFavoriteProbability),
+  ];
+  const train = paired.filter((row) => chronologicalLabel(games, row.game) === "train");
+  const model = fitLogisticModel(train.map((row) => ({ values: features(row), outcome: row.outcome })));
+  const rowsFor = (sideFn: (row: PairedRunLine) => Side): PickRow[] => paired.map((row) => {
+    const side = sideFn(row);
+    const favorite = side === row.favoriteSide;
+    return {
+      gameId: row.game.gameId,
+      date: row.game.date,
+      release: "run_line_price_audit",
+      outcome: handicapOutcome(side, favorite ? -1.5 : 1.5, row.game),
+      odds: favorite ? row.favoriteOdds : row.underdogOdds,
+    };
+  });
+  const summarize = (values: PickRow[]) => ({
+    all: metric(values),
+    chronology: summarizeChronology(games, values),
+  });
+  const underdogRows = rowsFor((row) => row.favoriteSide === "home" ? "away" : "home");
+  const candidateRows = model === null ? [] : rowsFor((row) =>
+    predictLogistic(model, features(row)) >= 0.5
+      ? row.favoriteSide
+      : row.favoriteSide === "home" ? "away" : "home");
+  const favoriteSelections = model === null
+    ? 0
+    : paired.filter((row) => predictLogistic(model, features(row)) >= 0.5).length;
+  return {
+    evidenceBoundary: "last retained real-book line row only; restricted to rows timestamped 1-48 hours before first pitch. This is not an immutable T-60 snapshot and remains shadow evidence.",
+    rawSpreadRows: rows.length,
+    eligiblePregameRows: eligibleRows.length,
+    pairedGames: paired.length,
+    trainGames: train.length,
+    featureNames,
+    coefficientsStandardized: model === null ? null : {
+      intercept: round(model.weights[0], 5),
+      ...Object.fromEntries(featureNames.map((name, index) => [name, round(model.weights[index + 1], 5)])),
+    },
+    alwaysUnderdog: summarize(underdogRows),
+    storedPoisson: summarize(rowsFor((row) => row.storedFavoriteCoverProbability >= 0.5
+      ? row.favoriteSide
+      : row.favoriteSide === "home" ? "away" : "home")),
+    scopedCandidatePoisson: summarize(rowsFor((row) => row.candidateFavoriteCoverProbability >= 0.5
+      ? row.favoriteSide
+      : row.favoriteSide === "home" ? "away" : "home")),
+    trainOnlyFavoriteCoverClassifier: {
+      favoriteSelections,
+      ...summarize(candidateRows),
+    },
+  };
+}
+
 type WriterRecord = ReturnType<typeof buildPredictionRecordsFromSlate>[number];
 
 function recordMetric(gamesById: Map<number, Game>, records: WriterRecord[]): Metric {
@@ -2936,6 +3116,22 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     : scopedActionRows
         .filter((row) => qualifiesPolicy(row, selectedScopedPolicy.policy))
         .map((row) => row.record);
+  const statisticalGrade = (record: WriterRecord): string => {
+    const game = gamesById.get(record.game_id);
+    if (!game) return "missing_game";
+    const score = scopedStructuralPosterior(game, "exclude_bad_or_weak");
+    return candidateTotalDecision(game, false, score)?.grade ?? "ungraded";
+  };
+  const scopedStatisticalBestAngleRecords = scopedSelectedActionRecords.filter((record) =>
+    statisticalGrade(record) === "best_angle");
+  const scopedStatisticalLeanRecords = scopedSelectedActionRecords.filter((record) =>
+    statisticalGrade(record) === "market_aligned");
+  const scopedStatisticalWatchlistRecords = scopedSelectedActionRecords.filter((record) =>
+    statisticalGrade(record) !== "best_angle" && statisticalGrade(record) !== "market_aligned");
+  const finalTwoLayerActionRecords = [
+    ...scopedStatisticalBestAngleRecords,
+    ...scopedStatisticalLeanRecords,
+  ];
   const scopedSelectedActionKeySet = new Set(
     scopedSelectedActionRecords.map((record) => `${record.game_id}:${record.market}`),
   );
@@ -2988,6 +3184,15 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     !incumbentActionKeys.has(`${record.game_id}:${record.market}`));
   const demotedIncumbentActions = baseTotals.filter((record) =>
     actionable(record) && !scopedSelectedActionKeys.has(`${record.game_id}:${record.market}`));
+  const finalTwoLayerActionKeys = new Set(
+    finalTwoLayerActionRecords.map((record) => `${record.game_id}:${record.market}`),
+  );
+  const finalTwoLayerRetained = finalTwoLayerActionRecords.filter((record) =>
+    incumbentActionKeys.has(`${record.game_id}:${record.market}`));
+  const finalTwoLayerPromoted = finalTwoLayerActionRecords.filter((record) =>
+    !incumbentActionKeys.has(`${record.game_id}:${record.market}`));
+  const finalTwoLayerDemoted = baseTotals.filter((record) =>
+    actionable(record) && !finalTwoLayerActionKeys.has(`${record.game_id}:${record.market}`));
   const scopedByKey = new Map(
     candidateScopedRecords.map((record) => [`${record.game_id}:${record.market}`, record]),
   );
@@ -3294,16 +3499,67 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       retained: {
         rows: retainedScopedActions.length,
         candidateDirection: recordMetric(gamesById, retainedScopedActions),
+        chronology: chronology(retainedScopedActions),
       },
       promoted: {
         rows: promotedScopedActions.length,
         candidateDirection: recordMetric(gamesById, promotedScopedActions),
+        chronology: chronology(promotedScopedActions),
       },
       demoted: {
         rows: demotedIncumbentActions.length,
         incumbentDirection: recordMetric(gamesById, demotedIncumbentActions),
+        chronology: chronology(demotedIncumbentActions),
       },
       predefinedBestAngleAudit,
+      statisticalBestAngleIntersection: {
+        rule: "candidate action policy AND independent Poisson/regime Best Angle eligibility before writer-time market qualification",
+        rows: scopedStatisticalBestAngleRecords.length,
+        all: recordMetric(gamesById, scopedStatisticalBestAngleRecords),
+        chronology: chronology(scopedStatisticalBestAngleRecords),
+      },
+      finalTwoLayerGradeBoard: {
+        contract: "candidate final-board qualification first; independent statistical grade then maps Best Angle→Best Angle, Market Aligned→Lean, and legacy Lean/No Bet→Watchlist",
+        actionable: {
+          rows: finalTwoLayerActionRecords.length,
+          all: recordMetric(gamesById, finalTwoLayerActionRecords),
+          chronology: chronology(finalTwoLayerActionRecords),
+        },
+        bestAngles: {
+          rows: scopedStatisticalBestAngleRecords.length,
+          all: recordMetric(gamesById, scopedStatisticalBestAngleRecords),
+          chronology: chronology(scopedStatisticalBestAngleRecords),
+        },
+        leans: {
+          rows: scopedStatisticalLeanRecords.length,
+          all: recordMetric(gamesById, scopedStatisticalLeanRecords),
+          chronology: chronology(scopedStatisticalLeanRecords),
+        },
+        watchlist: {
+          rows: scopedStatisticalWatchlistRecords.length,
+          all: recordMetric(gamesById, scopedStatisticalWatchlistRecords),
+          chronology: chronology(scopedStatisticalWatchlistRecords),
+        },
+        boardImpact: {
+          incumbentActionableRows: incumbentActionKeys.size,
+          candidateActionableRows: finalTwoLayerActionRecords.length,
+          retained: {
+            rows: finalTwoLayerRetained.length,
+            all: recordMetric(gamesById, finalTwoLayerRetained),
+            chronology: chronology(finalTwoLayerRetained),
+          },
+          promoted: {
+            rows: finalTwoLayerPromoted.length,
+            all: recordMetric(gamesById, finalTwoLayerPromoted),
+            chronology: chronology(finalTwoLayerPromoted),
+          },
+          demoted: {
+            rows: finalTwoLayerDemoted.length,
+            incumbentDirection: recordMetric(gamesById, finalTwoLayerDemoted),
+            chronology: chronology(finalTwoLayerDemoted),
+          },
+        },
+      },
       diagnostics: {
         bySide: groupedRecordMetrics(
           scopedSelectedActionRecords,
@@ -3314,6 +3570,7 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
           scopedSelectedActionRecords,
           (record) => String(obj(obj(record.snapshot_json).decision_pipeline).action_rule_id ?? "none"),
         ),
+        byStatisticalGrade: groupedRecordMetrics(scopedSelectedActionRecords, statisticalGrade),
       },
     },
     scopedDeltas: {
@@ -3466,6 +3723,14 @@ async function integratedIndependentWriterReplay(
   const summarize = (records: WriterRecord[], market: "moneyline" | "total") => ({
     all: metricFor(records, market),
     chronology: chronology(records, market),
+    actionable: {
+      all: metricFor(records.filter(actionable), market),
+      chronology: chronology(records.filter(actionable), market),
+    },
+    bestAngles: {
+      all: metricFor(records.filter((record) => record.best_angle), market),
+      chronology: chronology(records.filter((record) => record.best_angle), market),
+    },
     board: {
       rows: records.length,
       actionable: records.filter(actionable).length,
@@ -3766,6 +4031,7 @@ async function main(): Promise<void> {
     }
   }
   const writerReplay = await currentWriterReplay(candidateCohort, games);
+  const runLinePriceReplay = await runLinePriceAudit(games);
   const integratedIndependentReplay = Object.fromEntries(await Promise.all(
     independentScoreCandidates.map(async (candidate) => [
       candidate.name,
@@ -3910,6 +4176,7 @@ async function main(): Promise<void> {
       ),
     },
     currentWriterReplay: writerReplay,
+    runLinePriceReplay,
     integratedIndependentWriterReplay: integratedIndependentReplay,
     runLineDerived: pack(runLineRules),
     totals: pack(totalRules),
