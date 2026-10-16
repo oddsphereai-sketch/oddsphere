@@ -18,7 +18,8 @@
  * What we deliberately do NOT populate (NBA has no MLB equivalent):
  *
  *     homeStarter / awayStarter     → null  (NBA shell guard returns null)
- *     keyStats[]                    → []    (MLB KeyStats renderer no-ops on empty)
+ *     Spread keyStats[]             → point-in-time adjusted team efficiencies
+ *     ML / Total keyStats[]         → []    (no duplicated filler)
  *     park/weather / FI runs / WHIP → never present (no rows produced)
  *
  * What we synthesize so the shell renders meaningfully:
@@ -59,6 +60,7 @@ import type {
 } from "./nbaMemberMarketEvidence";
 import type { RecommendationGrade } from "./nbaMarketReview";
 import { publicSplitsDisplaySupported } from "../../config/publicSplitsCapability";
+import type { NbaSpreadReaderStats } from "./nbaSpreadReaderStats";
 
 const NBA_LOGO_BASE = "https://a.espncdn.com/i/teamlogos/nba/500";
 
@@ -178,6 +180,52 @@ function pctTo100(v: number | null | undefined): number | null {
   return v <= 1 ? v * 100 : v;
 }
 
+function formatAdjustedNetRating(value: number | null): string | null {
+  if (value === null) return null;
+  const rounded = value.toFixed(1);
+  return `${value > 0 ? "+" : ""}${rounded} pts / 100`;
+}
+
+function formatAdjustedEfficiency(
+  value: number | null,
+  suffix: "scored" | "allowed",
+): string | null {
+  return value === null ? null : `${value.toFixed(1)} ${suffix} / 100`;
+}
+
+/**
+ * Keep the Spread explanation compact and causal: overall opponent-adjusted
+ * strength, then its offensive and defensive components. All three values
+ * come from the already-scored professional feature row; none is recomputed
+ * from the sportsbook line or used to alter a prediction.
+ */
+export function buildNbaSpreadKeyStats(
+  stats: NbaSpreadReaderStats | undefined,
+): MarketEdgeDto["keyStats"] {
+  if (!stats) return [];
+  const rows: MarketEdgeDto["keyStats"] = [
+    {
+      label: "Adjusted net rating",
+      awayValue: formatAdjustedNetRating(stats.away.adjustedNetRating),
+      homeValue: formatAdjustedNetRating(stats.home.adjustedNetRating),
+      source: "feature_snapshot",
+    },
+    {
+      label: "Adjusted offensive efficiency",
+      awayValue: formatAdjustedEfficiency(stats.away.adjustedOffense, "scored"),
+      homeValue: formatAdjustedEfficiency(stats.home.adjustedOffense, "scored"),
+      source: "feature_snapshot",
+    },
+    {
+      label: "Adjusted defensive efficiency",
+      awayValue: formatAdjustedEfficiency(stats.away.adjustedDefense, "allowed"),
+      homeValue: formatAdjustedEfficiency(stats.home.adjustedDefense, "allowed"),
+      source: "feature_snapshot",
+    },
+  ];
+  return rows.filter((row) => row.awayValue !== null || row.homeValue !== null);
+}
+
 function buildMarketEdgeDto(opts: {
   intel: MarketIntelligence;
   homeAbbr: string;
@@ -191,8 +239,9 @@ function buildMarketEdgeDto(opts: {
   projectedTotal: number | null;
   /** Verified display-only evidence already consumed by the internal reader. */
   memberEvidence?: NbaMemberMarketEvidence;
+  keyStats?: MarketEdgeDto["keyStats"];
 }): MarketEdgeDto {
-  const { intel, homeAbbr, awayAbbr, sportSlot, capability, openPriceAmerican, projectedTotal, memberEvidence } = opts;
+  const { intel, homeAbbr, awayAbbr, sportSlot, capability, openPriceAmerican, projectedTotal, memberEvidence, keyStats } = opts;
   const held = intel.pick_side === null;
   const verdict: { key: Verdict; label: string } = {
     key: gradeToVerdict(intel.grade),
@@ -288,7 +337,7 @@ function buildMarketEdgeDto(opts: {
     modelTotal: sportSlot === "total" && !held ? (projectedTotal ?? intel.consensus_line ?? null) : null,
     marketTotal: sportSlot === "total" ? intel.consensus_line : null,
     line: sportSlot === "ml" ? null : intel.consensus_line,
-    keyStats: [],
+    keyStats: keyStats ?? [],
     modelTrustPct: held ? null : intel.effective_confidence,
     marketImpliedPct: marketImplied !== null ? marketImplied * 100 : null,
     // NBA-P0 — gap is the HONEST no-vig edge (model − fair market), not the
@@ -440,6 +489,7 @@ function adaptGame(
     openPriceAmerican: openPrices.spread,
     projectedTotal: null,
     memberEvidence: memberEvidence?.spread,
+    keyStats: buildNbaSpreadKeyStats(game.spread_reader_stats),
   });
 
   const topGrade = intel.top_grade;

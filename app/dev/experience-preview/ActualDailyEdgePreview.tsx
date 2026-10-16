@@ -21,6 +21,7 @@ import {
   dailyEdgeSportDestinationIsCurrent,
 } from "@/app/lab/lib/dailyEdgeSportSwitch";
 import { keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
+import { assessNbaNetRatingAgainstSpread } from "@/lib/services/nba/nbaSpreadReaderStats";
 import type {
   DailyEdgeGameAvailability,
   DailyEdgeTeamAvailability,
@@ -3056,6 +3057,9 @@ function projectionIsUnavailable(game: DailyEdgeGameDto): boolean {
 
 function driverCategory(label: string): string {
   if (/projected result|projected scoring margin|projected total vs betting line|model total vs market line|model cushion vs spread|model vs market margin/i.test(label)) return "Model vs line";
+  if (/adjusted net rating/i.test(label)) return "Team strength";
+  if (/adjusted offensive efficiency/i.test(label)) return "Scoring efficiency";
+  if (/adjusted defensive efficiency/i.test(label)) return "Defensive efficiency";
   if (/quarterback|passer rating/i.test(label)) return "Quarterback play";
   if (/turnover/i.test(label)) return "Ball security";
   if (/offensive plays per game|20\+ yard plays|neutral-situation pace|explosive-play rate/i.test(label)) return "Scoring profile";
@@ -3083,6 +3087,9 @@ function soccerCompetitionLabel(game: DailyEdgeGameDto): string {
 function driverContext(label: string, marketKey: MarketKey, pick: string | null, competitionLabel = "EPL"): string {
   const normalizedPick = pick?.toLowerCase() ?? "";
   if (/projected result|projected scoring margin/i.test(label)) return "The model’s expected winner and final margin. This is the simplest view of which team the model rates higher.";
+  if (/adjusted net rating/i.test(label)) return "Points scored minus points allowed per 100 possessions after accounting for opponent strength. The reader compares the rating gap with today’s handicap; a small cushion is treated as near-even.";
+  if (/adjusted offensive efficiency/i.test(label)) return "Expected points scored per 100 possessions after accounting for opponent strength. Higher is better; it shows the scoring side of the spread matchup.";
+  if (/adjusted defensive efficiency/i.test(label)) return "Expected points allowed per 100 possessions after accounting for opponent strength. Lower is better; it shows the prevention side of the spread matchup.";
   if (/quarterback passer rating/i.test(label)) return "A familiar summary of passing production. Higher is better, but the expected quarterback rotation still needs to be confirmed before kickoff.";
   if (/turnover margin per game/i.test(label)) return "Takeaways minus giveaways per game. Positive teams create more extra possessions; negative teams give more away.";
   if (/opponent-adjusted net epa\/play/i.test(label)) return "Expected points added per play after accounting for opponent strength. Positive is above average; higher is better.";
@@ -3134,7 +3141,11 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
   const isFootballScoring = /offensive plays per game|20\+ yard plays per game/i.test(label);
   const isFootballTeamStrength = /net yards per play/i.test(label);
   const isFootballTeamMetric = isQuarterback || isTurnoverMargin || isFootballTeamStrength;
-  if (!isRunPrevention && !isOffense && !isBullpenQuality && !isSoccerAttack && !isSoccerDefense && !isTableRank && !isFootballTeamMetric && !isFootballScoring) return null;
+  const isBasketballNetRating = /adjusted net rating/i.test(label);
+  const isBasketballOffense = /adjusted offensive efficiency/i.test(label);
+  const isBasketballDefense = /adjusted defensive efficiency/i.test(label);
+  const isBasketballTeamMetric = isBasketballNetRating || isBasketballOffense || isBasketballDefense;
+  if (!isRunPrevention && !isOffense && !isBullpenQuality && !isSoccerAttack && !isSoccerDefense && !isTableRank && !isFootballTeamMetric && !isFootballScoring && !isBasketballTeamMetric) return null;
   const parse = (value: string) => {
     if (/no .*sample|unavailable|^—$/i.test(value)) return null;
     if (/league average/i.test(value)) return 0;
@@ -3148,6 +3159,26 @@ function contextualDriverSignal({ label, awayValue, homeValue, away, home, marke
   if (awayNumber === null || homeNumber === null) return null;
   const rawDiff = awayNumber - homeNumber;
   const abs = Math.abs(rawDiff);
+  if (isBasketballTeamMetric) {
+    if (marketKey !== "first_inning" || !isBasketballNetRating) return null;
+    const selectedSide = sideMatchesPick(away, pick) ? "away" : sideMatchesPick(home, pick) ? "home" : null;
+    const handicapMatch = pick.match(/([+-]\d+(?:\.\d+)?)\s*$/);
+    const handicap = handicapMatch ? Number(handicapMatch[1]) : Number.NaN;
+    if (!selectedSide || !Number.isFinite(handicap)) return null;
+    const assessment = assessNbaNetRatingAgainstSpread({
+      awayNetRating: awayNumber,
+      homeNetRating: homeNumber,
+      selectedSide,
+      selectedHandicap: handicap,
+    });
+    if (assessment.status === "near") {
+      return { support: null, risk: null, label: "Near today’s spread" };
+    }
+    if (assessment.status === "support") {
+      return { support: selectedSide, risk: null, label: `Supports ${pick}` };
+    }
+    return { support: null, risk: selectedSide, label: `Challenges ${pick}` };
+  }
   const thresholds = /quarterback passer rating/i.test(label) ? [1.5, 5] : /turnover margin/i.test(label) ? [0.15, 0.5] : /offensive plays per game/i.test(label) ? [1, 3] : /20\+ yard plays/i.test(label) ? [0.25, 0.8] : /net yards per play/i.test(label) ? [0.1, 0.35] : /ops/i.test(label) ? [0.02, 0.05] : /whip/i.test(label) ? [0.05, 0.15] : /era|fip/i.test(label) ? [0.2, 0.5] : /xg/i.test(label) ? [0.12, 0.3] : /points from/i.test(label) ? [2, 5] : /prior-season/i.test(label) ? [2, 6] : /possession/i.test(label) ? [2, 5] : /shots/i.test(label) ? [1, 3] : /big chances/i.test(label) ? [0.4, 1] : [3, 7];
   if (abs < thresholds[0]) return { support: null, risk: null, label: "Even for this read" };
 

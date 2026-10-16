@@ -92,6 +92,7 @@ import {
   buildNbaMemberGameEvidence,
   type NbaMemberGameEvidence,
 } from "./nbaMemberMarketEvidence";
+import { buildNbaSpreadReaderStats } from "./nbaSpreadReaderStats";
 
 const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
 
@@ -553,6 +554,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       lines,
       splitsRow,
       opportunities: gameOpps,
+      spreadReaderStats: buildNbaSpreadReaderStats(featureRow),
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,
