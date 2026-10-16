@@ -12,6 +12,43 @@ import {
   selectNbaConsensusOpeningSpread,
   type NbaMovementHistoryRow,
 } from "./nbaSameBookMovement";
+import type { NbaProfessionalMarketReader } from "./nbaProfessionalMarketReader";
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]!
+    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
+/**
+ * Convert the categorical reader into the one bounded point-projection input.
+ * Two persistent same-direction number trails, including a named book, must
+ * each clear the historically selected two-point threshold. Price-only or
+ * split-only evidence can never move the score.
+ */
+export function selectNbaQualifiedSpreadRead(
+  reader: NbaProfessionalMarketReader | null | undefined,
+): { side: "home" | "away"; magnitudePoints: number } | null {
+  const read = reader?.reads.spread;
+  if (
+    reader?.evidenceStatus !== "complete" ||
+    read?.status !== "qualified" ||
+    (read.side !== "home" && read.side !== "away")
+  ) return null;
+  const supporting = read.trails.filter((trail) =>
+    trail.direction === read.side &&
+    trail.numberDirection === read.side &&
+    trail.numberDelta !== null &&
+    Math.abs(trail.numberDelta) >= 2 &&
+    trail.persistenceTimeShare >= 2 / 3
+  );
+  if (supporting.length < 2 || !supporting.some((trail) => trail.sourceClass === "named")) return null;
+  const magnitudePoints = median(supporting.map((trail) => Math.abs(trail.numberDelta!)));
+  return magnitudePoints === null ? null : { side: read.side, magnitudePoints };
+}
 
 /**
  * Pure assembly of the professional NBA candidate. One final margin/total pair
@@ -23,6 +60,7 @@ export function buildNbaProfessionalCandidate(args: {
   lines: readonly NbaLineRow[];
   history: readonly NbaMovementHistoryRow[];
   externalGameId: number;
+  marketReader?: NbaProfessionalMarketReader | null;
 }) {
   if (!args.artifact.distribution) {
     throw new Error("NBA professional candidate requires calibrated residual distribution state.");
@@ -54,6 +92,7 @@ export function buildNbaProfessionalCandidate(args: {
     currentSpreadHome: consensus.spreadHome,
     currentTotal: consensus.totalLine,
     openingSpreadHome: openingSpread?.spreadHome ?? null,
+    qualifiedSpreadRead: selectNbaQualifiedSpreadRead(args.marketReader),
   });
   const probabilities = computeNbaMarketProbabilities({
     projected_home_margin: final.marginHome,
@@ -68,6 +107,7 @@ export function buildNbaProfessionalCandidate(args: {
     independent,
     consensus,
     openingSpread,
+    marketReader: args.marketReader ?? null,
     final,
     probabilities,
     picks: {
@@ -132,7 +172,7 @@ export function applyNbaProfessionalCandidate(args: {
       posterior_away_score: candidate.final.awayScore,
       posterior_total: candidate.final.total,
       posterior_spread_home: candidate.final.marginHome,
-      trust_independent: candidate.final.marketApplied.margin || candidate.final.marketApplied.total ? 0.25 : 1,
+      trust_independent: 1,
       ml_pick: mlPick,
       ml_confidence: pickConfidence(mlHome),
       spread_pick: spreadPick,
@@ -143,6 +183,9 @@ export function applyNbaProfessionalCandidate(args: {
         ...baseline.audit.model_integrity_notes,
         `Professional independent release: ${candidate.modelRelease}.`,
         `Unified projection release: ${candidate.final.release}.`,
+        candidate.final.movementApplied
+          ? "Qualified target-excluded categorical Spread reader changed the final margin; no consensus weight was applied."
+          : "Independent score remained authoritative; no categorical Spread correction was applied.",
       ],
     },
     v1_probabilities: candidate.probabilities,
@@ -150,7 +193,7 @@ export function applyNbaProfessionalCandidate(args: {
       ...baseline.v1_breakdown,
       notes: [
         ...baseline.v1_breakdown.notes,
-        "Professional point-in-time scorer and coherent market reconciliation applied.",
+        "Professional point-in-time scorer and independent-first categorical market reader applied.",
       ],
     },
   };

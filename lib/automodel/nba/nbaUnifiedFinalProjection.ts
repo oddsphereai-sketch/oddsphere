@@ -1,8 +1,8 @@
 /**
- * Pure NBA final-score reconciliation selected chronologically on 2024-25
- * and confirmed once on 2025-26. This module owns point projection only;
- * exact-price probability, target-book exclusion, and grading remain separate
- * downstream responsibilities.
+ * Pure NBA independent-first final-score reconciliation. The score model owns
+ * the starting margin and total. A separately qualified categorical spread
+ * read may re-orient only the residual against the current spread; no fixed
+ * market-consensus weight is allowed.
  *
  * It is not activated by merely importing it. Production callers must supply
  * the qualified independent release plus a complete market state and preserve
@@ -10,14 +10,19 @@
  */
 
 export const NBA_UNIFIED_FINAL_PROJECTION_CANDIDATE_RELEASE =
-  "nba_unified_final_projection_2026_10_15_r1_coherent_score" as const;
+  "nba_unified_final_projection_2026_10_16_r2_independent_first_reader" as const;
 
 export const NBA_UNIFIED_FINAL_RECIPE = {
-  marginIndependentWeight: 0.25,
-  totalIndependentWeight: 0.25,
+  marginIndependentWeight: 1,
+  totalIndependentWeight: 1,
   spreadMovementThreshold: 2,
   minimumSpreadResidual: 0.25,
 } as const;
+
+export type NbaQualifiedSpreadRead = {
+  side: "home" | "away";
+  magnitudePoints: number;
+};
 
 export type NbaUnifiedFinalProjectionInput = {
   independentHomeScore: number;
@@ -25,6 +30,7 @@ export type NbaUnifiedFinalProjectionInput = {
   currentSpreadHome: number | null;
   currentTotal: number | null;
   openingSpreadHome: number | null;
+  qualifiedSpreadRead?: NbaQualifiedSpreadRead | null;
 };
 
 export type NbaUnifiedFinalProjection = {
@@ -34,6 +40,7 @@ export type NbaUnifiedFinalProjection = {
   marginHome: number;
   total: number;
   spreadResidual: number | null;
+  movementQualified: boolean;
   movementApplied: boolean;
   marketApplied: {
     margin: boolean;
@@ -70,31 +77,29 @@ export function buildNbaUnifiedFinalProjection(
   const marketMargin = currentSpreadHome === null ? null : -currentSpreadHome;
 
   let margin = independentMargin;
-  if (marketMargin !== null) {
-    margin =
-      NBA_UNIFIED_FINAL_RECIPE.marginIndependentWeight * independentMargin +
-      (1 - NBA_UNIFIED_FINAL_RECIPE.marginIndependentWeight) * marketMargin;
-  }
-  const total = currentTotal === null
-    ? independentTotal
-    : NBA_UNIFIED_FINAL_RECIPE.totalIndependentWeight * independentTotal +
-      (1 - NBA_UNIFIED_FINAL_RECIPE.totalIndependentWeight) * currentTotal;
+  const total = independentTotal;
 
   const spreadSupport = openingSpreadHome === null || currentSpreadHome === null
     ? null
     : openingSpreadHome - currentSpreadHome;
-  const movementApplied = spreadSupport !== null &&
-    Math.abs(spreadSupport) >= NBA_UNIFIED_FINAL_RECIPE.spreadMovementThreshold &&
+  const qualifiedSpreadRead = input.qualifiedSpreadRead ?? null;
+  const movementQualified = qualifiedSpreadRead !== null &&
+    Number.isFinite(qualifiedSpreadRead.magnitudePoints) &&
+    qualifiedSpreadRead.magnitudePoints >= NBA_UNIFIED_FINAL_RECIPE.spreadMovementThreshold &&
     marketMargin !== null;
 
   let spreadResidual: number | null = marketMargin === null ? null : margin - marketMargin;
-  if (movementApplied && spreadResidual !== null && spreadSupport !== null) {
+  let movementApplied = false;
+  if (movementQualified && spreadResidual !== null && qualifiedSpreadRead !== null) {
+    const direction = qualifiedSpreadRead.side === "home" ? 1 : -1;
     const residualSize = Math.max(
       Math.abs(spreadResidual),
       NBA_UNIFIED_FINAL_RECIPE.minimumSpreadResidual,
     );
-    spreadResidual = Math.sign(spreadSupport) * residualSize;
-    margin = marketMargin! + spreadResidual;
+    const adjustedResidual = direction * residualSize;
+    movementApplied = Math.sign(spreadResidual) !== direction;
+    spreadResidual = adjustedResidual;
+    margin = marketMargin! + adjustedResidual;
   }
 
   return {
@@ -104,10 +109,11 @@ export function buildNbaUnifiedFinalProjection(
     marginHome: margin,
     total,
     spreadResidual,
+    movementQualified,
     movementApplied,
     marketApplied: {
-      margin: marketMargin !== null,
-      total: currentTotal !== null,
+      margin: movementApplied,
+      total: false,
     },
     audit: {
       independentMarginHome: independentMargin,
@@ -118,4 +124,3 @@ export function buildNbaUnifiedFinalProjection(
     },
   };
 }
-

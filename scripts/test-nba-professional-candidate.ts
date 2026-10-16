@@ -8,6 +8,7 @@ import {
   applyNbaProfessionalCandidate,
   buildNbaProfessionalCandidate,
 } from "../lib/services/nba/nbaProfessionalCandidate";
+import { buildNbaProfessionalMarketReader } from "../lib/services/nba/nbaProfessionalMarketReader";
 
 const artifact: NbaPortableModelArtifact = {
   release: "fixture",
@@ -46,12 +47,54 @@ const history = ["pinnacle", "draftkings"].map((sportsbook) => ({
   observedAt: "2026-10-20T12:00:00Z",
 }));
 
+const independentOnly = buildNbaProfessionalCandidate({
+  artifact,
+  featureRow: { strength: -4 },
+  lines,
+  history,
+  externalGameId: 9,
+});
+
+assert.equal(independentOnly.independent.marginHome, -4);
+assert.equal(independentOnly.final.marginHome, -4);
+assert.equal(independentOnly.final.total, 220);
+assert.equal(independentOnly.final.movementApplied, false);
+
+const priceRows = ["pinnacle", "bookmaker"].flatMap((sportsbook) => [
+  {
+    sportsbook, sharpBook: true, market: "spread" as const, selectionKey: "9:spread:home",
+    americanPrice: -110, line: 0, providerTimestamp: "2026-10-20T14:00:00Z", fetchedAt: "2026-10-20T14:00:00Z",
+  },
+  {
+    sportsbook, sharpBook: true, market: "spread" as const, selectionKey: "9:spread:away",
+    americanPrice: -110, line: 0, providerTimestamp: "2026-10-20T14:00:00Z", fetchedAt: "2026-10-20T14:00:00Z",
+  },
+  {
+    sportsbook, sharpBook: true, market: "spread" as const, selectionKey: "9:spread:home",
+    americanPrice: -125, line: -2, providerTimestamp: "2026-10-20T15:30:00Z", fetchedAt: "2026-10-20T15:30:00Z",
+  },
+  {
+    sportsbook, sharpBook: true, market: "spread" as const, selectionKey: "9:spread:away",
+    americanPrice: 105, line: 2, providerTimestamp: "2026-10-20T15:30:00Z", fetchedAt: "2026-10-20T15:30:00Z",
+  },
+]);
+const marketReader = buildNbaProfessionalMarketReader({
+  evaluatedAt: "2026-10-20T16:00:00Z",
+  priceRows,
+  splitRows: [{
+    provider: "sharpapi", sourceBook: "draftkings", sourceType: "retail_book",
+    market: "spread", selectionKey: "9:spread:home", betsPct: 40, moneyPct: 60,
+    marketLine: -2, sourceObservedAt: "2026-10-20T15:45:00Z", fetchedAt: "2026-10-20T15:46:00Z",
+  }],
+  selectedLines: { spreadHome: -2, total: 218 },
+});
 const result = buildNbaProfessionalCandidate({
   artifact,
   featureRow: { strength: -4 },
   lines,
   history,
   externalGameId: 9,
+  marketReader,
 });
 
 assert.equal(result.independent.marginHome, -4);

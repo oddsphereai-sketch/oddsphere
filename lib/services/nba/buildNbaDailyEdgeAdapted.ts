@@ -475,30 +475,30 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     });
     const featureRow = professionalFeatures.get(s.game_external_id);
     if (!featureRow) throw new Error(`Missing NBA professional feature row for ${s.game_external_id}.`);
-    const candidate = buildNbaProfessionalCandidate({
+    const previewCandidate = buildNbaProfessionalCandidate({
       artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
       featureRow: selectNbaProfessionalPortableFeatures(featureRow),
       lines,
       history: movementHistory,
       externalGameId: s.game_external_id,
     });
-    const independentMlSide = candidate.independent.marginHome >= 0 ? "home" as const : "away" as const;
-    const independentSpreadSide = candidate.consensus.spreadHome === null ||
-      candidate.independent.marginHome + candidate.consensus.spreadHome >= 0
+    const independentMlSide = previewCandidate.independent.marginHome >= 0 ? "home" as const : "away" as const;
+    const independentSpreadSide = previewCandidate.consensus.spreadHome === null ||
+      previewCandidate.independent.marginHome + previewCandidate.consensus.spreadHome >= 0
       ? "home" as const : "away" as const;
-    const independentTotalSide = candidate.consensus.totalLine === null ||
-      candidate.independent.total - candidate.consensus.totalLine >= 0
+    const independentTotalSide = previewCandidate.consensus.totalLine === null ||
+      previewCandidate.independent.total - previewCandidate.consensus.totalLine >= 0
       ? "over" as const : "under" as const;
-    const spreadExecutionLine = candidate.consensus.spreadHome === null ? null
-      : independentSpreadSide === "home" ? candidate.consensus.spreadHome : -candidate.consensus.spreadHome;
+    const spreadExecutionLine = previewCandidate.consensus.spreadHome === null ? null
+      : independentSpreadSide === "home" ? previewCandidate.consensus.spreadHome : -previewCandidate.consensus.spreadHome;
     const reader = buildNbaProfessionalMarketReader({
       evaluatedAt: readerEvaluatedAt,
       priceRows: readerPriceRowsByGame.get(s.game_external_id) ?? [],
       splitRows: readerSplitRowsByGame.get(s.game_external_id) ?? [],
       evidenceErrors: readerEvidenceErrors,
       selectedLines: {
-        spreadHome: candidate.consensus.spreadHome,
-        total: candidate.consensus.totalLine,
+        spreadHome: previewCandidate.consensus.spreadHome,
+        total: previewCandidate.consensus.totalLine,
       },
       excludedSportsbooksByMarket: {
         moneyline: [bestExecutionSportsbook({
@@ -517,9 +517,17 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
           lines,
           market: "total",
           side: independentTotalSide,
-          line: candidate.consensus.totalLine,
+          line: previewCandidate.consensus.totalLine,
         }) ?? ""],
       },
+    });
+    const candidate = buildNbaProfessionalCandidate({
+      artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
+      featureRow: selectNbaProfessionalPortableFeatures(featureRow),
+      lines,
+      history: movementHistory,
+      externalGameId: s.game_external_id,
+      marketReader: reader,
     });
     const pred = applyNbaProfessionalCandidate({ baseline, candidate });
     const splitsRow = matchSplitsRow(
@@ -542,7 +550,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,
-      independent_primary: false,
+      independent_primary: true,
       independent_projection: {
         home_score: candidate.independent.homeScore,
         away_score: candidate.independent.awayScore,
@@ -563,6 +571,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       forecast_correction: {
         applied: candidate.final.marketApplied.margin || candidate.final.marketApplied.total,
         release: candidate.final.release,
+        movement_qualified: candidate.final.movementQualified,
         movement_applied: candidate.final.movementApplied,
         opening_spread_home: candidate.openingSpread?.spreadHome ?? null,
         final_projection: {
