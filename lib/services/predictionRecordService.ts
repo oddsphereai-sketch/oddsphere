@@ -465,12 +465,48 @@ export function applyMlbMoneylineActionPromotionStability(
   const publicMemberFacing = transition.promotionPending
     ? readRecordOrNull(existingSnapshot.member_facing_at_lock) ?? {}
     : memberFacing;
+  const candidateUnifiedForecast = readRecordOrNull(snapshot.mlb_unified_final_forecast);
+  const candidateUnifiedDecisions = readRecordOrNull(candidateUnifiedForecast?.decisions) ?? {};
+  const candidateUnifiedMoneyline = readRecordOrNull(candidateUnifiedDecisions.moneyline) ?? {};
+  // A pending same-side promotion may publish fresh game-distribution evidence,
+  // but an opposing candidate must not create a score/pick package that
+  // contradicts the retained public Moneyline side.
+  const canAdvanceUnifiedForecast = candidateUnifiedForecast !== null && (
+    !transition.promotionPending ||
+    !existing ||
+    existing.side === proposed.side
+  );
+  const publicUnifiedForecast = canAdvanceUnifiedForecast
+    ? {
+        ...candidateUnifiedForecast,
+        decisions: {
+          ...candidateUnifiedDecisions,
+          moneyline: {
+            ...candidateUnifiedMoneyline,
+            side: transition.promotionPending && existing ? existing.side : proposed.side,
+            model_probability:
+              transition.promotionPending && existing
+                ? existing.model_probability
+                : proposed.model_probability,
+            market_probability:
+              transition.promotionPending && existing
+                ? existing.market_probability
+                : proposed.market_probability,
+            grade: publicFields.play_grade,
+            best_angle: publicFields.best_angle,
+          },
+        },
+      }
+    : null;
   return {
     ...proposed,
     ...retainedPublicationFields,
     ...publicFields,
     snapshot_json: {
       ...publicSnapshot,
+      ...(publicUnifiedForecast === null
+        ? {}
+        : { mlb_unified_final_forecast: publicUnifiedForecast }),
       action_promotion_stability_v1: transition.state,
       action_promotion_candidate_v1: transition.promotionPending
         ? {

@@ -52,6 +52,25 @@ function candidate(args: {
         best_angle: true,
         no_bet: false,
       },
+      mlb_unified_final_forecast: {
+        version: "mlb_unified_game_distribution_v1_factorized_margin_total_2026_10_16",
+        expected: {
+          away_runs: 3.4,
+          home_runs: 4.1,
+          total_runs: 7.5,
+          home_margin_runs: 0.7,
+        },
+        decisions: {
+          moneyline: {
+            side: "home",
+            model_probability: args.probability ?? 0.62,
+            market_probability: 0.58,
+            grade: "best_angle",
+            best_angle: true,
+          },
+        },
+        invariants: { passed: true, issues: [] },
+      },
     },
   } as unknown as PredictionRecordRow;
 }
@@ -173,13 +192,68 @@ assert.equal(first.published_at, "2026-08-29T17:00:00.000Z", "pending promotion 
 const firstSnapshot = first.snapshot_json as Record<string, unknown>;
 const firstDecision = firstSnapshot.decision_pipeline as Record<string, unknown>;
 const firstCandidate = firstSnapshot.action_promotion_candidate_v1 as Record<string, unknown>;
+const firstUnified = firstSnapshot.mlb_unified_final_forecast as Record<string, unknown>;
+const firstUnifiedDecisions = firstUnified.decisions as Record<string, unknown>;
+const firstUnifiedMoneyline = firstUnifiedDecisions.moneyline as Record<string, unknown>;
 assert.deepEqual(firstSnapshot.ml_evaluation_price, priorSnapshot.ml_evaluation_price);
 assert.deepEqual(firstSnapshot.model_layer_versions, priorSnapshot.model_layer_versions);
 assert.deepEqual(firstSnapshot.tracking_identity, priorSnapshot.tracking_identity);
+assert.equal(
+  firstUnified.version,
+  "mlb_unified_game_distribution_v1_factorized_margin_total_2026_10_16",
+  "pending promotion retains the newly computed unified forecast evidence",
+);
+assert.equal(firstUnifiedMoneyline.side, "home");
+assert.equal(
+  firstUnifiedMoneyline.model_probability,
+  0.54,
+  "unified forecast reflects the retained public Moneyline probability",
+);
+assert.equal(firstUnifiedMoneyline.grade, null);
+assert.equal(firstUnifiedMoneyline.best_angle, false);
 assert.equal(firstDecision.transition_candidate_grade, "best_angle");
 assert.equal(firstDecision.transition_final_grade, "no_play");
 assert.equal(firstCandidate.published_at, "2026-08-29T17:15:00.000Z");
 assert.equal(firstCandidate.odds_american, -140);
+
+const opposingUnifiedForecast = {
+  version: "prior-unified-forecast",
+  decisions: {
+    moneyline: {
+      side: "away",
+      model_probability: 0.55,
+      market_probability: 0.52,
+      grade: null,
+      best_angle: false,
+    },
+  },
+};
+const opposingPrior = existingFrom(candidate({
+  publishedAt: "2026-08-29T17:00:00.000Z",
+  probability: 0.55,
+  price: 110,
+}), {
+  pick: "away",
+  side: "away",
+  play_grade: null,
+  best_angle: false,
+  no_bet: true,
+  snapshot_json: {
+    ...priorSnapshot,
+    mlb_unified_final_forecast: opposingUnifiedForecast,
+  },
+});
+const opposingPending = applyMlbMoneylineActionPromotionStability(
+  candidate({ publishedAt: "2026-08-29T17:15:00.000Z" }),
+  opposingPrior,
+);
+const opposingPendingSnapshot = opposingPending.snapshot_json as Record<string, unknown>;
+assert.equal(opposingPending.side, "away", "pending side flip retains the public Moneyline side");
+assert.deepEqual(
+  opposingPendingSnapshot.mlb_unified_final_forecast,
+  opposingUnifiedForecast,
+  "pending side flip retains prior unified evidence instead of publishing a contradictory score/pick package",
+);
 
 const draftCycleAt = "2026-08-29T18:15:00.000Z";
 const firstDraftPass = applyMlbMoneylineActionPromotionStability(
