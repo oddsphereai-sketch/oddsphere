@@ -1,6 +1,48 @@
 import assert from "node:assert/strict";
-import expectedRoleArtifact from "../lib/services/football/modelArtifacts/nflPlayerPropsExpectedRole.json";
-import rushingAttemptsArtifact from "../lib/services/football/modelArtifacts/nflPlayerPropsRuntimeMarketRushingAttempts.json";
+// These generated artifacts are intentionally loaded without JSON-module
+// inference so the repository-wide production typecheck does not materialize
+// their multi-megabyte literal trees merely to execute this parity test.
+type ProbabilityHead = {
+  challengerWeight: number;
+  challengerPositions?: string[];
+  challengerQualified: boolean;
+  incumbentRetained: boolean;
+};
+type ExpectedRoleArtifact = {
+  release: string;
+  marketIndependent: boolean;
+  marketFeatures: string[];
+  receptions: { blendWeight: number; groups: Record<string, unknown>; probability: ProbabilityHead };
+  rushingYards: {
+    blendWeight: number;
+    challengerPositions: string[];
+    groups: Record<string, unknown>;
+    probability: ProbabilityHead;
+  };
+  receivingYards: {
+    blendWeight: number;
+    positions: string[];
+    yardsPerTargetLower: number;
+    yardsPerTargetUpper: number;
+  };
+  passingCompletions: { blendWeight: number; probability: ProbabilityHead };
+  passingYards: {
+    blendWeight: number;
+    componentWeights: { attempt: number; completion: number };
+    probability: ProbabilityHead;
+  };
+};
+type RushingAttemptsArtifact = {
+  model: {
+    kind: string;
+    components: Array<{ weight: number; model: { featureNames: string[] } }>;
+  };
+  distribution: { family: string; buckets: unknown[] };
+};
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRoleArtifact = require("../lib/services/football/modelArtifacts/nflPlayerPropsExpectedRole.json") as ExpectedRoleArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const rushingAttemptsArtifact = require("../lib/services/football/modelArtifacts/nflPlayerPropsRuntimeMarketRushingAttempts.json") as RushingAttemptsArtifact;
 import {
   NFL_PLAYER_PROPS_BOARD_RELEASE,
   NFL_PLAYER_PROPS_CALIBRATION_RELEASE,

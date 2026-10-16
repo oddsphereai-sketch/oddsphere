@@ -1,5 +1,3 @@
-import bootstrapJson from "./modelArtifacts/nbaProfessionalBootstrap.json";
-import modelJson from "./modelArtifacts/nbaProfessionalR15.json";
 import type { NbaPortableFeatureRow, NbaPortableModelArtifact } from "./nbaPortableScoreModel";
 import {
   buildNbaPointInTimeFeatures,
@@ -22,8 +20,13 @@ type NbaProfessionalBootstrap = {
   sourceSha256: Record<string, { games: string; box: string }>;
 };
 
-const bootstrap = bootstrapJson as NbaProfessionalBootstrap;
-export const NBA_PROFESSIONAL_MODEL_ARTIFACT = modelJson as NbaPortableModelArtifact;
+// Static CommonJS loads keep generated model data out of TypeScript's literal
+// type graph while preserving fixed bundler-visible paths and explicit runtime
+// contracts.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const bootstrap = require("./modelArtifacts/nbaProfessionalBootstrap.json") as NbaProfessionalBootstrap;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+export const NBA_PROFESSIONAL_MODEL_ARTIFACT = require("./modelArtifacts/nbaProfessionalR15.json") as NbaPortableModelArtifact;
 
 function assertArtifacts(): void {
   if (bootstrap.release !== NBA_PROFESSIONAL_BOOTSTRAP_RELEASE) {

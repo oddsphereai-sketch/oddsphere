@@ -1,34 +1,3 @@
-import artifactCoreJson from "./modelArtifacts/nflPlayerPropsRuntime.json";
-import passingAttemptsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketPassingAttempts.json";
-import passingCompletionsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketPassingCompletions.json";
-import passingYardsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketPassingYards.json";
-import receptionsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketReceptions.json";
-import receivingYardsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketReceivingYards.json";
-import rushingAttemptsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketRushingAttempts.json";
-import rushingYardsJson from "./modelArtifacts/nflPlayerPropsRuntimeMarketRushingYards.json";
-import playerStates0Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers0.json";
-import playerStates1Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers1.json";
-import playerStates2Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers2.json";
-import playerStates3Json from "./modelArtifacts/nflPlayerPropsRuntimePlayers3.json";
-import touchdownJson from "./modelArtifacts/nflPlayerPropsRuntimeTouchdown.json";
-import jointArtifactJson from "./modelArtifacts/nflPlayerPropsRuntimeJoint.json";
-import expectedRoleArtifactJson from "./modelArtifacts/nflPlayerPropsExpectedRole.json";
-import expectedRolePlayers0 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers0.json";
-import expectedRolePlayers1 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers1.json";
-import expectedRolePlayers2 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers2.json";
-import expectedRolePlayers3 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers3.json";
-import expectedRolePlayers4 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers4.json";
-import expectedRolePlayers5 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers5.json";
-import expectedRolePlayers6 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers6.json";
-import expectedRolePlayers7 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers7.json";
-import expectedRolePlayers8 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers8.json";
-import expectedRolePlayers9 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers9.json";
-import expectedRolePlayers10 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers10.json";
-import expectedRolePlayers11 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers11.json";
-import expectedRolePlayers12 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers12.json";
-import expectedRolePlayers13 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers13.json";
-import expectedRolePlayers14 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers14.json";
-import expectedRolePlayers15 from "./modelArtifacts/nflPlayerPropsExpectedRolePlayers15.json";
 import type { NflPlayerPropMarket, NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
 import type { DailyEdgeAvailabilityPlayer } from "../dailyEdge/gameAvailability";
@@ -197,6 +166,75 @@ type JointRuntimeArtifact = {
     yardsPerAttemptModel: PortableModel;
   };
 };
+
+type PlayerStateShard = Record<string, Array<[number, number]>>;
+
+// Static CommonJS loads intentionally prevent TypeScript from materializing
+// millions of literal types for the generated tree-model JSON. The bundler
+// still sees fixed asset paths, and the explicit runtime contracts below keep
+// the executable values typed and parity-tested.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const artifactCoreJson = require("./modelArtifacts/nflPlayerPropsRuntime.json") as RuntimeArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const passingAttemptsJson = require("./modelArtifacts/nflPlayerPropsRuntimeMarketPassingAttempts.json") as RuntimeArtifact["markets"][string];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const passingCompletionsJson = require("./modelArtifacts/nflPlayerPropsRuntimeMarketPassingCompletions.json") as RuntimeArtifact["markets"][string];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const passingYardsJson = require("./modelArtifacts/nflPlayerPropsRuntimeMarketPassingYards.json") as RuntimeArtifact["markets"][string];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const receptionsJson = require("./modelArtifacts/nflPlayerPropsRuntimeMarketReceptions.json") as RuntimeArtifact["markets"][string];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const receivingYardsJson = require("./modelArtifacts/nflPlayerPropsRuntimeMarketReceivingYards.json") as RuntimeArtifact["markets"][string];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const rushingAttemptsJson = require("./modelArtifacts/nflPlayerPropsRuntimeMarketRushingAttempts.json") as RuntimeArtifact["markets"][string];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const rushingYardsJson = require("./modelArtifacts/nflPlayerPropsRuntimeMarketRushingYards.json") as RuntimeArtifact["markets"][string];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const playerStates0Json = require("./modelArtifacts/nflPlayerPropsRuntimePlayers0.json") as RuntimeArtifact["playerStates"];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const playerStates1Json = require("./modelArtifacts/nflPlayerPropsRuntimePlayers1.json") as RuntimeArtifact["playerStates"];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const playerStates2Json = require("./modelArtifacts/nflPlayerPropsRuntimePlayers2.json") as RuntimeArtifact["playerStates"];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const playerStates3Json = require("./modelArtifacts/nflPlayerPropsRuntimePlayers3.json") as RuntimeArtifact["playerStates"];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const touchdownJson = require("./modelArtifacts/nflPlayerPropsRuntimeTouchdown.json") as RuntimeArtifact["touchdown"];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const jointArtifactJson = require("./modelArtifacts/nflPlayerPropsRuntimeJoint.json") as JointRuntimeArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRoleArtifactJson = require("./modelArtifacts/nflPlayerPropsExpectedRole.json") as unknown;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers0 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers0.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers1 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers1.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers2 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers2.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers3 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers3.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers4 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers4.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers5 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers5.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers6 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers6.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers7 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers7.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers8 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers8.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers9 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers9.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers10 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers10.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers11 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers11.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers12 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers12.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers13 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers13.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers14 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers14.json") as PlayerStateShard;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const expectedRolePlayers15 = require("./modelArtifacts/nflPlayerPropsExpectedRolePlayers15.json") as PlayerStateShard;
 
 const expectedRoleArtifactRaw = expectedRoleArtifactJson as {
   featureNames: string[];

@@ -1,4 +1,3 @@
-import artifactJson from "./modelArtifacts/cfbFinalWinnerCoordinatorArtifact.json";
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 import type { CfbCurrentAdvancedGame, CfbCurrentAdvancedMetrics } from "./cfbCurrentAdvancedState";
 import type {
@@ -109,7 +108,10 @@ export type CfbFinalWinnerCoordinatorEvaluation = {
   targetMarginHome: number | null;
 };
 
-const artifact = artifactJson as unknown as Artifact;
+// Keep the generated coordinator artifact out of TypeScript's literal type
+// graph while preserving a fixed bundler-visible path and typed contract.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const artifact = require("./modelArtifacts/cfbFinalWinnerCoordinatorArtifact.json") as Artifact;
 const CURRENT_SEASON_PRIOR_GAMES = 4;
 const RECENT_PRIOR_GAMES = 1.5;
 const RECENT_WINDOW = 3;
