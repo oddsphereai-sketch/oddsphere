@@ -24,7 +24,11 @@ export type MlbSettledTotalRow = {
 export type MlbTotalsRegimeCalibration = {
   release: typeof MLB_TOTALS_REGIME_CALIBRATION_RELEASE;
   applied: boolean;
-  reason: "applied" | "prior_unavailable" | "insufficient_prior_sample";
+  reason:
+    | "applied"
+    | "prior_unavailable"
+    | "insufficient_prior_sample"
+    | "unified_score_gap_probability";
   modelOverProbabilityBefore: number;
   modelOverProbabilityAfter: number;
   regimeWeight: number;

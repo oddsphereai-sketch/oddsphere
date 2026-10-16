@@ -1,5 +1,37 @@
 # Model change safety protocol
 
+## Owner-directed provisional exception: MLB unified game distribution r92
+
+On 2026-10-16 Daniel Mengel directed Oddsphere to stop treating MLB Moneyline, Total, run-line,
+alternate-line, score, and market-reader outputs as disconnected models and to publish one logical
+game forecast. This exception is limited to the frozen r92 candidate and evidence documented in
+`docs/model-audits/2026-10-16-mlb-unified-game-distribution-r92-predeclaration.md` and its result.
+
+For future unlocked rows, r92 preserves the released r91 Moneyline margin and complete professional
+market-reader path. On the predeclared high-quality starter/bullpen cohort only, it repairs the
+independent scoring Total with an innings-weighted starter/bullpen construction, recomposes one score
+pair from that Total and the preserved margin, and derives Total probability from the frozen 0.096289
+score-gap logistic. The existing target-excluded reader remains downstream and may categorically
+correct the shared Total axis only through the already-released corroborated-opposition contract.
+Moneyline remains unchanged; run line is derived from the same preserved margin distribution but is
+shadow-only pending immutable forward evidence. A frozen exact-price two-layer rule promotes only
+qualified statistical Best Angles to Best Angle and qualified statistical Market Aligned rows to Lean.
+
+The exact 1,180-row writer replay changes zero Moneyline sides or grades/actions. Final Totals are
+622-551-7 (+25.152u); the 179-row actionable board is 105-74 (+23.591u), and its 46 Best Angles are
+29-17 (+9.736u). Actionable results and units are positive in development, validation, and holdout.
+On the exact writer cohort, favorable Total +1 is 60.99% and favorable Total +2 is 70.52%.
+Candidate run-line direction is 58.05% versus the shipped-ML-side
+run-line proxy's 47.31%, but remains non-public.
+
+Every locked payload retains exact stored precedence, and the sole writer keeps
+`prediction_pipeline:mlb`. Publication requires focused coherence/lock tests, TypeScript, the full
+model-change suite, exact replay, SELECT-only current-board rehearsal, latest-main integration safety,
+protected PR checks, and post-deploy proof of the r92 release, coherent final forecast, sole lease, and
+unchanged locks. Roll back future unlocked computation to the r91 family on mixed release identity,
+lock mutation, an invariant failure, unexplained board contraction, or prospective harm; rollback may
+not rewrite an r92 lock.
+
 ## Owner-directed provisional exception: NBA Total disagreement reader r4
 
 On 2026-10-16 Daniel Mengel directed Oddsphere to move beyond diagnosis and repair the NBA model by

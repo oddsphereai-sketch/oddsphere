@@ -471,6 +471,30 @@ function workloadWeightedPitchingFactor(
   return { factor: clampFactor(factor), workload };
 }
 
+/**
+ * Arithmetic innings blend used by the shadow total candidate.
+ *
+ * Starter and bullpen factors describe disjoint portions of one nine-inning
+ * pitching workload. Applying both as full-game multipliers double-counts
+ * pitching strength; an innings-weighted average keeps the units coherent.
+ */
+function inningsWeightedPitchingFactor(
+  starterFactorValue: number,
+  bullpenFactorValue: number,
+  starter: StarterSnapshot | null
+): { factor: number; workload: StarterWorkloadEstimate } {
+  const workload = estimateStarterWorkload(starter);
+  const totalInnings = workload.starter_innings + workload.bullpen_innings;
+  if (totalInnings <= 0) return { factor: 1.0, workload };
+
+  const factor =
+    (clampFactor(starterFactorValue) * workload.starter_innings +
+      clampFactor(bullpenFactorValue) * workload.bullpen_innings) /
+    totalInnings;
+
+  return { factor: clampFactor(factor), workload };
+}
+
 function workloadCandidatePitchingFactor(
   starterFactorValue: number,
   bullpenFactorValue: number,
@@ -568,6 +592,21 @@ export type V22IndependentProjection = {
   };
   feature_audit: V22FeatureAudit;
   data_quality_tier: "high" | "medium" | "low" | "fallback";
+  /**
+   * Shadow-only structural candidate diagnostics. The candidate changes the
+   * scoring environment while preserving the incumbent independent margin.
+   * Optional so historical readers remain backwards compatible.
+   */
+  innings_weighted_total_preserve_margin?: {
+    enabled: boolean;
+    applied: boolean;
+    scope: "all" | "validated_high_quality";
+    scope_qualified: boolean;
+    scope_reason: string;
+    legacy_total_expected_runs: number;
+    candidate_total_expected_runs: number;
+    preserved_home_run_diff: number;
+  };
 };
 
 export type ProjectIndependentOptions = {
@@ -577,6 +616,14 @@ export type ProjectIndependentOptions = {
    * workload instead of both being applied as full-strength factors.
    */
   useWorkloadPitching?: boolean;
+  /**
+   * Shadow-only candidate. Blend starter and bullpen factors by their expected
+   * innings for every starter, then use only that candidate's total. The
+   * incumbent home-away margin is preserved exactly so a totals repair cannot
+   * silently change the independent moneyline direction.
+   */
+  useInningsWeightedTotalPreserveMargin?: boolean;
+  inningsWeightedTotalScope?: "all" | "validated_high_quality";
 };
 
 function deriveQualityTier(audit: V22FeatureAudit): "high" | "medium" | "low" | "fallback" {
@@ -644,8 +691,68 @@ export function projectIndependent(
     park *
     weather *
     handAway;
-  const homeRuns = Math.max(0.1, homeRunsBase + HOME_FIELD_HALF);
-  const awayRuns = Math.max(0.1, awayRunsBase - HOME_FIELD_HALF);
+  const legacyHomeRuns = Math.max(0.1, homeRunsBase + HOME_FIELD_HALF);
+  const legacyAwayRuns = Math.max(0.1, awayRunsBase - HOME_FIELD_HALF);
+  const legacyTotalRuns = legacyAwayRuns + legacyHomeRuns;
+  const legacyHomeRunDiff = legacyHomeRuns - legacyAwayRuns;
+
+  const inningsWeightedTotalScope = opts.inningsWeightedTotalScope ?? "all";
+  const averageStarterEra =
+    typeof snap.home_starter?.season_era === "number" &&
+    typeof snap.away_starter?.season_era === "number"
+      ? (snap.home_starter.season_era + snap.away_starter.season_era) / 2
+      : null;
+  const averageBullpenFactor = (homeBullpen + awayBullpen) / 2;
+  const qualityTier = deriveQualityTier(audit);
+  const scopeQualified = inningsWeightedTotalScope === "all" || (
+    qualityTier === "high" &&
+    averageStarterEra !== null &&
+    averageStarterEra < 4.75 &&
+    averageBullpenFactor < 1.05
+  );
+  const useInningsWeightedTotalPreserveMargin =
+    opts.useInningsWeightedTotalPreserveMargin === true && scopeQualified;
+  let homeRuns = legacyHomeRuns;
+  let awayRuns = legacyAwayRuns;
+  let candidateTotalRuns = legacyTotalRuns;
+
+  if (useInningsWeightedTotalPreserveMargin) {
+    const candidateHomeOpponentPitching = inningsWeightedPitchingFactor(
+      awayStarterFactor,
+      awayBullpen,
+      snap.away_starter,
+    ).factor;
+    const candidateAwayOpponentPitching = inningsWeightedPitchingFactor(
+      homeStarterFactor,
+      homeBullpen,
+      snap.home_starter,
+    ).factor;
+    const candidateHomeRunsBase =
+      V22_LEAGUE_AVG_RUNS_PER_GAME *
+      homeOffense *
+      candidateHomeOpponentPitching *
+      park *
+      weather *
+      handHome;
+    const candidateAwayRunsBase =
+      V22_LEAGUE_AVG_RUNS_PER_GAME *
+      awayOffense *
+      candidateAwayOpponentPitching *
+      park *
+      weather *
+      handAway;
+
+    // Home field is total-neutral, so the candidate total is the sum of the
+    // two pre-home-field scoring environments. Keep enough total mass for both
+    // recomposed team scores to remain positive while preserving the incumbent
+    // margin exactly.
+    candidateTotalRuns = Math.max(
+      candidateHomeRunsBase + candidateAwayRunsBase,
+      Math.abs(legacyHomeRunDiff) + 0.2,
+    );
+    homeRuns = (candidateTotalRuns + legacyHomeRunDiff) / 2;
+    awayRuns = (candidateTotalRuns - legacyHomeRunDiff) / 2;
+  }
 
   return {
     away_expected_runs: awayRuns,
@@ -675,7 +782,29 @@ export function projectIndependent(
       },
     },
     feature_audit: audit,
-    data_quality_tier: deriveQualityTier(audit),
+    data_quality_tier: qualityTier,
+    innings_weighted_total_preserve_margin: {
+      enabled: opts.useInningsWeightedTotalPreserveMargin === true,
+      applied:
+        useInningsWeightedTotalPreserveMargin &&
+        Math.abs(candidateTotalRuns - legacyTotalRuns) > 1e-9,
+      scope: inningsWeightedTotalScope,
+      scope_qualified: scopeQualified,
+      scope_reason: scopeQualified
+        ? inningsWeightedTotalScope === "all"
+          ? "all_rows"
+          : "high_quality_starter_and_bullpen_thresholds_passed"
+        : qualityTier !== "high"
+          ? "data_quality_not_high"
+          : averageStarterEra === null
+            ? "starter_era_missing"
+            : averageStarterEra >= 4.75
+              ? "average_starter_era_at_or_above_4_75"
+              : "average_bullpen_factor_at_or_above_1_05",
+      legacy_total_expected_runs: legacyTotalRuns,
+      candidate_total_expected_runs: candidateTotalRuns,
+      preserved_home_run_diff: legacyHomeRunDiff,
+    },
   };
 }
 
@@ -685,6 +814,7 @@ export const __TEST__ = {
   bullpenFactor,
   estimateStarterWorkload,
   workloadWeightedPitchingFactor,
+  inningsWeightedPitchingFactor,
   parkFactor,
   weatherFactor,
   clampFactor,

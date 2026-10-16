@@ -784,6 +784,12 @@ export const TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID =
   "total_calibrated_model_best_angle_path_v1_2026_07_27";
 export const TOTAL_CALIBRATED_MODEL_LEAN_PATH_ID =
   "total_calibrated_model_lean_path_v1_2026_07_27";
+export const MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID =
+  "mlb_unified_total_two_layer_grade_v1_2026_10_16" as const;
+export const MLB_UNIFIED_TOTAL_MIN_MODEL_PROBABILITY = 0.51;
+export const MLB_UNIFIED_TOTAL_MIN_PROJECTION_GAP = 0.5;
+export const MLB_UNIFIED_TOTAL_MIN_EDGE_PP = 0;
+export const MLB_UNIFIED_TOTAL_MIN_AMERICAN_ODDS = -150;
 export const FI_FINAL_BEST_ANGLE_MIN_EDGE = 0.06;
 export const FI_FINAL_BEST_ANGLE_MIN_CONFIDENCE = 56;
 export const FI_FINAL_BEST_ANGLE_MIN_PRICE_EXCLUSIVE = -130;
@@ -797,6 +803,82 @@ export interface PlayGradeGateInputs {
   runGapAbs: number | null;
   /** total line at lock (totals only) — model has no edge on line<8 duels. */
   totalLine: number | null;
+}
+
+export function resolveMlbUnifiedTotalGrade(args: {
+  enabled: boolean;
+  invariantPassed: boolean;
+  writerGrade: string | null;
+  statisticalGrade: string | null;
+  noBet: boolean;
+  provisional: boolean;
+  modelProbability: number | null;
+  projectionGapAbs: number | null;
+  edgePp: number | null;
+  americanOdds: number | null;
+}): {
+  ruleId: typeof MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID;
+  qualified: boolean;
+  finalGrade: string | null;
+  bestAngle: boolean;
+  reason: string;
+} {
+  if (!args.enabled) {
+    return {
+      ruleId: MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID,
+      qualified: false,
+      finalGrade: args.writerGrade,
+      bestAngle: args.writerGrade === "best_angle",
+      reason: "unified_release_disabled",
+    };
+  }
+  const qualified =
+    args.invariantPassed &&
+    !args.noBet &&
+    !args.provisional &&
+    args.writerGrade === "market_aligned" &&
+    args.modelProbability !== null &&
+    args.modelProbability >= MLB_UNIFIED_TOTAL_MIN_MODEL_PROBABILITY &&
+    args.projectionGapAbs !== null &&
+    args.projectionGapAbs >= MLB_UNIFIED_TOTAL_MIN_PROJECTION_GAP &&
+    args.edgePp !== null &&
+    args.edgePp >= MLB_UNIFIED_TOTAL_MIN_EDGE_PP &&
+    args.americanOdds !== null &&
+    args.americanOdds >= MLB_UNIFIED_TOTAL_MIN_AMERICAN_ODDS;
+  if (!qualified) {
+    return {
+      ruleId: MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID,
+      qualified: false,
+      finalGrade: "market_aligned",
+      bestAngle: false,
+      reason: args.invariantPassed ? "final_board_contract_not_qualified" : "distribution_invariant_failed",
+    };
+  }
+  if (args.statisticalGrade === "best_angle") {
+    return {
+      ruleId: MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID,
+      qualified: true,
+      finalGrade: "best_angle",
+      bestAngle: true,
+      reason: "qualified_statistical_best_angle",
+    };
+  }
+  if (args.statisticalGrade === "market_aligned") {
+    return {
+      ruleId: MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID,
+      qualified: true,
+      finalGrade: "lean",
+      bestAngle: false,
+      reason: "qualified_statistical_market_aligned_lean",
+    };
+  }
+  return {
+    ruleId: MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID,
+    qualified: true,
+    finalGrade: "market_aligned",
+    bestAngle: false,
+    reason: "qualified_but_statistical_grade_watchlist",
+  };
 }
 function gateEvNegative(p: number | null, odds: number | null): boolean {
   if (p === null || odds === null) return false;
@@ -5366,6 +5448,25 @@ function buildOuRecord(
       ? null
       : roundEdgePp((ouChampionModelProb - finalOuMarketProb) * 100);
   }
+  const unifiedDistribution = readRecordOrNull(v22.unified_game_distribution);
+  const unifiedTotalGrade = resolveMlbUnifiedTotalGrade({
+    enabled: unifiedDistribution?.enabled === true,
+    invariantPassed: readBoolish(readRecordOrNull(unifiedDistribution?.invariants)?.passed),
+    writerGrade: trackedOuPublicPlayGrade,
+    statisticalGrade: readStringOrNull(unifiedDistribution?.total_statistical_grade),
+    noBet: ouNoBet,
+    provisional: readBoolish(sp.v2_provisional),
+    modelProbability: finalOuModelProb,
+    projectionGapAbs: ouProjectionGapAbs,
+    edgePp: finalOuEdge,
+    americanOdds: finalOuOdds,
+  });
+  const effectiveOuPublicPlayGrade = unifiedDistribution?.enabled === true
+    ? unifiedTotalGrade.finalGrade
+    : trackedOuPublicPlayGrade;
+  const effectiveOuFinalBestAngle = unifiedDistribution?.enabled === true
+    ? unifiedTotalGrade.bestAngle
+    : trackedOuFinalBestAngle;
   return {
     game_prediction_id: pred.id,
     game_id: game.id,
@@ -5397,11 +5498,11 @@ function buildOuRecord(
       ? null
       : ouChampionStandDownReason !== null
         ? null
-        : trackedOuPublicPlayGrade,
+        : effectiveOuPublicPlayGrade,
     prediction_type: readStringOrNull(sp.ou_prediction_type),
     // Phase 6B.11 + MLB-P0 — same resolution as ML; see resolveMlbBestAngle.
     // A flipped or stood-down divergent row is never Best Angle.
-    best_angle: trackedOuFinalBestAngle,
+    best_angle: effectiveOuFinalBestAngle,
     no_bet: ouNoBet,
     no_bet_reason: ouNoBetReason,
     market_aligned: readBoolish(sp.ou_market_aligned),
@@ -5452,20 +5553,24 @@ function buildOuRecord(
           ? TOTAL_REJECTED_CORRECTION_ORIGINAL_SIDE_RULE_ID
           : null,
         board_action:
-          !ouNoBet && (trackedOuFinalBestAngle || trackedOuPublicPlayGrade === "lean")
+          !ouNoBet && (effectiveOuFinalBestAngle || effectiveOuPublicPlayGrade === "lean")
             ? "bet"
             : "no_play",
         actionable_grade: ouNoBet
           ? null
-          : trackedOuFinalBestAngle
+          : effectiveOuFinalBestAngle
           ? "best_angle"
-          : trackedOuPublicPlayGrade === "lean"
+          : effectiveOuPublicPlayGrade === "lean"
             ? "lean"
             : null,
         action_rule_id:
           ouCorroboratedOppositionApplied && !ouNoBet &&
-          (trackedOuFinalBestAngle || trackedOuPublicPlayGrade === "lean")
+          (effectiveOuFinalBestAngle || effectiveOuPublicPlayGrade === "lean")
             ? MLB_TOTAL_CORROBORATED_OPPOSITION_RULE_ID
+          : unifiedDistribution?.enabled === true &&
+              !ouNoBet &&
+              (effectiveOuFinalBestAngle || effectiveOuPublicPlayGrade === "lean")
+            ? MLB_UNIFIED_TOTAL_TWO_LAYER_GRADE_RULE_ID
           : trackedOuFinalBestAngle && ouModelBestAngleRetained
             ? TOTAL_CALIBRATED_MODEL_BEST_ANGLE_PATH_ID
             : ouPromotedBestAngle
@@ -5528,6 +5633,20 @@ function buildOuRecord(
         final_side: finalOuPick,
         final_side_changed: didFinalSideChange(pred.predicted_ou_side, finalOuPick),
       },
+      mlb_unified_total_grade: unifiedDistribution?.enabled === true
+        ? {
+            ...unifiedTotalGrade,
+            thresholds: {
+              minimum_model_probability: MLB_UNIFIED_TOTAL_MIN_MODEL_PROBABILITY,
+              minimum_projection_gap: MLB_UNIFIED_TOTAL_MIN_PROJECTION_GAP,
+              minimum_edge_pp: MLB_UNIFIED_TOTAL_MIN_EDGE_PP,
+              minimum_american_odds: MLB_UNIFIED_TOTAL_MIN_AMERICAN_ODDS,
+            },
+            writer_grade_before_unified_contract: trackedOuPublicPlayGrade,
+            statistical_grade: readStringOrNull(unifiedDistribution.total_statistical_grade),
+            final_grade: effectiveOuPublicPlayGrade,
+          }
+        : null,
       public_splits: buildPublicSplitsSnapshot(signalsForGame, "total", finalOuPick),
       line_movement: finalOuLineMovement,
       // MLB-P0 — audit trail for the Best Angle confirmation resolution.
@@ -5553,7 +5672,7 @@ function buildOuRecord(
           : null,
         clean_confirmed_promotion: ouPromotedBestAngle,
         clean_confirmed_promotion_rule_id: ouPromotedBestAngle ? TOTAL_CLEAN_CONFIRMED_BEST_ANGLE_RULE_ID : null,
-        final_best_angle: trackedOuFinalBestAngle,
+        final_best_angle: effectiveOuFinalBestAngle,
       },
       market_aware_corrected_grade: ouMarketAwareCorrectedGrade,
       mlb_total_corroborated_opposition: ouCorroboratedOppositionApplied
@@ -6228,6 +6347,130 @@ function isActionableMlbRecord(record: PredictionRecordRow | null): boolean {
 }
 
 /**
+ * Attach one game-level final forecast only when every candidate record is
+ * unlocked. Any locked row causes the complete game bundle to return
+ * byte-for-byte unchanged, and the per-record map repeats that guard.
+ */
+export function attachMlbUnifiedFinalForecast(
+  records: PredictionRecordRow[],
+): PredictionRecordRow[] {
+  if (records.some((record) => record.locked_at !== null)) return records;
+  const ml = records.find((record) => record.market === "moneyline") ?? null;
+  const total = records.find((record) => record.market === "total") ?? null;
+  if (ml === null || total === null) return records;
+  const totalSnapshot = readRecordOrNull(total.snapshot_json) ?? {};
+  const v22 = readRecordOrNull(totalSnapshot.v2_2_audit) ?? {};
+  const base = readRecordOrNull(v22.unified_game_distribution);
+  if (base?.enabled !== true) return records;
+
+  const score = readRecordOrNull(totalSnapshot.predicted_scores_at_lock);
+  const home = readNumberOrNull(score?.home);
+  const away = readNumberOrNull(score?.away);
+  const marginAxis = readRecordOrNull(base.margin_axis) ?? {};
+  const homeWin = readNumberOrNull(marginAxis.home_win_probability);
+  const homeMinus = readNumberOrNull(marginAxis.home_minus_1_5_probability);
+  const awayPlus = readNumberOrNull(marginAxis.away_plus_1_5_probability);
+  const selectedTotalProbability = total.model_probability;
+  const overProbability = total.side === "over"
+    ? selectedTotalProbability
+    : total.side === "under" && selectedTotalProbability !== null
+      ? 1 - selectedTotalProbability
+      : null;
+  const issues: string[] = [];
+  if (home === null || away === null || home < 0 || away < 0) issues.push("invalid_final_score");
+  const expectedTotal = home === null || away === null ? null : home + away;
+  const expectedMargin = home === null || away === null ? null : home - away;
+  if (
+    expectedMargin !== null && homeWin !== null &&
+    ((expectedMargin > 1e-9 && homeWin < 0.5) || (expectedMargin < -1e-9 && homeWin > 0.5))
+  ) issues.push("moneyline_margin_direction");
+  if (
+    expectedMargin !== null &&
+    ((expectedMargin > 1e-9 && ml.side !== "home") ||
+      (expectedMargin < -1e-9 && ml.side !== "away"))
+  ) issues.push("moneyline_side_score_direction");
+  if (homeWin !== null && homeMinus !== null && homeMinus > homeWin + 1e-9) {
+    issues.push("home_minus_1_5_exceeds_home_win");
+  }
+  if (homeWin !== null && awayPlus !== null && awayPlus + 1e-9 < 1 - homeWin) {
+    issues.push("away_plus_1_5_below_away_win");
+  }
+  if (
+    expectedTotal !== null && total.line_value !== null &&
+    ((total.side === "over" && expectedTotal <= total.line_value) ||
+      (total.side === "under" && expectedTotal >= total.line_value))
+  ) issues.push("total_side_score_direction");
+  const baseInvariants = readRecordOrNull(base.invariants);
+  if (baseInvariants?.passed !== true) issues.push("base_distribution_invariant_failed");
+
+  const forecast = {
+    version: base.version,
+    construction: base.construction,
+    release_stage: "final_after_market_reader",
+    expected: {
+      away_runs: away,
+      home_runs: home,
+      total_runs: expectedTotal,
+      home_margin_runs: expectedMargin,
+    },
+    decisions: {
+      moneyline: {
+        side: ml.side,
+        model_probability: ml.model_probability,
+        market_probability: ml.market_probability,
+        grade: ml.play_grade,
+        best_angle: ml.best_angle,
+      },
+      total: {
+        side: total.side,
+        line: total.line_value,
+        over_probability: overProbability,
+        model_probability: total.model_probability,
+        market_probability: total.market_probability,
+        grade: total.play_grade,
+        best_angle: total.best_angle,
+      },
+      run_line: {
+        publication_status: "shadow_only",
+        home_minus_1_5_probability: homeMinus,
+        away_plus_1_5_probability: awayPlus,
+      },
+    },
+    market_reader: {
+      total_corroborated_opposition:
+        readRecordOrNull(totalSnapshot.mlb_total_corroborated_opposition),
+      total_line_movement: readRecordOrNull(totalSnapshot.line_movement),
+    },
+    invariants: {
+      passed: issues.length === 0,
+      issues,
+    },
+  };
+  return records.map((record) => {
+    if (record.locked_at !== null) return record;
+    const failClosed =
+      issues.length > 0 &&
+      (record.market === "moneyline" || record.market === "total");
+    const snapshot = readRecordOrNull(record.snapshot_json) ?? {};
+    return {
+      ...record,
+      ...(failClosed
+        ? {
+            play_grade: "market_aligned",
+            best_angle: false,
+            no_bet: true,
+            no_bet_reason: `Unified MLB distribution failed closed: ${issues.join(", ")}.`,
+          }
+        : {}),
+      snapshot_json: {
+        ...snapshot,
+        mlb_unified_final_forecast: forecast,
+      },
+    };
+  });
+}
+
+/**
  * A better quote fixes the public price tuple immediately, but this release
  * does not invent a new betting sleeve from price shopping alone. Existing
  * actionability may be retained at the better price; a price-only promotion is
@@ -6378,13 +6621,17 @@ export function buildPredictionRecordsFromSlate(args: {
   for (const game of args.games) {
     const prediction = args.predictionByGameId.get(game.id);
     if (!prediction) continue;
-    const gameRecords = ranked.filter((record) => record.game_id === game.id);
+    const gameRecords = attachMlbUnifiedFinalForecast(
+      ranked.filter((record) => record.game_id === game.id),
+    );
     if (gameRecords.length === 0) continue;
     const historyRows = [
       "moneyline::home",
       "moneyline::away",
       "total::over",
       "total::under",
+      "spread::home",
+      "spread::away",
     ].flatMap((suffix) => args.historyByKey?.get(`${game.id}::${suffix}`) ?? []);
     const captured = attachMlbFullGameForwardEvidence({
       records: gameRecords,
@@ -6587,7 +6834,7 @@ export async function createPredictionRecords(
       gameIds,
       // 2026-06-15: include first_inning_total so the FI record can thread its
       // real lock price (was excluded → FI odds_american hardcoded null).
-      marketTypes: ["moneyline", "total", "first_inning_total"],
+      marketTypes: ["moneyline", "total", "spread", "first_inning_total"],
       context: `prediction-record prices mlb/${slateDate}`,
     }) as LineRowForOdds[];
   } else {
@@ -6595,7 +6842,7 @@ export async function createPredictionRecords(
       .from("lines")
       .select("game_id, market_type, side, sportsbook, odds_american, line_value, fetched_at")
       .in("game_id", gameIds)
-      .in("market_type", ["moneyline", "total", "first_inning_total"])
+      .in("market_type", ["moneyline", "total", "spread", "first_inning_total"])
       .is("player_id", null);
     lineRowsForOdds = (data ?? []) as LineRowForOdds[];
   }
@@ -6625,7 +6872,7 @@ export async function createPredictionRecords(
         .from("line_history")
         .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
         .eq("game_id", gid)
-        .in("market_type", ["moneyline", "total", "first_inning_total"])
+        .in("market_type", ["moneyline", "total", "spread", "first_inning_total"])
         .is("player_id", null)
         .neq("sportsbook", "splits_consensus")
         .not("odds_american", "is", null)
@@ -6684,7 +6931,7 @@ export async function createPredictionRecords(
     .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
     .eq("is_opener", true)
     .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "total"])
+    .in("market_type", ["moneyline", "total", "spread"])
     .is("player_id", null);
   const flagged = (flaggedOpenerRows ?? []) as LineHistoryOpenerRow[];
 
@@ -6703,7 +6950,7 @@ export async function createPredictionRecords(
         .from("line_history")
         .select("game_id, market_type, side, sportsbook, odds_american, line_value, recorded_at")
         .eq("game_id", gid)
-        .in("market_type", ["moneyline", "total"])
+        .in("market_type", ["moneyline", "total", "spread"])
         .is("player_id", null)
         .order("recorded_at", { ascending: true })
         .limit(400)

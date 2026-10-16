@@ -4,8 +4,8 @@ import type { PredictionRecordRow } from "../../types/domain/Tracking";
 export const MLB_FULLGAME_MARKET_EVIDENCE_CAPTURE_KEY =
   "mlb_fullgame_market_evidence_v1" as const;
 export const MLB_FULLGAME_MARKET_EVIDENCE_CAPTURE_CONTRACT =
-  "mlb_fullgame_market_evidence_capture_2026_09_02_r1" as const;
-export const MLB_FULLGAME_MARKET_EVIDENCE_CAPTURE_SCHEMA = "mlbfgme1" as const;
+  "mlb_fullgame_market_evidence_capture_2026_10_16_r2_run_line_context" as const;
+export const MLB_FULLGAME_MARKET_EVIDENCE_CAPTURE_SCHEMA = "mlbfgme2" as const;
 export const MLB_FULLGAME_MARKET_EVIDENCE_MAX_MARKET_BYTES = 12_288;
 export const MLB_FULLGAME_MARKET_EVIDENCE_MAX_GAME_BYTES = 24_576;
 export const MLB_FULLGAME_MARKET_EVIDENCE_MAX_BOOKS = 16;
@@ -14,6 +14,7 @@ const MAX_PAIR_SKEW_MS = 2 * 60_000;
 const MAX_FRESHNESS_MS = 90 * 60_000;
 const MAX_SPLIT_ROWS = 8;
 const MAX_SIGNAL_ROWS = 4;
+const MAX_RUN_LINE_PAIRS = 4;
 const MAX_STRING = 160;
 
 const SHARP_BOOKS = new Set(["pinnacle", "circa", "bookmaker"]);
@@ -95,6 +96,7 @@ export type MlbFullGameEvidenceArtifact = {
   listed_line: number | null;
   evaluated_price: Record<string, unknown>;
   named_book_pairs: Array<Record<string, unknown>>;
+  related_run_line_evidence: Record<string, unknown> | null;
   target_excluded_cohort: Record<string, unknown>;
   source_aware_splits: Array<Record<string, unknown>>;
   sharp_signals: Array<Record<string, unknown>>;
@@ -201,6 +203,14 @@ function buildArtifact(args: {
   const signals = captureSignals(args.signals, args.market);
   const forecast = captureForecast(args.prediction, args.record, args.market);
   const correction = capturePublicationCorrection(args.prediction, args.record, args.market);
+  const runLineEvidence = args.market === "moneyline"
+    ? captureRunLineEvidence({
+        modelMs: args.modelMs,
+        currentLines: args.currentLines,
+        historyRows: args.historyRows,
+        openerRows: args.openerRows,
+      })
+    : null;
   const orderedPairs = pairResult.pairs;
   let retainedCount = Math.min(orderedPairs.length, MLB_FULLGAME_MARKET_EVIDENCE_MAX_BOOKS);
   while (retainedCount >= 0) {
@@ -216,6 +226,7 @@ function buildArtifact(args: {
       listed_line: listedLine,
       evaluated_price: evaluated,
       named_book_pairs: retainedPairs,
+      related_run_line_evidence: runLineEvidence,
       target_excluded_cohort: targetExcludedCohort(
         orderedPairs,
         retainedPairs,
@@ -237,6 +248,7 @@ function buildArtifact(args: {
         max_named_books: MLB_FULLGAME_MARKET_EVIDENCE_MAX_BOOKS,
         max_source_aware_split_rows: MAX_SPLIT_ROWS,
         max_sharp_signal_rows: MAX_SIGNAL_ROWS,
+        max_run_line_pairs: MAX_RUN_LINE_PAIRS,
         max_pair_skew_seconds: MAX_PAIR_SKEW_MS / 1000,
         max_current_age_minutes: MAX_FRESHNESS_MS / 60_000,
       },
@@ -246,6 +258,274 @@ function buildArtifact(args: {
     retainedCount -= 1;
   }
   return null;
+}
+
+function captureRunLineEvidence(args: {
+  modelMs: number;
+  currentLines: ReadonlyArray<MlbFullGameCaptureLineRow>;
+  historyRows: ReadonlyArray<MlbFullGameCaptureHistoryRow>;
+  openerRows: ReadonlyArray<MlbFullGameCaptureOpenerRow>;
+}): Record<string, unknown> {
+  const rejected: Record<string, number> = {
+    blocked_or_synthetic: 0,
+    unsupported_side: 0,
+    non_main_line: 0,
+    incoherent_pair: 0,
+    invalid_price: 0,
+    missing_timestamp: 0,
+    invalid_timestamp: 0,
+    future_timestamp: 0,
+    stale_current: 0,
+    unmatched_side: 0,
+    pair_skew: 0,
+  };
+  const points: PricePoint[] = [];
+  for (const row of args.currentLines) {
+    if (row.market_type !== "spread") continue;
+    collectRunLinePoint({
+      sportsbook: row.sportsbook,
+      side: row.side,
+      line: row.line_value ?? null,
+      odds: row.odds_american,
+      observedAt: row.fetched_at ?? null,
+      origin: "lines",
+      modelMs: args.modelMs,
+      rejected,
+      points,
+    });
+  }
+  for (const row of args.historyRows) {
+    if (row.market_type !== "spread") continue;
+    collectRunLinePoint({
+      sportsbook: row.sportsbook,
+      side: row.side,
+      line: row.line_value,
+      odds: row.odds_american,
+      observedAt: row.recorded_at,
+      origin: "line_history",
+      modelMs: args.modelMs,
+      rejected,
+      points,
+    });
+  }
+
+  const byBook = new Map<string, PricePoint[]>();
+  for (const point of points) {
+    const list = byBook.get(point.normalizedBook) ?? [];
+    list.push(point);
+    byBook.set(point.normalizedBook, list);
+  }
+  const pairs: Array<Record<string, unknown>> = [];
+  for (const [normalizedBook, bookPoints] of byBook) {
+    const home = uniqueNewest(bookPoints.filter((point) => point.side === "home"));
+    const away = uniqueNewest(bookPoints.filter((point) => point.side === "away"));
+    if (home.length === 0 || away.length === 0) {
+      rejected.unmatched_side += 1;
+      continue;
+    }
+    const pair = bestRunLinePair(home, away);
+    if (pair === null) {
+      const coherentLineExists = home.some((h) => away.some((a) => runLinePairIsCoherent(h, a)));
+      if (coherentLineExists) rejected.pair_skew += 1;
+      else rejected.incoherent_pair += 1;
+      continue;
+    }
+    const olderMs = Math.min(pair.positive.observedMs, pair.negative.observedMs);
+    const ageMs = args.modelMs - olderMs;
+    if (ageMs > MAX_FRESHNESS_MS) {
+      rejected.stale_current += 1;
+      continue;
+    }
+    const homeProbability = noVig(pair.positive.odds, pair.negative.odds);
+    if (homeProbability === null) {
+      rejected.invalid_price += 1;
+      continue;
+    }
+    const opener = buildRunLineOpenerPair({
+      rows: args.openerRows,
+      normalizedBook,
+      homeLine: Number(pair.positive.line),
+      awayLine: Number(pair.negative.line),
+      modelMs: args.modelMs,
+    });
+    pairs.push({
+      identity: bounded(`spread:${normalizedBook}:${pair.positive.line}:${pair.negative.line}`),
+      sportsbook: bounded(pair.positive.book),
+      normalized_sportsbook: normalizedBook,
+      source_class: pair.positive.sourceClass,
+      forecast_source_supported:
+        pair.positive.sourceClass === "sharp" || pair.positive.sourceClass === "retail",
+      home_line: pair.positive.line,
+      away_line: pair.negative.line,
+      current: {
+        home_odds_american: pair.positive.odds,
+        away_odds_american: pair.negative.odds,
+        home_observed_at: new Date(pair.positive.observedMs).toISOString(),
+        away_observed_at: new Date(pair.negative.observedMs).toISOString(),
+        pair_observed_at: new Date(Math.max(pair.positive.observedMs, pair.negative.observedMs)).toISOString(),
+        pair_skew_seconds: Math.abs(pair.positive.observedMs - pair.negative.observedMs) / 1000,
+        older_side_age_minutes: ageMs / 60_000,
+        no_vig_home_cover_probability: homeProbability,
+        origins: [pair.positive.origin, pair.negative.origin].sort(),
+      },
+      opening: opener,
+    });
+  }
+  pairs.sort((a, b) => pairSort(a, b, null));
+  const retained = pairs.slice(0, MAX_RUN_LINE_PAIRS);
+  return {
+    mode: "capture_only",
+    production_gate_enabled: false,
+    market: "spread",
+    canonical_scope: "same_book_main_run_line_plus_or_minus_1_5",
+    named_book_pairs: retained,
+    omitted_pair_count: Math.max(0, pairs.length - retained.length),
+    rejected_counts: rejected,
+  };
+}
+
+function collectRunLinePoint(args: {
+  sportsbook: string;
+  side: string | null;
+  line: number | null;
+  odds: number | null;
+  observedAt: string | null;
+  origin: "lines" | "line_history";
+  modelMs: number;
+  rejected: Record<string, number>;
+  points: PricePoint[];
+}): void {
+  if (args.side !== "home" && args.side !== "away") {
+    args.rejected.unsupported_side += 1;
+    return;
+  }
+  if (args.line === null || !Number.isFinite(args.line) || Math.abs(args.line) !== 1.5) {
+    args.rejected.non_main_line += 1;
+    return;
+  }
+  const normalizedBook = normalizeBook(args.sportsbook);
+  if (!normalizedBook || SYNTHETIC_BOOKS.has(normalizedBook) || isBlockedSportsbook(args.sportsbook)) {
+    args.rejected.blocked_or_synthetic += 1;
+    return;
+  }
+  if (args.odds === null || !Number.isFinite(args.odds) || args.odds === 0) {
+    args.rejected.invalid_price += 1;
+    return;
+  }
+  if (args.observedAt === null) {
+    args.rejected.missing_timestamp += 1;
+    return;
+  }
+  const observedMs = Date.parse(args.observedAt);
+  if (!Number.isFinite(observedMs)) {
+    args.rejected.invalid_timestamp += 1;
+    return;
+  }
+  if (observedMs > args.modelMs) {
+    args.rejected.future_timestamp += 1;
+    return;
+  }
+  args.points.push({
+    normalizedBook,
+    book: bounded(args.sportsbook),
+    sourceClass: sourceClass(normalizedBook),
+    side: args.side,
+    line: args.line,
+    odds: args.odds,
+    observedMs,
+    origin: args.origin,
+  });
+}
+
+function runLinePairIsCoherent(home: PricePoint, away: PricePoint): boolean {
+  return home.line !== null && away.line !== null && Math.abs(home.line + away.line) < 1e-9;
+}
+
+function bestRunLinePair(
+  home: PricePoint[],
+  away: PricePoint[],
+): { positive: PricePoint; negative: PricePoint } | null {
+  let best: { positive: PricePoint; negative: PricePoint } | null = null;
+  for (const h of home) {
+    for (const a of away) {
+      if (!runLinePairIsCoherent(h, a)) continue;
+      const skew = Math.abs(h.observedMs - a.observedMs);
+      if (skew > MAX_PAIR_SKEW_MS) continue;
+      if (best === null) {
+        best = { positive: h, negative: a };
+        continue;
+      }
+      const observed = Math.min(h.observedMs, a.observedMs);
+      const bestObserved = Math.min(best.positive.observedMs, best.negative.observedMs);
+      const bestSkew = Math.abs(best.positive.observedMs - best.negative.observedMs);
+      const identity = `${h.line}:${a.line}:${h.odds}:${a.odds}:${h.origin}:${a.origin}`;
+      const bestIdentity = `${best.positive.line}:${best.negative.line}:${best.positive.odds}:${best.negative.odds}:${best.positive.origin}:${best.negative.origin}`;
+      if (
+        observed > bestObserved ||
+        (observed === bestObserved && skew < bestSkew) ||
+        (observed === bestObserved && skew === bestSkew && identity < bestIdentity)
+      ) {
+        best = { positive: h, negative: a };
+      }
+    }
+  }
+  return best;
+}
+
+function buildRunLineOpenerPair(args: {
+  rows: ReadonlyArray<MlbFullGameCaptureOpenerRow>;
+  normalizedBook: string;
+  homeLine: number;
+  awayLine: number;
+  modelMs: number;
+}): Record<string, unknown> | null {
+  const points = args.rows.flatMap((row): PricePoint[] => {
+    if (row.market_type !== "spread" || normalizeBook(row.sportsbook) !== args.normalizedBook) return [];
+    if (row.side !== "home" && row.side !== "away") return [];
+    const expectedLine = row.side === "home" ? args.homeLine : args.awayLine;
+    if (row.line_value !== expectedLine) return [];
+    if (row.odds_american === null || !Number.isFinite(row.odds_american) || row.odds_american === 0) return [];
+    if (row.recorded_at === null) return [];
+    const observedMs = Date.parse(row.recorded_at);
+    if (!Number.isFinite(observedMs) || observedMs > args.modelMs) return [];
+    return [{
+      normalizedBook: args.normalizedBook,
+      book: bounded(row.sportsbook),
+      sourceClass: sourceClass(args.normalizedBook),
+      side: row.side,
+      line: row.line_value,
+      odds: row.odds_american,
+      observedMs,
+      origin: "line_history",
+    }];
+  });
+  const home = points.filter((point) => point.side === "home").sort((a, b) => a.observedMs - b.observedMs);
+  const away = points.filter((point) => point.side === "away").sort((a, b) => a.observedMs - b.observedMs);
+  let best: { positive: PricePoint; negative: PricePoint } | null = null;
+  for (const h of home) {
+    for (const a of away) {
+      const skew = Math.abs(h.observedMs - a.observedMs);
+      if (skew > MAX_PAIR_SKEW_MS) continue;
+      const observed = Math.max(h.observedMs, a.observedMs);
+      const bestObserved = best === null
+        ? Number.POSITIVE_INFINITY
+        : Math.max(best.positive.observedMs, best.negative.observedMs);
+      if (observed < bestObserved) best = { positive: h, negative: a };
+    }
+  }
+  if (best === null) return null;
+  const probability = noVig(best.positive.odds, best.negative.odds);
+  if (probability === null) return null;
+  return {
+    home_line: best.positive.line,
+    away_line: best.negative.line,
+    home_odds_american: best.positive.odds,
+    away_odds_american: best.negative.odds,
+    home_observed_at: new Date(best.positive.observedMs).toISOString(),
+    away_observed_at: new Date(best.negative.observedMs).toISOString(),
+    pair_skew_seconds: Math.abs(best.positive.observedMs - best.negative.observedMs) / 1000,
+    no_vig_home_cover_probability: probability,
+  };
 }
 
 type PricePoint = {
