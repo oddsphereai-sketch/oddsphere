@@ -1,0 +1,2 @@
+export const NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE =
+  "nfl_player_props_member_decision_support_2026_10_16_r2_reader_integration" as const;

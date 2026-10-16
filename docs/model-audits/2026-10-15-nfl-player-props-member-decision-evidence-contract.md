@@ -78,13 +78,13 @@ release identifiers therefore remain unchanged.
 - Writer / tracking: `nfl_player_props_writer_2026_10_15_r53_member_decision_evidence` /
   `nfl_player_props_tracking_2026_10_15_r31_member_decision_evidence`
 - Decision-support evidence / member support: `nfl_player_props_decision_support_evidence_2026_10_15_r1` /
-  `nfl_player_props_member_decision_support_2026_10_15_r1`
+  `nfl_player_props_member_decision_support_2026_10_16_r2_reader_integration`
 - Unchanged model / calibration: `nfl_player_props_distribution_model_2026_10_15_r25_receptions_reference_required` /
   `nfl_player_props_distribution_calibration_2026_10_15_r27_receptions_reference_required`
 
 Focused validation must prove newly evaluated support completeness, qualified reference
 provenance, explicit unavailable states, exact legacy-lock reader precedence, member transport
-bounds, runtime parity, one writer/lease, and zero UI/copy changes. Publication additionally
+bounds, runtime parity, one writer/lease, and reader integration without prediction changes. Publication additionally
 requires `npm run verify:model-change`, current-main integration safety, protected PR checks, and
 live proof of the release tuple and support telemetry.
 
@@ -93,6 +93,11 @@ lifecycle r25, writer r52, and tracking r30 if the evidence contradicts its deci
 fails, the reader reconstructs a legacy lock, releases mix, the board contracts, or any prediction
 field changes unexpectedly. Existing locks and all captured reference/observer/private records
 remain unchanged.
+
+The r2 member-support release is the reader-presentation boundary. Only rows that store that
+exact release use the integrated independent / published / target-excluded comparison and
+qualified-reference presentation. Earlier locked rows—including r1 rows—continue through the
+preceding reader path without reconstructing or reinterpreting their stored payload.
 
 ## Validation record
 

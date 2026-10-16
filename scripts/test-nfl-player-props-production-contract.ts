@@ -534,6 +534,18 @@ for (const readerEvidence of ["Available Exact Prices", "Same-Book Movement", "r
 for (const trendEvidence of ["modelInputTrends", "Actual model inputs.", "Last game", "L3 avg", "L5 avg", "Model-weighted"]) {
   assert.ok(memberReader.includes(trendEvidence), `NFL reader exposes authentic model-input trend evidence: ${trendEvidence}`);
 }
+for (const decisionSupportEvidence of ["DecisionSupportComparison", "Independent model", "Published calibrated", "Target-excluded market", "Fair price", "Qualified references"]) {
+  assert.ok(memberReader.includes(decisionSupportEvidence), `NFL reader exposes stored decision-support evidence: ${decisionSupportEvidence}`);
+}
+assert.ok(memberReader.includes("support.release !== NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE"),
+  "the enhanced reader requires the exact stored presentation release instead of reinterpreting an older locked support payload");
+assert.ok(memberReader.includes("return <><ProbabilityVisual row={row}"),
+  "legacy locked rows retain the preceding reader semantics when their stored support release does not qualify");
+assert.ok(memberReader.includes('row.market === "anytime_td" && context.teamImpliedTouchdowns !== null'),
+  "touchdown readers show the stored touchdown environment instead of a generic yardage-market team total");
+for (const unavailableEvidence of ["Pressure matchup", "Coverage matchup", "Yards before contact", "route participation", "Weather impact"]) {
+  assert.ok(!memberReader.includes(unavailableEvidence), `NFL reader does not invent unsupported evidence: ${unavailableEvidence}`);
+}
 for (const availabilityEvidence of ["Player availability needs review", "AvailabilityBadge", "nflPlayerPropsAvailabilityAgeLabel", "Recheck availability closer to kickoff"]) {
   assert.ok(memberReader.includes(availabilityEvidence), `NFL props foregrounds player availability without silently changing the grade: ${availabilityEvidence}`);
 }

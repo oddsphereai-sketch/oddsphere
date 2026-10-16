@@ -42,6 +42,9 @@ import {
   nflPlayerPropsMarketEvidenceId,
   type NflPlayerPropsMarketEvidenceCapture,
 } from "./nflPlayerPropsMarketEvidenceCapture";
+import { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
+
+export { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
   "nfl_player_props_runtime_2026_10_15_r15_independent_rushing_yards" as const;
@@ -83,8 +86,6 @@ export const NFL_PLAYER_PROPS_SOURCE_AWARE_MARKET_READING_RELEASE =
   "nfl_player_props_market_reading_2026_10_15_r3_reference_required" as const;
 export const NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE =
   "nfl_player_props_decision_support_evidence_2026_10_15_r1" as const;
-export const NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE =
-  "nfl_player_props_member_decision_support_2026_10_15_r1" as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS = [
   "receptions",
 ] as const satisfies readonly NflPlayerPropMarket[];
