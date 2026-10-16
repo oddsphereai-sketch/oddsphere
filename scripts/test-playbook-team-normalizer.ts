@@ -33,6 +33,21 @@ function expectAbbr(name: string, expected: string | null, label: string) {
   }
 }
 
+function expectSportAbbr(
+  sport: "wnba" | "nba",
+  name: string,
+  expected: string | null,
+  label: string,
+) {
+  const actual = normalizeTeamAbbr(sport, name);
+  if (actual === expected) {
+    pass++;
+  } else {
+    fail++;
+    failures.push(`${label}: ${sport} "${name}" -> got ${actual ?? "null"}, expected ${expected ?? "null"}`);
+  }
+}
+
 function expect(cond: boolean, label: string) {
   if (cond) pass++;
   else {
@@ -94,13 +109,27 @@ expect(resolveTeam("wnba", "Golden State")?.source === "city" || resolveTeam("wn
 expect(buildGameKey("wnba", "Phoenix Mercury", "Indiana Fever") === "PHX@IND", "gameKey wnba");
 expect(buildGameKey("wnba", "Brazil National", "Indiana Fever") === null, "gameKey null on unresolved");
 
-// ── Registry/scaffold behavior for other sports ────────────────────────────
+// ── NBA registry and live ESPN/database abbreviation compatibility ─────────
 expect(hasRegistry("wnba") === true, "wnba has registry");
-expect(hasRegistry("nba") === false, "nba scaffolded (no registry yet)");
-// Unpopulated sport: resolveTeam returns null, but buildGameKey falls back to
-// mascot slug so name-to-name matching still works until a registry lands.
-expect(normalizeTeamAbbr("nba", "Boston Celtics") === null, "nba abbr null (no registry)");
-expect(buildGameKey("nba", "Boston Celtics", "Los Angeles Lakers") === "celtics@lakers", "nba fallback slug key");
+expect(hasRegistry("nba") === true, "nba has exact registry");
+expect(buildGameKey("nba", "Boston Celtics", "Los Angeles Lakers") === "BOS@LAL", "nba canonical game key");
+
+const nbaDatabaseAbbreviations: Array<[string, string]> = [
+  ["ATL", "ATL"], ["BKN", "BKN"], ["BOS", "BOS"], ["CHA", "CHA"],
+  ["CHI", "CHI"], ["CLE", "CLE"], ["DAL", "DAL"], ["DEN", "DEN"],
+  ["DET", "DET"], ["GS", "GSW"], ["HOU", "HOU"], ["IND", "IND"],
+  ["LAC", "LAC"], ["LAL", "LAL"], ["MEM", "MEM"], ["MIA", "MIA"],
+  ["MIL", "MIL"], ["MIN", "MIN"], ["NO", "NOP"], ["NY", "NYK"],
+  ["OKC", "OKC"], ["ORL", "ORL"], ["PHI", "PHI"], ["PHX", "PHX"],
+  ["POR", "POR"], ["SA", "SAS"], ["SAC", "SAC"], ["TOR", "TOR"],
+  ["UTAH", "UTA"], ["WSH", "WAS"],
+];
+for (const [databaseAbbr, canonicalAbbr] of nbaDatabaseAbbreviations) {
+  expectSportAbbr("nba", databaseAbbr, canonicalAbbr, "nba database abbreviation");
+}
+expectSportAbbr("nba", "New York Knicks", "NYK", "nba full team name");
+expectSportAbbr("nba", "San Antonio Spurs", "SAS", "nba full team name");
+expectSportAbbr("nba", "London Lions", null, "nba non-league exhibition team fails closed");
 
 // ── cleanName sanity ───────────────────────────────────────────────────────
 expect(cleanName("L.A.  Sparks!!") === "l a sparks", "cleanName punctuation/space");

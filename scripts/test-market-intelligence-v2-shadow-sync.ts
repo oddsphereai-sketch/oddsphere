@@ -29,7 +29,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_shadow_capture_2026_10_16_r3_paginated_nba_price_window",
+    "market_intelligence_v2_shadow_capture_2026_10_16_r4_canonical_nba_team_identity",
 );
 
 function check(label: string, ok: boolean, detail?: string): void {
@@ -207,6 +207,20 @@ check(
       sportsbook: "draftkings",
     },
     {
+      event_id: "nba_76ers_knicks_2026-10-20_b3",
+      league: "nba",
+      away_team: "Philadelphia 76ers",
+      home_team: "New York Knicks",
+      sportsbook: "draftkings",
+    },
+    {
+      event_id: "nba_spurs_thunder_2026-10-20_b3",
+      league: "nba",
+      away_team: "Oklahoma City Thunder",
+      home_team: "San Antonio Spurs",
+      sportsbook: "draftkings",
+    },
+    {
       event_id: "nba_golden_state_warriors_los_angeles_lakers_2026-10-21",
       league: "nba",
       away_team: "Golden State Warriors",
@@ -237,15 +251,19 @@ check(
   ];
   const accepted = selectVerifiedSharpApiWindowRows(
     rows,
-    selectedGames,
+    [
+      ...selectedGames,
+      { slateDate: "2026-10-20", awayAbbr: "PHI", homeAbbr: "NY" },
+      { slateDate: "2026-10-20", awayAbbr: "OKC", homeAbbr: "SA" },
+    ],
     "2026-10-15",
     "2026-10-21",
     "nba",
   );
   check(
     "NBA rolling provider selection requires exact league, event date, and matchup inside the window",
-    accepted.length === 2 &&
-      accepted.some((row) => String(row.event_id).includes("2026-10-20")) &&
+    accepted.length === 4 &&
+      accepted.filter((row) => String(row.event_id).includes("2026-10-20")).length === 3 &&
       accepted.some((row) => String(row.event_id).includes("2026-10-21")),
   );
 }
