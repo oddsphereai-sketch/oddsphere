@@ -646,6 +646,8 @@ assert.ok(
 const cronRoute = readFileSync("app/api/cron/nfl-forward-evidence/route.ts", "utf8");
 assert.ok(cronRoute.includes("player_props_critical_health"),
   "the sole NFL cron exposes source-aware reference failures instead of silently publishing them");
+assert.ok(cronRoute.includes('finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"'),
+  "a private full-board tracking failure makes the sole NFL cron partial instead of silently passing");
 assert.ok(cronRoute.includes('process.env.NFL_PLAYER_PROPS_ENABLED === "true"'), "props writer is exact-string opt-in");
 assert.equal((cronRoute.match(/playerProps = await runNflPlayerPropsProductionWriter/g) ?? []).length, 1, "one NFL cron invokes props exactly once and sequentially");
 assert.ok(cronRoute.includes('sport: "nfl"') && cronRoute.includes('leaseGroup: "prediction_pipeline"') && cronRoute.includes("requireLease: true"));
