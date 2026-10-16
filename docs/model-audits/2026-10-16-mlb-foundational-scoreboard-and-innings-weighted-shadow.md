@@ -343,6 +343,68 @@ them for production decisions. Candidate C's explicit 233-row action replay is t
 the pure-model grades are retained only to show why grading cannot be evaluated before writer-time
 market arbitration.
 
+## Independent-score calibration and full-product ablation
+
+The next audit did not replace the product architecture. It fit candidate corrections inside the
+independent score layer, reconstructed the incumbent posterior, recomputed the existing Poisson
+probability heads, and then replayed the same frozen market reader, exact-price arbitration, final
+writer, and grade logic. The fixed affine calibration was fit on the first 60% only; validation and
+holdout were not used to fit it.
+
+The full Total-and-margin calibration improves independent Total MAE from 3.651 to 3.516 and
+posterior Total MAE from 3.474 to 3.424 on its paired cohort. Through the complete writer it moves
+Moneyline from 770-571 (57.42%) to 782-559 (58.31%) and Total from 678-652-11 (50.98%) to
+679-651-11 (51.05%). Those aggregate gains are not promotable:
+
+- Moneyline holdout falls from 166-118 to 165-119 and unit return falls from +5.45u to +0.23u.
+- Total development falls from 404-372-11 to 390-386-11 even though validation and holdout improve.
+- Moneyline Best Angles fall from 148 to 43 and Total Best Angles from 46 to 4 under the inherited
+  confidence scale.
+
+The controlled ablations identify the source. Calibrating Total while preserving the independent
+margin leaves all 1,341 final Moneyline sides and their flat-stake record unchanged, while producing
+the same later Total improvement. Calibrating margin while preserving Total creates all 150
+Moneyline side changes and the holdout regression. Therefore the defensible repair target is the
+independent Total head, not a wholesale replacement of the independent model or market reader.
+
+A prior-only rolling affine version was also rejected. It tied incumbent Moneyline accuracy over
+its paired cohort, but dropped holdout from 166-118 to 162-122 and reduced Moneyline units from
++5.45u to -5.26u. Continuous recalibration does not remove the failure.
+
+### Run-line truth test
+
+Every affine candidate's derived run-line side matched the same-cohort **always take the market
+underdog +1.5** baseline exactly. For the full affine posterior cohort that is 827-582 (58.69%),
+997-412 (+1 run), and 1,092-317 (+2 runs). Those percentages beat the screenshot benchmarks but
+contain zero demonstrated selection lift. They are a property of the alternate line, not proof of
+model skill, and must not be promoted or advertised as such.
+
+### Final-grade and market-reader diagnostics
+
+Three fixed, predeclared Best Angle thresholds were tested inside Candidate C's 233-row qualified
+board. None remained positive in holdout: balanced was 15-18, strict 9-11, and conservative 6-7.
+High model probability alone is therefore not a valid MLB Total Best Angle ranker yet.
+
+The existing market reader is informative, but the relationship is not a simple "follow the move"
+rule. Within the Candidate C action board:
+
+| Lock-time line context | All | Validation | Holdout |
+|---|---:|---:|---:|
+| Unknown/no comparable move | 85-70, +10.03u | 24-20, +3.88u | 9-6, +2.06u |
+| Neutral | 8-5, +2.85u | 2-2, -0.01u | 6-3, +2.86u |
+| Against candidate | 22-25, -2.87u | 3-3, -0.19u | 19-22, -2.68u |
+| Toward candidate | 9-9, -1.57u | 2-2, -0.50u | 7-7, -1.07u |
+
+Movement context was unavailable in the development block, so this table is a late-period
+diagnostic, not an untouched rule-selection result. A veto on directional movement is plausible but
+must be frozen in shadow and confirmed on new games before it can control grades. The finding does
+show why the market reader must remain a separate arbitration layer: both blindly following and
+blindly fading line movement fail.
+
+The current conclusion is narrow: Candidate C is a real Total-direction improvement through the
+complete product, while Moneyline margin calibration, run-line selection, and a new Total Best Angle
+tier remain unproven. Production stays unchanged until the grade boundary is confirmed prospectively.
+
 ## Feature coverage still missing from the independent model
 
 The existing model uses team OPS, starter ERA/WHIP/K9 or pitch-quality proxy, bullpen ERA proxy,

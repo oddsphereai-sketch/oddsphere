@@ -11,6 +11,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { supabase } from "../../lib/db/supabase";
 import {
+  homeWinProbabilityPoisson,
   homeMinus1_5Probability,
   overProbabilityPoisson,
   poissonPmf,
@@ -119,6 +120,22 @@ type MlFeatureSpec = {
   name: string;
   featureNames: string[];
   values: (game: Game) => number[] | null;
+};
+
+type LinearModel = {
+  means: number[];
+  scales: number[];
+  weights: number[];
+};
+
+type IndependentScoreCandidate = {
+  name: string;
+  featureNames: { total: string[]; margin: string[] };
+  scores: Map<number, Scores>;
+  trainGames: number;
+  eligibleGames: number;
+  totalModel: LinearModel;
+  marginModel: LinearModel;
 };
 
 type CandidateTotalDecision = {
@@ -463,6 +480,280 @@ function predictLogistic(
   return sigmoid(linear);
 }
 
+function fitLinearModel(
+  rows: Array<{ values: number[]; outcome: number }>,
+  ridgePenalty = 0.05,
+): LinearModel | null {
+  if (!rows.length) return null;
+  const width = rows[0].values.length;
+  const means = Array.from({ length: width }, (_, index) =>
+    rows.reduce((sum, row) => sum + row.values[index], 0) / rows.length);
+  const scales = Array.from({ length: width }, (_, index) => {
+    const variance = rows.reduce((sum, row) => sum + (row.values[index] - means[index]) ** 2, 0) / rows.length;
+    return Math.max(Math.sqrt(variance), 1e-6);
+  });
+  const standardized = rows.map((row) => ({
+    values: row.values.map((value, index) => (value - means[index]) / scales[index]),
+    outcome: row.outcome,
+  }));
+  const outcomeMean = rows.reduce((sum, row) => sum + row.outcome, 0) / rows.length;
+  const weights = [outcomeMean, ...Array(width).fill(0)] as number[];
+  for (let iteration = 0; iteration < 6000; iteration++) {
+    const gradient = Array(width + 1).fill(0) as number[];
+    for (const row of standardized) {
+      const prediction = weights[0] + row.values.reduce((sum, value, index) => sum + value * weights[index + 1], 0);
+      const error = prediction - row.outcome;
+      gradient[0] += error;
+      row.values.forEach((value, index) => { gradient[index + 1] += error * value; });
+    }
+    const learningRate = 0.04 / Math.sqrt(1 + iteration / 400);
+    weights[0] -= learningRate * gradient[0] / standardized.length;
+    for (let index = 1; index < weights.length; index++) {
+      weights[index] -= learningRate * (gradient[index] / standardized.length + ridgePenalty * weights[index]);
+    }
+  }
+  return { means, scales, weights };
+}
+
+function fitUnivariateLinearModel(
+  rows: Array<{ values: number[]; outcome: number }>,
+  ridgePenalty = 0.05,
+): LinearModel | null {
+  if (!rows.length) return null;
+  const mean = rows.reduce((sum, row) => sum + row.values[0], 0) / rows.length;
+  const outcomeMean = rows.reduce((sum, row) => sum + row.outcome, 0) / rows.length;
+  const variance = rows.reduce((sum, row) => sum + (row.values[0] - mean) ** 2, 0) / rows.length;
+  const scale = Math.max(Math.sqrt(variance), 1e-6);
+  const covarianceStandardized = rows.reduce(
+    (sum, row) => sum + ((row.values[0] - mean) / scale) * (row.outcome - outcomeMean),
+    0,
+  ) / rows.length;
+  return {
+    means: [mean],
+    scales: [scale],
+    weights: [outcomeMean, covarianceStandardized / (1 + ridgePenalty)],
+  };
+}
+
+function predictLinear(model: LinearModel, values: number[]): number {
+  return model.weights[0] + values.reduce((sum, value, index) =>
+    sum + ((value - model.means[index]) / model.scales[index]) * model.weights[index + 1], 0);
+}
+
+function independentRichFeatures(game: Game): { total: number[]; margin: number[] } | null {
+  const score = storedIndependentScore(game);
+  const matchups = matchupFeatures(game);
+  if (!score || !matchups) return null;
+  const audit = v22(game.ml ?? game.total);
+  const factors = obj(obj(audit.feature_capture).factors);
+  const home = obj(factors.home);
+  const away = obj(factors.away);
+  const starter = obj(obj(audit.feature_capture).starter);
+  const homeStarterEra = num(obj(starter.home).season_era);
+  const awayStarterEra = num(obj(starter.away).season_era);
+  const values = [
+    homeStarterEra,
+    awayStarterEra,
+    num(home.offense),
+    num(away.offense),
+    num(home.bullpen_factor_opp),
+    num(away.bullpen_factor_opp),
+    num(home.park),
+    num(home.weather),
+  ];
+  if (values.some((value) => value === null)) return null;
+  const [homeEra, awayEra, homeOffense, awayOffense, homeBullpen, awayBullpen, park, weather] = values as number[];
+  return {
+    total: [
+      score.home + score.away,
+      (homeEra + awayEra) / 2,
+      (homeOffense + awayOffense) / 2,
+      (homeBullpen + awayBullpen) / 2,
+      park,
+      weather,
+    ],
+    margin: [score.home - score.away, ...matchups],
+  };
+}
+
+function buildIndependentScoreCandidates(games: Game[]): IndependentScoreCandidate[] {
+  const specs = [
+    {
+      name: "affineIndependentTotalAndMargin",
+      featureNames: {
+        total: ["independent_total"],
+        margin: ["independent_home_margin"],
+      },
+      features: (game: Game) => {
+        const score = storedIndependentScore(game);
+        return score ? {
+          total: [score.home + score.away],
+          margin: [score.home - score.away],
+        } : null;
+      },
+    },
+    {
+      name: "richIndependentResidualCalibration",
+      featureNames: {
+        total: [
+          "independent_total",
+          "average_starter_era",
+          "average_offense_factor",
+          "average_bullpen_opponent_factor",
+          "park_factor",
+          "weather_factor",
+        ],
+        margin: [
+          "independent_home_margin",
+          "away_minus_home_starter_era",
+          "home_minus_away_offense_factor",
+          "home_minus_away_pitcher_opponent_factor",
+          "home_minus_away_bullpen_opponent_factor",
+        ],
+      },
+      features: independentRichFeatures,
+    },
+  ];
+  const fixedCandidates = specs.flatMap((spec) => {
+    const eligible = games.flatMap((game) => {
+      const features = spec.features(game);
+      return features ? [{ game, features }] : [];
+    });
+    const train = eligible.filter((row) => chronologicalLabel(games, row.game) === "train");
+    const totalModel = fitLinearModel(train.map((row) => ({
+      values: row.features.total,
+      outcome: row.game.home + row.game.away,
+    })));
+    const marginModel = fitLinearModel(train.map((row) => ({
+      values: row.features.margin,
+      outcome: row.game.home - row.game.away,
+    })));
+    if (!totalModel || !marginModel) return [];
+    const scores = new Map<number, Scores>();
+    for (const row of eligible) {
+      const total = Math.max(0.2, predictLinear(totalModel, row.features.total));
+      const rawMargin = predictLinear(marginModel, row.features.margin);
+      const margin = Math.max(-(total - 0.2), Math.min(total - 0.2, rawMargin));
+      scores.set(row.game.gameId, {
+        home: (total + margin) / 2,
+        away: (total - margin) / 2,
+      });
+    }
+    return [{
+      name: spec.name,
+      featureNames: spec.featureNames,
+      scores,
+      trainGames: train.length,
+      eligibleGames: eligible.length,
+      totalModel,
+      marginModel,
+    }];
+  });
+  const affineCandidate = fixedCandidates.find((candidate) =>
+    candidate.name === "affineIndependentTotalAndMargin");
+  const affineAblations: IndependentScoreCandidate[] = [];
+  if (affineCandidate) {
+    const identityModel: LinearModel = {
+      means: [0],
+      scales: [1],
+      weights: [0, 1],
+    };
+    const totalOnlyScores = new Map<number, Scores>();
+    const marginOnlyScores = new Map<number, Scores>();
+    for (const game of games) {
+      const score = storedIndependentScore(game);
+      if (!score) continue;
+      const rawTotal = score.home + score.away;
+      const rawMargin = score.home - score.away;
+      const calibratedTotal = Math.max(0.2, predictLinear(affineCandidate.totalModel, [rawTotal]));
+      const calibratedMargin = predictLinear(affineCandidate.marginModel, [rawMargin]);
+      const totalOnlyMargin = Math.max(
+        -(calibratedTotal - 0.2),
+        Math.min(calibratedTotal - 0.2, rawMargin),
+      );
+      totalOnlyScores.set(game.gameId, {
+        home: (calibratedTotal + totalOnlyMargin) / 2,
+        away: (calibratedTotal - totalOnlyMargin) / 2,
+      });
+      const marginOnlyMargin = Math.max(-(rawTotal - 0.2), Math.min(rawTotal - 0.2, calibratedMargin));
+      marginOnlyScores.set(game.gameId, {
+        home: (rawTotal + marginOnlyMargin) / 2,
+        away: (rawTotal - marginOnlyMargin) / 2,
+      });
+    }
+    affineAblations.push(
+      {
+        name: "affineIndependentTotalPreserveMargin",
+        featureNames: {
+          total: ["independent_total"],
+          margin: ["identity_independent_home_margin"],
+        },
+        scores: totalOnlyScores,
+        trainGames: affineCandidate.trainGames,
+        eligibleGames: totalOnlyScores.size,
+        totalModel: affineCandidate.totalModel,
+        marginModel: identityModel,
+      },
+      {
+        name: "preserveTotalAffineIndependentMargin",
+        featureNames: {
+          total: ["identity_independent_total"],
+          margin: ["independent_home_margin"],
+        },
+        scores: marginOnlyScores,
+        trainGames: affineCandidate.trainGames,
+        eligibleGames: marginOnlyScores.size,
+        totalModel: identityModel,
+        marginModel: affineCandidate.marginModel,
+      },
+    );
+  }
+  const eligible = games.flatMap((game) => {
+    const score = storedIndependentScore(game);
+    return score ? [{ game, score }] : [];
+  });
+  const rollingScores = new Map<number, Scores>();
+  let latestTotalModel: LinearModel | null = null;
+  let latestMarginModel: LinearModel | null = null;
+  for (const date of [...new Set(eligible.map((row) => row.game.date))].sort()) {
+    const prior = eligible.filter((row) => row.game.date < date);
+    if (prior.length < 250) continue;
+    const totalModel = fitUnivariateLinearModel(prior.map((row) => ({
+      values: [row.score.home + row.score.away],
+      outcome: row.game.home + row.game.away,
+    })));
+    const marginModel = fitUnivariateLinearModel(prior.map((row) => ({
+      values: [row.score.home - row.score.away],
+      outcome: row.game.home - row.game.away,
+    })));
+    if (!totalModel || !marginModel) continue;
+    latestTotalModel = totalModel;
+    latestMarginModel = marginModel;
+    for (const row of eligible.filter((candidateRow) => candidateRow.game.date === date)) {
+      const total = Math.max(0.2, predictLinear(totalModel, [row.score.home + row.score.away]));
+      const rawMargin = predictLinear(marginModel, [row.score.home - row.score.away]);
+      const margin = Math.max(-(total - 0.2), Math.min(total - 0.2, rawMargin));
+      rollingScores.set(row.game.gameId, {
+        home: (total + margin) / 2,
+        away: (total - margin) / 2,
+      });
+    }
+  }
+  const rollingCandidate = latestTotalModel && latestMarginModel ? [{
+    name: "rollingPriorOnlyAffineIndependentTotalAndMargin",
+    featureNames: {
+      total: ["independent_total"],
+      margin: ["independent_home_margin"],
+    },
+    scores: rollingScores,
+    trainGames: 250,
+    eligibleGames: rollingScores.size,
+    totalModel: latestTotalModel,
+    marginModel: latestMarginModel,
+  }] : [];
+  return [...fixedCandidates, ...affineAblations, ...rollingCandidate];
+}
+
 function mlProbabilityMetric(rows: MlProbabilityRow[]): MlProbabilityMetric {
   let wins = 0;
   let losses = 0;
@@ -654,6 +945,124 @@ function moneylineArchitectureAudit(games: Game[]): Record<string, unknown> {
   };
 }
 
+function scoreRunLineSide(game: Game, score: Scores | null): Side | null {
+  const pHomeMarket = homeMarketProbability(game.ml);
+  if (!score || pHomeMarket === null) return null;
+  const homeLine = pHomeMarket >= 0.5 ? -1.5 : 1.5;
+  const homeCoverProbability = homeLine < 0
+    ? homeMinus1_5Probability(score.home, score.away)
+    : 1 - homeMinus1_5Probability(score.away, score.home);
+  return homeCoverProbability >= 0.5 ? "home" : "away";
+}
+
+function linearModelReport(model: LinearModel, featureNames: string[]): Record<string, number> {
+  return {
+    intercept: round(model.weights[0], 5),
+    ...Object.fromEntries(featureNames.map((name, index) => [name, round(model.weights[index + 1], 5)])),
+  };
+}
+
+function independentScoreCandidateAudit(
+  games: Game[],
+  candidates: IndependentScoreCandidate[],
+): Record<string, unknown> {
+  const packageRows = (rows: PickRow[]) => ({
+    all: metric(rows),
+    chronology: summarizeChronology(games, rows),
+  });
+  const runLinePackage = (
+    cohort: Game[],
+    sideFn: (game: Game) => Side | null,
+  ) => Object.fromEntries([0, 1, 2].map((shift) => {
+    const rows = picksByRule(cohort, sideFn, (game, side) => {
+      const line = lineForSelectedRunLine(game, side);
+      return line === null ? "push" : handicapOutcome(side, line + shift, game);
+    }).filter((row) => {
+      const game = cohort.find((candidateGame) => candidateGame.gameId === row.gameId)!;
+      const side = sideFn(game);
+      return side !== null && lineForSelectedRunLine(game, side) !== null;
+    }).map((row) => ({ ...row, odds: null }));
+    return [shift === 0 ? "main" : `plus${shift}`, packageRows(rows)];
+  }));
+
+  return {
+    protocol: "Independent score calibration is fit on the first 60% only with no market inputs. Candidate independent scores then pass through the preserved production posterior reconstruction for an integrated diagnostic.",
+    candidates: Object.fromEntries(candidates.map((candidate) => {
+      const cohort = games.filter((game) => candidate.scores.has(game.gameId));
+      const independentScore = (game: Game) => candidate.scores.get(game.gameId) ?? null;
+      const posteriorScores = new Map<number, Scores>();
+      for (const game of cohort) {
+        const score = candidatePosteriorFromIndependent(game, independentScore(game));
+        if (score) posteriorScores.set(game.gameId, score);
+      }
+      const posteriorCohort = cohort.filter((game) => posteriorScores.has(game.gameId));
+      const posteriorScore = (game: Game) => posteriorScores.get(game.gameId) ?? null;
+      const sideFromScore = (scoreFn: (game: Game) => Scores | null) => (game: Game): Side | null => {
+        const score = scoreFn(game);
+        return score ? score.home >= score.away ? "home" : "away" : null;
+      };
+      const totalFromScore = (scoreFn: (game: Game) => Scores | null) => (game: Game): TotalSide | null => {
+        const score = scoreFn(game);
+        const line = totalLine(game);
+        return !score || line === null ? null : score.home + score.away >= line ? "over" : "under";
+      };
+      const marketBaseline = picksByRule(cohort, marketMlSide, mlOutcome);
+      return [candidate.name, {
+        featureNames: candidate.featureNames,
+        fit: {
+          eligibleGames: candidate.eligibleGames,
+          trainGames: candidate.trainGames,
+          totalCoefficientsStandardized: linearModelReport(candidate.totalModel, candidate.featureNames.total),
+          marginCoefficientsStandardized: linearModelReport(candidate.marginModel, candidate.featureNames.margin),
+        },
+        independent: {
+          score: scoreRule(cohort, independentScore, games),
+          moneyline: packageRows(picksByRule(cohort, sideFromScore(independentScore), mlOutcome)),
+          total: packageRows(totalsByRule(cohort, totalFromScore(independentScore))),
+          totalPlus1: packageRows(totalsByRule(cohort, totalFromScore(independentScore), 1)),
+          totalPlus2: packageRows(totalsByRule(cohort, totalFromScore(independentScore), 2)),
+          runLine: runLinePackage(cohort, (game) => scoreRunLineSide(game, independentScore(game))),
+        },
+        integratedPosterior: {
+          eligibleGames: posteriorCohort.length,
+          score: scoreRule(posteriorCohort, posteriorScore, games),
+          moneyline: packageRows(picksByRule(posteriorCohort, sideFromScore(posteriorScore), mlOutcome)),
+          total: packageRows(totalsByRule(posteriorCohort, totalFromScore(posteriorScore))),
+          totalPlus1: packageRows(totalsByRule(posteriorCohort, totalFromScore(posteriorScore), 1)),
+          totalPlus2: packageRows(totalsByRule(posteriorCohort, totalFromScore(posteriorScore), 2)),
+          runLine: runLinePackage(posteriorCohort, (game) => scoreRunLineSide(game, posteriorScore(game))),
+        },
+        pairedBaselines: {
+          storedIndependentScore: scoreRule(cohort, storedIndependentScore, games),
+          storedPosteriorScore: scoreRule(posteriorCohort, storedPosteriorScore, games),
+          shippedMoneyline: packageRows(picksByRule(cohort, storedMlSide, mlOutcome)),
+          marketFavoriteMoneyline: packageRows(marketBaseline),
+          storedIndependentMoneyline: packageRows(picksByRule(
+            cohort,
+            (game) => projectedMlSide(game, "independent_home_diff"),
+            mlOutcome,
+          )),
+          storedPosteriorMoneyline: packageRows(picksByRule(
+            posteriorCohort,
+            (game) => projectedMlSide(game, "posterior_home_diff"),
+            mlOutcome,
+          )),
+          storedIndependentTotal: packageRows(totalsByRule(
+            cohort,
+            (game) => projectionTotalSide(game, "independent_total"),
+          )),
+          storedPosteriorTotal: packageRows(totalsByRule(
+            posteriorCohort,
+            (game) => projectionTotalSide(game, "posterior_total"),
+          )),
+          marketUnderdogRunLine: runLinePackage(cohort, marketUnderdogSide),
+          marketUnderdogRunLinePosteriorCohort: runLinePackage(posteriorCohort, marketUnderdogSide),
+        },
+      }];
+    })),
+  };
+}
+
 function storedTotalSide(game: Game): TotalSide | null {
   return game.total?.side === "over" || game.total?.side === "under" ? game.total.side : null;
 }
@@ -757,10 +1166,9 @@ function inningsWeightedIndependent(game: Game, mode: PitchingMode): Scores | nu
   };
 }
 
-function candidatePosterior(game: Game, mode: PitchingMode): Scores | null {
+function candidatePosteriorFromIndependent(game: Game, candidateIndependent: Scores | null): Scores | null {
   const row = game.ml ?? game.total;
   const audit = v22(row);
-  const candidateIndependent = inningsWeightedIndependent(game, mode);
   const storedIndependent = {
     home: num(audit.independent_home_runs),
     away: num(audit.independent_away_runs),
@@ -787,6 +1195,10 @@ function candidatePosterior(game: Game, mode: PitchingMode): Scores | null {
     home: Math.max(0.05, trust * candidateIndependent.home + marketWeight * marketHome + homeCorrection),
     away: Math.max(0.05, trust * candidateIndependent.away + marketWeight * marketAway + awayCorrection),
   };
+}
+
+function candidatePosterior(game: Game, mode: PitchingMode): Scores | null {
+  return candidatePosteriorFromIndependent(game, inningsWeightedIndependent(game, mode));
 }
 
 function scoreMetric(rows: Array<{ game: Game; prediction: Scores }>): ErrorMetric {
@@ -1152,9 +1564,10 @@ function storedIndependentScore(game: Game): Scores | null {
 function candidateTotalDecision(
   game: Game,
   pushNormalize = false,
+  scoreOverride: Scores | null = null,
 ): CandidateTotalDecision | null {
   const row = game.total;
-  const score = candidatePosterior(game, "arithmetic_preserve_margin");
+  const score = scoreOverride ?? candidatePosterior(game, "arithmetic_preserve_margin");
   const line = totalLine(game);
   if (!row || !score || line === null) return null;
 
@@ -1672,6 +2085,9 @@ function predictionFromSnapshot(
   scoreGapCalibration: ScoreGapCalibration | null = null,
   preserveScoreGapProbability = false,
   structuralScope: StructuralRepairScope | null = null,
+  independentOverride: Scores | null = null,
+  posteriorOverride: Scores | null = null,
+  recomputeMoneyline = false,
 ): WriterPrediction | null {
   const sourceRow = game.total ?? game.ml;
   if (!sourceRow) return null;
@@ -1680,27 +2096,31 @@ function predictionFromSnapshot(
   const framework = obj(sourceSnapshot.framework_grades_at_lock);
   const baselineScores = storedPosteriorScore(game);
   const baselineTotalSide = String(obj(sourceSnapshot.total_projection_reconciliation).reconciled_total_side);
-  const mlProb = num(sourceV22.ml_model_prob);
+  const baselineMlProb = num(sourceV22.ml_model_prob);
   const baselineOuProb = num(sourceV22.ou_model_prob);
-  const margin = num(sourceV22.posterior_home_diff);
+  const baselineMargin = num(sourceV22.posterior_home_diff);
   if (
-    !baselineScores || mlProb === null || baselineOuProb === null || margin === null ||
+    !baselineScores || baselineMlProb === null || baselineOuProb === null || baselineMargin === null ||
     (baselineTotalSide !== "over" && baselineTotalSide !== "under")
   ) return null;
 
   let scores = baselineScores;
+  let mlProb = baselineMlProb;
+  let margin = baselineMargin;
+  let mlGrade = typeof framework.ml_grade === "string" ? framework.ml_grade : null;
+  let mlSignalType = typeof framework.ml_signal_type === "string" ? framework.ml_signal_type : null;
   let totalSide = baselineTotalSide as TotalSide;
   let ouProb = baselineOuProb;
   let sportSpecific = { ...sourceSnapshot };
   if (candidate) {
-    const candidateScores = structuralScope === null
+    const candidateScores = posteriorOverride ?? (structuralScope === null
       ? candidatePosterior(game, "arithmetic_preserve_margin")
-      : scopedStructuralPosterior(game, structuralScope);
-    const independent = structuralScope === null
+      : scopedStructuralPosterior(game, structuralScope));
+    const independent = independentOverride ?? (structuralScope === null
       ? inningsWeightedIndependent(game, "arithmetic_preserve_margin")
-      : scopedStructuralIndependent(game, structuralScope);
+      : scopedStructuralIndependent(game, structuralScope));
     const decision = scoreGapCalibration === null
-      ? candidateTotalDecision(game)
+      ? candidateTotalDecision(game, false, candidateScores)
       : scoreGapTotalDecision(game, scoreGapCalibration, candidateScores);
     const line = totalLine(game);
     const noVig = totalNoVigProbability(game);
@@ -1736,6 +2156,79 @@ function predictionFromSnapshot(
     const regularizedEdge = regularizedMarketProbability === null
       ? null
       : Math.round((regularizedPickedProbability - regularizedMarketProbability) * 1_000) / 10;
+    let candidateMlAudit: Record<string, unknown> = {};
+    let candidateMlSportSpecific: Record<string, unknown> = {};
+    if (recomputeMoneyline) {
+      const rawHomeProbability = homeWinProbabilityPoisson(candidateScores.home, candidateScores.away);
+      const side: Side = rawHomeProbability >= 0.5 ? "home" : "away";
+      const rawPickedProbability = side === "home" ? rawHomeProbability : 1 - rawHomeProbability;
+      const marketHomeProbability = homeMarketProbability(game.ml);
+      const marketPickedProbability = marketHomeProbability === null
+        ? null
+        : side === "home" ? marketHomeProbability : 1 - marketHomeProbability;
+      const exclusion = obj(sourceV22.evaluation_only_price_exclusion);
+      const regularized = regularizeProbability({
+        rawProb: rawPickedProbability,
+        marketProb: exclusion.moneyline_forecast_excluded === true ? null : marketPickedProbability,
+        k: 0.1,
+        maxDistancePp: 6,
+      });
+      mlProb = regularized.regularizedProb ?? rawPickedProbability;
+      margin = candidateScores.home - candidateScores.away;
+      const edgePct = marketPickedProbability === null
+        ? null
+        : Math.round((mlProb - marketPickedProbability) * 1_000) / 10;
+      const odds = mlSideOdds(game, side);
+      const priorBlockReason = String(sourceV22.ml_best_angle_block_reason ?? "");
+      const neutralFallbackBlock = /key feature group/i.test(priorBlockReason);
+      const hardBlockReason = exclusion.moneyline_forecast_excluded === true
+        ? "evaluation-only Moneyline price has no target-excluded forecast corroboration"
+        : neutralFallbackBlock
+          ? "key feature group on neutral fallback / missing for both sides"
+          : null;
+      const gradeResult = computePlayGrade({
+        modelProb: mlProb,
+        marketProb: marketPickedProbability,
+        americanOdds: odds,
+        dataQualityTier: qualityTier(game),
+        provisional: sourceV22.provisional === true,
+        isHeld: false,
+        minBestAngleEdgePct: 5,
+        minBestAngleConfidencePct: 56,
+        marketProbIsFallback: marketPickedProbability === null,
+        bestAngleHardBlockReason: hardBlockReason,
+      });
+      mlGrade = gradeResult.grade;
+      mlSignalType = gradeResult.predictionType;
+      candidateMlAudit = {
+        ml_raw_model_prob: rawPickedProbability,
+        ml_raw_edge_pct: marketPickedProbability === null
+          ? null
+          : Math.round((rawPickedProbability - marketPickedProbability) * 1_000) / 10,
+        ml_regularized_model_prob: mlProb,
+        ml_regularized_edge_pct: edgePct,
+        ml_model_prob: mlProb,
+        ml_market_prob: marketPickedProbability,
+        ml_edge_pct: edgePct,
+        ml_play_grade: gradeResult.grade,
+        ml_prediction_type: gradeResult.predictionType,
+        ml_best_angle_eligible: gradeResult.grade === "best_angle" && hardBlockReason === null,
+        ml_no_bet_reason: gradeResult.noBetReason,
+        ml_market_aligned: gradeResult.marketAligned,
+        ml_best_angle_reason: gradeResult.bestAngleReason,
+        ml_best_angle_blocked: gradeResult.bestAngleBlocked,
+        ml_best_angle_block_reason: gradeResult.bestAngleBlockReason,
+        ml_requires_market_confirmation: gradeResult.grade === "best_angle" && regularized.capApplied,
+      };
+      candidateMlSportSpecific = {
+        ml_play_grade: gradeResult.grade,
+        ml_prediction_type: gradeResult.predictionType,
+        ml_best_angle_eligible: gradeResult.grade === "best_angle" && hardBlockReason === null,
+        ml_no_bet_reason: gradeResult.noBetReason,
+        ml_market_aligned: gradeResult.marketAligned,
+        ml_best_angle_reason: gradeResult.bestAngleReason,
+      };
+    }
     const candidateV22 = {
       ...sourceV22,
       independent_home_runs: independent.home,
@@ -1752,6 +2245,7 @@ function predictionFromSnapshot(
       posterior_away_runs: candidateScores.away,
       posterior_total: candidateScores.home + candidateScores.away,
       posterior_home_diff: candidateScores.home - candidateScores.away,
+      ...candidateMlAudit,
       ou_raw_model_prob: rawPickedProbability,
       ou_raw_edge_pct: rawEdge,
       ou_regularized_model_prob: regularizedPickedProbability,
@@ -1785,6 +2279,7 @@ function predictionFromSnapshot(
     sportSpecific = {
       ...sportSpecific,
       v2_2_audit: candidateV22,
+      ...candidateMlSportSpecific,
       ou_play_grade: decision.grade,
       ou_prediction_type: decision.predictionType,
       ou_best_angle_eligible: decision.baseBestAngleEligible,
@@ -1792,7 +2287,9 @@ function predictionFromSnapshot(
       ou_market_aligned: decision.marketAligned,
       ou_best_angle_reason: decision.bestAngleReason,
       v2_best_angle_eligible:
-        sourceSnapshot.ml_best_angle_eligible === true || decision.baseBestAngleEligible,
+        (recomputeMoneyline
+          ? candidateMlAudit.ml_best_angle_eligible === true
+          : sourceSnapshot.ml_best_angle_eligible === true) || decision.baseBestAngleEligible,
       total_projection_reconciliation: reconciliation,
     };
     scores = candidateScores;
@@ -1833,10 +2330,10 @@ function predictionFromSnapshot(
     sport_specific: sportSpecific,
     predicted_home_score: scores.home,
     predicted_away_score: scores.away,
-    ml_grade: typeof framework.ml_grade === "string" ? framework.ml_grade : null,
+    ml_grade: mlGrade,
     ou_grade: typeof framework.ou_grade === "string" ? framework.ou_grade : null,
     nrfi_grade: null,
-    ml_signal_type: typeof framework.ml_signal_type === "string" ? framework.ml_signal_type : null,
+    ml_signal_type: mlSignalType,
     ou_signal_type: typeof framework.ou_signal_type === "string" ? framework.ou_signal_type : null,
     nrfi_signal_type: null,
     ml_market_signal: typeof framework.ml_market_signal === "string" ? framework.ml_market_signal : null,
@@ -2439,6 +2936,46 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     : scopedActionRows
         .filter((row) => qualifiesPolicy(row, selectedScopedPolicy.policy))
         .map((row) => row.record);
+  const scopedSelectedActionKeySet = new Set(
+    scopedSelectedActionRecords.map((record) => `${record.game_id}:${record.market}`),
+  );
+  const predefinedBestAnglePolicies: Record<string, ActionPolicy> = {
+    balanced: {
+      minModelProbability: 0.53,
+      minProjectionGap: 0.75,
+      minEdgePp: 2,
+      minAmericanOdds: -150,
+      rejectAdverseMovement: false,
+    },
+    strict: {
+      minModelProbability: 0.54,
+      minProjectionGap: 1,
+      minEdgePp: 3,
+      minAmericanOdds: -150,
+      rejectAdverseMovement: false,
+    },
+    conservative: {
+      minModelProbability: 0.55,
+      minProjectionGap: 1.25,
+      minEdgePp: 4,
+      minAmericanOdds: -130,
+      rejectAdverseMovement: false,
+    },
+  };
+  const predefinedBestAngleAudit = Object.fromEntries(Object.entries(predefinedBestAnglePolicies).map(
+    ([name, policy]) => {
+      const records = scopedActionRows
+        .filter((row) =>
+          scopedSelectedActionKeySet.has(`${row.record.game_id}:${row.record.market}`) &&
+          qualifiesPolicy(row, policy))
+        .map((row) => row.record);
+      return [name, {
+        policy,
+        all: recordMetric(gamesById, records),
+        chronology: chronology(records),
+      }];
+    },
+  ));
   const incumbentActionKeys = new Set(
     baseTotals.filter(actionable).map((record) => `${record.game_id}:${record.market}`),
   );
@@ -2766,6 +3303,18 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
         rows: demotedIncumbentActions.length,
         incumbentDirection: recordMetric(gamesById, demotedIncumbentActions),
       },
+      predefinedBestAngleAudit,
+      diagnostics: {
+        bySide: groupedRecordMetrics(
+          scopedSelectedActionRecords,
+          (record) => String(record.side ?? "none"),
+        ),
+        byLineDirection: groupedRecordMetrics(scopedSelectedActionRecords, lineDirection),
+        byActionRule: groupedRecordMetrics(
+          scopedSelectedActionRecords,
+          (record) => String(obj(obj(record.snapshot_json).decision_pipeline).action_rule_id ?? "none"),
+        ),
+      },
     },
     scopedDeltas: {
       ...scopedDeltas,
@@ -2809,6 +3358,170 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
   };
 }
 
+function writerMoneylineMetric(gamesById: Map<number, Game>, records: WriterRecord[]): Metric {
+  return metric(records.flatMap((record) => {
+    const game = gamesById.get(record.game_id);
+    if (!game || (record.side !== "home" && record.side !== "away")) return [];
+    return [{
+      gameId: game.gameId,
+      date: game.date,
+      release: "current_writer_replay",
+      outcome: mlOutcome(game, record.side),
+      odds: record.odds_american,
+    } satisfies PickRow];
+  }));
+}
+
+async function integratedIndependentWriterReplay(
+  games: Game[],
+  chronologyUniverse: Game[],
+  candidate: IndependentScoreCandidate,
+): Promise<Record<string, unknown>> {
+  const posteriorScores = new Map<number, Scores>();
+  for (const game of games) {
+    const independent = candidate.scores.get(game.gameId) ?? null;
+    const posterior = candidatePosteriorFromIndependent(game, independent);
+    if (independent && posterior) posteriorScores.set(game.gameId, posterior);
+  }
+  const cohort = games.filter((game) => candidate.scores.has(game.gameId) && posteriorScores.has(game.gameId));
+  const writerGames = await loadWriterGames(cohort);
+  const abbreviations = await loadTeamAbbreviations(writerGames);
+  const gamesById = new Map(cohort.map((game) => [game.gameId, game]));
+  const baselineRecords: WriterRecord[] = [];
+  const candidateRecords: WriterRecord[] = [];
+  const omitted = { missingGame: 0, missingBaseline: 0, missingCandidate: 0, missingLines: 0 };
+  for (const date of [...new Set(cohort.map((game) => game.date))].sort()) {
+    const slate = cohort.filter((game) => game.date === date);
+    const slateGames: WriterGame[] = [];
+    const baselinePredictions = new Map<number, WriterPrediction>();
+    const candidatePredictions = new Map<number, WriterPrediction>();
+    const oddsByGameId = new Map<number, ReturnType<typeof buildGameOddsSnapshot>>();
+    const linesByGameId = new Map<number, ReadonlyArray<WriterLine>>();
+    const openersByGameId = new Map<number, ReadonlyArray<WriterOpener>>();
+    const signalsByGameId = new Map<number, ReadonlyArray<WriterSignal>>();
+    const splitsByGameId = new Map<number, ReadonlyArray<WriterSplit>>();
+    for (const game of slate) {
+      const writerGame = writerGames.get(game.gameId);
+      const baseline = predictionFromSnapshot(game, false);
+      const independent = candidate.scores.get(game.gameId) ?? null;
+      const posterior = posteriorScores.get(game.gameId) ?? null;
+      const integrated = predictionFromSnapshot(
+        game,
+        true,
+        null,
+        false,
+        null,
+        independent,
+        posterior,
+        true,
+      );
+      const evidence = writerEvidence(game);
+      if (!writerGame) { omitted.missingGame++; continue; }
+      if (!baseline) { omitted.missingBaseline++; continue; }
+      if (!integrated) { omitted.missingCandidate++; continue; }
+      if (evidence.lines.length === 0) { omitted.missingLines++; continue; }
+      slateGames.push(writerGame);
+      baselinePredictions.set(game.gameId, baseline);
+      candidatePredictions.set(game.gameId, integrated);
+      const startMs = writerGame.game_date === null ? undefined : Date.parse(writerGame.game_date) - 60 * 60 * 1_000;
+      oddsByGameId.set(game.gameId, buildGameOddsSnapshot(evidence.lines, {
+        gameId: game.gameId,
+        freshnessReferenceMs: startMs !== undefined && Number.isFinite(startMs) ? startMs : undefined,
+      }));
+      linesByGameId.set(game.gameId, evidence.lines);
+      openersByGameId.set(game.gameId, evidence.openers);
+      signalsByGameId.set(game.gameId, evidence.signals);
+      splitsByGameId.set(game.gameId, evidence.splits);
+    }
+    const common = {
+      sport: "mlb" as const,
+      slateDate: date,
+      launchDay: false,
+      games: slateGames,
+      abbrevByTeamId: abbreviations,
+      signalsByGameId,
+      oddsByGameId,
+      openersByGameId,
+      currentLinesByGameId: linesByGameId,
+      sourceAwareSplitsByGameId: splitsByGameId,
+    };
+    baselineRecords.push(...buildPredictionRecordsFromSlate({ ...common, predictionByGameId: baselinePredictions }));
+    candidateRecords.push(...buildPredictionRecordsFromSlate({ ...common, predictionByGameId: candidatePredictions }));
+  }
+  const actionable = (record: WriterRecord) =>
+    !record.held && !record.no_bet && (record.play_grade === "lean" || record.play_grade === "best_angle");
+  const marketRecords = (records: WriterRecord[], market: "moneyline" | "total") =>
+    records.filter((record) => record.market === market);
+  const metricFor = (records: WriterRecord[], market: "moneyline" | "total") =>
+    market === "moneyline" ? writerMoneylineMetric(gamesById, records) : recordMetric(gamesById, records);
+  const chronology = (records: WriterRecord[], market: "moneyline" | "total") => Object.fromEntries(
+    (['train', 'validation', 'holdout'] as const).map((part) => [part, metricFor(
+      records.filter((record) => {
+        const game = gamesById.get(record.game_id);
+        return game !== undefined && chronologicalLabel(chronologyUniverse, game) === part;
+      }),
+      market,
+    )]),
+  );
+  const summarize = (records: WriterRecord[], market: "moneyline" | "total") => ({
+    all: metricFor(records, market),
+    chronology: chronology(records, market),
+    board: {
+      rows: records.length,
+      actionable: records.filter(actionable).length,
+      bestAngles: records.filter((record) => record.best_angle).length,
+      gradeCounts: Object.fromEntries([...new Set(records.map((record) => record.play_grade ?? "ungraded"))]
+        .sort()
+        .map((grade) => [grade, records.filter((record) => (record.play_grade ?? "ungraded") === grade).length])),
+    },
+  });
+  const deltas = {
+    moneyline: { sideChanges: 0, corrections: 0, harms: 0, promotions: 0, demotions: 0 },
+    total: { sideChanges: 0, corrections: 0, harms: 0, promotions: 0, demotions: 0 },
+  };
+  const baselineByKey = new Map(baselineRecords.map((record) => [`${record.game_id}:${record.market}`, record]));
+  for (const after of candidateRecords) {
+    if (after.market !== "moneyline" && after.market !== "total") continue;
+    const before = baselineByKey.get(`${after.game_id}:${after.market}`);
+    const game = gamesById.get(after.game_id);
+    if (!before || !game) continue;
+    const market = after.market;
+    const delta = deltas[market];
+    if (before.side !== after.side) {
+      delta.sideChanges++;
+      if (market === "moneyline" && (before.side === "home" || before.side === "away") && (after.side === "home" || after.side === "away")) {
+        const oldResult = mlOutcome(game, before.side);
+        const newResult = mlOutcome(game, after.side);
+        if (oldResult === "loss" && newResult === "win") delta.corrections++;
+        if (oldResult === "win" && newResult === "loss") delta.harms++;
+      }
+      if (market === "total" && before.line_value !== null && after.line_value !== null &&
+        (before.side === "over" || before.side === "under") && (after.side === "over" || after.side === "under")) {
+        const oldResult = totalOutcome(before.side, before.line_value, game);
+        const newResult = totalOutcome(after.side, after.line_value, game);
+        if (oldResult === "loss" && newResult === "win") delta.corrections++;
+        if (oldResult === "win" && newResult === "loss") delta.harms++;
+      }
+    }
+    if (!actionable(before) && actionable(after)) delta.promotions++;
+    if (actionable(before) && !actionable(after)) delta.demotions++;
+  }
+  const output: Record<string, unknown> = {
+    protocol: "Train-only independent score calibration passed through the incumbent posterior reconstruction, Poisson probability heads, frozen lock-time market reader, exact-price arbitration, and final grade writer.",
+    candidate: candidate.name,
+    pairedGames: cohort.length,
+    omitted,
+    deltas,
+  };
+  for (const market of ["moneyline", "total"] as const) {
+    output[market] = {
+      incumbent: summarize(marketRecords(baselineRecords, market), market),
+      candidate: summarize(marketRecords(candidateRecords, market), market),
+    };
+  }
+  return output;
+}
+
 function markdown(report: Record<string, unknown>): string {
   const lines = [
     "# MLB foundational scoreboard",
@@ -2840,6 +3553,7 @@ async function main(): Promise<void> {
   const options = args();
   const rows = await loadRows(options.from, options.to);
   const games = gamesFromRows(rows);
+  const independentScoreCandidates = buildIndependentScoreCandidates(games);
   const chronologyWindows = Object.fromEntries(
     (["train", "validation", "holdout"] as const).map((part) => {
       const values = games.filter((game) => chronologicalLabel(games, game) === part);
@@ -3052,6 +3766,12 @@ async function main(): Promise<void> {
     }
   }
   const writerReplay = await currentWriterReplay(candidateCohort, games);
+  const integratedIndependentReplay = Object.fromEntries(await Promise.all(
+    independentScoreCandidates.map(async (candidate) => [
+      candidate.name,
+      await integratedIndependentWriterReplay(games, games, candidate),
+    ]),
+  ));
   const report = {
     generatedAt: new Date().toISOString(),
     window: { from: options.from, to: options.to },
@@ -3067,6 +3787,7 @@ async function main(): Promise<void> {
     scoreModels,
     moneyline: pack(mlRules),
     moneylineArchitectureAudit: moneylineArchitectureAudit(games),
+    independentScoreCandidateAudit: independentScoreCandidateAudit(games, independentScoreCandidates),
     pairedCandidateCohort: {
       games: candidateCohort.length,
       scoreModels: {
@@ -3189,6 +3910,7 @@ async function main(): Promise<void> {
       ),
     },
     currentWriterReplay: writerReplay,
+    integratedIndependentWriterReplay: integratedIndependentReplay,
     runLineDerived: pack(runLineRules),
     totals: pack(totalRules),
   };
