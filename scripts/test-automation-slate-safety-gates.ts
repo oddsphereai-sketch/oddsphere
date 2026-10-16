@@ -18,6 +18,7 @@ import {
   DEFAULT_MIN_STARTER_COVERAGE_CATASTROPHIC_PCT,
   DEFAULT_MAX_MISSING_BOTH_FOR_CATASTROPHIC,
   IN_PROGRESS_BDL_STATUSES,
+  verifiedOfficialShortSlateIncompleteStarterIds,
 } from "../lib/services/automationSlateSafetyGates";
 
 let pass = 0;
@@ -100,6 +101,50 @@ async function main() {
 
   // ── G2 — Starter coverage ───────────────────────────────────────────
   section("G2 — starter coverage");
+
+  {
+    const games = [
+      { external_id: 15467425, mlb_stats_game_pk: 849817, home_pitcher_id: null, away_pitcher_id: 13777 },
+    ];
+    const exact = verifiedOfficialShortSlateIncompleteStarterIds({
+      officialGameCount: 1,
+      officialMissingByGamePk: new Map([
+        [849817, { homeMissing: true, awayMissing: false }],
+      ]),
+      games,
+    });
+    check("official short-slate verification accepts the exact game and missing side", exact[0] === 15467425);
+    check(
+      "official short-slate verification rejects a missing-side mismatch",
+      verifiedOfficialShortSlateIncompleteStarterIds({
+        officialGameCount: 1,
+        officialMissingByGamePk: new Map([
+          [849817, { homeMissing: false, awayMissing: true }],
+        ]),
+        games,
+      }).length === 0,
+    );
+    check(
+      "official short-slate verification rejects a game-count mismatch",
+      verifiedOfficialShortSlateIncompleteStarterIds({
+        officialGameCount: 2,
+        officialMissingByGamePk: new Map([
+          [849817, { homeMissing: true, awayMissing: false }],
+        ]),
+        games,
+      }).length === 0,
+    );
+    check(
+      "official short-slate verification rejects an internal-id/MLB-gamePk mixup",
+      verifiedOfficialShortSlateIncompleteStarterIds({
+        officialGameCount: 1,
+        officialMissingByGamePk: new Map([
+          [15467425, { homeMissing: true, awayMissing: false }],
+        ]),
+        games,
+      }).length === 0,
+    );
+  }
 
   {
     // Empty games array → deferred
@@ -250,11 +295,35 @@ async function main() {
     const r = assessStarterCoverage({
       sport: "mlb",
       games,
-      allowOfficialShortSlatePendingCards: true,
+      verifiedOfficialIncompleteStarterExternalIds: [15467368],
     });
     check("official one-game all-TBD slate → partial_ok", r.status === "partial_ok");
     check("official all-TBD game uses the starter-neutral M2 path", r.m2_excluded_external_ids.length === 0);
     check("official all-TBD reason names bullpen path", r.reason.includes("bullpen path"));
+  }
+  {
+    const games = [
+      { external_id: 15467425, home_pitcher_id: null, away_pitcher_id: 13777 },
+    ];
+    const r = assessStarterCoverage({
+      sport: "mlb",
+      games,
+      verifiedOfficialIncompleteStarterExternalIds: [15467425],
+    });
+    check("official one-game single-starter slate → partial_ok", r.status === "partial_ok");
+    check("official single-starter game reaches the neutral fallback", r.m2_excluded_external_ids.length === 0);
+    check("official single-starter reason remains explicit", r.reason.includes("missing one starter"));
+  }
+  {
+    const games = [
+      { external_id: 15467425, home_pitcher_id: null, away_pitcher_id: 13777 },
+    ];
+    const r = assessStarterCoverage({
+      sport: "mlb",
+      games,
+      verifiedOfficialIncompleteStarterExternalIds: [99999999],
+    });
+    check("unmatched one-game starter gap still fails closed", r.status === "fail_closed");
   }
   {
     const games = Array.from({ length: 3 }, (_, i) => ({
@@ -265,7 +334,7 @@ async function main() {
     const r = assessStarterCoverage({
       sport: "mlb",
       games,
-      allowOfficialShortSlatePendingCards: true,
+      verifiedOfficialIncompleteStarterExternalIds: games.map((game) => game.external_id),
     });
     check("three-game all-missing slate cannot use short-slate exception", r.status === "fail_closed");
   }

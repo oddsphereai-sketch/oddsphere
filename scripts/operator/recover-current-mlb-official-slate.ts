@@ -14,10 +14,13 @@ import {
   fetchMlbStatsScheduleRaw,
 } from "../../lib/providers/real_api/_mlbStatsApiClient";
 import { parseMlbStatsSchedule } from "../../lib/services/starterResolver";
+import { verifiedOfficialShortSlateIncompleteStarterIds } from "../../lib/services/automationSlateSafetyGates";
 
 type GameRow = {
   id: number;
   external_id: number;
+  home_pitcher_id: number | null;
+  away_pitcher_id: number | null;
   slate_status: string;
   provider_ids: unknown;
   home_team: { abbreviation: string | null } | null;
@@ -68,7 +71,7 @@ async function main() {
     throw new Error(`MLB Stats has no supported official games for ${slateDate}; refusing repair.`);
   }
   const officialPks = new Set(official.map((game) => game.gamePk));
-  const officialTbdPks = new Set(
+  const officialMissingByGamePk = new Map(
     ((officialRaw as {
       dates?: Array<{
         games?: Array<{
@@ -87,16 +90,21 @@ async function main() {
         game.gameType !== "A" &&
         game.gameType !== "S" &&
         game.gameType !== "E" &&
-        game.teams?.home?.probablePitcher == null &&
-        game.teams?.away?.probablePitcher == null,
+        (game.teams?.home?.probablePitcher == null || game.teams?.away?.probablePitcher == null),
       )
-      .map((game) => game.gamePk as number),
+      .map((game) => [
+        game.gamePk as number,
+        {
+          homeMissing: game.teams?.home?.probablePitcher == null,
+          awayMissing: game.teams?.away?.probablePitcher == null,
+        },
+      ] as const),
   );
 
   const { data, error } = await supabase
     .from("games")
     .select(
-      "id, external_id, slate_status, provider_ids, " +
+      "id, external_id, slate_status, provider_ids, home_pitcher_id, away_pitcher_id, " +
       "home_team:home_team_id ( abbreviation ), " +
       "away_team:away_team_id ( abbreviation )",
     )
@@ -118,14 +126,20 @@ async function main() {
   }
 
   const officialExternalIds = officialRows.map((game) => game.external_id);
-  const verifiedOfficialTbdStarterExternalIds = officialRows.flatMap((game) => {
-    const gamePk = mlbStatsGamePk(game.provider_ids);
-    return gamePk !== null && officialTbdPks.has(gamePk) ? [game.external_id] : [];
+  const verifiedOfficialIncompleteStarterExternalIds = verifiedOfficialShortSlateIncompleteStarterIds({
+    officialGameCount: official.length,
+    officialMissingByGamePk,
+    games: officialRows.map((game) => ({
+      external_id: game.external_id,
+      mlb_stats_game_pk: mlbStatsGamePk(game.provider_ids),
+      home_pitcher_id: game.home_pitcher_id,
+      away_pitcher_id: game.away_pitcher_id,
+    })),
   });
   const dryRun = await generatePredictionsForSlate("mlb", slateDate, "morning_draft", {
     writeToDb: false,
     gameExternalIdsFilter: officialExternalIds,
-    verifiedOfficialTbdStarterExternalIds,
+    verifiedOfficialIncompleteStarterExternalIds,
     respectLocks: true,
   });
   const report = {
@@ -298,7 +312,7 @@ async function main() {
     const model = await generatePredictionsForSlate("mlb", slateDate, "morning_draft", {
       writeToDb: true,
       gameExternalIdsFilter: officialExternalIds,
-      verifiedOfficialTbdStarterExternalIds,
+      verifiedOfficialIncompleteStarterExternalIds,
       respectLocks: true,
     });
     if (model.errors.length > 0 || model.predictions.length !== officialRows.length) {

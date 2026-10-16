@@ -791,6 +791,13 @@ function previewSportAvailability(activePreviewSports: Sport[], sportActivity: D
       ...availability,
       [activitySport]: {
         ...(availability[activitySport as Sport] ?? { isLive: true }),
+        // A game-bearing published member artifact is the launch signal for
+        // activity-gated models such as CBB. Empty/prelaunch reads preserve
+        // the registry's disabled state instead of exposing a hidden board.
+        isLive:
+          activity && activity.gameCount > 0
+            ? true
+            : availability[activitySport as Sport]?.isLive ?? true,
         statusLabel: activity && activity.gameCount > 0 ? "Active" : "No games today",
       },
     }),

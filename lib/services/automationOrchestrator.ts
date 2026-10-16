@@ -72,6 +72,7 @@ import {
   assessStarterCoverage,
   assessInProgressGames,
   anyGateFailedClosed,
+  verifiedOfficialShortSlateIncompleteStarterIds,
   type MinimumGameCountResult,
   type StarterCoverageResult,
   type InProgressGamesResult,
@@ -86,6 +87,18 @@ import {
 } from "./automationSlateLockSnapshot";
 import type { Sport } from "../types/domain/Sport";
 import { fetchMlbStatsScheduleRaw } from "../providers/real_api/_mlbStatsApiClient";
+
+function mlbStatsGamePkFromProviderIds(providerIds: unknown): number | null {
+  if (!providerIds || typeof providerIds !== "object") return null;
+  const value = (providerIds as Record<string, unknown>).mlb_stats;
+  if (typeof value === "number" && Number.isInteger(value)) return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+  if (!value || typeof value !== "object") return null;
+  const id = (value as Record<string, unknown>).id;
+  if (typeof id === "number" && Number.isInteger(id)) return id;
+  if (typeof id === "string" && /^\d+$/.test(id)) return Number(id);
+  return null;
+}
 
 // ─── Pure gate helpers — re-exported from automationOrchestratorGates ───
 //
@@ -417,7 +430,10 @@ export async function runSlateCycleAutomated(opts: {
   const blockingReasons: string[] = [];
   const warnings: string[] = [];
   let officialScheduledGameCount: number | null = null;
-  let officialShortSlateAllStartersTbd = false;
+  const officialShortSlateIncompleteStarters = new Map<
+    number,
+    { homeMissing: boolean; awayMissing: boolean }
+  >();
   let officialMlbScheduleRaw: unknown = null;
   if (opts.sport === "mlb") {
     try {
@@ -428,6 +444,7 @@ export async function runSlateCycleAutomated(opts: {
       const schedule = officialMlbScheduleRaw as {
         dates?: Array<{
           games?: Array<{
+            gamePk?: number;
             gameType?: string;
             teams?: {
               home?: { probablePitcher?: unknown };
@@ -441,14 +458,19 @@ export async function runSlateCycleAutomated(opts: {
         game.gameType !== "A" && game.gameType !== "S" && game.gameType !== "E"
       );
       officialScheduledGameCount = supportedOfficialGames.length;
-      officialShortSlateAllStartersTbd =
-        supportedOfficialGames.length > 0 &&
-        supportedOfficialGames.length <= 2 &&
-        supportedOfficialGames.every(
-          (game) =>
-            game.teams?.home?.probablePitcher == null &&
-            game.teams?.away?.probablePitcher == null,
-        );
+      if (supportedOfficialGames.length > 0 && supportedOfficialGames.length <= 2) {
+        for (const game of supportedOfficialGames) {
+          if (!Number.isFinite(game.gamePk)) continue;
+          const homeMissing = game.teams?.home?.probablePitcher == null;
+          const awayMissing = game.teams?.away?.probablePitcher == null;
+          if (homeMissing || awayMissing) {
+            officialShortSlateIncompleteStarters.set(game.gamePk as number, {
+              homeMissing,
+              awayMissing,
+            });
+          }
+        }
+      }
     } catch (error) {
       warnings.push(`official MLB schedule count unavailable: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1293,6 +1315,7 @@ export async function runSlateCycleAutomated(opts: {
   const t0g2 = Date.now();
   type SlateRow = {
     external_id: number;
+    provider_ids: unknown;
     game_date: string | null;
     home_pitcher_id: number | null;
     away_pitcher_id: number | null;
@@ -1301,11 +1324,12 @@ export async function runSlateCycleAutomated(opts: {
     game_predictions: { locked_at: string | null }[] | null;
   };
   let slateRows: SlateRow[] = [];
+  let verifiedOfficialIncompleteStarterExternalIds: number[] = [];
   try {
     const { data } = await supabase
       .from("games")
       .select(
-        "external_id, game_date, home_pitcher_id, away_pitcher_id, " +
+        "external_id, provider_ids, game_date, home_pitcher_id, away_pitcher_id, " +
         "home_team:home_team_id ( abbreviation ), " +
         "away_team:away_team_id ( abbreviation ), " +
         "game_predictions ( locked_at )"
@@ -1314,6 +1338,16 @@ export async function runSlateCycleAutomated(opts: {
       .eq("slate_date", opts.date)
       .neq("slate_status", "hidden");
     slateRows = (data ?? []) as unknown as SlateRow[];
+    verifiedOfficialIncompleteStarterExternalIds = verifiedOfficialShortSlateIncompleteStarterIds({
+      officialGameCount: officialScheduledGameCount,
+      officialMissingByGamePk: officialShortSlateIncompleteStarters,
+      games: slateRows.map((row) => ({
+        external_id: row.external_id,
+        mlb_stats_game_pk: mlbStatsGamePkFromProviderIds(row.provider_ids),
+        home_pitcher_id: row.home_pitcher_id,
+        away_pitcher_id: row.away_pitcher_id,
+      })),
+    });
     g2Result = assessStarterCoverage({
       sport: opts.sport,
       games: slateRows.map((r) => ({
@@ -1321,7 +1355,7 @@ export async function runSlateCycleAutomated(opts: {
         home_pitcher_id: r.home_pitcher_id,
         away_pitcher_id: r.away_pitcher_id,
       })),
-      allowOfficialShortSlatePendingCards: officialShortSlateAllStartersTbd,
+      verifiedOfficialIncompleteStarterExternalIds,
     });
     // R-19 Phase 5g.4 — G2 step mode reflects the new tri-state
     // semantics. "fail_closed" is now reserved for catastrophic coverage
@@ -1543,9 +1577,9 @@ export async function runSlateCycleAutomated(opts: {
       const res = await generatePredictionsForSlate(opts.sport, opts.date, "morning_draft", {
         writeToDb: writeMode,
         excludeGameExternalIds: combinedM2Exclusions,
-        verifiedOfficialTbdStarterExternalIds:
-          opts.sport === "mlb" && officialShortSlateAllStartersTbd
-            ? g2Result?.starter_warning_external_ids ?? []
+        verifiedOfficialIncompleteStarterExternalIds:
+          opts.sport === "mlb"
+            ? verifiedOfficialIncompleteStarterExternalIds
             : [],
       });
       // R-19 Phase 4b — report lock-skipped counts alongside model output.

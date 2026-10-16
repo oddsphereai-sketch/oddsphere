@@ -155,9 +155,9 @@ check(
     layers.schedule_time_policy === "mlb_official_schedule_time_v1_2026_07_30",
 );
 check(
-  "MLB layer stamp records projected-lineup continuity eligibility",
+  "MLB layer stamp records official short-slate starter continuity eligibility",
   layers.input_eligibility_policy ===
-    "mlb_input_eligibility_v2_projected_lineup_last_verified_continuity_2026_10_07",
+    "mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16",
 );
 const strongWinnerResistanceLean = resolveMlStrongWinnerResistanceLean({
   blocked: false,
