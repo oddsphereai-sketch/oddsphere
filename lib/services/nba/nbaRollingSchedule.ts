@@ -8,7 +8,7 @@ import { isPublicallyTracked } from "../../config/officialTrackingStart";
 export const NBA_REGULAR_SEASON_OPENER = "2026-10-20" as const;
 export const NBA_ROLLING_SCHEDULE_DAYS = 7 as const;
 export const NBA_ROLLING_SCHEDULE_RELEASE =
-  "nba_rolling_member_schedule_2026_10_15_r1_schedule_only" as const;
+  "nba_rolling_member_board_2026_10_16_r2_analyzed_predictions" as const;
 
 const MEMBER_SCHEDULE_STATUSES = new Set([
   "STATUS_SCHEDULED",
@@ -78,15 +78,17 @@ export function nbaRollingScheduleWindow(anchorDate: string): {
 }
 
 /**
- * The rolling schedule may be shown ahead of opening night, but an analyzed
- * Daily Edge card is member-eligible only for an official date that is not in
- * the future. Historical regular-season/postseason reads remain available.
+ * Historical official slates remain readable, while future analysis is
+ * bounded to the same seven-day window as the member board. Preseason and
+ * offseason dates never become eligible merely because they are nearby.
  */
 export function nbaMemberAnalysisEligible(
   requestedDate: string,
   currentBoardDate = currentDailyEdgeBoardDate("nba"),
 ): boolean {
-  return isPublicallyTracked("nba", requestedDate) && requestedDate <= currentBoardDate;
+  if (!isPublicallyTracked("nba", requestedDate)) return false;
+  if (requestedDate <= currentBoardDate) return true;
+  return requestedDate <= addDaysToSlate(currentBoardDate, NBA_ROLLING_SCHEDULE_DAYS - 1);
 }
 
 /**

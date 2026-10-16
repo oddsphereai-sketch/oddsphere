@@ -2664,7 +2664,7 @@ function NbaRollingSchedule({ schedule }: { schedule: NbaRollingScheduleDto }) {
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-orange-300/80">Official schedule</p>
           <h2 id="nba-seven-day-schedule" className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">NBA · Next 7 Days</h2>
         </div>
-        <p className="max-w-2xl text-[11px] leading-relaxed text-gray-400 sm:text-right">Matchups are live now. Picks, probabilities, grades, and prices appear only after the game-day model and market checks clear.</p>
+        <p className="max-w-2xl text-[11px] leading-relaxed text-gray-400 sm:text-right">These matchups could not clear the complete model-and-market coverage gate. The last coherent analyzed board remains authoritative.</p>
       </div>
       <div className="space-y-5">
         {[...gamesByDate.entries()].map(([slateDate, games]) => (
@@ -2689,7 +2689,7 @@ function NbaRollingSchedule({ schedule }: { schedule: NbaRollingScheduleDto }) {
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
                     <span className="text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{nbaScheduleStatusLabel(game.status)}</span>
-                    <span className="text-[8px] text-gray-500">Analysis opens game day</span>
+                    <span className="text-[8px] text-gray-500">Analysis temporarily unavailable</span>
                   </div>
                 </article>
               ))}

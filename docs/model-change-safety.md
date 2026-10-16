@@ -505,6 +505,38 @@ demotions: zero; actionable count: four to four. The same deep audit moves from
 eight critical findings to zero. No provider call, writer, schedule, database
 write, model coefficient, copy, label, or layout changes.
 
+## Owner-directed correctness exception: NBA rolling analyzed member board
+
+On 2026-10-16 Daniel Mengel explicitly rejected the live NBA schedule-only
+placeholder because it did not use the shared Daily Edge cards, reader, active
+status, or clickable prediction experience, and directed Oddsphere to expose
+the completed professional model before opening night. This exception is
+limited to the rolling member-board activation documented in
+`docs/model-audits/2026-10-16-nba-rolling-daily-edge-activation.md`.
+
+Every officially eligible NBA regular-season game in the current seven-day
+schedule window may run the unchanged r2 champion and render through the shared
+Daily Edge response, cards, and reader. The official schedule remains the event
+identity and lifecycle authority. A missing analyzed identity fails the entire
+incoming snapshot and preserves the prior coherent board. Preseason/offseason
+games and dates beyond the bounded window remain ineligible. Full daily refresh
+may collect lines for each seeded game date; intraday line refresh is bounded to
+the two nearest active game dates while schedule seeding retains its existing
+current/far-edge scope.
+
+This exception changes no model coefficient, 25/75 market marriage,
+probability distribution, grade threshold, stake, tracking eligibility, T-60
+lock, or settlement rule. It creates no writer and retains the existing
+`prediction_pipeline:nba` lease. The read path cannot create an official record
+or mutate a stored lock. Publication requires a zero-write coverage/coherence
+report, explicit before/after board counts, focused NBA and immutable-reader
+tests, full model-change verification, latest-main integration safety,
+protected PR checks, and live proof that NBA is Active and the shared reader is
+clickable. Roll back the complete member-board/eligibility/refresh release if
+coverage is partial, releases mix, runtime exceeds the publication budget, the
+reader disagrees with the champion tuple, writer overlap appears, or any lock
+changes.
+
 ## Owner-directed provisional exception: NBA professional unified projection r2
 
 On 2026-10-15 Daniel Mengel explicitly directed Oddsphere to stop treating the

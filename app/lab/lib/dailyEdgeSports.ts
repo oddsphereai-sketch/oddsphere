@@ -10,8 +10,7 @@ export type DailyEdgeSportDefinition = {
 };
 
 const NHL_2026_REGULAR_SEASON_START_MS = Date.parse("2026-09-29T04:00:00.000Z");
-const NBA_2026_SCHEDULE_LIVE_START_MS = Date.parse("2026-10-14T04:00:00.000Z");
-const NBA_2026_REGULAR_SEASON_START_MS = Date.parse("2026-10-20T04:00:00.000Z");
+const NBA_2026_MEMBER_BOARD_START_MS = Date.parse("2026-10-14T04:00:00.000Z");
 
 /**
  * One presentation/readiness registry for every Daily Edge surface.
@@ -29,8 +28,7 @@ export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
     key: "nba",
     label: "NBA",
     memberAvailable: true,
-    inSeason: Date.now() >= NBA_2026_REGULAR_SEASON_START_MS,
-    scheduleLive: Date.now() >= NBA_2026_SCHEDULE_LIVE_START_MS,
+    inSeason: Date.now() >= NBA_2026_MEMBER_BOARD_START_MS,
   },
   { key: "cbb", label: "CBB", memberAvailable: false },
   { key: "ucl", label: "UCL", memberAvailable: false, inSeason: false },

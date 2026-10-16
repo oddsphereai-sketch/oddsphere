@@ -23,7 +23,7 @@ assert.equal(isPublicallyTracked("nba", "2026-10-19"), false);
 assert.equal(isPublicallyTracked("nba", "2026-10-20"), true);
 assert.equal(nbaMemberAnalysisEligible("2026-06-13", "2026-10-15"), true);
 assert.equal(nbaMemberAnalysisEligible("2026-10-05", "2026-10-15"), false);
-assert.equal(nbaMemberAnalysisEligible("2026-10-20", "2026-10-15"), false);
+assert.equal(nbaMemberAnalysisEligible("2026-10-20", "2026-10-15"), true);
 assert.equal(nbaMemberAnalysisEligible("2026-10-20", "2026-10-20"), true);
 
 const dailyEdgeRouteSource = readFileSync(

@@ -274,6 +274,12 @@ export default async function CandidateDailyEdgePage({
   const cfbFbsGameCount = cfbFixture
     ? snapshot.games.filter((game) => game.collegeFootballScope === "fbs_involved").length
     : 0;
+  const nbaRollingBoard = sport === "nba" && snapshot.games.length > 0;
+  const activePreviewSports: Sport[] = [
+    ...(nflFixture || nflWeekOneEvidenceEnabled ? ["nfl" as const] : []),
+    ...(cfbFixture || cfbEnabled ? ["cfb" as const] : []),
+    ...(nbaRollingBoard ? ["nba" as const] : []),
+  ];
 
   return (
     <>
@@ -294,9 +300,17 @@ export default async function CandidateDailyEdgePage({
           : sport === "soccer"
               ? { active: "world_cup", label: "World Cup", eplAvailable: eplEnabled, uclAvailable: uclEnabled }
               : undefined}
-        activePreviewSports={nflFixture || nflWeekOneEvidenceEnabled ? ["nfl"] : cfbFixture || cfbEnabled ? ["cfb"] : []}
+        activePreviewSports={activePreviewSports}
         sportSwitchDestinations={sportSwitchDestinations}
-        weeklySlate={nflFixture
+        weeklySlate={nbaRollingBoard
+          ? {
+              label: `NBA · Next 7 Days · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · live model and exact-price Bet grades`,
+              previousHref: null,
+              nextHref: null,
+              asOf: snapshot.as_of,
+              cadenceLabel: "hourly board · T-60 lock",
+            }
+          : nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "live predictions and exact-price Bet grades" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,
               previousHref: null,

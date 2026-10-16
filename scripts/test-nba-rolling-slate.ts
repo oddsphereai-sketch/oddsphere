@@ -14,7 +14,7 @@ assert.equal(NBA_ROLLING_SCHEDULE_DAYS, 7);
 assert.equal(NBA_REGULAR_SEASON_OPENER, "2026-10-20");
 assert.equal(
   NBA_ROLLING_SCHEDULE_RELEASE,
-  "nba_rolling_member_schedule_2026_10_15_r1_schedule_only",
+  "nba_rolling_member_board_2026_10_16_r2_analyzed_predictions",
 );
 
 assert.equal(nbaRollingScheduleWindow("2026-10-13"), null);
@@ -59,9 +59,10 @@ assert.equal(isNbaMemberScheduleStatus("STATUS_FINAL"), false);
 assert.equal(isNbaMemberScheduleStatus("STATUS_CANCELED"), false);
 
 assert.equal(nbaMemberAnalysisEligible("2026-10-19", "2026-10-19"), false);
-assert.equal(nbaMemberAnalysisEligible("2026-10-20", "2026-10-19"), false);
+assert.equal(nbaMemberAnalysisEligible("2026-10-20", "2026-10-19"), true);
 assert.equal(nbaMemberAnalysisEligible("2026-10-20", "2026-10-20"), true);
-assert.equal(nbaMemberAnalysisEligible("2026-10-21", "2026-10-20"), false);
+assert.equal(nbaMemberAnalysisEligible("2026-10-21", "2026-10-20"), true);
+assert.equal(nbaMemberAnalysisEligible("2026-10-27", "2026-10-20"), false);
 assert.equal(nbaMemberAnalysisEligible("2026-06-14", "2026-10-20"), true);
 
 const cronSource = readFileSync(
@@ -69,8 +70,10 @@ const cronSource = readFileSync(
   "utf8",
 );
 assert.match(cronSource, /nbaScheduleSeedDates\(etDateDashed, intraday\)/);
-assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_15_r6_professional_state/);
-assert.match(cronSource, /nba_daily_refresh_schedule_only/);
+assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_16_r7_rolling_predictions/);
+assert.match(cronSource, /loadNbaRollingSchedule\(etDateDashed\)/);
+assert.match(cronSource, /sort\(\)\.slice\(0, 2\)/);
+assert.match(cronSource, /nba_daily_refresh_rolling_board/);
 assert.match(cronSource, /leaseGroup:\s*"prediction_pipeline"/);
 assert.match(cronSource, /requireLease:\s*true/);
 
@@ -78,12 +81,11 @@ const adapterSource = readFileSync(
   new URL("../lib/services/nba/buildNbaDailyEdgeAdapted.ts", import.meta.url),
   "utf8",
 );
-assert.ok(
-  adapterSource.indexOf("if (!nbaMemberAnalysisEligible(date, currentBoardDate))") <
-    adapterSource.lastIndexOf("const { nbaDto, openPricesByGame } = await buildNbaDailyEdgePipeline(date)"),
-  "future/preseason schedule-only requests must be gated before the prediction pipeline runs",
-);
-assert.match(adapterSource, /games:\s*\[\]/);
+assert.match(adapterSource, /date === currentBoardDate && rollingSchedule && rollingSchedule\.games\.length > 0/);
+assert.match(adapterSource, /buildNbaRollingMemberBoard\(date, rollingSchedule\)/);
+assert.match(adapterSource, /NBA_ROLLING_ANALYSIS_CONCURRENCY = 3/);
+assert.match(adapterSource, /NBA rolling member board incomplete/);
+assert.match(adapterSource, /responses\.push\(\.\.\.await Promise\.all/);
 assert.doesNotMatch(adapterSource, /response\.games = response\.games\.filter/);
 assert.match(adapterSource, /analyzedGameIds/);
 
@@ -92,9 +94,8 @@ const shellSource = readFileSync(
   "utf8",
 );
 assert.match(shellSource, /NBA · Next 7 Days/);
-assert.match(shellSource, /Picks, probabilities, grades, and prices stay blank/);
-assert.match(shellSource, /Analysis opens game day/);
-assert.match(shellSource, /s\.scheduleLive \? "Schedule live" : "Offseason"/);
+assert.doesNotMatch(shellSource, /Picks, probabilities, grades, and prices stay blank/);
+assert.doesNotMatch(shellSource, /Analysis opens game day/);
 
 const candidateReaderSource = readFileSync(
   new URL("../app/dev/experience-preview/ActualDailyEdgePreview.tsx", import.meta.url),
@@ -102,14 +103,21 @@ const candidateReaderSource = readFileSync(
 );
 assert.match(candidateReaderSource, /displaySnapshot\.nbaRollingSchedule/);
 assert.match(candidateReaderSource, /NBA · Next 7 Days/);
-assert.match(candidateReaderSource, /Analysis opens game day/);
+assert.doesNotMatch(candidateReaderSource, /Analysis opens game day/);
+
+const candidatePageSource = readFileSync(
+  new URL("../app/lab/daily-edge/CandidateDailyEdgePage.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(candidatePageSource, /nbaRollingBoard/);
+assert.match(candidatePageSource, /live model and exact-price Bet grades/);
+assert.match(candidatePageSource, /activePreviewSports/);
 
 const sportsRegistrySource = readFileSync(
   new URL("../app/lab/lib/dailyEdgeSports.ts", import.meta.url),
   "utf8",
 );
-assert.match(sportsRegistrySource, /scheduleLive: Date\.now\(\) >= NBA_2026_SCHEDULE_LIVE_START_MS/);
-assert.match(sportsRegistrySource, /NBA_2026_SCHEDULE_LIVE_START_MS/);
-assert.match(sportsRegistrySource, /NBA_2026_REGULAR_SEASON_START_MS/);
+assert.match(sportsRegistrySource, /NBA_2026_MEMBER_BOARD_START_MS/);
+assert.doesNotMatch(sportsRegistrySource, /NBA_2026_SCHEDULE_LIVE_START_MS/);
 
-console.log("PASS NBA rolling seven-day schedule stays separate from member predictions and tracking");
+console.log("PASS NBA rolling seven-day board renders analyzed Daily Edge predictions while tracking stays T-60 scoped");

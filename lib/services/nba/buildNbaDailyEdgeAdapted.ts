@@ -72,6 +72,7 @@ import { currentDailyEdgeBoardDate } from "../../dates/slateDate";
 import {
   loadNbaRollingSchedule,
   nbaMemberAnalysisEligible,
+  type NbaRollingSchedule,
 } from "./nbaRollingSchedule";
 import {
   applyNbaProfessionalCandidate,
@@ -442,10 +443,18 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     ? await loadNbaRollingSchedule(currentBoardDate)
     : undefined;
 
-  // Schedule visibility is deliberately independent of prediction
-  // visibility. Preseason/offseason dates and manually selected future dates
-  // never run or expose the member model; they return only the official
-  // rolling schedule contract.
+  // The active NBA product is a rolling seven-day analyzed board. The
+  // schedule supplies exact event identity and lifecycle state; the same
+  // champion pipeline that owns game-day projections supplies every normal
+  // Daily Edge card and reader market. Official tracking still begins only at
+  // the existing T-60 lock boundary and is not written by this read path.
+  if (date === currentBoardDate && rollingSchedule && rollingSchedule.games.length > 0) {
+    return buildNbaRollingMemberBoard(date, rollingSchedule);
+  }
+
+  // Historical official slates and explicit dates inside the active rolling
+  // window are analyzed. Preseason/offseason and dates outside that bounded
+  // window remain schedule-only and never invoke the model.
   if (!nbaMemberAnalysisEligible(date, currentBoardDate)) {
     return {
       as_of: new Date().toISOString(),
@@ -474,4 +483,65 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     };
   }
   return response;
+}
+
+const NBA_ROLLING_ANALYSIS_CONCURRENCY = 3;
+
+async function buildNbaRollingMemberBoard(
+  anchorDate: string,
+  schedule: NbaRollingSchedule,
+): Promise<DailyEdgeResponse> {
+  const eligibleDates = Array.from(new Set(
+    schedule.games
+      .map((game) => game.slateDate)
+      .filter((slateDate) => nbaMemberAnalysisEligible(slateDate, anchorDate)),
+  )).sort();
+
+  const responses: DailyEdgeResponse[] = [];
+  for (let index = 0; index < eligibleDates.length; index += NBA_ROLLING_ANALYSIS_CONCURRENCY) {
+    const batch = eligibleDates.slice(index, index + NBA_ROLLING_ANALYSIS_CONCURRENCY);
+    responses.push(...await Promise.all(batch.map(async (slateDate) => {
+      const { nbaDto, openPricesByGame } = await buildNbaDailyEdgePipeline(slateDate);
+      return adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame });
+    })));
+  }
+
+  const scheduledIds = new Set(schedule.games.map((game) => game.externalId));
+  const games = responses
+    .flatMap((response) => response.games)
+    .filter((game) => scheduledIds.has(game.external_id))
+    .sort((left, right) => {
+      const leftStart = left.gameStartAt ? Date.parse(left.gameStartAt) : Number.POSITIVE_INFINITY;
+      const rightStart = right.gameStartAt ? Date.parse(right.gameStartAt) : Number.POSITIVE_INFINITY;
+      return leftStart - rightStart || left.external_id - right.external_id;
+    });
+  const analyzedIds = new Set(games.map((game) => game.external_id));
+  const missing = schedule.games.filter((game) =>
+    nbaMemberAnalysisEligible(game.slateDate, anchorDate) && !analyzedIds.has(game.externalId),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `NBA rolling member board incomplete: ${missing.map((game) => game.externalId).join(",")}`,
+    );
+  }
+
+  const asOf = responses
+    .map((response) => response.as_of)
+    .sort()
+    .at(-1) ?? new Date().toISOString();
+  return {
+    as_of: asOf,
+    sport: "nba",
+    date: anchorDate,
+    requested_date: anchorDate,
+    fallback_used: false,
+    slateState: games.length > 0 ? "today_published" : "no_data",
+    slate_status: games.length > 0 ? "published" : null,
+    last_slate_update_at: asOf,
+    nbaRollingSchedule: {
+      ...schedule,
+      games: schedule.games.filter((game) => !analyzedIds.has(game.externalId)),
+    },
+    games,
+  };
 }
