@@ -20,6 +20,7 @@ const AUDITED_TRANSITION_MODEL_RELEASES = [
   "nhl_regular_2026_r9_source_aware_market_read",
   "nhl_regular_2026_r7_runtime_parity",
 ] as const;
+const ACTIVE_R17_MODEL_RELEASE = "nhl_regular_2026_r17_target_excluded_total_reconciliation";
 
 type Market = "moneyline" | "spread" | "total";
 type Side = -1 | 1;
@@ -1484,10 +1485,13 @@ function buildGame(gameId: number, rows: RecordRow[], requireOfficialScore: bool
 }
 
 async function main(): Promise<void> {
+  const auditedReleases = process.argv.includes("--include-r17")
+    ? [ACTIVE_R17_MODEL_RELEASE, ...AUDITED_TRANSITION_MODEL_RELEASES]
+    : [...AUDITED_TRANSITION_MODEL_RELEASES];
   const { data, error } = await supabase.from("prediction_records")
     .select("id,game_id,slate_date,game_date,matchup,market,pick,side,line_value,odds_american,model_probability,play_grade,no_bet,locked_at,model_version,snapshot_json,prediction_grades:prediction_grades!prediction_record_id(result,actual_home_score,actual_away_score,actual_total)")
     .eq("sport", "nhl")
-    .in("model_version", [...AUDITED_TRANSITION_MODEL_RELEASES])
+    .in("model_version", auditedReleases)
     .not("locked_at", "is", null)
     .in("market", MARKETS)
     .order("game_date", { ascending: true });

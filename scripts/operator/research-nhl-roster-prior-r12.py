@@ -146,6 +146,7 @@ def roster_features(own: dict[str, float], opponent: dict[str, float], family: t
 
 def build_examples(base: Any, games: list[dict[str, Any]], lineups: dict[tuple[int, str], list[dict[str, Any]]], alpha: float, family: tuple[str, ...]) -> list[dict[str, Any]]:
     team_states: dict[str, Any] = defaultdict(base.TeamState)
+    current_season_games: dict[str, int] = defaultdict(int)
     player_states: dict[str, PlayerState] = {}
     examples: list[dict[str, Any]] = []
     season: int | None = None
@@ -160,6 +161,7 @@ def build_examples(base: Any, games: list[dict[str, Any]], lineups: dict[tuple[i
                 state.last_date = None
             for state in player_states.values():
                 state.regress(0.65)
+            current_season_games.clear()
         season = game["season"]
         home, away = team_states[game["home"]], team_states[game["away"]]
         home_rows = lineups.get((game["id"], game["home"]), [])
@@ -169,6 +171,8 @@ def build_examples(base: Any, games: list[dict[str, Any]], lineups: dict[tuple[i
         if min(home.games, away.games) >= 5 and home_rows and away_rows:
             examples.append({
                 **{key: game[key] for key in ("id", "season", "date", "home", "away", "home_goals", "away_goals")},
+                "home_games": current_season_games[game["home"]],
+                "away_games": current_season_games[game["away"]],
                 "home_x": base.scoring_features(home, away, True, game["date"]) + roster_features(home_roster, away_roster, family),
                 "away_x": base.scoring_features(away, home, False, game["date"]) + roster_features(away_roster, home_roster, family),
                 "home_roster": home_roster,
@@ -182,6 +186,7 @@ def build_examples(base: Any, games: list[dict[str, Any]], lineups: dict[tuple[i
             for key, value in base.row_metrics(game["team_rows"][name]).items():
                 state.values[key] = (1 - alpha) * state.values[key] + alpha * value
             state.games += 1
+            current_season_games[name] += 1
             state.last_date = game["date"]
         for rows in (home_rows, away_rows):
             for row in rows:

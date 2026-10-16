@@ -9,11 +9,19 @@ import {
   openingNhlOpponentAdjustedState,
   type NhlOpponentAdjustedState,
 } from "../../automodel/nhlOpponentAdjustedState2026";
+import {
+  applyNhlFastGame,
+  openingNhlFastState,
+  type NhlFastTeamState,
+} from "../../automodel/nhlFastState2026";
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const TEAM_FILE_PACING_MS = 250;
 
 export type NhlOpponentAdjustedLoadResult = {
   states: Map<string, NhlOpponentAdjustedState>;
+  fastStates: Map<string, NhlFastTeamState>;
+  gameIdsApplied: Set<number>;
   source: "opening" | "moneypuck_game_by_game" | "fallback";
   complete: boolean;
   gamesApplied: number;
@@ -44,8 +52,15 @@ function compactDate(value: string): string | null {
 export function replayNhlOpponentAdjustedState(
   rows: readonly MoneyPuckTeamGameRow[],
   slateDate: string,
-): { states: Map<string, NhlOpponentAdjustedState>; gamesApplied: number } {
+): {
+  states: Map<string, NhlOpponentAdjustedState>;
+  fastStates: Map<string, NhlFastTeamState>;
+  gameIdsApplied: Set<number>;
+  gamesApplied: number;
+} {
   const states = openingNhlOpponentAdjustedState();
+  const fastStates = openingNhlFastState();
+  const gameIdsApplied = new Set<number>();
   const byGame = new Map<number, Map<string, MoneyPuckTeamGameRow>>();
   for (const row of rows) {
     const gameDate = compactDate(row.game_date);
@@ -87,9 +102,11 @@ export function replayNhlOpponentAdjustedState(
       attack: awayState.attack + halfAlpha * awayResidual,
       defenseWeakness: awayState.defenseWeakness + halfAlpha * homeResidual,
     });
+    applyNhlFastGame(fastStates, home, away);
+    gameIdsApplied.add(game.gameId);
     gamesApplied += 1;
   }
-  return { states, gamesApplied };
+  return { states, fastStates, gameIdsApplied, gamesApplied };
 }
 
 async function fetchAllTeamRows(season: number): Promise<CachedRows> {
@@ -105,9 +122,11 @@ async function fetchAllTeamRows(season: number): Promise<CachedRows> {
     return value;
   }
   const results: Array<MoneyPuckTeamGameRow[] | null> = [];
-  for (let offset = 0; offset < listedTeams.length; offset += 6) {
-    const batch = listedTeams.slice(offset, offset + 6);
-    results.push(...await Promise.all(batch.map((team) => fetchMoneyPuckTeamGames(season, team))));
+  for (let index = 0; index < listedTeams.length; index += 1) {
+    if (index > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, TEAM_FILE_PACING_MS));
+    }
+    results.push(await fetchMoneyPuckTeamGames(season, listedTeams[index]!));
   }
   if (results.some((rows) => rows === null)) throw new Error("MoneyPuck listed a current-season team file that returned 404");
   const rows = results.flatMap((teamRows) => teamRows ?? []);
@@ -135,14 +154,18 @@ export async function loadNhlOpponentAdjustedState(
   slateDate: string,
 ): Promise<NhlOpponentAdjustedLoadResult> {
   if (season !== 2026) {
-    return { states: new Map(), source: "fallback", complete: false, gamesApplied: 0, requestCount: 0 };
+    return {
+      states: new Map(), fastStates: new Map(), gameIdsApplied: new Set(), source: "fallback",
+      complete: false, gamesApplied: 0, requestCount: 0,
+    };
   }
   try {
     const hadCache = cache !== null && cache.season === season && cache.expiresAt > Date.now();
     const current = hadCache ? cache! : await fetchAllTeamRows(season);
     if (current.openingEmpty) {
       return {
-        states: openingNhlOpponentAdjustedState(), source: "opening", complete: true,
+        states: openingNhlOpponentAdjustedState(), fastStates: openingNhlFastState(), gameIdsApplied: new Set(),
+        source: "opening", complete: true,
         gamesApplied: 0, requestCount: hadCache ? 0 : current.requestCount,
       };
     }
@@ -153,7 +176,7 @@ export async function loadNhlOpponentAdjustedState(
     };
   } catch (error) {
     return {
-      states: new Map(), source: "fallback", complete: false, gamesApplied: 0,
+      states: new Map(), fastStates: new Map(), gameIdsApplied: new Set(), source: "fallback", complete: false, gamesApplied: 0,
       requestCount: 1, error: (error as Error).message,
     };
   }

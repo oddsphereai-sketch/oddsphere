@@ -24,6 +24,7 @@ import type { NhlFeatureSnapshot, NhlModelTeam } from "../../automodel/nhlRegula
 import type { BdlNhlTeamMetrics } from "../../providers/nhl/_ballDontLieNhlClient";
 import type { NhlCalibratedTeamState } from "../../automodel/nhlRegularPriors2026";
 import type { NhlOpponentAdjustedState } from "../../automodel/nhlOpponentAdjustedState2026";
+import type { NhlFastTeamState } from "../../automodel/nhlFastState2026";
 import {
   normalizeNhlPlayerName,
   type NhlRosterPrior,
@@ -51,6 +52,7 @@ export type BuildSnapshotOptions = {
   providerFeatureSeason?: number | null;
   calibratedStateByTeam?: ReadonlyMap<string, NhlCalibratedTeamState>;
   opponentAdjustedStateByTeam?: ReadonlyMap<string, NhlOpponentAdjustedState>;
+  fastStateByTeam?: ReadonlyMap<string, NhlFastTeamState>;
   rosterPriorByTeam?: ReadonlyMap<string, NhlRosterPrior>;
   currentRosterGoaliesByTeam?: ReadonlyMap<string, ReadonlySet<string>>;
   marketEvidence?: {
@@ -644,8 +646,10 @@ export async function buildNhlFeatureSnapshot(
     calibrated_state: opts.calibratedStateByTeam?.get(homeTeam.abbreviation) ?? null,
     opponent_adjusted_attack: opts.opponentAdjustedStateByTeam?.get(homeTeam.abbreviation)?.attack ?? null,
     opponent_adjusted_defense_weakness: opts.opponentAdjustedStateByTeam?.get(homeTeam.abbreviation)?.defenseWeakness ?? null,
+    fast_state: opts.fastStateByTeam?.get(homeTeam.abbreviation) ?? null,
     roster_prior: opts.rosterPriorByTeam?.get(homeTeam.abbreviation) ?? null,
-    current_season_games: homeStatsAll?.season === featureSeason ? homeStatsAll.games_played ?? 0 : 0,
+    current_season_games: opts.fastStateByTeam?.get(homeTeam.abbreviation)?.games
+      ?? (homeStatsAll?.season === featureSeason ? homeStatsAll.games_played ?? 0 : 0),
   };
   const awayModel: NhlModelTeam = {
     abbreviation: awayTeam.abbreviation,
@@ -668,8 +672,10 @@ export async function buildNhlFeatureSnapshot(
     calibrated_state: opts.calibratedStateByTeam?.get(awayTeam.abbreviation) ?? null,
     opponent_adjusted_attack: opts.opponentAdjustedStateByTeam?.get(awayTeam.abbreviation)?.attack ?? null,
     opponent_adjusted_defense_weakness: opts.opponentAdjustedStateByTeam?.get(awayTeam.abbreviation)?.defenseWeakness ?? null,
+    fast_state: opts.fastStateByTeam?.get(awayTeam.abbreviation) ?? null,
     roster_prior: opts.rosterPriorByTeam?.get(awayTeam.abbreviation) ?? null,
-    current_season_games: awayStatsAll?.season === featureSeason ? awayStatsAll.games_played ?? 0 : 0,
+    current_season_games: opts.fastStateByTeam?.get(awayTeam.abbreviation)?.games
+      ?? (awayStatsAll?.season === featureSeason ? awayStatsAll.games_played ?? 0 : 0),
   };
 
   const snapshot: NhlFeatureSnapshot = {

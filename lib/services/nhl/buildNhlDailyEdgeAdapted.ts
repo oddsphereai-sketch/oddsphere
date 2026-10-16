@@ -44,6 +44,7 @@ import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
+import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { buildNhlTwoSidedPriceTrail } from "./nhlPriceTrail";
 import {
@@ -56,7 +57,7 @@ import {
 import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMarket";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_09_r13_target_excluded_total_reconciliation" as const;
+  "nhl_daily_edge_reader_2026_10_15_r14_fast_state_direct_probability" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -227,6 +228,23 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     featureSeason,
     games.reduce((earliest, game) => game.game_date < earliest ? game.game_date : earliest, games[0]!.game_date),
   );
+  const replayedState = await loadNhlOpponentAdjustedState(featureSeason, date);
+  const priorGameCountResult = await supabase.from("games")
+    .select("external_id")
+    .eq("sport", "nhl")
+    .gte("external_id", featureSeason * 1_000_000 + 20_000)
+    .lte("external_id", featureSeason * 1_000_000 + 29_999)
+    .lt("slate_date", date)
+    .not("home_score", "is", null)
+    .not("away_score", "is", null);
+  const expectedPriorGameIds = new Set((priorGameCountResult.data ?? []).map((game) => Number(game.external_id)));
+  const expectedPriorGames = expectedPriorGameIds.size;
+  const replayComplete = priorGameCountResult.error === null
+    && replayedState.complete
+    && [...expectedPriorGameIds].every((gameId) => replayedState.gameIdsApplied.has(gameId));
+  if (!replayComplete) {
+    console.warn(`nhl daily-edge: MoneyPuck replay incomplete (${replayedState.gamesApplied}/${expectedPriorGames}): ${replayedState.error ?? priorGameCountResult.error?.message ?? "coverage gap"}`);
+  }
   let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
   let providerFeatureSeason: number | null = null;
   const rosterPriorByTeam = new Map<string, NhlRosterPrior>();
@@ -299,7 +317,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         payload.model_output.model_version as typeof NHL_REGULAR_TRANSITION_MODEL_RELEASES[number],
       )
       && payload.feature_inputs.game_type === 2
-      && (r.model_version === NHL_REGULAR_MODEL_RELEASE || r.locked_at !== null)
+      && (r.model_version === NHL_REGULAR_MODEL_RELEASE || r.locked_at !== null || !replayComplete)
     ) {
       const identity = JSON.stringify({
         model: payload.model_output,
@@ -362,6 +380,8 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         providerMetricsByTeam,
         providerFeatureSeason,
         calibratedStateByTeam,
+        opponentAdjustedStateByTeam: replayComplete ? replayedState.states : undefined,
+        fastStateByTeam: replayComplete ? replayedState.fastStates : undefined,
         rosterPriorByTeam,
         currentRosterGoaliesByTeam,
         marketEvidence: {
@@ -383,6 +403,11 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       });
       const snapshot = storedPayload?.snapshot ?? marketAware!.snapshot;
       const model = storedPayload?.model ?? marketAware!.model;
+      const openingWindow = snapshot.game_type === 2
+        && Math.max(snapshot.home.current_season_games ?? 0, snapshot.away.current_season_games ?? 0) < 10;
+      if (!storedPayload && openingWindow && !model.layers.fast_state_direct_active) {
+        throw new Error(`fast-state evidence incomplete (${replayedState.gamesApplied}/${expectedPriorGames}); no compatible stored predecessor`);
+      }
 
       // Pull lines once for ML + Total + Spread (NHL puck-line is
       // stored under market_type="spread" in our lines table, same

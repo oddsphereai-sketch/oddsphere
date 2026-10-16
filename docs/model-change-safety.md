@@ -26,6 +26,49 @@ collector/writer/fixture/snapshot family plus unchanged locks. Roll back future 
 publication to r22/r63/r45/r37 on any invented replacement, missing healthy-game starter, mixed
 release, board drift, writer overlap, or lock mutation.
 
+## Owner-directed provisional exception: NHL opening-window fast-state probability r18
+
+On 2026-10-15 Daniel Mengel directed Oddsphere to continue to the NHL model and
+perform the same complete accuracy, alternate-line, stat-ingestion, market-reader,
+loss-analysis, and competitor-benchmark work used for football. This exception is
+limited to `nhl_regular_2026_r18_fast_state_direct_probability` and the evidence in
+`docs/model-audits/2026-10-15-nhl-foundational-reset-predeclaration.md` and
+`docs/model-audits/2026-10-15-nhl-fast-state-direct-probability-r18.md`.
+
+R18 replaces only the regular-season opening window before either team reaches
+ten current-season games. A strictly lagged 0.085 EWMA state and frozen prior
+produce a market-free home-win probability, which is solved back to one coherent
+Poisson score distribution while preserving the independent Total. The qualified
+discrete Moneyline correction and target-book-excluded Total reader remain
+downstream. The established r17 statistical architecture resumes automatically
+outside the opening window because the candidate did not improve the full 2025
+confirmation season.
+
+MoneyPuck replay coverage must contain every exact settled database game before
+the slate, not merely an equal count. Missing schema fields, an explicit season or
+team mismatch, an incomplete paired game, or an absent exact-game replay fails
+the writer closed; the reader may preserve a compatible stored r17 predecessor
+but may not fabricate an r18 opening-window forecast. Existing locked payloads
+retain unconditional precedence. No second writer, market-weight blend, inferred
+starting goalie, stake change, or lock rewrite is authorized.
+
+The exact 107-game production replay moves Moneyline 62-45 to 71-36, puck line
+62-45 to 63-44, and Total 51-55-1 to 54-52-1. It exceeds the unequal-denominator
+competitor benchmark in six of seven tracked and alternate lanes; straight Total
+trails by 0.26 percentage points. The final 13-game chronology moves Moneyline
+6-7 to 8-5 with puck line and Total unchanged. Raw actionables move 219 to 213,
+with 79 promotions and 59 demotions. The exact current-slate dry run preserves
+27 locked tuples and changes two of six unlocked decisions through two promotions,
+zero demotions, and one Moneyline side change.
+
+Publication requires the focused NHL suite, TypeScript, full model-change
+verification, exact historical replay, no-write current-board rehearsal,
+latest-main integration safety, protected PR checks, explicit owner approval,
+and post-deploy proof of release identity, replay coverage, one writer/lease,
+reader coherence, and unchanged locks. Roll back future unlocked computation to
+r17/reader r13 on a mixed release, missing exact-game replay, lock mutation,
+unexpected board contraction, reader/writer disagreement, or schedule failure.
+
 ## Owner-approved correctness exception: NFL personnel coverage repair
 
 On 2026-10-15 Daniel Mengel directed Oddsphere to repair the false NFL personnel holds after the

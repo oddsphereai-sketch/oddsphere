@@ -246,7 +246,22 @@ export async function writeNhlPredictionRecords(
     games.reduce((earliest, game) => game.game_date < earliest ? game.game_date : earliest, games[0]!.game_date),
   );
   const opponentAdjusted = await loadNhlOpponentAdjustedState(featureSeason, opts.slateDate);
-  log(`NHL opponent-adjusted state: ${opponentAdjusted.source}; games=${opponentAdjusted.gamesApplied}; requests=${opponentAdjusted.requestCount}${opponentAdjusted.error ? `; fallback=${opponentAdjusted.error}` : ""}`);
+  const priorGameCountResult = await supabase.from("games")
+    .select("external_id")
+    .eq("sport", "nhl")
+    .gte("external_id", featureSeason * 1_000_000 + 20_000)
+    .lte("external_id", featureSeason * 1_000_000 + 29_999)
+    .lt("slate_date", opts.slateDate)
+    .not("home_score", "is", null)
+    .not("away_score", "is", null);
+  if (priorGameCountResult.error) {
+    throw new Error(`NHL fast-state coverage count: ${priorGameCountResult.error.message}`);
+  }
+  const expectedPriorGameIds = new Set((priorGameCountResult.data ?? []).map((game) => Number(game.external_id)));
+  const expectedPriorGames = expectedPriorGameIds.size;
+  const replayComplete = opponentAdjusted.complete
+    && [...expectedPriorGameIds].every((gameId) => opponentAdjusted.gameIdsApplied.has(gameId));
+  log(`NHL replay state: ${opponentAdjusted.source}; games=${opponentAdjusted.gamesApplied}/${expectedPriorGames}; requests=${opponentAdjusted.requestCount}${opponentAdjusted.error ? `; fallback=${opponentAdjusted.error}` : ""}`);
   let providerMetricsByTeam: Awaited<ReturnType<typeof fetchBdlNhlTeamMetricsWithPriorFallback>>["metrics"] = new Map();
   let providerFeatureSeason: number | null = null;
   const rosterPriorByTeam = new Map<string, NhlRosterPrior>();
@@ -309,7 +324,8 @@ export async function writeNhlPredictionRecords(
         providerMetricsByTeam,
         providerFeatureSeason,
         calibratedStateByTeam,
-        opponentAdjustedStateByTeam: opponentAdjusted.complete ? opponentAdjusted.states : undefined,
+        opponentAdjustedStateByTeam: replayComplete ? opponentAdjusted.states : undefined,
+        fastStateByTeam: replayComplete ? opponentAdjusted.fastStates : undefined,
         rosterPriorByTeam,
         currentRosterGoaliesByTeam,
         marketEvidence: {
@@ -331,6 +347,11 @@ export async function writeNhlPredictionRecords(
       const snapshot = marketAware.snapshot;
       const model = marketAware.model;
       const meta = built.meta;
+      const openingWindow = snapshot.game_type === 2
+        && Math.max(snapshot.home.current_season_games ?? 0, snapshot.away.current_season_games ?? 0) < 10;
+      if (openingWindow && !model.layers.fast_state_direct_active) {
+        throw new Error(`NHL fast-state evidence incomplete (${opponentAdjusted.gamesApplied}/${expectedPriorGames} prior games); prediction write failed closed`);
+      }
 
       // The feature builder and model consume the same canonical quote board.
       // Reusing it here prevents a mid-run refresh from changing the price

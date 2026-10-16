@@ -3276,15 +3276,55 @@ three-market pricing for both upcoming games. Predictions, prices, grades,
 locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
 
-## NHL regular-season champion (active from 2026-10-01)
+## NHL regular-season champion (active from 2026-10-15)
 
-- Model: `nhl_regular_2026_r17_target_excluded_total_reconciliation`
-- Calibration: `nhl_regular_calibration_2026_r17_target_excluded_total_reconciliation`
-- Decision: `nhl_regular_decision_2026_r17_target_excluded_total_reconciliation`
-- Reader: `nhl_daily_edge_reader_2026_10_09_r13_target_excluded_total_reconciliation`
+- Model: `nhl_regular_2026_r18_fast_state_direct_probability`
+- Calibration: `nhl_regular_calibration_2026_r18_fast_state_direct_probability`
+- Decision: `nhl_regular_decision_2026_r18_fast_state_direct_probability`
+- Reader: `nhl_daily_edge_reader_2026_10_15_r14_fast_state_direct_probability`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 15 r18 foundational release replaces the opening-window roster
+score head with a compact market-free home-win probability model built from a
+strictly lagged 0.085 EWMA team state. The state includes goals, xG, shots,
+5-on-5 xG, power-play and penalty-kill xG, finishing and suppression residuals,
+win form, Elo, rest/back-to-back context, home ice, and defensive-zone
+giveaways. The probability is solved back to the unique Poisson goal margin
+while preserving the independent score model's projected Total, so Moneyline,
+puck line, Total, alt tracking, and displayed score remain one coherent
+distribution. The existing discrete corroborated Moneyline reader and
+target-excluded Total reader remain intact; the market is not continuously
+weighted into the independent model.
+
+The architecture was selected on 2024 after 2019-23 fitting, then refit through
+2024. It is deliberately limited to games before either team reaches ten
+current-season games: on the separate 2025 opening-window confirmation it went
+88-65 (57.52%), versus 86-67 (56.21%) for the non-roster runtime comparator and
+83-70 (54.25%) for the released roster head. Its full 2025 season was worse, so
+the ten-game boundary is mandatory and the established later-season path
+resumes automatically.
+
+The exact TypeScript production replay over 107 immutable 2026 locks moves
+Moneyline from 62-45 to 71-36, puck line from 62-45 to 63-44, and Total from
+51-55-1 to 54-52-1. Puck +1 is 79-28, puck +2 is 96-11, Total +1 is 80-25-2,
+and Total +2 is 90-16-1. Margin MAE improves from 2.21283 to 2.18391 and Total
+MAE from 1.87769 to 1.80203. The final 13-game r17 chronological segment moves
+Moneyline from 6-7 to 8-5 with no puck-line or Total side changes. Raw model
+Best Angles rise from 33 to 60; actionables move from 219 to 213, with 79 grade
+promotions and 59 demotions. The existing sharp Moneyline reader contributes
+three corrections and zero harms to the 68-39 independent record.
+
+MoneyPuck's current no-`season` team-game schema and its historical schema are
+both supported, but an explicit mismatched season is rejected. The writer
+compares replayed games with settled database games before the slate and fails
+closed throughout the opening window when the full paired pregame replay is not
+available. No locked record is rewritten. The old `goalie_advantage_goals`
+explanation is zeroed because this release does not consume verified-starter
+evidence; roster filtering remains, but no most-games-played goalie is presented
+as a confirmed starter. Evidence, limitations, and rollback:
+`docs/model-audits/2026-10-15-nhl-fast-state-direct-probability-r18.md`.
 
 The October 9 r17 professional market-reader release preserves the validated
 r16 Moneyline arbitration and makes the Total score responsive to the complete

@@ -68,12 +68,12 @@ class TeamState:
     elo: float = 1500.0
 
 
-def load_games(csv_path: Path) -> list[dict[str, Any]]:
+def load_games(csv_path: Path, max_season: int = 2025) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, dict[str, dict[str, str]]]] = defaultdict(lambda: defaultdict(dict))
     with csv_path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             season = int(row["season"])
-            if season < 2016 or season > 2025 or row["position"] != "Team Level":
+            if season < 2016 or season > max_season or row["position"] != "Team Level":
                 continue
             if len(row["gameId"]) < 6 or row["gameId"][4:6] != "02":
                 continue
