@@ -147,6 +147,21 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
   return validatedStored;
 }
 
+export async function readStoredSharpApiCurrentSplits(
+  sport: Sport,
+): Promise<SharpApiCurrentSplitFeed | null> {
+  if (!supportedSport(sport)) return null;
+  const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
+  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(snapshotKey(sport));
+  return validateSharpApiCurrentSplitFeed(stored?.payload, sport);
+}
+
+export async function refreshSharpApiCurrentSplitFallback(sport: Sport): Promise<number> {
+  if (!supportedSport(sport)) return 0;
+  const feed = await readCachedCurrentSplits(sport);
+  return feed?.rows.length ?? 0;
+}
+
 export function validateSharpApiCurrentSplitFeed(
   value: unknown,
   sport: SupportedSport,

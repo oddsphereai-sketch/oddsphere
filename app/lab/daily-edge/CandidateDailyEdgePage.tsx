@@ -23,11 +23,14 @@ import { projectCfbSnapshotForInitialBoard } from "@/lib/services/football/cfbMe
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
-import { populateDailyEdgeDraftKingsFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
+import {
+  populateDailyEdgeDraftKingsFallback,
+  populateDailyEdgeStoredSplitFallback,
+} from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-// The compact weekly payload carries 101 games and can take 10-12 seconds to
-// cross the production DB boundary. Keep the read bounded, but do not turn a
-// valid published slate into a false empty-board state at four seconds.
+// The canonical weekly snapshot retains every game's full reader evidence.
+// Keep the read bounded, but do not turn a healthy transfer into a false
+// empty-board state; unopened evidence is projected out below.
 const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000;
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
@@ -195,16 +198,18 @@ export default async function CandidateDailyEdgePage({
   } else if ((eplRequested && eplEnabled) || (uclRequested && uclEnabled)) {
     snapshot = filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
+  const initialCfbReaderGameId = cfbFixture && requestedGame && snapshot.games.some((game) => game.id === requestedGame)
+    ? requestedGame
+    : null;
   // Display-only source hierarchy: current Circa remains authoritative, while
   // a complete DraftKings pair silently occupies the same established split
   // card when Circa is absent. Provider identity stays in the DTO for audit;
   // predictions, recommendations, grades, and member-facing copy are untouched.
-  await populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
-  const initialCfbReaderGameId = cfbFixture
-    ? snapshot.games.some((game) => game.id === requestedGame)
-      ? requestedGame ?? null
-      : snapshot.games.find((game) => game.collegeFootballScope === "fbs_involved")?.id ?? snapshot.games[0]?.id ?? null
-    : null;
+  if (cfbFixture && initialCfbReaderGameId) {
+    await populateDailyEdgeStoredSplitFallback(snapshot, "cfb");
+  } else if (!cfbFixture) {
+    await populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
+  }
   const cfbBoardProjection = cfbFixture
     ? projectCfbSnapshotForInitialBoard({ snapshot, fullReaderGameId: initialCfbReaderGameId })
     : null;

@@ -8,7 +8,7 @@ import {
   WHOP_SESSION_COOKIE_NAME,
   verifyWhopSession,
 } from "@/lib/auth/whopSession";
-import { populateDailyEdgeDraftKingsFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
+import { populateDailyEdgeStoredSplitFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 import { readResilientCfbMemberFixture } from "@/lib/services/football/cfbMemberReader";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   }
 
   const detailSnapshot = { ...fixture.snapshot, games: [game] };
-  await populateDailyEdgeDraftKingsFallback(detailSnapshot, "cfb");
+  await populateDailyEdgeStoredSplitFallback(detailSnapshot, "cfb");
   const providerGameId = game.id.startsWith("cfb-") ? game.id.slice(4) : game.id;
   const availability = fixture.availability?.[game.id] ?? fixture.availability?.[providerGameId] ?? null;
   return Response.json(

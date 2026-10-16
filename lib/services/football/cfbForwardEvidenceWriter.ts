@@ -166,6 +166,7 @@ import {
   type CfbVerifiedQuarterbackAvailability,
 } from "./cfbVerifiedAvailability";
 import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
+import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
   "cfb_forward_evidence_writer_2026_10_15_r124_full_product_coordinator_compatibility" as const;
@@ -1881,6 +1882,9 @@ async function refreshCompactMemberSnapshot(args: {
   if (rows.length === 0) return { memberSnapshotAttempted: false, memberSnapshotUpdated: false, memberSnapshotKey: null, memberSnapshotError: null };
   try {
     const marketHistory = [...args.marketHistory, ...args.payloads.map(marketHistoryForPayload)];
+    // Keep provider refreshes on the sole scheduled writer path. Member page
+    // requests consume the durable rows only and never wait on provider I/O.
+    await refreshDailyEdgeSplitFallbackSources("cfb");
     const fixture = buildCfbMemberFixture(rows, args.now, marketHistory);
     const snapshot = buildCfbForwardMemberSnapshot({ fixture, season: args.season, publishedAt: args.now });
     const write = await writeCfbForwardMemberSnapshot({ client: args.client, snapshot });
