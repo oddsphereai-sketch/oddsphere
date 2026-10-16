@@ -1782,6 +1782,27 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 16 bounded research offer-universe capture: the sole writer advances to
+  `nfl_player_props_writer_2026_10_16_r57_research_offer_universe`; every model, calibration,
+  decision, runtime, board, member, lifecycle, and tracking identifier remains the active
+  independent Rushing Yards set below. Additive internal store
+  `nfl_player_props_research_offer_universe_2026_10_16_r1` retains immutable provider-opening,
+  T-24, T-6, and T-60 exact-offer rows for Passing TDs, Longest Pass, Longest Reception, Longest
+  Rush, Field Goals Made, and Kicking Points from the already-collected retail and current-cycle
+  source-aware exact-offer boards. It never forces the conditional reference lane or converts a
+  retained stale reference quote into a new landmark.
+  It adds zero provider calls, schedules, writers, leases, member rows, predictions, probabilities,
+  sides, grades, actions, stakes, locks, tracking rows, settlement work, copy, labels, or site load.
+  The isolated append-only envelope is capped at 40,000 rows, 48 MB JSON, 4 MB gzip, and 550 days;
+  first landmark identity wins, idempotent replays do not write, and capture failure is explicit
+  health after authoritative production work. These research markets remain member-ineligible.
+  The 2026-10-16 06:55 ET read-only Week 7 audit found 14 games but zero provider prop observations,
+  so it produced zero rows and authorizes no market exposure; the fail-closed archive is retained so
+  subsequent writer cycles stop losing evidence once providers post it. Evidence and rollback:
+  `docs/model-audits/2026-10-15-nfl-player-props-research-offer-universe-predeclaration.md` and
+  `docs/model-audits/2026-10-16-nfl-player-props-research-offer-universe-live-audit.md`;
+  roll back the additive capture call and writer release to r56 while preserving every captured
+  research row and every immutable production lock.
 - October 15 independent Rushing Yards release: expected-role / portable artifact / model /
   calibration / decision / runtime / board are
   `nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards` /
