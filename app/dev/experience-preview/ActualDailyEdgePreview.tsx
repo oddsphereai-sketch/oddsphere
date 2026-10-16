@@ -32,6 +32,8 @@ import {
   ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
   DAILY_EDGE_SPORT_AVAILABILITY,
   DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
+  orderDailyEdgeSportKeys,
+  type DailyEdgeSportActivityMap,
 } from "@/app/lab/lib/dailyEdgeSports";
 import {
   buildReaderUrl,
@@ -234,6 +236,7 @@ export default function ActualDailyEdgePreview({
   const [sample, setSample] = useState<5 | 10>(10);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(initialReaderRequested);
   const [availability, setAvailability] = useState<PreviewAvailabilityByGame>(initialAvailability);
+  const [sportActivity, setSportActivity] = useState<DailyEdgeSportActivityMap>({});
   const readerRef = useRef<HTMLDivElement>(null);
   const sportSwitchFallbackRef = useRef<number | null>(null);
 
@@ -365,9 +368,24 @@ export default function ActualDailyEdgePreview({
     return () => controller.abort();
   }, [displaySnapshot.date, displaySnapshot.games, embeddedSample, sport]);
 
+  useEffect(() => {
+    if (embeddedSample) return;
+    const controller = new AbortController();
+    fetch("/api/lab/daily-edge-sport-activity", { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((body: { sports?: DailyEdgeSportActivityMap } | null) => {
+        if (body?.sports) setSportActivity(body.sports);
+      })
+      .catch(() => {
+        // Navigation activity is a progressive enhancement. The deliberate
+        // product-priority order remains usable when this read is unavailable.
+      });
+    return () => controller.abort();
+  }, [embeddedSample]);
+
   if (!game) {
     const nbaRollingSchedule = sport === "nba" ? displaySnapshot.nbaRollingSchedule : undefined;
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : nbaRollingSchedule && nbaRollingSchedule.games.length > 0 ? <NbaRollingSchedule schedule={nbaRollingSchedule} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : nbaRollingSchedule && nbaRollingSchedule.games.length > 0 ? <NbaRollingSchedule schedule={nbaRollingSchedule} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const market = game.markets[marketKey];
@@ -443,7 +461,7 @@ export default function ActualDailyEdgePreview({
 
   return (
     <div className="space-y-5 pb-16">
-      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} />
+      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />
 
       <div ref={readerRef} className="hidden scroll-mt-4 sm:block">
         {readerOpen ? <div>
@@ -458,7 +476,7 @@ export default function ActualDailyEdgePreview({
       ) : null}
 
       {mobileSheetOpen ? (
-        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} soccerCompetition={soccerCompetition} onPrev={scopedGameIndex > 0 ? () => selectAdjacentGame(-1) : null} onNext={scopedGameIndex < scopedGames.length - 1 ? () => selectAdjacentGame(1) : null} index={scopedGameIndex} total={scopedGames.length} />
+        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} sportActivity={sportActivity} soccerCompetition={soccerCompetition} onPrev={scopedGameIndex > 0 ? () => selectAdjacentGame(-1) : null} onNext={scopedGameIndex < scopedGames.length - 1 ? () => selectAdjacentGame(1) : null} index={scopedGameIndex} total={scopedGames.length} />
       ) : null}
 
       {reviewMode ? <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-700">
@@ -580,11 +598,11 @@ function CompactMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport
     const logo = memberTeamLogo(game, role);
     const fullName = memberTeamName(game, role, sport);
     const identity = ucl
-      ? <span className={`min-w-0 ${role === "home" ? "text-right" : ""}`}><strong className="block text-[12px] font-black uppercase tracking-[0.08em] text-white">{abbreviation}</strong><span className="mt-0.5 block break-words text-[9px] font-semibold leading-3 text-gray-400" title={fullName}>{fullName}</span><span className="mt-0.5 block text-[7px] font-black uppercase tracking-[0.13em] text-gray-600">{role === "away" ? "Away" : "Home"}</span></span>
-      : <span className={`min-w-0 ${role === "home" ? "text-right" : ""}`}><strong className="block break-words text-[12px] leading-4 text-white" title={fullName}>{fullName}</strong><span className="block text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{abbreviation}{role === "away" ? " · Away" : " · Home"}</span></span>;
+      ? <span className={`block min-w-0 flex-1 overflow-hidden ${role === "home" ? "text-right" : ""}`}><strong className="block text-[12px] font-black uppercase tracking-[0.08em] text-white">{abbreviation}</strong><span className="mt-0.5 block break-words text-[9px] font-semibold leading-3 text-gray-400 [overflow-wrap:anywhere]" title={fullName}>{fullName}</span><span className="mt-0.5 block text-[7px] font-black uppercase tracking-[0.13em] text-gray-600">{role === "away" ? "Away" : "Home"}</span></span>
+      : <span className={`block min-w-0 flex-1 overflow-hidden ${role === "home" ? "text-right" : ""}`}><strong className="line-clamp-2 break-words text-[11px] leading-3.5 text-white [overflow-wrap:anywhere] sm:text-[12px] sm:leading-4" title={fullName}>{fullName}</strong><span className="block truncate text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{abbreviation}{role === "away" ? " · Away" : " · Home"}</span></span>;
     return role === "away"
-      ? <div className="flex min-w-0 items-center gap-2"><TeamLogo src={logo} label={abbreviation} sport={sport} primaryColor={memberTeamColor(game, role, sport)} />{identity}</div>
-      : <div className="flex min-w-0 items-center justify-end gap-2 text-right">{identity}<TeamLogo src={logo} label={abbreviation} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /></div>;
+      ? <div className="flex min-w-0 items-center gap-2 overflow-hidden"><TeamLogo src={logo} label={abbreviation} sport={sport} primaryColor={memberTeamColor(game, role, sport)} />{identity}</div>
+      : <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-right">{identity}<TeamLogo src={logo} label={abbreviation} sport={sport} primaryColor={memberTeamColor(game, role, sport)} /></div>;
   };
   return <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2" aria-label={`${memberTeamName(game, "away", sport)} at ${memberTeamName(game, "home", sport)}`}>{side("away")}<span className="text-[9px] font-black text-gray-700">@</span>{side("home")}</div>;
 }
@@ -669,7 +687,7 @@ function SoccerDecisionSummary({ game, market, marketKey }: { game: DailyEdgeGam
   return <section className="mt-3 rounded-xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.08] via-black/15 to-sky-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><VerdictBadge market={market} large /><span className="text-[8px] font-black uppercase tracking-wider text-gray-600">Bet grade · exact-price decision</span></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-200">Daily Edge read</span></div><div className="mt-3 flex items-end justify-between gap-3"><div><h3 className="text-2xl font-black tracking-tight text-white">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport: "soccer" })}</h3><p className="mt-1 text-[8px] text-gray-600">{game.awayTeam} at {game.homeTeam}</p></div><span className="text-right"><span className="block font-mono text-base font-black text-violet-100">{formatAmerican(currentDisplayedPrice(market))}</span><span className="block text-[7px] font-bold text-gray-600">{market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : "Sportsbook unavailable"}</span></span></div><div className="mt-3 grid grid-cols-2 gap-2">{metric("Outcome confidence", formatProbability(market.modelProb))}{metric("Market", formatMarketProbability(market))}{metric("Gap", probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`)}{metric("Bet actionability", market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`)}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">Outcome confidence estimates the selected result. Bet grade evaluates that result at the exact offered price and market evidence; neither is a guarantee or automatic parlay recommendation.</p><div className="mt-3 grid gap-2"><div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-emerald-300">Why it rates</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, market.whyLine)}</p></div><div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-amber-300">Main risk</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{displayRiskLine(market)}</p></div></div></section>;
 }
 
-function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePreviewSports, soccerCompetition, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; activePreviewSports: Sport[]; soccerCompetition?: SoccerCompetitionPreview; onPrev: (() => void) | null; onNext: (() => void) | null }) {
+function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePreviewSports, sportActivity, soccerCompetition, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; activePreviewSports: Sport[]; sportActivity: DailyEdgeSportActivityMap; soccerCompetition?: SoccerCompetitionPreview; onPrev: (() => void) | null; onNext: (() => void) | null }) {
   useEffect(() => {
     const phoneViewport = window.matchMedia("(max-width: 639px)");
     let previousOverflow: string | null = null;
@@ -696,13 +714,14 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
     };
   }, []);
 
-  const sportAvailability = previewSportAvailability(activePreviewSports, soccerCompetition);
+  const sportAvailability = previewSportAvailability(activePreviewSports, sportActivity, soccerCompetition, reader.sport, true);
+  const readerSports = orderDailyEdgeSportKeys(ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability);
 
   return (
     <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label={`${reader.game.awayTeam} at ${reader.game.homeTeam} analysis`}>
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }} aria-hidden="true" />
       <nav aria-label="Reader sport switch" className="absolute inset-x-0 top-0 z-20 border-b border-violet-400/25 bg-[#100e18] px-4 py-2 shadow-[0_12px_35px_-24px_rgba(124,58,237,0.9)]">
-        <SportSelector active={reader.sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density="compact" activateOnPointerDown />
+        <SportSelector active={reader.sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={readerSports} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density="compact" activateOnPointerDown />
       </nav>
       <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
@@ -735,29 +754,30 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
   );
 }
 
-function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [] }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[] }) {
+function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [], sportActivity = {} }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[]; sportActivity?: DailyEdgeSportActivityMap }) {
   const displaySport = soccerCompetition?.label ?? sportLabel(sport);
   const nbaScheduleOnlyCount = sport === "nba" && snapshot.games.length === 0
     ? snapshot.nbaRollingSchedule?.games.length ?? 0
     : 0;
   const displayGameCount = weeklySlate?.displayGameCount ?? (nbaScheduleOnlyCount || snapshot.games.length);
   const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
-  const sportAvailability = previewSportAvailability(activePreviewSports, soccerCompetition);
+  const sportAvailability = previewSportAvailability(activePreviewSports, sportActivity, soccerCompetition, sport, displayGameCount > 0);
+  const orderedSports = orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability);
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {nbaScheduleOnlyCount > 0 ? "games in the next 7 days" : displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
-      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={DAILY_EDGE_TOP_LEVEL_SPORT_KEYS} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
+      <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={orderedSports} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} /></div>
       {sport === "soccer" && soccerCompetition ? <SoccerCompetitionBar active={soccerCompetition.active} reviewMode={reviewMode} hasGames={snapshot.games.length > 0} eplAvailable={soccerCompetition.eplAvailable !== false} uclAvailable={soccerCompetition.uclAvailable === true} /> : null}
       {weeklySlate ? <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5"><p className="min-w-0 text-[9px] font-black uppercase tracking-[0.15em] text-gray-400">{weeklySlate.label}</p><div className="flex shrink-0 gap-2">{weeklySlate.previousHref ? <Link href={weeklySlate.previousHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">← Previous</Link> : null}{weeklySlate.nextHref ? <Link href={weeklySlate.nextHref} className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Next →</Link> : null}</div></div> : null}
     </div>
   );
 }
 
-function previewSportAvailability(activePreviewSports: Sport[], soccerCompetition?: SoccerCompetitionPreview) {
-  return activePreviewSports.reduce(
+function previewSportAvailability(activePreviewSports: Sport[], sportActivity: DailyEdgeSportActivityMap, soccerCompetition?: SoccerCompetitionPreview, currentSport?: Sport, currentSlateHasGames?: boolean) {
+  const withActiveSports = activePreviewSports.reduce(
     (availability, activeSport) => ({
       ...availability,
       [activeSport]: { isLive: true, statusLabel: "Active" },
@@ -766,6 +786,24 @@ function previewSportAvailability(activePreviewSports: Sport[], soccerCompetitio
       ? { ...DAILY_EDGE_SPORT_AVAILABILITY, soccer: { isLive: true, statusLabel: "Active" } }
       : DAILY_EDGE_SPORT_AVAILABILITY,
   );
+  const withBoardActivity = Object.entries(sportActivity).reduce(
+    (availability, [activitySport, activity]) => ({
+      ...availability,
+      [activitySport]: {
+        ...(availability[activitySport as Sport] ?? { isLive: true }),
+        statusLabel: activity && activity.gameCount > 0 ? "Active" : "No games today",
+      },
+    }),
+    withActiveSports,
+  );
+  if (!currentSport || currentSlateHasGames === undefined) return withBoardActivity;
+  return {
+    ...withBoardActivity,
+    [currentSport]: {
+      ...(withBoardActivity[currentSport] ?? { isLive: true }),
+      statusLabel: currentSlateHasGames ? "Active" : "No games today",
+    },
+  };
 }
 
 function SoccerCompetitionBar({ active, reviewMode, hasGames, eplAvailable, uclAvailable }: { active: SoccerCompetitionPreview["active"]; reviewMode: boolean; hasGames: boolean; eplAvailable: boolean; uclAvailable: boolean }) {

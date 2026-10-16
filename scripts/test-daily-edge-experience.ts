@@ -10,6 +10,7 @@ import {
   DAILY_EDGE_SPORT_AVAILABILITY,
   DAILY_EDGE_SPORTS,
   DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
+  orderDailyEdgeSportKeys,
 } from "../app/lab/lib/dailyEdgeSports";
 import { isDailyEdgeExperiencePreviewAvailable } from "../lib/config/dailyEdgeExperience";
 import { __WNBA_AVAILABILITY_TEST__ } from "../lib/services/wnba/espnWnbaAvailability";
@@ -104,6 +105,10 @@ const candidateDailyEdgeSource = readFileSync(
 const labTypesSource = readFileSync("app/lab/lib/labTypes.ts", "utf8");
 const lockBadgeSource = readFileSync(
   "app/lab/components/daily-edge/LockBadge.tsx",
+  "utf8",
+);
+const sportActivityRouteSource = readFileSync(
+  "app/api/lab/daily-edge-sport-activity/route.ts",
   "utf8",
 );
 
@@ -965,9 +970,9 @@ check(
     candidateDailyEdgeSource.includes("uclAvailable"),
 );
 check(
-  "the top-level Soccer model is labeled and presented as active while EPL has a live slate",
+  "the top-level Soccer model is labeled as in season before live-board activity resolves",
   DAILY_EDGE_SPORTS.find((definition) => definition.key === "soccer")?.label === "Soccer" &&
-    DAILY_EDGE_SPORT_AVAILABILITY.soccer?.statusLabel === "Active",
+    DAILY_EDGE_SPORT_AVAILABILITY.soccer?.statusLabel === "In season",
 );
 check(
   "the shared Soccer selector owns Premier League, Champions League, and World Cup navigation",
@@ -977,12 +982,35 @@ check(
     candidateDailyEdgeSource.includes('label: "World Cup"'),
 );
 check(
-  "all active models lead the top-level pill bar and both football models are active",
-  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.slice(0, 5).join(",") === "mlb,wnba,soccer,nfl,cfb" &&
+  "high-traffic active-season models lead the top-level pill bar",
+  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.slice(0, 5).join(",") === "nfl,cfb,nba,nhl,mlb" &&
     DAILY_EDGE_SPORT_AVAILABILITY.nfl?.isLive === true &&
-    DAILY_EDGE_SPORT_AVAILABILITY.nfl?.statusLabel === "Active" &&
+    DAILY_EDGE_SPORT_AVAILABILITY.nfl?.statusLabel === "In season" &&
     DAILY_EDGE_SPORT_AVAILABILITY.cfb?.isLive === true &&
-    DAILY_EDGE_SPORT_AVAILABILITY.cfb?.statusLabel === "Active",
+    DAILY_EDGE_SPORT_AVAILABILITY.cfb?.statusLabel === "In season",
+);
+check(
+  "activity reorders a product band without displacing the flagship hierarchy",
+  orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, {
+    ...DAILY_EDGE_SPORT_AVAILABILITY,
+    nfl: { isLive: true, statusLabel: "No games today" },
+    cfb: { isLive: true, statusLabel: "No games today" },
+    nba: { isLive: true, statusLabel: "Active" },
+    nhl: { isLive: true, statusLabel: "No games today" },
+    mlb: { isLive: true, statusLabel: "Active" },
+    wnba: { isLive: true, statusLabel: "Active" },
+  }).join(",") === "nba,nfl,cfb,mlb,soccer,nhl,wnba,cbb",
+);
+check(
+  "sport activity is a cached read-only enhancement that does not substitute yesterday's daily board",
+  candidateDailyEdgeSource.includes('fetch("/api/lab/daily-edge-sport-activity"') &&
+    candidateDailyEdgeSource.includes("progressive enhancement") &&
+    sportActivityRouteSource.includes("unstable_cache") &&
+    sportActivityRouteSource.includes("currentDailyEdgeBoardDate(sport)") &&
+    sportActivityRouteSource.includes("snapshot.games.length") &&
+    !sportActivityRouteSource.includes(".upsert(") &&
+    !sportActivityRouteSource.includes(".insert(") &&
+    !sportActivityRouteSource.includes(".update("),
 );
 check(
   "planned college basketball remains visible but unavailable",
@@ -1125,7 +1153,7 @@ check(
   candidateSource.includes('aria-label="Reader sport switch"') &&
     candidateSource.includes("onSportChange={switchSport}") &&
     candidateSource.includes("onChange={onSportChange}") &&
-    candidateSource.includes("sports={ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS}") &&
+    candidateSource.includes("sports={readerSports}") &&
     candidateSource.includes('density="compact"') &&
     candidateSource.includes("activateOnPointerDown") &&
     candidateSource.includes('params.delete("game")') &&
@@ -1249,10 +1277,10 @@ check(
 check(
   "available offseason models remain selectable while schedule-only models are labeled separately",
   DAILY_EDGE_SPORTS.filter((sport) => sport.memberAvailable && !sport.inSeason && !sport.scheduleLive).every(
-    (sport) => DAILY_EDGE_SPORT_AVAILABILITY[sport.key]?.statusLabel === "No games today",
+    (sport) => DAILY_EDGE_SPORT_AVAILABILITY[sport.key]?.statusLabel === "Offseason",
   ) &&
     DAILY_EDGE_SPORT_AVAILABILITY.nba?.statusLabel ===
-      (DAILY_EDGE_SPORTS.find((sport) => sport.key === "nba")?.inSeason ? "Active" : "Schedule live") &&
+      (DAILY_EDGE_SPORTS.find((sport) => sport.key === "nba")?.inSeason ? "In season" : "Schedule live") &&
     candidateSource.includes("Model available") &&
     candidateSource.includes("instead of showing games from an older date"),
 );
@@ -1772,6 +1800,13 @@ check(
     candidateDailyEdgeSource.includes("game.homeTeamPrimaryColor") &&
     candidateDailyEdgeSource.includes("<CompactMatchupIdentity game={game} sport={sport} />") &&
     candidateDailyEdgeSource.includes("primaryColor={memberTeamColor(game, role, sport)}"),
+);
+check(
+  "long CFB team names stay inside both halves of the mobile matchup card",
+  candidateDailyEdgeSource.includes('block min-w-0 flex-1 overflow-hidden') &&
+    candidateDailyEdgeSource.includes('line-clamp-2 break-words text-[11px]') &&
+    candidateDailyEdgeSource.includes('[overflow-wrap:anywhere]') &&
+    candidateDailyEdgeSource.includes('gap-2 overflow-hidden text-right'),
 );
 check(
   "expanded football reader renders MASS for Massachusetts Minutemen while preserving the accessible full name",
