@@ -13,7 +13,7 @@ import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const DAILY_BOARD_SPORTS = ["mlb", "wnba", "nba", "nhl"] as const;
+const DAILY_BOARD_SPORTS = ["mlb", "wnba", "nba", "nhl", "cbb"] as const;
 
 async function readDailyBoardCount(sport: typeof DAILY_BOARD_SPORTS[number]): Promise<number> {
   return loadPublishedDailyEdgeSnapshot(sport, currentDailyEdgeBoardDate(sport))

@@ -1,5 +1,25 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: MLB official short-slate single-starter continuity
+
+On 2026-10-16 Daniel Mengel explicitly approved restoring an official ALCS matchup that the
+member board suppressed because one probable pitcher remained TBD. This exception is limited
+to the exact-game eligibility correction documented in
+`docs/model-audits/2026-10-16-mlb-official-short-slate-single-starter-continuity.md`.
+
+For future unlocked rows, a one- or two-game official MLB slate may use the existing
+neutral-starter/bullpen fallback only when the successful official schedule game id and its
+missing probable-pitcher side(s) exactly match the stored game. The degraded game cannot be a
+Best Angle and must automatically return to the ordinary complete-starter path after the
+probable pitcher is ingested. A mismatched id or side, a larger slate, or unavailable official
+evidence remains fail-closed.
+
+This correction changes no projection equation, calibration, market-reader rule, price, stake,
+writer, lease, cadence, or locked payload. Publication requires the focused G2, completeness,
+pipeline, Daily Edge, model-change, TypeScript, current-board no-write, integration-safety, and
+protected PR checks plus live proof of release identity, degraded status, Best-Angle exclusion,
+automatic refresh eligibility, cron recovery, and unchanged locks.
+
 ## Owner-approved correctness exception: NFL availability-adjusted starter authority
 
 On 2026-10-16 Daniel Mengel directed Oddsphere to stop showing Jalen Hurts as Philadelphia's

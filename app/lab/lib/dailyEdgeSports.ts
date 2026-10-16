@@ -4,6 +4,7 @@ export type DailyEdgeSportDefinition = {
   key: Sport;
   label: string;
   navigationTier: "flagship" | "core" | "specialist" | "planned";
+  navigationActivation?: "active_board";
   memberAvailable: boolean;
   inSeason?: boolean;
   /** Official fixtures are visible while analyzed model cards remain closed. */
@@ -41,11 +42,11 @@ export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
     memberAvailable: true,
     inSeason: Date.now() >= NBA_2026_MEMBER_BOARD_START_MS,
   },
-  { key: "cbb", label: "CBB", navigationTier: "flagship", memberAvailable: false },
   { key: "nhl", label: "NHL", navigationTier: "core", memberAvailable: true, inSeason: Date.now() >= NHL_2026_REGULAR_SEASON_START_MS },
   { key: "mlb", label: "MLB", navigationTier: "core", memberAvailable: true, inSeason: true },
   { key: "soccer", label: "Soccer", navigationTier: "core", memberAvailable: true, inSeason: true },
   { key: "wnba", label: "WNBA", navigationTier: "specialist", memberAvailable: true, inSeason: true },
+  { key: "cbb", label: "CBB", navigationTier: "flagship", navigationActivation: "active_board", memberAvailable: false },
   { key: "ucl", label: "UCL", navigationTier: "planned", memberAvailable: false, inSeason: false },
 ] as const;
 
@@ -115,10 +116,10 @@ const DAILY_EDGE_DEFINITION_BY_SPORT = new Map(
 
 /**
  * Product hierarchy is the primary contract: an active specialist model must
- * not jump ahead of a flagship model. The flagship sequence deliberately keeps
- * each professional league beside its college counterpart (NFL/CFB, NBA/CBB).
- * Activity orders the core tier, so a live core board leads an empty core board
- * without turning the entire selector into a volatile game-count ranking.
+ * not jump ahead of a flagship model. NFL/CFB and NBA remain permanent flagship
+ * anchors. CBB owns the fourth flagship slot only while its board is active;
+ * before launch or on an empty day it stays at the end. Activity also orders
+ * the core tier without turning the selector into a volatile game-count ranking.
  */
 export function orderDailyEdgeSportKeys(
   sports: readonly Sport[],
@@ -129,18 +130,26 @@ export function orderDailyEdgeSportKeys(
     .sort((left, right) => {
       const leftDefinition = DAILY_EDGE_DEFINITION_BY_SPORT.get(left.sport);
       const rightDefinition = DAILY_EDGE_DEFINITION_BY_SPORT.get(right.sport);
-      const leftNavigationTier = leftDefinition
-        ? DAILY_EDGE_NAVIGATION_TIER_PRIORITY[leftDefinition.navigationTier]
-        : DAILY_EDGE_NAVIGATION_TIER_PRIORITY.planned;
-      const rightNavigationTier = rightDefinition
-        ? DAILY_EDGE_NAVIGATION_TIER_PRIORITY[rightDefinition.navigationTier]
-        : DAILY_EDGE_NAVIGATION_TIER_PRIORITY.planned;
-      if (leftNavigationTier !== rightNavigationTier) return leftNavigationTier - rightNavigationTier;
-      if (leftDefinition?.navigationTier === "flagship" && rightDefinition?.navigationTier === "flagship") {
-        return left.registryIndex - right.registryIndex;
-      }
       const leftAvailability = availability[left.sport];
       const rightAvailability = availability[right.sport];
+      const leftTierDefinition = leftDefinition?.navigationActivation === "active_board" &&
+        (leftAvailability?.isLive !== true || leftAvailability.statusLabel !== "Active")
+        ? "planned"
+        : leftDefinition?.navigationTier;
+      const rightTierDefinition = rightDefinition?.navigationActivation === "active_board" &&
+        (rightAvailability?.isLive !== true || rightAvailability.statusLabel !== "Active")
+        ? "planned"
+        : rightDefinition?.navigationTier;
+      const leftNavigationTier = leftTierDefinition
+        ? DAILY_EDGE_NAVIGATION_TIER_PRIORITY[leftTierDefinition]
+        : DAILY_EDGE_NAVIGATION_TIER_PRIORITY.planned;
+      const rightNavigationTier = rightTierDefinition
+        ? DAILY_EDGE_NAVIGATION_TIER_PRIORITY[rightTierDefinition]
+        : DAILY_EDGE_NAVIGATION_TIER_PRIORITY.planned;
+      if (leftNavigationTier !== rightNavigationTier) return leftNavigationTier - rightNavigationTier;
+      if (leftTierDefinition === "flagship" && rightTierDefinition === "flagship") {
+        return left.registryIndex - right.registryIndex;
+      }
       const leftTier = leftAvailability?.isLive === false
         ? 5
         : DAILY_EDGE_STATUS_PRIORITY[leftAvailability?.statusLabel ?? ""] ?? 2;

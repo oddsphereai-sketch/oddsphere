@@ -2084,6 +2084,17 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
 
+- October 16 official short-slate starter continuity advances only input eligibility to
+  `mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16`.
+  On an official one- or two-game postseason slate, an exact game whose stored missing starter
+  side(s) exactly match MLB's official probable-pitcher omissions may use the existing degraded
+  neutral-starter/bullpen fallback instead of tripping the percentage-based slate-wide outage
+  gate. The degraded game cannot be a Best Angle and returns to the ordinary model automatically
+  when the starter arrives. Unverified omissions, mismatched games/sides, larger slates, and
+  official-source failures still fail closed. Projection, calibration, decision, grade, market,
+  stake, writer, lease, cadence, and lock releases are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-16-mlb-official-short-slate-single-starter-continuity.md`.
+
 - Operational cadence / rollover: `mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover`. The default member board changes ET dates at 03:00 and silently retains the prior complete date-keyed snapshot until the new date publishes successfully. The existing sole leased slate writer receives DST-safe 03:05 ET seed opportunities: Vercel invokes at 07:05Z and 08:05Z, while the route admits only the invocation whose New York hour is 03 and makes zero provider calls on the other. Current-season pitching and batting remain guarded by their existing successful once-per-slate-day markers; later full and intraday cycles reuse them. Partial core work, failed Market Intelligence, or a failed response-snapshot write cannot replace the prior complete board. Prediction formulas, market interpretation, sides, scores, probabilities, grades, stakes, locks, tracking, member copy, labels, and layout are unchanged. Evidence: `docs/model-audits/2026-10-07-mlb-readiness-gated-rollover-cadence.md`.
 
 - October 8 first-inning opening continuity advances the shared member presentation release to
@@ -2105,7 +2116,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Rule bundle: `mlb_daily_edge_rule_bundle_v76_professional_moneyline_tiering_2026_10_09`
 - Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
 - Model-layer schema: `mlb_model_layer_versions_v20_projected_lineup_continuity`
-- Input eligibility: `mlb_input_eligibility_v2_projected_lineup_last_verified_continuity_2026_10_07`
+- Input eligibility: `mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16`
 - Grade policy: `mlb_public_grade_policy_v60_professional_moneyline_tiering_2026_10_09`
 - Correction policy: `mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`

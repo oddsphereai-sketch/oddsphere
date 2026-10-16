@@ -47,7 +47,7 @@ export const MLB_MODEL_LAYER_VERSION_IDS = {
   correction_policy: "mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05",
   tracking_contract: "member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11",
   schedule_time_policy: "mlb_official_schedule_time_v1_2026_07_30",
-  input_eligibility_policy: "mlb_input_eligibility_v2_projected_lineup_last_verified_continuity_2026_10_07",
+  input_eligibility_policy: "mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16",
 } as const;
 
 const MLB_FIRST_INNING_SCOPED_VERSION_IDS = {

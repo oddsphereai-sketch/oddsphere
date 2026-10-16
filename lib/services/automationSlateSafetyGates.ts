@@ -176,6 +176,39 @@ export const DEFAULT_MIN_STARTER_COVERAGE_CATASTROPHIC_PCT = 50;
  */
 export const DEFAULT_MAX_MISSING_BOTH_FOR_CATASTROPHIC = 3;
 
+export function verifiedOfficialShortSlateIncompleteStarterIds(input: {
+  officialGameCount: number | null;
+  officialMissingByGamePk: ReadonlyMap<
+    number,
+    { homeMissing: boolean; awayMissing: boolean }
+  >;
+  games: ReadonlyArray<{
+    external_id: number;
+    mlb_stats_game_pk: number | null;
+    home_pitcher_id: number | null;
+    away_pitcher_id: number | null;
+  }>;
+}): number[] {
+  if (
+    input.officialGameCount === null ||
+    input.officialGameCount < 1 ||
+    input.officialGameCount > 2 ||
+    input.games.length !== input.officialGameCount
+  ) {
+    return [];
+  }
+  return input.games.flatMap((game) => {
+    if (game.mlb_stats_game_pk === null) return [];
+    const official = input.officialMissingByGamePk.get(game.mlb_stats_game_pk);
+    if (!official) return [];
+    const homeMissing = game.home_pitcher_id === null;
+    const awayMissing = game.away_pitcher_id === null;
+    return homeMissing === official.homeMissing && awayMissing === official.awayMissing
+      ? [game.external_id]
+      : [];
+  });
+}
+
 export interface StarterCoverageInput {
   sport: Sport;
   /**
@@ -196,13 +229,9 @@ export interface StarterCoverageInput {
   catastrophicMinPct?: number;
   /** Optional override — defaults to DEFAULT_MAX_MISSING_BOTH_FOR_CATASTROPHIC. */
   catastrophicMaxMissingBoth?: number;
-  /**
-   * A successful official MLB short-slate response can explicitly leave both
-   * starters TBD (for example, a winner-take-all bullpen game). In that narrow
-   * case, keep every game excluded from M2 but allow the existing pending-card
-   * lifecycle to continue instead of classifying the provider as catastrophic.
-   */
-  allowOfficialShortSlatePendingCards?: boolean;
+  /** Exact game ids from a successful official MLB one- or two-game slate
+   * whose missing starter side(s) match the official probable-pitcher response. */
+  verifiedOfficialIncompleteStarterExternalIds?: readonly number[];
 }
 
 /**
@@ -314,14 +343,16 @@ export function assessStarterCoverage(
   const coveragePct = Math.round((both / total) * 1000) / 10;
   const isCatastrophic =
     coveragePct < catastrophicPct || missingBoth >= catastrophicMissingBoth;
-  const officialShortSlatePending =
+  const verifiedOfficialIncompleteIds = new Set(
+    opts.verifiedOfficialIncompleteStarterExternalIds ?? [],
+  );
+  const officialShortSlateIncomplete =
     opts.sport === "mlb" &&
-    opts.allowOfficialShortSlatePendingCards === true &&
     total > 0 &&
     total <= 2 &&
     both === 0 &&
-    missingOne === 0 &&
-    missingBoth === total;
+    warningIds.length === total &&
+    warningIds.every((id) => verifiedOfficialIncompleteIds.has(id));
   const base = {
     totalGames: total,
     gamesWithBothStarters: both,
@@ -334,18 +365,19 @@ export function assessStarterCoverage(
     starter_warning_external_ids: warningIds,
     held_reasons: heldReasons,
   };
-  if (isCatastrophic && officialShortSlatePending) {
+  if (isCatastrophic && officialShortSlateIncomplete) {
     return {
       ...base,
-      // MLB has officially declared the short slate while leaving both
-      // starters TBD. Run the audited starter-neutral/bullpen model instead
+      // MLB has officially declared the short slate and its exact missing
+      // starter side(s). Run the audited neutral-starter/bullpen model instead
       // of deleting the game from the prediction pipeline.
       m2_excluded_external_ids: [],
       status: "partial_ok",
       reason:
-        `Official short MLB slate has ${missingBoth}/${total} game(s) with both ` +
-        `starters explicitly TBD. Games use the official-TBD starter-neutral ` +
-        `bullpen path and refresh when official starters arrive.`,
+        `Official short MLB slate has ${missingOne} game(s) missing one starter and ` +
+        `${missingBoth} game(s) missing both, matching the official schedule. ` +
+        `Games use the verified-TBD neutral-starter/bullpen path and refresh when ` +
+        `official starters arrive.`,
     };
   }
   if (isCatastrophic) {
