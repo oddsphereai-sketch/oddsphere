@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: NFL availability-adjusted starter authority
+
+On 2026-10-16 Daniel Mengel directed Oddsphere to stop showing Jalen Hurts as Philadelphia's
+expected quarterback after the exact-game injury report marked him Out, and to make that repair
+durable across the NFL rather than special-casing one team. This exception is limited to the
+writer/reader authority correction documented in
+`docs/model-audits/2026-10-16-nfl-availability-adjusted-starter-authority.md`.
+
+For future unlocked rows, the exact same availability-adjusted quarterback depth must own both
+model quarterback context and member display. An expected starter marked Out or Doubtful by either
+the provider depth snapshot or the verified exact-game injury report is replaced only by the
+highest healthy quarterback already present in that provider snapshot. If no healthy replacement
+exists, starter identity remains unknown and the existing personnel gate holds the game. The raw
+provider snapshot is retained separately for provenance. No player is manufactured, no game or
+team is fuzzy-matched, and a missing injury report cannot imply health.
+
+This correction changes no score equation, side, probability, grade, price, stake, market-reader
+rule, cadence, request ceiling, writer topology, or lease. Stored locked payloads and existing
+snapshot keys remain immutable. The same-input Week 6 rehearsal must show Tanner McKee for
+Carolina-Philadelphia with zero side, probability, grade, promotion, demotion, or actionable-count
+changes. Publication requires focused quarterback/writer/fixture/snapshot tests, full model-change
+verification, latest-main integration safety, protected PR checks, and live proof of the new
+collector/writer/fixture/snapshot family plus unchanged locks. Roll back future unlocked
+publication to r22/r63/r45/r37 on any invented replacement, missing healthy-game starter, mixed
+release, board drift, writer overlap, or lock mutation.
+
 ## Owner-approved correctness exception: NFL personnel coverage repair
 
 On 2026-10-15 Daniel Mengel directed Oddsphere to repair the false NFL personnel holds after the

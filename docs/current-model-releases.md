@@ -164,6 +164,25 @@ Last reviewed: 2026-10-16
 
 ## NFL Daily Edge generalized weekly production release
 
+### Availability-adjusted starter authority (r38 snapshot candidate)
+
+- The candidate collector / writer / fixture / compact snapshot are
+  `nfl_forward_evidence_collector_2026_10_16_r23_availability_adjusted_starter_authority` /
+  `nfl_forward_evidence_writer_2026_10_16_r64_availability_adjusted_starter_authority` /
+  `nfl_weekly_member_fixture_2026_10_16_r46_availability_adjusted_starter_authority` /
+  `nfl_forward_member_snapshot_2026_10_16_r38_availability_adjusted_starter_authority`.
+  The r33 member, r28 model, r27 calibration, and r36 decision/grade releases remain unchanged.
+- Future unlocked payloads now store one availability-adjusted expected quarterback for both the
+  calculation and member display while retaining the raw provider depth separately as provenance.
+  Out/Doubtful starters resolve only to the highest healthy quarterback already present on that
+  provider depth chart; no replacement leaves the existing personnel hold intact.
+- The October 16 SELECT/provider-only Week 6 rehearsal proposes 13 unlocked rows and writes zero.
+  Carolina-Philadelphia resolves Tanner McKee as Philadelphia's expected quarterback. Across the
+  complete 14-game / 42-market member board there are zero side, probability, grade, promotion,
+  demotion, actionable-count, or hold changes. Existing stored locks and prior snapshot keys remain
+  untouched. Evidence and rollback are in
+  `docs/model-audits/2026-10-16-nfl-availability-adjusted-starter-authority.md`.
+
 ### Personnel coverage repair (r33 candidate)
 
 - Candidate member / model / calibration / decision / grade are

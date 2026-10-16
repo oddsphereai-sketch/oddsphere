@@ -370,7 +370,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_15_r63_personnel_coverage_repair/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_16_r64_availability_adjusted_starter_authority/);
 assert.match(writer, /mergeNflAvailabilityWithPrior/);
 assert.match(
   writer,

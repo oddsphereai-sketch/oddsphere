@@ -236,8 +236,8 @@ export function buildNflR6ShadowMoneylineDecision(args: {
     capturedAt: evaluatedAt,
     gameStartsAt: args.game.scheduledStart,
   });
-  const adjustedAwayDepth = availabilityAdjustedQuarterbackDepth(args.startersAndDepth.away, args.injuries);
-  const adjustedHomeDepth = availabilityAdjustedQuarterbackDepth(args.startersAndDepth.home, args.injuries);
+  const adjustedAwayDepth = resolveNflAvailabilityAdjustedQuarterbackDepth(args.startersAndDepth.away, args.injuries);
+  const adjustedHomeDepth = resolveNflAvailabilityAdjustedQuarterbackDepth(args.startersAndDepth.home, args.injuries);
   const awayQb = quarterbackContext(
     adjustedAwayDepth,
     normalizeTeam(args.game.away.abbreviation),
@@ -382,7 +382,13 @@ export function buildNflR6ShadowMoneylineDecision(args: {
   }
 }
 
-function availabilityAdjustedQuarterbackDepth(
+/**
+ * Returns the single expected-quarterback authority used by calculation and
+ * member display. Provider depth remains unchanged in `roster` and
+ * `quarterbackDepth`; only the expected starter pointer is reconciled against
+ * the exact-game injury report.
+ */
+export function resolveNflAvailabilityAdjustedQuarterbackDepth(
   depth: NflForwardTeamDepthSnapshot,
   injuries: DailyEdgeGameAvailability | null,
 ): NflForwardTeamDepthSnapshot {

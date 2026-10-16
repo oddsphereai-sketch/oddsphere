@@ -35,7 +35,10 @@ import {
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
-import { buildNflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
+import {
+  buildNflR6ShadowMoneylineDecision,
+  resolveNflAvailabilityAdjustedQuarterbackDepth,
+} from "./nflR6MoneylineShadow";
 import {
   assertFootballCrossMarketCoherence,
   NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
@@ -105,7 +108,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_15_r63_personnel_coverage_repair" as const;
+  "nfl_forward_evidence_writer_2026_10_16_r64_availability_adjusted_starter_authority" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -365,8 +368,8 @@ export async function runNflForwardEvidenceWriter(args: {
       allowProviderUpgrade: plan.stage === "unlocked" &&
         Date.parse(args.now) < Date.parse(plan.game.scheduledStart),
     });
-    const awayDepth = depthForTeam(plan.game.away.abbreviation, rosters.byTeam, previous, "away");
-    const homeDepth = depthForTeam(plan.game.home.abbreviation, rosters.byTeam, previous, "home");
+    const providerAwayDepth = depthForTeam(plan.game.away.abbreviation, rosters.byTeam, previous, "away");
+    const providerHomeDepth = depthForTeam(plan.game.home.abbreviation, rosters.byTeam, previous, "home");
     const playbookLine = linesByGame[plan.game.providerGameId]
       ? normalizePlaybookLine(capturedAt, linesByGame[plan.game.providerGameId]!)
       : previous?.payload.market.playbookLine ?? null;
@@ -416,6 +419,8 @@ export async function runNflForwardEvidenceWriter(args: {
       availabilityByGame.get(plan.game.providerGameId) ?? null,
       latestVerifiedInjuriesForGame(historicalExisting, plan.game.providerGameId),
     );
+    const awayDepth = resolveNflAvailabilityAdjustedQuarterbackDepth(providerAwayDepth, injuries);
+    const homeDepth = resolveNflAvailabilityAdjustedQuarterbackDepth(providerHomeDepth, injuries);
     const weather = weatherByGame.get(plan.game.providerGameId)!.snapshot;
     const paidProjectionShadow = paidProjectionShadows[plan.game.providerGameId];
     const rosterAndDepth = awayDepth.roster.length > 0 && homeDepth.roster.length > 0;
@@ -632,6 +637,7 @@ export async function runNflForwardEvidenceWriter(args: {
         sharpApiSplits: sharpSplits,
       },
       startersAndDepth: { away: awayDepth, home: homeDepth },
+      providerStartersAndDepth: { away: providerAwayDepth, home: providerHomeDepth },
       injuries,
       weather,
       outcomeForecast: outcome,
@@ -762,8 +768,9 @@ function depthForTeam(
 ): NflForwardTeamDepthSnapshot {
   const fresh = current[team];
   if (fresh) return fresh;
-  const stored = previous?.payload.startersAndDepth[side];
-  if (!stored || stored.team !== team) throw new Error(`NFL depth snapshot is unavailable for ${team}.`);
+  const stored = previous?.payload.providerStartersAndDepth?.[side]
+    ?? previous?.payload.startersAndDepth[side];
+  if (!previous || !stored || stored.team !== team) throw new Error(`NFL depth snapshot is unavailable for ${team}.`);
   return { ...stored, sourceSnapshotId: previous.id };
 }
 

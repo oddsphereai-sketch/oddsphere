@@ -28,6 +28,10 @@ function marketRows(game: DailyEdgeGameDto): Array<[MarketName, MarketEdgeDto]> 
 
 function summarize(games: DailyEdgeGameDto[]) {
   const rows = games.flatMap(marketRows);
+  const bestAnglesByGame = games.map((game) => ({
+    game: `${game.awayTeam}@${game.homeTeam}`,
+    markets: marketRows(game).filter(([, market]) => market.verdict?.label === "Best Angle").map(([market]) => market),
+  })).filter((game) => game.markets.length > 0);
   const grades = rows.reduce<Record<string, number>>((counts, [, market]) => {
     const grade = market.verdict?.label ?? "Missing";
     counts[grade] = (counts[grade] ?? 0) + 1;
@@ -40,6 +44,12 @@ function summarize(games: DailyEdgeGameDto[]) {
       market,
       rows.filter(([name, row]) => name === market && ["Best Angle", "Lean"].includes(row.verdict?.label ?? "")).length,
     ])),
+    bestAngleByMarket: Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [
+      market,
+      rows.filter(([name, row]) => name === market && row.verdict?.label === "Best Angle").length,
+    ])),
+    gamesWithBestAngle: bestAnglesByGame.length,
+    gamesWithMultipleBestAngles: bestAnglesByGame.filter((game) => game.markets.length > 1),
     heldGames: games.filter((game) => marketRows(game).every(([, market]) => market.held)).length,
   };
 }
@@ -75,7 +85,7 @@ function compareBoards(beforeGames: DailyEdgeGameDto[], afterGames: DailyEdgeGam
         impact.byMarket[market].demotions += 1;
       }
       if (before.pick !== row.pick) impact.sideChanges += 1;
-      if (before.modelProb !== row.modelProb) impact.probabilityChanges += 1;
+      if (probabilityChanged(before.modelProb, row.modelProb)) impact.probabilityChanges += 1;
     }
   }
   return impact;
@@ -156,8 +166,8 @@ async function main(): Promise<void> {
         boardImpact.byMarket[market].demotions += 1;
       }
       if (before.pick !== row.pick) boardImpact.sideChanges += 1;
-      if (before.modelProb !== row.modelProb) boardImpact.probabilityChanges += 1;
-      if (before.pick === row.pick && before.modelProb === row.modelProb && before.verdict?.label === row.verdict?.label && before.held === row.held) continue;
+      if (probabilityChanged(before.modelProb, row.modelProb)) boardImpact.probabilityChanges += 1;
+      if (before.pick === row.pick && !probabilityChanged(before.modelProb, row.modelProb) && before.verdict?.label === row.verdict?.label && before.held === row.held) continue;
       changes.push({
         game: `${game.awayTeam}@${game.homeTeam}`, market,
         baseline: { pick: before.pick, probability: before.modelProb, grade: before.verdict?.label, held: before.held },
@@ -203,6 +213,11 @@ async function main(): Promise<void> {
     })),
     changes,
   }, null, 2));
+}
+
+function probabilityChanged(before: number | null, after: number | null): boolean {
+  if (before === null || after === null) return before !== after;
+  return Math.abs(before - after) > 1e-12;
 }
 
 void main().catch((error) => { console.error(error instanceof Error ? error.stack ?? error.message : String(error)); process.exitCode = 1; });

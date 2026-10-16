@@ -11,6 +11,7 @@ import {
   NFL_R6_MONEYLINE_DECISION_RELEASE,
   NFL_R6_MONEYLINE_MODEL_RELEASE,
   NFL_R6_RUNTIME_ARTIFACT_RELEASE,
+  resolveNflAvailabilityAdjustedQuarterbackDepth,
 } from "../lib/services/football/nflR6MoneylineShadow";
 import {
   NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
@@ -117,6 +118,35 @@ const availability: DailyEdgeGameAvailability = {
   ],
 };
 
+const rawInjuredDepth = {
+  ...depth("BUF", "Josh Allen"),
+  quarterbackDepth: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2)],
+  roster: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2)],
+};
+const exactGameInjuryReport: DailyEdgeGameAvailability = {
+  ...availability,
+  teams: [
+    {
+      abbreviation: "BUF",
+      teamName: "Buffalo Bills",
+      players: [{ name: "Josh Allen", status: "Inactive", detail: null, position: "QB", reportedAt: availability.reportUpdatedAt }],
+    },
+    availability.teams[1]!,
+  ],
+};
+const adjustedInjuredDepth = resolveNflAvailabilityAdjustedQuarterbackDepth(
+  rawInjuredDepth,
+  exactGameInjuryReport,
+);
+assert.equal(rawInjuredDepth.expectedStartingQuarterback?.name, "Josh Allen");
+assert.equal(adjustedInjuredDepth.expectedStartingQuarterback?.name, "Mitchell Trubisky");
+assert.equal(adjustedInjuredDepth.starterStatus, "projected");
+assert.deepEqual(adjustedInjuredDepth.quarterbackDepth, rawInjuredDepth.quarterbackDepth);
+assert.strictEqual(
+  resolveNflAvailabilityAdjustedQuarterbackDepth(rawInjuredDepth, availability),
+  rawInjuredDepth,
+);
+
 const unlocked = buildNflR6ShadowMoneylineDecision({
   game,
   opening,
@@ -146,24 +176,10 @@ const injuredQuarterback = buildNflR6ShadowMoneylineDecision({
   opening,
   comparableCurrentBooks: books,
   startersAndDepth: {
-    away: {
-      ...depth("BUF", "Josh Allen"),
-      quarterbackDepth: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2)],
-      roster: [player("Josh Allen", "BUF", 1), player("Mitchell Trubisky", "BUF", 2)],
-    },
+    away: rawInjuredDepth,
     home: depth("KC", "Patrick Mahomes"),
   },
-  injuries: {
-    ...availability,
-    teams: [
-      {
-        abbreviation: "BUF",
-        teamName: "Buffalo Bills",
-        players: [{ name: "Josh Allen", status: "Inactive", detail: null, position: "QB", reportedAt: availability.reportUpdatedAt }],
-      },
-      availability.teams[1]!,
-    ],
-  },
+  injuries: exactGameInjuryReport,
   stage: "unlocked",
   capturedAt: "2026-09-01T12:00:00.000Z",
   t60LagMinutes: null,
@@ -398,7 +414,7 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_15_r63_personnel_coverage_repair/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_16_r64_availability_adjusted_starter_authority/);
 assert.match(writer, /\.\.\.shadowMoneyline\.health\.blockingReasons/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);

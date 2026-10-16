@@ -24,7 +24,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_15_r22_personnel_coverage_repair" as const;
+  "nfl_forward_evidence_collector_2026_10_16_r23_availability_adjusted_starter_authority" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -125,6 +125,11 @@ export type NflForwardEvidencePayload = {
     sharpApiSplits: NflRegularSharpSplitSet | null;
   };
   startersAndDepth: {
+    away: NflForwardTeamDepthSnapshot;
+    home: NflForwardTeamDepthSnapshot;
+  };
+  /** Raw provider depth retained for provenance; member readers use `startersAndDepth`. */
+  providerStartersAndDepth?: {
     away: NflForwardTeamDepthSnapshot;
     home: NflForwardTeamDepthSnapshot;
   };
