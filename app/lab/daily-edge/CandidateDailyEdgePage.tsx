@@ -15,14 +15,11 @@ import {
 import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReaderLifecycle";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
-import { CFB_MEMBER_FIXTURE_RELEASE } from "@/lib/services/football/cfbMemberFixture";
-import {
-  CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
-  CFB_MEMBER_SNAPSHOT_READER_RELEASE,
-} from "@/lib/services/football/cfbForwardMemberSnapshotStore";
 import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
 import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
 import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
+import { readResilientCfbMemberFixture } from "@/lib/services/football/cfbMemberReader";
+import { projectCfbSnapshotForInitialBoard } from "@/lib/services/football/cfbMemberBoardProjection";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
@@ -45,35 +42,6 @@ const readCachedNflForwardMemberSnapshot = unstable_cache(
   { revalidate: 15, tags: [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE] },
 );
 
-async function readUncachedCfbMemberFixture(season: number) {
-  const [{ supabase }, { readCfbForwardMemberSnapshot }] = await Promise.all([
-    import("@/lib/db/supabase"),
-    import("@/lib/services/football/cfbForwardMemberSnapshotStore"),
-  ]);
-  const published = await readCfbForwardMemberSnapshot({ client: supabase, season });
-  return published?.fixture ?? null;
-}
-
-const readCachedCfbMemberFixture = unstable_cache(
-  async (season: number) => {
-    return readUncachedCfbMemberFixture(season);
-  },
-  [
-    "cfb-current-member-fixture",
-    CFB_MEMBER_FIXTURE_RELEASE,
-    CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
-    CFB_MEMBER_SNAPSHOT_READER_RELEASE,
-  ],
-  { revalidate: 60, tags: [CFB_MEMBER_FIXTURE_RELEASE] },
-);
-
-async function readResilientCfbMemberFixture(season: number) {
-  const cached = await readCachedCfbMemberFixture(season).catch(() => null);
-  // A cached miss must not extend an outage after the sole writer recovers.
-  // Retry the compact snapshot directly; never rebuild the evidence season.
-  return cached ?? readUncachedCfbMemberFixture(season);
-}
-
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
   mlb: "/lab/daily-edge?sport=mlb",
   wnba: "/lab/daily-edge?sport=wnba",
@@ -87,7 +55,12 @@ const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
 export default async function CandidateDailyEdgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ sport?: string | string[]; league?: string | string[] }>;
+  searchParams: Promise<{
+    sport?: string | string[];
+    league?: string | string[];
+    game?: string | string[];
+    market?: string | string[];
+  }>;
 }) {
   const query = await searchParams;
   const requestedSport = Array.isArray(query.sport) ? query.sport[0] : query.sport;
@@ -95,6 +68,7 @@ export default async function CandidateDailyEdgePage({
     ? (requestedSport as Sport)
     : "mlb";
   const requestedLeague = Array.isArray(query.league) ? query.league[0] : query.league;
+  const requestedGame = Array.isArray(query.game) ? query.game[0] : query.game;
   const soccerRequested = sourceSport === "soccer" || sourceSport === "ucl";
   const competition = !soccerRequested
     ? null
@@ -226,6 +200,15 @@ export default async function CandidateDailyEdgePage({
   // card when Circa is absent. Provider identity stays in the DTO for audit;
   // predictions, recommendations, grades, and member-facing copy are untouched.
   await populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
+  const initialCfbReaderGameId = cfbFixture
+    ? snapshot.games.some((game) => game.id === requestedGame)
+      ? requestedGame ?? null
+      : snapshot.games.find((game) => game.collegeFootballScope === "fbs_involved")?.id ?? snapshot.games[0]?.id ?? null
+    : null;
+  const cfbBoardProjection = cfbFixture
+    ? projectCfbSnapshotForInitialBoard({ snapshot, fullReaderGameId: initialCfbReaderGameId })
+    : null;
+  if (cfbBoardProjection) snapshot = cfbBoardProjection.snapshot;
   // Retain the established prop identifier because shared football reader
   // regression tests treat it as part of the page contract. CFB uses the same
   // existing availability surface when its fixture is active.
@@ -239,6 +222,7 @@ export default async function CandidateDailyEdgePage({
     : cfbFixture
       ? Object.fromEntries(
           snapshot.games.flatMap((game) => {
+            if (game.id !== initialCfbReaderGameId) return [];
             // Stored CFB fixtures retain the provider game id as the
             // availability key, while member game DTOs use the `cfb-` prefix.
             // Resolve both forms so verified reports reach the existing panel
@@ -290,6 +274,7 @@ export default async function CandidateDailyEdgePage({
         history={history}
         pitcherFirstInningHistory={pitcherFirstInningHistory}
         initialAvailability={visibleNflAvailability}
+        deferredCfbGameIds={cfbBoardProjection?.deferredGameIds}
         sport={sport}
         freshContractRead={false}
         reviewMode={false}

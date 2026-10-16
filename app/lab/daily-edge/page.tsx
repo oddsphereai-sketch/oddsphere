@@ -7,7 +7,12 @@ import { connection } from "next/server";
 export default async function DailyEdgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ sport?: string | string[]; league?: string | string[] }>;
+  searchParams: Promise<{
+    sport?: string | string[];
+    league?: string | string[];
+    game?: string | string[];
+    market?: string | string[];
+  }>;
 }) {
   // This is a live board, not build-time content. It must read both the
   // candidate flag and the latest published snapshot for each request so a

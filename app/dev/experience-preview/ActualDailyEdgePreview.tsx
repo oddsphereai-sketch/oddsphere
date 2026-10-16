@@ -165,6 +165,7 @@ export default function ActualDailyEdgePreview({
   history,
   pitcherFirstInningHistory,
   initialAvailability = {},
+  deferredCfbGameIds = [],
   sport,
   freshContractRead,
   reviewMode = true,
@@ -179,6 +180,7 @@ export default function ActualDailyEdgePreview({
   history: PreviewHistoryByTeam;
   pitcherFirstInningHistory: PreviewPitcherFirstInningByGame;
   initialAvailability?: PreviewAvailabilityByGame;
+  deferredCfbGameIds?: string[];
   sport: Sport;
   freshContractRead: boolean;
   reviewMode?: boolean;
@@ -236,6 +238,10 @@ export default function ActualDailyEdgePreview({
   const [sample, setSample] = useState<5 | 10>(10);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(initialReaderRequested);
   const [availability, setAvailability] = useState<PreviewAvailabilityByGame>(initialAvailability);
+  const [cfbGameDetails, setCfbGameDetails] = useState<Record<string, DailyEdgeGameDto>>({});
+  const cfbDetailRequests = useRef(new Map<string, Promise<DailyEdgeGameDto | null>>());
+  const cfbSelectionRequest = useRef(0);
+  const cfbDeferredGames = useMemo(() => new Set(deferredCfbGameIds), [deferredCfbGameIds]);
   const [sportActivity, setSportActivity] = useState<DailyEdgeSportActivityMap>({});
   const readerRef = useRef<HTMLDivElement>(null);
   const sportSwitchFallbackRef = useRef<number | null>(null);
@@ -327,10 +333,10 @@ export default function ActualDailyEdgePreview({
     router.prefetch(destination);
   }
 
-  const game = useMemo(
-    () => displaySnapshot.games.find((candidate) => candidate.id === gameId) ?? scopedGames[0],
-    [displaySnapshot.games, gameId, scopedGames],
-  );
+  const game = useMemo(() => {
+    const boardGame = displaySnapshot.games.find((candidate) => candidate.id === gameId) ?? scopedGames[0];
+    return boardGame ? cfbGameDetails[boardGame.id] ?? boardGame : undefined;
+  }, [cfbGameDetails, displaySnapshot.games, gameId, scopedGames]);
 
   useEffect(() => {
     if (!mobileSheetOpen) return;
@@ -388,6 +394,7 @@ export default function ActualDailyEdgePreview({
     return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : nbaRollingSchedule && nbaRollingSchedule.games.length > 0 ? <NbaRollingSchedule schedule={nbaRollingSchedule} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
+  const selectedGame = game;
   const market = game.markets[marketKey];
 
   function isMobileViewport(): boolean {
@@ -400,13 +407,48 @@ export default function ActualDailyEdgePreview({
     });
   }
 
-  function selectGame(next: DailyEdgeGameDto, nextMarket: MarketKey = primaryMarket(next)) {
-    setGameId(next.id);
+  function loadCfbGameDetail(gameIdToLoad: string): Promise<DailyEdgeGameDto | null> {
+    const loaded = cfbGameDetails[gameIdToLoad];
+    if (loaded) return Promise.resolve(loaded);
+    if (sport !== "cfb" || !cfbDeferredGames.has(gameIdToLoad)) {
+      return Promise.resolve(null);
+    }
+    const existing = cfbDetailRequests.current.get(gameIdToLoad);
+    if (existing) return existing;
+    const params = new URLSearchParams({ game: gameIdToLoad });
+    const request = fetch(`/api/lab/cfb-game-detail?${params.toString()}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((body: { game?: DailyEdgeGameDto; availability?: DailyEdgeGameAvailability | null } | null) => {
+        if (!body?.game || body.game.id !== gameIdToLoad) return null;
+        const normalized = normalizeCandidateGame(body.game, sport);
+        setCfbGameDetails((current) => ({ ...current, [gameIdToLoad]: normalized }));
+        if (body.availability) {
+          setAvailability((current) => ({ ...current, [gameIdToLoad]: body.availability! }));
+        }
+        return normalized;
+      })
+      .catch(() => null)
+      .finally(() => cfbDetailRequests.current.delete(gameIdToLoad));
+    cfbDetailRequests.current.set(gameIdToLoad, request);
+    return request;
+  }
+
+  function prefetchGameDetail(next: DailyEdgeGameDto) {
+    void loadCfbGameDetail(next.id);
+  }
+
+  async function selectGame(next: DailyEdgeGameDto, nextMarket: MarketKey = primaryMarket(next)) {
+    const requestId = ++cfbSelectionRequest.current;
+    const detailed = sport === "cfb" && cfbDeferredGames.has(next.id)
+      ? await loadCfbGameDetail(next.id)
+      : cfbGameDetails[next.id] ?? next;
+    if (!detailed || requestId !== cfbSelectionRequest.current) return;
+    setGameId(detailed.id);
     setMarketKey(nextMarket);
     setReaderOpen(true);
     setDeepOpen(false);
     setDeepView("case");
-    if (!embeddedSample) replaceReaderUrl(sport, next.id, nextMarket);
+    if (!embeddedSample) replaceReaderUrl(sport, detailed.id, nextMarket);
     if (isMobileViewport()) setMobileSheetOpen(true);
     else scrollReaderIntoView();
   }
@@ -414,17 +456,14 @@ export default function ActualDailyEdgePreview({
   function selectMarket(nextMarket: MarketKey) {
     setMarketKey(nextMarket);
     setDeepOpen(false);
-    if (!embeddedSample) replaceReaderUrl(sport, game.id, nextMarket);
+    if (!embeddedSample) replaceReaderUrl(sport, selectedGame.id, nextMarket);
   }
 
   function selectAdjacentGame(direction: -1 | 1) {
-    const index = scopedGames.findIndex((candidate) => candidate.id === game.id);
+    const index = scopedGames.findIndex((candidate) => candidate.id === selectedGame.id);
     const next = scopedGames[index + direction];
     if (!next) return;
-    setGameId(next.id);
-    setDeepOpen(false);
-    setDeepView("case");
-    replaceReaderUrl(sport, next.id, marketKey);
+    void selectGame(next, marketKey);
   }
 
   function collapseReader() {
@@ -438,9 +477,10 @@ export default function ActualDailyEdgePreview({
   }
 
   function changeCfbBoardScope(next: CfbBoardScope) {
+    cfbSelectionRequest.current += 1;
     setCfbBoardScope(next);
     const nextGames = selectCfbBoardGames(displaySnapshot.games, sport, next);
-    if (nextGames.length === 0 || nextGames.some((candidate) => candidate.id === game.id)) return;
+    if (nextGames.length === 0 || nextGames.some((candidate) => candidate.id === selectedGame.id)) return;
     const first = nextGames[0]!;
     setGameId(first.id);
     setMarketKey(primaryMarket(first));
@@ -469,7 +509,7 @@ export default function ActualDailyEdgePreview({
         </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={scopedGameIndex} total={scopedGames.length} />}
       </div>
 
-      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} groupByDay={Boolean(renderedWeeklySlate)} cfbScopeControl={cfbScopeControl} />
+      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} groupByDay={Boolean(renderedWeeklySlate)} cfbScopeControl={cfbScopeControl} />
 
       {sport === "nba" && displaySnapshot.nbaRollingSchedule?.games.length ? (
         <NbaRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} />
@@ -487,26 +527,28 @@ export default function ActualDailyEdgePreview({
 }
 
 function normalizeCandidatePicks(snapshot: DailyEdgeResponse, sport: Sport): DailyEdgeResponse {
-  const games = snapshot.games.map((game) => ({
+  const games = snapshot.games.map((game) => normalizeCandidateGame(game, sport));
+  return { ...snapshot, games };
+}
+
+function normalizeCandidateGame(game: DailyEdgeGameDto, sport: Sport): DailyEdgeGameDto {
+  const normalized = {
     ...game,
     markets: {
       moneyline: presentDailyEdgeOperationalNoPlay(game.markets.moneyline, game.holdReason),
       total: presentDailyEdgeOperationalNoPlay(game.markets.total, game.holdReason),
       first_inning: presentDailyEdgeOperationalNoPlay(game.markets.first_inning, game.holdReason),
     },
-  }));
-  if (sport !== "soccer" && sport !== "ucl") return { ...snapshot, games };
+  };
+  if (sport !== "soccer" && sport !== "ucl") return normalized;
   return {
-    ...snapshot,
-    games: games.map((game) => ({
-      ...game,
-      markets: {
-        ...game.markets,
-        moneyline: { ...game.markets.moneyline, pick: normalizeSoccerPick(game.markets.moneyline.pick, game) },
-        total: { ...game.markets.total, pick: normalizeSoccerSide(game.markets.total.pick) },
-        first_inning: { ...game.markets.first_inning, pick: normalizeSoccerSide(game.markets.first_inning.pick) },
-      },
-    })),
+    ...normalized,
+    markets: {
+      ...normalized.markets,
+      moneyline: { ...normalized.markets.moneyline, pick: normalizeSoccerPick(normalized.markets.moneyline.pick, normalized) },
+      total: { ...normalized.markets.total, pick: normalizeSoccerSide(normalized.markets.total.pick) },
+      first_inning: { ...normalized.markets.first_inning, pick: normalizeSoccerSide(normalized.markets.first_inning.pick) },
+    },
   };
 }
 
@@ -2433,7 +2475,7 @@ function AnalysisCard({ label, text }: { label: string; text: string }) {
 
 type BoardFilter = "all" | "best_angle" | "lean" | "watchlist" | "caution" | "no_play";
 
-function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDay = false, cfbScopeControl }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void; groupByDay?: boolean; cfbScopeControl?: { active: CfbBoardScope; fbsCount: number; divisionICount: number; onChange: (scope: CfbBoardScope) => void } }) {
+function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchGameDetail, groupByDay = false, cfbScopeControl }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void | Promise<void>; prefetchGameDetail: (game: DailyEdgeGameDto) => void; groupByDay?: boolean; cfbScopeControl?: { active: CfbBoardScope; fbsCount: number; divisionICount: number; onChange: (scope: CfbBoardScope) => void } }) {
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [focus, setFocus] = useState<MarketKey | null>(null);
   const [cfbSearch, setCfbSearch] = useState("");
@@ -2542,7 +2584,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, groupByDa
         {uclBoard ? <p className="mt-3 border-t border-white/[0.05] pt-3 text-[8px] font-semibold text-gray-600">Matches are grouped by your local calendar date. Every card also shows its localized kickoff date and time.</p> : null}
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} aria-pressed={active} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div>
       </div>
-      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{date === "Unscheduled" ? "Date TBD" : boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} />)}</div></section>; })}</div>}
+      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{date === "Unscheduled" ? "Date TBD" : boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} />)}</div></section>; })}</div>}
     </section>
   );
 }
@@ -2554,7 +2596,7 @@ function cfbGameMatchesSearch(game: DailyEdgeGameDto, query: string): boolean {
     .some((value) => value?.toLowerCase().replace(/[^a-z0-9]/g, "").includes(needle));
 }
 
-function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, selectGame }: { game: DailyEdgeGameDto; sport: Sport; headlineMarket: MarketKey; active: boolean; activeMarket: MarketKey | null; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void }) {
+function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, selectGame, prefetchGameDetail }: { game: DailyEdgeGameDto; sport: Sport; headlineMarket: MarketKey; active: boolean; activeMarket: MarketKey | null; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void | Promise<void>; prefetchGameDetail: (game: DailyEdgeGameDto) => void }) {
   const finalScore = game.result?.finalScore ?? null;
   const headlineKey = headlineMarket;
   const headlineMarketData = game.markets[headlineKey];
@@ -2586,6 +2628,8 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
       data-game-id={game.id}
       aria-pressed={active}
       onClick={() => selectGame(game, headlineKey)}
+      onPointerEnter={() => prefetchGameDetail(game)}
+      onFocus={() => prefetchGameDetail(game)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
