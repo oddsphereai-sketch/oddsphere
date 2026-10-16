@@ -1803,6 +1803,17 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 16 genuine-evidence reader integration: active member decision-support presentation is
+  `nfl_player_props_member_decision_support_2026_10_16_r2_reader_integration`. Newly evaluated
+  unlocked rows carrying that exact release render their stored independent, published calibrated,
+  and target-excluded market probabilities; derived fair price; exact model edge and EV; qualified
+  reference books; market-specific forecast inputs and trends; team environment; quarterback; and
+  availability context. A field that was not captured is never estimated or substituted. Earlier
+  locked rows, including r1 support rows, retain the preceding reader path and exact stored payload.
+  This is a presentation-only release: model, calibration, projection, probability, side, grade,
+  threshold, stake, provider calls, cadence, locks, tracking, and settlement are unchanged. Evidence
+  and rollback: `docs/model-audits/2026-10-15-nfl-player-props-member-decision-evidence-contract.md`;
+  roll back the reader presentation to r1 without rewriting any stored row.
 - October 15 independent Rushing Yards release: expected-role / portable artifact / model /
   calibration / decision / runtime / board are
   `nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards` /
