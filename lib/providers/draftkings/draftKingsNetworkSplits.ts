@@ -5,7 +5,10 @@ import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormaliz
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
 import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
 import {
+  applySharpApiCurrentSplitOverlay,
   populateDailyEdgeSharpApiCurrentSplits,
+  readStoredSharpApiCurrentSplits,
+  refreshSharpApiCurrentSplitFallback,
   sanitizeRetainedSharpSplitPresentation,
 } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import {
@@ -248,6 +251,28 @@ async function readDurableDraftKingsNetworkSplits(
   return previous;
 }
 
+async function readStoredDraftKingsNetworkSplits(
+  sport: Sport,
+): Promise<DraftKingsNetworkSplitFeed | null> {
+  const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
+  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport));
+  return validateDurableDraftKingsNetworkSplitFeed(stored?.payload, sport);
+}
+
+export async function refreshDailyEdgeSplitFallbackSources(sport: Sport): Promise<{
+  sharpApiRows: number;
+  draftKingsGames: number;
+}> {
+  const [sharpApiRows, draftKingsFeed] = await Promise.all([
+    refreshSharpApiCurrentSplitFallback(sport).catch(() => 0),
+    readCachedDraftKingsNetworkSplits(sport).catch(() => null),
+  ]);
+  return {
+    sharpApiRows,
+    draftKingsGames: draftKingsFeed?.games.length ?? 0,
+  };
+}
+
 function mergeDraftKingsNetworkFeeds(
   previous: DraftKingsNetworkSplitFeed | null,
   current: DraftKingsNetworkSplitFeed,
@@ -392,6 +417,30 @@ export async function populateDailyEdgeDraftKingsFallback(
   const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
   await persistDailyEdgeSharpBookSplitContinuity(response, sport, continuity.feed);
+  sanitizeRetainedSharpSplitPresentation(response);
+  return {
+    matchedGames: Math.max(current.matchedGames, durable.matchedGames, continuity.matchedGames),
+    populatedMarkets: current.populatedMarkets + durable.populatedMarkets + continuity.populatedMarkets,
+  };
+}
+
+/**
+ * Member reads must never wait on provider network calls. Scheduled writers
+ * refresh the durable feeds; this path overlays the latest stored values and
+ * retained continuity only.
+ */
+export async function populateDailyEdgeStoredSplitFallback(
+  response: DailyEdgeResponse,
+  sport: Sport,
+): Promise<DraftKingsNetworkOverlayResult> {
+  const [continuity, sharpFeed, draftKingsFeed] = await Promise.all([
+    loadDailyEdgeSharpBookSplitContinuity(response, sport),
+    readStoredSharpApiCurrentSplits(sport).catch(() => null),
+    readStoredDraftKingsNetworkSplits(sport).catch(() => null),
+  ]);
+  const current = applySharpApiCurrentSplitOverlay(response, sharpFeed);
+  const durable = applyDraftKingsNetworkSplitFallback(response, draftKingsFeed);
+  reconcileDailyEdgeSharpBookSplitAuthority(response);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
     matchedGames: Math.max(current.matchedGames, durable.matchedGames, continuity.matchedGames),

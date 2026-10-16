@@ -8,6 +8,8 @@ const snapshotStore = readFileSync("lib/services/football/cfbForwardMemberSnapsh
 const memberReader = readFileSync("lib/services/football/cfbMemberReader.ts", "utf8");
 const boardProjection = readFileSync("lib/services/football/cfbMemberBoardProjection.ts", "utf8");
 const detailRoute = readFileSync("app/api/lab/cfb-game-detail/route.ts", "utf8");
+const fallbackProvider = readFileSync("lib/providers/draftkings/draftKingsNetworkSplits.ts", "utf8");
+const writer = readFileSync("lib/services/football/cfbForwardEvidenceWriter.ts", "utf8");
 
 assert.match(memberReader, /readCachedCfbMemberFixture = unstable_cache\(/);
 assert.match(memberReader, /readCfbForwardMemberSnapshot\(\{ client: supabase, season \}\)/);
@@ -35,5 +37,11 @@ assert.match(detailRoute, /hasMemberSession/);
 assert.match(detailRoute, /verifyWhopSession/);
 assert.match(detailRoute, /isValidBetaSession/);
 assert.match(detailRoute, /detailSnapshot\.games\[0\] \?\? game/);
+assert.match(page, /cfbFixture[\s\S]*populateDailyEdgeStoredSplitFallback\(snapshot, "cfb"\)/);
+assert.match(detailRoute, /populateDailyEdgeStoredSplitFallback\(detailSnapshot, "cfb"\)/);
+assert.match(fallbackProvider, /Member reads must never wait on provider network calls/);
+assert.match(fallbackProvider, /readStoredSharpApiCurrentSplits/);
+assert.match(fallbackProvider, /readStoredDraftKingsNetworkSplits/);
+assert.match(writer, /refreshDailyEdgeSplitFallbackSources\("cfb"\)/);
 
 console.log("CFB member reader preserves the snapshot deadline, bridges verified releases, and defers authenticated per-game evidence without changing the board.");
