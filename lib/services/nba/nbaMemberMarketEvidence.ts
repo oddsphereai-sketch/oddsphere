@@ -1,0 +1,422 @@
+import type {
+  MarketEdgeDto,
+  OddsTrailStopDto,
+} from "../../../app/lab/lib/labTypes";
+import type { MarketSplitDisplaySection } from "../../types/domain/RecommendationDecision";
+import type { MarketIntelligence, NbaDailyEdgeGameDto } from "./buildNbaDailyEdgeDto";
+import type {
+  NbaReaderPriceRow,
+  NbaReaderSplitRow,
+  NbaReaderSide,
+} from "./nbaProfessionalMarketReader";
+import type { NbaMovementMarket } from "./nbaSameBookMovement";
+
+const SPLIT_STALE_AFTER_MINUTES = 75;
+
+type PublicSplit = MarketEdgeDto["publicSplits"][number];
+
+export type NbaMemberMarketEvidence = {
+  publicSplits: PublicSplit[];
+  sportsbookSplits: MarketSplitDisplaySection | null;
+  sharpBookAvailability: NonNullable<MarketEdgeDto["sharpBookAvailability"]>;
+  oddsTrail: OddsTrailStopDto[];
+  lineTrail: OddsTrailStopDto[];
+  opposingOddsTrail: MarketEdgeDto["opposingOddsTrail"];
+  movementReferenceSportsbook: string | null;
+  movementReferencePriceAmerican: number | null;
+  movementReferenceObservedAt: string | null;
+};
+
+export type NbaMemberGameEvidence = Record<NbaMovementMarket, NbaMemberMarketEvidence>;
+
+type SplitSnapshot = {
+  fetchedAt: string;
+  rows: Map<NbaReaderSide, NbaReaderSplitRow>;
+};
+
+function canonical(value: string | null): string {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function selectionSide(selectionKey: string): NbaReaderSide | null {
+  const side = selectionKey.split(":").at(-1);
+  return side === "home" || side === "away" || side === "over" || side === "under"
+    ? side
+    : null;
+}
+
+function oppositeSide(side: NbaReaderSide): NbaReaderSide {
+  if (side === "home") return "away";
+  if (side === "away") return "home";
+  return side === "over" ? "under" : "over";
+}
+
+function expectedSides(market: NbaMovementMarket): readonly NbaReaderSide[] {
+  return market === "total" ? ["over", "under"] : ["home", "away"];
+}
+
+function pct(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  const normalized = Math.abs(value) <= 1 ? value * 100 : value;
+  return normalized >= 0 && normalized <= 100 ? Math.round(normalized * 10) / 10 : null;
+}
+
+function validSplitPair(market: NbaMovementMarket, rows: Map<NbaReaderSide, NbaReaderSplitRow>): boolean {
+  const sides = expectedSides(market);
+  const pair = sides.map((side) => rows.get(side));
+  if (pair.some((row) => !row)) return false;
+  if (pair.some((row) => pct(row!.betsPct) === null && pct(row!.moneyPct) === null)) return false;
+  for (const field of ["betsPct", "moneyPct"] as const) {
+    const values = pair.map((row) => pct(row![field]));
+    if (values.every((value) => value !== null)) {
+      const sum = values.reduce<number>((total, value) => total + value!, 0);
+      if (Math.abs(sum - 100) > 1.1) return false;
+    }
+  }
+  return true;
+}
+
+function completeSplitPair(market: NbaMovementMarket, rows: Map<NbaReaderSide, NbaReaderSplitRow>): boolean {
+  if (!validSplitPair(market, rows)) return false;
+  return expectedSides(market).every((side) => {
+    const row = rows.get(side);
+    return row !== undefined && pct(row.betsPct) !== null && pct(row.moneyPct) !== null;
+  });
+}
+
+function playbookConsensusSnapshots(
+  market: NbaMovementMarket,
+  rows: readonly NbaReaderSplitRow[],
+): SplitSnapshot[] {
+  const byCapture = new Map<string, Map<NbaReaderSide, NbaReaderSplitRow>>();
+  for (const row of rows) {
+    if (
+      row.market !== market || canonical(row.provider) !== "playbook" ||
+      canonical(row.sourceBook) !== "consensus" || row.sourceType !== "multi_book_consensus"
+    ) continue;
+    const side = selectionSide(row.selectionKey);
+    if (!side || !expectedSides(market).includes(side)) continue;
+    const captured = byCapture.get(row.fetchedAt) ?? new Map<NbaReaderSide, NbaReaderSplitRow>();
+    captured.set(side, row);
+    byCapture.set(row.fetchedAt, captured);
+  }
+  return [...byCapture.entries()]
+    .filter(([, snapshot]) => completeSplitPair(market, snapshot))
+    .map(([fetchedAt, snapshot]) => ({ fetchedAt, rows: snapshot }))
+    .sort((left, right) => Date.parse(left.fetchedAt) - Date.parse(right.fetchedAt));
+}
+
+function buildPublicSplits(args: {
+  market: NbaMovementMarket;
+  rows: readonly NbaReaderSplitRow[];
+  homeAbbr: string;
+  awayAbbr: string;
+  evaluatedAt: string;
+}): PublicSplit[] {
+  const snapshots = playbookConsensusSnapshots(args.market, args.rows);
+  const latest = snapshots.at(-1);
+  if (!latest) return [];
+  const ageMinutes = (Date.parse(args.evaluatedAt) - Date.parse(latest.fetchedAt)) / 60_000;
+  if (!Number.isFinite(ageMinutes) || ageMinutes < 0) return [];
+  return expectedSides(args.market).map((side): PublicSplit => {
+    const row = latest.rows.get(side)!;
+    return {
+      side,
+      label: side === "home" ? args.homeAbbr
+        : side === "away" ? args.awayAbbr
+        : side === "over" ? "Over" : "Under",
+      moneyPct: pct(row.moneyPct),
+      betsPct: pct(row.betsPct),
+      observedAt: row.sourceObservedAt ?? row.fetchedAt,
+      freshnessCheckedAt: row.fetchedAt,
+      staleAfterMinutes: SPLIT_STALE_AFTER_MINUTES,
+      isStale: ageMinutes > SPLIT_STALE_AFTER_MINUTES,
+    };
+  });
+}
+
+type SharpSourceBook = "circa" | "draftkings" | "betmgm";
+
+function sharpSourceBook(row: NbaReaderSplitRow): SharpSourceBook | null {
+  const book = canonical(row.sourceBook);
+  if (book === "circa" || book === "draftkings" || book === "betmgm") return book;
+  return null;
+}
+
+function sharpBookSnapshots(
+  market: NbaMovementMarket,
+  rows: readonly NbaReaderSplitRow[],
+  sourceBook: SharpSourceBook,
+): SplitSnapshot[] {
+  const byCapture = new Map<string, Map<NbaReaderSide, NbaReaderSplitRow>>();
+  for (const row of rows) {
+    if (row.market !== market || canonical(row.provider) !== "sharpapi" || sharpSourceBook(row) !== sourceBook) continue;
+    const side = selectionSide(row.selectionKey);
+    if (!side || !expectedSides(market).includes(side)) continue;
+    const captured = byCapture.get(row.fetchedAt) ?? new Map<NbaReaderSide, NbaReaderSplitRow>();
+    captured.set(side, row);
+    byCapture.set(row.fetchedAt, captured);
+  }
+  return [...byCapture.entries()]
+    .filter(([, snapshot]) => completeSplitPair(market, snapshot))
+    .map(([fetchedAt, snapshot]) => ({ fetchedAt, rows: snapshot }))
+    .sort((left, right) => Date.parse(left.fetchedAt) - Date.parse(right.fetchedAt));
+}
+
+function latestSourceSection(args: {
+  market: NbaMovementMarket;
+  rows: readonly NbaReaderSplitRow[];
+  sourceBook: SharpSourceBook;
+  homeAbbr: string;
+  awayAbbr: string;
+  evaluatedAt: string;
+}): MarketSplitDisplaySection | null {
+  const snapshots = sharpBookSnapshots(args.market, args.rows, args.sourceBook);
+  const latest = snapshots.at(-1);
+  if (!latest) return null;
+  const first = snapshots[0]!;
+  const ageMinutes = (Date.parse(args.evaluatedAt) - Date.parse(latest.fetchedAt)) / 60_000;
+  if (!Number.isFinite(ageMinutes) || ageMinutes < 0) return null;
+  const stale = ageMinutes > SPLIT_STALE_AFTER_MINUTES;
+  return {
+    // The source remains internal provenance. Members always see one stable
+    // panel while Circa silently displaces or yields to an approved fallback.
+    label: "Sharp Book Splits",
+    sourceBook: args.sourceBook,
+    sourceObservedAt: latest.fetchedAt,
+    rows: expectedSides(args.market).map((side) => {
+      const row = latest.rows.get(side)!;
+      const firstRow = first.rows.get(side)!;
+      const moneyPct = pct(row.moneyPct);
+      const betsPct = pct(row.betsPct);
+      const firstMoneyPct = pct(firstRow.moneyPct);
+      const firstBetsPct = pct(firstRow.betsPct);
+      return {
+        side,
+        label: side === "home" ? args.homeAbbr
+          : side === "away" ? args.awayAbbr
+          : side === "over" ? "Over" : "Under",
+        moneyPct,
+        betsPct,
+        moneyDeltaPp: moneyPct !== null && firstMoneyPct !== null ? moneyPct - firstMoneyPct : null,
+        betsDeltaPp: betsPct !== null && firstBetsPct !== null ? betsPct - firstBetsPct : null,
+        comparisonObservedAt: first.rows.get(side)?.sourceObservedAt ?? first.fetchedAt,
+        observedAt: row.sourceObservedAt ?? row.fetchedAt,
+        freshnessCheckedAt: row.fetchedAt,
+        staleAfterMinutes: SPLIT_STALE_AFTER_MINUTES,
+        isStale: stale,
+      };
+    }),
+    signal: null,
+    lastUpdated: latest.fetchedAt,
+  };
+}
+
+function sectionTime(section: MarketSplitDisplaySection | null): number {
+  if (!section?.lastUpdated) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(section.lastUpdated);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function buildSharpBookEvidence(args: {
+  market: NbaMovementMarket;
+  rows: readonly NbaReaderSplitRow[];
+  homeAbbr: string;
+  awayAbbr: string;
+  evaluatedAt: string;
+}): Pick<NbaMemberMarketEvidence, "sportsbookSplits" | "sharpBookAvailability"> {
+  const section = (sourceBook: SharpSourceBook) => latestSourceSection({ ...args, sourceBook });
+  const circa = section("circa");
+  const fallback = [section("draftkings"), section("betmgm")]
+    .filter((candidate): candidate is MarketSplitDisplaySection => candidate !== null)
+    .sort((left, right) => sectionTime(right) - sectionTime(left))[0] ?? null;
+  const circaIsStale = circa?.rows.some((row) => row.isStale === true) ?? false;
+  const displayed = circa === null
+    ? fallback
+    : circaIsStale && sectionTime(fallback) > sectionTime(circa)
+      ? fallback
+      : circa;
+  const rawSharp = args.rows.filter((row) =>
+    row.market === args.market && canonical(row.provider) === "sharpapi" && sharpSourceBook(row) !== null);
+  const lastRawUpdate = rawSharp
+    .map((row) => row.fetchedAt)
+    .filter((value) => Number.isFinite(Date.parse(value)))
+    .sort()
+    .at(-1) ?? null;
+  if (displayed !== null) {
+    const stale = displayed.rows.some((row) => row.isStale === true);
+    return {
+      sportsbookSplits: displayed,
+      sharpBookAvailability: {
+        status: stale ? "stale" : "complete",
+        message: stale
+          ? "The last complete two-sided sharp-book split snapshot is retained while the next update is pending."
+          : "Complete two-sided sharp-book money and ticket percentages are available.",
+        lastUpdated: displayed.lastUpdated,
+      },
+    };
+  }
+  return {
+    sportsbookSplits: null,
+    sharpBookAvailability: rawSharp.length > 0 ? {
+      status: "provider_limited",
+      message: "Sharp-book data is partial for this market; percentages remain hidden until both sides include money and ticket shares.",
+      lastUpdated: lastRawUpdate,
+    } : {
+      status: "pending",
+      message: "Sharp-book splits are awaiting the next verified source snapshot.",
+      lastUpdated: null,
+    },
+  };
+}
+
+function observationTime(row: NbaReaderPriceRow): string {
+  return row.providerTimestamp ?? row.fetchedAt;
+}
+
+function sameQuote(left: NbaReaderPriceRow, right: NbaReaderPriceRow): boolean {
+  return left.americanPrice === right.americanPrice && left.line === right.line;
+}
+
+function compactTrail(rows: NbaReaderPriceRow[]): NbaReaderPriceRow[] {
+  if (rows.length <= 2) return rows;
+  const compacted = [rows[0]!];
+  for (let index = 1; index < rows.length - 1; index++) {
+    const row = rows[index]!;
+    if (!sameQuote(row, compacted[compacted.length - 1]!)) compacted.push(row);
+  }
+  const terminal = rows.at(-1)!;
+  if (observationTime(compacted.at(-1)!) !== observationTime(terminal)) compacted.push(terminal);
+  return compacted;
+}
+
+function buildTrail(args: {
+  market: NbaMovementMarket;
+  side: NbaReaderSide;
+  sportsbook: string | null;
+  rows: readonly NbaReaderPriceRow[];
+  current?: { price: number | null; line: number | null; observedAt: string | null };
+}): OddsTrailStopDto[] {
+  const book = canonical(args.sportsbook);
+  if (!book) return [];
+  const matching = args.rows
+    .filter((row) =>
+      row.market === args.market && selectionSide(row.selectionKey) === args.side &&
+      canonical(row.sportsbook) === book && row.americanPrice !== null && row.americanPrice !== 0 &&
+      Number.isFinite(Date.parse(observationTime(row))))
+    .sort((left, right) => Date.parse(observationTime(left)) - Date.parse(observationTime(right)));
+  const distinct = matching.filter((row, index) => {
+    const prior = matching[index - 1];
+    return !prior || observationTime(prior) !== observationTime(row) || !sameQuote(prior, row);
+  });
+  if (
+    args.current?.price !== null && args.current?.price !== undefined && args.current.price !== 0 &&
+    args.current.observedAt && Number.isFinite(Date.parse(args.current.observedAt)) &&
+    (!distinct.at(-1) || distinct.at(-1)!.americanPrice !== args.current.price ||
+      distinct.at(-1)!.line !== args.current.line ||
+      Date.parse(observationTime(distinct.at(-1)!)) < Date.parse(args.current.observedAt))
+  ) {
+    distinct.push({
+      sportsbook: args.sportsbook!,
+      sharpBook: false,
+      market: args.market,
+      selectionKey: `display:${args.market}:${args.side}`,
+      americanPrice: args.current.price,
+      line: args.current.line,
+      providerTimestamp: args.current.observedAt,
+      fetchedAt: args.current.observedAt,
+    });
+  }
+  const compacted = compactTrail(distinct);
+  return compacted.map((row, index): OddsTrailStopDto => ({
+    american: row.americanPrice!,
+    line: row.line,
+    observedAt: observationTime(row),
+    sportsbook: row.sportsbook,
+    source: index === compacted.length - 1 ? "current_line" : "line_history",
+    label: compacted.length === 1 ? "current" : index === 0 ? "first" : index === compacted.length - 1 ? "current" : "move",
+  }));
+}
+
+function marketIntel(game: NbaDailyEdgeGameDto, market: NbaMovementMarket): MarketIntelligence {
+  return market === "moneyline" ? game.intelligence.ml
+    : market === "spread" ? game.intelligence.spread : game.intelligence.total;
+}
+
+function memberEvidenceForMarket(args: {
+  game: NbaDailyEdgeGameDto;
+  market: NbaMovementMarket;
+  priceRows: readonly NbaReaderPriceRow[];
+  splitRows: readonly NbaReaderSplitRow[];
+  evaluatedAt: string;
+}): NbaMemberMarketEvidence {
+  const intel = marketIntel(args.game, args.market);
+  const selectedSide = intel.pick_side;
+  const sportsbook = intel.current_price.sportsbook;
+  const selected = selectedSide === null ? [] : buildTrail({
+    market: args.market,
+    side: selectedSide,
+    sportsbook,
+    rows: args.priceRows,
+    current: {
+      price: intel.current_price.odds_american,
+      line: intel.consensus_line,
+      observedAt: intel.current_price.fetched_at,
+    },
+  });
+  const opposingSide = selectedSide === null ? null : oppositeSide(selectedSide);
+  const opposing = opposingSide === null ? [] : buildTrail({
+    market: args.market,
+    side: opposingSide,
+    sportsbook,
+    rows: args.priceRows,
+  });
+  const terminal = selected.at(-1) ?? null;
+  const sharpBookEvidence = buildSharpBookEvidence({
+    market: args.market,
+    rows: args.splitRows,
+    homeAbbr: args.game.home_abbr,
+    awayAbbr: args.game.away_abbr,
+    evaluatedAt: args.evaluatedAt,
+  });
+  return {
+    publicSplits: buildPublicSplits({
+      market: args.market,
+      rows: args.splitRows,
+      homeAbbr: args.game.home_abbr,
+      awayAbbr: args.game.away_abbr,
+      evaluatedAt: args.evaluatedAt,
+    }),
+    ...sharpBookEvidence,
+    oddsTrail: selected,
+    lineTrail: args.market === "moneyline" ? [] : selected,
+    opposingOddsTrail: opposingSide !== null && opposing.length > 0 ? {
+      side: opposingSide,
+      label: opposingSide === "home" ? args.game.home_abbr
+        : opposingSide === "away" ? args.game.away_abbr
+        : opposingSide === "over" ? "Over" : "Under",
+      stops: opposing,
+    } : null,
+    movementReferenceSportsbook: terminal?.sportsbook ?? null,
+    movementReferencePriceAmerican: terminal?.american ?? null,
+    movementReferenceObservedAt: terminal?.observedAt ?? null,
+  };
+}
+
+/**
+ * Member evidence is a display-only projection of the exact stored inputs that
+ * the NBA reader already consumed. It cannot alter forecasts, grades, stakes,
+ * or locks. Callers must not attach it to an immutable locked snapshot.
+ */
+export function buildNbaMemberGameEvidence(args: {
+  game: NbaDailyEdgeGameDto;
+  priceRows: readonly NbaReaderPriceRow[];
+  splitRows: readonly NbaReaderSplitRow[];
+  evaluatedAt: string;
+}): NbaMemberGameEvidence {
+  return {
+    moneyline: memberEvidenceForMarket({ ...args, market: "moneyline" }),
+    spread: memberEvidenceForMarket({ ...args, market: "spread" }),
+    total: memberEvidenceForMarket({ ...args, market: "total" }),
+  };
+}
