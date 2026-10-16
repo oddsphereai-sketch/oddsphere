@@ -982,8 +982,9 @@ check(
     candidateDailyEdgeSource.includes('label: "World Cup"'),
 );
 check(
-  "high-traffic active-season models lead the top-level pill bar",
-  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.slice(0, 5).join(",") === "nfl,cfb,nba,nhl,mlb" &&
+  "the top-level pill bar keeps professional and college flagship pairs together",
+  DAILY_EDGE_TOP_LEVEL_SPORT_KEYS.slice(0, 5).join(",") === "nfl,cfb,nba,cbb,nhl" &&
+    orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS).slice(0, 4).join(",") === "nfl,cfb,nba,cbb" &&
     DAILY_EDGE_SPORT_AVAILABILITY.nfl?.isLive === true &&
     DAILY_EDGE_SPORT_AVAILABILITY.nfl?.statusLabel === "In season" &&
     DAILY_EDGE_SPORT_AVAILABILITY.cfb?.isLive === true &&
@@ -999,7 +1000,7 @@ check(
     nhl: { isLive: true, statusLabel: "No games today" },
     mlb: { isLive: true, statusLabel: "Active" },
     wnba: { isLive: true, statusLabel: "Active" },
-  }).join(",") === "nba,nfl,cfb,mlb,soccer,nhl,wnba,cbb",
+  }).join(",") === "nfl,cfb,nba,cbb,mlb,soccer,nhl,wnba",
 );
 check(
   "sport activity is a cached read-only enhancement that does not substitute yesterday's daily board",
