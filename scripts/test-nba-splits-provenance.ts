@@ -3,7 +3,10 @@ import {
   matchSplitsRow,
   type NbaSplitsRow,
 } from "../lib/services/nba/nbaSplitsClient";
-import { publicSplitsSupported } from "../lib/config/publicSplitsCapability";
+import {
+  publicSplitsDisplaySupported,
+  publicSplitsSupported,
+} from "../lib/config/publicSplitsCapability";
 
 function row(args: {
   sportsbook: string;
@@ -54,7 +57,12 @@ assert.equal(
 assert.equal(
   publicSplitsSupported("nba"),
   false,
-  "NBA split observations must remain display/model-ineligible until the capability audit clears",
+  "NBA split observations must remain model-ineligible until immutable forward validation clears",
+);
+assert.equal(
+  publicSplitsDisplaySupported("nba"),
+  true,
+  "the separately audited NBA Playbook pairs may render without granting model authority",
 );
 
 console.log("NBA sportsbook split provenance and observe-only boundary tests passed.");

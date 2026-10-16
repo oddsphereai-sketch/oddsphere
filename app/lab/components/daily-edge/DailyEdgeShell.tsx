@@ -2474,36 +2474,59 @@ function MarketPulse({
   // to the legacy single-side scalars if it isn't populated (e.g.,
   // older cached DTOs).
   const splits = marketData.publicSplits;
+  const sharpBookSplits = marketData.sportsbookSplits ?? null;
+  const sharpAvailability = marketData.sharpBookAvailability ?? null;
   const decision = marketData.recommendationDecision;
   if (decision) {
     return <SourceAwareMarketPulse decision={decision} />;
   }
-  if (splits.length === 0) {
+  if (splits.length === 0 && sharpBookSplits === null) {
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-2.5">
         <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse</p>
         <p className="text-[11.5px] text-gray-500 leading-snug">
           Public split data unavailable for this game today.
         </p>
+        {sharpAvailability !== null ? (
+          <div className="space-y-1">
+            <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-300">Sharp Book Splits</p>
+            <p className="text-[11.5px] text-gray-500 leading-snug">{sharpAvailability.message}</p>
+          </div>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse · Public Splits</p>
-      <div className="space-y-2.5">
-        {splits.map((s) => (
-          <SideSplitsBlock
-            key={s.side}
-            label={s.label}
-            moneyPct={s.moneyPct}
-            betsPct={s.betsPct}
-            observedAt={s.observedAt ?? null}
-            isStale={s.isStale ?? false}
-          />
-        ))}
-      </div>
+    <div className="space-y-2.5">
+      <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse</p>
+      {splits.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-300">Consensus Splits</p>
+          <div className="space-y-2.5">
+            {splits.map((s) => (
+              <SideSplitsBlock
+                key={s.side}
+                label={s.label}
+                moneyPct={s.moneyPct}
+                betsPct={s.betsPct}
+                observedAt={s.observedAt ?? null}
+                isStale={s.isStale ?? false}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-[11.5px] text-gray-500 leading-snug">Public split data unavailable for this game today.</p>
+      )}
+      {sharpBookSplits !== null ? (
+        <SplitSection section={sharpBookSplits} />
+      ) : sharpAvailability !== null ? (
+        <div className="space-y-1">
+          <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-gray-300">Sharp Book Splits</p>
+          <p className="text-[11.5px] text-gray-500 leading-snug">{sharpAvailability.message}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -53,7 +53,12 @@ import type {
   NbaDailyEdgeGameDto,
   NbaMarketSignalsCapability,
 } from "./buildNbaDailyEdgeDto";
+import type {
+  NbaMemberGameEvidence,
+  NbaMemberMarketEvidence,
+} from "./nbaMemberMarketEvidence";
 import type { RecommendationGrade } from "./nbaMarketReview";
+import { publicSplitsDisplaySupported } from "../../config/publicSplitsCapability";
 
 const NBA_LOGO_BASE = "https://a.espncdn.com/i/teamlogos/nba/500";
 
@@ -184,8 +189,10 @@ function buildMarketEdgeDto(opts: {
   /** Grounded model projected total (game.projection.total) — the model's
    *  actual total, NOT the market line, for the Model Edge "points" row. */
   projectedTotal: number | null;
+  /** Verified display-only evidence already consumed by the internal reader. */
+  memberEvidence?: NbaMemberMarketEvidence;
 }): MarketEdgeDto {
-  const { intel, homeAbbr, awayAbbr, sportSlot, capability, openPriceAmerican, projectedTotal } = opts;
+  const { intel, homeAbbr, awayAbbr, sportSlot, capability, openPriceAmerican, projectedTotal, memberEvidence } = opts;
   const held = intel.pick_side === null;
   const verdict: { key: Verdict; label: string } = {
     key: gradeToVerdict(intel.grade),
@@ -197,8 +204,13 @@ function buildMarketEdgeDto(opts: {
       "No Play",
   };
 
-  const publicSplits: MarketEdgeDto["publicSplits"] = [];
-  if (capability === "available" && intel.splits.pick_side !== null && intel.splits.other_side !== null) {
+  const publicSplits: MarketEdgeDto["publicSplits"] = publicSplitsDisplaySupported("nba")
+    ? memberEvidence?.publicSplits.map((row) => ({ ...row })) ?? []
+    : [];
+  if (
+    publicSplits.length === 0 && capability === "available" &&
+    intel.splits.pick_side !== null && intel.splits.other_side !== null
+  ) {
     if (sportSlot === "total") {
       const pickIsOver = intel.pick_side === "over";
       publicSplits.push({
@@ -266,7 +278,12 @@ function buildMarketEdgeDto(opts: {
     moneyPct: pctTo100(intel.splits.pick_side?.handle_pct ?? null),
     betsPct: pctTo100(intel.splits.pick_side?.bets_pct ?? null),
     publicSplits,
+    sportsbookSplits: memberEvidence?.sportsbookSplits ?? null,
+    sharpBookAvailability: memberEvidence?.sharpBookAvailability ?? null,
     priceAmerican: intel.current_price.odds_american,
+    currentPriceAmerican: intel.current_price.odds_american,
+    currentPriceSportsbook: intel.current_price.sportsbook,
+    currentPriceObservedAt: intel.current_price.fetched_at,
     lineOpenAmerican: openPriceAmerican,
     modelTotal: sportSlot === "total" && !held ? (projectedTotal ?? intel.consensus_line ?? null) : null,
     marketTotal: sportSlot === "total" ? intel.consensus_line : null,
@@ -291,6 +308,12 @@ function buildMarketEdgeDto(opts: {
           : "unavailable",
     reviewFlags: [],
     reviewActionSummary: "keep",
+    oddsTrail: memberEvidence?.oddsTrail ?? [],
+    lineTrail: memberEvidence?.lineTrail ?? [],
+    opposingOddsTrail: memberEvidence?.opposingOddsTrail ?? null,
+    movementReferenceSportsbook: memberEvidence?.movementReferenceSportsbook ?? null,
+    movementReferencePriceAmerican: memberEvidence?.movementReferencePriceAmerican ?? null,
+    movementReferenceObservedAt: memberEvidence?.movementReferenceObservedAt ?? null,
   };
 }
 
@@ -385,6 +408,7 @@ function adaptGame(
   capability: NbaMarketSignalsCapability,
   asOf: string,
   openPrices: NbaPickSideOpenPrices,
+  memberEvidence?: NbaMemberGameEvidence,
 ): DailyEdgeGameDto {
   const intel = game.intelligence;
   const ml = buildMarketEdgeDto({
@@ -395,6 +419,7 @@ function adaptGame(
     capability,
     openPriceAmerican: openPrices.ml,
     projectedTotal: null,
+    memberEvidence: memberEvidence?.moneyline,
   });
   const total = buildMarketEdgeDto({
     intel: intel.total,
@@ -404,6 +429,7 @@ function adaptGame(
     capability,
     openPriceAmerican: openPrices.total,
     projectedTotal: game.projection?.total ?? null,
+    memberEvidence: memberEvidence?.total,
   });
   const spreadAsFi = buildMarketEdgeDto({
     intel: intel.spread,
@@ -413,6 +439,7 @@ function adaptGame(
     capability,
     openPriceAmerican: openPrices.spread,
     projectedTotal: null,
+    memberEvidence: memberEvidence?.spread,
   });
 
   const topGrade = intel.top_grade;
@@ -483,7 +510,10 @@ function adaptGame(
 
 export function adaptNbaToDailyEdgeResponse(
   nbaDto: NbaDailyEdgeDto,
-  opts?: { openPricesByGame?: Map<number, NbaPickSideOpenPrices> },
+  opts?: {
+    openPricesByGame?: Map<number, NbaPickSideOpenPrices>;
+    memberEvidenceByGame?: Map<number, NbaMemberGameEvidence>;
+  },
 ): DailyEdgeResponse {
   return {
     as_of: nbaDto.as_of,
@@ -505,7 +535,13 @@ export function adaptNbaToDailyEdgeResponse(
         total: null,
         spread: null,
       };
-      return adaptGame(g, nbaDto.market_signals_capability, nbaDto.as_of, openPrices);
+      return adaptGame(
+        g,
+        nbaDto.market_signals_capability,
+        nbaDto.as_of,
+        openPrices,
+        opts?.memberEvidenceByGame?.get(g.game_external_id),
+      );
     }),
   };
 }

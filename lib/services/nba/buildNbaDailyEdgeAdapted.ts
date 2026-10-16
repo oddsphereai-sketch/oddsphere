@@ -88,6 +88,10 @@ import {
   type NbaReaderPriceRow,
   type NbaReaderSplitRow,
 } from "./nbaProfessionalMarketReader";
+import {
+  buildNbaMemberGameEvidence,
+  type NbaMemberGameEvidence,
+} from "./nbaMemberMarketEvidence";
 
 const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
 
@@ -127,6 +131,8 @@ function bestExecutionSportsbook(args: {
 export type NbaDailyEdgePipelineResult = {
   nbaDto: NbaDailyEdgeDto;
   openPricesByGame: Map<number, NbaPickSideOpenPrices>;
+  /** Unlocked-only display evidence. Never overlays an immutable locked DTO. */
+  memberEvidenceByGame: Map<number, NbaMemberGameEvidence>;
   /** Map of NBA game external_id → games.id (DB primary key). */
   dbIdByExternalId: Map<number, number>;
 };
@@ -606,6 +612,11 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
     dbIdByExternalId: externalToDbId,
     rows: lockedRows,
   });
+  const lockedExternalIds = new Set(lockedRows.flatMap((row) => {
+    if (row.locked_at === null) return [];
+    const externalId = dbIdToExt.get(row.game_id);
+    return externalId === undefined ? [] : [externalId];
+  }));
 
   const marketSignalsCapability =
     sharpKey === undefined || sharpKey === ""
@@ -631,6 +642,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
   // Surface only a comparable same-book, same-line opening price. Missing
   // identity is unavailable—not permission to compare unrelated quotes.
   const openPricesByGame = new Map<number, NbaPickSideOpenPrices>();
+  const memberEvidenceByGame = new Map<number, NbaMemberGameEvidence>();
   for (const g of games) {
     const ext = g.game_external_id;
     const intel = g.intelligence;
@@ -653,9 +665,17 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
       total: lookup("total", intel.total),
       spread: lookup("spread", intel.spread),
     });
+    if (!lockedExternalIds.has(ext)) {
+      memberEvidenceByGame.set(ext, buildNbaMemberGameEvidence({
+        game: g,
+        priceRows: readerPriceRowsByGame.get(ext) ?? [],
+        splitRows: readerSplitRowsByGame.get(ext) ?? [],
+        evaluatedAt: readerEvaluatedAt,
+      }));
+    }
   }
 
-  return { nbaDto, openPricesByGame, dbIdByExternalId: externalToDbId };
+  return { nbaDto, openPricesByGame, memberEvidenceByGame, dbIdByExternalId: externalToDbId };
 }
 
 /**
@@ -697,8 +717,8 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     };
   }
 
-  const { nbaDto, openPricesByGame } = await buildNbaDailyEdgePipeline(date);
-  const response = adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame });
+  const { nbaDto, openPricesByGame, memberEvidenceByGame } = await buildNbaDailyEdgePipeline(date);
+  const response = adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame, memberEvidenceByGame });
   if (rollingSchedule) {
     // Preserve the analyzed current-day lifecycle, including completed cards
     // through the normal ET rollover. The schedule layer independently drops
@@ -728,8 +748,8 @@ async function buildNbaRollingMemberBoard(
   for (let index = 0; index < eligibleDates.length; index += NBA_ROLLING_ANALYSIS_CONCURRENCY) {
     const batch = eligibleDates.slice(index, index + NBA_ROLLING_ANALYSIS_CONCURRENCY);
     responses.push(...await Promise.all(batch.map(async (slateDate) => {
-      const { nbaDto, openPricesByGame } = await buildNbaDailyEdgePipeline(slateDate);
-      return adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame });
+      const { nbaDto, openPricesByGame, memberEvidenceByGame } = await buildNbaDailyEdgePipeline(slateDate);
+      return adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame, memberEvidenceByGame });
     })));
   }
 
