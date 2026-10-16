@@ -30,3 +30,6 @@ Keep the archive implementation eligible for an internal capture release because
 The next scheduled writer cycles can capture provider openings and T-24/T-6/T-60 observations once the existing feeds actually post them. The archive accepts both the retail exact board and only those source-aware reference offers fetched in the same writer cycle; it never promotes a retained stale reference cache into a new landmark.
 
 Storage for the empty validation envelope was 370 JSON bytes and 225 gzip bytes, against hard ceilings of 48,000,000 and 4,000,000 bytes. The live audit itself performed no database write.
+
+The per-family provider matrix is recorded separately in
+`docs/model-audits/2026-10-16-nfl-player-props-provider-family-availability.md`.
