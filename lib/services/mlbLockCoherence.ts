@@ -5,7 +5,7 @@ import {
 } from "./dailyEdge/actionPromotionStability";
 
 export const MLB_LOCK_COHERENCE_RELEASE =
-  "mlb_lock_coherence_2026_09_05_r4_writer_timestamp_independent" as const;
+  "mlb_lock_coherence_2026_10_16_r5_persisted_numeric_precision" as const;
 
 type LockComparableRow = {
   game_id: number;
@@ -69,6 +69,16 @@ function sameScalar(first: unknown, second: unknown): boolean {
   return first === second || (typeof first === "number" && typeof second === "number" && Object.is(first, second));
 }
 
+function samePersistedNumericScalar(first: unknown, second: unknown): boolean {
+  if (typeof first !== "number" || typeof second !== "number") {
+    return sameScalar(first, second);
+  }
+  // prediction_records persists probability/economics columns at six decimal
+  // places. Compare the raw proposal at that storage boundary so harmless
+  // database serialization cannot block an otherwise exact public tuple.
+  return Number(first.toFixed(6)) === Number(second.toFixed(6));
+}
+
 function sameEvaluationPrice(candidate: JsonRecord, expectedSnapshot: JsonRecord): boolean {
   const candidatePrice = record(candidate.evaluation_price);
   const expectedPrice = record(expectedSnapshot.ml_evaluation_price);
@@ -126,7 +136,7 @@ function isExactFailedEconomicsStanddown(
   const expectedGrade = lockGrade(expected);
   if (GRADE_RANK[expectedGrade] < GRADE_RANK.lean) return false;
   if (stored.play_grade !== null || stored.best_angle !== false || stored.no_bet !== true) return false;
-  if (!FAILED_ECONOMICS_TUPLE_FIELDS.every((field) => sameScalar(stored[field], expected[field]))) {
+  if (!FAILED_ECONOMICS_TUPLE_FIELDS.every((field) => samePersistedNumericScalar(stored[field], expected[field]))) {
     return false;
   }
 

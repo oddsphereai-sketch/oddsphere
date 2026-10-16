@@ -466,7 +466,10 @@ Last reviewed: 2026-10-16
   `cfb_v1_daily_edge_decision_2026_10_15_r52_full_product_coordinator_compatibility`. Candidate /
   production reader / tuple / evidence / member are r38 / r40 / r39 / r47 / r64 with the same
   suffix. Fixture / outcome / compact snapshot / reader / tracking are r92 / r80 / r52 / r37 / r49;
-  the sole writer is r124. The r51/r46/r63/r39 coordinator family remains explicitly readable with
+  the sole writer is r125 (`cfb_forward_evidence_writer_2026_10_16_r125_market_history_capacity`).
+  R125 keeps the same 72-hour market-history semantics and raises only the compact projection's
+  bounded capacity from 12,000 to 20,000 rows after the 95-game board reached 12,003 rows and
+  stopped the scheduled writer before T-60. The r51/r46/r63/r39 coordinator family remains explicitly readable with
   exact locked precedence. Evidence, current-board impact, competitor context, gates, and rollback:
   `docs/model-audits/2026-10-15-cfb-full-product-coordinator-compatibility.md`.
 
@@ -2159,7 +2162,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Grade policy: `mlb_public_grade_policy_v61_unified_two_layer_total_2026_10_16`
 - Correction policy: `mlb_prediction_corrections_v26_unified_total_reader_reconciliation_2026_10_16`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
-- Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
+- Lock coherence: `mlb_lock_coherence_2026_10_16_r5_persisted_numeric_precision`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`
 - Authoritative member-facing writer: `lib/services/predictionRecordService.ts`
 
