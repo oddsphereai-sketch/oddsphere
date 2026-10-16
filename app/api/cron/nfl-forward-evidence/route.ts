@@ -120,7 +120,8 @@ export async function GET(request: Request): Promise<Response> {
     }
     const playerPropsCriticalHealth = playerProps?.healthFindings.filter((finding) =>
       finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
-      || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED") ?? [];
+      || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"
+      || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED") ?? [];
     return {
       records_updated: result.inserted + (playerProps?.memberRows ?? 0),
       api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
