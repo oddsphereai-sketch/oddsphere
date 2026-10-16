@@ -142,7 +142,8 @@ def build_market_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def incumbent_grades(frame: pd.DataFrame, market: str) -> np.ndarray:
-    probability = frame[f"{market}_probability"].to_numpy(float)
+    prefix = "ml" if market == "moneyline" else market
+    probability = frame[f"{prefix}_probability"].to_numpy(float)
     grade = np.full(len(frame), "watch", dtype=object)
     if market == "moneyline":
         edge = frame["ml_edge"].to_numpy(float)
@@ -266,13 +267,14 @@ def grade_counts(grades: np.ndarray) -> dict[str, int]:
 
 
 def tier_metrics(frame: pd.DataFrame, market: str, grades: np.ndarray, tier: str) -> dict[str, Any]:
+    prefix = "ml" if market == "moneyline" else market
     if tier == "actionable":
         mask = np.isin(grades, ["best_angle", "lean"])
     else:
         mask = grades == tier
     if market != "moneyline":
         mask &= ~frame[f"{market}_push"].to_numpy(bool)
-    wins = frame[f"{market}_win"].to_numpy(bool)[mask]
+    wins = frame[f"{prefix}_win"].to_numpy(bool)[mask]
     decisions = int(mask.sum())
     win_count = int(wins.sum())
     if market == "moneyline":
@@ -380,11 +382,12 @@ def confirmation_gates(result: dict[str, Any], market: str) -> dict[str, bool]:
 
 
 def loss_breakdown(frame: pd.DataFrame, market: str, grades: np.ndarray) -> dict[str, Any]:
+    prefix = "ml" if market == "moneyline" else market
     actionable = np.isin(grades, ["best_angle", "lean"])
     if market != "moneyline":
         actionable &= ~frame[f"{market}_push"].to_numpy(bool)
-    losses = actionable & ~frame[f"{market}_win"].to_numpy(bool)
-    probability = frame[f"{market}_probability"].to_numpy(float)
+    losses = actionable & ~frame[f"{prefix}_win"].to_numpy(bool)
+    probability = frame[f"{prefix}_probability"].to_numpy(float)
     buckets = pd.cut(
         probability,
         bins=[0.5, 0.55, 0.60, 0.65, 0.70, 1.0],
@@ -414,7 +417,7 @@ def loss_breakdown(frame: pd.DataFrame, market: str, grades: np.ndarray) -> dict
     return {
         "probabilityBuckets": grouped(np.asarray(buckets.astype(str))),
         "readerLanes": grouped(np.asarray(reader_lane)),
-        "pickedSides": grouped(frame[f"{market}_pick"].astype(str).to_numpy()),
+        "pickedSides": grouped(frame[f"{prefix}_pick"].astype(str).to_numpy()),
         "gradeTiers": grouped(np.asarray(grades)),
     }
 
