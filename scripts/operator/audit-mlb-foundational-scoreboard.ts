@@ -333,6 +333,16 @@ function metric(rows: PickRow[]): Metric {
   };
 }
 
+function wilsonLowerBound95(wins: number, decided: number): number {
+  if (decided === 0) return 0;
+  const z = 1.96;
+  const p = wins / decided;
+  const denominator = 1 + z * z / decided;
+  const center = p + z * z / (2 * decided);
+  const spread = z * Math.sqrt((p * (1 - p) + z * z / (4 * decided)) / decided);
+  return (center - spread) / denominator;
+}
+
 function mlOutcome(game: Game, side: Side): Outcome {
   const margin = side === "home" ? game.home - game.away : game.away - game.home;
   return margin > 0 ? "win" : margin < 0 ? "loss" : "push";
@@ -2474,21 +2484,38 @@ async function runLinePriceAudit(games: Game[]): Promise<Record<string, unknown>
     storedFavoriteCoverProbability: number;
     candidateFavoriteCoverProbability: number;
     candidateFavoriteMargin: number;
+    candidateTotal: number;
+    matchupFeatures: number[] | null;
     mlFavoriteProbability: number;
     outcome: number;
+    capturedAtMs: number;
   };
   const pairedByGame = new Map<number, PairedRunLine>();
   for (const values of byGameBook.values()) {
-    const home = values.find((row) => row.side === "home");
-    const away = values.find((row) => row.side === "away");
+    const coherentPairs = values
+      .filter((row) => row.side === "home")
+      .flatMap((home) => values
+        .filter((row) => row.side === "away")
+        .flatMap((away) => {
+          const homeMs = home.fetched_at ? Date.parse(home.fetched_at) : Number.NaN;
+          const awayMs = away.fetched_at ? Date.parse(away.fetched_at) : Number.NaN;
+          if (
+            home.line_value === null || away.line_value === null ||
+            home.line_value !== -away.line_value ||
+            !Number.isFinite(homeMs) || !Number.isFinite(awayMs) ||
+            Math.abs(homeMs - awayMs) > 30 * 60 * 1000
+          ) return [];
+          return [{ home, away, capturedAtMs: Math.max(homeMs, awayMs) }];
+        }))
+      .sort((a, b) => b.capturedAtMs - a.capturedAtMs);
+    const latestPair = coherentPairs[0];
+    if (!latestPair) continue;
+    const { home, away, capturedAtMs } = latestPair;
     if (
       !home || !away || home.line_value === null || away.line_value === null ||
       home.odds_american === null || away.odds_american === null ||
       home.line_value !== -away.line_value
     ) continue;
-    const homeMs = home.fetched_at ? Date.parse(home.fetched_at) : Number.NaN;
-    const awayMs = away.fetched_at ? Date.parse(away.fetched_at) : Number.NaN;
-    if (!Number.isFinite(homeMs) || !Number.isFinite(awayMs) || Math.abs(homeMs - awayMs) > 30 * 60 * 1000) continue;
     const game = games.find((candidateGame) => candidateGame.gameId === home.game_id);
     const stored = game ? storedPosteriorScore(game) : null;
     const candidate = game ? scopedStructuralPosterior(game, "exclude_bad_or_weak") : null;
@@ -2515,6 +2542,10 @@ async function runLinePriceAudit(games: Game[]): Promise<Record<string, unknown>
     const candidateFavoriteMargin = favoriteSide === "home"
       ? candidate.home - candidate.away
       : candidate.away - candidate.home;
+    const homeOrientedMatchupFeatures = matchupFeatures(game);
+    const favoriteMatchupFeatures = homeOrientedMatchupFeatures === null
+      ? null
+      : homeOrientedMatchupFeatures.map((value) => favoriteSide === "home" ? value : -value);
     const outcome = handicapOutcome(favoriteSide, favoriteLine, game) === "win" ? 1 : 0;
     const paired: PairedRunLine = {
       game,
@@ -2526,16 +2557,14 @@ async function runLinePriceAudit(games: Game[]): Promise<Record<string, unknown>
       storedFavoriteCoverProbability,
       candidateFavoriteCoverProbability,
       candidateFavoriteMargin,
+      candidateTotal: candidate.home + candidate.away,
+      matchupFeatures: favoriteMatchupFeatures,
       mlFavoriteProbability: favoriteSide === "home" ? mlHome : 1 - mlHome,
       outcome,
+      capturedAtMs,
     };
     const existing = pairedByGame.get(game.gameId);
-    const existingTime = existing
-      ? Math.max(...eligibleRows.filter((row) => row.game_id === game.gameId && row.sportsbook === existing.book)
-        .map((row) => row.fetched_at ? Date.parse(row.fetched_at) : Number.NEGATIVE_INFINITY))
-      : Number.NEGATIVE_INFINITY;
-    const pairTime = Math.max(homeMs, awayMs);
-    if (!existing || pairTime > existingTime) pairedByGame.set(game.gameId, paired);
+    if (!existing || capturedAtMs > existing.capturedAtMs) pairedByGame.set(game.gameId, paired);
   }
   const paired = [...pairedByGame.values()].sort((a, b) => a.game.date.localeCompare(b.game.date));
   const featureNames = [
@@ -2544,6 +2573,13 @@ async function runLinePriceAudit(games: Game[]): Promise<Record<string, unknown>
     "candidate_favorite_margin",
     "moneyline_favorite_logit",
   ];
+  const richFeatureNames = [
+    ...featureNames,
+    "favorite_starter_era_advantage",
+    "favorite_offense_factor_advantage",
+    "favorite_opposing_pitcher_factor_advantage",
+    "favorite_opposing_bullpen_factor_advantage",
+  ];
   const features = (row: PairedRunLine) => [
     logit(row.favoriteMarketProbability),
     logit(row.candidateFavoriteCoverProbability),
@@ -2551,7 +2587,56 @@ async function runLinePriceAudit(games: Game[]): Promise<Record<string, unknown>
     logit(row.mlFavoriteProbability),
   ];
   const train = paired.filter((row) => chronologicalLabel(games, row.game) === "train");
-  const model = fitLogisticModel(train.map((row) => ({ values: features(row), outcome: row.outcome })));
+  const marketReaderModel = fitLogisticModel(train.map((row) => ({ values: features(row), outcome: row.outcome })));
+  const storedCalibrationModel = fitLogisticModel(train.map((row) => ({
+    values: [logit(row.storedFavoriteCoverProbability)],
+    outcome: row.outcome,
+  })));
+  const candidateCalibrationModel = fitLogisticModel(train.map((row) => ({
+    values: [logit(row.candidateFavoriteCoverProbability)],
+    outcome: row.outcome,
+  })));
+  const independentSeparationModel = fitLogisticModel(train.map((row) => ({
+    values: [logit(row.candidateFavoriteCoverProbability), row.candidateFavoriteMargin],
+    outcome: row.outcome,
+  })));
+  const richIndependentTrain = train.filter((row) => row.matchupFeatures !== null);
+  const richIndependentSeparationModel = fitLogisticModel(richIndependentTrain.map((row) => ({
+    values: [
+      logit(row.candidateFavoriteCoverProbability),
+      row.candidateFavoriteMargin,
+      ...(row.matchupFeatures ?? []),
+    ],
+    outcome: row.outcome,
+  })));
+  const empiricalResiduals = train.map((row) => {
+    const actualFavoriteMargin = row.favoriteSide === "home"
+      ? row.game.home - row.game.away
+      : row.game.away - row.game.home;
+    const raw = actualFavoriteMargin - row.candidateFavoriteMargin;
+    return {
+      gameId: row.game.gameId,
+      raw,
+      scaled: raw / Math.sqrt(Math.max(1, row.candidateTotal)),
+    };
+  });
+  const empiricalSurvivalProbability = (
+    row: PairedRunLine,
+    scaled: boolean,
+  ): number => {
+    const leaveOneOut = chronologicalLabel(games, row.game) === "train";
+    const residuals = empiricalResiduals.filter((residual) =>
+      !leaveOneOut || residual.gameId !== row.game.gameId);
+    const scale = scaled ? Math.sqrt(Math.max(1, row.candidateTotal)) : 1;
+    const threshold = (1.5 - row.candidateFavoriteMargin) / scale;
+    const exceedances = residuals.filter((residual) =>
+      (scaled ? residual.scaled : residual.raw) > threshold).length;
+    return (exceedances + 0.5) / (residuals.length + 1);
+  };
+  const empiricalResidualProbability = (row: PairedRunLine) =>
+    empiricalSurvivalProbability(row, false);
+  const scaledEmpiricalResidualProbability = (row: PairedRunLine) =>
+    empiricalSurvivalProbability(row, true);
   const rowsFor = (sideFn: (row: PairedRunLine) => Side): PickRow[] => paired.map((row) => {
     const side = sideFn(row);
     const favorite = side === row.favoriteSide;
@@ -2567,24 +2652,356 @@ async function runLinePriceAudit(games: Game[]): Promise<Record<string, unknown>
     all: metric(values),
     chronology: summarizeChronology(games, values),
   });
+  const binaryMetric = (
+    values: PairedRunLine[],
+    probability: (row: PairedRunLine) => number,
+  ) => {
+    const probabilities = values.map((row) => clampProbability(probability(row)));
+    const wins = values.reduce((sum, row) => sum + row.outcome, 0);
+    const brier = values.length
+      ? values.reduce((sum, row, index) => sum + (probabilities[index] - row.outcome) ** 2, 0) / values.length
+      : null;
+    const logLoss = values.length
+      ? values.reduce((sum, row, index) => sum - (
+          row.outcome * Math.log(probabilities[index]) +
+          (1 - row.outcome) * Math.log(1 - probabilities[index])
+        ), 0) / values.length
+      : null;
+    return {
+      n: values.length,
+      favoriteCovers: wins,
+      underdogCovers: values.length - wins,
+      favoriteCoverRate: values.length ? round(wins / values.length, 4) : null,
+      meanPredictedFavoriteCoverProbability: values.length
+        ? round(probabilities.reduce((sum, value) => sum + value, 0) / values.length, 4)
+        : null,
+      brier: brier === null ? null : round(brier, 5),
+      logLoss: logLoss === null ? null : round(logLoss, 5),
+    };
+  };
+  const probabilityPackage = (probability: (row: PairedRunLine) => number) => ({
+    all: binaryMetric(paired, probability),
+    chronology: Object.fromEntries((['train', 'validation', 'holdout'] as const).map((partition) => [
+      partition,
+      binaryMetric(
+        paired.filter((row) => chronologicalLabel(games, row.game) === partition),
+        probability,
+      ),
+    ])),
+  });
+  const marginBuckets = (
+    margin: (row: PairedRunLine) => number,
+  ) => Object.fromEntries([
+    ["favorite_projected_to_lose", (value: number) => value <= 0],
+    ["favorite_by_0_to_1", (value: number) => value > 0 && value < 1],
+    ["favorite_by_1_to_2", (value: number) => value >= 1 && value < 2],
+    ["favorite_by_2_to_3", (value: number) => value >= 2 && value < 3],
+    ["favorite_by_3_plus", (value: number) => value >= 3],
+  ].map(([name, predicate]) => {
+    const bucket = paired.filter((row) => (predicate as (value: number) => boolean)(margin(row)));
+    const favoriteWins = bucket.filter((row) => mlOutcome(row.game, row.favoriteSide) === "win").length;
+    const favoriteCovers = bucket.reduce((sum, row) => sum + row.outcome, 0);
+    const actualMargins = bucket.map((row) => row.favoriteSide === "home"
+      ? row.game.home - row.game.away
+      : row.game.away - row.game.home);
+    return [name, {
+      n: bucket.length,
+      meanProjectedMargin: bucket.length
+        ? round(bucket.reduce((sum, row) => sum + margin(row), 0) / bucket.length)
+        : null,
+      meanActualMargin: bucket.length
+        ? round(actualMargins.reduce((sum, value) => sum + value, 0) / bucket.length)
+        : null,
+      favoriteWinPct: bucket.length ? round(favoriteWins / bucket.length, 4) : null,
+      favoriteCoverPct: bucket.length ? round(favoriteCovers / bucket.length, 4) : null,
+    }];
+  }));
+  const plattProbability = (
+    model: ReturnType<typeof fitLogisticModel>,
+    source: (row: PairedRunLine) => number[],
+    fallback: (row: PairedRunLine) => number,
+  ) => (row: PairedRunLine) => model === null
+    ? fallback(row)
+    : predictLogistic(model, source(row));
+  const storedCalibratedProbability = plattProbability(
+    storedCalibrationModel,
+    (row) => [logit(row.storedFavoriteCoverProbability)],
+    (row) => row.storedFavoriteCoverProbability,
+  );
+  const candidateCalibratedProbability = plattProbability(
+    candidateCalibrationModel,
+    (row) => [logit(row.candidateFavoriteCoverProbability)],
+    (row) => row.candidateFavoriteCoverProbability,
+  );
+  const independentSeparationProbability = plattProbability(
+    independentSeparationModel,
+    (row) => [logit(row.candidateFavoriteCoverProbability), row.candidateFavoriteMargin],
+    (row) => row.candidateFavoriteCoverProbability,
+  );
+  const richIndependentSeparationProbability = (row: PairedRunLine) =>
+    richIndependentSeparationModel === null || row.matchupFeatures === null
+      ? independentSeparationProbability(row)
+      : predictLogistic(richIndependentSeparationModel, [
+          logit(row.candidateFavoriteCoverProbability),
+          row.candidateFavoriteMargin,
+          ...row.matchupFeatures,
+        ]);
+  const marketReaderProbability = plattProbability(
+    marketReaderModel,
+    features,
+    (row) => row.candidateFavoriteCoverProbability,
+  );
+  const richMarketReaderModel = fitLogisticModel(richIndependentTrain.map((row) => ({
+    values: [
+      logit(row.favoriteMarketProbability),
+      logit(row.candidateFavoriteCoverProbability),
+      row.candidateFavoriteMargin,
+      logit(row.mlFavoriteProbability),
+      ...(row.matchupFeatures ?? []),
+    ],
+    outcome: row.outcome,
+  })));
+  const richMarketReaderProbability = (row: PairedRunLine) =>
+    richMarketReaderModel === null || row.matchupFeatures === null
+      ? marketReaderProbability(row)
+      : predictLogistic(richMarketReaderModel, [
+          logit(row.favoriteMarketProbability),
+          logit(row.candidateFavoriteCoverProbability),
+          row.candidateFavoriteMargin,
+          logit(row.mlFavoriteProbability),
+          ...row.matchupFeatures,
+        ]);
+  const empiricalReaderFeatures = (row: PairedRunLine) => [
+    logit(row.favoriteMarketProbability),
+    logit(scaledEmpiricalResidualProbability(row)),
+    logit(row.mlFavoriteProbability),
+  ];
+  const empiricalMarketReaderModel = fitLogisticModel(train.map((row) => ({
+    values: empiricalReaderFeatures(row),
+    outcome: row.outcome,
+  })));
+  const empiricalMarketReaderProbability = plattProbability(
+    empiricalMarketReaderModel,
+    empiricalReaderFeatures,
+    scaledEmpiricalResidualProbability,
+  );
+  const richEmpiricalMarketReaderModel = fitLogisticModel(richIndependentTrain.map((row) => ({
+    values: [...empiricalReaderFeatures(row), ...(row.matchupFeatures ?? [])],
+    outcome: row.outcome,
+  })));
+  const richEmpiricalMarketReaderProbability = (row: PairedRunLine) =>
+    richEmpiricalMarketReaderModel === null || row.matchupFeatures === null
+      ? empiricalMarketReaderProbability(row)
+      : predictLogistic(richEmpiricalMarketReaderModel, [
+          ...empiricalReaderFeatures(row),
+          ...row.matchupFeatures,
+        ]);
+  const valueRows = (
+    probability: (row: PairedRunLine) => number,
+    minimumEdge: number,
+    partition: "train" | "validation" | "holdout" | "all" = "all",
+    marketPosition: "favorite" | "underdog" | "all" = "all",
+    minimumUnderdogOdds: number | null = null,
+  ): PickRow[] => paired.flatMap((row) => {
+    if (partition !== "all" && chronologicalLabel(games, row.game) !== partition) return [];
+    const favoriteProbability = probability(row);
+    const edge = favoriteProbability - row.favoriteMarketProbability;
+    if (Math.abs(edge) < minimumEdge) return [];
+    const favorite = edge >= 0;
+    if (marketPosition !== "all" && marketPosition !== (favorite ? "favorite" : "underdog")) return [];
+    if (!favorite && minimumUnderdogOdds !== null && row.underdogOdds < minimumUnderdogOdds) return [];
+    const side = favorite
+      ? row.favoriteSide
+      : row.favoriteSide === "home" ? "away" : "home";
+    return [{
+      gameId: row.game.gameId,
+      date: row.game.date,
+      release: "run_line_value_audit",
+      outcome: handicapOutcome(side, favorite ? -1.5 : 1.5, row.game),
+      odds: favorite ? row.favoriteOdds : row.underdogOdds,
+    }];
+  });
+  const valueLadderRows = (
+    probability: (row: PairedRunLine) => number,
+    minimumEdge: number,
+    minimumUnderdogOdds: number | null = null,
+  ): LineLadderRow[] => paired.flatMap((row) => {
+    const favoriteProbability = probability(row);
+    const edge = favoriteProbability - row.favoriteMarketProbability;
+    if (Math.abs(edge) < minimumEdge) return [];
+    const favorite = edge >= 0;
+    if (!favorite && minimumUnderdogOdds !== null && row.underdogOdds < minimumUnderdogOdds) return [];
+    const side = favorite
+      ? row.favoriteSide
+      : row.favoriteSide === "home" ? "away" : "home";
+    const line = favorite ? -1.5 : 1.5;
+    const scoreMargin = side === "home"
+      ? row.game.home - row.game.away
+      : row.game.away - row.game.home;
+    const signedMargin = scoreMargin + line;
+    return [{
+      gameId: row.game.gameId,
+      date: row.game.date,
+      side: favorite ? "favorite_minus_1_5" : "underdog_plus_1_5",
+      signedMargin,
+      main: handicapOutcome(side, line, row.game),
+      plus1: handicapOutcome(side, line + 1, row.game),
+      plus2: handicapOutcome(side, line + 2, row.game),
+    }];
+  });
+  const valueBoard = (
+    name: string,
+    probability: (row: PairedRunLine) => number,
+  ) => {
+    const thresholds = [0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08];
+    const thresholdRows = thresholds.map((minimumEdge) => {
+      const trainRows = valueRows(probability, minimumEdge, "train");
+      const trainMetric = metric(trainRows);
+      return {
+        minimumEdge,
+        trainMetric,
+        trainWilsonLower95: round(wilsonLowerBound95(trainMetric.wins, trainMetric.decided), 4),
+      };
+    });
+    const eligible = thresholdRows.filter((row) =>
+      row.trainMetric.decided >= 100 && row.trainMetric.units > 0);
+    const selected = [...eligible].sort((a, b) =>
+      b.trainWilsonLower95 - a.trainWilsonLower95 ||
+      (b.trainMetric.roiPct ?? Number.NEGATIVE_INFINITY) -
+        (a.trainMetric.roiPct ?? Number.NEGATIVE_INFINITY) ||
+      a.minimumEdge - b.minimumEdge)[0] ?? null;
+    const packageAt = (minimumEdge: number, minimumUnderdogOdds: number | null = null) => {
+      const rows = valueRows(probability, minimumEdge, "all", "all", minimumUnderdogOdds);
+      const postTrainRows = [
+        ...valueRows(probability, minimumEdge, "validation", "all", minimumUnderdogOdds),
+        ...valueRows(probability, minimumEdge, "holdout", "all", minimumUnderdogOdds),
+      ];
+      const selectedKeys = new Set(rows.map((row) => row.gameId));
+      const favoriteSelections = paired.filter((row) => {
+        if (!selectedKeys.has(row.game.gameId)) return false;
+        return probability(row) - row.favoriteMarketProbability >= 0;
+      }).length;
+      return {
+        minimumEdge,
+        minimumUnderdogOdds,
+        favoriteSelections,
+        underdogSelections: rows.length - favoriteSelections,
+        ...summarize(rows),
+        postTrain: metric(postTrainRows),
+        byMarketPosition: {
+          favorite: summarize(valueRows(probability, minimumEdge, "all", "favorite", minimumUnderdogOdds)),
+          underdog: summarize(valueRows(probability, minimumEdge, "all", "underdog", minimumUnderdogOdds)),
+        },
+        alternateLineAccuracy: lineLadderDiagnostics(
+          valueLadderRows(probability, minimumEdge, minimumUnderdogOdds),
+          games,
+        ),
+      };
+    };
+    const underdogOddsFloors = [-220, -200, -180, -160, -150, -140, -130, -120, -110, 0];
+    const jointPolicySearch = thresholds.flatMap((minimumEdge) => underdogOddsFloors.map((minimumUnderdogOdds) => {
+      const trainRows = valueRows(
+        probability,
+        minimumEdge,
+        "train",
+        "all",
+        minimumUnderdogOdds,
+      );
+      const trainMetric = metric(trainRows);
+      return {
+        minimumEdge,
+        minimumUnderdogOdds,
+        trainMetric,
+        trainWilsonLower95: round(wilsonLowerBound95(trainMetric.wins, trainMetric.decided), 4),
+      };
+    }));
+    const eligibleJointPolicies = jointPolicySearch.filter((row) =>
+      row.trainMetric.decided >= 100 && row.trainMetric.units > 0);
+    const selectedJointPolicy = [...eligibleJointPolicies].sort((a, b) =>
+      b.trainWilsonLower95 - a.trainWilsonLower95 ||
+      (b.trainMetric.roiPct ?? Number.NEGATIVE_INFINITY) -
+        (a.trainMetric.roiPct ?? Number.NEGATIVE_INFINITY) ||
+      b.trainMetric.decided - a.trainMetric.decided)[0] ?? null;
+    return {
+      name,
+      selectionRule: "select the side whose model probability exceeds its exact same-book no-vig probability; abstain below the edge floor",
+      trainOnlyThresholdSearch: Object.fromEntries(thresholdRows.map((row) => [
+        `${Math.round(row.minimumEdge * 100)}pp`,
+        { train: row.trainMetric, trainWilsonLower95: row.trainWilsonLower95 },
+      ])),
+      selected: selected === null ? null : packageAt(selected.minimumEdge),
+      accuracyAndValueJointPolicy: selectedJointPolicy === null ? null : {
+        selectionMethod: "train-only Wilson lower bound among positive-unit policies with at least 100 decisions; underdog price floor limits excessive juice",
+        ...packageAt(selectedJointPolicy.minimumEdge, selectedJointPolicy.minimumUnderdogOdds),
+      },
+      jointPolicyTrainSearch: jointPolicySearch.map((row) => ({
+        minimumEdge: row.minimumEdge,
+        minimumUnderdogOdds: row.minimumUnderdogOdds,
+        train: row.trainMetric,
+        trainWilsonLower95: row.trainWilsonLower95,
+      })),
+      zeroEdgeReference: packageAt(0),
+    };
+  };
   const underdogRows = rowsFor((row) => row.favoriteSide === "home" ? "away" : "home");
-  const candidateRows = model === null ? [] : rowsFor((row) =>
-    predictLogistic(model, features(row)) >= 0.5
+  const candidateRows = marketReaderModel === null ? [] : rowsFor((row) =>
+    predictLogistic(marketReaderModel, features(row)) >= 0.5
       ? row.favoriteSide
       : row.favoriteSide === "home" ? "away" : "home");
-  const favoriteSelections = model === null
+  const favoriteSelections = marketReaderModel === null
     ? 0
-    : paired.filter((row) => predictLogistic(model, features(row)) >= 0.5).length;
+    : paired.filter((row) => predictLogistic(marketReaderModel, features(row)) >= 0.5).length;
   return {
     evidenceBoundary: "last retained real-book line row only; restricted to rows timestamped 1-48 hours before first pitch. This is not an immutable T-60 snapshot and remains shadow evidence.",
     rawSpreadRows: rows.length,
     eligiblePregameRows: eligibleRows.length,
     pairedGames: paired.length,
     trainGames: train.length,
+    richMatchupFeatureCoverage: {
+      all: paired.filter((row) => row.matchupFeatures !== null).length,
+      train: richIndependentTrain.length,
+    },
     featureNames,
-    coefficientsStandardized: model === null ? null : {
-      intercept: round(model.weights[0], 5),
-      ...Object.fromEntries(featureNames.map((name, index) => [name, round(model.weights[index + 1], 5)])),
+    coefficientsStandardized: marketReaderModel === null ? null : {
+      intercept: round(marketReaderModel.weights[0], 5),
+      ...Object.fromEntries(featureNames.map((name, index) => [name, round(marketReaderModel.weights[index + 1], 5)])),
+    },
+    richCoefficientsStandardized: richMarketReaderModel === null ? null : {
+      intercept: round(richMarketReaderModel.weights[0], 5),
+      ...Object.fromEntries(richFeatureNames.map((name, index) => [
+        name,
+        round(richMarketReaderModel.weights[index + 1], 5),
+      ])),
+    },
+    scoreSeparation: {
+      scopedCandidateFavoriteMarginBuckets: marginBuckets((row) => row.candidateFavoriteMargin),
+    },
+    probabilityCalibration: {
+      exactNoVigMarket: probabilityPackage((row) => row.favoriteMarketProbability),
+      storedPoissonRaw: probabilityPackage((row) => row.storedFavoriteCoverProbability),
+      storedPoissonTrainCalibrated: probabilityPackage(storedCalibratedProbability),
+      scopedCandidatePoissonRaw: probabilityPackage((row) => row.candidateFavoriteCoverProbability),
+      scopedCandidatePoissonTrainCalibrated: probabilityPackage(candidateCalibratedProbability),
+      independentSeparationTrainCalibrated: probabilityPackage(independentSeparationProbability),
+      richIndependentSeparationTrainCalibrated: probabilityPackage(richIndependentSeparationProbability),
+      empiricalMarginResidualTrainOnly: probabilityPackage(empiricalResidualProbability),
+      scaledEmpiricalMarginResidualTrainOnly: probabilityPackage(scaledEmpiricalResidualProbability),
+      finalMarketReaderTrainCalibrated: probabilityPackage(marketReaderProbability),
+      richFinalMarketReaderTrainCalibrated: probabilityPackage(richMarketReaderProbability),
+      empiricalFinalMarketReaderTrainCalibrated: probabilityPackage(empiricalMarketReaderProbability),
+      richEmpiricalFinalMarketReaderTrainCalibrated: probabilityPackage(richEmpiricalMarketReaderProbability),
+    },
+    valueSelection: {
+      storedPoissonTrainCalibrated: valueBoard("storedPoissonTrainCalibrated", storedCalibratedProbability),
+      scopedCandidateTrainCalibrated: valueBoard("scopedCandidateTrainCalibrated", candidateCalibratedProbability),
+      independentSeparationTrainCalibrated: valueBoard("independentSeparationTrainCalibrated", independentSeparationProbability),
+      richIndependentSeparationTrainCalibrated: valueBoard("richIndependentSeparationTrainCalibrated", richIndependentSeparationProbability),
+      empiricalMarginResidualTrainOnly: valueBoard("empiricalMarginResidualTrainOnly", empiricalResidualProbability),
+      scaledEmpiricalMarginResidualTrainOnly: valueBoard("scaledEmpiricalMarginResidualTrainOnly", scaledEmpiricalResidualProbability),
+      finalMarketReaderTrainCalibrated: valueBoard("finalMarketReaderTrainCalibrated", marketReaderProbability),
+      richFinalMarketReaderTrainCalibrated: valueBoard("richFinalMarketReaderTrainCalibrated", richMarketReaderProbability),
+      empiricalFinalMarketReaderTrainCalibrated: valueBoard("empiricalFinalMarketReaderTrainCalibrated", empiricalMarketReaderProbability),
+      richEmpiricalFinalMarketReaderTrainCalibrated: valueBoard("richEmpiricalFinalMarketReaderTrainCalibrated", richEmpiricalMarketReaderProbability),
     },
     alwaysUnderdog: summarize(underdogRows),
     storedPoisson: summarize(rowsFor((row) => row.storedFavoriteCoverProbability >= 0.5

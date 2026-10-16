@@ -20,9 +20,11 @@ Moneyline winner.
 The structural candidate improves score and Total results in chronological confirmation. The audit
 now also replays the exact current production writer over frozen lock evidence, measures alternate-
 line miss distance, and tests a train-selected action policy. It found a real Total-side candidate
-and a replacement action policy that remains positive in each chronological block. It also disproved
-the earlier run-line conclusion: a naive always-underdog +1.5 baseline is more accurate than the
-distribution selector at the main line, so no run-line model improvement is claimed.
+and a replacement action policy that remains positive in each chronological block. The corrected
+run-line audit also separates hit rate from price: blindly taking every underdog +1.5 wins often but
+loses units, while a price-aware independent-plus-market reader is economically promising in shadow.
+That reader still does not beat the screenshot's main or alternate-line accuracy, so no production
+run-line improvement is claimed.
 
 The scoped Total candidate is not active. The final audit resolves the earlier action-accuracy
 tradeoff with a two-layer grade contract: final-board price/value qualification is required first,
@@ -376,20 +378,44 @@ its paired cohort, but dropped holdout from 166-118 to 162-122 and reduced Money
 
 ### Run-line truth test
 
-Every affine candidate's derived run-line side matched the same-cohort **always take the market
-underdog +1.5** baseline exactly. For the full affine posterior cohort that is 827-582 (58.69%),
-997-412 (+1 run), and 1,092-317 (+2 runs). Those percentages beat the screenshot benchmarks but
-contain zero demonstrated selection lift. They are a property of the alternate line, not proof of
-model skill, and must not be promoted or advertised as such.
+The original run-line test used `favorite cover probability >= 50%` to select a favorite -1.5.
+That is the wrong decision boundary: a plus-money favorite can be valuable below 50%, while an
+expensive underdog +1.5 can lose money despite winning above 50%. The corrected audit requires the
+latest coherent real-book, same-book home/away ±1.5 pair observed from 48 hours through one hour
+before first pitch, removes the book's vig, and selects only when model probability differs from
+that exact market probability by a train-selected minimum edge.
 
-The price-aware retained-row audit confirms the rejection. It requires a real-book same-book
-home/away ±1.5 pair observed from 48 hours through one hour before first pitch. Across 825 paired
-games, always taking the underdog is 477-348 (57.82%) but **-51.94u**; the stored and repaired
-Poisson selectors are both 470-355 (56.97%) and -45.03u. A train-only favorite-cover classifier
-selects the favorite only 24 times, remains 477-348 overall, and falls to -53.86u. Its late
-101-game block is positive, but validation is worse than the underdog baseline, so it is not stable
-enough to ship. The correct conclusion is not “take every underdog”; it is that MLB run-line
-selection remains unconfirmed and should stay out of the public prediction board.
+Across 825 paired games, blindly taking the underdog is 477-348 (57.82%) but **-51.86u (-6.29%
+ROI)**. The richer reader uses the repaired independent cover probability, projected margin,
+moneyline market probability, exact run-line price, and favorite-oriented locked starter/offense/
+pitching/bullpen factors. Its 3-point edge floor is selected on the first 530 games only:
+
+| Window | Record | Units | ROI |
+|---|---:|---:|---:|
+| Train | 163-139 | +35.05u | +11.61% |
+| Validation | 52-57 | +7.71u | +7.07% |
+| Chronological confirmation | 30-31 | +1.11u | +1.83% |
+| Post-train combined | 82-88 | +8.82u | +5.19% |
+
+This is an economic improvement over the naive underdog rule, not a claim that 48.24% is a better
+raw prediction record. The selected favorite -1.5 subset is profitable in both later blocks
+(+9.19% and +17.69% ROI) because those prices are commonly plus money. The underdog +1.5 subset
+falls from +1.75% validation ROI to -9.96% in confirmation, so that side is not stable enough to
+promote. A train-only underdog-juice cap did not improve the accuracy/value tradeoff and was
+rejected.
+
+The same 472 selected games finish 245-227 (51.91%) at the main line, 310-162 (65.68%) with one
+favorable run, and 329-143 (69.70%) with two. The owner-provided screenshot is 54.35%, 66.45%, and
+72.01% on a different 2,447-game cohort. The gaps are therefore 2.44, 0.77, and 2.31 percentage
+points, respectively. Cohort differences prevent a certified head-to-head comparison, but the
+candidate has not cleared the requested accuracy benchmark.
+
+A second, leave-one-out empirical margin-residual model was tested to replace Poisson dispersion.
+It reached 53.27% across all selected games, but only 50.57% and +0.97% ROI post-train, while its
+Brier score was worse than the exact market in both later blocks. It is rejected. The remaining
+run-line problem is new predictive margin information, not another threshold or recalibration of
+the same score inputs. Because retained `lines` rows are mutable rather than immutable T-60 locks,
+the positive economic result remains shadow evidence.
 
 ### Final-grade and market-reader diagnostics
 
@@ -441,7 +467,8 @@ blindly fading line movement fail.
 
 The current conclusion is narrow: Candidate C is a real Total-direction improvement through the
 complete product and the two-layer Total grade hierarchy is a viable production candidate.
-Moneyline margin calibration and run-line selection remain rejected. Production stays unchanged
+Moneyline margin calibration remains rejected. The run-line reader is retained as a forward shadow,
+not a public pick or model release. Production stays unchanged
 until the candidate is versioned, reviewed, explicitly approved, and deployed only for future
 unlocked rows.
 
@@ -453,7 +480,9 @@ Angles are 101-47 (68.24%, +14.92u). Actionables remain above 61% in each chrono
 The Total-only candidate preserves every Moneyline side, so the Total repair does not discard the
 existing Moneyline architecture or market reader.
 
-Run line is not production-confirmed. The repository now contains a behavior-neutral r2 forward
+Run line is not production-confirmed. The corrected historical audit has a price-aware shadow with
+positive units in both post-training windows, but it remains below the external raw-accuracy
+benchmarks and uses mutable retained line evidence. The repository now contains a behavior-neutral r2 forward
 capture candidate that freezes up to four coherent, same-book main ±1.5 pairs and their same-book
 openers on the unlocked Moneyline snapshot. It rejects alternates, crossed books, incoherent side
 numbers, stale/future rows, and side timestamps more than two minutes apart. The capture is
@@ -488,10 +517,14 @@ tests. They are not permission to add many correlated factors at once.
   calibration, scoped Candidate C, miss-distance ladders, naive run-line baselines, train-only
   action-policy search, cross-market grade-integrity count, paired promotion/demotion counts,
   train-only Moneyline architecture comparisons, selective upset overrides, chronological
-  override-cohort stability, a price-aware run-line falsification test, and the final two-layer
+  override-cohort stability, a coherent-pair no-vig run-line audit, probability calibration,
+  favorite/underdog economics, alternate-line accuracy, rejected juice-cap and empirical-residual
+  tests, and the final two-layer
   Best Angle/Lean/Watchlist calibration.
 - Default behavior remains disabled.
-- Focused MLB model tests: 182 passed, 0 failed.
+- Focused MLB model tests from the candidate branch: 182 passed, 0 failed; forward evidence capture:
+  59 passed, 0 failed.
+- Required `npm run verify:model-change`: passed.
 - TypeScript: passed.
 - Targeted ESLint: passed.
 - No release identifier, writer, lease, schedule, lock, stored prediction, or live board changed.
@@ -508,8 +541,9 @@ Before this candidate can affect a member forecast:
    innings-weighted repair. The scoped thresholds were found in an opened 2026 analysis and must not
    be described as untouched validation.
 4. Do not promote the run-line selector. Deploy the behavior-neutral r2 price capture first, then
-   require a selector to beat the same-cohort always-underdog baseline after favorite/underdog and
-   price normalization on release-separated immutable evidence.
+   require the frozen reader to remain profitable in each release-separated immutable window and
+   close the main/+1/+2 accuracy gaps without relying on an always-favorite, always-underdog, or
+   price-only shortcut.
 5. Do not promote a Moneyline challenger until it beats the paired favorite baseline in both
    validation and chronological confirmation while retaining calibrated probabilities and selective
    upset corrections. The current four architectures and their train-selected override policies fail.
