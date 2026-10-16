@@ -113,6 +113,10 @@ export type V22Audit = {
   feature_missing_count: number;
   workload_pitching_enabled?: boolean;
   workload_pitching_applied?: boolean;
+  innings_weighted_total_preserve_margin_enabled?: boolean;
+  innings_weighted_total_preserve_margin_applied?: boolean;
+  innings_weighted_total_preserve_margin_legacy_total?: number;
+  innings_weighted_total_preserve_margin_candidate_total?: number;
   home_starter_workload?: StarterWorkloadEstimate;
   away_starter_workload?: StarterWorkloadEstimate;
   // Push 3A-2 — source/reason hierarchy roll-up
@@ -301,6 +305,7 @@ export type V22Output = {
 
 export type RunMlbAutoModelV2_2Options = {
   useWorkloadPitching?: boolean;
+  useInningsWeightedTotalPreserveMargin?: boolean;
   totalsRegimePrior?: MlbTotalsRegimePrior | null;
 };
 
@@ -511,6 +516,8 @@ export function runMlbAutoModelV2_2(
   void stage;
   const integrityNotes: string[] = [];
   const workloadPitchingEnabled = opts.useWorkloadPitching === true;
+  const inningsWeightedTotalPreserveMarginEnabled =
+    opts.useInningsWeightedTotalPreserveMargin === true;
   const homeStarterWorkload = estimateMlbStarterWorkload(snap.home_starter);
   const awayStarterWorkload = estimateMlbStarterWorkload(snap.away_starter);
   const workloadPitchingApplied =
@@ -530,7 +537,16 @@ export function runMlbAutoModelV2_2(
   // Layer 2 — independent projection
   const indep = projectIndependent(snap, {
     useWorkloadPitching: workloadPitchingEnabled,
+    useInningsWeightedTotalPreserveMargin:
+      inningsWeightedTotalPreserveMarginEnabled,
   });
+  const inningsWeightedTotalPreserveMarginApplied =
+    indep.innings_weighted_total_preserve_margin?.applied === true;
+  if (inningsWeightedTotalPreserveMarginApplied) {
+    integrityNotes.push(
+      "Shadow innings-weighted pitching total applied while preserving the incumbent independent margin.",
+    );
+  }
   if (workloadPitchingApplied) {
     integrityNotes.push(
       `Workload pitching applied: home=${homeStarterWorkload.role} ` +
@@ -859,6 +875,14 @@ export function runMlbAutoModelV2_2(
     feature_missing_count: indep.feature_audit.missing_count,
     workload_pitching_enabled: workloadPitchingEnabled,
     workload_pitching_applied: workloadPitchingApplied,
+    innings_weighted_total_preserve_margin_enabled:
+      inningsWeightedTotalPreserveMarginEnabled,
+    innings_weighted_total_preserve_margin_applied:
+      inningsWeightedTotalPreserveMarginApplied,
+    innings_weighted_total_preserve_margin_legacy_total:
+      indep.innings_weighted_total_preserve_margin?.legacy_total_expected_runs,
+    innings_weighted_total_preserve_margin_candidate_total:
+      indep.innings_weighted_total_preserve_margin?.candidate_total_expected_runs,
     home_starter_workload: homeStarterWorkload,
     away_starter_workload: awayStarterWorkload,
     feature_preferred_count: indep.feature_audit.preferred_count,

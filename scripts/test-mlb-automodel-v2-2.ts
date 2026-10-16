@@ -382,6 +382,38 @@ async function main() {
   }
   {
     const snap = buildSnapshot({
+      homeTeam: { bullpen_era_proxy: 5.20, team_avg_batter_ops: 0.760 },
+      awayTeam: { bullpen_era_proxy: 3.20, team_avg_batter_ops: 0.690 },
+      homeStarter: { season_era: 2.70, pitch_quality_score: 0.90 },
+      awayStarter: { season_era: 5.40, pitch_quality_score: 1.10 },
+    });
+    const incumbent = projectIndependent(snap);
+    const candidate = projectIndependent(snap, {
+      useInningsWeightedTotalPreserveMargin: true,
+    });
+    check(
+      "innings-weighted total candidate changes a normal-starter scoring environment",
+      !near(candidate.total_expected_runs, incumbent.total_expected_runs, 0.001),
+      `incumbent=${incumbent.total_expected_runs} candidate=${candidate.total_expected_runs}`,
+    );
+    check(
+      "innings-weighted total candidate preserves independent margin exactly",
+      near(candidate.home_run_diff, incumbent.home_run_diff, 1e-9),
+      `incumbent=${incumbent.home_run_diff} candidate=${candidate.home_run_diff}`,
+    );
+    check(
+      "innings-weighted total candidate records legacy and candidate totals",
+      candidate.innings_weighted_total_preserve_margin?.enabled === true &&
+        candidate.innings_weighted_total_preserve_margin?.applied === true &&
+        near(
+          candidate.innings_weighted_total_preserve_margin.legacy_total_expected_runs,
+          incumbent.total_expected_runs,
+          1e-9,
+        ),
+    );
+  }
+  {
+    const snap = buildSnapshot({
       awayStarter: buildStarter({
         season_era: 2.50,
         season_games_started: 1,
@@ -548,6 +580,62 @@ async function main() {
     check("v22Audit.data_quality_tier === high on full snapshot", out.v22Audit.data_quality_tier === "high");
     check("workload pitching default disabled", out.v22Audit.workload_pitching_enabled === false);
     check("workload pitching default not applied", out.v22Audit.workload_pitching_applied === false);
+    check(
+      "innings-weighted total candidate default disabled",
+      out.v22Audit.innings_weighted_total_preserve_margin_enabled === false,
+    );
+    check(
+      "innings-weighted total candidate default not applied",
+      out.v22Audit.innings_weighted_total_preserve_margin_applied === false,
+    );
+  }
+  {
+    const snap = buildSnapshot({
+      homeTeam: { bullpen_era_proxy: 5.20, team_avg_batter_ops: 0.760 },
+      awayTeam: { bullpen_era_proxy: 3.20, team_avg_batter_ops: 0.690 },
+      homeStarter: { season_era: 2.70, pitch_quality_score: 0.90 },
+      awayStarter: { season_era: 5.40, pitch_quality_score: 1.10 },
+      market: {
+        listed_total: 8.5,
+        over_odds_american: -110,
+        under_odds_american: -110,
+      },
+    });
+    const incumbent = runMlbAutoModelV2_2(
+      snap,
+      buildV1Out(),
+      "morning_draft",
+    );
+    const candidate = runMlbAutoModelV2_2(
+      snap,
+      buildV1Out(),
+      "morning_draft",
+      { useInningsWeightedTotalPreserveMargin: true },
+    );
+    check(
+      "innings-weighted total candidate preserves end-to-end ML winner",
+      candidate.predicted_ml_winner === incumbent.predicted_ml_winner,
+    );
+    check(
+      "innings-weighted total candidate preserves posterior margin",
+      near(
+        candidate.v22Audit.posterior_home_diff,
+        incumbent.v22Audit.posterior_home_diff,
+        1e-9,
+      ),
+    );
+    check(
+      "innings-weighted total candidate changes end-to-end projected total",
+      !near(candidate.predicted_total, incumbent.predicted_total, 0.001),
+      `incumbent=${incumbent.predicted_total} candidate=${candidate.predicted_total}`,
+    );
+    check(
+      "innings-weighted total candidate audit records application",
+      candidate.v22Audit.innings_weighted_total_preserve_margin_enabled === true &&
+        candidate.v22Audit.innings_weighted_total_preserve_margin_applied === true &&
+        candidate.v22Audit.model_integrity_notes.some((n) =>
+          /innings-weighted pitching total applied/i.test(n)),
+    );
   }
   {
     const out = runMlbAutoModelV2_2(buildSnapshot(), buildV1Out(), "morning_draft", { useWorkloadPitching: true });
