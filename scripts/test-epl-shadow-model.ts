@@ -498,7 +498,11 @@ for (const route of [refreshRoute, lockRoute]) {
 assert.match(foundationStore, /historical-foundation::through-2025/);
 assert.match(slateBuilder, /EPL_FOUNDATION_CACHE_WRITES_ENABLED/);
 assert.match(candidatePage, /PREMIER_LEAGUE_DAILY_EDGE_ENABLED/);
-assert.match(dailyEdgeSports, /key: "ucl", label: "UCL", memberAvailable: false, inSeason: false/, "UCL availability must fail closed in the static registry");
+assert.match(
+  dailyEdgeSports,
+  /key: "ucl", label: "UCL", navigationTier: "planned", memberAvailable: false, inSeason: false/,
+  "UCL availability must fail closed in the static registry",
+);
 assert.match(candidatePage, /resolveUclFeatureFlags\(\)\.member/, "the nested UCL member competition must be exposed only by the unified runtime gate");
 assert.match(previewReader, /weeklySlate \? "30-minute board" : "hourly board"/, "EPL cadence copy must match its production refresh schedule");
 assert.match(previewReader, /Choose a soccer competition/, "the new soccer league switcher must explain its navigation level");
