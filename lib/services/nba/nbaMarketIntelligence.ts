@@ -436,6 +436,8 @@ function buildMl(
     dataQualityTier: prediction.audit.data_quality_tier,
     injuriesKnown:
       snapshot.data_quality.home_injuries_known && snapshot.data_quality.away_injuries_known,
+    market: "moneyline",
+    currentPriceAmerican: pickOdds,
   });
 
   const opp = findOppFor(opps, "moneyline", pickSide, null);
@@ -573,6 +575,14 @@ function buildSpread(
     dataQualityTier: prediction.audit.data_quality_tier,
     injuriesKnown:
       snapshot.data_quality.home_injuries_known && snapshot.data_quality.away_injuries_known,
+    market: "spread",
+    independentEdgePoints: lineHomeFromMarket === null
+      ? null
+      : (prediction.audit.independent_home_score - prediction.audit.independent_away_score) + lineHomeFromMarket,
+    readerQualified: prediction.audit.professional_grade_context?.spread.readQualified ?? false,
+    readerCorrectionApplied: prediction.audit.professional_grade_context?.spread.correctionApplied ?? false,
+    readerMagnitudePoints: prediction.audit.professional_grade_context?.spread.magnitudePoints ?? null,
+    currentPriceAmerican: pickOdds,
   });
 
   const opp = findOppFor(opps, "spread", pickSide, pickLine);
@@ -696,6 +706,14 @@ function buildTotal(
     dataQualityTier: prediction.audit.data_quality_tier,
     injuriesKnown:
       snapshot.data_quality.home_injuries_known && snapshot.data_quality.away_injuries_known,
+    market: "total",
+    independentEdgePoints: line === null
+      ? null
+      : prediction.audit.independent_home_score + prediction.audit.independent_away_score - line,
+    readerQualified: prediction.audit.professional_grade_context?.total.readQualified ?? false,
+    readerCorrectionApplied: prediction.audit.professional_grade_context?.total.correctionApplied ?? false,
+    readerMagnitudePoints: prediction.audit.professional_grade_context?.total.magnitudePoints ?? null,
+    currentPriceAmerican: pickOdds,
   });
 
   const opp = findOppFor(opps, "total", pickSide, line);

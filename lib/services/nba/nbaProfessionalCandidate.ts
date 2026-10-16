@@ -114,14 +114,16 @@ export function buildNbaProfessionalCandidate(args: {
     acceptedSportsbooks: consensus.spreadAcceptedBooks,
     currentObservedAt,
   });
+  const qualifiedSpreadRead = selectNbaQualifiedSpreadRead(args.marketReader);
+  const qualifiedTotalRead = selectNbaQualifiedTotalRead(args.marketReader);
   const final = buildNbaUnifiedFinalProjection({
     independentHomeScore: independent.homeScore,
     independentAwayScore: independent.awayScore,
     currentSpreadHome: consensus.spreadHome,
     currentTotal: consensus.totalLine,
     openingSpreadHome: openingSpread?.spreadHome ?? null,
-    qualifiedSpreadRead: selectNbaQualifiedSpreadRead(args.marketReader),
-    qualifiedTotalRead: selectNbaQualifiedTotalRead(args.marketReader),
+    qualifiedSpreadRead,
+    qualifiedTotalRead,
   });
   const probabilities = computeNbaMarketProbabilities({
     projected_home_margin: final.marginHome,
@@ -165,6 +167,8 @@ export function buildNbaProfessionalCandidate(args: {
       spreadCorrectionApplied: final.movementApplied,
       totalReadQualified: final.totalMovementQualified,
       totalCorrectionApplied: final.totalMovementApplied,
+      spreadMagnitudePoints: qualifiedSpreadRead?.magnitudePoints ?? null,
+      totalMagnitudePoints: qualifiedTotalRead?.magnitudePoints ?? null,
       effects: {
         moneyline: independentPicks.moneyline !== picks.moneyline
           ? "flipped_by_validated_spread_score" as const
@@ -241,6 +245,18 @@ export function applyNbaProfessionalCandidate(args: {
       spread_confidence: spreadHome === null ? baseline.spread_confidence : pickConfidence(spreadHome),
       total_pick: totalPick,
       total_confidence: totalOver === null ? baseline.total_confidence : pickConfidence(totalOver),
+      professional_grade_context: {
+        spread: {
+          readQualified: candidate.final.movementQualified,
+          correctionApplied: candidate.final.movementApplied,
+          magnitudePoints: candidate.readerDecisionAudit.spreadMagnitudePoints,
+        },
+        total: {
+          readQualified: candidate.final.totalMovementQualified,
+          correctionApplied: candidate.final.totalMovementApplied,
+          magnitudePoints: candidate.readerDecisionAudit.totalMagnitudePoints,
+        },
+      },
       model_integrity_notes: [
         ...baseline.audit.model_integrity_notes,
         `Professional independent release: ${candidate.modelRelease}.`,

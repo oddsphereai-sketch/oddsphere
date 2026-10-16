@@ -3235,9 +3235,9 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_16_r4_total_disagreement_reader`
+- Model / prediction record: `nba_professional_unified_2026_10_16_r5_market_specific_grades`
 - Market marriage: `nba_market_marriage_2026_10_16_r4_independent_first_total_disagreement`
-- Grade policy: `nba_grade_policy_2026_10_16_r4_total_reader_probabilities`
+- Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
 - Internal market reader: `nba_professional_market_reader_2026_10_16_r4_total_disagreement_authority`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
@@ -3276,6 +3276,19 @@ rollback are recorded in
 `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`.
 The Total candidate and its rollback contract are recorded in
 `docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-result.md`.
+
+The October 16 r5 grade release leaves that complete r4 score, side, probability, market-reader,
+writer, lease, lock, and stake architecture unchanged, but replaces the generic cross-market grade
+threshold with historically replicated market-specific lanes. Moneyline retains its incumbent rule.
+Spread Best Angles require either an unqualified independent residual from 2.5 to under 3.5 points or
+an actually applied qualified correction of at least four points; applied corrections from three to
+under four points are Leans. Total Best Angles require an actually applied qualified correction with
+a preserved independent residual from five to under nine points; larger applied corrections and
+unqualified independent Overs from one to under two points are Leans. Every future unlocked actionable
+also requires complete high-quality inputs and positive expected value at the tier's conservative
+calibrated probability. Historical consensus is only a proxy for live same-book reader qualification.
+The fixed two-season replication, promotion/demotion ledger, calibration, limitations, and prospective
+contract are documented in `docs/model-audits/2026-10-16-nba-market-specific-grade-r8-result.md`.
 
 The superseded October 6 r1 release corrected NBA season identity, excluded unfinished/preseason rows from the
 early-season sample, uses the regular-season context outside the playoffs, and replaces the old
