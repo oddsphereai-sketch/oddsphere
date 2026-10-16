@@ -1,6 +1,4 @@
 import type { MarketEdgeDto } from "@/app/lab/lib/labTypes";
-import cfbArtifactJson from "./modelArtifacts/cfbV1WeeklyRuntimeArtifact.json";
-import nflArtifactJson from "./modelArtifacts/nflR6MoneylineShadow.json";
 
 export type FootballEvidenceMarket = "moneyline" | "spread" | "total";
 
@@ -28,8 +26,11 @@ type CfbArtifact = {
   teamProfiles: Record<string, CfbTeamProfile>;
 };
 
-const nflArtifact = nflArtifactJson as unknown as NflArtifact;
-const cfbArtifact = cfbArtifactJson as unknown as CfbArtifact;
+// Keep generated evidence artifacts out of TypeScript's literal type graph.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const nflArtifact = require("./modelArtifacts/nflR6MoneylineShadow.json") as NflArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const cfbArtifact = require("./modelArtifacts/cfbV1WeeklyRuntimeArtifact.json") as CfbArtifact;
 
 export function nflFootballEvidenceStats(args: {
   awayTeam: string;

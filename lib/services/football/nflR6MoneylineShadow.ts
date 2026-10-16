@@ -1,5 +1,4 @@
 import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
-import artifactJson from "./modelArtifacts/nflR6MoneylineShadow.json";
 import type { NflPreviewBookOdds, NflPreviewGame } from "./balldontlieNflPreviewSlate";
 import type {
   NflForwardEvidenceStage,
@@ -176,7 +175,11 @@ type ExactOffer = {
   edgePercentagePoints: number;
 };
 
-const artifact = artifactJson as unknown as RuntimeArtifact;
+// Keep the generated tree artifact out of TypeScript's literal type graph.
+// The static path remains visible to the bundler and RuntimeArtifact retains
+// the executable contract.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const artifact = require("./modelArtifacts/nflR6MoneylineShadow.json") as RuntimeArtifact;
 const METRIC_PRIORS: Record<string, number> = {
   epa: 0,
   pass_epa: 0,

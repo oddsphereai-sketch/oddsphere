@@ -1,7 +1,3 @@
-import gradeArtifactJson from "./modelArtifacts/cfbV1MarketSharpGradePolicy.json";
-import legacyScoreArtifactJson from "./modelArtifacts/cfbV1JointScoreArtifact.json";
-import scoreArtifactJson from "./modelArtifacts/cfbProfessionalScoreArtifact.json";
-import weeklyArtifactJson from "./modelArtifacts/cfbProfessionalScoreWeeklyArtifact.json";
 import type { NcaafBookOdds } from "./balldontlieNcaafSlate";
 import { CFB_V1_WEEKLY_BASE_ARTIFACT_RELEASE, getCfbV1WeeklyForecast } from "./cfbV1WeeklyForecast";
 import type { CfbCurrentAdvancedGame } from "./cfbCurrentAdvancedState";
@@ -229,10 +225,16 @@ type GradeArtifact = {
   policies: Record<CfbV1Market, Policy>;
 };
 
-const scoreArtifact = scoreArtifactJson as unknown as ScoreArtifact;
-const legacyScoreArtifact = legacyScoreArtifactJson as unknown as ScoreArtifact;
-const weeklyArtifact = weeklyArtifactJson as unknown as WeeklyArtifact;
-const gradeArtifact = gradeArtifactJson as GradeArtifact;
+// Static generated-artifact loads avoid forcing the checker to construct
+// literal types for large forecast payloads while retaining typed contracts.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const scoreArtifact = require("./modelArtifacts/cfbProfessionalScoreArtifact.json") as ScoreArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const legacyScoreArtifact = require("./modelArtifacts/cfbV1JointScoreArtifact.json") as ScoreArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const weeklyArtifact = require("./modelArtifacts/cfbProfessionalScoreWeeklyArtifact.json") as WeeklyArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const gradeArtifact = require("./modelArtifacts/cfbV1MarketSharpGradePolicy.json") as GradeArtifact;
 
 assertArtifactReleases();
 

@@ -1,6 +1,3 @@
-import baseArtifactJson from "./modelArtifacts/cfbProfessionalScoreArtifact.json";
-import weeklyArtifactJson from "./modelArtifacts/cfbProfessionalScoreWeeklyArtifact.json";
-import legacyArtifactJson from "./modelArtifacts/cfbV1JointScoreArtifact.json";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 import type { CfbCurrentAdvancedGame, CfbCurrentAdvancedMetrics } from "./cfbCurrentAdvancedState";
 import type { CfbV1Forecast } from "./cfbV1Decision";
@@ -99,9 +96,14 @@ export type CfbV1WeeklyProfileCoverage = {
   supported: boolean;
 };
 
-const baseArtifact = baseArtifactJson as unknown as BaseArtifact;
-const weeklyArtifact = weeklyArtifactJson as unknown as WeeklyArtifact;
-const legacyArtifact = legacyArtifactJson as unknown as { forecasts: CfbV1Forecast[] };
+// Static generated-artifact loads avoid materializing their complete literal
+// trees in the TypeScript checker while retaining explicit runtime contracts.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const baseArtifact = require("./modelArtifacts/cfbProfessionalScoreArtifact.json") as BaseArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const weeklyArtifact = require("./modelArtifacts/cfbProfessionalScoreWeeklyArtifact.json") as WeeklyArtifact;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const legacyArtifact = require("./modelArtifacts/cfbV1JointScoreArtifact.json") as { forecasts: CfbV1Forecast[] };
 const FOOTBALL_SCORE_SUPPORT = [
   0, 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
   22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
