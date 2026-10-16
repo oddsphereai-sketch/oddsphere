@@ -5,7 +5,10 @@ import {
   type NbaReaderPriceRow,
   type NbaReaderSplitRow,
 } from "../lib/services/nba/nbaProfessionalMarketReader";
-import { selectNbaQualifiedSpreadRead } from "../lib/services/nba/nbaProfessionalCandidate";
+import {
+  selectNbaQualifiedSpreadRead,
+  selectNbaQualifiedTotalRead,
+} from "../lib/services/nba/nbaProfessionalCandidate";
 
 const game = 401909088;
 const evaluatedAt = "2026-10-20T22:00:00.000Z";
@@ -76,11 +79,11 @@ const ml = buildNbaProfessionalMarketReader({
 });
 assert.equal(ml.release, NBA_PROFESSIONAL_MARKET_READER_RELEASE);
 assert.equal(ml.policy, "categorical_evidence_no_consensus_weight");
-assert.equal(ml.authority, "conditional_spread_with_coherent_moneyline_effect");
+assert.equal(ml.authority, "conditional_spread_and_total_with_coherent_score_effects");
 assert.deepEqual(ml.forecastAuthority, {
   moneyline: "indirect_only_from_validated_spread_score",
   spread: "conditional_categorical_score_correction",
-  total: "observation_only_pending_validation",
+  total: "conditional_categorical_score_correction",
 });
 assert.equal(ml.evidenceStatus, "complete");
 assert.equal(ml.reads.moneyline.status, "qualified");
@@ -117,6 +120,72 @@ assert.deepEqual(selectNbaQualifiedSpreadRead(qualifiedSpread), {
   side: "away",
   magnitudePoints: 2,
 });
+
+const modestTotalOver = ["pinnacle", "circa"].flatMap((book) => [
+  ...pair({ market: "total", book, at: "2026-10-20T20:00:00.000Z", firstLine: 220, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "total", book, at: "2026-10-20T21:00:00.000Z", firstLine: 224.5, firstPrice: -110, secondPrice: -110 }),
+]);
+const modestTotal = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: modestTotalOver,
+  splitRows: [],
+  selectedLines: { spreadHome: null, total: 224.5 },
+});
+assert.equal(modestTotal.reads.total.status, "qualified");
+assert.equal(selectNbaQualifiedTotalRead(modestTotal), null, "a Total move below five points stays observational");
+
+const strongTotalOver = ["pinnacle", "circa"].flatMap((book) => [
+  ...pair({ market: "total", book, at: "2026-10-20T20:00:00.000Z", firstLine: 220, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "total", book, at: "2026-10-20T21:00:00.000Z", firstLine: 225, firstPrice: -110, secondPrice: -110 }),
+]);
+const qualifiedTotal = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: strongTotalOver,
+  splitRows: [],
+  selectedLines: { spreadHome: null, total: 225 },
+});
+assert.deepEqual(selectNbaQualifiedTotalRead(qualifiedTotal), {
+  side: "over",
+  magnitudePoints: 5,
+});
+
+const targetExcludedTotal = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: strongTotalOver,
+  splitRows: [],
+  selectedLines: { spreadHome: null, total: 225 },
+  excludedSportsbooksByMarket: { total: ["pinnacle"] },
+});
+assert.equal(targetExcludedTotal.reads.total.status, "unavailable");
+assert.deepEqual(targetExcludedTotal.reads.total.excludedSportsbooks, ["pinnacle"]);
+assert.equal(selectNbaQualifiedTotalRead(targetExcludedTotal), null);
+
+const totalBuybackRows = ["pinnacle", "circa"].flatMap((book) => [
+  ...pair({ market: "total", book, at: "2026-10-20T19:00:00.000Z", firstLine: 220, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "total", book, at: "2026-10-20T20:00:00.000Z", firstLine: 225, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "total", book, at: "2026-10-20T21:00:00.000Z", firstLine: 220, firstPrice: -110, secondPrice: -110 }),
+]);
+const totalBoughtBack = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: totalBuybackRows,
+  splitRows: [],
+  selectedLines: { spreadHome: null, total: 220 },
+});
+assert.equal(totalBoughtBack.reads.total.status, "unavailable");
+assert.equal(totalBoughtBack.reads.total.reason, "reversal_or_buyback");
+assert.equal(selectNbaQualifiedTotalRead(totalBoughtBack), null);
+
+const retailTotalOver = ["draftkings", "fanduel"].flatMap((book) => [
+  ...pair({ market: "total", book, at: "2026-10-20T20:00:00.000Z", firstLine: 220, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "total", book, at: "2026-10-20T21:00:00.000Z", firstLine: 225, firstPrice: -110, secondPrice: -110 }),
+]);
+const retailOnlyTotal = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: retailTotalOver,
+  splitRows: [],
+  selectedLines: { spreadHome: null, total: 225 },
+});
+assert.equal(selectNbaQualifiedTotalRead(retailOnlyTotal), null, "retail-only Total movement has no forecast authority");
 
 const targetExcluded = buildNbaProfessionalMarketReader({
   evaluatedAt,

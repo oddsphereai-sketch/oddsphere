@@ -2,7 +2,7 @@
 
 Date: 2026-10-16
 
-Status: owner-directed provisional production candidate; implementation not yet authorized by this document alone
+Status: owner-directed provisional production candidate; authorized by the owner's subsequent request to fix the diagnosed losses
 
 ## Owner direction and problem
 

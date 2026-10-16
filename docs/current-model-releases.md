@@ -149,7 +149,7 @@ Last reviewed: 2026-10-16
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`.
 - NBA internal professional market reader is
-  `nba_professional_market_reader_2026_10_16_r3_explicit_forecast_authority`. It consumes the
+  `nba_professional_market_reader_2026_10_16_r4_total_disagreement_authority`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
   prediction pipeline. It excludes the independent model's best-execution sportsbook by market,
   removes vig before comparing price movement, and fails closed on incomplete pagination, stale
@@ -158,12 +158,16 @@ Last reviewed: 2026-10-16
   is a categorical Spread correction when at least two persistent same-direction same-book number
   trails each clear two points and at least one is a named sharp book. That corrected margin may
   consequently flip Moneyline as part of the coherent score; direct Moneyline reads remain
-  observational. Total reads remain observational. The audit payload records these authorities and
+  observational. A Total read has categorical forecast authority only when two persistent named-book
+  number trails each moved at least five points in one direction and the independent residual remains
+  at least five points on the opposite side of the current Total. The correction preserves residual
+  magnitude rather than blending toward consensus. The audit payload records these authorities and
   each independent-to-final side effect explicitly rather than treating evidence qualification as
   forecast authority.
   Evidence and rollback:
-  `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md` and
-  `docs/model-audits/2026-10-16-nba-three-market-reader-correction-attribution-r4.md`.
+  `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`,
+  `docs/model-audits/2026-10-16-nba-three-market-reader-correction-attribution-r4.md`, and
+  `docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-result.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
@@ -3231,11 +3235,11 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_16_r3_independent_first_reader`
-- Market marriage: `nba_market_marriage_2026_10_16_r3_independent_first_categorical_spread`
-- Grade policy: `nba_grade_policy_2026_10_16_r3_independent_first_reader_probabilities`
-- Point-projection policy: `nba_unified_final_projection_2026_10_16_r2_independent_first_reader`
-- Internal market reader: `nba_professional_market_reader_2026_10_16_r3_explicit_forecast_authority`
+- Model / prediction record: `nba_professional_unified_2026_10_16_r4_total_disagreement_reader`
+- Market marriage: `nba_market_marriage_2026_10_16_r4_independent_first_total_disagreement`
+- Grade policy: `nba_grade_policy_2026_10_16_r4_total_reader_probabilities`
+- Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
+- Internal market reader: `nba_professional_market_reader_2026_10_16_r4_total_disagreement_authority`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -3247,25 +3251,31 @@ The paired live-slate replay is recorded in
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
 
-The October 16 r3 release retains the portable, leakage-safe ratings-and-schedule ridge artifact
+The October 16 r4 release retains the r3 portable, leakage-safe ratings-and-schedule ridge artifact
 selected on 2024-25 and confirmed once on 2025-26, but removes r2's fixed 25% independent / 75%
 market-consensus score blend for future unlocked rows. The independent model now owns 100% of the
 starting margin and Total. A complete target-book-excluded categorical Spread read may re-orient the
 independent residual across the current spread only after two persistent same-direction two-point
 same-book number trails, including at least one named sharp book, clear every reader quality gate.
-Moneyline follows the resulting coherent margin; Total remains independent. One final score owns
+Moneyline follows the resulting coherent margin. A Total read may separately re-orient its residual
+only when two persistent named-book trails each moved five points in one direction while a still-at-
+least-five-point independent edge remains opposite that read. Residual magnitude is preserved and
+there is no scalar market blend. One final score owns
 Moneyline, Spread, Total, probabilities, exact-price grades, lock snapshots, and tracking. Existing
 locked rows retain exact payload precedence.
 
 The public-consensus historical proxy improves the sealed 2025-26 confirmation set from 48.86% to
 52.94% on main Spread, 57.43% to 62.01% at +3, 66.83% to 70.92% at +6, and 68.14% to 69.28% on
-winner direction. Team-score MAE is 9.54, margin MAE is 11.05, Total MAE remains 15.24, and Total
-direction remains 51.80%. Because the historical market files do not contain authentic same-book
+winner direction. The added Total rule improves 2024-25 full-board Total from 48.08% to 49.63% and
+2025-26 from 51.80% to 52.61%; its applied correction cohorts are 57.98% and 55.95%, while 2025-26
+Total MAE improves from 15.237 to 15.156 and team-score MAE from 9.539 to 9.511. Because the historical market files do not contain authentic same-book
 chronology, production promotion is provisional and release-pure prospective evaluation is required.
 The 14-game October 20-21 opening-board rehearsal changes actionables from 10 to 19 through 15
 promotions and 6 demotions, with 5 pick changes and zero nonpositive-EV promotions. Evidence and
 rollback are recorded in
 `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`.
+The Total candidate and its rollback contract are recorded in
+`docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-result.md`.
 
 The superseded October 6 r1 release corrected NBA season identity, excluded unfinished/preseason rows from the
 early-season sample, uses the regular-season context outside the playoffs, and replaces the old

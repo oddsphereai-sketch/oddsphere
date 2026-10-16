@@ -108,14 +108,63 @@ assert.deepEqual(result.readerDecisionAudit, {
   finalPicks: { moneyline: "home", spread: "home", total: "over" },
   spreadReadQualified: true,
   spreadCorrectionApplied: true,
+  totalReadQualified: false,
+  totalCorrectionApplied: false,
   effects: {
     moneyline: "flipped_by_validated_spread_score",
     spread: "flipped_by_validated_spread_read",
-    total: "unchanged_no_validated_total_authority",
+    total: "unchanged_no_qualified_total_read",
   },
 });
 assert.ok(Math.abs(result.final.homeScore + result.final.awayScore - result.final.total) < 1e-9);
 assert.ok(Math.abs(result.final.homeScore - result.final.awayScore - result.final.marginHome) < 1e-9);
+
+const totalArtifact: NbaPortableModelArtifact = {
+  ...artifact,
+  coefficients: {
+    ...artifact.coefficients,
+    target_total: [0, 210],
+  },
+};
+const totalPriceRows = ["pinnacle", "bookmaker"].flatMap((sportsbook) => [
+  {
+    sportsbook, sharpBook: true, market: "total" as const, selectionKey: "9:total:over",
+    americanPrice: -110, line: 213, providerTimestamp: "2026-10-20T14:00:00Z", fetchedAt: "2026-10-20T14:00:00Z",
+  },
+  {
+    sportsbook, sharpBook: true, market: "total" as const, selectionKey: "9:total:under",
+    americanPrice: -110, line: 213, providerTimestamp: "2026-10-20T14:00:00Z", fetchedAt: "2026-10-20T14:00:00Z",
+  },
+  {
+    sportsbook, sharpBook: true, market: "total" as const, selectionKey: "9:total:over",
+    americanPrice: -110, line: 218, providerTimestamp: "2026-10-20T15:30:00Z", fetchedAt: "2026-10-20T15:30:00Z",
+  },
+  {
+    sportsbook, sharpBook: true, market: "total" as const, selectionKey: "9:total:under",
+    americanPrice: -110, line: 218, providerTimestamp: "2026-10-20T15:30:00Z", fetchedAt: "2026-10-20T15:30:00Z",
+  },
+]);
+const totalReader = buildNbaProfessionalMarketReader({
+  evaluatedAt: "2026-10-20T16:00:00Z",
+  priceRows: totalPriceRows,
+  splitRows: [],
+  selectedLines: { spreadHome: -2, total: 218 },
+});
+const totalCorrected = buildNbaProfessionalCandidate({
+  artifact: totalArtifact,
+  featureRow: { strength: -4 },
+  lines,
+  history,
+  externalGameId: 9,
+  marketReader: totalReader,
+});
+assert.equal(totalCorrected.independent.total, 210);
+assert.equal(totalCorrected.final.totalMovementQualified, true);
+assert.equal(totalCorrected.final.totalMovementApplied, true);
+assert.equal(totalCorrected.final.total, 226);
+assert.equal(totalCorrected.picks.total, "over");
+assert.equal(totalCorrected.readerDecisionAudit.effects.total, "flipped_by_validated_total_read");
+assert.ok(Math.abs(totalCorrected.final.homeScore + totalCorrected.final.awayScore - 226) < 1e-9);
 
 const ratingPack: NbaTeamRatingPack = {
   off_rating: 115,
