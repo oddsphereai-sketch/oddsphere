@@ -149,17 +149,21 @@ Last reviewed: 2026-10-16
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`.
 - NBA internal professional market reader is
-  `nba_professional_market_reader_2026_10_16_r2_conditional_spread_only`. It consumes the
+  `nba_professional_market_reader_2026_10_16_r3_explicit_forecast_authority`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
   prediction pipeline. It excludes the independent model's best-execution sportsbook by market,
   removes vig before comparing price movement, and fails closed on incomplete pagination, stale
   flow, missing sequences, reversal/buyback, or book disagreement. It is not the member card/display
-  reader and never numerically blends the projection toward consensus. Its only forecast authority
+  reader and never numerically blends the projection toward consensus. Its direct forecast authority
   is a categorical Spread correction when at least two persistent same-direction same-book number
-  trails each clear two points and at least one is a named sharp book; Moneyline then follows the one
-  coherent final margin. Price-only, split-only, Moneyline, and Total reads remain observational.
+  trails each clear two points and at least one is a named sharp book. That corrected margin may
+  consequently flip Moneyline as part of the coherent score; direct Moneyline reads remain
+  observational. Total reads remain observational. The audit payload records these authorities and
+  each independent-to-final side effect explicitly rather than treating evidence qualification as
+  forecast authority.
   Evidence and rollback:
-  `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`.
+  `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md` and
+  `docs/model-audits/2026-10-16-nba-three-market-reader-correction-attribution-r4.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
@@ -3231,7 +3235,7 @@ The paired live-slate replay is recorded in
 - Market marriage: `nba_market_marriage_2026_10_16_r3_independent_first_categorical_spread`
 - Grade policy: `nba_grade_policy_2026_10_16_r3_independent_first_reader_probabilities`
 - Point-projection policy: `nba_unified_final_projection_2026_10_16_r2_independent_first_reader`
-- Internal market reader: `nba_professional_market_reader_2026_10_16_r2_conditional_spread_only`
+- Internal market reader: `nba_professional_market_reader_2026_10_16_r3_explicit_forecast_authority`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled

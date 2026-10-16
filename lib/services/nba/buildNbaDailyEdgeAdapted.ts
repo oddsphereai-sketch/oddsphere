@@ -582,6 +582,7 @@ export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyE
         },
       },
       market_reader: reader,
+      market_reader_decision: candidate.readerDecisionAudit,
     };
     return [dto];
   });
