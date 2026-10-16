@@ -110,6 +110,8 @@ assert.deepEqual(result.readerDecisionAudit, {
   spreadCorrectionApplied: true,
   totalReadQualified: false,
   totalCorrectionApplied: false,
+  spreadMagnitudePoints: 2,
+  totalMagnitudePoints: null,
   effects: {
     moneyline: "flipped_by_validated_spread_score",
     spread: "flipped_by_validated_spread_read",
@@ -164,6 +166,7 @@ assert.equal(totalCorrected.final.totalMovementApplied, true);
 assert.equal(totalCorrected.final.total, 226);
 assert.equal(totalCorrected.picks.total, "over");
 assert.equal(totalCorrected.readerDecisionAudit.effects.total, "flipped_by_validated_total_read");
+assert.equal(totalCorrected.readerDecisionAudit.totalMagnitudePoints, 5);
 assert.ok(Math.abs(totalCorrected.final.homeScore + totalCorrected.final.awayScore - 226) < 1e-9);
 
 const ratingPack: NbaTeamRatingPack = {

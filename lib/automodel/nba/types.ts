@@ -270,6 +270,19 @@ export type NbaAutoModelAudit = {
   // Notes / posture
   model_integrity_notes: string[];
   provisional: boolean;
+  /** Future-unlocked professional grade context. Optional for legacy fixtures and immutable locks. */
+  professional_grade_context?: {
+    spread: {
+      readQualified: boolean;
+      correctionApplied: boolean;
+      magnitudePoints: number | null;
+    };
+    total: {
+      readQualified: boolean;
+      correctionApplied: boolean;
+      magnitudePoints: number | null;
+    };
+  };
 };
 
 export type NbaAutoModelOutput = {

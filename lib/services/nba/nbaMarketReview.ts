@@ -197,6 +197,12 @@ export type GradeInput = {
   edge: number;
   dataQualityTier: "high" | "medium" | "low" | "fallback";
   injuriesKnown: boolean;
+  market?: "moneyline" | "spread" | "total";
+  independentEdgePoints?: number | null;
+  readerQualified?: boolean;
+  readerCorrectionApplied?: boolean;
+  readerMagnitudePoints?: number | null;
+  currentPriceAmerican?: number | null;
 };
 
 export type GradeOutput = {
@@ -205,6 +211,101 @@ export type GradeOutput = {
   bestAngleEligible: boolean;
   rationale: string[];
 };
+
+export const NBA_MARKET_SPECIFIC_GRADE_CALIBRATION = {
+  spread: { bestAngle: 60, lean: 56 },
+  total: { bestAngle: 60, lean: 54 },
+} as const;
+
+function expectedReturn(probability: number, american: number | null | undefined): number | null {
+  if (american === null || american === undefined || american === 0) return null;
+  const profit = american > 0 ? american / 100 : 100 / Math.abs(american);
+  return probability * profit - (1 - probability);
+}
+
+function marketSpecificGrade(input: GradeInput): GradeOutput | null {
+  if (input.market !== "spread" && input.market !== "total") return null;
+  if (input.dataQualityTier !== "high" || !input.injuriesKnown) {
+    return {
+      grade: "watch",
+      effectiveConfidence: Math.min(input.confidence, 52),
+      bestAngleEligible: false,
+      rationale: ["The model has a side, but the complete high-quality pregame picture is not ready."],
+    };
+  }
+  const independentEdge = input.independentEdgePoints;
+  if (independentEdge === null || independentEdge === undefined || !Number.isFinite(independentEdge)) {
+    return {
+      grade: "watch",
+      effectiveConfidence: Math.min(input.confidence, 52),
+      bestAngleEligible: false,
+      rationale: ["The independent edge cannot be verified against this exact line yet."],
+    };
+  }
+  const magnitude = input.readerMagnitudePoints ?? null;
+  let grade: "best_angle" | "lean" | null = null;
+  let calibrated = 0;
+  let rationale = "";
+  if (input.market === "spread") {
+    const bestIndependent = input.readerQualified !== true &&
+      Math.abs(independentEdge) >= 2.5 && Math.abs(independentEdge) < 3.5;
+    const bestCorrection = input.readerCorrectionApplied === true &&
+      magnitude !== null && magnitude >= 4;
+    const leanCorrection = input.readerCorrectionApplied === true &&
+      magnitude !== null && magnitude >= 3 && magnitude < 4;
+    if (bestIndependent || bestCorrection) {
+      grade = "best_angle";
+      calibrated = NBA_MARKET_SPECIFIC_GRADE_CALIBRATION.spread.bestAngle;
+      rationale = bestCorrection
+        ? "A strong qualified market correction and the independent score resolve to this same final side."
+        : "The independent model is in its historically strongest moderate Spread edge band.";
+    } else if (leanCorrection) {
+      grade = "lean";
+      calibrated = NBA_MARKET_SPECIFIC_GRADE_CALIBRATION.spread.lean;
+      rationale = "A qualified market correction clears the validated Spread lean band.";
+    }
+  } else {
+    const edge = Math.abs(independentEdge);
+    const bestCorrection = input.readerCorrectionApplied === true && edge >= 5 && edge < 9;
+    const leanCorrection = input.readerCorrectionApplied === true && edge >= 9;
+    const leanIndependentOver = input.readerQualified !== true && input.pick === "over" &&
+      independentEdge >= 1 && independentEdge < 2;
+    if (bestCorrection) {
+      grade = "best_angle";
+      calibrated = NBA_MARKET_SPECIFIC_GRADE_CALIBRATION.total.bestAngle;
+      rationale = "A qualified Total correction clears the validated disagreement band.";
+    } else if (leanCorrection || leanIndependentOver) {
+      grade = "lean";
+      calibrated = NBA_MARKET_SPECIFIC_GRADE_CALIBRATION.total.lean;
+      rationale = leanCorrection
+        ? "A qualified Total correction remains playable at a conservative calibrated grade."
+        : "The independent Over sits in the validated low-residual Total lane.";
+    }
+  }
+  if (grade === null) {
+    return {
+      grade: "watch",
+      effectiveConfidence: Math.min(input.confidence, 52),
+      bestAngleEligible: false,
+      rationale: ["The forecast has a side, but this exact market state is outside the validated NBA play lanes."],
+    };
+  }
+  const ev = expectedReturn(calibrated / 100, input.currentPriceAmerican);
+  if (ev === null || ev <= 0) {
+    return {
+      grade: "watch",
+      effectiveConfidence: Math.min(calibrated, 52),
+      bestAngleEligible: false,
+      rationale: [`${rationale} The selected price does not clear positive calibrated value.`],
+    };
+  }
+  return {
+    grade,
+    effectiveConfidence: calibrated,
+    bestAngleEligible: grade === "best_angle",
+    rationale: [rationale],
+  };
+}
 
 // Member-facing band phrasing. Keeps the underlying band token (used by
 // admin/debug paths) free to evolve while shipping clean Daily Edge copy.
@@ -246,6 +347,8 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
     );
     return { grade: "caution", effectiveConfidence: capped, bestAngleEligible: false, rationale };
   }
+  const specialized = marketSpecificGrade(input);
+  if (specialized !== null) return specialized;
   if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") {
     rationale.push(
       "Limited data on this market tonight — treat as informational, not a top play.",
