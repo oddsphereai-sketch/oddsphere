@@ -51,9 +51,15 @@ import { computePlayGrade } from "./playGrade";
 import { regularizeProbability } from "./mlbProbabilityRegularization";
 import {
   applyMlbTotalsRegimeCalibration,
+  MLB_TOTALS_REGIME_CALIBRATION_RELEASE,
+  MLB_TOTALS_REGIME_WEIGHT,
   type MlbTotalsRegimeCalibration,
   type MlbTotalsRegimePrior,
 } from "./mlbTotalsRegimeCalibration";
+import {
+  buildMlbUnifiedGameDistribution,
+  type MlbUnifiedGameDistribution,
+} from "./mlbUnifiedGameDistribution";
 import type { AutoModelOutput, GameSnapshot, ModelStage, StarterSnapshot, TeamSnapshot, BatterSnapshot } from "./types";
 import { MODEL_VERSION_V2_2 } from "./types";
 
@@ -117,6 +123,13 @@ export type V22Audit = {
   innings_weighted_total_preserve_margin_applied?: boolean;
   innings_weighted_total_preserve_margin_legacy_total?: number;
   innings_weighted_total_preserve_margin_candidate_total?: number;
+  unified_game_distribution?: MlbUnifiedGameDistribution & {
+    enabled: boolean;
+    applied: boolean;
+    moneyline_probability_source: "preserved_margin_axis";
+    total_probability_source: "development_score_gap_logistic";
+    total_statistical_grade: string;
+  };
   home_starter_workload?: StarterWorkloadEstimate;
   away_starter_workload?: StarterWorkloadEstimate;
   // Push 3A-2 — source/reason hierarchy roll-up
@@ -306,6 +319,7 @@ export type V22Output = {
 export type RunMlbAutoModelV2_2Options = {
   useWorkloadPitching?: boolean;
   useInningsWeightedTotalPreserveMargin?: boolean;
+  useUnifiedGameDistribution?: boolean;
   totalsRegimePrior?: MlbTotalsRegimePrior | null;
 };
 
@@ -518,6 +532,7 @@ export function runMlbAutoModelV2_2(
   const workloadPitchingEnabled = opts.useWorkloadPitching === true;
   const inningsWeightedTotalPreserveMarginEnabled =
     opts.useInningsWeightedTotalPreserveMargin === true;
+  const unifiedGameDistributionEnabled = opts.useUnifiedGameDistribution === true;
   const homeStarterWorkload = estimateMlbStarterWorkload(snap.home_starter);
   const awayStarterWorkload = estimateMlbStarterWorkload(snap.away_starter);
   const workloadPitchingApplied =
@@ -539,12 +554,21 @@ export function runMlbAutoModelV2_2(
     useWorkloadPitching: workloadPitchingEnabled,
     useInningsWeightedTotalPreserveMargin:
       inningsWeightedTotalPreserveMarginEnabled,
+    inningsWeightedTotalScope: unifiedGameDistributionEnabled
+      ? "validated_high_quality"
+      : "all",
   });
+  const legacyIndep = unifiedGameDistributionEnabled
+    ? projectIndependent(snap, {
+        useWorkloadPitching: workloadPitchingEnabled,
+        useInningsWeightedTotalPreserveMargin: false,
+      })
+    : indep;
   const inningsWeightedTotalPreserveMarginApplied =
     indep.innings_weighted_total_preserve_margin?.applied === true;
   if (inningsWeightedTotalPreserveMarginApplied) {
     integrityNotes.push(
-      "Shadow innings-weighted pitching total applied while preserving the incumbent independent margin.",
+      "Validated innings-weighted pitching Total applied while preserving the incumbent independent margin.",
     );
   }
   if (workloadPitchingApplied) {
@@ -571,7 +595,14 @@ export function runMlbAutoModelV2_2(
     market,
     independent: indep,
   });
-  if (evaluationOnlyPriceAuthority.moneylineForecastExcluded) {
+  const legacyEvaluationOnlyPriceAuthority = unifiedGameDistributionEnabled
+    ? resolveMlbEvaluationOnlyPriceAuthority({
+        snapshot: snap.market,
+        market,
+        independent: legacyIndep,
+      })
+    : evaluationOnlyPriceAuthority;
+  if (legacyEvaluationOnlyPriceAuthority.moneylineForecastExcluded) {
     integrityNotes.push(
       "Evaluation-only Moneyline pair retained for exact-price grading but excluded from the forecast team split.",
     );
@@ -587,6 +618,12 @@ export function runMlbAutoModelV2_2(
     market: marketValid ? evaluationOnlyPriceAuthority.posteriorMarket : null,
     independent: indep,
   });
+  const legacyPosterior = unifiedGameDistributionEnabled
+    ? blendPosterior({
+        market: marketValid ? legacyEvaluationOnlyPriceAuthority.posteriorMarket : null,
+        independent: legacyIndep,
+      })
+    : posterior;
   if (posterior.capped_by_total) {
     integrityNotes.push(
       `Posterior total capped (>${posterior.posterior_moved_runs_from_market.toFixed(1)}r from market).`,
@@ -601,10 +638,35 @@ export function runMlbAutoModelV2_2(
     homeRuns: posterior.home_expected_runs,
     awayRuns: posterior.away_expected_runs,
   });
-  const posteriorHomeRuns = correctedPosterior.homeRuns;
-  const posteriorAwayRuns = correctedPosterior.awayRuns;
+  const legacyCorrectedPosterior = unifiedGameDistributionEnabled
+    ? applyMlbTeamResidualRunCorrection({
+        homeTeam: snap.home_team.abbreviation,
+        awayTeam: snap.away_team.abbreviation,
+        homeRuns: legacyPosterior.home_expected_runs,
+        awayRuns: legacyPosterior.away_expected_runs,
+      })
+    : correctedPosterior;
+  const candidatePosteriorTotalRuns = correctedPosterior.homeRuns + correctedPosterior.awayRuns;
+  const preservedPosteriorHomeDiff =
+    legacyCorrectedPosterior.homeRuns - legacyCorrectedPosterior.awayRuns;
+  const unifiedDistribution = unifiedGameDistributionEnabled
+    ? buildMlbUnifiedGameDistribution({
+        expectedTotal: candidatePosteriorTotalRuns,
+        expectedHomeMargin: preservedPosteriorHomeDiff,
+        marginReferenceHomeRuns: legacyCorrectedPosterior.homeRuns,
+        marginReferenceAwayRuns: legacyCorrectedPosterior.awayRuns,
+        listedTotal: market.listedTotal,
+      })
+    : null;
+  const posteriorHomeRuns = unifiedDistribution?.expected.home_runs ?? correctedPosterior.homeRuns;
+  const posteriorAwayRuns = unifiedDistribution?.expected.away_runs ?? correctedPosterior.awayRuns;
   const posteriorTotalRuns = posteriorHomeRuns + posteriorAwayRuns;
   const posteriorHomeDiff = posteriorHomeRuns - posteriorAwayRuns;
+  if (unifiedDistribution !== null && !unifiedDistribution.invariants.passed) {
+    integrityNotes.push(
+      `Unified distribution invariant failure: ${unifiedDistribution.invariants.issues.join(", ")}.`,
+    );
+  }
   if (correctedPosterior.audit.applied) {
     integrityNotes.push(
       `Team residual correction applied (${correctedPosterior.audit.away_team} ${correctedPosterior.audit.away_runs >= 0 ? "+" : ""}${correctedPosterior.audit.away_runs}, ${correctedPosterior.audit.home_team} ${correctedPosterior.audit.home_runs >= 0 ? "+" : ""}${correctedPosterior.audit.home_runs}).`,
@@ -616,10 +678,8 @@ export function runMlbAutoModelV2_2(
   // Pre-Push 3A-6 hotfix: V2.2 had these arguments swapped, which
   // returned P(away wins) and inverted every ML pick. Test added in
   // scripts/test-mlb-automodel-v2-2.ts ("skewed lambdas — ML direction").
-  const mlHomeProb = homeWinProbabilityPoisson(
-    posteriorHomeRuns,
-    posteriorAwayRuns,
-  );
+  const mlHomeProb = unifiedDistribution?.margin_axis.home_win_probability ??
+    homeWinProbabilityPoisson(posteriorHomeRuns, posteriorAwayRuns);
   const mlAwayProb = 1 - mlHomeProb;
   // Pick direction is decided from the RAW Poisson probability — never
   // changed by regularization below.
@@ -634,7 +694,7 @@ export function runMlbAutoModelV2_2(
   // card; the raw prob/edge are preserved for calibration evaluation.
   const mlReg = regularizeProbability({
     rawProb: mlRawModelProb,
-    marketProb: evaluationOnlyPriceAuthority.moneylineForecastExcluded
+    marketProb: legacyEvaluationOnlyPriceAuthority.moneylineForecastExcluded
       ? null
       : mlMarketProb,
     k: V22_SHRINK_K_ML,
@@ -644,20 +704,22 @@ export function runMlbAutoModelV2_2(
   const mlRawEdgePct = mlMarketProb === null
     ? null
     : Math.round((mlRawModelProb - mlMarketProb) * 1_000) / 10;
-  const mlEdgePct = evaluationOnlyPriceAuthority.moneylineForecastExcluded
+  const mlEdgePct = legacyEvaluationOnlyPriceAuthority.moneylineForecastExcluded
     ? mlRawEdgePct ?? 0
     : mlReg.regularizedEdgePct ?? 0;
 
   // OU using market_total (or independent total when market missing)
   const ouLine = market.listedTotal ?? posteriorTotalRuns;
-  const ouRawOverProb = overProbabilityPoisson(
+  const ouStatisticalRawOverProb = overProbabilityPoisson(
     posteriorAwayRuns,
     posteriorHomeRuns,
     ouLine,
   );
-  const ouPreRegimePickIsOver = ouRawOverProb >= 0.5;
+  const ouStatisticalPreRegimePickIsOver = ouStatisticalRawOverProb >= 0.5;
   // RAW O/U model probability for the picked side (preserved in audit).
-  const ouRawModelProb = ouPreRegimePickIsOver ? ouRawOverProb : (1 - ouRawOverProb);
+  const ouStatisticalRawModelProb = ouStatisticalPreRegimePickIsOver
+    ? ouStatisticalRawOverProb
+    : 1 - ouStatisticalRawOverProb;
 
   // Phase 6B.8 — real no-vig O/U market probability for the picked
   // side. Pre-6B.8 this was hard-coded to 0.5, which made every OU
@@ -668,27 +730,60 @@ export function runMlbAutoModelV2_2(
   // ouMarketProb is null and ouEdgePct is null — surfaced honestly
   // downstream so the UI displays model projection only and Top
   // Available Angles cannot rank totals on placeholder edge.
-  const ouPreRegimeMarketProb: number | null = ouPreRegimePickIsOver
+  const ouStatisticalPreRegimeMarketProb: number | null = ouStatisticalPreRegimePickIsOver
     ? market.overNoVigProb
     : market.underNoVigProb;
   // MLB-P0 — regularize O/U toward the no-vig market (harder shrink than
   // ML). Regularized prob/edge drive confidence, grade, Best Angle, card.
-  const ouReg = regularizeProbability({
-    rawProb: ouRawModelProb,
+  const ouStatisticalReg = regularizeProbability({
+    rawProb: ouStatisticalRawModelProb,
     marketProb: evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
       ? null
-      : ouPreRegimeMarketProb,
+      : ouStatisticalPreRegimeMarketProb,
     k: V22_SHRINK_K_OU,
     maxDistancePp: V22_MAX_DISTANCE_PP_OU,
   });
-  const ouPreRegimeModelProb = ouReg.regularizedProb ?? ouRawModelProb;
-  const ouRegularizedOverProb = ouPreRegimePickIsOver
-    ? ouPreRegimeModelProb
-    : 1 - ouPreRegimeModelProb;
-  const totalRegimeCalibration = applyMlbTotalsRegimeCalibration({
-    modelOverProbability: ouRegularizedOverProb,
+  const ouStatisticalPreRegimeModelProb =
+    ouStatisticalReg.regularizedProb ?? ouStatisticalRawModelProb;
+  const ouStatisticalRegularizedOverProb = ouStatisticalPreRegimePickIsOver
+    ? ouStatisticalPreRegimeModelProb
+    : 1 - ouStatisticalPreRegimeModelProb;
+  const statisticalTotalRegimeCalibration = applyMlbTotalsRegimeCalibration({
+    modelOverProbability: ouStatisticalRegularizedOverProb,
     prior: opts.totalsRegimePrior ?? null,
   });
+  const ouStatisticalOverProb = statisticalTotalRegimeCalibration.modelOverProbabilityAfter;
+  const ouStatisticalPickIsOver = ouStatisticalOverProb >= 0.5;
+  const ouStatisticalModelProb = ouStatisticalPickIsOver
+    ? ouStatisticalOverProb
+    : 1 - ouStatisticalOverProb;
+
+  const ouRawOverProb = unifiedDistribution?.total_axis.over_probability ??
+    ouStatisticalRawOverProb;
+  const ouPreRegimePickIsOver = ouRawOverProb >= 0.5;
+  const ouRawModelProb = ouPreRegimePickIsOver ? ouRawOverProb : 1 - ouRawOverProb;
+  const ouPreRegimeMarketProb: number | null = ouPreRegimePickIsOver
+    ? market.overNoVigProb
+    : market.underNoVigProb;
+  const ouReg = unifiedDistribution === null
+    ? ouStatisticalReg
+    : regularizeProbability({
+        rawProb: ouRawModelProb,
+        marketProb: null,
+        k: 1,
+        maxDistancePp: 100,
+      });
+  const totalRegimeCalibration: MlbTotalsRegimeCalibration = unifiedDistribution === null
+    ? statisticalTotalRegimeCalibration
+    : {
+        release: MLB_TOTALS_REGIME_CALIBRATION_RELEASE,
+        applied: true,
+        reason: "unified_score_gap_probability",
+        modelOverProbabilityBefore: ouRawOverProb,
+        modelOverProbabilityAfter: ouRawOverProb,
+        regimeWeight: MLB_TOTALS_REGIME_WEIGHT,
+        prior: opts.totalsRegimePrior ?? null,
+      };
   const ouOverProb = totalRegimeCalibration.modelOverProbabilityAfter;
   const ouPickIsOver = ouOverProb >= 0.5;
   const ouModelProb = ouPickIsOver ? ouOverProb : 1 - ouOverProb;
@@ -707,9 +802,38 @@ export function runMlbAutoModelV2_2(
       : Math.round((ouModelProb - ouMarketProb) * 1_000) / 10;
 
   // Confidence
+  const legacyOuConfidenceProbability = unifiedDistribution === null
+    ? ouModelProb
+    : (() => {
+        const legacyLine = market.listedTotal ??
+          (legacyCorrectedPosterior.homeRuns + legacyCorrectedPosterior.awayRuns);
+        const rawOver = overProbabilityPoisson(
+          legacyCorrectedPosterior.awayRuns,
+          legacyCorrectedPosterior.homeRuns,
+          legacyLine,
+        );
+        const pickOver = rawOver >= 0.5;
+        const rawPicked = pickOver ? rawOver : 1 - rawOver;
+        const marketPicked = pickOver ? market.overNoVigProb : market.underNoVigProb;
+        const regularized = regularizeProbability({
+          rawProb: rawPicked,
+          marketProb: legacyEvaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
+            ? null
+            : marketPicked,
+          k: V22_SHRINK_K_OU,
+          maxDistancePp: V22_MAX_DISTANCE_PP_OU,
+        });
+        const picked = regularized.regularizedProb ?? rawPicked;
+        const over = pickOver ? picked : 1 - picked;
+        const calibrated = applyMlbTotalsRegimeCalibration({
+          modelOverProbability: over,
+          prior: opts.totalsRegimePrior ?? null,
+        }).modelOverProbabilityAfter;
+        return Math.max(calibrated, 1 - calibrated);
+      })();
   const mlConfidence = computeConfidence({
     win_prob: mlModelProb,
-    ou_prob: ouModelProb,
+    ou_prob: legacyOuConfidenceProbability,
     run_diff_abs: Math.abs(posteriorHomeDiff),
     tier: indep.data_quality_tier,
   });
@@ -724,7 +848,8 @@ export function runMlbAutoModelV2_2(
   const provisional =
     !marketValid ||
     indep.feature_audit.missing_count >= 7 ||
-    indep.data_quality_tier === "fallback";
+    indep.data_quality_tier === "fallback" ||
+    (unifiedDistribution !== null && !unifiedDistribution.invariants.passed);
 
   // Push 3A-2 — block Best Angle when any key feature group is on
   // neutral fallback or missing for BOTH sides. The model can still
@@ -763,7 +888,7 @@ export function runMlbAutoModelV2_2(
     minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_ML,
     minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
     marketProbIsFallback: mlMarketProbIsFallback,
-    bestAngleHardBlockReason: evaluationOnlyPriceAuthority.moneylineForecastExcluded
+    bestAngleHardBlockReason: legacyEvaluationOnlyPriceAuthority.moneylineForecastExcluded
       ? "evaluation-only Moneyline price has no target-excluded forecast corroboration"
       : neutralFallbackBlocksBA
         ? "key feature group on neutral fallback / missing for both sides"
@@ -777,12 +902,46 @@ export function runMlbAutoModelV2_2(
   const ouMarketAmerican = ouPickIsOver
     ? snap.market.over_odds_american
     : snap.market.under_odds_american;
+  const ouStatisticalMarketProbability = ouStatisticalPickIsOver
+    ? market.overNoVigProb
+    : market.underNoVigProb;
+  const ouStatisticalMarketAmerican = ouStatisticalPickIsOver
+    ? snap.market.over_odds_american
+    : snap.market.under_odds_american;
   // MLB-P0 totals tightening: a total can be Best Angle ONLY with real
   // O/U odds on the picked side (no 0.5/null fallback). When the picked
   // side's price is missing, hard-block Best Angle (it can still grade
   // lean). Totals are the worst-calibrated market in the audit, so they
   // get the strictest market-presence gate.
   const ouOddsMissing = ouMarketAmerican === null || ouMarketProb === null;
+  const ouStatisticalOddsMissing =
+    ouStatisticalMarketAmerican === null || ouStatisticalMarketProbability === null;
+  const ouStatisticalPlayGradeResult = computePlayGrade({
+    modelProb: ouStatisticalModelProb,
+    marketProb: ouStatisticalMarketProbability,
+    americanOdds: ouStatisticalMarketAmerican,
+    dataQualityTier: indep.data_quality_tier,
+    provisional,
+    isHeld: false,
+    minBestAngleEdgePct: V22_BEST_ANGLE_MIN_EDGE_PCT_OU,
+    minBestAngleConfidencePct: V22_BEST_ANGLE_MIN_CONFIDENCE_PCT,
+    marketProbIsFallback: ouStatisticalOddsMissing,
+    bestAngleHardBlockReason: ouStatisticalOddsMissing
+      ? "total requires real O/U odds (no fallback) for Best Angle"
+      : evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
+        ? "evaluation-only Total price has no target-excluded forecast corroboration"
+        : neutralFallbackBlocksBA
+          ? "key feature group on neutral fallback / missing for both sides"
+          : null,
+  });
+  const ouStatisticalEdgePct = ouStatisticalMarketProbability === null
+    ? null
+    : Math.round((ouStatisticalModelProb - ouStatisticalMarketProbability) * 1_000) / 10;
+  const ouStatisticalGrade = applyMlbTruthfulEdgeGradeCorrection({
+    market: "total",
+    grade: ouStatisticalPlayGradeResult.grade,
+    edgePct: ouStatisticalEdgePct,
+  }).grade;
   const ouPlayGrade = computePlayGrade({
     modelProb: ouModelProb,
     marketProb: ouMarketProb,
@@ -855,11 +1014,11 @@ export function runMlbAutoModelV2_2(
     evaluation_only_price_exclusion: {
       release_id: MLB_FULL_GAME_STRUCTURAL_COHERENCE_RELEASE_ID,
       moneyline_complete_pair_count:
-        evaluationOnlyPriceAuthority.moneylineCompletePairCount,
+        legacyEvaluationOnlyPriceAuthority.moneylineCompletePairCount,
       total_complete_pair_count:
         evaluationOnlyPriceAuthority.totalCompletePairCount,
       moneyline_forecast_excluded:
-        evaluationOnlyPriceAuthority.moneylineForecastExcluded,
+        legacyEvaluationOnlyPriceAuthority.moneylineForecastExcluded,
       total_forecast_excluded:
         evaluationOnlyPriceAuthority.totalForecastExcluded,
       total_probability_regularization_excluded:
@@ -883,6 +1042,16 @@ export function runMlbAutoModelV2_2(
       indep.innings_weighted_total_preserve_margin?.legacy_total_expected_runs,
     innings_weighted_total_preserve_margin_candidate_total:
       indep.innings_weighted_total_preserve_margin?.candidate_total_expected_runs,
+    unified_game_distribution: unifiedDistribution === null
+      ? undefined
+      : {
+          ...unifiedDistribution,
+          enabled: unifiedGameDistributionEnabled,
+          applied: inningsWeightedTotalPreserveMarginApplied,
+          moneyline_probability_source: "preserved_margin_axis",
+          total_probability_source: "development_score_gap_logistic",
+          total_statistical_grade: ouStatisticalGrade,
+        },
     home_starter_workload: homeStarterWorkload,
     away_starter_workload: awayStarterWorkload,
     feature_preferred_count: indep.feature_audit.preferred_count,
@@ -911,7 +1080,7 @@ export function runMlbAutoModelV2_2(
     ml_raw_edge_pct: mlRawEdgePct,
     ml_regularized_model_prob: mlModelProb,
     ml_regularized_edge_pct: mlEdgePct,
-    ml_shrink_factor: evaluationOnlyPriceAuthority.moneylineForecastExcluded
+    ml_shrink_factor: legacyEvaluationOnlyPriceAuthority.moneylineForecastExcluded
       ? 1
       : mlReg.shrinkFactor,
     ml_distance_cap_pp: mlReg.distanceCapPp,
@@ -927,7 +1096,7 @@ export function runMlbAutoModelV2_2(
     ou_distance_cap_applied: ouReg.capApplied,
     total_regime_calibration: totalRegimeCalibration,
     regularization_reason:
-      evaluationOnlyPriceAuthority.moneylineForecastExcluded ||
+      legacyEvaluationOnlyPriceAuthority.moneylineForecastExcluded ||
       evaluationOnlyPriceAuthority.totalProbabilityRegularizationExcluded
         ? "evaluation_only_price_exclusion"
         : mlReg.reason,

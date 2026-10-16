@@ -2294,6 +2294,15 @@ function predictionFromSnapshot(
         modelOverProbabilityBefore: decision.regularizedOverProbability,
         modelOverProbabilityAfter: decision.calibratedOverProbability,
       },
+      unified_game_distribution: structuralScope === "exclude_bad_or_weak"
+        ? {
+            enabled: true,
+            applied: structuralRepairApplies(game, structuralScope),
+            invariants: { passed: true, issues: [] },
+            total_statistical_grade:
+              candidateTotalDecision(game, false, candidateScores)?.grade ?? "ungraded",
+          }
+        : undefined,
     };
     sportSpecific = {
       ...sportSpecific,
@@ -2318,7 +2327,7 @@ function predictionFromSnapshot(
 
   const mlConfidence = computeConfidence({
     win_prob: mlProb,
-    ou_prob: ouProb,
+    ou_prob: candidate && !recomputeMoneyline ? baselineOuProb : ouProb,
     run_diff_abs: Math.abs(margin),
     tier: qualityTier(game),
   });
@@ -3147,7 +3156,7 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
   const candidateScopedMl = ml(candidateScopedRecords);
   const baseByKey = new Map(baselineRecords.map((record) => [`${record.game_id}:${record.market}`, record]));
   const candidateByKey = new Map(candidateRecords.map((record) => [`${record.game_id}:${record.market}`, record]));
-  const deltas = { totalSideFlips: 0, totalCorrections: 0, totalHarms: 0, totalPromotions: 0, totalDemotions: 0, mlSideChanges: 0, mlGradeChanges: 0 };
+  const deltas = { totalSideFlips: 0, totalCorrections: 0, totalHarms: 0, totalPromotions: 0, totalDemotions: 0, mlSideChanges: 0, mlProbabilityChanges: 0, mlGradeChanges: 0 };
   const promoted: WriterRecord[] = [];
   const demoted: WriterRecord[] = [];
   for (const [key, before] of baseByKey) {
@@ -3155,6 +3164,7 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     if (!after) continue;
     if (before.market === "moneyline") {
       if (before.side !== after.side) deltas.mlSideChanges++;
+      if (before.model_probability !== after.model_probability) deltas.mlProbabilityChanges++;
       if (before.play_grade !== after.play_grade || before.best_angle !== after.best_angle || before.no_bet !== after.no_bet) {
         deltas.mlGradeChanges++;
       }
@@ -3620,6 +3630,7 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     totalPromotions: 0,
     totalDemotions: 0,
     mlSideChanges: 0,
+    mlProbabilityChanges: 0,
     mlGradeChanges: 0,
   };
   for (const [key, before] of baseByKey) {
@@ -3627,6 +3638,7 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
     if (!after) continue;
     if (before.market === "moneyline") {
       if (before.side !== after.side) scopedDeltas.mlSideChanges++;
+      if (before.model_probability !== after.model_probability) scopedDeltas.mlProbabilityChanges++;
       if (
         before.play_grade !== after.play_grade ||
         before.best_angle !== after.best_angle ||
@@ -3855,6 +3867,10 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
           const after = candidatePreservedProbabilityMl.find((record) => record.game_id === before.game_id);
           return after !== undefined && before.side !== after.side;
         }).length,
+        probabilityChanges: baseMl.filter((before) => {
+          const after = candidatePreservedProbabilityMl.find((record) => record.game_id === before.game_id);
+          return after !== undefined && before.model_probability !== after.model_probability;
+        }).length,
         gradeOrActionChanges: baseMl.filter((before) => {
           const after = candidatePreservedProbabilityMl.find((record) => record.game_id === before.game_id);
           return after !== undefined && (
@@ -3887,6 +3903,10 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
         sideChanges: baseMl.filter((before) => {
           const after = candidateScopedMl.find((record) => record.game_id === before.game_id);
           return after !== undefined && before.side !== after.side;
+        }).length,
+        probabilityChanges: baseMl.filter((before) => {
+          const after = candidateScopedMl.find((record) => record.game_id === before.game_id);
+          return after !== undefined && before.model_probability !== after.model_probability;
         }).length,
         gradeOrActionChanges: baseMl.filter((before) => {
           const after = candidateScopedMl.find((record) => record.game_id === before.game_id);
@@ -4013,6 +4033,7 @@ async function currentWriterReplay(games: Game[], chronologyUniverse: Game[]): P
       incumbentRows: baseMl.length,
       candidateRows: candidateMl.length,
       sideChanges: deltas.mlSideChanges,
+      probabilityChanges: deltas.mlProbabilityChanges,
       gradeOrActionChanges: deltas.mlGradeChanges,
     },
     candidateDiagnostics: {

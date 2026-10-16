@@ -250,6 +250,22 @@ export function awayPlus1_5Probability(
   return 1 - homeMinus1_5Probability(lambdaHome, lambdaAway);
 }
 
+/** Probability the away team wins by 2+ runs (covers away -1.5). */
+export function awayMinus1_5Probability(
+  lambdaHome: number,
+  lambdaAway: number,
+): number {
+  return homeMinus1_5Probability(lambdaAway, lambdaHome);
+}
+
+/** Probability the home team's deficit is at most one run (covers home +1.5). */
+export function homePlus1_5Probability(
+  lambdaHome: number,
+  lambdaAway: number,
+): number {
+  return 1 - awayMinus1_5Probability(lambdaHome, lambdaAway);
+}
+
 /**
  * No-vig probability → fair American odds (positive integer or negative).
  * Used to compute EV from model probability vs market odds.

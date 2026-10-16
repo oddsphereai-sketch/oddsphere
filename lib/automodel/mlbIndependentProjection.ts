@@ -600,6 +600,9 @@ export type V22IndependentProjection = {
   innings_weighted_total_preserve_margin?: {
     enabled: boolean;
     applied: boolean;
+    scope: "all" | "validated_high_quality";
+    scope_qualified: boolean;
+    scope_reason: string;
     legacy_total_expected_runs: number;
     candidate_total_expected_runs: number;
     preserved_home_run_diff: number;
@@ -620,6 +623,7 @@ export type ProjectIndependentOptions = {
    * silently change the independent moneyline direction.
    */
   useInningsWeightedTotalPreserveMargin?: boolean;
+  inningsWeightedTotalScope?: "all" | "validated_high_quality";
 };
 
 function deriveQualityTier(audit: V22FeatureAudit): "high" | "medium" | "low" | "fallback" {
@@ -692,8 +696,22 @@ export function projectIndependent(
   const legacyTotalRuns = legacyAwayRuns + legacyHomeRuns;
   const legacyHomeRunDiff = legacyHomeRuns - legacyAwayRuns;
 
+  const inningsWeightedTotalScope = opts.inningsWeightedTotalScope ?? "all";
+  const averageStarterEra =
+    typeof snap.home_starter?.season_era === "number" &&
+    typeof snap.away_starter?.season_era === "number"
+      ? (snap.home_starter.season_era + snap.away_starter.season_era) / 2
+      : null;
+  const averageBullpenFactor = (homeBullpen + awayBullpen) / 2;
+  const qualityTier = deriveQualityTier(audit);
+  const scopeQualified = inningsWeightedTotalScope === "all" || (
+    qualityTier === "high" &&
+    averageStarterEra !== null &&
+    averageStarterEra < 4.75 &&
+    averageBullpenFactor < 1.05
+  );
   const useInningsWeightedTotalPreserveMargin =
-    opts.useInningsWeightedTotalPreserveMargin === true;
+    opts.useInningsWeightedTotalPreserveMargin === true && scopeQualified;
   let homeRuns = legacyHomeRuns;
   let awayRuns = legacyAwayRuns;
   let candidateTotalRuns = legacyTotalRuns;
@@ -764,12 +782,25 @@ export function projectIndependent(
       },
     },
     feature_audit: audit,
-    data_quality_tier: deriveQualityTier(audit),
+    data_quality_tier: qualityTier,
     innings_weighted_total_preserve_margin: {
-      enabled: useInningsWeightedTotalPreserveMargin,
+      enabled: opts.useInningsWeightedTotalPreserveMargin === true,
       applied:
         useInningsWeightedTotalPreserveMargin &&
         Math.abs(candidateTotalRuns - legacyTotalRuns) > 1e-9,
+      scope: inningsWeightedTotalScope,
+      scope_qualified: scopeQualified,
+      scope_reason: scopeQualified
+        ? inningsWeightedTotalScope === "all"
+          ? "all_rows"
+          : "high_quality_starter_and_bullpen_thresholds_passed"
+        : qualityTier !== "high"
+          ? "data_quality_not_high"
+          : averageStarterEra === null
+            ? "starter_era_missing"
+            : averageStarterEra >= 4.75
+              ? "average_starter_era_at_or_above_4_75"
+              : "average_bullpen_factor_at_or_above_1_05",
       legacy_total_expected_runs: legacyTotalRuns,
       candidate_total_expected_runs: candidateTotalRuns,
       preserved_home_run_diff: legacyHomeRunDiff,

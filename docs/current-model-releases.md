@@ -2094,6 +2094,20 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
 
+- October 16 unified game distribution release is
+  `mlb_daily_edge_decision_2026_10_16_r92_unified_game_distribution`. Future unlocked MLB games now
+  publish one factorized margin/Total forecast: the released r91 Moneyline margin and market reader
+  remain unchanged, the predeclared high-quality starter/bullpen cohort receives the validated
+  innings-weighted Total repair, and one score pair is recomposed from those two axes. Total
+  probability uses the frozen score-gap logistic; the target-excluded reader and r90 corroborated
+  opposition rule remain downstream and regenerate the same final score pair. Run-line and favorable
+  alternate-line probabilities are derived from this forecast but run line remains shadow-only.
+  The exact 1,180-row writer replay changes zero Moneyline sides or grades/actions, produces
+  622-551-7 Totals (+25.152u), and qualifies a 105-74 action board (+23.591u), including 29-17 Best
+  Angles (+9.736u). Locked payloads keep exact stored precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-16-mlb-unified-game-distribution-r92-predeclaration.md` and
+  `docs/model-audits/2026-10-16-mlb-unified-game-distribution-r92-result.md`.
+
 - October 16 MLB run-line forward evidence candidate advances only the additive full-game evidence
   contract to `mlb_fullgame_market_evidence_capture_2026_10_16_r2_run_line_context` (`mlbfgme2`).
   The existing sole prediction-record writer reuses its bounded current/history/opener reads to
@@ -2129,16 +2143,16 @@ changed; only deterministic settlement of existing locked rows is affected.
   Evidence and rollback: `docs/model-audits/2026-10-08-mlb-fi-opening-continuity.md`.
 
 - Projection runtime: resolved automodel `v2_2`
-- Projection core: `mlb_projection_core_v2_6_corroborated_total_opposition_preserve_margin_2026_10_05`
+- Projection core: `mlb_projection_core_v2_7_unified_total_preserve_margin_2026_10_16`
 - First-inning runtime: `fi_v2` with FI-scoped release `mlb_first_inning_release_2026_09_04_r85_independent_uncertainty` and probability head `mlb_first_inning_fi_v10_independent_uncertainty_target_excluded_2026_09_04`. r85 retains r84's pre-r61 65% independent / 35% target-excluded multi-book posterior and its 48%-52% corroborated uncertainty band. When the evaluated quote is the sole accepted pair, the forecast remains independent-only and now requires the independent probability to clear 55% NRFI or 55% YRFI; otherwise it is a genuine null-side Toss-Up. The evaluated quote remains exact-price economics only. Full-game tuples, probabilities, grades, the sole writer/lease, providers, query budgets, locks, tracking, and settlement are unchanged.
-- Public calibration: `mlb_public_calibration_v37_professional_moneyline_tiering_2026_10_09`
-- Decision release: `mlb_daily_edge_decision_2026_10_09_r91_professional_moneyline_tiering`
-- Rule bundle: `mlb_daily_edge_rule_bundle_v76_professional_moneyline_tiering_2026_10_09`
+- Public calibration: `mlb_public_calibration_v38_unified_game_distribution_2026_10_16`
+- Decision release: `mlb_daily_edge_decision_2026_10_16_r92_unified_game_distribution`
+- Rule bundle: `mlb_daily_edge_rule_bundle_v77_unified_game_distribution_2026_10_16`
 - Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
-- Model-layer schema: `mlb_model_layer_versions_v20_projected_lineup_continuity`
+- Model-layer schema: `mlb_model_layer_versions_v21_unified_game_distribution`
 - Input eligibility: `mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16`
-- Grade policy: `mlb_public_grade_policy_v60_professional_moneyline_tiering_2026_10_09`
-- Correction policy: `mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05`
+- Grade policy: `mlb_public_grade_policy_v61_unified_two_layer_total_2026_10_16`
+- Correction policy: `mlb_prediction_corrections_v26_unified_total_reader_reconciliation_2026_10_16`
 - Tracking contract: `member_facing_lock_v8_priority_retry_minute_cadence_2026_08_11`
 - Lock coherence: `mlb_lock_coherence_2026_09_02_r3_failed_economics_tuple`
 - Machine registry: `lib/automodel/mlbModelLayerVersions.ts`

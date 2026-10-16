@@ -105,8 +105,8 @@ const fiLayers = buildMlbModelLayerVersions("first_inning", {});
 check("missing model env stamps resolved v2_2", layers.runtime_env.automodel_version === "v2_2");
 check("missing FI env stamps resolved fi_v2", layers.runtime_env.first_inning_model_version === "fi_v2");
 check(
-  "grade policy stamps the r91 professional Moneyline tiering release",
-  layers.grade_policy === "mlb_public_grade_policy_v60_professional_moneyline_tiering_2026_10_09",
+  "grade policy stamps the r92 unified two-layer Total release",
+  layers.grade_policy === "mlb_public_grade_policy_v61_unified_two_layer_total_2026_10_16",
 );
 check(
   "FI r85 stamps the scoped independent-only uncertainty correction without changing the full-game tuple",
@@ -129,25 +129,27 @@ check(
     layers.calibration_version === MLB_PUBLIC_CALIBRATION_VERSION,
 );
 check(
-  "MLB r91 stamps professional Moneyline tiering while preserving unrelated heads",
-  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_10_09_r91_professional_moneyline_tiering" &&
-    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v20_projected_lineup_continuity" &&
-    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v76_professional_moneyline_tiering_2026_10_09" &&
+  "MLB r92 stamps the unified distribution while preserving the Moneyline and FI heads",
+  MLB_DAILY_EDGE_DECISION_RELEASE_ID === "mlb_daily_edge_decision_2026_10_16_r92_unified_game_distribution" &&
+    MLB_MODEL_LAYER_VERSION_SCHEMA === "mlb_model_layer_versions_v21_unified_game_distribution" &&
+    layers.rule_bundle_version === "mlb_daily_edge_rule_bundle_v77_unified_game_distribution_2026_10_16" &&
     layers.total_market_support_lean === "total_sharpapi_money_over_tickets_support_lean_v2_under_only_2026_09_04" &&
-    layers.calibration_version === "mlb_public_calibration_v37_professional_moneyline_tiering_2026_10_09" &&
-    layers.projection_core === "mlb_projection_core_v2_6_corroborated_total_opposition_preserve_margin_2026_10_05" &&
+    layers.calibration_version === "mlb_public_calibration_v38_unified_game_distribution_2026_10_16" &&
+    layers.projection_core === "mlb_projection_core_v2_7_unified_total_preserve_margin_2026_10_16" &&
+    layers.score_distribution === "mlb_score_distribution_factorized_margin_total_v1_2026_10_16" &&
     layers.market_input_snapshot === "mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&
     layers.moneyline_confidence_value_context_lean === "mlb_ml_confidence_value_context_best_angle_v1_2026_10_09" &&
     layers.moneyline_neutral_consensus_grade === "ml_sharpapi_consensus_grade_continuity_v3_exact_price_tier_2026_10_09" &&
-    layers.total_probability_head === "mlb_total_regime_calibrated_probability_v5_corroborated_opposition_2026_10_05" &&
+    layers.total_probability_head === "mlb_total_score_gap_probability_v6_unified_distribution_2026_10_16" &&
+    layers.run_line_probability_head === "mlb_run_line_shadow_probability_v1_unified_margin_distribution_2026_10_16" &&
     layers.coherent_market_price_map === "mlb_coherent_market_price_map_v1_2026_09_01" &&
-    layers.market_calibration_policy === "mlb_model_market_calibration_v5_corroborated_total_opposition_2026_10_05" &&
+    layers.market_calibration_policy === "mlb_model_market_calibration_v6_unified_game_distribution_2026_10_16" &&
     layers.moneyline_action_promotion_stability === "daily_edge_action_promotion_stability_2026_08_29_r1" &&
     layers.source_aware_split_pair_selector === "mlb_source_aware_split_pair_selector_v2_recency_coherent_2026_08_31" &&
     layers.moneyline_evaluation_price_policy === "mlb_ml_fresh_coherent_best_playable_price_same_book_movement_v4_sharp_source_recovery_2026_09_01" &&
     layers.moneyline_sharp_price_source === "mlb_sharp_moneyline_source_v2_targeted_complete_pair_recovery_2026_09_01" &&
-    layers.correction_policy === "mlb_prediction_corrections_v25_corroborated_total_opposition_2026_10_05" &&
+    layers.correction_policy === "mlb_prediction_corrections_v26_unified_total_reader_reconciliation_2026_10_16" &&
     layers.first_inning_probability_head === "mlb_first_inning_fi_v6_evaluated_quote_exclusion_2026_09_02" &&
     layers.first_inning_market_price_map === "mlb_first_inning_named_book_price_map_v1_2026_09_01" &&
     layers.first_inning_market_calibration_policy === "mlb_first_inning_market_calibration_v3_evaluated_quote_exclusion_2026_09_02" &&

@@ -60,6 +60,7 @@ import {
   buildMlbTotalsRegimePrior,
   type MlbTotalsRegimePrior,
 } from "../automodel/mlbTotalsRegimeCalibration";
+import { MLB_UNIFIED_GAME_DISTRIBUTION_ACTIVE } from "../automodel/mlbUnifiedGameDistribution";
 import {
   reconcileTotalProjection,
   type TotalProjectionReconciliation,
@@ -220,6 +221,8 @@ export type AutoModelRunOpts = {
    * Omit to load the production prior; pass null to preserve the incumbent.
    */
   auditTotalsRegimePriorOverride?: MlbTotalsRegimePrior | null;
+  /** Dry-run-only switch for exact incumbent/candidate board rehearsals. */
+  auditUnifiedGameDistributionOverride?: boolean;
 };
 
 /**
@@ -600,6 +603,12 @@ export async function generatePredictionsForSlate(
   if (wantWrite && Object.prototype.hasOwnProperty.call(opts, "auditTotalsRegimePriorOverride")) {
     throw new Error(
       "automodelService.generatePredictionsForSlate: auditTotalsRegimePriorOverride " +
+        "is dry-run only and cannot be combined with writeToDb=true.",
+    );
+  }
+  if (wantWrite && Object.prototype.hasOwnProperty.call(opts, "auditUnifiedGameDistributionOverride")) {
+    throw new Error(
+      "automodelService.generatePredictionsForSlate: auditUnifiedGameDistributionOverride " +
         "is dry-run only and cannot be combined with writeToDb=true.",
     );
   }
@@ -1021,6 +1030,8 @@ export async function generatePredictionsForSlate(
         stage,
         effectiveVersion,
         totalsRegimePrior,
+        unifiedGameDistributionEnabled:
+          opts.auditUnifiedGameDistributionOverride ?? MLB_UNIFIED_GAME_DISTRIBUTION_ACTIVE,
       });
       const playbookVenueWeatherAudit = playbookVenueWeatherAuditByExternalId.get(
         snap.game_external_id,
@@ -1446,8 +1457,16 @@ function applyV2IfSelected(args: {
   stage: ModelStage;
   effectiveVersion: AutomodelVersion;
   totalsRegimePrior: MlbTotalsRegimePrior | null;
+  unifiedGameDistributionEnabled: boolean;
 }): AutoModelOutput {
-  const { snap, v1Output, stage, effectiveVersion, totalsRegimePrior } = args;
+  const {
+    snap,
+    v1Output,
+    stage,
+    effectiveVersion,
+    totalsRegimePrior,
+    unifiedGameDistributionEnabled,
+  } = args;
   if (effectiveVersion === "v1") {
     return {
       ...v1Output,
@@ -1535,6 +1554,8 @@ function applyV2IfSelected(args: {
     try {
       v22 = runMlbAutoModelV2_2(snap, v1Output, stage, {
         useWorkloadPitching: process.env.MLB_WORKLOAD_PITCHING_ENABLED === "true",
+        useInningsWeightedTotalPreserveMargin: unifiedGameDistributionEnabled,
+        useUnifiedGameDistribution: unifiedGameDistributionEnabled,
         totalsRegimePrior,
       });
     } catch (e) {
@@ -1609,10 +1630,14 @@ function applyV2IfSelected(args: {
     });
     const coreModelEnabled =
       process.env.MLB_MARKET_AWARE_CORE_MODEL_ENABLED === "true";
+    const unifiedGameDistributionActive =
+      a22.unified_game_distribution?.enabled === true &&
+      a22.unified_game_distribution.invariants.passed === true;
     const projectionCalibrationEnabled =
       coreModelEnabled &&
       process.env.MLB_TOTAL_PROJECTION_CALIBRATION_ENABLED === "true" &&
       !isLockedHere &&
+      !unifiedGameDistributionActive &&
       totalCalibration.enabled;
     // Best settled totals cohort since launch (2026-06-26..2026-06-30)
     // kept calibrated projection as audit/context only. Do not let a stale

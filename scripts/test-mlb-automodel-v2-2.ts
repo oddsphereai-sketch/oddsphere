@@ -807,6 +807,16 @@ async function main() {
         1e-9,
       ));
     const out = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft");
+    const unified = runMlbAutoModelV2_2(snap, buildV1Out(), "morning_draft", {
+      useInningsWeightedTotalPreserveMargin: true,
+      useUnifiedGameDistribution: true,
+    });
+    check("unified singleton preserves exact Moneyline probability",
+      unified.v22Audit.ml_model_prob === out.v22Audit.ml_model_prob);
+    check("unified singleton preserves exact Moneyline confidence",
+      unified.ml_confidence === out.ml_confidence);
+    check("unified singleton preserves exact Moneyline grade",
+      unified.v22Audit.ml_play_grade === out.v22Audit.ml_play_grade);
     check("singleton ML final probability is the PMF probability, not quote-shrunk",
       near(out.v22Audit.ml_model_prob, out.v22Audit.ml_raw_model_prob, 1e-12));
     check("singleton Total final probability is the PMF probability, not quote-shrunk",
