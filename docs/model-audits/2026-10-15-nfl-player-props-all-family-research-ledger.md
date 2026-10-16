@@ -18,7 +18,7 @@ This ledger separates three decisions that must not be conflated: independent po
 | Anytime TD | Keep actionability disabled; fixed ensemble improves independent probability but not economic ordering | Corrected Week 5 ledger: 45 rows, released exact-price ROI -37.68% | Existing board family; no actionable promotion |
 | Passing TDs | Retain Poisson HGB research foundation after calendar-ordered confirmation | 578 QB-games in 2025; MAE 0.9643 → 0.9237, deviance 1.1766 → 1.1095, 4/4 Brier wins | Research only; confirmation was previously opened; no exact-price ledger |
 | Interceptions | Keep pooled foundation; HGB is retrospectively validated but externally unresolved | 2025 improved MAE/deviance/Brier and 4/4 thresholds; already-inspected 2026 Weeks 2-5 reversed all three | Research only; new prospective decision window required |
-| Rushing + Receiving Yards | Retain opportunity-efficiency HGB as a research foundation after calendar-ordered confirmation | 4,148 player-games in 2025; MAE 24.03 → 23.17, RMSE 32.29 → 30.66, 5/5 Brier wins | Research only; confirmation was previously opened; no exact-price ledger |
+| Rushing + Receiving Yards | Retain opportunity-efficiency HGB as the independent research foundation | 2025 selection confirmed on 982 current-season player-games: MAE 24.54 → 23.73, RMSE 32.50 → 31.06, 5/5 Brier wins; clustered intervals exclude zero | Research only; current season was previously opened and the retained board has no exact offers |
 | Player Touchdowns | Reject Poisson-HGB candidate for count projection | 1,084 rows; deviance/Brier improved but MAE worsened with CI above zero | Research only |
 | First Touchdown | Retain coherent hazard research foundation; evidence not conclusive | 63 games; point Brier/log loss improved, both bootstrap intervals cross zero | Research only |
 | Longest Pass | Retain HGB-log research foundation after calendar-ordered confirmation | 602 QB-games in 2025; MAE 13.31 → 10.04, RMSE 16.94 → 13.70, 5/5 Brier wins | Research only; confirmation was previously opened; no exact-price ledger |
@@ -29,7 +29,7 @@ This ledger separates three decisions that must not be conflated: independent po
 
 ## What is now answered
 
-All canonical prop families have an explicit current decision. The strict chronology strengthens four market-free research foundations: Passing TDs, Rushing + Receiving Yards, Longest Pass, and Kicking Points. It also prevents false promotion: Longest Reception and Longest Rush miss their frozen bias gates, Field Goals Made misses its clustered-MAE gate, and Interceptions has contradictory 2025 and 2026 evidence. Player Touchdowns and First Touchdown remain held from their earlier tests.
+All canonical prop families have an explicit current decision. The strict chronology strengthens four market-free research foundations: Passing TDs, Rushing + Receiving Yards, Longest Pass, and Kicking Points. The later component/joint combined-yards architecture also clears every current-season accuracy and clustered-uncertainty gate, fixing the earlier upper-tail compression, but it still lacks exact offers. The QB/RB next-step evidence is recorded in `docs/model-audits/2026-10-16-nfl-player-props-qb-rb-next-step-result.md`. It also prevents false promotion: Longest Reception and Longest Rush miss their frozen bias gates, Field Goals Made misses its clustered-MAE gate, and Interceptions has contradictory 2025 and 2026 evidence. Player Touchdowns and First Touchdown remain held from their earlier tests.
 
 These are retrospective decisions, not pristine confirmations. The earlier r1 work had already inspected 2025 and 2026, so none of the new chronology results may be labeled an untouched holdout. The next decisive evidence must come from outcomes generated after a new frozen declaration.
 
@@ -39,7 +39,7 @@ The market reader remains separate. The retained five-week exact ledger has open
 
 1. Retain a release-pure full-board offer universe with exact line, price, book, observation time, eligible nonoffers, lock time, and official outcome for each new family. Without that, side economics, calibration at offered lines, promotions/demotions, and board size cannot be measured.
 2. Add licensed route participation, alignment, red-zone routes, and end-zone targets for the receiving and touchdown allocation families. SportsDataIO Advanced Metrics is the first diligence target; Sportradar is second.
-3. Replace upper-tail-compressing single-target models for combined yards and touchdown counts with predeclared component/joint distributions.
+3. Retain complete exact Rushing + Receiving Yards offers so the validated component/joint model can receive probability, economic, and board-impact gates; continue component/joint work for touchdown counts.
 4. Calibrate First Touchdown's game-level residual mass before player allocation and require complete offer-universe coverage.
 
 Until those dependencies are present and settled, production remains unchanged. This is a safety boundary, not a return to market anchoring.
