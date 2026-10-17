@@ -1,16 +1,9 @@
 /**
- * Phase 7A — NBA Finals v0a — ESPN public NBA injuries fetcher.
+ * ESPN public exact-game NBA injury authority.
  *
- * Public read-only network call. Returns NbaPlayerInjury[] for a single
- * team or null on any failure (the snapshot builder treats null as
- * "unknown" and caps confidence accordingly).
- *
- * Endpoint:
- *   https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{abbr}/injuries
- *
- * The team abbreviation is what ESPN expects (e.g. "lal", "bos"). ESPN's
- * abbreviations are commonly lowercase but the endpoint accepts upper
- * also. We lowercase before the call to be safe.
+ * Public read-only network call. The exact event summary must explicitly
+ * publish injury groups for both matchup teams. Missing or partial payloads
+ * remain unknown and can never be interpreted as healthy.
  *
  * Master switch: NBA_INJURY_INGEST_ENABLED env var.
  *   default true; set to "false" to disable all injury fetches.
@@ -31,6 +24,21 @@ export type EspnNbaInjuryFetchOptions = {
   log?: (m: string) => void;
   fetchImpl?: typeof fetch;
 };
+
+export type EspnNbaGameInjuryRequest = {
+  gameExternalId: number;
+  teamAbbreviation: string;
+  teamExternalId: number;
+  awayTeamAbbreviation: string;
+  homeTeamAbbreviation: string;
+};
+
+export type EspnNbaGameInjuries = {
+  eventId: string;
+  teams: ReadonlyMap<string, NbaPlayerInjury[]>;
+};
+
+const ESPN_NBA_ROOT = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 
 export function isInjuryIngestEnabled(): boolean {
   const env = process.env.NBA_INJURY_INGEST_ENABLED;
@@ -55,46 +63,66 @@ function normalizeStatus(raw: string | null | undefined): NbaInjuryStatus {
 }
 
 /**
- * Fetch ESPN injuries for a single NBA team. Returns null on any failure
- * (caller treats null as "unknown" status).
+ * Exact-game injury authority used by every production NBA snapshot builder.
+ * Both matchup teams must be explicitly present in ESPN's game summary. An
+ * explicit empty `injuries` array is verified zero; a missing group, missing
+ * array, duplicate group, or malformed player row fails closed.
  */
-export async function fetchEspnNbaInjuries(
-  teamAbbr: string,
+export async function fetchEspnNbaGameInjuries(
+  eventId: number | string,
+  awayTeamAbbreviation: string,
+  homeTeamAbbreviation: string,
   opts: EspnNbaInjuryFetchOptions = {},
-): Promise<{ players: NbaPlayerInjury[] } | null> {
-  if (!isInjuryIngestEnabled()) {
-    return null;
-  }
+): Promise<EspnNbaGameInjuries | null> {
+  if (!isInjuryIngestEnabled()) return null;
   const log = opts.log ?? (() => {});
   const fetchFn = opts.fetchImpl ?? fetch;
-  const abbr = teamAbbr.trim().toLowerCase();
-  if (abbr === "") {
-    log(`[espnNbaInjuries] empty team abbreviation; returning null.`);
-    return null;
-  }
-  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${abbr}/injuries`;
+  const normalizedEventId = String(eventId).trim();
+  if (!/^\d+$/.test(normalizedEventId)) return null;
   try {
-    const res = await fetchFn(url, {
+    const response = await fetchFn(`${ESPN_NBA_ROOT}/summary?event=${normalizedEventId}`, {
       headers: {
-        "User-Agent": "Mozilla/5.0 oddsphere/nba-v0a",
+        "User-Agent": "Mozilla/5.0 oddsphere/nba-exact-game-availability",
         accept: "application/json",
       },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) {
-      log(`[espnNbaInjuries] ESPN ${abbr} returned HTTP ${res.status}; returning null.`);
+    if (!response.ok || !(response.headers.get("content-type") ?? "").toLowerCase().includes("json")) {
+      log(`[espnNbaInjuries] ESPN event ${normalizedEventId} did not return JSON success; returning null.`);
       return null;
     }
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("json")) {
-      log(`[espnNbaInjuries] ESPN ${abbr} non-JSON content-type=${ct}; returning null.`);
-      return null;
-    }
-    const body = (await res.json()) as unknown;
-    return parseEspnInjuriesPayload(body);
-  } catch (e) {
-    log(`[espnNbaInjuries] fetch threw for ${abbr}: ${(e as Error).message}; returning null.`);
+    return parseEspnGameInjuriesPayload(
+      await response.json(),
+      normalizedEventId,
+      awayTeamAbbreviation,
+      homeTeamAbbreviation,
+    );
+  } catch (error) {
+    log(`[espnNbaInjuries] exact-game fetch failed for ${normalizedEventId}: ${(error as Error).message}`);
     return null;
   }
+}
+
+/** One cached ESPN summary request per game, shared by both team resolver calls. */
+export function createEspnNbaGameInjuryResolver(
+  opts: EspnNbaInjuryFetchOptions = {},
+): (request: EspnNbaGameInjuryRequest) => Promise<NbaPlayerInjury[] | null> {
+  const cache = new Map<number, Promise<EspnNbaGameInjuries | null>>();
+  return async (request) => {
+    let report = cache.get(request.gameExternalId);
+    if (!report) {
+      report = fetchEspnNbaGameInjuries(
+        request.gameExternalId,
+        request.awayTeamAbbreviation,
+        request.homeTeamAbbreviation,
+        opts,
+      );
+      cache.set(request.gameExternalId, report);
+    }
+    const resolved = await report;
+    return resolved?.teams.get(canonicalNbaAbbreviation(request.teamAbbreviation)) ?? null;
+  };
 }
 
 /**
@@ -112,9 +140,7 @@ export function parseEspnInjuriesPayload(
   const root = body as { injuries?: unknown };
   const list = root.injuries;
   if (!Array.isArray(list)) {
-    // ESPN sometimes returns no injuries at all → empty list is the right
-    // answer; treat it as "known" (zero injuries).
-    return { players: [] };
+    return null;
   }
   const out: NbaPlayerInjury[] = [];
   for (const entry of list) {
@@ -158,6 +184,66 @@ export function parseEspnInjuriesPayload(
   return { players: out };
 }
 
+export function parseEspnGameInjuriesPayload(
+  body: unknown,
+  eventId: string,
+  awayTeamAbbreviation: string,
+  homeTeamAbbreviation: string,
+): EspnNbaGameInjuries | null {
+  if (body === null || typeof body !== "object") return null;
+  const groups = (body as { injuries?: unknown }).injuries;
+  if (!Array.isArray(groups)) return null;
+  const expected = new Set([
+    canonicalNbaAbbreviation(awayTeamAbbreviation),
+    canonicalNbaAbbreviation(homeTeamAbbreviation),
+  ]);
+  if (expected.size !== 2 || expected.has("")) return null;
+  const teams = new Map<string, NbaPlayerInjury[]>();
+  for (const candidate of groups) {
+    if (candidate === null || typeof candidate !== "object") continue;
+    const group = candidate as {
+      team?: { abbreviation?: unknown };
+      injuries?: unknown;
+    };
+    const abbreviation = canonicalNbaAbbreviation(
+      typeof group.team?.abbreviation === "string" ? group.team.abbreviation : "",
+    );
+    if (!expected.has(abbreviation)) continue;
+    if (teams.has(abbreviation) || !Array.isArray(group.injuries)) return null;
+    const structurallyComplete = group.injuries.every((injury) => {
+      if (injury === null || typeof injury !== "object") return false;
+      const row = injury as {
+        athlete?: { displayName?: unknown };
+        status?: unknown;
+        type?: unknown;
+        details?: { type?: unknown };
+      };
+      return typeof row.athlete?.displayName === "string" && row.athlete.displayName.trim().length > 0 &&
+        (typeof row.status === "string" || typeof row.type === "string" || typeof row.details?.type === "string");
+    });
+    if (!structurallyComplete) return null;
+    const parsed = parseEspnInjuriesPayload({ injuries: group.injuries });
+    if (parsed === null || parsed.players.length !== group.injuries.length) return null;
+    teams.set(abbreviation, parsed.players);
+  }
+  if ([...expected].some((abbreviation) => !teams.has(abbreviation))) return null;
+  return { eventId, teams };
+}
+
+export function canonicalNbaAbbreviation(value: string): string {
+  const abbreviation = value.trim().toUpperCase();
+  return ({
+    GS: "GSW",
+    NO: "NOP",
+    NY: "NYK",
+    SA: "SAS",
+    UTAH: "UTA",
+    WSH: "WAS",
+  } as Record<string, string>)[abbreviation] ?? abbreviation;
+}
+
 export const __NBA_INJURIES_TEST__ = {
   normalizeStatus,
+  canonicalNbaAbbreviation,
+  parseEspnGameInjuriesPayload,
 };

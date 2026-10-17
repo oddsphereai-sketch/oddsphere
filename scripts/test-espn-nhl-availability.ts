@@ -14,8 +14,9 @@ async function main(): Promise<void> {
     if (url.includes("scoreboard")) {
       return Response.json({ events: [event("401", "NJ", "WSH", "Jake Allen", "expected", "Logan Thompson", "confirmed")] });
     }
-    return Response.json({
-      injuries: [{
+    return Response.json({ injuries: [
+      { team: { abbreviation: "NJ", displayName: "New Jersey Devils" }, injuries: [] },
+      {
         team: { abbreviation: "WSH", displayName: "Washington Capitals" },
         injuries: [{
           status: "Out",
@@ -23,8 +24,8 @@ async function main(): Promise<void> {
           athlete: { displayName: "Pierre-Luc Dubois", position: { abbreviation: "LW" } },
           details: { type: "Illness" },
         }],
-      }],
-    });
+      },
+    ] });
   });
   assert.equal(ESPN_NHL_AVAILABILITY_MAX_EVENTS, 20);
   assert.equal(ESPN_NHL_AVAILABILITY_CONCURRENCY, 4);
@@ -40,15 +41,21 @@ async function main(): Promise<void> {
   assert.deepEqual(report.teams[1]?.players.map((player) => player.status), ["Confirmed starter", "Out"]);
   assert.equal(report.reportUpdatedAt, "2026-10-16T16:11:00.000Z");
 
-  const goalieOnly = await fetchEspnNhlSlateAvailability("2026-10-17", async (input) => {
+  const unverifiedInjuries = await fetchEspnNhlSlateAvailability("2026-10-17", async (input) => {
     if (String(input).includes("scoreboard")) {
       return Response.json({ events: [event("402", "LA", "SJ", "Darcy Kuemper", "expected", "Yaroslav Askarov", "expected")] });
     }
     throw new Error("summary unavailable");
   });
-  assert.equal(goalieOnly?.[0]?.awayTeam, "LAK");
-  assert.equal(goalieOnly?.[0]?.homeTeam, "SJS");
-  assert.equal(goalieOnly?.[0]?.teams.every((team) => team.players.length === 1), true);
+  assert.deepEqual(unverifiedInjuries, [], "goalie rows cannot certify a missing injury report");
+
+  const oneSided = await fetchEspnNhlSlateAvailability("2026-10-17", async (input) => {
+    if (String(input).includes("scoreboard")) {
+      return Response.json({ events: [event("403", "LA", "SJ", "Darcy Kuemper", "expected", "Yaroslav Askarov", "expected")] });
+    }
+    return Response.json({ injuries: [{ team: { abbreviation: "LA", displayName: "Los Angeles Kings" }, injuries: [] }] });
+  });
+  assert.deepEqual(oneSided, [], "both exact matchup teams must publish injury groups");
 
   const tooMany = await fetchEspnNhlSlateAvailability("2026-10-17", async () =>
     Response.json({ events: Array.from({ length: 21 }, (_, index) => event(String(index), "NJ", "WSH", "A", "expected", "B", "expected")) }));

@@ -21,7 +21,7 @@
  */
 
 import { buildNbaFeatureSnapshotsWithProvenance } from "../../../lib/services/nba/featureSnapshot";
-import { fetchEspnNbaInjuries } from "../../../lib/services/nba/espnNbaInjuries";
+import { createEspnNbaGameInjuryResolver } from "../../../lib/services/nba/espnNbaInjuries";
 import { runNbaAutoModelV1 } from "../../../lib/automodel/nba/nbaAutoModelV1";
 import { runNbaAutoModelV2 } from "../../../lib/automodel/nba/nbaAutoModelV2";
 import { etSlateDateToUtcWindow } from "../../../lib/services/nba/etSlateDate";
@@ -52,10 +52,7 @@ async function main(): Promise<void> {
     ? [win.startISO.slice(0, 10)]
     : [win.startISO.slice(0, 10), win.endISO.slice(0, 10)];
 
-  const injuryResolver = async (opts: { teamAbbreviation: string; teamExternalId: number }) => {
-    const r = await fetchEspnNbaInjuries(opts.teamAbbreviation);
-    return r === null ? null : r.players;
-  };
+  const injuryResolver = createEspnNbaGameInjuryResolver();
 
   const seen = new Set<number>();
   type Snap = Awaited<ReturnType<typeof buildNbaFeatureSnapshotsWithProvenance>>["snapshots"][number];

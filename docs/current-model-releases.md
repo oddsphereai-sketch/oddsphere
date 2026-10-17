@@ -126,8 +126,10 @@ Last reviewed: 2026-10-17
   a confirmed starter or an unfiltered postseason default. The member reader
   separately displays exact-date ESPN injury rows and published Expected or
   Confirmed goalie statuses through
-  `espn_nhl_availability_2026_10_17_r1_injuries_and_published_goalies`; this
+  `espn_nhl_availability_2026_10_17_r2_exact_matchup_injury_verification`; this
   display-only report has no model, grade, side, probability, or lock authority.
+  R2 requires explicit injury groups for both exact matchup teams; a goalie-only,
+  missing, or one-sided summary produces no report instead of medical clearance.
   Release and live-board evidence:
   `docs/model-audits/2026-10-17-daily-edge-release-and-availability-audit.md`.
 - NBA daily refresh release is `nba_daily_refresh_schedule_2026_10_07_r3_readiness_gated_rollover`.
@@ -2009,7 +2011,7 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 - Coherent outcome contract: `epl_coherent_market_outcome_2026_09_02_r2_structural_target_exclusion`
 - Display-grade / calibration release: `epl_grade_policy_2026_10_10_v25_exact_match_result_price_tiering`
 - Match Result locked-score reader release: `epl_match_result_exact_locked_score_2026_08_23_r2`
-- Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`; EPL snapshot continuity/publication lifecycle: `epl_member_snapshot_lifecycle_2026_10_10_r4_cross_release_locked_record_reconstruction`; tracking lock policy: `epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction`
+- Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`; EPL snapshot continuity/publication lifecycle: `epl_member_snapshot_lifecycle_2026_10_17_r5_scheduled_fixture_price_gate`; tracking lock policy: `epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction`
 - Runtime constants: `lib/services/epl/eplShadowModel.ts`
 - Provider boundary: BALLDONTLIE supplies fixtures/history/stats, a complete current three-way moneyline fallback, and its distinct opening endpoint. `lib/providers/real_api/SharpApiEplMarketProvider.ts` remains primary for per-book Match Result, Double Chance, Total, and BTTS prices and makes one cached league-level splits request. A live Playbook probe proved EPL is unsupported: EPL aliases silently returned NFL rows, so Playbook is not allowed into EPL odds or splits.
 - Model configuration: the retained r19 Total head uses a 365-day half-life, four-match shrinkage, 35% xG / 65% goals where xG is present, Dixon–Coles tau -0.10, and separate home/away club attack and defense. The r20 matchup-margin component uses the same half-life, ten-match shrinkage, 20% xG / 80% goals where xG is present, a 30% prior-match process contribution, and tau -0.15; the final margin is 75% r20 component and 25% r19.
@@ -2017,6 +2019,7 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 - October 10 v25 professional Match Result price tiering: the r19 prediction, Draw selector, coherent score PMF and all selected sides remain unchanged. Match Result now applies the same exact offered-price discipline already used by Total and BTTS. A nonpositive-exact-EV row that otherwise clears Best Angle steps down to Lean; one that otherwise clears Lean becomes Watchlist. Positive-exact-EV paths retain their incumbent tier. The opened 30-game replay changes five Match Result actionables at 4-1/+0.736u to two at 2-0/+1.209u; all three demotions remain visible Watchlists. The current 40-market board keeps all seven actionables, with Arsenal Match Result moving Best Angle to Lean and no side, probability, price or projected-score change. EPL splits remain genuinely unavailable and neutral. A settled same-book movement challenger did not clear Total/BTTS proper-score gates, and a Match Result flip candidate never activated in its untouched block, so neither receives production authority. Evidence and rollback: `docs/model-audits/2026-10-10-epl-professional-match-result-tiering-v25-predeclaration.md`.
 - October 13 r20 coherent Total/margin matchup model: the independent Total head remains exactly r19 while a 2024-selected, 2025-untouched attack/defence matchup model supplies 75% of the team margin. On the 380-match untouched 2025 holdout, Match Result accuracy improves 48.95% to 50.00%, Match Result Brier 0.61651 to 0.61311, log loss 1.02691 to 1.02126, team-score MAE 0.89999 to 0.89790, margin MAE 1.22053 to 1.20760, and margin correlation 0.34307 to 0.36142. Total MAE and accuracy remain effectively identical by construction; BTTS Brier and accuracy improve slightly. The final corrected-runtime replay of the current ten-game/30-market board preserves all eight incumbent actionables, with zero promotions, zero demotions, and three non-actionable Match Result side changes. No grade threshold, stake, provider call, writer, lease, cadence, member copy, label, layout, lock, or settlement behavior changes. Existing r19 locks remain immutable. Evidence: `docs/model-audits/2026-10-13-epl-total-margin-r20c-predeclaration.md` and `docs/model-audits/2026-10-13-epl-total-margin-r20-result.md`.
 - October 10 cross-release locked-reader repair: publication lifecycle r4 authenticates every immutable locked row against the model and calibration identifiers stored inside that row's own captured payload, groups all four markets by one exact legacy release tuple, and carries the earliest complete coherent cohort forward unchanged. A new unlocked calibration can no longer make a valid older lock unreadable, and rows from different release eras can never be combined into a synthetic lock. The live Arsenal-Leeds v24 four-market cohort remains byte-for-byte authoritative while future unlocked games use v25. This changes zero predictions, probabilities, projections, sides, prices, grades, stakes, promotions, demotions, or actionable counts. Evidence: `docs/model-audits/2026-10-10-epl-cross-release-locked-reader-r4.md`.
+- October 17 scheduled-fixture price gate: lifecycle r5 requires complete current prices only for matches that remain `scheduled`. Exact live and final cards no longer freeze the weekly publication after sportsbooks remove in-play offers. The member writer still preserves locked games through the existing immutable-record precedence and reconstructs them only from a complete verified four-market cohort; no coverage threshold is relaxed for any future wagerable match. The repaired live probe found all missing offers on live/final matches while all six scheduled fixtures passed 24/24 selected-price and 60/60 outcome-row coverage. The repair changes zero predictions, probabilities, projections, sides, prices, grades, stakes, promotions, demotions, or actionable counts. Evidence: `docs/model-audits/2026-10-17-cross-sport-exact-availability-and-epl-publication.md`.
 - October 1 r19/v24 accuracy repair: the conservative draw lane improved Match Result accuracy from 52.11% to 53.16% on 2024-25 selection, 48.68% to 48.95% on untouched 2025-26, and 36.67% to 43.33% on the exact 30-game 2026 r18 forward release. The accuracy-first grade replay changed exact forward Match Result actionables from 2-5 to 4-1. The current ten-game board has zero side changes, one actionable promotion and two actionable demotions: Arsenal at 68.0% becomes Lean, while the 44.6% Aston Villa and 48.6% Ipswich value forecasts become Watchlist. Total, BTTS, Double Chance, UCL, provider cadence, member fields, labels, layout, stakes, locks and tracking contracts are unchanged. Evidence: `docs/model-audits/2026-10-01-epl-draw-accuracy-grade-r19-v24.md`.
 - Frozen authoritative replay: the ten-game retained r1 capture produced exact independent-PMF fallback in all ten games because the apparent alternatives were one conservatively correlated provider family. Relative to r16/v21, r18/v23 changes the complete 40-market board from 1 Best Angle / 12 Leans / 13 Watchlists / 14 No Plays to 1 / 8 / 18 / 13, with four tier promotions, eight demotions, two actionable promotions, six actionable demotions, all four grade categories represented, 40/40 exact quotes, and zero nonpositive-EV actionables. Match Result and Double Chance sides are unchanged; one Total side changes and is re-priced at its exact evaluated book. This is a structural provenance/coherence correction, not a claim of measured predictive lift; the frozen forward scorecard remains release-pure and automatic. Evidence: `docs/model-audits/2026-09-02-epl-structural-target-exclusion-r18.md`.
 - Weekly-slate lifecycle: the stored active gameweek retains completed matches with their final score and advances only after every match in the round is final. The member board keeps matches throughout their Eastern game date, then removes prior-date matches after the established 2 a.m. ET soccer board rollover. Kickoffs retain canonical UTC instants and display in the member's browser time zone. Stored picks never disappear from lock, audit, settlement, or tracking history. This reader-only release changes zero projections, probabilities, sides, prices, grades, stakes, or official records.
@@ -2929,7 +2932,10 @@ a material coherent price improvement, which was too sparse to authorize a new
 promotion sleeve. The supplementary availability path also rejects the stale,
 implausible August 19 Playbook report and falls back to current official MLB
 40-man injured-list statuses with explicit source health; availability remains
-explanatory and changes no model input. Evidence and rollback are recorded in
+explanatory and changes no model input. The October 17 completeness repair additionally
+requires at least 25 roster rows with 90% complete name/status identity before an empty
+official injured-list result can be verified; truncated or empty success responses now fail
+closed. Evidence and rollback are recorded in
 `docs/model-audits/2026-08-21-mlb-price-coherence-availability-r65.md`. Rollback
 is r64/v52/v42/v24.
 
@@ -3297,7 +3303,7 @@ The paired live-slate replay is recorded in
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
 - Model / prediction record: `nba_professional_unified_2026_10_16_r6_canonical_split_identity`
-- Market marriage: `nba_market_marriage_2026_10_16_r5_canonical_split_identity`
+- Market marriage: `nba_market_marriage_2026_10_17_r6_exact_game_injury_authority`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
 - Internal market reader: `nba_professional_market_reader_2026_10_16_r5_canonical_split_identity`
@@ -3311,6 +3317,14 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 17 r6 market-marriage release replaces the broken ESPN team injury
+endpoint—which returned `{}` and was incorrectly treated as known zero—with the exact-event
+summary already keyed by each stored ESPN game ID. Both canonical matchup teams and complete
+injury arrays are mandatory. The three-game October 20 same-input board recovered 18 player
+statuses while changing zero projections, picks, grades, promotions, demotions, or actionables.
+Locked rows keep exact stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-17-cross-sport-exact-availability-and-epl-publication.md`.
 
 The October 16 r4 release retains the r3 portable, leakage-safe ratings-and-schedule ridge artifact
 selected on 2024-25 and confirmed once on 2025-26, but removes r2's fixed 25% independent / 75%
@@ -3843,6 +3857,10 @@ board impact, and rollback gates are in
   `prediction_pipeline` lease
 - Operational refresh release:
   `wnba_daily_refresh_schedule_2026_10_07_r1_readiness_gated_cadence`
+- Supplementary availability release:
+  `espn_wnba_availability_2026_10_17_r1_exact_matchup_injury_verification`;
+  it requires both exact ESPN matchup groups, accepts only explicit empty arrays
+  as verified zero, and has no model, grade, side, probability, or lock authority.
 - Operational cadence: one three-day full preparation at `23 11 * * *`;
   current-slate intraday work hourly at `23 4-10,12 * * *` and every 30
   minutes at `23,53 0-3,13-23 * * *`. The default member board changes at

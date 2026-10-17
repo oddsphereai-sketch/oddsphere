@@ -193,7 +193,29 @@ section("parseEspnInjuriesPayload · ESPN parser");
 
 {
   const res = parseEspnInjuriesPayload({});
-  check("missing injuries key → empty (treated as known zero)", res !== null && res.players.length === 0);
+  check("missing injuries key → unknown", res === null);
+}
+
+{
+  const res = __NBA_INJURIES_TEST__.parseEspnGameInjuriesPayload({
+    injuries: [
+      { team: { abbreviation: "BOS" }, injuries: [] },
+      { team: { abbreviation: "DET" }, injuries: [
+        { athlete: { displayName: "Cade Cunningham" }, status: "Questionable" },
+      ] },
+    ],
+  }, "401", "BOS", "DET");
+  check("exact-game parser verifies both matchup teams", res?.teams.size === 2);
+  check("exact-game parser preserves explicit verified zero", res?.teams.get("BOS")?.length === 0);
+  check("exact-game parser normalizes statuses", res?.teams.get("DET")?.[0]?.status === "questionable");
+  check(
+    "exact-game parser rejects one-sided and missing injury reports",
+    __NBA_INJURIES_TEST__.parseEspnGameInjuriesPayload({
+      injuries: [{ team: { abbreviation: "BOS" }, injuries: [] }],
+    }, "401", "BOS", "DET") === null &&
+      __NBA_INJURIES_TEST__.parseEspnGameInjuriesPayload({}, "401", "BOS", "DET") === null,
+  );
+  check("ESPN abbreviation aliases match DB teams", __NBA_INJURIES_TEST__.canonicalNbaAbbreviation("NY") === "NYK");
 }
 
 {

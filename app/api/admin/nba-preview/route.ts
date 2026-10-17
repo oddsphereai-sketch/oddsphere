@@ -19,7 +19,7 @@ import { validateAdminAuth } from "@/lib/auth/admin";
 import { publicSplitsSupported } from "@/lib/config/publicSplitsCapability";
 import { buildNbaFeatureSnapshotsWithProvenance } from "@/lib/services/nba/featureSnapshot";
 import {
-  fetchEspnNbaInjuries,
+  createEspnNbaGameInjuryResolver,
   isInjuryIngestEnabled,
 } from "@/lib/services/nba/espnNbaInjuries";
 import { runNbaAutoModelV1 } from "@/lib/automodel/nba/nbaAutoModelV1";
@@ -94,13 +94,7 @@ export async function GET(request: Request): Promise<Response> {
       ? [startUtcDate]
       : [startUtcDate, endUtcDate];
 
-    const injuryResolver = async (opts: {
-      teamAbbreviation: string;
-      teamExternalId: number;
-    }) => {
-      const result = await fetchEspnNbaInjuries(opts.teamAbbreviation);
-      return result === null ? null : result.players;
-    };
+    const injuryResolver = createEspnNbaGameInjuryResolver();
 
     type SnapshotBuildResult = Awaited<
       ReturnType<typeof buildNbaFeatureSnapshotsWithProvenance>

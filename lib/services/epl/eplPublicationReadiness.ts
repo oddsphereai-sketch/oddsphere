@@ -11,17 +11,18 @@ export type EplPublicationCoverage = {
 };
 
 /**
- * Current-price publication gates apply only to fixtures that can still be
- * wagered. Sportsbooks routinely remove prices after full time; requiring
- * those rows blocks a coherent upcoming match and eventually expires the
- * entire weekly member snapshot.
+ * Current-price publication gates apply only to scheduled pregame fixtures.
+ * Sportsbooks remove prices once a match starts; requiring live rows blocks
+ * coherent upcoming matches and eventually expires the weekly snapshot.
+ * Locked/live cards are preserved by the member snapshot writer and never
+ * reconstructed from a newly relaxed price requirement.
  */
 export function evaluateEplPublicationCoverage(
   slate: Pick<EplShadowSlate, "matches">,
   response: Pick<DailyEdgeResponse, "games">,
 ): EplPublicationCoverage {
   const activeProviderIds = new Set(
-    slate.matches.filter((match) => match.status !== "final").map((match) => String(match.id)),
+    slate.matches.filter((match) => match.status === "scheduled").map((match) => String(match.id)),
   );
   const activeGames = response.games.filter((game) => activeProviderIds.has(String(game.external_id)));
   const marketRows = activeGames.flatMap((game): MarketEdgeDto[] => [

@@ -26,8 +26,11 @@
 
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { publicSplitsSupported } from "../../config/publicSplitsCapability";
-import { buildNbaFeatureSnapshotsWithProvenance } from "./featureSnapshot";
-import { fetchEspnNbaInjuries } from "./espnNbaInjuries";
+import {
+  buildNbaFeatureSnapshotsWithProvenance,
+  type InjuryResolver,
+} from "./featureSnapshot";
+import { createEspnNbaGameInjuryResolver } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
 import {
   assertNbaChampionRuntime,
@@ -145,20 +148,17 @@ export type NbaDailyEdgePipelineResult = {
  *
  * Pure read-only — no DB writes anywhere in the pipeline.
  */
-export async function buildNbaDailyEdgePipeline(date: string): Promise<NbaDailyEdgePipelineResult> {
+export async function buildNbaDailyEdgePipeline(
+  date: string,
+  options: { injuryResolver?: InjuryResolver } = {},
+): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
   const startUtcDate = etWindow.startISO.slice(0, 10);
   const endUtcDate = etWindow.endISO.slice(0, 10);
   const utcDatesToQuery =
     startUtcDate === endUtcDate ? [startUtcDate] : [startUtcDate, endUtcDate];
 
-  const injuryResolver = async (opts: {
-    teamAbbreviation: string;
-    teamExternalId: number;
-  }) => {
-    const result = await fetchEspnNbaInjuries(opts.teamAbbreviation);
-    return result === null ? null : result.players;
-  };
+  const injuryResolver = options.injuryResolver ?? createEspnNbaGameInjuryResolver();
 
   type SnapshotBuildResult = Awaited<
     ReturnType<typeof buildNbaFeatureSnapshotsWithProvenance>

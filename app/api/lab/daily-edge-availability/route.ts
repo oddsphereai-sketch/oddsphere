@@ -46,18 +46,18 @@ export async function GET(request: Request) {
 
 const loadCachedWnbaAvailability = unstable_cache(
   fetchEspnWnbaSlateAvailability,
-  ["daily-edge-experience-wnba-availability-v2"],
+  ["daily-edge-experience-wnba-availability-v3"],
   { revalidate: 15 * 60, tags: ["daily-edge-experience-wnba-availability"] },
 );
 
 const loadCachedMlbAvailability = unstable_cache(
   fetchPlaybookMlbSlateAvailability,
-  ["daily-edge-experience-mlb-availability-v2"],
+  ["daily-edge-experience-mlb-availability-v3"],
   { revalidate: 15 * 60, tags: ["daily-edge-experience-mlb-availability"] },
 );
 
 const loadCachedNhlAvailability = unstable_cache(
   fetchEspnNhlSlateAvailability,
-  ["daily-edge-experience-nhl-availability-v1"],
+  ["daily-edge-experience-nhl-availability-v2"],
   { revalidate: 15 * 60, tags: ["daily-edge-experience-nhl-availability"] },
 );
