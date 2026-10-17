@@ -316,6 +316,35 @@ protected PR checks, and post-deploy proof of the release tuple, request cadence
 single writer/lease, stable board, and unchanged locks. Roll back to collector r57 / writer r121 on
 request looping, identity mismatch, mixed release, board contraction, or lock mutation.
 
+## Owner-approved correctness exception: CFB official-availability source completeness
+
+On 2026-10-17 Daniel Mengel explicitly rejected availability copy as a substitute for missing CFB
+injury ingestion and directed Oddsphere to close the source gap. This exception is limited to the
+source-completeness repair and evidence in
+`docs/model-audits/2026-10-17-cfb-official-availability-source-completeness.md`.
+
+The existing sole collector may add the verified American, MAC, Mountain West, CUSA, Sun Belt, and
+Pac-12 public conference feeds alongside SEC, ACC, Big Ten, and Big 12. The bounded ceiling may rise
+from four to twelve requests: six HD Intelligence posts, two conference-hosted JSON reads, and two
+official landing-page plus signed Faktor-embed pairs. The collector must dynamically resolve signed
+embed URLs from official conference pages, allow only the `https://faktorsports.com` player-
+availability path, enforce response-size and timeout limits, and isolate a failed source.
+
+Every report still requires one exact away team, home team, and game date. Provider timestamps and
+player statuses must be preserved. A published exact-game report with no unavailable players is
+verified clear evidence; a missing, ambiguous, malformed, or `Report Pending` response is unavailable
+and never medical clearance. Last-known exact-game continuity, append-only evidence, the sole
+`prediction_pipeline:cfb` lease, and immutable locked payloads remain mandatory. Conference reports
+remain panel-only and are forbidden from altering predictions, scores, probabilities, grades,
+stakes, or locks without a separate release-pure model audit.
+
+Publication requires focused parser, request-budget, identity, clear-report, and continuity tests;
+the full model-change gate; current-main integration safety; protected PR checks; and post-deploy
+proof of the r59/r126 collector/writer tuple, a healthy natural writer cycle, source-explained report
+coverage, stable board counts, and unchanged locked records. Roll back to the r58/r125 collector /
+writer pair if sources loop, cross event identity, contract the board, affect model output, or mutate
+any lock.
+
 ## Owner-approved provisional exception: CFB correct-QB final-winner coordinator
 
 On 2026-10-14 Daniel Mengel directed Oddsphere to close the validated
