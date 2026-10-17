@@ -49,7 +49,7 @@ async function main(): Promise<void> {
 
   const goalieSource = (homeGoalieExternalId !== undefined || awayGoalieExternalId !== undefined)
     ? "manual_override"
-    : "default_most_playoff_gp";
+    : "current_roster_prior_gp";
 
   console.log(`[nhl-write-prediction-records] mode=${write ? "WRITE" : "DRY-RUN"}  date=${slateDate}  season=${season}  goalie_source=${goalieSource}`);
   console.log("─".repeat(70));

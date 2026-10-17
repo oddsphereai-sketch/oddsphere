@@ -50,7 +50,7 @@ import { NHL_SHARP_ODDS_COLLECTOR_RELEASE } from "@/lib/providers/nhl/_sharpApiN
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_17_r11_current_roster_goalie_provenance";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -247,8 +247,8 @@ export async function GET(request: Request): Promise<Response> {
       // in env, same gate as the operator script. When unset, this step
       // is a no-op so the existing seed+lines behavior is unchanged.
       //
-      // Goalie selection: default to "default_most_playoff_gp" (most
-      // postseason GP per team). Operator-script manual overrides
+      // Goalie selection: default to a verified-current-roster prior (most
+      // eligible GP per team). This is not a confirmed starter. Operator-script manual overrides
       // (--home-goalie / --away-goalie) are not exposed via cron; the
       // operator script remains for one-off corrections.
       //
@@ -280,7 +280,7 @@ export async function GET(request: Request): Promise<Response> {
             slateDate,
             season,
             apply: true,
-            goalieSource: "default_most_playoff_gp",
+            goalieSource: "current_roster_prior_gp",
             logger: stepLog("predictions"),
           });
           predictionsResult = {

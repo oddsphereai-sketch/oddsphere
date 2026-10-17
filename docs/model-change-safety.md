@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: NHL availability and goalie provenance
+
+On 2026-10-17 Daniel Mengel directed Oddsphere to repair the unavailable NHL
+member context and verify that every Daily Edge uses its current approved model.
+This exception is limited to the display-only ESPN availability collector and
+the future-unlocked goalie-assumption provenance correction released as
+`nhl_daily_refresh_schedule_2026_10_17_r11_current_roster_goalie_provenance`.
+
+The member reader may show exact-date, exact-matchup ESPN injury rows and only a
+goalie whom ESPN explicitly labels Expected or Confirmed. Expected is never
+relabeled Confirmed, missing injury data never implies clear, and missing or
+unmatched events remain unavailable. The automated prediction feature remains
+the already-existing highest-GP eligible goalie from the verified current
+roster; its stored source is corrected from the inaccurate
+`default_most_playoff_gp` label to `current_roster_prior_gp`. That prior is not
+a published starter and must never be displayed as one.
+
+This correction changes no score, probability, side, grade, stake,
+market-reader rule, provider hierarchy, cadence, lease, writer topology, or
+stored lock. Publication requires focused parser/fail-closed/provenance tests,
+live exact-date coverage proof, TypeScript, full model-change verification,
+latest-main integration safety, protected PR checks, and post-deploy proof of
+release identity and unchanged locked rows. Roll back the display collector
+and r11 provenance tag if exact-matchup identity, Expected/Confirmed semantics,
+request bounds, model isolation, or lock precedence fail.
+
 ## Owner-directed provisional exception: MLB unified game distribution r92
 
 On 2026-10-16 Daniel Mengel directed Oddsphere to stop treating MLB Moneyline, Total, run-line,

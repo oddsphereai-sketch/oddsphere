@@ -56,7 +56,7 @@ const TEAM_VARIANTS: Record<string, NhlTeamAbbrev> = {
   "fla": "FLA", "flr": "FLA",
   // LAK — Los Angeles Kings
   "los angeles kings": "LAK", "la kings": "LAK", "kings": "LAK",
-  "lak": "LAK", "lak ": "LAK", "lakings": "LAK",
+  "lak": "LAK", "la": "LAK", "lak ": "LAK", "lakings": "LAK",
   // MIN — Minnesota Wild
   "minnesota wild": "MIN", "wild": "MIN", "minnesota": "MIN", "min": "MIN",
   // MTL — Montreal Canadiens

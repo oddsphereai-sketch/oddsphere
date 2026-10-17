@@ -1295,11 +1295,13 @@ check(
     candidateSource.includes("instead of showing games from an older date"),
 );
 check(
-  "MLB and WNBA availability load after the core reader and stay cached independently from prediction writes",
+  "MLB, WNBA, and NHL availability load after the core reader and stay cached independently from prediction writes",
   candidateSource.includes("/api/lab/daily-edge-availability") &&
     candidateSource.includes("controller.abort()") &&
     availabilityRouteSource.includes("loadCachedMlbAvailability") &&
     availabilityRouteSource.includes("loadCachedWnbaAvailability") &&
+    availabilityRouteSource.includes("loadCachedNhlAvailability") &&
+    candidateSource.includes('sport !== "nhl"') &&
     availabilityRouteSource.includes("revalidate: 15 * 60"),
 );
 check(

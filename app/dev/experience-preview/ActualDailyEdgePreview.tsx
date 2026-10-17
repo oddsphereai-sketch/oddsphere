@@ -357,7 +357,7 @@ export default function ActualDailyEdgePreview({
   }, [mobileSheetOpen]);
 
   useEffect(() => {
-    if (embeddedSample || (sport !== "mlb" && sport !== "wnba") || displaySnapshot.games.length === 0) return;
+    if (embeddedSample || (sport !== "mlb" && sport !== "wnba" && sport !== "nhl") || displaySnapshot.games.length === 0) return;
     const controller = new AbortController();
     const params = new URLSearchParams({ sport, date: displaySnapshot.date });
     for (const matchup of displaySnapshot.games) {
@@ -2185,7 +2185,7 @@ function FootballMarketEvidence({ game, market, marketKey, sport, availability }
 
 function FootballAvailabilityPanel({ report, sport }: { report: DailyEdgeGameAvailability | null; sport: Sport }) {
   if (!report) {
-    return <section className="mt-4 rounded-xl border border-amber-300/15 bg-amber-400/[0.025] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-amber-200">Injuries &amp; availability</p><p className="mt-1 text-[11px] font-black text-white">Not verified for this matchup</p></div><span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/[0.06] px-2 py-1 text-[6px] font-black uppercase tracking-wider text-amber-200">Check pending</span></div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">{sport === "cfb" ? "The current college-football provider does not include an injury feed. No player is assumed healthy because a report is missing." : "No verified injury report is attached to this game yet. The projection stays unchanged and availability remains a bettor check."}</p></section>;
+    return <section className="mt-4 rounded-xl border border-amber-300/15 bg-amber-400/[0.025] p-3.5"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-amber-200">Injuries &amp; availability</p><p className="mt-1 text-[11px] font-black text-white">Not verified for this matchup</p></div><span className="shrink-0 rounded-full border border-amber-400/20 bg-amber-400/[0.06] px-2 py-1 text-[6px] font-black uppercase tracking-wider text-amber-200">Check pending</span></div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">{sport === "cfb" ? "No verified matchup report has been published by the configured official sources. No player is assumed healthy because a report is missing." : "No verified injury report is attached to this game yet. The projection stays unchanged and availability remains a bettor check."}</p></section>;
   }
 
   const players = report.teams.flatMap((team) => team.players);
