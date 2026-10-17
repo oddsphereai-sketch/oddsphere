@@ -454,6 +454,25 @@ Last reviewed: 2026-10-17
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 17 official-availability source-completeness candidate: the one existing conference-report
+  collector now ingests every verified public FBS conference feed available to the release: SEC,
+  ACC, Big Ten, Big 12, American, MAC, Mountain West, CUSA, Sun Belt, and Pac-12. HD Intelligence,
+  signed Faktor embeds, and conference-hosted JSON remain separate fail-closed adapters behind one
+  writer. Signed embed URLs are resolved from the official conference page on every request; event
+  attachment still requires one exact away team, home team, and Eastern game date. Published empty
+  reports are retained as verified clear reports. Missing and `Report Pending` responses remain
+  unavailable and can never imply medical clearance. The bounded request ceiling is 12 (six HD
+  feeds, two JSON feeds, and two landing/embed pairs), with the existing six-hour ordinary and
+  one-hour final-pregame cadence. A live zero-write replay improved exact current-board report
+  coverage from 26/95 to 32/95 immediately, with six newly recovered games and no provider failures;
+  American and MAC reports were still officially pending and CUSA had not published a current
+  report at the replay time. Conference reports remain panel-only and cannot change predictions,
+  scores, probabilities, grades, stakes, or locks. Collector / sole writer are
+  `cfb_forward_evidence_collector_2026_10_17_r59_all_published_fbs_availability_feeds` /
+  `cfb_forward_evidence_writer_2026_10_17_r126_all_published_fbs_availability_feeds`; model,
+  evidence-schema, member, reader, tracking, lease, and lock releases remain unchanged. Evidence
+  and rollback: `docs/model-audits/2026-10-17-cfb-official-availability-source-completeness.md`.
+
 - October 15 full-product coordinator compatibility candidate: the independent weekly model and
   complete professional market reader remain authoritative; the frozen r2 correct-QB final-winner
   coordinator remains diagnostic but can no longer overwrite their final forecast. Would-be crosses

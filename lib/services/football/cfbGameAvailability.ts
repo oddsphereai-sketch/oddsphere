@@ -45,7 +45,10 @@ export function buildCfbGameAvailability(args: {
 
 function validConferenceReport(game: NcaafGame, report: DailyEdgeGameAvailability | null): DailyEdgeGameAvailability | null {
   if (!report || report.source !== "Conference" || report.eventId !== game.providerGameId) return null;
-  if (report.teams.length !== 2 || report.teams.every((team) => team.players.length === 0)) return null;
+  // A published exact-game report with zero listed unavailable players is a
+  // verified clear report, not missing evidence. It may replace an older
+  // injury report when its provider timestamp is newer.
+  if (report.teams.length !== 2) return null;
   return report;
 }
 

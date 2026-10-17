@@ -60,6 +60,10 @@ async function main(): Promise<void> {
     }
   }
   const rows = [...latest.values()];
+  const newlyAddedConferenceTeams = new Set([
+    "georgiastate", "jamesmadison", "troy", "louisiana", "latech", "ulm", "arkansasstate", "southernmiss",
+    "washingtonstate", "oregonstate", "fresnostate", "sandiegostate", "unlv", "airforce", "sanjosestate", "utep", "niu", "wyoming",
+  ]);
   const live = await fetchCfbOfficialConferenceAvailability({ games: rows.map((row) => row.game), capturedAt: now });
   const liveIds = new Set(Object.keys(live.reportsByGame));
   const storedIds = new Set(rows.filter((row) => row.stored_report !== null).map((row) => row.provider_game_id));
@@ -86,7 +90,7 @@ async function main(): Promise<void> {
   });
 
   console.log(JSON.stringify({
-    release: "cfb_official_availability_candidate_2026_10_15_r1_per_game_cadence",
+    release: "cfb_official_availability_candidate_2026_10_17_r2_all_published_fbs_feeds",
     mode: "live_official_provider_read_plus_production_select_zero_writes",
     writes: 0,
     now,
@@ -100,6 +104,25 @@ async function main(): Promise<void> {
     recoveredByCandidate: [...liveIds].filter((gameId) => !storedIds.has(gameId)).sort(),
     recoveredByCandidateCount: [...liveIds].filter((gameId) => !storedIds.has(gameId)).length,
     candidateVerifiedReports: new Set([...storedIds, ...liveIds]).size,
+    liveReportsBySource: Object.entries(live.reportsByGame).reduce<Record<string, number>>((counts, [, report]) => {
+      const source = report.sourceUrl ?? "unknown";
+      counts[source] = (counts[source] ?? 0) + 1;
+      return counts;
+    }, {}),
+    recoveredReports: rows.flatMap((row) => {
+      const report = live.reportsByGame[row.provider_game_id];
+      return report && !storedIds.has(row.provider_game_id) ? [{
+        gameId: row.provider_game_id,
+        matchup: `${row.game.away.abbreviation}@${row.game.home.abbreviation}`,
+        sourceUrl: report.sourceUrl,
+        reportUpdatedAt: report.reportUpdatedAt,
+        unavailablePlayers: report.teams.reduce((sum, team) => sum + team.players.length, 0),
+      }] : [];
+    }),
+    relevantSlateIdentities: rows.filter((row) => [row.game.away, row.game.home].some((team) =>
+      newlyAddedConferenceTeams.has(team.name.toLowerCase().replace(/[^a-z0-9]+/g, "")) ||
+      newlyAddedConferenceTeams.has(team.abbreviation.toLowerCase().replace(/[^a-z0-9]+/g, ""))))
+      .map((row) => ({ gameId: row.provider_game_id, scheduledStart: row.game.scheduledStart, away: row.game.away, home: row.game.home })),
     exactExpectedQuarterbackMatches: qbMatches.length,
     quarterbackMatches: qbMatches,
   }, null, 2));
