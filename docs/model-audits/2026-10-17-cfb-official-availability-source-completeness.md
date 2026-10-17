@@ -59,8 +59,8 @@ closes the ingestion-path gap without claiming that all 95 games have an officia
 ## Releases, tests, and rollback
 
 - official adapter: `cfb_official_conference_availability_2026_10_17_r2_all_published_fbs_feeds`;
-- collector: `cfb_forward_evidence_collector_2026_10_17_r59_all_published_fbs_availability_feeds`;
-- sole writer: `cfb_forward_evidence_writer_2026_10_17_r126_all_published_fbs_availability_feeds`.
+- collector: `cfb_forward_evidence_collector_2026_10_17_r60_release_aware_availability_seed`;
+- sole writer: `cfb_forward_evidence_writer_2026_10_17_r127_release_aware_availability_seed`.
 
 Evidence schema, member, forecast, probability, calibration, decision, grade, market-reader, stake,
 tracking, reader, snapshot, and lock releases remain unchanged. Focused tests cover all three feed
@@ -69,3 +69,15 @@ decoding, status preservation, the 12-request ceiling, verified-clear replacemen
 continuity. Full verification, integration safety, PR checks, and a natural post-deploy writer cycle
 remain publication gates. Rollback restores adapter r1, collector r58, and writer r125 without
 changing any stored or locked row.
+
+## Post-deploy seeding correction
+
+The first natural r59/r126 cycles proved the new collector and 12-request budget were live, but a
+production read found that stored r58 request timestamps still satisfied the six-hour cadence check.
+That delayed the first expanded-source attempt for already-polled games even though their preceding
+attempt had queried only four conferences. R60/r127 makes the cadence marker collector-release aware:
+only a successful attempt made by the current source set can suppress another request. Each game
+therefore receives one bounded seed under r60, after which the unchanged ordinary/pregame cadence
+applies. The regression test proves that a current-release attempt suppresses repeat polling while an
+otherwise fresh older-release attempt does not. This changes no provider maximum, model authority,
+locked row, or publication rule.

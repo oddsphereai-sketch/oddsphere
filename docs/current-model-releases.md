@@ -468,8 +468,8 @@ Last reviewed: 2026-10-17
   American and MAC reports were still officially pending and CUSA had not published a current
   report at the replay time. Conference reports remain panel-only and cannot change predictions,
   scores, probabilities, grades, stakes, or locks. Collector / sole writer are
-  `cfb_forward_evidence_collector_2026_10_17_r59_all_published_fbs_availability_feeds` /
-  `cfb_forward_evidence_writer_2026_10_17_r126_all_published_fbs_availability_feeds`; model,
+  `cfb_forward_evidence_collector_2026_10_17_r60_release_aware_availability_seed` /
+  `cfb_forward_evidence_writer_2026_10_17_r127_release_aware_availability_seed`; model,
   evidence-schema, member, reader, tracking, lease, and lock releases remain unchanged. Evidence
   and rollback: `docs/model-audits/2026-10-17-cfb-official-availability-source-completeness.md`.
 

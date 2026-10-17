@@ -340,7 +340,7 @@ stakes, or locks without a separate release-pure model audit.
 
 Publication requires focused parser, request-budget, identity, clear-report, and continuity tests;
 the full model-change gate; current-main integration safety; protected PR checks; and post-deploy
-proof of the r59/r126 collector/writer tuple, a healthy natural writer cycle, source-explained report
+proof of the r60/r127 collector/writer tuple, a healthy natural writer cycle, source-explained report
 coverage, stable board counts, and unchanged locked records. Roll back to the r58/r125 collector /
 writer pair if sources loop, cross event identity, contract the board, affect model output, or mutate
 any lock.
