@@ -169,7 +169,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_17_r126_all_published_fbs_availability_feeds" as const;
+  "cfb_forward_evidence_writer_2026_10_17_r127_release_aware_availability_seed" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1572,7 +1572,9 @@ export function shouldFetchCfbOfficialConferenceAvailability(args: {
   const requestedGameIds = new Set(args.games.map((game) => game.providerGameId));
   const latestFetchByGame = new Map<string, number>();
   for (const row of args.existing) {
-    if (!requestedGameIds.has(row.providerGameId) || (row.payload.requestBudget.officialAvailability ?? 0) <= 0) continue;
+    if (!requestedGameIds.has(row.providerGameId) ||
+      row.payload.collectorRelease !== CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE ||
+      (row.payload.requestBudget.officialAvailability ?? 0) <= 0) continue;
     const capturedAt = Date.parse(row.capturedAt);
     if (!Number.isFinite(capturedAt)) continue;
     latestFetchByGame.set(row.providerGameId, Math.max(latestFetchByGame.get(row.providerGameId) ?? 0, capturedAt));
