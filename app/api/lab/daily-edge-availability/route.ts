@@ -10,6 +10,7 @@ import {
   type MlbDailyEdgeGameAvailability,
 } from "@/lib/services/mlb/playbookMlbAvailability";
 import { fetchEspnWnbaSlateAvailability } from "@/lib/services/wnba/espnWnbaAvailability";
+import { fetchEspnNhlSlateAvailability } from "@/lib/services/nhl/espnNhlAvailability";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,13 +22,15 @@ export async function GET(request: Request) {
   const matchups = url.searchParams.getAll("game")
     .map(parseDailyEdgeAvailabilityMatchup)
     .filter((row): row is RequestedDailyEdgeMatchup => row !== null);
-  if ((sport !== "mlb" && sport !== "wnba") || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || matchups.length === 0 || matchups.length > 40) {
+  if ((sport !== "mlb" && sport !== "wnba" && sport !== "nhl") || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || matchups.length === 0 || matchups.length > 40) {
     return Response.json({ reports: {} }, { status: 400 });
   }
 
   const reports = sport === "mlb"
     ? await loadCachedMlbAvailability(date, matchups)
-    : await loadCachedWnbaAvailability(date);
+    : sport === "nhl"
+      ? await loadCachedNhlAvailability(date)
+      : await loadCachedWnbaAvailability(date);
   const byGame: Record<string, DailyEdgeGameAvailability | MlbDailyEdgeGameAvailability> = {};
   for (const matchup of matchups) {
     const report = reports?.find((candidate) =>
@@ -51,4 +54,10 @@ const loadCachedMlbAvailability = unstable_cache(
   fetchPlaybookMlbSlateAvailability,
   ["daily-edge-experience-mlb-availability-v2"],
   { revalidate: 15 * 60, tags: ["daily-edge-experience-mlb-availability"] },
+);
+
+const loadCachedNhlAvailability = unstable_cache(
+  fetchEspnNhlSlateAvailability,
+  ["daily-edge-experience-nhl-availability-v1"],
+  { revalidate: 15 * 60, tags: ["daily-edge-experience-nhl-availability"] },
 );

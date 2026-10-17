@@ -681,7 +681,7 @@ export async function GET(request: Request) {
             apply: true,
             externalIdsFilter: externalIds,
             deferLock: true,
-            goalieSource: "default_most_playoff_gp",
+            goalieSource: "current_roster_prior_gp",
           });
           enteringLockModelResult = {
             attempted: externalIds.length,

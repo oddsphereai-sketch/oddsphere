@@ -91,10 +91,9 @@ export type WriteNhlRecordsOptions = {
   homeGoalieExternalId?: number;
   awayGoalieExternalId?: number;
   /**
-   * Goalie source tag persisted in snapshot. "manual_override" when the
-   * caller passed an explicit ID; "default_most_playoff_gp" otherwise.
-   * Caller controls the tag — operator script passes "manual_override"
-   * when --home-goalie/--away-goalie is set.
+   * Goalie source tag persisted in snapshot. The ordinary automated path
+   * filters prior goalie stats to the verified current roster; it must never
+   * be described as a confirmed starter. Manual overrides remain explicit.
    */
   goalieSource?: "current_roster_prior_gp" | "default_most_playoff_gp" | "manual_override";
   logger?: (msg: string) => void;

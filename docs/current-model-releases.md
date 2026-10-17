@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-16
+Last reviewed: 2026-10-17
 
 ## Cross-sport confidence / execution contract
 
@@ -110,7 +110,7 @@ Last reviewed: 2026-10-16
 
 ## Cross-sport market-freshness ownership (2026-10-06)
 
-- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate`.
+- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_17_r11_current_roster_goalie_provenance`.
   The existing leased `nhl_daily_refresh` writer now has a lightweight intraday mode every 30
   minutes during the active window: it seeds the slate, refreshes exact lines, syncs provider-
   separated splits, recomputes unlocked predictions, and republishes the coherent Daily Edge
@@ -120,6 +120,16 @@ Last reviewed: 2026-10-16
   after the incoming date-keyed snapshot exists; partial cycles retain the
   prior complete board without member copy or labels. Evidence and rollback:
   `docs/model-audits/2026-10-07-nhl-readiness-gated-rollover-predeclaration.md`.
+  The October 17 r11 refresh retains that exact cadence and prediction behavior
+  while correcting future unlocked goalie-assumption provenance: the automated
+  feature is the highest-GP eligible goalie from a verified current roster, not
+  a confirmed starter or an unfiltered postseason default. The member reader
+  separately displays exact-date ESPN injury rows and published Expected or
+  Confirmed goalie statuses through
+  `espn_nhl_availability_2026_10_17_r1_injuries_and_published_goalies`; this
+  display-only report has no model, grade, side, probability, or lock authority.
+  Release and live-board evidence:
+  `docs/model-audits/2026-10-17-daily-edge-release-and-availability-audit.md`.
 - NBA daily refresh release is `nba_daily_refresh_schedule_2026_10_07_r3_readiness_gated_rollover`.
   Its existing writer refreshes seed/lines and publishes the coherent date-keyed member snapshot
   while the expensive ratings scrape remains daily. The default member board changes dates at
