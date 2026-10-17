@@ -21,6 +21,7 @@ const activeCoverage = evaluateEplPublicationCoverage(
     matches: [
       { id: 1, status: "final" },
       { id: 2, status: "scheduled" },
+      { id: 3, status: "in_progress" },
     ],
   } as never,
   {
@@ -35,13 +36,18 @@ const activeCoverage = evaluateEplPublicationCoverage(
         markets: { moneyline: completeMarket, total: { ...completeMarket, soccerPriceBoard: { rows: [{}, {}] } }, first_inning: { ...completeMarket, soccerPriceBoard: { rows: [{}, {}] } } },
         soccerDoubleChanceMarket: completeMarket,
       },
+      {
+        external_id: "3",
+        markets: { moneyline: { currentPriceAmerican: null }, total: { currentPriceAmerican: null }, first_inning: { currentPriceAmerican: null } },
+        soccerDoubleChanceMarket: { currentPriceAmerican: null },
+      },
     ],
   } as never,
 );
 assert.deepEqual(
   activeCoverage,
   { activeFixtures: 1, selectedCurrent: 4, selectedExpected: 4, outcomeCurrent: 10, outcomeExpected: 10, errors: [] },
-  "EPL publication coverage must ignore full-time fixtures after sportsbooks remove their prices",
+  "EPL publication coverage must ignore live and full-time fixtures after sportsbooks remove their prices",
 );
 
 const emergencySnapshot = {
@@ -484,12 +490,12 @@ assert.match(refreshRoute, /EPL_PUBLICATION_ENABLED/);
 assert.match(refreshRoute, /evaluateEplPublicationCoverage/);
 assert.match(publicationReadiness, /selected current-price coverage/);
 assert.match(publicationReadiness, /outcome price-board coverage/);
-assert.match(publicationReadiness, /match\.status !== "final"/, "completed EPL fixtures must not block publication after books remove their prices");
+assert.match(publicationReadiness, /match\.status === "scheduled"/, "only pregame EPL fixtures may require current sportsbook prices");
 assert.match(lockRoute, /findEplGamesEnteringLock/);
 assert.match(lockRoute, /predictions\.priorTuplesLocked[\s\S]*prior_priced_tuples_locked:\s*predictions\.priorTuplesLocked/, "fallback locks must count as writes and remain visible in cron telemetry");
 assert.match(memberStore, /current-week/);
 assert.match(memberStore, /readLatestLabResponseSnapshot/, "EPL reads need a bounded emergency fallback when a valid weekly snapshot outlives its cache deadline");
-assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_10_r4_cross_release_locked_record_reconstruction/, "EPL continuity behavior must carry its own immutable lifecycle release");
+assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_17_r5_scheduled_fixture_price_gate/, "EPL continuity behavior must carry its own immutable lifecycle release");
 for (const route of [refreshRoute, lockRoute]) {
   assert.match(route, /reconstructVerifiedEplLockedGames/, "every EPL publisher must reconstruct due locked games from the verified four-market DB cohort");
   assert.match(route, /authoritativeLockedProviderIds:\s*lockVerification\.completeProviderIds/, "only DB-verified locked games may replace a prior locked member card");

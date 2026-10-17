@@ -161,7 +161,17 @@ function parseMlbStatsFortyManRoster(
   abbreviation: MlbTeamAbbrev,
   value: unknown,
 ): DailyEdgeTeamAvailability | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length < 25) return null;
+  const completeRows = value.filter((candidate) => {
+    if (candidate === null || typeof candidate !== "object") return false;
+    const row = candidate as MlbStatsRosterRow;
+    const hasName = typeof row.person?.fullName === "string" && row.person.fullName.trim().length > 0;
+    const hasStatus =
+      (typeof row.status?.code === "string" && row.status.code.trim().length > 0) ||
+      (typeof row.status?.description === "string" && row.status.description.trim().length > 0);
+    return hasName && hasStatus;
+  }).length;
+  if (completeRows / value.length < 0.9) return null;
   const players = value
     .map((candidate) => {
       if (candidate === null || typeof candidate !== "object") return null;

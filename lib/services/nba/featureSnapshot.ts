@@ -152,8 +152,11 @@ function pickPriorityRow(rows: LineRow[]): LineRow | null {
 // arrays plus `injuries_known=false`.
 
 export type InjuryResolver = (opts: {
+  gameExternalId: number;
   teamAbbreviation: string;
   teamExternalId: number;
+  awayTeamAbbreviation: string;
+  homeTeamAbbreviation: string;
 }) => Promise<NbaPlayerInjury[] | null>;
 
 export type BuildNbaSnapshotOptions = {
@@ -567,8 +570,11 @@ async function runBuild(
     if (opts.injuryResolver) {
       try {
         const home = await opts.injuryResolver({
+          gameExternalId: g.external_id,
           teamAbbreviation: homeTeam.abbreviation,
           teamExternalId: homeTeam.external_id,
+          awayTeamAbbreviation: awayTeam.abbreviation,
+          homeTeamAbbreviation: homeTeam.abbreviation,
         });
         if (home !== null) {
           homeInjuries = home;
@@ -579,8 +585,11 @@ async function runBuild(
       }
       try {
         const away = await opts.injuryResolver({
+          gameExternalId: g.external_id,
           teamAbbreviation: awayTeam.abbreviation,
           teamExternalId: awayTeam.external_id,
+          awayTeamAbbreviation: awayTeam.abbreviation,
+          homeTeamAbbreviation: homeTeam.abbreviation,
         });
         if (away !== null) {
           awayInjuries = away;

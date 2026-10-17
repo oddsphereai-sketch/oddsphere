@@ -21,7 +21,7 @@
  */
 
 import { buildNbaFeatureSnapshots } from "../../../lib/services/nba/featureSnapshot";
-import { fetchEspnNbaInjuries, isInjuryIngestEnabled } from "../../../lib/services/nba/espnNbaInjuries";
+import { createEspnNbaGameInjuryResolver, isInjuryIngestEnabled } from "../../../lib/services/nba/espnNbaInjuries";
 import { runNbaAutoModelV1 } from "../../../lib/automodel/nba/nbaAutoModelV1";
 import type { NbaModelStage } from "../../../lib/automodel/nba/types";
 
@@ -73,10 +73,7 @@ async function main(): Promise<void> {
 
   const injuryResolver = skipInjuries
     ? undefined
-    : async (opts: { teamAbbreviation: string; teamExternalId: number }) => {
-        const result = await fetchEspnNbaInjuries(opts.teamAbbreviation);
-        return result === null ? null : result.players;
-      };
+    : createEspnNbaGameInjuryResolver();
 
   const snapshots = await buildNbaFeatureSnapshots(date, { injuryResolver });
   if (snapshots.length === 0) {

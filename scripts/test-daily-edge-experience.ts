@@ -2023,11 +2023,22 @@ check(
 const parsedInjuries = __WNBA_AVAILABILITY_TEST__.parseInjuryGroups([{ team: { abbreviation: "LV", displayName: "Las Vegas Aces" }, injuries: [{ status: "Out", date: "2026-08-09T14:04Z", athlete: { displayName: "A'ja Wilson", position: { abbreviation: "C" } }, details: { type: "Rest" } }] }]);
 check(
   "WNBA availability preserves status, reason, position, and report time",
-  parsedInjuries[0]?.players[0]?.name === "A'ja Wilson" &&
+  parsedInjuries?.[0]?.players[0]?.name === "A'ja Wilson" &&
     parsedInjuries[0]?.players[0]?.status === "Out" &&
     parsedInjuries[0]?.players[0]?.detail === "Rest" &&
     parsedInjuries[0]?.players[0]?.position === "C" &&
     parsedInjuries[0]?.players[0]?.reportedAt === "2026-08-09T14:04Z",
+);
+check(
+  "WNBA availability accepts verified zero only when both exact teams publish",
+  __WNBA_AVAILABILITY_TEST__.parseExactInjuryGroups([
+    { team: { abbreviation: "LV", displayName: "Las Vegas Aces" }, injuries: [] },
+    { team: { abbreviation: "NY", displayName: "New York Liberty" }, injuries: [] },
+  ], "LV", "NY")?.length === 2 &&
+    __WNBA_AVAILABILITY_TEST__.parseExactInjuryGroups([
+      { team: { abbreviation: "LV", displayName: "Las Vegas Aces" }, injuries: [] },
+    ], "LV", "NY") === null &&
+    __WNBA_AVAILABILITY_TEST__.parseInjuryGroups({}) === null,
 );
 
 const parsedMlbInjuries = __MLB_AVAILABILITY_TEST__.parsePlaybookMlbInjuries({
@@ -2072,6 +2083,7 @@ check(
     }),
 );
 const officialMlbTeam = __MLB_AVAILABILITY_TEST__.parseMlbStatsFortyManRoster("CLE", [
+  ...Array.from({ length: 23 }, (_, index) => ({ person: { id: index + 10, fullName: `Healthy Player ${index}` }, position: { abbreviation: "P" }, status: { code: "A", description: "Active" } })),
   { person: { id: 1, fullName: "Healthy Player" }, position: { abbreviation: "P" }, status: { code: "A", description: "Active" } },
   { person: { id: 2, fullName: "Injured Player" }, position: { abbreviation: "1B" }, status: { code: "D10", description: "Injured 10-Day" }, note: "Lower back inflammation." },
   { person: { id: 3, fullName: "Minor League Player" }, position: { abbreviation: "OF" }, status: { code: "RM", description: "Reassigned to Minors" } },
@@ -2082,6 +2094,13 @@ check(
     officialMlbTeam.players.length === 1 &&
     officialMlbTeam.players[0]?.name === "Injured Player" &&
     officialMlbTeam.players[0]?.detail === "Lower back inflammation.",
+);
+check(
+  "official MLB zero-injury fallback requires a complete roster response",
+  __MLB_AVAILABILITY_TEST__.parseMlbStatsFortyManRoster("CLE", []) === null &&
+    __MLB_AVAILABILITY_TEST__.parseMlbStatsFortyManRoster("CLE", [
+      { person: { id: 1, fullName: "Healthy Player" }, status: { code: "A", description: "Active" } },
+    ]) === null,
 );
 check(
   "availability endpoint accepts only bounded exact matchup tokens",

@@ -6,7 +6,7 @@ import type {
 import { normalizeNhlTeamName, type NhlTeamAbbrev } from "@/lib/providers/nhl/_teamNameNormalizer";
 
 export const ESPN_NHL_AVAILABILITY_RELEASE =
-  "espn_nhl_availability_2026_10_17_r1_injuries_and_published_goalies" as const;
+  "espn_nhl_availability_2026_10_17_r2_exact_matchup_injury_verification" as const;
 export const ESPN_NHL_AVAILABILITY_MAX_EVENTS = 20 as const;
 export const ESPN_NHL_AVAILABILITY_CONCURRENCY = 4 as const;
 export const ESPN_NHL_AVAILABILITY_TIMEOUT_MS = 8_000 as const;
@@ -92,8 +92,8 @@ export async function fetchEspnNhlSlateAvailability(
       .map(parseScoreboardEvent)
       .filter((event): event is ParsedEvent => event !== null);
 
-    return await mapWithConcurrency(events, ESPN_NHL_AVAILABILITY_CONCURRENCY, async (event) => {
-      let injuryTeams: DailyEdgeTeamAvailability[] = [];
+    const reports = await mapWithConcurrency(events, ESPN_NHL_AVAILABILITY_CONCURRENCY, async (event): Promise<NhlGameAvailability | null> => {
+      let injuryTeams: DailyEdgeTeamAvailability[] | null = null;
       try {
         const summaryResponse = await timedFetch(
           fetchImpl,
@@ -101,12 +101,12 @@ export async function fetchEspnNhlSlateAvailability(
         );
         if (summaryResponse.ok && isJson(summaryResponse)) {
           const summary = await summaryResponse.json() as { injuries?: unknown };
-          injuryTeams = parseInjuryGroups(summary.injuries);
+          injuryTeams = parseExactInjuryGroups(summary.injuries, event.awayTeam, event.homeTeam);
         }
       } catch {
-        // The published goalie row still makes this a useful exact-game
-        // availability report. Missing injuries are not interpreted as clear.
+        return null;
       }
+      if (injuryTeams === null) return null;
 
       const teams = ([event.awayTeam, event.homeTeam] as const).map((team) => {
         const injuries = injuryTeams.find((candidate) => candidate.abbreviation === team)?.players ?? [];
@@ -137,6 +137,7 @@ export async function fetchEspnNhlSlateAvailability(
         publishedGoalies: event.publishedGoalies,
       } satisfies NhlGameAvailability;
     });
+    return reports.filter((report): report is NhlGameAvailability => report !== null);
   } catch {
     return null;
   }
@@ -190,16 +191,17 @@ function parseCompetitor(value: EspnCompetitor | undefined): {
   return { team, teamName, publishedGoalies };
 }
 
-function parseInjuryGroups(value: unknown): DailyEdgeTeamAvailability[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((candidate): DailyEdgeTeamAvailability[] => {
-    if (candidate === null || typeof candidate !== "object") return [];
+function parseInjuryGroups(value: unknown): DailyEdgeTeamAvailability[] | null {
+  if (!Array.isArray(value)) return null;
+  const output: DailyEdgeTeamAvailability[] = [];
+  for (const candidate of value) {
+    if (candidate === null || typeof candidate !== "object") return null;
     const group = candidate as EspnInjuryGroup;
     const rawAbbreviation = typeof group.team?.abbreviation === "string" ? group.team.abbreviation : null;
     const abbreviation = normalizeNhlTeamName(rawAbbreviation);
-    if (!abbreviation) return [];
+    if (!abbreviation || !Array.isArray(group.injuries)) return null;
     const teamName = typeof group.team?.displayName === "string" ? group.team.displayName : abbreviation;
-    const players = (group.injuries ?? []).flatMap((injury): DailyEdgeAvailabilityPlayer[] => {
+    const players = group.injuries.flatMap((injury): DailyEdgeAvailabilityPlayer[] => {
       const name = typeof injury.athlete?.displayName === "string"
         ? injury.athlete.displayName
         : typeof injury.athlete?.fullName === "string"
@@ -222,8 +224,23 @@ function parseInjuryGroups(value: unknown): DailyEdgeTeamAvailability[] {
           : null,
       }];
     });
-    return [{ abbreviation, teamName, players }];
-  });
+    if (players.length !== group.injuries.length) return null;
+    output.push({ abbreviation, teamName, players });
+  }
+  return output;
+}
+
+function parseExactInjuryGroups(
+  value: unknown,
+  awayTeam: NhlTeamAbbrev,
+  homeTeam: NhlTeamAbbrev,
+): DailyEdgeTeamAvailability[] | null {
+  const groups = parseInjuryGroups(value);
+  if (groups === null) return null;
+  const expected = new Set([awayTeam, homeTeam]);
+  const exact = groups.filter((group) => expected.has(group.abbreviation as NhlTeamAbbrev));
+  if (exact.length !== 2 || new Set(exact.map((group) => group.abbreviation)).size !== 2) return null;
+  return exact;
 }
 
 function goalieAvailabilityPlayer(goalie: NhlPublishedGoalie): DailyEdgeAvailabilityPlayer {
@@ -270,4 +287,5 @@ function isJson(response: Response): boolean {
 export const __ESPN_NHL_AVAILABILITY_TEST__ = {
   parseScoreboardEvent,
   parseInjuryGroups,
+  parseExactInjuryGroups,
 };
