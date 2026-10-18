@@ -1,7 +1,7 @@
 import type { Grade } from "@/lib/types/domain/Grade";
 
 export const UCL_PREVIEW_GRADE_RELEASE =
-  "ucl_grade_policy_2026_10_14_r10_agreement_probability_band" as const;
+  "ucl_grade_policy_2026_10_18_r11_exact_price_actionability" as const;
 
 export type UclPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type UclPreviewGrade = {
@@ -122,13 +122,15 @@ export function deriveUclMatchResultDecision(input: {
   const valueSide = maximum(edges);
   const probability = input.model[forecastSide];
   const price = input.prices[forecastSide];
+  const forecastSideEv = exactPriceExpectedValue(probability, price);
   const lateAgrees = input.marketReader?.consensusLeader === forecastSide;
   const evaluatedAgrees = input.marketReader?.evaluatedLeader === forecastSide;
   const qualifies = probability >= 0.60
     && probability < 0.70
     && lateAgrees
     && evaluatedAgrees
-    && price > -600;
+    && price > -600
+    && forecastSideEv > 0;
 
   if (qualifies) {
     return {
@@ -141,7 +143,7 @@ export function deriveUclMatchResultDecision(input: {
         grade: "model_only" as const,
         recommendationScore: Math.round(60 + (probability - 0.60) * 100),
         candidateTier: "lean" as const,
-        reasons: ["The fixed UCL forecast is in the validated winner-confidence band and both target-excluded consensus and the evaluated book agree."],
+        reasons: ["The fixed UCL forecast is in the validated winner-confidence band, both target-excluded consensus and the evaluated book agree, and the exact forecast-side price has positive expected value."],
       },
     };
   }
