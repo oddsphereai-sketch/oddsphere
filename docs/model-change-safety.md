@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: UCL exact-price actionability r11
+
+On 2026-10-18 Daniel Mengel directed Oddsphere to check every Daily Edge model
+and repair actual data, injury, odds, line, market, or model problems without
+substituting copy or qualifiers. This exception is limited to the future-unlocked
+UCL Match Result grade correction documented in
+`docs/model-audits/2026-10-18-ucl-r11-exact-price-actionability.md`.
+
+The r8u forecast, coherent score distribution, target-excluded market reader,
+selected prediction, probabilities, prices, stakes, writer, lease and locked
+records remain unchanged. R11 adds the exact-price positive-EV condition that
+the existing UCL publication gate already requires of every actionable market.
+A qualifying r10 confidence-and-agreement winner at a negative-EV exact price
+remains the same visible forecast but is Watchlist rather than Lean. The exact
+18-fixture rehearsal demotes three Match Result prices, promotes none, changes
+no side or score, and restores publication readiness from a blocked 0-game live
+board to the complete 18-game board. No positive-EV Watchlist may be promoted
+without satisfying the already validated 60%-70% agreement lane.
+
+Publication requires the focused UCL suite, exact live readiness replay,
+TypeScript, full model-change verification, latest-main integration safety,
+protected pull-request checks, current-release identity, the shared
+`prediction_pipeline:soccer` lease and proof that existing locks remain exact.
+Roll back future unlocked calibration to r10 if the board develops a nonpositive
+actionable, mixed release identity, lock mutation, score/prediction drift or an
+unexplained contraction beyond these three documented grade-only demotions.
+
 ## Owner-approved correctness exception: NHL availability and goalie provenance
 
 On 2026-10-17 Daniel Mengel directed Oddsphere to repair the unavailable NHL
