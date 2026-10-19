@@ -63,6 +63,9 @@ const trackingFoundationRouteSource = readFileSync(new URL("../app/api/lab/track
 const snapshotKeySource = readFileSync(new URL("../lib/services/labResponseSnapshots.ts", import.meta.url), "utf8");
 const snapshotWriterSource = readFileSync(new URL("../lib/services/labResponseSnapshotWriter.ts", import.meta.url), "utf8");
 const nbaWriterSource = readFileSync(new URL("../lib/services/nba/buildNbaPredictionRecords.ts", import.meta.url), "utf8");
+const currentSiteAuditSource = readFileSync(new URL("./operator/audit-current-site-stability.ts", import.meta.url), "utf8");
+check("current-site auditor gates legacy NBA context checks through the authoritative registry",
+  currentSiteAuditSource.includes('getContextOnlyDisplayMarkets("nba").includes("spread")'));
 check(
   "NHL tracking page exposes the official puck-line category",
   /nhl:\s*\["ML",\s*"O\/U",\s*"Spread"\]/.test(trackingRouteSource),

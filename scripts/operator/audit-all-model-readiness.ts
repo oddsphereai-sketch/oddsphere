@@ -107,6 +107,7 @@ type DbSignalRow = {
 type DbSplitObservationRow = DbSignalRow & { provider: string | null; observed_at: string | null };
 
 type DbRecordRow = {
+  game_id: number | null;
   market: string | null;
   side: string | null;
   locked_at: string | null;
@@ -214,7 +215,7 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
 
   const { data: prRaw, error: prErr } = await supabase
     .from("prediction_records")
-    .select("market,side,locked_at,odds_american,line_value,held,no_bet")
+    .select("game_id,market,side,locked_at,odds_american,line_value,held,no_bet")
     .eq("sport", sport)
     .eq("slate_date", date);
   if (prErr) notes.push(`prediction_records query failed: ${prErr.message}`);
@@ -246,14 +247,23 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
     ? qualifyingObservedSplitRows.map((row) => ({ game_id: row.game_id, observedAt: row.observed_at }))
     : qualifyingSplitRows.map((row) => ({ game_id: row.game_id, observedAt: row.computed_at }));
   const splitFreshness = freshness(splitObservedRows.map((row) => row.observedAt));
-  const gamesWithLine = new Set(lineRows.map((row) => row.game_id).filter((id): id is number => typeof id === "number"));
+  // EPL/UCL keep their authoritative exact current price in the versioned
+  // prediction/member snapshot rather than the legacy `lines` table. Count
+  // those priced records as real market coverage so this cross-sport audit
+  // does not report a healthy soccer game as line-less.
+  const gamesWithLine = new Set([
+    ...lineRows.map((row) => row.game_id),
+    ...(sport === "soccer"
+      ? records.filter((row) => row.odds_american !== null).map((row) => row.game_id)
+      : []),
+  ].filter((id): id is number => typeof id === "number"));
 
   const normalizedStatus = (value: string | null) =>
     String(value ?? "").trim().toLowerCase().replace(/^status_/, "");
   const scheduled = games.filter((g) => normalizedStatus(g.status) === "scheduled").length;
   const final = games.filter((g) => ["final", "completed"].includes(normalizedStatus(g.status))).length;
 
-  if (sport === "soccer") notes.push("World Cup/soccer public splits are not expected unless provider coverage is verified.");
+  if (sport === "soccer") notes.push("EPL/UCL exact current prices are authoritative in prediction/member snapshots; legacy lines-table rows are optional. Public splits are not expected unless provider coverage is verified.");
   if (sport === "wnba") notes.push("WNBA total/spread fallback may have line values without odds when Playbook fills a SharpAPI market gap.");
   if (sport === "mlb") notes.push("MLB public splits are model-impacting; dual-source promotion must stay gated by outcome validation.");
   if (!predictionWindowOpen) notes.push("official prediction/tracking window is closed; seeded fixtures are ingestion rehearsal, not missing model output");
