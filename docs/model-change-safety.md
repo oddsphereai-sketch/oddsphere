@@ -26,6 +26,30 @@ coverage, one writer/lease, coherent member cards, and unchanged locks. Roll bac
 publication on any synthetic displayed line, unmatched available event, target-book contamination,
 mixed release, unexpected board contraction, writer overlap, or lock mutation.
 
+## Owner-directed correctness exception: CFB completion-cadence continuity
+
+On 2026-10-19 Daniel Mengel directed Oddsphere to repair the nearly all-No-Play
+CFB board and determine whether the 56-game default view was missing games. This
+exception is limited to the sole-writer planning correction documented in
+`docs/model-audits/2026-10-19-cfb-completion-cadence-continuity.md`.
+
+The authoritative slate remains 96 model-covered Division I games, of which 56
+are FBS-involved and shown by default. A persistent FCS provider-seed gap may no
+longer starve FBS games whose normal hourly capture is already due. Completion
+runs retain the union of due T-60, completion-needed, and ordinary-due games;
+fresh unrelated games stay excluded. Provider budgets, schedule identity,
+forecast, professional reader, probability, decision, grade, stake, member,
+tracking, the sole `prediction_pipeline:cfb` lease, and every stored lock remain
+unchanged.
+
+Publication requires the mixed-plan and T-60 regressions, focused CFB suite,
+TypeScript, full model-change verification, latest-main integration safety,
+protected pull-request checks, and live proof of increased current-price
+coverage on the unchanged slate without lock mutation or writer overlap. Roll
+back to writer r128 on provider-budget expansion, a dropped T-60, collection of
+a fresh non-due/non-completion game, mixed release identity, lock mutation, or a
+second writer.
+
 ## Owner-directed correctness exception: MLB market-scoped reader record overlay r26
 
 On 2026-10-19 Daniel Mengel directed Oddsphere to repair the actual MLB price

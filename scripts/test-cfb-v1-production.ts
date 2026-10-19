@@ -3300,6 +3300,7 @@ assert.equal(dueT60Plans[0]?.stage, "t60");
 assert.equal(
   filterCfbForwardCapturePlansForNeed({
     plans: dueT60Plans,
+    ordinaryDueGameIds: new Set(),
     needReason: "reference_line_completion_due",
     latestByGame: new Map([[game.providerGameId, openingIncompleteAtT60]]),
     now: "2026-08-29T15:00:00.000Z",
@@ -3310,12 +3311,82 @@ assert.equal(
 assert.equal(
   filterCfbForwardCapturePlansForNeed({
     plans: dueT60Plans,
+    ordinaryDueGameIds: new Set(),
     needReason: "provider_seed_due",
     latestByGame: new Map([[game.providerGameId, openingIncompleteAtT60]]),
     now: "2026-08-29T15:00:00.000Z",
   })[0]?.stage,
   "t60",
   "provider-seed filtering must preserve every due T-60 plan",
+);
+const seedOnlyGame: NcaafGame = {
+  ...farGame,
+  providerGameId: "seed-only-fcs-game",
+  away: { ...farGame.away, fbs: false },
+  home: { ...farGame.home, fbs: false },
+};
+const seedOnlyEvidence = structuredClone(unseededFcsEvidence);
+seedOnlyEvidence.providerGameId = seedOnlyGame.providerGameId;
+seedOnlyEvidence.gameStartAt = seedOnlyGame.scheduledStart;
+seedOnlyEvidence.capturedAt = "2026-08-28T19:30:00.000Z";
+seedOnlyEvidence.payload.game = seedOnlyGame;
+seedOnlyEvidence.payload.capturedAt = seedOnlyEvidence.capturedAt;
+const cadenceDueGame: NcaafGame = { ...farGame, providerGameId: "cadence-due-fbs-game" };
+const cadenceDueEvidence = structuredClone(currentCaptureEvidence);
+cadenceDueEvidence.providerGameId = cadenceDueGame.providerGameId;
+cadenceDueEvidence.gameStartAt = cadenceDueGame.scheduledStart;
+cadenceDueEvidence.capturedAt = "2026-08-28T18:30:00.000Z";
+cadenceDueEvidence.payload.game = cadenceDueGame;
+cadenceDueEvidence.payload.capturedAt = cadenceDueEvidence.capturedAt;
+const cadenceFreshGame: NcaafGame = { ...farGame, providerGameId: "cadence-fresh-fbs-game" };
+const cadenceFreshEvidence = structuredClone(currentCaptureEvidence);
+cadenceFreshEvidence.providerGameId = cadenceFreshGame.providerGameId;
+cadenceFreshEvidence.gameStartAt = cadenceFreshGame.scheduledStart;
+cadenceFreshEvidence.capturedAt = "2026-08-28T19:30:00.000Z";
+cadenceFreshEvidence.payload.game = cadenceFreshGame;
+cadenceFreshEvidence.payload.capturedAt = cadenceFreshEvidence.capturedAt;
+const completionExisting = [seedOnlyEvidence, cadenceDueEvidence, cadenceFreshEvidence];
+const completionGames = [seedOnlyGame, cadenceDueGame, cadenceFreshGame];
+const forcedCompletionPlans = planCfbForwardEvidenceCaptures({
+  games: completionGames,
+  existing: completionExisting,
+  capturedAt: "2026-08-28T20:00:00.000Z",
+  unlockedCadenceMinutesOverride: 0,
+});
+const ordinaryCompletionPlans = planCfbForwardEvidenceCaptures({
+  games: completionGames,
+  existing: completionExisting,
+  capturedAt: "2026-08-28T20:00:00.000Z",
+});
+assert.deepEqual(
+  filterCfbForwardCapturePlansForNeed({
+    plans: forcedCompletionPlans,
+    ordinaryDueGameIds: new Set(ordinaryCompletionPlans.map((plan) => plan.game.providerGameId)),
+    needReason: "provider_seed_due",
+    latestByGame: new Map(completionExisting.map((row) => [row.providerGameId, row])),
+    now: "2026-08-28T20:00:00.000Z",
+  }).map((plan) => plan.game.providerGameId).sort(),
+  [cadenceDueGame.providerGameId, seedOnlyGame.providerGameId].sort(),
+  "provider seeding must not starve an FBS game whose ordinary hourly refresh is already due",
+);
+const referenceOnlyEvidence = structuredClone(seedOnlyEvidence);
+referenceOnlyEvidence.payload.game.away.fbs = true;
+referenceOnlyEvidence.payload.market.playbookLine = null;
+referenceOnlyEvidence.payload.market.espnReferenceLine = null;
+referenceOnlyEvidence.payload.coverage.availabilityWarnings = ["espn_reference_line_deferred"];
+assert.deepEqual(
+  filterCfbForwardCapturePlansForNeed({
+    plans: forcedCompletionPlans,
+    ordinaryDueGameIds: new Set(ordinaryCompletionPlans.map((plan) => plan.game.providerGameId)),
+    needReason: "reference_line_completion_due",
+    latestByGame: new Map([
+      ...completionExisting.map((row) => [row.providerGameId, row] as const),
+      [seedOnlyGame.providerGameId, referenceOnlyEvidence],
+    ]),
+    now: "2026-08-28T20:00:00.000Z",
+  }).map((plan) => plan.game.providerGameId).sort(),
+  [cadenceDueGame.providerGameId, seedOnlyGame.providerGameId].sort(),
+  "reference completion must not starve a game whose ordinary hourly refresh is already due",
 );
 const isolatedTrackingFailure = await runCfbOfficialTrackingSafely(async () => {
   throw new Error("historical row is ineligible");
