@@ -19,6 +19,7 @@
 
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { DEFAULT_DAILY_EDGE_SPORT } from "@/app/lab/lib/dailyEdgeSports";
 import type { Sport } from "@/lib/types/domain/Sport";
 
 // "wnba" is deep-link reachable (?sport=wnba) for operator/UI review even though
@@ -32,7 +33,7 @@ function isSport(v: string | null): v is Sport {
 }
 
 export type UseSportSelectionResult = {
-  /** Validated sport from ?sport=, default "mlb". */
+  /** Validated sport from ?sport=, with a route-appropriate fallback. */
   sport: Sport;
   /**
    * Sport to render inside the Player Props subtree. Falls back to "mlb"
@@ -49,7 +50,10 @@ export function useSportSelection(): UseSportSelectionResult {
   const pathname = usePathname();
 
   const sportParam = searchParams.get("sport");
-  const sport: Sport = isSport(sportParam) ? sportParam : DEFAULT_SPORT;
+  const routeDefaultSport = pathname.startsWith("/lab/daily-edge")
+    ? DEFAULT_DAILY_EDGE_SPORT
+    : DEFAULT_SPORT;
+  const sport: Sport = isSport(sportParam) ? sportParam : routeDefaultSport;
 
   const section = searchParams.get("section");
   const propsSport: Sport =

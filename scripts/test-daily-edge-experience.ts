@@ -7,10 +7,12 @@ import {
 } from "../app/lab/lib/dailyEdgeReaderState";
 import {
   AVAILABLE_DAILY_EDGE_SPORTS,
+  DEFAULT_DAILY_EDGE_SPORT,
   DAILY_EDGE_SPORT_AVAILABILITY,
   DAILY_EDGE_SPORTS,
   DAILY_EDGE_TOP_LEVEL_SPORT_KEYS,
   orderDailyEdgeSportKeys,
+  resolveDailyEdgeSport,
 } from "../app/lab/lib/dailyEdgeSports";
 import { isDailyEdgeExperiencePreviewAvailable } from "../lib/config/dailyEdgeExperience";
 import { __WNBA_AVAILABILITY_TEST__ } from "../lib/services/wnba/espnWnbaAvailability";
@@ -80,6 +82,10 @@ const candidateMemberPageSource = readFileSync(
 );
 const dailyEdgeRouteSource = readFileSync(
   "app/lab/daily-edge/page.tsx",
+  "utf8",
+);
+const sportSelectionSource = readFileSync(
+  "app/lab/hooks/useSportSelection.ts",
   "utf8",
 );
 const dailyEdgeApiSource = readFileSync(
@@ -989,6 +995,19 @@ check(
     DAILY_EDGE_SPORT_AVAILABILITY.nfl?.statusLabel === "In season" &&
     DAILY_EDGE_SPORT_AVAILABILITY.cfb?.isLive === true &&
     DAILY_EDGE_SPORT_AVAILABILITY.cfb?.statusLabel === "In season",
+);
+check(
+  "the unqualified Daily Edge route opens the first displayed sport without breaking explicit deep links",
+  DEFAULT_DAILY_EDGE_SPORT === orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS)[0] &&
+    DEFAULT_DAILY_EDGE_SPORT === "nfl" &&
+    resolveDailyEdgeSport(undefined) === DEFAULT_DAILY_EDGE_SPORT &&
+    resolveDailyEdgeSport("invalid") === DEFAULT_DAILY_EDGE_SPORT &&
+    resolveDailyEdgeSport("mlb") === "mlb" &&
+    candidateMemberPageSource.includes("resolveDailyEdgeSport(requestedSport)") &&
+    dailyEdgeRouteSource.includes("resolveDailyEdgeSport(requestedSport)") &&
+    sportSelectionSource.includes('pathname.startsWith("/lab/daily-edge")') &&
+    sportSelectionSource.includes("? DEFAULT_DAILY_EDGE_SPORT") &&
+    sportSelectionSource.includes('const DEFAULT_SPORT: Sport = "mlb"'),
 );
 check(
   "activity reorders a product band without displacing the flagship hierarchy",
