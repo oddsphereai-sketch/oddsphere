@@ -88,7 +88,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v16_ucl_projected_forecast_continuity_2026_10_15" as const;
+  "tracking_aggregate_v17_alternate_line_evidence_backed_2026_10_19" as const;
 
 const UCL_PRIOR_ALT_LINE_MODEL_RELEASE =
   "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
@@ -373,6 +373,9 @@ const TRACKING_RECORD_SELECT = [
   "locked_at",
   "published_at",
   "created_at",
+  // Alternate-line history may include an explicitly audited row recovered
+  // after the game only when its original pregame evidence payload is hashed.
+  "alternate_line_evidence_sha256:snapshot_json->>evidence_payload_sha256",
   "competition:snapshot_json->>competition",
   // Required by UCL's immutable legacy continuity reader. Keep this bounded
   // projection in sync with uclFrozenTrackingForecastSide; omitting it makes

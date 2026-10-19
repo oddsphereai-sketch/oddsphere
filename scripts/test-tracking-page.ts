@@ -603,7 +603,7 @@ check(
 check(
   "API shares the five-minute aggregate cache across server instances",
   API.includes("unstable_cache") &&
-    API.includes('"member-tracking-aggregate-v11-nba-spread-official"') &&
+    API.includes('"member-tracking-aggregate-v12-alternate-line-evidence-backed"') &&
     API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
 );
 check(

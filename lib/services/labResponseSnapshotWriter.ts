@@ -150,7 +150,7 @@ export async function refreshTrackingFoundationResponseSnapshot(input: {
       ttlMs: TRACKING_SNAPSHOT_TTL_MS,
       staleMs: TRACKING_SNAPSHOT_STALE_MS,
       source: input.source ?? "cron",
-      payloadVersion: "tracking-foundation-v6-nba-spread-official",
+      payloadVersion: "tracking-foundation-v7-alternate-line-evidence-backed",
     });
     if (!write.ok) return { ok: false, snapshotKey, error: write.error };
     return {

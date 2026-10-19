@@ -2151,10 +2151,16 @@ The four-season chronological tournament selected the runtime configuration on 2
 - Tracking boundary: UCL records stay `sport=soccer` with exact competition identity and T-60 lock eligibility, then display under `ucl`. Generic soccer settlement always excludes UCL; only the exact UCL pass may grade it, and that pass requires the master/write settlement gate plus a complete same-game/external-event/slate/model/calibration four-market lock manifest. Current-release aggregate and release-pure winner-accuracy readers enforce the same manifest and admit only the exact active model plus calibration pair for Current release. Calendar windows (yesterday, trailing week, trailing month, daily trend, recent picks, recently settled, and weekly/monthly alternate-line results) retain every exact immutable side-bearing lock in their date range across release transitions; advancing the active release can never make a prior public result disappear. Twelve legacy missing-price rows from four October 14 fixtures recover only the displayed side already frozen inside their own `member_market_at_capture`; no row is mutated, no post-lock forecast is consulted, and their null prices remain excluded from ROI. The bounded aggregate query explicitly projects `member_market_at_capture`, preventing cold reads from dropping those forecasts while still avoiding complete historical snapshot payloads. The member aggregate cache is `member-tracking-aggregate-v10-ucl-projected-forecast-continuity`, its stored snapshot key is `tracking-foundation-r7-ucl-projected-forecast-continuity`, and the writer payload is `tracking-foundation-v5-ucl-projected-forecast-continuity`, so a pre-repair payload cannot mask the corrected reader after deployment. When the master/member gate is off, direct UCL tracking returns unavailable and member, homepage, and public track-record API reads exclude stored current UCL rows and dynamic baselines without deleting them or reusing an enabled-state cache/snapshot; if a mixed public aggregate cannot be safely separated, the current composite fails closed. The separately rendered static historical UCL archive remains visible with legacy provenance. Older row-level releases and the two aggregate-only legacy baselines remain labeled archive data and are never blended with current-release/lifetime accuracy. Tracking aggregation contract is `tracking_aggregate_v16_ucl_projected_forecast_continuity_2026_10_15`. Evidence: `docs/model-audits/2026-10-15-ucl-frozen-member-forecast-continuity.md`.
 - Shared-cache successor: the later NBA Spread launch supersedes the cache
   identifiers named in the preceding UCL boundary with
-  `member-tracking-aggregate-v11-nba-spread-official`,
-  `tracking-foundation-r8-nba-spread-official`, and
-  `tracking-foundation-v6-nba-spread-official`; the UCL reader contract itself
-  is unchanged.
+  `member-tracking-aggregate-v12-alternate-line-evidence-backed`,
+  `tracking-foundation-r9-alternate-line-evidence-backed`, and
+  `tracking-foundation-v7-alternate-line-evidence-backed`. The shared
+  alternate-line reader admits older rows only when the exact original market,
+  side, line, and immutable lock existed before the game. A later recovery also
+  requires its preserved pregame publication timestamp and hashed evidence
+  payload; a final score alone cannot create eligible history. The underlying
+  locked predictions, grades, and the UCL reader contract itself are unchanged.
+  Tracking aggregation contract is
+  `tracking_aggregate_v17_alternate_line_evidence_backed_2026_10_19`.
 - Evidence and validation boundary: `docs/model-audits/2026-09-03-ucl-chronological-r2-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-chronological-r4-result.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-result.md`, `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`, and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md` retain the historical release record. Active r8u/r10 evidence is release-pure and documented in `docs/model-audits/2026-10-14-ucl-elo-late-consensus-r8u-r10.md`; forward results must continue to be evaluated by exact release and T-60 lock.
 - October 10 professional market-reader audit: r7 remains unchanged. The exact locked forward release was 13-3 across 16 actionables (+5.461 flat-stake units), with every actionable positive at its exact offered price. Same-book no-vig movement-toward rows went 9-1, movement-against rows 1-2, and flat rows 3-0, but the required paired promotion pool was only 3-3; therefore movement remains audit context instead of an automatic switch. Authentic public splits were absent and remain neutral. The live 18-fixture readiness replay had 16 actionables, zero nonpositive-EV actionables and zero incoherent rows. Evidence and limitations: `docs/model-audits/2026-10-10-ucl-professional-market-reader-r7-result.md`.
 - October 14 full-slate market identity repair: common UCL provider aliases now resolve Manchester City/Man City, Real Betis/Betis, Shakhtar Donetsk/Shakhtar, Slovan Bratislava/S Bratislava, and VfB Stuttgart/Stuttgart without enabling substring matching. The exact live nine-fixture probe advances from 24/36 selected prices and 62/90 outcome prices to 36/36 and 90/90, including a complete 18-row multi-book PSG-Manchester City BTTS market. Against the stored still-unlocked board, 13 previously held market tuples become coherently priced, with zero prediction-side changes, six actionable promotions and zero demotions. Existing locked records remain byte-for-byte authoritative; no score, probability, prediction formula, threshold, stake, copy, label, layout, provider cadence, writer or lease changes. Evidence: `docs/model-audits/2026-10-14-ucl-full-market-identity-coverage-r8.md`.
@@ -3370,10 +3376,11 @@ The paired live-slate replay is recorded in
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
-- Tracking caches: `member-tracking-aggregate-v11-nba-spread-official`,
-  `tracking-foundation-r8-nba-spread-official`, and
-  `tracking-foundation-v6-nba-spread-official`; these prevent a pre-Spread
-  aggregate or stored snapshot from masking the launched category
+- Tracking caches: `member-tracking-aggregate-v12-alternate-line-evidence-backed`,
+  `tracking-foundation-r9-alternate-line-evidence-backed`, and
+  `tracking-foundation-v7-alternate-line-evidence-backed`; these prevent an
+  older permissive alternate-line aggregate or stored snapshot from masking the
+  evidence-backed category
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games

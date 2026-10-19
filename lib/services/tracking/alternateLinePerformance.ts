@@ -62,6 +62,10 @@ export type AlternateLineSourceRow = {
   displaySport: string;
 };
 
+type AlternateLineRecordProjection = PredictionRecordRow & {
+  alternate_line_evidence_sha256?: unknown;
+};
+
 type AdjustmentDefinition = {
   delta: number;
   label: string;
@@ -109,6 +113,39 @@ function supportedSport(value: string): value is AlternateLineDisplaySport {
 
 function supportedMarket(value: TrackedMarketV17): value is "spread" | "total" {
   return value === "spread" || value === "total";
+}
+
+function evidencePayloadSha256(record: PredictionRecordRow): string | null {
+  const projected = (record as AlternateLineRecordProjection).alternate_line_evidence_sha256;
+  if (typeof projected === "string") return projected;
+  const raw = record.snapshot_json?.evidence_payload_sha256;
+  return typeof raw === "string" ? raw : null;
+}
+
+/**
+ * An adjusted-line result may use older data only when the exact original
+ * market, side, line, and immutable lock existed before the game. Rows written
+ * later are admitted only when the recovery preserved a pregame publication
+ * timestamp and a hashed evidence payload. Final scores alone are never enough.
+ */
+export function hasVerifiedAlternateLineSource(record: PredictionRecordRow): boolean {
+  if (!supportedMarket(record.market) || !Number.isFinite(record.line_value)) return false;
+  const side = String(record.side ?? "").trim().toLowerCase();
+  if (record.market === "total" && side !== "over" && side !== "under") return false;
+  if (record.market === "spread" && side !== "home" && side !== "away") return false;
+
+  const gameStartsAt = Date.parse(record.game_date ?? "");
+  const lockedAt = Date.parse(record.locked_at ?? "");
+  const createdAt = Date.parse(record.created_at ?? "");
+  if (!Number.isFinite(gameStartsAt) || !Number.isFinite(lockedAt) || lockedAt > gameStartsAt) return false;
+  if (Number.isFinite(createdAt) && createdAt <= gameStartsAt) return true;
+
+  const publishedAt = Date.parse(record.published_at ?? "");
+  const evidenceSha256 = evidencePayloadSha256(record);
+  return Number.isFinite(publishedAt)
+    && publishedAt <= gameStartsAt
+    && evidenceSha256 !== null
+    && /^[a-f0-9]{64}$/i.test(evidenceSha256);
 }
 
 function storedOutcome(grade: PredictionGradeRow): AlternateLineOutcome | null {
@@ -186,7 +223,7 @@ function buildCategory(
   if (!definitions || definitions.length === 0) return null;
 
   const usable = sourceRows.flatMap((row) => {
-    if (!row.grade) return [];
+    if (!row.grade || !hasVerifiedAlternateLineSource(row.record)) return [];
     const lockedOutcome = storedOutcome(row.grade);
     const exactLineOutcome = alternateLineOutcome(row.record, row.grade, 0);
     // The immutable stored grade is authoritative. A missing score/line or a
