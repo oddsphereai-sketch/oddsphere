@@ -176,6 +176,7 @@ export default function ActualDailyEdgePreview({
   nflWeekOneEvidenceBoard,
   activePreviewSports = [],
   sportSwitchDestinations,
+  onEmbeddedSportChange,
 }: {
   snapshot: DailyEdgeResponse;
   history: PreviewHistoryByTeam;
@@ -191,6 +192,7 @@ export default function ActualDailyEdgePreview({
   nflWeekOneEvidenceBoard?: NflWeekOneEvidenceBoard | null;
   activePreviewSports?: Sport[];
   sportSwitchDestinations?: Partial<Record<Sport, string>>;
+  onEmbeddedSportChange?: (sport: Sport) => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -279,7 +281,10 @@ export default function ActualDailyEdgePreview({
   }, [embeddedSample, pathname, router, searchParams, sport, sportSwitchDestinations]);
 
   function switchSport(next: Sport) {
-    if (embeddedSample) return;
+    if (embeddedSample) {
+      onEmbeddedSportChange?.(next);
+      return;
+    }
     const destination = buildDailyEdgeSportSwitchDestination({
       pathname,
       currentSearch: searchParams.toString(),
@@ -510,7 +515,7 @@ export default function ActualDailyEdgePreview({
         </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={scopedGameIndex} total={scopedGames.length} />}
       </div>
 
-      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} groupByDay={Boolean(renderedWeeklySlate)} cfbScopeControl={cfbScopeControl} />
+      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} groupByDay={Boolean(renderedWeeklySlate)} cfbScopeControl={cfbScopeControl} marketingSample={embeddedSample} />
 
       {sport === "nba" && displaySnapshot.nbaRollingSchedule?.games.length ? (
         <NbaRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} />
@@ -805,7 +810,8 @@ function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample =
   const displayGameCount = weeklySlate?.displayGameCount ?? (nbaScheduleOnlyCount || snapshot.games.length);
   const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
   const sportAvailability = previewSportAvailability(activePreviewSports, sportActivity, soccerCompetition, sport, displayGameCount > 0);
-  const orderedSports = orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability);
+  const orderedSports = orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability)
+    .filter((candidate) => !sample || activePreviewSports.length === 0 || activePreviewSports.includes(candidate));
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
@@ -2488,14 +2494,21 @@ function AnalysisCard({ label, text }: { label: string; text: string }) {
 
 type BoardFilter = "all" | "best_angle" | "lean" | "watchlist" | "caution" | "no_play";
 
-function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchGameDetail, groupByDay = false, cfbScopeControl }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void | Promise<void>; prefetchGameDetail: (game: DailyEdgeGameDto) => void; groupByDay?: boolean; cfbScopeControl?: { active: CfbBoardScope; fbsCount: number; divisionICount: number; onChange: (scope: CfbBoardScope) => void } }) {
+function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchGameDetail, groupByDay = false, cfbScopeControl, marketingSample = false }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void | Promise<void>; prefetchGameDetail: (game: DailyEdgeGameDto) => void; groupByDay?: boolean; cfbScopeControl?: { active: CfbBoardScope; fbsCount: number; divisionICount: number; onChange: (scope: CfbBoardScope) => void }; marketingSample?: boolean }) {
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [focus, setFocus] = useState<MarketKey | null>(null);
   const [cfbSearch, setCfbSearch] = useState("");
   const [oddsMinInput, setOddsMinInput] = useState("");
   const [oddsMaxInput, setOddsMaxInput] = useState("");
   const userTimeZone = useUserTimeZone();
-  const filters: Array<{ key: BoardFilter; label: string }> = [{ key: "all", label: "All" }, { key: "best_angle", label: "Best Angle" }, { key: "lean", label: "Lean" }, { key: "watchlist", label: "Watchlist" }, { key: "caution", label: "Caution" }, { key: "no_play", label: "No Play" }];
+  const filters: Array<{ key: BoardFilter; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "best_angle", label: "Best Angle" },
+    { key: "lean", label: "Lean" },
+    { key: "watchlist", label: "Watchlist" },
+    ...(marketingSample ? [] : [{ key: "caution" as const, label: "Caution" }]),
+    { key: "no_play", label: "No Play" },
+  ];
   const footballBoard = groupByDay && (sport === "nfl" || sport === "cfb");
   const uclBoard = sport === "soccer" && games.some(isUclGame);
   const dateGroupedBoard = groupByDay || uclBoard;

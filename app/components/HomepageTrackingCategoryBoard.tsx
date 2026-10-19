@@ -7,6 +7,10 @@ import type {
   PublicTrackingCategoryRow,
   PublicTrackingCategoryWindow,
 } from "@/lib/services/tracking/publicTrackingCategoryWindows";
+import type {
+  AlternateLineCategory,
+  AlternateLineMetrics,
+} from "@/lib/services/tracking/alternateLinePerformance";
 
 const SPORT_LABEL: Record<string, string> = {
   mlb: "MLB",
@@ -70,8 +74,8 @@ const DEFAULT_THEME: SportTheme = {
   surface: "rgba(99,102,241,0.04)",
 };
 
-function groupBySport(rows: PublicTrackingCategoryRow[]): Array<{ sport: string; rows: PublicTrackingCategoryRow[] }> {
-  return rows.reduce<Array<{ sport: string; rows: PublicTrackingCategoryRow[] }>>((groups, row) => {
+function groupBySport<T extends { sport: string }>(rows: T[]): Array<{ sport: string; rows: T[] }> {
+  return rows.reduce<Array<{ sport: string; rows: T[] }>>((groups, row) => {
     const group = groups.find((candidate) => candidate.sport === row.sport);
     if (group) group.rows.push(row);
     else groups.push({ sport: row.sport, rows: [row] });
@@ -79,9 +83,132 @@ function groupBySport(rows: PublicTrackingCategoryRow[]): Array<{ sport: string;
   }, []);
 }
 
-function SportGroup({ sport, rows }: { sport: string; rows: PublicTrackingCategoryRow[] }) {
+function formatShortDate(yyyyMmDd: string): string {
+  const [year, month, day] = yyyyMmDd.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function alternateRecord(metrics: AlternateLineMetrics): string {
+  return `${metrics.wins}-${metrics.losses}${metrics.pushes > 0 ? `-${metrics.pushes}` : ""}`;
+}
+
+function alternateMarketLabel(sport: string, market: AlternateLineCategory["market"]): string {
+  if (sport === "nhl" && market === "spread") return "Puck Line";
+  return MARKET_LABEL[market] ?? market;
+}
+
+function alternateSourceLabel(row: AlternateLineCategory): string {
+  if (row.source === "prior_release") return row.sourceLabel;
+  return row.sourceLabel === "Current release"
+    ? row.sourceLabel
+    : `Current release · ${row.sourceLabel}`;
+}
+
+function AlternateLinePerformanceRows({
+  rows,
+  embedded = false,
+}: {
+  rows: AlternateLineCategory[];
+  embedded?: boolean;
+}) {
+  return (
+    <div className={embedded ? "mt-3" : "mt-4 border-t border-white/[0.06] pt-4"}>
+      <div className="mb-1.5 flex items-center gap-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">
+          {embedded ? "Alternate lines" : "Alternate Line Performance"}
+        </p>
+        <details className="group relative">
+          <summary
+            aria-label="How alternate line performance is calculated"
+            className="flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-slate-400/25 bg-slate-300/[0.06] text-[9px] font-black text-slate-300 marker:content-none"
+          >
+            ?
+          </summary>
+          <p className="absolute left-0 top-6 z-20 w-64 rounded-lg border border-white/[0.10] bg-[#111722] p-3 text-[11px] font-medium normal-case leading-relaxed tracking-normal text-gray-300 shadow-2xl">
+            Same tracked picks, graded with the line moved in the prediction&apos;s favor. Prices are not included. These are not additional independent picks or betting returns.
+          </p>
+        </details>
+      </div>
+      <p className="mb-3 text-[10px] leading-relaxed text-gray-500">
+        Same tracked picks at adjusted lines. Prices excluded; not additional independent picks or betting returns.
+      </p>
+      <div className="space-y-4">
+        {rows.map((row) => {
+          const coverage = row.coverageFrom === row.coverageTo
+            ? formatShortDate(row.coverageFrom)
+            : `${formatShortDate(row.coverageFrom)} → ${formatShortDate(row.coverageTo)}`;
+          return (
+            <div key={`${row.sport}-${row.market}-${row.source}`}>
+              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-0.5">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  {!embedded ? <p className="text-[12px] font-bold text-gray-200">{alternateMarketLabel(row.sport, row.market)}</p> : null}
+                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                    {alternateSourceLabel(row)} · {row.original.settled.toLocaleString()} graded · {coverage}
+                  </p>
+                </div>
+                <div className="text-right text-[9.5px] tabular-nums text-gray-500">
+                  <span className="font-black uppercase tracking-[0.1em]">Original line</span>
+                  <span className="ml-2 font-extrabold text-gray-300">{alternateRecord(row.original)}</span>
+                  {row.original.winPct !== null ? <span className="ml-1.5 font-bold text-gray-400">{row.original.winPct.toFixed(1)}%</span> : null}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {row.adjustments.map((adjustment) => (
+                  <div
+                    key={adjustment.label}
+                    className="w-full rounded-lg border border-slate-400/30 bg-slate-950/35 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex min-w-[96px] items-center justify-center rounded-md border border-slate-300/35 bg-slate-300/[0.12] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.11em] text-slate-100 shadow-sm">
+                        {adjustment.label}
+                      </span>
+                      <div className="text-right tabular-nums">
+                        <span className="text-[13px] font-extrabold text-gray-100">{alternateRecord(adjustment.metrics)}</span>
+                        {adjustment.metrics.winPct !== null ? (
+                          <span className="ml-2 text-[11px] font-extrabold text-emerald-300/95">{adjustment.metrics.winPct.toFixed(1)}%</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
+                      {adjustment.metrics.winPct !== null ? (
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300"
+                          style={{ width: `${Math.min(100, adjustment.metrics.winPct)}%` }}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SportGroup({
+  sport,
+  rows,
+  alternateRows,
+}: {
+  sport: string;
+  rows: PublicTrackingCategoryRow[];
+  alternateRows: AlternateLineCategory[];
+}) {
   const theme = SPORT_THEME[sport] ?? DEFAULT_THEME;
   const label = SPORT_LABEL[sport] ?? sport.toUpperCase();
+  const mainMarkets = new Set(rows.map((row) => row.market));
+  const unmatchedAlternateRows = alternateRows.filter((row) => !mainMarkets.has(row.market));
+  const categoryCount = new Set([
+    ...rows.map((row) => row.market),
+    ...alternateRows.map((row) => row.market),
+  ]).size;
   return (
     <section
       className="rounded-xl border p-3.5 sm:p-4"
@@ -96,22 +223,43 @@ function SportGroup({ sport, rows }: { sport: string; rows: PublicTrackingCatego
           </div>
         </div>
         <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500">
-          {rows.length} {rows.length === 1 ? "category" : "categories"}
+          {categoryCount} {categoryCount === 1 ? "category" : "categories"}
         </span>
       </div>
-      <CategoryBars
-        rows={rows.map((row) => ({
-          label: MARKET_LABEL[row.market] ?? row.market,
-          sublabel: row.detail
-            ? `${MARKET_SHORT[row.market] ?? row.market.toUpperCase()} · ${row.detail}`
-            : (MARKET_SHORT[row.market] ?? row.market.toUpperCase()),
-          metrics: {
-            ...row.metrics,
-            win_pct: row.metrics.winPct,
-          },
-        }))}
-        emptyBody={`${label} results appear once this window has graded picks.`}
-      />
+      {rows.length > 0 ? (
+        <div className="space-y-5">
+          {rows.map((row, index) => {
+            const matchingAlternateRows = alternateRows.filter((alternate) => alternate.market === row.market);
+            return (
+              <div
+                key={`${sport}-${row.market}`}
+                data-tracking-market={row.market}
+                className={index > 0 ? "border-t border-white/[0.08] pt-5" : undefined}
+              >
+                <CategoryBars
+                  rows={[{
+                    label: MARKET_LABEL[row.market] ?? row.market,
+                    sublabel: row.detail
+                      ? `${MARKET_SHORT[row.market] ?? row.market.toUpperCase()} · ${row.detail}`
+                      : (MARKET_SHORT[row.market] ?? row.market.toUpperCase()),
+                    metrics: {
+                      ...row.metrics,
+                      win_pct: row.metrics.winPct,
+                    },
+                  }]}
+                  emptyBody={`${label} results appear once this window has graded picks.`}
+                />
+                {matchingAlternateRows.length > 0 ? (
+                  <AlternateLinePerformanceRows rows={matchingAlternateRows} embedded />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {unmatchedAlternateRows.length > 0 ? (
+        <AlternateLinePerformanceRows rows={unmatchedAlternateRows} />
+      ) : null}
     </section>
   );
 }
@@ -133,6 +281,11 @@ export function HomepageTrackingCategoryBoard({
     [activeKey, orderedWindows],
   );
   const groups = groupBySport(activeWindow?.rows ?? []);
+  const alternateGroups = groupBySport(activeWindow?.alternateRows ?? []);
+  const sportKeys = Array.from(new Set([
+    ...groups.map((group) => group.sport),
+    ...alternateGroups.map((group) => group.sport),
+  ]));
 
   return (
     <div className="mt-8">
@@ -163,9 +316,16 @@ export function HomepageTrackingCategoryBoard({
       </div>
 
       <div className="mt-4 rounded-2xl border border-white/[0.06] bg-white/[0.018] p-3 sm:p-4">
-        {available && groups.length > 0 ? (
+        {available && sportKeys.length > 0 ? (
           <div className="space-y-3">
-            {groups.map((group) => <SportGroup key={group.sport} sport={group.sport} rows={group.rows} />)}
+            {sportKeys.map((sport) => (
+              <SportGroup
+                key={sport}
+                sport={sport}
+                rows={groups.find((group) => group.sport === sport)?.rows ?? []}
+                alternateRows={alternateGroups.find((group) => group.sport === sport)?.rows ?? []}
+              />
+            ))}
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-white/[0.08] px-4 py-10 text-center">

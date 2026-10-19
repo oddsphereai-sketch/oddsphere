@@ -233,9 +233,38 @@ function formatTrackingDate(yyyyMmDd: string): string {
   });
 }
 
-function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
-  const official = summary.currentOfficial;
+function formatTrackingSnapshotTimestamp(iso: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+    timeZoneName: "short",
+  }).format(new Date(iso));
+}
 
+function trackingUpdateLabel(tracking: PublicTrackRecordSummary["categoryTracking"]): string {
+  if (!tracking.available || tracking.freshness === "unavailable" || tracking.generatedAt === null) {
+    return "Tracking snapshot temporarily unavailable; no category records are labeled current.";
+  }
+
+  const generated = formatTrackingSnapshotTimestamp(tracking.generatedAt);
+  const coverage = tracking.coverageThrough
+    ? ` Coverage through ${formatTrackingDate(tracking.coverageThrough)}.`
+    : " Coverage date is temporarily unavailable.";
+  const completeness = tracking.completeness === "incomplete"
+    ? " Alternate-line results are unavailable from this incomplete snapshot."
+    : "";
+
+  if (tracking.freshness === "stale") {
+    return `Showing the latest available delayed tracking snapshot, generated ${generated}.${coverage}${completeness}`;
+  }
+  return `Tracking snapshot generated ${generated}.${coverage}${completeness}`;
+}
+
+function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-emerald-300/15 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.12),transparent_38%),rgba(3,7,18,0.82)] p-5 shadow-[0_32px_90px_rgba(0,0,0,0.28)] sm:p-8">
       <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-emerald-400/10 blur-3xl" />
@@ -258,10 +287,7 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
           available={summary.categoryTracking.available}
         />
         <p className="mt-5 text-xs leading-relaxed text-gray-500">
-          {official
-            ? `Results updated through ${formatTrackingDate(official.latestActivityDate)}. `
-            : "Results update after settlement. "}
-          Pushes are shown in the record and excluded from hit rate. Win rate measures prediction accuracy, not betting returns. Past performance does not guarantee future results.
+          {trackingUpdateLabel(summary.categoryTracking)} Pushes are shown in the record and excluded from hit rate. Win rate measures prediction accuracy, not betting returns. Past performance does not guarantee future results.
         </p>
       </div>
     </div>

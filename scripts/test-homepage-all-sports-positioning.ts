@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 const homepage = readFileSync("app/page.tsx", "utf8");
 const dashboardPreview = readFileSync("app/components/HomepageDashboardPrototype.tsx", "utf8");
 const dailyEdgeShell = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
+const actualDailyEdgePreview = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 const marketingSample = dailyEdgeShell.slice(
-  dailyEdgeShell.indexOf("const marketingPreviewGames"),
-  dailyEdgeShell.indexOf("const marketingPreviewSnapshot"),
+  dailyEdgeShell.indexOf("const marketingMlbPreviewGames"),
+  dailyEdgeShell.indexOf("export function MarketingDailyEdgePreviewSurface"),
 );
 
 function check(label: string, condition: boolean): void {
@@ -52,7 +53,9 @@ check(
   "historical member captures and the interactive preview are labeled as sample data",
   homepage.includes("Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result.")
     && dashboardPreview.includes("illustrative sample data")
-    && dailyEdgeShell.includes("Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result."),
+    && dailyEdgeShell.includes('"Illustrative NFL example dated Oct. 12, 2026."')
+    && dailyEdgeShell.includes('"Illustrative MLB example dated Aug. 10, 2026."')
+    && dailyEdgeShell.includes("Not a current recommendation or actual result."),
 );
 check(
   "visitor-facing product proof avoids developer language and labels consensus movement correctly",
@@ -61,6 +64,22 @@ check(
     && !homepage.includes("Production reader components")
     && !marketingSample.toLowerCase().includes("same-book")
     && marketingSample.includes("consensus price movement"),
+);
+check(
+  "interactive sample shows a complete two-sided consensus moneyline trail",
+  marketingSample.includes('awayTeam: "BUF"')
+    && marketingSample.includes('homeTeam: "KC"')
+    && marketingSample.includes("opposingOddsTrail")
+    && marketingSample.includes("{ american: -121")
+    && marketingSample.includes("{ american: -115")
+    && marketingSample.includes("{ american: -108"),
+);
+check(
+  "interactive sample starts with NFL and exposes only working NFL and MLB sport tabs",
+  dailyEdgeShell.includes('useState<"nfl" | "mlb">("nfl")')
+    && dailyEdgeShell.includes('activePreviewSports={["nfl", "mlb"]}')
+    && dailyEdgeShell.includes("onEmbeddedSportChange")
+    && actualDailyEdgePreview.includes('marketingSample ? [] : [{ key: "caution" as const, label: "Caution" }]'),
 );
 check(
   "marketing sample uses the current four Play Grade terms without Caution",

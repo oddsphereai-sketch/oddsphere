@@ -86,12 +86,33 @@ assert.equal(unavailable.length, 3);
 assert.equal(unavailable.every((window) => window.rows.length === 0), true);
 
 const uclMetric = metrics(2, 1);
+const uclAlternateCategory = {
+  sport: "ucl" as const,
+  market: "total" as const,
+  source: "current_release" as const,
+  sourceLabel: "Line-level history",
+  coverageFrom: "2026-08-24",
+  coverageTo: "2026-08-30",
+  original: { wins: 2, losses: 1, pushes: 0, settled: 3, winPct: 66.67 },
+  adjustments: [{
+    delta: 0.5,
+    label: "+0.5 GOAL",
+    metrics: { wins: 2, losses: 0, pushes: 1, settled: 3, winPct: 100 },
+  }],
+  excludedRows: 0,
+};
 const storedFoundation: PublicTrackingFoundationSnapshot = {
   ...snapshot,
   baselines: [...(snapshot.baselines ?? []), { sport: "ucl", market: "match_result", lifetime_wins: 100, lifetime_total: 174, lifetime_pct: 57.5 }],
   bySportMarket: [...(snapshot.bySportMarket ?? []), { sport: "ucl", market: "match_result", metrics: uclMetric }],
   thisWeek: { ...snapshot.thisWeek!, bySportMarket: [...snapshot.thisWeek!.bySportMarket, { sport: "ucl", market: "match_result", metrics: uclMetric }] },
   thisMonth: { ...snapshot.thisMonth!, bySportMarket: [...snapshot.thisMonth!.bySportMarket, { sport: "ucl", market: "match_result", metrics: uclMetric }] },
+  alternateLinePerformance: {
+    weekly: { from: "2026-08-24", to: "2026-08-30", rows: [uclAlternateCategory] },
+    monthly: { from: "2026-08-01", to: "2026-08-30", rows: [uclAlternateCategory] },
+    lifetime: { from: "2026-06-07", to: "2026-08-30", rows: [uclAlternateCategory] },
+    archives: [{ ...uclAlternateCategory, source: "prior_release", sourceLabel: "Prior locked release" }],
+  },
 };
 const storedCurrent = {
   as_of: "2026-09-03T12:00:00Z", sportOrder: ["mlb", "ucl"],
@@ -112,6 +133,10 @@ assert.equal(rollbackVisible.foundation?.baselines?.some((row) => row.sport === 
 assert.equal(rollbackVisible.foundation?.bySportMarket?.some((row) => row.sport === "ucl"), false);
 assert.equal(rollbackVisible.foundation?.thisWeek?.bySportMarket.some((row) => row.sport === "ucl"), false);
 assert.equal(rollbackVisible.foundation?.thisMonth?.bySportMarket.some((row) => row.sport === "ucl"), false);
+assert.equal(rollbackVisible.foundation?.alternateLinePerformance?.weekly.rows.some((row) => row.sport === "ucl"), false);
+assert.equal(rollbackVisible.foundation?.alternateLinePerformance?.monthly.rows.some((row) => row.sport === "ucl"), false);
+assert.equal(rollbackVisible.foundation?.alternateLinePerformance?.lifetime.rows.some((row) => row.sport === "ucl"), false);
+assert.equal(rollbackVisible.foundation?.alternateLinePerformance?.archives.some((row) => row.sport === "ucl"), false);
 assert.equal(rollbackVisible.current, null, "a mixed current snapshot fails closed because its monthly/lifetime UCL contribution is inseparable");
 for (const degradedFoundation of [
   null,

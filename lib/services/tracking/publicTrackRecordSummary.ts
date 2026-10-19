@@ -73,6 +73,10 @@ export type PublicTrackRecordSummary = {
   categoryTracking: {
     available: boolean;
     asOf: string;
+    generatedAt: string | null;
+    coverageThrough: string | null;
+    freshness: "fresh" | "stale" | "unavailable";
+    completeness: "complete" | "incomplete" | "unavailable";
     windows: PublicTrackingCategoryWindow[];
   };
   currentOfficial?: {
@@ -194,6 +198,41 @@ function withoutUcl<T extends { sport: string }>(rows: T[] | undefined): T[] {
   return (rows ?? []).filter((row) => row.sport !== "ucl");
 }
 
+function withoutUclAlternateLinePerformance(
+  performance: PublicTrackingFoundationSnapshot["alternateLinePerformance"],
+): PublicTrackingFoundationSnapshot["alternateLinePerformance"] {
+  if (!performance) return undefined;
+  return {
+    weekly: { ...performance.weekly, rows: withoutUcl(performance.weekly.rows) },
+    monthly: { ...performance.monthly, rows: withoutUcl(performance.monthly.rows) },
+    lifetime: { ...performance.lifetime, rows: withoutUcl(performance.lifetime.rows) },
+    archives: withoutUcl(performance.archives),
+  };
+}
+
+function hasCompleteAlternateLinePerformance(
+  snapshot: PublicTrackingFoundationSnapshot | null,
+): boolean {
+  const performance = snapshot?.alternateLinePerformance;
+  return performance !== undefined
+    && Array.isArray(performance.weekly?.rows)
+    && Array.isArray(performance.monthly?.rows)
+    && Array.isArray(performance.lifetime?.rows)
+    && Array.isArray(performance.archives);
+}
+
+function trackingCoverageThrough(snapshot: PublicTrackingFoundationSnapshot | null): string | null {
+  if (!snapshot) return null;
+  const candidates = [
+    snapshot.thisWeek?.to,
+    snapshot.thisMonth?.to,
+    snapshot.alternateLinePerformance?.weekly.to,
+    snapshot.alternateLinePerformance?.monthly.to,
+    snapshot.alternateLinePerformance?.lifetime.to,
+  ].filter((value): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value));
+  return candidates.sort().at(-1) ?? null;
+}
+
 /** Public pages use shared all-sport snapshots. On UCL rollback, remove only
  * current UCL rows from those payloads; the separately rendered static legacy
  * archive remains intact. If the category substrate is unavailable, hide the
@@ -216,6 +255,7 @@ export function applyPublicUclTrackingVisibility(input: {
       ...input.foundation.thisMonth,
       bySportMarket: withoutUcl(input.foundation.thisMonth.bySportMarket),
     } : undefined,
+    alternateLinePerformance: withoutUclAlternateLinePerformance(input.foundation.alternateLinePerformance),
   };
   if (input.current === null) return { current: null, foundation };
 
@@ -272,6 +312,17 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
     foundation: categorySnapshot?.payload ?? null,
     includeUcl: resolveUclFeatureFlags().member,
   });
+  const categoryGeneratedAt = visible.foundation?.generatedAt ?? categorySnapshot?.generatedAt ?? null;
+  const categoryFreshness = categorySnapshot === null
+    ? "unavailable"
+    : categorySnapshot.cacheState === "DB_SNAPSHOT"
+      ? "fresh"
+      : "stale";
+  const categoryCompleteness = visible.foundation === null
+    ? "unavailable"
+    : hasCompleteAlternateLinePerformance(visible.foundation)
+      ? "complete"
+      : "incomplete";
   let overall = ZERO_METRIC;
   const sportMap = new Map<TrackedSport, PublicTrackRecordMetric>();
 
@@ -321,7 +372,11 @@ export async function getPublicTrackRecordSummary(): Promise<PublicTrackRecordSu
     archiveProvenance: TRACK_RECORD_ARCHIVE_PROVENANCE,
     categoryTracking: {
       available: visible.foundation !== null,
-      asOf: visible.foundation?.generatedAt ?? categorySnapshot?.generatedAt ?? asOf,
+      asOf: categoryGeneratedAt ?? asOf,
+      generatedAt: categoryGeneratedAt,
+      coverageThrough: trackingCoverageThrough(visible.foundation),
+      freshness: categoryFreshness,
+      completeness: categoryCompleteness,
       windows: buildPublicTrackingCategoryWindows(visible.foundation),
     },
     currentOfficial: visible.current ? {
