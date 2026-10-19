@@ -49,6 +49,7 @@ import {
 } from "@/lib/services/trackingAggregateService";
 import { isFinalFiGradeCoherent } from "@/lib/services/dailyEdge/fiGradeCoherence";
 import {
+  getContextOnlyDisplayMarkets,
   getOfficialTrackingMarkets,
 } from "@/lib/config/officialTrackingMarkets";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
@@ -211,14 +212,16 @@ async function check1RegistryIntegrity(): Promise<Issue[]> {
     });
   }
 
-  // INFO — note context-only markets from the current registry. NHL puck line
-  // was intentionally promoted to official tracking and must not be audited
-  // as context-only here.
+  const contextOnly = ACTIVE_SPORTS.flatMap((sport) =>
+    getContextOnlyDisplayMarkets(sport).map((market) => `${sport}:${market}`),
+  );
+  // INFO — report the authoritative registry instead of preserving an old
+  // product assumption after a market is intentionally promoted.
   pushIssue(issues, {
     code: "REGISTRY_CONTEXT_ONLY_NOTE",
     severity: "INFO",
     sport: null,
-    affected: { details: "NBA spread is context-only; NHL puck-line is officially tracked" },
+    affected: { details: contextOnly.length > 0 ? contextOnly.join(", ") : "no active context-only markets" },
     user_facing_impact: "None — confirmation that context-only is the intended product direction",
     recommended_fix: "n/a — registry is authoritative",
     auto_fixable: false,
@@ -324,8 +327,9 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
   //   Summary INFO when substrate is present and contract-clean.
 
   const CONTEXT_SUBSTRATE_ROLLOUT_ISO = "2026-06-10T18:26:01Z"; // Commit A 57fa211 AuthorDate
+  const nbaSpreadIsContextOnly = getContextOnlyDisplayMarkets("nba").includes("spread");
 
-  for (const sport of ["nba"] as const) {
+  for (const sport of nbaSpreadIsContextOnly ? (["nba"] as const) : []) {
     const { data: prs } = await supabase
       .from("prediction_records")
       .select("id, game_id, market, locked_at, created_at, snapshot_json")
@@ -467,7 +471,7 @@ async function check2ContextOnlyDisplay(): Promise<Issue[]> {
   // prediction_records contains a public market="spread" row, which
   // would mean the writer leaked a context-only market into the
   // officially tracked substrate.
-  for (const sport of ["nba"] as const) {
+  for (const sport of nbaSpreadIsContextOnly ? (["nba"] as const) : []) {
     const { data: prs } = await supabase
       .from("prediction_records")
       .select("id, market")

@@ -3612,7 +3612,7 @@ assert.equal(CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_MARKET_HISTORY_MAX_ROWS, 20_000);
 assert.equal(CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS, 72);
 assert.equal(CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS, 12_000);
-assert.equal(CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS, 12_000);
+assert.equal(CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS, 30_000);
 assert.equal(CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS, 48);
 assert.match(evidenceStoreSource, /\.order\("captured_at", \{ ascending: true \}\)\s*\.order\("id", \{ ascending: true \}\)\s*\.range\(from, from \+ CFB_FORWARD_EVIDENCE_PAGE_SIZE - 1\)/, "the CFB evidence reader must paginate with a stable timestamp-and-ID order");
 assert.match(evidenceStoreSource, /exceeded its bounded.*row season limit/, "the CFB evidence reader must fail explicitly at its hard cap instead of silently truncating a release wave");
