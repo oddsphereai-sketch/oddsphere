@@ -105,6 +105,7 @@ import {
   buildDailyEdgeMemberPresentation,
   finalizeDailyEdgeResponseCoherence,
 } from "@/app/lab/lib/dailyEdgeResponseCoherence";
+import { mergeUnlockedMlbMoneylineCalibrationContext } from "@/app/api/lab/daily-edge/mlbRecordOverlay";
 import { DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID } from "@/app/lab/lib/dailyEdgeMarketPresentation";
 import {
   marketVerdictFor,
@@ -7733,10 +7734,10 @@ export async function GET(request: Request) {
       if (applied?.applied !== true) continue;
       if (!g.game_predictions) continue;
       const pred = g.game_predictions;
-      const sp = {
-        ...((pred.sport_specific ?? {}) as Record<string, unknown>),
-        ...((calibratedMl.snapshot_json ?? {}) as Record<string, unknown>),
-      };
+      const sp = mergeUnlockedMlbMoneylineCalibrationContext(
+        (pred.sport_specific ?? {}) as Record<string, unknown>,
+        calibratedMl.snapshot_json,
+      );
       (pred as unknown as { sport_specific: Record<string, unknown> }).sport_specific = sp;
       (pred as unknown as { predicted_ml_winner: string | null }).predicted_ml_winner =
         calibratedMl.pick;

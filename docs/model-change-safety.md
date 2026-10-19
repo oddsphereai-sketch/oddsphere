@@ -26,6 +26,33 @@ coverage, one writer/lease, coherent member cards, and unchanged locks. Roll bac
 publication on any synthetic displayed line, unmatched available event, target-book contamination,
 mixed release, unexpected board contraction, writer overlap, or lock mutation.
 
+## Owner-directed correctness exception: MLB market-scoped reader record overlay r26
+
+On 2026-10-19 Daniel Mengel directed Oddsphere to repair the actual MLB price
+handoff rather than accept missing-price copy on the postseason member board.
+This exception is limited to the reader correction documented in
+`docs/model-audits/2026-10-19-mlb-market-scoped-record-overlay-r26.md`.
+
+An unlocked Moneyline record may remain older than a newer Total or first-inning
+record because each market publishes independently. Its calibrated Moneyline
+pick remains authoritative, but the reader may carry only that record's
+`pick_calibration` audit into the current game context. It may not overwrite the
+newer game-wide completeness state, current prices, posted lines, Total audit,
+or first-inning audit. Pick, probability, grade, and exact-price values continue
+to come from their market's prediction-record columns and stored tuple. Locked
+rows retain exact stored precedence and never use this unlocked overlay.
+
+The exact production reproduction restores the already-stored Pinnacle Over
+6.5 at -122 evaluation while preserving its No Play grade and -1.1 percentage-
+point edge. It changes no forecast, side, probability, projected score, grade,
+actionable count, stake, provider request, writer, lease, cadence, tracking row,
+or lock. Publication requires the focused reader regression, MLB route and lock
+tests, TypeScript, lint, full model-change verification, latest-main integration
+safety, protected PR checks, and live proof of the r26 response release, exact
+price/line/book tuple, unchanged actionability, and immutable lock precedence.
+Roll back r26 on any cross-market overwrite, price/side mismatch, reader/writer
+disagreement, board contraction, or lock mutation.
+
 ## Owner-directed correctness exception: MLB trusted Total scope recovery v4
 
 On 2026-10-19 Daniel Mengel directed Oddsphere to repair the MLB price gap

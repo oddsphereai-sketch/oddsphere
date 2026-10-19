@@ -8,7 +8,20 @@ Last reviewed: 2026-10-19
 
 ## Cross-sport confidence / execution contract
 
-- October 10 shared reader-copy release is
+- October 19 MLB market-scoped reader handoff advances member presentation to
+  `daily_edge_member_presentation_2026_10_19_r26_mlb_market_scoped_record_overlay`.
+  An older unlocked Moneyline prediction record still owns its calibrated
+  Moneyline pick, but contributes only its `pick_calibration` audit to the
+  current game context. It can no longer replace newer game-wide completeness,
+  posted-line, Total, or first-inning evidence. The exact production incident
+  restores the already-authoritative Pinnacle Over 6.5 at -122 evaluation while
+  preserving its No Play grade and -1.1 percentage-point edge. Forecasts,
+  probabilities, scores, sides, grades, actionability, stakes, providers,
+  writers, leases, cadence, tracking, and every stored lock remain unchanged.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-19-mlb-market-scoped-record-overlay-r26.md`.
+
+- October 10 shared reader-copy predecessor is
   `daily_edge_member_presentation_2026_10_10_r25_cross_sport_copy_coherence`.
   It makes clear that a context/reference line and the displayed exact
   sportsbook price have different jobs instead of claiming the visible price
