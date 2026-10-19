@@ -6,6 +6,10 @@ const pipeline = readFileSync(
   new URL("../lib/services/nba/buildNbaDailyEdgeAdapted.ts", import.meta.url),
   "utf8",
 );
+const featureSnapshot = readFileSync(
+  new URL("../lib/services/nba/featureSnapshot.ts", import.meta.url),
+  "utf8",
+);
 const writer = readFileSync(
   new URL("../lib/services/nba/buildNbaPredictionRecords.ts", import.meta.url),
   "utf8",
@@ -27,6 +31,16 @@ for (const required of [
 assert.match(pipeline, /prediction:\s*pred/);
 assert.match(pipeline, /games:\s*dynamicGames,[\s\S]*rows:\s*lockedRows/);
 assert.match(pipeline, /public_splits|marketSignalsCapability/);
+assert.match(
+  pipeline,
+  /loadCompleteCurrentGameLines\([\s\S]*context:\s*"buildNbaDailyEdgePipeline"/,
+  "NBA member intelligence must read every current line past the PostgREST 1,000-row boundary",
+);
+assert.match(
+  featureSnapshot,
+  /loadCompleteCurrentGameLines\([\s\S]*context:\s*"buildNbaFeatureSnapshots"/,
+  "NBA feature snapshots must read every current line past the PostgREST 1,000-row boundary",
+);
 assert.match(writer, /\["moneyline", "spread", "total"\]/);
 assert.match(writer, /nba_game_dto_at_capture/);
 assert.doesNotMatch(writer, /displayed_context_markets:\s*\{\s*spread:/);

@@ -1,5 +1,29 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: NBA complete line-board pagination r8
+
+On 2026-10-19 Daniel Mengel directed Oddsphere to recover visibly available NBA sportsbook prices
+instead of accepting blank member cards. The deployed r7 identity correction successfully wrote
+118 Phoenix-Portland rows and 96 Sacramento-Clippers rows, but the model and member reader still
+omitted them because two current-line queries relied on PostgREST's default 1,000-row response cap.
+This exception is limited to the complete-reader correction documented in
+`docs/model-audits/2026-10-19-nba-complete-line-board-pagination.md`.
+
+Both NBA line consumers must use the existing bounded, deterministic, game-line pagination helper
+and fail closed at its explicit 10,000-row safety limit. The independent score equation, categorical
+market-reader rules, executable-line selection, exact-price grade thresholds, stake policy, official
+tracking boundary, sole writer, cadence, and `prediction_pipeline:nba` lease remain unchanged. New
+semantics apply only to unlocked rows and future locks; every stored locked payload retains exact
+precedence.
+
+Publication requires a same-input board-impact report including every newly visible price, pick,
+promotion, demotion, and actionable count; pagination and saturation regressions for both feature and
+member-intelligence readers; focused NBA model/reader/writer/lock tests; TypeScript; full model-change
+verification; latest-main integration safety; protected PR checks; and post-deploy proof that the live
+Phoenix-Portland and Sacramento-Clippers cards carry coherent prices when current rows exist. Roll
+back r8/r9 on any partial page publication, mixed release, unexpected side or grade change outside the
+recovered games, writer overlap, or locked-payload mutation.
+
 ## Owner-directed correctness exception: NBA executable quote and event identity r7
 
 On 2026-10-19 Daniel Mengel reported non-bettable NBA quarter-point spreads and missing
