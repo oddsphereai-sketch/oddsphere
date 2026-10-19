@@ -483,6 +483,19 @@ Last reviewed: 2026-10-19
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 19 completion-cadence continuity repair: the sole writer advances to
+  `cfb_forward_evidence_writer_2026_10_19_r129_completion_cadence_continuity`.
+  A persistent FCS paid-provider seed gap previously made every five-minute run
+  select only the 40 FCS-only completion rows, discarding ordinary-hourly-due
+  plans for the 56 FBS-involved games. Completion runs now retain due T-60 rows,
+  the rows needing the special completion operation, and every game already due
+  under the unchanged ordinary cadence; fresh unrelated games remain excluded.
+  The 96-game Division I slate, 56-game default FBS view, provider budgets,
+  forecast, market reader, probability, decision, grade, stake, member,
+  tracking, sole `prediction_pipeline:cfb` lease, and all locked records remain
+  unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-19-cfb-completion-cadence-continuity.md`.
+
 - October 19 unlocked-continuity capacity repair: the sole writer advances to
   `cfb_forward_evidence_writer_2026_10_19_r128_unlocked_continuity_capacity`.
   The append-only evidence table reached the writer's 12,000-row ceiling inside
