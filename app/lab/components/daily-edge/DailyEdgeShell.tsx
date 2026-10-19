@@ -4292,6 +4292,7 @@ type MarketingPreviewMarketInput = {
   fiMarketBoard?: MarketEdgeDto["fiMarketBoard"];
   lineOpenAmerican?: number | null;
   oddsTrail?: MarketEdgeDto["oddsTrail"];
+  lineTrail?: MarketEdgeDto["lineTrail"];
   opposingOddsTrail?: MarketEdgeDto["opposingOddsTrail"];
   modelTotal?: number | null;
   marketTotal?: number | null;
@@ -4330,6 +4331,7 @@ function marketingPlayGradeLabel(verdict: VerdictKey): PlayGradeLabel {
 function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeDto {
   const modelProb = input.modelProb ?? input.confidence;
   const marketFairProb = input.marketFairProb ?? null;
+  const isTotalMarket = /^(Over|Under)\b/i.test(input.pick ?? "") || input.modelTotal !== undefined || input.marketTotal !== undefined;
   const modelTrustPct = modelProb === null ? null : modelProb * 100;
   const marketImpliedPct = marketFairProb === null ? null : marketFairProb * 100;
   const modelMarketGapPct =
@@ -4381,6 +4383,7 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
     lockedLineAmerican: null,
     lockedLineAt: null,
     oddsTrail: input.oddsTrail ?? [],
+    lineTrail: input.lineTrail ?? (input.line !== null && input.line !== undefined ? input.oddsTrail ?? [] : []),
     opposingOddsTrail: input.opposingOddsTrail ?? null,
     marketInterpretation: null,
     marketReadV2: null,
@@ -4391,7 +4394,7 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
     lastMoveLinePrev: null,
     lastMoveLineNext: null,
     modelTotal: input.modelTotal ?? null,
-    marketTotal: input.marketTotal ?? input.line ?? null,
+    marketTotal: isTotalMarket ? input.marketTotal ?? input.line ?? null : null,
     line: input.line ?? null,
     keyStats: input.keyStats ?? [],
     modelTrustPct,

@@ -1252,14 +1252,19 @@ function FootballMarketSignalCell({ signal }: { signal: FootballMarketSignal }) 
 
 function footballMovementSignal(market: MarketEdgeDto, movement: CoherentMovement): FootballMarketSignal {
   const sportsbook = movement.sportsbook ? formatSportsbook(movement.sportsbook) : "Book unavailable";
+  const movementLabel = !movement.coherentTrail
+    ? "Movement"
+    : movement.sportsbook?.trim().toLowerCase() === "consensus"
+      ? "Consensus movement"
+      : "Same-book move";
   if (!movement.coherentTrail || movement.open === null || movement.current === null) {
-    return { label: "Same-book move", value: "Unverified", note: "No continuous trail", tone: "gray" };
+    return { label: movementLabel, value: "Unverified", note: "No continuous trail", tone: "gray" };
   }
   const lineChanged = !sameTrackedLine(movement.openLine, movement.currentLine);
   if (lineChanged) {
     const direction = movementRowDirection(market, movement, true);
     return {
-      label: "Same-book move",
+      label: movementLabel,
       value: `${formatNumber(movement.openLine!)} → ${formatNumber(movement.currentLine!)}`,
       note: `${direction.label} · ${sportsbook}`,
       tone: direction.tone === "emerald" || direction.tone === "teal" ? "emerald" : direction.tone === "red" || direction.tone === "amber" ? "amber" : "gray",
@@ -1268,12 +1273,12 @@ function footballMovementSignal(market: MarketEdgeDto, movement: CoherentMovemen
   const impliedDelta = 100 * (pickRelativeImpliedProbabilityDelta(movement.open, movement.current) ?? 0);
   const magnitude = Math.abs(impliedDelta);
   if (magnitude < 0.1) {
-    return { label: "Same-book move", value: "Market flat", note: `${formatAmerican(movement.open)} → ${formatAmerican(movement.current)} · ${sportsbook}`, tone: "gray" };
+    return { label: movementLabel, value: "Market flat", note: `${formatAmerican(movement.open)} → ${formatAmerican(movement.current)} · ${sportsbook}`, tone: "gray" };
   }
   const convictionRose = impliedDelta > 0;
   const entryImproved = movement.current > movement.open;
   return {
-    label: "Same-book move",
+    label: movementLabel,
     value: `Conviction ${convictionRose ? "rose" : "eased"} ${magnitude.toFixed(1)} pp`,
     note: `Entry ${formatAmerican(movement.open)} → ${formatAmerican(movement.current)} ${entryImproved ? "improved" : "worsened"}`,
     tone: convictionRose ? "emerald" : "amber",
@@ -1428,9 +1433,15 @@ function CompactPointLineMovement({ market }: { market: MarketEdgeDto }) {
       : isTotal
         ? current > first ? "Total rose" : "Total fell"
         : current < first ? `${spreadSide} strengthened` : `${spreadSide} eased`;
-  const point = (label: string, value: number | null, currentPoint = false) => <div className="min-w-0"><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className={`mt-0.5 font-mono text-sm font-black ${currentPoint ? "text-violet-200" : "text-gray-200"}`}>{value === null ? "—" : formatNumber(value)}</p></div>;
+  const formatPointLine = (value: number) => isSpread ? formatSigned(value) : formatNumber(value);
+  const point = (label: string, value: number | null, currentPoint = false) => <div className="min-w-0"><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className={`mt-0.5 font-mono text-sm font-black ${currentPoint ? "text-violet-200" : "text-gray-200"}`}>{value === null ? "—" : formatPointLine(value)}</p></div>;
   const marketLabel = isTotal ? "Total" : `${spreadSide} spread`;
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{marketLabel} line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{terminal?.sportsbook ? `${formatSportsbook(terminal.sportsbook)} · same-book line` : `Current ${isTotal ? "total" : "spread"} line`}</p></div><span className={`text-[7px] font-black uppercase tracking-wider ${coherent ? "text-violet-300" : "text-gray-500"}`}>{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">A coherent same-book opener is unavailable. The current line is shown without a movement claim.</p>}</section>;
+  const lineSource = terminal?.sportsbook?.trim().toLowerCase() === "consensus"
+    ? "Consensus line history"
+    : terminal?.sportsbook
+      ? `${formatSportsbook(terminal.sportsbook)} · same-book line`
+      : `Current ${isTotal ? "total" : "spread"} line`;
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{marketLabel} line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{lineSource}</p></div><span className={`text-[7px] font-black uppercase tracking-wider ${coherent ? "text-violet-300" : "text-gray-500"}`}>{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">A coherent same-book opener is unavailable. The current line is shown without a movement claim.</p>}</section>;
 }
 
 function AvailabilityContext({ report, market }: { report: DailyEdgeGameAvailability; market: MarketEdgeDto }) {
