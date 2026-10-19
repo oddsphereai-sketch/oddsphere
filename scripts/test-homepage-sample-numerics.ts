@@ -57,11 +57,16 @@ assert.deepEqual(
 );
 
 let auditedMarkets = 0;
+const sampleIds = new Set<string>();
 for (const sport of MARKETING_PREVIEW_SPORTS) {
   const games = MARKETING_PREVIEW_BY_SPORT[sport].snapshot.games;
-  assert.ok(games.length > 0, `${sport} includes at least one illustrative matchup`);
+  assert.equal(games.length, 3, `${sport} includes exactly three illustrative matchups`);
+  const grades = new Set(games.flatMap((game) => Object.values(game.markets).map((market) => market.verdict)));
+  assert.ok(grades.size >= 3, `${sport} presents a realistic mix of at least three Play Grades`);
 
   for (const game of games) {
+    assert.ok(!sampleIds.has(game.id), `${game.id} is unique across the illustrative slate`);
+    sampleIds.add(game.id);
     assert.ok(game.awayTeamLogo, `${sport} ${game.awayTeam} uses a real team-logo asset`);
     assert.ok(game.homeTeamLogo, `${sport} ${game.homeTeam} uses a real team-logo asset`);
     const totalMarket = game.markets.total;
@@ -101,7 +106,7 @@ for (const sport of MARKETING_PREVIEW_SPORTS) {
       }
     }
 
-    if (sport === "wnba") {
+    if (game.id === "marketing-wnba-6001") {
       assert.deepEqual(game.projected, { away: 81.5, home: 77 }, "WNBA retains its decimal expected-points projection");
       const representative = game.markets.moneyline.keyStats.find((stat) => /^representative final$/i.test(stat.label));
       assert.deepEqual(
@@ -182,6 +187,7 @@ for (const sport of MARKETING_PREVIEW_SPORTS) {
   console.log(`  ✓ ${sport.toUpperCase()}: scores, selections, prices, probabilities, gaps, movement, splits, and explanations`);
 }
 
-assert.equal(auditedMarkets, 27, "all 27 displayed illustrative market controls were audited");
+assert.equal(sampleIds.size, 21, "all 21 illustrative matchups have unique identities");
+assert.equal(auditedMarkets, 63, "all 63 displayed illustrative market controls were audited");
 console.log(`\n  ✓ ${auditedMarkets} displayed market controls audited numerically`);
 console.log("\nhomepage illustrative sample numerics: passed\n");
