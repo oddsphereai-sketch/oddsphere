@@ -283,10 +283,30 @@ async function main(): Promise<void> {
       away: payload.outcomeForecast.expectedAwayScore,
       home: payload.outcomeForecast.expectedHomeScore,
     };
-    const independentScore = payload.paidProjectionShadow ? {
+    const storedExactIndependent = payload.exactProviderScoreShadow ? {
+      away: payload.exactProviderScoreShadow.expectedAwayScore,
+      home: payload.exactProviderScoreShadow.expectedHomeScore,
+    } : null;
+    // R32+ fallback rows predate the explicit exact-score shadow. On those rows
+    // the resolver contract guarantees the stored final score is the untouched
+    // exact independent score because target-free market evidence did not act.
+    const inferredExactFallback = !storedExactIndependent &&
+      payload.coverage.forecastTargetExclusion?.status === "incumbent_fallback" &&
+      (payload.decisions.modelPromotionStatus.includes("foundational_no_weight_score") ||
+        payload.decisions.modelPromotionStatus.includes("personnel_"))
+      ? finalScore
+      : null;
+    const independentScore = storedExactIndependent ?? inferredExactFallback ?? (payload.paidProjectionShadow ? {
       away: payload.paidProjectionShadow.expectedAwayScore,
       home: payload.paidProjectionShadow.expectedHomeScore,
-    } : null;
+    } : null);
+    const independentSource = storedExactIndependent
+      ? "stored_exact_provider_shadow"
+      : inferredExactFallback
+        ? "exact_provider_inferred_from_untouched_fallback"
+        : payload.paidProjectionShadow
+          ? "paid_projection_shadow"
+          : null;
     const providerComponentScore = payload.paidProjectionShadow ? {
       away: payload.paidProjectionShadow.awayComponentScore,
       home: payload.paidProjectionShadow.homeComponentScore,
@@ -320,7 +340,9 @@ async function main(): Promise<void> {
             ? "market_reader_neutral_change"
             : finalResult === "loss"
               ? "independent_and_final_same_side_loss"
-              : "independent_and_final_same_side_win";
+              : finalResult === "win"
+                ? "independent_and_final_same_side_win"
+                : "independent_and_final_same_side_neutral";
     const injuryPlayers = payload.injuries?.teams.reduce((sum, team) => sum + team.players.length, 0) ?? null;
     const teamStats = currentSeasonState?.teamStats.filter((row) => row.gameId === payload.game.providerGameId) ?? [];
     const homeStats = teamStats.find((row) => row.team === payload.game.home.abbreviation) ?? null;
@@ -393,6 +415,7 @@ async function main(): Promise<void> {
       actual,
       scores: {
         independent: independentScore,
+        independentSource,
         providerComponent: providerComponentScore,
         calibratedCore: calibratedCoreScore,
         final: finalScore,
@@ -827,7 +850,7 @@ async function main(): Promise<void> {
     componentPopulation: {
       games: [...new Set(componentRows.map((row) => `${row.date}:${row.matchup}`))].length,
       records: componentRows.length,
-      note: "Pure paid-score comparisons are limited to locks that stored the paid projection before the market-informed final score.",
+      note: "Row-scoped comparisons use the stored exact-provider score when available, infer it only for untouched r32+ incumbent-fallback rows, and otherwise retain the historical paid projection shadow.",
       byMarket: Object.fromEntries(MARKETS.map((market) => {
         const values = componentRows.filter((row) => row.market === market);
         return [market, {
@@ -840,9 +863,9 @@ async function main(): Promise<void> {
     independentAutopsy: {
       games: paidScoreGames.length,
       source: {
-        currentIndependent: "opponent DST fantasy-projection points_allowed field",
+        currentIndependent: "row-scoped exact-provider score where stored/inferable; historical paid projection shadow otherwise",
         providerComponent: "sum of projected touchdowns, kicks, returns, and safeties",
-        warning: "Both are provider fantasy projections, not an independently trained OddSphere game model.",
+        warning: "The historical population spans more than one independent-score source; use each row's independentSource before attributing a loss.",
       },
       directions: Object.fromEntries(MARKETS.map((market) => {
         const values = componentRows.filter((row) => row.market === market);
@@ -910,6 +933,11 @@ async function main(): Promise<void> {
     },
     losses,
   };
+  const matchup = process.argv.find((value) => value.startsWith("--matchup="))?.slice("--matchup=".length);
+  if (matchup) {
+    process.stdout.write(`${JSON.stringify(rows.filter((row) => row.matchup === matchup), null, 2)}\n`);
+    return;
+  }
   if (process.argv.includes("--independent-autopsy")) {
     process.stdout.write(`${JSON.stringify(report.independentAutopsy, null, 2)}\n`);
     return;

@@ -100,6 +100,7 @@ import {
   buildNflExactProviderScoreContext,
   NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
 } from "./nflExactProviderScoreRuntime";
+import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
@@ -108,7 +109,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_16_r64_availability_adjusted_starter_authority" as const;
+  "nfl_forward_evidence_writer_2026_10_19_r65_availability_arbitration_shadow" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -573,6 +574,16 @@ export async function runNflForwardEvidenceWriter(args: {
       } : {}),
     });
     const { outcome, production } = resolved;
+    const availabilityArbitrationShadow = exactProviderScore && paidProjectionShadow
+      ? buildNflAvailabilityArbitrationShadow({
+          providerDepth: { away: providerAwayDepth, home: providerHomeDepth },
+          availabilityAdjustedDepth: { away: awayDepth, home: homeDepth },
+          exactProviderScore,
+          playerAwareScore: paidProjectionShadow,
+          targetExcludedProfessionalAuthority: resolved.diagnosticProfessionalAuthority,
+          targetExclusionStatus: resolved.targetExclusion.status,
+        })
+      : null;
     assertFootballCrossMarketCoherence({
       sport: "nfl",
       providerGameId: plan.game.providerGameId,
@@ -642,6 +653,8 @@ export async function runNflForwardEvidenceWriter(args: {
       weather,
       outcomeForecast: outcome,
       ...(paidProjectionShadow ? { paidProjectionShadow } : {}),
+      ...(exactProviderScore ? { exactProviderScoreShadow: exactProviderScore } : {}),
+      ...(availabilityArbitrationShadow ? { availabilityArbitrationShadow } : {}),
       decisions: {
         evaluatedBets: production.evaluatedBets,
         outcomeConfidence: production.outcomeConfidence,

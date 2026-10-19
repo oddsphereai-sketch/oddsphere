@@ -81,6 +81,7 @@ export function resolveNflTargetExcludedProduction(args: {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
   targetExclusion: NonNullable<NflV1WeekOneOutcomeForecast["targetExclusion"]>;
+  diagnosticProfessionalAuthority: NflProfessionalMarketAuthority | null;
 } {
   const buildProduction = (outcomeForecast: NflV1WeekOneOutcomeForecast) =>
     buildNflV1ActionableGradeBundle({
@@ -93,6 +94,7 @@ export function resolveNflTargetExcludedProduction(args: {
       shadowMoneyline: args.shadowMoneyline,
       outcomeForecast,
     });
+  let diagnosticProfessionalAuthority: NflProfessionalMarketAuthority | null = null;
   const fallback = () => {
     const targetExclusion = {
       release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
@@ -104,7 +106,7 @@ export function resolveNflTargetExcludedProduction(args: {
       totalExcludedSportsbooks: [] as string[],
     };
     const outcome = { ...(args.fallbackOutcome ?? args.incumbentOutcome), targetExclusion };
-    return { outcome, production: buildProduction(outcome), targetExclusion };
+    return { outcome, production: buildProduction(outcome), targetExclusion, diagnosticProfessionalAuthority };
   };
   if (!args.shadowMoneyline.footballProjection || !args.current.spread || !args.current.total) {
     return fallback();
@@ -155,6 +157,7 @@ export function resolveNflTargetExcludedProduction(args: {
           total: excluded.total,
         })
       : args.professionalMarketAuthority;
+    diagnosticProfessionalAuthority = professionalMarketAuthority ?? null;
     const outcomeCandidate = (args.marketOutcomeBuilder ?? buildNflMarketEvidenceOutcomeForecast)({
       baseForecast: args.baseOutcome,
       footballHomeMargin: args.shadowMoneyline.footballProjection.projectedHomeMargin,
@@ -189,7 +192,7 @@ export function resolveNflTargetExcludedProduction(args: {
         totalExcludedSportsbooks: anchor.totalExcludedSportsbooks,
       };
       const outcome = { ...outcomeCandidate, targetExclusion };
-      return { outcome, production: buildProduction(outcome), targetExclusion };
+      return { outcome, production: buildProduction(outcome), targetExclusion, diagnosticProfessionalAuthority };
     }
     production = productionCandidate;
     excluded = nextExcluded;
