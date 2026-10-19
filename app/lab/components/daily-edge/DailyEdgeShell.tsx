@@ -62,6 +62,8 @@ import type {
 import type { Sport } from "@/lib/types/domain/Sport";
 import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets";
 import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
+import { eplTeamLogo } from "@/lib/services/epl/eplTeamAssets";
+import { wnbaLogoUrl } from "@/lib/services/wnba/wnbaTeams";
 import { teamPrimaryColor } from "./teamColors";
 import { LockBadge } from "./LockBadge";
 import { DAILY_EDGE_SPORTS } from "../../lib/dailyEdgeSports";
@@ -4446,6 +4448,34 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
   };
 }
 
+const MARKETING_TEAM_DISPLAY_NAMES: Partial<Record<Sport, Record<string, string>>> = {
+  nfl: { BUF: "Buffalo Bills", KC: "Kansas City Chiefs" },
+  cfb: { ORE: "Oregon Ducks", PSU: "Penn State Nittany Lions" },
+};
+
+const MARKETING_CFB_TEAM_LOGOS: Record<string, string> = {
+  ORE: "https://a.espncdn.com/i/teamlogos/ncaa/500/2483.png",
+  PSU: "https://a.espncdn.com/i/teamlogos/ncaa/500/213.png",
+};
+
+function marketingTeamLogo(sport: Sport, abbreviation: string): string | null {
+  const team = abbreviation.toUpperCase();
+  if (sport === "cfb") return MARKETING_CFB_TEAM_LOGOS[team] ?? null;
+  if (sport === "soccer") return eplTeamLogo(team);
+  if (sport === "wnba") return wnbaLogoUrl(team);
+  if (sport === "nfl") return `https://a.espncdn.com/i/teamlogos/nfl/500/${team.toLowerCase()}.png`;
+  if (sport === "nba") {
+    const slug = team === "NYK" ? "ny" : team.toLowerCase();
+    return `https://a.espncdn.com/i/teamlogos/nba/500/${slug}.png`;
+  }
+  if (sport === "nhl") return `https://a.espncdn.com/i/teamlogos/nhl/500/${team.toLowerCase()}.png`;
+  if (sport === "mlb") {
+    const slug = team === "CWS" ? "chw" : team === "ATH" ? "oak" : team.toLowerCase();
+    return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`;
+  }
+  return null;
+}
+
 function marketingPreviewGame(input: {
   id: string;
   sport?: Sport;
@@ -4454,6 +4484,7 @@ function marketingPreviewGame(input: {
   gameTime: string;
   snapshotAt?: string;
   projected: { away: number; home: number };
+  representativeScore?: { away: number; home: number };
   decisionLine: string;
   homeStarter: DailyEdgeGameDto["homeStarter"];
   awayStarter: DailyEdgeGameDto["awayStarter"];
@@ -4471,14 +4502,39 @@ function marketingPreviewGame(input: {
     marketSignal: market.marketSignal,
   });
 
+  const sport = input.sport ?? "mlb";
+  const markets = input.representativeScore
+    ? Object.fromEntries(
+        Object.entries(input.markets).map(([marketKey, market]) => [
+          marketKey,
+          {
+            ...market,
+            keyStats: sport === "mlb" && marketKey === "first_inning"
+              ? market.keyStats
+              : [
+                  ...market.keyStats,
+                  {
+                    label: "Representative final",
+                    awayValue: String(input.representativeScore!.away),
+                    homeValue: String(input.representativeScore!.home),
+                    source: "computed" as const,
+                  },
+                ],
+          },
+        ]),
+      ) as DailyEdgeGameDto["markets"]
+    : input.markets;
+
   return {
     id: input.id,
-    sport: input.sport ?? "mlb",
+    sport,
     external_id: Number.parseInt(input.id.replace(/\D/g, ""), 10) || 1001,
     awayTeam: input.awayTeam,
-    awayTeamLogo: null,
+    awayTeamDisplayName: MARKETING_TEAM_DISPLAY_NAMES[sport]?.[input.awayTeam] ?? null,
+    awayTeamLogo: marketingTeamLogo(sport, input.awayTeam),
     homeTeam: input.homeTeam,
-    homeTeamLogo: null,
+    homeTeamDisplayName: MARKETING_TEAM_DISPLAY_NAMES[sport]?.[input.homeTeam] ?? null,
+    homeTeamLogo: marketingTeamLogo(sport, input.homeTeam),
     gameTime: input.gameTime,
     gameStartMinutes: 19 * 60 + 7,
     scheduledLockAt: input.snapshotAt ?? "2026-08-10T23:07:00.000Z",
@@ -4491,11 +4547,11 @@ function marketingPreviewGame(input: {
     homeStarter: input.homeStarter,
     awayStarter: input.awayStarter,
     predictions: {
-      ml: predictionFromMarket(input.markets.moneyline),
-      total: { ...predictionFromMarket(input.markets.total), line: input.markets.total.line },
-      nrfi: predictionFromMarket(input.markets.first_inning),
+      ml: predictionFromMarket(markets.moneyline),
+      total: { ...predictionFromMarket(markets.total), line: markets.total.line },
+      nrfi: predictionFromMarket(markets.first_inning),
     },
-    markets: input.markets,
+    markets,
     decisionLine: input.decisionLine,
     projected: input.projected,
     footballProjection: input.footballProjection ?? null,
@@ -4524,6 +4580,7 @@ const marketingMlbPreviewGames: DailyEdgeGameDto[] = [
     homeTeam: "TOR",
     gameTime: "7:07 PM",
     projected: { away: 5.0, home: 4.0 },
+    representativeScore: { away: 5, home: 4 },
     decisionLine: "NYM has a clear model edge, strong consensus price movement toward the pick, and sharp-book support.",
     awayStarter: { name: "Nolan McLean", throws: "R" },
     homeStarter: { name: "Kevin Gausman", throws: "R" },
@@ -4647,6 +4704,9 @@ const marketingMlbPreviewGames: DailyEdgeGameDto[] = [
         guidedWatchOut: "The FI price is playable, but the edge needs more separation before it becomes actionable.",
         whyLine: "Driver: modest NRFI model edge despite mild consensus price resistance.",
         riskLine: "The first-inning model is close enough to market that the current price resistance can erase the edge.",
+        keyStats: [
+          { label: "Projected 1st-inning runs", awayValue: null, homeValue: "0.72", source: "computed" },
+        ],
       }),
     },
   }),
@@ -4656,6 +4716,7 @@ const marketingMlbPreviewGames: DailyEdgeGameDto[] = [
     homeTeam: "WSH",
     gameTime: "7:30 PM",
     projected: { away: 4.9, home: 4.2 },
+    representativeScore: { away: 5, home: 4 },
     decisionLine: "ATL has model support, but the odds move keeps it below top-tier.",
     awayStarter: { name: "Spencer Strider", throws: "R" },
     homeStarter: { name: "Jake Irvin", throws: "R" },
@@ -4775,6 +4836,9 @@ const marketingMlbPreviewGames: DailyEdgeGameDto[] = [
         guidedWatchOut: "Price is the cap here.",
         whyLine: "Driver: FI context with limited price value.",
         riskLine: "The FI price leaves limited value cushion.",
+        keyStats: [
+          { label: "Projected 1st-inning runs", awayValue: null, homeValue: "1.18", source: "computed" },
+        ],
       }),
     },
   }),
@@ -4784,6 +4848,7 @@ const marketingMlbPreviewGames: DailyEdgeGameDto[] = [
     homeTeam: "BAL",
     gameTime: "8:05 PM",
     projected: { away: 4.2, home: 5.0 },
+    representativeScore: { away: 4, home: 5 },
     decisionLine: "The Over is interesting, but market friction keeps it on Watchlist.",
     awayStarter: { name: "Davis Martin", throws: "R" },
     homeStarter: { name: "Dean Kremer", throws: "R" },
@@ -4887,6 +4952,9 @@ const marketingMlbPreviewGames: DailyEdgeGameDto[] = [
         guidedWatchOut: "Thin FI edge keeps this below Lean.",
         whyLine: "Driver: starter profile with a small FI edge.",
         riskLine: "Limited value at the current number.",
+        keyStats: [
+          { label: "Projected 1st-inning runs", awayValue: null, homeValue: "0.78", source: "computed" },
+        ],
       }),
     },
   }),
@@ -5171,6 +5239,7 @@ const marketingNbaPreviewGames: DailyEdgeGameDto[] = [
     gameTime: "7:30 PM",
     snapshotAt: "2026-10-18T19:30:00.000Z",
     projected: { away: 113.5, home: 108.0 },
+    representativeScore: { away: 114, home: 108 },
     decisionLine: "BOS owns the stronger projected scoring profile and the clearest market support in this sample.",
     awayStarter: null,
     homeStarter: null,
@@ -5191,6 +5260,7 @@ const marketingNhlPreviewGames: DailyEdgeGameDto[] = [
     gameTime: "9:00 PM",
     snapshotAt: "2026-10-16T19:30:00.000Z",
     projected: { away: 3.8, home: 3.3 },
+    representativeScore: { away: 4, home: 3 },
     decisionLine: "EDM has the stronger scoring projection, while the market trail shows measured support rather than a runaway move.",
     awayStarter: null,
     homeStarter: null,
@@ -5211,6 +5281,7 @@ const marketingWnbaPreviewGames: DailyEdgeGameDto[] = [
     gameTime: "7:00 PM",
     snapshotAt: "2026-08-30T19:30:00.000Z",
     projected: { away: 81.5, home: 77.0 },
+    representativeScore: { away: 82, home: 77 },
     decisionLine: "MIN has the stronger outcome forecast, with consensus movement and sharp-book splits aligned behind it.",
     awayStarter: null,
     homeStarter: null,
