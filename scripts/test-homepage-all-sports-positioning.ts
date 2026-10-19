@@ -4,6 +4,7 @@ const homepage = readFileSync("app/page.tsx", "utf8");
 const dashboardPreview = readFileSync("app/components/HomepageDashboardPrototype.tsx", "utf8");
 const dailyEdgeShell = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
 const actualDailyEdgePreview = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
+const sportSelector = readFileSync("app/lab/components/SportSelector.tsx", "utf8");
 const marketingSample = dailyEdgeShell.slice(
   dailyEdgeShell.indexOf("const marketingMlbPreviewGames"),
   dailyEdgeShell.indexOf("export function MarketingDailyEdgePreviewSurface"),
@@ -42,11 +43,13 @@ check(
     && homepage.includes('title: "The Play Grade is explained"'),
 );
 check(
-  "homepage leads with genuine member overview and market-context captures",
-  homepage.includes("/marketing/daily-edge-member-overview-desktop-consensus-sample.jpg")
-    && homepage.includes("/marketing/daily-edge-member-overview-mobile-consensus-sample.jpg")
+  "homepage leads with the interactive member reader and keeps a genuine market-context capture as support",
+  homepage.includes("<MarketingDailyEdgePreviewSurface />")
     && homepage.includes("/marketing/daily-edge-member-market-context-consensus-sample.jpg")
     && homepage.includes("Actual Daily Edge member interface")
+    && homepage.includes("Genuine member capture")
+    && homepage.includes("grid-cols-[minmax(0,1fr)]")
+    && !homepage.includes("lg:grid-cols-[0.88fr_1.12fr]")
     && !homepage.includes("/marketing/daily-edge-expanded-reader.jpg"),
 );
 check(
@@ -55,6 +58,11 @@ check(
     && dashboardPreview.includes("illustrative sample data")
     && dailyEdgeShell.includes('"Illustrative NFL example dated Oct. 12, 2026."')
     && dailyEdgeShell.includes('"Illustrative MLB example dated Aug. 10, 2026."')
+    && dailyEdgeShell.includes('"Illustrative CFB example dated Oct. 17, 2026."')
+    && dailyEdgeShell.includes('"Illustrative NBA example dated Oct. 18, 2026."')
+    && dailyEdgeShell.includes('"Illustrative NHL example dated Oct. 16, 2026."')
+    && dailyEdgeShell.includes('"Illustrative Premier League example dated Oct. 18, 2026."')
+    && dailyEdgeShell.includes('"Illustrative WNBA example dated Aug. 30, 2026."')
     && dailyEdgeShell.includes("Not a current recommendation or actual result."),
 );
 check(
@@ -85,16 +93,28 @@ check(
     && marketingSample.includes('line: 2.5'),
 );
 check(
-  "interactive sample starts with NFL and exposes only working NFL and MLB sport tabs",
-  dailyEdgeShell.includes('useState<"nfl" | "mlb">("nfl")')
-    && dailyEdgeShell.includes('activePreviewSports={["nfl", "mlb"]}')
+  "interactive sample starts with NFL and every exposed sport has a complete working sample",
+  dailyEdgeShell.includes('useState<MarketingPreviewSport>("nfl")')
+    && dailyEdgeShell.includes('const MARKETING_PREVIEW_SPORTS = ["nfl", "cfb", "nba", "nhl", "mlb", "soccer", "wnba"]')
+    && dailyEdgeShell.includes("activePreviewSports={[...MARKETING_PREVIEW_SPORTS]}")
     && dailyEdgeShell.includes("onEmbeddedSportChange")
+    && ["marketing-nfl-2001", "marketing-cfb-3001", "marketing-nba-4001", "marketing-nhl-5001", "marketing-1001", "marketing-soccer-7001", "marketing-wnba-6001"].every((gameId) => dailyEdgeShell.includes(gameId))
+    && actualDailyEdgePreview.includes('density={sample ? "sample" : "default"}')
+    && actualDailyEdgePreview.includes('density={reader.sample ? "sample" : "compact"}')
+    && sportSelector.includes('"grid min-w-[280px] grid-cols-7 gap-1"')
     && actualDailyEdgePreview.includes('marketingSample ? [] : [{ key: "caution" as const, label: "Caution" }]'),
 );
 check(
   "marketing sample uses the current four Play Grade terms without Caution",
   ["best_angle", "lean", "watchlist", "no_play"].every((grade) => marketingSample.includes(`verdict: "${grade}"`))
     && !marketingSample.includes('verdict: "caution"'),
+);
+check(
+  "illustrative market probability is derived from displayed prices rather than model confidence",
+  dailyEdgeShell.includes("marketingNoVigProbability(input.current, [input.opposingCurrent])")
+    && !dailyEdgeShell.includes("input.confidence - 0.08")
+    && dailyEdgeShell.includes("projected: { away: 113.5, home: 108.0 }")
+    && dailyEdgeShell.includes("projected: { away: 81.5, home: 77.0 }"),
 );
 check(
   "search metadata represents baseball, football, basketball, soccer, and UCL",

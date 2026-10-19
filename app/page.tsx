@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Image, { getImageProps } from "next/image";
+import Image from "next/image";
 import Link from "next/link";
 import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
 import { HomepageTrackingCategoryBoard } from "@/app/components/HomepageTrackingCategoryBoard";
+import { MarketingDailyEdgePreviewSurface } from "@/app/lab/components/daily-edge/DailyEdgeShell";
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
@@ -294,46 +295,6 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
   );
 }
 
-function DailyEdgeOverviewImage() {
-  const common = {
-    alt: "OddSphere Daily Edge member reader showing a sample NYM at TOR matchup, projected score, outcome forecast, market prices, Best Angle Play Grade, and supporting matchup evidence",
-    sizes: "(min-width: 1024px) 70vw, (min-width: 640px) 92vw, 100vw",
-  };
-  const {
-    props: { srcSet: desktopSrcSet },
-  } = getImageProps({
-    ...common,
-    src: "/marketing/daily-edge-member-overview-desktop-consensus-sample.jpg",
-    width: 1240,
-    height: 920,
-    quality: 75,
-    fetchPriority: "high",
-  });
-  const {
-    props: { srcSet: mobileSrcSet, alt: mobileAlt, ...mobileProps },
-  } = getImageProps({
-    ...common,
-    src: "/marketing/daily-edge-member-overview-mobile-consensus-sample.jpg",
-    width: 350,
-    height: 400,
-    quality: 75,
-    fetchPriority: "high",
-  });
-
-  return (
-    <picture>
-      <source media="(min-width: 640px)" srcSet={desktopSrcSet} />
-      <source media="(max-width: 639px)" srcSet={mobileSrcSet} />
-      <img
-        {...mobileProps}
-        alt={mobileAlt}
-        className="h-auto w-full bg-[#07060d] object-cover"
-        style={{ width: "100%", height: "auto" }}
-      />
-    </picture>
-  );
-}
-
 function DailyEdgePreview() {
   return (
     <div aria-label="Daily Edge product preview" className="relative">
@@ -351,29 +312,12 @@ function DailyEdgePreview() {
           </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.72fr)_minmax(290px,0.58fr)] lg:items-start">
-          <figure className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-black/30">
-            <a
-              href="/marketing/daily-edge-member-overview-desktop-consensus-sample.jpg"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open the Daily Edge matchup overview at full size"
-              className="group relative block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
-            >
-              <DailyEdgeOverviewImage />
-              <span className="absolute bottom-3 right-3 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-90 transition group-hover:bg-black group-focus-visible:bg-black">
-                Open full size ↗
-              </span>
-            </a>
-            <figcaption className="border-t border-white/10 p-3 sm:p-4">
-              <p className="text-sm font-black text-white">Matchup overview</p>
-              <p className="mt-1 text-xs leading-relaxed text-gray-400">
-                Predictions, projected score, exact-price decision, Play Grade, and supporting matchup evidence in the member reader.
-              </p>
-            </figcaption>
-          </figure>
+        <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-black/30 p-1 sm:p-2">
+          <MarketingDailyEdgePreviewSurface />
+        </div>
 
-          <figure className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+        <div className="mt-3 grid gap-3 rounded-xl border border-white/10 bg-black/30 p-3 sm:grid-cols-[minmax(180px,0.42fr)_minmax(0,1fr)] sm:items-center sm:p-4">
+          <figure className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-black/30">
             <a
               href="/marketing/daily-edge-member-market-context-consensus-sample.jpg"
               target="_blank"
@@ -386,25 +330,25 @@ function DailyEdgePreview() {
                 alt="Daily Edge market context detail showing consensus price movement, public consensus, sharp-book splits, and a cross-source read"
                 width={450}
                 height={730}
-                sizes="(min-width: 1024px) 28vw, 100vw"
-                className="h-auto w-full bg-[#07060d]"
+                sizes="(min-width: 1024px) 18vw, (min-width: 640px) 32vw, 100vw"
+                className="h-auto max-h-[280px] w-full bg-[#07060d] object-cover object-top sm:max-h-[240px]"
               />
               <span className="absolute bottom-3 right-3 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-90 transition group-hover:bg-black group-focus-visible:bg-black">
                 Open full size ↗
               </span>
             </a>
-            <figcaption className="border-t border-white/10 p-3 sm:p-4">
-              <p className="text-sm font-black text-white">Market context detail</p>
-              <p className="mt-1 text-xs leading-relaxed text-gray-400">
-                Consensus price movement, public consensus, sharp-book information, and the cross-source read in this illustrative example.
-              </p>
-            </figcaption>
           </figure>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-200">Genuine member capture</p>
+            <p className="mt-2 text-sm font-black text-white">Market context detail</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-400">
+              Consensus price movement, public consensus, sharp-book information, and the cross-source read in the current member interface.
+            </p>
+            <p className="mt-3 text-[11px] leading-relaxed text-gray-500">
+              Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result.
+            </p>
+          </div>
         </div>
-
-        <p className="px-1 pt-3 text-[11px] leading-relaxed text-gray-500 sm:px-2">
-          Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result.
-        </p>
       </div>
       <div className="relative mx-auto -mt-1 flex max-w-2xl flex-wrap justify-center gap-2 px-4 pt-4">
         {["Projected score", "Play Grades", "Odds movement", "Public + sharp context"].map((label) => (
@@ -419,14 +363,13 @@ function DailyEdgePreview() {
 
 export async function HomePageContent({ presentation = "current" }: { presentation?: "current" | "candidate" }) {
   const trackingSummary = await getPublicTrackRecordSummary();
-  const candidate = presentation === "candidate";
 
   return (
     <main className="overflow-hidden">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <section className={`mx-auto grid max-w-7xl items-center gap-8 px-4 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10 lg:px-8 ${candidate ? "grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[0.88fr_1.12fr]"}`}>
-        <div className={candidate ? "min-w-0 max-w-4xl" : undefined}>
+      <section data-presentation={presentation} className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] items-center gap-8 px-4 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10 lg:px-8">
+        <div className="min-w-0 max-w-4xl">
           <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
             OddSphere AI · Daily Edge
           </p>

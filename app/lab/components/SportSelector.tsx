@@ -26,8 +26,8 @@ type Props = {
   showPendingState?: boolean;
   /** Surface-only labels; useful when one sport key contains competitions. */
   labelOverrides?: Partial<Record<Sport, string>>;
-  /** Compact, all-visible tab treatment for constrained reader headers. */
-  density?: "default" | "compact";
+  /** Condensed tab treatments for constrained reader headers and embedded samples. */
+  density?: "default" | "compact" | "sample";
   /** Activate before an open modal can refresh or unmount beneath the pointer. */
   activateOnPointerDown?: boolean;
 };
@@ -49,13 +49,17 @@ export default function SportSelector({
   const waitingForSport = pendingSport !== active ? pendingSport : null;
 
   const compact = density === "compact";
+  const sample = density === "sample";
+  const condensed = compact || sample;
 
   return (
-    <div className={compact ? "w-full overflow-x-auto overscroll-x-contain" : "-mx-4 overflow-x-auto sm:mx-0"}>
+    <div className={condensed ? "w-full overflow-x-auto overscroll-x-contain" : "-mx-4 overflow-x-auto sm:mx-0"}>
       <div
         role="tablist"
         aria-label="Sport"
-        className={compact
+        className={sample
+          ? "grid min-w-[280px] grid-cols-7 gap-1"
+          : compact
           ? "flex min-w-max flex-nowrap gap-1"
           : "flex min-w-max gap-2 px-4 pb-2 sm:min-w-0 sm:gap-3 sm:px-0 sm:pb-0"}
       >
@@ -74,7 +78,9 @@ export default function SportSelector({
             onChange(next);
           };
 
-          const base = compact
+          const base = sample
+            ? "relative inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden whitespace-nowrap rounded-lg px-1 py-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1 focus-visible:ring-offset-[#100e18]"
+            : compact
             ? "relative inline-flex min-h-12 min-w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden whitespace-nowrap rounded-lg px-1.5 py-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-1 focus-visible:ring-offset-[#100e18]"
             : "relative inline-flex min-h-16 min-w-[120px] flex-shrink-0 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-xl px-4 py-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#100e18] sm:min-w-0 sm:flex-1 sm:flex-shrink sm:px-5 sm:py-4";
 
@@ -111,21 +117,21 @@ export default function SportSelector({
               }}
               className={`${base} ${stateClasses}`}
             >
-              <span className={compact ? "inline-flex min-w-0 items-center font-black text-[10px]" : "inline-flex items-center gap-2 text-base font-bold sm:text-lg"}>
-                {!compact ? <span className="text-xl sm:text-2xl" aria-hidden="true">
+              <span className={condensed ? "inline-flex min-w-0 items-center font-black text-[9px] sm:text-[10px]" : "inline-flex items-center gap-2 text-base font-bold sm:text-lg"}>
+                {!condensed ? <span className="text-xl sm:text-2xl" aria-hidden="true">
                   {meta.icon}
                 </span> : null}
                 <span>{labelOverrides?.[sport] ?? meta.label}</span>
               </span>
               {isPending ? (
-                <span className={compact ? "inline-flex items-center gap-1 text-[7px] font-black uppercase tracking-wide text-violet-200" : "inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-violet-200"}>
-                  <span className={compact ? "h-1.5 w-1.5 animate-pulse rounded-full bg-violet-300" : "h-2 w-2 animate-pulse rounded-full bg-violet-300 shadow-[0_0_8px_rgba(196,181,253,0.9)]"} />
-                  {compact ? "Open" : "Opening"}
+                <span className={condensed ? "inline-flex items-center gap-1 text-[7px] font-black uppercase tracking-wide text-violet-200" : "inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-violet-200"}>
+                  <span className={condensed ? "h-1.5 w-1.5 animate-pulse rounded-full bg-violet-300" : "h-2 w-2 animate-pulse rounded-full bg-violet-300 shadow-[0_0_8px_rgba(196,181,253,0.9)]"} />
+                  {condensed ? "Open" : "Opening"}
                 </span>
               ) : statusLabel ? (
-                <span className={`inline-flex items-center font-black uppercase ${compact ? "gap-1 text-[7px] tracking-wide" : "gap-1.5 text-[10px] tracking-wider"} ${statusLabel === "Active" ? "text-emerald-300" : "text-gray-500"}`}>
-                  {statusLabel === "Active" ? <span className={compact ? "h-1 w-1 rounded-full bg-emerald-400" : "h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]"} /> : null}
-                  {compact ? <span className="sr-only">{statusLabel}</span> : statusLabel}
+                <span className={`inline-flex items-center font-black uppercase ${condensed ? "gap-1 text-[7px] tracking-wide" : "gap-1.5 text-[10px] tracking-wider"} ${statusLabel === "Active" ? "text-emerald-300" : "text-gray-500"}`}>
+                  {statusLabel === "Active" ? <span className={condensed ? "h-1 w-1 rounded-full bg-emerald-400" : "h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]"} /> : null}
+                  {condensed ? <span className="sr-only">{statusLabel}</span> : statusLabel}
                 </span>
               ) : isLive ? (
                 showCounts ? (
