@@ -1,13 +1,18 @@
 import type { NflPlayerPropsProductionSnapshot } from "./nflPlayerPropsProductionContract";
 
 export const NFL_PLAYER_PROPS_CADENCE_RELEASE =
-  "nfl_player_props_cadence_2026_10_07_r1_state_aware_refresh" as const;
+  "nfl_player_props_cadence_2026_10_19_r2_scheduler_jitter_tolerance" as const;
 
 const FIFTEEN_MINUTES_MS = 15 * 60_000;
 const THIRTY_MINUTES_MS = 30 * 60_000;
 const SIXTY_MINUTES_MS = 60 * 60_000;
 const TWO_HOURS_MS = 2 * 60 * 60_000;
 const SIX_HOURS_MS = 6 * 60 * 60_000;
+// Vercel's quarter-hour heartbeat can arrive a fraction of a second before the
+// timestamp of the preceding completed snapshot. Without a bounded allowance,
+// an hourly refresh due at :21 can miss by milliseconds and wait until :36.
+// Keep this well below the heartbeat interval so it cannot flatten cadence.
+const SCHEDULER_JITTER_TOLERANCE_MS = 1_000;
 
 export type NflPlayerPropsCadencePlan = {
   release: typeof NFL_PLAYER_PROPS_CADENCE_RELEASE;
@@ -61,7 +66,7 @@ export function planNflPlayerPropsRefresh(args: {
       ? THIRTY_MINUTES_MS
       : SIXTY_MINUTES_MS;
   const cadenceMinutes = (cadenceMs / 60_000) as 15 | 30 | 60;
-  if (snapshotAgeMs >= cadenceMs) {
+  if (snapshotAgeMs + SCHEDULER_JITTER_TOLERANCE_MS >= cadenceMs) {
     const reason = cadenceMinutes === 15
       ? "fifteen_minute_refresh_due"
       : cadenceMinutes === 30
