@@ -183,7 +183,7 @@ function SplitPreview({ label, money, tickets }: { label: string; money: number;
   return <div className="mt-3"><div className="flex items-center justify-between text-[9px]"><strong className="text-gray-300">{label}</strong><span className="text-gray-500">Money {money}% · Tickets {tickets}%</span></div><div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-gray-800"><span className="h-full bg-emerald-400" style={{ width: `${money}%` }} /><span className="h-full flex-1 bg-violet-400/35" /></div></div>;
 }
 
-export function HomepageDashboardPrototype({ candidate = false }: { candidate?: boolean }) {
+export function HomepageDashboardPrototype() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -222,9 +222,7 @@ export function HomepageDashboardPrototype({ candidate = false }: { candidate?: 
                   Daily Edge reader
                 </h2>
                 <p className="mt-1 text-xs text-gray-400">
-                  {candidate
-                    ? "See the redesigned OddSphere reader from the slate-level decision through Market Pulse and supporting evidence."
-                    : "This uses the same reader and slate-card components as the member Daily Edge, with safe sample data."}
+                  Interactive sample using the same reader and slate-card components as the member Daily Edge. All matchups, prices, splits, and outcomes shown here are illustrative sample data.
                 </p>
               </div>
               <button

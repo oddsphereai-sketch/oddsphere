@@ -75,13 +75,37 @@ check(
     HOMEPAGE_CATEGORY_TRACKER.includes("<CategoryBars"),
 );
 check(
+  "Homepage consumes the member-safe alternate-line rows for every category window",
+  PUBLIC_CATEGORY_WINDOWS.includes("alternateLinePerformance?.weekly.rows") &&
+    PUBLIC_CATEGORY_WINDOWS.includes("alternateLinePerformance?.monthly.rows") &&
+    PUBLIC_CATEGORY_WINDOWS.includes("alternateLinePerformance?.lifetime.rows") &&
+    PUBLIC_CATEGORY_WINDOWS.includes("alternateLinePerformance?.archives"),
+);
+check(
+  "Homepage nests alternate-line records beneath their matching original-line category",
+  /matchingAlternateRows[\s\S]{0,500}<AlternateLinePerformanceRows rows=\{matchingAlternateRows\} embedded/.test(HOMEPAGE_CATEGORY_TRACKER) &&
+    HOMEPAGE_CATEGORY_TRACKER.includes("Original line"),
+);
+check(
+  "Homepage alternate-line explanation excludes prices, returns, and additional picks",
+  HOMEPAGE_CATEGORY_TRACKER.includes("Same tracked picks at adjusted lines. Prices excluded; not additional independent picks or betting returns."),
+);
+check(
+  "Homepage labels fresh, delayed, incomplete, and unavailable tracking snapshots",
+  PUBLIC_TRACKING_SUMMARY.includes('freshness: "fresh" | "stale" | "unavailable"') &&
+    PUBLIC_TRACKING_SUMMARY.includes('completeness: "complete" | "incomplete" | "unavailable"') &&
+    HOMEPAGE.includes("Showing the latest available delayed tracking snapshot") &&
+    HOMEPAGE.includes("Tracking snapshot temporarily unavailable") &&
+    HOMEPAGE.includes("Alternate-line results are unavailable from this incomplete snapshot"),
+);
+check(
   "Homepage full public tracker does not link visitors into the member portal",
   !/function TrackingPreview[\s\S]{0,7000}href="\/lab\/tracking"/.test(HOMEPAGE) &&
     !HOMEPAGE.includes("Open the full tracker"),
 );
 check(
   "Homepage tracking section does not market the legacy archive",
-  HOMEPAGE.includes("See the record. Then see the reasoning.") &&
+  HOMEPAGE.includes("Explore the tracked results.") &&
     !/function TrackingPreview[\s\S]{0,7000}Legacy archive/.test(HOMEPAGE),
 );
 

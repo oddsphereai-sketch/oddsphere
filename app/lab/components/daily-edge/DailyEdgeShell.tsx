@@ -4292,6 +4292,7 @@ type MarketingPreviewMarketInput = {
   fiMarketBoard?: MarketEdgeDto["fiMarketBoard"];
   lineOpenAmerican?: number | null;
   oddsTrail?: MarketEdgeDto["oddsTrail"];
+  opposingOddsTrail?: MarketEdgeDto["opposingOddsTrail"];
   modelTotal?: number | null;
   marketTotal?: number | null;
   moneyPct?: number | null;
@@ -4380,6 +4381,7 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
     lockedLineAmerican: null,
     lockedLineAt: null,
     oddsTrail: input.oddsTrail ?? [],
+    opposingOddsTrail: input.opposingOddsTrail ?? null,
     marketInterpretation: null,
     marketReadV2: null,
     marketReadV2Enabled: false,
@@ -4439,6 +4441,7 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
 
 function marketingPreviewGame(input: {
   id: string;
+  sport?: "mlb" | "nfl";
   awayTeam: string;
   homeTeam: string;
   gameTime: string;
@@ -4447,6 +4450,7 @@ function marketingPreviewGame(input: {
   homeStarter: DailyEdgeGameDto["homeStarter"];
   awayStarter: DailyEdgeGameDto["awayStarter"];
   markets: DailyEdgeGameDto["markets"];
+  footballProjection?: NonNullable<DailyEdgeGameDto["footballProjection"]>;
 }): DailyEdgeGameDto {
   const predictionFromMarket = (market: MarketEdgeDto): DailyEdgePredictionDto => ({
     pick: market.pick,
@@ -4459,7 +4463,7 @@ function marketingPreviewGame(input: {
 
   return {
     id: input.id,
-    sport: "mlb",
+    sport: input.sport ?? "mlb",
     external_id: Number.parseInt(input.id.replace(/\D/g, ""), 10) || 1001,
     awayTeam: input.awayTeam,
     awayTeamLogo: null,
@@ -4467,11 +4471,11 @@ function marketingPreviewGame(input: {
     homeTeamLogo: null,
     gameTime: input.gameTime,
     gameStartMinutes: 19 * 60 + 7,
-    scheduledLockAt: "2026-07-07T22:07:00.000Z",
+    scheduledLockAt: "2026-08-10T23:07:00.000Z",
     lockState: "open",
     lockedAt: null,
-    updatedAt: "2026-07-07T19:30:00.000Z",
-    generatedAt: "2026-07-07T19:30:00.000Z",
+    updatedAt: "2026-08-10T19:30:00.000Z",
+    generatedAt: "2026-08-10T19:30:00.000Z",
     holdReason: null,
     dataCompleteness: null,
     homeStarter: input.homeStarter,
@@ -4484,6 +4488,7 @@ function marketingPreviewGame(input: {
     markets: input.markets,
     decisionLine: input.decisionLine,
     projected: input.projected,
+    footballProjection: input.footballProjection ?? null,
     sharpSignals: [],
     status: {
       lineupConfirmed: true,
@@ -4500,47 +4505,56 @@ function marketingPreviewGame(input: {
   } as unknown as DailyEdgeGameDto;
 }
 
-const marketingPreviewGames: DailyEdgeGameDto[] = [
+const marketingMlbPreviewGames: DailyEdgeGameDto[] = [
   marketingPreviewGame({
     id: "marketing-1001",
     awayTeam: "NYM",
     homeTeam: "TOR",
     gameTime: "7:07 PM",
     projected: { away: 5.0, home: 4.0 },
-    decisionLine: "NYM has a strong model/value case with movement toward the pick.",
+    decisionLine: "NYM has a clear model edge, strong consensus price movement toward the pick, and sharp-book support.",
     awayStarter: { name: "Nolan McLean", throws: "R" },
     homeStarter: { name: "Kevin Gausman", throws: "R" },
     markets: {
       moneyline: marketingPreviewMarket({
         pick: "NYM",
-        confidence: 0.56,
+        confidence: 0.61,
         verdict: "best_angle",
         grade: "best_signal",
-        modelProb: 0.56,
-        marketFairProb: 0.46,
-        priceAmerican: -104,
-        lineOpenAmerican: 106,
+        modelProb: 0.61,
+        marketFairProb: 0.49,
+        priceAmerican: -102,
+        lineOpenAmerican: 110,
         oddsTrail: [
-          { american: 106, line: null, observedAt: "2026-07-07T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
-          { american: -101, line: null, observedAt: "2026-07-07T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
-          { american: -104, line: null, observedAt: "2026-07-07T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+          { american: 110, line: null, observedAt: "2026-08-10T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: 104, line: null, observedAt: "2026-08-10T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -102, line: null, observedAt: "2026-08-10T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
         ],
-        moneyPct: 60,
-        betsPct: 56,
+        opposingOddsTrail: {
+          side: "home",
+          label: "TOR",
+          stops: [
+            { american: -121, line: null, observedAt: "2026-08-10T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+            { american: -115, line: null, observedAt: "2026-08-10T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+            { american: -108, line: null, observedAt: "2026-08-10T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+          ],
+        },
+        moneyPct: 58,
+        betsPct: 54,
         publicSplits: [
-          { side: "away", label: "NYM", moneyPct: 60, betsPct: 56 },
-          { side: "home", label: "TOR", moneyPct: 40, betsPct: 44 },
+          { side: "away", label: "NYM", moneyPct: 58, betsPct: 54 },
+          { side: "home", label: "TOR", moneyPct: 42, betsPct: 46 },
         ],
         sharpBookSplits: [
-          { side: "away", label: "NYM", moneyPct: 78, betsPct: 37 },
-          { side: "home", label: "TOR", moneyPct: 22, betsPct: 63 },
+          { side: "away", label: "NYM", moneyPct: 79, betsPct: 36 },
+          { side: "home", label: "TOR", moneyPct: 21, betsPct: 64 },
         ],
-        splitsUpdatedAt: "2026-07-07T19:30:00.000Z",
-        sharpUpdatedAt: "2026-07-07T19:21:00.000Z",
-        guidedGuide: "Strong model/value case with a price move toward NYM, though consensus is not fully aligned.",
-        guidedWatchOut: "Consensus is not fully aligned, so late price tightening can reduce the value.",
-        whyLine: "Driver: model win-probability edge, playable price, and movement toward the pick.",
-        riskLine: "Consensus is not fully aligned; price movement late in the day can change the value.",
+        splitsUpdatedAt: "2026-08-10T19:30:00.000Z",
+        sharpUpdatedAt: "2026-08-10T19:21:00.000Z",
+        guidedGuide: "NYM carries the model edge, consensus price movement ran from +110 to -102 toward the pick, and sharp-book money is strongly aligned.",
+        guidedWatchOut: "The consensus price movement has already occurred, so a materially worse price would reduce the value.",
+        whyLine: "Driver: 61% model probability, strong consensus price movement toward NYM, and a 43-point sharp money-to-ticket gap.",
+        riskLine: "The current price remains playable, but late consensus price movement can narrow the edge.",
         keyStats: [
           { label: "Starter ERA", awayValue: "4.03", homeValue: "4.36", source: "computed" },
           { label: "Bullpen Quality", awayValue: "NYM clear edge", homeValue: "TOR below avg", source: "computed" },
@@ -4718,16 +4732,16 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
       moneyline: marketingPreviewMarket({
         pick: "BAL",
         confidence: 0.62,
-        verdict: "caution",
-        grade: "sharp_conflict",
+        verdict: "no_play",
+        grade: "model_only",
         modelProb: 0.62,
         marketFairProb: 0.60,
         priceAmerican: -154,
         lineOpenAmerican: -146,
-        guidedGuide: "Likely winner, but price and market friction keep this in Caution territory.",
-        guidedWatchOut: "The current price limits betting value.",
+        guidedGuide: "The model favors BAL, but the current price does not leave enough value for a play.",
+        guidedWatchOut: "Heavy juice and limited separation keep this at No Play.",
         whyLine: "Driver: win case is present, but value is capped by price.",
-        riskLine: "Heavy juice makes the moneyline less attractive.",
+        riskLine: "Heavy juice removes the value needed for an actionable grade.",
       }),
       total: marketingPreviewMarket({
         pick: "Over",
@@ -4780,7 +4794,177 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
   }),
 ];
 
-const marketingPreviewSnapshot: DailyEdgeResponse = {
+function marketingFootballProjection(
+  awayWinProbability: number,
+  expectedAwayPoints: number,
+  expectedHomePoints: number,
+): NonNullable<DailyEdgeGameDto["footballProjection"]> {
+  return {
+    awayWinProbability,
+    homeWinProbability: 1 - awayWinProbability,
+    expectedAwayPoints,
+    expectedHomePoints,
+    modelRelease: "illustrative_nfl_sample",
+    distributionRelease: "illustrative_nfl_sample",
+    probabilityRelease: "illustrative_nfl_sample",
+    artifactRelease: "illustrative_nfl_sample",
+    representativeScore: {
+      away: Math.round(expectedAwayPoints),
+      home: Math.round(expectedHomePoints),
+    },
+  };
+}
+
+const marketingNflPreviewGames: DailyEdgeGameDto[] = [
+  marketingPreviewGame({
+    id: "marketing-nfl-2001",
+    sport: "nfl",
+    awayTeam: "BUF",
+    homeTeam: "KC",
+    gameTime: "8:20 PM",
+    projected: { away: 27, home: 24 },
+    footballProjection: marketingFootballProjection(0.61, 27.2, 23.8),
+    decisionLine: "BUF has the stronger outcome forecast, clear consensus price support, and a sharp-book money-to-ticket gap in its favor.",
+    awayStarter: null,
+    homeStarter: null,
+    markets: {
+      moneyline: marketingPreviewMarket({
+        pick: "BUF",
+        confidence: 0.61,
+        verdict: "best_angle",
+        grade: "best_signal",
+        modelProb: 0.61,
+        marketFairProb: 0.49,
+        priceAmerican: -102,
+        lineOpenAmerican: 110,
+        oddsTrail: [
+          { american: 110, line: null, observedAt: "2026-10-12T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: 104, line: null, observedAt: "2026-10-12T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -102, line: null, observedAt: "2026-10-12T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        opposingOddsTrail: {
+          side: "home",
+          label: "KC",
+          stops: [
+            { american: -121, line: null, observedAt: "2026-10-12T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+            { american: -115, line: null, observedAt: "2026-10-12T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+            { american: -108, line: null, observedAt: "2026-10-12T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+          ],
+        },
+        moneyPct: 58,
+        betsPct: 54,
+        publicSplits: [
+          { side: "away", label: "BUF", moneyPct: 58, betsPct: 54 },
+          { side: "home", label: "KC", moneyPct: 42, betsPct: 46 },
+        ],
+        sharpBookSplits: [
+          { side: "away", label: "BUF", moneyPct: 79, betsPct: 36 },
+          { side: "home", label: "KC", moneyPct: 21, betsPct: 64 },
+        ],
+        splitsUpdatedAt: "2026-10-12T19:30:00.000Z",
+        sharpUpdatedAt: "2026-10-12T19:21:00.000Z",
+        guidedGuide: "BUF carries the model edge, consensus price movement ran from +110 to -102 toward the pick, and sharp-book money is strongly aligned.",
+        guidedWatchOut: "The move has already crossed through pick'em, so a materially worse price would reduce the value.",
+        whyLine: "Driver: 61% outcome forecast, consensus price movement toward BUF, and a 43-point sharp money-to-ticket gap.",
+        riskLine: "Late price movement can narrow the remaining edge.",
+        keyStats: [
+          { label: "Early-down EPA", awayValue: "+0.12/play", homeValue: "+0.04/play", source: "computed" },
+          { label: "Pressure allowed", awayValue: "27%", homeValue: "34%", source: "computed" },
+        ],
+      }),
+      total: marketingPreviewMarket({
+        pick: "Over",
+        confidence: 0.59,
+        verdict: "lean",
+        grade: "model_only",
+        line: 47.5,
+        modelProb: 0.59,
+        marketFairProb: 0.52,
+        modelTotal: 51,
+        marketTotal: 47.5,
+        priceAmerican: -110,
+        lineOpenAmerican: 100,
+        oddsTrail: [
+          { american: 100, line: 47.5, observedAt: "2026-10-12T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: -104, line: 47.5, observedAt: "2026-10-12T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -110, line: 47.5, observedAt: "2026-10-12T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        opposingOddsTrail: {
+          side: "under",
+          label: "Under 47.5",
+          stops: [
+            { american: -110, line: 47.5, observedAt: "2026-10-12T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+            { american: -106, line: 47.5, observedAt: "2026-10-12T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+            { american: 100, line: 47.5, observedAt: "2026-10-12T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+          ],
+        },
+        publicSplits: [
+          { side: "over", label: "Over", moneyPct: 62, betsPct: 56 },
+          { side: "under", label: "Under", moneyPct: 38, betsPct: 44 },
+        ],
+        sharpBookSplits: [
+          { side: "over", label: "Over", moneyPct: 68, betsPct: 45 },
+          { side: "under", label: "Under", moneyPct: 32, betsPct: 55 },
+        ],
+        splitsUpdatedAt: "2026-10-12T19:30:00.000Z",
+        sharpUpdatedAt: "2026-10-12T19:21:00.000Z",
+        guidedGuide: "The 51-point projection supports Over 47.5, with both consensus movement and sharp-book money leaning the same way.",
+        guidedWatchOut: "The total is price-sensitive if the market climbs above 47.5.",
+        whyLine: "Driver: projected total above the market with confirming price and split context.",
+        riskLine: "A higher number would remove part of the cushion.",
+        keyStats: [
+          { label: "Expected points", awayValue: "27.2", homeValue: "23.8", source: "computed" },
+          { label: "Neutral pace", awayValue: "Top 8", homeValue: "Top 12", source: "computed" },
+        ],
+      }),
+      first_inning: marketingPreviewMarket({
+        pick: "BUF +2.5",
+        confidence: 0.57,
+        verdict: "watchlist",
+        grade: "model_only",
+        line: 2.5,
+        modelProb: 0.57,
+        marketFairProb: 0.53,
+        priceAmerican: -112,
+        lineOpenAmerican: -105,
+        oddsTrail: [
+          { american: -105, line: 2.5, observedAt: "2026-10-12T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: -108, line: 2.5, observedAt: "2026-10-12T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -112, line: 2.5, observedAt: "2026-10-12T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        opposingOddsTrail: {
+          side: "home",
+          label: "KC -2.5",
+          stops: [
+            { american: -105, line: -2.5, observedAt: "2026-10-12T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+            { american: -102, line: -2.5, observedAt: "2026-10-12T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+            { american: 102, line: -2.5, observedAt: "2026-10-12T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+          ],
+        },
+        publicSplits: [
+          { side: "away", label: "BUF +2.5", moneyPct: 57, betsPct: 52 },
+          { side: "home", label: "KC -2.5", moneyPct: 43, betsPct: 48 },
+        ],
+        sharpBookSplits: [
+          { side: "away", label: "BUF +2.5", moneyPct: 65, betsPct: 44 },
+          { side: "home", label: "KC -2.5", moneyPct: 35, betsPct: 56 },
+        ],
+        splitsUpdatedAt: "2026-10-12T19:30:00.000Z",
+        sharpUpdatedAt: "2026-10-12T19:21:00.000Z",
+        guidedGuide: "BUF +2.5 has modest model and market support, but the edge remains below Lean.",
+        guidedWatchOut: "The spread case is thinner than the moneyline read.",
+        whyLine: "Driver: the score distribution keeps BUF inside the number with moderate price support.",
+        riskLine: "A move through +2 would materially reduce the cushion.",
+        keyStats: [
+          { label: "Projected margin", awayValue: "BUF +3.4", homeValue: null, source: "computed" },
+          { label: "Late-down success", awayValue: "46%", homeValue: "42%", source: "computed" },
+        ],
+      }),
+    },
+  }),
+];
+
+const marketingMlbPreviewSnapshot: DailyEdgeResponse = {
   as_of: "2026-08-10T16:30:00.000Z",
   sport: "mlb",
   date: "2026-08-10",
@@ -4789,21 +4973,43 @@ const marketingPreviewSnapshot: DailyEdgeResponse = {
   slateState: "today_published",
   slate_status: "published",
   last_slate_update_at: "2026-08-10T16:30:00.000Z",
-  games: marketingPreviewGames,
+  games: marketingMlbPreviewGames,
+};
+
+const marketingNflPreviewSnapshot: DailyEdgeResponse = {
+  as_of: "2026-10-12T19:30:00.000Z",
+  sport: "nfl",
+  date: "2026-10-12",
+  requested_date: "2026-10-12",
+  fallback_used: false,
+  slateState: "today_published",
+  slate_status: "published",
+  last_slate_update_at: "2026-10-12T19:30:00.000Z",
+  games: marketingNflPreviewGames,
 };
 
 export function MarketingDailyEdgePreviewSurface(): ReactNode {
+  const [sport, setSport] = useState<"nfl" | "mlb">("nfl");
+  const snapshot = sport === "nfl" ? marketingNflPreviewSnapshot : marketingMlbPreviewSnapshot;
   return (
     <Suspense fallback={<div className="min-h-[520px] animate-pulse rounded-xl border border-violet-400/20 bg-[#0A0A0F]" aria-label="Loading interactive Daily Edge preview" />}>
       <div className="rounded-xl border border-violet-400/25 bg-[#0A0A0F] p-3 text-gray-200 sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[10px] leading-relaxed text-gray-300">
+          <strong className="font-black uppercase tracking-[0.15em] text-emerald-200">Interactive sample</strong>
+          <span>{sport === "nfl" ? "Illustrative NFL example dated Oct. 12, 2026." : "Illustrative MLB example dated Aug. 10, 2026."} Not a current recommendation or actual result.</span>
+        </div>
         <ActualDailyEdgePreview
-          snapshot={marketingPreviewSnapshot}
+          snapshot={snapshot}
           history={{}}
           pitcherFirstInningHistory={{}}
-          sport="mlb"
+          sport={sport}
           freshContractRead={false}
           reviewMode={false}
           embeddedSample
+          activePreviewSports={["nfl", "mlb"]}
+          onEmbeddedSportChange={(nextSport) => {
+            if (nextSport === "nfl" || nextSport === "mlb") setSport(nextSport);
+          }}
         />
       </div>
     </Suspense>

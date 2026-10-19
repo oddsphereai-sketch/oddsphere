@@ -11,10 +11,10 @@ export const TRIAL_DISCLOSURE =
   `Try monthly free for 7 days, then ${MONTHLY_PRICE}/month. Annual access is ${ANNUAL_PRICE}/year, billed immediately.`;
 
 export const MONTHLY_TRIAL_DISCLOSURE =
-  `Free for 7 days, then ${MONTHLY_PRICE}/month until canceled.`;
+  `7 days free, then ${MONTHLY_PRICE}/month. Renews automatically unless canceled.`;
 
 export const ANNUAL_BILLING_DISCLOSURE =
-  `${ANNUAL_PRICE} is charged today, then yearly until canceled. No free trial.`;
+  `${ANNUAL_PRICE}/year, billed immediately. No free trial.`;
 
 export const TRIAL_DISCLOSURE_WITH_BILLING =
   `${TRIAL_DISCLOSURE} Billing is handled through Whop.`;

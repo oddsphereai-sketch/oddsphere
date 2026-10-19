@@ -1337,8 +1337,9 @@ check(
     !candidateSource.includes("const resolvedSrc = mlbLogoUrl(label) ?? src"),
 );
 check(
-  "odds movement explicitly renders a named same-book trail",
-  candidateSource.includes('movement.coherentTrail ? "same-book trail"') &&
+  "odds movement distinguishes consensus movement from a named same-book trail",
+  candidateSource.includes('trackedBook?.trim().toLowerCase() === "consensus"') &&
+    candidateSource.includes('consensusMovement ? "consensus price movement" : "same-book trail"') &&
     candidateSource.includes("Group by book—not by point line"),
 );
 check(
@@ -1370,7 +1371,7 @@ check(
 );
 check(
   "soccer movement rows stay on one sportsbook without a secondary cross-book capture",
-  candidateSource.includes('movement.coherentTrail ? "same-book trail"') &&
+  candidateSource.includes('consensusMovement ? "consensus price movement" : "same-book trail"') &&
     !candidateSource.includes("Earlier market capture") &&
     !candidateSource.includes("Different book; not counted as"),
 );

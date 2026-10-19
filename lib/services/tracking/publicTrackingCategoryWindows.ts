@@ -1,3 +1,8 @@
+import type {
+  AlternateLineCategory,
+  AlternateLinePerformance,
+} from "@/lib/services/tracking/alternateLinePerformance";
+
 export type PublicTrackingCategoryMetric = {
   picks: number;
   wins: number;
@@ -20,6 +25,7 @@ export type PublicTrackingCategoryWindow = {
   label: "Weekly" | "Monthly" | "Lifetime";
   rangeLabel: string;
   rows: PublicTrackingCategoryRow[];
+  alternateRows: AlternateLineCategory[];
 };
 
 type FoundationMetric = {
@@ -59,6 +65,7 @@ export type PublicTrackingFoundationSnapshot = {
     to: string;
     bySportMarket: FoundationBucket[];
   };
+  alternateLinePerformance?: AlternateLinePerformance;
   generatedAt?: string;
 };
 
@@ -216,18 +223,24 @@ export function buildPublicTrackingCategoryWindows(
       label: "Weekly",
       rangeLabel: week ? `${formatShortDate(week.from)} → ${formatShortDate(week.to)}` : "This week",
       rows: weeklyRows,
+      alternateRows: snapshot?.alternateLinePerformance?.weekly.rows ?? [],
     },
     {
       key: "monthly",
       label: "Monthly",
       rangeLabel: month ? `${formatShortDate(month.from)} → ${formatShortDate(month.to)}` : "Last 30 days",
       rows: monthlyRows,
+      alternateRows: snapshot?.alternateLinePerformance?.monthly.rows ?? [],
     },
     {
       key: "lifetime",
       label: "Lifetime",
       rangeLabel: "All-time",
       rows: lifetimeRows,
+      alternateRows: [
+        ...(snapshot?.alternateLinePerformance?.lifetime.rows ?? []),
+        ...(snapshot?.alternateLinePerformance?.archives ?? []),
+      ],
     },
   ];
 }
