@@ -64,7 +64,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_15_r56_independent_rushing_yards" as const;
+  "nfl_player_props_writer_2026_10_19_r57_stale_reference_retry" as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -276,7 +276,11 @@ export async function runNflPlayerPropsProductionWriter(args: {
     sharpApiKey: args.sharpApiKey,
     includeReferenceResearch: retainedReferenceOffers === null
       || args.auditSourceAwareMarketReading === true
-      || shouldCaptureNflPlayerPropsReferenceResearch({ now: args.now, previous }),
+      || shouldCaptureNflPlayerPropsReferenceResearch({
+        now: args.now,
+        previous,
+        retainedReferenceOffers: retainedReferenceOffers.offers,
+      }),
     fetchImpl: args.fetchImpl,
   });
   const evidence = await readNflForwardEvidence({ client: args.client, season: args.season, week: args.week });
@@ -565,10 +569,21 @@ export function nflPlayerPropsReferenceEvaluationTime(args: {
 export function shouldCaptureNflPlayerPropsReferenceResearch(args: {
   now: string;
   previous: NflPlayerPropsProductionSnapshot | null;
+  retainedReferenceOffers: readonly Pick<NflPlayerPropsExactOffer, "market" | "observedAt">[];
 }): boolean {
   const now = Date.parse(args.now);
   if (!Number.isFinite(now)) throw new Error("NFL props reference-capture time is invalid.");
   if (!args.previous) return true;
+  // A failed hourly pull must not strand the writer on a stale cache until the
+  // next hourly boundary. The existing state-aware writer cadence is already
+  // bounded; when it wakes again, retry only if the retained qualified lane is
+  // actually unavailable under the same quote-age policy used by evaluation.
+  // Fresh retained Pinnacle/NoVig evidence still keeps ordinary wakes from
+  // multiplying provider calls.
+  if (!nflPlayerPropsSourceAwareReferenceOffersAvailable({
+    offers: args.retainedReferenceOffers,
+    evaluatedAt: args.now,
+  })) return true;
   // The route wakes every 15 minutes. One complete pull per UTC hour captures
   // ordinary movement; an extra pull in the lock window preserves the final
   // pregame comparison without quadrupling the all-day provider load.

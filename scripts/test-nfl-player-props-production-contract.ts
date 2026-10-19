@@ -128,7 +128,7 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r45_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_15_r56_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_19_r57_stale_reference_retry");
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_15_r32_independent_rushing_yards");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -136,11 +136,41 @@ assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 63, "slate/cur
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE, 18);
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE, 1_000);
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM, 113, "collection, current-season state, settlement, and isolated reference capture have one declared incremental-call ceiling");
-assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({ now: "2026-10-15T12:06:00.000Z", previous: unlocked }), true,
+const freshRetainedReferenceOffers = [
+  { market: "receptions" as const, observedAt: "2026-10-15T12:00:00.000Z" },
+];
+const staleRetainedReferenceOffers = [
+  { market: "receptions" as const, observedAt: "2026-10-15T05:59:00.000Z" },
+];
+assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
+  now: "2026-10-15T12:06:00.000Z",
+  previous: unlocked,
+  retainedReferenceOffers: freshRetainedReferenceOffers,
+}), true,
   "the bounded reference lane runs once at the start of each UTC hour");
-assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({ now: "2026-10-15T12:21:00.000Z", previous: unlocked }), false,
+assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
+  now: "2026-10-15T12:21:00.000Z",
+  previous: unlocked,
+  retainedReferenceOffers: freshRetainedReferenceOffers,
+}), false,
   "ordinary fifteen-minute writer wakes do not multiply reference-book calls");
-assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({ now: "2026-09-01T10:50:00.000Z", previous: unlocked }), true,
+assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
+  now: "2026-10-15T12:21:00.000Z",
+  previous: unlocked,
+  retainedReferenceOffers: staleRetainedReferenceOffers,
+}), true,
+  "a later writer wake retries the reference lane when the retained qualified quote is stale");
+assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
+  now: "2026-10-15T12:21:00.000Z",
+  previous: unlocked,
+  retainedReferenceOffers: [],
+}), true,
+  "a later writer wake retries the reference lane when no qualified quote was retained");
+assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
+  now: "2026-09-01T10:50:00.000Z",
+  previous: unlocked,
+  retainedReferenceOffers: freshRetainedReferenceOffers,
+}), true,
   "the reference lane runs again inside the final pre-lock comparison window");
 assert.equal(nflPlayerPropsReferenceEvaluationTime({
   writerStartedAt: "2026-10-15T12:00:00.000Z",
