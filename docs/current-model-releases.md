@@ -3404,8 +3404,8 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_19_r7_executable_quote_identity`
-- Market marriage: `nba_market_marriage_2026_10_19_r7_executable_quote_identity`
+- Model / prediction record: `nba_professional_unified_2026_10_19_r8_complete_line_board`
+- Market marriage: `nba_market_marriage_2026_10_19_r8_complete_line_board`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
 - Internal market reader: `nba_professional_market_reader_2026_10_16_r5_canonical_split_identity`
@@ -3420,6 +3420,16 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 19 r8 release preserves the r7 score, reader, executable-line, calibration, grade, writer,
+lease, cadence, and lock contracts while replacing both NBA current-line reads with the shared bounded
+and deterministic pagination path. The 11-game October 21 slate carried more than PostgREST's default
+1,000 rows after the identity repair; the unpaginated feature and intelligence queries silently omitted
+Phoenix-Portland and Sacramento-Clippers even though production held 118 and 96 rows respectively.
+The r8 reader retrieves the complete game-level board, filters props, and fails closed rather than
+publishing a partial board if its explicit 10,000-row cap is reached. Locked snapshots retain exact
+stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-19-nba-complete-line-board-pagination.md`.
 
 The October 19 r7 release preserves the independent score, categorical market reader, calibration,
 grade thresholds, and exact-price economics while correcting two market-input identity failures for
@@ -3501,7 +3511,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_19_r8_executable_event_identity`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board`
 - NBA member board release: `nba_rolling_member_board_2026_10_16_r2_analyzed_predictions`
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`

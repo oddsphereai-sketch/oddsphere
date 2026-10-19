@@ -22,6 +22,7 @@
 
 import { supabase } from "../../db/supabase";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
+import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
 import { deriveSeriesContext, type PriorGameInput } from "../../automodel/nba/seriesContext";
 import type {
   NbaDataQuality,
@@ -354,17 +355,12 @@ async function runBuild(
 
   // 3) lines for these games (full-game ML / spread / total)
   const gameIds = games.map((g) => g.id);
-  const { data: lineRows, error: linesErr } = await supabase
-    .from("lines")
-    .select(
-      "game_id, market_type, sportsbook, side, line_value, odds_american",
-    )
-    .in("game_id", gameIds)
-    .in("market_type", ["moneyline", "spread", "total"]);
-  if (linesErr !== null) {
-    throw new Error(`buildNbaFeatureSnapshots: lines query failed: ${linesErr.message}`);
-  }
-  const lines: LineRow[] = (lineRows ?? []) as LineRow[];
+  const lines: LineRow[] = await loadCompleteCurrentGameLines({
+    client: supabase,
+    gameIds,
+    marketTypes: ["moneyline", "spread", "total"],
+    context: "buildNbaFeatureSnapshots",
+  });
   const linesByGame = new Map<number, LineRow[]>();
   for (const l of lines) {
     if (l.game_id === null || l.game_id === undefined) continue;

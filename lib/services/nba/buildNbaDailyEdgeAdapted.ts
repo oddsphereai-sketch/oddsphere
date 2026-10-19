@@ -70,6 +70,7 @@ import {
   type NbaPickSideOpenPrices,
 } from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
+import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 import { currentDailyEdgeBoardDate } from "../../dates/slateDate";
 import {
@@ -231,22 +232,13 @@ export async function buildNbaDailyEdgePipeline(
   const linesByExtId = new Map<number, NbaLineRow[]>();
   if ((gameRows ?? []).length > 0) {
     const dbIds = (gameRows ?? []).map((g) => g.id);
-    const { data: lineRows } = await supabase
-      .from("lines")
-      .select(
-        "game_id, market_type, sportsbook, side, line_value, odds_american, fetched_at",
-      )
-      .in("game_id", dbIds)
-      .in("market_type", ["moneyline", "spread", "total"]);
-    for (const l of (lineRows ?? []) as Array<{
-      game_id: number;
-      market_type: string;
-      sportsbook: string;
-      side: string | null;
-      line_value: number | null;
-      odds_american: number | null;
-      fetched_at: string | null;
-    }>) {
+    const lineRows = await loadCompleteCurrentGameLines({
+      client: supabase,
+      gameIds: dbIds,
+      marketTypes: ["moneyline", "spread", "total"],
+      context: "buildNbaDailyEdgePipeline",
+    });
+    for (const l of lineRows) {
       const ext = dbIdToExt.get(l.game_id);
       if (ext === undefined) continue;
       if (isBlockedSportsbook(l.sportsbook)) continue; // never use blocked books (e.g. fliff)
