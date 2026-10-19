@@ -14,6 +14,8 @@ import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
+import type { NflExactProviderIndependentScore } from "./nflExactProviderScoreRuntime";
+import type { NflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_09_01_r6_forecast_value_separation" as const;
@@ -24,7 +26,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_16_r23_availability_adjusted_starter_authority" as const;
+  "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -138,6 +140,10 @@ export type NflForwardEvidencePayload = {
   outcomeForecast: NflV1WeekOneOutcomeForecast;
   /** Internal forward evidence only; no member or tracking reader may consume this field. */
   paidProjectionShadow?: NflPaidProjectionShadow;
+  /** Exact market-free score before the downstream market reader; internal audit evidence only. */
+  exactProviderScoreShadow?: NflExactProviderIndependentScore;
+  /** Prospective injury/player/market agreement diagnostic with zero decision authority. */
+  availabilityArbitrationShadow?: NflAvailabilityArbitrationShadow;
   contextualEvidenceCapture?: NflForwardContextCapture;
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];

@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-17
+Last reviewed: 2026-10-19
 
 ## Cross-sport confidence / execution contract
 
@@ -202,6 +202,20 @@ Last reviewed: 2026-10-17
 - The September 4 denominator release changed no forecast, side, probability, grade policy, actionable count, stake, provider query, schedule, lease, or database schema. Evidence and rollback: `docs/model-audits/2026-09-04-cross-sport-complete-tracking-denominators.md`. The September 19 WNBA r8 change is limited to its explicitly versioned economic denominator handoff described below.
 
 ## NFL Daily Edge generalized weekly production release
+
+### Availability arbitration prospective shadow (r65 writer candidate)
+
+- The model / calibration / decision / grade family remains r28 / r27 / r36 / r36. Future unlocked
+  evidence may additionally store the exact market-free score and
+  `nfl_availability_arbitration_shadow_2026_10_19_r1` under collector / writer
+  `nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow` /
+  `nfl_forward_evidence_writer_2026_10_19_r65_availability_arbitration_shadow`.
+- The shadow observes only verified quarterback replacement plus agreement between the existing
+  player-aware score and target-excluded professional Moneyline authority. It has zero score, side,
+  probability, grade, board, tracking, stake, member, lock, cadence, provider-call, or lease authority.
+  Existing locked payloads remain unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-19-nfl-availability-margin-residual-r1-result.md` and
+  `docs/model-audits/2026-10-19-nfl-availability-arbitration-shadow.md`.
 
 ### Availability-adjusted starter authority (r38 snapshot candidate)
 
