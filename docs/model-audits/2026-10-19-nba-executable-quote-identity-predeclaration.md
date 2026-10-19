@@ -1,7 +1,7 @@
 # NBA executable quote and event identity — predeclaration
 
-Date: 2026-10-19  
-Status: candidate implemented; production verification pending  
+Date: 2026-10-19
+Status: candidate verified; production verification pending
 Base: `819ccedebd00194852610bf77c356b88d4f40f7d`
 
 ## Scope
@@ -72,3 +72,29 @@ not a crashed scheduler.
 - Post-deploy proof that the live reader shows only executable Spread/Total lines, Phoenix-Portland and
   Sacramento-Clippers receive current prices when the provider offers them, release identifiers are
   coherent, the refresh remains healthy, and no locked payload changed.
+
+## Candidate result
+
+The exact current-input replay changed only the two synthetic quarter-point Spread rows before the
+identity refresh could run in production:
+
+- October 20 remained 3 games / 9 markets / 0 actionables. Boston-Detroit recovered from
+  `DET +1.25`, null price, No Market to the offered `DET +1.5` at -104, Watchlist. The other eight
+  rows retained their grade, and there was no actionable promotion or demotion.
+- October 21 remained 11 games / 33 markets / 5 actionables (4 Best Angles and 1 Lean). Watchlists
+  moved from 20 to 22 and No Market from 8 to 6 solely because Utah-Memphis recovered an offered
+  `MEM -1.5` at +102 instead of the synthetic `UTAH +1.25` null-price tuple. That row changed its
+  non-actionable displayed side at the real exact line; the five actionable sides and grades were
+  unchanged. There were zero actionable promotions, zero actionable demotions, and zero
+  nonpositive-EV promotions across both dates.
+
+The provider dry run improved from 10 of 11 to 11 of 11 matched October 21 events after exact alias
+resolution, with fetched rows increasing from 6,239 to 6,786 and canonical rows from 935 to 1,043.
+The restored event is Sacramento-LA Clippers. Phoenix-Portland was already present in the later
+provider payload and requires only the next successful production refresh to replace the older
+published no-market snapshot.
+
+Focused executable-consensus, team-identity, current-board fetch, and rolling-board tests pass.
+Strict TypeScript and `npm run verify:model-change` pass. The combined refresh-cycle source test
+reaches and passes the updated NBA release assertion, then fails on an unrelated stale NHL release
+literal already present on the production base; this NBA change does not alter that NHL contract.
