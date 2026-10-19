@@ -1809,7 +1809,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_10_10_r25_cross_sport_copy_coherence" &&
+    "daily_edge_member_presentation_2026_10_19_r26_mlb_market_scoped_record_overlay" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&
