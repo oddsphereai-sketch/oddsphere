@@ -277,7 +277,7 @@ function DailyEdgeOverviewImage() {
     props: { srcSet: desktopSrcSet },
   } = getImageProps({
     ...common,
-    src: "/marketing/daily-edge-member-overview-desktop-sample.jpg",
+    src: "/marketing/daily-edge-member-overview-desktop-consensus-sample.jpg",
     width: 1240,
     height: 920,
     quality: 75,
@@ -287,7 +287,7 @@ function DailyEdgeOverviewImage() {
     props: { srcSet: mobileSrcSet, alt: mobileAlt, ...mobileProps },
   } = getImageProps({
     ...common,
-    src: "/marketing/daily-edge-member-overview-mobile-sample.jpg",
+    src: "/marketing/daily-edge-member-overview-mobile-consensus-sample.jpg",
     width: 350,
     height: 400,
     quality: 75,
@@ -328,7 +328,7 @@ function DailyEdgePreview() {
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.72fr)_minmax(290px,0.58fr)] lg:items-start">
           <figure className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-black/30">
             <a
-              href="/marketing/daily-edge-member-overview-desktop-sample.jpg"
+              href="/marketing/daily-edge-member-overview-desktop-consensus-sample.jpg"
               target="_blank"
               rel="noreferrer"
               aria-label="Open the Daily Edge matchup overview at full size"
@@ -349,15 +349,15 @@ function DailyEdgePreview() {
 
           <figure className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-black/30">
             <a
-              href="/marketing/daily-edge-member-market-context-sample.jpg"
+              href="/marketing/daily-edge-member-market-context-consensus-sample.jpg"
               target="_blank"
               rel="noreferrer"
               aria-label="Open the Daily Edge market context detail at full size"
               className="group relative block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
             >
               <Image
-                src="/marketing/daily-edge-member-market-context-sample.jpg"
-                alt="Daily Edge market context detail showing moneyline price movement, public consensus, sharp-book splits, and a cross-source read"
+                src="/marketing/daily-edge-member-market-context-consensus-sample.jpg"
+                alt="Daily Edge market context detail showing consensus price movement, public consensus, sharp-book splits, and a cross-source read"
                 width={450}
                 height={730}
                 sizes="(min-width: 1024px) 28vw, 100vw"

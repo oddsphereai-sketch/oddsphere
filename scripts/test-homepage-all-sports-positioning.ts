@@ -42,9 +42,9 @@ check(
 );
 check(
   "homepage leads with genuine member overview and market-context captures",
-  homepage.includes("/marketing/daily-edge-member-overview-desktop-sample.jpg")
-    && homepage.includes("/marketing/daily-edge-member-overview-mobile-sample.jpg")
-    && homepage.includes("/marketing/daily-edge-member-market-context-sample.jpg")
+  homepage.includes("/marketing/daily-edge-member-overview-desktop-consensus-sample.jpg")
+    && homepage.includes("/marketing/daily-edge-member-overview-mobile-consensus-sample.jpg")
+    && homepage.includes("/marketing/daily-edge-member-market-context-consensus-sample.jpg")
     && homepage.includes("Actual Daily Edge member interface")
     && !homepage.includes("/marketing/daily-edge-expanded-reader.jpg"),
 );
