@@ -1,6 +1,7 @@
 import {
   alternateLineOutcome,
   buildAlternateLineCategories,
+  hasVerifiedAlternateLineSource,
 } from "../lib/services/tracking/alternateLinePerformance";
 import type {
   PredictionGradeRow,
@@ -27,8 +28,8 @@ function record(input: Partial<PredictionRecordRow>): PredictionRecordRow {
     game_id: 1,
     external_id: 1,
     sport: "nfl",
-    slate_date: "2026-10-11",
-    game_date: "2026-10-11",
+    slate_date: "2026-10-12",
+    game_date: "2026-10-12T20:00:00.000Z",
     matchup: "AWAY @ HOME",
     market: "total",
     pick: "Over 45.5",
@@ -57,8 +58,9 @@ function record(input: Partial<PredictionRecordRow>): PredictionRecordRow {
     hold_reason: null,
     launch_day: false,
     manual_outcome_expected: false,
-    locked_at: "2026-10-11T12:00:00.000Z",
-    published_at: "2026-10-11T12:00:00.000Z",
+    locked_at: "2026-10-12T12:00:00.000Z",
+    published_at: "2026-10-12T12:00:00.000Z",
+    created_at: "2026-10-12T10:00:00.000Z",
     snapshot_json: null,
     calibration_version: "test",
     ...input,
@@ -82,7 +84,7 @@ function grade(input: Partial<PredictionGradeRow>): PredictionGradeRow {
     actual_total: 44,
     actual_first_inning_runs: null,
     winning_team: "HOME",
-    graded_at: "2026-10-11T23:00:00.000Z",
+    graded_at: "2026-10-12T23:00:00.000Z",
     grade_source: "auto_score_ingest",
     grade_notes: null,
     ...input,
@@ -90,6 +92,21 @@ function grade(input: Partial<PredictionGradeRow>): PredictionGradeRow {
 }
 
 console.log("\n━━━ alternate line performance ━━━\n");
+
+check("A contemporaneously stored pregame line is eligible", hasVerifiedAlternateLineSource(record({})));
+check("A row locked after the scheduled start is ineligible", !hasVerifiedAlternateLineSource(record({ locked_at: "2026-10-12T20:01:00.000Z" })));
+check("A stored line without a selected side is ineligible", !hasVerifiedAlternateLineSource(record({ side: null })));
+const unverifiedRecovery = record({
+  created_at: "2026-10-13T12:00:00.000Z",
+  locked_at: "2026-10-12T19:00:00.000Z",
+  published_at: "2026-10-12T19:00:00.000Z",
+});
+check("A later-created row cannot rely on backdated timestamps alone", !hasVerifiedAlternateLineSource(unverifiedRecovery));
+const verifiedRecovery = {
+  ...unverifiedRecovery,
+  alternate_line_evidence_sha256: "a".repeat(64),
+} as PredictionRecordRow;
+check("A later recovery requires both pregame publication and hashed evidence", hasVerifiedAlternateLineSource(verifiedRecovery));
 
 const over = record({ side: "over", line_value: 45.5 });
 const overGrade = grade({ actual_total: 44 });
@@ -107,6 +124,18 @@ check("Spread retains the locked-line loss at delta 0", alternateLineOutcome(spr
 check("Spread adds points to the selected team's locked handicap", alternateLineOutcome(spread, spreadGrade, 3) === "win");
 
 const categories = buildAlternateLineCategories([
+  {
+    record: record({
+      id: 99,
+      slate_date: "2026-10-11",
+      game_date: "2026-10-11T20:00:00.000Z",
+      locked_at: "2026-10-11T12:00:00.000Z",
+      published_at: "2026-10-11T12:00:00.000Z",
+      created_at: "2026-10-11T10:00:00.000Z",
+    }),
+    grade: grade({ prediction_record_id: 99 }),
+    displaySport: "nfl",
+  },
   { record: over, grade: overGrade, displaySport: "nfl" },
   { record: under, grade: underGrade, displaySport: "nfl" },
   { record: spread, grade: spreadGrade, displaySport: "nfl" },
@@ -114,8 +143,9 @@ const categories = buildAlternateLineCategories([
 const total = categories.find((row) => row.market === "total");
 const spreadCategory = categories.find((row) => row.market === "spread");
 check("NFL Total exposes +3 and +6 point records", total?.adjustments.map((row) => row.label).join(",") === "+3 POINTS,+6 POINTS");
-check("Same-sample main line preserves stored grades", total?.original.losses === 2 && total.original.wins === 0);
-check("Favorable +3 Total regrade converts both test losses", total?.adjustments[0]?.metrics.wins === 2);
+check("Same-sample main line preserves stored grades", total?.original.losses === 3 && total.original.wins === 0);
+check("Older data-backed rows remain eligible", total?.original.settled === 3 && total.coverageFrom === "2026-10-11");
+check("Favorable +3 Total regrade converts all three test losses", total?.adjustments[0]?.metrics.wins === 3);
 check("NFL Spread exposes +3 and +6 point records", spreadCategory?.adjustments.map((row) => row.label).join(",") === "+3 POINTS,+6 POINTS");
 
 const roundingRows = Array.from({ length: 13 }, (_, index) => {
@@ -143,7 +173,16 @@ check("A delta-0 disagreement never reinterprets an immutable stored grade", mis
 
 const ucl = buildAlternateLineCategories([
   {
-    record: record({ id: 4, sport: "soccer", slate_date: "2026-09-08", line_value: 2.5 }),
+    record: record({
+      id: 4,
+      sport: "soccer",
+      slate_date: "2026-09-08",
+      game_date: "2026-09-08T20:00:00.000Z",
+      line_value: 2.5,
+      locked_at: "2026-09-08T19:00:00.000Z",
+      published_at: null,
+      created_at: "2026-09-08T18:00:00.000Z",
+    }),
     grade: grade({ prediction_record_id: 4, actual_home_score: 2, actual_away_score: 1, actual_total: 3, result: "win", win: true, loss: false }),
     displaySport: "ucl",
   },
