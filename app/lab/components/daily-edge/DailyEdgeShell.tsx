@@ -4444,16 +4444,19 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
 
 function marketingPreviewGame(input: {
   id: string;
-  sport?: "mlb" | "nfl";
+  sport?: Sport;
   awayTeam: string;
   homeTeam: string;
   gameTime: string;
+  snapshotAt?: string;
   projected: { away: number; home: number };
   decisionLine: string;
   homeStarter: DailyEdgeGameDto["homeStarter"];
   awayStarter: DailyEdgeGameDto["awayStarter"];
   markets: DailyEdgeGameDto["markets"];
   footballProjection?: NonNullable<DailyEdgeGameDto["footballProjection"]>;
+  soccerProjection?: NonNullable<DailyEdgeGameDto["soccerProjection"]>;
+  soccerCompetitionContext?: NonNullable<DailyEdgeGameDto["soccerCompetitionContext"]>;
 }): DailyEdgeGameDto {
   const predictionFromMarket = (market: MarketEdgeDto): DailyEdgePredictionDto => ({
     pick: market.pick,
@@ -4474,11 +4477,11 @@ function marketingPreviewGame(input: {
     homeTeamLogo: null,
     gameTime: input.gameTime,
     gameStartMinutes: 19 * 60 + 7,
-    scheduledLockAt: "2026-08-10T23:07:00.000Z",
+    scheduledLockAt: input.snapshotAt ?? "2026-08-10T23:07:00.000Z",
     lockState: "open",
     lockedAt: null,
-    updatedAt: "2026-08-10T19:30:00.000Z",
-    generatedAt: "2026-08-10T19:30:00.000Z",
+    updatedAt: input.snapshotAt ?? "2026-08-10T19:30:00.000Z",
+    generatedAt: input.snapshotAt ?? "2026-08-10T19:30:00.000Z",
     holdReason: null,
     dataCompleteness: null,
     homeStarter: input.homeStarter,
@@ -4492,6 +4495,8 @@ function marketingPreviewGame(input: {
     decisionLine: input.decisionLine,
     projected: input.projected,
     footballProjection: input.footballProjection ?? null,
+    soccerProjection: input.soccerProjection ?? null,
+    soccerCompetitionContext: input.soccerCompetitionContext ?? null,
     sharpSignals: [],
     status: {
       lineupConfirmed: true,
@@ -4801,16 +4806,17 @@ function marketingFootballProjection(
   awayWinProbability: number,
   expectedAwayPoints: number,
   expectedHomePoints: number,
+  release = "illustrative_nfl_sample",
 ): NonNullable<DailyEdgeGameDto["footballProjection"]> {
   return {
     awayWinProbability,
     homeWinProbability: 1 - awayWinProbability,
     expectedAwayPoints,
     expectedHomePoints,
-    modelRelease: "illustrative_nfl_sample",
-    distributionRelease: "illustrative_nfl_sample",
-    probabilityRelease: "illustrative_nfl_sample",
-    artifactRelease: "illustrative_nfl_sample",
+    modelRelease: release,
+    distributionRelease: release,
+    probabilityRelease: release,
+    artifactRelease: release,
     representativeScore: {
       away: Math.round(expectedAwayPoints),
       home: Math.round(expectedHomePoints),
@@ -4967,6 +4973,205 @@ const marketingNflPreviewGames: DailyEdgeGameDto[] = [
   }),
 ];
 
+type MarketingTwoWaySide = "home" | "away" | "over" | "under";
+
+function marketingSampleMarket(input: {
+  date: string;
+  pick: string;
+  opposingPick: string;
+  pickSide: MarketingTwoWaySide;
+  opposingSide: MarketingTwoWaySide;
+  confidence: number;
+  verdict: Exclude<VerdictKey, "caution">;
+  opening: number;
+  prior: number;
+  current: number;
+  opposingOpening: number;
+  opposingPrior: number;
+  opposingCurrent: number;
+  line?: number | null;
+  opposingLine?: number | null;
+  modelTotal?: number | null;
+  marketTotal?: number | null;
+  guide: string;
+  watchOut: string;
+  keyStats?: MarketEdgeDto["keyStats"];
+}): MarketEdgeDto {
+  const observedAt = (hour: string) => `${input.date}T${hour}:00.000Z`;
+  const pickMoneyPct = input.verdict === "best_angle" ? 68 : input.verdict === "lean" ? 62 : input.verdict === "watchlist" ? 57 : 52;
+  const pickBetsPct = input.verdict === "best_angle" ? 53 : input.verdict === "lean" ? 55 : input.verdict === "watchlist" ? 52 : 51;
+  const sharpMoneyPct = input.verdict === "best_angle" ? 78 : input.verdict === "lean" ? 69 : input.verdict === "watchlist" ? 61 : 51;
+  const sharpBetsPct = input.verdict === "best_angle" ? 38 : input.verdict === "lean" ? 46 : input.verdict === "watchlist" ? 50 : 52;
+  const pickLine = input.line ?? null;
+  const opposingLine = input.opposingLine ?? (pickLine === null ? null : -pickLine);
+
+  return marketingPreviewMarket({
+    pick: input.pick,
+    confidence: input.confidence,
+    verdict: input.verdict,
+    grade: input.verdict === "best_angle" ? "best_signal" : "model_only",
+    line: pickLine,
+    modelProb: input.confidence,
+    marketFairProb: Math.max(0.42, input.confidence - 0.08),
+    modelTotal: input.modelTotal,
+    marketTotal: input.marketTotal,
+    priceAmerican: input.current,
+    lineOpenAmerican: input.opening,
+    oddsTrail: [
+      { american: input.opening, line: pickLine, observedAt: observedAt("18:00"), sportsbook: "consensus", source: "line_history", label: "first" },
+      { american: input.prior, line: pickLine, observedAt: observedAt("19:00"), sportsbook: "consensus", source: "line_history", label: "move" },
+      { american: input.current, line: pickLine, observedAt: observedAt("19:30"), sportsbook: "consensus", source: "current_line", label: "current" },
+    ],
+    opposingOddsTrail: {
+      side: input.opposingSide,
+      label: input.opposingPick,
+      stops: [
+        { american: input.opposingOpening, line: opposingLine, observedAt: observedAt("18:00"), sportsbook: "consensus", source: "line_history", label: "first" },
+        { american: input.opposingPrior, line: opposingLine, observedAt: observedAt("19:00"), sportsbook: "consensus", source: "line_history", label: "move" },
+        { american: input.opposingCurrent, line: opposingLine, observedAt: observedAt("19:30"), sportsbook: "consensus", source: "current_line", label: "current" },
+      ],
+    },
+    moneyPct: pickMoneyPct,
+    betsPct: pickBetsPct,
+    publicSplits: [
+      { side: input.pickSide, label: input.pick, moneyPct: pickMoneyPct, betsPct: pickBetsPct },
+      { side: input.opposingSide, label: input.opposingPick, moneyPct: 100 - pickMoneyPct, betsPct: 100 - pickBetsPct },
+    ],
+    sharpBookSplits: [
+      { side: input.pickSide, label: input.pick, moneyPct: sharpMoneyPct, betsPct: sharpBetsPct },
+      { side: input.opposingSide, label: input.opposingPick, moneyPct: 100 - sharpMoneyPct, betsPct: 100 - sharpBetsPct },
+    ],
+    splitsUpdatedAt: observedAt("19:30"),
+    sharpUpdatedAt: observedAt("19:21"),
+    guidedGuide: input.guide,
+    guidedWatchOut: input.watchOut,
+    whyLine: `Driver: ${input.guide}`,
+    riskLine: input.watchOut,
+    keyStats: input.keyStats,
+  });
+}
+
+const marketingCfbPreviewGames: DailyEdgeGameDto[] = [
+  marketingPreviewGame({
+    id: "marketing-cfb-3001",
+    sport: "cfb",
+    awayTeam: "ORE",
+    homeTeam: "PSU",
+    gameTime: "7:30 PM",
+    snapshotAt: "2026-10-17T19:30:00.000Z",
+    projected: { away: 31, home: 27 },
+    footballProjection: marketingFootballProjection(0.60, 30.8, 26.7, "illustrative_cfb_sample"),
+    decisionLine: "ORE has the stronger score forecast, with consensus price movement and sharp-book money supporting the read.",
+    awayStarter: null,
+    homeStarter: null,
+    markets: {
+      moneyline: marketingSampleMarket({ date: "2026-10-17", pick: "ORE", opposingPick: "PSU", pickSide: "away", opposingSide: "home", confidence: 0.60, verdict: "best_angle", opening: 108, prior: 103, current: -101, opposingOpening: -119, opposingPrior: -113, opposingCurrent: -109, guide: "ORE combines a 60% outcome forecast with consensus movement toward the pick and a clear sharp-book money gap.", watchOut: "A materially worse price would reduce the remaining edge.", keyStats: [{ label: "Explosive-play rate", awayValue: "16%", homeValue: "11%", source: "computed" }, { label: "Pressure allowed", awayValue: "24%", homeValue: "31%", source: "computed" }] }),
+      total: marketingSampleMarket({ date: "2026-10-17", pick: "Over", opposingPick: "Under 53.5", pickSide: "over", opposingSide: "under", confidence: 0.58, verdict: "lean", opening: 100, prior: -105, current: -110, opposingOpening: -110, opposingPrior: -105, opposingCurrent: 100, line: 53.5, opposingLine: 53.5, modelTotal: 57.5, marketTotal: 53.5, guide: "The 57.5-point projection supports Over 53.5, and consensus pricing moved in the same direction.", watchOut: "The cushion becomes thinner above 54.5." }),
+      first_inning: marketingSampleMarket({ date: "2026-10-17", pick: "ORE +2.5", opposingPick: "PSU -2.5", pickSide: "away", opposingSide: "home", confidence: 0.56, verdict: "watchlist", opening: -104, prior: -108, current: -112, opposingOpening: -106, opposingPrior: -102, opposingCurrent: 102, line: 2.5, opposingLine: -2.5, guide: "The score distribution keeps ORE inside +2.5, with modest consensus price support.", watchOut: "The spread edge is thinner than the moneyline read." }),
+    },
+  }),
+];
+
+const marketingNbaPreviewGames: DailyEdgeGameDto[] = [
+  marketingPreviewGame({
+    id: "marketing-nba-4001",
+    sport: "nba",
+    awayTeam: "BOS",
+    homeTeam: "NYK",
+    gameTime: "7:30 PM",
+    snapshotAt: "2026-10-18T19:30:00.000Z",
+    projected: { away: 116, home: 111 },
+    decisionLine: "BOS owns the stronger projected scoring profile and the clearest market support in this sample.",
+    awayStarter: null,
+    homeStarter: null,
+    markets: {
+      moneyline: marketingSampleMarket({ date: "2026-10-18", pick: "BOS", opposingPick: "NYK", pickSide: "away", opposingSide: "home", confidence: 0.62, verdict: "best_angle", opening: 106, prior: 101, current: -102, opposingOpening: -117, opposingPrior: -111, opposingCurrent: -108, guide: "BOS pairs a 62% model probability with consensus movement toward the pick and a strong sharp-book money-to-ticket gap.", watchOut: "Late injury news could change both the projection and the price.", keyStats: [{ label: "Half-court offense", awayValue: "Top 4", homeValue: "Top 12", source: "computed" }, { label: "Turnover rate", awayValue: "11.8%", homeValue: "13.9%", source: "computed" }] }),
+      total: marketingSampleMarket({ date: "2026-10-18", pick: "Under", opposingPick: "Over 224.5", pickSide: "under", opposingSide: "over", confidence: 0.58, verdict: "lean", opening: 102, prior: -104, current: -108, opposingOpening: -112, opposingPrior: -106, opposingCurrent: -102, line: 224.5, opposingLine: 224.5, modelTotal: 221.5, marketTotal: 224.5, guide: "The 221.5-point projection supports Under 224.5, and consensus pricing moved toward the Under.", watchOut: "An unexpectedly fast pace would challenge the total read." }),
+      first_inning: marketingSampleMarket({ date: "2026-10-18", pick: "BOS +2.5", opposingPick: "NYK -2.5", pickSide: "away", opposingSide: "home", confidence: 0.57, verdict: "watchlist", opening: -104, prior: -108, current: -112, opposingOpening: -106, opposingPrior: -102, opposingCurrent: 102, line: 2.5, opposingLine: -2.5, guide: "BOS +2.5 has score-distribution support, but the spread edge is not as clean as the moneyline.", watchOut: "This spread is model context and not part of official tracking." }),
+    },
+  }),
+];
+
+const marketingNhlPreviewGames: DailyEdgeGameDto[] = [
+  marketingPreviewGame({
+    id: "marketing-nhl-5001",
+    sport: "nhl",
+    awayTeam: "EDM",
+    homeTeam: "COL",
+    gameTime: "9:00 PM",
+    snapshotAt: "2026-10-16T19:30:00.000Z",
+    projected: { away: 4, home: 3 },
+    decisionLine: "EDM has the stronger scoring projection, while the market trail shows measured support rather than a runaway move.",
+    awayStarter: null,
+    homeStarter: null,
+    markets: {
+      moneyline: marketingSampleMarket({ date: "2026-10-16", pick: "EDM", opposingPick: "COL", pickSide: "away", opposingSide: "home", confidence: 0.59, verdict: "lean", opening: 112, prior: 107, current: 102, opposingOpening: -123, opposingPrior: -117, opposingCurrent: -112, guide: "EDM has a 59% model probability, consensus movement toward the pick, and supporting sharp-book money.", watchOut: "Goalie confirmation remains the biggest sensitivity.", keyStats: [{ label: "Expected-goal share", awayValue: "55%", homeValue: "50%", source: "computed" }, { label: "Power play", awayValue: "26%", homeValue: "21%", source: "computed" }] }),
+      total: marketingSampleMarket({ date: "2026-10-16", pick: "Over", opposingPick: "Under 6.5", pickSide: "over", opposingSide: "under", confidence: 0.57, verdict: "watchlist", opening: 100, prior: -105, current: -109, opposingOpening: -110, opposingPrior: -105, opposingCurrent: -101, line: 6.5, opposingLine: 6.5, modelTotal: 7.1, marketTotal: 6.5, guide: "The 7.1-goal projection leans Over 6.5, with modest consensus price support.", watchOut: "A confirmed elite goalie matchup would lower confidence." }),
+      first_inning: marketingSampleMarket({ date: "2026-10-16", pick: "EDM +1.5", opposingPick: "COL -1.5", pickSide: "away", opposingSide: "home", confidence: 0.55, verdict: "no_play", opening: -135, prior: -140, current: -145, opposingOpening: 115, opposingPrior: 120, opposingCurrent: 125, line: 1.5, opposingLine: -1.5, guide: "EDM +1.5 is directionally supported, but the heavy price removes the value needed for an actionable grade.", watchOut: "The current puck-line price is the cap." }),
+    },
+  }),
+];
+
+const marketingWnbaPreviewGames: DailyEdgeGameDto[] = [
+  marketingPreviewGame({
+    id: "marketing-wnba-6001",
+    sport: "wnba",
+    awayTeam: "MIN",
+    homeTeam: "NYL",
+    gameTime: "7:00 PM",
+    snapshotAt: "2026-08-30T19:30:00.000Z",
+    projected: { away: 84, home: 80 },
+    decisionLine: "MIN has the stronger outcome forecast, with consensus movement and sharp-book splits aligned behind it.",
+    awayStarter: null,
+    homeStarter: null,
+    markets: {
+      moneyline: marketingSampleMarket({ date: "2026-08-30", pick: "MIN", opposingPick: "NYL", pickSide: "away", opposingSide: "home", confidence: 0.61, verdict: "best_angle", opening: 108, prior: 103, current: -101, opposingOpening: -119, opposingPrior: -113, opposingCurrent: -109, guide: "MIN combines a 61% model probability with consensus movement toward the pick and a pronounced sharp-book money gap.", watchOut: "Late availability news can move this market quickly.", keyStats: [{ label: "Net rating", awayValue: "+8.6", homeValue: "+3.1", source: "computed" }, { label: "Rebound rate", awayValue: "52%", homeValue: "48%", source: "computed" }] }),
+      total: marketingSampleMarket({ date: "2026-08-30", pick: "Under", opposingPick: "Over 161.5", pickSide: "under", opposingSide: "over", confidence: 0.58, verdict: "lean", opening: 100, prior: -105, current: -110, opposingOpening: -110, opposingPrior: -105, opposingCurrent: 100, line: 161.5, opposingLine: 161.5, modelTotal: 158.5, marketTotal: 161.5, guide: "The 158.5-point projection supports Under 161.5, and consensus pricing moved in the same direction.", watchOut: "Efficient transition scoring would pressure the Under." }),
+      first_inning: marketingSampleMarket({ date: "2026-08-30", pick: "MIN +2.5", opposingPick: "NYL -2.5", pickSide: "away", opposingSide: "home", confidence: 0.57, verdict: "watchlist", opening: -105, prior: -108, current: -112, opposingOpening: -105, opposingPrior: -102, opposingCurrent: 102, line: 2.5, opposingLine: -2.5, guide: "The projection keeps MIN inside +2.5, with moderate consensus support.", watchOut: "The spread edge is narrower than the moneyline case." }),
+    },
+  }),
+];
+
+const marketingSoccerPreviewGames: DailyEdgeGameDto[] = [
+  marketingPreviewGame({
+    id: "marketing-soccer-7001",
+    sport: "soccer",
+    awayTeam: "LIV",
+    homeTeam: "ARS",
+    gameTime: "11:30 AM",
+    snapshotAt: "2026-10-18T15:30:00.000Z",
+    projected: { away: 1, home: 2 },
+    decisionLine: "ARS has the stronger regulation-time outlook, with supportive consensus movement and sharp-book money.",
+    awayStarter: null,
+    homeStarter: null,
+    soccerCompetitionContext: { competition: "english_premier_league", stage: null, leg: null, aggregateBefore: null, neutralVenue: false, regulationTime: true, advancementMarket: false, provenance: "illustrative sample" },
+    soccerProjection: {
+      matchResultOutlook: { expectedGoals: { away: 1.2, home: 1.8 }, likelyScore: { away: 1, home: 2 }, likelyScoreProbability: 0.12, medianTotal: 3, mostLikelyTotal: 3 },
+      expectedGoals: { away: 1.2, home: 1.8 },
+      goalOutlookProbabilities: { home: 0.56, draw: 0.25, away: 0.19, over25: 0.58, under25: 0.42, bttsYes: 0.57, bttsNo: 0.43 },
+      likelyScore: { away: 1, home: 2 },
+      likelyScoreProbability: 0.12,
+      representativeScore: { away: 1, home: 2 },
+      representativeScoreProbability: 0.12,
+      medianTotal: 3,
+      mostLikelyTotal: 3,
+    },
+    markets: {
+      moneyline: marketingPreviewMarket({
+        pick: "home", confidence: 0.56, verdict: "best_angle", grade: "best_signal", modelProb: 0.56, marketFairProb: 0.47, priceAmerican: 110, lineOpenAmerican: 125,
+        oddsTrail: [{ american: 125, line: null, observedAt: "2026-10-18T14:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" }, { american: 118, line: null, observedAt: "2026-10-18T15:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" }, { american: 110, line: null, observedAt: "2026-10-18T15:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" }],
+        publicSplits: [{ side: "home", label: "ARS", moneyPct: 61, betsPct: 52 }, { side: "draw", label: "Draw", moneyPct: 17, betsPct: 20 }, { side: "away", label: "LIV", moneyPct: 22, betsPct: 28 }],
+        sharpBookSplits: [{ side: "home", label: "ARS", moneyPct: 72, betsPct: 39 }, { side: "draw", label: "Draw", moneyPct: 12, betsPct: 21 }, { side: "away", label: "LIV", moneyPct: 16, betsPct: 40 }],
+        splitsUpdatedAt: "2026-10-18T15:30:00.000Z", sharpUpdatedAt: "2026-10-18T15:21:00.000Z",
+        guidedGuide: "ARS has a 56% regulation-time model probability, consensus movement from +125 to +110, and sharp-book money aligned with the home side.", guidedWatchOut: "A draw remains the largest single alternative outcome.", whyLine: "Driver: coherent home-win projection, supportive consensus movement, and a 33-point sharp money-to-ticket gap.", riskLine: "The three-way market retains meaningful draw risk.",
+        keyStats: [{ label: "Expected goals", awayValue: "1.2", homeValue: "1.8", source: "computed" }, { label: "Box entries", awayValue: "23", homeValue: "31", source: "computed" }],
+      }),
+      total: marketingSampleMarket({ date: "2026-10-18", pick: "Over", opposingPick: "Under 2.5", pickSide: "over", opposingSide: "under", confidence: 0.58, verdict: "lean", opening: -102, prior: -106, current: -110, opposingOpening: -108, opposingPrior: -104, opposingCurrent: 100, line: 2.5, opposingLine: 2.5, modelTotal: 3.0, marketTotal: 2.5, guide: "The three-goal projection supports Over 2.5, and consensus pricing moved toward the Over.", watchOut: "Finishing variance is the main risk at this number." }),
+      first_inning: marketingSampleMarket({ date: "2026-10-18", pick: "Yes", opposingPick: "No", pickSide: "over", opposingSide: "under", confidence: 0.57, verdict: "watchlist", opening: -105, prior: -110, current: -115, opposingOpening: -105, opposingPrior: 100, opposingCurrent: 105, guide: "Both Teams To Score: Yes has modest model and consensus support.", watchOut: "The edge is not wide enough to move above Watchlist." }),
+    },
+  }),
+];
+
 const marketingMlbPreviewSnapshot: DailyEdgeResponse = {
   as_of: "2026-08-10T16:30:00.000Z",
   sport: "mlb",
@@ -4991,28 +5196,66 @@ const marketingNflPreviewSnapshot: DailyEdgeResponse = {
   games: marketingNflPreviewGames,
 };
 
+const marketingCfbPreviewSnapshot: DailyEdgeResponse = {
+  as_of: "2026-10-17T19:30:00.000Z", sport: "cfb", date: "2026-10-17", requested_date: "2026-10-17", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-17T19:30:00.000Z", games: marketingCfbPreviewGames,
+};
+
+const marketingNbaPreviewSnapshot: DailyEdgeResponse = {
+  as_of: "2026-10-18T19:30:00.000Z", sport: "nba", date: "2026-10-18", requested_date: "2026-10-18", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-18T19:30:00.000Z", games: marketingNbaPreviewGames,
+};
+
+const marketingNhlPreviewSnapshot: DailyEdgeResponse = {
+  as_of: "2026-10-16T19:30:00.000Z", sport: "nhl", date: "2026-10-16", requested_date: "2026-10-16", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-16T19:30:00.000Z", games: marketingNhlPreviewGames,
+};
+
+const marketingSoccerPreviewSnapshot: DailyEdgeResponse = {
+  as_of: "2026-10-18T15:30:00.000Z", sport: "soccer", date: "2026-10-18", requested_date: "2026-10-18", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-18T15:30:00.000Z", games: marketingSoccerPreviewGames,
+};
+
+const marketingWnbaPreviewSnapshot: DailyEdgeResponse = {
+  as_of: "2026-08-30T19:30:00.000Z", sport: "wnba", date: "2026-08-30", requested_date: "2026-08-30", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-08-30T19:30:00.000Z", games: marketingWnbaPreviewGames,
+};
+
+const MARKETING_PREVIEW_SPORTS = ["nfl", "cfb", "nba", "nhl", "mlb", "soccer", "wnba"] as const satisfies readonly Sport[];
+type MarketingPreviewSport = (typeof MARKETING_PREVIEW_SPORTS)[number];
+
+const MARKETING_PREVIEW_BY_SPORT: Record<MarketingPreviewSport, { snapshot: DailyEdgeResponse; disclosure: string }> = {
+  nfl: { snapshot: marketingNflPreviewSnapshot, disclosure: "Illustrative NFL example dated Oct. 12, 2026." },
+  cfb: { snapshot: marketingCfbPreviewSnapshot, disclosure: "Illustrative CFB example dated Oct. 17, 2026." },
+  nba: { snapshot: marketingNbaPreviewSnapshot, disclosure: "Illustrative NBA example dated Oct. 18, 2026." },
+  nhl: { snapshot: marketingNhlPreviewSnapshot, disclosure: "Illustrative NHL example dated Oct. 16, 2026." },
+  mlb: { snapshot: marketingMlbPreviewSnapshot, disclosure: "Illustrative MLB example dated Aug. 10, 2026." },
+  soccer: { snapshot: marketingSoccerPreviewSnapshot, disclosure: "Illustrative Premier League example dated Oct. 18, 2026." },
+  wnba: { snapshot: marketingWnbaPreviewSnapshot, disclosure: "Illustrative WNBA example dated Aug. 30, 2026." },
+};
+
+function isMarketingPreviewSport(sport: Sport): sport is MarketingPreviewSport {
+  return MARKETING_PREVIEW_SPORTS.some((candidate) => candidate === sport);
+}
+
 export function MarketingDailyEdgePreviewSurface(): ReactNode {
-  const [sport, setSport] = useState<"nfl" | "mlb">("nfl");
-  const snapshot = sport === "nfl" ? marketingNflPreviewSnapshot : marketingMlbPreviewSnapshot;
+  const [sport, setSport] = useState<MarketingPreviewSport>("nfl");
+  const preview = MARKETING_PREVIEW_BY_SPORT[sport];
   return (
     <Suspense fallback={<div className="min-h-[520px] animate-pulse rounded-xl border border-violet-400/20 bg-[#0A0A0F]" aria-label="Loading interactive Daily Edge preview" />}>
       <div className="rounded-xl border border-violet-400/25 bg-[#0A0A0F] p-3 text-gray-200 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[10px] leading-relaxed text-gray-300">
           <strong className="font-black uppercase tracking-[0.15em] text-emerald-200">Interactive sample</strong>
-          <span>{sport === "nfl" ? "Illustrative NFL example dated Oct. 12, 2026." : "Illustrative MLB example dated Aug. 10, 2026."} Not a current recommendation or actual result.</span>
+          <span>{preview.disclosure} Not a current recommendation or actual result.</span>
         </div>
         <ActualDailyEdgePreview
-          snapshot={snapshot}
+          snapshot={preview.snapshot}
           history={{}}
           pitcherFirstInningHistory={{}}
           sport={sport}
           freshContractRead={false}
           reviewMode={false}
           embeddedSample
-          activePreviewSports={["nfl", "mlb"]}
+          activePreviewSports={[...MARKETING_PREVIEW_SPORTS]}
           onEmbeddedSportChange={(nextSport) => {
-            if (nextSport === "nfl" || nextSport === "mlb") setSport(nextSport);
+            if (isMarketingPreviewSport(nextSport)) setSport(nextSport);
           }}
+          soccerCompetition={sport === "soccer" ? { active: "premier_league", label: "Premier League", eplAvailable: true, uclAvailable: false } : undefined}
         />
       </div>
     </Suspense>
