@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
+import {
+  HomepageDashboardPrototype,
+  HomepageMoneylinePreview,
+} from "@/app/components/HomepageDashboardPrototype";
 import { HomepageTrackingCategoryBoard } from "@/app/components/HomepageTrackingCategoryBoard";
 import { MarketingDailyEdgePreviewSurface } from "@/app/lab/components/daily-edge/DailyEdgeShell";
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
@@ -10,8 +13,8 @@ import {
   type PublicTrackRecordSummary,
 } from "@/lib/services/tracking/publicTrackRecordSummary";
 import {
+  MONTHLY_TRIAL_DISCLOSURE,
   PRICING_PAGE_URL,
-  TRIAL_DISCLOSURE,
 } from "@/lib/marketing/trialOffer";
 
 const SITE_URL = "https://www.oddsphereai.com";
@@ -21,7 +24,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "OddSphere AI | Sports Prediction & Market Intelligence",
   description:
-    "Start a 7-day free trial of OddSphere Daily Edge: AI sports predictions, model projections, market reads, Play Grades, transparent tracking, and responsible-use disclosures.",
+    "Explore model predictions, compare them with the market, understand Play Grades, inspect matchup research, and review tracked results with OddSphere AI Daily Edge.",
   alternates: { canonical: "/" },
   keywords: [
     "AI sports predictions",
@@ -45,7 +48,7 @@ export const metadata: Metadata = {
     url: "/",
     title: "OddSphere AI | Sports Prediction & Market Intelligence",
     description:
-      "Model projections, market movement, Play Grades, supporting evidence, transparent tracking, and responsible-use context in one Daily Edge dashboard.",
+      "Model predictions, market comparison, Play Grades, matchup research, and tracked results in one Daily Edge dashboard.",
     images: [
       {
         url: "/og-image.png",
@@ -60,7 +63,7 @@ export const metadata: Metadata = {
     site: "@OddSphereAI",
     title: "OddSphere AI | Sports Prediction & Market Intelligence",
     description:
-      "Start a 7-day free trial of OddSphere Daily Edge: AI-powered predictions, market reads, Play Grades, and tracking.",
+      "Explore model predictions, compare them with the market, and understand the reasoning behind each Daily Edge read.",
     images: ["/og-image.png"],
   },
 };
@@ -78,62 +81,62 @@ const trustChips = [
 
 const memberFeatures: FeatureCard[] = [
   {
-    title: "Daily Edge Picks",
-    body: "A clean slate view built to help you find the games worth watching.",
-  },
-  {
-    title: "Model Projections",
-    body: "Projected scores, probabilities, totals, and matchup context in one place.",
-  },
-  {
-    title: "Market Reads",
-    body: "Line movement, price context, and market resistance signals where available.",
+    title: "Model projections",
+    body: "Projected scores and probabilities for supported matchups and markets.",
   },
   {
     title: "Play Grades",
-    body: "Best Angle, Lean, Watchlist, and Caution labels separate stronger reads from thinner spots.",
+    body: "Understand how the available price and supporting context affect the grade.",
   },
   {
-    title: "Supporting Evidence",
-    body: "Quick explanations behind the read so users are not blindly tailing picks.",
+    title: "Market context",
+    body: "Explore price movement, public consensus, and verified sharp-book signals where available.",
   },
   {
-    title: "Transparent Tracking",
-    body: "Results are tracked so the product is accountable over time.",
+    title: "Supporting evidence",
+    body: "Look into the matchup information behind the projection.",
+  },
+  {
+    title: "Tracked results",
+    body: "Review recorded prediction outcomes by sport, market, and available period.",
+  },
+  {
+    title: "Player Props",
+    body: "Explore supported prop markets, pricing, recent results, and matchup context.",
   },
 ];
 
 const workflowSteps: StepCard[] = [
   {
     title: "The model projects the game",
-    body: "OddSphere generates a model-side read using matchup data, pricing context, and sport-specific inputs.",
+    body: "Daily Edge presents sport-specific projected scores and probabilities before the market comparison.",
   },
   {
-    title: "The market gets checked",
-    body: "Line movement, price, public and sharp signals where available, and market resistance help shape the final read.",
+    title: "The market is compared",
+    body: "The available price, movement, public consensus, and verified sharp-book signals are shown where available.",
   },
   {
-    title: "The play gets graded",
-    body: "Each spot is organized into a clear grade so users can understand strength, risk, and whether the edge is worth attention.",
+    title: "The Play Grade is explained",
+    body: "The grade connects the projection with available price and supporting context without making every forecast actionable.",
   },
 ];
 
 const faq: FaqItem[] = [
   {
     q: "What do I get during the free trial?",
-    a: "You get full access to Daily Edge during the 7-day trial, including model-backed picks, market reads, Play Grades, supporting evidence, and tracking where available.",
+    a: "The monthly trial includes Daily Edge access with model projections, market context, Play Grades, supporting evidence, tracked results, and supported Player Props coverage.",
   },
   {
     q: "When am I charged?",
-    a: "The monthly plan is free for 7 days, then renews at $19.99/month unless canceled before the trial ends. The annual plan is $199 charged immediately and does not include a free trial.",
+    a: "The monthly plan is free for 7 days, then renews at $19.99/month unless canceled. The annual plan is $199/year, billed immediately, with no free trial.",
   },
   {
     q: "Can I cancel before the trial ends?",
-    a: "Yes. Billing is managed through Whop, and users can cancel through their Whop account before the trial ends.",
+    a: "Yes. Membership and cancellation are managed through Whop. Cancel the monthly plan through your Whop account before the trial ends to avoid the first charge.",
   },
   {
     q: "What sports does Daily Edge cover?",
-    a: "Daily Edge is built for major baseball, football, basketball, hockey, and soccer competitions. Boards appear when a league is in season and verified data is available.",
+    a: "Daily Edge supports major baseball, football, basketball, hockey, and soccer competitions. Sports, markets, and Player Props boards vary by season and verified data availability.",
   },
   {
     q: "Is this financial or wagering advice?",
@@ -243,10 +246,10 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
       <div className="relative">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Tracked performance</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">See the record. Then see the reasoning.</h2>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Tracked results</p>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Explore the tracked results.</h2>
             <p className="mt-4 text-sm leading-relaxed text-gray-300 sm:text-base">
-              Every official Daily Edge result is tracked after settlement. Check weekly, monthly, and lifetime performance here, with the full public breakdown by sport and market below.
+              Review prediction results by sport, market, and available period.
             </p>
           </div>
         </div>
@@ -262,7 +265,7 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
           {official
             ? `Results updated through ${formatTrackingDate(official.latestActivityDate)}. `
             : "Results update after settlement. "}
-          Pushes are shown in the record and excluded from hit rate. Past performance does not guarantee future results.
+          Pushes are shown in the record and excluded from hit rate. Win rate measures prediction accuracy, not betting returns. Past performance does not guarantee future results.
         </p>
       </div>
     </div>
@@ -276,7 +279,12 @@ function DailyEdgePreview({ candidate = false }: { candidate?: boolean }) {
       <div className="relative overflow-hidden rounded-2xl border border-violet-400/30 bg-[#080712] shadow-[0_0_90px_rgba(124,58,237,0.22)]">
         <div className="flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-4 py-3 sm:px-5">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">
-            {candidate ? "OddSphere Daily Edge · Complete reader" : "Daily Edge reader"}
+            {candidate ? (
+              <>
+                <span className="sm:hidden">OddSphere Daily Edge · Sample quick read</span>
+                <span className="hidden sm:inline">OddSphere Daily Edge · Complete reader</span>
+              </>
+            ) : "Daily Edge reader"}
           </p>
           <div className="flex gap-1.5" aria-hidden="true">
             <span className="h-2 w-2 rounded-full bg-emerald-300/80" />
@@ -284,7 +292,12 @@ function DailyEdgePreview({ candidate = false }: { candidate?: boolean }) {
             <span className="h-2 w-2 rounded-full bg-white/30" />
           </div>
         </div>
-        {candidate ? <div className="p-2 sm:p-3"><MarketingDailyEdgePreviewSurface /></div> : (
+        {candidate ? (
+          <>
+            <div className="p-2 sm:hidden"><HomepageMoneylinePreview compact /></div>
+            <div className="hidden p-3 sm:block"><MarketingDailyEdgePreviewSurface /></div>
+          </>
+        ) : (
           <div className="relative aspect-[1.18/1] overflow-hidden bg-black">
             <Image
               src="/marketing/daily-edge-expanded-reader.jpg"
@@ -313,38 +326,21 @@ function DailyEdgePreview({ candidate = false }: { candidate?: boolean }) {
 export async function HomePageContent({ presentation = "current" }: { presentation?: "current" | "candidate" }) {
   const trackingSummary = await getPublicTrackRecordSummary();
   const candidate = presentation === "candidate";
-  const displayedFeatures = candidate
-    ? [
-        memberFeatures[0],
-        memberFeatures[2],
-        memberFeatures[1],
-        {
-          title: "Player Prop Research",
-          body: "Scan supported player-prop boards, then open recent results, matchup evidence, pricing, and deeper context only when you need it.",
-        },
-        memberFeatures[4],
-        memberFeatures[5],
-      ]
-    : memberFeatures;
 
   return (
     <main className="overflow-hidden">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <section className={`mx-auto grid max-w-7xl items-center gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-16 sm:pt-12 lg:px-8 ${candidate ? "grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[0.88fr_1.12fr]"}`}>
+      <section className={`mx-auto grid max-w-7xl items-center gap-8 px-4 pb-12 pt-8 sm:px-6 sm:pb-14 sm:pt-10 lg:px-8 ${candidate ? "grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[0.88fr_1.12fr]"}`}>
         <div className={candidate ? "min-w-0 max-w-4xl" : undefined}>
           <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
-            {candidate ? "OddSphere Sports Intelligence" : "7-Day Free Trial · OddSphere Daily Edge"}
+            OddSphere AI · Daily Edge
           </p>
-          <h1 className="mt-5 max-w-3xl break-words text-4xl font-black tracking-tight text-white sm:text-5xl xl:text-6xl">
-            {candidate
-              ? "The Full Slate Read—From Model Edge to Market Pulse."
-              : "Cut Through the Noise. Find the Plays Worth Your Attention."}
+          <h1 className="mt-5 max-w-4xl break-words text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
+            Understand the matchup before you make your call.
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-relaxed text-gray-200">
-            {candidate
-              ? "Read Daily Edge across baseball, football, basketball, soccer, and hockey with sport-specific projections, real price movement, public consensus, verified sharp-book signals where available, matchup evidence, and tracking in one OddSphere workflow."
-              : "Model projections, market movement, Play Grades, and tracking — organized into one Daily Edge dashboard built to show the why behind every pick."}
+            Explore model predictions, compare them with the market, and understand the reasoning behind each read. Daily Edge brings projections, Play Grades, and matchup research into one place.
           </p>
           <div className="mt-6 flex min-w-0 flex-col gap-3 sm:flex-row">
             <TrialButton className="w-full sm:w-auto" />
@@ -356,8 +352,8 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           >
             See how OddSphere works
           </Link>
-          <p className="mt-4 text-sm font-semibold text-violet-100">
-            {TRIAL_DISCLOSURE}
+          <p className="mt-3 text-sm font-semibold leading-relaxed text-violet-100">
+            {MONTHLY_TRIAL_DISCLOSURE}
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             {trustChips.map((chip) => (
@@ -387,24 +383,22 @@ export async function HomePageContent({ presentation = "current" }: { presentati
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
         <SectionHeader
           eyebrow="Inside the Daily Edge"
-          title={candidate ? "Scan the slate. Open the read. Go as deep as you need." : "The slate, the selected edge, and the accountability layer."}
-          body={candidate
-            ? "The first layer stays fast and readable. The complete reader keeps projections, price movement, public-versus-sharp splits, matchup stats, and supporting evidence available without crowding the board."
-            : "OddSphere is designed around the actual decision flow: scan the board, open the strongest reads, and understand why each grade exists."}
+          title="From the slate to the reasoning."
+          body="Choose a matchup, compare the projection with the market, and explore what supports the read."
         />
         <div className="grid gap-4 md:grid-cols-3">
           {[
             {
-              title: "Slate Scanner",
-              body: "Sort the day by sport, market, Play Grade, and signal quality without digging through noisy one-off posts.",
+              title: "Scan the slate",
+              body: "Browse available matchups and use the existing filters to focus your research.",
             },
             {
-              title: "Selected Edge",
-              body: "Open a pick to see the projection, price/value context, market read, supporting evidence, and risk language.",
+              title: "Open a matchup",
+              body: "Review projected scores, probabilities, Play Grades, and available price context.",
             },
             {
-              title: "Tracking",
-              body: "Posted Daily Edge results are tracked after settlement so the product stays accountable.",
+              title: "Explore the reasoning",
+              body: "Inspect matchup evidence, market movement, and public and sharp-book splits where available.",
             },
           ].map((item) => (
             <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
@@ -419,12 +413,10 @@ export async function HomePageContent({ presentation = "current" }: { presentati
         <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-7 lg:grid-cols-[0.95fr_1.05fr] lg:p-8">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Why OddSphere is different</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">A sharper read than a pick alone.</h2>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">See why the model favors a side, and how the price affects the grade.</h2>
           </div>
           <p className="text-base leading-relaxed text-gray-300">
-            {candidate
-              ? "OddSphere does more than surface a pick or trend. It connects the model projection to the live betting number, keeps public consensus separate from verified sharper-market signals where available, explains the matchup evidence, and tracks what the system actually posted."
-              : "Most betting content gives you a pick and asks you to trust it. OddSphere shows the full read: the model projection, the market context, the grade, the risk, and the tracking behind the system."}
+            A predicted winner is only part of the picture. Daily Edge connects the projection with the available price, market context, and matchup evidence so you can understand the grade behind the read.
           </p>
         </div>
       </section>
@@ -432,13 +424,10 @@ export async function HomePageContent({ presentation = "current" }: { presentati
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
         <SectionHeader
           eyebrow="What members get"
-          title={candidate ? "Daily Edge first, with deeper research when it matters." : "Everything needed to understand the slate."}
-          body={candidate
-            ? "Daily Edge remains the center of OddSphere. Player Props and Tracking extend the same workflow instead of turning the product into a wall of disconnected statistics."
-            : "Daily Edge is built to make the board easier to scan, compare, and judge without exposing users to noisy tout-style copy."}
+          title="Your research, in one place."
         />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {displayedFeatures.map((feature) => (
+          {memberFeatures.map((feature) => (
             <div key={feature.title} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
               <h3 className="text-lg font-black text-white">{feature.title}</h3>
               <p className="mt-3 text-sm leading-relaxed text-gray-300">{feature.body}</p>
@@ -446,7 +435,7 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           ))}
         </div>
         <p className="mx-auto mt-6 max-w-3xl text-center text-sm leading-relaxed text-gray-400">
-          Daily Edge covers major baseball, football, basketball, hockey, and soccer competitions when schedules and verified data are available.
+          Coverage varies by sport, season, market, and data availability.
         </p>
       </section>
 
@@ -474,14 +463,15 @@ export async function HomePageContent({ presentation = "current" }: { presentati
 
       <section className="mx-auto max-w-5xl px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
         <div className="rounded-3xl border border-emerald-400/25 bg-emerald-400/[0.07] p-6 text-center sm:p-10">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Start with 7 Days Free</p>
-          <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-5xl">Full Daily Edge access today.</h2>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">OddSphere AI · Daily Edge</p>
+          <h2 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-5xl">Explore Daily Edge free for 7 days.</h2>
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-gray-200 sm:text-base">
-            Get full access to Daily Edge, including model-backed picks, projected scores, market reads, Play Grades, supporting evidence, and transparent tracking.
+            Open the board, explore a matchup, and see how the projections, grades, and market context fit your research.
           </p>
           <p className="mt-4 text-sm font-bold text-emerald-100">
-            {TRIAL_DISCLOSURE}
+            {MONTHLY_TRIAL_DISCLOSURE}
           </p>
+          <p className="mt-2 text-xs font-semibold text-gray-400">Membership and cancellation managed through Whop.</p>
           <div className="mt-7">
             <TrialButton />
           </div>

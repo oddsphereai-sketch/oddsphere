@@ -81,7 +81,7 @@ check(
 );
 check(
   "Homepage tracking section does not market the legacy archive",
-  HOMEPAGE.includes("See the record. Then see the reasoning.") &&
+  HOMEPAGE.includes("Explore the tracked results.") &&
     !/function TrackingPreview[\s\S]{0,7000}Legacy archive/.test(HOMEPAGE),
 );
 

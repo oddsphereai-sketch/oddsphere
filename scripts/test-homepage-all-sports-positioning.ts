@@ -10,22 +10,29 @@ function check(label: string, condition: boolean): void {
 console.log("\n━━━ homepage all-sports positioning ━━━\n");
 
 check(
-  "candidate hero describes the full slate rather than one sport",
-  homepage.includes("The Full Slate Read—From Model Edge to Market Pulse."),
+  "homepage hero explains the product before using detailed terminology",
+  homepage.includes("Understand the matchup before you make your call."),
 );
 check(
-  "candidate hero names the cross-sport product family",
-  homepage.includes("across baseball, football, basketball, soccer, and hockey"),
+  "homepage hero names the prediction, market, grade, and research workflow",
+  homepage.includes("Explore model predictions, compare them with the market")
+    && homepage.includes("Daily Edge brings projections, Play Grades, and matchup research into one place."),
 );
 check(
   "player-prop feature is sport-neutral",
-  homepage.includes('title: "Player Prop Research"')
+  homepage.includes('title: "Player Props"')
     && !homepage.includes('title: "MLB Player Prop Research"'),
 );
 check(
-  "homepage uses evergreen league-availability copy",
-  homepage.includes("major baseball, football, basketball, hockey, and soccer competitions")
+  "homepage uses evergreen availability copy",
+  homepage.includes("Coverage varies by sport, season, market, and data availability.")
     && !homepage.includes("ACTIVE_DAILY_EDGE_SPORT_COPY"),
+);
+check(
+  "homepage distinguishes model projection, market comparison, and grade explanation",
+  homepage.includes('title: "The model projects the game"')
+    && homepage.includes('title: "The market is compared"')
+    && homepage.includes('title: "The Play Grade is explained"'),
 );
 check(
   "search metadata represents baseball, football, basketball, soccer, and UCL",
