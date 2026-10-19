@@ -4507,7 +4507,7 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
     homeTeam: "TOR",
     gameTime: "7:07 PM",
     projected: { away: 5.0, home: 4.0 },
-    decisionLine: "NYM has a clear model edge, strong movement toward the pick, and sharp-book support.",
+    decisionLine: "NYM has a clear model edge, strong consensus price movement toward the pick, and sharp-book support.",
     awayStarter: { name: "Nolan McLean", throws: "R" },
     homeStarter: { name: "Kevin Gausman", throws: "R" },
     markets: {
@@ -4537,10 +4537,10 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
         ],
         splitsUpdatedAt: "2026-08-10T19:30:00.000Z",
         sharpUpdatedAt: "2026-08-10T19:21:00.000Z",
-        guidedGuide: "NYM carries the model edge, the price moved from +110 to -102 toward the pick, and sharp-book money is strongly aligned.",
-        guidedWatchOut: "The market has already moved, so a materially worse price would reduce the value.",
-        whyLine: "Driver: 61% model probability, strong same-book movement toward NYM, and a 43-point sharp money-to-ticket gap.",
-        riskLine: "The current price remains playable, but late movement can narrow the edge.",
+        guidedGuide: "NYM carries the model edge, consensus price movement ran from +110 to -102 toward the pick, and sharp-book money is strongly aligned.",
+        guidedWatchOut: "The consensus price movement has already occurred, so a materially worse price would reduce the value.",
+        whyLine: "Driver: 61% model probability, strong consensus price movement toward NYM, and a 43-point sharp money-to-ticket gap.",
+        riskLine: "The current price remains playable, but late consensus price movement can narrow the edge.",
         keyStats: [
           { label: "Starter ERA", awayValue: "4.03", homeValue: "4.36", source: "computed" },
           { label: "Bullpen Quality", awayValue: "NYM clear edge", homeValue: "TOR below avg", source: "computed" },
@@ -4798,7 +4798,7 @@ export function MarketingDailyEdgePreviewSurface(): ReactNode {
       <div className="rounded-xl border border-violet-400/25 bg-[#0A0A0F] p-3 text-gray-200 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[10px] leading-relaxed text-gray-300">
           <strong className="font-black uppercase tracking-[0.15em] text-emerald-200">Interactive sample</strong>
-          <span>Illustrative MLB data dated Aug. 10, 2026 · not a current recommendation</span>
+          <span>Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result.</span>
         </div>
         <ActualDailyEdgePreview
           snapshot={marketingPreviewSnapshot}

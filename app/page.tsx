@@ -316,7 +316,7 @@ function DailyEdgePreview() {
         <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3 sm:px-2">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">Actual Daily Edge member interface</p>
-            <p className="mt-1 text-xs text-gray-400">Production reader components · realistic sample data clearly dated below</p>
+            <p className="mt-1 text-xs text-gray-400">Explore a matchup and the market context behind it.</p>
           </div>
           <div className="flex gap-1.5" aria-hidden="true">
             <span className="h-2 w-2 rounded-full bg-emerald-300/80" />
@@ -370,14 +370,14 @@ function DailyEdgePreview() {
             <figcaption className="border-t border-white/10 p-3 sm:p-4">
               <p className="text-sm font-black text-white">Market context detail</p>
               <p className="mt-1 text-xs leading-relaxed text-gray-400">
-                Same-book movement, public consensus, sharp-book information, and the cross-source read in this illustrative example.
+                Consensus price movement, public consensus, sharp-book information, and the cross-source read in this illustrative example.
               </p>
             </figcaption>
           </figure>
         </div>
 
         <p className="px-1 pt-3 text-[11px] leading-relaxed text-gray-500 sm:px-2">
-          Sample data: illustrative MLB matchup dated Aug. 10, 2026, rendered with the production member-interface components. Shown to explain the product, not as a current recommendation or outcome claim.
+          Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result.
         </p>
       </div>
       <div className="relative mx-auto -mt-1 flex max-w-2xl flex-wrap justify-center gap-2 px-4 pt-4">

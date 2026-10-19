@@ -50,9 +50,17 @@ check(
 );
 check(
   "historical member captures and the interactive preview are labeled as sample data",
-  homepage.includes("Sample data: illustrative MLB matchup dated Aug. 10, 2026")
+  homepage.includes("Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result.")
     && dashboardPreview.includes("illustrative sample data")
-    && dailyEdgeShell.includes("Illustrative MLB data dated Aug. 10, 2026"),
+    && dailyEdgeShell.includes("Illustrative MLB example dated Aug. 10, 2026. Not a current recommendation or actual result."),
+);
+check(
+  "visitor-facing product proof avoids developer language and labels consensus movement correctly",
+  homepage.includes("Explore a matchup and the market context behind it.")
+    && homepage.includes("Consensus price movement, public consensus")
+    && !homepage.includes("Production reader components")
+    && !marketingSample.toLowerCase().includes("same-book")
+    && marketingSample.includes("consensus price movement"),
 );
 check(
   "marketing sample uses the current four Play Grade terms without Caution",

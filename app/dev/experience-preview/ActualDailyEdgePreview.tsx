@@ -1331,7 +1331,11 @@ function CompactOddsMovement({ market, tone, lineClass, compact = false }: { mar
   const pickAlreadyIncludesLine = market.pick !== null && /(?:^|\s)[+-]?\d+(?:\.\d+)?(?:\s|$)/.test(market.pick);
   const trackedLine = movement.currentLine ?? market.line;
   const pickContext = market.pick && trackedLine !== null && !pickAlreadyIncludesLine ? `${market.pick} ${formatNumber(trackedLine)}` : market.pick;
-  const context = [pickContext, trackedBook ? formatSportsbook(trackedBook) : null, movement.coherentTrail ? "same-book trail" : null].filter(Boolean).join(" · ");
+  const consensusMovement = trackedBook?.trim().toLowerCase() === "consensus";
+  const movementProvenance = movement.coherentTrail
+    ? consensusMovement ? "consensus price movement" : "same-book trail"
+    : null;
+  const context = [pickContext, consensusMovement ? null : trackedBook ? formatSportsbook(trackedBook) : null, movementProvenance].filter(Boolean).join(" · ");
   const evaluatedPrice = market.gradePriceAmerican ?? market.priceAmerican;
   const currentPrice = currentDisplayedPrice(market);
   const contextOnlyPrediction = market.marketPrediction?.status === "available" &&
@@ -1801,6 +1805,7 @@ function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMove
 
 function coherentMovementSummary(market: MarketEdgeDto, movement: CoherentMovement, direction: "support" | "resistance" | "neutral"): string | null {
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return null;
+  const consensusMovement = movement.sportsbook?.trim().toLowerCase() === "consensus";
   const book = movement.sportsbook ? `${formatSportsbook(movement.sportsbook)} ` : "The same-book trail ";
   if (
     movement.openLine !== null &&
@@ -1810,10 +1815,17 @@ function coherentMovementSummary(market: MarketEdgeDto, movement: CoherentMoveme
     const directionCopy = direction === "neutral"
       ? "with no verified directional edge"
       : `${direction === "support" ? "toward" : "against"} our side`;
-    return `${book}line moved from ${formatNumber(movement.openLine)} (${formatAmerican(movement.open)}) to ${formatNumber(movement.currentLine)} (${formatAmerican(movement.current)}), ${directionCopy}.`;
+    return consensusMovement
+      ? `Consensus price movement ran from ${formatNumber(movement.openLine)} (${formatAmerican(movement.open)}) to ${formatNumber(movement.currentLine)} (${formatAmerican(movement.current)}), ${directionCopy}.`
+      : `${book}line moved from ${formatNumber(movement.openLine)} (${formatAmerican(movement.open)}) to ${formatNumber(movement.currentLine)} (${formatAmerican(movement.current)}), ${directionCopy}.`;
   }
   const line = movement.currentLine ?? market.line;
   const lineCopy = line === null ? "" : ` at ${formatNumber(line)}`;
+  if (consensusMovement) {
+    return direction === "neutral"
+      ? `Consensus price movement ran from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}; no meaningful directional edge was verified.`
+      : `Consensus price movement ran from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}, ${direction === "support" ? "toward" : "against"} our side.`;
+  }
   if (direction === "neutral") return `${book}moved from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}; no meaningful directional edge was verified.`;
   return `${book}moved from ${formatAmerican(movement.open)} to ${formatAmerican(movement.current)}${lineCopy}, ${direction === "support" ? "toward" : "against"} our side.`;
 }
