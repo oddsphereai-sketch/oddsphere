@@ -169,7 +169,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_19_r128_unlocked_continuity_capacity" as const;
+  "cfb_forward_evidence_writer_2026_10_19_r129_completion_cadence_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -190,6 +190,7 @@ export function resolveCfbForwardCollectionNeed(args: {
 
 export function filterCfbForwardCapturePlansForNeed(args: {
   plans: CfbForwardCapturePlan[];
+  ordinaryDueGameIds: ReadonlySet<string>;
   needReason: string;
   latestByGame: ReadonlyMap<string, CfbForwardStoredEvidence>;
   now: string;
@@ -199,11 +200,13 @@ export function filterCfbForwardCapturePlansForNeed(args: {
   if (args.needReason === "reference_line_completion_due") {
     return args.plans.filter((plan) =>
       plan.stage === "t60" ||
+      args.ordinaryDueGameIds.has(plan.game.providerGameId) ||
       cfbReferenceCompletionNeeded(args.latestByGame.get(plan.game.providerGameId), args.now));
   }
   if (args.needReason === "provider_seed_due") {
     return args.plans.filter((plan) =>
       plan.stage === "t60" ||
+      args.ordinaryDueGameIds.has(plan.game.providerGameId) ||
       cfbTheOddsApiProviderSeedNeeded(args.latestByGame.get(plan.game.providerGameId), args.now));
   }
   return args.plans;
@@ -406,16 +409,21 @@ export async function runCfbForwardEvidenceWriter(args: {
   if (games.length === 0) throw new Error(`CFB authoritative weekly window ${window.boardStartDate}..${window.boardEndDate} has no eligible model-covered games.`);
   const latestByGame = latestCfbEvidenceByGame(existing);
   const latestVerifiedInjuryReportByGame = latestVerifiedCfbGameAvailabilityByGame(existing);
-  const plannedCaptures = planCfbForwardEvidenceCaptures({
+  const ordinaryPlannedCaptures = planCfbForwardEvidenceCaptures({
     games,
     existing: lockPlanningExisting,
     capturedAt: args.now,
-    ...(args.auditForceUnlocked || need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" || need.reason === "provider_seed_due"
-      ? { unlockedCadenceMinutesOverride: 0 }
-      : {}),
   });
+  const forceUnlockedCapture = args.auditForceUnlocked || need.reason === "release_refresh_due" || need.reason === "reference_line_completion_due" || need.reason === "provider_seed_due";
+  const plannedCaptures = forceUnlockedCapture ? planCfbForwardEvidenceCaptures({
+    games,
+    existing: lockPlanningExisting,
+    capturedAt: args.now,
+    unlockedCadenceMinutesOverride: 0,
+  }) : ordinaryPlannedCaptures;
   const plans = filterCfbForwardCapturePlansForNeed({
     plans: plannedCaptures,
+    ordinaryDueGameIds: new Set(ordinaryPlannedCaptures.map((plan) => plan.game.providerGameId)),
     needReason: need.reason,
     latestByGame,
     now: args.now,
