@@ -1889,6 +1889,24 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 19 stale qualified-reference retry repair: the sole writer advances to
+  `nfl_player_props_writer_2026_10_19_r57_stale_reference_retry`. The existing
+  state-aware writer now retries its bounded Pinnacle/NoVig research lane on a
+  subsequent wake whenever the retained qualified Receptions reference is
+  absent or older than the released quote-age policy. A fresh retained quote
+  preserves the preceding hourly/final-pregame capture schedule, so ordinary
+  wakes do not multiply provider calls. A credential-backed October 19 no-write
+  replay recovered 98 Pinnacle observations / 49 complete pairs for the one
+  remaining Week 6 game, made qualified reference evidence available, and
+  removed the stale-reference health finding. NoVig returned no usable rows and
+  remains an explicit source failure rather than fabricated evidence. Against
+  the same captured input, only Receptions changed: 16 projections, zero
+  forecast sides, one actionable promotion, zero demotions, and canonical
+  actionables 23→24. The model, calibration, decision, runtime, board, member,
+  tracking, grade thresholds, stakes, locks, settlement, copy, layout, sole
+  `prediction_pipeline:nfl` lease, and every existing locked payload are
+  unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-19-nfl-player-props-stale-reference-retry.md`.
 - October 16 genuine-evidence reader integration: active member decision-support presentation is
   `nfl_player_props_member_decision_support_2026_10_16_r2_reader_integration`. Newly evaluated
   unlocked rows carrying that exact release render their stored independent, published calibrated,
