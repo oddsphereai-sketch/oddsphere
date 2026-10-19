@@ -183,7 +183,7 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /refreshDailyEdg
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /leaseGroup:\s*"prediction_pipeline"/, "NBA snapshot publication shares the sport prediction lease");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /requireLease:\s*true/, "NBA snapshot publication requires the shared lease");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
-assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_16_r7_rolling_predictions/, "NBA refresh exposes its immutable rolling-prediction operational release");
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_19_r8_executable_event_identity/, "NBA refresh exposes its immutable executable-event operational release");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate/, "NHL refresh exposes its immutable readiness-gated operational release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");

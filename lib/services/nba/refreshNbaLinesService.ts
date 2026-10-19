@@ -32,6 +32,7 @@
  */
 
 import { supabase } from "../../db/supabase";
+import { normalizeTeamAbbr } from "../../providers/playbook/playbookTeamNormalizer";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
@@ -178,6 +179,11 @@ function normalizeSide(
   const s = (rawSide ?? "").toLowerCase();
   if (s === "home" || s === "away" || s === "over" || s === "under") return s;
   if (selection !== undefined && selection !== null) {
+    const selectionAbbr = normalizeTeamAbbr("nba", selection);
+    const homeAbbr = normalizeTeamAbbr("nba", homeTeam);
+    const awayAbbr = normalizeTeamAbbr("nba", awayTeam);
+    if (selectionAbbr !== null && selectionAbbr === homeAbbr) return "home";
+    if (selectionAbbr !== null && selectionAbbr === awayAbbr) return "away";
     const sel = selection.toLowerCase();
     const home = homeTeam.toLowerCase();
     const away = awayTeam.toLowerCase();
@@ -315,6 +321,20 @@ function matchGame(
   games: GameRow[],
   teamById: Map<number, TeamRow>,
 ): GameRow | null {
+  const providerHome = normalizeTeamAbbr("nba", homeTeamName);
+  const providerAway = normalizeTeamAbbr("nba", awayTeamName);
+  if (providerHome !== null && providerAway !== null) {
+    for (const game of games) {
+      const storedHome = game.home_team_id !== null ? teamById.get(game.home_team_id) : undefined;
+      const storedAway = game.away_team_id !== null ? teamById.get(game.away_team_id) : undefined;
+      if (!storedHome || !storedAway) continue;
+      if (
+        normalizeTeamAbbr("nba", storedHome.display_name) === providerHome &&
+        normalizeTeamAbbr("nba", storedAway.display_name) === providerAway
+      ) return game;
+    }
+    return null;
+  }
   const homeLower = homeTeamName.toLowerCase();
   const awayLower = awayTeamName.toLowerCase();
   for (const g of games) {
@@ -331,6 +351,12 @@ function matchGame(
   }
   return null;
 }
+
+export const __NBA_LINES_TEST__ = {
+  eventIdsForGames,
+  matchGame,
+  normalizeSide,
+};
 
 function eventIdsForGames(
   events: readonly SharpEventRow[],

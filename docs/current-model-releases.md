@@ -3404,8 +3404,8 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_16_r6_canonical_split_identity`
-- Market marriage: `nba_market_marriage_2026_10_17_r6_exact_game_injury_authority`
+- Model / prediction record: `nba_professional_unified_2026_10_19_r7_executable_quote_identity`
+- Market marriage: `nba_market_marriage_2026_10_19_r7_executable_quote_identity`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
 - Internal market reader: `nba_professional_market_reader_2026_10_16_r5_canonical_split_identity`
@@ -3420,6 +3420,17 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 19 r7 release preserves the independent score, categorical market reader, calibration,
+grade thresholds, and exact-price economics while correcting two market-input identity failures for
+future unlocked rows. Provider and stored team names now resolve through the existing exact NBA alias
+registry before event matching, so `Los Angeles Clippers` and stored `LA Clippers` identify the same
+game without fuzzy cross-team matching. Spread and Total consensus can only select a real whole- or
+half-point line offered by an accepted sportsbook; an even-book median may choose the nearest
+best-supported offered line but can never fabricate a quarter point. The exact-line selector still
+requires a complete price/fair-probability tuple at that line, and missing evidence remains No Play.
+Locked member snapshots retain exact stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-19-nba-executable-quote-identity-predeclaration.md`.
 
 The October 17 r6 market-marriage release replaces the broken ESPN team injury
 endpoint—which returned `{}` and was incorrectly treated as known zero—with the exact-event
@@ -3490,7 +3501,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_16_r7_rolling_predictions`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_19_r8_executable_event_identity`
 - NBA member board release: `nba_rolling_member_board_2026_10_16_r2_analyzed_predictions`
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`

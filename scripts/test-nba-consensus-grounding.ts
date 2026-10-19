@@ -71,5 +71,30 @@ ok("4. NOT anchored (grounded total still above market — keeps own view)", g4.
 ok("4. raw margin preserved (+12)", g4.rawMargin === 12);
 ok("4. regularized prob present + bounded", g4.mlHomeProbRegularized > 0.5 && g4.mlHomeProbRegularized <= 1);
 
+// 5 — even-book centers must select an offered whole/half point rather than
+// fabricating a quarter line that cannot carry an exact sportsbook price.
+const executableLines: NbaBookLine[] = [
+  ...["betmgm", "fanduel", "pinnacle", "novig"].flatMap((sportsbook) => [
+    { sportsbook, market_type: "spread" as const, side: "home", line_value: 1.5, odds_american: -110 },
+    { sportsbook, market_type: "spread" as const, side: "away", line_value: -1.5, odds_american: -110 },
+  ]),
+  { sportsbook: "circa", market_type: "spread", side: "home", line_value: 1, odds_american: -110 },
+  { sportsbook: "circa", market_type: "spread", side: "away", line_value: -1, odds_american: -110 },
+  { sportsbook: "betonline", market_type: "spread", side: "home", line_value: 1, odds_american: -110 },
+  { sportsbook: "betonline", market_type: "spread", side: "away", line_value: -1, odds_american: -110 },
+  { sportsbook: "bad-quarter", market_type: "spread", side: "home", line_value: 1.25, odds_american: -110 },
+  { sportsbook: "bad-quarter", market_type: "spread", side: "away", line_value: -1.25, odds_american: -110 },
+  { sportsbook: "over-a", market_type: "total", side: "over", line_value: 221.5, odds_american: -110 },
+  { sportsbook: "over-a", market_type: "total", side: "under", line_value: 221.5, odds_american: -110 },
+  { sportsbook: "over-b", market_type: "total", side: "over", line_value: 222, odds_american: -110 },
+  { sportsbook: "over-b", market_type: "total", side: "under", line_value: 222, odds_american: -110 },
+];
+const c5 = buildNbaMarketConsensus(executableLines);
+ok("5. spread consensus is an offered line", c5.spreadHome === 1.5, `got ${c5.spreadHome}`);
+ok("5. spread consensus is never a quarter line", Math.abs((c5.spreadHome ?? 0) * 2 - Math.round((c5.spreadHome ?? 0) * 2)) < 1e-9);
+ok("5. malformed quarter spread is rejected", c5.spreadRejectedBooks.some((row) => row.book === "bad-quarter"));
+ok("5. total consensus is an offered line", c5.totalLine === 221.5 || c5.totalLine === 222, `got ${c5.totalLine}`);
+ok("5. total consensus is never a quarter line", Math.abs((c5.totalLine ?? 0) * 2 - Math.round((c5.totalLine ?? 0) * 2)) < 1e-9);
+
 if (failures > 0) { console.error(`\n${failures} assertion(s) failed.`); process.exit(1); }
 console.log("\nAll NBA consensus + grounding assertions passed.");
