@@ -7,7 +7,7 @@ import {
   loadPitcherFirstInningHistory,
   loadTeamHistory,
 } from "@/app/dev/experience-preview/previewData";
-import { DAILY_EDGE_SPORT_KEYS } from "@/app/lab/lib/dailyEdgeSports";
+import { resolveDailyEdgeSport } from "@/app/lab/lib/dailyEdgeSports";
 import {
   isNflDailyEdgeEnabled,
   isNflWeekOneEvidenceBoardEnabled,
@@ -67,9 +67,7 @@ export default async function CandidateDailyEdgePage({
 }) {
   const query = await searchParams;
   const requestedSport = Array.isArray(query.sport) ? query.sport[0] : query.sport;
-  const sourceSport = DAILY_EDGE_SPORT_KEYS.includes(requestedSport as Sport)
-    ? (requestedSport as Sport)
-    : "mlb";
+  const sourceSport = resolveDailyEdgeSport(requestedSport);
   const requestedLeague = Array.isArray(query.league) ? query.league[0] : query.league;
   const requestedGame = Array.isArray(query.game) ? query.game[0] : query.game;
   const soccerRequested = sourceSport === "soccer" || sourceSport === "ucl";

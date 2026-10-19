@@ -2,6 +2,7 @@ import CandidateDailyEdgePage from "./CandidateDailyEdgePage";
 import LegacyDailyEdgePage from "./LegacyDailyEdgePage";
 import { isDailyEdgeExperienceCandidateEnabled } from "@/lib/config/dailyEdgeExperience";
 import { isNflDailyEdgeEnabled } from "@/lib/config/nflDailyEdge";
+import { resolveDailyEdgeSport } from "@/app/lab/lib/dailyEdgeSports";
 import { connection } from "next/server";
 
 export default async function DailyEdgePage({
@@ -20,7 +21,8 @@ export default async function DailyEdgePage({
   await connection();
   const query = await searchParams;
   const requestedSport = Array.isArray(query.sport) ? query.sport[0] : query.sport;
-  const nflMemberRead = requestedSport === "nfl" && isNflDailyEdgeEnabled();
+  const initialSport = resolveDailyEdgeSport(requestedSport);
+  const nflMemberRead = initialSport === "nfl" && isNflDailyEdgeEnabled();
 
   return isDailyEdgeExperienceCandidateEnabled() || nflMemberRead
     ? <CandidateDailyEdgePage searchParams={Promise.resolve(query)} />

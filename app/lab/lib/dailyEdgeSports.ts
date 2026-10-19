@@ -160,3 +160,18 @@ export function orderDailyEdgeSportKeys(
     })
     .map(({ sport }) => sport);
 }
+
+/**
+ * The unqualified Daily Edge route opens the same sport that appears first in
+ * the selector. Keeping this derived from the presentation registry prevents
+ * the page default from drifting when the product hierarchy changes again.
+ */
+export const DEFAULT_DAILY_EDGE_SPORT: Sport =
+  orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS)[0] ?? "mlb";
+
+/** Preserve valid deep links; missing or invalid sport keys use the first tab. */
+export function resolveDailyEdgeSport(value: string | null | undefined): Sport {
+  return value && DAILY_EDGE_SPORT_KEYS.includes(value as Sport)
+    ? (value as Sport)
+    : DEFAULT_DAILY_EDGE_SPORT;
+}
