@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: NBA executable quote and event identity r7
+
+On 2026-10-19 Daniel Mengel reported non-bettable NBA quarter-point spreads and missing
+prices for games whose markets were visibly available at sportsbooks, and directed Oddsphere
+to repair the Daily Edge health failure before opening night. This exception is limited to the
+future-unlocked input-identity correction documented in
+`docs/model-audits/2026-10-19-nba-executable-quote-identity-predeclaration.md`.
+
+The independent score artifact, categorical professional market-reader rules, exact-price grade
+thresholds, stakes, tracking boundary, sole writer, cadence, and `prediction_pipeline:nba` lease
+remain unchanged. The existing exact NBA team registry must resolve provider and stored team names
+before event matching, so an alias such as `Los Angeles Clippers` versus `LA Clippers` cannot
+suppress a valid exact-date event. Spread and Total consensus may use only a whole- or half-point
+line actually offered by an accepted sportsbook; an arithmetic midpoint such as `+1.25` may remain
+internal audit context but cannot become the evaluated or displayed quote. The chosen line, selected
+side price, target-excluded fair reference, probability, grade, lock, and member reader must remain
+one coherent tuple.
+
+Existing locked payloads retain unconditional stored precedence. Publication requires exact identity
+and executable-line regressions, a same-input promotion/demotion and actionable-count report, focused
+NBA writer/reader/lock tests, TypeScript, the full model-change gate, latest-main integration safety,
+protected PR checks, and post-deploy proof of the r7/r8 release family, complete opening-night price
+coverage, one writer/lease, coherent member cards, and unchanged locks. Roll back future-unlocked
+publication on any synthetic displayed line, unmatched available event, target-book contamination,
+mixed release, unexpected board contraction, writer overlap, or lock mutation.
+
 ## Owner-directed correctness exception: MLB trusted Total scope recovery v4
 
 On 2026-10-19 Daniel Mengel directed Oddsphere to repair the MLB price gap

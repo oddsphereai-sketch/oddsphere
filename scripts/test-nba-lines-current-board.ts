@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  __NBA_LINES_TEST__,
   fetchNbaCurrentEvents,
   fetchNbaCurrentOddsBoard,
 } from "../lib/services/nba/refreshNbaLinesService";
@@ -69,6 +70,33 @@ async function main(): Promise<void> {
   assert.equal(targetedRequests.length, 3);
   assert.ok(targetedRequests.every((url) =>
     new URL(url).searchParams.get("event_id") === "nba-celtics-knicks"));
+
+  const storedGames = [{
+    id: 140080,
+    external_id: 401909842,
+    home_team_id: 807,
+    away_team_id: 820,
+    game_date: "2026-10-22T02:30:00Z",
+  }];
+  const storedTeams = new Map([
+    [807, { id: 807, display_name: "LA Clippers", abbreviation: "LAC" }],
+    [820, { id: 820, display_name: "Sacramento Kings", abbreviation: "SAC" }],
+  ]);
+  assert.deepEqual(
+    __NBA_LINES_TEST__.eventIdsForGames([{
+      id: "nba_clippers_kings_2026-10-21_b3",
+      away_team: "Sacramento Kings",
+      home_team: "Los Angeles Clippers",
+      event_start_time: "2026-10-22T02:30:00Z",
+    }], storedGames, storedTeams),
+    ["nba_clippers_kings_2026-10-21_b3"],
+    "the exact NBA alias registry must match Los Angeles Clippers to stored LA Clippers",
+  );
+  assert.equal(
+    __NBA_LINES_TEST__.normalizeSide(undefined, "Los Angeles Clippers", "LA Clippers", "Sacramento Kings"),
+    "home",
+    "selection aliases must retain the correct home/away orientation",
+  );
 
   console.log("NBA current-board odds fetch tests passed");
 }

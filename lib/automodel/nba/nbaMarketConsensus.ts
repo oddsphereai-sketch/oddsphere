@@ -12,7 +12,8 @@
  *   • Cross-check each book's ML against the spread-implied favorite; reject
  *     books whose ML contradicts a decisive spread (the fliff case).
  *   • Reject extreme outliers vs the consensus median.
- *   • Median-consensus the spread + total too; reject obvious outliers.
+ *   • Form a robust spread + total center, then select an actual accepted
+ *     whole/half-point sportsbook line nearest that center.
  *   • Record which books were accepted/rejected and WHY (audit).
  *
  * Safety (never silent): if ML is corrupted but the spread is clean, fall back
@@ -82,6 +83,38 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
 
+function isExecutableBasketballLine(value: number): boolean {
+  return Number.isFinite(value) && Math.abs(value * 2 - Math.round(value * 2)) < 1e-9;
+}
+
+/**
+ * A statistical median across an even book count can land between two real
+ * NBA quotes (for example +1 and +1.5 => +1.25). That midpoint is useful as
+ * an internal center but cannot own a member price, probability, or grade.
+ * Select one of the accepted sportsbook lines nearest the center instead.
+ */
+function representativeOfferedLine(
+  valuesByBook: ReadonlyMap<string, number>,
+  acceptedBooks: ReadonlyArray<string>,
+): number | null {
+  const acceptedValues = [...valuesByBook]
+    .filter(([book]) => acceptedBooks.includes(book))
+    .map(([, value]) => value);
+  if (acceptedValues.length === 0) return null;
+  const center = median(acceptedValues);
+  const counts = new Map<number, number>();
+  for (const value of acceptedValues) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts.keys()].sort((left, right) => {
+    const distance = Math.abs(left - center) - Math.abs(right - center);
+    if (Math.abs(distance) > 1e-9) return distance;
+    const coverage = (counts.get(right) ?? 0) - (counts.get(left) ?? 0);
+    if (coverage !== 0) return coverage;
+    const magnitude = Math.abs(left) - Math.abs(right);
+    if (Math.abs(magnitude) > 1e-9) return magnitude;
+    return left - right;
+  })[0] ?? null;
+}
+
 /** Standard normal CDF (Abramowitz-Stegun 7.1.26). */
 function normCdf(z: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
@@ -101,13 +134,17 @@ export function buildNbaMarketConsensus(lines: ReadonlyArray<NbaBookLine>): NbaM
 
   // ── Spread consensus (do first — it referees the ML cross-check) ──────
   const spreadByBook = new Map<string, number>();
+  const spreadRejected: BookDecision[] = [];
   for (const l of lines) {
     if (l.market_type === "spread" && l.side === "home" && l.line_value !== null) {
-      spreadByBook.set(l.sportsbook, l.line_value);
+      if (!isExecutableBasketballLine(l.line_value)) {
+        spreadRejected.push({ book: l.sportsbook, reason: `non-executable spread increment ${l.line_value}` });
+      } else {
+        spreadByBook.set(l.sportsbook, l.line_value);
+      }
     }
   }
   const spreadAccepted: string[] = [];
-  const spreadRejected: BookDecision[] = [];
   let spreadHome: number | null = null;
   let spreadImpliedFavorite: NbaMarketConsensus["spreadImpliedFavorite"] = null;
   if (spreadByBook.size > 0) {
@@ -116,10 +153,11 @@ export function buildNbaMarketConsensus(lines: ReadonlyArray<NbaBookLine>): NbaM
       if (Math.abs(v - med) > 4.0) spreadRejected.push({ book, reason: `spread ${v} >4pt from median ${med}` });
       else spreadAccepted.push(book);
     }
-    const acceptedVals = [...spreadByBook].filter(([b]) => spreadAccepted.includes(b)).map(([, v]) => v);
-    spreadHome = acceptedVals.length ? median(acceptedVals) : med;
-    spreadImpliedFavorite =
-      spreadHome < -SPREAD_DECISIVE_PTS ? "home" : spreadHome > SPREAD_DECISIVE_PTS ? "away" : "pickem";
+    spreadHome = representativeOfferedLine(spreadByBook, spreadAccepted);
+    if (spreadHome !== null) {
+      spreadImpliedFavorite =
+        spreadHome < -SPREAD_DECISIVE_PTS ? "home" : spreadHome > SPREAD_DECISIVE_PTS ? "away" : "pickem";
+    }
   }
 
   // ── Moneyline consensus — de-vig each book, cross-check vs spread ─────
@@ -188,14 +226,20 @@ export function buildNbaMarketConsensus(lines: ReadonlyArray<NbaBookLine>): NbaM
 
   // ── Total consensus ──────────────────────────────────────────────────
   const totalByBook = new Map<string, number>();
+  const totalRejected: BookDecision[] = [];
   for (const l of lines) {
     if (l.market_type === "total" && l.line_value !== null) {
       // over/under rows carry the same line; record once per book.
-      if (!totalByBook.has(l.sportsbook)) totalByBook.set(l.sportsbook, l.line_value);
+      if (!isExecutableBasketballLine(l.line_value)) {
+        if (!totalRejected.some((row) => row.book === l.sportsbook)) {
+          totalRejected.push({ book: l.sportsbook, reason: `non-executable total increment ${l.line_value}` });
+        }
+      } else if (!totalByBook.has(l.sportsbook)) {
+        totalByBook.set(l.sportsbook, l.line_value);
+      }
     }
   }
   const totalAccepted: string[] = [];
-  const totalRejected: BookDecision[] = [];
   let totalLine: number | null = null;
   if (totalByBook.size > 0) {
     const med = median([...totalByBook.values()]);
@@ -203,12 +247,7 @@ export function buildNbaMarketConsensus(lines: ReadonlyArray<NbaBookLine>): NbaM
       if (Math.abs(v - med) > TOTAL_OUTLIER_PTS) totalRejected.push({ book, reason: `total ${v} >${TOTAL_OUTLIER_PTS}pt from median ${med}` });
       else totalAccepted.push(book);
     }
-    const acceptedVals = [...totalByBook].filter(([b]) => totalAccepted.includes(b)).map(([, v]) => v);
-    const rawTotal = acceptedVals.length ? median(acceptedVals) : med;
-    // Snap to the nearest 0.5 — books quote half/whole-point totals, so a median
-    // across split books (e.g. 216.5 & 217) can land on a non-bettable 216.75.
-    // Display + grade against a real line.
-    totalLine = Math.round(rawTotal * 2) / 2;
+    totalLine = representativeOfferedLine(totalByBook, totalAccepted);
   }
 
   // ── Honest strength + spread confirmation ────────────────────────────
