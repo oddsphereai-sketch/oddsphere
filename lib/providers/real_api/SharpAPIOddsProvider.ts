@@ -38,6 +38,7 @@ import type {
   IOddsProvider,
   LineRecord,
 } from "../interfaces/IOddsProvider";
+import { bookPriorityRank } from "../../config/bookPriority";
 import {
   SharpApiAbortError,
   SharpApiClient,
@@ -151,6 +152,46 @@ function hasSharpMainTotal(rows: readonly RawOddsRow[]): boolean {
     mapMarketType(asStringOrNull(row.market_type)) === "total" &&
     row.is_alternate_line !== true &&
     SHARP_REFERENCE_BOOKS.has(String(row.sportsbook ?? "").toLowerCase())
+  );
+}
+
+/**
+ * A generic event payload is not sufficient evidence that MLB Total pricing
+ * is complete. SharpAPI can put one untrusted sportsbook at the front of the
+ * generic response while the market-scoped response still contains complete
+ * main-line pairs from approved books. Only a selectable, exact-line,
+ * two-sided pair with real prices may suppress the bounded recovery request.
+ */
+function hasCompleteTrustedMainTotal(rows: readonly RawOddsRow[]): boolean {
+  const sidesByBookAndLine = new Map<string, Set<"over" | "under">>();
+  for (const row of rows) {
+    if (
+      mapMarketType(asStringOrNull(row.market_type)) !== "total" ||
+      row.is_alternate_line === true
+    ) {
+      continue;
+    }
+    const book = String(row.sportsbook ?? "").trim().toLowerCase();
+    if (!Number.isFinite(bookPriorityRank(book))) continue;
+    const line = asNumberOrNull(row.line);
+    const price = asNumberOrNull(row.odds_american);
+    const side = mapSide(row.selection_type);
+    if (
+      line === null ||
+      price === null ||
+      price === 0 ||
+      (side !== "over" && side !== "under")
+    ) {
+      continue;
+    }
+    const key = `${book}::${line}`;
+    const sides = sidesByBookAndLine.get(key) ?? new Set<"over" | "under">();
+    if (side === "over") sides.add("over");
+    else sides.add("under");
+    sidesByBookAndLine.set(key, sides);
+  }
+  return [...sidesByBookAndLine.values()].some(
+    (sides) => sides.has("over") && sides.has("under"),
   );
 }
 
@@ -835,11 +876,7 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             maxPages: 3,
             signal: opts?.signal,
           });
-          const hasMainTotal = oddsRows.some((row) =>
-            mapMarketType(asStringOrNull(row.market_type)) === "total" &&
-            row.is_alternate_line !== true
-          );
-          if (!hasMainTotal && callsUsed < MAX_CALLS_PER_INVOCATION) {
+          if (!hasCompleteTrustedMainTotal(oddsRows) && callsUsed < MAX_CALLS_PER_INVOCATION) {
             callsUsed++;
             const targetedTotals = await this.client.fetchAll<RawOddsRow>({
               path: "/odds",
@@ -1046,11 +1083,11 @@ export class SharpAPIOddsProvider implements IOddsProvider {
             maxPages: 3,
             signal: opts?.signal,
           });
-          const hasMainTotal = probeRows.some((row) =>
-            mapMarketType(asStringOrNull(row.market_type)) === "total" &&
-            row.is_alternate_line !== true
-          );
-          if (!hasMainTotal && probeRows.length > 0 && callsUsed < MAX_CALLS_PER_INVOCATION) {
+          if (
+            !hasCompleteTrustedMainTotal(probeRows) &&
+            probeRows.length > 0 &&
+            callsUsed < MAX_CALLS_PER_INVOCATION
+          ) {
             callsUsed++;
             const targetedTotals = await this.client.fetchAll<RawOddsRow>({
               path: "/odds",

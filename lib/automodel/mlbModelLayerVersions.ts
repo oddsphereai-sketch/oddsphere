@@ -22,7 +22,7 @@ export const MLB_FIRST_INNING_RELEASE_ID = "mlb_first_inning_release_2026_09_04_
 
 export const MLB_MODEL_LAYER_VERSION_IDS = {
   projection_core: "mlb_projection_core_v2_7_unified_total_preserve_margin_2026_10_16",
-  market_input_snapshot: "mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08",
+  market_input_snapshot: "mlb_market_input_snapshot_v4_trusted_total_scope_recovery_2026_10_19",
   score_distribution: "mlb_score_distribution_factorized_margin_total_v1_2026_10_16",
   moneyline_probability_head: "mlb_moneyline_structural_coherence_probability_v3_2026_09_02",
   moneyline_portfolio_ranker: "mlb_ml_sharp_portfolio_ranker_v2_selected_side_floor_train_through_2026_07_31",

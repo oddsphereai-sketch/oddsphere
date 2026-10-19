@@ -2200,6 +2200,16 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
 
+- October 19 trusted Total scope recovery advances the market input snapshot to
+  `mlb_market_input_snapshot_v4_trusted_total_scope_recovery_2026_10_19`.
+  A complete Total from an unapproved sportsbook no longer suppresses the
+  existing bounded market-scoped request when that request can recover an
+  approved same-book, same-line Over/Under pair. Sportzino remains ineligible
+  for the evaluated member price; no provider hierarchy, model equation,
+  score, probability, side, grade threshold, stake, writer, lease, cadence,
+  tracking rule, copy, layout, or stored lock changes. Evidence and rollback:
+  `docs/model-audits/2026-10-19-mlb-trusted-total-scope-recovery.md`.
+
 - October 16 unified game distribution release is
   `mlb_daily_edge_decision_2026_10_16_r92_unified_game_distribution`. Future unlocked MLB games now
   publish one factorized margin/Total forecast: the released r91 Moneyline margin and market reader
@@ -2254,7 +2264,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Public calibration: `mlb_public_calibration_v38_unified_game_distribution_2026_10_16`
 - Decision release: `mlb_daily_edge_decision_2026_10_16_r92_unified_game_distribution`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v77_unified_game_distribution_2026_10_16`
-- Market input snapshot: `mlb_market_input_snapshot_v3_current_line_pagination_2026_09_08`
+- Market input snapshot: `mlb_market_input_snapshot_v4_trusted_total_scope_recovery_2026_10_19`
 - Model-layer schema: `mlb_model_layer_versions_v21_unified_game_distribution`
 - Input eligibility: `mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16`
 - Grade policy: `mlb_public_grade_policy_v61_unified_two_layer_total_2026_10_16`
