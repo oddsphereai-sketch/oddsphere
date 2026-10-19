@@ -1889,6 +1889,19 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 19 scheduler-jitter cadence repair: the operational cadence advances
+  to `nfl_player_props_cadence_2026_10_19_r2_scheduler_jitter_tolerance`.
+  Production proved that the `14:21:09.322Z` heartbeat arrived 142 milliseconds
+  before the prior snapshot's exact one-hour boundary at `14:21:09.464Z`; the
+  strict comparison therefore skipped a due r57 writer wake and would have
+  stretched the hourly cadence to 75 minutes. The existing cadence planner now
+  permits at most one second of scheduler jitter. A request more than one second
+  early remains not due, and the existing quarter-hour heartbeat, sole writer,
+  shared `prediction_pipeline:nfl` lease, provider ceilings, 60/30/15-minute
+  state-aware schedule, model, calibration, projections, probabilities, sides,
+  grades, stakes, locks, settlement, and member presentation are unchanged.
+  Existing locked rows remain immutable. Evidence and rollback:
+  `docs/model-audits/2026-10-19-nfl-player-props-cadence-jitter.md`.
 - October 19 stale qualified-reference retry repair: the sole writer advances to
   `nfl_player_props_writer_2026_10_19_r57_stale_reference_retry`. The existing
   state-aware writer now retries its bounded Pinnacle/NoVig research lane on a
