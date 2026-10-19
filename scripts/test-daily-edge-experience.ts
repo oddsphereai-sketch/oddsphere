@@ -1590,7 +1590,7 @@ check(
 );
 check(
   "first-inning Market Pulse uses the real two-sided FI price board alongside specialized evidence",
-  candidateSource.includes('<CompactMarketPulse market={market} /><section className="rounded-xl border border-violet-400/20') &&
+  candidateSource.includes('<CompactMarketPulse market={market} illustrativeSample={illustrativeSample} /><section className="rounded-xl border border-violet-400/20') &&
     candidateSource.includes("CompactFirstInningOddsMovement market={market}") &&
     candidateSource.includes('row("NRFI"') &&
     candidateSource.includes('row("YRFI"'),
@@ -1617,7 +1617,7 @@ check(
   candidateSource.includes('kind: "rate" | "record" | "average"') &&
     candidateSource.includes('comparison.kind === "rate"') &&
     candidateSource.includes("function SampleTally") &&
-    candidateSource.includes("Each tile is one completed game") &&
+    candidateSource.includes('Each tile is one {illustrativeSample ? "sample" : "completed"} game') &&
     !candidateSource.includes("function StatBar"),
 );
 check(
@@ -1681,7 +1681,7 @@ check(
 check(
   "small first-inning samples show understandable counts and explain missing starter history",
   candidateSource.includes('`${supportingCount}/${rows.length}`') &&
-    candidateSource.includes("Each tile is one completed game") &&
+    candidateSource.includes('Each tile is one {illustrativeSample ? "sample" : "completed"} game') &&
     candidateSource.includes("No verified recent sample") &&
     candidateSource.includes("This is a data-availability gap, not a 0% result"),
 );
@@ -1699,8 +1699,8 @@ check(
 );
 check(
   "MLB availability remains in the Market & Price column and fails visibly when unavailable",
-  candidateSource.includes('availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable />') &&
-    candidateSource.includes('<IntegratedEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} />') &&
+  candidateSource.includes('availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable illustrativeSample={illustrativeSample} />') &&
+    candidateSource.includes('<IntegratedEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} illustrativeSample={illustrativeSample} />') &&
     candidateSource.includes("Report temporarily unavailable") &&
     candidateSource.includes("missing report is not evidence that every player is available"),
 );

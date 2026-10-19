@@ -62,6 +62,8 @@ for (const sport of MARKETING_PREVIEW_SPORTS) {
   assert.ok(games.length > 0, `${sport} includes at least one illustrative matchup`);
 
   for (const game of games) {
+    assert.ok(game.awayTeamLogo, `${sport} ${game.awayTeam} uses a real team-logo asset`);
+    assert.ok(game.homeTeamLogo, `${sport} ${game.homeTeam} uses a real team-logo asset`);
     const totalMarket = game.markets.total;
     assert.notEqual(totalMarket.modelTotal, null, `${sport} ${game.awayTeam}@${game.homeTeam} includes a model total`);
     assert.notEqual(totalMarket.marketTotal, null, `${sport} ${game.awayTeam}@${game.homeTeam} includes a market total`);
@@ -88,6 +90,26 @@ for (const sport of MARKETING_PREVIEW_SPORTS) {
         "soccer representative score is explicitly separate from expected goals",
       );
     }
+    if (!game.footballProjection && !game.soccerProjection) {
+      for (const marketKey of ["moneyline", "total", "first_inning"] as const) {
+        if (sport === "mlb" && marketKey === "first_inning") continue;
+        const representative = game.markets[marketKey].keyStats.find((stat) => /^representative final$/i.test(stat.label));
+        assert.ok(representative, `${sport} ${marketKey} supplies a representative final separately from expected scoring means`);
+        const away = Number.parseFloat(representative!.awayValue ?? "");
+        const home = Number.parseFloat(representative!.homeValue ?? "");
+        assert.ok(Number.isInteger(away) && Number.isInteger(home), `${sport} ${marketKey} representative final uses whole-number scores`);
+      }
+    }
+
+    if (sport === "wnba") {
+      assert.deepEqual(game.projected, { away: 81.5, home: 77 }, "WNBA retains its decimal expected-points projection");
+      const representative = game.markets.moneyline.keyStats.find((stat) => /^representative final$/i.test(stat.label));
+      assert.deepEqual(
+        { away: Number(representative?.awayValue), home: Number(representative?.homeValue) },
+        { away: 82, home: 77 },
+        "WNBA supplies a plausible whole-number representative final",
+      );
+    }
 
     const totalPick = totalMarket.pick ?? "";
     if (/^Over\b/i.test(totalPick)) {
@@ -104,6 +126,19 @@ for (const sport of MARKETING_PREVIEW_SPORTS) {
       assert.ok(market.guidedGuide.length > 0 && market.guidedWatchOut.length > 0, `${label} includes coherent explanatory copy`);
       assert.notEqual(market.modelProb, null, `${label} includes a model probability`);
       assert.notEqual(market.marketFairProb, null, `${label} includes a market probability`);
+
+      if (sport === "mlb" && marketKey === "first_inning") {
+        const projection = market.keyStats.find((stat) => /projected.*(?:first|1st).*inning/i.test(stat.label));
+        const projectedRuns = Number.parseFloat(projection?.homeValue ?? projection?.awayValue ?? "");
+        assert.ok(Number.isFinite(projectedRuns), `${label} includes a finite opening-inning run projection`);
+        if (/^NRFI$/i.test(market.pick ?? "")) {
+          assert.ok(projectedRuns < 0.85, `${label} projection supports its NRFI selection`);
+        } else if (/^YRFI$/i.test(market.pick ?? "")) {
+          assert.ok(projectedRuns >= 1.15, `${label} projection supports its YRFI selection`);
+        } else {
+          assert.fail(`${label} uses a selectable NRFI or YRFI sample`);
+        }
+      }
 
       const selectedTrail = market.oddsTrail ?? [];
       const selectedCurrent = selectedTrail.at(-1)?.american;

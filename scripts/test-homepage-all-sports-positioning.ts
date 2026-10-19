@@ -117,6 +117,39 @@ check(
     && dailyEdgeShell.includes("projected: { away: 81.5, home: 77.0 }"),
 );
 check(
+  "illustrative reader labels sample evidence without changing authenticated verification language",
+  actualDailyEdgePreview.includes('illustrativeSample ? "Illustrative market snapshot"')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Sample supporting evidence" : "Verified evidence"')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "sample drivers" : "verified drivers"')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Sample evidence" : evidenceRole')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Sample" : "Actual"')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Illustrative price history" : "Observed price history"')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Illustrative consensus" : formatFiSource(board.source)')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Sample source · consensus"')
+    && actualDailyEdgePreview.includes('illustrativeSample={embeddedSample}')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Not included in this sample"')
+    && actualDailyEdgePreview.includes('"Verified evidence"')
+    && actualDailyEdgePreview.includes('"Real market snapshot"'),
+);
+check(
+  "illustrative expected scores, representative finals, first-inning projections, and league logos use real reader fields",
+  dailyEdgeShell.includes('representativeScore: { away: 82, home: 77 }')
+    && dailyEdgeShell.includes('projected: { away: 81.5, home: 77.0 }')
+    && dailyEdgeShell.includes('label: "Representative final"')
+    && dailyEdgeShell.includes('label: "Projected 1st-inning runs"')
+    && dailyEdgeShell.includes('homeValue: "0.72"')
+    && dailyEdgeShell.includes('homeValue: "1.18"')
+    && dailyEdgeShell.includes('homeValue: "0.78"')
+    && dailyEdgeShell.includes('awayTeamLogo: marketingTeamLogo(sport, input.awayTeam)')
+    && dailyEdgeShell.includes('homeTeamLogo: marketingTeamLogo(sport, input.homeTeam)')
+    && dailyEdgeShell.includes('ORE: "https://a.espncdn.com/i/teamlogos/ncaa/500/2483.png"')
+    && dailyEdgeShell.includes('PSU: "https://a.espncdn.com/i/teamlogos/ncaa/500/213.png"')
+    && dailyEdgeShell.includes('return eplTeamLogo(team)')
+    && dailyEdgeShell.includes('return wnbaLogoUrl(team)')
+    && actualDailyEdgePreview.includes('representativeScore ? <p')
+    && actualDailyEdgePreview.includes('illustrativeSample ? "Expected score" : "Proj"'),
+);
+check(
   "search metadata represents baseball, football, basketball, soccer, and UCL",
   [
     "MLB predictions",
