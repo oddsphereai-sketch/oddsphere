@@ -98,7 +98,11 @@ export const CFB_FORWARD_EVIDENCE_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_EVIDENCE_MAX_ROWS = 50_000 as const;
 export const CFB_FORWARD_WRITER_PAYLOAD_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS = 12_000 as const;
-export const CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS = 12_000 as const;
+// A full 96-game board captured every 15 minutes can contribute 18,432
+// payload-free metadata rows inside the required 48-hour continuity window.
+// Keep enough bounded headroom for the larger FBS + FCS slates without
+// shortening continuity or loading historical JSON payloads.
+export const CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS = 30_000 as const;
 export const CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS = 48 as const;
 export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
 export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 20_000 as const;
