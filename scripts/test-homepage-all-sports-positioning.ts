@@ -110,6 +110,13 @@ check(
     && !marketingSample.includes('verdict: "caution"'),
 );
 check(
+  "illustrative market probability is derived from displayed prices rather than model confidence",
+  dailyEdgeShell.includes("marketingNoVigProbability(input.current, [input.opposingCurrent])")
+    && !dailyEdgeShell.includes("input.confidence - 0.08")
+    && dailyEdgeShell.includes("projected: { away: 113.5, home: 108.0 }")
+    && dailyEdgeShell.includes("projected: { away: 81.5, home: 77.0 }"),
+);
+check(
   "search metadata represents baseball, football, basketball, soccer, and UCL",
   [
     "MLB predictions",
