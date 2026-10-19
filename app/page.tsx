@@ -1,12 +1,8 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
 import Link from "next/link";
-import {
-  HomepageDashboardPrototype,
-  HomepageMoneylinePreview,
-} from "@/app/components/HomepageDashboardPrototype";
+import { HomepageDashboardPrototype } from "@/app/components/HomepageDashboardPrototype";
 import { HomepageTrackingCategoryBoard } from "@/app/components/HomepageTrackingCategoryBoard";
-import { MarketingDailyEdgePreviewSurface } from "@/app/lab/components/daily-edge/DailyEdgeShell";
 import { isHomepageExperienceCandidateEnabled } from "@/lib/config/productExperience";
 import {
   getPublicTrackRecordSummary,
@@ -272,48 +268,120 @@ function TrackingPreview({ summary }: { summary: PublicTrackRecordSummary }) {
   );
 }
 
-function DailyEdgePreview({ candidate = false }: { candidate?: boolean }) {
+function DailyEdgeOverviewImage() {
+  const common = {
+    alt: "OddSphere Daily Edge member reader showing a sample NYM at TOR matchup, projected score, outcome forecast, market prices, Best Angle Play Grade, and supporting matchup evidence",
+    sizes: "(min-width: 1024px) 70vw, (min-width: 640px) 92vw, 100vw",
+  };
+  const {
+    props: { srcSet: desktopSrcSet },
+  } = getImageProps({
+    ...common,
+    src: "/marketing/daily-edge-member-overview-desktop-sample.jpg",
+    width: 1240,
+    height: 920,
+    quality: 75,
+    fetchPriority: "high",
+  });
+  const {
+    props: { srcSet: mobileSrcSet, alt: mobileAlt, ...mobileProps },
+  } = getImageProps({
+    ...common,
+    src: "/marketing/daily-edge-member-overview-mobile-sample.jpg",
+    width: 350,
+    height: 400,
+    quality: 75,
+    fetchPriority: "high",
+  });
+
+  return (
+    <picture>
+      <source media="(min-width: 640px)" srcSet={desktopSrcSet} />
+      <source media="(max-width: 639px)" srcSet={mobileSrcSet} />
+      <img
+        {...mobileProps}
+        alt={mobileAlt}
+        className="h-auto w-full bg-[#07060d] object-cover"
+        style={{ width: "100%", height: "auto" }}
+      />
+    </picture>
+  );
+}
+
+function DailyEdgePreview() {
   return (
     <div aria-label="Daily Edge product preview" className="relative">
       <div className="absolute -inset-5 rounded-[2rem] bg-violet-700/20 blur-3xl" />
-      <div className="relative overflow-hidden rounded-2xl border border-violet-400/30 bg-[#080712] shadow-[0_0_90px_rgba(124,58,237,0.22)]">
-        <div className="flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-4 py-3 sm:px-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">
-            {candidate ? (
-              <>
-                <span className="sm:hidden">OddSphere Daily Edge · Sample quick read</span>
-                <span className="hidden sm:inline">OddSphere Daily Edge · Complete reader</span>
-              </>
-            ) : "Daily Edge reader"}
-          </p>
+      <div className="relative rounded-2xl border border-violet-400/30 bg-[#080712] p-3 shadow-[0_0_90px_rgba(124,58,237,0.22)] sm:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3 sm:px-2">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-200">Actual Daily Edge member interface</p>
+            <p className="mt-1 text-xs text-gray-400">Production reader components · realistic sample data clearly dated below</p>
+          </div>
           <div className="flex gap-1.5" aria-hidden="true">
             <span className="h-2 w-2 rounded-full bg-emerald-300/80" />
             <span className="h-2 w-2 rounded-full bg-violet-300/70" />
             <span className="h-2 w-2 rounded-full bg-white/30" />
           </div>
         </div>
-        {candidate ? (
-          <>
-            <div className="p-2 sm:hidden"><HomepageMoneylinePreview compact /></div>
-            <div className="hidden p-3 sm:block"><MarketingDailyEdgePreviewSurface /></div>
-          </>
-        ) : (
-          <div className="relative aspect-[1.18/1] overflow-hidden bg-black">
-            <Image
-              src="/marketing/daily-edge-expanded-reader.jpg"
-              alt="OddSphere Daily Edge selected edge, supporting evidence, odds movement, and market pulse"
-              fill
-              priority
-              sizes="(min-width: 1024px) 58vw, 100vw"
-              className="object-cover object-[46%_26%]"
-            />
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(3,2,12,0.08),rgba(3,2,12,0)_20%,rgba(3,2,12,0)_78%,rgba(3,2,12,0.16))]" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#080712] to-transparent" />
-          </div>
-        )}
+
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.72fr)_minmax(290px,0.58fr)] lg:items-start">
+          <figure className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+            <a
+              href="/marketing/daily-edge-member-overview-desktop-sample.jpg"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open the Daily Edge matchup overview at full size"
+              className="group relative block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            >
+              <DailyEdgeOverviewImage />
+              <span className="absolute bottom-3 right-3 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-90 transition group-hover:bg-black group-focus-visible:bg-black">
+                Open full size ↗
+              </span>
+            </a>
+            <figcaption className="border-t border-white/10 p-3 sm:p-4">
+              <p className="text-sm font-black text-white">Matchup overview</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-400">
+                Predictions, projected score, exact-price decision, Play Grade, and supporting matchup evidence in the member reader.
+              </p>
+            </figcaption>
+          </figure>
+
+          <figure className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+            <a
+              href="/marketing/daily-edge-member-market-context-sample.jpg"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open the Daily Edge market context detail at full size"
+              className="group relative block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"
+            >
+              <Image
+                src="/marketing/daily-edge-member-market-context-sample.jpg"
+                alt="Daily Edge market context detail showing moneyline price movement, public consensus, sharp-book splits, and a cross-source read"
+                width={450}
+                height={730}
+                sizes="(min-width: 1024px) 28vw, 100vw"
+                className="h-auto w-full bg-[#07060d]"
+              />
+              <span className="absolute bottom-3 right-3 rounded-md border border-white/15 bg-black/80 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-90 transition group-hover:bg-black group-focus-visible:bg-black">
+                Open full size ↗
+              </span>
+            </a>
+            <figcaption className="border-t border-white/10 p-3 sm:p-4">
+              <p className="text-sm font-black text-white">Market context detail</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-400">
+                Same-book movement, public consensus, sharp-book information, and the cross-source read in this illustrative example.
+              </p>
+            </figcaption>
+          </figure>
+        </div>
+
+        <p className="px-1 pt-3 text-[11px] leading-relaxed text-gray-500 sm:px-2">
+          Sample data: illustrative MLB matchup dated Aug. 10, 2026, rendered with the production member-interface components. Shown to explain the product, not as a current recommendation or outcome claim.
+        </p>
       </div>
-      <div className="relative mx-auto -mt-5 flex max-w-xl flex-wrap justify-center gap-2 px-4">
-        {["Quick Read", "Odds Move", "Market Pulse", "Supporting Evidence"].map((label) => (
+      <div className="relative mx-auto -mt-1 flex max-w-2xl flex-wrap justify-center gap-2 px-4 pt-4">
+        {["Projected score", "Play Grades", "Odds movement", "Public + sharp context"].map((label) => (
           <span key={label} className="rounded-full border border-white/10 bg-gray-950/90 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-gray-200 shadow-lg shadow-black/30">
             {label}
           </span>
@@ -344,7 +412,7 @@ export async function HomePageContent({ presentation = "current" }: { presentati
           </p>
           <div className="mt-6 flex min-w-0 flex-col gap-3 sm:flex-row">
             <TrialButton className="w-full sm:w-auto" />
-            <HomepageDashboardPrototype candidate={candidate} />
+            <HomepageDashboardPrototype />
           </div>
           <Link
             href="/how-it-works"
@@ -376,7 +444,7 @@ export async function HomePageContent({ presentation = "current" }: { presentati
         </div>
 
         <div id="product-preview" className="min-w-0 max-w-full overflow-hidden">
-          <DailyEdgePreview candidate={candidate} />
+          <DailyEdgePreview />
         </div>
       </section>
 

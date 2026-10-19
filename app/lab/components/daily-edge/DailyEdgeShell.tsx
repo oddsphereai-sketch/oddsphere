@@ -4467,11 +4467,11 @@ function marketingPreviewGame(input: {
     homeTeamLogo: null,
     gameTime: input.gameTime,
     gameStartMinutes: 19 * 60 + 7,
-    scheduledLockAt: "2026-07-07T22:07:00.000Z",
+    scheduledLockAt: "2026-08-10T23:07:00.000Z",
     lockState: "open",
     lockedAt: null,
-    updatedAt: "2026-07-07T19:30:00.000Z",
-    generatedAt: "2026-07-07T19:30:00.000Z",
+    updatedAt: "2026-08-10T19:30:00.000Z",
+    generatedAt: "2026-08-10T19:30:00.000Z",
     holdReason: null,
     dataCompleteness: null,
     homeStarter: input.homeStarter,
@@ -4507,40 +4507,40 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
     homeTeam: "TOR",
     gameTime: "7:07 PM",
     projected: { away: 5.0, home: 4.0 },
-    decisionLine: "NYM has a strong model/value case with movement toward the pick.",
+    decisionLine: "NYM has a clear model edge, strong movement toward the pick, and sharp-book support.",
     awayStarter: { name: "Nolan McLean", throws: "R" },
     homeStarter: { name: "Kevin Gausman", throws: "R" },
     markets: {
       moneyline: marketingPreviewMarket({
         pick: "NYM",
-        confidence: 0.56,
+        confidence: 0.61,
         verdict: "best_angle",
         grade: "best_signal",
-        modelProb: 0.56,
-        marketFairProb: 0.46,
-        priceAmerican: -104,
-        lineOpenAmerican: 106,
+        modelProb: 0.61,
+        marketFairProb: 0.49,
+        priceAmerican: -102,
+        lineOpenAmerican: 110,
         oddsTrail: [
-          { american: 106, line: null, observedAt: "2026-07-07T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
-          { american: -101, line: null, observedAt: "2026-07-07T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
-          { american: -104, line: null, observedAt: "2026-07-07T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
+          { american: 110, line: null, observedAt: "2026-08-10T18:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: 104, line: null, observedAt: "2026-08-10T19:00:00.000Z", sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: -102, line: null, observedAt: "2026-08-10T19:30:00.000Z", sportsbook: "consensus", source: "current_line", label: "current" },
         ],
-        moneyPct: 60,
-        betsPct: 56,
+        moneyPct: 58,
+        betsPct: 54,
         publicSplits: [
-          { side: "away", label: "NYM", moneyPct: 60, betsPct: 56 },
-          { side: "home", label: "TOR", moneyPct: 40, betsPct: 44 },
+          { side: "away", label: "NYM", moneyPct: 58, betsPct: 54 },
+          { side: "home", label: "TOR", moneyPct: 42, betsPct: 46 },
         ],
         sharpBookSplits: [
-          { side: "away", label: "NYM", moneyPct: 78, betsPct: 37 },
-          { side: "home", label: "TOR", moneyPct: 22, betsPct: 63 },
+          { side: "away", label: "NYM", moneyPct: 79, betsPct: 36 },
+          { side: "home", label: "TOR", moneyPct: 21, betsPct: 64 },
         ],
-        splitsUpdatedAt: "2026-07-07T19:30:00.000Z",
-        sharpUpdatedAt: "2026-07-07T19:21:00.000Z",
-        guidedGuide: "Strong model/value case with a price move toward NYM, though consensus is not fully aligned.",
-        guidedWatchOut: "Consensus is not fully aligned, so late price tightening can reduce the value.",
-        whyLine: "Driver: model win-probability edge, playable price, and movement toward the pick.",
-        riskLine: "Consensus is not fully aligned; price movement late in the day can change the value.",
+        splitsUpdatedAt: "2026-08-10T19:30:00.000Z",
+        sharpUpdatedAt: "2026-08-10T19:21:00.000Z",
+        guidedGuide: "NYM carries the model edge, the price moved from +110 to -102 toward the pick, and sharp-book money is strongly aligned.",
+        guidedWatchOut: "The market has already moved, so a materially worse price would reduce the value.",
+        whyLine: "Driver: 61% model probability, strong same-book movement toward NYM, and a 43-point sharp money-to-ticket gap.",
+        riskLine: "The current price remains playable, but late movement can narrow the edge.",
         keyStats: [
           { label: "Starter ERA", awayValue: "4.03", homeValue: "4.36", source: "computed" },
           { label: "Bullpen Quality", awayValue: "NYM clear edge", homeValue: "TOR below avg", source: "computed" },
@@ -4718,16 +4718,16 @@ const marketingPreviewGames: DailyEdgeGameDto[] = [
       moneyline: marketingPreviewMarket({
         pick: "BAL",
         confidence: 0.62,
-        verdict: "caution",
-        grade: "sharp_conflict",
+        verdict: "no_play",
+        grade: "model_only",
         modelProb: 0.62,
         marketFairProb: 0.60,
         priceAmerican: -154,
         lineOpenAmerican: -146,
-        guidedGuide: "Likely winner, but price and market friction keep this in Caution territory.",
-        guidedWatchOut: "The current price limits betting value.",
+        guidedGuide: "The model favors BAL, but the current price does not leave enough value for a play.",
+        guidedWatchOut: "Heavy juice and limited separation keep this at No Play.",
         whyLine: "Driver: win case is present, but value is capped by price.",
-        riskLine: "Heavy juice makes the moneyline less attractive.",
+        riskLine: "Heavy juice removes the value needed for an actionable grade.",
       }),
       total: marketingPreviewMarket({
         pick: "Over",
@@ -4796,6 +4796,10 @@ export function MarketingDailyEdgePreviewSurface(): ReactNode {
   return (
     <Suspense fallback={<div className="min-h-[520px] animate-pulse rounded-xl border border-violet-400/20 bg-[#0A0A0F]" aria-label="Loading interactive Daily Edge preview" />}>
       <div className="rounded-xl border border-violet-400/25 bg-[#0A0A0F] p-3 text-gray-200 sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-[10px] leading-relaxed text-gray-300">
+          <strong className="font-black uppercase tracking-[0.15em] text-emerald-200">Interactive sample</strong>
+          <span>Illustrative MLB data dated Aug. 10, 2026 · not a current recommendation</span>
+        </div>
         <ActualDailyEdgePreview
           snapshot={marketingPreviewSnapshot}
           history={{}}

@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 
 const homepage = readFileSync("app/page.tsx", "utf8");
+const dashboardPreview = readFileSync("app/components/HomepageDashboardPrototype.tsx", "utf8");
+const dailyEdgeShell = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
+const marketingSample = dailyEdgeShell.slice(
+  dailyEdgeShell.indexOf("const marketingPreviewGames"),
+  dailyEdgeShell.indexOf("const marketingPreviewSnapshot"),
+);
 
 function check(label: string, condition: boolean): void {
   if (!condition) throw new Error(`FAIL: ${label}`);
@@ -33,6 +39,25 @@ check(
   homepage.includes('title: "The model projects the game"')
     && homepage.includes('title: "The market is compared"')
     && homepage.includes('title: "The Play Grade is explained"'),
+);
+check(
+  "homepage leads with genuine member overview and market-context captures",
+  homepage.includes("/marketing/daily-edge-member-overview-desktop-sample.jpg")
+    && homepage.includes("/marketing/daily-edge-member-overview-mobile-sample.jpg")
+    && homepage.includes("/marketing/daily-edge-member-market-context-sample.jpg")
+    && homepage.includes("Actual Daily Edge member interface")
+    && !homepage.includes("/marketing/daily-edge-expanded-reader.jpg"),
+);
+check(
+  "historical member captures and the interactive preview are labeled as sample data",
+  homepage.includes("Sample data: illustrative MLB matchup dated Aug. 10, 2026")
+    && dashboardPreview.includes("illustrative sample data")
+    && dailyEdgeShell.includes("Illustrative MLB data dated Aug. 10, 2026"),
+);
+check(
+  "marketing sample uses the current four Play Grade terms without Caution",
+  ["best_angle", "lean", "watchlist", "no_play"].every((grade) => marketingSample.includes(`verdict: "${grade}"`))
+    && !marketingSample.includes('verdict: "caution"'),
 );
 check(
   "search metadata represents baseball, football, basketball, soccer, and UCL",
