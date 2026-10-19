@@ -75,6 +75,16 @@ check(
     && marketingSample.includes("{ american: -108"),
 );
 check(
+  "interactive point-line samples retain their existing line history and distinguish totals from spreads",
+  dailyEdgeShell.includes('lineTrail: input.lineTrail ?? (input.line !== null && input.line !== undefined ? input.oddsTrail ?? [] : [])')
+    && dailyEdgeShell.includes('const isTotalMarket = /^(Over|Under)\\b/i.test(input.pick ?? "")')
+    && dailyEdgeShell.includes('marketTotal: isTotalMarket ? input.marketTotal ?? input.line ?? null : null')
+    && marketingSample.includes('pick: "Over"')
+    && marketingSample.includes('line: 47.5')
+    && marketingSample.includes('pick: "BUF +2.5"')
+    && marketingSample.includes('line: 2.5'),
+);
+check(
   "interactive sample starts with NFL and exposes only working NFL and MLB sport tabs",
   dailyEdgeShell.includes('useState<"nfl" | "mlb">("nfl")')
     && dailyEdgeShell.includes('activePreviewSports={["nfl", "mlb"]}')

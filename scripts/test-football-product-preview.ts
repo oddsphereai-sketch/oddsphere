@@ -445,7 +445,11 @@ assert.match(readerSource, /market\.gradePriceAmerican \?\? market\.priceAmerica
 assert.match(readerSource, /Forecast and evaluated side agree/);
 assert.match(readerSource, /function FootballMarketSignalRail/);
 assert.match(readerSource, /label: "Model vs market"/);
-assert.match(readerSource, /label: "Same-book move"/);
+assert.match(readerSource, /movement\.sportsbook\?\.trim\(\)\.toLowerCase\(\) === "consensus"/);
+assert.match(readerSource, /"Consensus movement"/);
+assert.match(readerSource, /"Same-book move"/);
+assert.match(readerSource, /!movement\.coherentTrail/);
+assert.match(readerSource, /isSpread \? formatSigned\(value\) : formatNumber\(value\)/);
 assert.match(readerSource, /label: "Public vs price"/);
 assert.match(readerSource, /label: "Verified sharp"/);
 assert.match(readerSource, /Public split · not sharp/);

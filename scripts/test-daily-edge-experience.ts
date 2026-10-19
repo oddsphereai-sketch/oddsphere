@@ -1400,6 +1400,8 @@ check(
   "NFL and CFB render explicit same-book Spread and Total line movement without a synthetic claim",
   candidateSource.includes("{showSplits ? <CompactPointLineMovement market={market} /> : null}") &&
     candidateSource.includes('const marketLabel = isTotal ? "Total" : `${spreadSide} spread`') &&
+    candidateSource.includes('terminal?.sportsbook?.trim().toLowerCase() === "consensus"') &&
+    candidateSource.includes('"Consensus line history"') &&
     candidateSource.includes("A coherent same-book opener is unavailable. The current line is shown without a movement claim.") &&
     candidateSource.includes('current < first ? `${spreadSide} strengthened` : `${spreadSide} eased`') &&
     !candidateSource.includes("showSplits && !football ? <CompactPointLineMovement"),
@@ -1755,7 +1757,10 @@ check(
   "football Market Pulse uses a compact authentic four-signal hierarchy",
   candidateSource.includes("function FootballMarketSignalRail") &&
     candidateSource.includes('label: "Model vs market"') &&
-    candidateSource.includes('label: "Same-book move"') &&
+    candidateSource.includes('movement.sportsbook?.trim().toLowerCase() === "consensus"') &&
+    candidateSource.includes('"Consensus movement"') &&
+    candidateSource.includes('"Same-book move"') &&
+    candidateSource.includes('!movement.coherentTrail') &&
     candidateSource.includes('label: "Public vs price"') &&
     candidateSource.includes('label: "Verified sharp"') &&
     candidateSource.includes("Conviction ${convictionRose ? \"rose\" : \"eased\"}") &&
