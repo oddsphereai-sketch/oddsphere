@@ -3973,7 +3973,11 @@ assert.equal(
   "the sole leased CFB writer must receive multiple attempts inside the immutable 20-minute T-60 tolerance",
 );
 const reader = readFileSync(path.resolve("app/dev/experience-preview/ActualDailyEdgePreview.tsx"), "utf8");
-assert.match(reader, /sport === "nfl" \|\| sport === "cfb" \? "Expected score"/);
+assert.match(
+  reader,
+  /sport === "nfl" \|\| sport === "cfb" \|\| illustrativeSample \? "Expected score"/,
+  "football and the explicit illustrative sample must retain the Expected score label",
+);
 assert.match(reader, /Representative final/);
 assert.match(reader, /footballExpectedAway\.toFixed\(1\)/);
 assert.match(reader, /presentDailyEdgeOperationalNoPlay/, "CFB must pass through the shared operational-health presentation boundary");

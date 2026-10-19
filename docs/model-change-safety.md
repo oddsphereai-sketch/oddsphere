@@ -1,5 +1,29 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: MLB trusted Total scope recovery v4
+
+On 2026-10-19 Daniel Mengel directed Oddsphere to repair the MLB price gap
+rather than accept it or substitute copy. This exception is limited to the
+future-unlocked market-input correction documented in
+`docs/model-audits/2026-10-19-mlb-trusted-total-scope-recovery.md`.
+
+The generic SharpAPI event payload may contain a complete Total from an
+unapproved sportsbook while its market-scoped payload contains complete
+approved-book pairs. V4 suppresses the existing bounded market-scoped recovery
+only when the generic payload already has an approved same-book, same-line,
+two-sided main Total with both prices. Sportzino remains ineligible for the
+evaluated member price. The 100-call ceiling, provider hierarchy, score,
+probability, side, grade thresholds, stake, writer, lease, cadence, tracking,
+copy, layout, and all stored locks are unchanged.
+
+Publication requires the pure provider regression, focused MLB writer/reader
+and lock tests, exact zero-write board impact, TypeScript, lint, full
+model-change verification, latest-main integration safety, protected PR checks,
+and live proof of the v4 input identity, current approved Total tuple, sole
+writer/lease, reader coherence, and unchanged locks. Roll back future unlocked
+input selection to v3 on request-bound regression, unapproved price selection,
+mixed identity, writer overlap, reader mismatch, or lock mutation.
+
 ## Owner-directed correctness exception: UCL exact-price actionability r11
 
 On 2026-10-18 Daniel Mengel directed Oddsphere to check every Daily Edge model

@@ -282,6 +282,47 @@ async function main() {
     check("generic moneyline remains present", result.records.some((r) => r.market_type === "moneyline"));
   }
 
+  section("Untrusted generic Total cannot suppress approved-book recovery");
+  {
+    const eventId = "mlb_royals_twins_2026-06-05_b3";
+    const oppRows = [oppRow({ eventId, away: "Kansas City Royals", home: "Minnesota Twins" })];
+    const genericRows = new Map<string, Array<Record<string, unknown>>>([[eventId, [
+      oddsRow({ market_type: "total_runs", sportsbook: "sportzino", selection_type: "over", line: 6.5, odds_american: -133 }),
+      oddsRow({ market_type: "total_runs", sportsbook: "sportzino", selection_type: "under", line: 6.5, odds_american: -105 }),
+    ]]]);
+    const targetedTotals = new Map<string, Array<Record<string, unknown>>>([[eventId, [
+      oddsRow({ market_type: "total_runs", sportsbook: "betmgm", selection_type: "over", line: 6.5, odds_american: -140 }),
+      oddsRow({ market_type: "total_runs", sportsbook: "betmgm", selection_type: "under", line: 6.5, odds_american: 105 }),
+    ]]]);
+    const stub = new StubClient(oppRows, genericRows, targetedTotals);
+    const provider = new SharpAPIOddsProvider("stub-key", mockResolver, { client: stub });
+    const result = await provider.getGameLinesV2(SLATE, "mlb");
+
+    check(
+      "market-scoped Total query fires despite a complete untrusted pair",
+      stub.calls.some((call) =>
+        call.path === "/odds" &&
+        call.query.event_id === eventId &&
+        call.query.market_type === "total_runs"
+      ),
+    );
+    const recoveredBetMgm = result.records.filter((row) =>
+      row.market_type === "total" &&
+      row.sportsbook === "betmgm" &&
+      row.line_value === 6.5,
+    );
+    check(
+      "approved exact-line over/under pair survives recovery",
+      recoveredBetMgm.length === 2 &&
+      recoveredBetMgm.some((row) => row.side === "over" && row.odds_american === -140) &&
+      recoveredBetMgm.some((row) => row.side === "under" && row.odds_american === 105),
+    );
+    check(
+      "untrusted rows remain context only rather than becoming an approved substitute",
+      result.records.filter((row) => row.sportsbook === "sportzino").length === 2,
+    );
+  }
+
   section("Generic payload recovers first-inning totals through targeted query");
   {
     const eventId = "mlb_royals_twins_2026-06-05_b3";
