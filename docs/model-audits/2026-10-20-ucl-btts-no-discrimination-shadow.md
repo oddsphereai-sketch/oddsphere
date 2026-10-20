@@ -24,6 +24,12 @@ The frozen chronological blocks confirm a direction-selection defect:
 This is not evidence that the underlying event is usually No. It is evidence
 that the incumbent barely discriminates which matches are No.
 
+The candidate did **not** predict No in 34.62% of all matches. It predicted No
+in 17/63 confirmation matches (26.98%). There were 26 actual No results
+(41.27%), and 34.62% No recall means the candidate found 9 of those 26. The
+remaining defect is therefore selection and calibration, not an excessive
+share of No predictions.
+
 ## Rejected shortcuts
 
 - Plain probability recalibration lowered numbers but did not improve No
@@ -60,6 +66,26 @@ untouched confirmation:
 Because Brier, log loss, and AUC regressed, this candidate is rejected for live
 publication. It is a useful feature family, not a production model yet.
 
+## Post-confirmation stability diagnosis
+
+After the confirmation result was opened, additional work is exploratory and
+cannot turn the same block into a fresh acceptance set. It isolated coefficient
+drift as the main failure mode:
+
+| Confirmation policy | Predicted No | Accuracy | No recall | Brier | Log loss | AUC |
+|---|---:|---:|---:|---:|---:|---:|
+| Incumbent | 2/63 | 58.73% | 3.85% | 0.23845 | 0.66943 | 0.6060 |
+| Frozen selection fit | 4/63 | 58.73% | 7.69% | 0.23475 | 0.66137 | 0.6185 |
+| 25% refit / 75% frozen diagnostic | 8/63 | 58.73% | 15.38% | 0.23687 | 0.66578 | 0.6040 |
+| Full refit | 17/63 | 60.32% | 34.62% | 0.24894 | 0.69440 | 0.5780 |
+
+The stable model improves probability quality and modestly reduces Yes bias;
+the unconstrained refit finds many more No results but becomes poorly
+calibrated. The next independent candidate should therefore regularize new
+coefficients toward the frozen scorer rather than applying an arbitrary global
+probability reduction. Its acceptance evidence must come from the forward
+cohort declared below, not further reuse of this confirmation block.
+
 ## Market-reader evidence and forward declaration
 
 Historical stored UCL line history currently has zero settled matches with a
@@ -94,4 +120,3 @@ must also preserve or improve Match Result accuracy, Total accuracy, team-score
 MAE, board count, and coherent score residuals. Evaluation is by exact release
 and T-60 evidence only. Until that gate passes, the current live release stays
 unchanged and the candidate remains shadow-only.
-

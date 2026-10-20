@@ -170,15 +170,15 @@ const directFeatures = {
 } as const;
 
 function candidatePredictions(
-  name: keyof typeof directFeatures | "team_scoring_hurdle" | "historical_team_hurdle" | "historical_hurdle_calibrated" | "chance_quality_hurdle" | "chance_quality_calibrated",
+  name: keyof typeof directFeatures | "team_scoring_hurdle" | "historical_team_hurdle" | "historical_hurdle_calibrated" | "chance_quality_hurdle" | "chance_quality_calibrated" | "chance_quality_stacked",
   train: ForecastRow[],
   target: ForecastRow[],
   l2: number,
 ): { probabilities: number[]; coefficients: unknown } {
   if (name === "team_scoring_hurdle" || name === "historical_team_hurdle" || name === "historical_hurdle_calibrated"
-    || name === "chance_quality_hurdle" || name === "chance_quality_calibrated") {
+    || name === "chance_quality_hurdle" || name === "chance_quality_calibrated" || name === "chance_quality_stacked") {
     const useHistory = name !== "team_scoring_hurdle";
-    const useChanceQuality = name === "chance_quality_hurdle" || name === "chance_quality_calibrated";
+    const useChanceQuality = name === "chance_quality_hurdle" || name === "chance_quality_calibrated" || name === "chance_quality_stacked";
     const sideFeature = (row: ForecastRow, home: boolean) => !useHistory
       ? [Math.log(home ? row.lambdaHome : row.lambdaAway), home ? 1 : 0]
       : [
@@ -201,6 +201,17 @@ function candidatePredictions(
     const sideOutcomes = train.flatMap((row) => [row.homeScored, row.awayScored]);
     const model = fitLogistic(sideFeatures, sideOutcomes, l2);
     const product = (row: ForecastRow) => predictLogistic(model, sideFeature(row, true)) * predictLogistic(model, sideFeature(row, false));
+    if (name === "chance_quality_stacked") {
+      const calibration = fitLogistic(
+        train.map((row) => [logit(row.raw), logit(product(row))]),
+        train.map((row) => row.actual),
+        l2,
+      );
+      return {
+        probabilities: target.map((row) => predictLogistic(calibration, [logit(row.raw), logit(product(row))])),
+        coefficients: { scoring: model, stack: calibration },
+      };
+    }
     if (name === "historical_hurdle_calibrated" || name === "chance_quality_calibrated") {
       const calibration = fitLogistic(train.map((row) => [logit(product(row))]), train.map((row) => row.actual), l2);
       return {
@@ -368,7 +379,7 @@ async function main() {
   const selectionRows = forecast(calibration);
   const confirmationRows = forecast(holdout);
   const rawSelection = metrics(selectionRows, selectionRows.map((row) => row.raw));
-  const candidateNames = ["platt", "structured", "scoring_shape", "team_scoring_hurdle", "historical_scoring", "historical_team_hurdle", "historical_hurdle_calibrated", "chance_quality_hurdle", "chance_quality_calibrated"] as const;
+  const candidateNames = ["platt", "structured", "scoring_shape", "team_scoring_hurdle", "historical_scoring", "historical_team_hurdle", "historical_hurdle_calibrated", "chance_quality_hurdle", "chance_quality_calibrated", "chance_quality_stacked"] as const;
   const l2Grid = [0.01, 0.1, 1, 10] as const;
   const trials = candidateNames.flatMap((name) => l2Grid.map((l2) => {
     const candidate = candidatePredictions(name, trainRows, selectionRows, l2);
@@ -385,6 +396,18 @@ async function main() {
   const confirmationCandidate = selected
     ? candidatePredictions(selected.name, combined, confirmationRows, selected.l2)
     : null;
+  const frozenConfirmationCandidate = selected
+    ? candidatePredictions(selected.name, trainRows, confirmationRows, selected.l2)
+    : null;
+  const stabilityBlends = confirmationCandidate && frozenConfirmationCandidate
+    ? [0.25, 0.5, 0.75].map((refitWeight) => ({
+      refitWeight,
+      metrics: metrics(confirmationRows, confirmationCandidate.probabilities.map((probability, index) => sigmoid(
+        refitWeight * logit(probability)
+          + (1 - refitWeight) * logit(frozenConfirmationCandidate.probabilities[index]!),
+      ))),
+    }))
+    : [];
   const rawConfirmation = metrics(confirmationRows, confirmationRows.map((row) => row.raw));
   const selectedConfirmation = confirmationCandidate ? metrics(confirmationRows, confirmationCandidate.probabilities) : null;
   const accepted = selectedConfirmation !== null
@@ -403,13 +426,19 @@ async function main() {
       selectionStructure: structuralAudit(selectionRows, selectionRows.map((row) => row.raw)),
       confirmationStructure: structuralAudit(confirmationRows, confirmationRows.map((row) => row.raw)),
     },
-    predeclaredSelectionTrials: trials,
+    selectionTrials: trials,
     selected: selected && confirmationCandidate ? {
       ...selected,
       confirmation: selectedConfirmation,
       coefficients: confirmationCandidate.coefficients,
       selectionStructure: structuralAudit(selectionRows, candidatePredictions(selected.name, trainRows, selectionRows, selected.l2).probabilities),
       confirmationStructure: structuralAudit(confirmationRows, confirmationCandidate.probabilities),
+    } : null,
+    stabilityDiagnostic: selected && frozenConfirmationCandidate ? {
+      policy: "freeze_selection_fit_without_refitting_on_selection_block",
+      confirmation: metrics(confirmationRows, frozenConfirmationCandidate.probabilities),
+      structure: structuralAudit(confirmationRows, frozenConfirmationCandidate.probabilities),
+      exploratoryRefitBlends: stabilityBlends,
     } : null,
     accepted,
     gate: !selected
