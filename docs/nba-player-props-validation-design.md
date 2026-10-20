@@ -51,6 +51,106 @@ same-book movement, so flips, confirmations, promotions, demotions, and grades
 remain unfit until point-in-time current snapshots are replayed on a later
 untouched window.
 
+## Validation-path audit
+
+The original 45-game/15-game replay was necessary but not sufficient because it
+did not select competing models on a window separate from confirmation. The
+reproducible tournament now uses the same immutable source capture with:
+
+- 36 chronological development games;
+- 12 later candidate-selection games;
+- 12 still-later untouched confirmation games;
+- eight independent candidates spanning the research ridge, a two-stage
+  conditional-minutes regression, three minutes horizons, and three
+  partial-pooling variants;
+- zero provider calls on a cached rerun and the same immutable-input SHA.
+
+The first simple recent-form and partial-pooling alternatives did not pass
+confirmation. A later structural candidate replaced the weighted-average
+minutes estimate with a chronological conditional-minutes regression using
+recent/season minutes, role volatility, participation, rest, home/away,
+back-to-back state, player history, and team-change context while leaving the
+stat-rate engine unchanged.
+
+That two-stage candidate produced the first repeatable improvement across both
+selection and untouched confirmation:
+
+| Market | Selection: ridge → candidate | Confirmation: ridge → candidate | Status |
+|---|---|---|---|
+| Points | MAE 6.77 → 6.32; hit 48.4% → 51.6% | MAE 5.95 → 5.52; hit 52.9% → 56.3% | Promising; second window required |
+| PRA | MAE 8.89 → 8.15; hit 46.2% → 54.5% | MAE 8.15 → 7.31; hit 51.0% → 51.9% | Promising; second window required |
+| Points + rebounds | MAE 8.16 → 7.55; hit 47.4% → 53.8% | MAE 7.20 → 6.48; hit 53.2% → 56.4% | Promising; second window required |
+| Points + assists | MAE 7.43 → 6.85; hit 48.9% → 56.0% | MAE 7.02 → 6.44; hit 43.8% → 42.7% | Projection gain only; direction not qualified |
+
+It failed confirmation for Assists and Rebounds + Assists. The selected simple
+Rebounds candidate improved MAE by 5.0% but reduced direction by 6.4 points, and
+the selected Threes candidate worsened MAE without a direction gain. Therefore
+no model is accepted for production yet. The two-stage architecture is retained
+as the next candidate rather than discarded, while each weak market continues
+through its own structural model.
+
+The same two-stage minutes candidate was then replayed across five rolling
+chronological blocks. It beat the ridge on MAE without losing more than two
+direction points in 4/5 Points blocks, 4/5 Points + Assists blocks, 3/5 PRA
+blocks, and 3/5 Points + Rebounds blocks. Points direction improved in every
+block, including 50.6% to 60.2%, 52.0% to 53.3%, 46.9% to 50.0%, 53.5% to
+56.3%, and 43.8% to 50.0%. This is meaningful stability evidence for the
+two-stage architecture, but it still comes from one late-season cached span and
+does not contain the early-season role changes needed for launch qualification.
+
+Five rolling-origin blocks also show that the current independent model is not
+stable enough to validate:
+
+| Market | Direction range | Projection-MAE range |
+|---|---:|---:|
+| Points | 43.8%–53.5% | 4.64–6.93 |
+| Rebounds | 52.0%–80.0% | 1.78–2.43 |
+| Assists | 39.5%–66.1% | 1.25–2.09 |
+| Threes | 45.0%–52.9% | 0.85–1.18 |
+| Points + rebounds + assists | 42.0%–52.0% | 6.45–8.95 |
+| Points + rebounds | 39.5%–58.2% | 5.65–8.18 |
+| Points + assists | 41.1%–57.4% | 5.42–7.63 |
+| Rebounds + assists | 44.4%–56.9% | 2.66–3.47 |
+
+The error decomposition identifies two separate independent-model defects. The
+conditional-minutes forecast misses by 5.44 minutes on average. Perfect minutes
+would reduce Points MAE from 5.70 to 4.48 and PRA MAE from 7.74 to 5.55, so
+availability and role are material. But those remaining errors are still too
+large: the stat-rate models also require replacement rather than cosmetic
+calibration.
+
+Opening-market evidence is not a stable substitute. On untouched confirmation,
+the de-vigged opening market beat the independent side for Assists (67.9% versus
+42.9%) and Points + Assists (58.4% versus 43.8%). On the immediately preceding
+selection window, however, the same opening evidence lost to the independent
+side for Assists (52.9% versus 55.5%) and was essentially tied for Points +
+Assists (48.2% versus 48.9%). A rule chosen from the confirmation result would
+be hindsight leakage. Timestamped movement and lock-time evidence are still
+required before a market-reader rule can qualify.
+
+### Current pathway status
+
+| Gate | Status | What remains |
+|---|---|---|
+| Immutable historical dataset | Passed for the pilot | Add independent early-, mid-, and late-season windows |
+| Reproducible offline replay | Passed | Retain cache SHA and release identity for every future run |
+| Independent model tournament | Failed | Replace minutes/role and market-specific rate engines |
+| Projection stability | Failed | Confirm across multiple rolling windows and a second season |
+| Distribution calibration | Not tested | Fit predictive distributions and test interval coverage/Brier/log loss |
+| Market-reading marriage | Not validated | Capture target-excluded T-180/T-60/T-15/lock snapshots and movement |
+| Grade/ROI calibration | Not tested | Run only after the final forecast qualifies; report board counts and prices |
+| Settlement/private tracking | Not built | Prove DNP, void, overtime, and stat-correction handling |
+| Production launch | Blocked | All preceding gates must pass on one release-pure candidate |
+
+The next independent-model candidate must therefore be structural, not another
+single coefficient change: participation and minutes by lineup/availability
+state; Points from shot and free-throw opportunity plus efficiency; Rebounds
+from rebound chances and expected misses; Assists from touches, passes,
+potential assists and teammate conversion; Threes from attempt volume and make
+probability; and combination markets from one correlated simulation. That model
+is selected without seeing confirmation, after which the market reader and
+grades receive their own later windows.
+
 ## Reader contract
 
 The proposed reader uses the existing `PlayerPropReaderDialog` shell and visual
@@ -101,4 +201,3 @@ panel.
 7. Only after those gates pass: create the one authoritative writer/lease,
    release identifiers, lock tests, health checks, and an explicit deployment
    PR.
-

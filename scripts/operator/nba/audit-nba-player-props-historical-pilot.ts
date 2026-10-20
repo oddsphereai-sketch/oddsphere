@@ -15,7 +15,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   fetchNbaBdlHistoricalRows,
@@ -29,6 +29,7 @@ import {
 } from "../../../lib/services/nba/nbaPointInTimeFeatures";
 import {
   fetchNbaBdlOpeningPlayerPropsHistory,
+  type NbaPlayerPropsOpeningHistory,
 } from "../../../lib/services/nba/nbaPlayerPropsHistorical";
 import {
   fitNbaPlayerPropsIndependentResearchModel,
@@ -115,6 +116,15 @@ async function writeAtomicJson(absolute: string, value: unknown): Promise<void> 
   await rename(temporary, absolute);
 }
 
+async function readJsonIfPresent<T>(absolute: string): Promise<T | null> {
+  try {
+    return JSON.parse(await readFile(absolute, "utf8")) as T;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 async function main(): Promise<void> {
   const season = positiveInteger("--season", 2025);
   const openingGames = positiveInteger("--opening-games", 60);
@@ -123,7 +133,11 @@ async function main(): Promise<void> {
   const requestCeiling = positiveInteger("--request-ceiling", 500);
   const requestIntervalMs = positiveInteger("--request-interval-ms", 125);
   const availabilityOnly = hasFlag("--availability-only");
+  const compact = hasFlag("--compact");
   const output = path.resolve(value("--output") ?? `nba-research/reports/player-props-pilot-${season}.json`);
+  const datasetOutputValue = value("--dataset-output");
+  const datasetOutput = datasetOutputValue ? path.resolve(datasetOutputValue) : null;
+  const cacheDirectory = path.resolve(value("--cache-dir") ?? `/private/tmp/oddsphere-nba-player-props-pilot-cache-${season}`);
   let requests = 0;
   const remainingPages = (label: string, cap: number) => {
     const remaining = requestCeiling - requests;
@@ -136,19 +150,24 @@ async function main(): Promise<void> {
     }
   };
 
-  const rawGames: Record<string, unknown>[] = [];
-  for (const seasonType of SEASON_TYPES) {
-    const result = await fetchNbaBdlHistoricalRows({
-      dataset: "games",
-      season,
-      seasonType,
-      requestIntervalMs,
-      maxPages: remainingPages(`${seasonType} schedule`, 50),
-    });
-    requests += result.requests;
-    assertWithinCeiling(`${seasonType} schedule`);
-    if (!result.complete) throw new Error(`NBA ${seasonType} schedule exceeded the bounded page limit.`);
-    rawGames.push(...result.rows);
+  const scheduleCache = path.join(cacheDirectory, "games.json");
+  let rawGames = await readJsonIfPresent<Record<string, unknown>[]>(scheduleCache);
+  if (!rawGames) {
+    rawGames = [];
+    for (const seasonType of SEASON_TYPES) {
+      const result = await fetchNbaBdlHistoricalRows({
+        dataset: "games",
+        season,
+        seasonType,
+        requestIntervalMs,
+        maxPages: remainingPages(`${seasonType} schedule`, 50),
+      });
+      requests += result.requests;
+      assertWithinCeiling(`${seasonType} schedule`);
+      if (!result.complete) throw new Error(`NBA ${seasonType} schedule exceeded the bounded page limit.`);
+      rawGames.push(...result.rows);
+    }
+    await writeAtomicJson(scheduleCache, rawGames);
   }
   const uniqueRawGames = [...new Map(rawGames
     .filter(isFinalGame)
@@ -161,20 +180,27 @@ async function main(): Promise<void> {
   }
   const evaluationPool = games.slice(-evaluationSpanGames);
   const evaluationGames = evenlySpaced(evaluationPool, openingGames);
-  if (requests + evaluationGames.length > requestCeiling) {
-    throw new Error(`NBA player-props pilot cannot fit ${evaluationGames.length} opening requests under its ceiling.`);
+  const selectionIdentity = createHash("sha256").update(JSON.stringify({
+    season,
+    evaluationGameIds: evaluationGames.map((game) => game.gameId),
+    warmupGames,
+  })).digest("hex").slice(0, 16);
+  const selectionCacheDirectory = path.join(cacheDirectory, selectionIdentity);
+  const openingCache = path.join(selectionCacheDirectory, "opening.json");
+  let opening = await readJsonIfPresent<NbaPlayerPropsOpeningHistory>(openingCache);
+  if (!opening) {
+    if (requests + evaluationGames.length > requestCeiling) {
+      throw new Error(`NBA player-props pilot cannot fit ${evaluationGames.length} opening requests under its ceiling.`);
+    }
+    opening = await fetchNbaBdlOpeningPlayerPropsHistory({
+      gameIds: evaluationGames.map((game) => game.gameId),
+      events: gameEventMap(evaluationGames),
+      requestIntervalMs,
+    });
+    requests += opening.requests;
+    assertWithinCeiling("opening player props");
+    await writeAtomicJson(openingCache, opening);
   }
-  const opening = await fetchNbaBdlOpeningPlayerPropsHistory({
-    gameIds: evaluationGames.map((game) => game.gameId),
-    events: gameEventMap(evaluationGames),
-    canonicalPlayers: Object.fromEntries(
-      // BALLDONTLIE player ids are stable canonical ids within this research boundary.
-      Array.from({ length: 0 }, () => ["", ""]),
-    ),
-    requestIntervalMs,
-  });
-  requests += opening.requests;
-  assertWithinCeiling("opening player props");
   const coveredGameIds = new Set(opening.rows.map((row) => Number(row.providerEventId)));
   const availability = {
     season,
@@ -210,31 +236,41 @@ async function main(): Promise<void> {
   // even though opening prices are sampled only for evaluation games.
   const requestedGames = games.slice(Math.max(0, firstEvaluationIndex - warmupGames), lastEvaluationIndex + 1);
   const gameIds = requestedGames.map((game) => game.gameId);
-  const rawBoxes: Record<string, unknown>[] = [];
-  const rawAdvanced: Record<string, unknown>[] = [];
-  for (const batch of chunks(gameIds, 25)) {
-    const result = await fetchNbaBdlHistoricalRows({
-      dataset: "box",
-      gameIds: batch,
-      requestIntervalMs,
-      maxPages: remainingPages("box-score batch", 25),
-    });
-    requests += result.requests;
-    assertWithinCeiling("box-score batch");
-    if (!result.complete) throw new Error("NBA box-score batch exceeded the bounded page limit.");
-    rawBoxes.push(...result.rows);
+  const boxesCache = path.join(selectionCacheDirectory, "boxes.json");
+  let rawBoxes = await readJsonIfPresent<Record<string, unknown>[]>(boxesCache);
+  if (!rawBoxes) {
+    rawBoxes = [];
+    for (const batch of chunks(gameIds, 25)) {
+      const result = await fetchNbaBdlHistoricalRows({
+        dataset: "box",
+        gameIds: batch,
+        requestIntervalMs,
+        maxPages: remainingPages("box-score batch", 25),
+      });
+      requests += result.requests;
+      assertWithinCeiling("box-score batch");
+      if (!result.complete) throw new Error("NBA box-score batch exceeded the bounded page limit.");
+      rawBoxes.push(...result.rows);
+    }
+    await writeAtomicJson(boxesCache, rawBoxes);
   }
-  for (const batch of chunks(gameIds, 25)) {
-    const result = await fetchNbaBdlHistoricalRows({
-      dataset: "advanced",
-      gameIds: batch,
-      requestIntervalMs,
-      maxPages: remainingPages("advanced-stat batch", 25),
-    });
-    requests += result.requests;
-    assertWithinCeiling("advanced-stat batch");
-    if (!result.complete) throw new Error("NBA advanced-stat batch exceeded the bounded page limit.");
-    rawAdvanced.push(...result.rows);
+  const advancedCache = path.join(selectionCacheDirectory, "advanced.json");
+  let rawAdvanced = await readJsonIfPresent<Record<string, unknown>[]>(advancedCache);
+  if (!rawAdvanced) {
+    rawAdvanced = [];
+    for (const batch of chunks(gameIds, 25)) {
+      const result = await fetchNbaBdlHistoricalRows({
+        dataset: "advanced",
+        gameIds: batch,
+        requestIntervalMs,
+        maxPages: remainingPages("advanced-stat batch", 25),
+      });
+      requests += result.requests;
+      assertWithinCeiling("advanced-stat batch");
+      if (!result.complete) throw new Error("NBA advanced-stat batch exceeded the bounded page limit.");
+      rawAdvanced.push(...result.rows);
+    }
+    await writeAtomicJson(advancedCache, rawAdvanced);
   }
 
   const boxes = unique(rawBoxes.map(normalizeNbaHistoricalPlayerBox), (row) => row.rowId);
@@ -280,6 +316,23 @@ async function main(): Promise<void> {
   const confirmationGameIds = new Set(coveredOrdered.slice(splitIndex).map((game) => game.gameId));
   const trainingRows = featureRows.filter((row) => trainingGameIds.has(row.game_id));
   const confirmationRows = featureRows.filter((row) => confirmationGameIds.has(row.game_id));
+  if (datasetOutput) {
+    await writeAtomicJson(datasetOutput, {
+      release: "nba_player_props_historical_research_dataset_2026_10_20_r1",
+      mode: "offline_research_only",
+      actionable: false,
+      season,
+      games: evaluationGames,
+      featureRows,
+      openingObservations: observations,
+      immutableInputsSha256: createHash("sha256").update(JSON.stringify({
+        gameIds,
+        openingObservationIds: observations.map((row) => row.providerObservationId).sort(),
+        boxIds: boxes.map((row) => row.rowId).sort((a, b) => a - b),
+        advancedIds: advanced.map((row) => row.rowId).sort((a, b) => a - b),
+      })).digest("hex"),
+    });
+  }
   const replay = replayNbaPlayerPropsFoundation({ trainingRows, confirmationRows, openingObservations: observations });
   const example = historicalExample({
     trainingRows,
@@ -296,6 +349,7 @@ async function main(): Promise<void> {
       requestCeiling,
       withinCeiling: requests <= requestCeiling,
       requestIntervalMs,
+      cacheDirectory: selectionCacheDirectory,
     },
     availability,
     dataset: {
@@ -328,7 +382,14 @@ async function main(): Promise<void> {
     },
   };
   await writeAtomicJson(output, report);
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(compact ? {
+    mode: report.mode,
+    actionable: report.actionable,
+    requestPolicy: report.requestPolicy,
+    dataset: report.dataset,
+    replay: report.replay,
+    integrity: report.integrity,
+  } : report, null, 2)}\n`);
 }
 
 function historicalExample(args: {
