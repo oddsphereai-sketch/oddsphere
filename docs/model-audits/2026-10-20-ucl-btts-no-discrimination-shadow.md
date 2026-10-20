@@ -298,3 +298,23 @@ ID. The feature set, shrinkage, half-life, weights, solver, and all acceptance
 gates remain unchanged. The small confirmation size cannot alone authorize
 production; a passing result must also improve the already opened pooled
 2011-26 robustness cohort before current-board rehearsal.
+
+### Zero-risk result
+
+The 2010 provider cohort contained 125 matches and the domestic source supplied
+36,494 prior rows. The selected 35% zero-risk blend improved its 25-match
+selection block, but failed on the sealed final 30 matches: accuracy declined
+from 60.00% to 56.67%, No recall from 53.33% to 46.67%, Brier worsened from
+0.24293 to 0.24343, and log loss from 0.68028 to 0.68045. AUC improved slightly
+from 0.62667 to 0.63111 and coherent team-score MAE improved from 0.94145 to
+0.93747, but partial improvement cannot pass the simultaneous gate.
+
+The result rejects a simple downward/zero-risk correction. Together with the
+recent-season domestic scorer and dynamic-Poisson test, it shows that the small
+UCL-only scorer is not stable enough to estimate the interaction between
+attacking scoring occurrence and opponent clean-sheet risk. The next candidate
+must learn that relationship on a substantially larger domestic match sample,
+seal it on a domestic chronological holdout, and transport the frozen scorer to
+UCL without fitting or selecting on UCL outcomes. Until that external model
+exists, another UCL-only coefficient or threshold search would be repeated
+testing rather than evidence of improvement.
