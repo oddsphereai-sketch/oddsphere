@@ -25,21 +25,21 @@ assert.equal(hourlyDue.reason, "hourly_refresh_due");
 
 const schedulerJitterDue = planNflPlayerPropsRefresh({
   now: NOW,
-  previous: snapshot({ generatedAt: "2026-10-07T15:00:00.250Z", lockAt: "2026-10-11T16:00:00.000Z" }),
+  previous: snapshot({ generatedAt: "2026-10-07T15:00:01.494Z", lockAt: "2026-10-11T16:00:00.000Z" }),
 });
 assert.deepEqual(
   { run: schedulerJitterDue.run, reason: schedulerJitterDue.reason, release: schedulerJitterDue.release },
   {
     run: true,
     reason: "hourly_refresh_due",
-    release: "nfl_player_props_cadence_2026_10_19_r2_scheduler_jitter_tolerance",
+    release: "nfl_player_props_cadence_2026_10_20_r3_observed_scheduler_jitter",
   },
-  "sub-second scheduler jitter cannot stretch an hourly refresh to 75 minutes",
+  "the observed 1.494-second scheduler lead cannot stretch an hourly refresh to 75 minutes",
 );
 assert.equal(planNflPlayerPropsRefresh({
   now: NOW,
-  previous: snapshot({ generatedAt: "2026-10-07T15:00:01.001Z", lockAt: "2026-10-11T16:00:00.000Z" }),
-}).run, false, "the one-second tolerance does not flatten the released cadence");
+  previous: snapshot({ generatedAt: "2026-10-07T15:00:05.001Z", lockAt: "2026-10-11T16:00:00.000Z" }),
+}).run, false, "the five-second tolerance does not flatten the released cadence");
 
 const sixHourFresh = planNflPlayerPropsRefresh({
   now: NOW,

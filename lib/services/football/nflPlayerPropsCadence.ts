@@ -1,7 +1,7 @@
 import type { NflPlayerPropsProductionSnapshot } from "./nflPlayerPropsProductionContract";
 
 export const NFL_PLAYER_PROPS_CADENCE_RELEASE =
-  "nfl_player_props_cadence_2026_10_19_r2_scheduler_jitter_tolerance" as const;
+  "nfl_player_props_cadence_2026_10_20_r3_observed_scheduler_jitter" as const;
 
 const FIFTEEN_MINUTES_MS = 15 * 60_000;
 const THIRTY_MINUTES_MS = 30 * 60_000;
@@ -12,7 +12,7 @@ const SIX_HOURS_MS = 6 * 60 * 60_000;
 // timestamp of the preceding completed snapshot. Without a bounded allowance,
 // an hourly refresh due at :21 can miss by milliseconds and wait until :36.
 // Keep this well below the heartbeat interval so it cannot flatten cadence.
-const SCHEDULER_JITTER_TOLERANCE_MS = 1_000;
+const SCHEDULER_JITTER_TOLERANCE_MS = 5_000;
 
 export type NflPlayerPropsCadencePlan = {
   release: typeof NFL_PLAYER_PROPS_CADENCE_RELEASE;
