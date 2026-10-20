@@ -3743,7 +3743,9 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 ## NBA/NHL operational refresh schedules
 
 - NBA refresh release: `nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board`
-- NBA member board release: `nba_rolling_member_board_2026_10_16_r2_analyzed_predictions`
+- NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
+  - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
+  - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
 - NBA member-board eligibility: `nba_member_board_window_2026_10_16_r3_rolling_analysis`; every officially tracked regular-season date in the active seven-day window is analyzed, while preseason/offseason and dates beyond the bounded window remain ineligible. This reader eligibility does not create an official record before the existing T-60 lock lifecycle.

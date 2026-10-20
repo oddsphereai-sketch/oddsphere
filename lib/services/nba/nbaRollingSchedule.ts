@@ -8,7 +8,7 @@ import { isPublicallyTracked } from "../../config/officialTrackingStart";
 export const NBA_REGULAR_SEASON_OPENER = "2026-10-20" as const;
 export const NBA_ROLLING_SCHEDULE_DAYS = 7 as const;
 export const NBA_ROLLING_SCHEDULE_RELEASE =
-  "nba_rolling_member_board_2026_10_16_r2_analyzed_predictions" as const;
+  "nba_rolling_member_board_2026_10_20_r3_same_day_final_retention" as const;
 
 const MEMBER_SCHEDULE_STATUSES = new Set([
   "STATUS_SCHEDULED",
@@ -18,6 +18,10 @@ const MEMBER_SCHEDULE_STATUSES = new Set([
   "STATUS_DELAYED",
   "STATUS_SUSPENDED",
   "STATUS_POSTPONED",
+  // Completed games remain part of the current ET board through the normal
+  // board-date rollover. Removing finals here made the rolling-board identity
+  // filter hide an immutable locked card immediately after the score ingest.
+  "STATUS_FINAL",
 ]);
 
 export type NbaRollingScheduleGame = {

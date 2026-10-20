@@ -14,7 +14,7 @@ assert.equal(NBA_ROLLING_SCHEDULE_DAYS, 7);
 assert.equal(NBA_REGULAR_SEASON_OPENER, "2026-10-20");
 assert.equal(
   NBA_ROLLING_SCHEDULE_RELEASE,
-  "nba_rolling_member_board_2026_10_16_r2_analyzed_predictions",
+  "nba_rolling_member_board_2026_10_20_r3_same_day_final_retention",
 );
 
 assert.equal(nbaRollingScheduleWindow("2026-10-13"), null);
@@ -55,7 +55,8 @@ assert.equal(isNbaMemberScheduleStatus("STATUS_HALFTIME"), true);
 assert.equal(isNbaMemberScheduleStatus("STATUS_END_PERIOD"), true);
 assert.equal(isNbaMemberScheduleStatus("STATUS_DELAYED"), true);
 assert.equal(isNbaMemberScheduleStatus("STATUS_POSTPONED"), true);
-assert.equal(isNbaMemberScheduleStatus("STATUS_FINAL"), false);
+assert.equal(isNbaMemberScheduleStatus("STATUS_FINAL"), true);
+assert.equal(isNbaMemberScheduleStatus("final"), false);
 assert.equal(isNbaMemberScheduleStatus("STATUS_CANCELED"), false);
 
 assert.equal(nbaMemberAnalysisEligible("2026-10-19", "2026-10-19"), false);
