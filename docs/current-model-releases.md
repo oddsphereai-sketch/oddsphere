@@ -3557,16 +3557,18 @@ evaluation. Evidence and rollback:
 `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-predeclaration.md` and
 `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
 
-The October 20 prospective independent-score shadow is
-`nba_independent_score_shadow_2026_10_20_r1_rating_30_total_20`. It records the frozen 30% adjusted-
-rating margin / 20% adjusted-rating Total challenger and a separately target-excluded pass through the
-same r6 professional reader inside future unlocked NBA grounding snapshots. It has zero production
-authority and changes no score, pick, probability, grade, stake, promotion, demotion, writer, lease,
-cadence, lock, tracking row, or member output. The candidate improved all six broad 2025 confirmation
-diagnostics but failed its original candidate-defined close-game gate, so only prospective release-pure
+The current October 20 prospective independent-score shadow is
+`nba_independent_score_shadow_2026_10_20_r2_alpha300_rating_30_total_20`. It replaces r1 only inside
+zero-authority evidence capture: an alpha-300 ratings/schedule ridge feeds the frozen 30% adjusted-
+rating margin / 20% adjusted-rating Total combination and a separately target-excluded pass through the
+same r6 professional reader. On the 1,230-game 2025 confirmation it held winner accuracy at 68.130%,
+improved margin MAE from 11.3705 to 11.3247 and Brier from 0.205080 to 0.203958, and reduced the
+margin-calibration slope from 1.1165 to 1.0526. It failed the predeclared 0.10-point margin-MAE
+production gate, so it changes no public score, pick, probability, grade, stake, promotion, demotion,
+writer, lease, cadence, lock, tracking authority, or member output. Only prospective release-pure
 evidence can authorize a later promotion. Evidence and rollback:
-`docs/model-audits/2026-10-20-nba-independent-score-prospective-shadow.md` and
-`docs/model-audits/2026-10-20-nba-independent-ensemble-shadow-result.md`.
+`docs/model-audits/2026-10-20-nba-margin-compression-repair-predeclaration.md` and
+`docs/model-audits/2026-10-20-nba-margin-compression-repair-result.md`.
 
 The October 19 r8 release preserves the r7 score, reader, executable-line, calibration, grade, writer,
 lease, cadence, and lock contracts while replacing both NBA current-line reads with the shared bounded

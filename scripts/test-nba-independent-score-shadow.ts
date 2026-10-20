@@ -22,13 +22,14 @@ const featureRow = {
 };
 const shadow = buildNbaIndependentScoreShadow({
   featureRow,
-  incumbent,
+  ridgeBase: incumbent,
   trainingHomeAdvantage: 2,
 });
 assert.equal(shadow.productionAuthority, false);
 assert.equal(shadow.available, true);
 assert.equal(shadow.weights.ratingMargin, 0.30);
 assert.equal(shadow.weights.ratingTotal, 0.20);
+assert.deepEqual(shadow.ridgeBase, incumbent);
 assert.ok(shadow.candidate);
 assert.ok(shadow.rating);
 assert.ok(Math.abs(shadow.rating.marginHome - 12) < 1e-12);
@@ -38,7 +39,7 @@ assert.ok(Math.abs(shadow.candidate.total - 221.6) < 1e-12);
 
 const unavailable = buildNbaIndependentScoreShadow({
   featureRow: { ...featureRow, league_off_rating: null },
-  incumbent,
+  ridgeBase: incumbent,
   trainingHomeAdvantage: 2,
 });
 assert.equal(unavailable.available, false);

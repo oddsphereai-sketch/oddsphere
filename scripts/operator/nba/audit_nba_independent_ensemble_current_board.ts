@@ -8,15 +8,15 @@
 import {
   __NBA_PROFESSIONAL_RUNTIME_ARTIFACT_TEST__,
   buildNbaProfessionalRuntimeFeatures,
+  NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT,
   NBA_PROFESSIONAL_MODEL_ARTIFACT,
   selectNbaProfessionalPortableFeatures,
 } from "../../../lib/automodel/nba/nbaProfessionalRuntimeArtifacts";
 import { scoreNbaPortableModel } from "../../../lib/automodel/nba/nbaPortableScoreModel";
+import { buildNbaIndependentScoreShadow } from "../../../lib/automodel/nba/nbaIndependentScoreShadow";
 import { writeFileSync } from "node:fs";
 
-const RELEASE = "nba_independent_ensemble_shadow_2026_10_20_r1_current_board";
-const MARGIN_RATING_WEIGHT = 0.30;
-const TOTAL_RATING_WEIGHT = 0.20;
+const RELEASE = "nba_independent_ensemble_shadow_2026_10_20_r2_alpha300_current_board";
 
 const upcoming = [
   {
@@ -42,14 +42,6 @@ const upcoming = [
   },
 ] as const;
 
-function finiteMean(values: Array<number | null | undefined>): number {
-  const finite = values.filter((value): value is number =>
-    typeof value === "number" && Number.isFinite(value)
-  );
-  if (finite.length === 0) return 99;
-  return finite.reduce((sum, value) => sum + value, 0) / finite.length;
-}
-
 const completed = __NBA_PROFESSIONAL_RUNTIME_ARTIFACT_TEST__.bootstrapGames;
 const homeAdvantage = completed.reduce(
   (sum, game) => sum + game.homeScore - game.awayScore,
@@ -74,61 +66,30 @@ const rows = upcoming.map((game) => {
     NBA_PROFESSIONAL_MODEL_ARTIFACT,
     selectNbaProfessionalPortableFeatures(row),
   );
-  const league = Number(row.league_off_rating);
-  const pace = finiteMean([
-    typeof row.home_pace_15 === "number" ? row.home_pace_15 : null,
-    typeof row.away_pace_15 === "number" ? row.away_pace_15 : null,
-    typeof row.home_pace_prior === "number" ? row.home_pace_prior : null,
-    typeof row.away_pace_prior === "number" ? row.away_pace_prior : null,
-  ]);
-  const ratingHome = (
-    Number(row.home_adjusted_offense)
-    + Number(row.away_adjusted_defense)
-    - league
-  ) * pace / 100 + homeAdvantage / 2;
-  const ratingAway = (
-    Number(row.away_adjusted_offense)
-    + Number(row.home_adjusted_defense)
-    - league
-  ) * pace / 100 - homeAdvantage / 2;
-  const incumbentMargin = incumbent.homeScore - incumbent.awayScore;
-  const incumbentTotal = incumbent.homeScore + incumbent.awayScore;
-  const ratingMargin = ratingHome - ratingAway;
-  const ratingTotal = ratingHome + ratingAway;
-  const candidateMargin = (
-    (1 - MARGIN_RATING_WEIGHT) * incumbentMargin
-    + MARGIN_RATING_WEIGHT * ratingMargin
-  );
-  const candidateTotal = (
-    (1 - TOTAL_RATING_WEIGHT) * incumbentTotal
-    + TOTAL_RATING_WEIGHT * ratingTotal
-  );
-  const candidateHome = (candidateTotal + candidateMargin) / 2;
-  const candidateAway = (candidateTotal - candidateMargin) / 2;
+  const portable = selectNbaProfessionalPortableFeatures(row);
+  const ridgeBase = scoreNbaPortableModel(NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT, portable);
+  const shadow = buildNbaIndependentScoreShadow({
+    featureRow: portable,
+    ridgeBase,
+    trainingHomeAdvantage: homeAdvantage,
+  });
+  if (!shadow.candidate || !shadow.rating) throw new Error(`Unavailable shadow for ${game.gameId}.`);
+  const candidate = shadow.candidate;
   return {
     gameId: game.gameId,
     matchup: `${game.awayTeam}@${game.homeTeam}`,
     incumbent: {
       awayScore: incumbent.awayScore,
       homeScore: incumbent.homeScore,
-      marginHome: incumbentMargin,
-      total: incumbentTotal,
+      marginHome: incumbent.marginHome,
+      total: incumbent.total,
     },
-    rating: {
-      awayScore: ratingAway,
-      homeScore: ratingHome,
-      marginHome: ratingMargin,
-      total: ratingTotal,
-    },
-    candidate: {
-      awayScore: candidateAway,
-      homeScore: candidateHome,
-      marginHome: candidateMargin,
-      total: candidateTotal,
-    },
+    ridgeBase,
+    rating: shadow.rating,
+    candidate,
     delta: {
-      marginHome: candidateMargin - incumbentMargin,
-      total: candidateTotal - incumbentTotal,
+      marginHome: candidate.marginHome - incumbent.marginHome,
+      total: candidate.total - incumbent.total,
     },
   };
 });
@@ -136,11 +97,9 @@ const rows = upcoming.map((game) => {
 console.log(JSON.stringify({
   release: RELEASE,
   status: "research_only_no_production_authority",
-  modelArtifact: NBA_PROFESSIONAL_MODEL_ARTIFACT.release,
-  weights: {
-    marginRating: MARGIN_RATING_WEIGHT,
-    totalRating: TOTAL_RATING_WEIGHT,
-  },
+  incumbentModelArtifact: NBA_PROFESSIONAL_MODEL_ARTIFACT.release,
+  shadowModelArtifact: NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT.release,
+  weights: { marginRating: 0.30, totalRating: 0.20 },
   homeAdvantage,
   rows,
 }, null, 2));

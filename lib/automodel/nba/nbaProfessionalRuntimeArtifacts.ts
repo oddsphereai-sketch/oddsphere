@@ -27,6 +27,10 @@ type NbaProfessionalBootstrap = {
 const bootstrap = require("./modelArtifacts/nbaProfessionalBootstrap.json") as NbaProfessionalBootstrap;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 export const NBA_PROFESSIONAL_MODEL_ARTIFACT = require("./modelArtifacts/nbaProfessionalR15.json") as NbaPortableModelArtifact;
+// Zero-authority prospective artifact. It may be scored only inside the
+// persisted independent-score shadow and never owns member output.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+export const NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT = require("./modelArtifacts/nbaProfessionalMarginShadowR2.json") as NbaPortableModelArtifact;
 
 export const NBA_PROFESSIONAL_TRAINING_HOME_ADVANTAGE = bootstrap.games.reduce(
   (sum, game) => sum + game.homeScore - game.awayScore,
@@ -39,6 +43,14 @@ function assertArtifacts(): void {
   }
   if (NBA_PROFESSIONAL_MODEL_ARTIFACT.featureRelease !== NBA_POINT_IN_TIME_FEATURE_RELEASE) {
     throw new Error("NBA professional model and point-in-time feature releases differ.");
+  }
+  if (
+    NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT.featureRelease !== NBA_POINT_IN_TIME_FEATURE_RELEASE ||
+    NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT.model.alpha !== 300 ||
+    JSON.stringify(NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT.design.features) !==
+      JSON.stringify(NBA_PROFESSIONAL_MODEL_ARTIFACT.design.features)
+  ) {
+    throw new Error("NBA professional margin shadow artifact contract is invalid.");
   }
   if (bootstrap.games.length === 0 || bootstrap.boxes.length !== bootstrap.games.length * 2) {
     throw new Error("NBA professional bootstrap is incomplete.");

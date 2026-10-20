@@ -4,6 +4,7 @@ import {
   __NBA_PROFESSIONAL_RUNTIME_ARTIFACT_TEST__,
   buildNbaProfessionalRuntimeFeatures,
   NBA_PROFESSIONAL_BOOTSTRAP_RELEASE,
+  NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT,
   NBA_PROFESSIONAL_MODEL_ARTIFACT,
   selectNbaProfessionalPortableFeatures,
 } from "../lib/automodel/nba/nbaProfessionalRuntimeArtifacts";
@@ -19,6 +20,15 @@ type ParityFixture = {
 const parity = parityJson as ParityFixture;
 assert.equal(parity.release, NBA_PROFESSIONAL_BOOTSTRAP_RELEASE);
 assert.equal(parity.modelRelease, NBA_PROFESSIONAL_MODEL_ARTIFACT.release);
+assert.equal(NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT.model.alpha, 300);
+assert.equal(
+  NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT.featureRelease,
+  NBA_PROFESSIONAL_MODEL_ARTIFACT.featureRelease,
+);
+assert.deepEqual(
+  NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT.design.features,
+  NBA_PROFESSIONAL_MODEL_ARTIFACT.design.features,
+);
 
 const selectedIds = new Set(parity.rows.map((row) => row.gameId));
 const rebuilt = buildNbaPointInTimeFeatures({

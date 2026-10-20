@@ -4,7 +4,7 @@ import type {
 } from "./nbaPortableScoreModel";
 
 export const NBA_INDEPENDENT_SCORE_SHADOW_RELEASE =
-  "nba_independent_score_shadow_2026_10_20_r1_rating_30_total_20" as const;
+  "nba_independent_score_shadow_2026_10_20_r2_alpha300_rating_30_total_20" as const;
 
 const MARGIN_RATING_WEIGHT = 0.30;
 const TOTAL_RATING_WEIGHT = 0.20;
@@ -25,6 +25,7 @@ export type NbaIndependentScoreShadow = {
     ratingMargin: typeof MARGIN_RATING_WEIGHT;
     ratingTotal: typeof TOTAL_RATING_WEIGHT;
   };
+  ridgeBase: NbaPortableScore;
   rating: NbaPortableScore | null;
   candidate: NbaPortableScore | null;
 };
@@ -41,7 +42,7 @@ function finiteMean(values: Array<number | null | undefined>): number | null {
 
 export function buildNbaIndependentScoreShadow(args: {
   featureRow: NbaPortableFeatureRow;
-  incumbent: NbaPortableScore;
+  ridgeBase: NbaPortableScore;
   trainingHomeAdvantage: number;
 }): NbaIndependentScoreShadow {
   const missing = REQUIRED.filter((feature) => !finite(args.featureRow[feature]));
@@ -62,6 +63,7 @@ export function buildNbaIndependentScoreShadow(args: {
           ? "missing_pace_inputs"
           : "invalid_training_home_advantage",
       weights: { ratingMargin: MARGIN_RATING_WEIGHT, ratingTotal: TOTAL_RATING_WEIGHT },
+      ridgeBase: args.ridgeBase,
       rating: null,
       candidate: null,
     };
@@ -80,9 +82,9 @@ export function buildNbaIndependentScoreShadow(args: {
     marginHome: ratingHome - ratingAway,
     total: ratingHome + ratingAway,
   };
-  const candidateMargin = (1 - MARGIN_RATING_WEIGHT) * args.incumbent.marginHome
+  const candidateMargin = (1 - MARGIN_RATING_WEIGHT) * args.ridgeBase.marginHome
     + MARGIN_RATING_WEIGHT * rating.marginHome;
-  const candidateTotal = (1 - TOTAL_RATING_WEIGHT) * args.incumbent.total
+  const candidateTotal = (1 - TOTAL_RATING_WEIGHT) * args.ridgeBase.total
     + TOTAL_RATING_WEIGHT * rating.total;
   const candidate: NbaPortableScore = {
     homeScore: (candidateTotal + candidateMargin) / 2,
@@ -96,6 +98,7 @@ export function buildNbaIndependentScoreShadow(args: {
     available: true,
     unavailableReason: null,
     weights: { ratingMargin: MARGIN_RATING_WEIGHT, ratingTotal: TOTAL_RATING_WEIGHT },
+    ridgeBase: args.ridgeBase,
     rating,
     candidate,
   };

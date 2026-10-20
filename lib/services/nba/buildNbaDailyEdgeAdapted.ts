@@ -38,11 +38,13 @@ import {
 } from "../../automodel/nba/nbaChampionRuntime";
 import {
   buildNbaProfessionalRuntimeFeatures,
+  NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT,
   NBA_PROFESSIONAL_MODEL_ARTIFACT,
   NBA_PROFESSIONAL_TRAINING_HOME_ADVANTAGE,
   selectNbaProfessionalPortableFeatures,
 } from "../../automodel/nba/nbaProfessionalRuntimeArtifacts";
 import { buildNbaIndependentScoreShadow } from "../../automodel/nba/nbaIndependentScoreShadow";
+import { scoreNbaPortableModel } from "../../automodel/nba/nbaPortableScoreModel";
 import { etSlateDateToUtcWindow } from "./etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -525,7 +527,10 @@ export async function buildNbaDailyEdgePipeline(
     });
     const independentScoreShadow = buildNbaIndependentScoreShadow({
       featureRow: portableFeatureRow,
-      incumbent: previewCandidate.independent,
+      ridgeBase: scoreNbaPortableModel(
+        NBA_PROFESSIONAL_MARGIN_SHADOW_ARTIFACT,
+        portableFeatureRow,
+      ),
       trainingHomeAdvantage: NBA_PROFESSIONAL_TRAINING_HOME_ADVANTAGE,
     });
     const shadowCandidate = independentScoreShadow.candidate === null

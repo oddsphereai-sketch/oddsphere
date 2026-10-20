@@ -2,7 +2,9 @@
 
 Date: 2026-10-20
 
-Status: prospective evidence capture only. No production score, pick,
+Status: superseded in prospective capture by the r2 alpha-300 compression
+shadow documented in `2026-10-20-nba-margin-compression-repair-result.md`.
+This r1 record remains the immutable audit history. No production score, pick,
 probability, grade, stake, promotion, demotion, lock, or tracking authority.
 
 ## Frozen candidate
