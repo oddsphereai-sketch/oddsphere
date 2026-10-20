@@ -2268,8 +2268,8 @@ The four-season chronological tournament selected the runtime configuration on 2
 - Runtime/model release: `ucl_goals_coherent_2026_10_14_r8u_elo_late_consensus`
 - Coherent outcome contract: `ucl_coherent_market_outcome_2026_10_14_r4_target_excluded_late_consensus`
 - Elo foundation: `ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus`; the prior opening-market arbitration remains a historical audit comparator and is not the active reader.
-- Display-grade/calibration release: `ucl_grade_policy_2026_10_19_r12_exact_team_identity_coverage`
-- Sharp market-identity release: `ucl_sharp_market_identity_2026_10_19_r4_exact_team_alias_coverage`
+- Display-grade/calibration release: `ucl_grade_policy_2026_10_20_r13_sabah_live_identity`
+- Sharp market-identity release: `ucl_sharp_market_identity_2026_10_20_r5_sabah_live_identity`
 - Competition context: `ucl_competition_context_2026_09_03_r2_qualifying_truthful`; settlement: `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`
 - Frozen history manifest: `ucl_history_manifest_2026_09_03_r1` (185/126/63, cutoff `2026-01-28T20:00:00.000Z`, match SHA-256 `00d3761b7d94851776ffb5b893bdaded8dec85657f769140a2aef0dacd306d36`; 754 team-stat rows, stat SHA-256 `3b817b9aa164ebc5141c26dddf9194611735d98708deef2b5b7f16df91314f88`)
 - Stored-quote availability authority: `ucl_stored_quote_fallback_2026_10_14_r1_complete_same_book`
@@ -2293,7 +2293,21 @@ The four-season chronological tournament selected the runtime configuration on 2
   locked predictions, grades, and the UCL reader contract itself are unchanged.
   Tracking aggregation contract is
   `tracking_aggregate_v17_alternate_line_evidence_backed_2026_10_19`.
-- Evidence and validation boundary: `docs/model-audits/2026-09-03-ucl-chronological-r2-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-chronological-r4-result.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-result.md`, `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`, and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md` retain the historical release record. Active r8u/r10 evidence is release-pure and documented in `docs/model-audits/2026-10-14-ucl-elo-late-consensus-r8u-r10.md`; forward results must continue to be evaluated by exact release and T-60 lock.
+- Evidence and validation boundary: `docs/model-audits/2026-09-03-ucl-chronological-r2-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-chronological-r4-result.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-result.md`, `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`, and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md` retain the historical release record. Active r8u score-model evidence is release-pure and documented in `docs/model-audits/2026-10-14-ucl-elo-late-consensus-r8u-r10.md`; the current display-grade release is r13, and forward results must continue to be evaluated by exact release and T-60 lock.
+- October 20 r13 Sabah live-identity repair: Sharp's current canonical event
+  names the club `Sabah Masazir`, with a secondary exact bucket named `Sabah
+  Baku FK`; the r12 registry covered only `Sabah`. The UCL-only exact alias
+  registry now recognizes those two observed identities without enabling
+  substring matching. On the same live 18-fixture slate, the fresh provider
+  path improves selected prices from 69/72 to 72/72, complete outcome rows
+  from 173/180 to 180/180, and held markets from three to zero. The recovered
+  Sabah-Dortmund Total becomes Watchlist and BTTS becomes Lean; the public LKG
+  already carried the same Sabah Total Watchlist and BTTS Lean, so the repair
+  does not itself change either public Sabah side or grade. The r8u score
+  model, probabilities, market-reader math, grade
+  thresholds, stakes, writer, shared lease, cadence and locked records are
+  unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-20-ucl-sabah-live-identity-r13.md`.
 - October 10 professional market-reader audit: r7 remains unchanged. The exact locked forward release was 13-3 across 16 actionables (+5.461 flat-stake units), with every actionable positive at its exact offered price. Same-book no-vig movement-toward rows went 9-1, movement-against rows 1-2, and flat rows 3-0, but the required paired promotion pool was only 3-3; therefore movement remains audit context instead of an automatic switch. Authentic public splits were absent and remain neutral. The live 18-fixture readiness replay had 16 actionables, zero nonpositive-EV actionables and zero incoherent rows. Evidence and limitations: `docs/model-audits/2026-10-10-ucl-professional-market-reader-r7-result.md`.
 - October 14 full-slate market identity repair: common UCL provider aliases now resolve Manchester City/Man City, Real Betis/Betis, Shakhtar Donetsk/Shakhtar, Slovan Bratislava/S Bratislava, and VfB Stuttgart/Stuttgart without enabling substring matching. The exact live nine-fixture probe advances from 24/36 selected prices and 62/90 outcome prices to 36/36 and 90/90, including a complete 18-row multi-book PSG-Manchester City BTTS market. Against the stored still-unlocked board, 13 previously held market tuples become coherently priced, with zero prediction-side changes, six actionable promotions and zero demotions. Existing locked records remain byte-for-byte authoritative; no score, probability, prediction formula, threshold, stake, copy, label, layout, provider cadence, writer or lease changes. Evidence: `docs/model-audits/2026-10-14-ucl-full-market-identity-coverage-r8.md`.
 - October 14 bounded partial-market recovery: a live post-deploy refresh proved that provider event identity was complete while concurrent four-market reads could still return a transient 31–35 of 36 selected quotes. The UCL adapter now loads fixtures sequentially and grants exactly one recovery load to each still-incomplete fixture. The shared EPL default remains three concurrent fixtures with its existing four-fixture recovery ceiling. The repair adds no provider calls when the first pass is complete and bounds the worst case to one additional four-market fixture load per scheduled UCL game. The forecast PMF, score, side, probability, thresholds, grades, stakes, member copy/layout, sole writer, shared lease and immutable locked payloads are unchanged on identical complete input. Evidence: `docs/model-audits/2026-10-14-ucl-bounded-partial-market-recovery-r9.md`.

@@ -1,6 +1,7 @@
 import { buildUclSlate } from "../../lib/services/ucl/buildUclSlate";
 import { buildUclDailyEdgePreview } from "../../lib/services/ucl/buildUclDailyEdgePreview";
 import { evaluateUclPublicationCoverage } from "../../lib/services/ucl/uclPublicationReadiness";
+import { bttsDistributionWarning } from "../../lib/services/soccer/bttsSide";
 
 async function main() {
   const slate = await buildUclSlate();
@@ -23,6 +24,10 @@ async function main() {
       || Math.abs(p.over25 + p.under25 - 1) > 1e-9
       || Math.abs(p.bttsYes + p.bttsNo - 1) > 1e-9;
   }).length;
+  const bttsSides = response.games.flatMap((game) => {
+    const probability = game.soccerProjection?.goalOutlookProbabilities?.bttsYes;
+    return typeof probability === "number" ? [probability >= 0.5 ? "yes" as const : "no" as const] : [];
+  });
   console.log(JSON.stringify({
     mode: "read_only",
     competition: "uefa_champions_league",
@@ -34,6 +39,7 @@ async function main() {
     providerHealth: slate.providerHealth,
     coverage,
     grades,
+    bttsDistributionWarning: bttsDistributionWarning(bttsSides),
     nonpositiveEvActionables,
     incoherent,
   }, null, 2));

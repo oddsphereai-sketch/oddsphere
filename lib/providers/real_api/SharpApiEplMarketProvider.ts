@@ -13,7 +13,7 @@ import type { SharpApiOddsRow } from "./SharpApiSoccerOddsProvider";
 export const SHARP_EPL_LEAGUE = "england_-_premier_league" as const;
 export const SHARP_UCL_LEAGUE = "uefa_-_champions_league" as const;
 export const UCL_SHARP_MARKET_IDENTITY_RELEASE =
-  "ucl_sharp_market_identity_2026_10_19_r4_exact_team_alias_coverage" as const;
+  "ucl_sharp_market_identity_2026_10_20_r5_sabah_live_identity" as const;
 const SHARP_MARKET_TYPE = {
   match_result: "moneyline",
   double_chance: "double_chance",
@@ -101,8 +101,10 @@ const TEAM_ALIASES: Record<string, string[]> = {
 };
 
 const UCL_TEAM_ALIASES: Record<string, string[]> = {
-  sabahfk: ["sabah"],
-  sabah: ["sabahfk"],
+  sabahfk: ["sabah", "sabahmasazir", "sabahbakufk"],
+  sabah: ["sabahfk", "sabahmasazir", "sabahbakufk"],
+  sabahmasazir: ["sabah", "sabahfk", "sabahbakufk"],
+  sabahbakufk: ["sabah", "sabahfk", "sabahmasazir"],
   asroma: ["roma"],
   roma: ["asroma"],
   fcporto: ["porto"],
