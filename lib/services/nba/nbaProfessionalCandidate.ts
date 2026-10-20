@@ -4,6 +4,7 @@ import {
   scoreNbaPortableModel,
   type NbaPortableFeatureRow,
   type NbaPortableModelArtifact,
+  type NbaPortableScore,
 } from "../../automodel/nba/nbaPortableScoreModel";
 import { buildNbaUnifiedFinalProjection } from "../../automodel/nba/nbaUnifiedFinalProjection";
 import type { NbaModelV1Output } from "../../automodel/nba/nbaAutoModelV2";
@@ -89,11 +90,12 @@ export function buildNbaProfessionalCandidate(args: {
   history: readonly NbaMovementHistoryRow[];
   externalGameId: number;
   marketReader?: NbaProfessionalMarketReader | null;
+  independentOverride?: NbaPortableScore;
 }) {
   if (!args.artifact.distribution) {
     throw new Error("NBA professional candidate requires calibrated residual distribution state.");
   }
-  const independent = scoreNbaPortableModel(args.artifact, args.featureRow);
+  const independent = args.independentOverride ?? scoreNbaPortableModel(args.artifact, args.featureRow);
   const consensus = buildNbaMarketConsensus(args.lines
     .filter((line) => line.side !== null && ["moneyline", "spread", "total"].includes(line.market_type))
     .map((line): NbaBookLine => ({

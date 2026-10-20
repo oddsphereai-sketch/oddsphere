@@ -3543,6 +3543,17 @@ evaluation. Evidence and rollback:
 `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-predeclaration.md` and
 `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
 
+The October 20 prospective independent-score shadow is
+`nba_independent_score_shadow_2026_10_20_r1_rating_30_total_20`. It records the frozen 30% adjusted-
+rating margin / 20% adjusted-rating Total challenger and a separately target-excluded pass through the
+same r6 professional reader inside future unlocked NBA grounding snapshots. It has zero production
+authority and changes no score, pick, probability, grade, stake, promotion, demotion, writer, lease,
+cadence, lock, tracking row, or member output. The candidate improved all six broad 2025 confirmation
+diagnostics but failed its original candidate-defined close-game gate, so only prospective release-pure
+evidence can authorize a later promotion. Evidence and rollback:
+`docs/model-audits/2026-10-20-nba-independent-score-prospective-shadow.md` and
+`docs/model-audits/2026-10-20-nba-independent-ensemble-shadow-result.md`.
+
 The October 19 r8 release preserves the r7 score, reader, executable-line, calibration, grade, writer,
 lease, cadence, and lock contracts while replacing both NBA current-line reads with the shared bounded
 and deterministic pagination path. The 11-game October 21 slate carried more than PostgREST's default

@@ -28,6 +28,11 @@ const bootstrap = require("./modelArtifacts/nbaProfessionalBootstrap.json") as N
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 export const NBA_PROFESSIONAL_MODEL_ARTIFACT = require("./modelArtifacts/nbaProfessionalR15.json") as NbaPortableModelArtifact;
 
+export const NBA_PROFESSIONAL_TRAINING_HOME_ADVANTAGE = bootstrap.games.reduce(
+  (sum, game) => sum + game.homeScore - game.awayScore,
+  0,
+) / bootstrap.games.length;
+
 function assertArtifacts(): void {
   if (bootstrap.release !== NBA_PROFESSIONAL_BOOTSTRAP_RELEASE) {
     throw new Error("NBA professional bootstrap release mismatch.");
