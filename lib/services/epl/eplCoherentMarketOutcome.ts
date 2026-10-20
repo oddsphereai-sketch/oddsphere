@@ -69,6 +69,23 @@ export type EplCoherentMarketOutcome = {
       dispersion: number;
       authority: number;
     };
+    bttsShadow?: {
+      release: string;
+      productionAuthority: false;
+      available: boolean;
+      modelYes: number;
+      consensusYes: number | null;
+      candidateYes: number;
+      modelSide: "yes" | "no";
+      consensusSide: "yes" | "no" | null;
+      candidateSide: "yes" | "no";
+      eligibleBooks: string[];
+      leaveOneOutYesRange: { minimum: number; maximum: number } | null;
+      agreement: number;
+      dispersion: number | null;
+      authority: number;
+      gateReasons: string[];
+    };
   };
 };
 
@@ -227,6 +244,7 @@ export function deriveEplCoherentMarketOutcome(input: {
   independentJoint?: ScoreDistribution;
   openingOdds?: BdlEplOdds[];
   matchResultVectors?: EplForwardBookVector[];
+  bttsVectors?: EplForwardBookVector[];
   totalVectors: EplForwardBookVector[];
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;

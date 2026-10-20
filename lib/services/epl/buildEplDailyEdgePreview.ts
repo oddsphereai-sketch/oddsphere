@@ -576,6 +576,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const btts = coherentRead(sharp.odds, "btts", ["yes", "no"]);
   const currentMatchResultVectors = eplCurrentBookVectors(sharp, "match_result", capturedAt);
   const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt);
+  const currentBttsVectors = eplCurrentBookVectors(sharp, "btts", capturedAt);
   const evaluatedTotalCanonicalBook = canonicalEplBook(total?.sportsbook ?? null);
   const coherentOutcome = authorities.deriveCoherentOutcome({
     matchId: match.id,
@@ -584,6 +585,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     independentJoint: match.prediction.coherentJoint,
     openingOdds: match.openingOdds,
     matchResultVectors: currentMatchResultVectors,
+    bttsVectors: currentBttsVectors,
     totalVectors: currentTotalVectors,
     evaluatedMatchResultCanonicalBook: canonicalEplBook(mr?.sportsbook ?? null),
     evaluatedTotalCanonicalBook,
@@ -935,6 +937,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
       evaluatedQuoteRole: "economics_and_grade_only",
       targetExcludedBooks: coherentOutcome.audit.evaluatedCanonicalBooksExcluded,
       eligibleAlternativeBooks: coherentOutcome.audit.eligibleAlternativeBooks,
+      ...(coherentOutcome.audit.bttsShadow ? { bttsShadow: coherentOutcome.audit.bttsShadow } : {}),
       regulationTime: true,
     },
     decisionLine: `${mrGrade.verdict.label}: ${resultPick}${resultSide === forecastSide ? " is also the most likely result" : ` is the value side; ${forecastPick} remains the most likely result`}.`,
