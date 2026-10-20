@@ -1,5 +1,30 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: NHL lock authority
+
+On 2026-10-20 Daniel Mengel directed Oddsphere to verify every Daily Edge,
+including locking. The NHL public tuple locked before puck drop, but the generic
+sweep subsequently classified the same games through the unused
+`game_predictions` table and emitted false critical lock misses. This exception
+is limited to making the exact current-release Moneyline/Spread/Total
+`prediction_records` tuple the NHL classification and write authority, as
+documented in
+`docs/model-audits/2026-10-20-nhl-prediction-record-lock-authority.md`.
+
+The repair must require exactly one row for each official NHL market, one
+current model release, and three non-null immutable lock timestamps. Partial,
+duplicate, mixed-release, or mixed lock-state tuples fail closed. Lock writes
+may stamp only currently unlocked current-release rows and must transition all
+three official markets together. Existing locked rows must never be updated.
+Model, calibration, decision, score, probability, side, price, grade, stake,
+market reader, settlement, and tracking contracts remain unchanged.
+
+Publication requires the focused NHL suite, lock-authority unit coverage,
+TypeScript, the full model-change suite, latest-main integration safety,
+protected PR checks, and a production read proving existing locked tuples are
+byte-for-byte unchanged. Roll back the route/helper/coherence release together
+if current three-market classification or atomic lock behavior regresses.
+
 ## Owner-directed correctness exception: CFB market-history continuity capacity
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to verify every Daily Edge and

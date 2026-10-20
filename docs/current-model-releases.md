@@ -3592,6 +3592,20 @@ locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
 
+October 20 lock-authority repair: the NHL pregame sweep now classifies and
+locks the exact current-release three-market `prediction_records` tuple that
+the NHL writer and member reader publish. The authority release is
+`nhl_prediction_record_lock_authority_2026_10_20_r1_current_three_market_tuple`
+and lock-coherence advances to
+`nhl_lock_coherence_2026_10_20_r2_prediction_record_authority`. Previously the
+generic sweep classified NHL through `game_predictions`, where the NHL writer
+does not create a row; the public tuple still locked before puck drop, but the
+later sweep emitted false started-without-lock criticals. Existing locks are
+unchanged. Model, calibration, decision, reader, scores, probabilities, picks,
+prices, grades, stakes, market reading, and tracking eligibility are unchanged.
+Evidence and rollback:
+`docs/model-audits/2026-10-20-nhl-prediction-record-lock-authority.md`.
+
 The October 15 r18 foundational release replaces the opening-window roster
 score head with a compact market-free home-win probability model built from a
 strictly lagged 0.085 EWMA team state. The state includes goals, xG, shots,
