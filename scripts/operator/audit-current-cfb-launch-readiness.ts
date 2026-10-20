@@ -4,7 +4,7 @@
 
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
-import { readCfbForwardEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
+import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "../../lib/services/football/cfbWeeklyWindow";
 import type { CfbV1Market } from "../../lib/services/football/cfbV1Decision";
 
@@ -18,10 +18,11 @@ async function main(): Promise<void> {
   if (!url || !key) throw new Error("Supabase read credentials are required.");
 
   const now = process.argv.find((value) => value.startsWith("--now="))?.slice(6) ?? new Date().toISOString();
-  const rows = await readCfbForwardEvidence({
+  const rows = (await readCfbForwardWriterEvidence({
     client: createClient(url, key, { auth: { persistSession: false } }),
     season: 2026,
-  });
+    now,
+  })).evidence;
   const window = activeCfbWeeklyWindow(now);
   const windowRows = rows.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window));
   const latest = new Map<string, (typeof rows)[number]>();

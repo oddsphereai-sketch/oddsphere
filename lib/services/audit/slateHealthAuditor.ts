@@ -74,6 +74,9 @@ const EXPECTED_MARKETS: Record<Sport, string[]> = {
 
 // Official WC public-tracking floor (Daniel: only 6/14 onward).
 const SOCCER_TRACKING_FLOOR = "2026-06-14";
+// EPL begins at 20,000,000 and UCL at 30,000,000. The legacy auditor below is
+// World-Cup-only; club competitions own separate coherence and lock gates.
+const CLUB_SOCCER_EXTERNAL_ID_FLOOR = 20_000_000;
 // Lock window: 60 min before kickoff (mirrors shouldLock conventions).
 const LOCK_WINDOW_MS = 60 * 60 * 1000;
 
@@ -149,11 +152,17 @@ export async function runSlateHealthAudit(opts: AuditOptions): Promise<AuditResu
     slates.push({ sport, dates });
 
     // Load games for these slates once.
-    const { data: games } = await sb
+    let gamesQuery = sb
       .from("games")
       .select("id, external_id, home_team_id, away_team_id, game_date, slate_date, status, postseason")
       .eq("sport", sport)
       .in("slate_date", dates);
+    // The legacy soccer auditor is World-Cup scoped. EPL and UCL persist under
+    // sport=soccer in reserved external-ID namespaces and have their own
+    // competition-aware publication/lock verification. Mixing those fixtures
+    // into the old WC checks creates false market, schedule, and logo gaps.
+    if (sport === "soccer") gamesQuery = gamesQuery.lt("external_id", CLUB_SOCCER_EXTERNAL_ID_FLOOR);
+    const { data: games } = await gamesQuery;
     const gameRows = games ?? [];
 
     // Team-name lookup for nicer labels.
@@ -181,7 +190,7 @@ export async function runSlateHealthAudit(opts: AuditOptions): Promise<AuditResu
     }
 
     // ── Check 1: missing games (soccer: provider vs DB count per slate) ──
-    if (sport === "soccer") {
+    if (sport === "soccer" && gameRows.length > 0) {
       for (const date of dates) {
         try {
           const { seedSoccerGames } = await import("@/lib/services/soccer/seedSoccerGamesService");
@@ -377,18 +386,10 @@ export async function runSlateHealthAudit(opts: AuditOptions): Promise<AuditResu
     }
   }
 
-  // ── Check 6 (tracking bridge presence) ──
-  // Soccer grades to prediction_grades and is bridged into the public tracker;
-  // NBA/NHL grade to prediction_grades but are NOT bridged → flag.
-  for (const sport of ["nba", "nhl"] as Sport[]) {
-    if (!sports.includes(sport)) continue;
-    findings.push(newFinding({
-      check: "tracking_bridge_missing", sport, severity: "warn",
-      detail: `${sport} grades to prediction_grades but the public tracker reads prediction_results and has no bridge for ${sport} (soccer is bridged; ${sport} is not).`,
-      reason: "modern-grading sport not surfaced in public tracking", autofix: "manual",
-      autofix_action: `extend the tracking route loader to bridge ${sport} like loadSoccerGradeRows`,
-    }));
-  }
+  // NBA and NHL are consumed by the current member Tracking foundation, which
+  // reads prediction_records/prediction_grades generically. Do not inspect the
+  // retired compatibility route and report a missing bridge that is not part
+  // of the member product.
 
   const summary = {
     errors: findings.filter((f) => f.severity === "error").length,

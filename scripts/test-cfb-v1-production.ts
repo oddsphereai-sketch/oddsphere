@@ -3674,6 +3674,9 @@ assert.match(memberSnapshotStoreSource, /const SNAPSHOT_STALE_MS = 8 \* 24 \* 60
 assert.doesNotMatch(memberSnapshotStoreSource, /\.gt\("stale_until", now\)/, "reader continuity must use the payload publication timestamp so an already-written eight-hour row can recover after deployment");
 assert.match(memberSnapshotStoreSource, /Date\.parse\(expected\.now\) - Date\.parse\(snapshot\.publishedAt/, "reader continuity must remain bounded by the published payload timestamp");
 const evidenceStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceStore.ts"), "utf8");
+const launchReadinessAuditSource = readFileSync(path.join(process.cwd(), "scripts/operator/audit-current-cfb-launch-readiness.ts"), "utf8");
+assert.match(launchReadinessAuditSource, /readCfbForwardWriterEvidence/, "the current CFB readiness audit must use the bounded game-stage reader");
+assert.doesNotMatch(launchReadinessAuditSource, /readCfbForwardEvidence\(/, "the current CFB readiness audit must not exhaust the full-season archive ceiling");
 assert.match(evidenceStoreSource, /CFB_FORWARD_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r4 exact-price wave during the natural r5 transition");
 assert.match(evidenceStoreSource, /CFB_FORWARD_IDENTITY_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain the complete r46 wave during the natural r47 transition");
 assert.match(evidenceStoreSource, /CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA_RELEASE/, "the reader must retain valid immutable r20 T-60 rows during a partial r21 transition");

@@ -1978,6 +1978,26 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 20 sharp-reference cadence alignment: the sole writer advances to
+  `nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture`. A
+  zero-write Week 7 audit found that production retained 59 qualified
+  Pinnacle/NoVig offers across two games from `07:06Z`, while the same provider
+  at `12:50Z` returned 390 exact observations, 139 complete Over/Under pairs,
+  and coverage on 13 of 14 games. The gap was not provider availability: the
+  elapsed-hour props planner could remain anchored at `:21`, while the
+  reference lane admitted ordinary captures only during UTC minutes 0–14. The
+  reference gate now refreshes when the newest retained qualified offer reaches
+  one hour of age, independent of wall-clock minute, and retains the existing
+  extra T-60 pull. Provider page/call ceilings, source qualification, exact
+  pairing, target-book exclusion, Receptions market-reader semantics, model,
+  calibration, decision, runtime, board, member, tracking, grade thresholds,
+  stakes, locks, settlement, UI, sole writer, and `prediction_pipeline:nfl`
+  lease remain unchanged. A forced current-source no-write replay produced 66
+  Receptions projection changes and four forecast-side changes versus the
+  independent fallback, with zero actionable promotions or demotions; that is
+  expected input freshness, not a new rule. Same-input r57/r58 output is
+  identical. Existing locked rows retain exact stored precedence. Evidence and
+  rollback: `docs/model-audits/2026-10-20-nfl-player-props-reference-cadence-alignment.md`.
 - October 19 scheduler-jitter cadence repair: the operational cadence advances
   to `nfl_player_props_cadence_2026_10_19_r2_scheduler_jitter_tolerance`.
   Production proved that the `14:21:09.322Z` heartbeat arrived 142 milliseconds
@@ -2221,6 +2241,14 @@ r16/v21 retains every r15 probability, projection, side, grade, provider budget,
 The four-season chronological tournament selected the runtime configuration on 2024–25, selected the xG blend on the first 285 matches of 2025–26, and reserved the final 95 matches for evaluation. Full 2025–26 accuracy was 48.68%, Brier 0.61610, log loss 1.02615, and team-score MAE 0.89956. Final-quarter accuracy was 43.16%, Brier 0.63409, log loss 1.05313, and MAE 0.91928; that deterioration is a declared limitation. Per-team goal projections ranged from 0.56 to 3.01 across the full untouched season, but their actual-score correlation was only 0.274 overall and 0.188 in the final quarter. The projections are therefore useful differentiated inputs, not a finished high-confidence score predictor. The price-eligible winner-confidence Lean rule was 56-41 on calibration and 11-8 on the untouched final period. Heavy favorites at a 65% model floor were 14-2 in calibration but only 1-3 in the small untouched final sample; v10 exposes them only as likely-winner context, never value or positive expected return. The 5pp value Best Angle rule was +2.924u over 127 calibration plays and +6.502u over 26 final plays. Full evidence and caveats are in `docs/model-audits/2026-08-18-epl-shadow-foundation-r1.md`.
 
 ## UEFA Champions League production release (active; sport-owned forecast and grade policy)
+
+- October 20 presentation identity repair: BALLDONTLIE's current Viking FK
+  abbreviation is `VFK`, while the presentation registry still carried only
+  the preceding `VIK` alias. The current 36-club registry now uses `VFK` and
+  retains `VIK` as a reader alias for already-captured cards. All current UCL
+  clubs resolve a deterministic crest and primary color. This changes no
+  fixture, model, probability, score, side, price, grade, stake, lock,
+  tracking, writer, lease, or stored payload.
 
 - Runtime/model release: `ucl_goals_coherent_2026_10_14_r8u_elo_late_consensus`
 - Coherent outcome contract: `ucl_coherent_market_outcome_2026_10_14_r4_target_excluded_late_consensus`

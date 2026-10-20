@@ -185,7 +185,7 @@ const currentUclClubs = [
   "AEK", "ARS", "ATM", "AVL", "BAR", "BET", "BODO", "BRU", "COMO",
   "DOR", "FCP", "FEN", "FEY", "GAL", "INT", "LAS", "LILL", "LIV",
   "MAN", "MNC", "MUN", "NAP", "PSG", "PSV", "RBL", "RCL", "RMA",
-  "ROMA", "SAB", "SCP", "SHK", "SLB", "SLP", "VFB", "VIK", "VIL",
+  "ROMA", "SAB", "SCP", "SHK", "SLB", "SLP", "VFB", "VFK", "VIL",
 ] as const;
 assert.deepEqual(Object.keys(UCL_TEAM_ASSETS).sort(), [...currentUclClubs].sort());
 for (const abbreviation of currentUclClubs) {
@@ -195,6 +195,7 @@ for (const abbreviation of currentUclClubs) {
   assert.equal(uclTeamLogo(abbreviation), `https://a.espncdn.com/i/teamlogos/soccer/500/${asset.espnId}.png`);
 }
 assert.equal(uclTeamAsset("unknown"), null);
+assert.deepEqual(uclTeamAsset("VIK"), uclTeamAsset("VFK"), "legacy Viking cards keep resolving through the current VFK identity");
 assert.equal(uclTeamLogo("unknown"), null);
 
 const previewCacheSlate = {

@@ -64,7 +64,8 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_19_r57_stale_reference_retry" as const;
+  "nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture" as const;
+export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
@@ -584,10 +585,24 @@ export function shouldCaptureNflPlayerPropsReferenceResearch(args: {
     offers: args.retainedReferenceOffers,
     evaluatedAt: args.now,
   })) return true;
-  // The route wakes every 15 minutes. One complete pull per UTC hour captures
-  // ordinary movement; an extra pull in the lock window preserves the final
-  // pregame comparison without quadrupling the all-day provider load.
-  if (new Date(now).getUTCMinutes() < 15) return true;
+  // The route wakes every 15 minutes, but the props planner is elapsed-time
+  // based and can stay anchored at :21/:36/:51. A UTC-minute gate therefore
+  // allowed a fresh-but-partial early cache to suppress Pinnacle/NoVig pulls
+  // for several hours. Refresh from the age of the newest retained qualified
+  // offer instead. The surrounding state-aware cadence still caps ordinary
+  // pulls at one per hour, while the lock-window branch below preserves the
+  // final pregame comparison.
+  const newestQualifiedObservedAt = args.retainedReferenceOffers.reduce((latest, offer) => {
+    if (!NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS.some((market) => market === offer.market)) {
+      return latest;
+    }
+    const observedAt = Date.parse(offer.observedAt);
+    return Number.isFinite(observedAt) && observedAt <= now ? Math.max(latest, observedAt) : latest;
+  }, Number.NEGATIVE_INFINITY);
+  if (
+    !Number.isFinite(newestQualifiedObservedAt)
+    || now - newestQualifiedObservedAt >= NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES * 60_000
+  ) return true;
   return args.previous.memberDecisions.some((row) => {
     if (row.state !== "unlocked") return false;
     const minutesToStart = (Date.parse(row.scheduledStart) - now) / 60_000;
