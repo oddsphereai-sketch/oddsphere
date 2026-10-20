@@ -47,7 +47,7 @@ type FeatureRow = {
 type Logistic = { means: number[]; scales: number[]; beta: number[] };
 type Metrics = { n: number; actualYes: number; predictedYes: number; accuracy: number; noRecall: number; brier: number; logLoss: number; auc: number };
 
-const SEASONS = ["1415", "1516", "1617", "1718", "1819", "1920", "2021", "2122", "2223", "2324", "2425"] as const;
+const SEASONS = ["1415", "1516", "1617", "1718", "1819", "1920", "2021", "2122", "2223", "2324", "2425", "2526"] as const;
 const LEAGUES = ["E0", "D1", "I1", "SP1", "F1", "N1", "P1", "B1", "T1", "G1", "SC0"] as const;
 const HALF_LIFE_MS = 365 * 86_400_000;
 const SHRINK = 8;
@@ -368,6 +368,69 @@ function developCalibration(rows: FeatureRow[]) {
   console.log(JSON.stringify({ mode: "opened_development_calibration", passing, bestAvailable: near }, null, 2));
 }
 
+function confirmDirect(rows: FeatureRow[]) {
+  const train = rows.filter((row) => row.match.season <= "2425");
+  const confirmation = rows.filter((row) => row.match.season === "2526");
+  const model = fit(train.map((row) => row.direct), train.map((row) => row.actualBtts), 1);
+  const baseline = confirmation.map((row) => row.baseBtts);
+  const candidate = confirmation.map((row) => directProbability(row, model, 0.25, -0.02, 1));
+  const raw = metrics(confirmation, baseline);
+  const direct = metrics(confirmation, candidate);
+  const rawStructure = structure(confirmation, baseline);
+  const candidateStructure = structure(confirmation, candidate);
+  const accepted = direct.accuracy > raw.accuracy && direct.noRecall > raw.noRecall && direct.brier < raw.brier
+    && direct.logLoss < raw.logLoss && direct.auc > raw.auc && candidateStructure.teamScoreMae <= rawStructure.teamScoreMae
+    && candidateStructure.maxResultResidual <= 1e-8 && candidateStructure.maxTotalResidual <= 1e-8
+    && candidateStructure.maxBttsResidual <= 1e-8;
+  console.log(JSON.stringify({ mode: "untouched_2025_26_confirmation", coverage: { train: train.length, confirmation: confirmation.length },
+    config: { l2: 1, blend: 0.25, slope: 1, offset: -0.02, featureCount: confirmation[0]?.direct.length ?? 0 },
+    confirmation: { baseline: raw, candidate: direct, rawStructure, candidateStructure }, model, accepted,
+    gateResult: accepted ? "direct_interaction_passed_all_confirmation_gates" : "direct_interaction_failed_confirmation_do_not_transport" }, null, 2));
+}
+
+function developResidualGate(rows: FeatureRow[]) {
+  const folds = [
+    { validation: "2324", trainThrough: "2223" },
+    { validation: "2425", trainThrough: "2324" },
+    { validation: "2526", trainThrough: "2425" },
+  ] as const;
+  const prepared = folds.map((fold) => {
+    const train = rows.filter((row) => row.match.season <= fold.trainThrough);
+    const validation = rows.filter((row) => row.match.season === fold.validation);
+    const model = fit(train.map((row) => row.direct), train.map((row) => row.actualBtts), 1);
+    return { fold, validation, model };
+  });
+  const candidates = ["symmetric", "down"] .flatMap((mode) => [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4].flatMap((threshold) =>
+    [0.15, 0.25, 0.35, 0.5].flatMap((blend) => [0, -0.01, -0.02].map((offset) => ({ mode, threshold, blend, offset }))))) as Array<{
+      mode: string; threshold: number; blend: number; offset: number;
+    }>;
+  const results = candidates.map((config) => {
+    const pooled: Array<{ row: FeatureRow; probability: number }> = [];
+    const foldMetrics = prepared.map(({ fold, validation, model }) => {
+      const probabilities = validation.map((row) => {
+        const base = logit(row.baseBtts);
+        const residual = logit(predict(model, row.direct)) - base;
+        const active = config.mode === "down" ? residual <= -config.threshold : Math.abs(residual) >= config.threshold;
+        return active ? sigmoid(base + config.blend * residual + config.offset) : row.baseBtts;
+      });
+      pooled.push(...validation.map((row, index) => ({ row, probability: probabilities[index]! })));
+      return { fold: fold.validation, baseline: metrics(validation, validation.map((row) => row.baseBtts)), candidate: metrics(validation, probabilities) };
+    });
+    const pooledRows = pooled.map((item) => item.row);
+    const baseline = metrics(pooledRows, pooledRows.map((row) => row.baseBtts));
+    const candidate = metrics(pooledRows, pooled.map((item) => item.probability));
+    const passes = candidate.accuracy > baseline.accuracy && candidate.noRecall > baseline.noRecall && candidate.brier < baseline.brier
+      && candidate.logLoss < baseline.logLoss && candidate.auc > baseline.auc
+      && foldMetrics.every((fold) => fold.candidate.accuracy + 1 / fold.candidate.n >= fold.baseline.accuracy);
+    const margin = Math.min(candidate.accuracy - baseline.accuracy, candidate.noRecall - baseline.noRecall,
+      baseline.brier - candidate.brier, baseline.logLoss - candidate.logLoss, candidate.auc - baseline.auc);
+    return { ...config, passes, margin, pooled: { baseline, candidate }, foldMetrics };
+  });
+  const ranked = results.sort((left, right) => Number(right.passes) - Number(left.passes) || right.margin - left.margin);
+  console.log(JSON.stringify({ mode: "opened_residual_gate_development", passingCount: ranked.filter((row) => row.passes).length,
+    bestAvailable: ranked.slice(0, 12) }, null, 2));
+}
+
 async function main() {
   const matches = await fetchMatches();
   const rows = buildRows(matches);
@@ -377,6 +440,14 @@ async function main() {
   }
   if (process.argv.includes("--develop-calibration")) {
     developCalibration(rows);
+    return;
+  }
+  if (process.argv.includes("--confirm-direct")) {
+    confirmDirect(rows);
+    return;
+  }
+  if (process.argv.includes("--develop-residual-gate")) {
+    developResidualGate(rows);
     return;
   }
   const train = rows.filter((row) => row.match.season <= "2223");

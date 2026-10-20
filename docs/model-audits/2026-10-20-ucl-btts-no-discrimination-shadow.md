@@ -412,3 +412,49 @@ Match Result, Over 2.5, and expected total within `1e-8` after coherent
 reconciliation, and not worsen team-score MAE. Failure rejects the candidate;
 success permits frozen transport to UCL but still does not authorize production
 until UCL robustness and current-board gates pass.
+
+### Direct-interaction confirmation result
+
+The untouched 2025-26 confirmation contained 3,445 matches. The candidate
+improved No recall from 33.35% to 34.48%, Brier from 0.246750 to 0.246430,
+log loss from 0.686667 to 0.685988, AUC from 0.555555 to 0.557227, and
+coherent team-score MAE from 0.896683 to 0.896564. It lost exactly one correct
+direction: accuracy moved from 54.804% (1,888/3,445) to 54.775%
+(1,887/3,445). Reconciliation residuals remained below `1e-8`.
+
+Because the frozen gate required strict improvement on every metric, this is a
+rejection and not a production candidate. The near-pass across every
+probability, ranking, No-recall, and score-structure metric isolates the next
+change: specialist authority should be conditional on residual strength rather
+than applied globally to marginal matches.
+
+## Residual-authority gate declaration
+
+The three opened chronological development folds (2023-24, 2024-25, and
+2025-26) were used to compare symmetric and downward-only authority gates.
+Twenty-eight configurations improved pooled accuracy, No recall, Brier, log
+loss, and AUC while keeping each fold's accuracy within one result of the
+baseline. The frozen configuration is chosen for cross-fold consistency rather
+than the largest pooled gain:
+
+- train the same 64-feature ridge-1 direct interaction model on every eligible
+  completed season before the prediction season;
+- calculate `residual = specialist_logit - baseline_logit`;
+- preserve the incumbent probability exactly when `abs(residual) < 0.05`;
+- otherwise use `baseline_logit + 0.25 * residual - 0.02`;
+- no outcome-, league-, side-, or board-count quota is used.
+
+This `0.05 / 0.25 / -0.02` gate was the strongest configuration that improved
+No recall, Brier, log loss, and AUC in every development fold while never
+reducing fold accuracy (one fold tied, two improved). Across 10,448 predictions
+it improved accuracy 54.55%→54.74%, No recall 33.33%→33.89%, Brier
+0.246617→0.246275, log loss 0.686358→0.685650, and AUC
+0.551542→0.553997.
+
+Before reading any 2026-27 result, this configuration is frozen for one current-
+season confirmation using every published eligible match in the 11 declared
+leagues through the source's latest row. The candidate must have at least 500
+confirmation matches and strictly improve accuracy, No recall, Brier, log loss,
+and AUC; reconciliation must retain Match Result, Over 2.5, and expected total
+within `1e-8`, with no team-score-MAE regression. A passing result permits UCL
+transport testing, not direct production deployment.
