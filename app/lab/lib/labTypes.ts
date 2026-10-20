@@ -958,6 +958,7 @@ export type DailyEdgeGameDto = {
   /** Locked audit provenance for the single coherent soccer score PMF. */
   soccerModelProvenance?: {
     coherentOutcomeRelease: string;
+    projectedScoreRelease?: string;
     source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration";
     evaluatedQuoteRole: "economics_and_grade_only";
     targetExcludedBooks: string[];

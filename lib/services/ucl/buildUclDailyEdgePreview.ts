@@ -1,4 +1,4 @@
-import type { DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
+import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import { SharpApiClient } from "@/lib/providers/real_api/_sharpApiClient";
 import { SharpApiUclMarketProvider } from "@/lib/providers/real_api/SharpApiUclMarketProvider";
 import {
@@ -18,8 +18,25 @@ import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_10_20_r1_coherent_representative" as const;
 
 export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions, "captureAllBookPrices" | "storedPriceHistory">;
+
+/**
+ * The primary score shown on an unlocked UCL card is the highest-probability
+ * exact score from the one reconciled PMF that agrees with the released Match
+ * Result, Total, and BTTS directions. Decimal expected goals remain available
+ * in soccerProjection as distribution means; they are not an exact-score pick.
+ * Locked cards keep their previously published primary score.
+ */
+export function uclCoherentProjectedScore(
+  game: Pick<DailyEdgeGameDto, "lockState" | "projected" | "soccerProjection">,
+): DailyEdgeGameDto["projected"] {
+  const representative = game.soccerProjection?.representativeScore;
+  return game.lockState !== "locked" && representative
+    ? { away: representative.away, home: representative.home }
+    : game.projected;
+}
 
 function marketContext(market: MarketEdgeDto): MarketEdgeDto {
   return {
@@ -90,6 +107,7 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
       return {
         ...game,
         id: `soccer-ucl-${game.external_id}`,
+        projected: uclCoherentProjectedScore(game),
         awayTeamDisplayName: match?.awayTeam.name ?? awayAsset?.displayName ?? null,
         homeTeamDisplayName: match?.homeTeam.name ?? homeAsset?.displayName ?? null,
         awayTeamLogo: uclTeamLogo(game.awayTeam),
@@ -116,6 +134,7 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
         soccerModelProvenance: game.soccerModelProvenance ? {
           ...game.soccerModelProvenance,
           coherentOutcomeRelease: UCL_COHERENT_MARKET_OUTCOME_RELEASE,
+          projectedScoreRelease: UCL_PROJECTED_SCORE_RELEASE,
           regulationTime: true,
         } : null,
         breakdown: {
