@@ -244,3 +244,41 @@ This is an architecture test informed by dynamic attack/defence and dependent
 score-distribution research. It is not another global threshold or forced-No
 rule. Failure leaves the live model unchanged; success advances to a complete
 current-board and release-safety rehearsal before any publication.
+
+### Dynamic-score result
+
+The authenticated cohort contained 1,128 UCL matches and 24,502 usable
+domestic matches. The selected 35% domestic-strength blend improved the sealed
+2019 block from 46.73% to 52.34% accuracy, Brier from 0.26443 to 0.25736, log
+loss from 0.72409 to 0.70861, AUC from 0.46281 to 0.47123, and coherent
+team-score MAE from 1.03295 to 1.03188. It nevertheless reduced No recall from
+18% to 14% and increased Yes directions from 82/107 to 92/107. It therefore
+fails the complete gate and is rejected. The result isolates the missing
+mechanism: generic domestic strength helps ranking and calibration but ordinary
+Poisson scoring intensities understate team-specific zero-goal risk.
+
+## Independent zero-risk architecture declaration
+
+Before requesting or inspecting any 2001-10 UCL result, one final structurally
+different candidate is frozen:
+
+- Request authenticated UCL seasons 2001 through 2010. Use 2001-06 for
+  warm-up, 2007-09 for weight selection, and 2010 once as untouched
+  confirmation. Any incomplete UCL season fails closed.
+- Use strictly prior domestic goals to estimate each club's scoring-occurrence
+  rate and each opponent's concession-occurrence rate with a 365-day half-life
+  and eight-match league-mean shrinkage. Shots are deliberately excluded so
+  older leagues with no shot schema remain honest rather than zero-filled.
+- A team's probability of scoring is the mean of its shrunk scoring rate and
+  its opponent's shrunk concession rate. Their product is the domestic
+  zero-risk BTTS estimate. Blend its logit with the incumbent BTTS logit using
+  only `[0.15, 0.25, 0.35]`, selected on 2007-09 by Brier then log loss.
+- Reconcile only BTTS into the incumbent PMF and retain the same exact
+  Match Result, Over 2.5, expected-total, score-MAE, and simultaneous BTTS
+  accuracy/No-recall/Brier/log-loss/AUC promotion gates.
+- If 2010 passes, the already opened 2011-26 blocks are robustness checks only.
+  The candidate must improve their pooled proper scores, AUC, and No recall
+  without reducing accuracy before it can reach current-board rehearsal.
+
+This candidate directly models the low-score/zero-inflation weakness isolated
+by the preceding test. It is neither a threshold shift nor a forced side mix.
