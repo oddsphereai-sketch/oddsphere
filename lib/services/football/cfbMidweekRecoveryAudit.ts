@@ -5,6 +5,7 @@ import { readCfbForwardWriterEvidence } from "./cfbForwardEvidenceStore";
 import { runCfbForwardEvidenceWriter } from "./cfbForwardEvidenceWriter";
 import { selectLatestCfbMemberEvidenceRows } from "./cfbMemberFixture";
 import { isGameInCfbWeeklyWindow, resolveCfbForwardWindow } from "./cfbWeeklyWindow";
+import { fetchCfbTheOddsApiFallback } from "./cfbTheOddsApiFallback";
 
 export const CFB_MIDWEEK_RECOVERY_AUDIT_RELEASE =
   "cfb_midweek_recovery_audit_2026_10_20_r2_durable_sanitized_result" as const;
@@ -137,4 +138,36 @@ function gradeCounts(payloads: readonly CfbForwardEvidencePayload[]): Record<str
     counts.Held += payload.decisions.heldMarkets.length;
   }
   return counts;
+}
+
+export async function runCfbFcsProviderDiagnostic(args: {
+  client: SupabaseClient;
+  season: number;
+  now: string;
+  theOddsApiKey: string;
+}): Promise<Record<string, unknown>> {
+  const all = (await readCfbForwardWriterEvidence({ client: args.client, season: args.season, now: args.now })).evidence;
+  const window = resolveCfbForwardWindow({ now: args.now, evidence: all, advanceWithoutNextEvidence: true });
+  const current = selectLatestCfbMemberEvidenceRows(
+    all.filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window)),
+    args.now,
+  ).map((row) => row.payload);
+  const games = current
+    .filter((payload) => !payload.game.away.fbs && !payload.game.home.fbs)
+    .map((payload) => payload.game);
+  const result = await fetchCfbTheOddsApiFallback({ games, capturedAt: args.now, apiKey: args.theOddsApiKey });
+  const matchupById = new Map(games.map((game) => [game.providerGameId, `${game.away.abbreviation}@${game.home.abbreviation}`]));
+  return {
+    mode: "authenticated_fcs_provider_identity_diagnostic",
+    now: args.now,
+    window: { start: window.boardStartDate, end: window.boardEndDate },
+    requestedGames: games.length,
+    providerEvents: result.providerEvents,
+    providerEventCount: result.providerEvents.length,
+    matchedGames: result.matchedGames,
+    matchedMatchups: Object.keys(result.booksByGame).map((gameId) => matchupById.get(gameId) ?? gameId),
+    failures: Object.fromEntries(Object.entries(result.failuresByGame).map(([gameId, reason]) => [matchupById.get(gameId) ?? gameId, reason])),
+    creditsUsed: result.creditsUsed,
+    creditsRemaining: result.creditsRemaining,
+  };
 }

@@ -32,6 +32,13 @@ export type CfbTheOddsApiFallbackResult = {
   matchedGames: number;
   booksByGame: Record<string, NcaafBookOdds[]>;
   failuresByGame: Record<string, string>;
+  providerEvents: Array<{
+    eventId: string | null;
+    commenceTime: string | null;
+    awayTeam: string | null;
+    homeTeam: string | null;
+    bookmakers: string[];
+  }>;
 };
 
 export type CfbTheOddsApiHistoricalOpeningResult = {
@@ -188,6 +195,13 @@ export async function fetchCfbTheOddsApiFallback(args: {
     matchedGames: Object.keys(booksByGame).length,
     booksByGame,
     failuresByGame,
+    providerEvents: events.map((event) => ({
+      eventId: text(event.id),
+      commenceTime: text(event.commence_time),
+      awayTeam: text(event.away_team),
+      homeTeam: text(event.home_team),
+      bookmakers: array(event.bookmakers).map(record).flatMap((book) => text(book.key) ? [text(book.key)!] : []),
+    })),
   };
 }
 

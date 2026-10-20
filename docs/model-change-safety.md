@@ -33,6 +33,14 @@ the isolated audit key, bypasses authentication
 or the shared lease, exposes credentials, or allows a candidate flag in an
 `apply=true` writer.
 
+When the full current-board rehearsal returns zero FCS recovery, the same
+authenticated route may run one bounded provider-only diagnostic under the
+shared CFB lease. It may return only public event identity, kickoff, bookmaker
+keys, exact-match results, failure reasons, and request-credit counters; it may
+not expose the provider credential or write model state. This diagnostic exists
+only to distinguish a genuinely empty provider board from a matching or
+normalization defect before any live reserve policy changes.
+
 ## Owner-directed correctness exception: NHL lock authority
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to verify every Daily Edge,

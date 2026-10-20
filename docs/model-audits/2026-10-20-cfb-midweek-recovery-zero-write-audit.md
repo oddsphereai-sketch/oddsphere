@@ -53,3 +53,10 @@ The audit result is the required current-board evidence for a separate live
 repair. Remove the endpoint after that repair is accepted. Revert this audit
 release if it writes model state, escapes authentication or the shared lease,
 or permits candidate behavior in an applying writer.
+
+The first durable current-board result retained 0/40 FCS paired Moneyline,
+Spread, and Total coverage with zero promotions, proving that lowering the
+reserve alone was not a valid repair. A bounded `provider=1` mode therefore
+queries only the paid FCS endpoint and returns sanitized public event identities,
+bookmaker keys, exact-match counts, failure reasons, and credit counters. It is
+authenticated, shares the CFB lease, makes one request, and writes nothing.

@@ -513,6 +513,10 @@ Last reviewed: 2026-10-20
   grade, promotion, and demotion so the live repair cannot be approved on stale
   October 8 evidence. Evidence and rollback:
   `docs/model-audits/2026-10-20-cfb-midweek-recovery-zero-write-audit.md`.
+  The first current-board result retained 0/40 FCS paired-market coverage, so
+  the reserve change remains disabled. An authenticated one-request provider
+  diagnostic is available only to distinguish an empty vendor board from an
+  event-identity defect; it cannot write model state or expose credentials.
 
 - October 20 market-history continuity capacity repair: the sole writer
   advances to

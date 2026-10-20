@@ -48,6 +48,14 @@ assert.equal(response.requests, 1);
 assert.equal(response.creditsUsed, 3);
 assert.equal(response.creditsRemaining, 491);
 assert.equal(response.matchedGames, 1);
+assert.equal(response.providerEvents.length, 2);
+assert.deepEqual(response.providerEvents[0], {
+  eventId: "e-liu",
+  commenceTime: liu.scheduledStart,
+  awayTeam: "LIU Sharks",
+  homeTeam: "Duquesne Dukes",
+  bookmakers: ["fanduel", "betrivers", "williamhill_us", "betonlineag"],
+});
 assert.equal(response.failuresByGame["g-cit"], "strict_event_not_found");
 const book = response.booksByGame["g-liu"]?.[0];
 assert.ok(book);
