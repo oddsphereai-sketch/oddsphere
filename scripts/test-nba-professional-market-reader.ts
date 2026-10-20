@@ -121,6 +121,71 @@ assert.deepEqual(selectNbaQualifiedSpreadRead(qualifiedSpread), {
   magnitudePoints: 2,
 });
 
+const crossNumberPriceOpposition = ["pinnacle", "bookmaker"].flatMap((book) => [
+  ...pair({ market: "spread", book, at: "2026-10-20T20:00:00.000Z", firstLine: -4, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book, at: "2026-10-20T21:00:00.000Z", firstLine: -2, firstPrice: -125, secondPrice: 105 }),
+]);
+const crossNumberPriceRead = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: crossNumberPriceOpposition,
+  splitRows: [],
+  selectedLines: { spreadHome: -2, total: null },
+});
+assert.equal(crossNumberPriceRead.reads.spread.status, "qualified");
+assert.equal(crossNumberPriceRead.reads.spread.side, "away");
+assert.ok(crossNumberPriceRead.reads.spread.trails.every((trail) => trail.priceDirection === null),
+  "juice at a different handicap cannot oppose the number move");
+assert.deepEqual(selectNbaQualifiedSpreadRead(crossNumberPriceRead), {
+  side: "away",
+  magnitudePoints: 2,
+});
+
+const lineMismatchedFlow = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: strongSpreadAway,
+  splitRows: [split({ market: "spread", side: "home", bets: 42, money: 62, line: -3 })],
+  selectedLines: { spreadHome: -2, total: null },
+});
+assert.equal(lineMismatchedFlow.reads.spread.status, "qualified");
+assert.equal(lineMismatchedFlow.reads.spread.resistance, "none");
+assert.equal(lineMismatchedFlow.reads.spread.flows[0]?.exactLineMatched, false,
+  "line-mismatched flow remains visible but has no qualification authority");
+
+const retailReversal = [
+  ...strongSpreadAway,
+  ...pair({ market: "spread", book: "betparx", at: "2026-10-20T19:30:00.000Z", firstLine: -4, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book: "betparx", at: "2026-10-20T20:30:00.000Z", firstLine: -5, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book: "betparx", at: "2026-10-20T21:30:00.000Z", firstLine: -2, firstPrice: -110, secondPrice: -110 }),
+];
+const retailReversalRead = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: retailReversal,
+  splitRows: [],
+  selectedLines: { spreadHome: -2, total: null },
+});
+assert.equal(retailReversalRead.reads.spread.status, "qualified",
+  "one retail reversal cannot veto otherwise complete named-book direction");
+assert.ok(retailReversalRead.reads.spread.trails.some((trail) =>
+  trail.sourceClass === "retail" && trail.reversalMagnitude > 0
+));
+
+const namedReversal = [
+  ...pair({ market: "spread", book: "pinnacle", at: "2026-10-20T19:30:00.000Z", firstLine: -4, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book: "pinnacle", at: "2026-10-20T20:30:00.000Z", firstLine: -5, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book: "pinnacle", at: "2026-10-20T21:30:00.000Z", firstLine: -2, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book: "bookmaker", at: "2026-10-20T19:30:00.000Z", firstLine: -4, firstPrice: -110, secondPrice: -110 }),
+  ...pair({ market: "spread", book: "bookmaker", at: "2026-10-20T21:30:00.000Z", firstLine: -2, firstPrice: -110, secondPrice: -110 }),
+];
+const namedReversalRead = buildNbaProfessionalMarketReader({
+  evaluatedAt,
+  priceRows: namedReversal,
+  splitRows: [],
+  selectedLines: { spreadHome: -2, total: null },
+});
+assert.equal(namedReversalRead.reads.spread.status, "unavailable");
+assert.equal(namedReversalRead.reads.spread.reason, "reversal_or_buyback",
+  "named-book reversal remains a fail-closed veto");
+
 const modestTotalOver = ["pinnacle", "circa"].flatMap((book) => [
   ...pair({ market: "total", book, at: "2026-10-20T20:00:00.000Z", firstLine: 220, firstPrice: -110, secondPrice: -110 }),
   ...pair({ market: "total", book, at: "2026-10-20T21:00:00.000Z", firstLine: 224.5, firstPrice: -110, secondPrice: -110 }),

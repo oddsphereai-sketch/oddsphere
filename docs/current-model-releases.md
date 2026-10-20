@@ -196,25 +196,26 @@ Last reviewed: 2026-10-20
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`, plus
   `docs/model-audits/2026-10-16-nba-split-fallback-team-identity-result.md`.
 - NBA internal professional market reader is
-  `nba_professional_market_reader_2026_10_16_r5_canonical_split_identity`. It consumes the
+  `nba_professional_market_reader_2026_10_20_r6_structural_qualification`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
   prediction pipeline. It excludes the independent model's best-execution sportsbook by market,
-  removes vig before comparing price movement, and fails closed on incomplete pagination, stale
-  flow, missing sequences, reversal/buyback, or book disagreement. It is not the member card/display
-  reader and never numerically blends the projection toward consensus. Its direct forecast authority
-  is a categorical Spread correction when at least two persistent same-direction same-book number
-  trails each clear two points and at least one is a named sharp book. That corrected margin may
-  consequently flip Moneyline as part of the coherent score; direct Moneyline reads remain
-  observational. A Total read has categorical forecast authority only when two persistent named-book
-  number trails each moved at least five points in one direction and the independent residual remains
-  at least five points on the opposite side of the current Total. The correction preserves residual
-  magnitude rather than blending toward consensus. The audit payload records these authorities and
-  each independent-to-final side effect explicitly rather than treating evidence qualification as
-  forecast authority.
+  removes vig before comparing price movement, compares Spread/Total prices only at the same number,
+  and fails closed on incomplete pagination, missing sequences, named reversal/buyback, or material
+  book disagreement. Exact-line flow may confirm or resist a read, but missing or line-mismatched flow
+  cannot erase otherwise complete number chronology. An isolated retail reversal remains reported and
+  cannot veto named-supported broad persistent direction. It is not the member card/display reader and
+  never numerically blends the projection toward consensus. Its direct forecast authority remains the
+  categorical Spread correction requiring at least two persistent same-direction same-book number trails
+  of at least two points, including a named sharp book. That corrected margin may consequently flip
+  Moneyline as part of the coherent score; direct Moneyline reads remain observational. Total authority
+  still requires two persistent named-book moves of at least five points plus the opposing five-point
+  independent residual. The audit payload records qualification separately from authority and every
+  independent-to-final side effect explicitly.
   Evidence and rollback:
   `docs/model-audits/2026-10-16-nba-independent-first-categorical-reader-r3.md`,
   `docs/model-audits/2026-10-16-nba-three-market-reader-correction-attribution-r4.md`, and
-  `docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-result.md`.
+  `docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-result.md`, plus
+  `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
@@ -3495,11 +3496,11 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_19_r8_complete_line_board`
-- Market marriage: `nba_market_marriage_2026_10_19_r8_complete_line_board`
+- Model / prediction record: `nba_professional_unified_2026_10_20_r9_reader_structural_qualification`
+- Market marriage: `nba_market_marriage_2026_10_20_r9_reader_structural_qualification`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
-- Internal market reader: `nba_professional_market_reader_2026_10_16_r5_canonical_split_identity`
+- Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -3511,6 +3512,22 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 20 r9 candidate preserves the independent model, two-point Spread authority, five-point
+Total authority, calibration, grade policy, writer, lease, cadence, target exclusion, pagination, and
+locked-record precedence while repairing the reader's structural qualification. Spread/Total no-vig
+price changes are now compared only at the same number; a number move no longer has to be duplicated by
+juice at a different handicap; missing or line-mismatched flow cannot erase complete number chronology;
+and one retail reversal cannot veto broad persistent named-supported movement. Named disagreement,
+reversal, and buyback still fail closed. The exact opening-day rehearsal changes Boston-Detroit from
+BOS 114.32-113.84 to BOS 115.34-112.82, flips the Spread from DET +1.5 to BOS -1.5, and promotes Boston
+Moneyline and Spread from Watchlist to Lean. Philadelphia-New York and Oklahoma City-San Antonio retain
+their scores and picks; Totals remain unchanged. Board impact is two promotions, zero demotions, one
+Spread change, and two actionables instead of zero. Authentic same-book capture has no settled regular-
+season sample yet, so the qualification repair remains provisional and requires prospective release-pure
+evaluation. Evidence and rollback:
+`docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-predeclaration.md` and
+`docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
 
 The October 19 r8 release preserves the r7 score, reader, executable-line, calibration, grade, writer,
 lease, cadence, and lock contracts while replacing both NBA current-line reads with the shared bounded

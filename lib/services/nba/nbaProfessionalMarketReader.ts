@@ -1,7 +1,7 @@
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_PROFESSIONAL_MARKET_READER_RELEASE =
-  "nba_professional_market_reader_2026_10_16_r5_canonical_split_identity" as const;
+  "nba_professional_market_reader_2026_10_20_r6_structural_qualification" as const;
 
 export type NbaReaderSide = "home" | "away" | "over" | "under";
 type Direction = -1 | 1;
@@ -63,6 +63,7 @@ export type NbaProfessionalMarketRead = {
   side: NbaReaderSide | null;
   reason:
     | "stable_two_named_moneyline_prices"
+    | "persistent_named_number_breadth"
     | "number_and_price_alignment"
     | "two_named_total_number_moves"
     | "reverse_flow_resistance"
@@ -205,7 +206,14 @@ function buildTrails(args: {
     const openingNumber = numberAxis(args.market, opening.firstLine);
     const currentNumber = numberAxis(args.market, current.firstLine);
     const numberDelta = openingNumber === null || currentNumber === null ? null : currentNumber - openingNumber;
-    const probabilityDelta = 100 * (fairFirst(current) - fairFirst(opening));
+    // Spread and Total prices at different numbers are different contracts.
+    // Compare their no-vig prices only after the book reached the current
+    // number; Moneyline has no number axis and retains opening-to-current price
+    // comparison.
+    const priceBaseline = args.market === "moneyline"
+      ? opening
+      : observations.find((row) => numberAxis(args.market, row.firstLine) === currentNumber) ?? current;
+    const probabilityDelta = 100 * (fairFirst(current) - fairFirst(priceBaseline));
     const numberDirection = numberDelta !== null && Math.abs(numberDelta) >= NUMBER_MOVE
       ? sideName(args.market, sign(numberDelta)) : null;
     const priceDirection = Math.abs(probabilityDelta) >= PRICE_MOVE_PP
@@ -216,11 +224,21 @@ function buildTrails(args: {
     const persistenceTimeShare = alignedAt === null || alignedAt < 0
       ? 0 : timeShare(observations, opening, direction!, alignedAt, args.evaluatedAt, args.market);
     const oppositeMagnitudes = direction === null ? [] : observations.flatMap((row) => {
-      if (observationDirection(args.market, opening, row) !== opposite(direction)) return [];
+      if (args.market === "moneyline") {
+        if (observationDirection(args.market, opening, row) !== opposite(direction)) return [];
+        return [Math.abs(100 * (fairFirst(row) - fairFirst(opening))) / 100];
+      }
       const number = numberAxis(args.market, row.firstLine);
-      return [openingNumber !== null && number !== null ? Math.abs(number - openingNumber) : Math.abs(100 * (fairFirst(row) - fairFirst(opening))) / 100];
+      if (openingNumber === null || number === null || Math.abs(number - openingNumber) < NUMBER_MOVE) return [];
+      const rowDirection = sideName(args.market, sign(number - openingNumber));
+      return rowDirection === opposite(direction) ? [Math.abs(number - openingNumber)] : [];
     });
-    const everMoved = observations.some((row) => observationDirection(args.market, opening, row) !== null);
+    const everMoved = args.market === "moneyline"
+      ? observations.some((row) => observationDirection(args.market, opening, row) !== null)
+      : observations.some((row) => {
+        const number = numberAxis(args.market, row.firstLine);
+        return openingNumber !== null && number !== null && Math.abs(number - openingNumber) >= NUMBER_MOVE;
+      });
     trails.push({
       sportsbook: book,
       sourceClass: raw.some((row) => canonical(row.sportsbook) === book && row.sharpBook) || NAMED_BOOKS.has(book)
@@ -237,7 +255,7 @@ function buildTrails(args: {
       direction,
       persistenceTimeShare,
       reversalMagnitude: Math.max(0, ...oppositeMagnitudes),
-      buybackToOpening: everMoved && direction === null,
+      buybackToOpening: everMoved && (args.market === "moneyline" ? direction === null : numberDirection === null),
     });
   }
   return trails.sort((left, right) => left.sportsbook.localeCompare(right.sportsbook));
@@ -272,7 +290,6 @@ function buildFlows(args: {
     const exactLineMatched = args.market === "moneyline" ? null
       : row.marketLine === null || args.selectedLine === null ? false
       : Math.abs(Math.abs(row.marketLine) - Math.abs(args.selectedLine)) < 0.01;
-    if (exactLineMatched === false) return [];
     const source = row.sourceType === "sharp_adjacent_book" ? "named_book" as const
       : row.sourceBook === "consensus" ? "public_consensus" as const : "retail_book" as const;
     return [{
@@ -294,48 +311,76 @@ function qualify(
   excludedSportsbooks: string[],
 ): NbaProfessionalMarketRead {
   const moved = trails.filter((trail) => trail.direction !== null);
-  const movement = consensus(moved.map((trail) => trail.direction!));
-  const bookDisagreement = new Set(moved.map((trail) => trail.direction)).size > 1;
-  const strongestFlow = flows[0] ?? null;
-  const resistance = bookDisagreement ? "book_disagreement" as const
+  const stable = market === "moneyline"
+    ? moved.filter((trail) => trail.persistenceTimeShare >= 2 / 3)
+    : trails.filter((trail) => trail.numberDirection !== null && trail.persistenceTimeShare >= 2 / 3);
+  const movement = consensus(stable.map((trail) => market === "moneyline"
+    ? trail.direction!
+    : trail.numberDirection!
+  ));
+  const eligibleFlows = flows.filter((flow) => market === "moneyline" || flow.exactLineMatched === true);
+  const strongestFlow = eligibleFlows[0] ?? null;
+  const namedStable = stable.filter((trail) => trail.sourceClass === "named");
+  const namedDisagreement = new Set(namedStable.map((trail) => trail.direction)).size > 1;
+  const namedReversalOrBuyback = trails.some((trail) =>
+    trail.sourceClass === "named" && (trail.buybackToOpening || trail.reversalMagnitude > 0)
+  );
+  const stableOpposition = movement === null
+    ? stable
+    : stable.filter((trail) => (market === "moneyline" ? trail.direction : trail.numberDirection) !== movement);
+  const bookDisagreement = namedDisagreement || (stable.length >= 2 && movement === null);
+  const resistance = bookDisagreement || stableOpposition.length > 0 ? "book_disagreement" as const
     : strongestFlow && movement === null ? "flow_resistance" as const
     : strongestFlow && movement !== strongestFlow.side ? "reverse_flow" as const : "none" as const;
   const base = { trails, flows, excludedSportsbooks, resistance };
   if (bookDisagreement) return { ...base, status: "unavailable", side: null, reason: "book_disagreement" };
-  if (trails.some((trail) => trail.buybackToOpening || trail.reversalMagnitude > 0)) {
+  if (namedReversalOrBuyback) {
     return { ...base, status: "unavailable", side: null, reason: "reversal_or_buyback" };
   }
-  const stable = moved.filter((trail) => trail.persistenceTimeShare >= 2 / 3);
-  const named = stable.filter((trail) => trail.sourceClass === "named");
   if (market === "moneyline") {
-    const namedDirection = consensus(named.map((trail) => trail.direction!));
-    if (named.length >= 2 && namedDirection !== null) {
+    const namedDirection = consensus(namedStable.map((trail) => trail.direction!));
+    if (namedStable.length >= 2 && namedDirection !== null) {
       return { ...base, status: "qualified", side: namedDirection, reason: "stable_two_named_moneyline_prices" };
     }
-  } else if (market === "spread") {
-    const aligned = stable.filter((trail) => trail.numberDirection !== null && trail.numberDirection === trail.priceDirection);
-    const alignedDirection = consensus(aligned.map((trail) => trail.numberDirection!));
-    if (aligned.length >= 2 && alignedDirection !== null && strongestFlow?.side === alignedDirection) {
-      return { ...base, status: "qualified", side: alignedDirection, reason: "number_and_price_alignment" };
-    }
-    if (
-      aligned.length >= 2 && alignedDirection !== null && strongestFlow !== null &&
-      strongestFlow.side !== alignedDirection && named.some((trail) => trail.direction === alignedDirection)
-    ) {
-      return { ...base, status: "qualified", side: alignedDirection, reason: "reverse_flow_resistance", resistance: "reverse_flow" };
-    }
   } else {
-    const namedNumbers = named.filter((trail) => trail.numberDirection !== null);
-    const namedDirection = consensus(namedNumbers.map((trail) => trail.numberDirection!));
-    if (namedNumbers.length >= 2 && namedDirection !== null) {
-      return { ...base, status: "qualified", side: namedDirection, reason: "two_named_total_number_moves" };
+    const stableNumbers = stable.filter((trail) => trail.numberDirection !== null);
+    const numberDirection = consensus(stableNumbers.map((trail) => trail.numberDirection!));
+    const supporting = numberDirection === null
+      ? []
+      : stableNumbers.filter((trail) => trail.numberDirection === numberDirection);
+    const namedSupporting = supporting.filter((trail) => trail.sourceClass === "named");
+    const namedNumberDisagreement = new Set(
+      stableNumbers
+        .filter((trail) => trail.sourceClass === "named")
+        .map((trail) => trail.numberDirection),
+    ).size > 1;
+    const supportIsComplete = numberDirection !== null && supporting.length >= 2 &&
+      (namedSupporting.length >= 2 || (namedSupporting.length >= 1 && stableNumbers.length >= 5));
+    if (!namedNumberDisagreement && supportIsComplete) {
+      if (strongestFlow !== null && strongestFlow.side !== numberDirection) {
+        return {
+          ...base,
+          status: "qualified",
+          side: numberDirection,
+          reason: "reverse_flow_resistance",
+          resistance: "reverse_flow",
+        };
+      }
+      return {
+        ...base,
+        status: "qualified",
+        side: numberDirection,
+        reason: market === "total" && namedSupporting.length >= 2
+          ? "two_named_total_number_moves"
+          : "persistent_named_number_breadth",
+      };
     }
   }
   return {
     ...base,
     status: "unavailable",
     side: null,
-    reason: flows.length === 0 ? "stale_or_incomplete_flow" : "insufficient_sequence",
+    reason: "insufficient_sequence",
   };
 }
 
