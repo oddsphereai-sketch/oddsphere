@@ -146,7 +146,7 @@ export const SOCCER_BOARD_ROLL_HOUR = 2; // ET
 export const DAILY_EDGE_BOARD_ROLL_HOUR_ET = 3;
 
 export const MLB_DAILY_REFRESH_SCHEDULE_RELEASE =
-  "mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover" as const;
+  "mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover" as const;
 
 /**
  * Vercel cron expressions are UTC-only. Scheduling the MLB rollover seed at

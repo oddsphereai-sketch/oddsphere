@@ -319,6 +319,13 @@ export type AutomationRunReport = {
     reason: string | null;
   };
   bdl_game_count: number | null;
+  /**
+   * Supported games in the authoritative MLB Stats schedule. A verified zero
+   * is materially different from an unavailable schedule and lets the leased
+   * rollover writer publish an exact-date empty board without trusting an
+   * empty lower-authority provider response.
+   */
+  official_scheduled_game_count: number | null;
   sharp_ev_count: number | null;
   reconciliation: {
     status: "ok" | "warn" | "fail_closed" | "skipped" | null;
@@ -1890,6 +1897,7 @@ export async function runSlateCycleAutomated(opts: {
       reason: providerModeReport.reason,
     },
     bdl_game_count: bdlGameCount,
+    official_scheduled_game_count: officialScheduledGameCount,
     sharp_ev_count: sharpEvCount,
     reconciliation: {
       status: reconciliation?.status ?? (sharpKey ? null : "skipped"),

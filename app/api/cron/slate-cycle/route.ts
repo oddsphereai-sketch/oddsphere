@@ -55,6 +55,7 @@ import {
   isMlbRolloverSeedWindow,
   MLB_DAILY_REFRESH_SCHEDULE_RELEASE,
 } from "@/lib/dates/slateDate";
+import { shouldPublishOfficialEmptyMlbRollover } from "@/lib/cron/mlbOfficialEmptyRollover";
 
 export const maxDuration = 300; // Vercel Pro — full slate cycle can take ~3-5 min
 
@@ -115,6 +116,97 @@ export async function GET(request: Request) {
           SLATE_CYCLE_MARKET_INTELLIGENCE_BUDGET_MS +
           SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
       });
+      const confirmedOfficialEmptyRollover = shouldPublishOfficialEmptyMlbRollover({
+        sport,
+        rolloverSeed,
+        officialScheduledGameCount: report.official_scheduled_game_count,
+      });
+
+      // MLB Stats is the schedule authority. On a verified off-day the lower-
+      // authority slate provider is expected to be empty, so its generic
+      // reconciliation gate must not strand members on yesterday's board.
+      // Rebuild through the ordinary snapshot assembler and require its own
+      // independent schedule read to agree on `no_data` before persistence.
+      if (confirmedOfficialEmptyRollover) {
+        const emptySnapshotBudget = assessSlateCyclePostludeBudget({
+          routeStartedAtMs,
+          nowMs: Date.now(),
+          requiredWorkMs: SLATE_CYCLE_RESPONSE_SNAPSHOT_BUDGET_MS,
+        });
+        if (!emptySnapshotBudget.canRun) {
+          return {
+            records_updated: coreLifecycle.recordsWritten,
+            api_calls_made: coreLifecycle.apiCalls,
+            partial: true,
+            error_message: "MLB official-empty rollover snapshot deferred: insufficient_time_after_core_orchestrator",
+            details: {
+              ...report,
+              schedule_release: MLB_DAILY_REFRESH_SCHEDULE_RELEASE,
+              mode: "rollover_seed",
+              official_empty_slate: true,
+              market_intelligence_v2: null,
+              response_snapshot: null,
+              postlude_timing: buildSlateCyclePostludeTiming({
+                routeStartedAtMs,
+                nowMs: Date.now(),
+                budgetAfterCore: emptySnapshotBudget,
+                marketIntelligenceV2: {
+                  status: "deferred",
+                  elapsed_ms: 0,
+                  deferred_reason: "confirmed_official_empty_slate",
+                },
+                responseSnapshot: {
+                  status: "deferred",
+                  elapsed_ms: 0,
+                  deferred_reason: "insufficient_time_after_core_orchestrator",
+                },
+              }),
+            },
+          };
+        }
+        const responseSnapshotStartedAtMs = Date.now();
+        const responseSnapshot = await refreshDailyEdgeResponseSnapshot({
+          sport,
+          date,
+          source: "slate_cycle_official_empty_rollover",
+          requiredSlateState: "no_data",
+        });
+        const responseSnapshotTelemetry: SlateCyclePostludeStageTelemetry = {
+          status: responseSnapshot.ok ? "completed" : "deferred",
+          elapsed_ms: Date.now() - responseSnapshotStartedAtMs,
+          deferred_reason: responseSnapshot.ok
+            ? null
+            : "official_empty_snapshot_verification_failed",
+        };
+        const marketIntelligenceTelemetry: SlateCyclePostludeStageTelemetry = {
+          status: "deferred",
+          elapsed_ms: 0,
+          deferred_reason: "confirmed_official_empty_slate",
+        };
+        return {
+          records_updated: coreLifecycle.recordsWritten + (responseSnapshot.ok ? 1 : 0),
+          api_calls_made: coreLifecycle.apiCalls,
+          partial: !responseSnapshot.ok,
+          error_message: responseSnapshot.ok
+            ? null
+            : `MLB official-empty rollover snapshot failed: ${responseSnapshot.error ?? "unknown error"}`,
+          details: {
+            ...report,
+            schedule_release: MLB_DAILY_REFRESH_SCHEDULE_RELEASE,
+            mode: "rollover_seed",
+            official_empty_slate: true,
+            market_intelligence_v2: null,
+            response_snapshot: responseSnapshot,
+            postlude_timing: buildSlateCyclePostludeTiming({
+              routeStartedAtMs,
+              nowMs: Date.now(),
+              budgetAfterCore: emptySnapshotBudget,
+              marketIntelligenceV2: marketIntelligenceTelemetry,
+              responseSnapshot: responseSnapshotTelemetry,
+            }),
+          },
+        };
+      }
       let marketIntelligenceV2:
         | Awaited<ReturnType<typeof runScheduledMarketIntelligenceV2Collection>>
         | null = null;

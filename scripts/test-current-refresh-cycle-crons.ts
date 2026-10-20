@@ -147,7 +147,8 @@ assert.deepEqual(
 );
 assert.match(source("app/api/cron/slate-cycle/route.ts"), /isMlbRolloverSeedWindow/, "MLB rollover seed is DST-gated in the route");
 assert.match(source("app/api/cron/slate-cycle/route.ts"), /incomplete_member_pipeline/, "an incomplete MLB cycle cannot replace the ready member snapshot");
-assert.match(source("app/api/cron/slate-cycle/route.ts"), /mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover|MLB_DAILY_REFRESH_SCHEDULE_RELEASE/, "MLB exposes its immutable readiness-gated schedule release");
+assert.match(source("app/api/cron/slate-cycle/route.ts"), /shouldPublishOfficialEmptyMlbRollover/, "an authoritative MLB off-day publishes the exact-date empty rollover snapshot");
+assert.match(source("app/api/cron/slate-cycle/route.ts"), /MLB_DAILY_REFRESH_SCHEDULE_RELEASE/, "MLB exposes its immutable official-empty rollover schedule release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/tracking-refresh" && cron.schedule === "33 * * * *"), "Tracking publishes hourly");
 assert.deepEqual(
   crons.filter((cron) => cron.path === "/api/cron/wnba-daily-refresh").map((cron) => cron.schedule),
@@ -168,8 +169,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   crons.filter((cron) => cron.path === "/api/cron/nhl-daily-refresh?intraday=true").map((cron) => cron.schedule),
-  ["18 6-10 * * *", "18,48 0-5,12-23 * * *"],
-  "NHL refreshes hourly before the member day and every 30 minutes through its active market window",
+  ["18 6-11 * * *", "48 10 * * *", "18,48 0-5,12-23 * * *"],
+  "NHL adds bounded 06:48 and 07:18 ET rollover retries before the full daily refresh",
 );
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /intraday \? "intraday_market" : "daily_full"/, "NBA separates lightweight market refreshes from the full ratings scrape");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /intraday \? "intraday_market" : "daily_full"/, "NHL separates lightweight market refreshes from the full stats scrape");
@@ -184,7 +185,7 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /leaseGroup:\s*"
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /requireLease:\s*true/, "NBA snapshot publication requires the shared lease");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board/, "NBA refresh exposes its immutable complete-line-board operational release");
-assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate/, "NHL refresh exposes its immutable readiness-gated operational release");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry/, "NHL refresh exposes its immutable morning-rollover retry release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /leaseRetryMaxWaitMs:\s*!dryRun && gateActive \? 20_000/, "lock sweep briefly waits for the shared lease before deferring");
