@@ -13,6 +13,8 @@ import type { NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
 async function main(): Promise<void> {
 const mountainWestGame = game("mw-1", "UNLV", "UNLV", "Air Force", "AFA", "2026-10-17T19:30:00.000Z");
 const sunBeltGame = game("sb-1", "Georgia State", "GAST", "James Madison", "JMU", "2026-10-17T16:00:00.000Z");
+const southAlabamaGame = game("sb-live", "South Alabama Jaguars", "USA", "Marshall Thundering Herd", "MRSH", "2026-10-20T23:30:00.000Z");
+const cusaGame = game("cusa-live", "New Mexico State Aggies", "NMSU", "Sam Houston Bearkats", "SHSU", "2026-10-22T00:00:00.000Z");
 const americanGame = game("aac-1", "Florida Atlantic", "FAU", "Army", "ARMY", "2026-10-17T16:00:00.000Z");
 
 const json = parseCfbOfficialJsonAvailability({
@@ -31,6 +33,23 @@ const json = parseCfbOfficialJsonAvailability({
 assert.equal(json["sb-1"]?.teams[0]?.players[0]?.name, "Ryan Green");
 assert.equal(json["sb-1"]?.teams[1]?.players.length, 0, "available rows must not become injuries");
 
+const liveSunBeltArgs = {
+  games: [southAlabamaGame],
+  capturedAt: "2026-10-20T11:00:00.000Z",
+  sourceUrl: "https://sunbeltsports.org/report",
+  json: {
+    games: [{
+      dateISO: "2026-10-20",
+      updatedAtUTC: "2026-10-18T00:04:55.361Z",
+      away: { name: "South Alabama", players: [{ name: "Jay Jaguar", position: "WR", status: "Questionable" }] },
+      home: { name: "Marshall", players: [{ name: "Marco Herd", position: "LB", status: "Out" }] },
+    }],
+  },
+};
+assert.equal(parseCfbOfficialJsonAvailability(liveSunBeltArgs)["sb-live"], undefined, "deployed baseline must stay unchanged in the audit-only release");
+const liveSunBelt = parseCfbOfficialJsonAvailability({ ...liveSunBeltArgs, auditUseMidweekRecoveryCandidate: true });
+assert.equal(liveSunBelt["sb-live"]?.teams[0]?.players[0]?.name, "Jay Jaguar", "candidate must recover school-only labels against mascot-bearing schedule names");
+
 const faktorHtml = `
 <article class="availability-graphic-card" data-availability-graphic-card="true" aria-label="UNLV @ Air Force Initial Report">
   <div data-kickoff-at="2026-10-17 19:30:00" data-local-time-zone="America/New_York"></div>
@@ -48,6 +67,23 @@ const faktor = parseCfbFaktorAvailability({ html: faktorHtml, games: [mountainWe
 assert.equal(faktor["mw-1"]?.reportUpdatedAt, "2026-10-15T21:28:38.000Z", "Faktor timestamps are UTC wall values");
 assert.equal(faktor["mw-1"]?.teams[0]?.players[0]?.name, "Jai'Den Thomas");
 assert.equal(faktor["mw-1"]?.teams[1]?.players[0]?.status, "OUT (GAME)");
+
+const cusaSectionHtml = `
+<section class="availability-graphic-card" data-availability-graphic-card="true" aria-label="NM State @ Sam Houston Initial Report">
+  <div data-kickoff-at="2026-10-22 00:00:00" data-local-time-zone="UTC"></div>
+  <div data-updated-at="2026-10-20 12:00:00" data-local-time-zone="UTC"></div>
+  <div class="availability-team-table" aria-label="NM State availability"><table>
+    <tbody class="availability-status-section"><tr class="status-section-heading-row"><th class="status-section-heading"><span>QUESTIONABLE</span></th></tr>
+      <tr class="availability-player-row"><td class="player-cell">Aggie Quarterback</td><td class="position-cell">QB</td></tr>
+    </tbody></table></div>
+  <div class="availability-team-table" aria-label="Sam Houston availability"><table>
+    <tbody class="availability-status-section"><tr class="status-section-heading-row"><th class="status-section-heading"><span>OUT</span></th></tr>
+      <tr class="availability-player-row"><td class="player-cell">Bearkat Receiver</td><td class="position-cell">WR</td></tr>
+    </tbody></table></div>
+</section>`;
+assert.equal(parseCfbFaktorAvailability({ html: cusaSectionHtml, games: [cusaGame], capturedAt: "2026-10-20T12:00:00.000Z", sourceUrl: "https://conferenceusa.com/report" })["cusa-live"], undefined);
+const cusa = parseCfbFaktorAvailability({ html: cusaSectionHtml, games: [cusaGame], capturedAt: "2026-10-20T12:00:00.000Z", sourceUrl: "https://conferenceusa.com/report", auditUseMidweekRecoveryCandidate: true });
+assert.equal(cusa["cusa-live"]?.teams[0]?.players[0]?.name, "Aggie Quarterback", "candidate must parse Faktor section containers and the NM State label");
 
 const hdi = parseCfbOfficialConferenceAvailability({
   games: [americanGame],

@@ -198,6 +198,8 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
   now: string;
   forceT60?: boolean;
   forceOpeningSeed?: boolean;
+  /** SELECT-only operator rehearsal; live writers must never set this. */
+  auditIgnoreCreditReserve?: boolean;
 }): { fetch: boolean; reason: string; cadenceMinutes: number; weeklyPulls: number; lastRemainingCredits: number | null } {
   const nowMs = Date.parse(args.now);
   const upcoming = args.games.filter((game) => Date.parse(game.scheduledStart) > nowMs);
@@ -233,7 +235,7 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
   if (!args.forceT60 && attempts.length >= CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT) {
     return { fetch: false, reason: "ordinary_pull_limit_lock_reserve", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
   }
-  if (lastRemainingCredits !== null && lastRemainingCredits < CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CREDITS_PER_PULL) {
+  if (!args.auditIgnoreCreditReserve && lastRemainingCredits !== null && lastRemainingCredits < CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CREDITS_PER_PULL) {
     return { fetch: false, reason: "credit_reserve", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
   }
   const latest = attempts[0] ?? 0;
