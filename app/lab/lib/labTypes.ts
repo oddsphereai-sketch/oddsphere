@@ -966,6 +966,7 @@ export type DailyEdgeGameDto = {
       release: string;
       productionAuthority: false;
       available: boolean;
+      lane: "unavailable" | "aligned" | "conflicted" | "corrected";
       modelYes: number;
       consensusYes: number | null;
       candidateYes: number;
@@ -976,7 +977,18 @@ export type DailyEdgeGameDto = {
       leaveOneOutYesRange: { minimum: number; maximum: number } | null;
       agreement: number;
       dispersion: number | null;
+      baseAuthority: number;
       authority: number;
+      modelEvidenceQuality: "thin" | "medium" | "strong";
+      movementBooks: string[];
+      movementYesDelta: number | null;
+      movementSide: "yes" | "no" | "stable" | null;
+      movementCorroboratesConsensus: boolean;
+      movementResistsConsensus: boolean;
+      currentVerdict: "no_play" | "watchlist" | "lean" | null;
+      candidateVerdict: "no_play" | "watchlist" | "lean" | null;
+      gradeEffect: "promotion" | "demotion" | "unchanged" | "unavailable";
+      candidatePriceAmerican: number | null;
       gateReasons: string[];
     };
     regulationTime: true;

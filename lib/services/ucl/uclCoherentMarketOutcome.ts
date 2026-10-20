@@ -9,7 +9,7 @@ import {
 } from "@/lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import { logPoolUclResult, reconcileUclMeanPreserving } from "./uclEloConsensus";
-import { deriveUclBttsMarketShadow } from "./uclBttsMarketShadow";
+import { deriveUclBttsMarketShadow, type UclBttsHistoryObservation } from "./uclBttsMarketShadow";
 
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
   "ucl_coherent_market_outcome_2026_10_14_r4_target_excluded_late_consensus" as const;
@@ -101,6 +101,15 @@ export function deriveUclCoherentMarketOutcome(input: {
   openingOdds?: BdlUclOdds[];
   matchResultVectors?: EplForwardBookVector[];
   bttsVectors?: EplForwardBookVector[];
+  bttsHistory?: UclBttsHistoryObservation[];
+  bttsEvaluatedPrices?: Partial<Record<"yes" | "no", number>> | null;
+  bttsModelEvidence?: {
+    homeStatMatches: number;
+    awayStatMatches: number;
+    homeXgMatches: number;
+    awayXgMatches: number;
+    promotedProxy: boolean;
+  };
   totalVectors: EplForwardBookVector[];
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;
@@ -153,7 +162,11 @@ export function deriveUclCoherentMarketOutcome(input: {
     modelYes: independentMarkets.btts.yes,
     vectors: input.bttsVectors ?? [],
     evaluatedBook: input.evaluatedBttsCanonicalBook,
+    evaluatedPrices: input.bttsEvaluatedPrices,
     providerEventId: input.providerEventId,
+    providerId: input.matchId,
+    history: input.bttsHistory,
+    modelEvidence: input.bttsModelEvidence,
     decisionAt: input.decisionAt,
     kickoff: input.kickoff,
   });

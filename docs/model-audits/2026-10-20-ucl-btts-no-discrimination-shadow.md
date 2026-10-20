@@ -561,3 +561,29 @@ receive production authority from the current board. Promotion still requires
 release-pure settled evidence improving BTTS accuracy, No recall, Brier and log
 loss, with no regression in Match Result, Total, team-score error, lock
 immutability, coverage or board actionability.
+
+### Outcome-blind current-board result
+
+At 11:32 EDT, before the first kickoff, the zero-write audit read all 18
+fixtures and 21,970 stored price observations. Seventeen fixtures had an
+eligible target-excluded consensus and same-book movement read. The frozen
+candidate produced 15 aligned, two conflicted, zero corrected and one
+unavailable lane. Six movements corroborated the current consensus, three
+resisted it and eight were directionally stable. Both target-excluded No
+levels remained confidence-only conflicts rather than automatic flips:
+
+- Slovan Bratislava at Roma stayed Yes (74.82% model, 47.14% consensus,
+  66.52% pooled). The six-book movement was -0.96 percentage point, below the
+  predeclared one-point directional threshold.
+- AEK at Manchester City stayed Yes (68.37% model, 47.64% consensus, 64.67%
+  pooled) because the six-book movement was +8.67 points toward Yes and thus
+  resisted the current No level.
+
+There were zero side changes and zero promotions. One symmetric exact-price
+demotion occurred: Viking at Aston Villa moved from Lean to Watchlist because
+the 61.92% independent Yes estimate pooled to 60.12%, below the break-even
+probability of the evaluated -152 quote. Board actionability changed from
+seven Leans and eleven Watchlists to six Leans and twelve Watchlists; no No
+Play was created and BTTS remained the only affected market. This is a
+measured, bounded change rather than a blanket Yes-to-No flip. It remains
+shadow-only pending release-pure settled confirmation.
