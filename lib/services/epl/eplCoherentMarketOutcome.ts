@@ -7,7 +7,6 @@ import {
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { BdlEplOdds } from "@/lib/providers/real_api/BallDontLieEplProvider";
 import type { EplForwardBookVector } from "./eplForwardEvidenceCapture";
-import type { UclBttsHistoryObservation, UclBttsMarketShadow } from "@/lib/services/ucl/uclBttsMarketShadow";
 
 export const EPL_COHERENT_MARKET_OUTCOME_RELEASE =
   "epl_coherent_market_outcome_2026_09_02_r2_structural_target_exclusion" as const;
@@ -70,7 +69,6 @@ export type EplCoherentMarketOutcome = {
       dispersion: number;
       authority: number;
     };
-    bttsShadow?: UclBttsMarketShadow;
   };
 };
 
@@ -229,16 +227,6 @@ export function deriveEplCoherentMarketOutcome(input: {
   independentJoint?: ScoreDistribution;
   openingOdds?: BdlEplOdds[];
   matchResultVectors?: EplForwardBookVector[];
-  bttsVectors?: EplForwardBookVector[];
-  bttsHistory?: UclBttsHistoryObservation[];
-  bttsEvaluatedPrices?: Partial<Record<"yes" | "no", number>> | null;
-  bttsModelEvidence?: {
-    homeStatMatches: number;
-    awayStatMatches: number;
-    homeXgMatches: number;
-    awayXgMatches: number;
-    promotedProxy: boolean;
-  };
   totalVectors: EplForwardBookVector[];
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;

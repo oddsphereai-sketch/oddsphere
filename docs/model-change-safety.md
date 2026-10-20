@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed correction: no production shadow models
+
+On 2026-10-20 Daniel Mengel restated the standing product rule that Oddsphere
+does not deploy or persist shadow models. Failed challengers remain reproducible
+offline audits; they do not consume production writer, snapshot, tracking, or
+database capacity and are not presented as a substitute for a validated live
+improvement.
+
+This correction retires the UCL BTTS r2 three-lane shadow from future unlocked
+member snapshots and advances only the snapshot lifecycle to
+`ucl_member_snapshot_lifecycle_2026_10_20_r10_no_shadow_payload`. It removes
+the runtime derivation, DTO field, shadow-only operator report, and shadow-only
+tests. The active UCL r8u coherent PMF, probabilities, public sides, projected
+scores, grades, stakes, exact prices, target-excluded Match Result reader,
+provider collection, sole writer, cadence, `prediction_pipeline:soccer` lease,
+tracking, and settlement remain unchanged.
+
+Previously locked payloads remain immutable, including any already-stored
+provenance field; the reader continues to render those exact legacy payloads.
+Publication requires same-input public-output parity, focused UCL production
+and lock tests, TypeScript, the full model-change gate, latest-main integration
+safety, protected pull-request checks, and a post-deploy snapshot proving the
+r10 lifecycle contains no new BTTS shadow payload. Roll back only the future
+snapshot lifecycle/code path if public output changes, a locked row changes,
+or writer/lease health regresses.
+
 ## Owner-directed correctness exception: NBA minimum-coherent crossing
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to close the diagnosed NBA

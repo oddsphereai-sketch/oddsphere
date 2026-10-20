@@ -79,5 +79,6 @@ At minimum, before deployment:
 7. Deploy from a clean, intentional commit, then verify the live release identifier, cron
    health, model coherence, data coverage, and reader snapshot before declaring success.
 
-If any item cannot be verified, keep the change in shadow/audit mode and do not alter live
-grades or stakes.
+If any item cannot be verified, reject the production change and retain only a reproducible
+offline audit artifact. Do not deploy or persist a shadow model, shadow prediction, shadow grade,
+or shadow candidate in the live writer, member snapshot, tracking record, or production database.

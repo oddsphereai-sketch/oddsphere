@@ -54,7 +54,6 @@ function compact(row: any) {
   const movement = selectedMovement(snapshot, row.side);
   const member = snapshot.member_market_at_capture ?? {};
   const splits = snapshot.splits ?? member.publicSplits ?? [];
-  const bttsShadow = row.market === "btts" ? snapshot?.model_provenance?.bttsShadow ?? null : null;
   return {
     id: row.id,
     date: row.slate_date,
@@ -75,63 +74,7 @@ function compact(row: any) {
     stage: snapshot.competition_context?.stage ?? null,
     modelRelease: row.model_version,
     calibrationRelease: row.calibration_version,
-    bttsShadow,
   };
-}
-
-function binaryMetrics(probabilities: Array<{ probability: number; actual: 0 | 1 }>) {
-  if (!probabilities.length) return { rows: 0, brier: null, logLoss: null };
-  return {
-    rows: probabilities.length,
-    brier: probabilities.reduce((sum, row) => sum + (row.probability - row.actual) ** 2, 0) / probabilities.length,
-    logLoss: probabilities.reduce((sum, row) => {
-      const probability = Math.max(1e-8, Math.min(1 - 1e-8, row.probability));
-      return sum - (row.actual * Math.log(probability) + (1 - row.actual) * Math.log(1 - probability));
-    }, 0) / probabilities.length,
-  };
-}
-
-function summarizeBttsShadow(rows: ReturnType<typeof compact>[]) {
-  const settled = rows.flatMap((row) => {
-    if (row.market !== "btts" || !row.bttsShadow || !["win", "loss"].includes(row.result)) return [];
-    const lockedSide = String(row.side ?? "").toLowerCase();
-    if (lockedSide !== "yes" && lockedSide !== "no") return [];
-    const actualSide = row.result === "win" ? lockedSide : lockedSide === "yes" ? "no" : "yes";
-    const modelYes = Number(row.bttsShadow.modelYes);
-    const candidateYes = Number(row.bttsShadow.candidateYes);
-    if (![modelYes, candidateYes].every(Number.isFinite)) return [];
-    return [{
-      release: String(row.bttsShadow.release ?? "unknown"),
-      actualSide,
-      modelYes,
-      candidateYes,
-      modelSide: modelYes >= 0.5 ? "yes" : "no",
-      candidateSide: candidateYes >= 0.5 ? "yes" : "no",
-      lane: row.bttsShadow.lane ?? "unavailable",
-      gradeEffect: row.bttsShadow.gradeEffect ?? "unavailable",
-    }];
-  });
-  return Object.fromEntries([...new Set(settled.map((row) => row.release))].map((release) => {
-    const cohort = settled.filter((row) => row.release === release);
-    const actualNo = cohort.filter((row) => row.actualSide === "no");
-    const model = binaryMetrics(cohort.map((row) => ({ probability: row.modelYes, actual: row.actualSide === "yes" ? 1 as const : 0 as const })));
-    const candidate = binaryMetrics(cohort.map((row) => ({ probability: row.candidateYes, actual: row.actualSide === "yes" ? 1 as const : 0 as const })));
-    return [release, {
-      rows: cohort.length,
-      lanes: Object.fromEntries(["aligned", "conflicted", "corrected", "unavailable"].map((lane) => [lane, cohort.filter((row) => row.lane === lane).length])),
-      gradeEffects: Object.fromEntries(["promotion", "demotion", "unchanged", "unavailable"].map((effect) => [effect, cohort.filter((row) => row.gradeEffect === effect).length])),
-      model: {
-        accuracy: cohort.length ? cohort.filter((row) => row.modelSide === row.actualSide).length / cohort.length : null,
-        noRecall: actualNo.length ? actualNo.filter((row) => row.modelSide === "no").length / actualNo.length : null,
-        ...model,
-      },
-      candidate: {
-        accuracy: cohort.length ? cohort.filter((row) => row.candidateSide === row.actualSide).length / cohort.length : null,
-        noRecall: actualNo.length ? actualNo.filter((row) => row.candidateSide === "no").length / actualNo.length : null,
-        ...candidate,
-      },
-    }];
-  }));
 }
 
 function summarize(rows: ReturnType<typeof compact>[]) {
@@ -219,7 +162,6 @@ async function main() {
         promotionRecord: `${movementPromotionCandidates.filter((row) => row.result === "win").length}-${movementPromotionCandidates.filter((row) => row.result === "loss").length}-${movementPromotionCandidates.filter((row) => row.result === "push").length}`,
         demotionRecord: `${movementResistanceActionables.filter((row) => row.result === "win").length}-${movementResistanceActionables.filter((row) => row.result === "loss").length}-${movementResistanceActionables.filter((row) => row.result === "push").length}`,
       },
-      bttsShadowByRelease: summarizeBttsShadow(uclRows),
     },
     current: {
       generatedAt: snapshot.generated_at,

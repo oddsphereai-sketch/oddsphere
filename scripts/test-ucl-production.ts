@@ -18,6 +18,7 @@ import {
   UCL_OPENING_MARKET_SCORE_ARBITRATION_RELEASE,
 } from "../lib/services/ucl/uclOpeningMarketScoreArbitration";
 import { deriveUclCoherentMarketOutcome } from "../lib/services/ucl/uclCoherentMarketOutcome";
+import { UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE } from "../lib/services/ucl/uclMemberSnapshotStore";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 import {
   assertFrozenUclChronologicalManifest,
@@ -329,6 +330,8 @@ assert.equal((["home", "draw", "away"] as const).reduce((best, side) => coherent
 assert.ok(Math.abs(coherentOpeningOutcome.expectedGoals.home + coherentOpeningOutcome.expectedGoals.away - 2.3) < 1e-4, "displayed PMF total stays within numerical truncation tolerance of the preserved independent total");
 assert.equal(coherentOpeningOutcome.audit.maximumMatchResultResidual < 1e-7, true);
 assert.deepEqual(coherentOpeningOutcome.audit.matchResultReader?.eligibleBooks, ["betmgm", "draftkings"]);
+assert.equal("bttsShadow" in coherentOpeningOutcome.audit, false, "new UCL outcomes must not persist a shadow candidate");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_10_20_r10_no_shadow_payload");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
