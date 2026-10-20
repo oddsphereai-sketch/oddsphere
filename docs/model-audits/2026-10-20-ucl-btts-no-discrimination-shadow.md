@@ -86,6 +86,33 @@ coefficients toward the frozen scorer rather than applying an arbitrary global
 probability reduction. Its acceptance evidence must come from the forward
 cohort declared below, not further reuse of this confirmation block.
 
+## Expanded six-season tournament
+
+The authenticated provider exposes complete UCL matches and team statistics
+for 2020 through 2025. The expanded audit contains 878 matches: 494 forecast
+rows from 2020-23 for training, 185 from 2024 for selection, and 189 from 2025
+for confirmation.
+
+Three data boundaries were tested:
+
+1. A rolling two-season baseline and rolling two-season scoring features. This
+   improves confirmation Brier/log loss but does not improve No direction.
+2. An all-history baseline and all-history scoring features. The stacked scorer
+   passes every BTTS selection and confirmation gate, but the wider baseline
+   slightly degrades confirmation Match Result and Total direction. A wholesale
+   foundation replacement is rejected.
+3. The production-compatible rolling baseline with all-history features only
+   in the scoring head. This preserves Match Result and Total exactly. On
+   confirmation it improves BTTS accuracy from 56.61% to 58.20%, No recall from
+   4.82% to 12.05%, Brier from 0.24661 to 0.24305, log loss from 0.68606 to
+   0.67909, and team-score MAE from 1.13558 to 1.13501. AUC declines from
+   0.5813 to 0.5640, so the hybrid remains shadow-only.
+
+The release target is therefore the third boundary after improving its ranking
+with domestic scoring/shot history and/or validated target-excluded BTTS market
+evidence. Match Result and Total must remain owned by the current foundation;
+the longer history is isolated to the team-scoring occurrence head.
+
 ## Market-reader evidence and forward declaration
 
 Historical stored UCL line history currently has zero settled matches with a

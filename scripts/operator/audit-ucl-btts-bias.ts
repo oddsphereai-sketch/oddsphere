@@ -143,6 +143,47 @@ function metrics(rows: ForecastRow[], probabilities: number[]): Metrics {
   };
 }
 
+function otherMarketMetrics(rows: ForecastRow[]) {
+  let resultCorrect = 0;
+  let resultBrier = 0;
+  let resultLogLoss = 0;
+  let totalCorrect = 0;
+  let totalBrier = 0;
+  let totalLogLoss = 0;
+  let teamScoreAbsoluteError = 0;
+  for (const row of rows) {
+    const settled = regulationScore(row.match).score!;
+    const joint = bivariatePoissonScoreDistribution(row.lambdaHome, row.lambdaAway, UCL_MODEL_CONFIG.dixonColesTau);
+    const markets = deriveSoccerMarketProbabilities({ joint, totalLine: 2.5 });
+    const actualResult = settled.home > settled.away ? "home" : settled.home < settled.away ? "away" : "draw";
+    const forecastResult = (["home", "draw", "away"] as const).reduce((best, side) =>
+      markets.match_result[side] > markets.match_result[best] ? side : best, "home");
+    if (forecastResult === actualResult) resultCorrect += 1;
+    for (const side of ["home", "draw", "away"] as const) {
+      const actual = side === actualResult ? 1 : 0;
+      resultBrier += (markets.match_result[side] - actual) ** 2 / 3;
+    }
+    resultLogLoss -= Math.log(clip(markets.match_result[actualResult]));
+    const actualOver = settled.home + settled.away > 2.5 ? 1 : 0;
+    const forecastOver = markets.total.over >= 0.5 ? 1 : 0;
+    if (forecastOver === actualOver) totalCorrect += 1;
+    totalBrier += (markets.total.over - actualOver) ** 2;
+    totalLogLoss -= actualOver ? Math.log(clip(markets.total.over)) : Math.log(clip(1 - markets.total.over));
+    teamScoreAbsoluteError += Math.abs(row.lambdaHome - settled.home) + Math.abs(row.lambdaAway - settled.away);
+  }
+  const denominator = Math.max(1, rows.length);
+  return {
+    n: rows.length,
+    matchResultAccuracy: resultCorrect / denominator,
+    matchResultBrier: resultBrier / denominator,
+    matchResultLogLoss: resultLogLoss / denominator,
+    totalAccuracy: totalCorrect / denominator,
+    totalBrier: totalBrier / denominator,
+    totalLogLoss: totalLogLoss / denominator,
+    teamScoreMae: teamScoreAbsoluteError / (2 * denominator),
+  };
+}
+
 const directFeatures = {
   platt: (row: ForecastRow) => [logit(row.raw)],
   structured: (row: ForecastRow) => [
@@ -258,21 +299,36 @@ function structuralAudit(rows: ForecastRow[], probabilities: number[]) {
 async function main() {
   const apiKey = process.env.BALLDONTLIE_API_KEY;
   if (!apiKey) throw new Error("BALLDONTLIE_API_KEY is required");
+  const expanded = process.argv.includes("--expanded-history");
+  const allHistoryInputs = expanded && process.argv.includes("--all-history-inputs");
+  const allHistoryFeatures = expanded && process.argv.includes("--all-history-features");
   const provider = new BallDontLieUclProvider(apiKey);
-  const history = await provider.listHistoricalMatches([2024, 2025]);
+  const history = await provider.listHistoricalMatches(expanded ? [2020, 2021, 2022, 2023, 2024, 2025] : [2024, 2025]);
   const matches = history.matches;
   const finalIds = matches.filter((match) => match.status_state === "final").map((match) => match.id);
   const stats = await provider.listTeamMatchStats(finalIds);
   const training = joinUclMatchStats(matches, stats);
   const contexts = buildUclCompetitionContexts(matches);
   const statsByMatchTeam = new Map(stats.map((row) => [`${row.match_id}:${row.team_id}`, row]));
-  const { train, calibration, holdout } = partitionUclChronologicalMatches(matches);
+  const partition = expanded
+    ? {
+      train: matches.filter((match) => match.status_state === "final" && match.season <= 2023),
+      calibration: matches.filter((match) => match.status_state === "final" && match.season === 2024),
+      holdout: matches.filter((match) => match.status_state === "final" && match.season === 2025),
+    }
+    : partitionUclChronologicalMatches(matches);
+  const { train, calibration, holdout } = partition;
   const forecast = (block: BdlUclMatch[]) => block.flatMap((match): ForecastRow[] => {
     const settled = regulationScore(match).score;
     const context = contexts.get(match.id);
     if (!settled || !context) return [];
-    const prediction = fitAndPredictUclBaseline({ training, match, history: matches, context });
-    const prior = matches.filter((row) => row.status_state === "final" && Date.parse(row.date) < Date.parse(match.date));
+    const rollingTraining = expanded && !allHistoryInputs
+      ? training.filter((row) => row.season >= match.season - 1)
+      : training;
+    const prediction = fitAndPredictUclBaseline({ training: rollingTraining, match, history: matches, context });
+    const prior = matches.filter((row) => row.status_state === "final"
+      && Date.parse(row.date) < Date.parse(match.date)
+      && (!expanded || allHistoryInputs || allHistoryFeatures || row.season >= match.season - 1));
     const priorSides = prior.flatMap((row) => {
       const score = regulationScore(row).score;
       return score ? [{ match: row, teamId: row.home_team_id, goalsFor: score.home, goalsAgainst: score.away, opponentId: row.away_team_id },
@@ -418,11 +474,18 @@ async function main() {
     && selectedConfirmation.noRecall > rawConfirmation.noRecall;
   console.log(JSON.stringify({
     mode: "read_only_no_runtime_change",
+    cohort: expanded
+      ? `expanded_2020_2023_train_2024_selection_2025_confirmation_${allHistoryInputs ? "all_history_inputs" : allHistoryFeatures ? "rolling_baseline_all_history_scoring_features" : "rolling_two_season_inputs"}`
+      : "frozen_manifest_2024_train_2025_split",
     providerHistory: history.telemetry,
     rows: { train: trainRows.length, selection: selectionRows.length, confirmation: confirmationRows.length },
     raw: {
       selection: rawSelection,
       confirmation: rawConfirmation,
+      otherMarkets: {
+        selection: otherMarketMetrics(selectionRows),
+        confirmation: otherMarketMetrics(confirmationRows),
+      },
       selectionStructure: structuralAudit(selectionRows, selectionRows.map((row) => row.raw)),
       confirmationStructure: structuralAudit(confirmationRows, confirmationRows.map((row) => row.raw)),
     },
