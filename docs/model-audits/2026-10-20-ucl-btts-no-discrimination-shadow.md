@@ -147,3 +147,65 @@ must also preserve or improve Match Result accuracy, Total accuracy, team-score
 MAE, board count, and coherent score residuals. Evaluation is by exact release
 and T-60 evidence only. Until that gate passes, the current live release stays
 unchanged and the candidate remains shadow-only.
+
+## Outcome-blind 2026 domestic-scoring confirmation declaration
+
+Before loading any 2026 final score into the BTTS audit, the next and only
+promotion candidate is frozen as follows:
+
+- The current rolling-two-UCL-season score model remains the starting PMF and
+  continues to own Match Result, Over 2.5, and expected total.
+- A separate team-to-score head adds strictly prior domestic-league scoring,
+  concession, goals, shots-on-target, and shot-volume rates to the already
+  declared UCL scoring-occurrence, xG, and chance-quality features. Domestic
+  values are normalized to their own league/date baseline, use the same
+  365-day half-life, and shrink eight effective matches toward that baseline.
+- The two team scoring probabilities are multiplied, then stacked with the
+  incumbent BTTS logit. Ridge strength is selected only from
+  `[1, 10, 25, 50, 100]` on the complete 2025 block after fitting 2020-24.
+  The selected form is refit through 2025 exactly once before the 2026 read.
+- The coherent solver may change only BTTS and the representative score. It
+  must preserve the incumbent Match Result vector, Over 2.5 probability, and
+  expected total within `1e-8`.
+- The untouched confirmation block is every authenticated 2026 regulation
+  final available at the first run. Acceptance requires simultaneous
+  improvement over the exact incumbent in accuracy, No recall, Brier, log
+  loss, and AUC; team-score MAE may not worsen. A tie does not pass.
+
+If this exact candidate fails any gate, no feature, coefficient, threshold, or
+regularization value may be changed after seeing the 2026 results. It remains
+shadow-only and the live release stays unchanged.
+
+The preceding six-season audit had already frozen one non-domestic comparator
+before any 2026 outcome was loaded: `chance_quality_stacked` with ridge `10`,
+the production-compatible rolling-two-season baseline, and all prior UCL
+history restricted to the scoring head. It may receive one 2026 forward read
+without changing that feature set, ridge, fit/refit policy, threshold, or
+coherent solver. This is a previously frozen candidate, not a post-2026 retry.
+
+## 2026 confirmation result
+
+The first authenticated read returned 108 season rows, including 36 completed
+regulation matches. The incumbent was already materially stronger in this new
+block than in 2025: 23/36 correct (63.89%), 34/36 Yes directions, 7.69% No
+recall, 0.22403 Brier, 0.63996 log loss, and 0.62542 AUC.
+
+The frozen domestic scorer selected ridge `10` on 2025, where it improved
+accuracy from 57.67% to 58.20%, No recall from 7.23% to 20.48%, Brier from
+0.24649 to 0.24236, log loss from 0.68613 to 0.67752, and AUC from 0.55888 to
+0.57013. On 2026 confirmation it produced 32/36 Yes directions and doubled No
+recall to 15.38%, while improving coherent team-score MAE from 1.18076 to
+1.16711. It nevertheless tied accuracy at 63.89% and worsened Brier to 0.22637,
+log loss to 0.64483, and AUC to 0.60535. It therefore fails the predeclared
+gate and is rejected for live publication.
+
+The previously frozen non-domestic `chance_quality_stacked` ridge-10 candidate
+was also ineligible before its 2026 scoring step: on the fixed 2025 selection
+block it improved accuracy, No recall, Brier, and log loss but reduced AUC from
+0.58127 to 0.56399. The script correctly stopped it at selection instead of
+using the new season to rescue a rejected candidate.
+
+No public model identifier, probability, pick, projection, grade, writer,
+lock, or member snapshot is changed by this result. Shipping either candidate
+would knowingly trade away probability quality and ranking for cosmetic board
+variety, which the declaration and model-change safety gate prohibit.

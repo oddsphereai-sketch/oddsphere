@@ -18,7 +18,8 @@ async function main() {
   const response = await buildUclDailyEdgePreview(slate, { captureAllBookPrices: (rows) => { observations = rows; } });
   const games = response.games.map((game) => {
     const providerId = Number(game.external_id);
-    const evaluated = game.markets.first_inning.sportsbook?.toLowerCase() ?? null;
+    const evaluated = (game.markets.first_inning.currentPriceSportsbook
+      ?? game.markets.first_inning.soccerPriceBoard?.sportsbook)?.toLowerCase() ?? null;
     const rows = observations.filter((row) => row.providerId === providerId && row.market === "btts" && row.sportsbook);
     const byBook = new Map<string, Partial<Record<"yes" | "no", UclStoredPriceObservation>>>();
     for (const row of rows) {

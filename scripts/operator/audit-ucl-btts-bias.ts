@@ -4,6 +4,7 @@ import { deriveSoccerMarketProbabilities } from "../../lib/services/soccer/socce
 import { buildUclCompetitionContexts, regulationScore } from "../../lib/services/ucl/uclCompetitionContext";
 import { partitionUclChronologicalMatches } from "../../lib/services/ucl/uclChronologicalEvaluation";
 import { reconcileUclMeanPreserving } from "../../lib/services/ucl/uclEloConsensus";
+import { normalizeUclEloClub } from "../../lib/services/ucl/uclEloStrengthFoundation";
 import { fitAndPredictUclBaseline, joinUclMatchStats, UCL_MODEL_CONFIG } from "../../lib/services/ucl/uclModel";
 
 type ForecastRow = {
@@ -34,7 +35,108 @@ type ForecastRow = {
   awayBoxShotsFor: number;
   homeBoxShotsAgainst: number;
   awayBoxShotsAgainst: number;
+  homeDomesticScoreRate: number;
+  awayDomesticScoreRate: number;
+  homeDomesticConcedeRate: number;
+  awayDomesticConcedeRate: number;
+  homeDomesticGoalsFor: number;
+  awayDomesticGoalsFor: number;
+  homeDomesticGoalsAgainst: number;
+  awayDomesticGoalsAgainst: number;
+  homeDomesticSotFor: number;
+  awayDomesticSotFor: number;
+  homeDomesticSotAgainst: number;
+  awayDomesticSotAgainst: number;
+  homeDomesticShotsFor: number;
+  awayDomesticShotsFor: number;
+  homeDomesticShotsAgainst: number;
+  awayDomesticShotsAgainst: number;
 };
+
+type DomesticMatch = {
+  date: string;
+  league: string;
+  home: string;
+  away: string;
+  homeGoals: number;
+  awayGoals: number;
+  homeSot: number | null;
+  awaySot: number | null;
+  homeShots: number | null;
+  awayShots: number | null;
+};
+
+const DOMESTIC_SEASONS = ["1920", "2021", "2122", "2223", "2324", "2425", "2526", "2627"] as const;
+const DOMESTIC_LEAGUES = ["E0", "D1", "I1", "SP1", "F1", "N1", "P1", "B1", "T1", "G1", "SC0"] as const;
+
+function parseCsv(line: string): string[] {
+  const values: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]!;
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') { current += '"'; index += 1; }
+      else quoted = !quoted;
+    } else if (char === "," && !quoted) { values.push(current); current = ""; }
+    else current += char;
+  }
+  values.push(current);
+  return values;
+}
+
+function footballDataDate(value: string): string | null {
+  const parts = value.trim().split(/[\/-]/).map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return null;
+  const [day, month, rawYear] = parts;
+  const year = rawYear! < 100 ? 2000 + rawYear! : rawYear!;
+  return new Date(Date.UTC(year, month! - 1, day!)).toISOString();
+}
+
+async function fetchDomesticFile(season: string, league: string): Promise<DomesticMatch[]> {
+  const response = await fetch(`https://football-data.co.uk/mmz4281/${season}/${league}.csv`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`Domestic BTTS source ${season}/${league} returned ${response.status}`);
+  const lines = (await response.text()).split(/\r?\n/).filter(Boolean);
+  const header = parseCsv(lines[0] ?? "");
+  const at = (name: string) => header.indexOf(name);
+  const required = [at("Date"), at("HomeTeam"), at("AwayTeam"), at("FTHG"), at("FTAG")];
+  if (required.some((index) => index < 0)) throw new Error(`Domestic BTTS source ${season}/${league} schema mismatch`);
+  const numeric = (row: string[], index: number) => {
+    const value = Number(row[index]);
+    return index >= 0 && Number.isFinite(value) ? value : null;
+  };
+  return lines.slice(1).flatMap((line): DomesticMatch[] => {
+    const row = parseCsv(line);
+    const date = footballDataDate(row[at("Date")] ?? "");
+    const homeGoals = numeric(row, at("FTHG"));
+    const awayGoals = numeric(row, at("FTAG"));
+    if (!date || homeGoals === null || awayGoals === null) return [];
+    return [{
+      date,
+      league,
+      home: normalizeUclEloClub(row[at("HomeTeam")] ?? ""),
+      away: normalizeUclEloClub(row[at("AwayTeam")] ?? ""),
+      homeGoals,
+      awayGoals,
+      homeSot: numeric(row, at("HST")),
+      awaySot: numeric(row, at("AST")),
+      homeShots: numeric(row, at("HS")),
+      awayShots: numeric(row, at("AS")),
+    }];
+  });
+}
+
+async function fetchDomesticMatches(): Promise<DomesticMatch[]> {
+  const jobs = DOMESTIC_SEASONS.flatMap((season) => DOMESTIC_LEAGUES.map((league) => ({ season, league })));
+  const rows: DomesticMatch[][] = [];
+  for (let index = 0; index < jobs.length; index += 6) {
+    rows.push(...await Promise.all(jobs.slice(index, index + 6).map(({ season, league }) => fetchDomesticFile(season, league))));
+  }
+  return rows.flat().sort((left, right) => Date.parse(left.date) - Date.parse(right.date));
+}
 
 type Metrics = {
   n: number;
@@ -211,15 +313,16 @@ const directFeatures = {
 } as const;
 
 function candidatePredictions(
-  name: keyof typeof directFeatures | "team_scoring_hurdle" | "historical_team_hurdle" | "historical_hurdle_calibrated" | "chance_quality_hurdle" | "chance_quality_calibrated" | "chance_quality_stacked",
+  name: keyof typeof directFeatures | "team_scoring_hurdle" | "historical_team_hurdle" | "historical_hurdle_calibrated" | "chance_quality_hurdle" | "chance_quality_calibrated" | "chance_quality_stacked" | "domestic_stacked",
   train: ForecastRow[],
   target: ForecastRow[],
   l2: number,
 ): { probabilities: number[]; coefficients: unknown } {
   if (name === "team_scoring_hurdle" || name === "historical_team_hurdle" || name === "historical_hurdle_calibrated"
-    || name === "chance_quality_hurdle" || name === "chance_quality_calibrated" || name === "chance_quality_stacked") {
+    || name === "chance_quality_hurdle" || name === "chance_quality_calibrated" || name === "chance_quality_stacked" || name === "domestic_stacked") {
     const useHistory = name !== "team_scoring_hurdle";
-    const useChanceQuality = name === "chance_quality_hurdle" || name === "chance_quality_calibrated" || name === "chance_quality_stacked";
+    const useChanceQuality = name === "chance_quality_hurdle" || name === "chance_quality_calibrated" || name === "chance_quality_stacked" || name === "domestic_stacked";
+    const useDomestic = name === "domestic_stacked";
     const sideFeature = (row: ForecastRow, home: boolean) => !useHistory
       ? [Math.log(home ? row.lambdaHome : row.lambdaAway), home ? 1 : 0]
       : [
@@ -236,13 +339,23 @@ function candidatePredictions(
           Math.log(home ? row.homeBoxShotsFor : row.awayBoxShotsFor),
           Math.log(home ? row.awayBoxShotsAgainst : row.homeBoxShotsAgainst),
         ] : []),
+        ...(useDomestic ? [
+          logit(home ? row.homeDomesticScoreRate : row.awayDomesticScoreRate),
+          logit(home ? row.awayDomesticConcedeRate : row.homeDomesticConcedeRate),
+          Math.log(home ? row.homeDomesticGoalsFor : row.awayDomesticGoalsFor),
+          Math.log(home ? row.awayDomesticGoalsAgainst : row.homeDomesticGoalsAgainst),
+          Math.log(home ? row.homeDomesticSotFor : row.awayDomesticSotFor),
+          Math.log(home ? row.awayDomesticSotAgainst : row.homeDomesticSotAgainst),
+          Math.log(home ? row.homeDomesticShotsFor : row.awayDomesticShotsFor),
+          Math.log(home ? row.awayDomesticShotsAgainst : row.homeDomesticShotsAgainst),
+        ] : []),
         home ? 1 : 0,
       ];
     const sideFeatures = train.flatMap((row) => [sideFeature(row, true), sideFeature(row, false)]);
     const sideOutcomes = train.flatMap((row) => [row.homeScored, row.awayScored]);
     const model = fitLogistic(sideFeatures, sideOutcomes, l2);
     const product = (row: ForecastRow) => predictLogistic(model, sideFeature(row, true)) * predictLogistic(model, sideFeature(row, false));
-    if (name === "chance_quality_stacked") {
+    if (name === "chance_quality_stacked" || name === "domestic_stacked") {
       const calibration = fitLogistic(
         train.map((row) => [logit(row.raw), logit(product(row))]),
         train.map((row) => row.actual),
@@ -299,18 +412,32 @@ function structuralAudit(rows: ForecastRow[], probabilities: number[]) {
 async function main() {
   const apiKey = process.env.BALLDONTLIE_API_KEY;
   if (!apiKey) throw new Error("BALLDONTLIE_API_KEY is required");
-  const expanded = process.argv.includes("--expanded-history");
+  const forward2026 = process.argv.includes("--forward-2026");
+  const expanded = process.argv.includes("--expanded-history") || forward2026;
+  const domesticConfirmation = process.argv.includes("--domestic-confirmation");
   const allHistoryInputs = expanded && process.argv.includes("--all-history-inputs");
-  const allHistoryFeatures = expanded && process.argv.includes("--all-history-features");
+  const allHistoryFeatures = forward2026 || (expanded && process.argv.includes("--all-history-features"));
   const provider = new BallDontLieUclProvider(apiKey);
-  const history = await provider.listHistoricalMatches(expanded ? [2020, 2021, 2022, 2023, 2024, 2025] : [2024, 2025]);
+  const seasons = domesticConfirmation || forward2026 ? [2020, 2021, 2022, 2023, 2024, 2025, 2026] : expanded ? [2020, 2021, 2022, 2023, 2024, 2025] : [2024, 2025];
+  const [history, domestic, teamCohorts] = await Promise.all([
+    provider.listHistoricalMatches(seasons),
+    domesticConfirmation ? fetchDomesticMatches() : Promise.resolve([]),
+    domesticConfirmation ? Promise.all(seasons.map((season) => provider.listTeams(season))) : Promise.resolve([]),
+  ]);
   const matches = history.matches;
+  const teamNames = new Map(teamCohorts.flat().map((team) => [team.id, normalizeUclEloClub(team.name)]));
   const finalIds = matches.filter((match) => match.status_state === "final").map((match) => match.id);
   const stats = await provider.listTeamMatchStats(finalIds);
   const training = joinUclMatchStats(matches, stats);
   const contexts = buildUclCompetitionContexts(matches);
   const statsByMatchTeam = new Map(stats.map((row) => [`${row.match_id}:${row.team_id}`, row]));
-  const partition = expanded
+  const partition = domesticConfirmation || forward2026
+    ? {
+      train: matches.filter((match) => match.status_state === "final" && match.season <= 2024),
+      calibration: matches.filter((match) => match.status_state === "final" && match.season === 2025),
+      holdout: matches.filter((match) => match.status_state === "final" && match.season === 2026),
+    }
+    : expanded
     ? {
       train: matches.filter((match) => match.status_state === "final" && match.season <= 2023),
       calibration: matches.filter((match) => match.status_state === "final" && match.season === 2024),
@@ -401,6 +528,58 @@ async function main() {
     };
     const homeEvidence = teamEvidence(match.home_team_id);
     const awayEvidence = teamEvidence(match.away_team_id);
+    const domesticEvidence = (teamId: number) => {
+      const club = teamNames.get(teamId);
+      const cutoff = Date.parse(match.date);
+      const eligible = domestic.filter((row) => Date.parse(row.date) < cutoff);
+      const leagueRows = eligible.filter((row) => row.home === club || row.away === club);
+      const league = leagueRows.at(-1)?.league;
+      const comparison = eligible.filter((row) => row.league === league);
+      const leagueSides = comparison.flatMap((row) => [
+        { goalsFor: row.homeGoals, goalsAgainst: row.awayGoals, sotFor: row.homeSot, sotAgainst: row.awaySot, shotsFor: row.homeShots, shotsAgainst: row.awayShots },
+        { goalsFor: row.awayGoals, goalsAgainst: row.homeGoals, sotFor: row.awaySot, sotAgainst: row.homeSot, shotsFor: row.awayShots, shotsAgainst: row.homeShots },
+      ]);
+      const mean = (values: Array<number | null>, fallback: number) => {
+        const present = values.filter((value): value is number => value !== null && Number.isFinite(value));
+        return present.length ? present.reduce((sum, value) => sum + value, 0) / present.length : fallback;
+      };
+      const baseline = {
+        scoreRate: mean(leagueSides.map((row) => row.goalsFor > 0 ? 1 : 0), 0.7),
+        concedeRate: mean(leagueSides.map((row) => row.goalsAgainst > 0 ? 1 : 0), 0.7),
+        goalsFor: mean(leagueSides.map((row) => row.goalsFor), 1.4),
+        goalsAgainst: mean(leagueSides.map((row) => row.goalsAgainst), 1.4),
+        sotFor: mean(leagueSides.map((row) => row.sotFor), 4.5),
+        sotAgainst: mean(leagueSides.map((row) => row.sotAgainst), 4.5),
+        shotsFor: mean(leagueSides.map((row) => row.shotsFor), 12),
+        shotsAgainst: mean(leagueSides.map((row) => row.shotsAgainst), 12),
+      };
+      const sums = { weight: 0, scoreRate: 0, concedeRate: 0, goalsFor: 0, goalsAgainst: 0, sotFor: 0, sotAgainst: 0, shotsFor: 0, shotsAgainst: 0 };
+      for (const row of leagueRows) {
+        const home = row.home === club;
+        const ageDays = (cutoff - Date.parse(row.date)) / 86_400_000;
+        const weight = Math.pow(0.5, Math.max(0, ageDays) / UCL_MODEL_CONFIG.halfLifeDays);
+        const side = home
+          ? { goalsFor: row.homeGoals, goalsAgainst: row.awayGoals, sotFor: row.homeSot, sotAgainst: row.awaySot, shotsFor: row.homeShots, shotsAgainst: row.awayShots }
+          : { goalsFor: row.awayGoals, goalsAgainst: row.homeGoals, sotFor: row.awaySot, sotAgainst: row.homeSot, shotsFor: row.awayShots, shotsAgainst: row.homeShots };
+        sums.weight += weight;
+        sums.scoreRate += weight * (side.goalsFor > 0 ? 1 : 0);
+        sums.concedeRate += weight * (side.goalsAgainst > 0 ? 1 : 0);
+        for (const field of ["goalsFor", "goalsAgainst", "sotFor", "sotAgainst", "shotsFor", "shotsAgainst"] as const) {
+          const value = side[field];
+          if (value !== null) sums[field] += weight * value;
+        }
+      }
+      const shrink = 8;
+      const shrunk = (field: keyof typeof baseline) => (sums[field] + shrink * baseline[field]) / (sums.weight + shrink);
+      return {
+        scoreRate: shrunk("scoreRate"), concedeRate: shrunk("concedeRate"),
+        goalsFor: shrunk("goalsFor"), goalsAgainst: shrunk("goalsAgainst"),
+        sotFor: shrunk("sotFor"), sotAgainst: shrunk("sotAgainst"),
+        shotsFor: shrunk("shotsFor"), shotsAgainst: shrunk("shotsAgainst"),
+      };
+    };
+    const homeDomestic = domesticEvidence(match.home_team_id);
+    const awayDomestic = domesticEvidence(match.away_team_id);
     return [{
       match,
       lambdaHome: prediction.lambdaHome,
@@ -429,14 +608,34 @@ async function main() {
       awayBoxShotsFor: awayEvidence.boxShotsFor,
       homeBoxShotsAgainst: homeEvidence.boxShotsAgainst,
       awayBoxShotsAgainst: awayEvidence.boxShotsAgainst,
+      homeDomesticScoreRate: homeDomestic.scoreRate,
+      awayDomesticScoreRate: awayDomestic.scoreRate,
+      homeDomesticConcedeRate: homeDomestic.concedeRate,
+      awayDomesticConcedeRate: awayDomestic.concedeRate,
+      homeDomesticGoalsFor: homeDomestic.goalsFor,
+      awayDomesticGoalsFor: awayDomestic.goalsFor,
+      homeDomesticGoalsAgainst: homeDomestic.goalsAgainst,
+      awayDomesticGoalsAgainst: awayDomestic.goalsAgainst,
+      homeDomesticSotFor: homeDomestic.sotFor,
+      awayDomesticSotFor: awayDomestic.sotFor,
+      homeDomesticSotAgainst: homeDomestic.sotAgainst,
+      awayDomesticSotAgainst: awayDomestic.sotAgainst,
+      homeDomesticShotsFor: homeDomestic.shotsFor,
+      awayDomesticShotsFor: awayDomestic.shotsFor,
+      homeDomesticShotsAgainst: homeDomestic.shotsAgainst,
+      awayDomesticShotsAgainst: awayDomestic.shotsAgainst,
     }];
   });
   const trainRows = forecast(train);
   const selectionRows = forecast(calibration);
   const confirmationRows = forecast(holdout);
   const rawSelection = metrics(selectionRows, selectionRows.map((row) => row.raw));
-  const candidateNames = ["platt", "structured", "scoring_shape", "team_scoring_hurdle", "historical_scoring", "historical_team_hurdle", "historical_hurdle_calibrated", "chance_quality_hurdle", "chance_quality_calibrated", "chance_quality_stacked"] as const;
-  const l2Grid = [0.01, 0.1, 1, 10] as const;
+  const candidateNames = domesticConfirmation
+    ? ["domestic_stacked"] as const
+    : forward2026
+      ? ["chance_quality_stacked"] as const
+    : ["platt", "structured", "scoring_shape", "team_scoring_hurdle", "historical_scoring", "historical_team_hurdle", "historical_hurdle_calibrated", "chance_quality_hurdle", "chance_quality_calibrated", "chance_quality_stacked"] as const;
+  const l2Grid = domesticConfirmation ? [1, 10, 25, 50, 100] as const : forward2026 ? [10] as const : [0.01, 0.1, 1, 10] as const;
   const trials = candidateNames.flatMap((name) => l2Grid.map((l2) => {
     const candidate = candidatePredictions(name, trainRows, selectionRows, l2);
     return { name, l2, metrics: metrics(selectionRows, candidate.probabilities) };
@@ -474,7 +673,11 @@ async function main() {
     && selectedConfirmation.noRecall > rawConfirmation.noRecall;
   console.log(JSON.stringify({
     mode: "read_only_no_runtime_change",
-    cohort: expanded
+    cohort: domesticConfirmation
+      ? "domestic_scoring_2020_2024_train_2025_selection_2026_untouched_confirmation"
+      : forward2026
+        ? "frozen_chance_quality_l2_10_2020_2024_train_2025_selection_2026_forward_read"
+      : expanded
       ? `expanded_2020_2023_train_2024_selection_2025_confirmation_${allHistoryInputs ? "all_history_inputs" : allHistoryFeatures ? "rolling_baseline_all_history_scoring_features" : "rolling_two_season_inputs"}`
       : "frozen_manifest_2024_train_2025_split",
     providerHistory: history.telemetry,
