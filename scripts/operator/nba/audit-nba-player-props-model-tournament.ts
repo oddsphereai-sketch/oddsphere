@@ -15,7 +15,9 @@ import {
   type NbaPlayerPropsIndependentResearchModel,
 } from "../../../lib/services/nba/nbaPlayerPropsIndependentModel";
 import {
+  buildNbaPlayerPropsMarketEvidence,
   selectNbaPlayerPropsCanonicalOfferSets,
+  type NbaPlayerPropsCanonicalOfferSet,
 } from "../../../lib/services/nba/nbaPlayerPropsMarketEvidence";
 import type { NbaPlayerPropPriceObservation } from "../../../lib/services/nba/nbaPlayerPropsContract";
 import type { NbaPlayerPropFeatureRow } from "../../../lib/services/nba/nbaPlayerPropsPointInTimeFeatures";
@@ -386,6 +388,15 @@ async function main(): Promise<void> {
       ),
     }];
   }));
+  const exactPriceGradeResearch = buildExactPriceGradeResearch({
+    development,
+    selection,
+    confirmation,
+    canonical,
+    selectedByMarket,
+    selectionPredictors,
+    confirmationPredictors: predictors,
+  });
   const selectionWindowGames = orderedGames.slice(0, selectionEnd);
   const selectionWindowIds = new Set(selectionWindowGames.map((game) => game.gameId));
   const selectionWindowStability = walkForward(
@@ -426,13 +437,15 @@ async function main(): Promise<void> {
     selectedByMarket,
     confirmationCandidateMetrics,
     confirmationMetrics,
+    exactPriceGradeResearch,
     selectionWindowStability,
     walkForwardStability,
     launchDecision: "not_fit",
     reasons: [
       "A single confirmation block is still insufficient for production qualification.",
       "Opening prices cannot validate same-book movement or lock-time market arbitration.",
-      "No grade, stake, promotion, demotion, or member output was evaluated.",
+      "No production grade, stake, promotion, demotion, or member output was evaluated.",
+      "Exact-price grade research is retrospective and non-actionable; target-book-excluded evidence is mandatory.",
     ],
     integrity: {
       chronologicalGameSplit: true,
@@ -1109,6 +1122,519 @@ function marketDiagnostic(
       }])),
     },
   };
+}
+
+type GradeName = "Best Angle" | "Lean" | "Watchlist" | "No Play";
+type GradePolicy = Readonly<{
+  bestProbability: number;
+  bestEv: number;
+  bestMarketProbability: number;
+  leanProbability: number;
+  leanEv: number;
+  leanMarketProbability: number;
+  watchProbability: number;
+  watchEv: number;
+}>;
+type ExactPriceReplayRow = Readonly<{
+  scopeKey: string;
+  featureCutoff: string;
+  market: Market;
+  independentSide: "over" | "under";
+  finalSide: "over" | "under";
+  outcomeSide: "over" | "under";
+  line: number;
+  actual: number;
+  independentProjection: number;
+  finalProjection: number;
+  finalProbability: number;
+  sportsbook: string;
+  americanPrice: number;
+  expectedValue: number;
+  targetExcludedProbability: number;
+  targetExcludedBooks: number;
+  targetExcludedReferenceBooks: number;
+  allBookProbability: number | null;
+  marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection";
+}>;
+
+function buildExactPriceGradeResearch(args: {
+  development: readonly NbaPlayerPropFeatureRow[];
+  selection: readonly NbaPlayerPropFeatureRow[];
+  confirmation: readonly NbaPlayerPropFeatureRow[];
+  canonical: readonly NbaPlayerPropsCanonicalOfferSet[];
+  selectedByMarket: Readonly<Record<Market, CandidateName>>;
+  selectionPredictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
+  confirmationPredictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
+}) {
+  const canonicalByScope = new Map(args.canonical.map((offer) => [offer.scopeKey, offer]));
+  const selectionRows: ExactPriceReplayRow[] = [];
+  const confirmationRows: ExactPriceReplayRow[] = [];
+  const byMarket = Object.fromEntries(MARKETS.map((market) => {
+    const candidate = args.selectedByMarket[market];
+    const selectionFinal = args.selectionPredictors.get(candidate)!;
+    const confirmationFinal = args.confirmationPredictors.get(candidate)!;
+    const underlying = underlyingIndependentCandidate(candidate, market);
+    const selectionIndependent = args.selectionPredictors.get(underlying)!;
+    const confirmationIndependent = args.confirmationPredictors.get(underlying)!;
+    const selectionDistribution = residualDistribution(args.development, market, selectionFinal);
+    const confirmationDistribution = residualDistribution(
+      [...args.development, ...args.selection],
+      market,
+      confirmationFinal,
+    );
+    const selected = exactPriceReplayRows({
+      rows: args.selection,
+      market,
+      independentPredict: selectionIndependent,
+      finalPredict: selectionFinal,
+      distribution: selectionDistribution,
+      canonicalByScope,
+    });
+    const confirmed = exactPriceReplayRows({
+      rows: args.confirmation,
+      market,
+      independentPredict: confirmationIndependent,
+      finalPredict: confirmationFinal,
+      distribution: confirmationDistribution,
+      canonicalByScope,
+    });
+    const orderedSelection = [...selected].sort((left, right) => Date.parse(left.featureCutoff) - Date.parse(right.featureCutoff));
+    const gradeFitEnd = Math.max(1, Math.floor(orderedSelection.length / 2));
+    const gradeFitRaw = orderedSelection.slice(0, gradeFitEnd);
+    const gradeValidationRaw = orderedSelection.slice(gradeFitEnd);
+    const probabilityCalibration = fitProbabilityCalibration(gradeFitRaw);
+    const calibratedGradeFit = applyProbabilityCalibration(gradeFitRaw, probabilityCalibration);
+    const calibratedGradeValidation = applyProbabilityCalibration(gradeValidationRaw, probabilityCalibration);
+    const calibratedSelected = [...calibratedGradeFit, ...calibratedGradeValidation];
+    const calibratedConfirmed = applyProbabilityCalibration(confirmed, probabilityCalibration);
+    selectionRows.push(...calibratedSelected);
+    confirmationRows.push(...calibratedConfirmed);
+    const policySearch = selectExploratoryGradePolicy(calibratedGradeFit);
+    const policyValidation = scoreGradePolicy(calibratedGradeValidation, policySearch.policy);
+    const policyConfirmation = scoreGradePolicy(calibratedConfirmed, policySearch.policy);
+    return [market, {
+      selectedCandidate: candidate,
+      underlyingIndependentCandidate: underlying,
+      rawSelection: exactPriceReplaySummary(selected),
+      rawConfirmation: exactPriceReplaySummary(confirmed),
+      probabilityCalibration,
+      selection: exactPriceReplaySummary(calibratedSelected),
+      gradeFit: exactPriceReplaySummary(calibratedGradeFit),
+      gradeValidation: exactPriceReplaySummary(calibratedGradeValidation),
+      confirmation: exactPriceReplaySummary(calibratedConfirmed),
+      exploratoryPolicy: policySearch.policy,
+      policyGradeFit: policySearch.summary,
+      policyGradeValidation: policyValidation,
+      policyConfirmation,
+      policyVerdict: gradePolicyVerdict(
+        policySearch.summary,
+        policyValidation,
+        policyConfirmation,
+      ),
+    }];
+  }));
+  return {
+    release: "nba_player_props_exact_price_grade_research_2026_10_20_r1",
+    status: "opened_retrospective_research_only",
+    actionable: false,
+    targetBookExcluded: true,
+    selection: exactPriceReplaySummary(selectionRows),
+    confirmation: exactPriceReplaySummary(confirmationRows),
+    byMarket,
+    limitations: [
+      "Only archived opening quotes are available; T-180/T-60/T-15/lock movement and CLV are not represented.",
+      "The earlier confirmation outcomes were already opened during model research, so grade results cannot qualify production.",
+      "Policies are exploratory candidates for private forward tracking, not member grades or stakes.",
+    ],
+  };
+}
+
+function exactPriceReplayRows(args: {
+  rows: readonly NbaPlayerPropFeatureRow[];
+  market: Market;
+  independentPredict: (row: NbaPlayerPropFeatureRow, market: Market) => number;
+  finalPredict: (row: NbaPlayerPropFeatureRow, market: Market) => number;
+  distribution: { bias: number; standardDeviation: number };
+  canonicalByScope: ReadonlyMap<string, NbaPlayerPropsCanonicalOfferSet>;
+}): ExactPriceReplayRow[] {
+  const output: ExactPriceReplayRow[] = [];
+  for (const row of args.rows) {
+    const actual = target(row, args.market);
+    const scopeKey = scope(row, args.market);
+    const offer = args.canonicalByScope.get(scopeKey);
+    if (actual === null || !offer || actual === offer.canonicalLine) continue;
+    const independentProjection = args.independentPredict(row, args.market);
+    const candidateProjection = args.finalPredict(row, args.market);
+    if (independentProjection === offer.canonicalLine || candidateProjection === offer.canonicalLine) continue;
+    const independentSide = independentProjection > offer.canonicalLine ? "over" : "under";
+    const outcomeSide = actual > offer.canonicalLine ? "over" : "under";
+    const arbitrationThreshold = targetExcludedArbitrationThreshold(args.market);
+    const arbitration = arbitrationThreshold === null ? null : resolveTargetExcludedArbitration({
+      offer,
+      independentProjection,
+      minimumMarketDistance: arbitrationThreshold,
+    });
+    const finalProjection = arbitration?.projection ?? candidateProjection;
+    const finalSide = finalProjection > offer.canonicalLine ? "over" : "under";
+    const priceCandidates = arbitration
+      ? [arbitration.target]
+      : offer.observations
+        .filter((observation) => observation.side === finalSide)
+        .sort((left, right) => right.americanPrice - left.americanPrice);
+    let resolved: ExactPriceReplayRow | null = null;
+    for (const price of priceCandidates) {
+      const evidence = buildNbaPlayerPropsMarketEvidence({
+        target: price,
+        observations: offer.observations,
+        evaluatedAt: price.observedAt,
+      });
+      if (evidence.targetExcludedOverProbability === null || evidence.targetExcludedBooks < 1) continue;
+      const probabilityOver = residualProbabilityOver({
+        line: offer.canonicalLine,
+        projection: finalProjection,
+        ...args.distribution,
+      });
+      const finalProbability = finalSide === "over" ? probabilityOver : 1 - probabilityOver;
+      const targetExcludedProbability = finalSide === "over"
+        ? evidence.targetExcludedOverProbability
+        : 1 - evidence.targetExcludedOverProbability;
+      resolved = {
+        scopeKey,
+        featureCutoff: row.feature_cutoff,
+        market: args.market,
+        independentSide,
+        finalSide,
+        outcomeSide,
+        line: offer.canonicalLine,
+        actual,
+        independentProjection,
+        finalProjection,
+        finalProbability,
+        sportsbook: price.sportsbook,
+        americanPrice: price.americanPrice,
+        expectedValue: expectedValue(finalProbability, price.americanPrice),
+        targetExcludedProbability,
+        targetExcludedBooks: evidence.targetExcludedBooks,
+        targetExcludedReferenceBooks: evidence.targetExcludedReferenceBooks,
+        allBookProbability: sideProbabilityFromOver(consensusNoVigOver(offer.observations), finalSide),
+        marketEvidenceMode: arbitration ? "target_excluded_arbitration" : "candidate_projection",
+      };
+      break;
+    }
+    if (resolved) output.push(resolved);
+  }
+  return output;
+}
+
+function resolveTargetExcludedArbitration(args: {
+  offer: NbaPlayerPropsCanonicalOfferSet;
+  independentProjection: number;
+  minimumMarketDistance: number;
+}): { projection: number; target: NbaPlayerPropPriceObservation } | null {
+  const independentSide = args.independentProjection > args.offer.canonicalLine ? "over" : "under";
+  let side = independentSide;
+  let lastBook = "";
+  for (let iteration = 0; iteration < 3; iteration += 1) {
+    const target = args.offer.observations
+      .filter((row) => row.side === side)
+      .sort((left, right) => right.americanPrice - left.americanPrice)[0];
+    if (!target) return null;
+    const evidence = buildNbaPlayerPropsMarketEvidence({
+      target,
+      observations: args.offer.observations,
+      evaluatedAt: target.observedAt,
+    });
+    if (evidence.targetExcludedOverProbability === null || evidence.targetExcludedBooks < 1) return null;
+    const marketOver = evidence.targetExcludedOverProbability > 0.5;
+    const marketDistance = Math.abs(evidence.targetExcludedOverProbability - 0.5);
+    const desired = marketDistance >= args.minimumMarketDistance
+      ? marketOver ? "over" : "under"
+      : independentSide;
+    if (desired === side) {
+      const distance = Math.max(0.05, Math.abs(args.independentProjection - args.offer.canonicalLine));
+      return {
+        projection: Math.max(0, args.offer.canonicalLine + (side === "over" ? distance : -distance)),
+        target,
+      };
+    }
+    const targetBook = normalizeBook(target.sportsbook);
+    if (targetBook === lastBook) return null;
+    lastBook = targetBook;
+    side = desired;
+  }
+  return null;
+}
+
+function targetExcludedArbitrationThreshold(market: Market): number | null {
+  if (market === "rebounds" || market === "threes") return 0.05;
+  if (market === "assists") return 0.02;
+  if (market === "rebounds_assists") return 0;
+  return null;
+}
+
+function exactPriceReplaySummary(rows: readonly ExactPriceReplayRow[]) {
+  const settled = rows.map((row) => row.finalSide === row.outcomeSide);
+  const independent = rows.map((row) => row.independentSide === row.outcomeSide);
+  const flips = rows.filter((row) => row.independentSide !== row.finalSide);
+  const corrections = flips.filter((row) => row.finalSide === row.outcomeSide).length;
+  const harms = flips.filter((row) => row.independentSide === row.outcomeSide).length;
+  const pricedUnits = rows.reduce((sum, row) => sum + unitReturn(row.finalSide === row.outcomeSide, row.americanPrice), 0);
+  const excludedDirectionDisagreements = rows.filter((row) => {
+    const excludedSide = row.targetExcludedProbability >= 0.5 ? row.finalSide : opposite(row.finalSide);
+    const allBookSide = row.allBookProbability === null
+      ? excludedSide
+      : row.allBookProbability >= 0.5 ? row.finalSide : opposite(row.finalSide);
+    return excludedSide !== allBookSide;
+  }).length;
+  return {
+    rows: rows.length,
+    hitRate: mean(settled.map(Number)),
+    independentHitRate: mean(independent.map(Number)),
+    brier: mean(rows.map((row) => (row.finalProbability - Number(row.finalSide === row.outcomeSide)) ** 2)),
+    logLoss: mean(rows.map((row) => {
+      const probability = Math.min(1 - 1e-9, Math.max(1e-9, row.finalProbability));
+      return row.finalSide === row.outcomeSide ? -Math.log(probability) : -Math.log(1 - probability);
+    })),
+    units: pricedUnits,
+    roi: rows.length > 0 ? pricedUnits / rows.length : null,
+    flips: flips.length,
+    corrections,
+    harms,
+    netCorrections: corrections - harms,
+    targetExcludedCoverage: rows.length,
+    withReferenceBookConfirmation: rows.filter((row) => row.targetExcludedReferenceBooks > 0).length,
+    allBookVsTargetExcludedDirectionDisagreements: excludedDirectionDisagreements,
+  };
+}
+
+function selectExploratoryGradePolicy(rows: readonly ExactPriceReplayRow[]): {
+  policy: GradePolicy;
+  summary: ReturnType<typeof scoreGradePolicy>;
+} {
+  const policies: GradePolicy[] = [];
+  for (const leanProbability of [0.53, 0.56, 0.59, 0.62, 0.65]) {
+    for (const leanEv of [0, 0.03, 0.06, 0.09]) {
+      for (const leanMarketProbability of [0.50, 0.52, 0.54]) {
+        for (const bestProbability of [0.60, 0.64, 0.68, 0.72]) {
+          for (const bestEv of [0.05, 0.08, 0.12, 0.16]) {
+            for (const bestMarketProbability of [0.52, 0.55]) {
+              if (bestProbability <= leanProbability || bestEv < leanEv
+                || bestMarketProbability < leanMarketProbability) continue;
+              policies.push({
+                bestProbability,
+                bestEv,
+                bestMarketProbability,
+                leanProbability,
+                leanEv,
+                leanMarketProbability,
+                watchProbability: 0.52,
+                watchEv: -0.01,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+  const minimumActionables = Math.max(8, Math.floor(rows.length * 0.08));
+  const candidates = policies.map((policy) => ({ policy, summary: scoreGradePolicy(rows, policy) }))
+    .filter(({ summary }) => summary.actionable.records >= minimumActionables
+      && summary.actionable.records <= Math.ceil(rows.length * 0.45)
+      && summary.bestAngle.records >= Math.min(3, Math.floor(minimumActionables / 2))
+      && summary.bestAngle.records <= Math.ceil(rows.length * 0.20)
+      && (summary.bestAngle.hitRate ?? 0) >= (summary.actionable.hitRate ?? 0));
+  return (candidates.length > 0 ? candidates : policies.map((policy) => ({ policy, summary: scoreGradePolicy(rows, policy) })))
+    .sort((left, right) => gradePolicyScore(right.summary) - gradePolicyScore(left.summary))[0]!;
+}
+
+function scoreGradePolicy(rows: readonly ExactPriceReplayRow[], policy: GradePolicy) {
+  const graded = rows.map((row) => ({ row, grade: grade(row, policy) }));
+  const summary = (values: typeof graded) => {
+    const wins = values.filter(({ row }) => row.finalSide === row.outcomeSide).length;
+    const units = values.reduce((sum, { row }) => sum + unitReturn(row.finalSide === row.outcomeSide, row.americanPrice), 0);
+    return {
+      records: values.length,
+      wins,
+      losses: values.length - wins,
+      hitRate: values.length > 0 ? wins / values.length : null,
+      units,
+      roi: values.length > 0 ? units / values.length : null,
+    };
+  };
+  const bestAngle = graded.filter((row) => row.grade === "Best Angle");
+  const lean = graded.filter((row) => row.grade === "Lean");
+  const watchlist = graded.filter((row) => row.grade === "Watchlist");
+  const noPlay = graded.filter((row) => row.grade === "No Play");
+  return {
+    all: summary(graded),
+    actionable: summary([...bestAngle, ...lean]),
+    bestAngle: summary(bestAngle),
+    lean: summary(lean),
+    watchlist: summary(watchlist),
+    noPlay: summary(noPlay),
+    boardShare: {
+      actionable: graded.length > 0 ? (bestAngle.length + lean.length) / graded.length : null,
+      bestAngle: graded.length > 0 ? bestAngle.length / graded.length : null,
+      watchlist: graded.length > 0 ? watchlist.length / graded.length : null,
+      noPlay: graded.length > 0 ? noPlay.length / graded.length : null,
+    },
+  };
+}
+
+function grade(row: ExactPriceReplayRow, policy: GradePolicy): GradeName {
+  if (row.finalProbability >= policy.bestProbability && row.expectedValue >= policy.bestEv
+    && row.targetExcludedProbability >= policy.bestMarketProbability
+    && row.targetExcludedReferenceBooks >= 1) return "Best Angle";
+  if (row.finalProbability >= policy.leanProbability && row.expectedValue >= policy.leanEv
+    && row.targetExcludedProbability >= policy.leanMarketProbability) return "Lean";
+  if (row.finalProbability >= policy.watchProbability && row.expectedValue >= policy.watchEv) return "Watchlist";
+  return "No Play";
+}
+
+function gradePolicyVerdict(
+  gradeFit: ReturnType<typeof scoreGradePolicy>,
+  gradeValidation: ReturnType<typeof scoreGradePolicy>,
+  confirmation: ReturnType<typeof scoreGradePolicy>,
+): { qualified: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (gradeValidation.actionable.records < 5) reasons.push("fewer_than_5_grade_validation_actionables");
+  if ((gradeValidation.actionable.hitRate ?? 0) < 0.55) reasons.push("grade_validation_actionable_hit_below_55_percent");
+  if ((gradeValidation.actionable.roi ?? -1) <= 0) reasons.push("grade_validation_actionable_roi_not_positive");
+  if (confirmation.actionable.records < 10) reasons.push("fewer_than_10_confirmation_actionables");
+  if ((confirmation.actionable.hitRate ?? 0) < 0.55) reasons.push("confirmation_actionable_hit_below_55_percent");
+  if ((confirmation.actionable.roi ?? -1) <= 0) reasons.push("confirmation_actionable_roi_not_positive");
+  if (confirmation.bestAngle.records > 0
+    && (confirmation.bestAngle.hitRate ?? 0) < (confirmation.actionable.hitRate ?? 0)) {
+    reasons.push("best_angle_does_not_outrank_actionables");
+  }
+  if (confirmation.lean.records > 0 && (confirmation.lean.hitRate ?? 0) < 0.5) {
+    reasons.push("confirmation_lean_hit_below_50_percent");
+  }
+  if (confirmation.noPlay.records >= 10
+    && (confirmation.noPlay.hitRate ?? 0) > (confirmation.actionable.hitRate ?? 0) + 0.05) {
+    reasons.push("no_play_materially_outperforms_actionables");
+  }
+  if ((gradeFit.actionable.roi ?? -1) <= 0) reasons.push("grade_fit_actionable_roi_not_positive");
+  const validationShare = gradeValidation.boardShare.actionable ?? 0;
+  const confirmationShare = confirmation.boardShare.actionable ?? 0;
+  if (Math.abs(validationShare - confirmationShare) > 0.20) reasons.push("actionable_board_share_unstable");
+  return { qualified: reasons.length === 0, reasons };
+}
+
+function gradePolicyScore(summary: ReturnType<typeof scoreGradePolicy>): number {
+  const actionableRoi = summary.actionable.roi ?? -1;
+  const actionableHit = summary.actionable.hitRate ?? 0;
+  const bestRoi = summary.bestAngle.roi ?? -1;
+  const bestHit = summary.bestAngle.hitRate ?? 0;
+  return actionableRoi + 0.35 * (actionableHit - 0.5) + 0.25 * bestRoi + 0.15 * (bestHit - 0.5);
+}
+
+function fitProbabilityCalibration(rows: readonly ExactPriceReplayRow[]): {
+  intercept: number;
+  slope: number;
+  selectionLogLoss: number | null;
+} {
+  if (rows.length === 0) return { intercept: 0, slope: 0, selectionLogLoss: null };
+  let best = { intercept: 0, slope: 1, selectionLogLoss: Infinity };
+  for (let intercept = -0.5; intercept <= 0.5001; intercept += 0.05) {
+    for (let slope = 0; slope <= 1.5001; slope += 0.05) {
+      const loss = mean(rows.map((row) => {
+        const probability = plattProbability(row.finalProbability, intercept, slope);
+        return row.finalSide === row.outcomeSide ? -Math.log(probability) : -Math.log(1 - probability);
+      })) ?? Infinity;
+      if (loss < best.selectionLogLoss) best = { intercept, slope, selectionLogLoss: loss };
+    }
+  }
+  return best;
+}
+
+function applyProbabilityCalibration(
+  rows: readonly ExactPriceReplayRow[],
+  calibration: { intercept: number; slope: number },
+): ExactPriceReplayRow[] {
+  return rows.map((row) => {
+    const finalProbability = plattProbability(row.finalProbability, calibration.intercept, calibration.slope);
+    return {
+      ...row,
+      finalProbability,
+      expectedValue: expectedValue(finalProbability, row.americanPrice),
+    };
+  });
+}
+
+function plattProbability(probability: number, intercept: number, slope: number): number {
+  const bounded = Math.min(1 - 1e-6, Math.max(1e-6, probability));
+  const logit = Math.log(bounded / (1 - bounded));
+  const calibrated = 1 / (1 + Math.exp(-(intercept + slope * logit)));
+  return Math.min(1 - 1e-6, Math.max(1e-6, calibrated));
+}
+
+function underlyingIndependentCandidate(candidate: CandidateName, market: Market): CandidateName {
+  if (candidate.startsWith("market_read_") || candidate.startsWith("fanduel_")) {
+    return "ridge_r2_minutes_regression";
+  }
+  if (candidate.startsWith("hybrid_market_read_")) {
+    return market === "rebounds" || market === "threes" || market === "rebounds_assists"
+      ? "opportunity_direct_counts"
+      : "ridge_r2_minutes_regression";
+  }
+  return candidate;
+}
+
+function residualDistribution(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  market: Market,
+  predict: (row: NbaPlayerPropFeatureRow, market: Market) => number,
+): { bias: number; standardDeviation: number } {
+  const errors = rows.flatMap((row) => {
+    const actual = target(row, market);
+    return actual === null ? [] : [actual - predict(row, market)];
+  });
+  return {
+    bias: mean(errors) ?? 0,
+    standardDeviation: Math.max(0.25, standardDeviation(errors)),
+  };
+}
+
+function residualProbabilityOver(args: {
+  line: number;
+  projection: number;
+  bias: number;
+  standardDeviation: number;
+}): number {
+  const z = (args.line - (args.projection + args.bias)) / args.standardDeviation;
+  return Math.min(0.995, Math.max(0.005, 1 - normalCdf(z)));
+}
+
+function normalCdf(value: number): number {
+  const sign = value < 0 ? -1 : 1;
+  const x = Math.abs(value) / Math.sqrt(2);
+  const t = 1 / (1 + 0.3275911 * x);
+  const erf = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592)
+    * t * Math.exp(-x * x);
+  return 0.5 * (1 + sign * erf);
+}
+
+function expectedValue(probability: number, price: number): number {
+  const profit = price > 0 ? price / 100 : 100 / -price;
+  return probability * profit - (1 - probability);
+}
+
+function unitReturn(win: boolean, price: number): number {
+  if (!win) return -1;
+  return price > 0 ? price / 100 : 100 / -price;
+}
+
+function sideProbabilityFromOver(probabilityOver: number | null, side: "over" | "under"): number | null {
+  return probabilityOver === null ? null : side === "over" ? probabilityOver : 1 - probabilityOver;
+}
+
+function opposite(side: "over" | "under"): "over" | "under" {
+  return side === "over" ? "under" : "over";
+}
+
+function normalizeBook(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function predictedMinutes(row: NbaPlayerPropFeatureRow, weights: readonly [number, number, number, number]): number {

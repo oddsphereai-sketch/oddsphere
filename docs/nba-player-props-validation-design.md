@@ -259,3 +259,35 @@ This does not add a public route, Tracking-page row, member copy, scheduled
 job, provider request, grade, or prediction. Runtime capture remains disabled
 until one authoritative NBA props observer exists; attaching a second writer
 just to collect research would violate the single-writer safety boundary.
+
+## Exact-price market and grade replay
+
+The next offline replay evaluated real archived opening prices with the exact
+grade sportsbook excluded from the market evidence. It used separate
+chronological grade-fit, grade-validation, and later confirmation windows.
+This closes the circularity where the quote being graded could otherwise help
+create its own apparent edge.
+
+The target-excluded Market Reader improved the final confirmation direction:
+
+| Market | Confirmation rows | Final hit rate | Reader flips | Corrections | Harms | Exact-price ROI |
+|---|---:|---:|---:|---:|---:|---:|
+| Rebounds | 69 | 63.8% | 5 | 3 | 2 | +16.9% |
+| Assists | 45 | 60.0% | 11 | 9 | 2 | +5.2% |
+| Threes | 56 | 55.4% | 7 | 6 | 1 | -7.0% |
+| Rebounds + Assists | 38 | 68.4% | 15 | 13 | 2 | +25.7% |
+
+Those forecast results do not qualify a grade policy. Raw model probabilities
+were overconfident, so Platt-style calibration was fit only on the earlier
+grade-fit half. The later grade-validation and confirmation windows then showed
+that confidence rank was not stable enough: every tested market-specific grade
+ladder failed at least one minimum-sample, hit-rate, ROI, grade-ordering, or
+board-density gate. Threes remains the weakest point forecast despite its
+Reader corrections. No tested grade policy may be published or used to infer a
+stake from this replay.
+
+The correct next step is private forward capture of the target-excluded
+T-180/T-60/T-15/lock path, followed by market-specific probability and grade
+calibration. The validated forecast candidates must be retained; the failed
+grade layer must not be mistaken for a reason to discard useful independent or
+Market Reader improvements.
