@@ -1,4 +1,5 @@
 import { buildUclDailyEdgePreview, type UclStoredPriceObservation } from "../../lib/services/ucl/buildUclDailyEdgePreview";
+import { readUclStoredPriceHistory } from "../../lib/services/ucl/uclLineHistoryStore";
 import { buildUclSlate } from "../../lib/services/ucl/buildUclSlate";
 
 function implied(price: number): number {
@@ -14,8 +15,12 @@ function median(values: number[]): number | null {
 
 async function main() {
   const slate = await buildUclSlate();
+  const storedPriceHistory = await readUclStoredPriceHistory(slate.matches.map((match) => match.id));
   let observations: UclStoredPriceObservation[] = [];
-  const response = await buildUclDailyEdgePreview(slate, { captureAllBookPrices: (rows) => { observations = rows; } });
+  const response = await buildUclDailyEdgePreview(slate, {
+    storedPriceHistory,
+    captureAllBookPrices: (rows) => { observations = rows; },
+  });
   const games = response.games.map((game) => {
     const providerId = Number(game.external_id);
     const evaluated = (game.markets.first_inning.currentPriceSportsbook
@@ -61,11 +66,33 @@ async function main() {
   console.log(JSON.stringify({
     mode: "read_only_no_runtime_change",
     fixtures: games.length,
+    storedPriceObservations: storedPriceHistory.length,
     modelYes: games.filter((game) => game.modelSide === "Yes").length,
     targetExcludedNo: games.filter((game) => game.targetExcludedSide === "No").length,
     robustTargetExcludedNo: games.filter((game) => game.robustTargetExcludedNo).length,
     shadowAvailable: games.filter((game) => game.runtimeShadow?.available).length,
     shadowCandidateNo: games.filter((game) => game.runtimeShadow?.candidateSide === "no").length,
+    lanes: Object.fromEntries(["aligned", "corrected", "conflicted", "unavailable"].map((lane) => [
+      lane,
+      games.filter((game) => (game.runtimeShadow?.lane ?? "unavailable") === lane).length,
+    ])),
+    movement: {
+      available: games.filter((game) => game.runtimeShadow?.movementSide).length,
+      supportsConsensus: games.filter((game) => game.runtimeShadow?.movementCorroboratesConsensus).length,
+      resistsConsensus: games.filter((game) => game.runtimeShadow?.movementResistsConsensus).length,
+    },
+    sideChanges: games.filter((game) => game.runtimeShadow && game.runtimeShadow.candidateSide !== game.runtimeShadow.modelSide).length,
+    promotions: games.filter((game) => game.runtimeShadow?.gradeEffect === "promotion").length,
+    demotions: games.filter((game) => game.runtimeShadow?.gradeEffect === "demotion").length,
+    unchanged: games.filter((game) => game.runtimeShadow?.gradeEffect === "unchanged").length,
+    currentVerdicts: Object.fromEntries(["lean", "watchlist", "no_play"].map((verdict) => [
+      verdict,
+      games.filter((game) => game.runtimeShadow?.currentVerdict === verdict).length,
+    ])),
+    candidateVerdicts: Object.fromEntries(["lean", "watchlist", "no_play"].map((verdict) => [
+      verdict,
+      games.filter((game) => game.runtimeShadow?.candidateVerdict === verdict).length,
+    ])),
     games,
   }, null, 2));
 }
