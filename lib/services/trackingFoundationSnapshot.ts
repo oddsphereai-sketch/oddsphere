@@ -70,6 +70,7 @@ export function trackingFoundationResponseBody(
     byPlayGrade: result.byPlayGrade,
     bestAngles: result.bestAngles,
     leans: result.leans,
+    actionableHistory: result.actionableHistory,
     yesterday: result.yesterday,
     thisWeek: result.thisWeek,
     thisMonth: result.thisMonth,

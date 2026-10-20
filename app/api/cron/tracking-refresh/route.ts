@@ -62,7 +62,7 @@ import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 export const maxDuration = 300;
 
 const TRACKING_REFRESH_PUBLICATION_RELEASE =
-  "tracking_refresh_publication_2026_10_20_r1_nba_checkpoint";
+  "tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint";
 
 // The active EPL pipeline stores under sport="soccer" and is competition-
 // scoped in snapshot_json. Include soccer in the scheduled cycle so EPL
@@ -103,13 +103,13 @@ export async function GET(request: Request) {
         revalidateTag("member-tracking-aggregate", { expire: 0 });
       }
 
-      // Publish immediately after NBA settles instead of allowing a later
-      // sport timeout to leave the online Tracking reader stale. A one-sport
-      // operator invocation remains self-publishing. The shared aggregate is
-      // built from the database, so this checkpoint includes every already
-      // settled sport without adding a second writer or schedule.
-      const publishAfterSport = sports.length === 1 ? sports[0] : "nba";
-      const responseSnapshot = apply && sport === publishAfterSport
+      // NBA remains the early safety checkpoint. NHL is the final scheduled
+      // checkpoint and therefore includes later WNBA, soccer/UCL, NFL and CFB
+      // grades that the NBA-time snapshot cannot yet contain. A one-sport
+      // operator invocation remains self-publishing. Both checkpoints use the
+      // same existing writer and route; no second writer or schedule exists.
+      const publishAfterSports = sports.length === 1 ? new Set(sports) : new Set<Sport>(["nba", "nhl"]);
+      const responseSnapshot = apply && publishAfterSports.has(sport)
         ? {
             legacy: await refreshTrackingResponseSnapshot({ source: "tracking_refresh" }),
             member: await refreshTrackingFoundationResponseSnapshot({ source: "tracking_refresh" }),

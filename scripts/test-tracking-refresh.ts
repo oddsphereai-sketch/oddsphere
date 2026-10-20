@@ -207,10 +207,10 @@ check(
     trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
 );
 check(
-  "online tracking publishes immediately after NBA before a later sport can stall",
-  trackingCronSource.includes('"tracking_refresh_publication_2026_10_20_r1_nba_checkpoint"') &&
-    trackingCronSource.includes('const publishAfterSport = sports.length === 1 ? sports[0] : "nba"') &&
-    trackingCronSource.includes("sport === publishAfterSport") &&
+  "online tracking publishes after NBA and again after the final sport",
+  trackingCronSource.includes('"tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint"') &&
+    trackingCronSource.includes('new Set<Sport>(["nba", "nhl"])') &&
+    trackingCronSource.includes("publishAfterSports.has(sport)") &&
     trackingCronSource.includes("export const maxDuration = 300"),
 );
 check(
@@ -236,7 +236,8 @@ check(
 );
 check(
   "Daily Edge keeps the active Soccer model in the current in-season navigation contract",
-  dailyEdgeSportsSource.includes('{ key: "soccer", label: "Soccer", memberAvailable: true, inSeason: true }') &&
+  dailyEdgeSportsSource.includes('{ key: "soccer", label: "Soccer"') &&
+    dailyEdgeSportsSource.includes('navigationTier: "core", memberAvailable: true, inSeason: true') &&
     dailyEdgeShellSource.includes("const isActiveInSeason = isActive && s.inSeason === true") &&
     dailyEdgeShellSource.includes('s.memberAvailable && !s.inSeason ? "offseason model"'),
 );

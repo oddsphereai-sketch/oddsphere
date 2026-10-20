@@ -40,7 +40,7 @@ export function trackingFoundationSnapshotKey(input: {
   sport?: string | null;
   date: string;
 }): string {
-  return ["tracking-foundation-r9-alternate-line-evidence-backed", input.sport ?? "all", input.date].join("::");
+  return ["tracking-foundation-r10-ucl-actionable-history", input.sport ?? "all", input.date].join("::");
 }
 
 export async function readLabResponseSnapshot<T extends LabResponseSnapshotPayload>(

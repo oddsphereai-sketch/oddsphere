@@ -266,7 +266,7 @@ export async function refreshTrackingFoundationResponseSnapshot(input: {
       ttlMs: TRACKING_SNAPSHOT_TTL_MS,
       staleMs: TRACKING_SNAPSHOT_STALE_MS,
       source: input.source ?? "cron",
-      payloadVersion: "tracking-foundation-v7-alternate-line-evidence-backed",
+      payloadVersion: "tracking-foundation-v8-ucl-actionable-history",
     });
     if (!write.ok) return { ok: false, snapshotKey, error: write.error };
     return {
