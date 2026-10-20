@@ -3525,10 +3525,10 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_20_r9_reader_structural_qualification`
-- Market marriage: `nba_market_marriage_2026_10_20_r9_reader_structural_qualification`
+- Model / prediction record: `nba_professional_unified_2026_10_20_r10_minimum_coherent_crossing`
+- Market marriage: `nba_market_marriage_2026_10_20_r10_minimum_coherent_crossing`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
-- Point-projection policy: `nba_unified_final_projection_2026_10_16_r3_total_disagreement_reader`
+- Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Official markets: moneyline, spread, and total prospectively from October 20;
@@ -3557,6 +3557,18 @@ season sample yet, so the qualification repair remains provisional and requires 
 evaluation. Evidence and rollback:
 `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-predeclaration.md` and
 `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
+
+The October 20 r10 candidate preserves every r9 Moneyline, Spread, Total,
+selected-underdog, +3, and +6 direction while replacing full residual mirroring
+with the minimum coherent score crossing. The two-season proxy improves
+team-score, margin, Total, and winner-Brier error in both seasons without a
+direction change. On the live three-game board it changes only BOS-DET's score,
+from BOS 115.341 / DET 112.819 to BOS 114.955 / DET 113.205; all nine picks,
+grades, prices, and the two-actionable count remain unchanged. The r6 reader,
+qualification thresholds, independent model, grade policy, writer, lease,
+cadence, tracking, and locked records remain unchanged. Evidence and rollback:
+`docs/model-audits/2026-10-20-nba-minimum-coherent-crossing-r10-predeclaration.md`
+and `docs/model-audits/2026-10-20-nba-minimum-coherent-crossing-r10-result.md`.
 
 The October 20 prospective independent-score shadow is
 `nba_independent_score_shadow_2026_10_20_r1_rating_30_total_20`. It records the frozen 30% adjusted-

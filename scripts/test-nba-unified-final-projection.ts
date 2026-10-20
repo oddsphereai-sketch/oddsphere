@@ -44,6 +44,7 @@ const movementFlip = buildNbaUnifiedFinalProjection({
 assert.equal(NBA_UNIFIED_FINAL_RECIPE.spreadMovementThreshold, 2);
 assert.equal(movementFlip.movementQualified, true);
 assert.equal(movementFlip.movementApplied, true);
+assert.equal(movementFlip.marginHome, 1.25);
 assert.ok(movementFlip.spreadResidual! > 0, "two points of home support must orient the final residual home");
 assert.ok(Math.abs(movementFlip.homeScore + movementFlip.awayScore - movementFlip.total) < 1e-9);
 assert.ok(Math.abs(movementFlip.homeScore - movementFlip.awayScore - movementFlip.marginHome) < 1e-9);
@@ -57,6 +58,7 @@ const awaySupport = buildNbaUnifiedFinalProjection({
   qualifiedSpreadRead: { side: "away", magnitudePoints: 3 },
 });
 assert.equal(awaySupport.movementApplied, true);
+assert.equal(awaySupport.marginHome, -2.25);
 assert.ok(awaySupport.spreadResidual! < 0, "three points of away support must orient the final residual away");
 
 const belowThreshold = buildNbaUnifiedFinalProjection({
@@ -97,10 +99,10 @@ assert.equal(NBA_UNIFIED_FINAL_RECIPE.totalMovementThreshold, 5);
 assert.equal(NBA_UNIFIED_FINAL_RECIPE.minimumTotalResidual, 5);
 assert.equal(totalDisagreementFlip.totalMovementQualified, true);
 assert.equal(totalDisagreementFlip.totalMovementApplied, true);
-assert.equal(totalDisagreementFlip.totalResidual, 8);
-assert.equal(totalDisagreementFlip.total, 226);
+assert.equal(totalDisagreementFlip.totalResidual, 0.25);
+assert.equal(totalDisagreementFlip.total, 218.25);
 assert.equal(totalDisagreementFlip.marketApplied.total, true);
-assert.ok(Math.abs(totalDisagreementFlip.homeScore + totalDisagreementFlip.awayScore - 226) < 1e-9);
+assert.ok(Math.abs(totalDisagreementFlip.homeScore + totalDisagreementFlip.awayScore - 218.25) < 1e-9);
 assert.ok(Math.abs(totalDisagreementFlip.homeScore - totalDisagreementFlip.awayScore - 2) < 1e-9);
 
 const totalMoveBelowThreshold = buildNbaUnifiedFinalProjection({
@@ -146,5 +148,84 @@ assert.throws(() => buildNbaUnifiedFinalProjection({
   currentTotal: 220,
   openingSpreadHome: -1,
 }));
+
+function legacyR9Projection(args: {
+  independentMargin: number;
+  independentTotal: number;
+  marketMargin: number;
+  marketTotal: number;
+  spreadSide: "home" | "away";
+  spreadMagnitude: number;
+  totalSide: "over" | "under";
+  totalMagnitude: number;
+}) {
+  const spreadDirection = args.spreadSide === "home" ? 1 : -1;
+  const spreadResidual = args.independentMargin - args.marketMargin;
+  const spreadQualified = args.spreadMagnitude >= NBA_UNIFIED_FINAL_RECIPE.spreadMovementThreshold;
+  const margin = spreadQualified && Math.sign(spreadResidual) !== spreadDirection
+    ? args.marketMargin + spreadDirection * Math.max(
+      Math.abs(spreadResidual),
+      NBA_UNIFIED_FINAL_RECIPE.minimumSpreadResidual,
+    )
+    : args.independentMargin;
+  const totalDirection = args.totalSide === "over" ? 1 : -1;
+  const totalResidual = args.independentTotal - args.marketTotal;
+  const totalQualified = args.totalMagnitude >= NBA_UNIFIED_FINAL_RECIPE.totalMovementThreshold &&
+    Math.abs(totalResidual) >= NBA_UNIFIED_FINAL_RECIPE.minimumTotalResidual;
+  const total = totalQualified && Math.sign(totalResidual) !== totalDirection
+    ? args.marketTotal + totalDirection * Math.abs(totalResidual)
+    : args.independentTotal;
+  return { margin, total };
+}
+
+for (const independentMargin of [-15, -7, -2, -0.5, 0.5, 2, 7, 15]) {
+  for (const marketMargin of [-10, -5.5, -1.5, 0, 1.5, 5.5, 10]) {
+    for (const independentTotal of [205, 215, 220, 225, 235]) {
+      for (const marketTotal of [210, 220, 230]) {
+        for (const spreadSide of ["home", "away"] as const) {
+          for (const spreadMagnitude of [1.5, 2, 3] as const) {
+            for (const totalSide of ["over", "under"] as const) {
+              for (const totalMagnitude of [4.5, 5, 7] as const) {
+                const legacy = legacyR9Projection({
+                  independentMargin,
+                  independentTotal,
+                  marketMargin,
+                  marketTotal,
+                  spreadSide,
+                  spreadMagnitude,
+                  totalSide,
+                  totalMagnitude,
+                });
+                const candidate = buildNbaUnifiedFinalProjection({
+                  independentHomeScore: (independentTotal + independentMargin) / 2,
+                  independentAwayScore: (independentTotal - independentMargin) / 2,
+                  currentSpreadHome: -marketMargin,
+                  currentTotal: marketTotal,
+                  openingSpreadHome: -marketMargin,
+                  qualifiedSpreadRead: { side: spreadSide, magnitudePoints: spreadMagnitude },
+                  qualifiedTotalRead: { side: totalSide, magnitudePoints: totalMagnitude },
+                });
+                assert.equal(candidate.marginHome >= 0, legacy.margin >= 0, "r10 must preserve the r9 Moneyline side");
+                assert.equal(
+                  candidate.marginHome - marketMargin >= 0,
+                  legacy.margin - marketMargin >= 0,
+                  "r10 must preserve the r9 Spread side",
+                );
+                assert.equal(
+                  candidate.total - marketTotal >= 0,
+                  legacy.total - marketTotal >= 0,
+                  "r10 must preserve the r9 Total side",
+                );
+                assert.ok(Number.isFinite(candidate.homeScore) && Number.isFinite(candidate.awayScore));
+                assert.ok(Math.abs(candidate.homeScore + candidate.awayScore - candidate.total) < 1e-9);
+                assert.ok(Math.abs(candidate.homeScore - candidate.awayScore - candidate.marginHome) < 1e-9);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
 
 console.log("NBA unified final projection tests passed");

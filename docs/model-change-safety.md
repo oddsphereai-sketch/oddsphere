@@ -1,5 +1,29 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: NBA minimum-coherent crossing
+
+On 2026-10-20 Daniel Mengel directed Oddsphere to close the diagnosed NBA
+score-compression and market-reader handoff gap rather than leave the best
+available repair in research. This exception is limited to replacing r9's full
+residual mirror with the nearest coherent margin or Total that preserves the
+same qualified Moneyline, Spread, and Total decisions. It advances the model
+and market marriage to r10 and the unified projection to r4.
+
+Reader qualification, independent inputs, exact lines and prices, grades,
+stakes, provider collection, writer, cadence, `prediction_pipeline:nba` lease,
+tracking, and every stored locked payload remain unchanged. The existing
+0.25-point residual is decision-boundary separation, not a market weight or
+correction cap. Same-input r9/r10 comparisons must preserve every side; a grid
+regression enforces Moneyline, Spread, and Total parity.
+
+Publication requires the two-season error report, current-board score/pick/
+probability/grade impact, focused projection/candidate/lock tests, TypeScript,
+the full model-change suite, latest-main integration safety, protected PR
+checks, and post-deploy proof of r10 releases, board coherence, writer/lease
+health, and unchanged locked rows. Roll back r10/r4 together if any same-input
+pick changes, score coherence fails, actionability contracts unexpectedly, a
+locked row changes, or writer/lease health regresses.
+
 ## Owner-directed correctness exception: observed NFL props scheduler jitter
 
 On 2026-10-20 the first production heartbeat after the r58 deployment began at
