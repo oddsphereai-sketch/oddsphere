@@ -1,10 +1,20 @@
 import { cronHandler } from "@/lib/cron/runCron";
+import { validateCronAuth } from "@/lib/cron/auth";
 import { supabase } from "@/lib/db/supabase";
-import { runCfbMidweekRecoveryAudit } from "@/lib/services/football/cfbMidweekRecoveryAudit";
+import { CFB_MIDWEEK_RECOVERY_AUDIT_SNAPSHOT_KEY, runCfbMidweekRecoveryAudit } from "@/lib/services/football/cfbMidweekRecoveryAudit";
+import { readLatestLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 
 export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
+  if (new URL(request.url).searchParams.get("read") === "1") {
+    const auth = validateCronAuth(request);
+    if (!auth.ok) return auth.response;
+    const snapshot = await readLatestLabResponseSnapshot<Record<string, unknown>>(CFB_MIDWEEK_RECOVERY_AUDIT_SNAPSHOT_KEY);
+    return snapshot
+      ? Response.json({ ok: true, generatedAt: snapshot.generatedAt, audit: snapshot.payload })
+      : Response.json({ ok: false, error: "CFB midweek recovery audit result is unavailable." }, { status: 404 });
+  }
   return cronHandler(request, "cfb_midweek_recovery_audit", async ({ runId }) => {
     const audit = await runCfbMidweekRecoveryAudit({
       client: supabase,

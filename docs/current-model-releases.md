@@ -501,12 +501,15 @@ Last reviewed: 2026-10-20
 ## CFB Daily Edge generalized weekly production release
 
 - October 20 midweek recovery audit gate: the authenticated operator-only
-  `/api/cron/cfb-midweek-recovery-audit` endpoint may run one SELECT-only,
+  `/api/cron/cfb-midweek-recovery-audit` endpoint may run one `apply=false`,
   `apply=false` rehearsal of the pending official-availability identity/parser
   repair and paid FCS market recovery. Candidate flags are rejected whenever
   `apply=true`; the scheduled writer, live 5,000-credit reserve, active release
   identifiers, member snapshot, grades, tracking, and locks remain unchanged.
-  The endpoint reports exact before/candidate coverage and every side, line,
+  The endpoint persists only its sanitized result under the isolated
+  `cfb::operator-audit::2026-10-20-midweek-recovery` response-snapshot key so a
+  completed long-running audit can be retrieved after the HTTP connection
+  closes. It reports exact before/candidate coverage and every side, line,
   grade, promotion, and demotion so the live repair cannot be approved on stale
   October 8 evidence. Evidence and rollback:
   `docs/model-audits/2026-10-20-cfb-midweek-recovery-zero-write-audit.md`.

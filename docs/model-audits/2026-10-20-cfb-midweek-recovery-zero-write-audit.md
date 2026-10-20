@@ -1,4 +1,4 @@
-# CFB midweek recovery zero-write audit
+# CFB midweek recovery zero-model-write audit
 
 Date: 2026-10-20
 
@@ -35,7 +35,12 @@ It rehearses:
 It returns only bounded operational summaries: before/candidate FBS and FCS
 coverage, grade counts, health/provider errors, and every changed side, line,
 or grade with promotion/demotion totals. It does not return credentials or raw
-provider payloads. The ordinary route cannot set these flags, and the writer
+provider payloads. Because the provider rehearsal outlives the production HTTP
+response window, the sanitized result is also written to the isolated
+`cfb::operator-audit::2026-10-20-midweek-recovery` response-snapshot key and is
+available only through the same cron authentication. It cannot overwrite a
+Daily Edge, model, evidence, member, tracking, or lock key. The ordinary route
+cannot set these flags, and the writer
 throws if any candidate flag is supplied with `apply=true`.
 
 ## Acceptance and rollback
@@ -43,6 +48,7 @@ throws if any candidate flag is supplied with `apply=true`.
 This release deliberately changes no production model or collector release,
 scheduled-writer behavior, credit reserve, evidence row, member snapshot,
 tracking row, projection, probability, side, grade, stake, or locked record.
+Its sole state change is the replaceable sanitized operator-audit artifact.
 The audit result is the required current-board evidence for a separate live
 repair. Remove the endpoint after that repair is accepted. Revert this audit
 release if it writes model state, escapes authentication or the shared lease,
