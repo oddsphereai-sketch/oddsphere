@@ -1,5 +1,10 @@
 # UCL coherent primary score r10
 
+> Historical intermediate: the code deployed, but the authenticated production
+> refresh was cadence-skipped. The owner refined the desired score semantic
+> before the member board advanced; active behavior is r11 in
+> `2026-10-20-ucl-minimum-coherent-decimal-score-r11.md`.
+
 Date: 2026-10-20
 
 ## Decision
@@ -22,10 +27,10 @@ primary score instead used decimal expected goals. Expected goals are
 distribution means and may remain positive because of high-scoring tail
 outcomes even when the median categorical forecast is BTTS No.
 
-Roma-Benfica exposed the presentation contradiction:
+Roma-Slovan Bratislava exposed the presentation contradiction:
 
 - final predictions: Roma, Over 2.5, BTTS No;
-- decimal distribution means: Roma 3.3089, Benfica 1.0956;
+- decimal distribution means: Roma 3.3089, Slovan Bratislava 1.0956;
 - coherent representative exact score: Roma 3-0.
 
 The PMF was coherent; the primary-score adapter selected the wrong semantic.
@@ -54,8 +59,8 @@ Applying the fixed semantic gives:
 - zero side, probability, price, grade, stake, promotion, demotion, or
   actionable-count changes.
 
-Roma-Benfica's primary score becomes Roma 3-0. Its expected-goals evidence
-remains Roma 3.3089 and Benfica 1.0956. The distinction is intentional: the
+Roma-Slovan Bratislava's primary score becomes Roma 3-0. Its expected-goals evidence
+remains Roma 3.3089 and Slovan Bratislava 1.0956. The distinction is intentional: the
 first is the exact-score prediction; the second is the distribution mean.
 
 ## Verification and rollback

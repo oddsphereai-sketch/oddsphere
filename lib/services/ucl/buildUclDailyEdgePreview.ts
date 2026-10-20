@@ -18,24 +18,64 @@ import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
-export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_10_20_r1_coherent_representative" as const;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_10_20_r2_minimum_coherent_decimal" as const;
 
 export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions, "captureAllBookPrices" | "storedPriceHistory">;
 
+type UclGoalOutlookProbabilities = NonNullable<NonNullable<DailyEdgeGameDto["soccerProjection"]>["goalOutlookProbabilities"]>;
+
+function roundedTenth(value: number): number {
+  return Math.round((value + Number.EPSILON) * 10) / 10;
+}
+
+function scoreMatchesFinalDirections(
+  score: { away: number; home: number },
+  probabilities: UclGoalOutlookProbabilities,
+): boolean {
+  const displayed = { away: roundedTenth(score.away), home: roundedTenth(score.home) };
+  const result = probabilities.home >= probabilities.draw && probabilities.home >= probabilities.away
+    ? "home"
+    : probabilities.away >= probabilities.draw ? "away" : "draw";
+  const resultMatches = result === "home"
+    ? displayed.home > displayed.away
+    : result === "away" ? displayed.away > displayed.home : displayed.home === displayed.away;
+  const totalMatches = probabilities.over25 >= probabilities.under25
+    ? displayed.home + displayed.away > 2.5
+    : displayed.home + displayed.away < 2.5;
+  const bttsMatches = probabilities.bttsYes >= probabilities.bttsNo
+    ? displayed.home >= 0.5 && displayed.away >= 0.5
+    : displayed.home < 0.5 || displayed.away < 0.5;
+  return resultMatches && totalMatches && bttsMatches;
+}
+
 /**
- * The primary score shown on an unlocked UCL card is the highest-probability
- * exact score from the one reconciled PMF that agrees with the released Match
- * Result, Total, and BTTS directions. Decimal expected goals remain available
- * in soccerProjection as distribution means; they are not an exact-score pick.
- * Locked cards keep their previously published primary score.
+ * Keep the full-PMF decimal means whenever their one-decimal card display
+ * already agrees with the released Match Result, Total, and BTTS directions.
+ * On a visible conflict, move along the straight line toward the PMF's
+ * coherent representative outcome and stop at the first one-percent step that
+ * resolves every direction. This retains continuous simulation context and
+ * applies the minimum presentation correction instead of claiming an exact
+ * final. Locked cards keep their exact stored projection.
  */
 export function uclCoherentProjectedScore(
   game: Pick<DailyEdgeGameDto, "lockState" | "projected" | "soccerProjection">,
 ): DailyEdgeGameDto["projected"] {
   const representative = game.soccerProjection?.representativeScore;
-  return game.lockState !== "locked" && representative
-    ? { away: representative.away, home: representative.home }
-    : game.projected;
+  const expected = game.soccerProjection?.expectedGoals;
+  const probabilities = game.soccerProjection?.goalOutlookProbabilities;
+  if (game.lockState === "locked" || !representative || !expected || !probabilities) return game.projected;
+  if (scoreMatchesFinalDirections(expected, probabilities)) return game.projected;
+  for (let step = 1; step <= 100; step += 1) {
+    const weight = step / 100;
+    const candidate = {
+      away: expected.away + (representative.away - expected.away) * weight,
+      home: expected.home + (representative.home - expected.home) * weight,
+    };
+    if (scoreMatchesFinalDirections(candidate, probabilities)) {
+      return { away: roundedTenth(candidate.away), home: roundedTenth(candidate.home) };
+    }
+  }
+  return { away: representative.away, home: representative.home };
 }
 
 function marketContext(market: MarketEdgeDto): MarketEdgeDto {
