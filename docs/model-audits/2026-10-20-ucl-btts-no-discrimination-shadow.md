@@ -376,3 +376,39 @@ the population Yes prevalence and does not identify the conditional pockets
 where either side fails to score. The next candidate must directly learn
 match-level nonlinear zero-risk interactions and recent clean-sheet/
 failed-to-score state; another side-product calibration is not justified.
+
+## Direct interaction specialist declaration
+
+Development used only the already opened 2023-24 and 2024-25 domestic seasons,
+with each season predicted by a model trained strictly on earlier seasons. The
+candidate directly models match BTTS rather than multiplying separately fitted
+side probabilities. Its 64 inputs include the dynamic-Poisson baseline; home,
+away, total, minimum, product, and mismatch scoring intensities; shrunk scoring,
+concession, goals, and shots-on-target state; five- and ten-match scoring,
+concession, goals, and shots-on-target form; explicit attack-versus-opposing-
+defence products and minima; evidence weight; venue; and league scoring rate.
+
+The opened development grid tested ridge values `[1, 5, 25, 100]`, specialist
+logit authorities `[0.25, 0.5, 0.75, 1]`, calibration slopes
+`[1, 1.15, 1.3, 1.45]`, and declared logit offsets. The selected configuration
+is now frozen before requesting any 2025-26 outcome:
+
+- ridge `1`;
+- 25% specialist logit plus 75% dynamic-Poisson baseline logit;
+- calibration slope `1` and logit offset `-0.02`;
+- train on all eligible 2014-15 through 2024-25 rows, then open 2025-26 once as
+  untouched confirmation.
+
+This was the highest-margin configuration that improved accuracy, No recall,
+Brier, log loss, and AUC on both development folds. On 2023-24 it moved
+accuracy 54.71%→54.74%, No recall 33.14%→34.09%, Brier
+0.246158→0.246089, log loss 0.685448→0.685291, and AUC
+0.551590→0.553048. On 2024-25 it moved accuracy 54.12%→54.35%, No
+recall 33.48%→34.86%, Brier 0.246949→0.246448, log loss
+0.686972→0.685955, and AUC 0.547507→0.551079.
+
+The untouched 2025-26 season must again improve all five metrics, preserve
+Match Result, Over 2.5, and expected total within `1e-8` after coherent
+reconciliation, and not worsen team-score MAE. Failure rejects the candidate;
+success permits frozen transport to UCL but still does not authorize production
+until UCL robustness and current-board gates pass.
