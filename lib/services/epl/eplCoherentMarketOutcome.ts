@@ -30,7 +30,7 @@ type GateReason =
 
 export type EplCoherentMarketOutcome = {
   release: string;
-  source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool";
+  source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration";
   joint: ScoreDistribution;
   markets: ReturnType<typeof deriveSoccerMarketProbabilities>;
   expectedGoals: { home: number; away: number };
@@ -68,6 +68,18 @@ export type EplCoherentMarketOutcome = {
       agreement: number;
       dispersion: number;
       authority: number;
+    };
+    goalsReader?: {
+      totalConsensus: { over: number; under: number } | null;
+      bttsConsensus: { yes: number; no: number } | null;
+      crossMarketBttsYes: number | null;
+      totalEligibleBooks: string[];
+      bttsEligibleBooks: string[];
+      totalMovement: { books: number; delta: number | null; side: "over" | "under" | "stable" | null };
+      bttsMovement: { books: number; delta: number | null; side: "yes" | "no" | "stable" | null };
+      totalCorrectionApplied: boolean;
+      bttsCorrectionApplied: boolean;
+      modelEvidenceQuality: "thin" | "standard";
     };
   };
 };
@@ -228,6 +240,18 @@ export function deriveEplCoherentMarketOutcome(input: {
   openingOdds?: BdlEplOdds[];
   matchResultVectors?: EplForwardBookVector[];
   totalVectors: EplForwardBookVector[];
+  bttsVectors?: EplForwardBookVector[];
+  storedPriceHistory?: Array<{
+    providerId: number;
+    market: "match_result" | "double_chance" | "total" | "btts";
+    side: string;
+    line: number | null;
+    american: number;
+    sportsbook: string | null;
+    recordedAt: string;
+    isOpener: boolean;
+  }>;
+  modelEvidenceQuality?: "thin" | "standard";
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;
   evaluatedBttsCanonicalBook: string | null;

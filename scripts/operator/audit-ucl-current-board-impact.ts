@@ -4,7 +4,9 @@ import { SharpApiUclMarketProvider, type UclSharpFixtureMarket } from "../../lib
 import { buildEplDailyEdgePreview } from "../../lib/services/epl/buildEplDailyEdgePreview";
 import type { EplShadowSlateMatch } from "../../lib/services/epl/buildEplShadowSlate";
 import { buildUclSlate } from "../../lib/services/ucl/buildUclSlate";
+import { readUclStoredPriceHistory } from "../../lib/services/ucl/uclLineHistoryStore";
 import { deriveUclCoherentMarketOutcome } from "../../lib/services/ucl/uclCoherentMarketOutcome";
+import { applyUclStoredQuoteFallback } from "../../lib/services/ucl/uclStoredQuoteFallback";
 import { UCL_CALIBRATION_RELEASE } from "../../lib/services/ucl/uclModel";
 import { deriveUclMatchResultDecision, deriveUclPreviewGrade } from "../../lib/services/ucl/uclPreviewGrade";
 
@@ -13,6 +15,9 @@ type MarketRow = {
   pick: string | null;
   verdict: string;
   actionable: boolean;
+  probability: number | null;
+  price: number | null;
+  locked: boolean;
 };
 
 function forecastSelector(prediction: EplShadowSlateMatch["prediction"]) {
@@ -34,6 +39,9 @@ function rows(response: Awaited<ReturnType<typeof buildEplDailyEdgePreview>>): M
     pick: row.pick,
     verdict: row.verdict?.key ?? "unknown",
     actionable: row.verdict?.key === "best_angle" || row.verdict?.key === "lean",
+    probability: row.modelProb ?? null,
+    price: row.currentPriceAmerican ?? null,
+    locked: game.lockState === "locked",
   }] : []));
 }
 
@@ -48,6 +56,7 @@ async function main() {
   const key = process.env.SHARPAPI_KEY;
   if (!key) throw new Error("SHARPAPI_KEY is required");
   const slate = await buildUclSlate();
+  const storedPriceHistory = await readUclStoredPriceHistory(slate.matches.map((match) => match.id));
   const live = new SharpApiUclMarketProvider(new SharpApiClient(key));
   const captured = new Map<string, UclSharpFixtureMarket>();
   const fixtureKey = (fixture: { home: string; away: string; kickoff: string }) => `${fixture.away}@${fixture.home}:${fixture.kickoff}`;
@@ -65,13 +74,23 @@ async function main() {
       return value;
     },
   };
+  const common = {
+    storedPriceHistory,
+    skipForwardEvidence: true as const,
+    maxFixtureRecoveryLoads: 0,
+    competitionLabel: "Champions League",
+    fixtureLoadConcurrency: 1,
+    finalizeFixtureMarket: (fixture: UclSharpFixtureMarket, match: EplShadowSlateMatch) => applyUclStoredQuoteFallback({
+      fixture,
+      providerId: match.id,
+      history: storedPriceHistory,
+    }),
+  };
   const candidate = await buildEplDailyEdgePreview(slate, {
+    ...common,
     marketProvider: captureProvider,
     cacheNamespace: "ucl-board-impact-candidate",
     cacheIdentity: `${slate.boardDate}:${slate.modelRelease}`,
-    skipForwardEvidence: true,
-    maxFixtureRecoveryLoads: 0,
-    competitionLabel: "Champions League",
     authorities: {
       gradeRelease: UCL_CALIBRATION_RELEASE,
       deriveCoherentOutcome: deriveUclCoherentMarketOutcome,
@@ -82,18 +101,22 @@ async function main() {
     },
   });
   const incumbent = await buildEplDailyEdgePreview(slate, {
+    ...common,
     marketProvider: replayProvider,
     cacheNamespace: "ucl-board-impact-incumbent",
     cacheIdentity: `${slate.boardDate}:incumbent`,
-    skipForwardEvidence: true,
-    maxFixtureRecoveryLoads: 0,
-    competitionLabel: "Champions League",
     authorities: {
-      gradeRelease: "ucl_grade_policy_2026_09_03_r6_owner_approved_epl_v23_transfer",
-      deriveCoherentOutcome: (input) => deriveUclCoherentMarketOutcome({ ...input, openingOdds: [] }),
+      gradeRelease: UCL_CALIBRATION_RELEASE,
+      deriveCoherentOutcome: (input) => deriveUclCoherentMarketOutcome({
+        ...input,
+        totalVectors: [],
+        bttsVectors: [],
+        storedPriceHistory: [],
+        modelEvidenceQuality: "standard",
+      }),
       deriveMatchResultDecision: deriveUclMatchResultDecision,
       derivePreviewGrade: deriveUclPreviewGrade,
-      useCoherentMatchResultForecast: false,
+      useCoherentMatchResultForecast: true,
       selectMatchResultSide: forecastSelector,
     },
   });
@@ -106,20 +129,26 @@ async function main() {
     const right = afterById.get(identity);
     return right ? [{ identity, before: left, after: right }] : [];
   });
-  const promotions = paired.filter((row) => !row.before.actionable && row.after.actionable);
-  const demotions = paired.filter((row) => row.before.actionable && !row.after.actionable);
-  const sideChanges = paired.filter((row) => row.before.pick !== row.after.pick);
+  const unlocked = paired.filter((row) => !row.before.locked && !row.after.locked);
+  const locked = paired.filter((row) => row.before.locked || row.after.locked);
+  const promotions = unlocked.filter((row) => !row.before.actionable && row.after.actionable);
+  const demotions = unlocked.filter((row) => row.before.actionable && !row.after.actionable);
+  const sideChanges = unlocked.filter((row) => row.before.pick !== row.after.pick);
+  const probabilityChanges = unlocked.filter((row) => row.before.probability !== row.after.probability);
   console.log(JSON.stringify({
     mode: "read_only_zero_write_same_input",
     fixtures: slate.matches.length,
     markets: paired.length,
     releases: { candidateModel: slate.modelRelease, candidateCalibration: slate.calibrationRelease },
     capturedFixtures: captured.size,
-    before: { counts: counts(before), actionable: before.filter((row) => row.actionable).length },
-    after: { counts: counts(after), actionable: after.filter((row) => row.actionable).length },
+    providerCoverage: { fixtures: captured.size, expected: slate.matches.length },
+    lockedRowsExcludedFromDecisionImpact: locked.length,
+    before: { counts: counts(unlocked.map((row) => row.before)), actionable: unlocked.filter((row) => row.before.actionable).length },
+    after: { counts: counts(unlocked.map((row) => row.after)), actionable: unlocked.filter((row) => row.after.actionable).length },
     promotions,
     demotions,
     sideChanges,
+    probabilityChanges,
   }, null, 2));
 }
 

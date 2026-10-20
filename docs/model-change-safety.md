@@ -1,5 +1,43 @@
 # Model change safety protocol
 
+## Owner-approved provisional exception: UCL qualified goals arbitration r9
+
+On 2026-10-20 Daniel Mengel directed Oddsphere to correct the UCL model's
+near-universal BTTS Yes/Over behavior now, without forced board balance and
+without deploying or persisting a shadow model. This exception is limited to
+the future-unlocked r9/r5 release documented in
+`docs/model-audits/2026-10-20-ucl-qualified-goals-arbitration-r9.md`.
+
+The r8u independent PMF remains the starting opinion. The reader may correct a
+weak Total only with robust target-book-excluded multi-book Total consensus and
+no contrary same-book movement. BTTS additionally requires an independent
+target-excluded 1X2+Total score reconstruction to agree with direct BTTS
+consensus. A 60%+ independent BTTS side is eligible only when club evidence is
+thin, direct disagreement is at least 20 percentage points, and movement does
+not resist. The evaluated quote remains grade/economics evidence only. Every
+accepted target is reconciled through the existing mean-preserving joint PMF;
+no scalar market weight, quota, forced side, new stake, writer, timer, or
+provider call is authorized.
+
+The exact same-input unlocked rehearsal changes one of 64 market sides:
+Roma-Benfica BTTS Yes/Lean becomes No/Watchlist. Actionables move 12 to 11
+through zero promotions and one evidence-driven demotion. The symmetric grade
+path remains able to promote a corrected side at the existing 55% and positive
+exact-price-EV gates, but no current row qualifies; this exception accepts the
+single demotion without fabricating a compensating play. The 27-row immutable
+one-book settled benchmark improves Total and BTTS accuracy, minority-side
+recall, Brier, and log loss, but it is opened secondary evidence rather than a
+target-excluded multi-book holdout. The thin-evidence 20-point branch is
+therefore provisional and must be tracked only by exact r9 T-60 locks.
+
+Previously locked games are outside the change and retain exact stored reader
+precedence. Publication requires focused UCL tests, TypeScript, the full
+model-change suite, the same-input board report, latest-main integration
+safety, protected PR checks, and live proof of r9/r5, complete market coverage,
+one soccer writer/lease, and unchanged prior locks. Roll back only future
+unlocked generation if any evidence gate, movement veto, PMF coherence,
+coverage, actionability, writer ownership, or lock precedence regresses.
+
 ## Owner-directed correction: no production shadow models
 
 On 2026-10-20 Daniel Mengel restated the standing product rule that Oddsphere
