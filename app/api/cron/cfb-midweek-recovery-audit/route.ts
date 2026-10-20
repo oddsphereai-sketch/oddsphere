@@ -1,13 +1,14 @@
 import { cronHandler } from "@/lib/cron/runCron";
 import { validateCronAuth } from "@/lib/cron/auth";
 import { supabase } from "@/lib/db/supabase";
-import { CFB_MIDWEEK_RECOVERY_AUDIT_SNAPSHOT_KEY, runCfbMidweekRecoveryAudit } from "@/lib/services/football/cfbMidweekRecoveryAudit";
+import { CFB_MIDWEEK_RECOVERY_AUDIT_SNAPSHOT_KEY, runCfbFcsProviderDiagnostic, runCfbMidweekRecoveryAudit } from "@/lib/services/football/cfbMidweekRecoveryAudit";
 import { readLatestLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 
 export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
-  if (new URL(request.url).searchParams.get("read") === "1") {
+  const query = new URL(request.url).searchParams;
+  if (query.get("read") === "1") {
     const auth = validateCronAuth(request);
     if (!auth.ok) return auth.response;
     const snapshot = await readLatestLabResponseSnapshot<Record<string, unknown>>(CFB_MIDWEEK_RECOVERY_AUDIT_SNAPSHOT_KEY);
@@ -16,6 +17,15 @@ export async function GET(request: Request): Promise<Response> {
       : Response.json({ ok: false, error: "CFB midweek recovery audit result is unavailable." }, { status: 404 });
   }
   return cronHandler(request, "cfb_midweek_recovery_audit", async ({ runId }) => {
+    if (query.get("provider") === "1") {
+      const diagnostic = await runCfbFcsProviderDiagnostic({
+        client: supabase,
+        season: boundedInteger(process.env.CFB_FORWARD_SEASON ?? "2026", 2026, 2100, "CFB_FORWARD_SEASON"),
+        now: new Date().toISOString(),
+        theOddsApiKey: requiredEnv("THE_ODDS_API_KEY"),
+      });
+      return { records_updated: 0, api_calls_made: 1, details: diagnostic };
+    }
     const audit = await runCfbMidweekRecoveryAudit({
       client: supabase,
       season: boundedInteger(process.env.CFB_FORWARD_SEASON ?? "2026", 2026, 2100, "CFB_FORWARD_SEASON"),
