@@ -1,7 +1,7 @@
 export const NBA_MODEL_RELEASE =
-  "nba_professional_unified_2026_10_19_r8_complete_line_board" as const;
+  "nba_professional_unified_2026_10_20_r9_reader_structural_qualification" as const;
 export const NBA_MARKET_MARRIAGE_RELEASE =
-  "nba_market_marriage_2026_10_19_r8_complete_line_board" as const;
+  "nba_market_marriage_2026_10_20_r9_reader_structural_qualification" as const;
 export const NBA_GRADE_POLICY_RELEASE =
   "nba_grade_policy_2026_10_16_r5_market_specific_accuracy" as const;
 export const NBA_PREDICTION_RECORD_RELEASE = NBA_MODEL_RELEASE;
