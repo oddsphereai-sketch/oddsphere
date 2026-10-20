@@ -47,7 +47,7 @@ type FeatureRow = {
 type Logistic = { means: number[]; scales: number[]; beta: number[] };
 type Metrics = { n: number; actualYes: number; predictedYes: number; accuracy: number; noRecall: number; brier: number; logLoss: number; auc: number };
 
-const SEASONS = ["1415", "1516", "1617", "1718", "1819", "1920", "2021", "2122", "2223", "2324", "2425", "2526"] as const;
+const SEASONS = ["1415", "1516", "1617", "1718", "1819", "1920", "2021", "2122", "2223", "2324", "2425", "2526", "2627"] as const;
 const LEAGUES = ["E0", "D1", "I1", "SP1", "F1", "N1", "P1", "B1", "T1", "G1", "SC0"] as const;
 const HALF_LIFE_MS = 365 * 86_400_000;
 const SHRINK = 8;
@@ -431,6 +431,30 @@ function developResidualGate(rows: FeatureRow[]) {
     bestAvailable: ranked.slice(0, 12) }, null, 2));
 }
 
+function confirmResidualGate(rows: FeatureRow[]) {
+  const train = rows.filter((row) => row.match.season <= "2526");
+  const confirmation = rows.filter((row) => row.match.season === "2627");
+  const model = fit(train.map((row) => row.direct), train.map((row) => row.actualBtts), 1);
+  const baseline = confirmation.map((row) => row.baseBtts);
+  const candidate = confirmation.map((row) => {
+    const base = logit(row.baseBtts);
+    const residual = logit(predict(model, row.direct)) - base;
+    return Math.abs(residual) >= 0.05 ? sigmoid(base + 0.25 * residual - 0.02) : row.baseBtts;
+  });
+  const raw = metrics(confirmation, baseline);
+  const gated = metrics(confirmation, candidate);
+  const rawStructure = structure(confirmation, baseline);
+  const candidateStructure = structure(confirmation, candidate);
+  const accepted = confirmation.length >= 500 && gated.accuracy > raw.accuracy && gated.noRecall > raw.noRecall
+    && gated.brier < raw.brier && gated.logLoss < raw.logLoss && gated.auc > raw.auc
+    && candidateStructure.teamScoreMae <= rawStructure.teamScoreMae && candidateStructure.maxResultResidual <= 1e-8
+    && candidateStructure.maxTotalResidual <= 1e-8 && candidateStructure.maxBttsResidual <= 1e-8;
+  console.log(JSON.stringify({ mode: "untouched_2026_27_confirmation", coverage: { train: train.length, confirmation: confirmation.length },
+    config: { l2: 1, threshold: 0.05, blend: 0.25, offset: -0.02, featureCount: confirmation[0]?.direct.length ?? 0 },
+    confirmation: { baseline: raw, candidate: gated, rawStructure, candidateStructure }, model, accepted,
+    gateResult: accepted ? "residual_gate_passed_all_confirmation_gates" : "residual_gate_failed_confirmation_do_not_transport" }, null, 2));
+}
+
 async function main() {
   const matches = await fetchMatches();
   const rows = buildRows(matches);
@@ -448,6 +472,10 @@ async function main() {
   }
   if (process.argv.includes("--develop-residual-gate")) {
     developResidualGate(rows);
+    return;
+  }
+  if (process.argv.includes("--confirm-residual-gate")) {
+    confirmResidualGate(rows);
     return;
   }
   const train = rows.filter((row) => row.match.season <= "2223");

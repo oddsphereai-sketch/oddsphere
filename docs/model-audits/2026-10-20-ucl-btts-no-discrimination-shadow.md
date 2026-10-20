@@ -458,3 +458,55 @@ confirmation matches and strictly improve accuracy, No recall, Brier, log loss,
 and AUC; reconciliation must retain Match Result, Over 2.5, and expected total
 within `1e-8`, with no team-score-MAE regression. A passing result permits UCL
 transport testing, not direct production deployment.
+
+### Residual-authority confirmation result
+
+The untouched current-season confirmation contained 744 matches, satisfying
+the declared minimum. The candidate improved Brier from 0.244600 to 0.244212,
+log loss from 0.682212 to 0.681407, and AUC from 0.551093 to 0.554948. It
+failed the direction and structural gates: accuracy fell from 56.85% to 56.32%
+(four fewer correct results), No recall fell from 28.40% to 27.79%, and
+team-score MAE moved from 0.975450 to 0.975550. Reconciliation remained within
+`1e-8`.
+
+The gate is rejected for live authority and is not transported as a pick-
+changing UCL model. Across four chronological confirmations, the direct
+interaction specialist has repeatable probability-ranking value but unstable
+0.5-threshold direction value. The justified next use is a versioned UCL
+shadow reader that records its probability alongside—never over—the incumbent
+locked and live projection. Future UCL finals can then evaluate exact-
+competition promotion criteria without altering current picks or reconstructing
+locked rows.
+
+## Prospective UCL BTTS market shadow
+
+A credential-backed zero-write read of the October 20 UCL board found 18
+fixtures and 18 independent Yes forecasts. Target-book-excluded, complete
+multi-book BTTS vectors were available on 17 fixtures; two had a robust No
+consensus under every leave-one-out median: Benfica at Roma (47.13% median Yes)
+and AEK at Manchester City (46.40% median Yes). This proves that the current
+market feed contains the missing directional disagreement; it does not prove
+those two No sides will win.
+
+The prospective shadow release
+`ucl_btts_market_shadow_2026_10_20_r1_target_excluded_consensus` therefore:
+
+- accepts only complete named-book Yes/No vectors for the exact provider event,
+  captured strictly before both decision time and kickoff;
+- excludes the evaluated BTTS book plus Polymarket and Kalshi;
+- requires at least three eligible alternatives, leave-one-out directional
+  stability, and mean absolute dispersion no greater than six percentage
+  points;
+- logs a candidate probability with at most 30% authority, scaled by book
+  agreement and dispersion;
+- stores `productionAuthority=false` plus model, consensus, and candidate
+  probabilities/sides in future UCL snapshot provenance under lifecycle
+  `ucl_member_snapshot_lifecycle_2026_10_20_r8_btts_shadow_provenance`;
+- does not alter the coherent PMF, displayed BTTS probability or side, grade,
+  stake, score, writer, lock tuple, tracking record, or any existing locked
+  payload.
+
+Promotion requires settled prospective UCL evidence showing better accuracy,
+No recall, Brier, and log loss without degrading Match Result, Total, expected
+goals, board actionability, or immutable-lock behavior. Until that evidence
+exists, r8u/r4 remains the live champion and the shadow is measurement only.

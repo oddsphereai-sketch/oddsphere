@@ -9,6 +9,7 @@ import {
 } from "@/lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import { logPoolUclResult, reconcileUclMeanPreserving } from "./uclEloConsensus";
+import { deriveUclBttsMarketShadow } from "./uclBttsMarketShadow";
 
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
   "ucl_coherent_market_outcome_2026_10_14_r4_target_excluded_late_consensus" as const;
@@ -99,6 +100,7 @@ export function deriveUclCoherentMarketOutcome(input: {
   independentJoint?: ScoreDistribution;
   openingOdds?: BdlUclOdds[];
   matchResultVectors?: EplForwardBookVector[];
+  bttsVectors?: EplForwardBookVector[];
   totalVectors: EplForwardBookVector[];
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;
@@ -147,6 +149,14 @@ export function deriveUclCoherentMarketOutcome(input: {
     ? reconcileUclMeanPreserving(independentJoint, targetResult, independentMarkets.total.over, independentMarkets.btts.yes)
     : independentJoint;
   const markets = deriveSoccerMarketProbabilities({ joint, totalLine: 2.5 });
+  const bttsShadow = deriveUclBttsMarketShadow({
+    modelYes: independentMarkets.btts.yes,
+    vectors: input.bttsVectors ?? [],
+    evaluatedBook: input.evaluatedBttsCanonicalBook,
+    providerEventId: input.providerEventId,
+    decisionAt: input.decisionAt,
+    kickoff: input.kickoff,
+  });
   const summary = summarize(joint, markets);
   const excluded = [input.evaluatedMatchResultCanonicalBook, input.evaluatedTotalCanonicalBook, input.evaluatedBttsCanonicalBook]
     .filter((value): value is string => Boolean(value));
@@ -182,6 +192,7 @@ export function deriveUclCoherentMarketOutcome(input: {
         dispersion,
         authority,
       },
+      bttsShadow,
     },
   };
 }

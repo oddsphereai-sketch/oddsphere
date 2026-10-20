@@ -54,6 +54,7 @@ async function main() {
         ? { minimum: Math.min(...leaveOneOutMedians), maximum: Math.max(...leaveOneOutMedians) }
         : null,
       robustTargetExcludedNo,
+      runtimeShadow: game.soccerModelProvenance?.bttsShadow ?? null,
       vectors,
     };
   });
@@ -63,6 +64,8 @@ async function main() {
     modelYes: games.filter((game) => game.modelSide === "Yes").length,
     targetExcludedNo: games.filter((game) => game.targetExcludedSide === "No").length,
     robustTargetExcludedNo: games.filter((game) => game.robustTargetExcludedNo).length,
+    shadowAvailable: games.filter((game) => game.runtimeShadow?.available).length,
+    shadowCandidateNo: games.filter((game) => game.runtimeShadow?.candidateSide === "no").length,
     games,
   }, null, 2));
 }

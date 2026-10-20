@@ -962,6 +962,23 @@ export type DailyEdgeGameDto = {
     evaluatedQuoteRole: "economics_and_grade_only";
     targetExcludedBooks: string[];
     eligibleAlternativeBooks: string[];
+    bttsShadow?: {
+      release: string;
+      productionAuthority: false;
+      available: boolean;
+      modelYes: number;
+      consensusYes: number | null;
+      candidateYes: number;
+      modelSide: "yes" | "no";
+      consensusSide: "yes" | "no" | null;
+      candidateSide: "yes" | "no";
+      eligibleBooks: string[];
+      leaveOneOutYesRange: { minimum: number; maximum: number } | null;
+      agreement: number;
+      dispersion: number | null;
+      authority: number;
+      gateReasons: string[];
+    };
     regulationTime: true;
   } | null;
   recommendationDecision?: RecommendationDecision;
