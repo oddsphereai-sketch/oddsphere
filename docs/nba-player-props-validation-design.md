@@ -180,7 +180,7 @@ writer, or schedule changed during this work.
 | Distribution calibration | Not tested | Fit predictive distributions and test interval coverage/Brier/log loss |
 | Market-reading marriage | Opening-only candidates passed | Capture target-excluded T-180/T-60/T-15/lock snapshots and validate movement |
 | Grade/ROI calibration | Not tested | Run only after the final forecast qualifies; report board counts and prices |
-| Settlement/private tracking | Not built | Prove DNP, void, overtime, and stat-correction handling |
+| Settlement/private tracking | Private append-only contract built; runtime capture not yet enabled | Connect it only to the future sole authoritative observer, then prove DNP, void, overtime, and stat-correction handling |
 | Production launch | Blocked | All preceding gates must pass on one release-pure candidate |
 
 The next independent-model candidate must therefore be structural, not another
@@ -242,3 +242,20 @@ panel.
 7. Only after those gates pass: create the one authoritative writer/lease,
    release identifiers, lock tests, health checks, and an explicit deployment
    PR.
+
+## Private forward scorecard
+
+The research branch now contains an internal-only, append-only NBA player-prop
+tracking contract. It retains the first exact locked game/player/market/line/
+side/book tuple and rejects later attempts to reinterpret it. Each row stores
+the independent projection and probability separately from the final married
+projection and probability, plus the canonical line, real price, grade,
+movement classification, and complete release tuple. Official outcomes can be
+scored through the existing private player-prop diagnostics to report point
+error, hit rate, probability calibration, exact-price ROI, favorable-line
+cushions, and Market Reader corrections versus harms by market and release.
+
+This does not add a public route, Tracking-page row, member copy, scheduled
+job, provider request, grade, or prediction. Runtime capture remains disabled
+until one authoritative NBA props observer exists; attaching a second writer
+just to collect research would violate the single-writer safety boundary.
