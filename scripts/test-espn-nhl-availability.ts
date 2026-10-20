@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   }
   assert.match(
     readFileSync("app/api/cron/nhl-daily-refresh/route.ts", "utf8"),
-    /nhl_daily_refresh_schedule_2026_10_17_r11_current_roster_goalie_provenance/,
+    /nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry/,
   );
 
   console.log("ESPN NHL availability tests passed");

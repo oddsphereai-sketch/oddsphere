@@ -29,6 +29,7 @@ type SnapshotWriteResult = {
   snapshotKey: string;
   status?: number;
   games?: number;
+  slateState?: DailyEdgeResponse["slateState"];
   error?: string;
   expiresAt?: string;
   staleUntil?: string;
@@ -40,6 +41,8 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
   allowStale?: boolean;
   copyPreview?: boolean;
   source?: string;
+  /** Fail closed before persistence when a caller requires an exact slate state. */
+  requiredSlateState?: DailyEdgeResponse["slateState"];
 }): Promise<SnapshotWriteResult> {
   const allowStale = input.allowStale ?? false;
   const copyPreview = input.copyPreview ?? false;
@@ -69,6 +72,15 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
         error: body.error ?? `daily-edge snapshot build returned HTTP ${response.status}`,
       };
     }
+    if (input.requiredSlateState && body.slateState !== input.requiredSlateState) {
+      return {
+        ok: false,
+        snapshotKey,
+        games: body.games?.length ?? 0,
+        slateState: body.slateState,
+        error: `daily-edge snapshot state ${body.slateState ?? "unknown"} did not match required ${input.requiredSlateState}`,
+      };
+    }
 
     const write = await upsertLabResponseSnapshot({
       snapshotKey,
@@ -86,6 +98,7 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
       ok: true,
       snapshotKey,
       games: body.games?.length ?? 0,
+      slateState: body.slateState,
       expiresAt: write.expiresAt,
       staleUntil: write.staleUntil,
     };

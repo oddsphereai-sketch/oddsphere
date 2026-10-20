@@ -8,9 +8,10 @@ import {
   MLB_DAILY_REFRESH_SCHEDULE_RELEASE,
   previousReadyBoardDate,
 } from "../lib/dates/slateDate";
+import { shouldPublishOfficialEmptyMlbRollover } from "../lib/cron/mlbOfficialEmptyRollover";
 
 assert.equal(DAILY_EDGE_BOARD_ROLL_HOUR_ET, 3);
-assert.equal(MLB_DAILY_REFRESH_SCHEDULE_RELEASE, "mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover");
+assert.equal(MLB_DAILY_REFRESH_SCHEDULE_RELEASE, "mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover");
 
 // Summer: New York is UTC-4.
 assert.equal(currentSlateDate("nba", new Date("2026-07-15T06:59:00.000Z")), "2026-07-15");
@@ -32,6 +33,26 @@ assert.equal(isMlbRolloverSeedWindow(new Date("2026-07-15T07:05:00.000Z")), true
 assert.equal(isMlbRolloverSeedWindow(new Date("2026-07-15T08:05:00.000Z")), false);
 assert.equal(isMlbRolloverSeedWindow(new Date("2026-12-15T07:05:00.000Z")), false);
 assert.equal(isMlbRolloverSeedWindow(new Date("2026-12-15T08:05:00.000Z")), true);
+assert.equal(shouldPublishOfficialEmptyMlbRollover({
+  sport: "mlb",
+  rolloverSeed: true,
+  officialScheduledGameCount: 0,
+}), true, "verified MLB off-days may publish the exact-date empty rollover artifact");
+assert.equal(shouldPublishOfficialEmptyMlbRollover({
+  sport: "mlb",
+  rolloverSeed: true,
+  officialScheduledGameCount: null,
+}), false, "an unavailable official schedule cannot publish an empty artifact");
+assert.equal(shouldPublishOfficialEmptyMlbRollover({
+  sport: "mlb",
+  rolloverSeed: true,
+  officialScheduledGameCount: 1,
+}), false, "a non-empty official slate cannot be suppressed");
+assert.equal(shouldPublishOfficialEmptyMlbRollover({
+  sport: "nhl",
+  rolloverSeed: true,
+  officialScheduledGameCount: 0,
+}), false, "the MLB off-day exception cannot affect another sport");
 
 // DST transitions stay tied to the local 03:00 boundary rather than a fixed
 // UTC hour. The spring missing hour and fall repeated hour cannot advance the
@@ -67,6 +88,8 @@ assert.equal(previousReadyBoardDate({
 }), "2026-12-14");
 
 const routeSource = readFileSync(new URL("../app/api/lab/daily-edge/route.ts", import.meta.url), "utf8");
+const slateCycleSource = readFileSync(new URL("../app/api/cron/slate-cycle/route.ts", import.meta.url), "utf8");
+const snapshotWriterSource = readFileSync(new URL("../lib/services/labResponseSnapshotWriter.ts", import.meta.url), "utf8");
 assert.match(routeSource, /sport === "mlb" \|\| sport === "nba"[\s\S]*currentDailyEdgeBoardDate\(sport\)/,
   "MLB, NBA, NHL, and WNBA default to the 3 AM ET member board date");
 assert.match(routeSource, /sport === "mlb" \|\| sport === "nba" \|\| sport === "nhl" \|\| sport === "wnba"/,
@@ -77,5 +100,11 @@ assert.match(routeSource, /readLatestLabResponseSnapshot<DailyEdgeResponse>\(fal
   "rollover continuity reads the last published prior board without a provider call");
 assert.match(routeSource, /fallbackSnapshot\?\.payload\.memberPresentation\?\.releaseId ===[\s\S]*DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID/,
   "rollover continuity cannot restore a superseded member presentation release");
+assert.match(slateCycleSource, /shouldPublishOfficialEmptyMlbRollover/,
+  "the rollover distinguishes an authoritative MLB off-day from an unavailable lower-authority slate");
+assert.match(slateCycleSource, /requiredSlateState:\s*"no_data"/,
+  "an official empty rollover requires the response assembler to independently confirm the no-data state");
+assert.match(snapshotWriterSource, /body\.slateState !== input\.requiredSlateState/,
+  "snapshot persistence fails closed when the independently assembled slate state disagrees");
 
 console.log("PASS MLB/NBA/NHL/WNBA Daily Edge rollover is DST-safe, readiness-gated, and explicit-date preserving");

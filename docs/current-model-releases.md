@@ -4,9 +4,23 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-19
+Last reviewed: 2026-10-20
 
 ## Cross-sport confidence / execution contract
+
+- October 20 MLB/NHL rollover continuity advances the operational schedule
+  releases to
+  `mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover` and
+  `nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`. A
+  successful authoritative MLB Stats response with zero supported games can
+  now publish the exact-date empty member artifact even when the empty
+  lower-authority slate provider triggers its normal fail-closed gate; the
+  response assembler must independently confirm `no_data` before persistence.
+  NHL keeps its existing sole leased writer and adds only the bounded 06:48 and
+  07:18 ET morning retries before the existing 07:45 full refresh. Forecasts,
+  scores, probabilities, sides, grades, stakes, locks, tracking, provider
+  hierarchy, and writer topology are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-20-daily-edge-rollover-continuity.md`.
 
 - October 19 MLB market-scoped reader handoff advances member presentation to
   `daily_edge_member_presentation_2026_10_19_r26_mlb_market_scoped_record_overlay`.
@@ -123,7 +137,7 @@ Last reviewed: 2026-10-19
 
 ## Cross-sport market-freshness ownership (2026-10-06)
 
-- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_17_r11_current_roster_goalie_provenance`.
+- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`.
   The existing leased `nhl_daily_refresh` writer now has a lightweight intraday mode every 30
   minutes during the active window: it seeds the slate, refreshes exact lines, syncs provider-
   separated splits, recomputes unlocked predictions, and republishes the coherent Daily Edge
@@ -133,8 +147,11 @@ Last reviewed: 2026-10-19
   after the incoming date-keyed snapshot exists; partial cycles retain the
   prior complete board without member copy or labels. Evidence and rollback:
   `docs/model-audits/2026-10-07-nhl-readiness-gated-rollover-predeclaration.md`.
-  The October 17 r11 refresh retains that exact cadence and prediction behavior
-  while correcting future unlocked goalie-assumption provenance: the automated
+  The October 17 r11 goalie-provenance correction remains the model-input
+  contract beneath the October 20 r12 cadence release. R12 retains that exact
+  prediction behavior and adds only the bounded 06:48 and 07:18 ET rollover
+  retries. The r11 correction continues to govern future unlocked
+  goalie-assumption provenance: the automated
   feature is the highest-GP eligible goalie from a verified current roster, not
   a confirmed starter or an unfiltered postseason default. The member reader
   separately displays exact-date ESPN injury rows and published Expected or
@@ -2271,7 +2288,7 @@ changed; only deterministic settlement of existing locked rows is affected.
   stake, writer, lease, cadence, and lock releases are unchanged. Evidence and rollback:
   `docs/model-audits/2026-10-16-mlb-official-short-slate-single-starter-continuity.md`.
 
-- Operational cadence / rollover: `mlb_daily_refresh_schedule_2026_10_07_r1_readiness_gated_rollover`. The default member board changes ET dates at 03:00 and silently retains the prior complete date-keyed snapshot until the new date publishes successfully. The existing sole leased slate writer receives DST-safe 03:05 ET seed opportunities: Vercel invokes at 07:05Z and 08:05Z, while the route admits only the invocation whose New York hour is 03 and makes zero provider calls on the other. Current-season pitching and batting remain guarded by their existing successful once-per-slate-day markers; later full and intraday cycles reuse them. Partial core work, failed Market Intelligence, or a failed response-snapshot write cannot replace the prior complete board. Prediction formulas, market interpretation, sides, scores, probabilities, grades, stakes, locks, tracking, member copy, labels, and layout are unchanged. Evidence: `docs/model-audits/2026-10-07-mlb-readiness-gated-rollover-cadence.md`.
+- Operational cadence / rollover: `mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover`. The default member board changes ET dates at 03:00 and silently retains the prior complete date-keyed snapshot until the new date publishes successfully. The existing sole leased slate writer receives DST-safe 03:05 ET seed opportunities: Vercel invokes at 07:05Z and 08:05Z, while the route admits only the invocation whose New York hour is 03 and makes zero provider calls on the other. Current-season pitching and batting remain guarded by their existing successful once-per-slate-day markers; later full and intraday cycles reuse them. Partial core work, failed Market Intelligence, or a failed response-snapshot write cannot replace the prior complete board. A successful authoritative MLB Stats zero-game response is the narrow exception: the ordinary response assembler must independently confirm `slateState=no_data` before the exact-date empty board replaces the prior slate. Prediction formulas, market interpretation, sides, scores, probabilities, grades, stakes, locks, tracking, member copy, labels, and layout are unchanged. Prior cadence evidence: `docs/model-audits/2026-10-07-mlb-readiness-gated-rollover-cadence.md`. Current rollover evidence: `docs/model-audits/2026-10-20-daily-edge-rollover-continuity.md`.
 
 - October 8 first-inning opening continuity advances the shared member presentation release to
   `daily_edge_member_presentation_2026_10_08_r24_mlb_fi_opening_continuity`. The FI market model

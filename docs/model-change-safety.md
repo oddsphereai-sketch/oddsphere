@@ -1,5 +1,35 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: MLB/NHL exact-date rollover continuity
+
+On 2026-10-20 Daniel Mengel reported that NHL and MLB could retain the prior
+day's member slate after the 03:00 America/New_York board boundary. This
+exception is limited to the operational rollover repair documented in
+`docs/model-audits/2026-10-20-daily-edge-rollover-continuity.md`.
+
+For MLB, a successful authoritative MLB Stats schedule response with zero
+supported games may publish the exact-date `no_data` snapshot even when the
+lower-authority slate provider's generic minimum-count gate fails closed. The
+ordinary response assembler must independently reproduce `slateState=no_data`
+before persistence; an unavailable, malformed, or non-empty official response
+still fails closed. For NHL, the existing leased intraday writer receives only
+two additional bounded morning retry opportunities, at 06:48 and 07:18 ET,
+before the existing 07:45 ET full refresh. Provider hierarchy, request shapes,
+model equations, probabilities, sides, scores, grades, stakes, locks, tracking,
+and writer ownership remain unchanged.
+
+The schedule releases advance to
+`mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover` and
+`nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`. Publication
+requires exact-state and cadence regressions, the focused NHL/MLB suites,
+TypeScript, full model-change verification, latest-main integration safety,
+protected pull-request checks, and post-deploy proof that NHL serves the
+current 11-game board while MLB serves the verified current-date zero-game
+board. Existing locked payloads retain exact precedence. Roll back on any
+non-empty MLB slate being suppressed, unverified empty publication, duplicate
+writer, lease bypass, mixed release identity, prediction drift, or lock
+mutation.
+
 ## Owner-directed correctness exception: NBA complete line-board pagination r8
 
 On 2026-10-19 Daniel Mengel directed Oddsphere to recover visibly available NBA sportsbook prices
