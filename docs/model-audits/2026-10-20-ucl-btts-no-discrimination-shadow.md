@@ -318,3 +318,42 @@ seal it on a domestic chronological holdout, and transport the frozen scorer to
 UCL without fitting or selecting on UCL outcomes. Until that external model
 exists, another UCL-only coefficient or threshold search would be repeated
 testing rather than evidence of improvement.
+
+## Cross-league gated specialist declaration
+
+Before calculating any candidate metric on the 2024-25 domestic season, the
+replacement development path is frozen:
+
+- Source: Football-Data full-time goals and shots-on-target from `E0`, `D1`,
+  `I1`, `SP1`, `F1`, `N1`, `P1`, `B1`, `T1`, `G1`, and `SC0`. Rows lacking
+  the declared columns are excluded rather than zero-filled.
+- Chronology: 2014-15 through 2022-23 train the team-scoring specialist;
+  2023-24 trains the gate from genuinely out-of-training specialist outputs;
+  2024-25 is opened once as untouched confirmation. No random split is used.
+- Baseline: a league/date-local, venue-aware dynamic Poisson score model with
+  a 365-day half-life and eight-match shrinkage. It supplies the starting BTTS
+  probability and score distribution.
+- Specialist: one ridge-25 logistic scoring-occurrence model shared by home
+  and away sides. Its inputs are baseline scoring logit, prior scoring and
+  concession occurrence, league-normalized goals and shots-on-target for the
+  attack and opposing defence, effective prior-match weight, and venue.
+- Gate: one ridge-25 logistic model trained only on 2023-24. It receives the
+  baseline BTTS logit, the specialist-minus-baseline logit residual, the signed
+  squared residual, the smaller specialist team-scoring probability, baseline
+  scoring-intensity mismatch, and the weaker team's evidence weight. This
+  allows conditional authority while shrinking ordinary games toward the
+  baseline; there is no hand-authored No quota or threshold.
+- The frozen 2024-25 confirmation must simultaneously improve BTTS accuracy,
+  No recall, Brier, log loss, and AUC. Reconciliation must preserve Match
+  Result, Over 2.5, and expected total within `1e-8`, and team-score MAE may
+  not worsen.
+- A passing domestic result is necessary but not sufficient. The scorer and
+  gate are then frozen and transported to UCL without UCL coefficient fitting.
+  They must improve pooled opened UCL robustness metrics, retain current Match
+  Result/Total exactly, and pass a complete current-board impact rehearsal
+  before a versioned future-unlocked release can be proposed.
+
+This structure is the explicit “best of both worlds” test: the incumbent-style
+score distribution remains the default expert, while a separately validated
+scoreless-risk specialist receives authority only through an out-of-training
+gate.
