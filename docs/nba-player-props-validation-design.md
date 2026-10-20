@@ -18,6 +18,10 @@ opening observations and is identified by immutable-input SHA-256
 `b8e20c78dabed1f461e8eb9e26c85c61316ba801ac94cf776969c45544d93da8`.
 The larger sample invalidated several apparently strong results from the sparse
 pilot; those earlier qualifications are withdrawn rather than carried forward.
+The consolidated grade report is release
+`nba_player_props_model_tournament_2026_10_20_r9_best_angle_noninferiority`,
+with SHA-256
+`5f6eb5d4ce88d90a2df0daaf69f368957a4c9947f30a6a4f29bd9e54ba550a3b`.
 
 The current replay uses five non-overlapping chronological stages:
 
@@ -33,25 +37,40 @@ selection cannot see confirmation outcomes. This replaces the earlier design
 that tried to fit reliability and policy on halves of one small selection
 window.
 
-Two future-facing Lean surfaces survived both the policy window and untouched
-confirmation:
+Three future-facing Lean surfaces survived both the policy window and untouched
+confirmation. The Assists surface is limited to established-role players with
+at least 10 prior games, a 10-game minutes standard deviation no greater than
+five, and no team back-to-back; that eligibility rule was selected before the
+untouched confirmation window and does not prefer Overs or Unders:
 
 | Market | Policy window | Untouched confirmation | Board behavior |
 |---|---:|---:|---|
-| Points | 42-27; 60.9%; +10.2% ROI (69) | 54-36; 60.0%; +8.4% ROI (90) | 19.9% actionable; Lean only |
-| Points + rebounds + assists | 17-11; 60.7%; +12.8% ROI (28) | 16-7; 69.6%; +28.5% ROI (23) | 7.5% actionable; Lean surface qualified |
+| Points | 42-27; 60.9%; +10.2% ROI (69) | 54-36; 60.0%; +8.4% ROI (90) | 19.9% actionable; relative Best tier qualified |
+| Points + rebounds + assists | 17-11; 60.7%; +12.8% ROI (28) | 16-7; 69.6%; +28.5% ROI (23) | 7.5% actionable; relative Best tier qualified |
+| Assists, stable role/non-back-to-back | 16-10; 61.5%; +12.9% ROI (26) | 17-12; 58.6%; +4.8% ROI (29) | 10.7% actionable; Lean only |
 
-The PRA policy emitted only three policy-window Best Angles and one confirmation
-Best Angle. That is not enough evidence to independently qualify the Best Angle
-tier, even though the combined actionable surface passed. Points intentionally
-emits no Best Angles. An absent unsupported tier is neutral; calibration must
-not broaden or distort the Lean population merely to manufacture one.
+Best Angle is a relative ranking within a market's already-qualified actionable
+population, not a separate universal bet standard. A different outcome-blind
+ranking signal may select the top slice after the actionable rule is frozen.
+The policy window requires that slice to outperform the remaining Leans. The
+untouched window requires at least five Best Angles, positive ROI, and a hit
+rate no more than five percentage points below the remaining Leans. This
+non-inferiority allowance prevents one result in a small top tier from erasing
+a valid ranking while still rejecting materially bad separation.
 
-Rebounds, Assists, Threes, Points + Rebounds, Points + Assists, and Rebounds +
-Assists did not survive untouched confirmation. They remain private research
+On untouched games, Points Best Angles went 20-11 (64.5%, +16.8% ROI) while
+the remaining Points Leans went 34-25 (57.6%, +3.9% ROI). PRA Best Angles went
+9-4 (69.2%, +25.6% ROI) while its remaining Leans went 7-3 (70.0%, +32.2%
+ROI). Assists did not qualify a Best tier: its proposed top slice went 2-5,
+while the remaining Assists Leans went 15-7. Calibration therefore preserves
+Assists Leans without manufacturing a misleading Best label.
+
+Rebounds, Threes, Points + Rebounds, Points + Assists, and Rebounds + Assists
+did not survive untouched confirmation. They remain private research
 markets. The failure is not hidden by flattening the future member board: their
 structural projections and grade signals continue separately, while the two
-passing surfaces establish a real release boundary.
+ungated surfaces and the role-qualified Assists surface establish a real
+release boundary.
 
 The local forward observer also proved current provider coverage on October 20:
 three games, nine sportsbooks, every foundation market, 2,588 complete two-way
@@ -219,7 +238,7 @@ reported afterward.
 At that sparse stage, these four candidates qualified only for the next
 market-path and grade experiment. The later 360-game exact-price replay above
 supersedes that conclusion: none of the four earned a current grade release,
-and only Points and PRA produced stable Lean surfaces. No route, member row,
+and only Points, PRA, and role-qualified Assists produced stable Lean surfaces. No route, member row,
 prediction, grade, stake, lock, writer, or schedule changed during this work.
 
 ### Current pathway status
@@ -228,11 +247,11 @@ prediction, grade, stake, lock, writer, or schedule changed during this work.
 |---|---|---|
 | Immutable historical dataset | Passed for the 360-game exact-price replay | Add an independent season and preserve the immutable SHA for every run |
 | Reproducible offline replay | Passed | Retain cache SHA and release identity for every future run |
-| Independent model tournament | Mixed; separate candidates selected by market | Continue structural work for the six failed grade markets and add an independent season/window |
-| Projection stability | Sufficient to forward-test Points and PRA grades; not a release pass for the other six markets | Retain market-specific candidates; do not restore sparse-sample qualifications |
+| Independent model tournament | Mixed; separate candidates selected by market | Continue structural work for the five failed grade markets and add an independent season/window |
+| Projection stability | Sufficient to forward-test Points, PRA, and role-qualified Assists grades; not a release pass for the other five markets | Retain market-specific candidates; do not restore sparse-sample qualifications |
 | Distribution calibration | Not tested | Fit predictive distributions and test interval coverage/Brier/log loss |
 | Market-reading marriage | Opening-only candidates passed | Capture target-excluded T-180/T-60/T-15/lock snapshots and validate movement |
-| Grade/ROI calibration | Passed for Points and PRA Lean surfaces; failed for the other six markets | Forward-test the frozen passing surfaces; continue market-specific structural work for failures; do not infer a Best Angle tier from insufficient samples |
+| Grade/ROI calibration | Passed for Points and PRA relative Best/Lean surfaces and role-qualified Assists Leans; failed for the other five markets | Forward-test the frozen passing surfaces; continue market-specific structural work for failures; do not manufacture unsupported Best tiers |
 | Settlement/private tracking | Private append-only contract built; runtime capture not yet enabled | Connect it only to the future sole authoritative observer, then prove DNP, void, overtime, and stat-correction handling |
 | Production launch | Not requested and not performed | Keep all work private until the forward release is explicitly approved |
 

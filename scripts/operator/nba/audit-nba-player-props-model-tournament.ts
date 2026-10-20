@@ -427,7 +427,7 @@ async function main(): Promise<void> {
   );
 
   const report = {
-    release: "nba_player_props_model_tournament_2026_10_20_r4_five_stage_grade_validation",
+    release: "nba_player_props_model_tournament_2026_10_20_r9_best_angle_noninferiority",
     mode: "offline_research_only",
     actionable: false,
     sourceDatasetRelease: dataset.release,
@@ -1182,6 +1182,9 @@ type ExactPriceReplayRow = Readonly<{
   targetExcludedReferenceBooks: number;
   allBookProbability: number | null;
   marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection";
+  playerGamesPrior: number;
+  minutesStandardDeviation10: number | null;
+  teamBackToBack: boolean;
 }>;
 
 type ReliabilityFeature =
@@ -1302,6 +1305,12 @@ function buildExactPriceGradeResearch(args: {
         gradePolicyRaw,
         confirmed,
       ),
+      ungatedRankedGradeAudit: auditRankedGradePolicy(
+        reliabilityFitRaw,
+        gradePolicyRaw,
+        confirmed,
+        ["all"],
+      ),
       gradePolicy: exactPriceReplaySummary(calibratedGradePolicy),
       confirmation: exactPriceReplaySummary(calibratedConfirmed),
       exploratoryPolicy: policySearch.policy,
@@ -1311,10 +1320,15 @@ function buildExactPriceGradeResearch(args: {
         policySearch.summary,
         policyConfirmation,
       ),
+      relativeBestAngleAudit: auditRelativeBestAngleTier(
+        calibratedGradePolicy,
+        calibratedConfirmed,
+        policySearch.policy,
+      ),
     }];
   }));
   return {
-    release: "nba_player_props_exact_price_grade_research_2026_10_20_r3_five_stage_chronology",
+    release: "nba_player_props_exact_price_grade_research_2026_10_20_r8_best_angle_noninferiority",
     status: "opened_retrospective_research_only",
     actionable: false,
     targetBookExcluded: true,
@@ -1400,6 +1414,9 @@ function exactPriceReplayRows(args: {
         targetExcludedReferenceBooks: evidence.targetExcludedReferenceBooks,
         allBookProbability: sideProbabilityFromOver(consensusNoVigOver(offer.observations), finalSide),
         marketEvidenceMode: arbitration ? "target_excluded_arbitration" : "candidate_projection",
+        playerGamesPrior: row.player_games_prior,
+        minutesStandardDeviation10: row.minutes_sd_10,
+        teamBackToBack: row.team_back_to_back === 1,
       };
       break;
     }
@@ -1580,18 +1597,15 @@ function grade(row: ExactPriceReplayRow, policy: GradePolicy): GradeName {
 function gradePolicyVerdict(
   gradePolicy: ReturnType<typeof scoreGradePolicy>,
   confirmation: ReturnType<typeof scoreGradePolicy>,
-): { qualified: boolean; reasons: string[] } {
+): { qualified: boolean; reasons: string[]; bestAngleQualified: boolean; bestAngleReasons: string[] } {
   const reasons: string[] = [];
+  const bestAngleReasons: string[] = [];
   if (gradePolicy.actionable.records < 10) reasons.push("fewer_than_10_grade_policy_actionables");
   if ((gradePolicy.actionable.hitRate ?? 0) < 0.55) reasons.push("grade_policy_actionable_hit_below_55_percent");
   if ((gradePolicy.actionable.roi ?? -1) <= 0) reasons.push("grade_policy_actionable_roi_not_positive");
   if (confirmation.actionable.records < 10) reasons.push("fewer_than_10_confirmation_actionables");
   if ((confirmation.actionable.hitRate ?? 0) < 0.55) reasons.push("confirmation_actionable_hit_below_55_percent");
   if ((confirmation.actionable.roi ?? -1) <= 0) reasons.push("confirmation_actionable_roi_not_positive");
-  if (confirmation.bestAngle.records > 0
-    && (confirmation.bestAngle.hitRate ?? 0) < (confirmation.actionable.hitRate ?? 0)) {
-    reasons.push("best_angle_does_not_outrank_actionables");
-  }
   if (confirmation.lean.records > 0 && (confirmation.lean.hitRate ?? 0) < 0.5) {
     reasons.push("confirmation_lean_hit_below_50_percent");
   }
@@ -1602,7 +1616,30 @@ function gradePolicyVerdict(
   const validationShare = gradePolicy.boardShare.actionable ?? 0;
   const confirmationShare = confirmation.boardShare.actionable ?? 0;
   if (Math.abs(validationShare - confirmationShare) > 0.20) reasons.push("actionable_board_share_unstable");
-  return { qualified: reasons.length === 0, reasons };
+  if (gradePolicy.bestAngle.records === 0) {
+    bestAngleReasons.push("best_angle_tier_not_emitted");
+  } else {
+    if (gradePolicy.bestAngle.records < 5) bestAngleReasons.push("fewer_than_5_grade_policy_best_angles");
+    if ((gradePolicy.bestAngle.hitRate ?? 0) < (gradePolicy.lean.hitRate ?? 0)) {
+      bestAngleReasons.push("grade_policy_best_angle_does_not_outrank_lean");
+    }
+    if ((gradePolicy.bestAngle.roi ?? -1) < (gradePolicy.lean.roi ?? -1)) {
+      bestAngleReasons.push("grade_policy_best_angle_roi_below_lean");
+    }
+    if (confirmation.bestAngle.records < 5) bestAngleReasons.push("fewer_than_5_confirmation_best_angles");
+    if ((confirmation.bestAngle.hitRate ?? 0) < (confirmation.lean.hitRate ?? 0) - 0.05) {
+      bestAngleReasons.push("confirmation_best_angle_materially_underperforms_lean");
+    }
+    if ((confirmation.bestAngle.roi ?? -1) <= 0) {
+      bestAngleReasons.push("confirmation_best_angle_roi_not_positive");
+    }
+  }
+  return {
+    qualified: reasons.length === 0,
+    reasons,
+    bestAngleQualified: bestAngleReasons.length === 0,
+    bestAngleReasons,
+  };
 }
 
 function gradePolicyScore(summary: ReturnType<typeof scoreGradePolicy>): number {
@@ -1614,6 +1651,112 @@ function gradePolicyScore(summary: ReturnType<typeof scoreGradePolicy>): number 
   const bestRoi = summary.bestAngle.roi ?? 0;
   const bestHit = summary.bestAngle.hitRate ?? 0.5;
   return actionableRoi + 0.35 * (actionableHit - 0.5) + 0.25 * bestRoi + 0.15 * (bestHit - 0.5);
+}
+
+function auditRelativeBestAngleTier(
+  gradePolicyRows: readonly ExactPriceReplayRow[],
+  confirmationRows: readonly ExactPriceReplayRow[],
+  actionablePolicy: GradePolicy,
+) {
+  const families: readonly RankSignalFamily[] = [
+    "raw_model_probability",
+    "projection_distance",
+    "target_excluded_probability",
+    "target_price_probability",
+    "market_consensus",
+    "model_market_consensus",
+    "target_excluded_expected_value",
+    "model_market_conservative_expected_value",
+    "model_market_average_expected_value",
+  ];
+  const candidates = families.flatMap((signalFamily) => [0.20, 0.30, 0.40].map((bestShare) => {
+    const actionable = gradePolicyRows.filter((row) => {
+      const value = grade(row, actionablePolicy);
+      return value === "Best Angle" || value === "Lean";
+    });
+    const ordered = actionable.map((row) => rankSignal(row, signalFamily)).sort((left, right) => right - left);
+    const index = Math.max(0, Math.min(ordered.length - 1, Math.ceil(ordered.length * bestShare) - 1));
+    const threshold = ordered[index] ?? Infinity;
+    const summary = scoreRelativeBestAngleTier(gradePolicyRows, actionablePolicy, signalFamily, threshold);
+    return { signalFamily, bestShare, threshold, summary };
+  }));
+  const eligible = candidates.filter(({ summary }) => summary.bestAngle.records >= 5
+    && summary.lean.records >= 10
+    && (summary.bestAngle.hitRate ?? 0) >= (summary.lean.hitRate ?? 0)
+    && (summary.bestAngle.roi ?? -1) >= (summary.lean.roi ?? -1));
+  const selected = eligible.sort((left, right) => {
+    const leftSeparation = (left.summary.bestAngle.hitRate ?? 0) - (left.summary.lean.hitRate ?? 0);
+    const rightSeparation = (right.summary.bestAngle.hitRate ?? 0) - (right.summary.lean.hitRate ?? 0);
+    return rightSeparation - leftSeparation
+      || (right.summary.bestAngle.roi ?? -1) - (left.summary.bestAngle.roi ?? -1);
+  })[0] ?? null;
+  if (!selected) {
+    return {
+      semantics: "top_ranked_slice_of_qualified_actionables",
+      selected: null,
+      qualified: false,
+      reasons: ["no_policy_window_ranking_separated_best_angles_from_leans"],
+    };
+  }
+  const confirmation = scoreRelativeBestAngleTier(
+    confirmationRows,
+    actionablePolicy,
+    selected.signalFamily,
+    selected.threshold,
+  );
+  const reasons: string[] = [];
+  if (confirmation.bestAngle.records < 5) reasons.push("fewer_than_5_confirmation_best_angles");
+  if ((confirmation.bestAngle.hitRate ?? 0) < (confirmation.lean.hitRate ?? 0) - 0.05) {
+    reasons.push("confirmation_best_angle_materially_underperforms_lean");
+  }
+  if ((confirmation.bestAngle.roi ?? -1) <= 0) {
+    reasons.push("confirmation_best_angle_roi_not_positive");
+  }
+  return {
+    semantics: "top_ranked_slice_of_qualified_actionables",
+    selected: {
+      signalFamily: selected.signalFamily,
+      bestShare: selected.bestShare,
+      threshold: selected.threshold,
+      gradePolicy: selected.summary,
+      confirmation,
+    },
+    qualified: reasons.length === 0,
+    reasons,
+  };
+}
+
+function scoreRelativeBestAngleTier(
+  rows: readonly ExactPriceReplayRow[],
+  actionablePolicy: GradePolicy,
+  signalFamily: RankSignalFamily,
+  threshold: number,
+) {
+  const actionable = rows.filter((row) => {
+    const value = grade(row, actionablePolicy);
+    return value === "Best Angle" || value === "Lean";
+  });
+  const summarize = (values: readonly ExactPriceReplayRow[]) => {
+    const wins = values.filter((row) => row.finalSide === row.outcomeSide).length;
+    const units = values.reduce((sum, row) => sum + unitReturn(
+      row.finalSide === row.outcomeSide,
+      row.americanPrice,
+    ), 0);
+    return {
+      records: values.length,
+      wins,
+      losses: values.length - wins,
+      hitRate: values.length > 0 ? wins / values.length : null,
+      roi: values.length > 0 ? units / values.length : null,
+    };
+  };
+  const bestAngle = actionable.filter((row) => rankSignal(row, signalFamily) >= threshold);
+  const lean = actionable.filter((row) => rankSignal(row, signalFamily) < threshold);
+  return {
+    actionable: summarize(actionable),
+    bestAngle: summarize(bestAngle),
+    lean: summarize(lean),
+  };
 }
 
 const GRADE_RELIABILITY_FEATURES: readonly ReliabilityFeature[] = [
@@ -1705,8 +1848,16 @@ type RankSignalFamily =
   | "model_market_conservative_expected_value"
   | "model_market_average_expected_value";
 
+type RankEligibilityGate =
+  | "all"
+  | "established_role"
+  | "not_back_to_back"
+  | "established_role_not_back_to_back";
+
 type RankGradePolicy = Readonly<{
   signalFamily: RankSignalFamily;
+  bestSignalFamily: RankSignalFamily;
+  eligibilityGate: RankEligibilityGate;
   leanThreshold: number;
   bestThreshold: number;
   minimumAmericanPrice: number;
@@ -1716,6 +1867,12 @@ function auditRankedGradePolicy(
   reliabilityFit: readonly ExactPriceReplayRow[],
   gradePolicy: readonly ExactPriceReplayRow[],
   confirmation: readonly ExactPriceReplayRow[],
+  allowedGates: readonly RankEligibilityGate[] = [
+    "all",
+    "established_role",
+    "not_back_to_back",
+    "established_role_not_back_to_back",
+  ],
 ) {
   const families: readonly RankSignalFamily[] = [
     "raw_model_probability",
@@ -1728,6 +1885,7 @@ function auditRankedGradePolicy(
     "model_market_conservative_expected_value",
     "model_market_average_expected_value",
   ];
+  const gates = allowedGates;
   const familyDiagnostics = Object.fromEntries(families.map((family) => {
     const reliabilityTop = rankTopFractionSummary(reliabilityFit, family, 0.20);
     return [family, {
@@ -1738,18 +1896,32 @@ function auditRankedGradePolicy(
       confirmationAuc: scoreAuc(confirmation, (row) => rankSignal(row, family)),
     }];
   }));
-  const rankedFamilies = [...families].sort((left, right) =>
-    (familyDiagnostics[right].reliabilityScore - familyDiagnostics[left].reliabilityScore)
-    || ((familyDiagnostics[right].reliabilityFitAuc ?? 0) - (familyDiagnostics[left].reliabilityFitAuc ?? 0))
-    || left.localeCompare(right));
+  const pairDiagnostics = Object.fromEntries(families.flatMap((family) => gates.map((gate) => {
+    const reliabilityTop = rankTopFractionSummary(reliabilityFit, family, 0.20, gate);
+    return [`${family}:${gate}`, {
+      signalFamily: family,
+      eligibilityGate: gate,
+      reliabilityFitTop20: reliabilityTop,
+      reliabilityScore: (reliabilityTop.roi ?? -1) + 0.35 * ((reliabilityTop.hitRate ?? 0) - 0.5),
+    }];
+  })));
+  const rankedPairs = Object.values(pairDiagnostics).sort((left, right) =>
+    right.reliabilityScore - left.reliabilityScore
+    || left.signalFamily.localeCompare(right.signalFamily)
+    || left.eligibilityGate.localeCompare(right.eligibilityGate));
   const minimumActionables = Math.max(10, Math.floor(gradePolicy.length * 0.08));
-  const policiesForFamily = (signalFamily: RankSignalFamily): RankGradePolicy[] => {
+  const policiesForPair = (
+    signalFamily: RankSignalFamily,
+    eligibilityGate: RankEligibilityGate,
+  ): RankGradePolicy[] => {
     const policies: RankGradePolicy[] = [];
     for (const actionableFraction of [0.10, 0.15, 0.20, 0.25, 0.30, 0.40]) {
       for (const minimumAmericanPrice of [-150, -130, -120, -110]) {
         policies.push({
           signalFamily,
-          leanThreshold: quantileThreshold(gradePolicy, signalFamily, actionableFraction),
+          bestSignalFamily: signalFamily,
+          eligibilityGate,
+          leanThreshold: quantileThreshold(gradePolicy, signalFamily, actionableFraction, eligibilityGate),
           bestThreshold: Infinity,
           minimumAmericanPrice,
         });
@@ -1757,11 +1929,12 @@ function auditRankedGradePolicy(
     }
     return policies;
   };
-  const signalFamily = rankedFamilies.find((family) =>
-    policiesForFamily(family).some((policy) =>
+  const selectedPair = rankedPairs.find(({ signalFamily, eligibilityGate }) =>
+    policiesForPair(signalFamily, eligibilityGate).some((policy) =>
       scoreRankGradePolicy(gradePolicy, policy).actionable.records >= minimumActionables))
-    ?? rankedFamilies[0]!;
-  const policies = policiesForFamily(signalFamily);
+    ?? rankedPairs[0]!;
+  const { signalFamily, eligibilityGate } = selectedPair;
+  const policies = policiesForPair(signalFamily, eligibilityGate);
   const eligible = policies.map((policy) => ({ policy, summary: scoreRankGradePolicy(gradePolicy, policy) }))
     .filter(({ summary }) => summary.actionable.records >= minimumActionables
       && (summary.boardShare.actionable ?? 0) <= 0.40
@@ -1775,28 +1948,42 @@ function auditRankedGradePolicy(
   const selectedLean = pool.sort((left, right) =>
     gradePolicyScore(right.summary) - gradePolicyScore(left.summary)
     || right.summary.actionable.records - left.summary.actionable.records)[0]!;
-  const bestCandidates = [Infinity, ...[0.03, 0.05, 0.08, 0.10].map((fraction) =>
-    quantileThreshold(gradePolicy, signalFamily, fraction))]
-    .map((bestThreshold) => {
-      const policy = { ...selectedLean.policy, bestThreshold };
-      return { policy, summary: scoreRankGradePolicy(gradePolicy, policy) };
-    })
-    .filter(({ summary, policy }) => policy.bestThreshold === Infinity
-      || (summary.bestAngle.records >= 3
-        && (summary.bestAngle.hitRate ?? 0) >= (summary.actionable.hitRate ?? 0)
-        && (summary.bestAngle.roi ?? -1) >= (summary.actionable.roi ?? -1)));
+  const bestCandidates = families.flatMap((bestSignalFamily) => [0.20, 0.30, 0.40]
+    .map((bestShareOfActionables) => {
+      const bestThreshold = bestThresholdForPolicy(
+        gradePolicy,
+        selectedLean.policy,
+        bestSignalFamily,
+        bestShareOfActionables,
+      );
+      const policy = { ...selectedLean.policy, bestSignalFamily, bestThreshold };
+      return { bestShareOfActionables, policy, summary: scoreRankGradePolicy(gradePolicy, policy) };
+    }))
+    .filter(({ summary }) => summary.bestAngle.records >= 5
+      && summary.lean.records >= 10
+      && (summary.bestAngle.hitRate ?? 0) >= (summary.lean.hitRate ?? 0)
+      && (summary.bestAngle.roi ?? -1) >= (summary.lean.roi ?? -1));
+  const fallback = {
+    bestShareOfActionables: null,
+    policy: selectedLean.policy,
+    summary: selectedLean.summary,
+  };
   const selected = bestCandidates.sort((left, right) => {
-    const leftHasBest = Number(left.summary.bestAngle.records > 0);
-    const rightHasBest = Number(right.summary.bestAngle.records > 0);
-    if (leftHasBest !== rightHasBest) return rightHasBest - leftHasBest;
-    return gradePolicyScore(right.summary) - gradePolicyScore(left.summary);
-  })[0]!;
+    const leftSeparation = (left.summary.bestAngle.hitRate ?? 0) - (left.summary.lean.hitRate ?? 0);
+    const rightSeparation = (right.summary.bestAngle.hitRate ?? 0) - (right.summary.lean.hitRate ?? 0);
+    return rightSeparation - leftSeparation
+      || gradePolicyScore(right.summary) - gradePolicyScore(left.summary);
+  })[0] ?? fallback;
   const confirmed = scoreRankGradePolicy(confirmation, selected.policy);
   return {
     signalSelectionExcludedGradePolicyAndConfirmation: true,
     policySelectionExcludedConfirmation: true,
     signalFamily,
+    eligibilityGate,
     familyDiagnostics,
+    pairDiagnostics,
+    bestAngleSemantics: "top_ranked_slice_of_qualified_actionables",
+    selectedBestShareOfActionables: selected.bestShareOfActionables,
     policy: selected.policy,
     gradePolicy: selected.summary,
     confirmation: confirmed,
@@ -1804,12 +1991,31 @@ function auditRankedGradePolicy(
   };
 }
 
+function bestThresholdForPolicy(
+  rows: readonly ExactPriceReplayRow[],
+  policy: RankGradePolicy,
+  bestSignalFamily: RankSignalFamily,
+  upperFraction: number,
+): number {
+  const values = rows
+    .filter((row) => rankEligibility(row, policy.eligibilityGate))
+    .filter((row) => row.americanPrice >= policy.minimumAmericanPrice)
+    .filter((row) => rankSignal(row, policy.signalFamily) >= policy.leanThreshold)
+    .map((row) => rankSignal(row, bestSignalFamily))
+    .sort((left, right) => right - left);
+  if (values.length === 0) return Infinity;
+  const index = Math.max(0, Math.min(values.length - 1, Math.ceil(values.length * upperFraction) - 1));
+  return values[index]!;
+}
+
 function quantileThreshold(
   rows: readonly ExactPriceReplayRow[],
   family: RankSignalFamily,
   upperFraction: number,
+  gate: RankEligibilityGate = "all",
 ): number {
-  const values = rows.map((row) => rankSignal(row, family)).sort((left, right) => right - left);
+  const values = rows.filter((row) => rankEligibility(row, gate))
+    .map((row) => rankSignal(row, family)).sort((left, right) => right - left);
   if (values.length === 0) return Infinity;
   const index = Math.max(0, Math.min(values.length - 1, Math.ceil(values.length * upperFraction) - 1));
   return values[index]!;
@@ -1839,9 +2045,11 @@ function rankTopFractionSummary(
   rows: readonly ExactPriceReplayRow[],
   family: RankSignalFamily,
   fraction: number,
+  gate: RankEligibilityGate = "all",
 ) {
-  const count = Math.max(1, Math.ceil(rows.length * fraction));
-  const selected = [...rows]
+  const eligible = rows.filter((row) => rankEligibility(row, gate));
+  const count = Math.max(1, Math.ceil(eligible.length * fraction));
+  const selected = [...eligible]
     .sort((left, right) => rankSignal(right, family) - rankSignal(left, family))
     .slice(0, count);
   const wins = selected.filter((row) => row.finalSide === row.outcomeSide).length;
@@ -1856,15 +2064,27 @@ function rankTopFractionSummary(
   };
 }
 
+function rankEligibility(row: ExactPriceReplayRow, gate: RankEligibilityGate): boolean {
+  const establishedRole = row.playerGamesPrior >= 10
+    && (row.minutesStandardDeviation10 ?? Infinity) <= 5;
+  if (gate === "established_role") return establishedRole;
+  if (gate === "not_back_to_back") return !row.teamBackToBack;
+  if (gate === "established_role_not_back_to_back") return establishedRole && !row.teamBackToBack;
+  return true;
+}
+
 function scoreRankGradePolicy(rows: readonly ExactPriceReplayRow[], policy: RankGradePolicy) {
   const graded = rows.map((row) => {
     const score = rankSignal(row, policy.signalFamily);
+    const bestScore = rankSignal(row, policy.bestSignalFamily);
+    const eligible = rankEligibility(row, policy.eligibilityGate);
     const priceQualified = row.americanPrice >= policy.minimumAmericanPrice;
-    const grade: GradeName = priceQualified && score >= policy.bestThreshold
+    const grade: GradeName = eligible && priceQualified && score >= policy.leanThreshold
+      && bestScore >= policy.bestThreshold
       ? "Best Angle"
-      : priceQualified && score >= policy.leanThreshold
+      : eligible && priceQualified && score >= policy.leanThreshold
         ? "Lean"
-        : score >= policy.leanThreshold
+        : eligible && score >= policy.leanThreshold
           ? "Watchlist"
           : "No Play";
     return { row, grade };
