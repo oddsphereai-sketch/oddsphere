@@ -10,6 +10,7 @@ import type {
   NbaReaderSide,
 } from "./nbaProfessionalMarketReader";
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
+import type { NbaApprovedLegacyLockedEvidenceRecovery } from "./nbaLockedMemberSnapshot";
 
 const SPLIT_STALE_AFTER_MINUTES = 75;
 
@@ -25,6 +26,8 @@ export type NbaMemberMarketEvidence = {
   movementReferenceSportsbook: string | null;
   movementReferencePriceAmerican: number | null;
   movementReferenceObservedAt: string | null;
+  /** Internal-only provenance for an explicitly approved immutable-lock recovery. */
+  evidenceRecoveryRelease?: string;
 };
 
 export type NbaMemberGameEvidence = Record<NbaMovementMarket, NbaMemberMarketEvidence>;
@@ -419,4 +422,44 @@ export function buildNbaMemberGameEvidence(args: {
     spread: memberEvidenceForMarket({ ...args, market: "spread" }),
     total: memberEvidenceForMarket({ ...args, market: "total" }),
   };
+}
+
+/**
+ * Rebuild only fields that were absent from the approved legacy member-card
+ * capture. Public splits come verbatim from the immutable prediction records;
+ * movement comes only from append-only observations captured no later than
+ * the authoritative lock. Current/post-lock provider state is never eligible.
+ */
+export function buildApprovedNbaLegacyLockedMemberGameEvidence(args: {
+  game: NbaDailyEdgeGameDto;
+  priceRows: readonly NbaReaderPriceRow[];
+  recovery: NbaApprovedLegacyLockedEvidenceRecovery;
+}): NbaMemberGameEvidence {
+  const cutoffMs = Date.parse(args.recovery.lockedAt);
+  const preLockPriceRows = args.priceRows.filter((row) => {
+    const providerMs = Date.parse(row.providerTimestamp ?? row.fetchedAt);
+    const fetchedMs = Date.parse(row.fetchedAt);
+    return Number.isFinite(providerMs) && Number.isFinite(fetchedMs) &&
+      providerMs <= cutoffMs && fetchedMs <= cutoffMs;
+  });
+  const base = buildNbaMemberGameEvidence({
+    game: args.game,
+    priceRows: preLockPriceRows,
+    splitRows: [],
+    evaluatedAt: args.recovery.lockedAt,
+  });
+  return Object.fromEntries((['moneyline', 'spread', 'total'] as const).map((market) => [
+    market,
+    {
+      ...base[market],
+      publicSplits: args.recovery.publicSplits[market].map((row) => ({ ...row })),
+      sportsbookSplits: null,
+      sharpBookAvailability: {
+        status: "provider_limited",
+        message: "The locked record did not preserve a complete two-sided sharp-book split snapshot.",
+        lastUpdated: args.recovery.capturedAt,
+      },
+      evidenceRecoveryRelease: args.recovery.release,
+    },
+  ])) as NbaMemberGameEvidence;
 }

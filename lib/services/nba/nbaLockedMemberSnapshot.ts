@@ -1,9 +1,19 @@
 import type { NbaDailyEdgeGameDto } from "./buildNbaDailyEdgeDto";
-import type { DailyEdgeGameDto } from "../../../app/lab/lib/labTypes";
+import type { DailyEdgeGameDto, MarketEdgeDto } from "../../../app/lab/lib/labTypes";
 import { computeLocksAt } from "../../automodel/lockState";
+import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_LOCKED_MEMBER_SNAPSHOT_RELEASE =
   "nba_locked_member_snapshot_2026_10_20_r2_complete_card_evidence" as const;
+
+export const NBA_APPROVED_LEGACY_LOCKED_EVIDENCE_RECOVERY_RELEASE =
+  "nba_legacy_locked_evidence_recovery_2026_10_20_r1_bos_det" as const;
+
+const APPROVED_LEGACY_RECOVERY = {
+  externalId: 401909088,
+  matchup: "BOS @ DET",
+  lockedAt: "2026-10-20T18:00:59.937Z",
+} as const;
 
 export type NbaLockedMemberRecord = {
   game_id: number;
@@ -11,6 +21,152 @@ export type NbaLockedMemberRecord = {
   locked_at: string | null;
   snapshot_json: unknown;
 };
+
+export type NbaApprovedLegacyLockedEvidenceRecovery = {
+  release: typeof NBA_APPROVED_LEGACY_LOCKED_EVIDENCE_RECOVERY_RELEASE;
+  lockedAt: string;
+  capturedAt: string;
+  publicSplits: Record<NbaMovementMarket, MarketEdgeDto["publicSplits"]>;
+};
+
+type LegacyPublicSplits = {
+  picked_side?: unknown;
+  picked_handle_pct?: unknown;
+  picked_bets_pct?: unknown;
+  opp_handle_pct?: unknown;
+  opp_bets_pct?: unknown;
+};
+
+function pctTo100(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const normalized = Math.abs(value) <= 1 ? value * 100 : value;
+  return normalized >= 0 && normalized <= 100 ? Math.round(normalized * 10) / 10 : null;
+}
+
+function oppositeSide(side: "home" | "away" | "over" | "under") {
+  if (side === "home") return "away" as const;
+  if (side === "away") return "home" as const;
+  return side === "over" ? "under" as const : "over" as const;
+}
+
+function labelForSide(
+  side: "home" | "away" | "over" | "under",
+  game: NbaDailyEdgeGameDto,
+): string {
+  if (side === "home") return game.home_abbr;
+  if (side === "away") return game.away_abbr;
+  return side === "over" ? "Over" : "Under";
+}
+
+function normalizedIso(value: string): string | null {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+/**
+ * Owner-approved, read-only recovery for the single Boston-Detroit legacy
+ * lock that predates complete-card capture. It reads only fields already
+ * stored in the three immutable lock rows. Every other legacy lock remains
+ * outside this exception and receives no reconstruction.
+ */
+export function resolveApprovedNbaLegacyLockedEvidenceRecovery(args: {
+  game: NbaDailyEdgeGameDto;
+  gameId: number;
+  rows: readonly NbaLockedMemberRecord[];
+}): NbaApprovedLegacyLockedEvidenceRecovery | null {
+  if (
+    args.game.game_external_id !== APPROVED_LEGACY_RECOVERY.externalId ||
+    args.game.matchup !== APPROVED_LEGACY_RECOVERY.matchup
+  ) return null;
+
+  const rows = args.rows.filter((row) => row.game_id === args.gameId && row.locked_at !== null);
+  const markets = new Set(rows.map((row) => row.market));
+  const lockedAtValues = new Set(rows.map((row) => normalizedIso(row.locked_at!)));
+  if (
+    rows.length !== 3 || markets.size !== 3 ||
+    !["moneyline", "spread", "total"].every((market) => markets.has(market)) ||
+    lockedAtValues.size !== 1 ||
+    !lockedAtValues.has(APPROVED_LEGACY_RECOVERY.lockedAt)
+  ) {
+    throw new Error("Approved NBA legacy evidence recovery requires the exact immutable BOS-DET lock tuple");
+  }
+
+  const capturedAtValues = new Set<string>();
+  const publicSplits = {} as Record<NbaMovementMarket, MarketEdgeDto["publicSplits"]>;
+  for (const row of rows) {
+    if (row.snapshot_json === null || typeof row.snapshot_json !== "object") {
+      throw new Error(`Approved NBA legacy evidence recovery is missing ${row.market} snapshot_json`);
+    }
+    const snapshot = row.snapshot_json as {
+      as_of?: unknown;
+      splits_state?: unknown;
+      public_splits?: LegacyPublicSplits | null;
+      nba_daily_edge_game_at_capture?: unknown;
+    };
+    if (snapshot.nba_daily_edge_game_at_capture !== undefined) {
+      return null;
+    }
+    if (typeof snapshot.as_of !== "string" || normalizedIso(snapshot.as_of) === null) {
+      throw new Error(`Approved NBA legacy evidence recovery has no valid ${row.market} capture timestamp`);
+    }
+    const capturedAt = normalizedIso(snapshot.as_of)!;
+    if (Date.parse(capturedAt) > Date.parse(APPROVED_LEGACY_RECOVERY.lockedAt)) {
+      throw new Error(`Approved NBA legacy evidence recovery rejects post-lock ${row.market} evidence`);
+    }
+    capturedAtValues.add(capturedAt);
+    if (snapshot.splits_state !== "available" || snapshot.public_splits === null || snapshot.public_splits === undefined) {
+      throw new Error(`Approved NBA legacy evidence recovery is missing stored ${row.market} public splits`);
+    }
+
+    const market = row.market as NbaMovementMarket;
+    const expectedSides = market === "total" ? ["over", "under"] as const : ["home", "away"] as const;
+    const pickedSide = snapshot.public_splits.picked_side;
+    if (typeof pickedSide !== "string" || !expectedSides.includes(pickedSide as never)) {
+      throw new Error(`Approved NBA legacy evidence recovery has an invalid ${row.market} picked side`);
+    }
+    const picked = pickedSide as "home" | "away" | "over" | "under";
+    const opposing = oppositeSide(picked);
+    const pickedMoney = pctTo100(snapshot.public_splits.picked_handle_pct);
+    const pickedBets = pctTo100(snapshot.public_splits.picked_bets_pct);
+    const opposingMoney = pctTo100(snapshot.public_splits.opp_handle_pct);
+    const opposingBets = pctTo100(snapshot.public_splits.opp_bets_pct);
+    if ([pickedMoney, pickedBets, opposingMoney, opposingBets].some((value) => value === null)) {
+      throw new Error(`Approved NBA legacy evidence recovery has incomplete ${row.market} public splits`);
+    }
+    if (Math.abs(pickedMoney! + opposingMoney! - 100) > 1.1 || Math.abs(pickedBets! + opposingBets! - 100) > 1.1) {
+      throw new Error(`Approved NBA legacy evidence recovery rejects incoherent ${row.market} public splits`);
+    }
+    publicSplits[market] = [
+      {
+        side: picked,
+        label: labelForSide(picked, args.game),
+        moneyPct: pickedMoney,
+        betsPct: pickedBets,
+        observedAt: capturedAt,
+        freshnessCheckedAt: capturedAt,
+        isStale: false,
+      },
+      {
+        side: opposing,
+        label: labelForSide(opposing, args.game),
+        moneyPct: opposingMoney,
+        betsPct: opposingBets,
+        observedAt: capturedAt,
+        freshnessCheckedAt: capturedAt,
+        isStale: false,
+      },
+    ];
+  }
+  if (capturedAtValues.size !== 1) {
+    throw new Error("Approved NBA legacy evidence recovery requires one shared capture timestamp");
+  }
+  return {
+    release: NBA_APPROVED_LEGACY_LOCKED_EVIDENCE_RECOVERY_RELEASE,
+    lockedAt: APPROVED_LEGACY_RECOVERY.lockedAt,
+    capturedAt: [...capturedAtValues][0]!,
+    publicSplits,
+  };
+}
 
 function readStoredGameDto(value: unknown): NbaDailyEdgeGameDto | null {
   if (value === null || typeof value !== "object") return null;
