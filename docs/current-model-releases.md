@@ -3563,7 +3563,8 @@ The paired live-slate replay is recorded in
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_20_r1_column_authoritative`
+- Member lock publication: `nba_member_lock_publication_2026_10_20_r2_complete_card_precedence`
+- Locked member snapshot: `nba_locked_member_snapshot_2026_10_20_r2_complete_card_evidence`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r1_nba_checkpoint`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -3576,18 +3577,24 @@ The paired live-slate replay is recorded in
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
 
-The October 20 lock-publication repair leaves the r11 forecast and the existing
+The October 20 r2 complete-card lock repair leaves the r11 forecast and the existing
 three-market T-60 writer unchanged. It overlays only the authoritative column
 lock timestamp onto the member response after verifying a complete atomic
 Moneyline/Spread/Total tuple, so a post-lock publish no longer recomputes the
-52-game rolling board. The exact captured locked DTO remains authoritative for
-every prediction, score, side, probability, line, price, grade, and evidence
-field, and no stored lock is updated. The existing hourly tracking writer now
+52-game rolling board. Future locks additionally store the fully adapted member
+card, including public consensus, sharp-book splits, selected and opposing
+same-book trails, and opening/current price context, identically on all three
+market rows. That exact card has reader precedence after lock; only the
+authoritative lifecycle timestamp is overlaid. Legacy locks without this field
+remain unchanged and are never reconstructed. The exact captured locked DTO
+remains authoritative for every model field, and no stored lock is updated. The
+existing hourly tracking writer now
 publishes its shared online snapshot immediately after NBA completes, before a
 later sport can stall the sequence; NHL runs last and the route retains one
 schedule plus the existing sport-scoped leases. Promotions, demotions, and
 actionable-count changes are all zero. Evidence and rollback:
-`docs/model-audits/2026-10-20-nba-lock-publication-tracking-repair.md`.
+`docs/model-audits/2026-10-20-nba-lock-publication-tracking-repair.md` and
+`docs/model-audits/2026-10-20-nba-complete-card-lock-evidence-r2.md`.
 
 The October 20 r9 candidate preserves the independent model, two-point Spread authority, five-point
 Total authority, calibration, grade policy, writer, lease, cadence, target exclusion, pagination, and

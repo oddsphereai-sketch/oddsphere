@@ -574,6 +574,7 @@ export function adaptNbaToDailyEdgeResponse(
   opts?: {
     openPricesByGame?: Map<number, NbaPickSideOpenPrices>;
     memberEvidenceByGame?: Map<number, NbaMemberGameEvidence>;
+    lockedMemberGamesByExternalId?: Map<number, DailyEdgeGameDto>;
   },
 ): DailyEdgeResponse {
   return {
@@ -591,6 +592,8 @@ export function adaptNbaToDailyEdgeResponse(
     slate_status: nbaDto.games.length > 0 ? "published" : null,
     last_slate_update_at: nbaDto.as_of,
     games: nbaDto.games.map((g) => {
+      const lockedMemberGame = opts?.lockedMemberGamesByExternalId?.get(g.game_external_id);
+      if (lockedMemberGame !== undefined) return lockedMemberGame;
       const openPrices: NbaPickSideOpenPrices = opts?.openPricesByGame?.get(g.game_external_id) ?? {
         ml: null,
         total: null,

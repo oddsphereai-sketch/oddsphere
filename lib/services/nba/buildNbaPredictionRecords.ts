@@ -42,6 +42,8 @@ import type {
 } from "./buildNbaDailyEdgeDto";
 import type { PredictionRecordRow, TrackedMarketV17 } from "../../types/domain/Tracking";
 import type { RecommendationGrade } from "./nbaMarketReview";
+import { adaptNbaToDailyEdgeResponse } from "./adaptNbaToDailyEdgeResponse";
+import { buildNbaLockedMemberCapture } from "./nbaLockedMemberSnapshot";
 import {
   isPublicallyTracked,
   NBA_SPREAD_OFFICIAL_TRACKING_START,
@@ -190,6 +192,7 @@ function shouldBeLocked(tipIsoUtc: string | null, now: Date): boolean {
 function buildSnapshot(opts: {
   dto: NbaDailyEdgeDto;
   gameDto: NbaDailyEdgeDto["games"][number];
+  memberGame: ReturnType<typeof adaptNbaToDailyEdgeResponse>["games"][number];
   matchup: string;
   market: "moneyline" | "spread" | "total";
   intel: MarketIntelligence;
@@ -233,7 +236,10 @@ function buildSnapshot(opts: {
     market: opts.market,
     // Future locked readers can restore the exact member DTO instead of
     // reinterpreting an immutable row through newer model/reader semantics.
-    nba_game_dto_at_capture: opts.gameDto,
+    ...buildNbaLockedMemberCapture({
+      gameDto: opts.gameDto,
+      memberGame: opts.memberGame,
+    }),
     pick_label: opts.intel.pick_label,
     rationale: opts.intel.rationale,
     // Predicted scores persisted for audit + calibration. These come
@@ -306,7 +312,20 @@ export async function createNbaPredictionRecords(
     });
     return result;
   }
-  const { nbaDto, dbIdByExternalId } = pipelineResult;
+  const {
+    nbaDto,
+    dbIdByExternalId,
+    openPricesByGame,
+    memberEvidenceByGame,
+    lockedMemberGamesByExternalId,
+  } = pipelineResult;
+  const memberGamesByExternalId = new Map(
+    adaptNbaToDailyEdgeResponse(nbaDto, {
+      openPricesByGame,
+      memberEvidenceByGame,
+      lockedMemberGamesByExternalId,
+    }).games.map((game) => [game.external_id, game]),
+  );
 
   const externalFilter = opts.externalIdsFilter === undefined ? null : new Set(opts.externalIdsFilter);
   const games = externalFilter === null
@@ -351,6 +370,15 @@ export async function createNbaPredictionRecords(
       continue;
     }
     const matchup = `${g.away_abbr}@${g.home_abbr}`;
+    const memberGame = memberGamesByExternalId.get(g.game_external_id);
+    if (memberGame === undefined) {
+      result.errors.push({
+        game_id,
+        market: "member_snapshot",
+        reason: `external_id=${g.game_external_id} has no adapted member card`,
+      });
+      continue;
+    }
     const lockNow = opts.deferLock !== true && shouldBeLocked(g.tip_iso_utc, now);
 
     const perGameSources = g.intelligence.sources;
@@ -463,6 +491,7 @@ export async function createNbaPredictionRecords(
           ...buildSnapshot({
             dto: nbaDto,
             gameDto: g,
+            memberGame,
             matchup,
             market,
             intel,

@@ -74,7 +74,7 @@ import {
 } from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
 import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
-import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
+import type { DailyEdgeGameDto, DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 import { currentDailyEdgeBoardDate } from "../../dates/slateDate";
 import {
   loadNbaRollingSchedule,
@@ -141,6 +141,8 @@ export type NbaDailyEdgePipelineResult = {
   openPricesByGame: Map<number, NbaPickSideOpenPrices>;
   /** Unlocked-only display evidence. Never overlays an immutable locked DTO. */
   memberEvidenceByGame: Map<number, NbaMemberGameEvidence>;
+  /** Exact fully adapted member cards captured by future immutable locks. */
+  lockedMemberGamesByExternalId: Map<number, DailyEdgeGameDto>;
   /** Map of NBA game external_id → games.id (DB primary key). */
   dbIdByExternalId: Map<number, number>;
 };
@@ -695,11 +697,12 @@ export async function buildNbaDailyEdgePipeline(
     if (error) throw new Error(`NBA locked member snapshot lookup failed: ${error.message}`);
     lockedRows = (data ?? []) as NbaLockedMemberRecord[];
   }
-  const games = applyNbaLockedMemberSnapshotPrecedence({
+  const lockedMemberSnapshots = applyNbaLockedMemberSnapshotPrecedence({
     games: dynamicGames,
     dbIdByExternalId: externalToDbId,
     rows: lockedRows,
   });
+  const games = lockedMemberSnapshots.games;
   const lockedExternalIds = new Set(lockedRows.flatMap((row) => {
     if (row.locked_at === null) return [];
     const externalId = dbIdToExt.get(row.game_id);
@@ -763,7 +766,13 @@ export async function buildNbaDailyEdgePipeline(
     }
   }
 
-  return { nbaDto, openPricesByGame, memberEvidenceByGame, dbIdByExternalId: externalToDbId };
+  return {
+    nbaDto,
+    openPricesByGame,
+    memberEvidenceByGame,
+    lockedMemberGamesByExternalId: lockedMemberSnapshots.memberGamesByExternalId,
+    dbIdByExternalId: externalToDbId,
+  };
 }
 
 /**
@@ -805,8 +814,17 @@ export async function buildNbaDailyEdgeAdapted(date: string): Promise<DailyEdgeR
     };
   }
 
-  const { nbaDto, openPricesByGame, memberEvidenceByGame } = await buildNbaDailyEdgePipeline(date);
-  const response = adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame, memberEvidenceByGame });
+  const {
+    nbaDto,
+    openPricesByGame,
+    memberEvidenceByGame,
+    lockedMemberGamesByExternalId,
+  } = await buildNbaDailyEdgePipeline(date);
+  const response = adaptNbaToDailyEdgeResponse(nbaDto, {
+    openPricesByGame,
+    memberEvidenceByGame,
+    lockedMemberGamesByExternalId,
+  });
   if (rollingSchedule) {
     // Preserve the analyzed current-day lifecycle, including completed cards
     // through the normal ET rollover. The schedule layer independently drops
@@ -836,8 +854,17 @@ async function buildNbaRollingMemberBoard(
   for (let index = 0; index < eligibleDates.length; index += NBA_ROLLING_ANALYSIS_CONCURRENCY) {
     const batch = eligibleDates.slice(index, index + NBA_ROLLING_ANALYSIS_CONCURRENCY);
     responses.push(...await Promise.all(batch.map(async (slateDate) => {
-      const { nbaDto, openPricesByGame, memberEvidenceByGame } = await buildNbaDailyEdgePipeline(slateDate);
-      return adaptNbaToDailyEdgeResponse(nbaDto, { openPricesByGame, memberEvidenceByGame });
+      const {
+        nbaDto,
+        openPricesByGame,
+        memberEvidenceByGame,
+        lockedMemberGamesByExternalId,
+      } = await buildNbaDailyEdgePipeline(slateDate);
+      return adaptNbaToDailyEdgeResponse(nbaDto, {
+        openPricesByGame,
+        memberEvidenceByGame,
+        lockedMemberGamesByExternalId,
+      });
     })));
   }
 
