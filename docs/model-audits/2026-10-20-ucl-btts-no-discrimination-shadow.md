@@ -209,3 +209,38 @@ No public model identifier, probability, pick, projection, grade, writer,
 lock, or member snapshot is changed by this result. Shipping either candidate
 would knowingly trade away probability quality and ranking for cosmetic board
 variety, which the declaration and model-change safety gate prohibit.
+
+## Independent dynamic-score architecture declaration
+
+The failed candidates above are discriminative overlays on the same score
+foundation. They do not establish that a dynamic scoring architecture cannot
+improve the model. Before requesting or inspecting any pre-2020 UCL result,
+the following independent tournament is frozen:
+
+- Request only authenticated seasons 2011 through 2019 and fail closed if any
+  requested season lacks regulation-final coverage.
+- Use 2011-16 for fitting/warm-up, 2017-18 for selecting one domestic-strength
+  weight, and 2019 once as the untouched confirmation season.
+- For each club and kickoff, construct strictly prior, exponentially weighted
+  domestic attack and defence strengths from goals and shots on target. Convert
+  shots on target to goal units using only that league's prior scoring rate,
+  combine 70% observed goals with 30% shot-derived goals, use a 365-day
+  half-life, and shrink eight effective matches toward the league/date mean.
+- Generate a domestic home/away scoring intensity from the attacking club's
+  attack ratio, its opponent's defence ratio, and the league's venue-specific
+  scoring rate. Combine its BTTS logit with the incumbent UCL BTTS logit using
+  exactly one of `[0.15, 0.25, 0.35]` domestic weight, selected on 2017-18 by
+  lowest Brier followed by log loss. No other feature, coefficient, threshold,
+  or candidate family is searched.
+- Reconcile only the selected BTTS probability into the incumbent joint score
+  distribution. Match Result, Over 2.5, and expected total must remain exact
+  within `1e-8`; team-score MAE may not worsen.
+- Promotion requires the selected weight to improve 2019 BTTS accuracy, No
+  recall, Brier, log loss, and AUC simultaneously, with no regression in the
+  structural constraints. After that one read, 2020-26 may be reported only as
+  opened robustness evidence and cannot choose or modify the candidate.
+
+This is an architecture test informed by dynamic attack/defence and dependent
+score-distribution research. It is not another global threshold or forced-No
+rule. Failure leaves the live model unchanged; success advances to a complete
+current-board and release-safety rehearsal before any publication.
