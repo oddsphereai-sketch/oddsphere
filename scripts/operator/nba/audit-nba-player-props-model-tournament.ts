@@ -1,9 +1,9 @@
 /**
  * Offline-only NBA player-props model tournament.
  *
- * Candidate selection uses a chronological selection window. The winning
- * family is then refit on development + selection and evaluated exactly once
- * on the later untouched confirmation window. No production or member writes.
+ * Candidate selection, reliability fitting, grade-policy fitting, and final
+ * confirmation use separate chronological windows. No production or member
+ * writes.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -289,13 +289,19 @@ async function main(): Promise<void> {
   const orderedGames = [...modelingGames]
     .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime) || a.gameId - b.gameId);
   if (orderedGames.length < 30) throw new Error("NBA props tournament requires at least 30 chronological games.");
-  const developmentEnd = Math.floor(orderedGames.length * 0.60);
-  const selectionEnd = Math.floor(orderedGames.length * 0.80);
+  const developmentEnd = Math.floor(orderedGames.length * 0.50);
+  const modelSelectionEnd = Math.floor(orderedGames.length * 0.60);
+  const reliabilityFitEnd = Math.floor(orderedGames.length * 0.70);
+  const gradePolicyEnd = Math.floor(orderedGames.length * 0.80);
   const developmentIds = new Set(orderedGames.slice(0, developmentEnd).map((game) => game.gameId));
-  const selectionIds = new Set(orderedGames.slice(developmentEnd, selectionEnd).map((game) => game.gameId));
-  const confirmationIds = new Set(orderedGames.slice(selectionEnd).map((game) => game.gameId));
+  const modelSelectionIds = new Set(orderedGames.slice(developmentEnd, modelSelectionEnd).map((game) => game.gameId));
+  const reliabilityFitIds = new Set(orderedGames.slice(modelSelectionEnd, reliabilityFitEnd).map((game) => game.gameId));
+  const gradePolicyIds = new Set(orderedGames.slice(reliabilityFitEnd, gradePolicyEnd).map((game) => game.gameId));
+  const confirmationIds = new Set(orderedGames.slice(gradePolicyEnd).map((game) => game.gameId));
   const development = chronological(modelingRows.filter((row) => developmentIds.has(row.game_id)));
-  const selection = chronological(modelingRows.filter((row) => selectionIds.has(row.game_id)));
+  const modelSelection = chronological(modelingRows.filter((row) => modelSelectionIds.has(row.game_id)));
+  const reliabilityFit = chronological(modelingRows.filter((row) => reliabilityFitIds.has(row.game_id)));
+  const gradePolicy = chronological(modelingRows.filter((row) => gradePolicyIds.has(row.game_id)));
   const confirmation = chronological(modelingRows.filter((row) => confirmationIds.has(row.game_id)));
   const canonical = selectNbaPlayerPropsCanonicalOfferSets(dataset.openingObservations.filter((row) => row.isOpening));
   const lineByScope = new Map(canonical.map((offer) => [offer.scopeKey, offer.canonicalLine]));
@@ -341,7 +347,7 @@ async function main(): Promise<void> {
     selectionPredictors.set(candidate.name, predict);
     selectionMetrics[candidate.name] = Object.fromEntries(MARKETS.map((market) => [
       market,
-      evaluate(selection, market, predict, lineByScope),
+      evaluate(modelSelection, market, predict, lineByScope),
     ]));
   }
 
@@ -350,7 +356,10 @@ async function main(): Promise<void> {
     selectCandidate(candidates, selectionMetrics, market),
   ])) as Record<Market, CandidateName>;
 
-  const fitRows = chronological([...development, ...selection]);
+  const gradeModelFitRows = chronological([...development, ...modelSelection]);
+  const gradePredictors = new Map<CandidateName, ReturnType<Candidate["fit"]>>();
+  for (const candidate of candidates) gradePredictors.set(candidate.name, candidate.fit(gradeModelFitRows));
+  const fitRows = chronological([...gradeModelFitRows, ...reliabilityFit, ...gradePolicy]);
   const ridgeDiagnosticModel = fitNbaPlayerPropsIndependentResearchModel(fitRows);
   const predictors = new Map<CandidateName, ReturnType<Candidate["fit"]>>();
   for (const candidate of candidates) predictors.set(candidate.name, candidate.fit(fitRows));
@@ -373,7 +382,7 @@ async function main(): Promise<void> {
       ridgeErrorDecomposition: projectionErrorDecomposition(confirmation, market, ridgeDiagnosticModel),
       failureSegments: segmentFailures(confirmation, market, predictors.get(candidate)!, lineByScope),
       openingMarketSelectionDiagnostic: marketDiagnostic(
-        selection,
+        modelSelection,
         market,
         selectionPredictors.get(candidate)!,
         lineByScope,
@@ -389,15 +398,16 @@ async function main(): Promise<void> {
     }];
   }));
   const exactPriceGradeResearch = buildExactPriceGradeResearch({
-    development,
-    selection,
+    modelFitRows: gradeModelFitRows,
+    reliabilityFit,
+    gradePolicy,
     confirmation,
     canonical,
     selectedByMarket,
-    selectionPredictors,
+    gradePredictors,
     confirmationPredictors: predictors,
   });
-  const selectionWindowGames = orderedGames.slice(0, selectionEnd);
+  const selectionWindowGames = orderedGames.slice(0, modelSelectionEnd);
   const selectionWindowIds = new Set(selectionWindowGames.map((game) => game.gameId));
   const selectionWindowStability = walkForward(
     selectionWindowGames,
@@ -417,7 +427,7 @@ async function main(): Promise<void> {
   );
 
   const report = {
-    release: "nba_player_props_model_tournament_2026_10_20_r2_expanded_projection_window",
+    release: "nba_player_props_model_tournament_2026_10_20_r4_five_stage_grade_validation",
     mode: "offline_research_only",
     actionable: false,
     sourceDatasetRelease: dataset.release,
@@ -425,10 +435,14 @@ async function main(): Promise<void> {
     split: {
       population: dataset.projectionPopulation ?? "Opening-price player population.",
       developmentGames: developmentIds.size,
-      selectionGames: selectionIds.size,
+      modelSelectionGames: modelSelectionIds.size,
+      reliabilityFitGames: reliabilityFitIds.size,
+      gradePolicyGames: gradePolicyIds.size,
       untouchedConfirmationGames: confirmationIds.size,
       developmentRows: development.length,
-      selectionRows: selection.length,
+      modelSelectionRows: modelSelection.length,
+      reliabilityFitRows: reliabilityFit.length,
+      gradePolicyRows: gradePolicy.length,
       confirmationRows: confirmation.length,
       confirmationFrom: confirmation[0]?.feature_cutoff ?? null,
       confirmationThrough: confirmation.at(-1)?.feature_cutoff ?? null,
@@ -449,7 +463,9 @@ async function main(): Promise<void> {
     ],
     integrity: {
       chronologicalGameSplit: true,
-      candidateSelectionExcludedConfirmation: true,
+      candidateSelectionExcludedReliabilityGradesAndConfirmation: true,
+      reliabilityFitExcludedGradePolicyAndConfirmation: true,
+      gradePolicySelectionExcludedConfirmation: true,
       noDatabaseWrites: true,
       noMemberWrites: true,
       noGradesOrStakes: true,
@@ -522,7 +538,7 @@ function walkForward(
     });
   }
   return {
-    release: "nba_player_props_walk_forward_stability_2026_10_20_r1",
+    release: "nba_player_props_walk_forward_stability_2026_10_20_r2_dense_exact_prices",
     folds,
     summary: Object.fromEntries(MARKETS.map((market) => {
       const metrics = folds.map((fold) => fold.markets[market]!.independent);
@@ -1011,10 +1027,18 @@ function selectCandidate(
       && item.directionHitRate >= ridgeHit - 0.02;
   });
   const pool = eligible.length > 0 ? eligible : candidates.filter((candidate) => metrics[candidate.name]?.[market]?.mae !== null);
-  return [...pool].sort((left, right) => {
+  const minimumMae = Math.min(...pool.map((candidate) => metrics[candidate.name]![market]!.mae ?? Infinity));
+  // Direction determines whether the member wins the prop; projection error
+  // determines whether that side remains trustworthy as lines move. Preserve
+  // the near-best projection frontier, then select the strongest direction
+  // result instead of letting a negligible MAE difference hide a material hit
+  // rate gain.
+  const projectionFrontier = pool.filter((candidate) =>
+    (metrics[candidate.name]![market]!.mae ?? Infinity) <= minimumMae * 1.01);
+  return [...projectionFrontier].sort((left, right) => {
     const a = metrics[left.name]![market]!;
     const b = metrics[right.name]![market]!;
-    return (a.mae! - b.mae!) || ((b.directionHitRate ?? 0) - (a.directionHitRate ?? 0));
+    return ((b.directionHitRate ?? 0) - (a.directionHitRate ?? 0)) || (a.mae! - b.mae!);
   })[0]!.name;
 }
 
@@ -1132,6 +1156,7 @@ type GradePolicy = Readonly<{
   leanProbability: number;
   leanEv: number;
   leanMarketProbability: number;
+  leanRequiresReferenceBook: boolean;
   watchProbability: number;
   watchEv: number;
 }>;
@@ -1146,6 +1171,8 @@ type ExactPriceReplayRow = Readonly<{
   actual: number;
   independentProjection: number;
   finalProjection: number;
+  projectionStandardDeviation: number;
+  rawFinalProbability: number;
   finalProbability: number;
   sportsbook: string;
   americanPrice: number;
@@ -1157,37 +1184,74 @@ type ExactPriceReplayRow = Readonly<{
   marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection";
 }>;
 
+type ReliabilityFeature =
+  | "raw_model_logit"
+  | "standardized_projection_distance"
+  | "target_excluded_margin"
+  | "target_price_implied_probability"
+  | "independent_final_agreement"
+  | "reference_book_confirmation";
+
+type GradeReliabilityModel = Readonly<{
+  release: "nba_player_props_grade_reliability_research_2026_10_20_r3_five_stage_chronology";
+  features: readonly ReliabilityFeature[];
+  means: readonly number[];
+  scales: readonly number[];
+  coefficients: readonly number[];
+  lambda: number;
+  family:
+    | "market_specific"
+    | "partially_pooled"
+    | "raw_model_only"
+    | "projection_distance_only"
+    | "target_excluded_only"
+    | "target_price_only";
+  fitRows: number;
+  pooledRows: number;
+  internalValidationRows: number;
+  internalValidationLogLoss: number | null;
+}>;
+
 function buildExactPriceGradeResearch(args: {
-  development: readonly NbaPlayerPropFeatureRow[];
-  selection: readonly NbaPlayerPropFeatureRow[];
+  modelFitRows: readonly NbaPlayerPropFeatureRow[];
+  reliabilityFit: readonly NbaPlayerPropFeatureRow[];
+  gradePolicy: readonly NbaPlayerPropFeatureRow[];
   confirmation: readonly NbaPlayerPropFeatureRow[];
   canonical: readonly NbaPlayerPropsCanonicalOfferSet[];
   selectedByMarket: Readonly<Record<Market, CandidateName>>;
-  selectionPredictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
+  gradePredictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
   confirmationPredictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
 }) {
   const canonicalByScope = new Map(args.canonical.map((offer) => [offer.scopeKey, offer]));
-  const selectionRows: ExactPriceReplayRow[] = [];
+  const policyRows: ExactPriceReplayRow[] = [];
   const confirmationRows: ExactPriceReplayRow[] = [];
-  const byMarket = Object.fromEntries(MARKETS.map((market) => {
+  const prepareMarket = (market: Market) => {
     const candidate = args.selectedByMarket[market];
-    const selectionFinal = args.selectionPredictors.get(candidate)!;
+    const gradeFinal = args.gradePredictors.get(candidate)!;
     const confirmationFinal = args.confirmationPredictors.get(candidate)!;
     const underlying = underlyingIndependentCandidate(candidate, market);
-    const selectionIndependent = args.selectionPredictors.get(underlying)!;
+    const gradeIndependent = args.gradePredictors.get(underlying)!;
     const confirmationIndependent = args.confirmationPredictors.get(underlying)!;
-    const selectionDistribution = residualDistribution(args.development, market, selectionFinal);
+    const gradeDistribution = residualDistribution(args.modelFitRows, market, gradeFinal);
     const confirmationDistribution = residualDistribution(
-      [...args.development, ...args.selection],
+      [...args.modelFitRows, ...args.reliabilityFit, ...args.gradePolicy],
       market,
       confirmationFinal,
     );
-    const selected = exactPriceReplayRows({
-      rows: args.selection,
+    const reliabilityFitRaw = exactPriceReplayRows({
+      rows: args.reliabilityFit,
       market,
-      independentPredict: selectionIndependent,
-      finalPredict: selectionFinal,
-      distribution: selectionDistribution,
+      independentPredict: gradeIndependent,
+      finalPredict: gradeFinal,
+      distribution: gradeDistribution,
+      canonicalByScope,
+    });
+    const gradePolicyRaw = exactPriceReplayRows({
+      rows: args.gradePolicy,
+      market,
+      independentPredict: gradeIndependent,
+      finalPredict: gradeFinal,
+      distribution: gradeDistribution,
       canonicalByScope,
     });
     const confirmed = exactPriceReplayRows({
@@ -1198,47 +1262,63 @@ function buildExactPriceGradeResearch(args: {
       distribution: confirmationDistribution,
       canonicalByScope,
     });
-    const orderedSelection = [...selected].sort((left, right) => Date.parse(left.featureCutoff) - Date.parse(right.featureCutoff));
-    const gradeFitEnd = Math.max(1, Math.floor(orderedSelection.length / 2));
-    const gradeFitRaw = orderedSelection.slice(0, gradeFitEnd);
-    const gradeValidationRaw = orderedSelection.slice(gradeFitEnd);
-    const probabilityCalibration = fitProbabilityCalibration(gradeFitRaw);
-    const calibratedGradeFit = applyProbabilityCalibration(gradeFitRaw, probabilityCalibration);
-    const calibratedGradeValidation = applyProbabilityCalibration(gradeValidationRaw, probabilityCalibration);
-    const calibratedSelected = [...calibratedGradeFit, ...calibratedGradeValidation];
-    const calibratedConfirmed = applyProbabilityCalibration(confirmed, probabilityCalibration);
-    selectionRows.push(...calibratedSelected);
+    return { candidate, underlying, reliabilityFitRaw, gradePolicyRaw, confirmed };
+  };
+  const preparedByMarket = new Map(MARKETS.map((market) => [market, prepareMarket(market)] as const));
+  const pooledReliabilityFitRaw = [...preparedByMarket.values()].flatMap((prepared) => prepared.reliabilityFitRaw);
+  const byMarket = Object.fromEntries(MARKETS.map((market) => {
+    const prepared = preparedByMarket.get(market)!;
+    const { candidate, underlying, reliabilityFitRaw, gradePolicyRaw, confirmed } = prepared;
+    const probabilityCalibration = fitProbabilityCalibration(reliabilityFitRaw);
+    const reliabilityModel = fitGradeReliabilityModel(reliabilityFitRaw, pooledReliabilityFitRaw);
+    const calibratedReliabilityFit = applyGradeReliabilityModel(reliabilityFitRaw, reliabilityModel);
+    const calibratedGradePolicy = applyGradeReliabilityModel(gradePolicyRaw, reliabilityModel);
+    const calibratedConfirmed = applyGradeReliabilityModel(confirmed, reliabilityModel);
+    policyRows.push(...calibratedGradePolicy);
     confirmationRows.push(...calibratedConfirmed);
-    const policySearch = selectExploratoryGradePolicy(calibratedGradeFit);
-    const policyValidation = scoreGradePolicy(calibratedGradeValidation, policySearch.policy);
+    const policySearch = selectExploratoryGradePolicy(calibratedGradePolicy);
     const policyConfirmation = scoreGradePolicy(calibratedConfirmed, policySearch.policy);
     return [market, {
       selectedCandidate: candidate,
       underlyingIndependentCandidate: underlying,
-      rawSelection: exactPriceReplaySummary(selected),
+      rawReliabilityFit: exactPriceReplaySummary(reliabilityFitRaw),
+      rawGradePolicy: exactPriceReplaySummary(gradePolicyRaw),
       rawConfirmation: exactPriceReplaySummary(confirmed),
-      probabilityCalibration,
-      selection: exactPriceReplaySummary(calibratedSelected),
-      gradeFit: exactPriceReplaySummary(calibratedGradeFit),
-      gradeValidation: exactPriceReplaySummary(calibratedGradeValidation),
+      rawSignalReliabilityFit: signalRankDiagnostics(reliabilityFitRaw),
+      rawSignalGradePolicy: signalRankDiagnostics(gradePolicyRaw),
+      rawSignalConfirmation: signalRankDiagnostics(confirmed),
+      legacyProbabilityCalibrationDiagnostic: probabilityCalibration,
+      reliabilityModel,
+      reliabilityFit: reliabilityDiagnostics(calibratedReliabilityFit),
+      reliabilityGradePolicy: reliabilityDiagnostics(calibratedGradePolicy),
+      reliabilityConfirmation: reliabilityDiagnostics(calibratedConfirmed),
+      singleSignalFamilyAudit: auditSingleSignalGradeFamilies(
+        reliabilityFitRaw,
+        gradePolicyRaw,
+        confirmed,
+      ),
+      rankedGradeAudit: auditRankedGradePolicy(
+        reliabilityFitRaw,
+        gradePolicyRaw,
+        confirmed,
+      ),
+      gradePolicy: exactPriceReplaySummary(calibratedGradePolicy),
       confirmation: exactPriceReplaySummary(calibratedConfirmed),
       exploratoryPolicy: policySearch.policy,
-      policyGradeFit: policySearch.summary,
-      policyGradeValidation: policyValidation,
+      policyGradePolicy: policySearch.summary,
       policyConfirmation,
       policyVerdict: gradePolicyVerdict(
         policySearch.summary,
-        policyValidation,
         policyConfirmation,
       ),
     }];
   }));
   return {
-    release: "nba_player_props_exact_price_grade_research_2026_10_20_r1",
+    release: "nba_player_props_exact_price_grade_research_2026_10_20_r3_five_stage_chronology",
     status: "opened_retrospective_research_only",
     actionable: false,
     targetBookExcluded: true,
-    selection: exactPriceReplaySummary(selectionRows),
+    gradePolicy: exactPriceReplaySummary(policyRows),
     confirmation: exactPriceReplaySummary(confirmationRows),
     byMarket,
     limitations: [
@@ -1309,6 +1389,8 @@ function exactPriceReplayRows(args: {
         actual,
         independentProjection,
         finalProjection,
+        projectionStandardDeviation: args.distribution.standardDeviation,
+        rawFinalProbability: finalProbability,
         finalProbability,
         sportsbook: price.sportsbook,
         americanPrice: price.americanPrice,
@@ -1415,9 +1497,10 @@ function selectExploratoryGradePolicy(rows: readonly ExactPriceReplayRow[]): {
   for (const leanProbability of [0.53, 0.56, 0.59, 0.62, 0.65]) {
     for (const leanEv of [0, 0.03, 0.06, 0.09]) {
       for (const leanMarketProbability of [0.50, 0.52, 0.54]) {
-        for (const bestProbability of [0.60, 0.64, 0.68, 0.72]) {
-          for (const bestEv of [0.05, 0.08, 0.12, 0.16]) {
-            for (const bestMarketProbability of [0.52, 0.55]) {
+          for (const leanRequiresReferenceBook of [false, true]) {
+            for (const bestProbability of [0.60, 0.64, 0.68, 0.72]) {
+            for (const bestEv of [0.05, 0.08, 0.12, 0.16]) {
+              for (const bestMarketProbability of [0.52, 0.55]) {
               if (bestProbability <= leanProbability || bestEv < leanEv
                 || bestMarketProbability < leanMarketProbability) continue;
               policies.push({
@@ -1427,9 +1510,11 @@ function selectExploratoryGradePolicy(rows: readonly ExactPriceReplayRow[]): {
                 leanProbability,
                 leanEv,
                 leanMarketProbability,
+                leanRequiresReferenceBook,
                 watchProbability: 0.52,
                 watchEv: -0.01,
               });
+              }
             }
           }
         }
@@ -1486,20 +1571,20 @@ function grade(row: ExactPriceReplayRow, policy: GradePolicy): GradeName {
     && row.targetExcludedProbability >= policy.bestMarketProbability
     && row.targetExcludedReferenceBooks >= 1) return "Best Angle";
   if (row.finalProbability >= policy.leanProbability && row.expectedValue >= policy.leanEv
-    && row.targetExcludedProbability >= policy.leanMarketProbability) return "Lean";
+    && row.targetExcludedProbability >= policy.leanMarketProbability
+    && (!policy.leanRequiresReferenceBook || row.targetExcludedReferenceBooks >= 1)) return "Lean";
   if (row.finalProbability >= policy.watchProbability && row.expectedValue >= policy.watchEv) return "Watchlist";
   return "No Play";
 }
 
 function gradePolicyVerdict(
-  gradeFit: ReturnType<typeof scoreGradePolicy>,
-  gradeValidation: ReturnType<typeof scoreGradePolicy>,
+  gradePolicy: ReturnType<typeof scoreGradePolicy>,
   confirmation: ReturnType<typeof scoreGradePolicy>,
 ): { qualified: boolean; reasons: string[] } {
   const reasons: string[] = [];
-  if (gradeValidation.actionable.records < 5) reasons.push("fewer_than_5_grade_validation_actionables");
-  if ((gradeValidation.actionable.hitRate ?? 0) < 0.55) reasons.push("grade_validation_actionable_hit_below_55_percent");
-  if ((gradeValidation.actionable.roi ?? -1) <= 0) reasons.push("grade_validation_actionable_roi_not_positive");
+  if (gradePolicy.actionable.records < 10) reasons.push("fewer_than_10_grade_policy_actionables");
+  if ((gradePolicy.actionable.hitRate ?? 0) < 0.55) reasons.push("grade_policy_actionable_hit_below_55_percent");
+  if ((gradePolicy.actionable.roi ?? -1) <= 0) reasons.push("grade_policy_actionable_roi_not_positive");
   if (confirmation.actionable.records < 10) reasons.push("fewer_than_10_confirmation_actionables");
   if ((confirmation.actionable.hitRate ?? 0) < 0.55) reasons.push("confirmation_actionable_hit_below_55_percent");
   if ((confirmation.actionable.roi ?? -1) <= 0) reasons.push("confirmation_actionable_roi_not_positive");
@@ -1514,8 +1599,7 @@ function gradePolicyVerdict(
     && (confirmation.noPlay.hitRate ?? 0) > (confirmation.actionable.hitRate ?? 0) + 0.05) {
     reasons.push("no_play_materially_outperforms_actionables");
   }
-  if ((gradeFit.actionable.roi ?? -1) <= 0) reasons.push("grade_fit_actionable_roi_not_positive");
-  const validationShare = gradeValidation.boardShare.actionable ?? 0;
+  const validationShare = gradePolicy.boardShare.actionable ?? 0;
   const confirmationShare = confirmation.boardShare.actionable ?? 0;
   if (Math.abs(validationShare - confirmationShare) > 0.20) reasons.push("actionable_board_share_unstable");
   return { qualified: reasons.length === 0, reasons };
@@ -1524,9 +1608,521 @@ function gradePolicyVerdict(
 function gradePolicyScore(summary: ReturnType<typeof scoreGradePolicy>): number {
   const actionableRoi = summary.actionable.roi ?? -1;
   const actionableHit = summary.actionable.hitRate ?? 0;
-  const bestRoi = summary.bestAngle.roi ?? -1;
-  const bestHit = summary.bestAngle.hitRate ?? 0;
+  // A market may support Leans without enough evidence for Best Angles. Treat
+  // an intentionally absent top tier as neutral rather than penalizing the
+  // entire useful grade surface.
+  const bestRoi = summary.bestAngle.roi ?? 0;
+  const bestHit = summary.bestAngle.hitRate ?? 0.5;
   return actionableRoi + 0.35 * (actionableHit - 0.5) + 0.25 * bestRoi + 0.15 * (bestHit - 0.5);
+}
+
+const GRADE_RELIABILITY_FEATURES: readonly ReliabilityFeature[] = [
+  "raw_model_logit",
+  "standardized_projection_distance",
+  "target_excluded_margin",
+  "target_price_implied_probability",
+  "independent_final_agreement",
+  "reference_book_confirmation",
+] as const;
+
+function fitGradeReliabilityModel(
+  rows: readonly ExactPriceReplayRow[],
+  pooledRows: readonly ExactPriceReplayRow[],
+): GradeReliabilityModel {
+  const ordered = [...rows].sort((left, right) => Date.parse(left.featureCutoff) - Date.parse(right.featureCutoff));
+  const split = Math.max(4, Math.min(ordered.length - 2, Math.floor(ordered.length * 0.7)));
+  const fitRows = ordered.slice(0, split);
+  const internalValidation = ordered.slice(split);
+  const market = ordered[0]?.market;
+  const otherMarkets = pooledRows.filter((row) => row.market !== market);
+  const partiallyPooledFit = [...otherMarkets, ...fitRows, ...fitRows, ...fitRows];
+  const lambdas = [0.5, 1, 2, 5, 10, 20, 50];
+  const selected = lambdas.flatMap((lambda) => [
+    { family: "market_specific" as const, model: fitGradeReliabilityAtLambda(fitRows, lambda, GRADE_RELIABILITY_FEATURES, "market_specific") },
+    { family: "partially_pooled" as const, model: fitGradeReliabilityAtLambda(partiallyPooledFit, lambda, GRADE_RELIABILITY_FEATURES, "partially_pooled") },
+    { family: "raw_model_only" as const, model: fitGradeReliabilityAtLambda(fitRows, lambda, ["raw_model_logit"], "raw_model_only") },
+    { family: "projection_distance_only" as const, model: fitGradeReliabilityAtLambda(fitRows, lambda, ["standardized_projection_distance"], "projection_distance_only") },
+    { family: "target_excluded_only" as const, model: fitGradeReliabilityAtLambda(fitRows, lambda, ["target_excluded_margin"], "target_excluded_only") },
+    { family: "target_price_only" as const, model: fitGradeReliabilityAtLambda(fitRows, lambda, ["target_price_implied_probability"], "target_price_only") },
+  ]).map((candidate) => ({
+    ...candidate,
+    loss: reliabilityLogLoss(internalValidation, candidate.model) ?? Infinity,
+  })).sort((left, right) => left.loss - right.loss || left.model.lambda - right.model.lambda)[0];
+  const lambda = selected?.model.lambda ?? 20;
+  const family = selected?.family ?? "market_specific";
+  const pooledRefitRows = family === "partially_pooled"
+    ? [...otherMarkets, ...ordered, ...ordered, ...ordered]
+    : ordered;
+  const features = featuresForReliabilityFamily(family);
+  const refit = calibrateReliabilityIntercept(fitGradeReliabilityAtLambda(pooledRefitRows, lambda, features, family), ordered);
+  return {
+    ...refit,
+    family,
+    fitRows: ordered.length,
+    pooledRows: otherMarkets.length,
+    internalValidationRows: internalValidation.length,
+    internalValidationLogLoss: selected && Number.isFinite(selected.loss) ? selected.loss : null,
+  };
+}
+
+function auditSingleSignalGradeFamilies(
+  gradeFit: readonly ExactPriceReplayRow[],
+  gradeValidation: readonly ExactPriceReplayRow[],
+  confirmation: readonly ExactPriceReplayRow[],
+) {
+  const families: readonly GradeReliabilityModel["family"][] = [
+    "raw_model_only",
+    "projection_distance_only",
+    "target_excluded_only",
+    "target_price_only",
+  ];
+  return Object.fromEntries(families.map((family) => {
+    const model = fitSingleSignalGradeReliability(gradeFit, family);
+    const fitRows = applyGradeReliabilityModel(gradeFit, model);
+    const validationRows = applyGradeReliabilityModel(gradeValidation, model);
+    const confirmationRows = applyGradeReliabilityModel(confirmation, model);
+    const policySearch = selectExploratoryGradePolicy(fitRows);
+    const validation = scoreGradePolicy(validationRows, policySearch.policy);
+    const confirmed = scoreGradePolicy(confirmationRows, policySearch.policy);
+    return [family, {
+      model,
+      fit: policySearch.summary,
+      validation,
+      confirmation: confirmed,
+      verdict: gradePolicyVerdict(validation, confirmed),
+    }];
+  }));
+}
+
+type RankSignalFamily =
+  | "raw_model_probability"
+  | "projection_distance"
+  | "target_excluded_probability"
+  | "target_price_probability"
+  | "market_consensus"
+  | "model_market_consensus"
+  | "target_excluded_expected_value"
+  | "model_market_conservative_expected_value"
+  | "model_market_average_expected_value";
+
+type RankGradePolicy = Readonly<{
+  signalFamily: RankSignalFamily;
+  leanThreshold: number;
+  bestThreshold: number;
+  minimumAmericanPrice: number;
+}>;
+
+function auditRankedGradePolicy(
+  reliabilityFit: readonly ExactPriceReplayRow[],
+  gradePolicy: readonly ExactPriceReplayRow[],
+  confirmation: readonly ExactPriceReplayRow[],
+) {
+  const families: readonly RankSignalFamily[] = [
+    "raw_model_probability",
+    "projection_distance",
+    "target_excluded_probability",
+    "target_price_probability",
+    "market_consensus",
+    "model_market_consensus",
+    "target_excluded_expected_value",
+    "model_market_conservative_expected_value",
+    "model_market_average_expected_value",
+  ];
+  const familyDiagnostics = Object.fromEntries(families.map((family) => {
+    const reliabilityTop = rankTopFractionSummary(reliabilityFit, family, 0.20);
+    return [family, {
+      reliabilityFitAuc: scoreAuc(reliabilityFit, (row) => rankSignal(row, family)),
+      reliabilityFitTop20: reliabilityTop,
+      reliabilityScore: (reliabilityTop.roi ?? -1) + 0.35 * ((reliabilityTop.hitRate ?? 0) - 0.5),
+      gradePolicyAuc: scoreAuc(gradePolicy, (row) => rankSignal(row, family)),
+      confirmationAuc: scoreAuc(confirmation, (row) => rankSignal(row, family)),
+    }];
+  }));
+  const rankedFamilies = [...families].sort((left, right) =>
+    (familyDiagnostics[right].reliabilityScore - familyDiagnostics[left].reliabilityScore)
+    || ((familyDiagnostics[right].reliabilityFitAuc ?? 0) - (familyDiagnostics[left].reliabilityFitAuc ?? 0))
+    || left.localeCompare(right));
+  const minimumActionables = Math.max(10, Math.floor(gradePolicy.length * 0.08));
+  const policiesForFamily = (signalFamily: RankSignalFamily): RankGradePolicy[] => {
+    const policies: RankGradePolicy[] = [];
+    for (const actionableFraction of [0.10, 0.15, 0.20, 0.25, 0.30, 0.40]) {
+      for (const minimumAmericanPrice of [-150, -130, -120, -110]) {
+        policies.push({
+          signalFamily,
+          leanThreshold: quantileThreshold(gradePolicy, signalFamily, actionableFraction),
+          bestThreshold: Infinity,
+          minimumAmericanPrice,
+        });
+      }
+    }
+    return policies;
+  };
+  const signalFamily = rankedFamilies.find((family) =>
+    policiesForFamily(family).some((policy) =>
+      scoreRankGradePolicy(gradePolicy, policy).actionable.records >= minimumActionables))
+    ?? rankedFamilies[0]!;
+  const policies = policiesForFamily(signalFamily);
+  const eligible = policies.map((policy) => ({ policy, summary: scoreRankGradePolicy(gradePolicy, policy) }))
+    .filter(({ summary }) => summary.actionable.records >= minimumActionables
+      && (summary.boardShare.actionable ?? 0) <= 0.40
+      && (summary.actionable.hitRate ?? 0) >= 0.55
+      && (summary.actionable.roi ?? -1) > 0
+      && (summary.bestAngle.records === 0
+        || (summary.bestAngle.hitRate ?? 0) >= (summary.actionable.hitRate ?? 0)));
+  const pool = eligible.length > 0
+    ? eligible
+    : policies.map((policy) => ({ policy, summary: scoreRankGradePolicy(gradePolicy, policy) }));
+  const selectedLean = pool.sort((left, right) =>
+    gradePolicyScore(right.summary) - gradePolicyScore(left.summary)
+    || right.summary.actionable.records - left.summary.actionable.records)[0]!;
+  const bestCandidates = [Infinity, ...[0.03, 0.05, 0.08, 0.10].map((fraction) =>
+    quantileThreshold(gradePolicy, signalFamily, fraction))]
+    .map((bestThreshold) => {
+      const policy = { ...selectedLean.policy, bestThreshold };
+      return { policy, summary: scoreRankGradePolicy(gradePolicy, policy) };
+    })
+    .filter(({ summary, policy }) => policy.bestThreshold === Infinity
+      || (summary.bestAngle.records >= 3
+        && (summary.bestAngle.hitRate ?? 0) >= (summary.actionable.hitRate ?? 0)
+        && (summary.bestAngle.roi ?? -1) >= (summary.actionable.roi ?? -1)));
+  const selected = bestCandidates.sort((left, right) => {
+    const leftHasBest = Number(left.summary.bestAngle.records > 0);
+    const rightHasBest = Number(right.summary.bestAngle.records > 0);
+    if (leftHasBest !== rightHasBest) return rightHasBest - leftHasBest;
+    return gradePolicyScore(right.summary) - gradePolicyScore(left.summary);
+  })[0]!;
+  const confirmed = scoreRankGradePolicy(confirmation, selected.policy);
+  return {
+    signalSelectionExcludedGradePolicyAndConfirmation: true,
+    policySelectionExcludedConfirmation: true,
+    signalFamily,
+    familyDiagnostics,
+    policy: selected.policy,
+    gradePolicy: selected.summary,
+    confirmation: confirmed,
+    verdict: gradePolicyVerdict(selected.summary, confirmed),
+  };
+}
+
+function quantileThreshold(
+  rows: readonly ExactPriceReplayRow[],
+  family: RankSignalFamily,
+  upperFraction: number,
+): number {
+  const values = rows.map((row) => rankSignal(row, family)).sort((left, right) => right - left);
+  if (values.length === 0) return Infinity;
+  const index = Math.max(0, Math.min(values.length - 1, Math.ceil(values.length * upperFraction) - 1));
+  return values[index]!;
+}
+
+function rankSignal(row: ExactPriceReplayRow, family: RankSignalFamily): number {
+  const projectionDistance = Math.abs(row.finalProjection - row.line) / Math.max(0.25, row.projectionStandardDeviation);
+  const targetPriceProbability = implied(row.americanPrice);
+  if (family === "raw_model_probability") return row.rawFinalProbability;
+  if (family === "projection_distance") return projectionDistance;
+  if (family === "target_excluded_probability") return row.targetExcludedProbability;
+  if (family === "target_price_probability") return targetPriceProbability;
+  if (family === "market_consensus") return (row.targetExcludedProbability + targetPriceProbability) / 2;
+  if (family === "model_market_consensus") {
+    return (row.rawFinalProbability + row.targetExcludedProbability + targetPriceProbability) / 3;
+  }
+  if (family === "target_excluded_expected_value") {
+    return expectedValue(row.targetExcludedProbability, row.americanPrice);
+  }
+  const marriedProbability = family === "model_market_conservative_expected_value"
+    ? Math.min(row.rawFinalProbability, row.targetExcludedProbability)
+    : (row.rawFinalProbability + row.targetExcludedProbability) / 2;
+  return expectedValue(marriedProbability, row.americanPrice);
+}
+
+function rankTopFractionSummary(
+  rows: readonly ExactPriceReplayRow[],
+  family: RankSignalFamily,
+  fraction: number,
+) {
+  const count = Math.max(1, Math.ceil(rows.length * fraction));
+  const selected = [...rows]
+    .sort((left, right) => rankSignal(right, family) - rankSignal(left, family))
+    .slice(0, count);
+  const wins = selected.filter((row) => row.finalSide === row.outcomeSide).length;
+  const units = selected.reduce((sum, row) => sum + unitReturn(
+    row.finalSide === row.outcomeSide,
+    row.americanPrice,
+  ), 0);
+  return {
+    records: selected.length,
+    hitRate: selected.length > 0 ? wins / selected.length : null,
+    roi: selected.length > 0 ? units / selected.length : null,
+  };
+}
+
+function scoreRankGradePolicy(rows: readonly ExactPriceReplayRow[], policy: RankGradePolicy) {
+  const graded = rows.map((row) => {
+    const score = rankSignal(row, policy.signalFamily);
+    const priceQualified = row.americanPrice >= policy.minimumAmericanPrice;
+    const grade: GradeName = priceQualified && score >= policy.bestThreshold
+      ? "Best Angle"
+      : priceQualified && score >= policy.leanThreshold
+        ? "Lean"
+        : score >= policy.leanThreshold
+          ? "Watchlist"
+          : "No Play";
+    return { row, grade };
+  });
+  const summary = (values: typeof graded) => {
+    const wins = values.filter(({ row }) => row.finalSide === row.outcomeSide).length;
+    const units = values.reduce((sum, { row }) => sum + unitReturn(row.finalSide === row.outcomeSide, row.americanPrice), 0);
+    return {
+      records: values.length,
+      wins,
+      losses: values.length - wins,
+      hitRate: values.length > 0 ? wins / values.length : null,
+      units,
+      roi: values.length > 0 ? units / values.length : null,
+    };
+  };
+  const bestAngle = graded.filter((row) => row.grade === "Best Angle");
+  const lean = graded.filter((row) => row.grade === "Lean");
+  const watchlist = graded.filter((row) => row.grade === "Watchlist");
+  const noPlay = graded.filter((row) => row.grade === "No Play");
+  return {
+    all: summary(graded),
+    actionable: summary([...bestAngle, ...lean]),
+    bestAngle: summary(bestAngle),
+    lean: summary(lean),
+    watchlist: summary(watchlist),
+    noPlay: summary(noPlay),
+    boardShare: {
+      actionable: graded.length > 0 ? (bestAngle.length + lean.length) / graded.length : null,
+      bestAngle: graded.length > 0 ? bestAngle.length / graded.length : null,
+      watchlist: graded.length > 0 ? watchlist.length / graded.length : null,
+      noPlay: graded.length > 0 ? noPlay.length / graded.length : null,
+    },
+  };
+}
+
+function fitSingleSignalGradeReliability(
+  rows: readonly ExactPriceReplayRow[],
+  family: GradeReliabilityModel["family"],
+): GradeReliabilityModel {
+  const ordered = [...rows].sort((left, right) => Date.parse(left.featureCutoff) - Date.parse(right.featureCutoff));
+  const split = Math.max(4, Math.min(ordered.length - 2, Math.floor(ordered.length * 0.7)));
+  const fitRows = ordered.slice(0, split);
+  const internalValidation = ordered.slice(split);
+  const features = featuresForReliabilityFamily(family);
+  const selected = [0.5, 1, 2, 5, 10, 20, 50].map((lambda) => {
+    const model = fitGradeReliabilityAtLambda(fitRows, lambda, features, family);
+    return { model, loss: reliabilityLogLoss(internalValidation, model) ?? Infinity };
+  }).sort((left, right) => left.loss - right.loss || left.model.lambda - right.model.lambda)[0]!;
+  const refit = calibrateReliabilityIntercept(
+    fitGradeReliabilityAtLambda(ordered, selected.model.lambda, features, family),
+    ordered,
+  );
+  return {
+    ...refit,
+    fitRows: ordered.length,
+    pooledRows: 0,
+    internalValidationRows: internalValidation.length,
+    internalValidationLogLoss: Number.isFinite(selected.loss) ? selected.loss : null,
+  };
+}
+
+function featuresForReliabilityFamily(
+  family: GradeReliabilityModel["family"],
+): readonly ReliabilityFeature[] {
+  if (family === "raw_model_only") return ["raw_model_logit"];
+  if (family === "projection_distance_only") return ["standardized_projection_distance"];
+  if (family === "target_excluded_only") return ["target_excluded_margin"];
+  if (family === "target_price_only") return ["target_price_implied_probability"];
+  return GRADE_RELIABILITY_FEATURES;
+}
+
+function fitGradeReliabilityAtLambda(
+  rows: readonly ExactPriceReplayRow[],
+  lambda: number,
+  features: readonly ReliabilityFeature[] = GRADE_RELIABILITY_FEATURES,
+  family: GradeReliabilityModel["family"] = "market_specific",
+): GradeReliabilityModel {
+  const raw = rows.map((row) => reliabilityFeatureVector(row, features));
+  const means = features.map((_, index) => mean(raw.map((values) => values[index]!)) ?? 0);
+  const scales = features.map((_, index) => standardDeviation(raw.map((values) => values[index]!)) || 1);
+  const x = raw.map((values) => [1, ...values.map((value, index) => (value - means[index]!) / scales[index]!)]);
+  const y = rows.map((row) => Number(row.finalSide === row.outcomeSide));
+  const baseRate = Math.min(1 - 1e-4, Math.max(1e-4, mean(y) ?? 0.5));
+  const coefficients = [Math.log(baseRate / (1 - baseRate)), ...features.map(() => 0)];
+  const learningRate = 0.04;
+  for (let iteration = 0; iteration < 4_000; iteration += 1) {
+    const gradient = coefficients.map(() => 0);
+    x.forEach((values, rowIndex) => {
+      const probability = sigmoid(values.reduce((sum, value, index) => sum + value * coefficients[index]!, 0));
+      const error = probability - y[rowIndex]!;
+      values.forEach((value, index) => { gradient[index]! += error * value; });
+    });
+    coefficients.forEach((coefficient, index) => {
+      const penalty = index === 0 ? 0 : lambda * coefficient;
+      coefficients[index] = coefficient - learningRate * ((gradient[index]! + penalty) / Math.max(1, rows.length));
+    });
+  }
+  return {
+    release: "nba_player_props_grade_reliability_research_2026_10_20_r3_five_stage_chronology",
+    features,
+    means,
+    scales,
+    coefficients,
+    lambda,
+    family,
+    fitRows: rows.length,
+    pooledRows: 0,
+    internalValidationRows: 0,
+    internalValidationLogLoss: null,
+  };
+}
+
+function calibrateReliabilityIntercept(
+  model: GradeReliabilityModel,
+  rows: readonly ExactPriceReplayRow[],
+): GradeReliabilityModel {
+  let best = { offset: 0, loss: reliabilityLogLoss(rows, model) ?? Infinity };
+  for (let offset = -1.5; offset <= 1.5001; offset += 0.025) {
+    const candidate = { ...model, coefficients: [model.coefficients[0]! + offset, ...model.coefficients.slice(1)] };
+    const loss = reliabilityLogLoss(rows, candidate) ?? Infinity;
+    if (loss < best.loss) best = { offset, loss };
+  }
+  return {
+    ...model,
+    coefficients: [model.coefficients[0]! + best.offset, ...model.coefficients.slice(1)],
+  };
+}
+
+function applyGradeReliabilityModel(
+  rows: readonly ExactPriceReplayRow[],
+  model: GradeReliabilityModel,
+): ExactPriceReplayRow[] {
+  return rows.map((row) => {
+    const raw = reliabilityFeatureVector(row, model.features);
+    const values = [1, ...raw.map((value, index) => (value - model.means[index]!) / model.scales[index]!)];
+    const finalProbability = boundedProbability(sigmoid(values.reduce(
+      (sum, value, index) => sum + value * (model.coefficients[index] ?? 0),
+      0,
+    )));
+    return {
+      ...row,
+      finalProbability,
+      expectedValue: expectedValue(finalProbability, row.americanPrice),
+    };
+  });
+}
+
+function reliabilityFeatureVector(
+  row: ExactPriceReplayRow,
+  features: readonly ReliabilityFeature[] = GRADE_RELIABILITY_FEATURES,
+): number[] {
+  const rawProbability = boundedProbability(row.rawFinalProbability);
+  const values: Record<ReliabilityFeature, number> = {
+    raw_model_logit: Math.log(rawProbability / (1 - rawProbability)),
+    standardized_projection_distance: Math.abs(row.finalProjection - row.line) / Math.max(0.25, row.projectionStandardDeviation),
+    target_excluded_margin: row.targetExcludedProbability - 0.5,
+    target_price_implied_probability: implied(row.americanPrice),
+    independent_final_agreement: Number(row.independentSide === row.finalSide),
+    reference_book_confirmation: Number(row.targetExcludedReferenceBooks > 0),
+  };
+  return features.map((feature) => values[feature]);
+}
+
+function reliabilityLogLoss(
+  rows: readonly ExactPriceReplayRow[],
+  model: GradeReliabilityModel,
+): number | null {
+  const scored = applyGradeReliabilityModel(rows, model);
+  return mean(scored.map((row) => {
+    const won = row.finalSide === row.outcomeSide;
+    return won ? -Math.log(row.finalProbability) : -Math.log(1 - row.finalProbability);
+  }));
+}
+
+function reliabilityDiagnostics(rows: readonly ExactPriceReplayRow[]) {
+  const ordered = [...rows].sort((left, right) => right.finalProbability - left.finalProbability);
+  const quartile = Math.max(1, Math.floor(ordered.length / 4));
+  const top = ordered.slice(0, quartile);
+  const bottom = ordered.slice(-quartile);
+  const hitRate = (values: readonly ExactPriceReplayRow[]) => mean(values.map(
+    (row) => Number(row.finalSide === row.outcomeSide),
+  ));
+  return {
+    rows: rows.length,
+    auc: reliabilityAuc(rows),
+    topQuartileRows: top.length,
+    topQuartileHitRate: hitRate(top),
+    bottomQuartileRows: bottom.length,
+    bottomQuartileHitRate: hitRate(bottom),
+    rankSpread: (hitRate(top) ?? 0) - (hitRate(bottom) ?? 0),
+  };
+}
+
+function signalRankDiagnostics(rows: readonly ExactPriceReplayRow[]) {
+  const signals: Record<string, (row: ExactPriceReplayRow) => number> = {
+    rawModelProbability: (row) => row.rawFinalProbability,
+    standardizedProjectionDistance: (row) => Math.abs(row.finalProjection - row.line) / Math.max(0.25, row.projectionStandardDeviation),
+    targetExcludedProbability: (row) => row.targetExcludedProbability,
+    targetPriceImpliedProbability: (row) => implied(row.americanPrice),
+    independentFinalAgreement: (row) => Number(row.independentSide === row.finalSide),
+    referenceBookConfirmation: (row) => Number(row.targetExcludedReferenceBooks > 0),
+  };
+  return Object.fromEntries(Object.entries(signals).map(([name, score]) => [name, {
+    auc: scoreAuc(rows, score),
+    upperHalfHitRate: rankedHalfHitRate(rows, score, "upper"),
+    lowerHalfHitRate: rankedHalfHitRate(rows, score, "lower"),
+  }]));
+}
+
+function scoreAuc(
+  rows: readonly ExactPriceReplayRow[],
+  score: (row: ExactPriceReplayRow) => number,
+): number | null {
+  const wins = rows.filter((row) => row.finalSide === row.outcomeSide);
+  const losses = rows.filter((row) => row.finalSide !== row.outcomeSide);
+  if (wins.length === 0 || losses.length === 0) return null;
+  let value = 0;
+  for (const win of wins) {
+    for (const loss of losses) {
+      value += score(win) > score(loss) ? 1 : score(win) === score(loss) ? 0.5 : 0;
+    }
+  }
+  return value / (wins.length * losses.length);
+}
+
+function rankedHalfHitRate(
+  rows: readonly ExactPriceReplayRow[],
+  score: (row: ExactPriceReplayRow) => number,
+  half: "upper" | "lower",
+): number | null {
+  const ordered = [...rows].sort((left, right) => score(right) - score(left));
+  const midpoint = Math.max(1, Math.floor(ordered.length / 2));
+  const selected = half === "upper" ? ordered.slice(0, midpoint) : ordered.slice(midpoint);
+  return mean(selected.map((row) => Number(row.finalSide === row.outcomeSide)));
+}
+
+function reliabilityAuc(rows: readonly ExactPriceReplayRow[]): number | null {
+  const wins = rows.filter((row) => row.finalSide === row.outcomeSide);
+  const losses = rows.filter((row) => row.finalSide !== row.outcomeSide);
+  if (wins.length === 0 || losses.length === 0) return null;
+  let score = 0;
+  for (const win of wins) {
+    for (const loss of losses) {
+      score += win.finalProbability > loss.finalProbability ? 1 : win.finalProbability === loss.finalProbability ? 0.5 : 0;
+    }
+  }
+  return score / (wins.length * losses.length);
+}
+
+function boundedProbability(value: number): number {
+  return Math.min(1 - 1e-6, Math.max(1e-6, value));
+}
+
+function sigmoid(value: number): number {
+  if (value >= 0) return 1 / (1 + Math.exp(-Math.min(40, value)));
+  const exponential = Math.exp(Math.max(-40, value));
+  return exponential / (1 + exponential);
 }
 
 function fitProbabilityCalibration(rows: readonly ExactPriceReplayRow[]): {
@@ -1546,20 +2142,6 @@ function fitProbabilityCalibration(rows: readonly ExactPriceReplayRow[]): {
     }
   }
   return best;
-}
-
-function applyProbabilityCalibration(
-  rows: readonly ExactPriceReplayRow[],
-  calibration: { intercept: number; slope: number },
-): ExactPriceReplayRow[] {
-  return rows.map((row) => {
-    const finalProbability = plattProbability(row.finalProbability, calibration.intercept, calibration.slope);
-    return {
-      ...row,
-      finalProbability,
-      expectedValue: expectedValue(finalProbability, row.americanPrice),
-    };
-  });
 }
 
 function plattProbability(probability: number, intercept: number, slope: number): number {

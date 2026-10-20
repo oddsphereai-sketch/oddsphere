@@ -10,6 +10,61 @@ model, market-evidence seam, chronological replay, and member-reader contract.
 It does not add an NBA navigation pill, route, cron, database writer, lock job,
 grade, stake, or member-facing row.
 
+## Dense exact-price and play-grade validation update
+
+The exact-price replay now covers all 360 chronological research games rather
+than the earlier 60-game sparse sample. It contains 360,522 genuine archived
+opening observations and is identified by immutable-input SHA-256
+`b8e20c78dabed1f461e8eb9e26c85c61316ba801ac94cf776969c45544d93da8`.
+The larger sample invalidated several apparently strong results from the sparse
+pilot; those earlier qualifications are withdrawn rather than carried forward.
+
+The current replay uses five non-overlapping chronological stages:
+
+- 180 development games;
+- 36 model-selection games;
+- 35 reliability-fit games;
+- 37 grade-policy games; and
+- 72 untouched confirmation games.
+
+Candidate selection cannot see reliability, policy, or confirmation outcomes.
+Reliability fitting cannot see policy or confirmation outcomes. Grade-policy
+selection cannot see confirmation outcomes. This replaces the earlier design
+that tried to fit reliability and policy on halves of one small selection
+window.
+
+Two future-facing Lean surfaces survived both the policy window and untouched
+confirmation:
+
+| Market | Policy window | Untouched confirmation | Board behavior |
+|---|---:|---:|---|
+| Points | 42-27; 60.9%; +10.2% ROI (69) | 54-36; 60.0%; +8.4% ROI (90) | 19.9% actionable; Lean only |
+| Points + rebounds + assists | 17-11; 60.7%; +12.8% ROI (28) | 16-7; 69.6%; +28.5% ROI (23) | 7.5% actionable; Lean surface qualified |
+
+The PRA policy emitted only three policy-window Best Angles and one confirmation
+Best Angle. That is not enough evidence to independently qualify the Best Angle
+tier, even though the combined actionable surface passed. Points intentionally
+emits no Best Angles. An absent unsupported tier is neutral; calibration must
+not broaden or distort the Lean population merely to manufacture one.
+
+Rebounds, Assists, Threes, Points + Rebounds, Points + Assists, and Rebounds +
+Assists did not survive untouched confirmation. They remain private research
+markets. The failure is not hidden by flattening the future member board: their
+structural projections and grade signals continue separately, while the two
+passing surfaces establish a real release boundary.
+
+The local forward observer also proved current provider coverage on October 20:
+three games, nine sportsbooks, every foundation market, 2,588 complete two-way
+buckets, 12,314 opening rows, 8,439 current rows, and zero invalid-freshness
+rows at the lock observation. The immutable captures are:
+
+- initial: `7cdc939e318aca652288149b9b2b181a6630cde0e8fd9e643e40ac0eeb3bfcc8`;
+- T-60 sweep: `088f2ec06fc970f84fb3e9681b34504f8b2cb2f848ec35b8ba0b42613260dc74`; and
+- lock observer: `81cdcd8deeb67ce1393b2657f3f00aa6d7f5de4ffc18fd37293978d416446409`.
+
+These are local observe-only artifacts. No route, public Tracking row, member
+copy, grade, stake, lock, database writer, schedule, or live product changed.
+
 ## Genuine historical pilot
 
 The bounded 2025-season pilot used:
@@ -161,27 +216,25 @@ reported afterward.
 | Threes | long-horizon opportunity model + 5 pp market disagreement | 56.0% (100) | 53.3% (60) | 6/6 before confirmation; 3/5 full rolling blocks | Selection MAE 0.954 versus 0.970 ridge; confirmation MAE is effectively tied |
 | Rebounds + Assists | component sum + opening-market arbitration | 53.8% (119) | 55.0% (80) | 4/5 full rolling blocks | Confirmation MAE 3.06 versus 3.14 ridge |
 
-These four candidates are qualified for the next market-path and grade stage;
-they are not production-qualified releases. Threes is the narrowest pass and
-must not receive broad actionability merely because it cleared 50%. The
-remaining launch gates are timestamped movement, predictive-distribution
-calibration, price/ROI grades, board-count impact, settlement, and live
-operational validation. No route, member row, prediction, grade, stake, lock,
-writer, or schedule changed during this work.
+At that sparse stage, these four candidates qualified only for the next
+market-path and grade experiment. The later 360-game exact-price replay above
+supersedes that conclusion: none of the four earned a current grade release,
+and only Points and PRA produced stable Lean surfaces. No route, member row,
+prediction, grade, stake, lock, writer, or schedule changed during this work.
 
 ### Current pathway status
 
 | Gate | Status | What remains |
 |---|---|---|
-| Immutable historical dataset | Passed for the pilot | Add independent early-, mid-, and late-season windows |
+| Immutable historical dataset | Passed for the 360-game exact-price replay | Add an independent season and preserve the immutable SHA for every run |
 | Reproducible offline replay | Passed | Retain cache SHA and release identity for every future run |
-| Independent model tournament | Passed for Rebounds; provisional for Assists, Threes, and Rebounds + Assists | Preserve the pre-confirmation choices and add an independent season/window |
-| Projection stability | Passed for the expanded target-market candidates | Threes remains the narrowest pass and needs the movement/grade gate |
+| Independent model tournament | Mixed; separate candidates selected by market | Continue structural work for the six failed grade markets and add an independent season/window |
+| Projection stability | Sufficient to forward-test Points and PRA grades; not a release pass for the other six markets | Retain market-specific candidates; do not restore sparse-sample qualifications |
 | Distribution calibration | Not tested | Fit predictive distributions and test interval coverage/Brier/log loss |
 | Market-reading marriage | Opening-only candidates passed | Capture target-excluded T-180/T-60/T-15/lock snapshots and validate movement |
-| Grade/ROI calibration | Not tested | Run only after the final forecast qualifies; report board counts and prices |
+| Grade/ROI calibration | Passed for Points and PRA Lean surfaces; failed for the other six markets | Forward-test the frozen passing surfaces; continue market-specific structural work for failures; do not infer a Best Angle tier from insufficient samples |
 | Settlement/private tracking | Private append-only contract built; runtime capture not yet enabled | Connect it only to the future sole authoritative observer, then prove DNP, void, overtime, and stat-correction handling |
-| Production launch | Blocked | All preceding gates must pass on one release-pure candidate |
+| Production launch | Not requested and not performed | Keep all work private until the forward release is explicitly approved |
 
 The next independent-model candidate must therefore be structural, not another
 single coefficient change: participation and minutes by lineup/availability
