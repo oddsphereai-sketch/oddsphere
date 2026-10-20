@@ -1,5 +1,37 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: UCL coherent primary score r10
+
+On 2026-10-20 Daniel Mengel directed Oddsphere to make the UCL primary score
+projection agree logically with the final Match Result, Total, and BTTS
+predictions, while leaving already locked games untouched. This exception is
+limited to future-unlocked release
+`ucl_goals_coherent_2026_10_20_r10_coherent_representative_score` documented in
+`docs/model-audits/2026-10-20-ucl-coherent-primary-score-r10.md`.
+
+R10 changes no PMF, probability, market-reading gate, prediction side, price,
+grade, stake, provider call, cadence, writer, lease, tracking rule, or
+settlement rule. The existing r9/r5 reconciled PMF already stores a
+representative exact score whose Match Result, Over/Under 2.5, and BTTS states
+agree with its released categorical leaders. R10 uses that exact score for the
+primary unlocked-card projection instead of displaying decimal expected goals
+as though they were an exact-score pick. The decimal distribution means remain
+available under the explicitly labeled Expected Goals evidence.
+
+On the same current 18-game member snapshot, 16 open primary score displays
+advance to their coherent representative scores, all 16 agree with all three
+released directions, and the two locked games change zero fields. Roma-Benfica
+changes from the visually contradictory Roma 3.31 / Benfica 1.10 mean display
+to a Roma 3-0 primary projected score, agreeing with Roma, Over 2.5, and BTTS
+No; its expected-goals evidence remains 3.31 / 1.10. Promotions, demotions,
+actionable-count changes, and side/probability/price/grade changes are all zero.
+
+Publication requires the focused UCL and immutable-lock contracts, TypeScript,
+the full model-change suite, a same-input all-game coherence report, latest-main
+integration safety, protected PR checks, and post-deploy proof that only
+unlocked r10 rows advance while prior locks retain their stored release and
+payload precedence.
+
 ## Owner-approved provisional exception: UCL qualified goals arbitration r9
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to correct the UCL model's

@@ -37,6 +37,7 @@ import { deriveUclEloConsensusJoint } from "../lib/services/ucl/uclEloConsensus"
 import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_ENDPOINT, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "../lib/services/ucl/uclStoredQuoteFallback";
 import type { EplSharpFixtureMarket, EplSharpOddsRecord } from "../lib/providers/real_api/SharpApiEplMarketProvider";
 import type { EplStoredPriceObservation } from "../lib/services/epl/buildEplDailyEdgePreview";
+import { uclCoherentProjectedScore, UCL_PROJECTED_SCORE_RELEASE } from "../lib/services/ucl/buildUclDailyEdgePreview";
 
 function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_team_id" | "away_team_id" | "date">): BdlUclMatch {
   return {
@@ -484,6 +485,27 @@ assert.equal(uclTeamsMatch("Sabah FK", "Sabah Masazir"), true);
 assert.equal(uclTeamsMatch("Sabah FK", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_20_r5_sabah_live_identity");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_10_20_r1_coherent_representative");
+const romaExpectedGoalsCard = {
+  lockState: "open",
+  projected: { away: 1.1, home: 3.3 },
+  soccerProjection: { representativeScore: { away: 0, home: 3 } },
+} as const;
+assert.deepEqual(
+  uclCoherentProjectedScore(romaExpectedGoalsCard as never),
+  { away: 0, home: 3 },
+  "an unlocked UCL primary score must express the exact score consistent with the released result/total/BTTS directions",
+);
+assert.deepEqual(
+  uclCoherentProjectedScore({ ...romaExpectedGoalsCard, lockState: "locking" } as never),
+  { away: 0, home: 3 },
+  "a game entering T-60 captures the coherent primary score before its tuple becomes immutable",
+);
+assert.deepEqual(
+  uclCoherentProjectedScore({ ...romaExpectedGoalsCard, lockState: "locked" } as never),
+  { away: 1.1, home: 3.3 },
+  "a locked card keeps its previously published primary score",
+);
 assert.equal(uclTeamsMatch("Roma", "AS Roma"), true);
 assert.equal(uclTeamsMatch("Porto", "FC Porto"), true);
 assert.equal(uclTeamsMatch("PSV Eindhoven", "PSV"), true);
@@ -771,6 +793,8 @@ assert.doesNotMatch(uclReaderBranch, /buildUclSlate|SharpApi|BallDontLie/);
 assert.ok(uclReaderBranch.indexOf("resolveUclFeatureFlags") < uclReaderBranch.indexOf("readCurrentUclMemberSnapshot"));
 assert.doesNotMatch(uclModelSource, /fitEplShadowModel|predictEplMatch|joinEplMatchStats|EPL_SHADOW_DEFAULT_CONFIG/);
 assert.match(uclPreviewSource, /deriveUclCoherentMarketOutcome/);
+assert.match(uclPreviewSource, /projected:\s*uclCoherentProjectedScore\(game\)/, "unlocked UCL cards publish the exact score selected from the coherent final PMF");
+assert.match(uclPreviewSource, /projectedScoreRelease:\s*UCL_PROJECTED_SCORE_RELEASE/, "the member snapshot identifies the primary score semantic");
 assert.match(uclPreviewSource, /deriveUclMatchResultDecision/);
 assert.match(uclPreviewSource, /deriveUclPreviewGrade/);
 assert.match(uclPreviewSource, /fixtureLoadConcurrency:\s*1/, "UCL bounds provider fan-out independently of EPL");
