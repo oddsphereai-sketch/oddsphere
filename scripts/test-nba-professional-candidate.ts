@@ -99,6 +99,7 @@ const result = buildNbaProfessionalCandidate({
 
 assert.equal(result.independent.marginHome, -4);
 assert.equal(result.final.movementApplied, true);
+assert.equal(result.final.marginHome, 2.25);
 assert.ok(result.final.marginHome > 2, "qualified home movement must flip the residual beyond the home -2 threshold");
 assert.equal(result.picks.moneyline, "home");
 assert.equal(result.picks.spread, "home");
@@ -163,11 +164,11 @@ const totalCorrected = buildNbaProfessionalCandidate({
 assert.equal(totalCorrected.independent.total, 210);
 assert.equal(totalCorrected.final.totalMovementQualified, true);
 assert.equal(totalCorrected.final.totalMovementApplied, true);
-assert.equal(totalCorrected.final.total, 226);
+assert.equal(totalCorrected.final.total, 218.25);
 assert.equal(totalCorrected.picks.total, "over");
 assert.equal(totalCorrected.readerDecisionAudit.effects.total, "flipped_by_validated_total_read");
 assert.equal(totalCorrected.readerDecisionAudit.totalMagnitudePoints, 5);
-assert.ok(Math.abs(totalCorrected.final.homeScore + totalCorrected.final.awayScore - 226) < 1e-9);
+assert.ok(Math.abs(totalCorrected.final.homeScore + totalCorrected.final.awayScore - 218.25) < 1e-9);
 
 const ratingPack: NbaTeamRatingPack = {
   off_rating: 115,
