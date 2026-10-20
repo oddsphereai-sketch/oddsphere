@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: NFL props sharp-reference capture alignment
+
+On 2026-10-20 Daniel Mengel directed Oddsphere to close actual Daily Edge data
+gaps rather than explain or label them. The Week 7 player-props board retained
+only 59 qualified Pinnacle/NoVig offers across two games even though a
+credential-backed, zero-write provider read returned 390 exact observations,
+139 complete Over/Under pairs, and coverage on 13 of 14 games. The provider was
+healthy; the existing elapsed-time props writer and UTC-minute reference gate
+could remain permanently out of phase.
+
+This exception is limited to replacing that UTC-minute gate with a one-hour
+age check on the newest retained qualified reference offer. The existing
+state-aware 60/30/15-minute writer cadence, bounded Pinnacle/NoVig pages,
+113-call total ceiling, final T-60 refresh, source qualification, exact pairing,
+target-book exclusion, sole `prediction_pipeline:nfl` lease, and immutable lock
+precedence remain unchanged. The writer advances to
+`nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture`.
+
+Publication requires pure cadence regressions, a credential-backed current-week
+no-write replay, focused player-props tests, TypeScript, the full model-change
+gate, latest-main integration safety, protected pull-request checks, and a live
+read showing that the reference cache refreshes beyond the initial two-game
+state. Same-input r57/r58 outputs must be identical; only evidence collection
+timing changes. Roll back to r57 if the repair exceeds existing provider
+ceilings, creates sub-hourly ordinary pulls, changes a locked row, or bypasses
+the existing writer or lease.
+
 ## Owner-directed correctness exception: CFB midweek availability and FCS polling continuity
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to repair, rather than merely

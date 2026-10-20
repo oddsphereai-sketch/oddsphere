@@ -46,12 +46,16 @@ export const UCL_TEAM_ASSETS: Record<string, UclTeamAsset> = {
   SLB: { displayName: "Slovan Bratislava", espnId: 521, primaryColor: "#81C0FF" },
   SLP: { displayName: "Slavia Prague", espnId: 494, primaryColor: "#DC1F26" },
   VFB: { displayName: "VfB Stuttgart", espnId: 134, primaryColor: "#FFFFFF" },
-  VIK: { displayName: "Viking FK", espnId: 510, primaryColor: "#000080" },
+  // BALLDONTLIE's current UCL abbreviation is VFK.
+  VFK: { displayName: "Viking FK", espnId: 510, primaryColor: "#000080" },
   VIL: { displayName: "Villarreal", espnId: 102, primaryColor: "#FFFF00" },
 };
 
 export function uclTeamAsset(abbreviation: string): UclTeamAsset | null {
-  return UCL_TEAM_ASSETS[abbreviation.trim().toUpperCase()] ?? null;
+  const normalized = abbreviation.trim().toUpperCase();
+  // Retain the preceding VIK presentation alias for already-captured cards
+  // without counting it as a second club in the current 36-team registry.
+  return UCL_TEAM_ASSETS[normalized === "VIK" ? "VFK" : normalized] ?? null;
 }
 
 export function uclTeamLogo(abbreviation: string): string | null {

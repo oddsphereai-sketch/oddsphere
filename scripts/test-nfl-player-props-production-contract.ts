@@ -33,6 +33,7 @@ import {
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM,
   NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS,
   NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM,
+  NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES,
   nflPlayerPropsSourceAwareReferenceOffersAvailable,
   NFL_PLAYER_PROPS_WRITER_RELEASE,
   nflPlayerPropsReferenceEvaluationTime,
@@ -128,7 +129,8 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r45_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_19_r57_stale_reference_retry");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture");
+assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
 assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_15_r32_independent_rushing_yards");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
@@ -146,14 +148,20 @@ assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
   now: "2026-10-15T12:06:00.000Z",
   previous: unlocked,
   retainedReferenceOffers: freshRetainedReferenceOffers,
-}), true,
-  "the bounded reference lane runs once at the start of each UTC hour");
+}), false,
+  "a six-minute-old qualified capture is not repeated merely because the clock entered a UTC hour");
 assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
   now: "2026-10-15T12:21:00.000Z",
   previous: unlocked,
   retainedReferenceOffers: freshRetainedReferenceOffers,
 }), false,
   "ordinary fifteen-minute writer wakes do not multiply reference-book calls");
+assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
+  now: "2026-10-15T13:00:00.000Z",
+  previous: unlocked,
+  retainedReferenceOffers: freshRetainedReferenceOffers,
+}), true,
+  "a qualified capture refreshes when its own evidence age reaches one hour, regardless of UTC-minute alignment");
 assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
   now: "2026-10-15T12:21:00.000Z",
   previous: unlocked,
@@ -169,7 +177,7 @@ assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
 assert.equal(shouldCaptureNflPlayerPropsReferenceResearch({
   now: "2026-09-01T10:50:00.000Z",
   previous: unlocked,
-  retainedReferenceOffers: freshRetainedReferenceOffers,
+  retainedReferenceOffers: [{ market: "receptions", observedAt: "2026-09-01T10:45:00.000Z" }],
 }), true,
   "the reference lane runs again inside the final pre-lock comparison window");
 assert.equal(nflPlayerPropsReferenceEvaluationTime({

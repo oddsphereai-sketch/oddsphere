@@ -6,6 +6,7 @@
 
 import { __TEST__ } from "../lib/services/audit/slateHealthAuditor";
 import { resolveSlateHealthAuditApply } from "../lib/cron/slateHealthAuditApply";
+import { readFileSync } from "node:fs";
 
 const { classifyNoPredictionReason, slatesForSport, addDays } = __TEST__;
 
@@ -69,6 +70,12 @@ test("non-soccer sports audit yesterday + today only", () => {
 test("addDays handles month boundary", () => {
   assert(addDays("2026-06-30", 1) === "2026-07-01", addDays("2026-06-30", 1));
   assert(addDays("2026-06-14", -1) === "2026-06-13", addDays("2026-06-14", -1));
+});
+
+test("legacy WC audit excludes reserved club-soccer IDs and retired tracking warnings", () => {
+  const source = readFileSync("lib/services/audit/slateHealthAuditor.ts", "utf8");
+  assert(source.includes('.lt("external_id", CLUB_SOCCER_EXTERNAL_ID_FLOOR)'), "club namespace filter missing");
+  assert(!source.includes('check: "tracking_bridge_missing"'), "retired compatibility-route warning remains");
 });
 
 console.log("─".repeat(60));
