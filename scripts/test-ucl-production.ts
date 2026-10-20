@@ -308,6 +308,50 @@ const matchResultVector = (book: string, home: number, draw: number, away: numbe
     fetchedAtSource: "provider",
   })),
 });
+const binaryVector = (
+  book: string,
+  market: "total" | "btts",
+  positiveProbability: number,
+): EplForwardBookVector => {
+  const [positive, negative] = market === "total" ? ["over", "under"] : ["yes", "no"];
+  return {
+    identity: `sharpapi:/odds:evt:${book}:${market}:${market === "total" ? "2.5" : "main"}:${positive}+${negative}`,
+    sportsbook: book,
+    canonicalBook: book.toLowerCase(),
+    sourceClass: book.toLowerCase() === "pinnacle" ? "named_originator" : "named_retail",
+    provider: "sharpapi",
+    providerEndpoint: "/odds",
+    providerEventId: "evt",
+    market,
+    line: market === "total" ? 2.5 : null,
+    capturedAt: "2025-01-01T12:00:00Z",
+    fetchedAtMin: "2025-01-01T11:59:00Z",
+    fetchedAtMax: "2025-01-01T11:59:00Z",
+    vectorSkewMs: 0,
+    overround: 1.05,
+    probabilityTotal: 1,
+    outcomes: [
+      { side: positive, probability: positiveProbability },
+      { side: negative, probability: 1 - positiveProbability },
+    ].map(({ side, probability }) => ({
+      side,
+      american: probability >= 0.5 ? -Math.round(100 * probability / (1 - probability)) : Math.round(100 * (1 - probability) / probability),
+      decimal: 1 / probability,
+      rawImpliedProbability: probability * 1.05,
+      noVigProbability: probability,
+      fetchedAt: "2025-01-01T11:59:00Z",
+      fetchedAtSource: "provider" as const,
+    })),
+  };
+};
+const movementRows = (
+  market: "total" | "btts",
+  positiveAmerican: number,
+  negativeAmerican: number,
+): EplStoredPriceObservation[] => ["betmgm", "draftkings", "pinnacle"].flatMap((sportsbook) => ([
+  stored({ providerId: 92, market, side: market === "total" ? "over" : "yes", american: positiveAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
+  stored({ providerId: 92, market, side: market === "total" ? "under" : "no", american: negativeAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
+]));
 const coherentOpeningOutcome = deriveUclCoherentMarketOutcome({
   matchId: 91,
   independentLambdaHome: 1.2,
@@ -331,6 +375,73 @@ assert.ok(Math.abs(coherentOpeningOutcome.expectedGoals.home + coherentOpeningOu
 assert.equal(coherentOpeningOutcome.audit.maximumMatchResultResidual < 1e-7, true);
 assert.deepEqual(coherentOpeningOutcome.audit.matchResultReader?.eligibleBooks, ["betmgm", "draftkings"]);
 assert.equal("bttsShadow" in coherentOpeningOutcome.audit, false, "new UCL outcomes must not persist a shadow candidate");
+const goalsVectors = {
+  matchResultVectors: [
+    matchResultVector("betmgm", 0.86, 0.095, 0.045),
+    matchResultVector("draftkings", 0.855, 0.10, 0.045),
+    matchResultVector("pinnacle", 0.865, 0.09, 0.045),
+  ],
+  totalVectors: [binaryVector("betmgm", "total", 0.755), binaryVector("draftkings", "total", 0.76), binaryVector("pinnacle", "total", 0.75)],
+  bttsVectors: [binaryVector("betmgm", "btts", 0.47), binaryVector("draftkings", "btts", 0.475), binaryVector("pinnacle", "btts", 0.465)],
+};
+const qualifiedGoalsCorrection = deriveUclCoherentMarketOutcome({
+  matchId: 92,
+  independentLambdaHome: 3.4,
+  independentLambdaAway: 1.4,
+  ...goalsVectors,
+  storedPriceHistory: movementRows("btts", 113, -113),
+  modelEvidenceQuality: "thin",
+  evaluatedMatchResultCanonicalBook: null,
+  evaluatedTotalCanonicalBook: null,
+  evaluatedBttsCanonicalBook: null,
+  providerEventId: "evt",
+  decisionAt: "2025-01-01T12:00:00Z",
+  kickoff: "2025-01-02T20:00:00Z",
+});
+assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, true, "thin independent evidence may be corrected only when direct and score-implied BTTS agree");
+assert.equal(qualifiedGoalsCorrection.source, "target_excluded_goals_arbitration");
+assert.deepEqual(qualifiedGoalsCorrection.audit.goalsReader?.bttsEligibleBooks, ["betmgm", "draftkings", "pinnacle"]);
+assert.equal(qualifiedGoalsCorrection.markets.btts.no > 0.5, true);
+assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.totalCorrectionApplied, false);
+assert.equal(Math.abs(qualifiedGoalsCorrection.markets.total.over - deriveSoccerMarketProbabilities({
+  joint: bivariatePoissonScoreDistribution(3.4, 1.4, -0.1),
+  totalLine: 2.5,
+}).total.over) < 1e-7, true, "BTTS correction preserves the independent Total");
+const movementResistedGoalsCorrection = deriveUclCoherentMarketOutcome({
+  matchId: 92,
+  independentLambdaHome: 3.4,
+  independentLambdaAway: 1.4,
+  ...goalsVectors,
+  storedPriceHistory: movementRows("btts", 150, -150),
+  modelEvidenceQuality: "thin",
+  evaluatedMatchResultCanonicalBook: null,
+  evaluatedTotalCanonicalBook: null,
+  evaluatedBttsCanonicalBook: null,
+  providerEventId: "evt",
+  decisionAt: "2025-01-01T12:00:00Z",
+  kickoff: "2025-01-02T20:00:00Z",
+});
+assert.equal(movementResistedGoalsCorrection.audit.goalsReader?.bttsMovement.side, "yes");
+assert.equal(movementResistedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, false, "same-book movement toward the independent side vetoes a stale opposing level");
+assert.equal(movementResistedGoalsCorrection.markets.btts.yes > 0.5, true);
+const qualifiedTotalCorrection = deriveUclCoherentMarketOutcome({
+  matchId: 93,
+  independentLambdaHome: 1.3,
+  independentLambdaAway: 1.2,
+  matchResultVectors: goalsVectors.matchResultVectors,
+  totalVectors: [binaryVector("betmgm", "total", 0.62), binaryVector("draftkings", "total", 0.625), binaryVector("pinnacle", "total", 0.615)],
+  bttsVectors: [],
+  modelEvidenceQuality: "standard",
+  evaluatedMatchResultCanonicalBook: null,
+  evaluatedTotalCanonicalBook: null,
+  evaluatedBttsCanonicalBook: null,
+  providerEventId: "evt",
+  decisionAt: "2025-01-01T12:00:00Z",
+  kickoff: "2025-01-02T20:00:00Z",
+});
+assert.equal(qualifiedTotalCorrection.audit.goalsReader?.totalCorrectionApplied, true, "a weak Total may be corrected by stable target-excluded consensus");
+assert.equal(qualifiedTotalCorrection.markets.total.over > 0.5, true);
+assert.equal(qualifiedTotalCorrection.audit.goalsReader?.bttsCorrectionApplied, false);
 assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_10_20_r10_no_shadow_payload");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },

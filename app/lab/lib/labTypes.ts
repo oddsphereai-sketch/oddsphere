@@ -958,10 +958,22 @@ export type DailyEdgeGameDto = {
   /** Locked audit provenance for the single coherent soccer score PMF. */
   soccerModelProvenance?: {
     coherentOutcomeRelease: string;
-    source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool";
+    source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration";
     evaluatedQuoteRole: "economics_and_grade_only";
     targetExcludedBooks: string[];
     eligibleAlternativeBooks: string[];
+    goalsReader?: {
+      totalConsensus: { over: number; under: number } | null;
+      bttsConsensus: { yes: number; no: number } | null;
+      crossMarketBttsYes: number | null;
+      totalEligibleBooks: string[];
+      bttsEligibleBooks: string[];
+      totalMovement: { books: number; delta: number | null; side: "over" | "under" | "stable" | null };
+      bttsMovement: { books: number; delta: number | null; side: "yes" | "no" | "stable" | null };
+      totalCorrectionApplied: boolean;
+      bttsCorrectionApplied: boolean;
+      modelEvidenceQuality: "thin" | "standard";
+    };
     regulationTime: true;
   } | null;
   recommendationDecision?: RecommendationDecision;
