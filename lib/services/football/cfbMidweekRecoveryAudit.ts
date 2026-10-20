@@ -7,7 +7,9 @@ import { selectLatestCfbMemberEvidenceRows } from "./cfbMemberFixture";
 import { isGameInCfbWeeklyWindow, resolveCfbForwardWindow } from "./cfbWeeklyWindow";
 
 export const CFB_MIDWEEK_RECOVERY_AUDIT_RELEASE =
-  "cfb_midweek_recovery_audit_2026_10_20_r1_zero_write" as const;
+  "cfb_midweek_recovery_audit_2026_10_20_r2_durable_sanitized_result" as const;
+export const CFB_MIDWEEK_RECOVERY_AUDIT_SNAPSHOT_KEY =
+  "cfb::operator-audit::2026-10-20-midweek-recovery" as const;
 
 type Market = "moneyline" | "spread" | "total";
 const MARKETS: readonly Market[] = ["moneyline", "spread", "total"];
@@ -67,7 +69,7 @@ export async function runCfbMidweekRecoveryAudit(args: {
     });
   });
   const actionable = (grade: string) => grade === "Best Angle" || grade === "Lean";
-  return {
+  const audit = {
     release: CFB_MIDWEEK_RECOVERY_AUDIT_RELEASE,
     mode: "live_provider_select_only_zero_prediction_writes",
     apiCallsMaximum: writerResult.apiCallsMaximum,
@@ -90,6 +92,22 @@ export async function runCfbMidweekRecoveryAudit(args: {
     promotions: changes.filter((change) => !actionable(change.before.grade) && actionable(change.after.grade)).length,
     demotions: changes.filter((change) => actionable(change.before.grade) && !actionable(change.after.grade)).length,
   };
+  const nowMs = Date.parse(args.now);
+  const { error } = await args.client.from("lab_response_snapshots").upsert({
+    snapshot_key: CFB_MIDWEEK_RECOVERY_AUDIT_SNAPSHOT_KEY,
+    kind: "daily_edge",
+    sport: "cfb",
+    slate_date: window.boardStartDate,
+    payload: audit,
+    payload_version: CFB_MIDWEEK_RECOVERY_AUDIT_RELEASE,
+    source: "cfb_midweek_recovery_operator_audit",
+    generated_at: args.now,
+    expires_at: new Date(nowMs + 24 * 60 * 60_000).toISOString(),
+    stale_until: new Date(nowMs + 7 * 24 * 60 * 60_000).toISOString(),
+    updated_at: args.now,
+  }, { onConflict: "snapshot_key" });
+  if (error) throw new Error(`CFB midweek recovery audit result persistence failed: ${error.message}`);
+  return audit;
 }
 
 function summarize(payloads: readonly CfbForwardEvidencePayload[]): Record<string, unknown> {
