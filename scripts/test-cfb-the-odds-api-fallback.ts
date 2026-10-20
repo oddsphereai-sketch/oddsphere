@@ -242,6 +242,14 @@ const reserve = shouldFetchCfbTheOddsApiFallback({
 });
 assert.equal(reserve.fetch, false);
 assert.equal(reserve.reason, "credit_reserve");
+const auditReserveBypass = shouldFetchCfbTheOddsApiFallback({
+  games: [liu],
+  existing: [stored("2026-10-07T00:00:00.000Z", 3_470)],
+  now: capturedAt,
+  auditIgnoreCreditReserve: true,
+});
+assert.equal(auditReserveBypass.fetch, true, "zero-write audit must be able to measure current FCS provider coverage below the live reserve");
+assert.equal(auditReserveBypass.reason, "gap_refresh_due");
 
 const ordinaryCappedRows = Array.from({ length: CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT }, (_, index) =>
   stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * 3));

@@ -1,0 +1,49 @@
+# CFB midweek recovery zero-write audit
+
+Date: 2026-10-20
+
+## Incident
+
+The current board had two independently verified ingestion failures.
+
+- The official Sun Belt JSON had published South Alabama–Marshall availability
+  rows, but the conference adapter compared school-only labels such as `South
+  Alabama` with a local mascot-stripping list that omitted `Jaguars`. The exact
+  game was therefore rejected even though its date and team orientation were
+  correct.
+- Stored request-budget evidence showed 3,470 paid-provider credits remaining,
+  but the 5,000-credit reserve prevented every current FCS fallback request.
+  The provider was not queried, so the missing FCS prices could not honestly be
+  classified as unavailable at sportsbooks.
+
+The CUSA signed Faktor page was also verified to use `section` containers in
+its current empty-state markup while the parser accepted only `article`. CUSA
+had not yet published a report at audit preparation time; no unofficial injury
+row is substituted for the absent official report.
+
+## Audit-only release
+
+The authenticated `/api/cron/cfb-midweek-recovery-audit` endpoint runs the sole
+CFB writer with `apply=false` and the existing `prediction_pipeline:cfb` lease.
+It rehearses:
+
+- shared CFB provider identity matching for official reports;
+- both `article` and `section` Faktor cards;
+- the exact `NM State` alias needed by the current CUSA slate; and
+- one paid FCS odds request below the live reserve.
+
+It returns only bounded operational summaries: before/candidate FBS and FCS
+coverage, grade counts, health/provider errors, and every changed side, line,
+or grade with promotion/demotion totals. It does not return credentials or raw
+provider payloads. The ordinary route cannot set these flags, and the writer
+throws if any candidate flag is supplied with `apply=true`.
+
+## Acceptance and rollback
+
+This release deliberately changes no production model or collector release,
+scheduled-writer behavior, credit reserve, evidence row, member snapshot,
+tracking row, projection, probability, side, grade, stake, or locked record.
+The audit result is the required current-board evidence for a separate live
+repair. Remove the endpoint after that repair is accepted. Revert this audit
+release if it writes model state, escapes authentication or the shared lease,
+or permits candidate behavior in an applying writer.

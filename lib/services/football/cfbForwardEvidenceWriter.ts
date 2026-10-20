@@ -355,12 +355,16 @@ export async function runCfbForwardEvidenceWriter(args: {
   auditForceUnlocked?: boolean;
   /** Read-only provider replay override. Rejected whenever apply=true. */
   auditForceTheOddsApi?: boolean;
+  /** Read-only pending midweek recovery rehearsal. Rejected whenever apply=true. */
+  auditUseMidweekRecoveryCandidate?: boolean;
+  /** Read-only provider-credit rehearsal. Rejected whenever apply=true. */
+  auditIgnoreTheOddsApiCreditReserve?: boolean;
   /** Read-only rollback comparison. Rejected whenever apply=true. */
   auditDisableIndependentPriceLane?: boolean;
   /** Read-only baseline replay. Rejected whenever apply=true. */
   auditDisableCompleteMarketReader?: boolean;
 }): Promise<CfbForwardWriterResult> {
-  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader)) {
+  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditUseMidweekRecoveryCandidate || args.auditIgnoreTheOddsApiCreditReserve || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader)) {
     throw new Error("CFB audit planning overrides are forbidden when apply=true.");
   }
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season, now: args.now });
@@ -461,7 +465,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     force: need.reason === "release_refresh_due" || need.reason === "opening_seed",
   });
   const officialAvailabilityPromise = officialAvailabilityDue
-    ? fetchCfbOfficialConferenceAvailability({ games: plannedGames, capturedAt: args.now })
+    ? fetchCfbOfficialConferenceAvailability({ games: plannedGames, capturedAt: args.now, auditUseMidweekRecoveryCandidate: args.auditUseMidweekRecoveryCandidate })
         .then((result) => ({ result, error: null }))
         .catch((error: unknown) => ({ result: null, error: splitRequestError(error) }))
     : Promise.resolve({ result: null as CfbOfficialConferenceAvailabilityResult | null, error: null as string | null });
@@ -556,6 +560,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         row.providerGameId === game.providerGameId &&
         ((row.payload.requestBudget.theOddsApi ?? 0) > 0 ||
           row.payload.market.currentBooks.some((book) => book.provider === "theoddsapi")))),
+    auditIgnoreCreditReserve: args.auditIgnoreTheOddsApiCreditReserve,
   });
   const theOddsApiAttempt = args.theOddsApiKey && theOddsApiNeed.fetch
     ? await fetchCfbTheOddsApiFallback({

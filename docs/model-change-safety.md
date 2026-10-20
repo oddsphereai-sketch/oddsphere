@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## Owner-directed audit exception: CFB midweek availability and FCS continuity
+
+On 2026-10-20 Daniel Mengel reported that a Tuesday CFB board still lacked
+published injury reports and that the paid FCS market recovery had regressed
+after working the prior week. Before any future-unlocked publication change,
+this exception authorizes the authenticated, operator-invoked, zero-write audit
+documented in
+`docs/model-audits/2026-10-20-cfb-midweek-recovery-zero-write-audit.md`.
+
+The audit may rehearse the pending shared team-identity and Faktor-container
+compatibility fixes and may bypass the live 5,000-credit reserve for one current
+FCS odds request. It must run with `apply=false`, under the existing
+`prediction_pipeline:cfb` lease, and report exact before/candidate market
+coverage plus every side, line, grade, promotion, and demotion. Every candidate
+flag is rejected when `apply=true`; the ordinary scheduled writer, release
+identifiers, reserve, provider cadence, predictions, grades, stakes, member
+snapshot, tracking, and locked records remain unchanged in this audit release.
+
+Publication requires focused candidate/baseline separation tests, TypeScript,
+the full model-change suite, latest-main integration safety, and protected PR
+checks. Run the endpoint once after deployment, retain the result as the
+current-board acceptance artifact, then separately release or reject the live
+repair. Remove the endpoint after acceptance. Roll back immediately if an audit
+invocation performs a prediction/evidence/tracking write, bypasses authentication
+or the shared lease, exposes credentials, or allows a candidate flag in an
+`apply=true` writer.
+
 ## Owner-directed correctness exception: NHL lock authority
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to verify every Daily Edge,
