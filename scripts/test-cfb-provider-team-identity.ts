@@ -12,6 +12,7 @@ const confirmedProviderLabels = [
   ["SHSU", "Sam Houston Bearkats", "Sam Houston State Bearkats"],
   ["MTSU", "Middle Tennessee Blue Raiders", "Middle Tenn ST Blue Raiders"],
   ["MASS", "Massachusetts Minutemen", "UMass"],
+  ["NMSU", "New Mexico State Aggies", "NM State"],
 ] as const;
 
 for (const [abbreviation, expectedName, observed] of confirmedProviderLabels) {

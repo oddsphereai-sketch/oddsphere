@@ -46,9 +46,8 @@ const liveSunBeltArgs = {
     }],
   },
 };
-assert.equal(parseCfbOfficialJsonAvailability(liveSunBeltArgs)["sb-live"], undefined, "deployed baseline must stay unchanged in the audit-only release");
-const liveSunBelt = parseCfbOfficialJsonAvailability({ ...liveSunBeltArgs, auditUseMidweekRecoveryCandidate: true });
-assert.equal(liveSunBelt["sb-live"]?.teams[0]?.players[0]?.name, "Jay Jaguar", "candidate must recover school-only labels against mascot-bearing schedule names");
+const liveSunBelt = parseCfbOfficialJsonAvailability(liveSunBeltArgs);
+assert.equal(liveSunBelt["sb-live"]?.teams[0]?.players[0]?.name, "Jay Jaguar", "school-only labels must match mascot-bearing schedule names");
 
 const faktorHtml = `
 <article class="availability-graphic-card" data-availability-graphic-card="true" aria-label="UNLV @ Air Force Initial Report">
@@ -81,9 +80,8 @@ const cusaSectionHtml = `
       <tr class="availability-player-row"><td class="player-cell">Bearkat Receiver</td><td class="position-cell">WR</td></tr>
     </tbody></table></div>
 </section>`;
-assert.equal(parseCfbFaktorAvailability({ html: cusaSectionHtml, games: [cusaGame], capturedAt: "2026-10-20T12:00:00.000Z", sourceUrl: "https://conferenceusa.com/report" })["cusa-live"], undefined);
-const cusa = parseCfbFaktorAvailability({ html: cusaSectionHtml, games: [cusaGame], capturedAt: "2026-10-20T12:00:00.000Z", sourceUrl: "https://conferenceusa.com/report", auditUseMidweekRecoveryCandidate: true });
-assert.equal(cusa["cusa-live"]?.teams[0]?.players[0]?.name, "Aggie Quarterback", "candidate must parse Faktor section containers and the NM State label");
+const cusa = parseCfbFaktorAvailability({ html: cusaSectionHtml, games: [cusaGame], capturedAt: "2026-10-20T12:00:00.000Z", sourceUrl: "https://conferenceusa.com/report" });
+assert.equal(cusa["cusa-live"]?.teams[0]?.players[0]?.name, "Aggie Quarterback", "Faktor section containers and the NM State label must parse");
 
 const hdi = parseCfbOfficialConferenceAvailability({
   games: [americanGame],

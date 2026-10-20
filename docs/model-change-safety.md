@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: CFB midweek availability and FCS polling continuity
+
+On 2026-10-20 Daniel Mengel directed Oddsphere to repair, rather than merely
+label, the missing Tuesday/Wednesday CFB availability reports and recurring
+FCS-only market gap. The accepted zero-write audit is documented in
+`docs/model-audits/2026-10-20-cfb-midweek-availability-fcs-continuity.md`.
+
+This exception is limited to (1) using the existing centralized, strict CFB
+team-identity resolver for official conference reports, (2) accepting both
+published Faktor `article` and `section` report containers, and (3) reducing
+the paid FCS provider reserve from 5,000 credits to 1,152 credits. The new
+reserve equals two complete worst-case weekly budgets (192 pulls × 3 credits ×
+2); the existing hourly cadence, 176 ordinary / 192 total weekly limits,
+strict event identity, provider hierarchy, target-exclusion rules, exact-price
+requirements, one leased writer, and immutable lock boundary remain unchanged.
+An absent official report or vendor event must remain absent; neither repair
+may fabricate an injury, price, market, prediction, or grade.
+
+The current-board audit must disclose coverage even when the provider has no
+events. It found zero FCS events and therefore zero immediate FCS market
+recovery; the reserve change is accepted as a continuity repair that resumes
+bounded polling when the vendor posts, not as evidence that prices presently
+exist. The temporary audit endpoint and candidate switches must be removed in
+the production release. Roll back collector/writer/fallback/availability
+releases from r61/r131/r4/r3 to r60/r130/r3/r2 without rewriting locked rows.
+
 ## Owner-directed audit exception: CFB midweek availability and FCS continuity
 
 On 2026-10-20 Daniel Mengel reported that a Tuesday CFB board still lacked

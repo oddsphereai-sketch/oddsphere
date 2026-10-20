@@ -4,7 +4,7 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_THE_ODDS_API_FALLBACK_RELEASE =
-  "cfb_the_odds_api_fcs_fallback_2026_10_12_r3_central_team_identity" as const;
+  "cfb_the_odds_api_fcs_fallback_2026_10_20_r4_bounded_month_end_continuity" as const;
 export const CFB_THE_ODDS_API_SPORT_KEY = "americanfootball_ncaaf_fcs" as const;
 export const CFB_THE_ODDS_API_BOOKMAKERS =
   "fanduel,draftkings,rebet,betmgm,betrivers,williamhill_us,fanatics,espnbet,betonlineag,ballybet" as const;
@@ -12,7 +12,11 @@ export const CFB_THE_ODDS_API_CREDITS_PER_PULL = 3 as const;
 export const CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL = 30 as const;
 export const CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT = 176 as const;
 export const CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT = 192 as const;
-export const CFB_THE_ODDS_API_CREDIT_RESERVE = 5_000 as const;
+// Preserve two complete worst-case weekly budgets. The former 5,000-credit
+// reserve stranded a paid 20,000-credit subscription with 3,470 credits still
+// available and disabled every FCS pull eleven days before the monthly reset.
+export const CFB_THE_ODDS_API_CREDIT_RESERVE =
+  2 * CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT * CFB_THE_ODDS_API_CREDITS_PER_PULL;
 export const CFB_THE_ODDS_API_FAR_REFRESH_MINUTES = 60 as const;
 export const CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES = 60 as const;
 export const CFB_THE_ODDS_API_TIMEOUT_MS = 8_000 as const;
@@ -32,13 +36,6 @@ export type CfbTheOddsApiFallbackResult = {
   matchedGames: number;
   booksByGame: Record<string, NcaafBookOdds[]>;
   failuresByGame: Record<string, string>;
-  providerEvents: Array<{
-    eventId: string | null;
-    commenceTime: string | null;
-    awayTeam: string | null;
-    homeTeam: string | null;
-    bookmakers: string[];
-  }>;
 };
 
 export type CfbTheOddsApiHistoricalOpeningResult = {
@@ -195,13 +192,6 @@ export async function fetchCfbTheOddsApiFallback(args: {
     matchedGames: Object.keys(booksByGame).length,
     booksByGame,
     failuresByGame,
-    providerEvents: events.map((event) => ({
-      eventId: text(event.id),
-      commenceTime: text(event.commence_time),
-      awayTeam: text(event.away_team),
-      homeTeam: text(event.home_team),
-      bookmakers: array(event.bookmakers).map(record).flatMap((book) => text(book.key) ? [text(book.key)!] : []),
-    })),
   };
 }
 
@@ -212,8 +202,6 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
   now: string;
   forceT60?: boolean;
   forceOpeningSeed?: boolean;
-  /** SELECT-only operator rehearsal; live writers must never set this. */
-  auditIgnoreCreditReserve?: boolean;
 }): { fetch: boolean; reason: string; cadenceMinutes: number; weeklyPulls: number; lastRemainingCredits: number | null } {
   const nowMs = Date.parse(args.now);
   const upcoming = args.games.filter((game) => Date.parse(game.scheduledStart) > nowMs);
@@ -249,7 +237,7 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
   if (!args.forceT60 && attempts.length >= CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT) {
     return { fetch: false, reason: "ordinary_pull_limit_lock_reserve", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
   }
-  if (!args.auditIgnoreCreditReserve && lastRemainingCredits !== null && lastRemainingCredits < CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CREDITS_PER_PULL) {
+  if (lastRemainingCredits !== null && lastRemainingCredits < CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CREDITS_PER_PULL) {
     return { fetch: false, reason: "credit_reserve", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
   }
   const latest = attempts[0] ?? 0;
