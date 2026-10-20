@@ -88,6 +88,7 @@ import {
 import { loadNbaProfessionalCurrentState } from "./nbaProfessionalGameInputs";
 import {
   applyNbaLockedMemberSnapshotPrecedence,
+  resolveApprovedNbaLegacyLockedEvidenceRecovery,
   type NbaLockedMemberRecord,
 } from "./nbaLockedMemberSnapshot";
 import {
@@ -96,6 +97,7 @@ import {
   type NbaReaderSplitRow,
 } from "./nbaProfessionalMarketReader";
 import {
+  buildApprovedNbaLegacyLockedMemberGameEvidence,
   buildNbaMemberGameEvidence,
   type NbaMemberGameEvidence,
 } from "./nbaMemberMarketEvidence";
@@ -708,6 +710,18 @@ export async function buildNbaDailyEdgePipeline(
     const externalId = dbIdToExt.get(row.game_id);
     return externalId === undefined ? [] : [externalId];
   }));
+  const approvedLegacyRecoveryByExternalId = new Map(
+    games.flatMap((game) => {
+      const gameId = externalToDbId.get(game.game_external_id);
+      if (gameId === undefined) return [];
+      const recovery = resolveApprovedNbaLegacyLockedEvidenceRecovery({
+        game,
+        gameId,
+        rows: lockedRows,
+      });
+      return recovery === null ? [] : [[game.game_external_id, recovery] as const];
+    }),
+  );
 
   const marketSignalsCapability =
     sharpKey === undefined || sharpKey === ""
@@ -756,7 +770,14 @@ export async function buildNbaDailyEdgePipeline(
       total: lookup("total", intel.total),
       spread: lookup("spread", intel.spread),
     });
-    if (!lockedExternalIds.has(ext)) {
+    const approvedLegacyRecovery = approvedLegacyRecoveryByExternalId.get(ext);
+    if (approvedLegacyRecovery !== undefined) {
+      memberEvidenceByGame.set(ext, buildApprovedNbaLegacyLockedMemberGameEvidence({
+        game: g,
+        priceRows: readerPriceRowsByGame.get(ext) ?? [],
+        recovery: approvedLegacyRecovery,
+      }));
+    } else if (!lockedExternalIds.has(ext)) {
       memberEvidenceByGame.set(ext, buildNbaMemberGameEvidence({
         game: g,
         priceRows: readerPriceRowsByGame.get(ext) ?? [],

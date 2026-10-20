@@ -356,8 +356,17 @@ function buildMarketEdgeDto(opts: {
         : intel.current_price.odds_american !== null
           ? "single_book"
           : "unavailable",
-    reviewFlags: [],
+    reviewFlags: memberEvidence?.evidenceRecoveryRelease
+      ? [`legacy_locked_evidence_recovery:${memberEvidence.evidenceRecoveryRelease}`]
+      : [],
     reviewActionSummary: "keep",
+    evidenceCoherence: memberEvidence?.evidenceRecoveryRelease
+      ? {
+          status: "coherent",
+          reasonCodes: ["legacy_locked_evidence_recovery"],
+          note: "Reader evidence recovered from the immutable lock payload and pre-lock odds history.",
+        }
+      : undefined,
     oddsTrail: memberEvidence?.oddsTrail ?? [],
     lineTrail: memberEvidence?.lineTrail ?? [],
     opposingOddsTrail: memberEvidence?.opposingOddsTrail ?? null,
