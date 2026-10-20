@@ -485,26 +485,44 @@ assert.equal(uclTeamsMatch("Sabah FK", "Sabah Masazir"), true);
 assert.equal(uclTeamsMatch("Sabah FK", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_20_r5_sabah_live_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_10_20_r1_coherent_representative");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_10_20_r2_minimum_coherent_decimal");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
-  soccerProjection: { representativeScore: { away: 0, home: 3 } },
+  soccerProjection: {
+    expectedGoals: { away: 1.1, home: 3.3 },
+    representativeScore: { away: 0, home: 3 },
+    goalOutlookProbabilities: { home: 0.76, draw: 0.12, away: 0.12, over25: 0.82, under25: 0.18, bttsYes: 0.48, bttsNo: 0.52 },
+  },
 } as const;
 assert.deepEqual(
   uclCoherentProjectedScore(romaExpectedGoalsCard as never),
-  { away: 0, home: 3 },
-  "an unlocked UCL primary score must express the exact score consistent with the released result/total/BTTS directions",
+  { away: 0.4, home: 3.1 },
+  "an unlocked UCL primary score makes only the minimum decimal correction needed to agree with result/total/BTTS",
 );
 assert.deepEqual(
   uclCoherentProjectedScore({ ...romaExpectedGoalsCard, lockState: "locking" } as never),
-  { away: 0, home: 3 },
-  "a game entering T-60 captures the coherent primary score before its tuple becomes immutable",
+  { away: 0.4, home: 3.1 },
+  "a game entering T-60 captures the coherent decimal score before its tuple becomes immutable",
 );
 assert.deepEqual(
   uclCoherentProjectedScore({ ...romaExpectedGoalsCard, lockState: "locked" } as never),
   { away: 1.1, home: 3.3 },
   "a locked card keeps its previously published primary score",
+);
+const alreadyCoherentCard = {
+  ...romaExpectedGoalsCard,
+  projected: { away: 1.2, home: 1.7 },
+  soccerProjection: {
+    expectedGoals: { away: 1.2, home: 1.7 },
+    representativeScore: { away: 1, home: 2 },
+    goalOutlookProbabilities: { home: 0.50, draw: 0.27, away: 0.23, over25: 0.55, under25: 0.45, bttsYes: 0.59, bttsNo: 0.41 },
+  },
+} as const;
+assert.deepEqual(
+  uclCoherentProjectedScore(alreadyCoherentCard as never),
+  alreadyCoherentCard.projected,
+  "an already coherent decimal simulation projection is not adjusted",
 );
 assert.equal(uclTeamsMatch("Roma", "AS Roma"), true);
 assert.equal(uclTeamsMatch("Porto", "FC Porto"), true);
@@ -793,7 +811,7 @@ assert.doesNotMatch(uclReaderBranch, /buildUclSlate|SharpApi|BallDontLie/);
 assert.ok(uclReaderBranch.indexOf("resolveUclFeatureFlags") < uclReaderBranch.indexOf("readCurrentUclMemberSnapshot"));
 assert.doesNotMatch(uclModelSource, /fitEplShadowModel|predictEplMatch|joinEplMatchStats|EPL_SHADOW_DEFAULT_CONFIG/);
 assert.match(uclPreviewSource, /deriveUclCoherentMarketOutcome/);
-assert.match(uclPreviewSource, /projected:\s*uclCoherentProjectedScore\(game\)/, "unlocked UCL cards publish the exact score selected from the coherent final PMF");
+assert.match(uclPreviewSource, /projected:\s*uclCoherentProjectedScore\(game\)/, "unlocked UCL cards publish the minimum coherent decimal projection from the final PMF");
 assert.match(uclPreviewSource, /projectedScoreRelease:\s*UCL_PROJECTED_SCORE_RELEASE/, "the member snapshot identifies the primary score semantic");
 assert.match(uclPreviewSource, /deriveUclMatchResultDecision/);
 assert.match(uclPreviewSource, /deriveUclPreviewGrade/);

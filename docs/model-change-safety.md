@@ -1,5 +1,28 @@
 # Model change safety protocol
 
+## Owner-directed correctness refinement: UCL coherent decimal score r11
+
+On 2026-10-20 Daniel Mengel clarified that the primary UCL score should retain
+the decimal simulation feel while agreeing logically with the final Match
+Result, Total, and BTTS directions. The exact-score r10 adapter had deployed
+but its authenticated refresh was cadence-skipped, so the public member board
+did not advance to r10 before this refinement.
+
+R11 keeps the full-PMF expected goals whenever their one-decimal display is
+already directionally coherent. Only a conflicting unlocked display moves
+toward the same PMF's coherent representative outcome, stopping at the first
+one-percent interpolation step whose one-decimal score agrees with all three
+directions. It therefore makes the minimum visible correction and does not
+claim an exact final score. Roma-Slovan Bratislava becomes Roma 3.1 / Slovan Bratislava 0.4 rather
+than either the conflicting 3.31 / 1.10 means or a rigid 3-0.
+
+The r9/r5 PMF, probabilities, sides, market reader, prices, grades, stakes,
+providers, cadence, writer, lease, tracking, settlement, and already locked
+payloads remain unchanged. Publication requires the focused UCL and lock
+contracts, TypeScript, the full model-change suite, current-board verification,
+latest-main integration safety, protected PR checks, and post-deploy live proof.
+Evidence: `docs/model-audits/2026-10-20-ucl-minimum-coherent-decimal-score-r11.md`.
+
 ## Owner-directed correctness exception: UCL coherent primary score r10
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to make the UCL primary score
@@ -20,8 +43,8 @@ available under the explicitly labeled Expected Goals evidence.
 
 On the same current 18-game member snapshot, 16 open primary score displays
 advance to their coherent representative scores, all 16 agree with all three
-released directions, and the two locked games change zero fields. Roma-Benfica
-changes from the visually contradictory Roma 3.31 / Benfica 1.10 mean display
+released directions, and the two locked games change zero fields. Roma-Slovan Bratislava
+changes from the visually contradictory Roma 3.31 / Slovan Bratislava 1.10 mean display
 to a Roma 3-0 primary projected score, agreeing with Roma, Over 2.5, and BTTS
 No; its expected-goals evidence remains 3.31 / 1.10. Promotions, demotions,
 actionable-count changes, and side/probability/price/grade changes are all zero.
@@ -52,7 +75,7 @@ no scalar market weight, quota, forced side, new stake, writer, timer, or
 provider call is authorized.
 
 The exact same-input unlocked rehearsal changes one of 64 market sides:
-Roma-Benfica BTTS Yes/Lean becomes No/Watchlist. Actionables move 12 to 11
+Roma-Slovan Bratislava BTTS Yes/Lean becomes No/Watchlist. Actionables move 12 to 11
 through zero promotions and one evidence-driven demotion. The symmetric grade
 path remains able to promote a corrected side at the existing 55% and positive
 exact-price-EV gates, but no current row qualifies; this exception accepts the

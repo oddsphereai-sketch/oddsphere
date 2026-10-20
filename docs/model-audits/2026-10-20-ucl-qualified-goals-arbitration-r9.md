@@ -103,7 +103,7 @@ Across the remaining 16 unlocked games and 64 markets:
 | Promotions | — | 0 |
 | Demotions | — | 1 |
 
-The only changed side is Roma-Benfica BTTS:
+The only changed side is Roma-Slovan Bratislava BTTS:
 
 - incumbent: Yes, 74.82%, Lean, +107;
 - candidate: No, 53.65%, Watchlist, -133;

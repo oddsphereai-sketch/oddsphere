@@ -134,7 +134,7 @@ before settlement:
 
 That rule identifies exactly two current shadow No candidates:
 
-- Benfica at Roma: all six available books price Yes below 50%; full median
+- Slovan Bratislava at Roma: all six available books price Yes below 50%; full median
   Yes is approximately 47.51%.
 - AEK Athens at Manchester City: all six available books price Yes below 50%;
   full median Yes is approximately 46.40%.
@@ -488,7 +488,7 @@ locked rows.
 A credential-backed zero-write read of the October 20 UCL board found 18
 fixtures and 18 independent Yes forecasts. Target-book-excluded, complete
 multi-book BTTS vectors were available on 17 fixtures; two had a robust No
-consensus under every leave-one-out median: Benfica at Roma (47.13% median Yes)
+consensus under every leave-one-out median: Slovan Bratislava at Roma (47.13% median Yes)
 and AEK at Manchester City (46.40% median Yes). This proves that the current
 market feed contains the missing directional disagreement; it does not prove
 those two No sides will win.
