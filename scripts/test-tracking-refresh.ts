@@ -203,8 +203,15 @@ check(
 );
 check(
   "hourly tracking includes active EPL, NFL, and CFB settlement and keeps the manual override",
-  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer", "nfl", "cfb"]') &&
+  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "wnba", "soccer", "nfl", "cfb", "nhl"]') &&
     trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
+);
+check(
+  "online tracking publishes immediately after NBA before a later sport can stall",
+  trackingCronSource.includes('"tracking_refresh_publication_2026_10_20_r1_nba_checkpoint"') &&
+    trackingCronSource.includes('const publishAfterSport = sports.length === 1 ? sports[0] : "nba"') &&
+    trackingCronSource.includes("sport === publishAfterSport") &&
+    trackingCronSource.includes("export const maxDuration = 300"),
 );
 check(
   "NFL grading excludes records that never reached the persisted T-60 lock boundary",

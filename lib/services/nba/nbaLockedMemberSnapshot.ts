@@ -53,11 +53,16 @@ export function applyNbaLockedMemberSnapshotPrecedence(args: {
       throw new Error(`NBA locked member DTO is incomplete for game_id=${dbId}`);
     }
     const identity = JSON.stringify(stored[0]);
+    const lockTimestamps = new Set(lockedRows.map((row) => row.locked_at));
     if (
-      stored.some((row) => row.game_external_id !== game.game_external_id || JSON.stringify(row) !== identity)
+      stored.some((row) => row.game_external_id !== game.game_external_id || JSON.stringify(row) !== identity) ||
+      lockTimestamps.size !== 1
     ) {
       throw new Error(`NBA locked member DTO mismatch for game_id=${dbId}`);
     }
-    return stored[0]!;
+    // Preserve the exact captured DTO and overlay only the authoritative
+    // column-owned lifecycle timestamp for the response adapter. The stored
+    // snapshot_json remains byte-for-byte immutable.
+    return { ...stored[0]!, locked_at: lockedRows[0]!.locked_at };
   });
 }

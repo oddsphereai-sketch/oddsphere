@@ -59,7 +59,10 @@ import { updateGradesForSlate } from "@/lib/services/gradeDerivationService";
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { detectSnapshotStaleness } from "@/lib/services/snapshotStalenessDetector";
 import { dailyEdgeSnapshotKey } from "@/lib/services/labResponseSnapshots";
-import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
+import {
+  refreshDailyEdgeResponseSnapshot,
+  refreshNbaPublishedLockMetadata,
+} from "@/lib/services/labResponseSnapshotWriter";
 import { isVoidStatus } from "@/lib/services/gameLifecycle";
 import { refreshNhlLines } from "@/lib/services/nhl/refreshNhlLinesService";
 import { writeNhlPredictionRecords } from "@/lib/services/nhl/buildNhlPredictionRecords";
@@ -989,11 +992,16 @@ export async function GET(request: Request) {
           }
         }
         if (responseSnapshotRefreshNeeded) {
-          responseSnapshot = await refreshDailyEdgeResponseSnapshot({
-            sport,
-            date,
-            source: "pregame_sweep_lock",
-          });
+          responseSnapshot = sport === "nba"
+            ? await refreshNbaPublishedLockMetadata({
+                date,
+                source: "pregame_sweep_lock",
+              })
+            : await refreshDailyEdgeResponseSnapshot({
+                sport,
+                date,
+                source: "pregame_sweep_lock",
+              });
           if (!responseSnapshot.ok) {
             lockResult.errors.push(`daily-edge lock snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`);
           }

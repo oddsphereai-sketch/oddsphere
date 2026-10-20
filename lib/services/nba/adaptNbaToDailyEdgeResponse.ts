@@ -61,6 +61,7 @@ import type {
 import type { RecommendationGrade } from "./nbaMarketReview";
 import { publicSplitsDisplaySupported } from "../../config/publicSplitsCapability";
 import type { NbaSpreadReaderStats } from "./nbaSpreadReaderStats";
+import { classifyLockState, computeLocksAt } from "../../automodel/lockState";
 
 const NBA_LOGO_BASE = "https://a.espncdn.com/i/teamlogos/nba/500";
 
@@ -491,6 +492,16 @@ function adaptGame(
     memberEvidence: memberEvidence?.spread,
     keyStats: buildNbaSpreadKeyStats(game.spread_reader_stats),
   });
+  const lockClassification = classifyLockState({
+    locked_at: game.locked_at,
+    game_date: game.tip_iso_utc,
+  }, new Date(asOf));
+  const lockState =
+    lockClassification === "locked" || lockClassification === "already_started"
+      ? "locked" as const
+      : lockClassification === "entering_lock"
+        ? "locking" as const
+        : "open" as const;
 
   const topGrade = intel.top_grade;
   const verdictKey = gradeToVerdict(topGrade);
@@ -519,9 +530,9 @@ function adaptGame(
     gameTime: tipDisplayShortEt(game.tip_iso_utc),
     gameStartAt: game.tip_iso_utc,
     gameStartMinutes: tipStartMinutesEt(game.tip_iso_utc),
-    scheduledLockAt: game.tip_iso_utc ?? asOf,
-    lockState: "open",
-    lockedAt: null,
+    scheduledLockAt: computeLocksAt(game.tip_iso_utc) ?? game.tip_iso_utc ?? asOf,
+    lockState,
+    lockedAt: game.locked_at ?? null,
     updatedAt: asOf,
     generatedAt: asOf,
     holdReason: null,

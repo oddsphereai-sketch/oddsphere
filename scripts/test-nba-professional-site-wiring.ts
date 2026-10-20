@@ -18,6 +18,14 @@ const sweep = readFileSync(
   new URL("../app/api/cron/pregame-sweep/route.ts", import.meta.url),
   "utf8",
 );
+const adapter = readFileSync(
+  new URL("../lib/services/nba/adaptNbaToDailyEdgeResponse.ts", import.meta.url),
+  "utf8",
+);
+const snapshotWriter = readFileSync(
+  new URL("../lib/services/labResponseSnapshotWriter.ts", import.meta.url),
+  "utf8",
+);
 
 for (const required of [
   "loadNbaProfessionalCurrentState",
@@ -46,6 +54,11 @@ assert.match(writer, /nba_game_dto_at_capture/);
 assert.doesNotMatch(writer, /displayed_context_markets:\s*\{\s*spread:/);
 assert.match(sweep, /rows\.length === 3/);
 assert.match(sweep, /updated \$\{\(lockedRows \?\? \[\]\)\.length\}\/3 rows/);
+assert.match(sweep, /refreshNbaPublishedLockMetadata/);
+assert.match(adapter, /lockedAt: game\.locked_at \?\? null/);
+assert.match(adapter, /scheduledLockAt: computeLocksAt\(game\.tip_iso_utc\)/);
+assert.match(snapshotWriter, /applyNbaPublishedLockMetadata/);
+assert.match(snapshotWriter, /payloadVersion: NBA_MEMBER_LOCK_PUBLICATION_RELEASE/);
 
 const awayCover = gradePrediction({
   record: {

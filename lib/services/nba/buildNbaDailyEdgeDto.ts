@@ -171,6 +171,12 @@ export type NbaDailyEdgeGameDto = {
   away_full_name: string;
   tip_iso_utc: string | null;
   tip_display_et: string | null;
+  /**
+   * Authoritative three-market lock timestamp. This is reader-only lifecycle
+   * metadata sourced from prediction_records.locked_at; it is deliberately
+   * absent from legacy captured DTOs and never written back into them.
+   */
+  locked_at?: string | null;
   series: ReturnType<typeof seriesLine>;
   rest: {
     home_days: number | null;
