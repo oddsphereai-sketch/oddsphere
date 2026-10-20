@@ -41,6 +41,11 @@ import {
   selectNhlBestPriceQuote,
 } from "../lib/services/nhl/nhlLineBoard";
 import { assessNhlLockCoherence } from "../lib/services/nhl/nhlLockCoherence";
+import {
+  NHL_PREDICTION_RECORD_LOCK_MARKETS,
+  resolveNhlPredictionRecordLocks,
+  type NhlPredictionRecordLockRow,
+} from "../lib/services/nhl/nhlPredictionRecordLockAuthority";
 import { __NHL_ADAPTER_TEST__ } from "../lib/services/nhl/adaptNhlToDailyEdgeResponse";
 import {
   buildNhlRegularMarketAwareForecast,
@@ -914,6 +919,39 @@ const matchedPlaybookNhl = matchPlaybookSplitsToSlateGames(
 );
 assert.equal(matchedPlaybookNhl.get(1)?.gameId, "playbook-nhl-1", "NHL DB abbreviations match Playbook full team names through the canonical NHL identity");
 
+const completeNhlLockRows: NhlPredictionRecordLockRow[] = NHL_PREDICTION_RECORD_LOCK_MARKETS.map((market, index) => ({
+  game_id: 501,
+  market,
+  model_version: NHL_REGULAR_MODEL_RELEASE,
+  locked_at: `2026-10-20T22:00:0${index}.000Z`,
+}));
+assert.equal(
+  resolveNhlPredictionRecordLocks([501], completeNhlLockRows).get(501),
+  "2026-10-20T22:00:00.000Z",
+  "NHL lock classification trusts the earliest timestamp only after the exact current-release three-market tuple is locked",
+);
+assert.equal(
+  resolveNhlPredictionRecordLocks([501], completeNhlLockRows.slice(0, 2)).get(501),
+  null,
+  "an incomplete NHL tuple remains unlocked",
+);
+assert.equal(
+  resolveNhlPredictionRecordLocks([501], completeNhlLockRows.map((row, index) => ({
+    ...row,
+    locked_at: index === 2 ? null : row.locked_at,
+  }))).get(501),
+  null,
+  "a partially locked NHL tuple fails closed without reinterpreting existing rows",
+);
+assert.equal(
+  resolveNhlPredictionRecordLocks([501], completeNhlLockRows.map((row, index) => ({
+    ...row,
+    model_version: index === 1 ? "retired-nhl-release" : row.model_version,
+  }))).get(501),
+  null,
+  "a mixed-release NHL tuple cannot establish the current authoritative lock",
+);
+
 const writer = readFileSync(new URL("../lib/services/nhl/buildNhlPredictionRecords.ts", import.meta.url), "utf8");
 const reader = readFileSync(new URL("../lib/services/nhl/buildNhlDailyEdgeAdapted.ts", import.meta.url), "utf8");
 const cron = readFileSync(new URL("../app/api/cron/nhl-daily-refresh/route.ts", import.meta.url), "utf8");
@@ -938,6 +976,8 @@ assert.match(reader, /resolveNhlLockedPriceQuote/, "reader renders the stored lo
 assert.match(writer, /evaluated_quotes/, "writer freezes the selected price, book, side, and line together");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
 assert.match(pregameSweep, /deferLock:\s*true/, "T-60 writer defers locking until the coherence gate passes");
+assert.match(pregameSweep, /resolveNhlPredictionRecordLocks/, "NHL sweep classification reads the same current three-market prediction tuple shown to members");
+assert.match(pregameSweep, /NHL official-market lock failed/, "NHL lock writes fail closed unless the complete current three-market tuple transitions together");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader quarantines incoherence by release instead of hiding a valid prior lock");
 assert.match(reader, /const marketAware = storedPayload \? null : buildNhlRegularMarketAwareForecast/, "reader fallback uses the same target-excluded NHL model path as the sole writer");
 assert.match(reader, /incoherentPayloadReleaseGames/, "reader rejects internally inconsistent sibling market snapshots");

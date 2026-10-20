@@ -67,6 +67,12 @@ import {
   assessNhlLockCoherence,
   NHL_LOCK_COHERENCE_RELEASE,
 } from "@/lib/services/nhl/nhlLockCoherence";
+import {
+  NHL_PREDICTION_RECORD_LOCK_AUTHORITY_RELEASE,
+  NHL_PREDICTION_RECORD_LOCK_MARKETS,
+  resolveNhlPredictionRecordLocks,
+} from "@/lib/services/nhl/nhlPredictionRecordLockAuthority";
+import { NHL_REGULAR_MODEL_RELEASE } from "@/lib/automodel/nhlRegularModelV1";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 import {
   createNbaPredictionRecords,
@@ -197,6 +203,20 @@ async function loadSlateCandidates(
         lockByGame.set(gameId, locked);
       }
     }
+    if (sport === "nhl") {
+      const { data: nhlRows, error: nhlError } = await supabase
+        .from("prediction_records")
+        .select("game_id, market, model_version, locked_at")
+        .in("game_id", gameIds)
+        .eq("sport", "nhl")
+        .eq("model_version", NHL_REGULAR_MODEL_RELEASE)
+        .in("market", [...NHL_PREDICTION_RECORD_LOCK_MARKETS]);
+      if (nhlError) {
+        throw new Error(`pregame-sweep NHL lock lookup failed: ${nhlError.message}`);
+      }
+      const nhlLocks = resolveNhlPredictionRecordLocks(gameIds, nhlRows ?? []);
+      for (const gameId of gameIds) lockByGame.set(gameId, nhlLocks.get(gameId) ?? null);
+    }
   }
   return games.map((r) => ({
     game_id: r.id,
@@ -238,6 +258,45 @@ async function applyLocks(
   // predicate guarantees the row stays untouched when already
   // locked, regardless of partition mis-classification.
   for (const g of games) {
+    if (sport === "nhl") {
+      const { data: lockedRows, error: nhlLockError } = await supabase
+        .from("prediction_records")
+        .update({ locked_at: lockedAt })
+        .eq("game_id", g.game_id)
+        .eq("sport", "nhl")
+        .eq("model_version", NHL_REGULAR_MODEL_RELEASE)
+        .in("market", [...NHL_PREDICTION_RECORD_LOCK_MARKETS])
+        .is("locked_at", null)
+        .select("id, market");
+      if (nhlLockError || (lockedRows ?? []).length !== NHL_PREDICTION_RECORD_LOCK_MARKETS.length) {
+        errors.push(
+          `game_id=${g.game_id}: NHL official-market lock failed: ${nhlLockError?.message ?? `updated ${(lockedRows ?? []).length}/${NHL_PREDICTION_RECORD_LOCK_MARKETS.length} rows`}`,
+        );
+        continue;
+      }
+      lockedCount++;
+      const { error: nhlAuditError } = await supabase.from("admin_audit_log").insert({
+        action_type: "prediction_records.lock",
+        target_table: "prediction_records",
+        target_id: g.game_id,
+        before_state: { locked_at: null },
+        after_state: {
+          sport,
+          date,
+          game_id: g.game_id,
+          external_id: g.external_id,
+          game_date: g.game_date,
+          markets: [...NHL_PREDICTION_RECORD_LOCK_MARKETS],
+          model_version: NHL_REGULAR_MODEL_RELEASE,
+          lock_authority_release: NHL_PREDICTION_RECORD_LOCK_AUTHORITY_RELEASE,
+          locked_at: lockedAt,
+        },
+        source_type: "real_api",
+      });
+      if (nhlAuditError) errors.push(`game_id=${g.game_id}: NHL lock audit failed: ${nhlAuditError.message}`);
+      else auditCount++;
+      continue;
+    }
     if (sport === "nba") {
       const { data: lockedRows, error: nbaLockError } = await supabase
         .from("prediction_records")

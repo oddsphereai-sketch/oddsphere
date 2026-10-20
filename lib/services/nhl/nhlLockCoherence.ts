@@ -5,7 +5,7 @@ import {
 } from "../../automodel/nhlRegularModelV1";
 
 export const NHL_LOCK_COHERENCE_RELEASE =
-  "nhl_lock_coherence_2026_09_29_r1_current_release_tuple" as const;
+  "nhl_lock_coherence_2026_10_20_r2_prediction_record_authority" as const;
 
 type NhlLockRow = {
   game_id: number;
