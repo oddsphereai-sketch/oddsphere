@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: CFB market-history continuity capacity
+
+On 2026-10-20 Daniel Mengel directed Oddsphere to verify every Daily Edge and
+fix real freshness defects. The production CFB writer was failing every five
+minutes before provider collection because its compact 72-hour movement read
+contained 21,054 rows but retained a 20,000-row ceiling. This exception is
+limited to the bounded capacity repair documented in
+`docs/model-audits/2026-10-20-cfb-market-history-continuity-capacity.md`.
+
+The movement reader may raise its explicit ceiling to 50,000 rows, matching the
+existing bounded season reader. It must retain the same compact JSON projection,
+stable timestamp/ID pagination, 72-hour horizon, compatible-release filter,
+and fail-closed saturation behavior. The sole writer advances to
+`cfb_forward_evidence_writer_2026_10_20_r130_market_history_continuity_capacity`.
+Provider requests, score/PMF equations, market interpretation, probability,
+side, decision, grade, stake, tracking, lock semantics, member schema, writer
+ownership, and the `prediction_pipeline:cfb` lease remain unchanged.
+
+Publication requires a capacity regression at the documented 96-game,
+15-minute, 72-hour envelope; the focused CFB production suite; TypeScript;
+full model-change verification; latest-main integration safety; protected PR
+checks; and live proof that a natural leased run publishes a fresh 96-game
+snapshot without changing existing locked rows. Roll back to r129 if the larger
+bounded read times out, exceeds memory limits, changes same-input outputs, or
+bypasses saturation, writer, lease, or immutable-lock contracts.
+
 ## Owner-directed correctness exception: MLB/NHL exact-date rollover continuity
 
 On 2026-10-20 Daniel Mengel reported that NHL and MLB could retain the prior

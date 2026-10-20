@@ -500,6 +500,21 @@ Last reviewed: 2026-10-20
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 20 market-history continuity capacity repair: the sole writer
+  advances to
+  `cfb_forward_evidence_writer_2026_10_20_r130_market_history_continuity_capacity`.
+  Production accumulated 21,054 compact movement rows inside the required
+  72-hour visible-board window, exceeding the former 20,000-row reader ceiling
+  before the writer could refresh any game. The compact, payload-projected
+  reader now shares the existing explicit 50,000-row season-reader ceiling,
+  which covers a 96-game board at the documented 15-minute cadence plus
+  immutable openings, T-60 rows, and bounded release-transition headroom.
+  Query projection, stable pagination, 72-hour horizon, compatible releases,
+  provider calls, model inputs, forecast, market reader, probabilities, sides,
+  grades, stakes, tracking, sole `prediction_pipeline:cfb` lease, and locked
+  records are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-20-cfb-market-history-continuity-capacity.md`.
+
 - October 19 completion-cadence continuity repair: the sole writer advances to
   `cfb_forward_evidence_writer_2026_10_19_r129_completion_cadence_continuity`.
   A persistent FCS paid-provider seed gap previously made every five-minute run

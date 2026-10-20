@@ -105,11 +105,17 @@ export const CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS = 12_000 as const;
 export const CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS = 30_000 as const;
 export const CFB_FORWARD_WRITER_UNLOCKED_CONTINUITY_HOURS = 48 as const;
 export const CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE = 1_000 as const;
-export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 20_000 as const;
+// The visible-board movement reader retains 72 hours, versus the writer's
+// 48-hour unlocked continuity scan. A 96-game board observed every 15 minutes
+// contributes 27,648 movement rows before immutable openings/T-60 rows and
+// release-transition overlap. Keep this read explicitly bounded while matching
+// the existing 50k season-reader safety ceiling so normal publication cannot
+// fail merely because the required continuity window is complete.
+export const CFB_FORWARD_MARKET_HISTORY_MAX_ROWS = 50_000 as const;
 export const CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS = 72 as const;
 // Keep the JSON projection query below Supabase's statement-timeout cliff as
 // the append-only evidence table grows. This changes query partitioning only;
-// row identity, ordering, compatible releases and the 20k total bound remain
+// row identity, ordering, compatible releases and the bounded total remain
 // unchanged.
 export const CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE = 10 as const;
 export const CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES = [
