@@ -7,7 +7,7 @@ import type {
 import { buildNbaPointInTimeFeatures } from "./nbaPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_player_props_point_in_time_features_2026_10_20_r2_matchup_context" as const;
+  "nba_player_props_point_in_time_features_2026_10_20_r3_long_horizon_rates" as const;
 
 const RESULT_AVAILABILITY_HOURS = 5;
 
@@ -43,13 +43,21 @@ export type NbaPlayerPropFeatureRow = {
   minutes_p75_10: number | null;
   points_per_minute_10: number | null;
   rebounds_per_minute_10: number | null;
+  rebounds_per_minute_20: number | null;
+  rebounds_per_minute_season: number | null;
   assists_per_minute_10: number | null;
+  assists_per_minute_20: number | null;
+  assists_per_minute_season: number | null;
   threes_per_minute_10: number | null;
+  threes_per_minute_20: number | null;
+  threes_per_minute_season: number | null;
   blocks_per_minute_10: number | null;
   steals_per_minute_10: number | null;
   turnovers_per_minute_10: number | null;
   fga_per_minute_10: number | null;
   fg3a_per_minute_10: number | null;
+  fg3a_per_minute_20: number | null;
+  fg3a_per_minute_season: number | null;
   fta_per_minute_10: number | null;
   usage_mean_5: number | null;
   touches_per_minute_5: number | null;
@@ -224,6 +232,7 @@ function buildFeatureRow(args: {
 }): NbaPlayerPropFeatureRow {
   const seasonHistory = args.history.filter((row) => row.season === args.game.season);
   const recent10 = args.history.slice(-10);
+  const recent20 = args.history.slice(-20);
   const recent5 = args.history.slice(-5);
   const last = args.history.at(-1) ?? null;
   const sameTeamGames = recent10.filter((row) => row.teamId === args.candidate.teamId).length;
@@ -263,13 +272,21 @@ function buildFeatureRow(args: {
     minutes_p75_10: quantile(recent10.map((row) => row.minutes), 0.75),
     points_per_minute_10: perMinute(recent10, "points"),
     rebounds_per_minute_10: perMinute(recent10, "rebounds"),
+    rebounds_per_minute_20: perMinute(recent20, "rebounds"),
+    rebounds_per_minute_season: perMinute(seasonHistory, "rebounds"),
     assists_per_minute_10: perMinute(recent10, "assists"),
+    assists_per_minute_20: perMinute(recent20, "assists"),
+    assists_per_minute_season: perMinute(seasonHistory, "assists"),
     threes_per_minute_10: perMinute(recent10, "threes"),
+    threes_per_minute_20: perMinute(recent20, "threes"),
+    threes_per_minute_season: perMinute(seasonHistory, "threes"),
     blocks_per_minute_10: perMinute(recent10, "blocks"),
     steals_per_minute_10: perMinute(recent10, "steals"),
     turnovers_per_minute_10: perMinute(recent10, "turnovers"),
     fga_per_minute_10: perMinute(recent10, "fga"),
     fg3a_per_minute_10: perMinute(recent10, "fg3a"),
+    fg3a_per_minute_20: perMinute(recent20, "fg3a"),
+    fg3a_per_minute_season: perMinute(seasonHistory, "fg3a"),
     fta_per_minute_10: perMinute(recent10, "fta"),
     usage_mean_5: mean(nonNull(recent5.map((row) => row.usage))),
     touches_per_minute_5: optionalPerMinute(recent5, "touches"),

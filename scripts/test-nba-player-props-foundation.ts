@@ -215,6 +215,14 @@ assert.equal(playerFeatures[0]?.minutes_mean_5, null);
 assert.equal(playerFeatures[1]?.player_games_prior, 1);
 assert.equal(playerFeatures[1]?.minutes_mean_5, 34);
 assert.equal(playerFeatures[1]?.points_per_minute_10, 20 / 34);
+assert.equal(playerFeatures[1]?.rebounds_per_minute_20, 6 / 34);
+assert.equal(playerFeatures[1]?.rebounds_per_minute_season, 6 / 34);
+assert.equal(playerFeatures[1]?.assists_per_minute_20, 7 / 34);
+assert.equal(playerFeatures[1]?.assists_per_minute_season, 7 / 34);
+assert.equal(playerFeatures[1]?.threes_per_minute_20, 2 / 34);
+assert.equal(playerFeatures[1]?.threes_per_minute_season, 2 / 34);
+assert.equal(playerFeatures[1]?.fg3a_per_minute_20, 6 / 34);
+assert.equal(playerFeatures[1]?.fg3a_per_minute_season, 6 / 34);
 assert.equal(playerFeatures[1]?.target_points, 24);
 const mutated = buildNbaPlayerPropsPointInTimeFeatures({
   games: historicalGames,
@@ -222,6 +230,7 @@ const mutated = buildNbaPlayerPropsPointInTimeFeatures({
   candidates,
 });
 assert.equal(mutated[1]?.points_per_minute_10, playerFeatures[1]?.points_per_minute_10, "a target mutation cannot alter its own pregame features");
+assert.equal(mutated[1]?.threes_per_minute_season, playerFeatures[1]?.threes_per_minute_season, "long-horizon rates remain point-in-time");
 assert.equal(mutated[1]?.target_points, 99, "the target remains available for offline scoring only");
 
 const syntheticRows = Array.from({ length: 160 }, (_, index) => {

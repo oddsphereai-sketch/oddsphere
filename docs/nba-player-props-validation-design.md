@@ -128,16 +128,57 @@ Assists (48.2% versus 48.9%). A rule chosen from the confirmation result would
 be hindsight leakage. Timestamped movement and lock-time evidence are still
 required before a market-reader rule can qualify.
 
+## Expanded weak-market qualification
+
+The weak-market audit was expanded without another provider request. The same
+immutable cache now emits a 360-game conditional-on-appearance projection
+population with 5,581 point-in-time player rows. Selection uses 72 later games
+and 1,164 rows; confirmation remains untouched until candidate choice and uses
+72 still-later games and 1,018 rows. A player enters this projection population
+only from pregame history: at least three prior appearances and at least 12
+recent minutes. The closing box score supplies the target and participant
+identity only; it is never a feature.
+
+The structural fix adds 20-game and season-to-date component rates. Rebounds
+are estimated from minutes, rebound opportunities, capture, pace, and team and
+opponent rebounding context. Assists retain the stronger two-stage minutes/rate
+forecast and use market arbitration after the independent center. Threes use
+attempt volume, stabilized conversion, team shot mix, and opponent perimeter
+context. Rebounds + Assists is the sum of the component forecasts rather than
+an independently fitted shortcut.
+
+Market arbitration is downstream. It never averages the projection toward the
+line. When qualified evidence disagrees, it may reflect the independent
+distance across the canonical line so the final center and side remain
+coherent. Opening-only candidates are selected on the earlier selection window
+and six rolling pre-confirmation blocks; the untouched confirmation result is
+reported afterward.
+
+| Market | Pre-confirmation candidate | Selection hit | Untouched confirmation hit | Rolling support | Projection result |
+|---|---|---:|---:|---:|---|
+| Rebounds | opportunity model + 5 pp market disagreement | 52.7% (131) | 63.8% (69) | 4/6 before confirmation; 5/5 full rolling blocks | Confirmation MAE 2.13 versus 2.18 ridge |
+| Assists | two-stage model + 2 pp market disagreement | 56.0% (100) | 60.8% (51) | 5/6 before confirmation; 4/5 full rolling blocks | Confirmation MAE 1.65 versus 1.65 ridge; direction is the material gain |
+| Threes | long-horizon opportunity model + 5 pp market disagreement | 56.0% (100) | 53.3% (60) | 6/6 before confirmation; 3/5 full rolling blocks | Selection MAE 0.954 versus 0.970 ridge; confirmation MAE is effectively tied |
+| Rebounds + Assists | component sum + opening-market arbitration | 53.8% (119) | 55.0% (80) | 4/5 full rolling blocks | Confirmation MAE 3.06 versus 3.14 ridge |
+
+These four candidates are qualified for the next market-path and grade stage;
+they are not production-qualified releases. Threes is the narrowest pass and
+must not receive broad actionability merely because it cleared 50%. The
+remaining launch gates are timestamped movement, predictive-distribution
+calibration, price/ROI grades, board-count impact, settlement, and live
+operational validation. No route, member row, prediction, grade, stake, lock,
+writer, or schedule changed during this work.
+
 ### Current pathway status
 
 | Gate | Status | What remains |
 |---|---|---|
 | Immutable historical dataset | Passed for the pilot | Add independent early-, mid-, and late-season windows |
 | Reproducible offline replay | Passed | Retain cache SHA and release identity for every future run |
-| Independent model tournament | Failed | Replace minutes/role and market-specific rate engines |
-| Projection stability | Failed | Confirm across multiple rolling windows and a second season |
+| Independent model tournament | Passed for Rebounds; provisional for Assists, Threes, and Rebounds + Assists | Preserve the pre-confirmation choices and add an independent season/window |
+| Projection stability | Passed for the expanded target-market candidates | Threes remains the narrowest pass and needs the movement/grade gate |
 | Distribution calibration | Not tested | Fit predictive distributions and test interval coverage/Brier/log loss |
-| Market-reading marriage | Not validated | Capture target-excluded T-180/T-60/T-15/lock snapshots and movement |
+| Market-reading marriage | Opening-only candidates passed | Capture target-excluded T-180/T-60/T-15/lock snapshots and validate movement |
 | Grade/ROI calibration | Not tested | Run only after the final forecast qualifies; report board counts and prices |
 | Settlement/private tracking | Not built | Prove DNP, void, overtime, and stat-correction handling |
 | Production launch | Blocked | All preceding gates must pass on one release-pure candidate |

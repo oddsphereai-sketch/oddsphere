@@ -310,6 +310,27 @@ async function main(): Promise<void> {
     candidates: [...candidatesByIdentity.values()],
     emitGameIds,
   });
+  // Projection qualification needs substantially more outcomes than the
+  // bounded odds sample. These rows cover every game in the evaluation span
+  // and remain conditional-on-appearance research: the closing box score is
+  // used only to identify participants and the target, never as a feature.
+  const projectionGameIds = new Set(evaluationPool.map((game) => game.gameId));
+  const projectionCandidates = boxes.flatMap((target) => {
+    if (!projectionGameIds.has(target.gameId) || target.minutes <= 0) return [];
+    return [{
+      gameId: target.gameId,
+      playerId: target.playerId,
+      playerName: playerNames.get(String(target.playerId)) ?? null,
+      teamId: target.teamId,
+    } satisfies NbaPlayerPropCandidate];
+  });
+  const projectionFeatureRows = buildNbaPlayerPropsPointInTimeFeatures({
+    games: requestedGames,
+    boxes,
+    advanced,
+    candidates: projectionCandidates,
+    emitGameIds: projectionGameIds,
+  }).filter((row) => row.player_games_prior >= 3 && (row.minutes_mean_10 ?? 0) >= 12);
   const coveredOrdered = evaluationGames.filter((game) => coveredGameIds.has(game.gameId));
   const splitIndex = Math.max(4, Math.min(coveredOrdered.length - 1, Math.floor(coveredOrdered.length * 0.75)));
   const trainingGameIds = new Set(coveredOrdered.slice(0, splitIndex).map((game) => game.gameId));
@@ -324,6 +345,9 @@ async function main(): Promise<void> {
       season,
       games: evaluationGames,
       featureRows,
+      projectionGames: evaluationPool,
+      projectionFeatureRows,
+      projectionPopulation: "Conditional on an appearance; filtered only by pregame history (at least 3 prior games and 12 recent minutes).",
       openingObservations: observations,
       immutableInputsSha256: createHash("sha256").update(JSON.stringify({
         gameIds,
