@@ -3,7 +3,7 @@ import type { NcaafGame } from "./balldontlieNcaafSlate";
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_OFFICIAL_CONFERENCE_AVAILABILITY_RELEASE =
-  "cfb_official_conference_availability_2026_10_17_r2_all_published_fbs_feeds" as const;
+  "cfb_official_conference_availability_2026_10_20_r3_shared_team_identity_container_compatibility" as const;
 export const CFB_OFFICIAL_CONFERENCE_AVAILABILITY_MAX_REQUESTS = 12 as const;
 export const CFB_OFFICIAL_CONFERENCE_AVAILABILITY_TIMEOUT_MS = 10_000 as const;
 export const CFB_OFFICIAL_CONFERENCE_AVAILABILITY_MAX_RESPONSE_BYTES = 20_000_000 as const;
@@ -43,8 +43,6 @@ export async function fetchCfbOfficialConferenceAvailability(args: {
   games: NcaafGame[];
   capturedAt: string;
   fetchImpl?: typeof fetch;
-  /** SELECT-only operator rehearsal for the pending midweek recovery. */
-  auditUseMidweekRecoveryCandidate?: boolean;
 }): Promise<CfbOfficialConferenceAvailabilityResult> {
   const games = [...new Map(args.games.map((game) => [game.providerGameId, game])).values()];
   if (games.length === 0) return emptyResult();
@@ -69,7 +67,7 @@ export async function fetchCfbOfficialConferenceAvailability(args: {
         headers: headers("application/json"),
         body: JSON.stringify({ sport: "Football", organization: conference.organization, conference: conference.organization }),
       });
-      return parseCfbOfficialConferenceAvailability({ json: JSON.parse(body) as unknown, games, capturedAt: args.capturedAt, sourceUrl: conference.sourceUrl, auditUseMidweekRecoveryCandidate: args.auditUseMidweekRecoveryCandidate });
+      return parseCfbOfficialConferenceAvailability({ json: JSON.parse(body) as unknown, games, capturedAt: args.capturedAt, sourceUrl: conference.sourceUrl });
     } catch (error) {
       failures.push(`${conference.organization}:${errorMessage(error)}`);
       return {};
@@ -78,7 +76,7 @@ export async function fetchCfbOfficialConferenceAvailability(args: {
   const jsonFeeds = JSON_CONFERENCES.map(async (conference) => {
     try {
       const body = await requestText(conference.feedUrl, { method: "GET", headers: headers("application/json") });
-      return parseCfbOfficialJsonAvailability({ json: JSON.parse(body) as unknown, games, capturedAt: args.capturedAt, sourceUrl: conference.sourceUrl, auditUseMidweekRecoveryCandidate: args.auditUseMidweekRecoveryCandidate });
+      return parseCfbOfficialJsonAvailability({ json: JSON.parse(body) as unknown, games, capturedAt: args.capturedAt, sourceUrl: conference.sourceUrl });
     } catch (error) {
       failures.push(`${conference.key}:${errorMessage(error)}`);
       return {};
@@ -92,7 +90,7 @@ export async function fetchCfbOfficialConferenceAvailability(args: {
         method: "GET",
         headers: { ...headers("text/html"), origin: new URL(conference.referer).origin, referer: conference.referer, "sec-fetch-dest": "iframe" },
       });
-      return parseCfbFaktorAvailability({ html: report, games, capturedAt: args.capturedAt, sourceUrl: conference.landingUrl, auditUseMidweekRecoveryCandidate: args.auditUseMidweekRecoveryCandidate });
+      return parseCfbFaktorAvailability({ html: report, games, capturedAt: args.capturedAt, sourceUrl: conference.landingUrl });
     } catch (error) {
       failures.push(`${conference.key}:${errorMessage(error)}`);
       return {};
@@ -108,7 +106,6 @@ export function parseCfbOfficialConferenceAvailability(args: {
   games: NcaafGame[];
   capturedAt: string;
   sourceUrl: string;
-  auditUseMidweekRecoveryCandidate?: boolean;
 }): Record<string, DailyEdgeGameAvailability> {
   const root = record(args.json);
   if (!root) throw new Error("invalid_official_report_envelope");
@@ -120,7 +117,7 @@ export function parseCfbOfficialConferenceAvailability(args: {
     const teams = Array.isArray(report.games) ? report.games.map(record).filter((value): value is OfficialTeam => value !== null) : [];
     const eventDate = text(record(report.footer)?.date);
     if (teams.length !== 2 || !validDate(eventDate)) continue;
-    const matchingGames = args.games.filter((game) => strictEventMatch(game, teams, eventDate, args.auditUseMidweekRecoveryCandidate));
+    const matchingGames = args.games.filter((game) => strictEventMatch(game, teams, eventDate));
     if (matchingGames.length !== 1) continue;
     const game = matchingGames[0]!;
     const reportUpdatedAt = officialTimestamp({ date: text(report.publishDate), time: text(report.postedTime), timeZone: text(report.conferenceTimeZone) }) ?? new Date(args.capturedAt).toISOString();
@@ -134,7 +131,6 @@ export function parseCfbOfficialJsonAvailability(args: {
   games: NcaafGame[];
   capturedAt: string;
   sourceUrl: string;
-  auditUseMidweekRecoveryCandidate?: boolean;
 }): Record<string, DailyEdgeGameAvailability> {
   const root = record(args.json);
   if (!root || !Array.isArray(root.games)) throw new Error("invalid_official_json_report_envelope");
@@ -146,7 +142,7 @@ export function parseCfbOfficialJsonAvailability(args: {
     const eventDate = text(report?.dateISO);
     if (!report || !away || !home || !validDate(eventDate)) continue;
     const teams: OfficialTeam[] = [{ teamName: away.name }, { teamName: home.name }];
-    const matchingGames = args.games.filter((game) => strictEventMatch(game, teams, eventDate, args.auditUseMidweekRecoveryCandidate));
+    const matchingGames = args.games.filter((game) => strictEventMatch(game, teams, eventDate));
     if (matchingGames.length !== 1) continue;
     const game = matchingGames[0]!;
     const reportUpdatedAt = validIso(text(report.updatedAtUTC)) ?? new Date(args.capturedAt).toISOString();
@@ -160,12 +156,9 @@ export function parseCfbFaktorAvailability(args: {
   games: NcaafGame[];
   capturedAt: string;
   sourceUrl: string;
-  auditUseMidweekRecoveryCandidate?: boolean;
 }): Record<string, DailyEdgeGameAvailability> {
   const reportsByGame: Record<string, DailyEdgeGameAvailability> = {};
-  const containerPattern = args.auditUseMidweekRecoveryCandidate
-    ? /<(article|section)\b[^>]*data-availability-graphic-card=["']true["'][^>]*>([\s\S]*?)<\/\1>/gi
-    : /<(article)\b[^>]*data-availability-graphic-card=["']true["'][^>]*>([\s\S]*?)<\/\1>/gi;
+  const containerPattern = /<(article|section)\b[^>]*data-availability-graphic-card=["']true["'][^>]*>([\s\S]*?)<\/\1>/gi;
   const articles = [...args.html.matchAll(containerPattern)];
   for (const match of articles) {
     const article = match[0] ?? "";
@@ -176,7 +169,7 @@ export function parseCfbFaktorAvailability(args: {
     const tables = [...article.matchAll(/<div\b[^>]*class=["'][^"']*availability-team-table[^"']*["'][^>]*aria-label=["']([^"']+) availability["'][^>]*>([\s\S]*?)<\/div>/gi)];
     if (tables.length !== 2) continue;
     const teams: OfficialTeam[] = tables.map((table) => ({ teamName: decodeHtml(table[1] ?? "") }));
-    const matchingGames = args.games.filter((game) => strictEventMatch(game, teams, eventDate, args.auditUseMidweekRecoveryCandidate));
+    const matchingGames = args.games.filter((game) => strictEventMatch(game, teams, eventDate));
     if (matchingGames.length !== 1) continue;
     const reportUpdatedAt = faktorUtcTimestamp(attributeFrom(article, "data-updated-at")) ?? new Date(args.capturedAt).toISOString();
     const game = matchingGames[0]!;
@@ -258,44 +251,16 @@ function mergeReports(groups: Array<Record<string, DailyEdgeGameAvailability>>):
   return merged;
 }
 
-function strictEventMatch(game: NcaafGame, teams: OfficialTeam[], eventDate: string, auditUseMidweekRecoveryCandidate = false): boolean {
+function strictEventMatch(game: NcaafGame, teams: OfficialTeam[], eventDate: string): boolean {
   return easternDate(game.scheduledStart) === eventDate &&
-    teamMatches(game.away, teams[0]!, auditUseMidweekRecoveryCandidate) &&
-    teamMatches(game.home, teams[1]!, auditUseMidweekRecoveryCandidate);
+    teamMatches(game.away, teams[0]!) &&
+    teamMatches(game.home, teams[1]!);
 }
-function teamMatches(team: NcaafGame["away"], report: OfficialTeam, auditUseMidweekRecoveryCandidate: boolean): boolean {
+function teamMatches(team: NcaafGame["away"], report: OfficialTeam): boolean {
   const candidates = [text(report.teamDisplayName), text(report.teamName)].filter((value): value is string => Boolean(value));
-  if (auditUseMidweekRecoveryCandidate) {
-    return candidates.some((observed) =>
-      cfbProviderTeamMatches({ observed, abbreviation: team.abbreviation, expectedName: team.name }) ||
-      (team.abbreviation === "NMSU" && ["nmstate", "newmexicostate"].includes(normalize(observed))));
-  }
-  const accepted = new Set([canonicalTeam(team.name), canonicalTeam(team.abbreviation)]);
-  return candidates.some((value) => accepted.has(canonicalTeam(value)));
+  return candidates.some((observed) =>
+    cfbProviderTeamMatches({ observed, abbreviation: team.abbreviation, expectedName: team.name }));
 }
-function canonicalTeam(value: string): string {
-  let normalized = normalize(value);
-  for (const mascot of MASCOT_SUFFIXES) if (normalized.endsWith(mascot) && normalized.length > mascot.length) { normalized = normalized.slice(0, -mascot.length); break; }
-  return ({
-    appstate: "appalachianstate",
-    connecticut: "uconn",
-    floridast: "floridastate",
-    gasouthern: "georgiasouthern",
-    gastate: "georgiastate",
-    latech: "louisianatech",
-    massachusetts: "umass",
-    ncst: "northcarolinastate",
-    ncstate: "northcarolinastate",
-    mississippi: "olemiss",
-    southerncalifornia: "usc",
-    southernmississippi: "southernmiss",
-    pitt: "pittsburgh",
-    utsanantonio: "utsa",
-  } as Record<string, string>)[normalized] ?? normalized;
-}
-const MASCOT_SUFFIXES = [
-  "fightingillini", "goldengophers", "yellowjackets", "mountaineers", "crimsontide", "southcarolinagamecocks", "ragincajuns", "nittanylions", "demondeacons", "cornhuskers", "boilermakers", "commodores", "terrapins", "seminoles", "hurricanes", "cavaliers", "razorbacks", "longhorns", "volunteers", "wildcats", "cardinals", "gamecocks", "wolverines", "spartans", "hawkeyes", "huskies", "buckeyes", "badgers", "scarletknights", "fightingirish", "tarheels", "wolfpack", "bluedevils", "goldenbears", "orangemen", "hokies", "panthers", "tigers", "aggies", "gators", "sooners", "rebels", "bulldogs", "bayoubengals", "cyclones", "jayhawks", "utes", "knights", "blackknights", "cowboys", "cougars", "redraiders", "hornedfrogs", "sundevils", "bearcats", "buffaloes", "bears", "ducks", "bruins", "trojans", "hoosiers", "huskers", "orange", "cardinal", "owls", "eagles", "falcons", "warhawks",
-].sort((first, second) => second.length - first.length);
 
 function easternDate(value: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));

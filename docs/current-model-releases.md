@@ -500,23 +500,34 @@ Last reviewed: 2026-10-20
 
 ## CFB Daily Edge generalized weekly production release
 
-- October 20 midweek recovery audit gate: the authenticated operator-only
-  `/api/cron/cfb-midweek-recovery-audit` endpoint may run one `apply=false`,
-  `apply=false` rehearsal of the pending official-availability identity/parser
-  repair and paid FCS market recovery. Candidate flags are rejected whenever
-  `apply=true`; the scheduled writer, live 5,000-credit reserve, active release
-  identifiers, member snapshot, grades, tracking, and locks remain unchanged.
-  The endpoint persists only its sanitized result under the isolated
-  `cfb::operator-audit::2026-10-20-midweek-recovery` response-snapshot key so a
-  completed long-running audit can be retrieved after the HTTP connection
-  closes. It reports exact before/candidate coverage and every side, line,
-  grade, promotion, and demotion so the live repair cannot be approved on stale
-  October 8 evidence. Evidence and rollback:
-  `docs/model-audits/2026-10-20-cfb-midweek-recovery-zero-write-audit.md`.
-  The first current-board result retained 0/40 FCS paired-market coverage, so
-  the reserve change remains disabled. An authenticated one-request provider
-  diagnostic is available only to distinguish an empty vendor board from an
-  event-identity defect; it cannot write model state or expose credentials.
+- October 20 midweek availability and FCS continuity repair: the active
+  collector/writer advance to
+  `cfb_forward_evidence_collector_2026_10_20_r61_midweek_availability_fcs_continuity` /
+  `cfb_forward_evidence_writer_2026_10_20_r131_midweek_availability_fcs_continuity`.
+  Official conference availability advances to
+  `cfb_official_conference_availability_2026_10_20_r3_shared_team_identity_container_compatibility`:
+  it now uses the centralized strict team resolver and parses both Faktor
+  `article` and `section` containers. This recovered the published South
+  Alabama–Marshall and James Madison–App State Sun Belt reports in the
+  zero-write collector rehearsal; CUSA remained absent because its official
+  feed had not yet published a current report.
+- The paid FCS fallback advances to
+  `cfb_the_odds_api_fcs_fallback_2026_10_20_r4_bounded_month_end_continuity`.
+  Its reserve is 1,152 credits, exactly two complete worst-case weekly budgets;
+  hourly cadence and the 176 ordinary / 192 total weekly ceilings are
+  unchanged. The authenticated provider diagnostic returned zero current FCS
+  events, zero matched games, zero credits used and 3,470 credits remaining,
+  so the repair resumes bounded polling but does not fabricate present market
+  coverage. The temporary audit route and candidate flags are removed.
+- The 96-game current-board zero-write replay retained 0/40 FCS-only paired
+  Moneyline/Spread/Total coverage because the vendor board was empty. Across
+  all games it recorded 0 promotions and 1 demotion; five fresh-input changes
+  were outside the FCS recovery lane. Conference availability is panel-only
+  and cannot alter predictions or grades. Model equations, market arbitration,
+  thresholds, stakes, provider hierarchy, one `prediction_pipeline:cfb`
+  lease, and all locked records are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-20-cfb-midweek-availability-fcs-continuity.md`;
+  roll back r61/r131/r4/r3 to r60/r130/r3/r2 without rewriting locks.
 
 - October 20 market-history continuity capacity repair: the sole writer
   advances to
@@ -878,7 +889,8 @@ Last reviewed: 2026-10-20
   books. FanDuel, DraftKings and Rebet retain execution and market-reading eligibility. BetMGM, BetRivers,
   Caesars, Fanatics, theScore Bet, BetOnline and Bally Bet are target-excluded consensus only: they cannot
   become the evaluated quote, score/side anchor, opening authority or movement signal. The provider,
-  cadence, weekly limits and 5,000-credit reserve are unchanged. Identical ordered market-history reads
+  cadence, weekly limits and then-current 5,000-credit reserve were unchanged in this historical release;
+  the active October 20 r4 fallback above supersedes only that reserve. Identical ordered market-history reads
   are partitioned into 10-game batches after a live 25-game batch still intermittently exceeded the
   database statement timeout. Current-price and historical-opening request counters are now separate,
   so a transition-only historical lookup cannot postpone an hourly live-price refresh. Historical
@@ -909,7 +921,8 @@ Last reviewed: 2026-10-20
   labeled a provider opening. Future slates use the real primary-provider opening where available and
   otherwise retain the earliest verified observation. Current pulls are one sport-level request, at
   most hourly while an upcoming FCS price gap exists, forced once at T-60 when due, capped at 176
-  ordinary and 192 total weekly pulls, and protected by a 5,000-credit reserve.
+  ordinary and 192 total weekly pulls, and was protected by a 5,000-credit reserve at that release.
+  The active October 20 r4 fallback above replaces that reserve with 1,152 credits while retaining the limits.
 - Writer r106 closes the deployment-transition seed gap: when an unlocked FCS price gap has no
   recorded paid-provider attempt or verified paid-provider book, the existing leased writer runs
   one immediate FCS-only seed instead of waiting for the ordinary hourly game-capture boundary. A

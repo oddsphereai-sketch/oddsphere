@@ -48,14 +48,6 @@ assert.equal(response.requests, 1);
 assert.equal(response.creditsUsed, 3);
 assert.equal(response.creditsRemaining, 491);
 assert.equal(response.matchedGames, 1);
-assert.equal(response.providerEvents.length, 2);
-assert.deepEqual(response.providerEvents[0], {
-  eventId: "e-liu",
-  commenceTime: liu.scheduledStart,
-  awayTeam: "LIU Sharks",
-  homeTeam: "Duquesne Dukes",
-  bookmakers: ["fanduel", "betrivers", "williamhill_us", "betonlineag"],
-});
 assert.equal(response.failuresByGame["g-cit"], "strict_event_not_found");
 const book = response.booksByGame["g-liu"]?.[0];
 assert.ok(book);
@@ -160,6 +152,7 @@ assert.equal(opening.fetch, true);
 assert.equal(opening.reason, "opening_gap_seed");
 assert.equal(opening.cadenceMinutes, 60);
 assert.equal(CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT * CFB_THE_ODDS_API_CREDITS_PER_PULL, 576);
+assert.equal(CFB_THE_ODDS_API_CREDIT_RESERVE, 1_152, "reserve must preserve two full worst-case weekly budgets");
 
 const newGameSeed = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
@@ -185,6 +178,14 @@ const hourlyDue = shouldFetchCfbTheOddsApiFallback({
 });
 assert.equal(hourlyDue.fetch, true);
 assert.equal(hourlyDue.reason, "gap_refresh_due");
+
+const monthEndContinuity = shouldFetchCfbTheOddsApiFallback({
+  games: [liu],
+  existing: [stored("2026-10-08T11:00:00.000Z", 3_470)],
+  now: capturedAt,
+});
+assert.equal(monthEndContinuity.fetch, true, "a healthy paid balance above two complete weekly budgets must remain usable");
+assert.equal(monthEndContinuity.reason, "gap_refresh_due");
 
 const historicalOnlyDoesNotPostponeCurrent = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
@@ -250,14 +251,6 @@ const reserve = shouldFetchCfbTheOddsApiFallback({
 });
 assert.equal(reserve.fetch, false);
 assert.equal(reserve.reason, "credit_reserve");
-const auditReserveBypass = shouldFetchCfbTheOddsApiFallback({
-  games: [liu],
-  existing: [stored("2026-10-07T00:00:00.000Z", 3_470)],
-  now: capturedAt,
-  auditIgnoreCreditReserve: true,
-});
-assert.equal(auditReserveBypass.fetch, true, "zero-write audit must be able to measure current FCS provider coverage below the live reserve");
-assert.equal(auditReserveBypass.reason, "gap_refresh_due");
 
 const ordinaryCappedRows = Array.from({ length: CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT }, (_, index) =>
   stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * 3));

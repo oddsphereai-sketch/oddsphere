@@ -20,6 +20,7 @@ export const CFB_PROVIDER_TEAM_ALIASES: Readonly<Record<string, readonly string[
   MIA: ["Miami", "Miami FL", "Miami Florida"],
   "M-OH": ["Miami OH", "Miami Ohio"],
   MTSU: ["Middle Tennessee", "Middle Tenn ST", "Middle Tennessee State"],
+  NMSU: ["NM State", "New Mexico State"],
   NICH: ["Nicholls", "Nicholls State", "Nicholls State Colonels"],
   NCST: ["NC State", "North Carolina State"],
   NCSU: ["NC State", "North Carolina State"],
