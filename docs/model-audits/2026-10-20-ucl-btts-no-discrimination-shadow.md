@@ -282,3 +282,19 @@ different candidate is frozen:
 
 This candidate directly models the low-score/zero-inflation weakness isolated
 by the preceding test. It is neither a threshold shift nor a forced side mix.
+
+### Provider-availability amendment before outcome access
+
+The provider-only row-count probe returned no regulation-final rows for
+2001-09 and exactly 125 for 2010. The declared multi-season tournament therefore
+failed closed before producing any metric. No unavailable year is silently
+dropped and no outcome was inspected.
+
+Before loading the 2010 scores, the same frozen zero-risk candidate is assigned
+an exact within-season chronology: the first 70 regulation finals are warm-up,
+the next 25 select among the already declared three weights, and the remaining
+30 are untouched confirmation. Match order is provider kickoff then provider
+ID. The feature set, shrinkage, half-life, weights, solver, and all acceptance
+gates remain unchanged. The small confirmation size cannot alone authorize
+production; a passing result must also improve the already opened pooled
+2011-26 robustness cohort before current-board rehearsal.
