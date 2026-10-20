@@ -510,3 +510,54 @@ Promotion requires settled prospective UCL evidence showing better accuracy,
 No recall, Brier, and log loss without degrading Match Result, Total, expected
 goals, board actionability, or immutable-lock behavior. Until that evidence
 exists, r8u/r4 remains the live champion and the shadow is measurement only.
+
+## Outcome-blind three-lane market-reader declaration
+
+This declaration was frozen on October 20 before any fixture on the 18-match
+board kicked off. The production base is merge commit
+`c1b5ab5a0998874cb311275cbd6a4bee6f1ff060`. Scope is UCL BTTS shadow
+provenance only. The incumbent coherent PMF, public BTTS side/probability,
+grade, score, stake, sole UCL writer, `prediction_pipeline:soccer` lease,
+refresh/lock cadence, member copy/layout, tracking and every locked payload are
+unchanged.
+
+The frozen candidate release is
+`ucl_btts_market_shadow_2026_10_20_r2_three_lane_target_excluded`. It extends
+the r1 target-excluded consensus without using any result:
+
+1. Current level retains the r1 requirements: at least three complete named
+   books, exact event identity, evaluated-book exclusion, prediction-market
+   exclusion, stable leave-one-out direction and no more than six percentage
+   points of mean absolute dispersion.
+2. Movement is constructed only from the same eligible target-excluded books.
+   Each book requires complete Yes/No pairs at two or more strictly predecision
+   capture times. Per-book opening and current prices are separately de-vigged;
+   the reader uses the median Yes-probability change. At least two books are
+   required, and a movement direction exists only at an absolute one-point
+   change.
+3. Model evidence quality is `strong` only when each club has at least five
+   provider stat matches and three xG matches with no promoted proxy; `medium`
+   requires three stat matches and two xG matches per club; everything else is
+   `thin`.
+4. The r1 reliability authority is multiplied by movement support (`1.25`
+   when target-excluded movement corroborates the consensus, `0.75` when it
+   resists, otherwise `1.00`) and model-evidence quality (`1.25` thin, `1.10`
+   medium, `1.00` strong), then capped at `0.45`. Missing movement changes no
+   direction and grants no bonus.
+5. The candidate probability remains a logit pool of the independent model and
+   target-excluded consensus. Its lane is `aligned` when their directions
+   agree, `corrected` only when the pooled probability crosses 50%, and
+   `conflicted` when disagreement shrinks confidence without crossing 50%.
+6. The shadow grade uses the candidate side's exact quote and the frozen UCL
+   53% Watchlist / 55% positive-EV Lean ladder. A conflicted candidate whose
+   target-excluded movement corroborates the opposing consensus is capped at
+   Watchlist. An aligned candidate may promote through the same symmetric
+   probability/price gates. A corrected candidate is capped at Watchlist until
+   settled confirmation authorizes direction changes.
+
+The exact current-board audit must report lane counts, side changes,
+promotions, demotions, actionable count and market mix. The candidate cannot
+receive production authority from the current board. Promotion still requires
+release-pure settled evidence improving BTTS accuracy, No recall, Brier and log
+loss, with no regression in Match Result, Total, team-score error, lock
+immutability, coverage or board actionability.
