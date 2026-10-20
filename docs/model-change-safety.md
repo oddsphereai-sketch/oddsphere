@@ -1,5 +1,28 @@
 # Model change safety protocol
 
+## Owner-directed correctness exception: observed NFL props scheduler jitter
+
+On 2026-10-20 the first production heartbeat after the r58 deployment began at
+`13:21:09.467Z`, 1.494 seconds before the prior snapshot's exact hourly due
+boundary at `13:21:10.961Z`. The r2 cadence's one-second tolerance therefore
+returned `not_due` and would defer the writer to `13:36`, despite an hourly
+policy. Daniel Mengel directed Oddsphere to close actual ingestion gaps rather
+than accept or describe them.
+
+This exception is limited to increasing the pure cadence comparison tolerance
+from one to five seconds and advancing the cadence release to
+`nfl_player_props_cadence_2026_10_20_r3_observed_scheduler_jitter`. The
+quarter-hour route, state-aware 60/30/15-minute policy, sole writer, shared
+`prediction_pipeline:nfl` lease, providers, call ceilings, writer r58, model,
+calibration, decision, grades, stakes, locks, tracking, and settlement remain
+unchanged. A wake more than five seconds early must remain not due.
+
+Publication requires the observed 1.494-second regression, the over-five-second
+negative control, focused props tests, TypeScript, the full model-change gate,
+latest-main integration safety, protected pull-request checks, and a live
+scheduled writer read. Roll back to r2 if the writer runs outside its existing
+state-aware cadence or any locked row changes.
+
 ## Owner-directed correctness exception: NFL props sharp-reference capture alignment
 
 On 2026-10-20 Daniel Mengel directed Oddsphere to close actual Daily Edge data
