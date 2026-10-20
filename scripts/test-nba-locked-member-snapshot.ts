@@ -27,8 +27,9 @@ const restored = applyNbaLockedMemberSnapshotPrecedence({
   dbIdByExternalId: map,
   rows,
 });
-assert.deepEqual(restored, [locked]);
+assert.deepEqual(restored, [{ ...locked, locked_at: "2026-10-20T22:00:00.000Z" }]);
 assert.notEqual(restored[0], dynamic);
+assert.deepEqual(rows[0]!.snapshot_json, { nba_game_dto_at_capture: locked });
 
 assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({
   games: [dynamic],
@@ -51,6 +52,12 @@ assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({
     { ...rows[1]!, snapshot_json: { nba_game_dto_at_capture: dynamic } },
     rows[2]!,
   ],
+}), /locked member DTO mismatch/);
+
+assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({
+  games: [dynamic],
+  dbIdByExternalId: map,
+  rows: [rows[0]!, { ...rows[1]!, locked_at: "2026-10-20T22:00:01.000Z" }, rows[2]!],
 }), /locked member DTO mismatch/);
 
 console.log("NBA locked member snapshot precedence tests passed");

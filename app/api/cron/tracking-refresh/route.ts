@@ -59,13 +59,16 @@ import {
 } from "@/lib/services/labResponseSnapshotWriter";
 import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 
-export const maxDuration = 180;
+export const maxDuration = 300;
+
+const TRACKING_REFRESH_PUBLICATION_RELEASE =
+  "tracking_refresh_publication_2026_10_20_r1_nba_checkpoint";
 
 // The active EPL pipeline stores under sport="soccer" and is competition-
 // scoped in snapshot_json. Include soccer in the scheduled cycle so EPL
 // scores and grades settle automatically; the ingest service only touches the
 // EPL external-id namespace and cannot rewrite historical World Cup games.
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "nhl", "wnba", "soccer", "nfl", "cfb"];
+const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "wnba", "soccer", "nfl", "cfb", "nhl"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -100,10 +103,13 @@ export async function GET(request: Request) {
         revalidateTag("member-tracking-aggregate", { expire: 0 });
       }
 
-      // The wrapper runs sports sequentially. Publish the member response once
-      // after the final sport instead of making every user request aggregate
-      // the full historical ledger.
-      const responseSnapshot = apply && sport === sports.at(-1)
+      // Publish immediately after NBA settles instead of allowing a later
+      // sport timeout to leave the online Tracking reader stale. A one-sport
+      // operator invocation remains self-publishing. The shared aggregate is
+      // built from the database, so this checkpoint includes every already
+      // settled sport without adding a second writer or schedule.
+      const publishAfterSport = sports.length === 1 ? sports[0] : "nba";
+      const responseSnapshot = apply && sport === publishAfterSport
         ? {
             legacy: await refreshTrackingResponseSnapshot({ source: "tracking_refresh" }),
             member: await refreshTrackingFoundationResponseSnapshot({ source: "tracking_refresh" }),
@@ -129,6 +135,7 @@ export async function GET(request: Request) {
           finishedAtIso: summary.finishedAtIso,
           durationMs: summary.durationMs,
           settlementContractVersion: summary.settlementContractVersion,
+          trackingPublicationRelease: TRACKING_REFRESH_PUBLICATION_RELEASE,
           stalePendingRepair: summary.stalePendingRepair,
           responseSnapshot,
         },

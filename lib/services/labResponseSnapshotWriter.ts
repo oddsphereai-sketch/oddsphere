@@ -2,10 +2,16 @@ import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes
 import type { Sport } from "@/lib/types/domain/Sport";
 import {
   dailyEdgeSnapshotKey,
+  readLatestLabResponseSnapshot,
   trackingFoundationSnapshotKey,
   trackingSnapshotKey,
   upsertLabResponseSnapshot,
 } from "@/lib/services/labResponseSnapshots";
+import {
+  applyNbaPublishedLockMetadata,
+  NBA_MEMBER_LOCK_PUBLICATION_RELEASE,
+} from "@/lib/services/nba/nbaPublishedLockMetadata";
+import { supabase } from "@/lib/db/supabase";
 
 const DAILY_EDGE_SNAPSHOT_TTL_MS = Number(
   // The lightest regular publisher runs every 15 minutes. Keep a five-minute
@@ -33,7 +39,104 @@ type SnapshotWriteResult = {
   error?: string;
   expiresAt?: string;
   staleUntil?: string;
+  lockedGames?: number;
+  changedGames?: number;
 };
+
+/**
+ * Publish authoritative NBA lock metadata without recomputing the rolling
+ * model board. This is intentionally a metadata-only post-lock operation:
+ * every prediction, score, side, price, grade, and evidence field comes from
+ * the already coherent snapshot and remains unchanged.
+ */
+export async function refreshNbaPublishedLockMetadata(input: {
+  date: string;
+  source?: string;
+}): Promise<SnapshotWriteResult> {
+  const snapshotKey = dailyEdgeSnapshotKey({
+    sport: "nba",
+    requestedDate: input.date,
+    allowStale: false,
+    copyPreview: false,
+  });
+
+  try {
+    const snapshot = await readLatestLabResponseSnapshot<DailyEdgeResponse>(snapshotKey);
+    if (!snapshot) {
+      return { ok: false, snapshotKey, error: "NBA Daily Edge snapshot is unavailable for lock publication" };
+    }
+    const externalIds = snapshot.payload.games.map((game) => game.external_id);
+    if (externalIds.length === 0) {
+      return { ok: false, snapshotKey, error: "NBA Daily Edge snapshot has no games for lock publication" };
+    }
+
+    const gameLookup = await supabase
+      .from("games")
+      .select("id,external_id")
+      .eq("sport", "nba")
+      .in("external_id", externalIds);
+    if (gameLookup.error) {
+      return { ok: false, snapshotKey, error: `NBA lock game lookup failed: ${gameLookup.error.message}` };
+    }
+    const dbIdByExternalId = new Map<number, number>();
+    for (const row of gameLookup.data ?? []) {
+      dbIdByExternalId.set(Number(row.external_id), Number(row.id));
+    }
+    if (dbIdByExternalId.size !== new Set(externalIds).size) {
+      return {
+        ok: false,
+        snapshotKey,
+        error: `NBA lock game lookup covered ${dbIdByExternalId.size}/${new Set(externalIds).size} snapshot games`,
+      };
+    }
+    const gameIds = [...dbIdByExternalId.values()];
+    const lockLookup = await supabase
+      .from("prediction_records")
+      .select("game_id,market,locked_at")
+      .eq("sport", "nba")
+      .in("game_id", gameIds)
+      .not("locked_at", "is", null);
+    if (lockLookup.error) {
+      return { ok: false, snapshotKey, error: `NBA lock tuple lookup failed: ${lockLookup.error.message}` };
+    }
+
+    const patched = applyNbaPublishedLockMetadata({
+      payload: snapshot.payload,
+      dbIdByExternalId,
+      rows: lockLookup.data ?? [],
+    });
+    if (patched.lockedGames === 0) {
+      return { ok: false, snapshotKey, error: "NBA lock publication found no complete locked games" };
+    }
+
+    const write = await upsertLabResponseSnapshot({
+      snapshotKey,
+      kind: "daily_edge",
+      sport: "nba",
+      slateDate: patched.payload.date ?? input.date,
+      payload: patched.payload,
+      ttlMs: DAILY_EDGE_SNAPSHOT_TTL_MS,
+      staleMs: DAILY_EDGE_SNAPSHOT_STALE_MS,
+      source: input.source ?? "pregame_sweep_lock",
+      payloadVersion: NBA_MEMBER_LOCK_PUBLICATION_RELEASE,
+    });
+    if (!write.ok) {
+      return { ok: false, snapshotKey, error: write.error, lockedGames: patched.lockedGames, changedGames: patched.changedGames };
+    }
+    return {
+      ok: true,
+      snapshotKey,
+      games: patched.payload.games.length,
+      slateState: patched.payload.slateState,
+      expiresAt: write.expiresAt,
+      staleUntil: write.staleUntil,
+      lockedGames: patched.lockedGames,
+      changedGames: patched.changedGames,
+    };
+  } catch (error) {
+    return { ok: false, snapshotKey, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 export async function refreshDailyEdgeResponseSnapshot(input: {
   sport: Sport;
