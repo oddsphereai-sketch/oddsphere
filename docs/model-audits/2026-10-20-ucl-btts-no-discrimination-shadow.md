@@ -357,3 +357,22 @@ This structure is the explicit “best of both worlds” test: the incumbent-sty
 score distribution remains the default expert, while a separately validated
 scoreless-risk specialist receives authority only through an out-of-training
 gate.
+
+### Cross-league gated-specialist result
+
+The external chronology contained 34,067 eligible matches: 27,064 scorer
+training rows, 3,524 out-of-training gate rows, and 3,479 untouched 2024-25
+confirmation rows. The gate slightly improved confirmation accuracy from
+54.12% to 54.99%, Brier from 0.24695 to 0.24660, log loss from 0.68697 to
+0.68628, and coherent team-score MAE from 0.90300 to 0.90250. It failed the
+actual discrimination objective: AUC declined from 0.54751 to 0.54635,
+predicted Yes directions rose from 2,411 to 2,993, and No recall collapsed
+from 33.48% to 16.21%. Match Result, Total, and BTTS reconciliation residuals
+remained below `1e-8`, so structural coherence was not the failure.
+
+The candidate is rejected and is not transported to UCL or production. The
+result shows that a separately calibrated side-scoring product still inherits
+the population Yes prevalence and does not identify the conditional pockets
+where either side fails to score. The next candidate must directly learn
+match-level nonlinear zero-risk interactions and recent clean-sheet/
+failed-to-score state; another side-product calibration is not justified.
