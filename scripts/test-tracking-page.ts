@@ -603,8 +603,26 @@ check(
 check(
   "API shares the five-minute aggregate cache across server instances",
   API.includes("unstable_cache") &&
-    API.includes('"member-tracking-aggregate-v12-alternate-line-evidence-backed"') &&
+    API.includes('"member-tracking-aggregate-v13-ucl-actionable-history"') &&
     API.includes("TRACKING_RESPONSE_CACHE_TTL_MS / 1000"),
+);
+check(
+  "Best Angle and Lean panels retain immutable history across model releases",
+  SERVICE.includes("actionableHistory") &&
+    SERVICE.includes("bySportMarket: buildSportMarketBuckets(calendarRows)") &&
+    TRACKING_RESPONSE_PATH.includes("actionableHistory") &&
+    PAGE.includes("data?.actionableHistory?.bySportMarket ?? data?.bySportMarket ?? []"),
+);
+check(
+  "Current-model tracking remains separate from cross-release actionable history",
+  SERVICE.includes("result.bySportMarket = buildSportMarketBuckets(rows)") &&
+    SERVICE.includes("result.actionableHistory =") &&
+    SERVICE.includes("bestAngles: gradeCut(calendarRows, \"best_angle\")") &&
+    SERVICE.includes("leans: gradeCut(calendarRows, \"lean\")"),
+);
+check(
+  "Member tracking rejects pre-contract snapshots that omit actionable history",
+  API.includes("snapshot.payload.actionableHistory !== undefined"),
 );
 check(
   "Slow member routes provide immediate loading states",

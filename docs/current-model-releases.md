@@ -2293,6 +2293,23 @@ The four-season chronological tournament selected the runtime configuration on 2
   locked predictions, grades, and the UCL reader contract itself are unchanged.
   Tracking aggregation contract is
   `tracking_aggregate_v17_alternate_line_evidence_backed_2026_10_19`.
+- October 20 actionable-history successor: current-release UCL accuracy remains
+  restricted to the exact active model/calibration pair, while the Best Angle
+  and Lean panel now reads the separately named immutable calendar-history cut.
+  This prevents a release transition from erasing recommendations members
+  actually saw without blending older releases into current-model performance.
+  The reader also maps the stored display label `Best Angle` to its canonical
+  `best_angle` token. The existing multi-sport tracking writer publishes after
+  NBA for early availability and again after final NHL processing so later UCL
+  settlement cannot leave the member snapshot stale. The aggregate contract is
+  `tracking_aggregate_v18_ucl_actionable_history_2026_10_20`; shared cache,
+  stored snapshot key, writer payload, and publication releases are
+  `member-tracking-aggregate-v13-ucl-actionable-history`,
+  `tracking-foundation-r10-ucl-actionable-history`,
+  `tracking-foundation-v8-ucl-actionable-history`, and
+  `tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint`.
+  No locked row or model output changes. Evidence:
+  `docs/model-audits/2026-10-20-ucl-actionable-tracking-continuity.md`.
 - Evidence and validation boundary: `docs/model-audits/2026-09-03-ucl-chronological-r2-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-chronological-r4-result.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-result.md`, `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`, and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md` retain the historical release record. The r8u independent/Match Result foundation remains documented in `docs/model-audits/2026-10-14-ucl-elo-late-consensus-r8u-r10.md`; active r9 goals arbitration is documented in `docs/model-audits/2026-10-20-ucl-qualified-goals-arbitration-r9.md`; active future-unlocked r10 primary-score semantics are documented in `docs/model-audits/2026-10-20-ucl-coherent-primary-score-r10.md`. The current display-grade release is r13, and results must continue to be evaluated by exact model release and T-60 lock.
 - October 20 r13 Sabah live-identity repair: Sharp's current canonical event
   names the club `Sabah Masazir`, with a secondary exact bucket named `Sabah
@@ -3565,12 +3582,12 @@ The paired live-slate replay is recorded in
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Member lock publication: `nba_member_lock_publication_2026_10_20_r2_complete_card_precedence`
 - Locked member snapshot: `nba_locked_member_snapshot_2026_10_20_r2_complete_card_evidence`
-- Tracking publication: `tracking_refresh_publication_2026_10_20_r1_nba_checkpoint`
+- Tracking publication: `tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
-- Tracking caches: `member-tracking-aggregate-v12-alternate-line-evidence-backed`,
-  `tracking-foundation-r9-alternate-line-evidence-backed`, and
-  `tracking-foundation-v7-alternate-line-evidence-backed`; these prevent an
+- Tracking caches: `member-tracking-aggregate-v13-ucl-actionable-history`,
+  `tracking-foundation-r10-ucl-actionable-history`, and
+  `tracking-foundation-v8-ucl-actionable-history`; these prevent an
   older permissive alternate-line aggregate or stored snapshot from masking the
   evidence-backed category
 - Schema status: additive migration v44 was applied to the primary database on

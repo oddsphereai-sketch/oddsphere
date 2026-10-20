@@ -64,7 +64,7 @@ const loadSharedTrackingAggregate = unstable_cache(
       includeLaunchDay: false,
     });
   },
-  ["member-tracking-aggregate-v12-alternate-line-evidence-backed"],
+  ["member-tracking-aggregate-v13-ucl-actionable-history"],
   { revalidate: TRACKING_RESPONSE_CACHE_TTL_MS / 1000, tags: ["member-tracking-aggregate"] },
 );
 
@@ -138,10 +138,11 @@ export async function GET(request: Request) {
     const snapshotKey = trackingFoundationSnapshotKey({ sport, date: today });
     const snapshot = await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "fresh")
       ?? await readLabResponseSnapshot<Record<string, unknown>>(snapshotKey, "stale");
-    // Snapshots created before alternate-line tracking existed are safe but
-    // incomplete. Bypass them once so the deployed reader cannot hide the new
-    // section until the next scheduled snapshot refresh.
-    if (snapshot && snapshot.payload.alternateLinePerformance !== undefined) {
+    // Older snapshots are safe but incomplete. Bypass them so a prior payload
+    // cannot hide alternate-line evidence or immutable actionable history
+    // while the newly deployed writer publishes its first snapshot.
+    if (snapshot && snapshot.payload.alternateLinePerformance !== undefined
+      && snapshot.payload.actionableHistory !== undefined) {
       return trackingJson(snapshot.payload, {
         cacheStatus: snapshot.cacheState === "DB_SNAPSHOT" ? "hit" : "stale",
       });

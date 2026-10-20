@@ -88,7 +88,7 @@ export type DimensionRow<K extends string = string> = {
 export type TrackingDisplaySport = TrackedSport | "epl";
 
 export const TRACKING_AGGREGATE_CONTRACT_VERSION =
-  "tracking_aggregate_v17_alternate_line_evidence_backed_2026_10_19" as const;
+  "tracking_aggregate_v18_ucl_actionable_history_2026_10_20" as const;
 
 const UCL_PRIOR_ALT_LINE_MODEL_RELEASE =
   "ucl_goals_coherent_2026_09_03_r6_authenticated_match_stats_manifest" as const;
@@ -184,6 +184,13 @@ export type TrackingAggregateResult = {
   byDataQualityTier: DimensionRow[];
   bestAngles: AggregateMetrics;
   leans: AggregateMetrics;
+  /** Immutable Best Angle / Lean history across release transitions. The main
+   * accuracy fields above remain current-release-pure for UCL. */
+  actionableHistory: {
+    bestAngles: AggregateMetrics;
+    leans: AggregateMetrics;
+    bySportMarket: SportMarketBucket[];
+  };
   provisionalOnly: AggregateMetrics;
   /** Yesterday's slate (slate_date = effective "yesterday" relative to `to`). */
   yesterday: { date: string | null; overall: AggregateMetrics; bySportMarket: SportMarketBucket[] };
@@ -412,7 +419,14 @@ const TRACKING_GRADE_SELECT = [
 ].join(",");
 
 function storedGrade(record: PredictionRecordRow): string {
-  return String(record.play_grade ?? "").trim().toLowerCase();
+  // Some immutable UCL locks persist the member-facing label ("Best Angle")
+  // while newer writers persist the canonical key ("best_angle"). They are
+  // the same released verdict and must resolve to the same tracking cut.
+  return String(record.play_grade ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function displayGradeOverride(record: PredictionRecordRow): string | null {
@@ -752,6 +766,11 @@ export async function computeTrackingAggregate(opts: {
     byDataQualityTier: [],
     bestAngles: emptyMetrics(),
     leans: emptyMetrics(),
+    actionableHistory: {
+      bestAngles: emptyMetrics(),
+      leans: emptyMetrics(),
+      bySportMarket: [],
+    },
     provisionalOnly: emptyMetrics(),
     yesterday: { date: null, overall: emptyMetrics(), bySportMarket: [] },
     thisWeek: { from: "", to: "", overall: emptyMetrics(), bySportMarket: [], daily: [] },
@@ -955,13 +974,16 @@ export async function computeTrackingAggregate(opts: {
   // Most sports retain actionable-only recommendation cuts. CFB's member card
   // verdict remains Best Angle / Lean for a shop-priced tuple, so its grade cut
   // follows the immutable member-facing label instead of silently losing it.
-  const bestRows = rows.filter((r) => isTrackingPlayGradeCutEligible(r.record) && grade(r) === "best_angle");
-  for (const row of bestRows) accumulate(result.bestAngles, row);
-  finalize(result.bestAngles, bestRows);
+  function gradeCut(scopeRows: ReadonlyArray<Row>, target: "best_angle" | "lean"): AggregateMetrics {
+    const selected = scopeRows.filter((r) => isTrackingPlayGradeCutEligible(r.record) && grade(r) === target);
+    const metrics = emptyMetrics();
+    for (const row of selected) accumulate(metrics, row);
+    finalize(metrics, selected);
+    return metrics;
+  }
 
-  const leanRows = rows.filter((r) => isTrackingPlayGradeCutEligible(r.record) && grade(r) === "lean");
-  for (const row of leanRows) accumulate(result.leans, row);
-  finalize(result.leans, leanRows);
+  result.bestAngles = gradeCut(rows, "best_angle");
+  result.leans = gradeCut(rows, "lean");
 
   const provRows = rows.filter((r) => r.record.provisional === true);
   for (const row of provRows) accumulate(result.provisionalOnly, row);
@@ -1031,6 +1053,11 @@ export async function computeTrackingAggregate(opts: {
     return out;
   }
   result.bySportMarket = buildSportMarketBuckets(rows);
+  result.actionableHistory = {
+    bestAngles: gradeCut(calendarRows, "best_angle"),
+    leans: gradeCut(calendarRows, "lean"),
+    bySportMarket: buildSportMarketBuckets(calendarRows),
+  };
 
   // Effective "today" for relative windows. Caller-supplied `to`
   // wins (operator queries, historic audits). Otherwise default to

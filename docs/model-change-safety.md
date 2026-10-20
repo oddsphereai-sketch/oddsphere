@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## Tracking-reader correction: UCL actionable-history continuity
+
+On 2026-10-20 the UCL Best Angle / Lean panel appeared empty or pending even
+though the immutable locked records and their grades were present. The failure
+was entirely in the shared Tracking read/publication path: historical UCL
+actionable rows were hidden by the current-release-only aggregate, the stored
+label `Best Angle` did not normalize to the canonical `best_angle` key, and the
+multi-sport refresh published before the later soccer settlement pass without
+republishing at the end of the cycle.
+
+This correction adds a separately named `actionableHistory` aggregate over the
+same exact locked, complete-manifest calendar rows. Current-model accuracy
+remains release-pure and is not blended with older releases. It also normalizes
+the immutable display label at read time and adds a final NHL checkpoint to the
+existing tracking-refresh writer after its existing early NBA checkpoint. No
+prediction, probability, projection, side, grade, stake, price, model release,
+lock, provider, settlement result, or stored database row changes.
+
+The read-only live rehearsal reports current r11/r13 UCL at 22-6 overall, with
+current-release Leans 3-1 and no current-release Best Angles. The separate
+actionable history correctly restores Best Angles to 5-1 (six graded, zero
+pending) and Leans to 26-7 (33 graded, zero pending). Publication requires the
+focused aggregate, page, market-registry, and refresh tests, TypeScript, the
+full model-change suite, latest-main integration safety, protected PR checks,
+and a post-deploy snapshot refresh. Evidence and rollback:
+`docs/model-audits/2026-10-20-ucl-actionable-tracking-continuity.md`.
+
 ## Owner-directed correctness refinement: UCL coherent decimal score r11
 
 On 2026-10-20 Daniel Mengel clarified that the primary UCL score should retain

@@ -129,6 +129,11 @@ type TrackingResponse = {
   bySportMarket?: SportMarketBucket[];
   bestAngles: Metrics;
   leans?: Metrics;
+  actionableHistory?: {
+    bestAngles: Metrics;
+    leans: Metrics;
+    bySportMarket: SportMarketBucket[];
+  };
   yesterday?: { date: string | null; overall: Metrics; bySportMarket: SportMarketBucket[] };
   thisWeek?: { from: string; to: string; overall: Metrics; bySportMarket: SportMarketBucket[] };
   thisMonth?: { from: string; to: string; overall: Metrics; bySportMarket: SportMarketBucket[] };
@@ -530,11 +535,12 @@ export default function LabTrackingPage({
     if (trackWindow === "monthly") return alternate.monthly.rows;
     return [...alternate.lifetime.rows, ...alternate.archives];
   }, [data, trackWindow]);
-  // Best Angles still derived from live joint sport+market buckets —
-  // it's strictly a live concept (premium tier), so we don't fall
-  // back to baselines here.
+  // Recommendation tracking is an immutable public history. UCL model-release
+  // changes must not make an already locked Best Angle or Lean disappear;
+  // current-model accuracy remains release-separated in the main aggregates.
   const bestAngleRows = useMemo(() => {
-    return visibleBuckets(data?.bySportMarket ?? []).filter((b) => b.bestAngles.picks > 0 || b.leans.picks > 0);
+    return visibleBuckets(data?.actionableHistory?.bySportMarket ?? data?.bySportMarket ?? [])
+      .filter((b) => b.bestAngles.picks > 0 || b.leans.picks > 0);
   }, [data]);
 
   if (error !== null) {
