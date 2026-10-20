@@ -705,6 +705,15 @@
   "distribution": {
     "calibratedOn": "earlier_weight_selection_partition",
     "family": "normal_residual",
+    "marginCalibration": {
+      "confirmedOn": "2025_chronological_confirmation",
+      "coreSigmaMultiplier": 0.85,
+      "family": "two_component_normal_mixture",
+      "release": "nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture",
+      "selectedOn": "2024_selection",
+      "tailSigmaMultiplier": 2.5,
+      "tailWeight": 0.15
+    },
     "marginSigma": 12.964104634449086,
     "totalSigma": 18.251616651383458
   },

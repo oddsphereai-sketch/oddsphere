@@ -232,4 +232,49 @@ assert.notEqual(intelligence.ml.grade, "held");
 assert.notEqual(intelligence.spread.grade, "held");
 assert.notEqual(intelligence.total.grade, "held");
 
+const mixtureArtifact: NbaPortableModelArtifact = {
+  ...artifact,
+  distribution: {
+    ...artifact.distribution!,
+    marginCalibration: {
+      release: "fixture_mixture",
+      family: "two_component_normal_mixture",
+      coreSigmaMultiplier: 0.85,
+      tailWeight: 0.15,
+      tailSigmaMultiplier: 2.5,
+      selectedOn: "fixture_selection",
+      confirmedOn: "fixture_confirmation",
+    },
+  },
+};
+const mixtureResult = buildNbaProfessionalCandidate({
+  artifact: mixtureArtifact,
+  featureRow: { strength: -4 },
+  lines,
+  history,
+  externalGameId: 9,
+  marketReader,
+});
+const mixtureApplied = applyNbaProfessionalCandidate({ baseline, candidate: mixtureResult });
+const mixtureIntelligence = buildNbaGameIntelligence({
+  snapshot,
+  prediction: mixtureApplied,
+  lines,
+  splitsRow: null,
+  opportunities: [],
+  injuriesSource: "espn",
+});
+const expectedMlProbability = mixtureResult.picks.moneyline === "home"
+  ? mixtureResult.probabilities.ml_home_win_prob
+  : mixtureResult.probabilities.ml_away_win_prob;
+const expectedSpreadProbability = mixtureResult.picks.spread === "home"
+  ? mixtureResult.probabilities.spread_home_cover_prob
+  : mixtureResult.probabilities.spread_away_cover_prob;
+assert.ok(Math.abs(mixtureIntelligence.ml.model_prob_on_pick! - expectedMlProbability) < 1e-12,
+  "member ML probability preserves the calibrated margin mixture");
+assert.ok(Math.abs(mixtureIntelligence.spread.model_prob_on_pick! - expectedSpreadProbability!) < 1e-12,
+  "member Spread probability preserves the calibrated margin mixture");
+assert.equal(mixtureIntelligence.total.model_prob_on_pick, intelligence.total.model_prob_on_pick,
+  "margin mixture leaves the member Total probability unchanged");
+
 console.log("NBA professional score, picks, exact prices, and grade-input coherence tests passed");

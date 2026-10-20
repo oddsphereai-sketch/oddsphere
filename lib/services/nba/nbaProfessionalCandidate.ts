@@ -134,6 +134,13 @@ export function buildNbaProfessionalCandidate(args: {
     market_total: consensus.totalLine,
     margin_sd_base: args.artifact.distribution.marginSigma,
     total_sd_base: args.artifact.distribution.totalSigma,
+    margin_residual_mixture: args.artifact.distribution.marginCalibration === undefined
+      ? undefined
+      : {
+          core_sigma_multiplier: args.artifact.distribution.marginCalibration.coreSigmaMultiplier,
+          tail_weight: args.artifact.distribution.marginCalibration.tailWeight,
+          tail_sigma_multiplier: args.artifact.distribution.marginCalibration.tailSigmaMultiplier,
+        },
   });
   const independentPicks = {
     moneyline: independent.marginHome >= 0 ? "home" as const : "away" as const,
@@ -155,6 +162,10 @@ export function buildNbaProfessionalCandidate(args: {
   };
   return {
     modelRelease: args.artifact.release,
+    probabilityCalibration: args.artifact.distribution.marginCalibration ?? {
+      release: "legacy_normal_residual",
+      family: "normal_residual" as const,
+    },
     independent,
     consensus,
     openingSpread,

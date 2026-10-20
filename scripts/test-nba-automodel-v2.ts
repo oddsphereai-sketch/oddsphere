@@ -342,6 +342,41 @@ section("Test 11: signed sportsbook spread is converted to cover threshold");
   assert((awayByTwoVsHomePlusFive.spread_home_cover_prob ?? 0) > 0.5, "home projected down 2 covers home +5 more often than not");
 }
 
+section("Test 12: calibrated margin mixture is symmetric and changes probabilities only");
+{
+  const input = {
+    projected_home_margin: 8,
+    projected_total: 225,
+    market_spread_home: -5,
+    market_total: 225,
+    margin_sd_base: 12,
+    total_sd_base: 20,
+    margin_residual_mixture: {
+      core_sigma_multiplier: 0.85,
+      tail_weight: 0.15,
+      tail_sigma_multiplier: 2.5,
+    },
+  };
+  const positive = computeNbaMarketProbabilities(input);
+  const negative = computeNbaMarketProbabilities({
+    ...input,
+    projected_home_margin: -8,
+    market_spread_home: 5,
+  });
+  assert(Math.abs(positive.ml_home_win_prob + negative.ml_home_win_prob - 1) < 1e-10,
+    "symmetric mixture preserves complementary moneyline probabilities");
+  assert(Math.abs((positive.spread_home_cover_prob ?? 0) + (negative.spread_home_cover_prob ?? 0) - 1) < 1e-10,
+    "symmetric mixture preserves complementary spread probabilities");
+  const normal = computeNbaMarketProbabilities({
+    ...input,
+    margin_residual_mixture: undefined,
+  });
+  assert(positive.ml_home_win_prob !== normal.ml_home_win_prob,
+    "mixture recalibrates probability without changing the projected margin");
+  assert(positive.total_over_prob === normal.total_over_prob,
+    "margin-only calibration leaves Total probability unchanged");
+}
+
 // ─── Final report ──────────────────────────────────────────────
 void __NBA_AUTOMODEL_V2_TEST__;
 console.log("");

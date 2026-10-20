@@ -3525,8 +3525,9 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_20_r10_minimum_coherent_crossing`
-- Market marriage: `nba_market_marriage_2026_10_20_r10_minimum_coherent_crossing`
+- Model / prediction record: `nba_professional_unified_2026_10_20_r11_heavy_tail_margin_calibration`
+- Market marriage: `nba_market_marriage_2026_10_20_r11_heavy_tail_margin_calibration`
+- Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
@@ -3569,6 +3570,23 @@ qualification thresholds, independent model, grade policy, writer, lease,
 cadence, tracking, and locked records remain unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-20-nba-minimum-coherent-crossing-r10-predeclaration.md`
 and `docs/model-audits/2026-10-20-nba-minimum-coherent-crossing-r10-result.md`.
+
+The October 20 r11 candidate confirms that the score model is not capped at
+small margins and rejects arbitrary mean widening. The accepted change keeps
+every independent and final score and side fixed while replacing the
+single-normal margin residual with a chronologically selected symmetric
+two-normal mixture. On 1,224 confirmation games, 20-plus Brier improves from
+0.172382 to 0.171388, 20-plus log loss from 0.529103 to 0.525400, and winner
+Brier from 0.197680 to 0.197365; winner accuracy, Spread, Total, underdog, +3,
++6, team-score MAE, margin MAE, and Total MAE are unchanged. The same-input
+October 21 replay has zero score, side, grade, promotion, or demotion changes
+across 11 games and 33 markets. R11 also repairs exact-line probability
+recomputation so member cards retain the selected residual family instead of
+silently reverting to a normal. Locked rows, the r4 point projection, r6
+reader, r5 grade policy, writer, lease, cadence, and tracking boundary remain
+unchanged. Evidence and rollback:
+`docs/model-audits/2026-10-20-nba-extreme-margin-calibration-predeclaration.md`
+and `docs/model-audits/2026-10-20-nba-heavy-tail-margin-calibration-r11-result.md`.
 
 The October 20 prospective independent-score shadow is
 `nba_independent_score_shadow_2026_10_20_r1_rating_30_total_20`. It records the frozen 30% adjusted-

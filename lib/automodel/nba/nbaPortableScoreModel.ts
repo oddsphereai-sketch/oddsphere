@@ -23,6 +23,15 @@ export type NbaPortableModelArtifact = {
     marginSigma: number;
     totalSigma: number;
     calibratedOn: string;
+    marginCalibration?: {
+      release: string;
+      family: "two_component_normal_mixture";
+      coreSigmaMultiplier: number;
+      tailWeight: number;
+      tailSigmaMultiplier: number;
+      selectedOn: string;
+      confirmedOn: string;
+    };
   };
 };
 

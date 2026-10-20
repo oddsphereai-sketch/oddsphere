@@ -307,7 +307,16 @@ function exactLineProbability(opts: {
   cap: number;
 } | null {
   const candidate = opts.prediction as NbaAutoModelOutput & {
-    v1_probabilities?: { margin_sd_used: number; total_sd_used: number };
+    v1_probabilities?: {
+      margin_sd_used: number;
+      total_sd_used: number;
+      margin_distribution_used?: {
+        family: "normal_residual" | "two_component_normal_mixture";
+        core_sigma_multiplier: number;
+        tail_weight: number;
+        tail_sigma_multiplier: number;
+      };
+    };
     v1_breakdown?: { applied_caps: Array<{ cap: number }> };
   };
   if (!candidate.v1_probabilities) return null;
@@ -318,6 +327,16 @@ function exactLineProbability(opts: {
     market_total: opts.total,
     margin_sd_base: candidate.v1_probabilities.margin_sd_used,
     total_sd_base: candidate.v1_probabilities.total_sd_used,
+    margin_residual_mixture:
+      candidate.v1_probabilities.margin_distribution_used?.family === "two_component_normal_mixture"
+        ? {
+            core_sigma_multiplier:
+              candidate.v1_probabilities.margin_distribution_used.core_sigma_multiplier,
+            tail_weight: candidate.v1_probabilities.margin_distribution_used.tail_weight,
+            tail_sigma_multiplier:
+              candidate.v1_probabilities.margin_distribution_used.tail_sigma_multiplier,
+          }
+        : undefined,
   });
   const caps = [
     opts.prediction.audit.confidence_ceiling,
