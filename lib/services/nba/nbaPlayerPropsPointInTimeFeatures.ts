@@ -4,9 +4,10 @@ import type {
   NbaHistoricalPlayerBox,
   NbaUpcomingGame,
 } from "./nbaPointInTimeFeatures";
+import { buildNbaPointInTimeFeatures } from "./nbaPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_player_props_point_in_time_features_2026_10_20_r1" as const;
+  "nba_player_props_point_in_time_features_2026_10_20_r2_matchup_context" as const;
 
 const RESULT_AVAILABILITY_HOURS = 5;
 
@@ -58,6 +59,23 @@ export type NbaPlayerPropFeatureRow = {
   assist_percentage_mean_5: number | null;
   points_share_mean_5: number | null;
   fga_share_mean_5: number | null;
+  game_pace_mean_5: number | null;
+  game_pace_mean_15: number | null;
+  team_adjusted_offense: number | null;
+  opponent_adjusted_defense: number | null;
+  team_efg_5: number | null;
+  opponent_efg_allowed_5: number | null;
+  team_assist_percentage_5: number | null;
+  opponent_deflections_per100_5: number | null;
+  team_offensive_rebound_rate_5: number | null;
+  opponent_defensive_rebound_percentage_5: number | null;
+  opponent_rebound_chances_per100_5: number | null;
+  team_three_point_attempt_share_5: number | null;
+  opponent_matchup_three_point_pct_5: number | null;
+  opponent_contested_shots_per100_5: number | null;
+  team_rest_days: number | null;
+  team_back_to_back: number | null;
+  opponent_rest_days: number | null;
   target_minutes: number | null;
   target_points: number | null;
   target_rebounds: number | null;
@@ -121,6 +139,13 @@ export function buildNbaPlayerPropsPointInTimeFeatures(args: {
     if (row.period === 0) advancedByGamePlayer.set(`${row.gameId}:${row.playerId}`, row);
   }
   const candidatesByGame = group(args.candidates, (row) => row.gameId);
+  const gameContextById = new Map(buildNbaPointInTimeFeatures({
+    games: [...args.games],
+    upcomingGames: [...(args.upcomingGames ?? [])],
+    boxes: [...args.boxes],
+    advanced: [...(args.advanced ?? [])],
+    emitGameIds: args.emitGameIds,
+  }).map((row) => [row.game_id, row]));
   const playerHistory = new Map<number, PlayerObservation[]>();
   const teamGameStarts = new Map<number, number[]>();
   const pending: PendingGame[] = [];
@@ -156,6 +181,7 @@ export function buildNbaPlayerPropsPointInTimeFeatures(args: {
           history,
           teamStarts,
           target,
+          gameContext: gameContextById.get(game.gameId) ?? null,
         }));
       }
     }
@@ -194,6 +220,7 @@ function buildFeatureRow(args: {
   history: PlayerObservation[];
   teamStarts: number[];
   target: NbaHistoricalPlayerBox | null;
+  gameContext: ReturnType<typeof buildNbaPointInTimeFeatures>[number] | null;
 }): NbaPlayerPropFeatureRow {
   const seasonHistory = args.history.filter((row) => row.season === args.game.season);
   const recent10 = args.history.slice(-10);
@@ -204,6 +231,13 @@ function buildFeatureRow(args: {
   const appearancesInTeamWindow = recent10.filter((row) => teamRecent10.includes(row.startMs)).length;
   const target = args.target;
   const rebounds = target ? target.oreb + target.dreb : null;
+  const teamPrefix = args.candidate.teamId === args.game.homeTeamId ? "home" : "away";
+  const opponentPrefix = teamPrefix === "home" ? "away" : "home";
+  const context = args.gameContext;
+  const contextNumber = (key: string): number | null => {
+    const value = context?.[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
   return {
     release: NBA_PLAYER_PROPS_POINT_IN_TIME_FEATURE_RELEASE,
     game_id: args.game.gameId,
@@ -245,6 +279,23 @@ function buildFeatureRow(args: {
     assist_percentage_mean_5: mean(nonNull(recent5.map((row) => row.assistPercentage))),
     points_share_mean_5: mean(nonNull(recent5.map((row) => row.pointsShare))),
     fga_share_mean_5: mean(nonNull(recent5.map((row) => row.fgaShare))),
+    game_pace_mean_5: contextNumber("matchup_pace_mean_5"),
+    game_pace_mean_15: contextNumber("matchup_pace_mean_15"),
+    team_adjusted_offense: contextNumber(`${teamPrefix}_adjusted_offense`),
+    opponent_adjusted_defense: contextNumber(`${opponentPrefix}_adjusted_defense`),
+    team_efg_5: contextNumber(`${teamPrefix}_efg_5`),
+    opponent_efg_allowed_5: contextNumber(`${opponentPrefix}_opponentEfg_5`),
+    team_assist_percentage_5: contextNumber(`${teamPrefix}_assistPercentage_5`),
+    opponent_deflections_per100_5: contextNumber(`${opponentPrefix}_deflectionsPer100_5`),
+    team_offensive_rebound_rate_5: contextNumber(`${teamPrefix}_offensiveReboundRate_5`),
+    opponent_defensive_rebound_percentage_5: contextNumber(`${opponentPrefix}_defensiveReboundPercentage_5`),
+    opponent_rebound_chances_per100_5: contextNumber(`${opponentPrefix}_reboundChancesPer100_5`),
+    team_three_point_attempt_share_5: contextNumber(`${teamPrefix}_threePointAttemptShare_5`),
+    opponent_matchup_three_point_pct_5: contextNumber(`${opponentPrefix}_matchupThreePointPct_5`),
+    opponent_contested_shots_per100_5: contextNumber(`${opponentPrefix}_contestedShotsPer100_5`),
+    team_rest_days: contextNumber(`${teamPrefix}_rest_days`),
+    team_back_to_back: contextNumber(`${teamPrefix}_back_to_back`),
+    opponent_rest_days: contextNumber(`${opponentPrefix}_rest_days`),
     target_minutes: target?.minutes ?? null,
     target_points: target?.points ?? null,
     target_rebounds: rebounds,

@@ -9,7 +9,7 @@ import { selectNbaPlayerPropsCanonicalOfferSets } from "./nbaPlayerPropsMarketEv
 import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_REPLAY_RELEASE =
-  "nba_player_props_chronological_replay_research_2026_10_20_r1" as const;
+  "nba_player_props_chronological_replay_research_2026_10_20_r2_matchup_context" as const;
 
 export type NbaPlayerPropsReplayMarketMetrics = {
   rowsWithOutcome: number;

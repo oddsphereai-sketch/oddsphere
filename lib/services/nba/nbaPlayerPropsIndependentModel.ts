@@ -1,7 +1,7 @@
 import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_INDEPENDENT_RESEARCH_RELEASE =
-  "nba_player_props_independent_research_unfit_2026_10_20_r1" as const;
+  "nba_player_props_independent_research_unfit_2026_10_20_r2_matchup_context" as const;
 
 export const NBA_PLAYER_PROP_COMPONENTS = ["points", "rebounds", "assists", "threes"] as const;
 export type NbaPlayerPropComponent = (typeof NBA_PLAYER_PROP_COMPONENTS)[number];
@@ -28,6 +28,23 @@ type NumericFeature = keyof Pick<NbaPlayerPropFeatureRow,
   | "assist_percentage_mean_5"
   | "points_share_mean_5"
   | "fga_share_mean_5"
+  | "game_pace_mean_5"
+  | "game_pace_mean_15"
+  | "team_adjusted_offense"
+  | "opponent_adjusted_defense"
+  | "team_efg_5"
+  | "opponent_efg_allowed_5"
+  | "team_assist_percentage_5"
+  | "opponent_deflections_per100_5"
+  | "team_offensive_rebound_rate_5"
+  | "opponent_defensive_rebound_percentage_5"
+  | "opponent_rebound_chances_per100_5"
+  | "team_three_point_attempt_share_5"
+  | "opponent_matchup_three_point_pct_5"
+  | "opponent_contested_shots_per100_5"
+  | "team_rest_days"
+  | "team_back_to_back"
+  | "opponent_rest_days"
 >;
 
 type TargetKey = keyof Pick<NbaPlayerPropFeatureRow,
@@ -96,19 +113,19 @@ const RIDGE_LAMBDAS = [0.1, 1, 5, 20] as const;
 const COMPONENT_SPEC: Record<NbaPlayerPropComponent, { target: TargetKey; features: NumericFeature[] }> = {
   points: {
     target: "target_points",
-    features: ["points_per_minute_10", "fga_per_minute_10", "fg3a_per_minute_10", "fta_per_minute_10", "usage_mean_5", "true_shooting_mean_5", "points_share_mean_5", "fga_share_mean_5"],
+    features: ["points_per_minute_10", "fga_per_minute_10", "fg3a_per_minute_10", "fta_per_minute_10", "usage_mean_5", "true_shooting_mean_5", "points_share_mean_5", "fga_share_mean_5", "game_pace_mean_5", "team_adjusted_offense", "opponent_adjusted_defense", "team_efg_5", "opponent_efg_allowed_5", "team_rest_days", "team_back_to_back"],
   },
   rebounds: {
     target: "target_rebounds",
-    features: ["rebounds_per_minute_10", "rebound_chances_per_minute_5", "usage_mean_5"],
+    features: ["rebounds_per_minute_10", "rebound_chances_per_minute_5", "usage_mean_5", "game_pace_mean_5", "team_offensive_rebound_rate_5", "opponent_defensive_rebound_percentage_5", "opponent_rebound_chances_per100_5", "team_rest_days"],
   },
   assists: {
     target: "target_assists",
-    features: ["assists_per_minute_10", "touches_per_minute_5", "passes_per_minute_5", "assist_percentage_mean_5", "usage_mean_5"],
+    features: ["assists_per_minute_10", "touches_per_minute_5", "passes_per_minute_5", "assist_percentage_mean_5", "usage_mean_5", "game_pace_mean_5", "team_assist_percentage_5", "opponent_deflections_per100_5", "team_adjusted_offense", "opponent_adjusted_defense"],
   },
   threes: {
     target: "target_threes",
-    features: ["threes_per_minute_10", "fg3a_per_minute_10", "true_shooting_mean_5", "usage_mean_5"],
+    features: ["threes_per_minute_10", "fg3a_per_minute_10", "true_shooting_mean_5", "usage_mean_5", "game_pace_mean_5", "team_three_point_attempt_share_5", "opponent_matchup_three_point_pct_5", "opponent_contested_shots_per100_5"],
   },
 };
 
