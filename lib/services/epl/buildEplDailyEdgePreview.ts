@@ -567,7 +567,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   deriveMatchResultDecision: deriveEplMatchResultDecision,
   derivePreviewGrade: deriveEplPreviewGrade,
   selectMatchResultSide: selectEplMatchResultSide,
-}, competitionLabel = "EPL", storedPriceHistory: EplStoredPriceObservation[] = []): DailyEdgeGameDto {
+}, competitionLabel = "EPL"): DailyEdgeGameDto {
   const clubP = match.prediction.probabilities;
   const mr = coherentRead(sharp.odds, "match_result", ["home", "draw", "away"])
     ?? bdlMoneylineRead(match.currentMoneylineOdds);
@@ -576,7 +576,6 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const btts = coherentRead(sharp.odds, "btts", ["yes", "no"]);
   const currentMatchResultVectors = eplCurrentBookVectors(sharp, "match_result", capturedAt);
   const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt);
-  const currentBttsVectors = eplCurrentBookVectors(sharp, "btts", capturedAt);
   const promotedProxy = match.prediction.homeStrengthSource === "promoted_proxy" || match.prediction.awayStrengthSource === "promoted_proxy";
   const evaluatedTotalCanonicalBook = canonicalEplBook(total?.sportsbook ?? null);
   const coherentOutcome = authorities.deriveCoherentOutcome({
@@ -586,16 +585,6 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     independentJoint: match.prediction.coherentJoint,
     openingOdds: match.openingOdds,
     matchResultVectors: currentMatchResultVectors,
-    bttsVectors: currentBttsVectors,
-    bttsHistory: storedPriceHistory,
-    bttsEvaluatedPrices: btts ? { yes: btts.prices.yes!, no: btts.prices.no! } : null,
-    bttsModelEvidence: {
-      homeStatMatches: match.evidence.home.statMatches,
-      awayStatMatches: match.evidence.away.statMatches,
-      homeXgMatches: match.evidence.home.xgMatches,
-      awayXgMatches: match.evidence.away.xgMatches,
-      promotedProxy,
-    },
     totalVectors: currentTotalVectors,
     evaluatedMatchResultCanonicalBook: canonicalEplBook(mr?.sportsbook ?? null),
     evaluatedTotalCanonicalBook,
@@ -946,7 +935,6 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
       evaluatedQuoteRole: "economics_and_grade_only",
       targetExcludedBooks: coherentOutcome.audit.evaluatedCanonicalBooksExcluded,
       eligibleAlternativeBooks: coherentOutcome.audit.eligibleAlternativeBooks,
-      ...(coherentOutcome.audit.bttsShadow ? { bttsShadow: coherentOutcome.audit.bttsShadow } : {}),
       regulationTime: true,
     },
     decisionLine: `${mrGrade.verdict.label}: ${resultPick}${resultSide === forecastSide ? " is also the most likely result" : ` is the value side; ${forecastPick} remains the most likely result`}.`,
@@ -1057,7 +1045,7 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     slateState: "today_draft_only",
     slate_status: "draft",
     last_slate_update_at: slate.generatedAt,
-    games: slate.matches.map((match, index) => gameDto(match, markets[index], capturedAt, options.authorities, options.competitionLabel ?? "EPL", options.storedPriceHistory ?? [])),
+    games: slate.matches.map((match, index) => gameDto(match, markets[index], capturedAt, options.authorities, options.competitionLabel ?? "EPL")),
   };
   const allBookPrices = allBookPriceObservations(slate, markets, capturedAt);
   options.captureAllBookPrices?.(allBookPrices);

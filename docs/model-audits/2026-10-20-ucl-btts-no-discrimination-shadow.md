@@ -2,6 +2,11 @@
 
 Date: 2026-10-20
 
+> Historical audit only. The proposed production shadow was retired the same
+> day under the owner-directed no-shadow rule. No new runtime or member snapshot
+> persists this candidate; see
+> `docs/model-audits/2026-10-20-ucl-no-shadow-runtime-correction.md`.
+
 ## Scope
 
 This is a read-only audit. It does not change the live UCL model, probability,
