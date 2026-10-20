@@ -5,9 +5,9 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import {
-  CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   type CfbForwardTeamQuarterbacks,
 } from "../../lib/services/football/cfbForwardEvidence";
+import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
 import type { NcaafGame } from "../../lib/services/football/balldontlieNcaafSlate";
 import { fetchCfbOfficialConferenceAvailability } from "../../lib/services/football/cfbOfficialConferenceAvailability";
 import { reportedCfbQuarterbackAvailability } from "../../lib/services/football/cfbVerifiedAvailability";
@@ -33,26 +33,24 @@ async function main(): Promise<void> {
   const now = process.argv.find((value) => value.startsWith("--now="))?.slice(6) ?? new Date().toISOString();
   const window = activeCfbWeeklyWindow(now);
   const client = createClient(url, key, { auth: { persistSession: false } });
-  const { data, error } = await client
-    .from("cfb_forward_evidence_snapshots")
-    .select([
-      "id",
-      "provider_game_id",
-      "captured_at",
-      "game_start_at",
-      "game:payload->game",
-      "quarterbacks:payload->quarterbacks",
-      "stored_report:payload->availability->report",
-      "official_requests:payload->requestBudget->officialAvailability",
-    ].join(","))
-    .eq("season", Number(now.slice(0, 4)))
-    .eq("evidence_release", CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE)
-    .order("captured_at", { ascending: true })
-    .limit(10_000);
-  if (error) throw new Error(`CFB official-availability candidate read failed: ${error.message}`);
+  const stored = await readCfbForwardWriterEvidence({
+    client,
+    season: Number(now.slice(0, 4)),
+    now,
+  });
   const latest = new Map<string, Row>();
-  for (const row of (data ?? []) as unknown as Row[]) {
-    if (!isGameInCfbWeeklyWindow({ scheduledStart: row.game_start_at }, window)) continue;
+  for (const evidence of stored.evidence) {
+    if (!isGameInCfbWeeklyWindow({ scheduledStart: evidence.gameStartAt }, window)) continue;
+    const row: Row = {
+      id: evidence.id,
+      provider_game_id: evidence.providerGameId,
+      captured_at: evidence.capturedAt,
+      game_start_at: evidence.gameStartAt,
+      game: evidence.payload.game,
+      quarterbacks: evidence.payload.quarterbacks,
+      stored_report: evidence.payload.availability.report ?? null,
+      official_requests: evidence.payload.requestBudget.officialAvailability ?? null,
+    };
     const current = latest.get(row.provider_game_id);
     if (!current || Date.parse(row.captured_at) > Date.parse(current.captured_at) ||
       (row.captured_at === current.captured_at && row.id.localeCompare(current.id) > 0)) {

@@ -3680,7 +3680,11 @@ assert.match(evidenceStoreSource, /CFB_FORWARD_HOLISTIC_PREVIOUS_EVIDENCE_SCHEMA
 assert.equal(CFB_FORWARD_EVIDENCE_PAGE_SIZE, 1_000);
 assert.equal(CFB_FORWARD_EVIDENCE_MAX_ROWS, 50_000);
 assert.equal(CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE, 1_000);
-assert.equal(CFB_FORWARD_MARKET_HISTORY_MAX_ROWS, 20_000);
+assert.equal(CFB_FORWARD_MARKET_HISTORY_MAX_ROWS, 50_000);
+assert.ok(
+  CFB_FORWARD_MARKET_HISTORY_MAX_ROWS >= 96 * (72 * 4 + 2),
+  "the bounded movement reader must hold a 96-game board at the documented 15-minute cadence for 72 hours plus opening/T-60 lifecycle rows",
+);
 assert.equal(CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS, 72);
 assert.equal(CFB_FORWARD_WRITER_LIFECYCLE_MAX_ROWS, 12_000);
 assert.equal(CFB_FORWARD_WRITER_RECENT_UNLOCKED_MAX_ROWS, 30_000);
