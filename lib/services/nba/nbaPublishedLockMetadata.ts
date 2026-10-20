@@ -2,7 +2,7 @@ import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { computeLocksAt } from "@/lib/automodel/lockState";
 
 export const NBA_MEMBER_LOCK_PUBLICATION_RELEASE =
-  "nba_member_lock_publication_2026_10_20_r1_column_authoritative";
+  "nba_member_lock_publication_2026_10_20_r2_complete_card_precedence";
 
 export type NbaPublishedLockRow = {
   game_id: number;
