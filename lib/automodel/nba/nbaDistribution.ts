@@ -3,12 +3,12 @@
  *
  * Pure functions. Takes a projected margin + projected total and the
  * current market spread/total, produces independent probabilities for
- * ML, spread cover, and total over/under via a normal approximation.
+ * ML, spread cover, and total over/under. Margin supports a calibrated
+ * symmetric two-normal residual mixture; Total retains a normal residual.
  *
- * "v1 research-prior, calibration pending" — the margin/total SD
- * constants in nbaFeatureWeights.ts are research priors. Once we
- * accumulate settled NBA game data we'll recalibrate these from
- * realized residuals.
+ * Generic v1 callers may still supply the research-prior SD constants from
+ * nbaFeatureWeights.ts. The professional artifact supplies its released
+ * residual scale and, when present, the selected margin-mixture calibration.
  *
  * Independence guarantee: each market is computed from its own model
  * inputs against its own market line. ML probability does NOT cascade
@@ -70,6 +70,13 @@ export type NbaMarketProbabilities = {
   /** Effective standard deviations used (audit). */
   margin_sd_used: number;
   total_sd_used: number;
+  /** Full margin-distribution state required for exact-line recomputation. */
+  margin_distribution_used: {
+    family: "normal_residual" | "two_component_normal_mixture";
+    core_sigma_multiplier: number;
+    tail_weight: number;
+    tail_sigma_multiplier: number;
+  };
 };
 
 export type NbaDistributionInput = {
@@ -85,12 +92,32 @@ export type NbaDistributionInput = {
   margin_sd_base: number;
   /** Base total SD prior. */
   total_sd_base: number;
+  /** Optional calibrated heavy-tail margin residual distribution. */
+  margin_residual_mixture?: {
+    core_sigma_multiplier: number;
+    tail_weight: number;
+    tail_sigma_multiplier: number;
+  };
   /** Optional SD inflations summed onto base (volatility adjustments). */
   sd_inflations?: {
     injury_unknown?: number;
     limited_books?: number;
   };
 };
+
+function marginResidualCdf(
+  residual: number,
+  marginSd: number,
+  mixture: NbaDistributionInput["margin_residual_mixture"],
+): number {
+  if (!mixture) return normalCdf(residual / marginSd);
+  const coreSigma = marginSd * mixture.core_sigma_multiplier;
+  const tailSigma = marginSd * mixture.tail_sigma_multiplier;
+  return (
+    (1 - mixture.tail_weight) * normalCdf(residual / coreSigma) +
+    mixture.tail_weight * normalCdf(residual / tailSigma)
+  );
+}
 
 /**
  * Compute independent ML / spread / total probabilities from the v1
@@ -105,9 +132,13 @@ export function computeNbaMarketProbabilities(
   const marginSd = input.margin_sd_base + inflation;
   const totalSd = input.total_sd_base + inflation;
 
-  // ML: P(home margin > 0) = 1 - Φ((0 - projected) / SD)
+  // ML: P(home margin > 0) = 1 - F_margin(0 - projected).
   const mlHome = clamp01(
-    1 - normalCdf((0 - input.projected_home_margin) / marginSd),
+    1 - marginResidualCdf(
+      0 - input.projected_home_margin,
+      marginSd,
+      input.margin_residual_mixture,
+    ),
   );
   const mlAway = clamp01(1 - mlHome);
 
@@ -119,7 +150,11 @@ export function computeNbaMarketProbabilities(
   let spreadAwayCover: number | null = null;
   if (input.market_spread_home !== null) {
     spreadHomeCover = clamp01(
-      1 - normalCdf((-input.market_spread_home - input.projected_home_margin) / marginSd),
+      1 - marginResidualCdf(
+        -input.market_spread_home - input.projected_home_margin,
+        marginSd,
+        input.margin_residual_mixture,
+      ),
     );
     spreadAwayCover = clamp01(1 - spreadHomeCover);
   }
@@ -143,11 +178,23 @@ export function computeNbaMarketProbabilities(
     total_under_prob: totalUnder,
     margin_sd_used: marginSd,
     total_sd_used: totalSd,
+    margin_distribution_used: input.margin_residual_mixture === undefined
+      ? {
+          family: "normal_residual",
+          core_sigma_multiplier: 1,
+          tail_weight: 0,
+          tail_sigma_multiplier: 1,
+        }
+      : {
+          family: "two_component_normal_mixture",
+          ...input.margin_residual_mixture,
+        },
   };
 }
 
 // Re-exported for fixture tests.
 export const __NBA_DISTRIBUTION_TEST__ = {
   normalCdf,
+  marginResidualCdf,
   erf,
 };

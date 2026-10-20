@@ -1228,6 +1228,35 @@ tests, full model-change verification, latest-main integration safety,
 protected PR checks, and post-deploy proof of release identity, artifact parity,
 collector coverage, sole writer/lease, board coherence, and unchanged locks.
 
+## Owner-directed correctness exception: NBA heavy-tail margin calibration r11
+
+On 2026-10-20 Daniel Mengel explicitly directed Oddsphere to determine whether
+the NBA model can predict large margins and to repair any compression defect
+without sacrificing predictive accuracy. This exception is limited to the r11
+probability-calibration release and the evidence in
+`docs/model-audits/2026-10-20-nba-extreme-margin-calibration-predeclaration.md`
+and
+`docs/model-audits/2026-10-20-nba-heavy-tail-margin-calibration-r11-result.md`.
+
+R11 may replace the released single-normal margin residual with the frozen
+selection-season two-normal mixture only. It may not widen an expected score,
+add a market input to the independent model, change a 50% side boundary, alter
+Total probability, change a grade threshold, create a writer, change cadence,
+or mutate a locked record. The full mixture state must survive exact-line
+member recomputation; scalar-SD fallback is a release-blocking coherence
+failure.
+
+The 1,224-game 2025 confirmation preserves winner accuracy, every score MAE,
+Spread, 10-plus Spread, Total, selected-underdog, +3, and +6 direction while
+improving winner and 20-plus Brier and log loss. The exact same-input October
+21 replay preserves all 11 scores, 33 sides, 33 grades, and the actionable
+count, with zero promotions and zero demotions. Publication still requires the
+full model-change suite, clean current-main ancestry, integration safety,
+protected PR checks, and post-deploy release, writer, lease, coverage, reader,
+snapshot, and lock proof. Roll back future unlocked rows to r10 on any mixed
+release, probability-family loss, score/side/Total drift, hidden board
+contraction, lock mutation, or writer overlap.
+
 ## Owner-approved provisional exception: NBA independent-first regular-season r1
 
 On 2026-10-06 Daniel Mengel explicitly directed Oddsphere to prepare the NBA regular-season model with

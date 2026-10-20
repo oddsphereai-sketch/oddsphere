@@ -32,6 +32,7 @@ import {
 } from "./featureSnapshot";
 import { createEspnNbaGameInjuryResolver } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
+import type { NbaPortableModelArtifact } from "../../automodel/nba/nbaPortableScoreModel";
 import {
   assertNbaChampionRuntime,
   NBA_MARKET_MARRIAGE_RELEASE,
@@ -153,7 +154,11 @@ export type NbaDailyEdgePipelineResult = {
  */
 export async function buildNbaDailyEdgePipeline(
   date: string,
-  options: { injuryResolver?: InjuryResolver } = {},
+  options: {
+    injuryResolver?: InjuryResolver;
+    /** Read-only same-input audit hook; production callers omit this. */
+    professionalArtifact?: NbaPortableModelArtifact;
+  } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
   const startUtcDate = etWindow.startISO.slice(0, 10);
@@ -162,6 +167,7 @@ export async function buildNbaDailyEdgePipeline(
     startUtcDate === endUtcDate ? [startUtcDate] : [startUtcDate, endUtcDate];
 
   const injuryResolver = options.injuryResolver ?? createEspnNbaGameInjuryResolver();
+  const professionalArtifact = options.professionalArtifact ?? NBA_PROFESSIONAL_MODEL_ARTIFACT;
 
   type SnapshotBuildResult = Awaited<
     ReturnType<typeof buildNbaFeatureSnapshotsWithProvenance>
@@ -478,7 +484,7 @@ export async function buildNbaDailyEdgePipeline(
     if (!featureRow) throw new Error(`Missing NBA professional feature row for ${s.game_external_id}.`);
     const portableFeatureRow = selectNbaProfessionalPortableFeatures(featureRow);
     const previewCandidate = buildNbaProfessionalCandidate({
-      artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
+      artifact: professionalArtifact,
       featureRow: portableFeatureRow,
       lines,
       history: movementHistory,
@@ -532,7 +538,7 @@ export async function buildNbaDailyEdgePipeline(
       ? null
       : (() => {
           const shadowPreview = buildNbaProfessionalCandidate({
-            artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
+            artifact: professionalArtifact,
             featureRow: portableFeatureRow,
             lines,
             history: movementHistory,
@@ -586,7 +592,7 @@ export async function buildNbaDailyEdgePipeline(
             },
           });
           return buildNbaProfessionalCandidate({
-            artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
+            artifact: professionalArtifact,
             featureRow: portableFeatureRow,
             lines,
             history: movementHistory,
@@ -596,7 +602,7 @@ export async function buildNbaDailyEdgePipeline(
           });
         })();
     const candidate = buildNbaProfessionalCandidate({
-      artifact: NBA_PROFESSIONAL_MODEL_ARTIFACT,
+      artifact: professionalArtifact,
       featureRow: portableFeatureRow,
       lines,
       history: movementHistory,
@@ -654,6 +660,11 @@ export async function buildNbaDailyEdgePipeline(
           away_score: candidate.final.awayScore,
           total: candidate.final.total,
           margin_home: candidate.final.marginHome,
+        },
+        margin_probability_calibration: candidate.probabilityCalibration,
+        final_margin_probabilities: {
+          home_win: candidate.probabilities.ml_home_win_prob,
+          home_cover: candidate.probabilities.spread_home_cover_prob,
         },
       },
       market_reader: reader,
