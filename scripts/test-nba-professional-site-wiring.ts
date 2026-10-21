@@ -61,6 +61,13 @@ assert.match(
   /loadCompleteCurrentGameLines\([\s\S]*context:\s*"buildNbaFeatureSnapshots"/,
   "NBA feature snapshots must read every current line past the PostgREST 1,000-row boundary",
 );
+assert.match(pipeline, /selectNbaCurrentLineBoard/);
+assert.match(featureSnapshot, /selectNbaCurrentLineBoard/);
+assert.doesNotMatch(
+  pipeline,
+  /independent_score_shadow|buildNbaIndependentScoreShadow/,
+  "NBA production snapshots must not compute or persist a shadow model",
+);
 assert.match(writer, /\["moneyline", "spread", "total"\]/);
 assert.match(lockedMemberSnapshot, /nba_game_dto_at_capture/);
 assert.match(lockedMemberSnapshot, /nba_daily_edge_game_at_capture/);

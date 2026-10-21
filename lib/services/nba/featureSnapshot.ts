@@ -23,6 +23,7 @@
 import { supabase } from "../../db/supabase";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
+import { selectNbaCurrentLineBoard } from "./nbaCurrentLineBoard";
 import { deriveSeriesContext, type PriorGameInput } from "../../automodel/nba/seriesContext";
 import type {
   NbaDataQuality,
@@ -64,6 +65,7 @@ type LineRow = {
   side: string | null;
   line_value: number | null;
   odds_american: number | null;
+  fetched_at?: string | null;
 };
 
 // Phase 7B / 7C — nba_team_ratings row shape. v20 added Four Factors columns.
@@ -367,6 +369,9 @@ async function runBuild(
     const list = linesByGame.get(l.game_id) ?? [];
     list.push(l);
     linesByGame.set(l.game_id, list);
+  }
+  for (const [gameId, rows] of linesByGame) {
+    linesByGame.set(gameId, selectNbaCurrentLineBoard(rows));
   }
 
   // 4) Prior NBA games for series context. We pull ALL finished NBA games

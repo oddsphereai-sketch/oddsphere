@@ -3583,10 +3583,10 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_20_r11_heavy_tail_margin_calibration`
-- Market marriage: `nba_market_marriage_2026_10_21_r14_bounded_high_water_market_evidence`
+- Model / prediction record: `nba_professional_unified_2026_10_21_r12_current_execution_quote`
+- Market marriage: `nba_market_marriage_2026_10_21_r15_current_execution_target_exclusion`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
+- Grade policy: `nba_grade_policy_2026_10_21_r6_current_execution_economics`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
@@ -3603,6 +3603,20 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 21 r12/r15/r6 current-execution release collapses append-only NBA
+line history to the newest sportsbook/market/side quote and rejects a book side
+that trails the freshest quote for that game and market by more than 120 minutes. Consensus,
+target-book exclusion, exact-price grade economics, member display, and future
+tracking therefore consume one coherent current board. On the exact 11-game / 33-market
+October 21 rehearsal, all scores, sides, probabilities, grades, five actionables,
+and four market-reader flips remain unchanged; selected prices older than 180
+minutes fall from ten to zero. CHA-BKN Moneyline remains BKN Lean but advances
+from stale October 17 SX Bet +112 to current Hard Rock +110. Future production
+snapshots also stop computing or persisting the rejected zero-authority
+independent-score shadow; its offline audit remains reproducible. Existing r11
+locks retain exact stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-current-execution-quote-coherence-r12.md`.
 
 The October 20 r2 complete-card lock repair leaves the r11 forecast and the existing
 three-market T-60 writer unchanged. It overlays only the authoritative column
@@ -3681,14 +3695,15 @@ unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-20-nba-extreme-margin-calibration-predeclaration.md`
 and `docs/model-audits/2026-10-20-nba-heavy-tail-margin-calibration-r11-result.md`.
 
-The October 20 prospective independent-score shadow is
+The retired October 20 prospective independent-score audit is
 `nba_independent_score_shadow_2026_10_20_r1_rating_30_total_20`. It records the frozen 30% adjusted-
-rating margin / 20% adjusted-rating Total challenger and a separately target-excluded pass through the
-same r6 professional reader inside future unlocked NBA grounding snapshots. It has zero production
-authority and changes no score, pick, probability, grade, stake, promotion, demotion, writer, lease,
+rating margin / 20% adjusted-rating Total challenger in reproducible offline evidence only. The r12
+current-execution release removed its runtime derivation and persisted field from future unlocked
+grounding snapshots in accordance with the no-production-shadow rule. It never had production
+authority and changed no score, pick, probability, grade, stake, promotion, demotion, writer, lease,
 cadence, lock, tracking row, or member output. The candidate improved all six broad 2025 confirmation
 diagnostics but failed its original candidate-defined close-game gate, so only prospective release-pure
-evidence can authorize a later promotion. Evidence and rollback:
+evidence from a separately approved future candidate could authorize promotion. Evidence:
 `docs/model-audits/2026-10-20-nba-independent-score-prospective-shadow.md` and
 `docs/model-audits/2026-10-20-nba-independent-ensemble-shadow-result.md`.
 
