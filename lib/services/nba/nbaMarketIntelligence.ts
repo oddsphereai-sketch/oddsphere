@@ -405,6 +405,7 @@ function buildMl(
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
   enforcePositiveModelEv: boolean,
+  enforceMoneylineEvidenceGuard: boolean,
 ): MarketIntelligence {
   const pickSide = prediction.predicted_ml_winner;
   const pickLabel =
@@ -459,6 +460,8 @@ function buildMl(
     market: "moneyline",
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProbOnPick,
+    moneylineEvidence: prediction.audit.professional_grade_context?.moneyline,
+    enforceMoneylineEvidenceGuard,
     enforcePositiveModelEv,
   });
 
@@ -818,6 +821,8 @@ export function buildNbaGameIntelligence(opts: {
   injuriesSource: "espn" | "none";
   /** Same-input audit hook; production uses the coherent exact-price gate. */
   enforcePositiveModelEv?: boolean;
+  /** Same-input audit hook for the superseded Moneyline Best Angle path. */
+  enforceMoneylineEvidenceGuard?: boolean;
 }): NbaGameIntelligence {
   const consensus = buildNbaMarketConsensus(opts.lines
     .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
@@ -829,7 +834,17 @@ export function buildNbaGameIntelligence(opts: {
       odds_american: line.odds_american,
     })));
   const enforcePositiveModelEv = opts.enforcePositiveModelEv ?? true;
-  const ml = buildMl(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv);
+  const enforceMoneylineEvidenceGuard = opts.enforceMoneylineEvidenceGuard ?? true;
+  const ml = buildMl(
+    opts.snapshot,
+    opts.prediction,
+    opts.lines,
+    consensus,
+    opts.splitsRow,
+    opts.opportunities,
+    enforcePositiveModelEv,
+    enforceMoneylineEvidenceGuard,
+  );
   const spread = buildSpread(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv);
   const total = buildTotal(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv);
 

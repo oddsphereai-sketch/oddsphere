@@ -142,4 +142,100 @@ assert.equal(
   "no_market",
 );
 
+const moneylineBestAngle: GradeInput = {
+  ...base,
+  market: "moneyline",
+  pick: "away",
+  confidence: 65,
+  edge: 0.1,
+  currentPriceAmerican: 110,
+  modelProbabilityOnPick: 0.65,
+};
+assert.equal(
+  gradeNbaMarket({
+    ...moneylineBestAngle,
+    moneylineEvidence: {
+      directReadQualified: true,
+      directReadSide: "away",
+      spreadReadQualified: false,
+      spreadReadSide: null,
+      spreadCorrectionApplied: false,
+    },
+  }).grade,
+  "best_angle",
+  "qualified direct Moneyline confirmation preserves Best Angle",
+);
+assert.equal(
+  gradeNbaMarket({
+    ...moneylineBestAngle,
+    moneylineEvidence: {
+      directReadQualified: true,
+      directReadSide: "home",
+      spreadReadQualified: true,
+      spreadReadSide: "away",
+      spreadCorrectionApplied: false,
+    },
+  }).grade,
+  "lean",
+  "an opposing qualified direct read keeps a playable model edge below Best Angle",
+);
+assert.equal(
+  gradeNbaMarket({
+    ...moneylineBestAngle,
+    moneylineEvidence: {
+      directReadQualified: false,
+      directReadSide: null,
+      spreadReadQualified: true,
+      spreadReadSide: "home",
+      spreadCorrectionApplied: false,
+    },
+  }).grade,
+  "lean",
+  "an opposing qualified Spread observation blocks Best Angle when the direct read is unavailable",
+);
+assert.equal(
+  gradeNbaMarket({
+    ...moneylineBestAngle,
+    moneylineEvidence: {
+      directReadQualified: true,
+      directReadSide: "home",
+      spreadReadQualified: true,
+      spreadReadSide: "away",
+      spreadCorrectionApplied: true,
+    },
+  }).grade,
+  "best_angle",
+  "a final side authored by the validated Spread correction outranks observational disagreement",
+);
+assert.equal(
+  gradeNbaMarket({
+    ...moneylineBestAngle,
+    moneylineEvidence: {
+      directReadQualified: false,
+      directReadSide: null,
+      spreadReadQualified: true,
+      spreadReadSide: "home",
+      spreadCorrectionApplied: false,
+    },
+    enforceMoneylineEvidenceGuard: false,
+  }).grade,
+  "best_angle",
+  "the same-input legacy audit hook reproduces the superseded grade",
+);
+assert.equal(
+  gradeNbaMarket({
+    ...moneylineBestAngle,
+    confidence: 58,
+    moneylineEvidence: {
+      directReadQualified: true,
+      directReadSide: "away",
+      spreadReadQualified: true,
+      spreadReadSide: "away",
+      spreadCorrectionApplied: false,
+    },
+  }).grade,
+  "lean",
+  "reader confirmation cannot lower the existing Best Angle confidence gate",
+);
+
 console.log("NBA market-specific grade boundaries and price gates passed");

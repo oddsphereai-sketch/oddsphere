@@ -3617,10 +3617,10 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_21_r14_rating_identity_verified_availability`
-- Market marriage: `nba_market_marriage_2026_10_21_r16_complete_team_rating_inputs`
+- Model / prediction record: `nba_professional_unified_2026_10_21_r15_moneyline_evidence_grade`
+- Market marriage: `nba_market_marriage_2026_10_21_r17_moneyline_evidence_grade`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_21_r8_rating_identity_no_count_cap`
+- Grade policy: `nba_grade_policy_2026_10_21_r9_moneyline_evidence_guard`
 - Line refresh: `nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
@@ -3639,6 +3639,19 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 21 r15/r17/r9 grade-integrity release separates model value versus the current no-vig
+price from actual qualified market movement. Direct Moneyline movement remains observational and
+cannot change a score, winner, probability, or price. The established two-point qualified Spread
+correction remains the only reader path that can change the NBA winner. For Moneyline grading, a
+qualified opposite-side direct read—or, when that read is unavailable, a qualified opposite-side
+Spread observation—now keeps an otherwise eligible play at Lean instead of Best Angle. A matching
+reader can confirm an existing Best Angle but cannot lower any confidence, edge, exact-price EV,
+quality, or injury gate. Public splits remain context-only. On the same October 21 board, Milwaukee
+retains Best Angle, Charlotte retains the same side/score/probability/price but moves Best Angle to
+Lean, Memphis retains its validated Spread-authored flip and Lean, total actionables remain unchanged,
+and no new Best Angle is created. Existing locked payloads retain exact stored precedence. Evidence:
+`docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-result.md`.
 
 The October 21 r12/r15/r6 current-execution release, paired with r10 line refresh,
 reconciles every successful provider game/market response as the authoritative

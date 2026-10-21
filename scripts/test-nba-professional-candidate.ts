@@ -212,6 +212,13 @@ const snapshot: NbaGameSnapshot = {
 };
 const baseline = runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 2 });
 const applied = applyNbaProfessionalCandidate({ baseline, candidate: result });
+assert.deepEqual(applied.audit.professional_grade_context?.moneyline, {
+  directReadQualified: false,
+  directReadSide: null,
+  spreadReadQualified: true,
+  spreadReadSide: "home",
+  spreadCorrectionApplied: true,
+});
 const intelligence = buildNbaGameIntelligence({
   snapshot,
   prediction: applied,
