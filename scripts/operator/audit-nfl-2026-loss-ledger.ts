@@ -203,6 +203,16 @@ function summary(rows: Array<{ result: Result }>) {
   };
 }
 
+function exactPriceSummary(rows: Array<{ result: Result; price: number | null }>) {
+  const priced = rows.filter((row): row is { result: Result; price: number } => row.price !== null);
+  const units = priced.reduce((sum, row) => {
+    if (row.result === "loss") return sum - 1;
+    if (row.result !== "win") return sum;
+    return sum + (row.price > 0 ? row.price / 100 : 100 / Math.abs(row.price));
+  }, 0);
+  return { ...summary(rows), priced: priced.length, units, roi: priced.length ? units / priced.length : null };
+}
+
 function byKey<T>(rows: T[], key: (row: T) => string, value: (rows: T[]) => unknown) {
   const groups = new Map<string, T[]>();
   for (const row of rows) {
@@ -952,6 +962,69 @@ async function main(): Promise<void> {
       final: row.scores.final,
       marketAnchor: row.scores.marketAnchor,
     })), null, 2)}\n`);
+    return;
+  }
+  if (process.argv.includes("--current-release-summary")) {
+    const currentDecisionRelease = "nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair";
+    const currentRows = rows.filter((row) => row.releases.decision === currentDecisionRelease);
+    const currentComponentRows = currentRows.filter((row) => row.component.independentResult !== null);
+    process.stdout.write(`${JSON.stringify({
+      release: "nfl_2026_loss_ledger_2026_10_20_r2_current_release_summary",
+      readOnly: true,
+      currentDecisionRelease,
+      games: new Set(currentRows.map((row) => `${row.date}:${row.matchup}`)).size,
+      markets: Object.fromEntries(MARKETS.map((market) => {
+        const selected = currentRows.filter((row) => row.market === market);
+        const component = currentComponentRows.filter((row) => row.market === market);
+        return [market, {
+          published: summary(selected.map((row) => ({ result: row.published.result }))),
+          independent: summary(component.map((row) => ({ result: row.component.independentResult! }))),
+          corrections: component.filter((row) => row.component.category === "market_reader_correction").length,
+          harms: component.filter((row) => row.component.category === "market_reader_harm").length,
+          actionable: exactPriceSummary(selected.filter((row) => row.published.actionable).map((row) => ({
+            result: row.published.result,
+            price: row.published.price,
+          }))),
+          byGrade: byKey(selected, (row) => row.published.grade, (gradeRows) => exactPriceSummary(gradeRows.map((row) => ({
+            result: row.published.result,
+            price: row.published.price,
+          })))),
+        }];
+      })),
+      scoreError: {
+        marginMae: absolute([...new Map(currentRows.map((row) => [`${row.date}:${row.matchup}`, row])).values()].map((row) => row.errors.finalMargin)),
+        totalMae: absolute([...new Map(currentRows.map((row) => [`${row.date}:${row.matchup}`, row])).values()].map((row) => row.errors.finalTotal)),
+      },
+    }, null, 2)}\n`);
+    return;
+  }
+  if (process.argv.includes("--current-release-rows")) {
+    const currentDecisionRelease = "nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair";
+    process.stdout.write(`${JSON.stringify(rows.filter((row) =>
+      row.releases.decision === currentDecisionRelease).map((row) => ({
+        id: row.id,
+        date: row.date,
+        matchup: row.matchup,
+        market: row.market,
+        side: row.published.side,
+        line: row.published.line,
+        price: row.published.price,
+        probability: row.published.probability,
+        marketProbability: row.published.marketProbability,
+        edgePercentagePoints: row.published.probability !== null && row.published.marketProbability !== null
+          ? 100 * (row.published.probability - row.published.marketProbability)
+          : null,
+        grade: row.published.grade,
+        actionable: row.published.actionable,
+        result: row.published.result,
+        readerCategory: row.component.category,
+        readerChangedSide: row.component.marketChangedSide,
+        injuriesAvailable: row.evidence.injuriesAvailable,
+        expectedQuarterbacks: row.evidence.expectedQuarterbacks,
+        playbookSplits: row.evidence.playbookSplits,
+        sharpSplits: row.evidence.sharpSplits,
+        multibookConsensus: row.evidence.multibookConsensus,
+      })), null, 2)}\n`);
     return;
   }
   if (process.argv.includes("--challenger-replay")) {

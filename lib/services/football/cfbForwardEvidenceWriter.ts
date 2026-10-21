@@ -169,7 +169,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_20_r131_midweek_availability_fcs_continuity" as const;
+  "cfb_forward_evidence_writer_2026_10_20_r132_terminal_status_immutability" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -2126,14 +2126,61 @@ async function upsertTeams(client: SupabaseClient, payloads: CfbForwardEvidenceP
 }
 
 async function upsertGames(client: SupabaseClient, payloads: CfbForwardEvidencePayload[], teamIds: Map<number, number>): Promise<Map<string, number>> {
-  const rows = payloads.map((payload) => ({ external_id: cfbProviderIntegerId(payload.game.providerGameId, "game"), sport: "cfb", home_team_id: teamIds.get(payload.game.home.id)!, away_team_id: teamIds.get(payload.game.away.id)!, game_date: payload.game.scheduledStart, slate_date: computeSlateDate("cfb", payload.game.scheduledStart), season: payload.season, season_type: "regular", postseason: false, status: normalizeStatus(payload.game.status), venue: null, provider_ids: { balldontlie_ncaaf: { id: payload.game.providerGameId, season: payload.season, week: payload.week } } }));
+  const externalIds = payloads.map((payload) => cfbProviderIntegerId(payload.game.providerGameId, "game"));
+  const { data: existingRows, error: existingError } = await client.from("games")
+    .select("external_id,status")
+    .eq("sport", "cfb")
+    .in("external_id", externalIds);
+  if (existingError) throw new Error(`CFB tracking game status read failed: ${existingError.message}`);
+  const existingStatusByExternalId = new Map(
+    ((existingRows ?? []) as Array<{ external_id: number; status: string | null }>)
+      .map((row) => [row.external_id, row.status]),
+  );
+  const rows = payloads.map((payload) => {
+    const externalId = cfbProviderIntegerId(payload.game.providerGameId, "game");
+    return {
+      external_id: externalId,
+      sport: "cfb",
+      home_team_id: teamIds.get(payload.game.home.id)!,
+      away_team_id: teamIds.get(payload.game.away.id)!,
+      game_date: payload.game.scheduledStart,
+      slate_date: computeSlateDate("cfb", payload.game.scheduledStart),
+      season: payload.season,
+      season_type: "regular",
+      postseason: false,
+      status: resolveCfbGameUpsertStatus({
+        existingStatus: existingStatusByExternalId.get(externalId) ?? null,
+        incomingStatus: payload.game.status,
+      }),
+      venue: null,
+      provider_ids: { balldontlie_ncaaf: { id: payload.game.providerGameId, season: payload.season, week: payload.week } },
+    };
+  });
   const { data, error } = await client.from("games").upsert(rows, { onConflict: "sport,external_id" }).select("id,external_id");
   if (error) throw new Error(`CFB tracking game upsert failed: ${error.message}`);
   const providerByExternal = new Map(payloads.map((payload) => [cfbProviderIntegerId(payload.game.providerGameId, "game"), payload.game.providerGameId]));
   return new Map(((data ?? []) as Array<{ id: number; external_id: number }>).map((row) => [providerByExternal.get(row.external_id)!, row.id]));
 }
 
-function normalizeStatus(value: string): string { const normalized = value.toLowerCase(); return normalized === "final" ? "final" : normalized === "in_progress" ? "in_progress" : normalized === "postponed" || normalized === "canceled" ? normalized : "scheduled"; }
+function normalizeStatus(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/^status[_\s-]*/, "");
+  if (["final", "completed", "post"].includes(normalized)) return "final";
+  if (["in_progress", "in progress", "inprogress", "live"].includes(normalized)) return "in_progress";
+  if (normalized === "postponed") return "postponed";
+  if (["canceled", "cancelled"].includes(normalized)) return "canceled";
+  return "scheduled";
+}
+
+export function resolveCfbGameUpsertStatus(args: {
+  existingStatus: string | null;
+  incomingStatus: string;
+}): string {
+  const incoming = normalizeStatus(args.incomingStatus);
+  const existing = args.existingStatus === null ? null : normalizeStatus(args.existingStatus);
+  if (existing === "final" && incoming !== "final") return "final";
+  if (existing === "in_progress" && incoming === "scheduled") return "in_progress";
+  return incoming;
+}
 
 function emptyResult(reason: string, tracking: TrackingResult, memberSnapshot: MemberSnapshotResult): CfbForwardWriterResult {
   return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: tracking.trackingProviderRequests, healthHolds: tracking.trackingError ? ["official_tracking_incomplete"] : [], providerErrors: { playbookLines: null, playbookSplits: null, playbookInjuries: null, sharpApiSplits: null }, captureFailures: [], publicationAttempted: false, ...memberSnapshot, ...tracking };

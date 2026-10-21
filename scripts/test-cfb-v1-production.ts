@@ -87,6 +87,7 @@ import {
   planCfbTrackingRecordInsert,
   preferredCfbContextBook,
   publishCfbForwardDecisionBundle,
+  resolveCfbGameUpsertStatus,
   resolveCfbForwardCollectionNeed,
   retainLatestCfbPlaybookObservation,
   runCfbOfficialTrackingSafely,
@@ -3542,6 +3543,33 @@ const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence("
 const memberSnapshotPublishIndex = writerSource.indexOf("const memberSnapshot = await refreshCompactMemberSnapshot", evidenceAppendIndex);
 const officialTrackingIndex = writerSource.indexOf("const tracking = await writeOfficialTrackingSafely", evidenceAppendIndex);
 assert.ok(quarterbackCollectionIndex >= 0 && evidenceAppendIndex > quarterbackCollectionIndex, "the writer must finish bounded QB collection before its sole evidence append");
+assert.equal(
+  resolveCfbGameUpsertStatus({ existingStatus: "final", incomingStatus: "scheduled" }),
+  "final",
+  "a stale forward payload must not regress an already-final CFB game",
+);
+assert.equal(
+  resolveCfbGameUpsertStatus({ existingStatus: "STATUS_FINAL", incomingStatus: "in_progress" }),
+  "final",
+  "an already-final CFB game must remain terminal across provider status formats",
+);
+assert.equal(
+  resolveCfbGameUpsertStatus({ existingStatus: "in_progress", incomingStatus: "scheduled" }),
+  "in_progress",
+  "a stale scheduled payload must not move an active CFB game backward",
+);
+assert.equal(
+  resolveCfbGameUpsertStatus({ existingStatus: "scheduled", incomingStatus: "final" }),
+  "final",
+  "a current terminal provider status must still advance the stored game",
+);
+assert.equal(
+  resolveCfbGameUpsertStatus({ existingStatus: "postponed", incomingStatus: "scheduled" }),
+  "scheduled",
+  "a legitimately rescheduled CFB game must be allowed back onto the schedule",
+);
+assert.match(writerSource, /select\("external_id,status"\)/, "the writer must read persisted game status before its upsert");
+assert.match(writerSource, /resolveCfbGameUpsertStatus/, "the writer must apply terminal-status immutability before its upsert");
 assert.ok(
   evidenceAppendIndex < memberSnapshotPublishIndex && memberSnapshotPublishIndex < officialTrackingIndex,
   "append-only evidence and member lock publication must complete before fallible historical tracking",
@@ -4080,7 +4108,7 @@ const trackingRefresh = readFileSync(path.resolve("lib/services/trackingRefreshS
 assert.match(trackingRefresh, /sport === "cfb"/);
 assert.match(trackingRefresh, /ingestCfbFinalScores/);
 const trackingRoute = readFileSync(path.resolve("app/api/cron/tracking-refresh/route.ts"), "utf8");
-assert.match(trackingRoute, /"nfl", "cfb"/);
+assert.match(trackingRoute, /const DEFAULT_SPORTS: Sport\[\] = \["cfb", "mlb", "nba", "wnba", "soccer", "nfl", "nhl"\]/);
 
 await assert.rejects(
   runCfbForwardEvidenceWriter({

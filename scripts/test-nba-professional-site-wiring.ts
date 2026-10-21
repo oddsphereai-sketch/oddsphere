@@ -48,6 +48,14 @@ assert.match(
   /loadCompleteCurrentGameLines\([\s\S]*context:\s*"buildNbaDailyEdgePipeline"/,
   "NBA member intelligence must read every current line past the PostgREST 1,000-row boundary",
 );
+assert.match(pipeline, /buildNbaMovementHistoryFromCanonicalPrices/);
+assert.doesNotMatch(
+  pipeline,
+  /\.from\("line_history"\)/,
+  "NBA opening evidence must not use a silently truncated direct line_history read",
+);
+assert.match(pipeline, /splitHighWaterRead[\s\S]*\.gt\("id", lastSplitId\)[\s\S]*\.lte\("id", splitHighWaterId\)/);
+assert.match(pipeline, /priceHighWaterRead[\s\S]*\.gt\("id", lastPriceId\)[\s\S]*\.lte\("id", priceHighWaterId\)/);
 assert.match(
   featureSnapshot,
   /loadCompleteCurrentGameLines\([\s\S]*context:\s*"buildNbaFeatureSnapshots"/,

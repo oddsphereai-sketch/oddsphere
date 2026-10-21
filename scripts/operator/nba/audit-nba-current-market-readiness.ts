@@ -3,6 +3,31 @@
 import { supabase } from "../../../lib/db/supabase";
 
 type Row = Record<string, unknown>;
+const PAGE_SIZE = 1_000;
+const MAX_ROWS = 100_000;
+const HISTORY_WINDOW_HOURS = 36;
+const READER_BOOKS = [
+  "circa", "pinnacle", "betmgm", "betrivers", "caesars", "draftkings", "fanatics", "fanduel",
+] as const;
+const SPLIT_BOOKS = ["consensus", "circa", "draftkings", "betmgm"] as const;
+
+async function readAllPages<T>(
+  label: string,
+  readPage: (from: number, to: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; from < MAX_ROWS; from += PAGE_SIZE) {
+    const page = await readPage(from, from + PAGE_SIZE - 1);
+    if (page.error) throw new Error(`${label}: ${page.error.message}`);
+    const values = page.data ?? [];
+    rows.push(...values);
+    if (values.length < PAGE_SIZE) return rows;
+  }
+  throw new Error(`${label}: exceeded bounded ${MAX_ROWS}-row audit cap`);
+}
 
 function flag(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -25,6 +50,7 @@ function team(value: unknown): string {
 }
 
 async function main(): Promise<void> {
+  const historySince = new Date(Date.now() - HISTORY_WINDOW_HOURS * 3_600_000).toISOString();
   const { data: gameData, error: gameError } = await supabase
     .from("games")
     .select("id, external_id, slate_date, game_date, status, home_team:teams!games_home_team_id_fkey(abbreviation), away_team:teams!games_away_team_id_fkey(abbreviation)")
@@ -37,39 +63,33 @@ async function main(): Promise<void> {
   const gameIds = games.map((game) => Number(game.id));
   const externalIds = new Set(games.map((game) => String(game.external_id)));
 
-  const { data: currentData, error: currentError } = gameIds.length === 0
-    ? { data: [], error: null }
-    : await supabase
-        .from("lines")
-        .select("game_id, market_type, side, sportsbook, line_value, odds_american, fetched_at")
-        .in("game_id", gameIds)
-        .in("market_type", ["moneyline", "spread", "total"])
-        .limit(10_000);
-  if (currentError) throw new Error(`lines: ${currentError.message}`);
-  const current = (currentData ?? []) as Row[];
+  const current = gameIds.length === 0 ? [] : await readAllPages<Row>("lines", (from, to) => supabase
+    .from("lines")
+    .select("game_id, market_type, side, sportsbook, line_value, odds_american, fetched_at")
+    .in("game_id", gameIds)
+    .in("market_type", ["moneyline", "spread", "total"])
+    .order("id", { ascending: true })
+    .range(from, to) as never);
 
-  const { data: historyData, error: historyError } = gameIds.length === 0
-    ? { data: [], error: null }
-    : await supabase
-        .from("line_history")
-        .select("game_id, market_type, side, sportsbook, line_value, odds_american, is_opener, recorded_at")
-        .in("game_id", gameIds)
-        .in("market_type", ["moneyline", "spread", "total"])
-        .order("recorded_at", { ascending: true })
-        .limit(50_000);
-  if (historyError) throw new Error(`line_history: ${historyError.message}`);
-  const history = (historyData ?? []) as Row[];
+  const history = gameIds.length === 0 ? [] : await readAllPages<Row>("line_history", (from, to) => supabase
+    .from("line_history")
+    .select("id, game_id, market_type, side, sportsbook, line_value, odds_american, is_opener, recorded_at")
+    .in("game_id", gameIds)
+    .in("market_type", ["moneyline", "spread", "total"])
+    .in("sportsbook", [...READER_BOOKS])
+    .gte("recorded_at", historySince)
+    .order("id", { ascending: true })
+    .range(from, to) as never);
 
-  const { data: splitData, error: splitError } = externalIds.size === 0
-    ? { data: [], error: null }
-    : await supabase
-        .from("market_split_observations_v2")
-        .select("canonical_event_id, market_type, selection_key, provider, source_book, source_type, bets_pct, money_pct, source_observed_at, fetched_at")
-        .eq("league", "nba")
-        .in("canonical_event_id", [...externalIds])
-        .limit(20_000);
-  if (splitError) throw new Error(`market_split_observations_v2: ${splitError.message}`);
-  const splits = (splitData ?? []) as Row[];
+  const splits = externalIds.size === 0 ? [] : await readAllPages<Row>("market_split_observations_v2", (from, to) => supabase
+    .from("market_split_observations_v2")
+    .select("id, canonical_event_id, market_type, selection_key, provider, source_book, source_type, bets_pct, money_pct, source_observed_at, fetched_at")
+    .eq("league", "nba")
+    .in("canonical_event_id", [...externalIds])
+    .in("source_book", [...SPLIT_BOOKS])
+    .gte("fetched_at", historySince)
+    .order("id", { ascending: true })
+    .range(from, to) as never);
 
   const gameCoverage = games.map((game) => {
     const id = Number(game.id);
@@ -131,6 +151,8 @@ async function main(): Promise<void> {
     release: "nba_current_market_readiness_2026_10_15_r1",
     generatedAt: new Date().toISOString(),
     window: { from, to },
+    evidenceWindow: { since: historySince, hours: HISTORY_WINDOW_HOURS, readerBooks: READER_BOOKS },
+    rowsRead: { current: current.length, history: history.length, splits: splits.length },
     games: games.length,
     gamesWithCompleteMultiBookSequenceAllMarkets: readyGames,
     ready: games.length > 0 && readyGames === games.length,

@@ -134,6 +134,7 @@ import {
   mlbPropsMarketEvidenceInput,
 } from "./marketEvidenceCapture";
 import { applyMlbPropsPriceConfidenceCeilings } from "./priceConfidencePolicy";
+import { applyMlbPropsReleasePureGradeRanking } from "./gradeRankingPolicy";
 import { shouldRetainMlbPropOffer } from "./offerRetention";
 import {
   captureMlbPropsPrivateTracking,
@@ -464,11 +465,12 @@ export async function refreshMlbPropsBoard(args: RefreshArgs): Promise<MlbPropsB
   // member projection so a later display transform cannot leave an ordinary
   // two-way Lean/Best Angle pointing through the line in the opposite direction.
   const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps);
+  const rankedProps = applyMlbPropsReleasePureGradeRanking(coherentProps);
   // Confidence grades describe how strongly the model prefers the outcome,
   // while the exact available price still determines whether that confidence
   // deserves premium placement. Keep short-priced reads visible and retain the
   // quote, but graduate them down instead of turning price into a binary veto.
-  const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(coherentProps);
+  const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(rankedProps);
   const marketEvidence = buildMlbPropsMarketEvidenceCapture({
     currentOdds: boardSourceOdds,
     openingOdds,

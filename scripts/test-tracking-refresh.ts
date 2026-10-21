@@ -203,12 +203,17 @@ check(
 );
 check(
   "hourly tracking includes active EPL, NFL, and CFB settlement and keeps the manual override",
-  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "wnba", "soccer", "nfl", "cfb", "nhl"]') &&
+  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["cfb", "mlb", "nba", "wnba", "soccer", "nfl", "nhl"]') &&
     trackingCronSource.includes("overrideSport") && trackingCronSource.includes("[overrideSport]"),
 );
 check(
+  "CFB settlement runs first to avoid the five-minute writer lease collision",
+  trackingCronSource.includes('const DEFAULT_SPORTS: Sport[] = ["cfb",') &&
+    trackingCronSource.includes("Starting settlement at :33"),
+);
+check(
   "online tracking publishes after NBA and again after the final sport",
-  trackingCronSource.includes('"tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint"') &&
+  trackingCronSource.includes('"tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance"') &&
     trackingCronSource.includes('new Set<Sport>(["nba", "nhl"])') &&
     trackingCronSource.includes("publishAfterSports.has(sport)") &&
     trackingCronSource.includes("export const maxDuration = 300"),

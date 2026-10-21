@@ -759,15 +759,16 @@ async function main() {
       && (liveBoardSource.match(/forecastTelemetry,/g) ?? []).length === 2);
   check("final target-excluded actions enforce projection-side integrity after every promotion",
     liveBoardSource.includes("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)")
-      && liveBoardSource.includes("const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(coherentProps)")
+      && liveBoardSource.includes("const rankedProps = applyMlbPropsReleasePureGradeRanking(coherentProps)")
+      && liveBoardSource.includes("const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(rankedProps)")
       && liveBoardSource.includes("rows: priceBalancedProps")
       && liveBoardSource.includes("applyMlbPropsProjectionSideActionability(")
       && liveBoardSource.indexOf("applyValidatedValuePortfolioPromotions")
         < liveBoardSource.indexOf("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)"));
   check("price affects premium confidence placement without removing the quoted read",
     liveBoardSource.includes("applyMlbPropsPriceConfidenceCeilings")
-      && liveBoardSource.indexOf("const coherentProps = applyMlbPropsProjectionSideActionability(calibratedProps)")
-        < liveBoardSource.indexOf("const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(coherentProps)"));
+      && liveBoardSource.indexOf("const rankedProps = applyMlbPropsReleasePureGradeRanking(coherentProps)")
+        < liveBoardSource.indexOf("const priceBalancedProps = applyMlbPropsPriceConfidenceCeilings(rankedProps)"));
   check("pitcher target-excluded evidence resolves one posterior without a duplicate board anchor",
     realScoringSource.includes("buildTargetExcludedPitcherConsensus")
       && realScoringSource.includes("forecastMarketOverProbability: targetExcludedConsensus?.overProbability ?? null")
@@ -956,7 +957,7 @@ async function main() {
   check("dev preview stays production-disabled unless an explicit preview/candidate gate opens it", devPreviewSource.includes("isProductExperiencePreviewAvailable()") && devPreviewSource.includes("notFound()") && productExperienceSource.includes('if (env.NODE_ENV !== "production") return true') && productExperienceSource.includes("PRODUCT_EXPERIENCE_PREVIEW_FLAG"));
   check("candidate preview uses the production member read path and behavior", devPreviewSource.includes("loadMlbPropsMemberBoardSnapshot") && devPreviewSource.includes('mode="member"') && devPreviewSource.includes("loadMlbPropsLivePreviewSnapshot") && !devPreviewSource.includes("loadLatestMlbPropsBoardSnapshot") && !devPreviewSource.includes('process.env.VERCEL_ENV !== "preview"'));
   check("candidate presentation contains no internal review banners", !propsUiSource.includes("Private product candidate") && devPreviewSource.includes('presentation="candidate"') && devPreviewSource.includes('mode="member"'));
-  check("props routes use only the authenticated product shell", [marketingNavSource, marketingFooterSource].every((source) => source.includes("usesProductShell(pathname)")) && ["/mlb/props", "/player-props", "/dev/mlb-props-preview", "/dev/nfl-props-preview"].every((route) => productShellRoutesSource.includes(`"${route}"`)));
+  check("props routes use only the authenticated product shell", [marketingNavSource, marketingFooterSource].every((source) => source.includes("usesProductShell(")) && ["/mlb/props", "/player-props", "/dev/mlb-props-preview", "/dev/nfl-props-preview"].every((route) => productShellRoutesSource.includes(`"${route}"`)));
   check("member route scaffold is gated and fixture-free", memberPropsSource.includes("getPublicPicksMode") && memberPropsSource.includes("ProductAppFrame") && !memberPropsSource.includes("player-props-preview-full.json"));
   check("member routes read cached display-locked props snapshots", memberPropsSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && memberPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && playerPropsApiSource.includes("loadCachedLatestMlbPropsDisplaySnapshot") && !memberPropsSource.includes("loadCachedLatestMlbPropsBoardSnapshot"));
   check("member board defers only research evidence", memberPropsSource.includes("buildMlbPropsMemberBoardData") && propsUiSource.includes("loadedResearch") && propsUiSource.includes("/api/mlb/props/player/") && playerPropsApiSource.includes("selectMlbPropsResearchForRows") && playerPropsApiSource.includes("research,"));

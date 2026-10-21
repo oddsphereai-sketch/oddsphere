@@ -62,13 +62,17 @@ import { assertMlbChampionRuntime } from "@/lib/automodel/mlbChampionRuntime";
 export const maxDuration = 300;
 
 const TRACKING_REFRESH_PUBLICATION_RELEASE =
-  "tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint";
+  "tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance";
 
 // The active EPL pipeline stores under sport="soccer" and is competition-
 // scoped in snapshot_json. Include soccer in the scheduled cycle so EPL
 // scores and grades settle automatically; the ingest service only touches the
 // EPL external-id namespace and cannot rewrite historical World Cup games.
-const DEFAULT_SPORTS: Sport[] = ["mlb", "nba", "wnba", "soccer", "nfl", "cfb", "nhl"];
+// CFB runs first because its sole evidence writer has five-minute lease
+// opportunities. Starting settlement at :33 keeps the score/grade pass away
+// from the writer's usual :35/:40 acquisition attempts instead of reaching
+// CFB at :36 and repeatedly losing the shared prediction-pipeline lease.
+const DEFAULT_SPORTS: Sport[] = ["cfb", "mlb", "nba", "wnba", "soccer", "nfl", "nhl"];
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
