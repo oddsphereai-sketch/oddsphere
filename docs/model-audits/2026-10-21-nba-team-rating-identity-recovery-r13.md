@@ -1,5 +1,10 @@
 # NBA exact team-rating identity recovery (r13)
 
+> Integration note: this isolated r13 candidate was not published independently. It is incorporated
+> into the combined r14/r16/r8 release documented in
+> `2026-10-21-nba-rating-availability-r14-result.md`. That final candidate adds the exact-price
+> model-EV coherence gate and therefore supersedes the isolated three-promotion board result below.
+
 ## Scope and predeclaration
 
 - Sport: NBA.
@@ -78,8 +83,8 @@ protected PR checks, and post-deploy proof of 30 prior regular rows, 11/11 high-
 quality games, complete reader evidence, one writer/lease, healthy tracking,
 and unchanged existing locks.
 
-Rollback future-unlocked generation to r12/r15/r6 and refresh r10 if identity
+Rollback the combined future-unlocked generation to r12/r15/r6 and refresh r10 if identity
 matching becomes ambiguous, provider requests repeat after complete recovery,
 the board loses coverage, a score/side changes outside the reviewed candidate,
 an actionable has nonpositive exact-price EV, the writer overlaps, or any
-stored lock changes. Do not delete or rewrite any r13 lock.
+stored lock changes. Do not delete or rewrite any stored lock.

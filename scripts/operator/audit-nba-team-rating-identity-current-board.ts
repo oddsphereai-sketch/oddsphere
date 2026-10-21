@@ -3,6 +3,7 @@
 import { supabase } from "../../lib/db/supabase";
 import { fetchBbrSeasonTeamRatings } from "../../lib/providers/real_api/_basketballReferenceClient";
 import { buildNbaDailyEdgePipeline } from "../../lib/services/nba/buildNbaDailyEdgeAdapted";
+import { createEspnNbaGameInjuryResolver } from "../../lib/services/nba/espnNbaInjuries";
 import type { NbaTeamRatingsRow } from "../../lib/services/nba/featureSnapshot";
 import {
   buildNbaTeamRatingPayload,
@@ -96,9 +97,17 @@ async function main() {
   for (const row of (storedRatings ?? []) as NbaTeamRatingsRow[]) override.set(overlayKey(row), row);
   for (const row of recovered) override.set(overlayKey(row), row);
 
+  const sharedInjuryResolver = createEspnNbaGameInjuryResolver();
   const [incumbentResult, candidateResult] = await Promise.all([
-    buildNbaDailyEdgePipeline(date),
-    buildNbaDailyEdgePipeline(date, { teamRatingsOverride: [...override.values()] }),
+    buildNbaDailyEdgePipeline(date, {
+      injuryResolver: sharedInjuryResolver,
+      retainLegacyInjuryCap: true,
+      retainLegacyGradeEconomics: true,
+    }),
+    buildNbaDailyEdgePipeline(date, {
+      injuryResolver: sharedInjuryResolver,
+      teamRatingsOverride: [...override.values()],
+    }),
   ]);
   const incumbent = new Map(incumbentResult.nbaDto.games.map((game) => [game.game_external_id, compactGame(game)]));
   const candidate = new Map(candidateResult.nbaDto.games.map((game) => [game.game_external_id, compactGame(game)]));
@@ -128,6 +137,15 @@ async function main() {
     };
   });
   const changes = rows.flatMap((row) => Object.values(row.marketChanges));
+  const changedRows = rows.flatMap((row) => Object.entries(row.marketChanges).flatMap(([market, change]) =>
+    change.before.grade !== change.after.grade ||
+    change.before.pick !== change.after.pick ||
+    change.before.probability !== change.after.probability ||
+    change.before.price !== change.after.price ||
+    change.before.sportsbook !== change.after.sportsbook
+      ? [{ externalId: row.externalId, matchup: row.matchup, market, ...change }]
+      : []
+  ));
   const report = {
     generatedAt: new Date().toISOString(),
     readOnly: true,
@@ -135,10 +153,21 @@ async function main() {
     providerRows: provider.rows.length,
     recoveredPriorRegularRows: recovered.length,
     games: rows.length,
+    gamesWithBothTeamsVerified: candidateResult.nbaDto.games.filter((game) =>
+      game.injuries.home_known && game.injuries.away_known
+    ).length,
+    playersReported: candidateResult.nbaDto.games.reduce((sum, game) =>
+      sum + game.injuries.home_players.length + game.injuries.away_players.length,
+    0),
     fallbackGamesBefore: rows.filter((row) => row.tierBefore === "fallback").length,
     fallbackGamesAfter: rows.filter((row) => row.tierAfter === "fallback").length,
     scoreChanges: rows.filter((row) => JSON.stringify(row.projectionBefore) !== JSON.stringify(row.projectionAfter)).length,
     sideChanges: changes.filter((row) => row.sideChanged).length,
+    probabilityChanges: changes.filter((row) => row.before.probability !== row.after.probability).length,
+    priceChanges: changes.filter((row) =>
+      row.before.price !== row.after.price || row.before.sportsbook !== row.after.sportsbook
+    ).length,
+    gradeChanges: changes.filter((row) => row.before.grade !== row.after.grade).length,
     promotions: changes.filter((row) => row.promotion).length,
     demotions: changes.filter((row) => row.demotion).length,
     actionableBefore: rows.reduce((sum, row) => sum + Object.values(row.marketChanges).filter((market) => actionable(market.before.grade)).length, 0),
@@ -149,6 +178,7 @@ async function main() {
     nonpositiveModelEvPromotionsAfter: rows.reduce((sum, row) => sum + Object.values(row.marketChanges).filter((market) =>
       market.promotion && !(Number(market.after.modelExpectedReturn) > 0)
     ).length, 0),
+    changedRows,
     rows,
   };
   console.log(JSON.stringify(compact ? { ...report, rows: undefined } : report, null, 2));

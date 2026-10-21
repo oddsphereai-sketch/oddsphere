@@ -166,6 +166,8 @@ export async function buildNbaDailyEdgePipeline(
     retainLegacyInjuryCap?: boolean;
     /** Read-only same-input ratings audit hook; production callers omit this. */
     teamRatingsOverride?: readonly NbaTeamRatingsRow[];
+    /** Read-only same-input audit hook for the superseded price-incoherent grade path. */
+    retainLegacyGradeEconomics?: boolean;
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
@@ -533,6 +535,7 @@ export async function buildNbaDailyEdgePipeline(
       splitsRow,
       opportunities: gameOpps,
       spreadReaderStats: buildNbaSpreadReaderStats(featureRow),
+      retainLegacyGradeEconomics: options.retainLegacyGradeEconomics,
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,

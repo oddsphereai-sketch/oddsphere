@@ -270,6 +270,8 @@ export function buildNbaDailyEdgeGameDto(opts: {
   splitsRow: NbaSplitsRow | null;
   opportunities: NbaOpportunity[];
   spreadReaderStats?: NbaSpreadReaderStats;
+  /** Same-input audit hook for the superseded exact-price grade path. */
+  retainLegacyGradeEconomics?: boolean;
 }): NbaDailyEdgeGameDto {
   const intel = buildNbaGameIntelligence({
     snapshot: opts.snapshot,
@@ -278,6 +280,7 @@ export function buildNbaDailyEdgeGameDto(opts: {
     splitsRow: opts.splitsRow,
     opportunities: opts.opportunities,
     injuriesSource: opts.provenance.injuries_source,
+    enforcePositiveModelEv: opts.retainLegacyGradeEconomics !== true,
   });
 
   return {

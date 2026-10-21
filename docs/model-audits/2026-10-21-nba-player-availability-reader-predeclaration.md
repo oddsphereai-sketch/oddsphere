@@ -2,7 +2,7 @@
 
 Date: 2026-10-21
 
-Status: predeclared candidate. No live behavior is authorized by this document alone.
+Status: accepted only as part of the combined r14/r16/r8 candidate after the strict same-input audit.
 
 ## Problem
 
@@ -25,7 +25,7 @@ professional-model contract.
   coefficients.
 - Market marriage: current target-book-excluded professional reader and qualified Spread/Total
   corrections; unchanged.
-- Candidate grade policy: `nba_grade_policy_2026_10_21_r7_verified_availability_no_count_cap`.
+- Candidate grade policy: `nba_grade_policy_2026_10_21_r8_rating_identity_no_count_cap`.
 - Candidate prediction-record release: one new release identifier is required because grades can
   change, even though scores, probabilities, and sides are intended to remain identical.
 - Writer: the existing NBA prediction-record writer only.
@@ -79,3 +79,6 @@ actionable-board collapse; or if player evidence cannot be tied to both exact ma
 After publication, roll future unlocked generation back to the preceding model/grade release if the
 reader loses exact team/player identity, any lock changes, releases mix, the sole writer/lease
 contract fails, or the live board impact differs from the reviewed comparison.
+
+Final combined evidence is recorded in
+`docs/model-audits/2026-10-21-nba-rating-availability-r14-result.md`.
