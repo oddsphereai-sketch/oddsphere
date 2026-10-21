@@ -20,7 +20,7 @@ row, stake, or member-request provider fetch.
   `nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only`
 - Writer/store/state/tracking/settlement:
   `nba_player_props_private_writer_2026_10_21_r2_chronological_market_identity`,
-  `nba_player_props_private_store_2026_10_21_r2_bounded_by_payload_kind`,
+  `nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity`,
   `nba_player_props_current_state_2026_10_21_r2_regular_and_ist`,
   `nba_player_props_private_tracking_store_2026_10_21_r1_immutable`, and
   `nba_player_props_private_settlement_2026_10_21_r1_official_box_revisions`.
@@ -82,6 +82,11 @@ settlement, especially for Threes and the slate-relative fallback markets. The
 prior-season player-state bootstrap and a natural private cron run are required
 operational initialization steps before enabling the private writer flag. A
 separate owner-approved release is required before any member exposure.
+
+The real 2025 bootstrap dry run completed without a write: 1,230 games,
+43,268 box rows, 32,202 advanced rows, 603 player identities, and 783 provider
+requests. That proves provider coverage and bounded request execution; the
+one-time private-state write remains an explicit post-deploy initialization.
 
 ## Verification
 

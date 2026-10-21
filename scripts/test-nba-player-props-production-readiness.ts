@@ -141,9 +141,17 @@ const initialHistory = mergeNbaPlayerPropsMarketHistory({
   capturedAt: "2026-10-21T15:00:00.000Z",
 });
 assert.equal(initialHistory.added, observations.length);
-const conflict = mergeNbaPlayerPropsMarketHistory({
+const nextQuote = { ...observations[0]!, observedAt: "2026-10-21T12:30:00.000Z", americanPrice: -120 };
+const nextHistory = mergeNbaPlayerPropsMarketHistory({
   previous: initialHistory.history,
-  current: [{ ...observations[0]!, americanPrice: -999 }],
+  current: [nextQuote],
+  slateDate: "2026-10-21",
+  capturedAt: "2026-10-21T15:30:00.000Z",
+});
+assert.equal(nextHistory.added, 1, "the same provider offer at a new timestamp must append to movement history");
+const conflict = mergeNbaPlayerPropsMarketHistory({
+  previous: nextHistory.history,
+  current: [{ ...nextQuote, americanPrice: -999 }],
   slateDate: "2026-10-21",
   capturedAt: "2026-10-21T16:00:00.000Z",
 });
@@ -151,6 +159,11 @@ assert.equal(conflict.conflicts, 1);
 assert.equal(
   conflict.history.observations.find((row) => row.providerObservationId === observations[0]!.providerObservationId)?.americanPrice,
   observations[0]!.americanPrice,
+);
+assert.equal(
+  conflict.history.observations.find((row) => row.providerObservationId === nextQuote.providerObservationId
+    && row.observedAt === nextQuote.observedAt)?.americanPrice,
+  nextQuote.americanPrice,
 );
 const envelope = encodeNbaPlayerPropsPrivatePayload(initialHistory.history, "market_history");
 assert.deepEqual(decodeNbaPlayerPropsPrivatePayload(envelope, "market_history"), initialHistory.history);

@@ -8,7 +8,7 @@ import type {
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_10_21_r2_ist_and_identity_fallback" as const;
+  "nba_player_props_live_collector_2026_10_21_r3_chronological_quotes" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -88,8 +88,13 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
         fetchImpl,
       });
       bdlRequests += 1;
+      const openingRows = data(opening.body);
       observations.push(...normalizeBallDontLieNbaPlayerProps({
-        values: data(opening.body), fetchedAt, opening: true, events: eventMap, canonicalPlayers: playerMap,
+        values: openingRows,
+        fetchedAt,
+        opening: true,
+        events: eventMap,
+        canonicalPlayers: { ...canonicalPlayerMap(openingRows), ...playerMap },
       }).rows);
     }
   }
@@ -213,7 +218,9 @@ function data(value: unknown): Record<string, unknown>[] {
   return root.data.map(object).filter((row): row is Record<string, unknown> => row !== null);
 }
 function dedupe(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
-  return [...new Map(rows.map((row) => [[row.provider, row.providerObservationId, row.side].join("|"), row])).values()];
+  return [...new Map(rows.map((row) => [[
+    row.provider, row.providerObservationId, row.side, row.observedAt, row.isOpening ? "opening" : "current",
+  ].join("|"), row])).values()];
 }
 function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 function object(value: unknown): Record<string, unknown> | null {

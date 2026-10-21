@@ -9,7 +9,17 @@ import type { NbaPlayerPropsMemberSnapshot } from "../lib/services/nba/nbaPlayer
 
 const historical = fixture as NbaPlayerPropsMemberSnapshot;
 const firstStart = Date.parse(historical.games[0]!.scheduledStart);
-const forward = { ...historical, mode: "private_forward_candidate" as const };
+const forward = {
+  ...historical,
+  mode: "private_forward_candidate" as const,
+  decisions: historical.decisions.map((row) => ({
+    ...row,
+    independentProbability: row.probability,
+    modelRelease: "test_model",
+    calibrationRelease: "test_calibration",
+    decisionRelease: "test_decision",
+  })),
+};
 const plan = planNbaPlayerPropsRefresh({
   now: new Date(firstStart - 170 * 60_000).toISOString(),
   slateDate: historical.slateDate,

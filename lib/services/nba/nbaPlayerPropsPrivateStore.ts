@@ -6,7 +6,7 @@ import type { NbaPlayerPropPriceObservation } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE =
-  "nba_player_props_private_store_2026_10_21_r2_bounded_by_payload_kind" as const;
+  "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity" as const;
 export const NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_JSON_BYTES = 32_000_000;
 export const NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_GZIP_BYTES = 2_000_000;
 const NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_JSON_BYTES = 64_000_000;
@@ -221,7 +221,7 @@ async function readPayload(client: SupabaseClient, key: string): Promise<unknown
 }
 
 function observationKey(row: NbaPlayerPropPriceObservation): string {
-  return [row.provider, row.providerObservationId, row.side].join("|");
+  return [row.provider, row.providerObservationId, row.side, row.observedAt, row.isOpening ? "opening" : "current"].join("|");
 }
 
 function isEnvelope(value: unknown): value is Envelope {

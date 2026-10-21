@@ -92,17 +92,6 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     canonicalPlayersByName,
     fetchImpl: args.fetchImpl,
   });
-  const missingScheduledGames = slateSchedule.filter((scheduled) => !live.games.some((game) =>
-    normalize(game.homeTeam) === normalize(scheduled.homeTeam)
-      && normalize(game.awayTeam) === normalize(scheduled.awayTeam)));
-  if (missingScheduledGames.length > 0) {
-    return {
-      ...result("last_known_good_preserved"),
-      providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
-      theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
-      findings: [...live.findings, ...missingScheduledGames.map((game) => `scheduled_game_missing_from_prop_provider:${game.id}`)],
-    };
-  }
   const previousMarket = await readNbaPlayerPropsMarketHistory({ client: args.client, slateDate: args.slateDate });
   const mergedMarket = mergeNbaPlayerPropsMarketHistory({
     previous: previousMarket,
@@ -111,6 +100,19 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     capturedAt: now,
   });
   if (mergedMarket.added > 0) await writeNbaPlayerPropsMarketHistory({ client: args.client, history: mergedMarket.history });
+  const missingScheduledGames = slateSchedule.filter((scheduled) => !live.games.some((game) =>
+    normalize(game.homeTeam) === normalize(scheduled.homeTeam)
+      && normalize(game.awayTeam) === normalize(scheduled.awayTeam)));
+  if (missingScheduledGames.length > 0) {
+    return {
+      ...result("last_known_good_preserved"),
+      providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
+      theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
+      observationsAdded: mergedMarket.added,
+      observationConflictsPreserved: mergedMarket.conflicts,
+      findings: [...live.findings, ...missingScheduledGames.map((game) => `scheduled_game_missing_from_prop_provider:${game.id}`)],
+    };
+  }
 
   const stateGames = [...priorState.games, ...(currentState?.games ?? [])];
   const stateBoxes = [...priorState.boxes, ...(currentState?.boxes ?? [])];
@@ -166,6 +168,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const forward = buildNbaPlayerPropsForwardDecisions({
     features: eligibleFeatures,
     observations: mergedMarket.history.observations,
+    evaluatedAt: now,
   });
   const minimumCoverage = Math.max(1, Math.floor(candidates.length * 0.80));
   if (eligibleFeatures.length < minimumCoverage || forward.length === 0) {
@@ -211,6 +214,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       line: row.line,
       projection: row.finalProjection,
       independentProjection: row.independentProjection,
+      independentProbability: row.independentProbability,
+      modelRelease: row.modelRelease,
+      calibrationRelease: row.calibrationRelease,
+      decisionRelease: row.decisionRelease,
       side: row.side,
       probability: row.probability,
       grade: row.grade,
@@ -262,7 +269,6 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     slateDate: args.slateDate,
     evaluatedAt: now,
     snapshot: lifecycle.snapshot,
-    forward,
   });
   const settlement = args.fullRefresh && currentState
     ? await settleNbaPlayerPropsTrackedSlates({

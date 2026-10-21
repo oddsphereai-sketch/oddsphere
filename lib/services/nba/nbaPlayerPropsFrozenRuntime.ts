@@ -71,6 +71,8 @@ type FrozenArtifact = Readonly<{
   release: typeof NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE;
   publicEnabled: false;
   sourceInputsSha256: string;
+  sourceTournamentRelease: string;
+  sourceGradeRelease: string;
   payloadSha256: string;
   selectedByMarket: Readonly<Record<FoundationMarket, string>>;
   underlyingByMarket: Readonly<Record<FoundationMarket, string>>;
@@ -94,6 +96,9 @@ type FrozenArtifact = Readonly<{
 
 export type NbaPlayerPropsForwardDecision = Readonly<{
   release: typeof NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE;
+  modelRelease: string;
+  calibrationRelease: string;
+  decisionRelease: typeof NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE;
   publicEnabled: false;
   scopeKey: string;
   gameId: number;
@@ -174,6 +179,7 @@ export function nbaPlayerPropsFrozenRuntimeArtifact(): FrozenArtifact {
 export function buildNbaPlayerPropsForwardDecisions(args: {
   features: readonly NbaPlayerPropFeatureRow[];
   observations: readonly NbaPlayerPropPriceObservation[];
+  evaluatedAt?: string;
 }): NbaPlayerPropsForwardDecision[] {
   const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
   const offers = selectNbaPlayerPropsCurrentCanonicalOfferSets(args.observations);
@@ -196,6 +202,7 @@ export function buildNbaPlayerPropsForwardDecisions(args: {
       candidateMinimumMarketDistance: artifact.candidateMarketMinimumDistance[market],
       exactPriceMinimumMarketDistance: artifact.exactPriceArbitrationMinimumDistance[market],
       historyObservations: historyByScope.get(offer.scopeKey) ?? offer.observations,
+      evaluatedAt: args.evaluatedAt,
     });
     if (!resolved) continue;
     const { target, finalProjection, evidence, mode } = resolved;
@@ -234,6 +241,9 @@ export function buildNbaPlayerPropsForwardDecisions(args: {
     });
     const base: ScoredDecision = {
       release: NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
+      modelRelease: artifact.sourceTournamentRelease,
+      calibrationRelease: artifact.sourceGradeRelease,
+      decisionRelease: NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
       publicEnabled: false,
       scopeKey: offer.scopeKey,
       gameId,
@@ -311,6 +321,7 @@ function resolveFinalProjection(args: {
   candidateMinimumMarketDistance: number | null;
   exactPriceMinimumMarketDistance: number | null;
   historyObservations: readonly NbaPlayerPropPriceObservation[];
+  evaluatedAt?: string;
 }) {
   const independentSide: Side = args.independentProjection > args.offer.canonicalLine ? "over" : "under";
   const usesCandidateMarketRead = args.selectedCandidate.includes("market_read") || args.selectedCandidate.includes("fanduel_");
@@ -333,6 +344,7 @@ function resolveFinalProjection(args: {
       independentProjection: args.independentProjection,
       minimumMarketDistance: args.exactPriceMinimumMarketDistance,
       historyObservations: args.historyObservations,
+      evaluatedAt: args.evaluatedAt,
     });
   if (exactArbitration) return exactArbitration;
   const desired = candidateSide;
@@ -343,7 +355,7 @@ function resolveFinalProjection(args: {
   const evidence = buildNbaPlayerPropsMarketEvidence({
     target,
     observations: args.historyObservations,
-    evaluatedAt: target.observedAt,
+    evaluatedAt: args.evaluatedAt ?? target.observedAt,
   });
   if (evidence.targetExcludedOverProbability === null || evidence.targetExcludedBooks < 1) return null;
   return {
@@ -359,6 +371,7 @@ function resolveTargetExcludedArbitration(args: {
   independentProjection: number;
   minimumMarketDistance: number;
   historyObservations: readonly NbaPlayerPropPriceObservation[];
+  evaluatedAt?: string;
 }) {
   const independentSide: Side = args.independentProjection > args.offer.canonicalLine ? "over" : "under";
   let side = independentSide;
@@ -371,7 +384,7 @@ function resolveTargetExcludedArbitration(args: {
     const evidence = buildNbaPlayerPropsMarketEvidence({
       target,
       observations: args.historyObservations,
-      evaluatedAt: target.observedAt,
+      evaluatedAt: args.evaluatedAt ?? target.observedAt,
     });
     if (evidence.targetExcludedOverProbability === null || evidence.targetExcludedBooks < 1) return null;
     const marketDistance = Math.abs(evidence.targetExcludedOverProbability - 0.5);

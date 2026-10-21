@@ -39,6 +39,10 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
   line: number;
   projection: number;
   independentProjection: number;
+  independentProbability?: number;
+  modelRelease?: string;
+  calibrationRelease?: string;
+  decisionRelease?: string;
   side: Extract<NbaPlayerPropSide, "over" | "under">;
   probability: number;
   grade: NbaPlayerPropsMemberGrade;
@@ -132,6 +136,10 @@ export function buildNbaPlayerPropsMemberSnapshot(args: {
     }
     timestamp(decision.evaluatedAt, "evaluatedAt");
     if (decision.lockedAt !== null) timestamp(decision.lockedAt, "lockedAt");
+    if (args.mode === "private_forward_candidate" && (
+      !Number.isFinite(decision.independentProbability)
+      || !decision.modelRelease || !decision.calibrationRelease || !decision.decisionRelease
+    )) throw new Error(`NBA props forward decision ${decision.decisionKey} is missing frozen tracking provenance.`);
   }
   const ordered = [...args.decisions].sort((left, right) => Date.parse(left.scheduledStart) - Date.parse(right.scheduledStart)
     || gradeRank(left.grade) - gradeRank(right.grade)

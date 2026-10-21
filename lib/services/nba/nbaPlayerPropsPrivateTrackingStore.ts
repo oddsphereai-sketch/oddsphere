@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { NbaPlayerPropsForwardDecision } from "./nbaPlayerPropsFrozenRuntime";
 import {
   buildNbaPlayerPropsPrivateTrackingRow,
   decodeNbaPlayerPropsPrivateTrackingHistory,
@@ -39,18 +38,11 @@ export async function readNbaPlayerPropsPrivateTracking(args: {
 
 export function buildNbaPlayerPropsLockedTrackingRows(args: {
   snapshot: NbaPlayerPropsMemberSnapshot;
-  forward: readonly NbaPlayerPropsForwardDecision[];
 }): NbaPlayerPropsPrivateTrackingRow[] {
-  const forwardByScope = new Map(args.forward.map((row) => [
-    `${row.gameId}|${row.playerId}|${row.market}|${row.line}`,
-    row,
-  ]));
   return args.snapshot.decisions.flatMap((row) => {
     if (!row.lockedAt) return [];
-    const gameId = Number(row.gameId.replace(/^.*:/, ""));
-    const playerId = Number(row.playerId.replace(/^.*:/, ""));
-    const source = forwardByScope.get(`${gameId}|${playerId}|${row.market}|${row.line}`);
-    if (!source) return [];
+    if (!Number.isFinite(row.independentProbability)
+      || !row.modelRelease || !row.calibrationRelease || !row.decisionRelease) return [];
     return [buildNbaPlayerPropsPrivateTrackingRow({
       gameId: row.gameId,
       playerId: row.playerId,
@@ -66,16 +58,16 @@ export function buildNbaPlayerPropsLockedTrackingRows(args: {
       canonicalMainLine: true,
       independentProjection: row.independentProjection,
       finalProjection: row.projection,
-      independentProbability: source.independentProbability,
+      independentProbability: row.independentProbability!,
       marketProbability: row.targetExcludedProbability,
       finalProbability: row.probability,
       grade: row.grade,
       marketMovement: row.movement ? `${row.movement.openingLine}->${row.movement.currentLine}` : null,
       observedAt: row.evaluatedAt,
       lockedAt: row.lockedAt,
-      modelRelease: source.release,
-      calibrationRelease: source.release,
-      decisionRelease: source.release,
+      modelRelease: row.modelRelease,
+      calibrationRelease: row.calibrationRelease,
+      decisionRelease: row.decisionRelease,
     })];
   });
 }
@@ -86,10 +78,9 @@ export async function captureNbaPlayerPropsPrivateTracking(args: {
   slateDate: string;
   evaluatedAt: string;
   snapshot: NbaPlayerPropsMemberSnapshot;
-  forward: readonly NbaPlayerPropsForwardDecision[];
 }): Promise<{ written: boolean; added: number; preserved: number; conflicts: number; total: number }> {
   const previous = await readNbaPlayerPropsPrivateTracking(args);
-  const current = buildNbaPlayerPropsLockedTrackingRows({ snapshot: args.snapshot, forward: args.forward });
+  const current = buildNbaPlayerPropsLockedTrackingRows({ snapshot: args.snapshot });
   const merged = mergeNbaPlayerPropsPrivateTrackingRows({ previous: previous?.rows ?? [], current });
   if (merged.added === 0) {
     return { written: false, added: 0, preserved: merged.preserved, conflicts: merged.conflicts, total: merged.rows.length };
