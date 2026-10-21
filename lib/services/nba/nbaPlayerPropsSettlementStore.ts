@@ -29,6 +29,35 @@ export type NbaPlayerPropsSettlementHistory = Readonly<{
   revisions: readonly NbaPlayerPropsSettlementRevision[];
 }>;
 
+export function buildNbaPlayerPropsSettlementRevision(args: {
+  row: NbaPlayerPropsPrivateTrackingRow;
+  box: NbaPlayerPropsCurrentState["boxes"][number] | null;
+  prior: NbaPlayerPropsSettlementRevision | null;
+  observedAt: string;
+}): Readonly<{
+  status: "added" | "corrected" | "preserved";
+  revision: NbaPlayerPropsSettlementRevision;
+}> {
+  const actual = !args.box || args.box.minutes <= 0 ? null : actualForMarket(args.row.market, args.box);
+  const result = actual === null ? "void" : actual === args.row.line ? "push"
+    : (args.row.side === "over" ? actual > args.row.line : actual < args.row.line) ? "win" : "loss";
+  const unitReturn = result === "win"
+    ? (args.row.americanPrice > 0 ? args.row.americanPrice / 100 : 100 / -args.row.americanPrice)
+    : result === "loss" ? -1 : 0;
+  const revision: NbaPlayerPropsSettlementRevision = {
+    rowKey: args.row.rowKey,
+    revision: (args.prior?.revision ?? 0) + 1,
+    actual,
+    result,
+    unitReturn,
+    officialObservedAt: args.observedAt,
+  };
+  if (args.prior && args.prior.actual === actual && args.prior.result === result) {
+    return { status: "preserved", revision: args.prior };
+  }
+  return { status: args.prior ? "corrected" : "added", revision };
+}
+
 export function nbaPlayerPropsSettlementKey(season: number): string {
   return `nba::player-props-private-settlement::${season}`;
 }
@@ -60,23 +89,12 @@ export async function settleNbaPlayerPropsTrackedSlates(args: {
     const gameId = Number(row.gameId.replace(/^.*:/, ""));
     const playerId = Number(row.playerId.replace(/^.*:/, ""));
     if (!gameIds.has(gameId)) continue;
-    const box = boxByGamePlayer.get(`${gameId}|${playerId}`);
-    const actual = !box || box.minutes <= 0 ? null : actualForMarket(row.market, box);
-    const result = actual === null ? "void" : actual === row.line ? "push"
-      : (row.side === "over" ? actual > row.line : actual < row.line) ? "win" : "loss";
-    const unitReturn = result === "win" ? (row.americanPrice > 0 ? row.americanPrice / 100 : 100 / -row.americanPrice)
-      : result === "loss" ? -1 : 0;
+    const box = boxByGamePlayer.get(`${gameId}|${playerId}`) ?? null;
     const prior = latestByRow.get(row.rowKey);
-    if (prior && prior.actual === actual && prior.result === result) { preserved += 1; continue; }
-    if (prior) corrected += 1;
-    additions.push({
-      rowKey: row.rowKey,
-      revision: (prior?.revision ?? 0) + 1,
-      actual,
-      result,
-      unitReturn,
-      officialObservedAt: args.observedAt,
-    });
+    const settlement = buildNbaPlayerPropsSettlementRevision({ row, box, prior: prior ?? null, observedAt: args.observedAt });
+    if (settlement.status === "preserved") { preserved += 1; continue; }
+    if (settlement.status === "corrected") corrected += 1;
+    additions.push(settlement.revision);
   }
   if (additions.length === 0) return { written: false, added: 0, corrected, preserved, total: previous?.revisions.length ?? 0 };
   const history: NbaPlayerPropsSettlementHistory = {
