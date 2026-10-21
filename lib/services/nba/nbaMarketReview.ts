@@ -82,17 +82,19 @@ export const NBA_BEST_ANGLE_MIN_EDGE_PROB = 0.04;
 export const NBA_BEST_ANGLE_MIN_CONFIDENCE = 62;
 
 export type MarketConflictBand =
-  | "support"           // market agrees with the model pick (mild or strong)
-  | "neutral"           // gap below NEUTRAL threshold; market is silent
-  | "mild_conflict"     // market leans the other way, but small gap
-  | "strong_conflict"   // market strongly disagrees with model pick
+  | "support"           // compatibility token: model has positive value versus the no-vig price
+  | "neutral"           // model and no-vig market probability are close
+  | "mild_conflict"     // compatibility token: market prices the same pick slightly shorter than the model
+  | "strong_conflict"   // compatibility token: market prices the same pick materially shorter than the model
   | "market_unavailable"; // not enough market data to compute
 
 /**
  * Conflict band for a moneyline. `modelProb` = model's probability on the
  * SAME side as `marketNoVigProb`. Positive `edge` means model favors the
- * pick more than market does (supports). Negative edge means market
- * favors the other side more (conflict).
+ * pick more than market does (positive model value). Negative edge means the
+ * market prices that same side more strongly than the model; it does not mean
+ * the market moved toward the other team. Qualified movement is carried by
+ * the professional reader instead.
  */
 export function classifyMlConflict(opts: {
   modelProb: number;          // model probability for the pick side
@@ -102,13 +104,13 @@ export function classifyMlConflict(opts: {
   const gap = Math.abs(edge);
   if (gap < NBA_ML_PROB_GAP_NEUTRAL_MAX) return { band: "neutral", edge, gap_abs: gap };
   if (edge > 0) {
-    // model thinks the pick is BETTER than market does — market supports the pick.
+    // Compatibility token: the model sees positive value versus the no-vig price.
     if (gap < NBA_ML_PROB_GAP_MILD_MAX) return { band: "support", edge, gap_abs: gap };
     if (gap >= NBA_ML_PROB_GAP_STRONG_MIN) return { band: "support", edge, gap_abs: gap };
-    // 5-10pp: market still supports but model is more confident
+    // 5-10pp: model remains more confident than the current market price.
     return { band: "support", edge, gap_abs: gap };
   }
-  // edge < 0: market thinks the OTHER side is better — conflict against the pick
+  // Compatibility token: the market prices this same pick above the model.
   if (gap >= NBA_ML_PROB_GAP_STRONG_MIN) return { band: "strong_conflict", edge, gap_abs: gap };
   return { band: "mild_conflict", edge, gap_abs: gap };
 }
@@ -203,6 +205,19 @@ export type GradeInput = {
   readerCorrectionApplied?: boolean;
   readerMagnitudePoints?: number | null;
   currentPriceAmerican?: number | null;
+  /** Uncapped probability from the same coherent distribution that owns the pick. */
+  modelProbabilityOnPick?: number | null;
+  moneylineEvidence?: {
+    directReadQualified: boolean;
+    directReadSide: "home" | "away" | null;
+    spreadReadQualified: boolean;
+    spreadReadSide: "home" | "away" | null;
+    spreadCorrectionApplied: boolean;
+  };
+  /** Same-input audit hook for the superseded Moneyline Best Angle path. */
+  enforceMoneylineEvidenceGuard?: boolean;
+  /** Same-input audit hook for the superseded price-incoherent grade path. */
+  enforcePositiveModelEv?: boolean;
 };
 
 export type GradeOutput = {
@@ -311,10 +326,10 @@ function marketSpecificGrade(input: GradeInput): GradeOutput | null {
 // admin/debug paths) free to evolve while shipping clean Daily Edge copy.
 function memberBandPhrase(band: MarketConflictBand): string {
   switch (band) {
-    case "support":             return "market support";
-    case "neutral":             return "a quiet market";
-    case "mild_conflict":       return "mild market pushback";
-    case "strong_conflict":     return "heavy market pushback";
+    case "support":             return "model value over the current price";
+    case "neutral":             return "model and price alignment";
+    case "mild_conflict":       return "a price slightly ahead of the model";
+    case "strong_conflict":     return "a price well ahead of the model";
     case "market_unavailable":  return "no market read yet";
   }
 }
@@ -343,9 +358,24 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   if (input.band === "strong_conflict") {
     const capped = Math.min(input.confidence, 55);
     rationale.push(
-      "Market is pushing the other way hard — this stays a cautious read, not a play.",
+      "The available price is materially shorter than the model's fair probability — this stays a cautious read, not a play.",
     );
     return { grade: "caution", effectiveConfidence: capped, bestAngleEligible: false, rationale };
+  }
+  const modelPriceEv = input.modelProbabilityOnPick === null || input.modelProbabilityOnPick === undefined
+    ? null
+    : expectedReturn(input.modelProbabilityOnPick, input.currentPriceAmerican);
+  if (
+    input.enforcePositiveModelEv !== false &&
+    input.currentPriceAmerican !== undefined &&
+    (modelPriceEv === null || modelPriceEv <= 0)
+  ) {
+    return {
+      grade: "watch",
+      effectiveConfidence: Math.min(input.confidence, 52),
+      bestAngleEligible: false,
+      rationale: ["The forecast has a side, but its probability does not clear positive value at the selected price."],
+    };
   }
   const specialized = marketSpecificGrade(input);
   if (specialized !== null) return specialized;
@@ -365,7 +395,7 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
     return { grade: "watch", effectiveConfidence: input.confidence, bestAngleEligible: false, rationale };
   }
   if (input.band === "mild_conflict") {
-    rationale.push("Market is hedging against the model lean — keeping this on the watchlist.");
+    rationale.push("The available price is ahead of the model's fair probability — keeping this on the watchlist.");
     return { grade: "watch", effectiveConfidence: input.confidence, bestAngleEligible: false, rationale };
   }
   // band is neutral or support, confidence >= 55, tier >= medium
@@ -376,7 +406,39 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
     input.injuriesKnown &&
     input.dataQualityTier === "high"
   ) {
-    rationale.push("Strong model read with market support — a clean edge worth playing.");
+    const evidence = input.moneylineEvidence;
+    const pickedSide = input.pick === "home" || input.pick === "away" ? input.pick : null;
+    const directOpposes = pickedSide !== null && evidence?.directReadQualified === true &&
+      evidence.directReadSide !== null && evidence.directReadSide !== pickedSide;
+    const spreadOpposes = pickedSide !== null && evidence?.directReadQualified !== true &&
+      evidence?.spreadReadQualified === true && evidence.spreadReadSide !== null &&
+      evidence.spreadReadSide !== pickedSide;
+    const opposingObservation = input.market === "moneyline" &&
+      evidence?.spreadCorrectionApplied !== true && (directOpposes || spreadOpposes);
+    if (input.enforceMoneylineEvidenceGuard !== false && opposingObservation) {
+      rationale.push(
+        "The independent value remains playable, but qualified opposite-side movement keeps it below Best Angle; the signal is not strong enough to flip the pick.",
+      );
+      return {
+        grade: "lean",
+        effectiveConfidence: input.confidence,
+        bestAngleEligible: false,
+        rationale,
+      };
+    }
+    const directConfirms = pickedSide !== null && evidence?.directReadQualified === true &&
+      evidence.directReadSide === pickedSide;
+    const spreadConfirms = pickedSide !== null && evidence?.directReadQualified !== true &&
+      evidence?.spreadReadQualified === true && evidence.spreadReadSide === pickedSide;
+    if (input.market === "moneyline" && evidence?.spreadCorrectionApplied === true) {
+      rationale.push("Strong model value at the selected price after a validated Spread correction authored the final side.");
+    } else if (input.market === "moneyline" && directConfirms) {
+      rationale.push("Strong model value at the selected price with qualified named-book Moneyline movement confirming the side.");
+    } else if (input.market === "moneyline" && spreadConfirms) {
+      rationale.push("Strong model value at the selected price with qualified Spread movement agreeing with the side.");
+    } else {
+      rationale.push("Strong independent value at the selected price with no qualified market evidence opposing the side.");
+    }
     return { grade: "best_angle", effectiveConfidence: input.confidence, bestAngleEligible: true, rationale };
   }
   // Lean — model is confident enough but doesn't clear the Best Angle bar.

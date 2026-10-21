@@ -184,7 +184,9 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /refreshDailyEdg
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /leaseGroup:\s*"prediction_pipeline"/, "NBA snapshot publication shares the sport prediction lease");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /requireLease:\s*true/, "NBA snapshot publication requires the shared lease");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
-assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board/, "NBA refresh exposes its immutable complete-line-board operational release");
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry/, "NBA refresh exposes its combined current-slate and active-registry operational release");
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /season:\s*season - 1[\s\S]*skipFetchWhenRegularSeasonComplete:\s*true/, "NBA full refresh recovers an incomplete prior-season ratings pack once");
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /futureWindowPartial:\s*partial && snapshotBlockers\.length === 0/, "future-window quote gaps remain visible without suppressing a complete current NBA slate");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry/, "NHL refresh exposes its immutable morning-rollover retry release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");

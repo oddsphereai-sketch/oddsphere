@@ -17,6 +17,7 @@ import {
 } from "../lib/services/football/nflPlayerPropsMarketObserverStore";
 import type { NflPlayerPropsMarketEvidenceCapture } from "../lib/services/football/nflPlayerPropsMarketEvidenceCapture";
 import type { NflPlayerPropsProductionSnapshot } from "../lib/services/football/nflPlayerPropsProductionContract";
+import { nflPlayerPropsObserverClosingQuotes } from "../lib/services/football/nflPlayerPropsTrackingStore";
 
 const start = "2026-10-12T00:00:00.000Z";
 const lock = "2026-10-11T23:00:00.000Z";
@@ -211,6 +212,18 @@ assert.deepEqual(atLock.rows.map((row) => row.landmark), ["t60_lock"],
   "the coherent retained tuple can fill T-60 when the provider removes the offer at lock");
 assert.equal(atLock.rows[0]?.observedAt, "2026-10-11T22:58:00.000Z");
 assert.equal(atLock.rows[0]?.minutesToStartAtCapture, 50);
+const closingQuotes = nflPlayerPropsObserverClosingQuotes(atLock.rows);
+assert.deepEqual(closingQuotes.map((quote) => ({
+  trackingKey: quote.trackingKey,
+  decisionRelease: quote.decisionRelease,
+  sportsbook: quote.sportsbook,
+  closingPrice: quote.closingPrice,
+})), [
+  { trackingKey: "game-id|exactplayer|receptions|4.5|over", decisionRelease: "decision-release", sportsbook: "draftkings", closingPrice: -105 },
+  { trackingKey: "game-id|exactplayer|receptions|4.5|under", decisionRelease: "decision-release", sportsbook: "draftkings", closingPrice: -115 },
+], "only exact same-line T-60 tuples become close-recovery candidates");
+assert.deepEqual(nflPlayerPropsObserverClosingQuotes([{ ...atLock.rows[0]!, observedLine: 5.5 }]), [],
+  "a different observed line can never be used to reconstruct a locked close");
 
 const staleLockEvidence = evidence({ observedAt: "2026-10-11T16:00:00.000Z", fetchedAt: "2026-10-11T16:00:01.000Z" });
 const staleLock = buildNflPlayerPropsMarketObserverRows({
@@ -344,8 +357,8 @@ async function runPersistenceAndIsolationTests(): Promise<void> {
 const writerSource = readFileSync("lib/services/football/nflPlayerPropsProductionWriter.ts", "utf8");
 assert.ok(writerSource.indexOf("await writeNflPlayerPropsSnapshot") < writerSource.indexOf("? await captureNflPlayerPropsMarketObserverSafely"),
   "capture must occur only after the member-authoritative snapshot write");
-assert.ok(writerSource.indexOf("settleNflPlayerPropsRecords({") < writerSource.lastIndexOf("captureNflPlayerPropsMarketObserverSafely"),
-  "capture must run after lock tracking, closing prices, and settlement rather than delaying them");
+assert.ok(writerSource.lastIndexOf("captureNflPlayerPropsMarketObserverSafely") < writerSource.indexOf("settleNflPlayerPropsRecords({"),
+  "the exact T-60 observer row must be stored and attached as close metadata before settlement");
 assert.doesNotMatch(
   readFileSync("lib/services/football/nflPlayerPropsMarketObserverStore.ts", "utf8"),
   /fetch\(|collectNflPlayerPropsObservations|ballDontLieApiKey|sharpApiKey/,

@@ -34,7 +34,7 @@
  *                within the lock window. Wrapper-level behavior.
  *
  * records_updated tallies useful writes only:
- *   teamsUpserted + ratings.written + linesWritten + lineHistoryWritten
+ *   teamsUpserted + ratings.written + linesWritten + linesRemoved + lineHistoryWritten
  *   + a successfully published response snapshot.
  *
  * Scope (unchanged from Services 1–3):
@@ -52,7 +52,10 @@ import {
   seedNbaGames,
   type SeedNbaGamesResult,
 } from "@/lib/services/nba/seedNbaGamesService";
-import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsService";
+import {
+  NBA_TEAM_RATINGS_REFRESH_RELEASE,
+  refreshNbaTeamRatings,
+} from "@/lib/services/nba/refreshNbaTeamRatingsService";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import {
@@ -62,7 +65,7 @@ import {
 import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -141,6 +144,11 @@ export async function GET(request: Request): Promise<Response> {
       // three steps so the wrapper marks the whole run partial when
       // soft failures occur.
       let partial = false;
+      // The operational run reports every rolling-window defect, but only
+      // evidence required by today's member board may block today's snapshot.
+      // A thin quote group six days away must remain visible as a partial
+      // refresh without suppressing an otherwise complete current slate.
+      const snapshotBlockers: string[] = [];
       const stepDetails: Record<string, unknown> = {
         refresh_release: NBA_DAILY_REFRESH_RELEASE,
         slate_date_et: etDateDashed,
@@ -162,7 +170,12 @@ export async function GET(request: Request): Promise<Response> {
           logger: stepLog(`seed:${seedDate}`),
         });
         seedResults.push({ date: seedDate, result });
-        if (result.errors.length > 0) partial = true;
+        if (result.errors.length > 0) {
+          partial = true;
+          if (seedDate === etDateDashed) {
+            snapshotBlockers.push(`current_seed_errors:${result.errors.length}`);
+          }
+        }
       }
       const currentSeedResult = seedResults.find((entry) => entry.date === etDateDashed)?.result;
       if (!currentSeedResult) {
@@ -212,25 +225,53 @@ export async function GET(request: Request): Promise<Response> {
 
       // ─── Step 3: refreshNbaTeamRatings ────────────────────────────
       console.log(`[nba-daily-refresh] step=ratings  season=${season}  mode=${intraday ? "skip" : "full"}`);
+      const skippedRatingsResult = {
+        release: NBA_TEAM_RATINGS_REFRESH_RELEASE,
+        mode: "skipped" as const,
+        teamsInDb: 0,
+        seasonFetchStatus: "skipped" as const,
+        seasonRowsParsed: 0,
+        playoffFetchStatus: "skipped" as const,
+        playoffRowsParsed: 0,
+        payloadsBuilt: 0,
+        written: 0,
+        errors: [] as string[],
+      };
+      // Opening-month forecasts intentionally carry a regressed prior-season
+      // rating pack. Repair that immutable pack once when any current NBA team
+      // is missing, then skip its provider calls on subsequent full cycles.
+      const priorSeasonRatingsResult = intraday
+        ? skippedRatingsResult
+        : await refreshNbaTeamRatings({
+            season: season - 1,
+            includePlayoffs: true,
+            dryRun: false,
+            skipFetchWhenRegularSeasonComplete: true,
+            logger: stepLog("ratings-prior-season"),
+          });
       const ratingsResult = intraday
-        ? {
-            mode: "skipped" as const,
-            teamsInDb: 0,
-            seasonFetchStatus: "skipped" as const,
-            seasonRowsParsed: 0,
-            playoffFetchStatus: "skipped" as const,
-            playoffRowsParsed: 0,
-            payloadsBuilt: 0,
-            written: 0,
-            errors: [] as string[],
-          }
+        ? skippedRatingsResult
         : await refreshNbaTeamRatings({
             season,
             includePlayoffs: true,
             dryRun: false,
             logger: stepLog("ratings"),
           });
+      stepDetails.ratings_prior_season = {
+        release: priorSeasonRatingsResult.release,
+        season: season - 1,
+        mode: priorSeasonRatingsResult.mode,
+        teamsInDb: priorSeasonRatingsResult.teamsInDb,
+        seasonFetchStatus: priorSeasonRatingsResult.seasonFetchStatus,
+        seasonRowsParsed: priorSeasonRatingsResult.seasonRowsParsed,
+        playoffFetchStatus: priorSeasonRatingsResult.playoffFetchStatus,
+        playoffRowsParsed: priorSeasonRatingsResult.playoffRowsParsed,
+        payloadsBuilt: priorSeasonRatingsResult.payloadsBuilt,
+        written: priorSeasonRatingsResult.written,
+        errorCount: priorSeasonRatingsResult.errors.length,
+      };
       stepDetails.ratings = {
+        release: ratingsResult.release,
         mode: ratingsResult.mode,
         teamsInDb: ratingsResult.teamsInDb,
         seasonFetchStatus: ratingsResult.seasonFetchStatus,
@@ -248,8 +289,22 @@ export async function GET(request: Request): Promise<Response> {
       if (!intraday && ratingsResult.mode === "no-teams") {
         throw new Error("ratings step returned mode=no-teams (no NBA teams resident in DB after seed step)");
       }
-      if (!intraday && ratingsResult.seasonFetchStatus === "failed") partial = true;
-      if (ratingsResult.errors.length > 0) partial = true;
+      if (!intraday && ratingsResult.seasonFetchStatus === "failed") {
+        partial = true;
+        snapshotBlockers.push("current_ratings_fetch_failed");
+      }
+      if (!intraday && priorSeasonRatingsResult.seasonFetchStatus === "failed") {
+        partial = true;
+        snapshotBlockers.push("prior_ratings_fetch_failed");
+      }
+      if (priorSeasonRatingsResult.errors.length > 0) {
+        partial = true;
+        snapshotBlockers.push(`prior_ratings_errors:${priorSeasonRatingsResult.errors.length}`);
+      }
+      if (ratingsResult.errors.length > 0) {
+        partial = true;
+        snapshotBlockers.push(`current_ratings_errors:${ratingsResult.errors.length}`);
+      }
 
       // ─── Step 4: refreshNbaLines ──────────────────────────────────
       // The member product is a rolling seven-day analyzed board. A full
@@ -287,6 +342,9 @@ export async function GET(request: Request): Promise<Response> {
             date: lineDate,
             error: error instanceof Error ? error.message : String(error),
           });
+          if (lineDate === etDateDashed) {
+            snapshotBlockers.push("current_lines_refresh_failed");
+          }
         }
       }
       const lineTotals = lineResults.reduce(
@@ -297,7 +355,10 @@ export async function GET(request: Request): Promise<Response> {
           unmatched: total.unmatched + entry.result.unmatched,
           parsed: total.parsed + entry.result.parsed,
           linesWritten: total.linesWritten + entry.result.linesWritten,
+          linesRemoved: total.linesRemoved + entry.result.linesRemoved,
           lineHistoryWritten: total.lineHistoryWritten + entry.result.lineHistoryWritten,
+          scopesReconciled: total.scopesReconciled + entry.result.scopesReconciled,
+          incompleteBookGroupsDropped: total.incompleteBookGroupsDropped + entry.result.incompleteBookGroupsDropped,
           errorCount: total.errorCount + entry.result.errors.length,
         }),
         {
@@ -307,7 +368,10 @@ export async function GET(request: Request): Promise<Response> {
           unmatched: 0,
           parsed: 0,
           linesWritten: 0,
+          linesRemoved: 0,
           lineHistoryWritten: 0,
+          scopesReconciled: 0,
+          incompleteBookGroupsDropped: 0,
           errorCount: 0,
         },
       );
@@ -321,7 +385,10 @@ export async function GET(request: Request): Promise<Response> {
           unmatched: result.unmatched,
           parsed: result.parsed,
           linesWritten: result.linesWritten,
+          linesRemoved: result.linesRemoved,
           lineHistoryWritten: result.lineHistoryWritten,
+          scopesReconciled: result.scopesReconciled,
+          incompleteBookGroupsDropped: result.incompleteBookGroupsDropped,
           errorCount: result.errors.length,
         })),
         failures: lineFailures,
@@ -329,10 +396,25 @@ export async function GET(request: Request): Promise<Response> {
       };
       if (lineTotals.errorCount > 0) partial = true;
 
+      const currentLineResult = lineResults.find((entry) => entry.date === etDateDashed)?.result;
+      if (currentSeedResult.mode !== "no-events") {
+        if (!currentLineResult) {
+          snapshotBlockers.push("current_lines_missing");
+        } else if (currentLineResult.errors.length > 0) {
+          snapshotBlockers.push(`current_lines_errors:${currentLineResult.errors.length}`);
+        }
+      }
+      stepDetails.snapshot_readiness = {
+        ready: snapshotBlockers.length === 0,
+        blockers: snapshotBlockers,
+        futureWindowPartial: partial && snapshotBlockers.length === 0,
+      };
+
       // The date-keyed response snapshot is the readiness boundary for the
-      // 3 AM ET member rollover. A partial source cycle must not replace the
-      // prior complete board; the next scheduled run retries the same date.
-      const responseSnapshot = partial
+      // 3 AM ET member rollover. Current-slate defects remain fail-closed.
+      // Distant rolling-window quote defects remain reported as partial but
+      // do not suppress a complete current-day board.
+      const responseSnapshot = snapshotBlockers.length > 0
         ? null
         : await refreshDailyEdgeResponseSnapshot({
             sport: "nba",
@@ -341,9 +423,13 @@ export async function GET(request: Request): Promise<Response> {
           });
       stepDetails.response_snapshot = responseSnapshot ?? {
         skipped: true,
-        reason: "incomplete_source_cycle",
+        reason: "current_slate_incomplete",
+        blockers: snapshotBlockers,
       };
       if (responseSnapshot?.ok === false) partial = true;
+      const lineError = lineFailures[0]?.error ??
+        lineResults.flatMap(({ result }) => result.errors)[0] ??
+        null;
 
       // ─── records_updated: tally useful writes only ────────────────
       const recordsUpdated =
@@ -352,6 +438,7 @@ export async function GET(request: Request): Promise<Response> {
         ratingsResult.written +
         professionalInputs.written +
         lineTotals.linesWritten +
+        lineTotals.linesRemoved +
         lineTotals.lineHistoryWritten +
         (responseSnapshot?.ok ? 1 : 0);
 
@@ -360,7 +447,11 @@ export async function GET(request: Request): Promise<Response> {
         partial,
         error_message: responseSnapshot?.ok === false
           ? `NBA response snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
-          : null,
+          : lineError !== null
+            ? `NBA line refresh partial: ${lineError}`
+            : partial
+              ? "NBA refresh completed with an incomplete source cycle"
+              : null,
         details: stepDetails,
       };
     },

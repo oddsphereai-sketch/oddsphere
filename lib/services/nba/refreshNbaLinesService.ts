@@ -15,9 +15,10 @@
  *     overlap (display_name + last-token fallback).
  *   • Normalizes market + side, builds (game_id, market_type,
  *     sportsbook, side) payloads.
- *   • Apply path: delete then insert per (game_id, market_type,
- *     sportsbook) triplet — matches the MLB linesService refresh
- *     pattern — and appends an intraday line_history snapshot.
+ *   • Apply path: insert each complete current game/market snapshot, then
+ *     remove the exact prior rows for that scope. A failed insert preserves
+ *     the prior complete board; a successful cycle removes absent books.
+ *     The service also appends an intraday line_history snapshot.
  *   • NEVER writes any other table; NEVER touches MLB rows.
  *
  * Service contract (vs. CLI wrapper):
@@ -68,7 +69,10 @@ export type RefreshNbaLinesResult = {
   unmatched: number;
   parsed: number;
   linesWritten: number;
+  linesRemoved: number;
   lineHistoryWritten: number;
+  scopesReconciled: number;
+  incompleteBookGroupsDropped: number;
   /** Canonical main-line snapshot used by dry-run board-impact audits. */
   canonicalLines: Array<{
     gameId: number;
@@ -214,6 +218,7 @@ function impliedProbability(american: number | null): number | null {
 }
 
 const NBA_GAME_MARKETS = ["moneyline", "point_spread", "total_points"] as const;
+const NBA_CURRENT_LINE_MARKETS = ["moneyline", "spread", "total"] as const;
 const MAX_PAGES_PER_NBA_GAME_MARKET = 25;
 
 type SharpEventRow = {
@@ -274,8 +279,9 @@ export async function fetchNbaCurrentOddsBoard(
       const url = `${SHARP_API_BASE}/odds?league=nba&market_type=${market}${eventQuery}&limit=100${cursorQuery}`;
       const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${apiKey}` } });
       if (!res.ok) {
-        log(`  ✗ /odds market=${market} event=${eventId ?? "all"} page=${page + 1} HTTP ${res.status}`);
-        break;
+        const message = `SharpAPI NBA /odds market=${market} event=${eventId ?? "all"} page=${page + 1} HTTP ${res.status}`;
+        log(`  ✗ ${message}`);
+        throw new Error(message);
       }
       const j = (await res.json()) as {
         data?: SharpOddsRow[];
@@ -352,18 +358,14 @@ function matchGame(
   return null;
 }
 
-export const __NBA_LINES_TEST__ = {
-  eventIdsForGames,
-  matchGame,
-  normalizeSide,
-};
+type NbaEventTarget = { eventId: string; gameId: number; distanceMs: number };
 
-function eventIdsForGames(
+function eventTargetsForGames(
   events: readonly SharpEventRow[],
   games: GameRow[],
   teamById: Map<number, TeamRow>,
-): string[] {
-  const ids = new Set<string>();
+): NbaEventTarget[] {
+  const closestByGame = new Map<number, NbaEventTarget>();
   for (const event of events) {
     const eventId = event.id ?? event.event_id;
     const home = event.home_team;
@@ -374,10 +376,70 @@ function eventIdsForGames(
     if (!game) continue;
     const distanceMs = Math.abs(Date.parse(startsAt) - Date.parse(game.game_date));
     if (!Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000) continue;
-    ids.add(eventId);
+    const previous = closestByGame.get(game.id);
+    if (previous === undefined || distanceMs < previous.distanceMs) {
+      closestByGame.set(game.id, { eventId, gameId: game.id, distanceMs });
+    }
   }
-  return [...ids].sort();
+  return [...closestByGame.values()].sort((left, right) => left.eventId.localeCompare(right.eventId));
 }
+
+function eventIdsForGames(
+  events: readonly SharpEventRow[],
+  games: GameRow[],
+  teamById: Map<number, TeamRow>,
+): string[] {
+  return eventTargetsForGames(events, games, teamById).map((target) => target.eventId);
+}
+
+function isCompleteExecutableBookPair(rows: readonly LineUpsertPayload[]): boolean {
+  if (rows.length !== 2 || rows.some((row) => row.odds_american === null)) return false;
+  const market = rows[0]?.market_type;
+  const bySide = new Map(rows.map((row) => [row.side, row]));
+  if (market === "moneyline") return bySide.has("home") && bySide.has("away");
+  if (market === "spread") {
+    const home = bySide.get("home")?.line_value;
+    const away = bySide.get("away")?.line_value;
+    return home !== null && home !== undefined && away !== null && away !== undefined && Math.abs(home + away) < 0.01;
+  }
+  if (market === "total") {
+    const over = bySide.get("over")?.line_value;
+    const under = bySide.get("under")?.line_value;
+    return over !== null && over !== undefined && under !== null && under !== undefined && Math.abs(over - under) < 0.01;
+  }
+  return false;
+}
+
+function selectCompleteExecutableBookPairs(payloads: readonly LineUpsertPayload[]): {
+  rows: LineUpsertPayload[];
+  incompleteGroups: number;
+} {
+  const byBookMarket = new Map<string, LineUpsertPayload[]>();
+  for (const row of payloads) {
+    const key = `${row.game_id}|${row.market_type}|${row.sportsbook}`;
+    const group = byBookMarket.get(key) ?? [];
+    group.push(row);
+    byBookMarket.set(key, group);
+  }
+  const rows: LineUpsertPayload[] = [];
+  let incompleteGroups = 0;
+  for (const group of byBookMarket.values()) {
+    if (!isCompleteExecutableBookPair(group)) {
+      incompleteGroups++;
+      continue;
+    }
+    rows.push(...group);
+  }
+  return { rows, incompleteGroups };
+}
+
+export const __NBA_LINES_TEST__ = {
+  eventIdsForGames,
+  eventTargetsForGames,
+  matchGame,
+  normalizeSide,
+  selectCompleteExecutableBookPairs,
+};
 
 function buildLinePayload(
   row: SharpOddsRow,
@@ -441,7 +503,10 @@ export async function refreshNbaLines(
       unmatched: 0,
       parsed: 0,
       linesWritten: 0,
+      linesRemoved: 0,
       lineHistoryWritten: 0,
+      scopesReconciled: 0,
+      incompleteBookGroupsDropped: 0,
       canonicalLines: [],
       errors,
     };
@@ -457,7 +522,13 @@ export async function refreshNbaLines(
   // identity plus team and start-time matching prevents future same-pair games
   // and thousands of alternate lines from exhausting global pagination.
   const events = await fetchNbaCurrentEvents(opts.sharpApiKey, log);
-  const eventIds = eventIdsForGames(events, games, teamById);
+  const eventTargets = eventTargetsForGames(events, games, teamById);
+  const eventIds = eventTargets.map((target) => target.eventId);
+  const reconciliationGameIds = new Set(eventTargets.map((target) => target.gameId));
+  if (eventTargets.length < games.length) {
+    const missing = games.length - eventTargets.length;
+    errors.push(`SharpAPI NBA event identity unavailable for ${missing} of ${games.length} scoped game(s); unmatched games preserved.`);
+  }
   log(`SharpAPI matched event ids: ${eventIds.length}`);
   const oddsRows = eventIds.length === 0
     ? []
@@ -543,7 +614,7 @@ export async function refreshNbaLines(
     const dNew = Math.abs((p.odds_american ?? -110) + 110);
     if (dNew < dExisting) dedupeByGroup.set(k, p);
   }
-  const dedupedPayloads: LineUpsertPayload[] = [...dedupeByGroup.values()].map(
+  const dedupedPayloadsBeforePairGate: LineUpsertPayload[] = [...dedupeByGroup.values()].map(
     (p) => {
       // Strip the tracking tag before write — schema doesn't have it.
       const rest = { ...p };
@@ -551,6 +622,8 @@ export async function refreshNbaLines(
       return rest;
     },
   );
+  const completeBoard = selectCompleteExecutableBookPairs(dedupedPayloadsBeforePairGate);
+  const dedupedPayloads = completeBoard.rows;
   const canonicalLines: RefreshNbaLinesResult["canonicalLines"] = dedupedPayloads.map((line) => ({
     gameId: line.game_id,
     marketType: line.market_type as "moneyline" | "spread" | "total",
@@ -565,7 +638,10 @@ export async function refreshNbaLines(
   );
 
   log(
-    `Dedupe per (game,market,side,sportsbook): kept ${dedupedPayloads.length} of ${payloads.length} parsed rows`,
+    `Dedupe per (game,market,side,sportsbook): kept ${dedupedPayloadsBeforePairGate.length} of ${payloads.length} parsed rows`,
+  );
+  log(
+    `Executable pair gate: kept ${dedupedPayloads.length} rows; dropped ${completeBoard.incompleteGroups} incomplete sportsbook group(s)`,
   );
 
   // 5. Dry-run path: log a sample and exit.
@@ -585,53 +661,109 @@ export async function refreshNbaLines(
       unmatched,
       parsed,
       linesWritten: 0,
+      linesRemoved: 0,
       lineHistoryWritten: 0,
+      scopesReconciled: reconciliationGameIds.size * NBA_GAME_MARKETS.length,
+      incompleteBookGroupsDropped: completeBoard.incompleteGroups,
       canonicalLines,
       errors,
     };
   }
 
-  // 6. Write path: delete then insert per (game_id, market_type, sportsbook).
+  // 6. Write path: reconcile one complete current game/market scope at a time.
+  // Insert the fresh provider snapshot first. Only after that succeeds do we
+  // remove the exact rows that existed before this cycle. This means a provider
+  // or insert failure preserves the last complete board, while a successful
+  // response removes books/sides that the provider no longer returns.
   log(`\nApplying ${dedupedPayloads.length} rows…`);
-  const groups = new Map<string, LineUpsertPayload[]>();
-  for (const p of dedupedPayloads) {
-    const k = `${p.game_id}|${p.market_type}|${p.sportsbook}`;
-    const arr = groups.get(k) ?? [];
-    arr.push(p);
-    groups.set(k, arr);
+  const candidateRowsByScope = new Map<string, LineUpsertPayload[]>();
+  const parsedRowsByScope = new Map<string, LineUpsertPayload[]>();
+  for (const row of dedupedPayloads) {
+    const key = `${row.game_id}|${row.market_type}`;
+    const rows = candidateRowsByScope.get(key) ?? [];
+    rows.push(row);
+    candidateRowsByScope.set(key, rows);
   }
+  for (const row of dedupedPayloadsBeforePairGate) {
+    const key = `${row.game_id}|${row.market_type}`;
+    const rows = parsedRowsByScope.get(key) ?? [];
+    rows.push(row);
+    parsedRowsByScope.set(key, rows);
+  }
+
   let linesWritten = 0;
-  for (const [key, group] of groups) {
-    const [gameIdStr, market, book] = key.split("|");
-    const gameId = Number.parseInt(gameIdStr, 10);
-    const { error: delErr } = await supabase
-      .from("lines")
-      .delete()
-      .eq("game_id", gameId)
-      .eq("market_type", market)
-      .eq("sportsbook", book)
-      .is("player_id", null);
-    if (delErr) {
-      const msg = `  ✗ delete existing ${key}: ${delErr.message}`;
-      log(msg);
-      errors.push(msg);
-      continue;
+  let linesRemoved = 0;
+  let scopesReconciled = 0;
+  const writtenPayloads: LineUpsertPayload[] = [];
+  for (const gameId of reconciliationGameIds) {
+    for (const market of NBA_CURRENT_LINE_MARKETS) {
+      const key = `${gameId}|${market}`;
+      const proposed = candidateRowsByScope.get(key) ?? [];
+      const parsedForScope = parsedRowsByScope.get(key) ?? [];
+
+      // Rows were present but no complete same-book pair survived. Treat this
+      // as malformed/partial evidence and preserve the prior board for retry.
+      if (parsedForScope.length > 0 && proposed.length === 0) {
+        const msg = `  ✗ preserve ${key}: provider rows contained no complete executable sportsbook pair`;
+        log(msg);
+        errors.push(msg);
+        continue;
+      }
+
+      const existingIds: number[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data: existing, error: readErr } = await supabase
+          .from("lines")
+          .select("id")
+          .eq("game_id", gameId)
+          .eq("market_type", market)
+          .is("player_id", null)
+          .range(from, from + 999);
+        if (readErr) {
+          const msg = `  ✗ read existing ${key}: ${readErr.message}`;
+          log(msg);
+          errors.push(msg);
+          existingIds.length = 0;
+          break;
+        }
+        const page = ((existing as unknown) ?? []) as Array<{ id: number }>;
+        existingIds.push(...page.map((row) => row.id));
+        if (page.length < 1000) break;
+      }
+      if (errors.at(-1)?.startsWith(`  ✗ read existing ${key}:`)) continue;
+
+      if (proposed.length > 0) {
+        const { error: insErr } = await supabase.from("lines").insert(proposed);
+        if (insErr) {
+          const msg = `  ✗ insert current scope ${key}: ${insErr.message}`;
+          log(msg);
+          errors.push(msg);
+          continue;
+        }
+        linesWritten += proposed.length;
+        writtenPayloads.push(...proposed);
+      }
+
+      let scopeDeleteFailed = false;
+      for (let index = 0; index < existingIds.length; index += 250) {
+        const ids = existingIds.slice(index, index + 250);
+        const { error: delErr } = await supabase.from("lines").delete().in("id", ids);
+        if (delErr) {
+          const msg = `  ✗ remove superseded ${key}: ${delErr.message}`;
+          log(msg);
+          errors.push(msg);
+          scopeDeleteFailed = true;
+          break;
+        }
+        linesRemoved += ids.length;
+      }
+      if (!scopeDeleteFailed) scopesReconciled++;
     }
-    const { error: insErr } = await supabase.from("lines").insert(group);
-    if (insErr) {
-      const msg = `  ✗ insert ${key}: ${insErr.message}`;
-      log(msg);
-      // Match pre-7K accounting: errors counter was incremented by
-      // group.length on insert failure (one error per row in the group).
-      for (let i = 0; i < group.length; i++) errors.push(msg);
-      continue;
-    }
-    linesWritten += group.length;
   }
 
   // 7. line_history append-only snapshot (Phase v0c-DE).
   const nowIso = new Date().toISOString();
-  const historyRows: LineHistoryPayload[] = dedupedPayloads.map((p) => ({
+  const historyRows: LineHistoryPayload[] = writtenPayloads.map((p) => ({
     game_id: p.game_id,
     market_type: p.market_type,
     player_id: null,
@@ -663,7 +795,10 @@ export async function refreshNbaLines(
     unmatched,
     parsed,
     linesWritten,
+    linesRemoved,
     lineHistoryWritten,
+    scopesReconciled,
+    incompleteBookGroupsDropped: completeBoard.incompleteGroups,
     canonicalLines,
     errors,
   };

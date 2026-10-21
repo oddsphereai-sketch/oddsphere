@@ -1,6 +1,6 @@
 import type { NflPlayerPropMarket, NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
 import type { NflPlayerPropsInferenceContext } from "./nflPlayerPropsInferenceContext";
-import type { DailyEdgeAvailabilityPlayer } from "../dailyEdge/gameAvailability";
+import type { DailyEdgeAvailabilityPlayer, DailyEdgeGameAvailability } from "../dailyEdge/gameAvailability";
 import type {
   NflPlayerPropsCurrentSeasonState,
   NflPlayerPropsCurrentSeasonStat,
@@ -369,7 +369,7 @@ export type NflPlayerPropsRuntimeFeatureRow = {
   } | null;
   availability: {
     listed: boolean; status: string | null; detail: string | null; reportedAt: string | null;
-    reportUpdatedAt: string | null; source: "ESPN" | "Playbook" | "BALLDONTLIE" | "Conference";
+    reportUpdatedAt: string | null; source: DailyEdgeGameAvailability["source"];
   };
   features: Record<string, number | null>;
   expectedRoleFeatures?: Record<string, number | null>;

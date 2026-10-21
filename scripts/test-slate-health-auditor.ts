@@ -76,6 +76,7 @@ test("legacy WC audit excludes reserved club-soccer IDs and retired tracking war
   const source = readFileSync("lib/services/audit/slateHealthAuditor.ts", "utf8");
   assert(source.includes('.lt("external_id", CLUB_SOCCER_EXTERNAL_ID_FLOOR)'), "club namespace filter missing");
   assert(!source.includes('check: "tracking_bridge_missing"'), "retired compatibility-route warning remains");
+  assert(source.includes('nba: ["moneyline", "spread", "total"]'), "NBA health audit must cover all officially tracked markets");
 });
 
 console.log("─".repeat(60));

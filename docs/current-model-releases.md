@@ -4,9 +4,19 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-20
+Last reviewed: 2026-10-21
 
 ## Cross-sport confidence / execution contract
+
+- October 21 complete-health certification contract:
+  `daily_edge_complete_health_contract_2026_10_21_r1_all_active_models`
+  gives MLB, WNBA, NBA, NFL, CFB, NHL, and soccer one required evidence
+  vocabulary while preserving each sport's own qualified market reader. The
+  all-model database audit now includes NFL/CFB and uses their weekly board
+  window. Missing prices, source credentials, or reader dimensions are red;
+  no absent split or market signal is inferred. This is monitoring only and
+  changes no model or member output. Evidence:
+  `docs/model-audits/2026-10-21-daily-edge-complete-health-contract.md`.
 
 - October 20 MLB/NHL rollover continuity advances the operational schedule
   releases to
@@ -500,6 +510,20 @@ Last reviewed: 2026-10-20
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+- October 21 national injury fallback: the future-unlocked CFB collector and
+  sole writer advance to
+  `cfb_forward_evidence_collector_2026_10_21_r62_national_injury_fallback` /
+  `cfb_forward_evidence_writer_2026_10_21_r133_national_injury_fallback`.
+  Exact official-conference reports remain first authority; a credentialed
+  national SportsDataIO team catalog plus injured-player wire fills only games
+  whose two scheduled teams match uniquely. Provider absence, failure, or an
+  unmatched team is never medical clearance. This source is panel-only and
+  cannot change projections, probabilities, market reading, sides, grades,
+  stakes, promotions, or demotions. Production certification requires
+  `SPORTSDATAIO_CFB_API_KEY` and a credential-backed post-deploy coverage read.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-21-cfb-national-injury-fallback.md`.
 
 - October 20 midweek availability and FCS continuity repair: the active
   collector/writer advance to
@@ -2003,6 +2027,16 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
   `verify:model-change` gate. Existing locked rows remain immutable. Evidence
   and rollback:
   `docs/model-audits/2026-10-20-nfl-player-props-observed-scheduler-jitter.md`.
+- October 21 exact T-60 close recovery: sole writer / tracking advance to
+  `nfl_player_props_writer_2026_10_21_r59_exact_t60_close_recovery` /
+  `nfl_player_props_tracking_2026_10_21_r33_exact_t60_close_recovery`.
+  The unchanged append-only market observer is stored before settlement and
+  may fill only null close metadata when game, player, market, canonical line,
+  side, sportsbook, and decision release match exactly. It cannot change any
+  locked decision field or result. A production read found 42 missing closes:
+  two have exact stored T-60 tuples; 40 remain unrecoverable without
+  fabrication. Evidence and rollback:
+  `docs/model-audits/2026-10-21-nfl-player-props-exact-close-recovery.md`.
 - October 20 sharp-reference cadence alignment: the sole writer advances to
   `nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture`. A
   zero-write Week 7 audit found that production retained 59 qualified
@@ -3583,10 +3617,12 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_20_r11_heavy_tail_margin_calibration`
-- Market marriage: `nba_market_marriage_2026_10_21_r14_bounded_high_water_market_evidence`
+- Model / prediction record: `nba_professional_unified_2026_10_21_r15_moneyline_evidence_grade`
+- Market marriage: `nba_market_marriage_2026_10_21_r17_moneyline_evidence_grade`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
+- Grade policy: `nba_grade_policy_2026_10_21_r9_moneyline_evidence_guard`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry`
+- Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
@@ -3603,6 +3639,65 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 21 r15/r17/r9 grade-integrity release separates model value versus the current no-vig
+price from actual qualified market movement. Direct Moneyline movement remains observational and
+cannot change a score, winner, probability, or price. The established two-point qualified Spread
+correction remains the only reader path that can change the NBA winner. For Moneyline grading, a
+qualified opposite-side direct read—or, when that read is unavailable, a qualified opposite-side
+Spread observation—now keeps an otherwise eligible play at Lean instead of Best Angle. A matching
+reader can confirm an existing Best Angle but cannot lower any confidence, edge, exact-price EV,
+quality, or injury gate. Public splits remain context-only. On the same October 21 board, Milwaukee
+retains Best Angle, Charlotte retains the same side/score/probability/price but moves Best Angle to
+Lean, Memphis retains its validated Spread-authored flip and Lean, total actionables remain unchanged,
+and no new Best Angle is created. Existing locked payloads retain exact stored precedence. Evidence:
+`docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-result.md`.
+
+The October 21 r12/r15/r6 current-execution release, paired with r10 line refresh,
+reconciles every successful provider game/market response as the authoritative
+current board. Newly received complete same-book pairs are inserted before the
+exact prior scope is removed, so a failed request or insert preserves the prior
+complete board while a successful response removes books/sides the provider no
+longer returns. The reader additionally collapses the board to the newest
+sportsbook/market/side quote and rejects a book side that trails the freshest
+quote for that game and market by more than 120 minutes. Consensus,
+target-book exclusion, exact-price grade economics, member display, and future
+tracking therefore consume one coherent current board. On the exact 11-game / 33-market
+October 21 rehearsal, all scores, sides, probabilities, grades, five actionables,
+and four market-reader flips remain unchanged; selected prices older than 180
+minutes fall from ten to zero. CHA-BKN Moneyline remains BKN Lean but advances
+from stale October 17 SX Bet +112 to current Hard Rock +110. Future production
+snapshots also stop computing or persisting the rejected zero-authority
+independent-score shadow; its offline audit remains reproducible. Existing r11
+locks retain exact stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-current-execution-quote-coherence-r12.md`.
+
+The October 21 combined r14/r16/r8 release keeps every r12 score, side,
+probability, selected price, reader rule, and market threshold unchanged while
+repairing the model-quality input gate for four stored/provider abbreviation
+pairs: `GS`/`GSW`, `WSH`/`WAS`, `UTAH`/`UTA`, and `NO`/`NOP`. The daily full
+writer performs one bounded prior-season recovery when any of the 30 current
+teams lacks its opening-month regular-season pack and skips that provider work
+after coverage is complete. Exact ESPN player identity, position, status,
+injury type, report time, and expected return are retained and displayed for
+unlocked cards; absence counts no longer impose the legacy generic confidence
+cap. Missing reports still fail closed through the existing data-quality tier.
+No fixed player points, automatic score adjustment, forced side, or new market
+authority is added. The current target-book-excluded professional reader remains
+the only validated path that may alter the coherent score.
+
+The strict same-input 11-game / 33-market rehearsal has 11/11 verified two-team
+reports and 62 player rows. Fallback games move four to zero; scores, sides,
+probabilities, and prices change zero times. Grades change four times: MIL
+Moneyline Watchlist to Best Angle and MEM Moneyline Watchlist to Lean promote;
+CHA Moneyline moves Lean to Best Angle within the actionable board; HOU
+Moneyline at -365 moves Lean to Watchlist because its 78.28% model probability
+does not clear positive expected return at that exact price. Actionables move
+6 to 7 with two promotions, one demotion, and zero negative-model-EV actions.
+Intraday cadence, writer, lease, tracking boundary, and locked payloads remain
+unchanged. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-team-rating-identity-recovery-r13.md` and
+`docs/model-audits/2026-10-21-nba-rating-availability-r14-result.md`.
 
 The October 20 r2 complete-card lock repair leaves the r11 forecast and the existing
 three-market T-60 writer unchanged. It overlays only the authoritative column
@@ -3681,14 +3776,15 @@ unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-20-nba-extreme-margin-calibration-predeclaration.md`
 and `docs/model-audits/2026-10-20-nba-heavy-tail-margin-calibration-r11-result.md`.
 
-The October 20 prospective independent-score shadow is
+The retired October 20 prospective independent-score audit is
 `nba_independent_score_shadow_2026_10_20_r1_rating_30_total_20`. It records the frozen 30% adjusted-
-rating margin / 20% adjusted-rating Total challenger and a separately target-excluded pass through the
-same r6 professional reader inside future unlocked NBA grounding snapshots. It has zero production
-authority and changes no score, pick, probability, grade, stake, promotion, demotion, writer, lease,
+rating margin / 20% adjusted-rating Total challenger in reproducible offline evidence only. The r12
+current-execution release removed its runtime derivation and persisted field from future unlocked
+grounding snapshots in accordance with the no-production-shadow rule. It never had production
+authority and changed no score, pick, probability, grade, stake, promotion, demotion, writer, lease,
 cadence, lock, tracking row, or member output. The candidate improved all six broad 2025 confirmation
 diagnostics but failed its original candidate-defined close-game gate, so only prospective release-pure
-evidence can authorize a later promotion. Evidence and rollback:
+evidence from a separately approved future candidate could authorize promotion. Evidence:
 `docs/model-audits/2026-10-20-nba-independent-score-prospective-shadow.md` and
 `docs/model-audits/2026-10-20-nba-independent-ensemble-shadow-result.md`.
 
@@ -3782,11 +3878,12 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
+  - Current-day seed, rating, and line defects still block the member snapshot. Future-window quote defects remain visible as a partial run and retry normally, but no longer suppress an otherwise complete current slate.
 - Canonical NBA split/price evidence cadence: every 15 minutes during `0-3` and `11-23` UTC, plus an hourly `20 4-10 * * *` continuity run. The October 21 continuity repair closes the prior 03:45-11:00 UTC collection blackout, during which the authoritative NBA line writer remained healthy but the professional reader correctly rejected its separate canonical evidence as more than 120 minutes old. The additional run uses the existing leased collector, source contracts, and reader semantics; it does not weaken freshness, add a writer, or mutate locked records.
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
 - NBA member-board eligibility: `nba_member_board_window_2026_10_16_r3_rolling_analysis`; every officially tracked regular-season date in the active seven-day window is analyzed, while preseason/offseason and dates beyond the bounded window remain ineligible. This reader eligibility does not create an official record before the existing T-60 lock lifecycle.

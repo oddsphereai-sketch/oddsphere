@@ -404,6 +404,8 @@ function buildMl(
   consensus: NbaMarketConsensus,
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
+  enforcePositiveModelEv: boolean,
+  enforceMoneylineEvidenceGuard: boolean,
 ): MarketIntelligence {
   const pickSide = prediction.predicted_ml_winner;
   const pickLabel =
@@ -457,6 +459,10 @@ function buildMl(
       snapshot.data_quality.home_injuries_known && snapshot.data_quality.away_injuries_known,
     market: "moneyline",
     currentPriceAmerican: pickOdds,
+    modelProbabilityOnPick: modelProbOnPick,
+    moneylineEvidence: prediction.audit.professional_grade_context?.moneyline,
+    enforceMoneylineEvidenceGuard,
+    enforcePositiveModelEv,
   });
 
   const opp = findOppFor(opps, "moneyline", pickSide, null);
@@ -527,6 +533,7 @@ function buildSpread(
   consensus: NbaMarketConsensus,
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
+  enforcePositiveModelEv: boolean,
 ): MarketIntelligence {
   const lineHomeFromMarket = consensus.spreadHome;
   const exact = exactLineProbability({ prediction, spreadHome: lineHomeFromMarket, total: null });
@@ -602,6 +609,8 @@ function buildSpread(
     readerCorrectionApplied: prediction.audit.professional_grade_context?.spread.correctionApplied ?? false,
     readerMagnitudePoints: prediction.audit.professional_grade_context?.spread.magnitudePoints ?? null,
     currentPriceAmerican: pickOdds,
+    modelProbabilityOnPick: modelProb,
+    enforcePositiveModelEv,
   });
 
   const opp = findOppFor(opps, "spread", pickSide, pickLine);
@@ -680,6 +689,7 @@ function buildTotal(
   consensus: NbaMarketConsensus,
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
+  enforcePositiveModelEv: boolean,
 ): MarketIntelligence {
   const line = consensus.totalLine;
   const exact = exactLineProbability({ prediction, spreadHome: null, total: line });
@@ -733,6 +743,8 @@ function buildTotal(
     readerCorrectionApplied: prediction.audit.professional_grade_context?.total.correctionApplied ?? false,
     readerMagnitudePoints: prediction.audit.professional_grade_context?.total.magnitudePoints ?? null,
     currentPriceAmerican: pickOdds,
+    modelProbabilityOnPick: modelProb,
+    enforcePositiveModelEv,
   });
 
   const opp = findOppFor(opps, "total", pickSide, line);
@@ -807,6 +819,10 @@ export function buildNbaGameIntelligence(opts: {
   splitsRow: NbaSplitsRow | null;
   opportunities: NbaOpportunity[];
   injuriesSource: "espn" | "none";
+  /** Same-input audit hook; production uses the coherent exact-price gate. */
+  enforcePositiveModelEv?: boolean;
+  /** Same-input audit hook for the superseded Moneyline Best Angle path. */
+  enforceMoneylineEvidenceGuard?: boolean;
 }): NbaGameIntelligence {
   const consensus = buildNbaMarketConsensus(opts.lines
     .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
@@ -817,9 +833,20 @@ export function buildNbaGameIntelligence(opts: {
       line_value: line.line_value,
       odds_american: line.odds_american,
     })));
-  const ml = buildMl(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities);
-  const spread = buildSpread(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities);
-  const total = buildTotal(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities);
+  const enforcePositiveModelEv = opts.enforcePositiveModelEv ?? true;
+  const enforceMoneylineEvidenceGuard = opts.enforceMoneylineEvidenceGuard ?? true;
+  const ml = buildMl(
+    opts.snapshot,
+    opts.prediction,
+    opts.lines,
+    consensus,
+    opts.splitsRow,
+    opts.opportunities,
+    enforcePositiveModelEv,
+    enforceMoneylineEvidenceGuard,
+  );
+  const spread = buildSpread(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv);
+  const total = buildTotal(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv);
 
   const books = uniqueBooks(opts.lines);
   const sources: SourceBadges = {

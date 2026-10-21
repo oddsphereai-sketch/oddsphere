@@ -4,7 +4,7 @@
 
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
-import { readCfbForwardEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
+import { readCfbForwardMarketHistory } from "../../lib/services/football/cfbForwardEvidenceStore";
 import { readCfbForwardMemberSnapshot } from "../../lib/services/football/cfbForwardMemberSnapshotStore";
 import type { NcaafBookOdds } from "../../lib/services/football/balldontlieNcaafSlate";
 import type { CfbMemberFixture } from "../../lib/services/football/cfbMemberFixture";
@@ -28,11 +28,18 @@ async function main(): Promise<void> {
   if (!url || !key) throw new Error("Supabase read credentials are required.");
   const client = createClient(url, key, { auth: { persistSession: false } });
   const now = process.argv.find((value) => value.startsWith("--now="))?.slice(6) ?? new Date().toISOString();
-  const [snapshot, evidence] = await Promise.all([
-    readCfbForwardMemberSnapshot({ client, season: 2026, now }),
-    readCfbForwardEvidence({ client, season: 2026 }),
-  ]);
+  const snapshot = await readCfbForwardMemberSnapshot({ client, season: 2026, now });
   if (!snapshot) throw new Error("Current CFB member snapshot is unavailable.");
+  const providerGameIds = snapshot.fixture.snapshot.games.map((game) => String(game.id).replace(/^cfb-/, ""));
+  // This audit needs only the market chronology for games on the current
+  // member board. The compact history reader projects those fields in bounded
+  // game batches; loading every full-season forecast payload is both wasteful
+  // and unreliable once the append-only evidence table grows.
+  const evidence = await readCfbForwardMarketHistory({
+    client,
+    season: 2026,
+    providerGameIds,
+  });
   const rows = snapshot.fixture.snapshot.games.flatMap((game) => MARKETS.flatMap((market) => {
     const dto = marketDto(game, market);
     if (dto.currentPriceAmerican !== null) return [];
@@ -61,7 +68,7 @@ async function main(): Promise<void> {
   }));
   const upcoming = rows.filter((row) => Date.parse(row.startsAt ?? "") > Date.parse(now));
   console.log(JSON.stringify({
-    release: "cfb_missing_price_continuity_select_audit_2026_09_26_r1",
+    release: "cfb_missing_price_continuity_select_audit_2026_10_21_r2_compact_market_history",
     readOnly: true,
     writes: 0,
     providerCalls: 0,

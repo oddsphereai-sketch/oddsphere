@@ -30,6 +30,10 @@ const lockedMemberSnapshot = readFileSync(
   new URL("../lib/services/nba/nbaLockedMemberSnapshot.ts", import.meta.url),
   "utf8",
 );
+const reader = readFileSync(
+  new URL("../app/lab/components/daily-edge/DailyEdgeShell.tsx", import.meta.url),
+  "utf8",
+);
 
 for (const required of [
   "loadNbaProfessionalCurrentState",
@@ -61,6 +65,13 @@ assert.match(
   /loadCompleteCurrentGameLines\([\s\S]*context:\s*"buildNbaFeatureSnapshots"/,
   "NBA feature snapshots must read every current line past the PostgREST 1,000-row boundary",
 );
+assert.match(pipeline, /selectNbaCurrentLineBoard/);
+assert.match(featureSnapshot, /selectNbaCurrentLineBoard/);
+assert.doesNotMatch(
+  pipeline,
+  /independent_score_shadow|buildNbaIndependentScoreShadow/,
+  "NBA production snapshots must not compute or persist a shadow model",
+);
 assert.match(writer, /\["moneyline", "spread", "total"\]/);
 assert.match(lockedMemberSnapshot, /nba_game_dto_at_capture/);
 assert.match(lockedMemberSnapshot, /nba_daily_edge_game_at_capture/);
@@ -74,6 +85,10 @@ assert.match(adapter, /lockedAt: game\.locked_at \?\? null/);
 assert.match(adapter, /scheduledLockAt: computeLocksAt\(game\.tip_iso_utc\)/);
 assert.match(adapter, /lockedMemberGamesByExternalId/);
 assert.match(adapter, /if \(lockedMemberGame !== undefined\) return lockedMemberGame/);
+assert.match(adapter, /nbaAvailability:[\s\S]*away_players[\s\S]*home_players/);
+assert.match(reader, /function NbaAvailabilityPanel/);
+assert.match(reader, /Verified Availability/);
+assert.match(reader, /sourcePlayerId \?\? player\.name/);
 assert.match(snapshotWriter, /applyNbaPublishedLockMetadata/);
 assert.match(snapshotWriter, /payloadVersion: NBA_MEMBER_LOCK_PUBLICATION_RELEASE/);
 

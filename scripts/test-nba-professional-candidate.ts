@@ -212,6 +212,13 @@ const snapshot: NbaGameSnapshot = {
 };
 const baseline = runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 2 });
 const applied = applyNbaProfessionalCandidate({ baseline, candidate: result });
+assert.deepEqual(applied.audit.professional_grade_context?.moneyline, {
+  directReadQualified: false,
+  directReadSide: null,
+  spreadReadQualified: true,
+  spreadReadSide: "home",
+  spreadCorrectionApplied: true,
+});
 const intelligence = buildNbaGameIntelligence({
   snapshot,
   prediction: applied,
@@ -231,6 +238,53 @@ assert.equal(intelligence.total.current_price.odds_american, -110);
 assert.notEqual(intelligence.ml.grade, "held");
 assert.notEqual(intelligence.spread.grade, "held");
 assert.notEqual(intelligence.total.grade, "held");
+
+const injuredSnapshot: NbaGameSnapshot = {
+  ...snapshot,
+  home_injuries: [{ player_id: null, name: "Verified Player", status: "out" }],
+};
+const injuredBaseline = runNbaAutoModelV2(injuredSnapshot, "t60_locked", { bookCount: 10 });
+const legacyCapApplied = applyNbaProfessionalCandidate({
+  baseline: injuredBaseline,
+  candidate: result,
+  retainLegacyInjuryCap: true,
+});
+const contextualAvailabilityApplied = applyNbaProfessionalCandidate({
+  baseline: injuredBaseline,
+  candidate: result,
+});
+assert.ok(
+  legacyCapApplied.v1_breakdown.applied_caps.some((entry) => entry.source === "injury"),
+  "same-input legacy audit retains the superseded count-only injury cap",
+);
+assert.ok(
+  !contextualAvailabilityApplied.v1_breakdown.applied_caps.some((entry) => entry.source === "injury"),
+  "professional runtime removes only the count-only injury cap",
+);
+assert.equal(contextualAvailabilityApplied.v1_breakdown.injury_review.confidence_cap, null);
+assert.deepEqual(
+  {
+    home: contextualAvailabilityApplied.predicted_home_score,
+    away: contextualAvailabilityApplied.predicted_away_score,
+    probabilities: contextualAvailabilityApplied.v1_probabilities,
+    picks: {
+      ml: contextualAvailabilityApplied.predicted_ml_winner,
+      spread: contextualAvailabilityApplied.predicted_spread_side,
+      total: contextualAvailabilityApplied.predicted_total_side,
+    },
+  },
+  {
+    home: legacyCapApplied.predicted_home_score,
+    away: legacyCapApplied.predicted_away_score,
+    probabilities: legacyCapApplied.v1_probabilities,
+    picks: {
+      ml: legacyCapApplied.predicted_ml_winner,
+      spread: legacyCapApplied.predicted_spread_side,
+      total: legacyCapApplied.predicted_total_side,
+    },
+  },
+  "availability policy cannot mechanically change score, probabilities, or sides",
+);
 
 const mixtureArtifact: NbaPortableModelArtifact = {
   ...artifact,

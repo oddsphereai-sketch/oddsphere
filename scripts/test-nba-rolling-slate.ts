@@ -71,10 +71,15 @@ const cronSource = readFileSync(
   "utf8",
 );
 assert.match(cronSource, /nbaScheduleSeedDates\(etDateDashed, intraday\)/);
-assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board/);
+assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry/);
+assert.match(cronSource, /lineTotals\.linesRemoved/);
+assert.match(cronSource, /NBA line refresh partial/);
 assert.match(cronSource, /loadNbaRollingSchedule\(etDateDashed\)/);
 assert.match(cronSource, /sort\(\)\.slice\(0, 2\)/);
 assert.match(cronSource, /nba_daily_refresh_rolling_board/);
+assert.match(cronSource, /snapshotBlockers\.length > 0/);
+assert.match(cronSource, /futureWindowPartial: partial && snapshotBlockers\.length === 0/);
+assert.match(cronSource, /current_lines_errors/);
 assert.match(cronSource, /leaseGroup:\s*"prediction_pipeline"/);
 assert.match(cronSource, /requireLease:\s*true/);
 

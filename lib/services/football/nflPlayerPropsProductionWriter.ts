@@ -28,7 +28,11 @@ import {
   type NflPlayerPropsProductionSnapshot,
 } from "./nflPlayerPropsProductionContract";
 import { readNflPlayerPropsSnapshot, writeNflPlayerPropsSnapshot } from "./nflPlayerPropsSnapshotStore";
-import { updateNflPlayerPropsClosingPrices, writeLockedNflPlayerPropsTracking } from "./nflPlayerPropsTrackingStore";
+import {
+  updateNflPlayerPropsClosingPrices,
+  updateNflPlayerPropsClosingPricesFromObserver,
+  writeLockedNflPlayerPropsTracking,
+} from "./nflPlayerPropsTrackingStore";
 import {
   NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM,
   NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM,
@@ -51,6 +55,7 @@ import {
 import {
   captureNflPlayerPropsMarketObserver,
   captureNflPlayerPropsMarketObserverSafely,
+  readNflPlayerPropsMarketObserverHistory,
   type NflPlayerPropsMarketObserverSafeResult,
 } from "./nflPlayerPropsMarketObserverStore";
 import {
@@ -64,7 +69,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture" as const;
+  "nfl_player_props_writer_2026_10_21_r59_exact_t60_close_recovery" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -163,6 +168,8 @@ export type NflPlayerPropsWriterResult = {
   heldDiagnostics: number;
   trackingRows: number;
   closingPricesUpdated: number;
+  observerClosingPricesUpdated: number;
+  observerClosingPriceError: string | null;
   settlementEligibleGames: number;
   settlementProcessedGames: number;
   settlementDeferredGames: number;
@@ -402,6 +409,8 @@ export async function runNflPlayerPropsProductionWriter(args: {
     ? compareNflPlayerPropsCandidateImpact(previous, snapshot)
     : undefined;
   let closingPricesUpdated = 0;
+  let observerClosingPricesUpdated = 0;
+  let observerClosingPriceError: string | null = null;
   let referenceOfferCacheError: string | null = null;
   if (args.apply) {
     await writeNflPlayerPropsCurrentSeasonState({ client: args.client, state: currentSeason.state });
@@ -422,15 +431,9 @@ export async function runNflPlayerPropsProductionWriter(args: {
       }
     }
   }
-  // Closing price must attach while a locked record is still pending. Running
-  // settlement first made same-cycle finals permanently miss CLV because the
-  // closing update intentionally refuses to rewrite a settled result.
-  const settlement = args.apply
-    ? await settleNflPlayerPropsRecords({ client: args.client, apiKey: args.ballDontLieApiKey, now: args.now, fetchImpl: args.fetchImpl })
-    : { pending: 0, eligible: 0, eligibleGames: 0, processedGames: 0, deferredGames: 0, recordReadLimitReached: false, settled: 0, apiCalls: 0 };
-  // Research captures are deliberately after production and failure-isolated. The authoritative
-  // member snapshot, immutable lock/tracking rows, closing prices, and
-  // settlement have all completed before this internal research write runs.
+  // Capture the immutable exact T-60 tuple before settlement, then use that
+  // same stored row to fill only absent closing metadata. The locked pick,
+  // line, probability, grade, stake, and result remain untouched.
   const marketObserverCapture = args.apply
     ? await captureNflPlayerPropsMarketObserverSafely(() => captureNflPlayerPropsMarketObserver({
       client: args.client,
@@ -441,6 +444,20 @@ export async function runNflPlayerPropsProductionWriter(args: {
       writerRelease: NFL_PLAYER_PROPS_WRITER_RELEASE,
     }))
     : null;
+  if (args.apply) {
+    try {
+      const history = await readNflPlayerPropsMarketObserverHistory({ client: args.client, season: args.season, week: args.week });
+      observerClosingPricesUpdated = await updateNflPlayerPropsClosingPricesFromObserver({
+        client: args.client,
+        rows: history?.rows ?? [],
+      });
+    } catch (error) {
+      observerClosingPriceError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  const settlement = args.apply
+    ? await settleNflPlayerPropsRecords({ client: args.client, apiKey: args.ballDontLieApiKey, now: args.now, fetchImpl: args.fetchImpl })
+    : { pending: 0, eligible: 0, eligibleGames: 0, processedGames: 0, deferredGames: 0, recordReadLimitReached: false, settled: 0, apiCalls: 0 };
   // The private diagnostic archive is also last and failure-isolated. It
   // records every already-locked decision, including No Plays and alternate
   // lines, without changing the public board or the official actionable ledger.
@@ -501,6 +518,8 @@ export async function runNflPlayerPropsProductionWriter(args: {
     heldDiagnostics: snapshot.board.counts.Held,
     trackingRows: buildNflPlayerPropsTrackingRows(snapshot).length,
     closingPricesUpdated,
+    observerClosingPricesUpdated,
+    observerClosingPriceError,
     settlementEligibleGames: settlement.eligibleGames,
     settlementProcessedGames: settlement.processedGames,
     settlementDeferredGames: settlement.deferredGames,
@@ -517,6 +536,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
       ...(settlement.deferredGames > 0 ? [`NFL_PLAYER_PROPS_SETTLEMENT_GAMES_DEFERRED:${settlement.deferredGames}`] : []),
       ...(settlement.recordReadLimitReached ? ["NFL_PLAYER_PROPS_SETTLEMENT_RECORD_READ_LIMIT_REACHED"] : []),
       ...(marketObserverCapture?.error ? ["NFL_PLAYER_PROPS_MARKET_OBSERVER_CAPTURE_FAILED"] : []),
+      ...(observerClosingPriceError ? ["NFL_PLAYER_PROPS_OBSERVER_CLOSING_PRICE_RECOVERY_FAILED"] : []),
       ...(privateTrackingCapture?.error ? ["NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED"] : []),
       ...(referenceOfferCacheError ? ["NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"] : []),
       ...(!sourceAwareReferenceOffersAvailable ? ["NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"] : []),

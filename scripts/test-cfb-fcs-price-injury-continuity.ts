@@ -139,6 +139,38 @@ const retained = buildCfbGameAvailability({
 });
 assert.equal(retained?.source, "Conference");
 
+const nationalFallback = buildCfbGameAvailability({
+  game,
+  capturedAt: "2026-10-07T23:30:00.000Z",
+  playbookRows: [],
+  conferenceReport: null,
+  nationalReport: {
+    eventId: game.providerGameId,
+    awayTeam: game.away.abbreviation,
+    homeTeam: game.home.abbreviation,
+    source: "SportsDataIO",
+    sourceLabel: "National college football injury wire",
+    sourceUrl: null,
+    reportUpdatedAt: "2026-10-07T23:20:00.000Z",
+    teams: [
+      { abbreviation: game.away.abbreviation, teamName: game.away.name, players: [] },
+      { abbreviation: game.home.abbreviation, teamName: game.home.name, players: [] },
+    ],
+  },
+  previous: null,
+});
+assert.equal(nationalFallback?.source, "SportsDataIO", "a verified national exact-game report fills an absent conference report");
+
+const conferencePrecedence = buildCfbGameAvailability({
+  game,
+  capturedAt: "2026-10-07T23:30:00.000Z",
+  playbookRows: [],
+  conferenceReport: official[game.providerGameId],
+  nationalReport: nationalFallback,
+  previous: null,
+});
+assert.equal(conferencePrecedence?.source, "Conference", "official exact-game conference evidence retains authority over the national fallback");
+
 const playbook = buildCfbGameAvailability({
   game,
   capturedAt: "2026-10-07T23:30:00.000Z",

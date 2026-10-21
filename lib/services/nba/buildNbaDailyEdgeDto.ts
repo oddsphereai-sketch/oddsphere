@@ -97,6 +97,8 @@ function injurySummary(snapshot: NbaGameSnapshot): {
   away_unknown: number;
   home_known: boolean;
   away_known: boolean;
+  home_players: NbaGameSnapshot["home_injuries"];
+  away_players: NbaGameSnapshot["away_injuries"];
 } {
   return {
     home_out: snapshot.home_injuries.filter((i) => i.status === "out").length,
@@ -107,6 +109,8 @@ function injurySummary(snapshot: NbaGameSnapshot): {
     away_unknown: snapshot.away_injuries.filter((i) => i.status === "unknown").length,
     home_known: snapshot.data_quality.home_injuries_known,
     away_known: snapshot.data_quality.away_injuries_known,
+    home_players: snapshot.home_injuries,
+    away_players: snapshot.away_injuries,
   };
 }
 
@@ -124,12 +128,18 @@ function composeQuickRead(intel: NbaGameIntelligence, snapshot: NbaGameSnapshot)
   }
   const m =
     top === "moneyline" ? intel.ml : top === "spread" ? intel.spread : intel.total;
+  const marketContext =
+    m.conflict_band === "support" ? "model value vs. price" :
+    m.conflict_band === "neutral" ? "model and price aligned" :
+    m.conflict_band === "mild_conflict" ? "price slightly ahead of model" :
+    m.conflict_band === "strong_conflict" ? "price well ahead of model" :
+    "market unavailable";
   const grade = m.grade;
   switch (grade) {
     case "best_angle":
-      return `${matchup} — Best Angle on ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, market ${m.conflict_band.replace("_", " ")}).`;
+      return `${matchup} — Best Angle on ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, ${marketContext}).`;
     case "lean":
-      return `${matchup} — Lean ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, market ${m.conflict_band.replace("_", " ")}).`;
+      return `${matchup} — Lean ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, ${marketContext}).`;
     case "watch":
       return `${matchup} — Watchlist on ${m.pick_label}. ${m.rationale[0] ?? ""}`.trim();
     case "caution":
@@ -266,6 +276,10 @@ export function buildNbaDailyEdgeGameDto(opts: {
   splitsRow: NbaSplitsRow | null;
   opportunities: NbaOpportunity[];
   spreadReaderStats?: NbaSpreadReaderStats;
+  /** Same-input audit hook for the superseded exact-price grade path. */
+  retainLegacyGradeEconomics?: boolean;
+  /** Same-input audit hook for the superseded Moneyline Best Angle path. */
+  retainLegacyMoneylineEvidenceGrade?: boolean;
 }): NbaDailyEdgeGameDto {
   const intel = buildNbaGameIntelligence({
     snapshot: opts.snapshot,
@@ -274,6 +288,8 @@ export function buildNbaDailyEdgeGameDto(opts: {
     splitsRow: opts.splitsRow,
     opportunities: opts.opportunities,
     injuriesSource: opts.provenance.injuries_source,
+    enforcePositiveModelEv: opts.retainLegacyGradeEconomics !== true,
+    enforceMoneylineEvidenceGuard: opts.retainLegacyMoneylineEvidenceGrade !== true,
   });
 
   return {

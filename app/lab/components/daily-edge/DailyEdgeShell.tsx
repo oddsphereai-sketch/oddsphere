@@ -2115,6 +2115,62 @@ function CleanColHead({ tone, label }: { tone: "emerald" | "violet" | "sky"; lab
   );
 }
 
+function NbaAvailabilityPanel({ game }: { game: DailyEdgeGameDto }) {
+  const availability = game.nbaAvailability;
+  if (game.sport !== "nba" || availability == null) return null;
+  const teams = [availability.away, availability.home];
+  const statusTone = (status: (typeof availability.away.players)[number]["status"]): string => {
+    if (status === "out") return "text-rose-300 border-rose-400/25 bg-rose-400/[0.07]";
+    if (status === "questionable" || status === "unknown") return "text-amber-200 border-amber-400/25 bg-amber-400/[0.07]";
+    return "text-emerald-200 border-emerald-400/20 bg-emerald-400/[0.06]";
+  };
+  return (
+    <section className="mt-4 border-t border-white/[0.06] pt-4" aria-label="NBA availability report">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-[10px] uppercase tracking-[0.16em] font-bold text-gray-300">Verified Availability</p>
+        <span className="text-[9px] uppercase tracking-[0.14em] font-semibold text-gray-500">{availability.source} · exact matchup</span>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {teams.map((team) => (
+          <div key={team.team} className="rounded-lg border border-white/[0.06] bg-white/[0.018] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-black tracking-[0.08em] text-gray-200">{team.team}</span>
+              <span className={`text-[9px] uppercase tracking-[0.12em] font-bold ${team.known ? "text-emerald-300" : "text-amber-300"}`}>
+                {team.known ? "Report verified" : "Report unavailable"}
+              </span>
+            </div>
+            {!team.known ? (
+              <p className="text-[11px] text-gray-500">No exact-game team report was returned.</p>
+            ) : team.players.length === 0 ? (
+              <p className="text-[11px] text-gray-400">No players listed on the verified report.</p>
+            ) : (
+              <div className="space-y-2">
+                {team.players.map((player) => (
+                  <div key={`${player.sourcePlayerId ?? player.name}-${player.status}`} className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[11.5px] font-semibold text-gray-200">
+                        {player.name}{player.position ? <span className="ml-1.5 text-[9px] font-bold text-gray-600">{player.position}</span> : null}
+                      </p>
+                      <p className="mt-0.5 text-[9.5px] leading-snug text-gray-500">
+                        {player.injuryType ?? "Injury detail unavailable"}
+                        {player.reportedAt ? <> · reported <LocalTime value={player.reportedAt} style="date-time" /></> : null}
+                        {player.expectedReturnAt ? <> · expected return <LocalTime value={player.expectedReturnAt} style="date-time" /></> : null}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 rounded border px-2 py-0.5 text-[8.5px] uppercase tracking-[0.12em] font-black ${statusTone(player.status)}`}>
+                      {player.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** The clean 3-column expanded read (gated behind ?reader=clean). */
 function ExpandedReadClean({ game, market, marketData }: { game: DailyEdgeGameDto; market: MarketKey; marketData: MarketEdgeDto }) {
   return (
@@ -2136,6 +2192,7 @@ function ExpandedReadClean({ game, market, marketData }: { game: DailyEdgeGameDt
           <MarketNotes marketData={marketData} awayAbbr={game.awayTeam} homeAbbr={game.homeTeam} market={market} />
         </div>
       </div>
+      <NbaAvailabilityPanel game={game} />
     </div>
   );
 }

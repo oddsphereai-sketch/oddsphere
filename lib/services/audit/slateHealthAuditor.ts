@@ -67,7 +67,7 @@ export type AuditOptions = {
 // Expected member-facing markets per sport (prediction_records.market vocab).
 const EXPECTED_MARKETS: Record<Sport, string[]> = {
   mlb: ["moneyline", "total"], // first_inning audited separately (conditional)
-  nba: ["moneyline", "total"],
+  nba: ["moneyline", "spread", "total"],
   nhl: ["moneyline", "total"],
   soccer: ["match_result", "total", "btts", "double_chance"],
 };

@@ -118,8 +118,14 @@ export type NbaInjuryStatus =
 export type NbaPlayerInjury = {
   /** Internal DB id when mapped; null when we couldn't map the ESPN row. */
   player_id: number | null;
+  /** Provider athlete identity. Kept separate from the unpopulated internal id. */
+  source_player_id?: string | null;
   name: string;
   status: NbaInjuryStatus;
+  position?: string | null;
+  injury_type?: string | null;
+  reported_at?: string | null;
+  expected_return_at?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -272,6 +278,13 @@ export type NbaAutoModelAudit = {
   provisional: boolean;
   /** Future-unlocked professional grade context. Optional for legacy fixtures and immutable locks. */
   professional_grade_context?: {
+    moneyline?: {
+      directReadQualified: boolean;
+      directReadSide: "home" | "away" | null;
+      spreadReadQualified: boolean;
+      spreadReadSide: "home" | "away" | null;
+      spreadCorrectionApplied: boolean;
+    };
     spread: {
       readQualified: boolean;
       correctionApplied: boolean;

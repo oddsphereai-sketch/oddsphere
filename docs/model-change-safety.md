@@ -1,5 +1,134 @@
 # Model change safety protocol
 
+## Owner-directed NBA Moneyline Best Angle evidence guard
+
+On 2026-10-21 Daniel Mengel clarified that NBA market reading must decide when a qualified signal
+justifies a fade, when the existing validated Spread correction justifies a flip, and when unresolved
+opposition should merely prevent the strongest play grade. Model probability above the no-vig market
+probability is model value, not market confirmation.
+
+For future unlocked rows only, r15/r17/r9 passes the existing professional reader's qualified
+observations into Moneyline grade evaluation. An opposite qualified direct Moneyline read—or, when
+that read is unavailable, an opposite qualified Spread observation—moves only Best Angle to Lean.
+It does not change actionability, score, side, probability, price, stake, reader threshold, writer,
+lease, cadence, tracking, or any locked payload. A validated Spread-authored final side and a matching
+direct Moneyline read remain confirming evidence; neither can bypass the existing probability, edge,
+positive exact-price EV, quality, or verified-availability gates. Public splits remain context-only.
+
+Publication requires the predeclared same-input board report, unit coverage for confirmation,
+opposition, unavailability, correction precedence and legacy parity, focused NBA pipeline/writer/lock
+tests, TypeScript, the full model-change gate, latest-main integration safety, protected PR checks,
+and live proof of the reviewed one Best Angle-to-Lean change with zero score/side/probability/price or
+locked-row changes. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-predeclaration.md` and
+`docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-result.md`.
+
+## NBA active-registry ratings completeness
+
+The October 21 post-deploy audit found 30/30 current NBA clubs covered by the
+recovered prior-season ratings pack, plus one historical/test `LON` row in the
+shared teams table. The r1 completeness check counted every stored NBA row, so
+that non-registry identity would have forced a redundant prior-season provider
+fetch on every full cycle even though all model-eligible clubs were complete.
+
+Combined refresh r13 / team-rating refresh r2 now evaluates bounded recovery against
+the same exact 30-club NBA identity registry used for provider matching.
+Unknown stored identities remain in the database and remain unavailable to the
+model; they are not deleted, remapped, or silently accepted. Model r14, market
+marriage r16, grade r8, scores, probabilities, sides, grades, prices, cadence,
+writer, lease, tracking, and every locked payload are unchanged. Publication
+requires focused identity/cron tests, full model-change verification, latest-
+main integration safety, and live proof that the prior pass returns
+`already-complete` with no provider fetch.
+
+## Owner-directed correctness candidate: NBA verified availability without a count-only cap
+
+On 2026-10-21 Daniel Mengel explicitly rejected automatic injury score adjustments and confidence
+caps and directed Oddsphere to treat player availability and market reaction as nuanced evidence.
+The bounded candidate is documented in
+`docs/model-audits/2026-10-21-nba-player-availability-reader-predeclaration.md`.
+
+For future unlocked NBA rows only, the exact-game ESPN resolver may retain and display provider
+player id, name, position, normalized status, injury type, report timestamp, and expected-return
+date. Missing or malformed team reports remain unavailable. The current professional independent
+score and the validated target-book-excluded categorical market reader remain authoritative; no
+fixed player points, injury-count score shift, automatic side change, or new market authority is
+permitted. The candidate may remove only the legacy generic `source=injury` confidence ceiling from
+professional actionability because it has no player, minutes, role, replacement, chronology, or
+repricing model. Every other price, freshness, coverage, target-exclusion, grade, and data-quality
+control remains active.
+
+Because grades may change, the combined model/prediction-record r14 and grade-policy r8 releases must advance
+together with rating-input market marriage r16. Publication requires a same-input board-impact report, score/probability/side/price/stake
+parity, focused NBA reader/writer/lock tests, TypeScript, the full model-change gate, latest-main
+integration safety, protected PR checks, and post-deploy proof of exact report coverage, release
+identity, one writer/lease, coherent cards, and unchanged locks. Roll back future unlocked output on
+mixed releases, identity drift, lock mutation, unexpected board contraction, provider-load growth,
+or a live impact different from the reviewed comparison.
+
+## NBA exact team-rating identity and prior-season recovery
+
+On 2026-10-21 the live NBA audit found four of 11 games incorrectly marked
+fallback despite complete lines, splits, and injuries. The Basketball Reference
+ratings importer did not resolve the stored `GS`, `WSH`, `UTAH`, and `NO`
+abbreviations to provider `GSW`, `WAS`, `UTA`, and `NOP`, so those teams were
+also absent from the prior-season pack required by the opening-month handoff.
+
+The integrated future-unlocked release advances to model r14, market marriage r16, grade r8,
+daily refresh r11, and team-rating refresh r1. Both identities resolve through
+the existing exact NBA registry, ambiguous matches fail closed, and the full
+daily writer performs one bounded prior-season recovery only while any current
+team lacks a regular-season row. Intraday cadence, model equations, market-
+reader rules, prices, stakes, sole writer, `prediction_pipeline:nba` lease,
+tracking boundary, and stored locks remain unchanged.
+
+The final exact same-input 11-game rehearsal moves fallback games from four to zero,
+changes zero scores, sides, probabilities, or prices, and moves actionables 6 to
+7 through two positive-model-EV promotions and one negative-model-EV demotion.
+Publication requires the focused identity/refresh/model/lock
+tests, full model-change gate, latest-main integration safety, protected PR,
+and live proof of 30-team prior coverage, 11 high-quality games, coherent
+reader output, healthy tracking, and unchanged locks. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-team-rating-identity-recovery-r13.md`.
+
+## NFL player props exact close metadata recovery
+
+On 2026-10-21 the player-props writer was confirmed to lose closing metadata
+when the newest provider snapshot omitted an offer before settlement, even
+though the separate immutable observer archive retained an exact T-60 quote.
+The sole writer now captures that existing archive before settlement and fills
+only a null close when game, player, market, line, side, book, and decision
+release match exactly. Different-line or reconstructed prices are forbidden.
+
+Writer/tracking provenance advances to r59/r33. The observer schema, provider
+collection, model, calibration, decision, probabilities, projections, sides,
+grades, stakes, locks, results, cadence, and lease remain unchanged. Focused
+tests prove mismatched lines are rejected and the close step precedes
+settlement. The live read found 42 missing closes, only two exact recoverable;
+40 remain missing. Evidence:
+`docs/model-audits/2026-10-21-nfl-player-props-exact-close-recovery.md`.
+
+## CFB national injury fallback with zero model authority
+
+On 2026-10-21 the official-conference collector was confirmed to be a bounded
+ten-feed publication collector, not complete national CFB injury coverage.
+Future unlocked evidence adds a credentialed SportsDataIO team catalog and
+current injured-player wire behind exact official-conference reports. Both
+scheduled teams must match uniquely before even an empty report is accepted;
+missing credentials, failed requests, ambiguity, and unmatched teams remain
+explicitly unavailable.
+
+The new source is panel-only and is not passed to CFB quarterback availability,
+the independent model, probability distribution, market reader, decision,
+grade, or stake paths. Therefore board counts, promotions, demotions, sides,
+and scores remain identical. Collector/writer provenance advances to r62/r133;
+all model, calibration, decision, evidence-schema, member, lock, tracking, and
+settlement releases remain unchanged. Locked payloads retain exact stored
+precedence. Publication requires the focused source and continuity tests, CFB
+production suite, full model-change suite, latest-main integration safety, a
+protected PR, the production credential, and a post-deploy matched-game read.
+Evidence: `docs/model-audits/2026-10-21-cfb-national-injury-fallback.md`.
+
 ## Tracking-reader correction: UCL actionable-history continuity
 
 On 2026-10-20 the UCL Best Angle / Lean panel appeared empty or pending even

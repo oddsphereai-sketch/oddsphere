@@ -129,9 +129,9 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r45_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_21_r59_exact_t60_close_recovery");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_15_r32_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_21_r33_exact_t60_close_recovery");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 63, "slate/current+opening props/player identity/Sharp pagination and the isolated Pinnacle/NoVig reference lanes are explicitly bounded");
@@ -680,6 +680,10 @@ assert.ok(productionWriter.includes("now: args.now"), "settlement finality uses 
 assert.ok(
   productionWriter.indexOf("updateNflPlayerPropsClosingPrices") < productionWriter.indexOf("settleNflPlayerPropsRecords"),
   "same-cycle closing prices attach before settlement makes the locked record immutable",
+);
+assert.ok(
+  productionWriter.indexOf("updateNflPlayerPropsClosingPricesFromObserver") < productionWriter.indexOf("settleNflPlayerPropsRecords"),
+  "exact stored T-60 close recovery runs before settlement without changing locked decisions",
 );
 const cronRoute = readFileSync("app/api/cron/nfl-forward-evidence/route.ts", "utf8");
 assert.ok(cronRoute.includes("player_props_critical_health"),

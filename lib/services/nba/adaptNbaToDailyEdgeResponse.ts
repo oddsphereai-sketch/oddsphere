@@ -557,6 +557,35 @@ function adaptGame(
       total,
       first_inning: spreadAsFi,
     },
+    nbaAvailability: {
+      source: "ESPN",
+      away: {
+        team: game.away_abbr,
+        known: game.injuries.away_known,
+        players: game.injuries.away_players.map((player) => ({
+          sourcePlayerId: player.source_player_id ?? null,
+          name: player.name,
+          status: player.status,
+          position: player.position ?? null,
+          injuryType: player.injury_type ?? null,
+          reportedAt: player.reported_at ?? null,
+          expectedReturnAt: player.expected_return_at ?? null,
+        })),
+      },
+      home: {
+        team: game.home_abbr,
+        known: game.injuries.home_known,
+        players: game.injuries.home_players.map((player) => ({
+          sourcePlayerId: player.source_player_id ?? null,
+          name: player.name,
+          status: player.status,
+          position: player.position ?? null,
+          injuryType: player.injury_type ?? null,
+          reportedAt: player.reported_at ?? null,
+          expectedReturnAt: player.expected_return_at ?? null,
+        })),
+      },
+    },
     decisionLine: game.quick_read,
     projected: {
       away: game.projection.away_score,
