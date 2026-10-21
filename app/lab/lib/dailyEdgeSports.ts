@@ -115,11 +115,11 @@ const DAILY_EDGE_DEFINITION_BY_SPORT = new Map(
 );
 
 /**
- * Product hierarchy is the primary contract: an active specialist model must
- * not jump ahead of a flagship model. NFL/CFB and NBA remain permanent flagship
- * anchors. CBB owns the fourth flagship slot only while its board is active;
- * before launch or on an empty day it stays at the end. Activity also orders
- * the core tier without turning the selector into a volatile game-count ranking.
+ * Today's active boards are the primary navigation contract. The product
+ * hierarchy remains stable inside the active and inactive groups, so activity
+ * promotes a sport without turning the selector into a game-count ranking.
+ * CBB owns a flagship slot only while its board is active; before launch or on
+ * an empty day it stays at the end.
  */
 export function orderDailyEdgeSportKeys(
   sports: readonly Sport[],
@@ -146,10 +146,10 @@ export function orderDailyEdgeSportKeys(
       const rightNavigationTier = rightTierDefinition
         ? DAILY_EDGE_NAVIGATION_TIER_PRIORITY[rightTierDefinition]
         : DAILY_EDGE_NAVIGATION_TIER_PRIORITY.planned;
+      const leftIsActive = leftAvailability?.isLive === true && leftAvailability.statusLabel === "Active";
+      const rightIsActive = rightAvailability?.isLive === true && rightAvailability.statusLabel === "Active";
+      if (leftIsActive !== rightIsActive) return leftIsActive ? -1 : 1;
       if (leftNavigationTier !== rightNavigationTier) return leftNavigationTier - rightNavigationTier;
-      if (leftTierDefinition === "flagship" && rightTierDefinition === "flagship") {
-        return left.registryIndex - right.registryIndex;
-      }
       const leftTier = leftAvailability?.isLive === false
         ? 5
         : DAILY_EDGE_STATUS_PRIORITY[leftAvailability?.statusLabel ?? ""] ?? 2;
