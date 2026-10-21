@@ -100,6 +100,7 @@ async function main(): Promise<void> {
   console.log(`\n─${"─".repeat(70)}`);
   console.log(
     `${write ? "WRITE" : "DRY-RUN"} complete: ${result.linesWritten} lines written, ` +
+      `${result.linesRemoved} superseded lines removed across ${result.scopesReconciled} scopes, ` +
       `${result.lineHistoryWritten} line_history snapshots appended, ${result.errors.length} errors.`,
   );
 }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   __NBA_LINES_TEST__,
@@ -71,6 +72,12 @@ async function main(): Promise<void> {
   assert.ok(targetedRequests.every((url) =>
     new URL(url).searchParams.get("event_id") === "nba-celtics-knicks"));
 
+  await assert.rejects(
+    fetchNbaCurrentOddsBoard("test-key", () => {}, async () => new Response("upstream failed", { status: 503 }), ["nba-celtics-knicks"]),
+    /HTTP 503/,
+    "an incomplete provider cycle must fail closed instead of publishing a partial current board",
+  );
+
   const storedGames = [{
     id: 140080,
     external_id: 401909842,
@@ -96,6 +103,28 @@ async function main(): Promise<void> {
     __NBA_LINES_TEST__.normalizeSide(undefined, "Los Angeles Clippers", "LA Clippers", "Sacramento Kings"),
     "home",
     "selection aliases must retain the correct home/away orientation",
+  );
+
+  const pairGate = __NBA_LINES_TEST__.selectCompleteExecutableBookPairs([
+    { game_id: 1, market_type: "moneyline", player_id: null, sportsbook: "complete", side: "home", line_value: null, odds_american: -120, odds_decimal: 1.83, implied_probability: 0.545, ev_percent: null, fair_odds: null },
+    { game_id: 1, market_type: "moneyline", player_id: null, sportsbook: "complete", side: "away", line_value: null, odds_american: 110, odds_decimal: 2.1, implied_probability: 0.476, ev_percent: null, fair_odds: null },
+    { game_id: 1, market_type: "moneyline", player_id: null, sportsbook: "one_sided", side: "home", line_value: null, odds_american: -115, odds_decimal: 1.87, implied_probability: 0.535, ev_percent: null, fair_odds: null },
+    { game_id: 1, market_type: "spread", player_id: null, sportsbook: "mismatch", side: "home", line_value: -4.5, odds_american: -110, odds_decimal: 1.91, implied_probability: 0.524, ev_percent: null, fair_odds: null },
+    { game_id: 1, market_type: "spread", player_id: null, sportsbook: "mismatch", side: "away", line_value: 5.5, odds_american: -110, odds_decimal: 1.91, implied_probability: 0.524, ev_percent: null, fair_odds: null },
+  ]);
+  assert.deepEqual(pairGate.rows.map((row) => row.sportsbook), ["complete", "complete"]);
+  assert.equal(pairGate.incompleteGroups, 2);
+
+  const refreshSource = readFileSync(
+    new URL("../lib/services/nba/refreshNbaLinesService.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(refreshSource, /provider HTTP failure aborts|throw new Error\(message\)/);
+  assert.match(refreshSource, /selectCompleteExecutableBookPairs/);
+  assert.match(refreshSource, /const existingIds: number\[\] = \[\]/);
+  assert.ok(
+    refreshSource.indexOf('.from("lines").insert(proposed)') < refreshSource.indexOf('.from("lines").delete().in("id", ids)'),
+    "fresh scope insertion must succeed before superseded rows are removed",
   );
 
   console.log("NBA current-board odds fetch tests passed");

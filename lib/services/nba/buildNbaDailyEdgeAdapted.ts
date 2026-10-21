@@ -40,10 +40,8 @@ import {
 import {
   buildNbaProfessionalRuntimeFeatures,
   NBA_PROFESSIONAL_MODEL_ARTIFACT,
-  NBA_PROFESSIONAL_TRAINING_HOME_ADVANTAGE,
   selectNbaProfessionalPortableFeatures,
 } from "../../automodel/nba/nbaProfessionalRuntimeArtifacts";
-import { buildNbaIndependentScoreShadow } from "../../automodel/nba/nbaIndependentScoreShadow";
 import { etSlateDateToUtcWindow } from "./etSlateDate";
 import {
   buildNbaDailyEdgeGameDto,
@@ -74,6 +72,7 @@ import {
 } from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
 import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
+import { selectNbaCurrentLineBoard } from "./nbaCurrentLineBoard";
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 import { currentDailyEdgeBoardDate } from "../../dates/slateDate";
 import {
@@ -264,6 +263,9 @@ export async function buildNbaDailyEdgePipeline(
         fetched_at: l.fetched_at,
       });
       linesByExtId.set(ext, arr);
+    }
+    for (const [externalId, rows] of linesByExtId) {
+      linesByExtId.set(externalId, selectNbaCurrentLineBoard(rows));
     }
   }
 
@@ -492,78 +494,6 @@ export async function buildNbaDailyEdgePipeline(
         }) ?? ""],
       },
     });
-    const independentScoreShadow = buildNbaIndependentScoreShadow({
-      featureRow: portableFeatureRow,
-      incumbent: previewCandidate.independent,
-      trainingHomeAdvantage: NBA_PROFESSIONAL_TRAINING_HOME_ADVANTAGE,
-    });
-    const shadowCandidate = independentScoreShadow.candidate === null
-      ? null
-      : (() => {
-          const shadowPreview = buildNbaProfessionalCandidate({
-            artifact: professionalArtifact,
-            featureRow: portableFeatureRow,
-            lines,
-            history: movementHistory,
-            externalGameId: s.game_external_id,
-            independentOverride: independentScoreShadow.candidate,
-          });
-          const shadowMlSide = shadowPreview.independent.marginHome >= 0
-            ? "home" as const
-            : "away" as const;
-          const shadowSpreadSide = shadowPreview.consensus.spreadHome === null ||
-            shadowPreview.independent.marginHome + shadowPreview.consensus.spreadHome >= 0
-            ? "home" as const
-            : "away" as const;
-          const shadowTotalSide = shadowPreview.consensus.totalLine === null ||
-            shadowPreview.independent.total - shadowPreview.consensus.totalLine >= 0
-            ? "over" as const
-            : "under" as const;
-          const shadowSpreadExecutionLine = shadowPreview.consensus.spreadHome === null
-            ? null
-            : shadowSpreadSide === "home"
-              ? shadowPreview.consensus.spreadHome
-              : -shadowPreview.consensus.spreadHome;
-          const shadowReader = buildNbaProfessionalMarketReader({
-            evaluatedAt: readerEvaluatedAt,
-            priceRows: readerPriceRowsByGame.get(s.game_external_id) ?? [],
-            splitRows: readerSplitRowsByGame.get(s.game_external_id) ?? [],
-            evidenceErrors: readerEvidenceErrors,
-            selectedLines: {
-              spreadHome: shadowPreview.consensus.spreadHome,
-              total: shadowPreview.consensus.totalLine,
-            },
-            excludedSportsbooksByMarket: {
-              moneyline: [bestExecutionSportsbook({
-                lines,
-                market: "moneyline",
-                side: shadowMlSide,
-                line: null,
-              }) ?? ""],
-              spread: [bestExecutionSportsbook({
-                lines,
-                market: "spread",
-                side: shadowSpreadSide,
-                line: shadowSpreadExecutionLine,
-              }) ?? ""],
-              total: [bestExecutionSportsbook({
-                lines,
-                market: "total",
-                side: shadowTotalSide,
-                line: shadowPreview.consensus.totalLine,
-              }) ?? ""],
-            },
-          });
-          return buildNbaProfessionalCandidate({
-            artifact: professionalArtifact,
-            featureRow: portableFeatureRow,
-            lines,
-            history: movementHistory,
-            externalGameId: s.game_external_id,
-            marketReader: shadowReader,
-            independentOverride: independentScoreShadow.candidate!,
-          });
-        })();
     const candidate = buildNbaProfessionalCandidate({
       artifact: professionalArtifact,
       featureRow: portableFeatureRow,
@@ -632,14 +562,6 @@ export async function buildNbaDailyEdgePipeline(
       },
       market_reader: reader,
       market_reader_decision: candidate.readerDecisionAudit,
-      independent_score_shadow: {
-        ...independentScoreShadow,
-        final: shadowCandidate?.final ?? null,
-        picks: shadowCandidate?.picks ?? null,
-        probabilities: shadowCandidate?.probabilities ?? null,
-        market_reader: shadowCandidate?.marketReader ?? null,
-        market_reader_decision: shadowCandidate?.readerDecisionAudit ?? null,
-      },
     };
     return [dto];
   });

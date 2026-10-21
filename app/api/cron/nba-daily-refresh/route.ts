@@ -34,7 +34,7 @@
  *                within the lock window. Wrapper-level behavior.
  *
  * records_updated tallies useful writes only:
- *   teamsUpserted + ratings.written + linesWritten + lineHistoryWritten
+ *   teamsUpserted + ratings.written + linesWritten + linesRemoved + lineHistoryWritten
  *   + a successfully published response snapshot.
  *
  * Scope (unchanged from Services 1–3):
@@ -62,7 +62,7 @@ import {
 import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_21_r10_reconciled_current_board";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -297,7 +297,10 @@ export async function GET(request: Request): Promise<Response> {
           unmatched: total.unmatched + entry.result.unmatched,
           parsed: total.parsed + entry.result.parsed,
           linesWritten: total.linesWritten + entry.result.linesWritten,
+          linesRemoved: total.linesRemoved + entry.result.linesRemoved,
           lineHistoryWritten: total.lineHistoryWritten + entry.result.lineHistoryWritten,
+          scopesReconciled: total.scopesReconciled + entry.result.scopesReconciled,
+          incompleteBookGroupsDropped: total.incompleteBookGroupsDropped + entry.result.incompleteBookGroupsDropped,
           errorCount: total.errorCount + entry.result.errors.length,
         }),
         {
@@ -307,7 +310,10 @@ export async function GET(request: Request): Promise<Response> {
           unmatched: 0,
           parsed: 0,
           linesWritten: 0,
+          linesRemoved: 0,
           lineHistoryWritten: 0,
+          scopesReconciled: 0,
+          incompleteBookGroupsDropped: 0,
           errorCount: 0,
         },
       );
@@ -321,7 +327,10 @@ export async function GET(request: Request): Promise<Response> {
           unmatched: result.unmatched,
           parsed: result.parsed,
           linesWritten: result.linesWritten,
+          linesRemoved: result.linesRemoved,
           lineHistoryWritten: result.lineHistoryWritten,
+          scopesReconciled: result.scopesReconciled,
+          incompleteBookGroupsDropped: result.incompleteBookGroupsDropped,
           errorCount: result.errors.length,
         })),
         failures: lineFailures,
@@ -344,6 +353,9 @@ export async function GET(request: Request): Promise<Response> {
         reason: "incomplete_source_cycle",
       };
       if (responseSnapshot?.ok === false) partial = true;
+      const lineError = lineFailures[0]?.error ??
+        lineResults.flatMap(({ result }) => result.errors)[0] ??
+        null;
 
       // ─── records_updated: tally useful writes only ────────────────
       const recordsUpdated =
@@ -352,6 +364,7 @@ export async function GET(request: Request): Promise<Response> {
         ratingsResult.written +
         professionalInputs.written +
         lineTotals.linesWritten +
+        lineTotals.linesRemoved +
         lineTotals.lineHistoryWritten +
         (responseSnapshot?.ok ? 1 : 0);
 
@@ -360,7 +373,11 @@ export async function GET(request: Request): Promise<Response> {
         partial,
         error_message: responseSnapshot?.ok === false
           ? `NBA response snapshot publish failed: ${responseSnapshot.error ?? "unknown error"}`
-          : null,
+          : lineError !== null
+            ? `NBA line refresh partial: ${lineError}`
+            : partial
+              ? "NBA refresh completed with an incomplete source cycle"
+              : null,
         details: stepDetails,
       };
     },
