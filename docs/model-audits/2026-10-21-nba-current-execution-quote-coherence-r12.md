@@ -14,6 +14,7 @@ Status: accepted candidate for future unlocked rows; production proof still requ
   - model / prediction record: `nba_professional_unified_2026_10_21_r12_current_execution_quote`;
   - market marriage: `nba_market_marriage_2026_10_21_r15_current_execution_target_exclusion`;
   - grade policy: `nba_grade_policy_2026_10_21_r6_current_execution_economics`.
+  - line refresh: `nba_daily_refresh_schedule_2026_10_21_r10_reconciled_current_board`.
 - The sole writer remains `createNbaPredictionRecords` under the shared
   `prediction_pipeline:nba` lease. No provider call, timer, writer, stake,
   independent-score coefficient, residual distribution, categorical reader
@@ -21,10 +22,11 @@ Status: accepted candidate for future unlocked rows; production proof still requ
 
 ## Production finding
 
-The append-only `lines` table was correctly loaded past PostgREST's 1,000-row
-ceiling, but the NBA DTO's execution-price selector still searched every loaded
-historical row. A book that stopped updating could therefore win price shopping
-with an old numerically favorable price. At the 2026-10-21 12:53Z audit:
+The NBA line writer replaced only sportsbook groups present in the latest
+provider response. It did not remove a sportsbook omitted from that response,
+so the nominally current `lines` table could retain an abandoned quote
+indefinitely. The DTO then searched every retained row, allowing an old
+numerically favorable price to win price shopping. At the 2026-10-21 12:53Z audit:
 
 - the board contained 11 games, 33 markets, 12,889 split observations, and more
   than 20,000 canonical price observations;
@@ -40,8 +42,26 @@ score or professional market reader had stopped running.
 
 ## Candidate behavior
 
-Before consensus, target-book exclusion, exact-price grading, member display,
-and tracking consume the `lines` rows, the candidate:
+The r10 writer now treats each successful provider game/market response as one
+authoritative current-board scope:
+
+1. a provider HTTP failure aborts the cycle before writes;
+2. incomplete or mismatched same-book pairs cannot enter the current board;
+3. fresh rows are inserted before exact prior row IDs are removed, preserving
+   the last complete board if an insert fails;
+4. a successful scope removes books or sides absent from the new response;
+5. unmatched provider events are preserved and reported as a partial refresh
+   rather than being destructively cleared.
+
+The scheduled refresh records inserted rows, removed superseded rows,
+reconciled scopes, dropped incomplete book groups, and a bounded partial-cycle
+error in `data_refresh_log`. NBA slate health also checks the full officially
+tracked Moneyline/Spread/Total set. These are internal health signals; no
+member-facing copy was added.
+
+No customer-facing qualification copy is added. Before consensus, target-book
+exclusion, exact-price grading, member display, and tracking consume the
+reconciled `lines` rows, and the downstream defense:
 
 1. retains only the newest row for each sportsbook / market / side;
 2. anchors each game-and-market board to its freshest retained quote;

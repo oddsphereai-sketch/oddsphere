@@ -3587,6 +3587,7 @@ The paired live-slate replay is recorded in
 - Market marriage: `nba_market_marriage_2026_10_21_r15_current_execution_target_exclusion`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_21_r6_current_execution_economics`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_21_r10_reconciled_current_board`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
@@ -3604,9 +3605,14 @@ The paired live-slate replay is recorded in
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
 
-The October 21 r12/r15/r6 current-execution release collapses append-only NBA
-line history to the newest sportsbook/market/side quote and rejects a book side
-that trails the freshest quote for that game and market by more than 120 minutes. Consensus,
+The October 21 r12/r15/r6 current-execution release, paired with r10 line refresh,
+reconciles every successful provider game/market response as the authoritative
+current board. Newly received complete same-book pairs are inserted before the
+exact prior scope is removed, so a failed request or insert preserves the prior
+complete board while a successful response removes books/sides the provider no
+longer returns. The reader additionally collapses the board to the newest
+sportsbook/market/side quote and rejects a book side that trails the freshest
+quote for that game and market by more than 120 minutes. Consensus,
 target-book exclusion, exact-price grade economics, member display, and future
 tracking therefore consume one coherent current board. On the exact 11-game / 33-market
 October 21 rehearsal, all scores, sides, probabilities, grades, five actionables,
