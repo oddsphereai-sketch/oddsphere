@@ -65,7 +65,7 @@ import {
 import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_21_r12_current_slate_publication_isolation";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year

@@ -3,6 +3,7 @@ import { normalizeTeamAbbr } from "../lib/providers/playbook/playbookTeamNormali
 import {
   matchBbrRatingToNbaTeam,
   NBA_TEAM_RATINGS_REFRESH_RELEASE,
+  recognizedNbaTeamRows,
   type NbaTeamRow,
 } from "../lib/services/nba/nbaTeamRatingIdentity";
 import type { BbrTeamRatings } from "../lib/providers/real_api/_basketballReferenceClient";
@@ -57,11 +58,16 @@ assert.equal(normalizeTeamAbbr("nba", "WSH"), "WAS");
 assert.equal(normalizeTeamAbbr("nba", "UTAH"), "UTA");
 assert.equal(normalizeTeamAbbr("nba", "NO"), "NOP");
 assert.equal(matchBbrRatingToNbaTeam(bbr("SEA"), storedTeams), null);
+assert.deepEqual(
+  recognizedNbaTeamRows([...storedTeams, { id: 10, abbreviation: "LON" }]).map((team) => team.id),
+  storedTeams.map((team) => team.id),
+  "legacy non-registry team rows must not keep bounded prior recovery incomplete",
+);
 assert.equal(
   matchBbrRatingToNbaTeam(bbr("GSW"), [...storedTeams, { id: 10, abbreviation: "GSW" }]),
   null,
   "ambiguous stored identities must fail closed",
 );
-assert.match(NBA_TEAM_RATINGS_REFRESH_RELEASE, /exact_team_identity_prior_recovery/);
+assert.match(NBA_TEAM_RATINGS_REFRESH_RELEASE, /active_registry_completeness/);
 
 console.log("NBA team-rating identity tests passed");

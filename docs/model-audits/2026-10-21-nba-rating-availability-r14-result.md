@@ -10,7 +10,7 @@ model-change gate, latest-main integration safety, protected pull-request checks
 - Model / prediction record: `nba_professional_unified_2026_10_21_r14_rating_identity_verified_availability`
 - Market marriage: `nba_market_marriage_2026_10_21_r16_complete_team_rating_inputs`
 - Grade policy: `nba_grade_policy_2026_10_21_r8_rating_identity_no_count_cap`
-- Daily refresh: `nba_daily_refresh_schedule_2026_10_21_r12_current_slate_publication_isolation`
+- Daily refresh: `nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r1_exact_team_identity_prior_recovery`
 
 The release restores exact prior-season rating identity for `GS`/`GSW`, `WSH`/`WAS`,
@@ -23,11 +23,13 @@ authority. The released professional market reader remains unchanged and remains
 path that may alter the coherent score. Missing availability still lowers data quality and fails
 closed. All complete-card locked snapshots retain exact stored precedence.
 
-The r12 operational follow-up keeps the complete rolling-window health signal but isolates today's
+The r13 operational follow-up keeps the complete rolling-window health signal but isolates today's
 snapshot readiness from defects that occur only on later dates in the seven-day window. Current-day
 seed, rating, or line errors still block publication. A future-only thin quote group remains a
 reported partial run and is retried normally, but it cannot suppress an otherwise complete current
-slate. This changes no projection, probability, side, grade, price, stake, lock, or tracking row.
+slate. It also scopes prior-season completeness to the exact 30-club registry so a retained legacy
+team row cannot trigger a redundant provider fetch forever. This changes no projection, probability,
+side, grade, price, stake, lock, or tracking row.
 
 ## Strict same-input current-board audit
 
