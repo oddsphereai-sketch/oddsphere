@@ -24,11 +24,28 @@ import {
   selectNbaPlayerPropsCurrentCanonicalOfferSets,
 } from "../lib/services/nba/nbaPlayerPropsMarketEvidence";
 import { buildNbaPlayerPropsPointInTimeFeatures } from "../lib/services/nba/nbaPlayerPropsPointInTimeFeatures";
+import { nbaPlayerPropsScheduleGameMatches } from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
 import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/nba/nbaPointInTimeFeatures";
 
 const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
 assert.equal(artifact.publicEnabled, false);
 assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_21_r1_private_forward");
+assert.equal(nbaPlayerPropsScheduleGameMatches(
+  { awayTeam: "GS", homeTeam: "LAL" },
+  { awayTeam: "GSW", homeTeam: "LAL" },
+), true, "ESPN and provider Golden State abbreviations must identify the same scheduled game");
+assert.equal(nbaPlayerPropsScheduleGameMatches(
+  { awayTeam: "MIL", homeTeam: "WSH" },
+  { awayTeam: "MIL", homeTeam: "WAS" },
+), true, "ESPN and provider Washington abbreviations must identify the same scheduled game");
+assert.equal(nbaPlayerPropsScheduleGameMatches(
+  { awayTeam: "IND", homeTeam: "NO" },
+  { awayTeam: "IND", homeTeam: "NOP" },
+), true, "ESPN and provider New Orleans abbreviations must identify the same scheduled game");
+assert.equal(nbaPlayerPropsScheduleGameMatches(
+  { awayTeam: "UTAH", homeTeam: "MEM" },
+  { awayTeam: "UTA", homeTeam: "MEM" },
+), true, "ESPN and provider Utah abbreviations must identify the same scheduled game");
 
 const games: NbaHistoricalGame[] = [];
 const boxes: NbaHistoricalPlayerBox[] = [];
