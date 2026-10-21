@@ -27,7 +27,7 @@ import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementSto
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_21_r3_schedule_team_identity" as const;
+  "nba_player_props_private_writer_2026_10_21_r4_bounded_market_chronology" as const;
 
 export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   release: typeof NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE;
@@ -36,6 +36,7 @@ export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   providerRequests: number;
   theOddsApiCreditsUsed: number;
   observationsAdded: number;
+  observationsRefreshed: number;
   observationConflictsPreserved: number;
   featureRows: number;
   decisions: number;
@@ -99,7 +100,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     slateDate: args.slateDate,
     capturedAt: now,
   });
-  if (mergedMarket.added > 0) await writeNbaPlayerPropsMarketHistory({ client: args.client, history: mergedMarket.history });
+  if (mergedMarket.added > 0 || mergedMarket.refreshed > 0
+    || previousMarket?.release !== mergedMarket.history.release) {
+    await writeNbaPlayerPropsMarketHistory({ client: args.client, history: mergedMarket.history });
+  }
   const missingScheduledGames = slateSchedule.filter((scheduled) => !live.games.some((game) =>
     nbaPlayerPropsScheduleGameMatches(scheduled, game)));
   if (missingScheduledGames.length > 0) {
@@ -108,6 +112,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
       theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
       observationsAdded: mergedMarket.added,
+      observationsRefreshed: mergedMarket.refreshed,
       observationConflictsPreserved: mergedMarket.conflicts,
       findings: [...live.findings, ...missingScheduledGames.map((game) => `scheduled_game_missing_from_prop_provider:${game.id}`)],
     };
@@ -176,6 +181,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
       theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
       observationsAdded: mergedMarket.added,
+      observationsRefreshed: mergedMarket.refreshed,
       observationConflictsPreserved: mergedMarket.conflicts,
       featureRows: eligibleFeatures.length,
       findings: [...live.findings, `feature_coverage_below_80_percent:${eligibleFeatures.length}/${candidates.length}`],
@@ -285,6 +291,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
     theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
     observationsAdded: mergedMarket.added,
+    observationsRefreshed: mergedMarket.refreshed,
     observationConflictsPreserved: mergedMarket.conflicts,
     featureRows: eligibleFeatures.length,
     decisions: lifecycle.snapshot.decisions.length,
@@ -357,6 +364,7 @@ function result(status: NbaPlayerPropsPrivateWriterResult["status"]): NbaPlayerP
     providerRequests: 0,
     theOddsApiCreditsUsed: 0,
     observationsAdded: 0,
+    observationsRefreshed: 0,
     observationConflictsPreserved: 0,
     featureRows: 0,
     decisions: 0,

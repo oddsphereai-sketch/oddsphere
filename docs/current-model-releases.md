@@ -237,10 +237,14 @@ Last reviewed: 2026-10-21
   `nba_player_props_product_candidate_2026_10_21_r4_private_forward_ready` /
   `nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_10_21_r3_schedule_team_identity`; it
+  `nba_player_props_private_writer_2026_10_21_r4_bounded_market_chronology`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
-  behavior for a genuinely missing scheduled game.
+  behavior for a genuinely missing scheduled game. Its private store release is
+  `nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology`: the
+  deployed r3 envelope migrates in place, unchanged polling refreshes current
+  evidence without unbounded duplicate rows, and every quote scope retains its
+  first, prior, and current distinct price states for opening/movement reading.
   It runs only when `NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED=true`, inside the
   existing `prediction_pipeline:nba` lease. It adds frozen-artifact verification,
   bounded current/opening prop capture, gap-only The Odds API fallback,

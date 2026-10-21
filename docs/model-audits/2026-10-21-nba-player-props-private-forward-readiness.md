@@ -19,8 +19,8 @@ row, stake, or member-request provider fetch.
 - Lifecycle:
   `nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only`
 - Writer/store/state/tracking/settlement:
-  `nba_player_props_private_writer_2026_10_21_r3_schedule_team_identity`,
-  `nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity`,
+  `nba_player_props_private_writer_2026_10_21_r4_bounded_market_chronology`,
+  `nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology`,
   `nba_player_props_current_state_2026_10_21_r2_regular_and_ist`,
   `nba_player_props_private_tracking_store_2026_10_21_r1_immutable`, and
   `nba_player_props_private_settlement_2026_10_21_r1_official_box_revisions`.
@@ -39,9 +39,12 @@ row, stake, or member-request provider fetch.
 - The primary live catalog is BALLDONTLIE. The Odds API is requested only for a
   game whose primary feed has no multi-book complete prop scope. There is no
   provider fetch from a member request.
-- Real opening and later observations append to a checksummed, compressed
-  market history. An identity collision preserves the earlier observation and
-  reports a conflict rather than rewriting history.
+- Real opening and later observations write to a checksummed, compressed market
+  history. Each exact quote scope retains the first, prior, and current distinct
+  price state. An unchanged poll refreshes current evidence without growing the
+  payload forever; a true price change remains chronological movement. An
+  identity collision preserves the earlier observation and reports a conflict.
+  The deployed r3 envelope is accepted and migrated rather than discarded.
 - Player-level finalized boxes and advanced rows are stored separately from the
   team aggregates used by NBA Daily Edge. Regular-season and NBA Cup rows are
   covered. A bounded one-time prior-season bootstrap is followed by seven-date
@@ -84,15 +87,13 @@ validation measures the designed product instead of a flattened shadow.
 ## Remaining gate
 
 The only model-quality gate that requires elapsed time is release-pure forward
-settlement, especially for Threes and the slate-relative fallback markets. The
-prior-season player-state bootstrap and a natural private cron run are required
-operational initialization steps before enabling the private writer flag. A
+settlement, especially for Threes and the slate-relative fallback markets. A
 separate owner-approved release is required before any member exposure.
 
-The real 2025 bootstrap dry run completed without a write: 1,230 games,
+The real 2025 bootstrap completed and wrote private state: 1,230 games,
 43,268 box rows, 32,202 advanced rows, 603 player identities, and 783 provider
-requests. That proves provider coverage and bounded request execution; the
-one-time private-state write remains an explicit post-deploy initialization.
+requests. The current 2026 incremental state also exists privately. The private
+writer flag is enabled only in production; public product gates remain false.
 
 ## Verification
 

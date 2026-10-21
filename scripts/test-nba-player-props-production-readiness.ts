@@ -158,19 +158,30 @@ const initialHistory = mergeNbaPlayerPropsMarketHistory({
   capturedAt: "2026-10-21T15:00:00.000Z",
 });
 assert.equal(initialHistory.added, observations.length);
-const nextQuote = { ...observations[0]!, observedAt: "2026-10-21T12:30:00.000Z", americanPrice: -120 };
-const nextHistory = mergeNbaPlayerPropsMarketHistory({
+const refreshedQuote = { ...observations[0]!, observedAt: "2026-10-21T12:30:00.000Z", fetchedAt: "2026-10-21T12:30:01.000Z" };
+const refreshedHistory = mergeNbaPlayerPropsMarketHistory({
   previous: initialHistory.history,
-  current: [nextQuote],
+  current: [refreshedQuote],
   slateDate: "2026-10-21",
   capturedAt: "2026-10-21T15:30:00.000Z",
 });
-assert.equal(nextHistory.added, 1, "the same provider offer at a new timestamp must append to movement history");
+assert.equal(refreshedHistory.added, 0, "an unchanged quote heartbeat is not a new market state");
+assert.equal(refreshedHistory.refreshed, 1, "an unchanged quote heartbeat must refresh current evidence");
+assert.equal(refreshedHistory.history.observations.length, initialHistory.history.observations.length + 1,
+  "the first quote and newest heartbeat are retained without unbounded duplicate polling rows");
+const nextQuote = { ...refreshedQuote, observedAt: "2026-10-21T13:00:00.000Z", americanPrice: -120 };
+const nextHistory = mergeNbaPlayerPropsMarketHistory({
+  previous: refreshedHistory.history,
+  current: [nextQuote],
+  slateDate: "2026-10-21",
+  capturedAt: "2026-10-21T16:00:00.000Z",
+});
+assert.equal(nextHistory.added, 1, "a genuine same-line price change must append to movement history");
 const conflict = mergeNbaPlayerPropsMarketHistory({
   previous: nextHistory.history,
   current: [{ ...nextQuote, americanPrice: -999 }],
   slateDate: "2026-10-21",
-  capturedAt: "2026-10-21T16:00:00.000Z",
+  capturedAt: "2026-10-21T16:30:00.000Z",
 });
 assert.equal(conflict.conflicts, 1);
 assert.equal(
@@ -184,7 +195,30 @@ assert.equal(
 );
 const envelope = encodeNbaPlayerPropsPrivatePayload(initialHistory.history, "market_history");
 assert.deepEqual(decodeNbaPlayerPropsPrivatePayload(envelope, "market_history"), initialHistory.history);
+assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
+  ...envelope,
+  release: "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity",
+}, "market_history"), initialHistory.history, "the deployed r3 private payload must migrate without losing observations");
 assert.equal(decodeNbaPlayerPropsPrivatePayload({ ...envelope, checksum: "bad" }, "market_history"), null);
+
+let boundedHistory = initialHistory.history;
+for (let index = 1; index <= 8; index += 1) {
+  boundedHistory = mergeNbaPlayerPropsMarketHistory({
+    previous: boundedHistory,
+    current: [{
+      ...observations[0]!,
+      observedAt: new Date(Date.parse(observations[0]!.observedAt) + index * 60_000).toISOString(),
+      americanPrice: observations[0]!.americanPrice - index,
+    }],
+    slateDate: "2026-10-21",
+    capturedAt: new Date(Date.parse("2026-10-21T15:00:00.000Z") + index * 60_000).toISOString(),
+  }).history;
+}
+assert.equal(
+  boundedHistory.observations.filter((row) => row.providerObservationId === observations[0]!.providerObservationId).length,
+  3,
+  "market storage retains the first, prior, and current distinct quote states",
+);
 
 const state = mergeNbaPlayerPropsCurrentState({
   previous: null,

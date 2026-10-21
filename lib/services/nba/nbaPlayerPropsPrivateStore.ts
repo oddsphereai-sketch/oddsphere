@@ -6,17 +6,23 @@ import type { NbaPlayerPropPriceObservation } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE =
-  "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity" as const;
+  "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology" as const;
+const NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES = new Set([
+  "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity",
+]);
 export const NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_JSON_BYTES = 32_000_000;
 export const NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_GZIP_BYTES = 2_000_000;
 const NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_JSON_BYTES = 64_000_000;
 const NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_GZIP_BYTES = 8_000_000;
+const NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES = 64_000_000;
+const NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_GZIP_BYTES = 8_000_000;
 const MAX_MARKET_OBSERVATIONS = 150_000;
+const MAX_CURRENT_STATES_PER_QUOTE = 3;
 const HOUR_MS = 60 * 60_000;
 
 type Envelope = Readonly<{
   kind: "nba_player_props_private_envelope_v1";
-  release: typeof NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE;
+  release: string;
   encoding: "gzip-base64";
   payloadKind: "candidate_snapshot" | "market_history" | "current_state" | "tracking_history";
   checksum: string;
@@ -26,7 +32,7 @@ type Envelope = Readonly<{
 }>;
 
 export type NbaPlayerPropsMarketHistory = Readonly<{
-  release: typeof NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE;
+  release: string;
   publicEnabled: false;
   slateDate: string;
   createdAt: string;
@@ -97,24 +103,52 @@ export function mergeNbaPlayerPropsMarketHistory(args: {
   current: readonly NbaPlayerPropPriceObservation[];
   slateDate: string;
   capturedAt: string;
-}): { history: NbaPlayerPropsMarketHistory; added: number; preserved: number; conflicts: number } {
-  const rows = new Map<string, NbaPlayerPropPriceObservation>();
-  for (const row of args.previous?.observations ?? []) rows.set(observationKey(row), row);
+}): { history: NbaPlayerPropsMarketHistory; added: number; refreshed: number; preserved: number; conflicts: number } {
+  const rows = new Map<string, NbaPlayerPropPriceObservation[]>();
+  for (const row of [...(args.previous?.observations ?? [])].sort(compareObservations)) {
+    const key = logicalQuoteKey(row);
+    rows.set(key, compactQuoteTrail([...(rows.get(key) ?? []), row]));
+  }
   let added = 0;
+  let refreshed = 0;
   let preserved = 0;
   let conflicts = 0;
-  for (const row of args.current) {
-    const key = observationKey(row);
-    const prior = rows.get(key);
-    if (!prior) {
-      rows.set(key, row);
+  for (const row of [...args.current].sort(compareObservations)) {
+    const key = logicalQuoteKey(row);
+    const trail = rows.get(key) ?? [];
+    const sameTimestamp = trail.find((prior) => prior.observedAt === row.observedAt);
+    if (sameTimestamp) {
+      if (sameEconomicQuote(sameTimestamp, row)) preserved += 1;
+      else conflicts += 1;
+      continue;
+    }
+    const latest = trail.at(-1);
+    if (!latest) {
+      rows.set(key, [row]);
       added += 1;
-    } else if (JSON.stringify(prior) === JSON.stringify(row)) preserved += 1;
-    else conflicts += 1;
+      continue;
+    }
+    if (Date.parse(row.observedAt) < Date.parse(latest.observedAt)) {
+      rows.set(key, compactQuoteTrail([...trail, row].sort(compareObservations)));
+      added += 1;
+      continue;
+    }
+    if (sameEconomicQuote(latest, row)) {
+      if (row.isOpening) {
+        preserved += 1;
+      } else {
+        const next = [...trail];
+        if (next.length === 1) next.push(row);
+        else next[next.length - 1] = row;
+        rows.set(key, compactQuoteTrail(next));
+        refreshed += 1;
+      }
+      continue;
+    }
+    rows.set(key, compactQuoteTrail([...trail, row]));
+    added += 1;
   }
-  const observations = [...rows.values()].sort((left, right) =>
-    Date.parse(left.observedAt) - Date.parse(right.observedAt)
-    || observationKey(left).localeCompare(observationKey(right)));
+  const observations = [...rows.values()].flat().sort(compareObservations);
   if (observations.length > MAX_MARKET_OBSERVATIONS) throw new Error("NBA props market history row limit exceeded.");
   return {
     history: {
@@ -122,10 +156,13 @@ export function mergeNbaPlayerPropsMarketHistory(args: {
       publicEnabled: false,
       slateDate: args.slateDate,
       createdAt: args.previous?.createdAt ?? args.capturedAt,
-      updatedAt: added > 0 ? args.capturedAt : (args.previous?.updatedAt ?? args.capturedAt),
+      updatedAt: added > 0 || refreshed > 0 || args.previous?.release !== NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE
+        ? args.capturedAt
+        : (args.previous?.updatedAt ?? args.capturedAt),
       observations,
     },
     added,
+    refreshed,
     preserved,
     conflicts,
   };
@@ -208,9 +245,13 @@ function decode<T>(value: unknown, payloadKind: Envelope["payloadKind"]): T | nu
 }
 
 function payloadLimits(payloadKind: Envelope["payloadKind"]): { json: number; gzip: number } {
-  return payloadKind === "current_state"
-    ? { json: NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_JSON_BYTES, gzip: NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_GZIP_BYTES }
-    : { json: NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_JSON_BYTES, gzip: NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_GZIP_BYTES };
+  if (payloadKind === "current_state") {
+    return { json: NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_JSON_BYTES, gzip: NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_GZIP_BYTES };
+  }
+  if (payloadKind === "market_history") {
+    return { json: NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, gzip: NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_GZIP_BYTES };
+  }
+  return { json: NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_JSON_BYTES, gzip: NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_GZIP_BYTES };
 }
 
 async function readPayload(client: SupabaseClient, key: string): Promise<unknown | null> {
@@ -224,10 +265,71 @@ function observationKey(row: NbaPlayerPropPriceObservation): string {
   return [row.provider, row.providerObservationId, row.side, row.observedAt, row.isOpening ? "opening" : "current"].join("|");
 }
 
+function logicalQuoteKey(row: NbaPlayerPropPriceObservation): string {
+  const player = row.canonicalPlayerId
+    ?? (row.providerPlayerId ? `${row.provider}:${row.providerPlayerId}` : normalizeIdentity(row.playerName ?? ""));
+  return [
+    row.provider,
+    row.providerEventId,
+    row.canonicalGameId ?? "unresolved-game",
+    player,
+    normalizeIdentity(row.sportsbook),
+    row.market,
+    row.providerMarket,
+    row.offerType,
+    row.side,
+    row.line,
+    row.isOpening ? "opening" : "current",
+    row.isLive ? "live" : "pregame",
+  ].join("|");
+}
+
+function compactQuoteTrail(
+  trail: readonly NbaPlayerPropPriceObservation[],
+): NbaPlayerPropPriceObservation[] {
+  if (trail.length <= 1) return [...trail];
+  const ordered = [...trail].sort(compareObservations);
+  if (ordered[0]!.isOpening) return [ordered[0]!];
+
+  const first = ordered[0]!;
+  const states: NbaPlayerPropPriceObservation[] = [first];
+  for (const row of ordered.slice(1)) {
+    const latest = states.at(-1)!;
+    if (sameEconomicQuote(latest, row)) {
+      if (states.length === 1) states.push(row);
+      else states[states.length - 1] = row;
+    } else {
+      states.push(row);
+    }
+  }
+  if (states.length <= MAX_CURRENT_STATES_PER_QUOTE) return states;
+  return [states[0]!, ...states.slice(-(MAX_CURRENT_STATES_PER_QUOTE - 1))];
+}
+
+function sameEconomicQuote(
+  left: NbaPlayerPropPriceObservation,
+  right: NbaPlayerPropPriceObservation,
+): boolean {
+  return left.line === right.line
+    && left.americanPrice === right.americanPrice
+    && left.isOpening === right.isOpening
+    && left.isLive === right.isLive;
+}
+
+function compareObservations(left: NbaPlayerPropPriceObservation, right: NbaPlayerPropPriceObservation): number {
+  return Date.parse(left.observedAt) - Date.parse(right.observedAt)
+    || observationKey(left).localeCompare(observationKey(right));
+}
+
+function normalizeIdentity(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function isEnvelope(value: unknown): value is Envelope {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     && (value as Record<string, unknown>).kind === "nba_player_props_private_envelope_v1"
-    && (value as Record<string, unknown>).release === NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE
+    && ((value as Record<string, unknown>).release === NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE
+      || NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES.has(String((value as Record<string, unknown>).release)))
     && (value as Record<string, unknown>).encoding === "gzip-base64"
     && typeof (value as Record<string, unknown>).checksum === "string"
     && typeof (value as Record<string, unknown>).payload === "string"
