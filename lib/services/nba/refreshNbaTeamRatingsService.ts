@@ -31,9 +31,21 @@ import { supabase } from "../../db/supabase";
 import {
   fetchBbrSeasonTeamRatings,
   fetchBbrPlayoffTeamRatings,
-  normalizeBbrAbbr,
-  type BbrTeamRatings,
 } from "../../providers/real_api/_basketballReferenceClient";
+import {
+  buildNbaTeamRatingPayload,
+  matchBbrRatingToNbaTeam,
+  NBA_TEAM_RATINGS_REFRESH_RELEASE,
+  type NbaTeamRatingPayload,
+  type NbaTeamRow,
+} from "./nbaTeamRatingIdentity";
+
+export {
+  buildNbaTeamRatingPayload,
+  NBA_TEAM_RATINGS_REFRESH_RELEASE,
+  type NbaTeamRatingPayload,
+  type NbaTeamRow,
+} from "./nbaTeamRatingIdentity";
 
 export type RefreshNbaTeamRatingsOptions = {
   /** 4-digit season year (e.g. 2026 for the 2025-26 season). */
@@ -42,14 +54,21 @@ export type RefreshNbaTeamRatingsOptions = {
   includePlayoffs?: boolean;
   /** false = perform DB upserts; true = dry-run (read-only). */
   dryRun: boolean;
+  /**
+   * Skip provider calls when every current NBA team already has a regular-
+   * season row for this season. Used only for the immutable prior-season
+   * recovery pass; the current season must continue refreshing normally.
+   */
+  skipFetchWhenRegularSeasonComplete?: boolean;
   /** Sink for human-readable progress lines. Default no-op. */
   logger?: (msg: string) => void;
 };
 
 export type RefreshNbaTeamRatingsResult = {
-  mode: "dry-run" | "write" | "no-teams";
+  release: typeof NBA_TEAM_RATINGS_REFRESH_RELEASE;
+  mode: "dry-run" | "write" | "no-teams" | "already-complete";
   teamsInDb: number;
-  seasonFetchStatus: "ok" | "failed";
+  seasonFetchStatus: "ok" | "failed" | "skipped";
   seasonRowsParsed: number;
   /** "skipped" when includePlayoffs=false. */
   playoffFetchStatus: "ok" | "failed" | "skipped";
@@ -60,32 +79,6 @@ export type RefreshNbaTeamRatingsResult = {
   written: number;
   /** Per-row error messages from Supabase failures. */
   errors: string[];
-};
-
-type NbaTeamRow = {
-  id: number;
-  abbreviation: string;
-};
-
-type UpsertPayload = {
-  team_id: number;
-  season: number;
-  season_type: "regular" | "playoffs";
-  off_rating: number | null;
-  def_rating: number | null;
-  net_rating: number | null;
-  pace: number | null;
-  off_efg_pct: number | null;
-  off_tov_pct: number | null;
-  off_orb_pct: number | null;
-  off_ft_rate: number | null;
-  def_efg_pct: number | null;
-  def_tov_pct: number | null;
-  def_drb_pct: number | null;
-  def_ft_rate_allowed: number | null;
-  source: string;
-  source_url: string;
-  fetched_at: string;
 };
 
 async function loadNbaTeams(): Promise<NbaTeamRow[]> {
@@ -99,48 +92,8 @@ async function loadNbaTeams(): Promise<NbaTeamRow[]> {
   return ((data as unknown) ?? []) as NbaTeamRow[];
 }
 
-function matchToTeamRow(
-  bbr: BbrTeamRatings,
-  teamRows: NbaTeamRow[],
-): NbaTeamRow | null {
-  const normalizedBbrAbbr = normalizeBbrAbbr(bbr.abbreviation);
-  return (
-    teamRows.find(
-      (t) => t.abbreviation.toUpperCase() === normalizedBbrAbbr.toUpperCase(),
-    ) ?? null
-  );
-}
-
-function buildPayload(
-  row: BbrTeamRatings,
-  team: NbaTeamRow,
-  season: number,
-  seasonType: "regular" | "playoffs",
-): UpsertPayload {
-  return {
-    team_id: team.id,
-    season,
-    season_type: seasonType,
-    off_rating: row.off_rating,
-    def_rating: row.def_rating,
-    net_rating: row.net_rating,
-    pace: row.pace,
-    off_efg_pct: row.off_efg_pct,
-    off_tov_pct: row.off_tov_pct,
-    off_orb_pct: row.off_orb_pct,
-    off_ft_rate: row.off_ft_rate,
-    def_efg_pct: row.def_efg_pct,
-    def_tov_pct: row.def_tov_pct,
-    def_drb_pct: row.def_drb_pct,
-    def_ft_rate_allowed: row.def_ft_rate_allowed,
-    source: "basketball-reference",
-    source_url: row.source_url,
-    fetched_at: row.fetched_at,
-  };
-}
-
 async function upsertRatings(
-  rows: UpsertPayload[],
+  rows: NbaTeamRatingPayload[],
   dryRun: boolean,
   log: (msg: string) => void,
   errors: string[],
@@ -190,6 +143,7 @@ export async function refreshNbaTeamRatings(
   log(`Loaded ${teams.length} NBA teams from DB.`);
   if (teams.length === 0) {
     return {
+      release: NBA_TEAM_RATINGS_REFRESH_RELEASE,
       mode: "no-teams",
       teamsInDb: 0,
       seasonFetchStatus: "failed",
@@ -200,6 +154,31 @@ export async function refreshNbaTeamRatings(
       written: 0,
       errors,
     };
+  }
+
+  if (opts.skipFetchWhenRegularSeasonComplete) {
+    const { data: existing, error } = await supabase
+      .from("nba_team_ratings")
+      .select("team_id")
+      .eq("season", opts.season)
+      .eq("season_type", "regular")
+      .in("team_id", teams.map((team) => team.id));
+    if (error) throw new Error(`load existing NBA ratings failed: ${error.message}`);
+    const coveredTeamIds = new Set((existing ?? []).map((row) => Number(row.team_id)));
+    if (teams.every((team) => coveredTeamIds.has(team.id))) {
+      return {
+        release: NBA_TEAM_RATINGS_REFRESH_RELEASE,
+        mode: "already-complete",
+        teamsInDb: teams.length,
+        seasonFetchStatus: "skipped",
+        seasonRowsParsed: 0,
+        playoffFetchStatus: "skipped",
+        playoffRowsParsed: 0,
+        payloadsBuilt: 0,
+        written: 0,
+        errors,
+      };
+    }
   }
 
   // 2. Season-wide ratings fetch.
@@ -234,22 +213,22 @@ export async function refreshNbaTeamRatings(
   }
 
   // 4. Build upsert payloads filtered to teams we have in DB.
-  const payloads: UpsertPayload[] = [];
+  const payloads: NbaTeamRatingPayload[] = [];
   for (const r of seasonResult.rows) {
-    const t = matchToTeamRow(r, teams);
+    const t = matchBbrRatingToNbaTeam(r, teams);
     if (t === null) {
       log(
         `  ⏭ skip BBR row ${r.abbreviation} (${r.team_name}) — no matching teams.abbreviation in DB`,
       );
       continue;
     }
-    payloads.push(buildPayload(r, t, opts.season, "regular"));
+    payloads.push(buildNbaTeamRatingPayload(r, t, opts.season, "regular"));
   }
   if (playoffResult && playoffResult.status === "ok") {
     for (const r of playoffResult.rows) {
-      const t = matchToTeamRow(r, teams);
+      const t = matchBbrRatingToNbaTeam(r, teams);
       if (t === null) continue;
-      payloads.push(buildPayload(r, t, opts.season, "playoffs"));
+      payloads.push(buildNbaTeamRatingPayload(r, t, opts.season, "playoffs"));
     }
   }
   log(
@@ -260,6 +239,7 @@ export async function refreshNbaTeamRatings(
   const written = await upsertRatings(payloads, opts.dryRun, log, errors);
 
   return {
+    release: NBA_TEAM_RATINGS_REFRESH_RELEASE,
     mode: opts.dryRun ? "dry-run" : "write",
     teamsInDb: teams.length,
     seasonFetchStatus,

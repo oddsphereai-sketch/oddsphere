@@ -52,7 +52,10 @@ import {
   seedNbaGames,
   type SeedNbaGamesResult,
 } from "@/lib/services/nba/seedNbaGamesService";
-import { refreshNbaTeamRatings } from "@/lib/services/nba/refreshNbaTeamRatingsService";
+import {
+  NBA_TEAM_RATINGS_REFRESH_RELEASE,
+  refreshNbaTeamRatings,
+} from "@/lib/services/nba/refreshNbaTeamRatingsService";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import {
@@ -62,7 +65,7 @@ import {
 import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_21_r10_reconciled_current_board";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_21_r11_exact_team_rating_identity";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -212,25 +215,53 @@ export async function GET(request: Request): Promise<Response> {
 
       // ─── Step 3: refreshNbaTeamRatings ────────────────────────────
       console.log(`[nba-daily-refresh] step=ratings  season=${season}  mode=${intraday ? "skip" : "full"}`);
+      const skippedRatingsResult = {
+        release: NBA_TEAM_RATINGS_REFRESH_RELEASE,
+        mode: "skipped" as const,
+        teamsInDb: 0,
+        seasonFetchStatus: "skipped" as const,
+        seasonRowsParsed: 0,
+        playoffFetchStatus: "skipped" as const,
+        playoffRowsParsed: 0,
+        payloadsBuilt: 0,
+        written: 0,
+        errors: [] as string[],
+      };
+      // Opening-month forecasts intentionally carry a regressed prior-season
+      // rating pack. Repair that immutable pack once when any current NBA team
+      // is missing, then skip its provider calls on subsequent full cycles.
+      const priorSeasonRatingsResult = intraday
+        ? skippedRatingsResult
+        : await refreshNbaTeamRatings({
+            season: season - 1,
+            includePlayoffs: true,
+            dryRun: false,
+            skipFetchWhenRegularSeasonComplete: true,
+            logger: stepLog("ratings-prior-season"),
+          });
       const ratingsResult = intraday
-        ? {
-            mode: "skipped" as const,
-            teamsInDb: 0,
-            seasonFetchStatus: "skipped" as const,
-            seasonRowsParsed: 0,
-            playoffFetchStatus: "skipped" as const,
-            playoffRowsParsed: 0,
-            payloadsBuilt: 0,
-            written: 0,
-            errors: [] as string[],
-          }
+        ? skippedRatingsResult
         : await refreshNbaTeamRatings({
             season,
             includePlayoffs: true,
             dryRun: false,
             logger: stepLog("ratings"),
           });
+      stepDetails.ratings_prior_season = {
+        release: priorSeasonRatingsResult.release,
+        season: season - 1,
+        mode: priorSeasonRatingsResult.mode,
+        teamsInDb: priorSeasonRatingsResult.teamsInDb,
+        seasonFetchStatus: priorSeasonRatingsResult.seasonFetchStatus,
+        seasonRowsParsed: priorSeasonRatingsResult.seasonRowsParsed,
+        playoffFetchStatus: priorSeasonRatingsResult.playoffFetchStatus,
+        playoffRowsParsed: priorSeasonRatingsResult.playoffRowsParsed,
+        payloadsBuilt: priorSeasonRatingsResult.payloadsBuilt,
+        written: priorSeasonRatingsResult.written,
+        errorCount: priorSeasonRatingsResult.errors.length,
+      };
       stepDetails.ratings = {
+        release: ratingsResult.release,
         mode: ratingsResult.mode,
         teamsInDb: ratingsResult.teamsInDb,
         seasonFetchStatus: ratingsResult.seasonFetchStatus,
@@ -249,6 +280,8 @@ export async function GET(request: Request): Promise<Response> {
         throw new Error("ratings step returned mode=no-teams (no NBA teams resident in DB after seed step)");
       }
       if (!intraday && ratingsResult.seasonFetchStatus === "failed") partial = true;
+      if (!intraday && priorSeasonRatingsResult.seasonFetchStatus === "failed") partial = true;
+      if (priorSeasonRatingsResult.errors.length > 0) partial = true;
       if (ratingsResult.errors.length > 0) partial = true;
 
       // ─── Step 4: refreshNbaLines ──────────────────────────────────

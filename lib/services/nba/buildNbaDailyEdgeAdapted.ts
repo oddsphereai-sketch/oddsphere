@@ -29,6 +29,7 @@ import { publicSplitsSupported } from "../../config/publicSplitsCapability";
 import {
   buildNbaFeatureSnapshotsWithProvenance,
   type InjuryResolver,
+  type NbaTeamRatingsRow,
 } from "./featureSnapshot";
 import { createEspnNbaGameInjuryResolver } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
@@ -163,6 +164,8 @@ export async function buildNbaDailyEdgePipeline(
     professionalArtifact?: NbaPortableModelArtifact;
     /** Read-only same-input audit hook for the superseded injury-count cap. */
     retainLegacyInjuryCap?: boolean;
+    /** Read-only same-input ratings audit hook; production callers omit this. */
+    teamRatingsOverride?: readonly NbaTeamRatingsRow[];
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
@@ -180,7 +183,10 @@ export async function buildNbaDailyEdgePipeline(
   const buildResults: SnapshotBuildResult[] = [];
   for (const d of utcDatesToQuery) {
     buildResults.push(
-      await buildNbaFeatureSnapshotsWithProvenance(d, { injuryResolver }),
+      await buildNbaFeatureSnapshotsWithProvenance(d, {
+        injuryResolver,
+        teamRatingsOverride: options.teamRatingsOverride,
+      }),
     );
   }
 

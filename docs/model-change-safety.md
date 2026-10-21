@@ -25,6 +25,30 @@ identity, one writer/lease, coherent cards, and unchanged locks. Roll back futur
 mixed releases, identity drift, lock mutation, unexpected board contraction, provider-load growth,
 or a live impact different from the reviewed comparison.
 
+## NBA exact team-rating identity and prior-season recovery
+
+On 2026-10-21 the live NBA audit found four of 11 games incorrectly marked
+fallback despite complete lines, splits, and injuries. The Basketball Reference
+ratings importer did not resolve the stored `GS`, `WSH`, `UTAH`, and `NO`
+abbreviations to provider `GSW`, `WAS`, `UTA`, and `NOP`, so those teams were
+also absent from the prior-season pack required by the opening-month handoff.
+
+Future unlocked releases advance to model r13, market marriage r16, grade r7,
+daily refresh r11, and team-rating refresh r1. Both identities resolve through
+the existing exact NBA registry, ambiguous matches fail closed, and the full
+daily writer performs one bounded prior-season recovery only while any current
+team lacks a regular-season row. Intraday cadence, model equations, market-
+reader rules, prices, stakes, sole writer, `prediction_pipeline:nba` lease,
+tracking boundary, and stored locks remain unchanged.
+
+The exact same-input 11-game rehearsal moves fallback games from four to zero,
+changes zero scores or sides, and promotes three existing positive-EV rows with
+zero demotions. Publication requires the focused identity/refresh/model/lock
+tests, full model-change gate, latest-main integration safety, protected PR,
+and live proof of 30-team prior coverage, 11 high-quality games, coherent
+reader output, healthy tracking, and unchanged locks. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-team-rating-identity-recovery-r13.md`.
+
 ## NFL player props exact close metadata recovery
 
 On 2026-10-21 the player-props writer was confirmed to lose closing metadata
