@@ -1010,7 +1010,7 @@ check(
     sportSelectionSource.includes('const DEFAULT_SPORT: Sport = "mlb"'),
 );
 check(
-  "activity reorders a product band without displacing the flagship hierarchy",
+  "today's active boards lead the selector while product hierarchy remains stable inside each activity group",
   orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, {
     ...DAILY_EDGE_SPORT_AVAILABILITY,
     nfl: { isLive: true, statusLabel: "No games today" },
@@ -1019,12 +1019,22 @@ check(
     nhl: { isLive: true, statusLabel: "No games today" },
     mlb: { isLive: true, statusLabel: "Active" },
     wnba: { isLive: true, statusLabel: "Active" },
-  }).join(",") === "nfl,cfb,nba,mlb,soccer,nhl,wnba,cbb",
+  }).join(",") === "nba,mlb,wnba,nfl,cfb,soccer,nhl,cbb",
+);
+check(
+  "an active WNBA board ranks ahead of an MLB board with no games today",
+  orderDailyEdgeSportKeys(["mlb", "wnba"], {
+    mlb: { isLive: true, statusLabel: "No games today" },
+    wnba: { isLive: true, statusLabel: "Active" },
+  }).join(",") === "wnba,mlb",
 );
 check(
   "CBB moves beside NBA only when its board becomes active",
   orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, {
     ...DAILY_EDGE_SPORT_AVAILABILITY,
+    nfl: { isLive: true, statusLabel: "Active" },
+    cfb: { isLive: true, statusLabel: "Active" },
+    nba: { isLive: true, statusLabel: "Active" },
     cbb: { isLive: true, statusLabel: "Active" },
   }).slice(0, 4).join(",") === "nfl,cfb,nba,cbb",
 );
