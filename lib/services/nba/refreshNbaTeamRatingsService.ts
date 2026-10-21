@@ -36,6 +36,7 @@ import {
   buildNbaTeamRatingPayload,
   matchBbrRatingToNbaTeam,
   NBA_TEAM_RATINGS_REFRESH_RELEASE,
+  recognizedNbaTeamRows,
   type NbaTeamRatingPayload,
   type NbaTeamRow,
 } from "./nbaTeamRatingIdentity";
@@ -43,6 +44,7 @@ import {
 export {
   buildNbaTeamRatingPayload,
   NBA_TEAM_RATINGS_REFRESH_RELEASE,
+  recognizedNbaTeamRows,
   type NbaTeamRatingPayload,
   type NbaTeamRow,
 } from "./nbaTeamRatingIdentity";
@@ -157,15 +159,22 @@ export async function refreshNbaTeamRatings(
   }
 
   if (opts.skipFetchWhenRegularSeasonComplete) {
+    const completenessTeams = recognizedNbaTeamRows(teams);
+    log(
+      `Checking prior-season completeness for ${completenessTeams.length} exact-registry NBA teams (${teams.length} total stored rows).`,
+    );
     const { data: existing, error } = await supabase
       .from("nba_team_ratings")
       .select("team_id")
       .eq("season", opts.season)
       .eq("season_type", "regular")
-      .in("team_id", teams.map((team) => team.id));
+      .in("team_id", completenessTeams.map((team) => team.id));
     if (error) throw new Error(`load existing NBA ratings failed: ${error.message}`);
     const coveredTeamIds = new Set((existing ?? []).map((row) => Number(row.team_id)));
-    if (teams.every((team) => coveredTeamIds.has(team.id))) {
+    if (
+      completenessTeams.length > 0 &&
+      completenessTeams.every((team) => coveredTeamIds.has(team.id))
+    ) {
       return {
         release: NBA_TEAM_RATINGS_REFRESH_RELEASE,
         mode: "already-complete",

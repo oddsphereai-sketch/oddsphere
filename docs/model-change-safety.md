@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## NBA active-registry ratings completeness
+
+The October 21 post-deploy audit found 30/30 current NBA clubs covered by the
+recovered prior-season ratings pack, plus one historical/test `LON` row in the
+shared teams table. The r1 completeness check counted every stored NBA row, so
+that non-registry identity would have forced a redundant prior-season provider
+fetch on every full cycle even though all model-eligible clubs were complete.
+
+Combined refresh r13 / team-rating refresh r2 now evaluates bounded recovery against
+the same exact 30-club NBA identity registry used for provider matching.
+Unknown stored identities remain in the database and remain unavailable to the
+model; they are not deleted, remapped, or silently accepted. Model r14, market
+marriage r16, grade r8, scores, probabilities, sides, grades, prices, cadence,
+writer, lease, tracking, and every locked payload are unchanged. Publication
+requires focused identity/cron tests, full model-change verification, latest-
+main integration safety, and live proof that the prior pass returns
+`already-complete` with no provider fetch.
+
 ## Owner-directed correctness candidate: NBA verified availability without a count-only cap
 
 On 2026-10-21 Daniel Mengel explicitly rejected automatic injury score adjustments and confidence

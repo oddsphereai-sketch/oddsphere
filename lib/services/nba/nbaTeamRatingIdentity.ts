@@ -2,7 +2,7 @@ import { normalizeBbrAbbr, type BbrTeamRatings } from "../../providers/real_api/
 import { normalizeTeamAbbr } from "../../providers/playbook/playbookTeamNormalizer";
 
 export const NBA_TEAM_RATINGS_REFRESH_RELEASE =
-  "nba_team_ratings_refresh_2026_10_21_r1_exact_team_identity_prior_recovery" as const;
+  "nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness" as const;
 
 export type NbaTeamRow = {
   id: number;
@@ -29,6 +29,19 @@ export type NbaTeamRatingPayload = {
   source_url: string;
   fetched_at: string;
 };
+
+/**
+ * The teams table retains historical/test identities that are not members of
+ * the current 30-club NBA registry. They must not make the bounded prior-
+ * season recovery look incomplete forever.
+ */
+export function recognizedNbaTeamRows(
+  teamRows: readonly NbaTeamRow[],
+): NbaTeamRow[] {
+  return teamRows.filter(
+    (team) => normalizeTeamAbbr("nba", team.abbreviation) !== null,
+  );
+}
 
 export function matchBbrRatingToNbaTeam(
   bbr: BbrTeamRatings,
