@@ -1,4 +1,4 @@
-export type PrivatePlayerPropSport = "nfl" | "mlb";
+export type PrivatePlayerPropSport = "nfl" | "mlb" | "nba";
 export type PrivatePlayerPropSide = "over" | "under" | "yes";
 export type PrivatePlayerPropResult = "win" | "loss" | "push";
 
@@ -72,6 +72,16 @@ export const PRIVATE_PLAYER_PROP_CUSHIONS: Readonly<Record<PrivatePlayerPropSpor
     batter_rbis: [0.5, 1],
     batter_hits_runs_rbis: [0.5, 1],
     batter_stolen_bases: [0.5, 1],
+  },
+  nba: {
+    points: [1, 2],
+    rebounds: [1, 2],
+    assists: [1, 2],
+    threes: [0.5, 1],
+    points_rebounds_assists: [2, 4],
+    points_rebounds: [2, 4],
+    points_assists: [2, 4],
+    rebounds_assists: [1, 2],
   },
 };
 

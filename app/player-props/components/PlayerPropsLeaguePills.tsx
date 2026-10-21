@@ -2,12 +2,12 @@ import { SportIcon } from "@/app/lab/components/SportIcon";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { PlayerPropsLeagueLink } from "./PlayerPropsLeagueLink";
 
-export function PlayerPropsLeaguePills({ league, nflEnabled = false, reviewMode = false }: { league: "mlb" | "nfl"; nflEnabled?: boolean; reviewMode?: boolean }) {
+export function PlayerPropsLeaguePills({ league, nflEnabled = false, nbaEnabled = false, reviewMode = false }: { league: "mlb" | "nfl" | "nba"; nflEnabled?: boolean; nbaEnabled?: boolean; reviewMode?: boolean }) {
   const leagues: Array<{ key: Sport; label: string; href?: string }> = [
     { key: "mlb", label: "MLB", href: reviewMode ? "/dev/mlb-props-preview" : "/mlb/props" },
     { key: "nfl", label: "NFL", href: nflEnabled ? (reviewMode ? "/dev/nfl-props-preview" : "/player-props?league=nfl") : undefined },
     { key: "cfb", label: "CFB" },
-    { key: "nba", label: "NBA" },
+    { key: "nba", label: "NBA", href: nbaEnabled && reviewMode ? "/dev/nba-props-preview" : undefined },
     { key: "wnba", label: "WNBA" },
     { key: "cbb", label: "CBB" },
     { key: "nhl", label: "NHL" },
