@@ -1,14 +1,29 @@
-/** Read-only current-board comparison for the exact-game NBA injury authority. */
+/** Read-only same-input comparison for the superseded count-only injury cap. */
 
 import { buildNbaDailyEdgePipeline } from "../../../lib/services/nba/buildNbaDailyEdgeAdapted";
+import type { NbaPlayerInjury } from "../../../lib/automodel/nba/types";
+import type { InjuryResolver } from "../../../lib/services/nba/featureSnapshot";
 
 const date = process.argv[2] ?? "2026-10-20";
 
 async function main(): Promise<void> {
-  const [legacy, exact] = await Promise.all([
-    buildNbaDailyEdgePipeline(date, { injuryResolver: async () => [] }),
-    buildNbaDailyEdgePipeline(date),
-  ]);
+  const exactReports = new Map<string, NbaPlayerInjury[] | null>();
+  const resolver: InjuryResolver = async (request) => {
+    const key = `${request.gameExternalId}:${request.teamAbbreviation}`;
+    if (!exactReports.has(key)) {
+      throw new Error(`Exact injury report ${key} was not primed.`);
+    }
+    return exactReports.get(key) ?? null;
+  };
+  const exact = await buildNbaDailyEdgePipeline(date);
+  for (const game of exact.nbaDto.games) {
+    exactReports.set(`${game.game_external_id}:${game.away_abbr}`, game.injuries.away_known ? game.injuries.away_players : null);
+    exactReports.set(`${game.game_external_id}:${game.home_abbr}`, game.injuries.home_known ? game.injuries.home_players : null);
+  }
+  const legacy = await buildNbaDailyEdgePipeline(date, {
+    injuryResolver: resolver,
+    retainLegacyInjuryCap: true,
+  });
   const legacyByGame = new Map(legacy.nbaDto.games.map((game) => [game.game_external_id, game]));
   const rows = exact.nbaDto.games.flatMap((game) => {
     const prior = legacyByGame.get(game.game_external_id);
@@ -17,14 +32,16 @@ async function main(): Promise<void> {
       gameExternalId: game.game_external_id,
       matchup: game.matchup,
       market: game.intelligence[market].market,
-      priorPick: prior.intelligence[market].pick_side,
-      exactPick: game.intelligence[market].pick_side,
-      priorGrade: prior.intelligence[market].grade,
-      exactGrade: game.intelligence[market].grade,
-      priorConfidence: prior.intelligence[market].model_confidence,
-      exactConfidence: game.intelligence[market].model_confidence,
-      priorProjection: prior.projection,
-      exactProjection: game.projection,
+      legacyPick: prior.intelligence[market].pick_side,
+      candidatePick: game.intelligence[market].pick_side,
+      legacyGrade: prior.intelligence[market].grade,
+      candidateGrade: game.intelligence[market].grade,
+      legacyConfidence: prior.intelligence[market].model_confidence,
+      candidateConfidence: game.intelligence[market].model_confidence,
+      legacyProjection: prior.projection,
+      candidateProjection: game.projection,
+      legacyPrice: prior.intelligence[market].current_price,
+      candidatePrice: game.intelligence[market].current_price,
       exactInjuries: game.injuries,
     }));
   });
@@ -44,12 +61,15 @@ async function main(): Promise<void> {
         sum + game.injuries.home_out + game.injuries.home_questionable + game.injuries.home_unknown
           + game.injuries.away_out + game.injuries.away_questionable + game.injuries.away_unknown,
       0),
-      pickChanges: rows.filter((row) => row.priorPick !== row.exactPick).length,
-      gradeChanges: rows.filter((row) => row.priorGrade !== row.exactGrade).length,
-      promotions: rows.filter((row) => !actionable(row.priorGrade) && actionable(row.exactGrade)).length,
-      demotions: rows.filter((row) => actionable(row.priorGrade) && !actionable(row.exactGrade)).length,
+      pickChanges: rows.filter((row) => row.legacyPick !== row.candidatePick).length,
+      gradeChanges: rows.filter((row) => row.legacyGrade !== row.candidateGrade).length,
+      promotions: rows.filter((row) => !actionable(row.legacyGrade) && actionable(row.candidateGrade)).length,
+      demotions: rows.filter((row) => actionable(row.legacyGrade) && !actionable(row.candidateGrade)).length,
       projectionChanges: rows.filter((row) =>
-        JSON.stringify(row.priorProjection) !== JSON.stringify(row.exactProjection)
+        JSON.stringify(row.legacyProjection) !== JSON.stringify(row.candidateProjection)
+      ).length,
+      priceChanges: rows.filter((row) =>
+        JSON.stringify(row.legacyPrice) !== JSON.stringify(row.candidatePrice)
       ).length,
     },
     games: exact.nbaDto.games.map((game) => ({

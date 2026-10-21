@@ -1,5 +1,30 @@
 # Model change safety protocol
 
+## Owner-directed correctness candidate: NBA verified availability without a count-only cap
+
+On 2026-10-21 Daniel Mengel explicitly rejected automatic injury score adjustments and confidence
+caps and directed Oddsphere to treat player availability and market reaction as nuanced evidence.
+The bounded candidate is documented in
+`docs/model-audits/2026-10-21-nba-player-availability-reader-predeclaration.md`.
+
+For future unlocked NBA rows only, the exact-game ESPN resolver may retain and display provider
+player id, name, position, normalized status, injury type, report timestamp, and expected-return
+date. Missing or malformed team reports remain unavailable. The current professional independent
+score and the validated target-book-excluded categorical market reader remain authoritative; no
+fixed player points, injury-count score shift, automatic side change, or new market authority is
+permitted. The candidate may remove only the legacy generic `source=injury` confidence ceiling from
+professional actionability because it has no player, minutes, role, replacement, chronology, or
+repricing model. Every other price, freshness, coverage, target-exclusion, grade, and data-quality
+control remains active.
+
+Because grades may change, the model/prediction-record and grade-policy releases must advance
+together. Publication requires a same-input board-impact report, score/probability/side/price/stake
+parity, focused NBA reader/writer/lock tests, TypeScript, the full model-change gate, latest-main
+integration safety, protected PR checks, and post-deploy proof of exact report coverage, release
+identity, one writer/lease, coherent cards, and unchanged locks. Roll back future unlocked output on
+mixed releases, identity drift, lock mutation, unexpected board contraction, provider-load growth,
+or a live impact different from the reviewed comparison.
+
 ## NFL player props exact close metadata recovery
 
 On 2026-10-21 the player-props writer was confirmed to lose closing metadata
