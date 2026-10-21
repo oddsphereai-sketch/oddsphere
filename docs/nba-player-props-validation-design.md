@@ -1,6 +1,6 @@
 # NBA Player Props: Historical Pilot and Reader Design
 
-Date: 2026-10-20  
+Date: 2026-10-20
 Status: offline research only; not approved for production
 
 ## Scope

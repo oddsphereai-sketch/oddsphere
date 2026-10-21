@@ -46,4 +46,3 @@ assert.equal(view.prices.length, 0);
 assert.equal(view.movement, null);
 assert(!JSON.stringify(view).includes("unavailable"));
 process.stdout.write("NBA player-props reader research contract passed.\n");
-

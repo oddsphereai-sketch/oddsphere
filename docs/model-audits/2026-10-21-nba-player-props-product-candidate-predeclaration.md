@@ -81,4 +81,3 @@ member recommendation, public result, or permission to rewrite any record.
 - Focused tests, TypeScript, lint, `npm run verify:model-change`, production
   build, current-main integration safety, protected PR checks, and post-deploy
   live proof before any public enablement.
-
