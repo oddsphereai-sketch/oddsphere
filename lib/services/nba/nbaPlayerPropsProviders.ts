@@ -70,6 +70,10 @@ export function normalizeBallDontLieNbaPlayerProps(args: {
     if (providerMarket && !market) unknownMarkets.set(providerMarket, (unknownMarkets.get(providerMarket) ?? 0) + 1);
     const providerEventId = id(row?.game_id);
     const providerPlayerId = id(row?.player_id);
+    const player = object(row?.player);
+    const playerTeam = object(player?.team);
+    const playerName = [string(player?.first_name), string(player?.last_name)].filter(Boolean).join(" ") || null;
+    const playerTeamIdentity = id(row?.team_id) ?? id(player?.team_id) ?? id(playerTeam?.id);
     const sportsbook = string(row?.vendor)?.toLowerCase() ?? null;
     const line = finite(row?.line_value);
     const marketObject = object(row?.market);
@@ -122,8 +126,8 @@ export function normalizeBallDontLieNbaPlayerProps(args: {
         canonicalGameId: event?.canonicalGameId ?? null,
         canonicalPlayerId: args.canonicalPlayers?.[accepted.providerPlayerId] ?? null,
         providerPlayerId: accepted.providerPlayerId,
-        playerName: null,
-        playerTeam: null,
+        playerName,
+        playerTeam: playerTeamIdentity,
         sportsbook: accepted.sportsbook,
         market: accepted.market,
         providerMarket: accepted.providerMarket,

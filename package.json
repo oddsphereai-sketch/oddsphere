@@ -146,6 +146,7 @@
     "test:nba-player-props-reader": "tsx scripts/test-nba-player-props-reader-contract.ts",
     "test:nba-player-props-product-preview": "tsx scripts/test-nba-player-props-product-preview.ts",
     "test:nba-player-props-lifecycle": "tsx scripts/test-nba-player-props-lifecycle.ts",
+    "test:nba-player-props-production-readiness": "tsx scripts/test-nba-player-props-production-readiness.ts",
     "audit:nba-player-props-provider": "tsx --env-file=.env.local scripts/operator/audit-nba-player-props-provider-coverage.ts",
     "test:football-player-props-history-contract": "tsx scripts/test-nfl-player-props-history-contract.ts",
     "test:football-player-props-current-season-state": "tsx scripts/test-nfl-player-props-current-season-state.ts",

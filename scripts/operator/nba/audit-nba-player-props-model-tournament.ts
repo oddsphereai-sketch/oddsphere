@@ -6,6 +6,7 @@
  * writes.
  */
 
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -326,6 +327,8 @@ async function main(): Promise<void> {
   if (!input) throw new Error("--input is required.");
   const outputValue = value("--output");
   const previewOutputValue = value("--preview-output");
+  const artifactOutputValue = value("--artifact-output");
+  const parityOutputValue = value("--parity-output");
   const dataset = JSON.parse(await readFile(input, "utf8")) as Dataset;
   if (dataset.mode !== "offline_research_only" || dataset.actionable !== false) {
     throw new Error("NBA props tournament accepts only an offline, non-actionable research dataset.");
@@ -455,6 +458,13 @@ async function main(): Promise<void> {
     confirmationPredictors: predictors,
   });
   const exactPriceGradeResearch = exactPriceResearch.report;
+  const frozenRuntimeArtifact = buildFrozenRuntimeArtifact({
+    dataset,
+    fitRows,
+    selectedByMarket,
+    predictors,
+    exactPriceGradeResearch,
+  });
   const selectionWindowGames = orderedGames.slice(0, modelSelectionEnd);
   const selectionWindowIds = new Set(selectionWindowGames.map((game) => game.gameId));
   const selectionWindowStability = walkForward(
@@ -543,7 +553,141 @@ async function main(): Promise<void> {
         && exactPriceResearch.previewGameIds.has(Number(row.providerEventId))),
     }, null, 2)}\n`, "utf8");
   }
+  if (artifactOutputValue) {
+    const artifactOutput = path.resolve(artifactOutputValue);
+    await mkdir(path.dirname(artifactOutput), { recursive: true });
+    await writeFile(artifactOutput, `${JSON.stringify(frozenRuntimeArtifact, null, 2)}\n`, "utf8");
+  }
+  if (parityOutputValue) {
+    const parityOutput = path.resolve(parityOutputValue);
+    await mkdir(path.dirname(parityOutput), { recursive: true });
+    await writeFile(parityOutput, `${JSON.stringify({
+      release: "nba_player_props_frozen_runtime_parity_2026_10_21_r1",
+      mode: "private_historical_parity_only",
+      actionable: false,
+      features: confirmation,
+      observations: dataset.openingObservations.filter((row) => row.isOpening
+        && row.canonicalGameId !== null
+        && confirmationIds.has(Number(row.providerEventId))),
+      rows: exactPriceResearch.parityRows,
+    }, null, 2)}\n`, "utf8");
+  }
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+}
+
+function buildFrozenRuntimeArtifact(args: {
+  dataset: Dataset;
+  fitRows: readonly NbaPlayerPropFeatureRow[];
+  selectedByMarket: Readonly<Record<Market, CandidateName>>;
+  predictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
+  exactPriceGradeResearch: ReturnType<typeof buildExactPriceGradeResearch>["report"];
+}) {
+  const ridgeModel = fitNbaPlayerPropsIndependentResearchModel(args.fitRows);
+  const minuteModel = fitMinuteRegression(args.fitRows);
+  const structuralDirectModels = Object.fromEntries(
+    (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+      component,
+      fitStructuralCountModel(args.fitRows, component, "identity", minuteModel, STRUCTURAL_FEATURES),
+    ]),
+  );
+  const structuralLogModels = Object.fromEntries(
+    (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+      component,
+      fitStructuralCountModel(args.fitRows, component, "log1p", minuteModel, STRUCTURAL_FEATURES),
+    ]),
+  );
+  const opportunityModels = Object.fromEntries(
+    (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+      component,
+      fitStructuralCountModel(args.fitRows, component, "identity", minuteModel, OPPORTUNITY_FEATURES),
+    ]),
+  );
+  const underlyingByMarket = Object.fromEntries(MARKETS.map((market) => [
+    market,
+    underlyingIndependentCandidate(args.selectedByMarket[market], market),
+  ]));
+  const distributions = Object.fromEntries(MARKETS.map((market) => {
+    const candidate = args.selectedByMarket[market];
+    return [market, residualDistribution(args.fitRows, market, args.predictors.get(candidate)!)];
+  }));
+  const candidateMarketMinimumDistance = Object.fromEntries(MARKETS.map((market) => {
+    const selected = args.selectedByMarket[market];
+    return [market, selected.includes("all_disagreements") ? 0
+      : selected.includes("2pp_disagreements") ? 0.02
+        : selected.includes("5pp_disagreements") ? 0.05
+          : null];
+  }));
+  const exactPriceArbitrationMinimumDistance = Object.fromEntries(MARKETS.map((market) => [
+    market,
+    targetExcludedArbitrationThreshold(market),
+  ]));
+  const byMarket = args.exactPriceGradeResearch.byMarket;
+  const artifactWithoutChecksum = {
+    release: "nba_player_props_frozen_runtime_artifact_2026_10_21_r1_private_forward",
+    publicEnabled: false,
+    sourceDatasetRelease: args.dataset.release,
+    sourceInputsSha256: args.dataset.immutableInputsSha256,
+    sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_21_r11_coherent_all_market_relative_leans",
+    sourceGradeRelease: args.exactPriceGradeResearch.release,
+    trainedThrough: args.fitRows.at(-1)?.feature_cutoff ?? null,
+    selectedByMarket: args.selectedByMarket,
+    underlyingByMarket,
+    candidateMarketMinimumDistance,
+    exactPriceArbitrationMinimumDistance,
+    ridgeModel,
+    minuteModel,
+    structuralDirectModels,
+    structuralLogModels,
+    opportunityModels,
+    distributions,
+    reliabilityModels: Object.fromEntries(MARKETS.map((market) => [market, byMarket[market].reliabilityModel])),
+    gradePolicies: {
+      points: {
+        kind: "ranked",
+        policy: byMarket.points.ungatedRankedGradeAudit.policy,
+        bestAngleQualified: byMarket.points.ungatedRankedGradeAudit.verdict.bestAngleQualified,
+      },
+      assists: {
+        kind: "ranked",
+        policy: byMarket.assists.rankedGradeAudit.policy,
+        bestAngleQualified: byMarket.assists.rankedGradeAudit.verdict.bestAngleQualified,
+      },
+      points_rebounds_assists: {
+        kind: "threshold_relative_best",
+        policy: byMarket.points_rebounds_assists.exploratoryPolicy,
+        relativeBest: byMarket.points_rebounds_assists.relativeBestAngleAudit.selected,
+      },
+      rebounds: {
+        kind: "slate_relative_lean",
+        policy: args.exactPriceGradeResearch.inheritedReboundLeanAudit.inheritedPolicy,
+        publicQualified: false,
+      },
+      threes: {
+        kind: "slate_relative_lean",
+        policy: args.exactPriceGradeResearch.threesForwardOnlyLeanAudit.selectedPolicy,
+        publicQualified: false,
+      },
+      points_rebounds: {
+        kind: "slate_relative_lean",
+        policy: args.exactPriceGradeResearch.uncoveredSlateRelativeLeanAudits.combos.selectedPolicy,
+        publicQualified: false,
+      },
+      points_assists: {
+        kind: "slate_relative_lean",
+        policy: args.exactPriceGradeResearch.uncoveredSlateRelativeLeanAudits.combos.selectedPolicy,
+        publicQualified: false,
+      },
+      rebounds_assists: {
+        kind: "slate_relative_lean",
+        policy: args.exactPriceGradeResearch.uncoveredSlateRelativeLeanAudits.combos.selectedPolicy,
+        publicQualified: false,
+      },
+    },
+  } as const;
+  return {
+    ...artifactWithoutChecksum,
+    payloadSha256: createHash("sha256").update(JSON.stringify(artifactWithoutChecksum)).digest("hex"),
+  };
 }
 
 function walkForward(
@@ -1778,6 +1922,7 @@ function buildExactPriceGradeResearch(args: {
   const selectedPreviewRows = expandedPreviewRows.filter((row) => previewGameIds.has(row.gameId));
   return {
     report,
+    parityRows: expandedPreviewRows,
     previewRows: selectedPreviewRows,
     previewGameIds,
     previewScopeKeys: new Set(selectedPreviewRows.map((row) => `${row.gameId}|${row.playerId}`)),

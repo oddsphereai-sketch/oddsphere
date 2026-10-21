@@ -1,7 +1,7 @@
 import { NBA_PLAYER_PROPS_FOUNDATION_MARKETS } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_SOURCE_POLICY_RELEASE =
-  "nba_player_props_source_policy_2026_10_20_r1" as const;
+  "nba_player_props_source_policy_2026_10_21_r2_private_forward_ready" as const;
 
 export const NBA_PLAYER_PROPS_SOURCE_POLICY = {
   liveBoard: {
@@ -20,6 +20,7 @@ export const NBA_PLAYER_PROPS_SOURCE_POLICY = {
     pointInTimeOddsReplay: "the_odds_api",
   },
   memberFetches: false,
+  privateCandidateWriterAvailable: true,
   productionWriterEnabled: false,
   routeEnabled: false,
   navigationEnabled: false,

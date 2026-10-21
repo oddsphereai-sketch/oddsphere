@@ -63,8 +63,10 @@ import {
   nbaScheduleSeedDates,
 } from "@/lib/services/nba/nbaRollingSchedule";
 import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
+import { refreshNbaPlayerPropsPrivateCandidate } from "@/lib/services/nba/nbaPlayerPropsPrivateWriter";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
+const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
 const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry";
 
 /**
@@ -410,6 +412,42 @@ export async function GET(request: Request): Promise<Response> {
         futureWindowPartial: partial && snapshotBlockers.length === 0,
       };
 
+      // Private NBA player-props candidate. It deliberately reuses this
+      // route's sport-scoped prediction_pipeline:nba lease and never runs a
+      // second timer or member-request fetch. Failure preserves the previous
+      // private last-known-good snapshot and cannot suppress Daily Edge.
+      let privatePlayerPropsWrites = 0;
+      if (process.env[NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV] === "true") {
+        try {
+          const rollingSchedule = await loadNbaRollingSchedule(etDateDashed);
+          const privatePlayerProps = await refreshNbaPlayerPropsPrivateCandidate({
+            client: supabase,
+            slateDate: etDateDashed,
+            season: providerSeason,
+            schedule: rollingSchedule.games,
+            ballDontLieApiKey: balldontlieApiKey,
+            theOddsApiKey: process.env.THE_ODDS_API_KEY?.trim() || null,
+            fullRefresh: !intraday,
+            now: now.toISOString(),
+          });
+          stepDetails.player_props_private_candidate = privatePlayerProps;
+          privatePlayerPropsWrites = privatePlayerProps.status === "published_private" ? 1 : 0;
+        } catch (error) {
+          partial = true;
+          stepDetails.player_props_private_candidate = {
+            public_enabled: false,
+            status: "last_known_good_preserved",
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      } else {
+        stepDetails.player_props_private_candidate = {
+          public_enabled: false,
+          disabled: true,
+          reason: `${NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV}!=true`,
+        };
+      }
+
       // The date-keyed response snapshot is the readiness boundary for the
       // 3 AM ET member rollover. Current-slate defects remain fail-closed.
       // Distant rolling-window quote defects remain reported as partial but
@@ -440,6 +478,7 @@ export async function GET(request: Request): Promise<Response> {
         lineTotals.linesWritten +
         lineTotals.linesRemoved +
         lineTotals.lineHistoryWritten +
+        privatePlayerPropsWrites +
         (responseSnapshot?.ok ? 1 : 0);
 
       return {

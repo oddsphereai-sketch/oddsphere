@@ -1,7 +1,7 @@
 import type { NbaPlayerPropPriceObservation, NbaPlayerPropSide } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_MARKET_EVIDENCE_RELEASE =
-  "nba_player_props_market_evidence_research_2026_10_20_r1" as const;
+  "nba_player_props_market_evidence_research_2026_10_21_r2_forward_chronology" as const;
 
 export type NbaPlayerPropsCanonicalOfferSet = {
   scopeKey: string;
@@ -41,12 +41,27 @@ const REFERENCE_BOOKS = new Set(["pinnacle", "fanduel", "bet365", "novig", "prof
 export function selectNbaPlayerPropsCanonicalOfferSets(
   rows: readonly NbaPlayerPropPriceObservation[],
 ): NbaPlayerPropsCanonicalOfferSet[] {
+  return selectCanonicalOfferSets(rows, false);
+}
+
+/** Forward-only selector: each sportsbook votes from its newest complete snapshot. */
+export function selectNbaPlayerPropsCurrentCanonicalOfferSets(
+  rows: readonly NbaPlayerPropPriceObservation[],
+): NbaPlayerPropsCanonicalOfferSet[] {
+  return selectCanonicalOfferSets(rows, true);
+}
+
+function selectCanonicalOfferSets(
+  rows: readonly NbaPlayerPropPriceObservation[],
+  currentOnly: boolean,
+): NbaPlayerPropsCanonicalOfferSet[] {
   const scopes = groupBy(rows.filter(resolvedObservation), marketScopeKey);
   return [...scopes.entries()].map(([scopeKey, scopeRows]) => {
-    const summaries = summarizeLines(scopeRows);
+    const selectableRows = currentOnly ? latestSnapshotByBook(scopeRows) : scopeRows;
+    const summaries = summarizeLines(selectableRows);
     const complete = summaries.filter((summary) => summary.completeBooks > 0);
     const candidates = complete.length > 0 ? complete : summaries;
-    const bookVotes = sportsbookLineVotes(scopeRows);
+    const bookVotes = sportsbookLineVotes(selectableRows);
     for (const vote of bookVotes) {
       const summary = summaries.find((row) => row.line === vote);
       if (summary) summary.votes += 1;
@@ -59,7 +74,7 @@ export function selectNbaPlayerPropsCanonicalOfferSets(
       || right.books - left.books
       || right.latest - left.latest
       || left.line - right.line)[0]!;
-    const freshest = freshestByBookSide(scopeRows.filter((row) => row.line === selected.line));
+    const freshest = freshestByBookSide(selectableRows.filter((row) => row.line === selected.line));
     return {
       scopeKey,
       canonicalLine: selected.line,
@@ -89,7 +104,7 @@ export function buildNbaPlayerPropsMarketEvidence(args: {
     .filter((row) => marketScopeKey(row) === scopeKey && Date.parse(row.observedAt) <= evaluatedAt)
     .sort((a, b) => Date.parse(a.observedAt) - Date.parse(b.observedAt));
   const atLine = inScope.filter((row) => row.line === args.target.line);
-  const pairProbabilities = completePairs(atLine)
+  const pairProbabilities = latestPairByBook(completePairs(atLine))
     .filter((pair) => pair.book !== targetBook)
     .flatMap((pair) => {
       const probability = noVigOver(pair.over.americanPrice, pair.under.americanPrice);
@@ -197,6 +212,24 @@ function sportsbookLineVotes(rows: readonly NbaPlayerPropPriceObservation[]): nu
     votes.push(closest.line);
   }
   return votes;
+}
+
+function latestSnapshotByBook(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
+  const output: NbaPlayerPropPriceObservation[] = [];
+  for (const values of groupBy(rows, (row) => normalizeBook(row.sportsbook)).values()) {
+    const latest = Math.max(...values.map((row) => Date.parse(row.observedAt)));
+    output.push(...values.filter((row) => Date.parse(row.observedAt) === latest));
+  }
+  return output;
+}
+
+function latestPairByBook(pairs: readonly Pair[]): Pair[] {
+  const selected = new Map<string, Pair>();
+  for (const pair of pairs) {
+    const previous = selected.get(pair.book);
+    if (!previous || Date.parse(pair.observedAt) > Date.parse(previous.observedAt)) selected.set(pair.book, pair);
+  }
+  return [...selected.values()];
 }
 
 function freshestByBookSide(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {

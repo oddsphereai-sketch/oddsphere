@@ -226,6 +226,23 @@ Last reviewed: 2026-10-21
   `docs/model-audits/2026-10-16-nba-three-market-reader-correction-attribution-r4.md`, and
   `docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-result.md`, plus
   `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
+- NBA player props remain member-disabled. The current private forward-readiness
+  family is frozen artifact / decision / product / lifecycle
+  `nba_player_props_frozen_runtime_artifact_2026_10_21_r1_private_forward` /
+  `nba_player_props_forward_decision_2026_10_21_r1_private_disabled` /
+  `nba_player_props_product_candidate_2026_10_21_r4_private_forward_ready` /
+  `nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only`.
+  It runs only when `NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED=true`, inside the
+  existing `prediction_pipeline:nba` lease. It adds frozen-artifact verification,
+  bounded current/opening prop capture, gap-only The Odds API fallback,
+  player-level regular-season/NBA-Cup state with official-source corrections,
+  exact-game injury exclusion, last-known-good
+  private snapshots, one-hour immutable locking, internal tracking, and official
+  revisioned settlement. Public route/navigation/tracking and member-request
+  fetching remain off; public board impact is 0 promotions / 0 demotions / 0
+  rows. Prior-season state bootstrap plus release-pure forward results remain
+  prerequisites for a separate public activation. Evidence and rollback:
+  `docs/model-audits/2026-10-21-nba-player-props-private-forward-readiness.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.

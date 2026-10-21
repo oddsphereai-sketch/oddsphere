@@ -7,7 +7,7 @@ import type {
 import type { NbaPlayerPropMarket } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE =
-  "nba_player_props_private_tracking_2026_10_20_r1_research_only" as const;
+  "nba_player_props_private_tracking_2026_10_21_r2_private_forward" as const;
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA =
   "nba_player_props_private_tracking_history_v1" as const;
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_MAX_ROWS = 24_000;

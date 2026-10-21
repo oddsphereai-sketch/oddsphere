@@ -19,27 +19,36 @@ assert.equal(plan.publicEnabled, false);
 assert.equal(plan.writerLeaseGroup, NBA_PLAYER_PROPS_WRITER_LEASE_GROUP);
 assert(plan.dueGameIds.includes(historical.games[0]!.gameId));
 
-const locked = advanceNbaPlayerPropsCandidateLifecycle({
+const missed = advanceNbaPlayerPropsCandidateLifecycle({
   now: new Date(firstStart - 45 * 60_000).toISOString(),
   previous: null,
   candidate: forward,
 });
-assert(locked.frozenAtLock > 0);
-const lockedRow = locked.snapshot.decisions.find((row) => row.gameId === historical.games[0]!.gameId)!;
-assert(lockedRow.lockedAt);
+assert.equal(missed.frozenAtLock, 0, "a post-cutoff run cannot invent or backdate a missing lock");
+assert(!missed.snapshot.decisions.some((row) => row.gameId === historical.games[0]!.gameId));
+
+const prelock = advanceNbaPlayerPropsCandidateLifecycle({
+  now: new Date(firstStart - 90 * 60_000).toISOString(),
+  previous: null,
+  candidate: forward,
+});
+const prelockRow = prelock.snapshot.decisions.find((row) => row.gameId === historical.games[0]!.gameId)!;
+assert(prelockRow && !prelockRow.lockedAt);
 
 const mutatedCandidate = {
   ...forward,
-  decisions: forward.decisions.map((row) => row.decisionKey === lockedRow.decisionKey
-    ? { ...row, projection: row.projection + 9, side: row.side === "over" ? "under" as const : "over" as const }
+  decisions: forward.decisions.map((row) => row.decisionKey === prelockRow.decisionKey
+    ? { ...row, decisionKey: `${row.decisionKey}|changed-line`, line: row.line + 1, projection: row.projection + 9, side: row.side === "over" ? "under" as const : "over" as const }
     : row),
 };
 const rerun = advanceNbaPlayerPropsCandidateLifecycle({
   now: new Date(firstStart - 30 * 60_000).toISOString(),
-  previous: locked.snapshot,
+  previous: prelock.snapshot,
   candidate: mutatedCandidate,
 });
-assert.deepEqual(rerun.snapshot.decisions.find((row) => row.decisionKey === lockedRow.decisionKey), lockedRow);
-assert(rerun.retainedLocked > 0);
+const lockedRow = rerun.snapshot.decisions.find((row) => row.gameId === historical.games[0]!.gameId)!;
+assert.equal(lockedRow.decisionKey, prelockRow.decisionKey, "lock must preserve the last genuinely observed pre-cutoff quote");
+assert.equal(lockedRow.projection, prelockRow.projection);
+assert(lockedRow.lockedAt);
 
 process.stdout.write("NBA player-props disabled lifecycle and lock immutability passed.\n");

@@ -6,7 +6,7 @@ import {
 import { nbaPlayerPropsCadenceStage, type NbaPlayerPropsCadenceStage } from "./nbaPlayerPropsSourcePolicy";
 
 export const NBA_PLAYER_PROPS_LIFECYCLE_CANDIDATE_RELEASE =
-  "nba_player_props_lifecycle_candidate_2026_10_21_r1_disabled" as const;
+  "nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only" as const;
 export const NBA_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nba" as const;
 export const NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES = 60;
 
@@ -84,15 +84,15 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
   ) {
     throw new Error("NBA props candidate lifecycle cannot operate on a public snapshot.");
   }
-  const previousByKey = new Map((args.previous?.decisions ?? []).map((row) => [row.decisionKey, row]));
-  const candidateByKey = new Map(args.candidate.decisions.map((row) => [row.decisionKey, row]));
+  const previousByScope = new Map((args.previous?.decisions ?? []).map((row) => [decisionScope(row), row]));
+  const candidateScopes = new Set(args.candidate.decisions.map(decisionScope));
   const output: NbaPlayerPropsMemberDecision[] = [];
   let recomputedUnlocked = 0;
   let frozenAtLock = 0;
   let retainedLocked = 0;
 
   for (const row of args.candidate.decisions) {
-    const prior = previousByKey.get(row.decisionKey);
+    const prior = previousByScope.get(decisionScope(row));
     if (prior?.lockedAt) {
       output.push(prior);
       retainedLocked += 1;
@@ -100,15 +100,17 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
     }
     const lockAt = Date.parse(row.scheduledStart) - NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES * 60_000;
     if (now >= lockAt) {
-      output.push({ ...row, lockedAt: new Date(Math.max(lockAt, 0)).toISOString() });
-      frozenAtLock += 1;
+      if (prior) {
+        output.push({ ...prior, lockedAt: new Date(Math.max(lockAt, 0)).toISOString() });
+        frozenAtLock += 1;
+      }
     } else {
       output.push(row);
       recomputedUnlocked += 1;
     }
   }
   for (const prior of args.previous?.decisions ?? []) {
-    if (prior.lockedAt && !candidateByKey.has(prior.decisionKey)) {
+    if (prior.lockedAt && !candidateScopes.has(decisionScope(prior))) {
       output.push(prior);
       retainedLocked += 1;
     }
@@ -131,6 +133,10 @@ export function advanceNbaPlayerPropsCandidateLifecycle(args: {
     frozenAtLock,
     retainedLocked,
   };
+}
+
+function decisionScope(row: NbaPlayerPropsMemberDecision): string {
+  return [row.gameId, row.playerId, row.market].join("|");
 }
 
 function timestamp(value: string, field: string): number {
