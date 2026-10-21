@@ -15,10 +15,13 @@ type Block = "development" | "confirmation" | "holdout";
 type Forecast = { expectedAwayPoints: number; expectedHomePoints: number; expectedMarginHome: number; expectedTotal: number };
 type PredictionRow = {
   id: number; external_id: number; slate_date: string; market: string; side: string | null;
-  line_value: number | null; play_grade: string | null; no_bet: boolean | null;
+  line_value: number | null; odds_american: number | null; play_grade: string | null; no_bet: boolean | null;
   locked_at: string; model_version: string | null; snapshot_json: Json | null;
+  prediction_grades: StoredGrade | StoredGrade[] | null;
 };
 type FinalGame = { external_id: string | number; status: string | null; away_score: number | null; home_score: number | null };
+type SettledFinalGame = FinalGame & { away_score: number; home_score: number };
+type StoredGrade = { result: string | null; actual_away_score: number | null; actual_home_score: number | null };
 type ContextRow = { payload_sha256: string; captured_at: string; markets: Json | null };
 type AuditRow = {
   gameId: string; date: string; block: Block; release: string; market: Market;
@@ -26,7 +29,8 @@ type AuditRow = {
   changed: boolean; correction: boolean; harm: boolean;
   independentAxisError: number; authoritativeAxisError: number;
   independentTeamScoreMae: number; authoritativeTeamScoreMae: number;
-  grade: string; actionable: boolean; splitState: string;
+  grade: string; actionable: boolean; splitState: string; oddsAmerican: number | null;
+  independentDistanceToLine: number | null; readerTotalSideFlipped: boolean; readerTotalShiftPoints: number | null;
 };
 
 const MARKETS: Market[] = ["moneyline", "spread", "total"];
@@ -47,9 +51,24 @@ function forecast(value: unknown): Forecast | null {
     ? { expectedAwayPoints: expectedAwayPoints!, expectedHomePoints: expectedHomePoints!, expectedMarginHome: expectedMarginHome!, expectedTotal: expectedTotal! }
     : null;
 }
-function isFinal(value: FinalGame | undefined): value is FinalGame {
+function isFinal(value: FinalGame | undefined): value is SettledFinalGame {
   return Boolean(value && ["final", "completed", "post"].includes(value.status?.trim().toLowerCase() ?? "") &&
     Number.isFinite(value.away_score) && Number.isFinite(value.home_score));
+}
+function storedGrade(value: PredictionRow["prediction_grades"]): StoredGrade | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+function settledGame(row: PredictionRow, value: FinalGame | undefined): FinalGame | undefined {
+  if (isFinal(value)) return value;
+  const grade = storedGrade(row.prediction_grades);
+  if (!["win", "loss", "push"].includes(grade?.result ?? "") ||
+    !Number.isFinite(grade?.actual_away_score) || !Number.isFinite(grade?.actual_home_score)) return value;
+  return {
+    external_id: row.external_id,
+    status: "final",
+    away_score: grade!.actual_away_score,
+    home_score: grade!.actual_home_score,
+  };
 }
 function blockFor(date: string): Block {
   if (date <= "2026-09-27") return "development";
@@ -65,7 +84,7 @@ async function readPredictions(client: SupabaseClient): Promise<PredictionRow[]>
   const rows: PredictionRow[] = [];
   for (let from = 0; from < 10_000; from += PAGE) {
     const { data, error } = await client.from("prediction_records")
-      .select("id,external_id,slate_date,market,side,line_value,play_grade,no_bet,locked_at,model_version,snapshot_json")
+      .select("id,external_id,slate_date,market,side,line_value,odds_american,play_grade,no_bet,locked_at,model_version,snapshot_json,prediction_grades(result,actual_away_score,actual_home_score)")
       .eq("sport", "cfb").gte("slate_date", "2026-08-01").not("locked_at", "is", null)
       .order("id", { ascending: true }).range(from, from + PAGE - 1);
     if (error) throw new Error(`CFB prediction read failed: ${error.message}`);
@@ -147,6 +166,16 @@ function metrics(rows: AuditRow[]) {
   const independentResolved = rows.filter((row) => row.independentResult !== "push");
   const authoritativeResolved = rows.filter((row) => row.authoritativeResult !== "push");
   const changed = rows.filter((row) => row.changed);
+  const exactPriceRows = rows.filter((row) => row.oddsAmerican !== null);
+  const profit = (row: AuditRow) => row.authoritativeResult === "push" ? 0 : row.authoritativeResult === "loss" ? -1 :
+    row.oddsAmerican! > 0 ? row.oddsAmerican! / 100 : 100 / Math.abs(row.oddsAmerican!);
+  const record = (selected: AuditRow[]) => ({
+    wins: selected.filter((row) => row.authoritativeResult === "win").length,
+    losses: selected.filter((row) => row.authoritativeResult === "loss").length,
+    pushes: selected.filter((row) => row.authoritativeResult === "push").length,
+    exactPriceBets: selected.filter((row) => row.oddsAmerican !== null).length,
+    units: selected.filter((row) => row.oddsAmerican !== null).reduce((sum, row) => sum + profit(row), 0),
+  });
   return {
     games: new Set(rows.map((row) => row.gameId)).size,
     dates: [...new Set(rows.map((row) => row.date))].sort(),
@@ -161,6 +190,11 @@ function metrics(rows: AuditRow[]) {
     authoritativeTeamScoreMae: rows.length ? rows.reduce((sum, row) => sum + row.authoritativeTeamScoreMae, 0) / rows.length : null,
     actionables: rows.filter((row) => row.actionable).length,
     grades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) => [grade, rows.filter((row) => row.grade === grade).length])),
+    exactPrice: {
+      bets: exactPriceRows.length,
+      units: exactPriceRows.reduce((sum, row) => sum + profit(row), 0),
+    },
+    byGrade: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) => [grade, record(rows.filter((row) => row.grade === grade))])),
   };
 }
 
@@ -173,6 +207,23 @@ function summarize(rows: AuditRow[]) {
       bySplitState: Object.fromEntries([...new Set(selected.map((row) => row.splitState))].sort().map((state) => [state, metrics(selected.filter((row) => row.splitState === state))])),
     }];
   }))]));
+}
+
+function totalFlipDiagnostics(rows: AuditRow[]) {
+  const selected = rows.filter((row) => row.market === "total" && row.changed);
+  const bucket = (minimum: number, maximum: number) => metrics(selected.filter((row) =>
+    row.independentDistanceToLine !== null && row.independentDistanceToLine >= minimum && row.independentDistanceToLine < maximum));
+  return {
+    changedTotals: metrics(selected),
+    explicitReaderFlips: metrics(selected.filter((row) => row.readerTotalSideFlipped)),
+    byIndependentDistanceToLine: {
+      zeroToThree: bucket(0, 3),
+      threeToSeven: bucket(3, 7),
+      sevenPlus: bucket(7, Number.POSITIVE_INFINITY),
+    },
+    byGrade: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play", "Held"].map((grade) =>
+      [grade, metrics(selected.filter((row) => row.grade === grade))])),
+  };
 }
 
 async function main(): Promise<void> {
@@ -199,14 +250,68 @@ async function main(): Promise<void> {
   const hashes = [...new Set(current.map((row) => text(object(row.snapshot_json).evidence_payload_sha256)).filter((value): value is string => value !== null))];
   const contexts = await readContexts(client, hashes);
   const rows: AuditRow[] = [];
+  const inventory = new Map<string, {
+    locked: number;
+    final: number;
+    evaluable: number;
+    missingFinal: number;
+    missingIndependentForecast: number;
+    missingAuthoritativeForecast: number;
+    missingSide: number;
+    missingLine: number;
+    missingFinalSamples: Array<{
+      externalId: number;
+      slateDate: string;
+      status: string | null;
+      awayScore: number | null;
+      homeScore: number | null;
+    }>;
+  }>();
   for (const row of current) {
-    const result = results.get(String(row.external_id));
+    const persistedResult = results.get(String(row.external_id));
+    const result = settledGame(row, persistedResult);
     const snapshot = object(row.snapshot_json);
     const independent = forecast(snapshot.independent_forecast);
     const authoritative = forecast(snapshot.forecast);
+    const authoritativeMetadata = object(snapshot.authoritative_forecast);
     const finalSide = row.side as Side | null;
     const market = row.market as Market;
-    if (!isFinal(result) || !independent || !authoritative || !finalSide || (market !== "moneyline" && row.line_value === null)) continue;
+    const decision = object(snapshot.decision_tuple);
+    const release = text(decision.decisionRelease ?? decision.decision_release) ?? row.model_version ?? "unknown";
+    const releaseInventory = inventory.get(release) ?? {
+      locked: 0,
+      final: 0,
+      evaluable: 0,
+      missingFinal: 0,
+      missingIndependentForecast: 0,
+      missingAuthoritativeForecast: 0,
+      missingSide: 0,
+      missingLine: 0,
+      missingFinalSamples: [],
+    };
+    releaseInventory.locked += 1;
+    if (isFinal(result)) releaseInventory.final += 1;
+    else {
+      releaseInventory.missingFinal += 1;
+      if (releaseInventory.missingFinalSamples.length < 3) {
+        releaseInventory.missingFinalSamples.push({
+          externalId: row.external_id,
+          slateDate: row.slate_date,
+          status: result?.status ?? null,
+          awayScore: result?.away_score ?? null,
+          homeScore: result?.home_score ?? null,
+        });
+      }
+    }
+    if (!independent) releaseInventory.missingIndependentForecast += 1;
+    if (!authoritative) releaseInventory.missingAuthoritativeForecast += 1;
+    if (!finalSide) releaseInventory.missingSide += 1;
+    if (market !== "moneyline" && row.line_value === null) releaseInventory.missingLine += 1;
+    const evaluable = isFinal(result) && independent !== null && authoritative !== null && finalSide !== null &&
+      (market === "moneyline" || row.line_value !== null);
+    if (evaluable) releaseInventory.evaluable += 1;
+    inventory.set(release, releaseInventory);
+    if (!evaluable) continue;
     const baseSide = independentSide(market, row.line_value, finalSide, independent);
     const independentResult = settle(market, baseSide, row.line_value, result.away_score!, result.home_score!);
     const authoritativeResult = settle(market, finalSide, row.line_value, result.away_score!, result.home_score!);
@@ -214,8 +319,6 @@ async function main(): Promise<void> {
     const independentAxis = market === "total" ? independent.expectedTotal : independent.expectedMarginHome;
     const authoritativeAxis = market === "total" ? authoritative.expectedTotal : authoritative.expectedMarginHome;
     const changed = baseSide !== finalSide;
-    const decision = object(snapshot.decision_tuple);
-    const release = text(decision.decisionRelease ?? decision.decision_release) ?? row.model_version ?? "unknown";
     const grade = normalizedGrade(row.play_grade);
     const hash = text(snapshot.evidence_payload_sha256);
     rows.push({
@@ -228,6 +331,13 @@ async function main(): Promise<void> {
       authoritativeTeamScoreMae: (Math.abs(authoritative.expectedAwayPoints - result.away_score!) + Math.abs(authoritative.expectedHomePoints - result.home_score!)) / 2,
       grade, actionable: row.no_bet !== true && (grade === "Best Angle" || grade === "Lean"),
       splitState: splitState(hash ? contexts.get(hash) : undefined, market),
+      oddsAmerican: row.odds_american,
+      independentDistanceToLine: market === "moneyline" || row.line_value === null
+        ? null
+        : Math.abs((market === "total" ? independent.expectedTotal : independent.expectedMarginHome) -
+          (market === "total" ? row.line_value : -row.line_value)),
+      readerTotalSideFlipped: authoritativeMetadata.marketReaderTotalSideFlipped === true,
+      readerTotalShiftPoints: number(authoritativeMetadata.marketReaderTotalShiftPoints),
     });
   }
   const summary = summarize(rows);
@@ -246,14 +356,29 @@ async function main(): Promise<void> {
       }])),
     })),
   );
+  const activeRelease = "cfb_v1_daily_edge_decision_2026_10_15_r52_full_product_coordinator_compatibility";
+  if (process.argv.includes("--active-r52-total")) {
+    console.log(JSON.stringify({
+      release: "cfb_2026_current_market_marriage_select_audit_2026_10_20_r3_settled_grade_truth",
+      mode: "select_only_zero_writes_zero_provider_calls",
+      activeRelease,
+      inventory: inventory.get(activeRelease) ?? null,
+      markets: compactRows.filter((row) => row.release === activeRelease),
+      totalFlipDiagnostics: totalFlipDiagnostics(rows.filter((row) => row.release === activeRelease)),
+    }, null, 2));
+    return;
+  }
   console.log(JSON.stringify({
-    release: "cfb_2026_current_market_marriage_select_audit_2026_10_08_r2_immutable_records",
+    release: "cfb_2026_current_market_marriage_select_audit_2026_10_20_r3_settled_grade_truth",
     mode: "select_only_zero_writes_zero_provider_calls",
     lockedRecords: current.length,
     evaluatedRecords: rows.length,
     contextMatches: hashes.filter((hash) => contexts.has(hash)).length,
     duplicateGroups: duplicateGroups.length,
     duplicateSamples: duplicateGroups.slice(0, 20),
+    releaseInventory: Object.fromEntries([...inventory.entries()].sort(([left], [right]) => left.localeCompare(right))),
+    activeR52TotalFlipDiagnostics: totalFlipDiagnostics(rows.filter((row) =>
+      row.release === "cfb_v1_daily_edge_decision_2026_10_15_r52_full_product_coordinator_compatibility")),
     ...(process.argv.includes("--compact") ? { rows: compactRows } : { summary }),
   }, null, 2));
 }

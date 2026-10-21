@@ -504,7 +504,7 @@ Last reviewed: 2026-10-20
 - October 20 midweek availability and FCS continuity repair: the active
   collector/writer advance to
   `cfb_forward_evidence_collector_2026_10_20_r61_midweek_availability_fcs_continuity` /
-  `cfb_forward_evidence_writer_2026_10_20_r131_midweek_availability_fcs_continuity`.
+  `cfb_forward_evidence_writer_2026_10_20_r132_terminal_status_immutability`.
   Official conference availability advances to
   `cfb_official_conference_availability_2026_10_20_r3_shared_team_identity_container_compatibility`:
   it now uses the centralized strict team resolver and parses both Faktor
@@ -528,6 +528,16 @@ Last reviewed: 2026-10-20
   thresholds, stakes, provider hierarchy, one `prediction_pipeline:cfb`
   lease, and all locked records are unchanged. Evidence and rollback:
   `docs/model-audits/2026-10-20-cfb-midweek-availability-fcs-continuity.md`;
+- October 21 terminal-status continuity: the r132 sole writer reads each
+  existing CFB game status before its normal upsert. A stale scheduled provider
+  row cannot regress a final game, and a stale scheduled row cannot regress an
+  in-progress game. Provider final/live advances still apply normally. The
+  tracking refresh now begins with CFB at minute `:33`, before the writer's
+  five-minute acquisition opportunities, preventing the settlement pass from
+  repeatedly reaching CFB during a shared `prediction_pipeline:cfb` lease.
+  Forecasts, probabilities, sides, prices, grades, stakes, T-60 locks, and
+  historical records are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-21-cfb-terminal-status-and-settlement-continuity.md`.
   roll back r61/r131/r4/r3 to r60/r130/r3/r2 without rewriting locks.
 
 - October 20 market-history continuity capacity repair: the sole writer
@@ -2307,7 +2317,7 @@ The four-season chronological tournament selected the runtime configuration on 2
   `member-tracking-aggregate-v13-ucl-actionable-history`,
   `tracking-foundation-r10-ucl-actionable-history`,
   `tracking-foundation-v8-ucl-actionable-history`, and
-  `tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint`.
+  `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`.
   No locked row or model output changes. Evidence:
   `docs/model-audits/2026-10-20-ucl-actionable-tracking-continuity.md`.
 - Evidence and validation boundary: `docs/model-audits/2026-09-03-ucl-chronological-r2-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-chronological-r4-result.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-predeclaration.md`, `docs/model-audits/2026-09-03-ucl-opening-odds-actionability-result.md`, `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`, and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md` retain the historical release record. The r8u independent/Match Result foundation remains documented in `docs/model-audits/2026-10-14-ucl-elo-late-consensus-r8u-r10.md`; active r9 goals arbitration is documented in `docs/model-audits/2026-10-20-ucl-qualified-goals-arbitration-r9.md`; active future-unlocked r10 primary-score semantics are documented in `docs/model-audits/2026-10-20-ucl-coherent-primary-score-r10.md`. The current display-grade release is r13, and results must continue to be evaluated by exact model release and T-60 lock.
@@ -3574,7 +3584,7 @@ The paired live-slate replay is recorded in
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
 - Model / prediction record: `nba_professional_unified_2026_10_20_r11_heavy_tail_margin_calibration`
-- Market marriage: `nba_market_marriage_2026_10_20_r11_heavy_tail_margin_calibration`
+- Market marriage: `nba_market_marriage_2026_10_21_r14_bounded_high_water_market_evidence`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_16_r5_market_specific_accuracy`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
@@ -3582,7 +3592,7 @@ The paired live-slate replay is recorded in
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Member lock publication: `nba_member_lock_publication_2026_10_20_r2_complete_card_precedence`
 - Locked member snapshot: `nba_locked_member_snapshot_2026_10_20_r2_complete_card_evidence`
-- Tracking publication: `tracking_refresh_publication_2026_10_20_r2_nba_and_final_checkpoint`
+- Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
 - Tracking caches: `member-tracking-aggregate-v13-ucl-actionable-history`,
@@ -3612,6 +3622,19 @@ schedule plus the existing sport-scoped leases. Promotions, demotions, and
 actionable-count changes are all zero. Evidence and rollback:
 `docs/model-audits/2026-10-20-nba-lock-publication-tracking-repair.md` and
 `docs/model-audits/2026-10-20-nba-complete-card-lock-evidence-r2.md`.
+
+The October 21 r14 market-marriage repair removes an unpaginated direct
+`line_history` read from the unlocked member pipeline. That read silently
+stopped at 1,000 rows on multi-game slates and could omit opening-price and
+opening-spread evidence for later games. R14 derives the same display and
+grounding chronology from the already fully paginated canonical price
+observations consumed by the professional reader. It also replaces offset-plus-
+mutable-count pagination with monotone ID keyset pagination. Normal concurrent
+ingestion therefore cannot invalidate an entire slate while the reader is
+loading evidence; new observations are included when reached or on the next
+read, without duplicate or skipped IDs. The r11 forecast, r6 reader,
+r5 grade policy, selected prices, predictions, projections, grades, stakes,
+writer, lease, cadence, and immutable locked records remain unchanged.
 
 The October 20 r9 candidate preserves the independent model, two-point Spread authority, five-point
 Total authority, calibration, grade policy, writer, lease, cadence, target exclusion, pagination, and
@@ -3764,6 +3787,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
+- Canonical NBA split/price evidence cadence: every 15 minutes during `0-3` and `11-23` UTC, plus an hourly `20 4-10 * * *` continuity run. The October 21 continuity repair closes the prior 03:45-11:00 UTC collection blackout, during which the authoritative NBA line writer remained healthy but the professional reader correctly rejected its separate canonical evidence as more than 120 minutes old. The additional run uses the existing leased collector, source contracts, and reader semantics; it does not weaken freshness, add a writer, or mutate locked records.
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
 - NBA member-board eligibility: `nba_member_board_window_2026_10_16_r3_rolling_analysis`; every officially tracked regular-season date in the active seven-day window is analyzed, while preseason/offseason and dates beyond the bounded window remain ineligible. This reader eligibility does not create an official record before the existing T-60 lock lifecycle.
 
@@ -4434,7 +4458,7 @@ in `docs/model-audits/2026-08-21-wnba-incoherent-total-tuple-fallback.md`.
 
 ## MLB Player Props production release
 
-- Release: `mlb_props_2026_09_21_r43`
+- Release: `mlb_props_2026_10_21_r44`
 - Machine registry: `lib/mlb/props/marketModelVersions.ts`
 - Authoritative writer: `/api/cron/mlb-player-props-refresh` through
   `refreshMlbPropsBoard`
@@ -4454,6 +4478,8 @@ no change to the r43 model, probability, projection, side, grade, stake, provide
 member board, public tracking, lock or settlement. The SELECT-only paired NFL/MLB report and
 verification are documented in
 `docs/model-audits/2026-10-12-private-player-props-full-board-tracking.md`.
+
+The October 21 r44 release corrects the release-pure Best Angle / Lean ranking without changing any selected side, projection, probability, price, edge, EV, stake, provider call, writer, cadence, lock, settlement, copy, or layout. Qualified Runs Scored Under Leans at the existing `-200` Best Angle price floor or better become Best Angles; HRR Under and Pitcher Strikeouts Over Best Angles remain actionable but rerank to Lean. The rule is supported by the frozen r42 chronology and r43 forward ledger, is not a grade-count quota, and never reinterprets a locked row. Evidence and rollback are recorded in `docs/model-audits/2026-10-21-mlb-player-props-grade-ranking-r44-predeclaration.md` and its paired result. Rollback is r43 for future unlocked rows only.
 
 The September 21 r43 priced-offer retention release keeps fresh, supported pitcher offers visible when a confirmed probable starter has no recent MLB log sample. Such rows remain explicitly held by the existing Research or Data Check path with zero units. When no active scored model candidate exists, projection, probability, edge, EV, and fair odds remain null; when the established conservative pitcher scorer has an output but required member research is incomplete, the existing member-readiness gate preserves Data Check and zero units. r43 never substitutes the market for an independent model output. Hitter rows still require recent form, and every actionable pitcher row still requires the complete probability-backed model path. Snapshot validation permits a null projection only on an existing Research or Data Check hold and rejects it everywhere else. The writer, shared lease, provider budgets, exact-price selection, locks, tracking, UI copy, labels, and layout are unchanged. Evidence and rollback are recorded in `docs/model-audits/2026-09-21-mlb-props-priced-offer-retention-r43-predeclaration.md` and its paired result. Rollback is r42 without rewriting historical snapshots or locks.
 

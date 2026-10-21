@@ -10,6 +10,48 @@ export type NbaMovementHistoryRow = {
   observedAt: string | null;
 };
 
+export type NbaCanonicalPriceHistoryRow = {
+  sportsbook: string;
+  market: NbaMovementMarket;
+  selectionKey: string;
+  americanPrice: number | null;
+  line: number | null;
+  providerTimestamp: string | null;
+  fetchedAt: string;
+};
+
+/**
+ * Reuse the fully paginated canonical price-observation lane for NBA opening
+ * and same-book evidence. The former direct `line_history` read was capped by
+ * PostgREST at 1,000 rows, so a multi-game slate silently lost later games.
+ */
+export function buildNbaMovementHistoryFromCanonicalPrices(args: {
+  rowsByExternalGameId: ReadonlyMap<number, readonly NbaCanonicalPriceHistoryRow[]>;
+}): NbaMovementHistoryRow[] {
+  return [...args.rowsByExternalGameId.entries()].flatMap(([externalGameId, rows]) => rows.flatMap((row) => {
+    const side = row.selectionKey.split(":").at(-1) ?? "";
+    const validSide = row.market === "total"
+      ? side === "over" || side === "under"
+      : side === "home" || side === "away";
+    const observedAt = row.providerTimestamp ?? row.fetchedAt;
+    if (!validSide || !row.sportsbook.trim() || !Number.isFinite(Date.parse(observedAt))) return [];
+    return [{
+      externalGameId,
+      market: row.market,
+      side,
+      sportsbook: row.sportsbook,
+      line: row.line,
+      americanPrice: row.americanPrice,
+      observedAt,
+    }];
+  })).sort((left, right) =>
+    Date.parse(left.observedAt ?? "") - Date.parse(right.observedAt ?? "") ||
+    left.externalGameId - right.externalGameId ||
+    left.market.localeCompare(right.market) ||
+    left.sportsbook.localeCompare(right.sportsbook) ||
+    left.side.localeCompare(right.side));
+}
+
 export type NbaComparableOpening = {
   americanPrice: number;
   sportsbook: string;

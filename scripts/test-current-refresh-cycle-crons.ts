@@ -188,6 +188,10 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refre
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry/, "NHL refresh exposes its immutable morning-rollover retry release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");
+assert.ok(
+  crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "20 4-10 * * *"),
+  "canonical split and price evidence cannot go stale during the NBA overnight hourly refresh window",
+);
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /leaseRetryMaxWaitMs:\s*!dryRun && gateActive \? 20_000/, "lock sweep briefly waits for the shared lease before deferring");
 assert.match(source("app/lab/hooks/useDailyEdge.ts"), /refreshIntervalMs = 60_000/, "an open member board observes a newly published lock within a minute");
 

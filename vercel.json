@@ -54,6 +54,10 @@
       "schedule": "*/15 0-3 * * *"
     },
     {
+      "path": "/api/cron/public-splits-observations-refresh",
+      "schedule": "20 4-10 * * *"
+    },
+    {
       "path": "/api/cron/daily-edge-data-health",
       "schedule": "35 8 * * *"
     },
