@@ -32,23 +32,38 @@ export function buildCfbGameAvailability(args: {
   capturedAt: string;
   playbookRows: PlaybookInjuryTeamRow[];
   conferenceReport?: DailyEdgeGameAvailability | null;
+  publicNewsReport?: DailyEdgeGameAvailability | null;
   nationalReport?: DailyEdgeGameAvailability | null;
   previous?: DailyEdgeGameAvailability | null;
 }): DailyEdgeGameAvailability | null {
   const fresh = buildPlaybookAvailability(args.game, args.playbookRows, args.capturedAt) ??
     validSourceReport(args.game, args.conferenceReport ?? null, "Conference") ??
+    validSourceReport(args.game, args.publicNewsReport ?? null, "ESPN") ??
     validSourceReport(args.game, args.nationalReport ?? null, "SportsDataIO");
   if (!fresh) return args.previous ?? null;
   if (!args.previous) return fresh;
+  const freshAuthority = sourceAuthority(fresh.source);
+  const previousAuthority = sourceAuthority(args.previous.source);
+  if (freshAuthority !== previousAuthority) {
+    return freshAuthority > previousAuthority ? fresh : args.previous;
+  }
   const freshAt = Date.parse(fresh.reportUpdatedAt ?? "");
   const previousAt = Date.parse(args.previous.reportUpdatedAt ?? "");
   return !Number.isFinite(previousAt) || (Number.isFinite(freshAt) && freshAt >= previousAt) ? fresh : args.previous;
 }
 
+function sourceAuthority(source: string): number {
+  if (source === "Playbook") return 4;
+  if (source === "Conference") return 3;
+  if (source === "ESPN") return 2;
+  if (source === "SportsDataIO") return 1;
+  return 0;
+}
+
 function validSourceReport(
   game: NcaafGame,
   report: DailyEdgeGameAvailability | null,
-  source: "Conference" | "SportsDataIO",
+  source: "Conference" | "ESPN" | "SportsDataIO",
 ): DailyEdgeGameAvailability | null {
   if (!report || report.source !== source || report.eventId !== game.providerGameId) return null;
   // A published exact-game report with zero listed unavailable players is a

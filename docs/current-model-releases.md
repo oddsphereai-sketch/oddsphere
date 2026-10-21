@@ -9,14 +9,18 @@ Last reviewed: 2026-10-21
 ## Cross-sport confidence / execution contract
 
 - October 21 complete-health certification contract:
-  `daily_edge_complete_health_contract_2026_10_21_r1_all_active_models`
+  `daily_edge_complete_health_contract_2026_10_21_r2_public_cfb_availability`
   gives MLB, WNBA, NBA, NFL, CFB, NHL, and soccer one required evidence
   vocabulary while preserving each sport's own qualified market reader. The
   all-model database audit now includes NFL/CFB and uses their weekly board
-  window. Missing prices, source credentials, or reader dimensions are red;
-  no absent split or market signal is inferred. This is monitoring only and
+  window. Missing prices, genuinely required source credentials, or reader
+  dimensions are red; no absent split or market signal is inferred. CFB now
+  recognizes official conference reports plus bounded public ESPN injury news
+  as its no-key availability path, with SportsDataIO explicitly optional
+  rather than a false required-credential failure. This is monitoring only and
   changes no model or member output. Evidence:
-  `docs/model-audits/2026-10-21-daily-edge-complete-health-contract.md`.
+  `docs/model-audits/2026-10-21-daily-edge-complete-health-contract.md` and
+  `docs/model-audits/2026-10-21-cfb-public-injury-news-fallback-predeclaration.md`.
 
 - October 20 MLB/NHL rollover continuity advances the operational schedule
   releases to
@@ -511,6 +515,29 @@ Last reviewed: 2026-10-21
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 21 public injury-news fallback: the future-unlocked collector and
+  sole writer advance to
+  `cfb_forward_evidence_collector_2026_10_21_r63_public_injury_news_fallback` /
+  `cfb_forward_evidence_writer_2026_10_21_r134_public_injury_news_fallback`.
+  The existing official conference collectors remain first authority. One
+  bounded, no-key ESPN college-football news request may fill an otherwise
+  absent exact-game panel only when a current public article uniquely matches
+  a scheduled team and explicitly names a player plus an Out, Doubtful,
+  Questionable, Probable, Available, cleared, expected-to-play, or long-term
+  status. Generic injury discussion, stale or post-kickoff articles,
+  multi-team ambiguity, and inferred clearance fail closed. The newest status
+  for the same exact player is retained within the accepted feed; a lower
+  authority cannot displace retained exact-game official evidence.
+- SportsDataIO remains a supported optional lower-priority fallback, but its
+  credential is no longer required to certify CFB health. Public news cannot
+  certify an unlisted player or team healthy. This source is panel-only and is
+  never passed to verified-quarterback, independent-score, probability,
+  market-reader, side, grade, stake, promotion, or demotion paths. Locked
+  payloads remain byte-for-byte authoritative. Evidence and rollback:
+  `docs/model-audits/2026-10-21-cfb-public-injury-news-fallback-predeclaration.md`;
+  roll back r63/r134 and complete-health r2 together without modifying any
+  stored locked record.
+
 - October 21 national injury fallback: the future-unlocked CFB collector and
   sole writer advance to
   `cfb_forward_evidence_collector_2026_10_21_r62_national_injury_fallback` /
@@ -520,8 +547,9 @@ Last reviewed: 2026-10-21
   whose two scheduled teams match uniquely. Provider absence, failure, or an
   unmatched team is never medical clearance. This source is panel-only and
   cannot change projections, probabilities, market reading, sides, grades,
-  stakes, promotions, or demotions. Production certification requires
-  `SPORTSDATAIO_CFB_API_KEY` and a credential-backed post-deploy coverage read.
+  stakes, promotions, or demotions. This is the immediate predecessor to the
+  r63/r134 no-key public-news fallback above; `SPORTSDATAIO_CFB_API_KEY` is
+  optional in the active release.
   Evidence and rollback:
   `docs/model-audits/2026-10-21-cfb-national-injury-fallback.md`.
 
