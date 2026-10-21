@@ -32,10 +32,12 @@ export function buildCfbGameAvailability(args: {
   capturedAt: string;
   playbookRows: PlaybookInjuryTeamRow[];
   conferenceReport?: DailyEdgeGameAvailability | null;
+  nationalReport?: DailyEdgeGameAvailability | null;
   previous?: DailyEdgeGameAvailability | null;
 }): DailyEdgeGameAvailability | null {
   const fresh = buildPlaybookAvailability(args.game, args.playbookRows, args.capturedAt) ??
-    validConferenceReport(args.game, args.conferenceReport ?? null);
+    validSourceReport(args.game, args.conferenceReport ?? null, "Conference") ??
+    validSourceReport(args.game, args.nationalReport ?? null, "SportsDataIO");
   if (!fresh) return args.previous ?? null;
   if (!args.previous) return fresh;
   const freshAt = Date.parse(fresh.reportUpdatedAt ?? "");
@@ -43,8 +45,12 @@ export function buildCfbGameAvailability(args: {
   return !Number.isFinite(previousAt) || (Number.isFinite(freshAt) && freshAt >= previousAt) ? fresh : args.previous;
 }
 
-function validConferenceReport(game: NcaafGame, report: DailyEdgeGameAvailability | null): DailyEdgeGameAvailability | null {
-  if (!report || report.source !== "Conference" || report.eventId !== game.providerGameId) return null;
+function validSourceReport(
+  game: NcaafGame,
+  report: DailyEdgeGameAvailability | null,
+  source: "Conference" | "SportsDataIO",
+): DailyEdgeGameAvailability | null {
+  if (!report || report.source !== source || report.eventId !== game.providerGameId) return null;
   // A published exact-game report with zero listed unavailable players is a
   // verified clear report, not missing evidence. It may replace an older
   // injury report when its provider timestamp is newer.

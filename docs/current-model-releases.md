@@ -4,9 +4,19 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-20
+Last reviewed: 2026-10-21
 
 ## Cross-sport confidence / execution contract
+
+- October 21 complete-health certification contract:
+  `daily_edge_complete_health_contract_2026_10_21_r1_all_active_models`
+  gives MLB, WNBA, NBA, NFL, CFB, NHL, and soccer one required evidence
+  vocabulary while preserving each sport's own qualified market reader. The
+  all-model database audit now includes NFL/CFB and uses their weekly board
+  window. Missing prices, source credentials, or reader dimensions are red;
+  no absent split or market signal is inferred. This is monitoring only and
+  changes no model or member output. Evidence:
+  `docs/model-audits/2026-10-21-daily-edge-complete-health-contract.md`.
 
 - October 20 MLB/NHL rollover continuity advances the operational schedule
   releases to
@@ -500,6 +510,20 @@ Last reviewed: 2026-10-20
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+- October 21 national injury fallback: the future-unlocked CFB collector and
+  sole writer advance to
+  `cfb_forward_evidence_collector_2026_10_21_r62_national_injury_fallback` /
+  `cfb_forward_evidence_writer_2026_10_21_r133_national_injury_fallback`.
+  Exact official-conference reports remain first authority; a credentialed
+  national SportsDataIO team catalog plus injured-player wire fills only games
+  whose two scheduled teams match uniquely. Provider absence, failure, or an
+  unmatched team is never medical clearance. This source is panel-only and
+  cannot change projections, probabilities, market reading, sides, grades,
+  stakes, promotions, or demotions. Production certification requires
+  `SPORTSDATAIO_CFB_API_KEY` and a credential-backed post-deploy coverage read.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-21-cfb-national-injury-fallback.md`.
 
 - October 20 midweek availability and FCS continuity repair: the active
   collector/writer advance to
@@ -2003,6 +2027,16 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
   `verify:model-change` gate. Existing locked rows remain immutable. Evidence
   and rollback:
   `docs/model-audits/2026-10-20-nfl-player-props-observed-scheduler-jitter.md`.
+- October 21 exact T-60 close recovery: sole writer / tracking advance to
+  `nfl_player_props_writer_2026_10_21_r59_exact_t60_close_recovery` /
+  `nfl_player_props_tracking_2026_10_21_r33_exact_t60_close_recovery`.
+  The unchanged append-only market observer is stored before settlement and
+  may fill only null close metadata when game, player, market, canonical line,
+  side, sportsbook, and decision release match exactly. It cannot change any
+  locked decision field or result. A production read found 42 missing closes:
+  two have exact stored T-60 tuples; 40 remain unrecoverable without
+  fabrication. Evidence and rollback:
+  `docs/model-audits/2026-10-21-nfl-player-props-exact-close-recovery.md`.
 - October 20 sharp-reference cadence alignment: the sole writer advances to
   `nfl_player_props_writer_2026_10_20_r58_reference_age_aligned_capture`. A
   zero-write Week 7 audit found that production retained 59 qualified

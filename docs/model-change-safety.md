@@ -1,5 +1,43 @@
 # Model change safety protocol
 
+## NFL player props exact close metadata recovery
+
+On 2026-10-21 the player-props writer was confirmed to lose closing metadata
+when the newest provider snapshot omitted an offer before settlement, even
+though the separate immutable observer archive retained an exact T-60 quote.
+The sole writer now captures that existing archive before settlement and fills
+only a null close when game, player, market, line, side, book, and decision
+release match exactly. Different-line or reconstructed prices are forbidden.
+
+Writer/tracking provenance advances to r59/r33. The observer schema, provider
+collection, model, calibration, decision, probabilities, projections, sides,
+grades, stakes, locks, results, cadence, and lease remain unchanged. Focused
+tests prove mismatched lines are rejected and the close step precedes
+settlement. The live read found 42 missing closes, only two exact recoverable;
+40 remain missing. Evidence:
+`docs/model-audits/2026-10-21-nfl-player-props-exact-close-recovery.md`.
+
+## CFB national injury fallback with zero model authority
+
+On 2026-10-21 the official-conference collector was confirmed to be a bounded
+ten-feed publication collector, not complete national CFB injury coverage.
+Future unlocked evidence adds a credentialed SportsDataIO team catalog and
+current injured-player wire behind exact official-conference reports. Both
+scheduled teams must match uniquely before even an empty report is accepted;
+missing credentials, failed requests, ambiguity, and unmatched teams remain
+explicitly unavailable.
+
+The new source is panel-only and is not passed to CFB quarterback availability,
+the independent model, probability distribution, market reader, decision,
+grade, or stake paths. Therefore board counts, promotions, demotions, sides,
+and scores remain identical. Collector/writer provenance advances to r62/r133;
+all model, calibration, decision, evidence-schema, member, lock, tracking, and
+settlement releases remain unchanged. Locked payloads retain exact stored
+precedence. Publication requires the focused source and continuity tests, CFB
+production suite, full model-change suite, latest-main integration safety, a
+protected PR, the production credential, and a post-deploy matched-game read.
+Evidence: `docs/model-audits/2026-10-21-cfb-national-injury-fallback.md`.
+
 ## Tracking-reader correction: UCL actionable-history continuity
 
 On 2026-10-20 the UCL Best Angle / Lean panel appeared empty or pending even

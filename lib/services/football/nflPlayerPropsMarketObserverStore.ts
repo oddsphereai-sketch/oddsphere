@@ -220,7 +220,7 @@ export async function captureNflPlayerPropsMarketObserver(args: {
   writerRelease: string;
 }): Promise<NflPlayerPropsMarketObserverCaptureResult> {
   const built = buildNflPlayerPropsMarketObserverRows(args);
-  const previous = await readHistory({ client: args.client, season: args.snapshot.season, week: args.snapshot.week });
+  const previous = await readNflPlayerPropsMarketObserverHistory({ client: args.client, season: args.snapshot.season, week: args.snapshot.week });
   const merged = mergeNflPlayerPropsMarketObserverRows({ previous: previous?.rows ?? [], current: built.rows });
   const history: NflPlayerPropsMarketObserverHistory = {
     kind: "nfl_player_props_market_observer_history_v1",
@@ -333,7 +333,7 @@ export function decodeNflPlayerPropsMarketObserverHistory(
   }
 }
 
-async function readHistory(args: {
+export async function readNflPlayerPropsMarketObserverHistory(args: {
   client: SupabaseClient;
   season: number;
   week: number;
