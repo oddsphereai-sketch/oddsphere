@@ -279,6 +279,21 @@ export function applyNbaProfessionalCandidate(args: {
       total_pick: totalPick,
       total_confidence: totalOver === null ? baseline.total_confidence : pickConfidence(totalOver),
       professional_grade_context: {
+        moneyline: {
+          directReadQualified: candidate.marketReader?.reads.moneyline.status === "qualified",
+          directReadSide:
+            candidate.marketReader?.reads.moneyline.side === "home" ||
+            candidate.marketReader?.reads.moneyline.side === "away"
+              ? candidate.marketReader.reads.moneyline.side
+              : null,
+          spreadReadQualified: candidate.marketReader?.reads.spread.status === "qualified",
+          spreadReadSide:
+            candidate.marketReader?.reads.spread.side === "home" ||
+            candidate.marketReader?.reads.spread.side === "away"
+              ? candidate.marketReader.reads.spread.side
+              : null,
+          spreadCorrectionApplied: candidate.final.movementApplied,
+        },
         spread: {
           readQualified: candidate.final.movementQualified,
           correctionApplied: candidate.final.movementApplied,

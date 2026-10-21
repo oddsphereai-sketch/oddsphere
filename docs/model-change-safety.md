@@ -1,5 +1,28 @@
 # Model change safety protocol
 
+## Owner-directed NBA Moneyline Best Angle evidence guard
+
+On 2026-10-21 Daniel Mengel clarified that NBA market reading must decide when a qualified signal
+justifies a fade, when the existing validated Spread correction justifies a flip, and when unresolved
+opposition should merely prevent the strongest play grade. Model probability above the no-vig market
+probability is model value, not market confirmation.
+
+For future unlocked rows only, r15/r17/r9 passes the existing professional reader's qualified
+observations into Moneyline grade evaluation. An opposite qualified direct Moneyline read—or, when
+that read is unavailable, an opposite qualified Spread observation—moves only Best Angle to Lean.
+It does not change actionability, score, side, probability, price, stake, reader threshold, writer,
+lease, cadence, tracking, or any locked payload. A validated Spread-authored final side and a matching
+direct Moneyline read remain confirming evidence; neither can bypass the existing probability, edge,
+positive exact-price EV, quality, or verified-availability gates. Public splits remain context-only.
+
+Publication requires the predeclared same-input board report, unit coverage for confirmation,
+opposition, unavailability, correction precedence and legacy parity, focused NBA pipeline/writer/lock
+tests, TypeScript, the full model-change gate, latest-main integration safety, protected PR checks,
+and live proof of the reviewed one Best Angle-to-Lean change with zero score/side/probability/price or
+locked-row changes. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-predeclaration.md` and
+`docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-result.md`.
+
 ## NBA active-registry ratings completeness
 
 The October 21 post-deploy audit found 30/30 current NBA clubs covered by the

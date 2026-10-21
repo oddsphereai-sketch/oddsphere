@@ -278,6 +278,13 @@ export type NbaAutoModelAudit = {
   provisional: boolean;
   /** Future-unlocked professional grade context. Optional for legacy fixtures and immutable locks. */
   professional_grade_context?: {
+    moneyline?: {
+      directReadQualified: boolean;
+      directReadSide: "home" | "away" | null;
+      spreadReadQualified: boolean;
+      spreadReadSide: "home" | "away" | null;
+      spreadCorrectionApplied: boolean;
+    };
     spread: {
       readQualified: boolean;
       correctionApplied: boolean;

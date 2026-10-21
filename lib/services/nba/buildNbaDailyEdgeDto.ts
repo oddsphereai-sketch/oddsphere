@@ -128,12 +128,18 @@ function composeQuickRead(intel: NbaGameIntelligence, snapshot: NbaGameSnapshot)
   }
   const m =
     top === "moneyline" ? intel.ml : top === "spread" ? intel.spread : intel.total;
+  const marketContext =
+    m.conflict_band === "support" ? "model value vs. price" :
+    m.conflict_band === "neutral" ? "model and price aligned" :
+    m.conflict_band === "mild_conflict" ? "price slightly ahead of model" :
+    m.conflict_band === "strong_conflict" ? "price well ahead of model" :
+    "market unavailable";
   const grade = m.grade;
   switch (grade) {
     case "best_angle":
-      return `${matchup} — Best Angle on ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, market ${m.conflict_band.replace("_", " ")}).`;
+      return `${matchup} — Best Angle on ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, ${marketContext}).`;
     case "lean":
-      return `${matchup} — Lean ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, market ${m.conflict_band.replace("_", " ")}).`;
+      return `${matchup} — Lean ${m.pick_label} (model ${m.effective_confidence.toFixed(0)}, ${marketContext}).`;
     case "watch":
       return `${matchup} — Watchlist on ${m.pick_label}. ${m.rationale[0] ?? ""}`.trim();
     case "caution":
@@ -272,6 +278,8 @@ export function buildNbaDailyEdgeGameDto(opts: {
   spreadReaderStats?: NbaSpreadReaderStats;
   /** Same-input audit hook for the superseded exact-price grade path. */
   retainLegacyGradeEconomics?: boolean;
+  /** Same-input audit hook for the superseded Moneyline Best Angle path. */
+  retainLegacyMoneylineEvidenceGrade?: boolean;
 }): NbaDailyEdgeGameDto {
   const intel = buildNbaGameIntelligence({
     snapshot: opts.snapshot,
@@ -281,6 +289,7 @@ export function buildNbaDailyEdgeGameDto(opts: {
     opportunities: opts.opportunities,
     injuriesSource: opts.provenance.injuries_source,
     enforcePositiveModelEv: opts.retainLegacyGradeEconomics !== true,
+    enforceMoneylineEvidenceGuard: opts.retainLegacyMoneylineEvidenceGrade !== true,
   });
 
   return {

@@ -168,6 +168,8 @@ export async function buildNbaDailyEdgePipeline(
     teamRatingsOverride?: readonly NbaTeamRatingsRow[];
     /** Read-only same-input audit hook for the superseded price-incoherent grade path. */
     retainLegacyGradeEconomics?: boolean;
+    /** Read-only same-input audit hook for the superseded Moneyline Best Angle path. */
+    retainLegacyMoneylineEvidenceGrade?: boolean;
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
@@ -536,6 +538,7 @@ export async function buildNbaDailyEdgePipeline(
       opportunities: gameOpps,
       spreadReaderStats: buildNbaSpreadReaderStats(featureRow),
       retainLegacyGradeEconomics: options.retainLegacyGradeEconomics,
+      retainLegacyMoneylineEvidenceGrade: options.retainLegacyMoneylineEvidenceGrade,
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,
