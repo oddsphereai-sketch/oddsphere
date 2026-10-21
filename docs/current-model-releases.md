@@ -3621,7 +3621,7 @@ The paired live-slate replay is recorded in
 - Market marriage: `nba_market_marriage_2026_10_21_r16_complete_team_rating_inputs`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_21_r8_rating_identity_no_count_cap`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_21_r11_exact_team_rating_identity`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_21_r12_current_slate_publication_isolation`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r1_exact_team_identity_prior_recovery`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
@@ -3865,11 +3865,12 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_21_r11_exact_team_rating_identity`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_21_r12_current_slate_publication_isolation`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
+  - Current-day seed, rating, and line defects still block the member snapshot. Future-window quote defects remain visible as a partial run and retry normally, but no longer suppress an otherwise complete current slate.
 - Canonical NBA split/price evidence cadence: every 15 minutes during `0-3` and `11-23` UTC, plus an hourly `20 4-10 * * *` continuity run. The October 21 continuity repair closes the prior 03:45-11:00 UTC collection blackout, during which the authoritative NBA line writer remained healthy but the professional reader correctly rejected its separate canonical evidence as more than 120 minutes old. The additional run uses the existing leased collector, source contracts, and reader semantics; it does not weaken freshness, add a writer, or mutate locked records.
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
 - NBA member-board eligibility: `nba_member_board_window_2026_10_16_r3_rolling_analysis`; every officially tracked regular-season date in the active seven-day window is analyzed, while preseason/offseason and dates beyond the bounded window remain ineligible. This reader eligibility does not create an official record before the existing T-60 lock lifecycle.
