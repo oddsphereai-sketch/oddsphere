@@ -149,6 +149,7 @@ export function buildNbaPlayerPropsReaderResearchView(args: {
         priceMovement: args.movement.priceMovement,
       }
     : null;
+  const evidence = buildNbaPlayerPropsReaderEvidence(args.feature, args.market);
   return {
     release: NBA_PLAYER_PROPS_READER_RESEARCH_RELEASE,
     mode: "offline_research_only",
@@ -167,9 +168,7 @@ export function buildNbaPlayerPropsReaderResearchView(args: {
       participationProbability: args.projection.participationProbability,
       conditionalMinutes: args.projection.conditionalMinutes,
     },
-    role: metrics(args.feature, ROLE),
-    production: metrics(args.feature, productionSpecs(args.market)),
-    matchup: metrics(args.feature, matchupSpecs(args.market)),
+    ...evidence,
     prices: exactPrices.map((row) => ({
       sportsbook: row.sportsbook,
       side: row.side as "over" | "under",
@@ -178,6 +177,17 @@ export function buildNbaPlayerPropsReaderResearchView(args: {
       observedAt: row.observedAt,
     })).sort((left, right) => left.side.localeCompare(right.side) || right.americanPrice - left.americanPrice),
     movement,
+  };
+}
+
+export function buildNbaPlayerPropsReaderEvidence(
+  feature: NbaPlayerPropFeatureRow,
+  market: NbaPlayerPropMarket,
+): Pick<NbaPlayerPropsReaderResearchView, "role" | "production" | "matchup"> {
+  return {
+    role: metrics(feature, ROLE),
+    production: metrics(feature, productionSpecs(market)),
+    matchup: metrics(feature, matchupSpecs(market)),
   };
 }
 
@@ -220,4 +230,3 @@ function projectionValue(
   }
   return null;
 }
-

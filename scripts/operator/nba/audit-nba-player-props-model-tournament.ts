@@ -279,6 +279,7 @@ async function main(): Promise<void> {
   const input = value("--input");
   if (!input) throw new Error("--input is required.");
   const outputValue = value("--output");
+  const previewOutputValue = value("--preview-output");
   const dataset = JSON.parse(await readFile(input, "utf8")) as Dataset;
   if (dataset.mode !== "offline_research_only" || dataset.actionable !== false) {
     throw new Error("NBA props tournament accepts only an offline, non-actionable research dataset.");
@@ -397,7 +398,7 @@ async function main(): Promise<void> {
       ),
     }];
   }));
-  const exactPriceGradeResearch = buildExactPriceGradeResearch({
+  const exactPriceResearch = buildExactPriceGradeResearch({
     modelFitRows: gradeModelFitRows,
     reliabilityFit,
     gradePolicy,
@@ -407,6 +408,7 @@ async function main(): Promise<void> {
     gradePredictors,
     confirmationPredictors: predictors,
   });
+  const exactPriceGradeResearch = exactPriceResearch.report;
   const selectionWindowGames = orderedGames.slice(0, modelSelectionEnd);
   const selectionWindowIds = new Set(selectionWindowGames.map((game) => game.gameId));
   const selectionWindowStability = walkForward(
@@ -475,6 +477,25 @@ async function main(): Promise<void> {
     const output = path.resolve(outputValue);
     await mkdir(path.dirname(output), { recursive: true });
     await writeFile(output, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  }
+  if (previewOutputValue) {
+    const previewOutput = path.resolve(previewOutputValue);
+    await mkdir(path.dirname(previewOutput), { recursive: true });
+    await writeFile(previewOutput, `${JSON.stringify({
+      release: "nba_player_props_private_product_preview_2026_10_21_r1",
+      mode: "private_historical_visual_qa_only",
+      actionable: false,
+      sourceDatasetRelease: dataset.release,
+      sourceTournamentRelease: report.release,
+      games: modelingGames.filter((game) => exactPriceResearch.previewGameIds.has(game.gameId)),
+      rows: exactPriceResearch.previewRows,
+      features: confirmation.filter((row) => exactPriceResearch.previewScopeKeys.has(
+        `${row.game_id}|${row.player_id}`,
+      )),
+      observations: dataset.openingObservations.filter((row) => row.isOpening
+        && row.canonicalGameId !== null
+        && exactPriceResearch.previewGameIds.has(Number(row.providerEventId))),
+    }, null, 2)}\n`, "utf8");
   }
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
@@ -1161,6 +1182,11 @@ type GradePolicy = Readonly<{
   watchEv: number;
 }>;
 type ExactPriceReplayRow = Readonly<{
+  gameId: number;
+  playerId: number;
+  playerName: string | null;
+  teamId: number;
+  opponentTeamId: number;
   scopeKey: string;
   featureCutoff: string;
   market: Market;
@@ -1228,6 +1254,10 @@ function buildExactPriceGradeResearch(args: {
   const canonicalByScope = new Map(args.canonical.map((offer) => [offer.scopeKey, offer]));
   const policyRows: ExactPriceReplayRow[] = [];
   const confirmationRows: ExactPriceReplayRow[] = [];
+  const previewRows: Array<ExactPriceReplayRow & {
+    grade: GradeName;
+    gradePolicySource: "points_ungated_ranked" | "assists_role_stable_ranked" | "pra_relative_best" | "forecast_only";
+  }> = [];
   const prepareMarket = (market: Market) => {
     const candidate = args.selectedByMarket[market];
     const gradeFinal = args.gradePredictors.get(candidate)!;
@@ -1281,6 +1311,43 @@ function buildExactPriceGradeResearch(args: {
     confirmationRows.push(...calibratedConfirmed);
     const policySearch = selectExploratoryGradePolicy(calibratedGradePolicy);
     const policyConfirmation = scoreGradePolicy(calibratedConfirmed, policySearch.policy);
+    const policyVerdict = gradePolicyVerdict(policySearch.summary, policyConfirmation);
+    const rankedGradeAudit = auditRankedGradePolicy(
+      reliabilityFitRaw,
+      gradePolicyRaw,
+      confirmed,
+    );
+    const ungatedRankedGradeAudit = auditRankedGradePolicy(
+      reliabilityFitRaw,
+      gradePolicyRaw,
+      confirmed,
+      ["all"],
+    );
+    const relativeBestAngleAudit = auditRelativeBestAngleTier(
+      calibratedGradePolicy,
+      calibratedConfirmed,
+      policySearch.policy,
+    );
+    for (const row of calibratedConfirmed) {
+      let grade: GradeName = "No Play";
+      let gradePolicySource: "points_ungated_ranked" | "assists_role_stable_ranked" | "pra_relative_best" | "forecast_only" = "forecast_only";
+      if (market === "points" && ungatedRankedGradeAudit.verdict.qualified) {
+        grade = rankGrade(row, ungatedRankedGradeAudit.policy);
+        gradePolicySource = "points_ungated_ranked";
+      } else if (market === "assists" && rankedGradeAudit.verdict.qualified) {
+        grade = rankGrade(row, rankedGradeAudit.policy);
+        if (grade === "Best Angle" && !rankedGradeAudit.verdict.bestAngleQualified) grade = "Lean";
+        gradePolicySource = "assists_role_stable_ranked";
+      } else if (market === "points_rebounds_assists" && policyVerdict.qualified) {
+        grade = gradeRowWithRelativeBest(row, policySearch.policy, relativeBestAngleAudit);
+        gradePolicySource = "pra_relative_best";
+      }
+      // An actionable member label cannot contradict its own chosen-side
+      // probability. Preserve the forecast and row, but keep it at Watchlist
+      // until the calibrated outcome probability clears 50%.
+      if ((grade === "Best Angle" || grade === "Lean") && row.finalProbability < 0.5) grade = "Watchlist";
+      previewRows.push({ ...row, grade, gradePolicySource });
+    }
     return [market, {
       selectedCandidate: candidate,
       underlyingIndependentCandidate: underlying,
@@ -1300,34 +1367,18 @@ function buildExactPriceGradeResearch(args: {
         gradePolicyRaw,
         confirmed,
       ),
-      rankedGradeAudit: auditRankedGradePolicy(
-        reliabilityFitRaw,
-        gradePolicyRaw,
-        confirmed,
-      ),
-      ungatedRankedGradeAudit: auditRankedGradePolicy(
-        reliabilityFitRaw,
-        gradePolicyRaw,
-        confirmed,
-        ["all"],
-      ),
+      rankedGradeAudit,
+      ungatedRankedGradeAudit,
       gradePolicy: exactPriceReplaySummary(calibratedGradePolicy),
       confirmation: exactPriceReplaySummary(calibratedConfirmed),
       exploratoryPolicy: policySearch.policy,
       policyGradePolicy: policySearch.summary,
       policyConfirmation,
-      policyVerdict: gradePolicyVerdict(
-        policySearch.summary,
-        policyConfirmation,
-      ),
-      relativeBestAngleAudit: auditRelativeBestAngleTier(
-        calibratedGradePolicy,
-        calibratedConfirmed,
-        policySearch.policy,
-      ),
+      policyVerdict,
+      relativeBestAngleAudit,
     }];
   }));
-  return {
+  const report = {
     release: "nba_player_props_exact_price_grade_research_2026_10_20_r8_best_angle_noninferiority",
     status: "opened_retrospective_research_only",
     actionable: false,
@@ -1335,11 +1386,58 @@ function buildExactPriceGradeResearch(args: {
     gradePolicy: exactPriceReplaySummary(policyRows),
     confirmation: exactPriceReplaySummary(confirmationRows),
     byMarket,
+    actionableCoherenceAudit: {
+      baseline: summarizeActionableCoherence(previewRows, () => true),
+      probabilityAtLeastHalf: summarizeActionableCoherence(previewRows, (row) => row.finalProbability >= 0.5),
+      nonnegativeExactPriceEv: summarizeActionableCoherence(previewRows, (row) => row.expectedValue >= 0),
+      coherentProbabilityAndPrice: summarizeActionableCoherence(
+        previewRows,
+        (row) => row.finalProbability >= 0.5 && row.expectedValue >= 0,
+      ),
+    },
     limitations: [
       "Only archived opening quotes are available; T-180/T-60/T-15/lock movement and CLV are not represented.",
       "The earlier confirmation outcomes were already opened during model research, so grade results cannot qualify production.",
       "Policies are exploratory candidates for private forward tracking, not member grades or stakes.",
     ],
+  };
+  const previewGameIds = selectPreviewGames(previewRows);
+  const selectedPreviewRows = previewRows.filter((row) => previewGameIds.has(row.gameId));
+  return {
+    report,
+    previewRows: selectedPreviewRows,
+    previewGameIds,
+    previewScopeKeys: new Set(selectedPreviewRows.map((row) => `${row.gameId}|${row.playerId}`)),
+  };
+}
+
+function summarizeActionableCoherence(
+  rows: readonly (ExactPriceReplayRow & { grade: GradeName })[],
+  retain: (row: ExactPriceReplayRow & { grade: GradeName }) => boolean,
+) {
+  const summarize = (values: readonly (ExactPriceReplayRow & { grade: GradeName })[]) => {
+    const actionable = values.filter((row) => (row.grade === "Best Angle" || row.grade === "Lean") && retain(row));
+    const wins = actionable.filter((row) => row.finalSide === row.outcomeSide).length;
+    const units = actionable.reduce((sum, row) => sum + unitReturn(
+      row.finalSide === row.outcomeSide,
+      row.americanPrice,
+    ), 0);
+    return {
+      records: actionable.length,
+      wins,
+      losses: actionable.length - wins,
+      hitRate: actionable.length > 0 ? wins / actionable.length : null,
+      units,
+      roi: actionable.length > 0 ? units / actionable.length : null,
+      boardShare: values.length > 0 ? actionable.length / values.length : null,
+    };
+  };
+  return {
+    all: summarize(rows),
+    byMarket: Object.fromEntries(MARKETS.map((market) => [
+      market,
+      summarize(rows.filter((row) => row.market === market)),
+    ])),
   };
 }
 
@@ -1393,6 +1491,11 @@ function exactPriceReplayRows(args: {
         ? evidence.targetExcludedOverProbability
         : 1 - evidence.targetExcludedOverProbability;
       resolved = {
+        gameId: row.game_id,
+        playerId: row.player_id,
+        playerName: row.player_name,
+        teamId: row.team_id,
+        opponentTeamId: row.opponent_team_id,
         scopeKey,
         featureCutoff: row.feature_cutoff,
         market: args.market,
@@ -2075,19 +2178,7 @@ function rankEligibility(row: ExactPriceReplayRow, gate: RankEligibilityGate): b
 
 function scoreRankGradePolicy(rows: readonly ExactPriceReplayRow[], policy: RankGradePolicy) {
   const graded = rows.map((row) => {
-    const score = rankSignal(row, policy.signalFamily);
-    const bestScore = rankSignal(row, policy.bestSignalFamily);
-    const eligible = rankEligibility(row, policy.eligibilityGate);
-    const priceQualified = row.americanPrice >= policy.minimumAmericanPrice;
-    const grade: GradeName = eligible && priceQualified && score >= policy.leanThreshold
-      && bestScore >= policy.bestThreshold
-      ? "Best Angle"
-      : eligible && priceQualified && score >= policy.leanThreshold
-        ? "Lean"
-        : eligible && score >= policy.leanThreshold
-          ? "Watchlist"
-          : "No Play";
-    return { row, grade };
+    return { row, grade: rankGrade(row, policy) };
   });
   const summary = (values: typeof graded) => {
     const wins = values.filter(({ row }) => row.finalSide === row.outcomeSide).length;
@@ -2119,6 +2210,69 @@ function scoreRankGradePolicy(rows: readonly ExactPriceReplayRow[], policy: Rank
       noPlay: graded.length > 0 ? noPlay.length / graded.length : null,
     },
   };
+}
+
+function rankGrade(row: ExactPriceReplayRow, policy: RankGradePolicy): GradeName {
+  const score = rankSignal(row, policy.signalFamily);
+  const bestScore = rankSignal(row, policy.bestSignalFamily);
+  const eligible = rankEligibility(row, policy.eligibilityGate);
+  const priceQualified = row.americanPrice >= policy.minimumAmericanPrice;
+  if (eligible && priceQualified && score >= policy.leanThreshold && bestScore >= policy.bestThreshold) {
+    return "Best Angle";
+  }
+  if (eligible && priceQualified && score >= policy.leanThreshold) return "Lean";
+  if (eligible && score >= policy.leanThreshold) return "Watchlist";
+  return "No Play";
+}
+
+function gradeRowWithRelativeBest(
+  row: ExactPriceReplayRow,
+  policy: GradePolicy,
+  audit: ReturnType<typeof auditRelativeBestAngleTier>,
+): GradeName {
+  const base = grade(row, policy);
+  if ((base !== "Best Angle" && base !== "Lean") || !audit.qualified || !audit.selected) return base;
+  return rankSignal(row, audit.selected.signalFamily) >= audit.selected.threshold ? "Best Angle" : "Lean";
+}
+
+function selectPreviewGames(rows: readonly (ExactPriceReplayRow & { grade: GradeName })[]): Set<number> {
+  const scoreByDate = new Map<string, { qualified: number; total: number; games: Set<number> }>();
+  for (const row of rows) {
+    const date = easternDateForPreview(row.featureCutoff);
+    const score = scoreByDate.get(date) ?? { qualified: 0, total: 0, games: new Set<number>() };
+    score.total += 1;
+    score.games.add(row.gameId);
+    if (row.grade === "Best Angle" || row.grade === "Lean") score.qualified += 1;
+    scoreByDate.set(date, score);
+  }
+  const selectedDate = [...scoreByDate.entries()]
+    .filter(([, score]) => score.games.size >= 2)
+    .sort((left, right) => right[1].qualified - left[1].qualified || right[1].games.size - left[1].games.size || right[1].total - left[1].total)[0]?.[0]
+    ?? [...scoreByDate.keys()].sort()[0];
+  const slateRows = selectedDate ? rows.filter((row) => easternDateForPreview(row.featureCutoff) === selectedDate) : rows;
+  const scoreByGame = new Map<number, { qualified: number; total: number }>();
+  for (const row of slateRows) {
+    const score = scoreByGame.get(row.gameId) ?? { qualified: 0, total: 0 };
+    score.total += 1;
+    if (row.grade === "Best Angle" || row.grade === "Lean") score.qualified += 1;
+    scoreByGame.set(row.gameId, score);
+  }
+  const selected = [...scoreByGame.entries()]
+    .sort((left, right) => right[1].qualified - left[1].qualified || right[1].total - left[1].total)
+    .slice(0, 3)
+    .map(([gameId]) => gameId);
+  return new Set(selected);
+}
+
+function easternDateForPreview(value: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${byType.get("year")}-${byType.get("month")}-${byType.get("day")}`;
 }
 
 function fitSingleSignalGradeReliability(
