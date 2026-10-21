@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
 import { SharpApiAbortError, SharpApiClientError } from "@/lib/providers/real_api/_sharpApiClient";
 import { computeSlateDate } from "@/lib/dates/slateDate";
+import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { assertOfficialTrackingMarket } from "@/lib/config/officialTrackingMarkets";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
@@ -114,6 +115,10 @@ import {
   type CfbOfficialConferenceAvailabilityResult,
 } from "./cfbOfficialConferenceAvailability";
 import {
+  fetchCfbEspnInjuryNewsAvailability,
+  type CfbEspnInjuryNewsAvailabilityResult,
+} from "./cfbEspnInjuryNewsAvailability";
+import {
   fetchCfbSportsDataIoAvailability,
   type CfbSportsDataIoAvailabilityResult,
 } from "./cfbSportsDataIoAvailability";
@@ -173,7 +178,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_21_r133_national_injury_fallback" as const;
+  "cfb_forward_evidence_writer_2026_10_21_r134_public_injury_news_fallback" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -237,6 +242,7 @@ export type CfbForwardWriterResult = {
     playbookSplits: string | null;
     playbookInjuries: string | null;
     sharpApiSplits: string | null;
+    espnInjuryNews: string | null;
     sportsDataIoAvailability: string | null;
   };
   captureFailures: CfbForwardCaptureFailure[];
@@ -471,6 +477,11 @@ export async function runCfbForwardEvidenceWriter(args: {
         .then((result) => ({ result, error: null }))
         .catch((error: unknown) => ({ result: null, error: splitRequestError(error) }))
     : Promise.resolve({ result: null as CfbOfficialConferenceAvailabilityResult | null, error: null as string | null });
+  const espnInjuryNewsPromise = officialAvailabilityDue
+    ? fetchCfbEspnInjuryNewsAvailability({ games: plannedGames, capturedAt: args.now })
+        .then((result) => ({ result, error: null as string | null }))
+        .catch((error: unknown) => ({ result: null as CfbEspnInjuryNewsAvailabilityResult | null, error: splitRequestError(error) }))
+    : Promise.resolve({ result: null as CfbEspnInjuryNewsAvailabilityResult | null, error: null as string | null });
   // Let the provider catalog prove coverage game by game. Pre-filtering to
   // FBS-vs-FBS silently excluded FBS/FCS and any supported FCS matchup even
   // though the national endpoints cost the same fixed two requests.
@@ -481,7 +492,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ? fetchCfbSportsDataIoAvailability({ games: nationalAvailabilityGames, capturedAt: args.now, apiKey: args.sportsDataIoApiKey })
           .then((result) => ({ result, error: null as string | null }))
           .catch((error: unknown) => ({ result: null as CfbSportsDataIoAvailabilityResult | null, error: splitRequestError(error) }))
-      : Promise.resolve({ result: null as CfbSportsDataIoAvailabilityResult | null, error: "SPORTSDATAIO_CFB_API_KEY_missing" });
+      : Promise.resolve({ result: null as CfbSportsDataIoAvailabilityResult | null, error: null as string | null });
   const weeklyForecasts = getCfbV1WeeklyForecasts({
     games,
     completedGames: priorResults.games,
@@ -603,7 +614,7 @@ export async function runCfbForwardEvidenceWriter(args: {
   // writer failure. CFB injuries come from the existing official-conference
   // collector, with exact-game last-known continuity below.
   const injuryAttempt = { rows: [] as unknown[], error: null as string | null };
-  const [linesAttempt, splitsAttempt, venueWeatherAttempt, quarterbacks, sharpSplitsAttempt, circaAttempt, espnCurrentOddsAttempt, officialAvailabilityAttempt, sportsDataIoAvailabilityAttempt] = await Promise.all([
+  const [linesAttempt, splitsAttempt, venueWeatherAttempt, quarterbacks, sharpSplitsAttempt, circaAttempt, espnCurrentOddsAttempt, officialAvailabilityAttempt, espnInjuryNewsAttempt, sportsDataIoAvailabilityAttempt] = await Promise.all([
     fetchCfbPlaybookRowsAttempt(() => playbook.lines("ncaaf")),
     fetchCfbPlaybookRowsAttempt(() => playbook.splits("ncaaf")),
     playbook.venueWeather("ncaaf")
@@ -628,6 +639,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       error: splitRequestError(error),
     })),
     officialAvailabilityPromise,
+    espnInjuryNewsPromise,
     sportsDataIoAvailabilityPromise,
   ]);
   const quarterbackContext = retainLatestNonemptyCfbQuarterbacks(priorQuarterbacks, quarterbacks.byTeamId);
@@ -749,6 +761,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       capturedAt: args.now,
       playbookRows: injuryAttempt.rows as PlaybookInjuryTeamRow[],
       conferenceReport: officialAvailabilityAttempt.result?.reportsByGame[plan.game.providerGameId] ?? null,
+      publicNewsReport: espnInjuryNewsAttempt.result?.reportsByGame[plan.game.providerGameId] ?? null,
       nationalReport: sportsDataIoAvailabilityAttempt.result?.reportsByGame[plan.game.providerGameId] ?? null,
       previous: previousInjuryReport,
     });
@@ -769,7 +782,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       // panel, but are not model inputs until a release-pure promotion and
       // demotion replay validates that authority. Paid Playbook evidence keeps
       // the existing production projection and grade behavior.
-      report: injuryReport?.source === "Playbook" ? injuryReport : null,
+      report: cfbAvailabilityReportForModel(injuryReport),
       capturedAt: args.now,
       previousEvidence: previousVerifiedAvailability,
     });
@@ -1184,12 +1197,13 @@ export async function runCfbForwardEvidenceWriter(args: {
           theOddsApiHistoricalOpeningAttempt.result?.creditsRemaining ??
           theOddsApiNeed.lastRemainingCredits,
         officialAvailability: officialAvailabilityAttempt.result?.requests ?? 0,
+        espnInjuryNews: espnInjuryNewsAttempt.result?.requests ?? 0,
         sportsDataIoAvailability: sportsDataIoAvailabilityAttempt.result?.requests ?? 0,
         espnReference: espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0),
         sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
         sharpApiSplits: 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + (sportsDataIoAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + 4,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + (espnInjuryNewsAttempt.result?.requests ?? 0) + (sportsDataIoAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + 4,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({
@@ -1239,7 +1253,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     publishedWatchlists: decisions.filter((row) => row.grade === "Watchlist").length,
     publishedNoPlays: decisions.filter((row) => row.grade === "No Play").length,
     heldMarkets: payloads.reduce((sum, payload) => sum + payload.decisions.heldMarkets.length, 0),
-    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + (sportsDataIoAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + tracking.trackingProviderRequests + 4,
+    apiCallsMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + (espnInjuryNewsAttempt.result?.requests ?? 0) + (sportsDataIoAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + tracking.trackingProviderRequests + 4,
     healthHolds: [...new Set([
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...(sharpFallbackAttempt.error ? ["sharpapi_odds_fallback_request_failed"] : []),
@@ -1253,6 +1267,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       ...(linesAttempt.error ? ["playbook_lines_request_failed"] : []),
       ...(splitsAttempt.error ? ["playbook_splits_request_failed"] : []),
       ...(injuryAttempt.error ? ["playbook_injuries_request_failed"] : []),
+      ...(espnInjuryNewsAttempt.error ? ["espn_cfb_injury_news_request_failed"] : []),
       ...(sportsDataIoAvailabilityAttempt.error ? ["sportsdataio_cfb_availability_unavailable"] : []),
       ...(advancedState.error ? ["cfb_current_advanced_state_refresh_failed"] : []),
       ...(tracking.trackingError ? ["official_tracking_incomplete"] : []),
@@ -1263,6 +1278,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       playbookSplits: splitsAttempt.error,
       playbookInjuries: injuryAttempt.error,
       sharpApiSplits: sharpSplitsAttempt.error,
+      espnInjuryNews: espnInjuryNewsAttempt.error,
       sportsDataIoAvailability: sportsDataIoAvailabilityAttempt.error,
     },
     captureFailures,
@@ -2204,6 +2220,12 @@ export function resolveCfbGameUpsertStatus(args: {
   return incoming;
 }
 
+export function cfbAvailabilityReportForModel(
+  report: DailyEdgeGameAvailability | null,
+): DailyEdgeGameAvailability | null {
+  return report?.source === "Playbook" ? report : null;
+}
+
 function emptyResult(reason: string, tracking: TrackingResult, memberSnapshot: MemberSnapshotResult): CfbForwardWriterResult {
-  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: tracking.trackingProviderRequests, healthHolds: tracking.trackingError ? ["official_tracking_incomplete"] : [], providerErrors: { playbookLines: null, playbookSplits: null, playbookInjuries: null, sharpApiSplits: null, sportsDataIoAvailability: null }, captureFailures: [], publicationAttempted: false, ...memberSnapshot, ...tracking };
+  return { writerRelease: CFB_FORWARD_WRITER_RELEASE, collected: false, collectionReason: reason, proposed: 0, inserted: 0, games: 0, stages: { opening: 0, unlocked: 0, t60: 0 }, publishedEvaluations: 0, publishedBestAngles: 0, publishedLeans: 0, publishedWatchlists: 0, publishedNoPlays: 0, heldMarkets: 0, apiCallsMaximum: tracking.trackingProviderRequests, healthHolds: tracking.trackingError ? ["official_tracking_incomplete"] : [], providerErrors: { playbookLines: null, playbookSplits: null, playbookInjuries: null, sharpApiSplits: null, espnInjuryNews: null, sportsDataIoAvailability: null }, captureFailures: [], publicationAttempted: false, ...memberSnapshot, ...tracking };
 }

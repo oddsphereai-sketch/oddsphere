@@ -1,5 +1,34 @@
 # Model change safety protocol
 
+## CFB public injury-news fallback with zero model authority
+
+On 2026-10-21 Daniel Mengel rejected a new injury-data subscription and a
+manual report-supply workflow. Future-unlocked CFB collection may therefore
+add one bounded, no-key ESPN college-football news request to the existing sole
+writer. An article is accepted only when it has a valid pre-kickoff timestamp
+and public URL, uniquely matches a scheduled team, names a player through the
+strict parser, and explicitly states an availability designation. Generic,
+stale, post-kickoff, malformed, or ambiguous items fail closed. Absence from
+public news is never medical clearance.
+
+Official conference reports retain first authority. ESPN public injury news is
+the second authority for otherwise missing exact-game panels; SportsDataIO is
+an optional lower-priority fallback and its credential is not a health
+requirement. Existing exact-game continuity remains intact. The public source
+is panel-only and is mechanically excluded from verified quarterback,
+independent-score, distribution, probability, market-reader, side, decision,
+grade, stake, promotion, and demotion paths. Locked payloads remain unchanged.
+
+Collector/writer and complete-health provenance advance to r63/r134/r2. Model,
+calibration, decision, evidence-schema, member, tracking, settlement, one
+writer, and the `prediction_pipeline:cfb` lease remain unchanged. Publication
+requires strict parser, authority, continuity, and zero-model-authority tests;
+the focused CFB suite; TypeScript; the full model-change gate; a live zero-write
+matched-game read; latest-main integration safety; protected PR checks; and
+post-deploy release and coverage proof. Evidence and rollback:
+`docs/model-audits/2026-10-21-cfb-public-injury-news-fallback-predeclaration.md`
+and `docs/model-audits/2026-10-21-cfb-public-injury-news-fallback-result.md`.
+
 ## Owner-directed NBA Moneyline Best Angle evidence guard
 
 On 2026-10-21 Daniel Mengel clarified that NBA market reading must decide when a qualified signal
@@ -127,7 +156,9 @@ settlement releases remain unchanged. Locked payloads retain exact stored
 precedence. Publication requires the focused source and continuity tests, CFB
 production suite, full model-change suite, latest-main integration safety, a
 protected PR, the production credential, and a post-deploy matched-game read.
-Evidence: `docs/model-audits/2026-10-21-cfb-national-injury-fallback.md`.
+This is the immediate predecessor to the no-key public fallback above;
+SportsDataIO remains supported but optional in the active release. Evidence:
+`docs/model-audits/2026-10-21-cfb-national-injury-fallback.md`.
 
 ## Tracking-reader correction: UCL actionable-history continuity
 

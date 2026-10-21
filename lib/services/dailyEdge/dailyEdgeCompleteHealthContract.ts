@@ -1,5 +1,5 @@
 export const DAILY_EDGE_COMPLETE_HEALTH_CONTRACT_RELEASE =
-  "daily_edge_complete_health_contract_2026_10_21_r1_all_active_models" as const;
+  "daily_edge_complete_health_contract_2026_10_21_r2_public_cfb_availability" as const;
 
 export type DailyEdgeHealthSport = "mlb" | "wnba" | "nba" | "nfl" | "cfb" | "nhl" | "soccer";
 export type DailyEdgeHealthDimension =
@@ -83,8 +83,7 @@ export const DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS: Readonly<Record<DailyEdgeHeal
     expectedMarkets: ["moneyline", "spread", "total"],
     lineMarkets: ["moneyline", "spread", "total"],
     lineValueRequiredMarkets: ["spread", "total"],
-    availabilityAuthorities: ["Official conference report", "SportsDataIO national FBS injury wire", "exact-game retained report"],
-    availabilityCredentialEnv: "SPORTSDATAIO_CFB_API_KEY",
+    availabilityAuthorities: ["Official conference report", "ESPN public injury news", "optional SportsDataIO national injury wire", "exact-game retained report"],
     splitsPolicy: "required_when_provider_publishes",
   }),
   nhl: contract({

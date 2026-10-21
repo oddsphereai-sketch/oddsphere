@@ -23,7 +23,8 @@ assert.deepEqual(certifyDailyEdgeCompleteHealth({
   activeGames: 2,
   dimensionCoverage: Object.fromEntries(DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS.cfb.dimensions.map((dimension) => [dimension, 2])),
   configuredEnvironment: { SPORTSDATAIO_CFB_API_KEY: false },
-}).missingCredentials, ["SPORTSDATAIO_CFB_API_KEY"]);
+}).missingCredentials, []);
+assert.equal(DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS.cfb.availabilityAuthorities.includes("ESPN public injury news"), true);
 assert.equal(certifyDailyEdgeCompleteHealth({ sport: "mlb", activeGames: 0, dimensionCoverage: {} }).status, "inactive");
 
 console.log("Daily Edge complete-health contract tests passed.");
