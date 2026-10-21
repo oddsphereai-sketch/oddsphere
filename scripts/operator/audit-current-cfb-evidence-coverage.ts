@@ -12,11 +12,13 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE } from "../../lib/services/football/cfbForwardEvidence";
+import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "../../lib/services/football/cfbWeeklyWindow";
 
 loadEnvConfig(process.cwd());
 
 const PAGE_SIZE = 500;
+const GAME_BATCH_SIZE = 10;
 const MARKETS = ["moneyline", "spread", "total"] as const;
 
 type ProjectedRow = {
@@ -79,11 +81,31 @@ async function main(): Promise<void> {
   const now = process.argv.find((value) => value.startsWith("--now="))?.slice(6) ?? new Date().toISOString();
   if (!Number.isFinite(Date.parse(now))) throw new Error(`Invalid --now value: ${now}`);
   const client = createClient(url, key, { auth: { persistSession: false } });
+  const window = activeCfbWeeklyWindow(now);
+  // Bound the database scan to the weekly provider envelope before projecting
+  // JSON fields. Filtering a full season after transport eventually trips the
+  // statement timeout even though this audit certifies only the visible board.
+  // The extra day after providerQueryEndDate safely contains Monday-night ET
+  // kickoffs that cross UTC midnight; the exact Eastern window is still
+  // enforced below by isGameInCfbWeeklyWindow().
+  const queryStart = `${window.providerQueryStartDate}T00:00:00.000Z`;
+  const queryEndExclusive = new Date(`${window.providerQueryEndDate}T00:00:00.000Z`);
+  queryEndExclusive.setUTCDate(queryEndExclusive.getUTCDate() + 1);
+  const writerEvidence = await readCfbForwardWriterEvidence({
+    client,
+    season: Number(now.slice(0, 4)),
+    now,
+  });
+  const currentGameIds = [...new Set(writerEvidence.evidence
+    .filter((row) => isGameInCfbWeeklyWindow({ scheduledStart: row.gameStartAt }, window))
+    .map((row) => row.providerGameId))].sort();
   const rows: ProjectedRow[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await client
-      .from("cfb_forward_evidence_snapshots")
-      .select([
+  for (let gameIndex = 0; gameIndex < currentGameIds.length; gameIndex += GAME_BATCH_SIZE) {
+    const gameIds = currentGameIds.slice(gameIndex, gameIndex + GAME_BATCH_SIZE);
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data, error } = await client
+        .from("cfb_forward_evidence_snapshots")
+        .select([
         "id",
         "provider_game_id",
         "away_team",
@@ -104,19 +126,22 @@ async function main(): Promise<void> {
         "current_books:payload->market->currentBooks",
         "coverage:payload->coverage",
         "request_budget:payload->requestBudget",
-      ].join(","))
-      .eq("season", Number(now.slice(0, 4)))
-      .eq("evidence_release", CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE)
-      .order("captured_at", { ascending: true })
-      .order("id", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(`CFB projected evidence read failed: ${error.message}`);
-    const page = (data ?? []) as unknown as ProjectedRow[];
-    rows.push(...page);
-    if (page.length < PAGE_SIZE) break;
+        ].join(","))
+        .eq("season", Number(now.slice(0, 4)))
+        .eq("evidence_release", CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE)
+        .in("provider_game_id", gameIds)
+        .gte("game_start_at", queryStart)
+        .lt("game_start_at", queryEndExclusive.toISOString())
+        .order("captured_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw new Error(`CFB projected evidence read failed: ${error.message}`);
+      const page = (data ?? []) as unknown as ProjectedRow[];
+      rows.push(...page);
+      if (page.length < PAGE_SIZE) break;
+    }
   }
 
-  const window = activeCfbWeeklyWindow(now);
   const latest = new Map<string, ProjectedRow>();
   for (const row of rows) {
     if (!isGameInCfbWeeklyWindow({ scheduledStart: row.game_start_at }, window)) continue;
@@ -160,7 +185,7 @@ async function main(): Promise<void> {
   const captures = games.map((row) => row.captured_at).sort();
   const coordinatorFeatureNames = [...new Set(games.flatMap((row) => Object.keys(row.coordinator_features ?? {})))].sort();
   console.log(JSON.stringify({
-    release: "cfb_current_evidence_coverage_audit_2026_10_15_r1_field_projected",
+    release: "cfb_current_evidence_coverage_audit_2026_10_21_r2_batched_current_window",
     readOnly: true,
     writes: 0,
     providerCalls: 0,
