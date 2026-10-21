@@ -20,34 +20,21 @@
 import { supabase } from "../../lib/db/supabase";
 import { isPublicallyTracked } from "../../lib/config/officialTrackingStart";
 import { readBoolFlag, readStringFlag, todayUTC } from "./_cliCommon";
+import {
+  DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS,
+  type DailyEdgeHealthSport,
+} from "../../lib/services/dailyEdge/dailyEdgeCompleteHealthContract";
+import { readCfbForwardMemberSnapshot } from "../../lib/services/football/cfbForwardMemberSnapshotStore";
+import { readNflForwardMemberSnapshot } from "../../lib/services/football/nflForwardMemberSnapshotStore";
+import { resolveNflForwardWeek } from "../../lib/services/football/nflForwardWeekSelection";
 
-type Sport = "mlb" | "wnba" | "soccer" | "nba" | "nhl";
+type Sport = DailyEdgeHealthSport;
 
-const SPORTS: readonly Sport[] = ["mlb", "wnba", "soccer", "nba", "nhl"];
+const SPORTS = Object.keys(DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS) as Sport[];
 
-const EXPECTED_MARKETS: Record<Sport, readonly string[]> = {
-  mlb: ["moneyline", "total", "first_inning"],
-  wnba: ["moneyline", "total", "spread"],
-  soccer: ["match_result", "total", "btts", "double_chance"],
-  nba: ["moneyline", "total", "spread"],
-  nhl: ["moneyline", "total", "spread"],
-};
-
-const LINE_MARKETS: Record<Sport, readonly string[]> = {
-  mlb: ["moneyline", "total", "first_inning_total"],
-  wnba: ["moneyline", "total", "spread"],
-  soccer: ["match_result", "total", "btts", "double_chance"],
-  nba: ["moneyline", "total", "spread"],
-  nhl: ["moneyline", "total", "spread", "puckline"],
-};
-
-const LINE_VALUE_REQUIRED_MARKETS: Record<Sport, ReadonlySet<string>> = {
-  mlb: new Set(["total", "first_inning"]),
-  wnba: new Set(["total", "spread"]),
-  soccer: new Set(["total"]),
-  nba: new Set(["total", "spread"]),
-  nhl: new Set(["total", "puckline"]),
-};
+const EXPECTED_MARKETS = Object.fromEntries(SPORTS.map((sport) => [sport, DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS[sport].expectedMarkets])) as Record<Sport, readonly string[]>;
+const LINE_MARKETS = Object.fromEntries(SPORTS.map((sport) => [sport, DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS[sport].lineMarkets])) as Record<Sport, readonly string[]>;
+const LINE_VALUE_REQUIRED_MARKETS = Object.fromEntries(SPORTS.map((sport) => [sport, DAILY_EDGE_COMPLETE_HEALTH_CONTRACTS[sport].lineValueRequiredMarkets])) as Record<Sport, ReadonlySet<string>>;
 
 type CountByMarket = Record<string, number>;
 
@@ -165,6 +152,7 @@ function maximumLatestAgeByGame(rows: Array<{ game_id?: number | null; observedA
 }
 
 async function auditSport(sport: Sport, date: string): Promise<SportReport> {
+  if (sport === "nfl" || sport === "cfb") return auditFootballSnapshot(sport, date);
   const { data: gamesRaw, error: gamesErr } = await supabase
     .from("games")
     .select("id,status")
@@ -247,15 +235,12 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
     ? qualifyingObservedSplitRows.map((row) => ({ game_id: row.game_id, observedAt: row.observed_at }))
     : qualifyingSplitRows.map((row) => ({ game_id: row.game_id, observedAt: row.computed_at }));
   const splitFreshness = freshness(splitObservedRows.map((row) => row.observedAt));
-  // EPL/UCL keep their authoritative exact current price in the versioned
-  // prediction/member snapshot rather than the legacy `lines` table. Count
-  // those priced records as real market coverage so this cross-sport audit
-  // does not report a healthy soccer game as line-less.
+  // A versioned prediction record with an exact evaluated price is also real
+  // market coverage. Some current writers publish that authoritative tuple
+  // without copying every provider row into the legacy `lines` table.
   const gamesWithLine = new Set([
     ...lineRows.map((row) => row.game_id),
-    ...(sport === "soccer"
-      ? records.filter((row) => row.odds_american !== null).map((row) => row.game_id)
-      : []),
+    ...records.filter((row) => row.odds_american !== null).map((row) => row.game_id),
   ].filter((id): id is number => typeof id === "number"));
 
   const normalizedStatus = (value: string | null) =>
@@ -302,6 +287,89 @@ async function auditSport(sport: Sport, date: string): Promise<SportReport> {
       maximumSplitAgeMinutes: maximumLatestAgeByGame(splitObservedRows),
     },
     notes,
+  };
+}
+
+type FootballMarket = {
+  held: boolean;
+  line: number | null;
+  currentPriceAmerican: number | null;
+  currentPriceObservedAt?: string | null;
+  marketPrediction?: { status?: string; label?: string | null } | null;
+  publicSplits?: unknown;
+  sportsbookSplits?: unknown;
+};
+
+type FootballGame = {
+  id: string;
+  lockState: string;
+  gameStartAt: string;
+  markets: { moneyline: FootballMarket; first_inning: FootballMarket; total: FootballMarket };
+};
+
+async function auditFootballSnapshot(sport: "nfl" | "cfb", date: string): Promise<SportReport> {
+  const now = new Date().toISOString();
+  const season = Number(process.env[`${sport.toUpperCase()}_FORWARD_SEASON`] ?? "2026");
+  const snapshot = sport === "nfl"
+    ? await readNflForwardMemberSnapshot({
+        client: supabase,
+        season,
+        week: resolveNflForwardWeek({ season, configuredWeek: Number(process.env.NFL_FORWARD_WEEK ?? "1"), now: new Date(now) }),
+        now,
+      })
+    : await readCfbForwardMemberSnapshot({ client: supabase, season, now });
+  if (!snapshot) throw new Error(`${sport} current weekly member snapshot is unavailable.`);
+  const games = snapshot.fixture.snapshot.games as unknown as FootballGame[];
+  const markets = ["moneyline", "spread", "total"] as const;
+  const rows = games.flatMap((game) => markets.map((market) => ({
+    game,
+    market,
+    value: market === "spread" ? game.markets.first_inning : game.markets[market],
+  })));
+  const linesByMarket: CountByMarket = {};
+  const predictionRecordsByMarket: CountByMarket = {};
+  const publicSplitsByMarket: CountByMarket = {};
+  for (const row of rows) {
+    if (row.value.currentPriceAmerican !== null) inc(linesByMarket, row.market);
+    if (row.value.marketPrediction?.status === "available" || row.value.marketPrediction?.label) inc(predictionRecordsByMarket, row.market);
+    if (row.value.publicSplits !== undefined && row.value.publicSplits !== null) inc(publicSplitsByMarket, `public:${row.market}`);
+    if (row.value.sportsbookSplits !== undefined && row.value.sportsbookSplits !== null) inc(publicSplitsByMarket, `sharp:${row.market}`);
+  }
+  const observedTimes = rows.map((row) => row.value.currentPriceObservedAt);
+  const observedFreshness = freshness(observedTimes);
+  const gameIdsWithPrice = new Set(rows.filter((row) => row.value.currentPriceAmerican !== null).map((row) => row.game.id));
+  const normalizedStatus = (game: FootballGame) => Date.parse(game.gameStartAt) <= Date.now() ? "other" : "scheduled";
+  return {
+    sport,
+    date,
+    games: {
+      total: games.length,
+      scheduled: games.filter((game) => normalizedStatus(game) === "scheduled").length,
+      final: 0,
+      other: games.filter((game) => normalizedStatus(game) === "other").length,
+    },
+    linesByMarket,
+    publicSplitsByMarket,
+    predictionRecordsByMarket,
+    expectedMarketsMissingRecords: EXPECTED_MARKETS[sport].filter((market) => (predictionRecordsByMarket[market] ?? 0) === 0),
+    records: {
+      total: rows.length,
+      locked: rows.filter((row) => row.game.lockState === "locked").length,
+      missingOdds: rows.filter((row) => !row.value.held && row.value.currentPriceAmerican === null).length,
+      missingLineValue: rows.filter((row) => LINE_VALUE_REQUIRED_MARKETS[sport].has(row.market) && row.value.line === null).length,
+      held: rows.filter((row) => row.value.held).length,
+      noBet: rows.filter((row) => row.value.held || !row.value.marketPrediction?.label).length,
+    },
+    freshness: {
+      newestLineAt: observedFreshness.newest,
+      oldestLineAt: observedFreshness.oldest,
+      maximumLineAgeMinutes: observedFreshness.maximumAgeMinutes,
+      gamesWithoutAnyLine: games.filter((game) => !gameIdsWithPrice.has(game.id)).length,
+      newestSplitAt: null,
+      oldestSplitAt: null,
+      maximumSplitAgeMinutes: null,
+    },
+    notes: [`weekly member snapshot source captured at ${snapshot.sourceCapturedAt}`],
   };
 }
 

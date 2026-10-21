@@ -2,9 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NflPlayerPropsProductionSnapshot } from "./nflPlayerPropsProductionContract";
 import { buildNflPlayerPropsTrackingRows } from "./nflPlayerPropsProductionContract";
 import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract";
+import type { NflPlayerPropsMarketObserverRow } from "./nflPlayerPropsMarketObserverStore";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_10_15_r32_independent_rushing_yards" as const;
+  "nfl_player_props_tracking_2026_10_21_r33_exact_t60_close_recovery" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;
@@ -75,6 +76,93 @@ export async function updateNflPlayerPropsClosingPrices(args: {
       updated_at: new Date().toISOString(),
     }).eq("tracking_key", trackingKey(decision)).eq("decision_release", decision.decisionRelease).eq("result", "pending");
     if (error) throw new Error(`NFL player props closing-price update failed: ${error.message}`);
+    updated += 1;
+  }
+  return updated;
+}
+
+export type NflPlayerPropsObserverClosingQuote = Readonly<{
+  trackingKey: string;
+  decisionRelease: string;
+  sportsbook: string;
+  closingPrice: number;
+  observedAt: string;
+}>;
+
+/**
+ * Resolve close metadata only from immutable exact T-60 rows. The tuple must
+ * retain the same game, player, market, canonical line, side, sportsbook, and
+ * decision release as the locked record. This function cannot reconstruct or
+ * alter any prediction field.
+ */
+export function nflPlayerPropsObserverClosingQuotes(
+  rows: readonly NflPlayerPropsMarketObserverRow[],
+): NflPlayerPropsObserverClosingQuote[] {
+  const latest = new Map<string, NflPlayerPropsObserverClosingQuote>();
+  for (const row of rows) {
+    if (row.landmark !== "t60_lock" || row.observedLine !== row.canonicalLine) continue;
+    for (const side of row.targetSides) {
+      const closingPrice = side === "over" ? row.overPrice : side === "under" ? row.underPrice : row.yesPrice;
+      if (closingPrice === null || !Number.isInteger(closingPrice) || closingPrice === 0) continue;
+      const quote: NflPlayerPropsObserverClosingQuote = {
+        trackingKey: [row.gameId, normalize(row.playerName), row.market, row.canonicalLine, side].join("|"),
+        decisionRelease: row.decisionRelease,
+        sportsbook: row.sportsbook,
+        closingPrice,
+        observedAt: row.observedAt,
+      };
+      const identity = [quote.trackingKey, quote.decisionRelease, normalize(quote.sportsbook)].join("|");
+      const prior = latest.get(identity);
+      if (!prior || Date.parse(quote.observedAt) > Date.parse(prior.observedAt)) latest.set(identity, quote);
+    }
+  }
+  return [...latest.values()].sort((first, second) => first.trackingKey.localeCompare(second.trackingKey));
+}
+
+export async function updateNflPlayerPropsClosingPricesFromObserver(args: {
+  client: SupabaseClient;
+  rows: readonly NflPlayerPropsMarketObserverRow[];
+}): Promise<number> {
+  const quotes = nflPlayerPropsObserverClosingQuotes(args.rows);
+  if (quotes.length === 0) return 0;
+  const quoteByIdentity = new Map(quotes.map((quote) => [
+    [quote.trackingKey, quote.decisionRelease, normalize(quote.sportsbook)].join("|"),
+    quote,
+  ]));
+  const records: Array<{
+    id: number;
+    tracking_key: string;
+    decision_release: string;
+    sportsbook: string;
+    locked_price: number;
+    closing_price: number | null;
+  }> = [];
+  const trackingKeys = [...new Set(quotes.map((quote) => quote.trackingKey))];
+  for (let index = 0; index < trackingKeys.length; index += 150) {
+    const { data, error: readError } = await args.client.from("nfl_player_prop_records")
+      .select("id,tracking_key,decision_release,sportsbook,locked_price,closing_price")
+      .in("tracking_key", trackingKeys.slice(index, index + 150))
+      .is("closing_price", null);
+    if (readError) throw new Error(`NFL player props observer closing-price read failed: ${readError.message}`);
+    records.push(...((data ?? []) as typeof records));
+  }
+  let updated = 0;
+  for (const record of records) {
+    const quote = quoteByIdentity.get([
+      record.tracking_key,
+      record.decision_release,
+      normalize(record.sportsbook),
+    ].join("|"));
+    if (!quote || record.closing_price !== null) continue;
+    const closingImplied = implied(quote.closingPrice);
+    const clv = 100 * (closingImplied - implied(record.locked_price));
+    const { error } = await args.client.from("nfl_player_prop_records").update({
+      closing_price: quote.closingPrice,
+      closing_implied_probability: closingImplied,
+      clv_probability_points: clv,
+      updated_at: new Date().toISOString(),
+    }).eq("id", record.id).is("closing_price", null);
+    if (error) throw new Error(`NFL player props observer closing-price update failed: ${error.message}`);
     updated += 1;
   }
   return updated;
