@@ -169,6 +169,8 @@ export type BuildNbaSnapshotOptions = {
   /** Optional fixed clock for series-context "this game date". Defaults
    *  to the slate date if not supplied. */
   thisGameDate?: string;
+  /** Read-only same-input audit hook. Production callers omit this. */
+  teamRatingsOverride?: readonly NbaTeamRatingsRow[];
 };
 
 // ─── main builder ────────────────────────────────────────────────
@@ -405,26 +407,26 @@ async function runBuild(
   const regularByTeam = new Map<number, NbaTeamRatingsRow>();
   const playoffByTeam = new Map<number, NbaTeamRatingsRow>();
   if (teamIds.size > 0 && Number.isFinite(slateSeason)) {
-    const { data: ratingsRows, error: ratingsErr } = await supabase
-      .from("nba_team_ratings")
-      .select(
-        "team_id, season, season_type, off_rating, def_rating, net_rating, pace, off_efg_pct, off_tov_pct, off_orb_pct, off_ft_rate, def_efg_pct, def_tov_pct, def_drb_pct, def_ft_rate_allowed, source, source_url, fetched_at",
-      )
-      .in("team_id", Array.from(teamIds))
-      .in("season", [slateSeason - 1, slateSeason]);
-    if (ratingsErr !== null) {
-      // Non-fatal: missing/erroring ratings → null fields, fallback tier.
-      // Log but continue. (Includes the case where v20 migration hasn't
-      // been applied yet — the older SELECT shape would fail; the new
-      // one degrades gracefully because Postgres returns null for
-      // missing columns when present.)
-      console.warn(
-        `buildNbaFeatureSnapshots: nba_team_ratings query failed (continuing with null ratings): ${ratingsErr.message}`,
-      );
+    let ratingsRows: readonly NbaTeamRatingsRow[] = opts.teamRatingsOverride ?? [];
+    if (opts.teamRatingsOverride === undefined) {
+      const result = await supabase
+        .from("nba_team_ratings")
+        .select(
+          "team_id, season, season_type, off_rating, def_rating, net_rating, pace, off_efg_pct, off_tov_pct, off_orb_pct, off_ft_rate, def_efg_pct, def_tov_pct, def_drb_pct, def_ft_rate_allowed, source, source_url, fetched_at",
+        )
+        .in("team_id", Array.from(teamIds))
+        .in("season", [slateSeason - 1, slateSeason]);
+      if (result.error !== null) {
+        // Non-fatal: missing/erroring ratings → null fields, fallback tier.
+        console.warn(
+          `buildNbaFeatureSnapshots: nba_team_ratings query failed (continuing with null ratings): ${result.error.message}`,
+        );
+      }
+      ratingsRows = (result.data ?? []) as NbaTeamRatingsRow[];
     }
     const currentRegular = new Map<number, NbaTeamRatingsRow>();
     const previousRegular = new Map<number, NbaTeamRatingsRow>();
-    for (const r of (ratingsRows ?? []) as NbaTeamRatingsRow[]) {
+    for (const r of ratingsRows) {
       if (r.season === slateSeason && r.season_type === "regular") currentRegular.set(r.team_id, r);
       else if (r.season === slateSeason - 1 && r.season_type === "regular") previousRegular.set(r.team_id, r);
       else if (r.season === slateSeason && r.season_type === "playoffs") playoffByTeam.set(r.team_id, r);

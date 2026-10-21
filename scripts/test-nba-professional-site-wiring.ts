@@ -30,6 +30,10 @@ const lockedMemberSnapshot = readFileSync(
   new URL("../lib/services/nba/nbaLockedMemberSnapshot.ts", import.meta.url),
   "utf8",
 );
+const reader = readFileSync(
+  new URL("../app/lab/components/daily-edge/DailyEdgeShell.tsx", import.meta.url),
+  "utf8",
+);
 
 for (const required of [
   "loadNbaProfessionalCurrentState",
@@ -81,6 +85,10 @@ assert.match(adapter, /lockedAt: game\.locked_at \?\? null/);
 assert.match(adapter, /scheduledLockAt: computeLocksAt\(game\.tip_iso_utc\)/);
 assert.match(adapter, /lockedMemberGamesByExternalId/);
 assert.match(adapter, /if \(lockedMemberGame !== undefined\) return lockedMemberGame/);
+assert.match(adapter, /nbaAvailability:[\s\S]*away_players[\s\S]*home_players/);
+assert.match(reader, /function NbaAvailabilityPanel/);
+assert.match(reader, /Verified Availability/);
+assert.match(reader, /sourcePlayerId \?\? player\.name/);
 assert.match(snapshotWriter, /applyNbaPublishedLockMetadata/);
 assert.match(snapshotWriter, /payloadVersion: NBA_MEMBER_LOCK_PUBLICATION_RELEASE/);
 

@@ -226,7 +226,12 @@ section("parseEspnInjuriesPayload · ESPN parser");
 {
   const res = parseEspnInjuriesPayload({
     injuries: [
-      { athlete: { id: 1, displayName: "Jayson Tatum" }, status: "Questionable" },
+      {
+        athlete: { id: 1, displayName: "Jayson Tatum", position: { abbreviation: "SF" } },
+        status: "Questionable",
+        date: "2026-10-20T15:00:00Z",
+        details: { type: "Ankle", returnDate: "2026-10-25T00:00:00Z" },
+      },
       { athlete: { id: 2, displayName: "Jaylen Brown" }, status: "Out" },
     ],
   });
@@ -234,6 +239,11 @@ section("parseEspnInjuriesPayload · ESPN parser");
   if (res !== null) {
     check("first player status normalized", res.players[0]!.status === "questionable");
     check("first player name preserved", res.players[0]!.name === "Jayson Tatum");
+    check("provider player identity retained", res.players[0]!.source_player_id === "1");
+    check("provider position retained", res.players[0]!.position === "SF");
+    check("provider injury type retained", res.players[0]!.injury_type === "Ankle");
+    check("provider report timestamp retained", res.players[0]!.reported_at === "2026-10-20T15:00:00Z");
+    check("provider expected return retained", res.players[0]!.expected_return_at === "2026-10-25T00:00:00Z");
     check("second player out", res.players[1]!.status === "out");
   }
 }

@@ -10,6 +10,7 @@ const base: GradeInput = {
   dataQualityTier: "high",
   injuriesKnown: true,
   currentPriceAmerican: -110,
+  modelProbabilityOnPick: 0.6,
 };
 
 assert.deepEqual(
@@ -69,6 +70,17 @@ assert.equal(
   }).grade,
   "watch",
   "a negative-EV selected price blocks a historical proxy qualifier",
+);
+assert.equal(
+  gradeNbaMarket({
+    ...base,
+    market: "spread",
+    independentEdgePoints: 2.9,
+    currentPriceAmerican: -108,
+    modelProbabilityOnPick: 0.508,
+  }).grade,
+  "watch",
+  "a calibrated lane cannot promote a side whose coherent model probability is negative-EV at the exact price",
 );
 
 assert.equal(

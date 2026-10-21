@@ -203,6 +203,10 @@ export type GradeInput = {
   readerCorrectionApplied?: boolean;
   readerMagnitudePoints?: number | null;
   currentPriceAmerican?: number | null;
+  /** Uncapped probability from the same coherent distribution that owns the pick. */
+  modelProbabilityOnPick?: number | null;
+  /** Same-input audit hook for the superseded price-incoherent grade path. */
+  enforcePositiveModelEv?: boolean;
 };
 
 export type GradeOutput = {
@@ -346,6 +350,21 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
       "Market is pushing the other way hard — this stays a cautious read, not a play.",
     );
     return { grade: "caution", effectiveConfidence: capped, bestAngleEligible: false, rationale };
+  }
+  const modelPriceEv = input.modelProbabilityOnPick === null || input.modelProbabilityOnPick === undefined
+    ? null
+    : expectedReturn(input.modelProbabilityOnPick, input.currentPriceAmerican);
+  if (
+    input.enforcePositiveModelEv !== false &&
+    input.currentPriceAmerican !== undefined &&
+    (modelPriceEv === null || modelPriceEv <= 0)
+  ) {
+    return {
+      grade: "watch",
+      effectiveConfidence: Math.min(input.confidence, 52),
+      bestAngleEligible: false,
+      rationale: ["The forecast has a side, but its probability does not clear positive value at the selected price."],
+    };
   }
   const specialized = marketSpecificGrade(input);
   if (specialized !== null) return specialized;

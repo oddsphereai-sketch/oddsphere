@@ -943,6 +943,37 @@ export type DailyEdgeGameDto = {
     away: SoccerTeamAvailabilityDto;
     home: SoccerTeamAvailabilityDto;
   } | null;
+  /** NBA-only exact-game ESPN availability evidence. Player rows are source
+   * facts, not a fixed score adjustment or an inferred impact ranking. */
+  nbaAvailability?: {
+    source: "ESPN";
+    away: {
+      team: string;
+      known: boolean;
+      players: Array<{
+        sourcePlayerId: string | null;
+        name: string;
+        status: "out" | "questionable" | "probable" | "available" | "unknown";
+        position: string | null;
+        injuryType: string | null;
+        reportedAt: string | null;
+        expectedReturnAt: string | null;
+      }>;
+    };
+    home: {
+      team: string;
+      known: boolean;
+      players: Array<{
+        sourcePlayerId: string | null;
+        name: string;
+        status: "out" | "questionable" | "probable" | "available" | "unknown";
+        position: string | null;
+        injuryType: string | null;
+        reportedAt: string | null;
+        expectedReturnAt: string | null;
+      }>;
+    };
+  } | null;
   /** Competition provenance for club/tournament soccer. Core Daily Edge
    * markets remain regulation-time unless an explicit market says otherwise. */
   soccerCompetitionContext?: {

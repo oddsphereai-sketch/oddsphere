@@ -14,7 +14,14 @@ const dynamic = {
   matchup: "AWY @ HME",
   projection: { home_score: 120, away_score: 110, total: 230, spread_home: 10 },
   intelligence: { ml: { pick_side: "home" } },
-} as NbaDailyEdgeGameDto;
+  injuries: {
+    source: "espn",
+    home_known: true,
+    away_known: true,
+    home_players: [{ player_id: null, name: "New Report", status: "out" }],
+    away_players: [],
+  },
+} as unknown as NbaDailyEdgeGameDto;
 const locked = {
   ...dynamic,
   projection: { home_score: 116, away_score: 113, total: 229, spread_home: 3 },
@@ -79,6 +86,11 @@ assert.deepEqual(
   adaptedLocked.games,
   [...restored.memberGamesByExternalId.values()],
   "a later empty provider read cannot replace any field of the fully captured locked card",
+);
+assert.equal(
+  adaptedLocked.games[0]!.nbaAvailability,
+  undefined,
+  "new availability evidence cannot be overlaid onto an immutable locked card",
 );
 
 assert.throws(() => applyNbaLockedMemberSnapshotPrecedence({

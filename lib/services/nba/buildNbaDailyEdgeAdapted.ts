@@ -29,6 +29,7 @@ import { publicSplitsSupported } from "../../config/publicSplitsCapability";
 import {
   buildNbaFeatureSnapshotsWithProvenance,
   type InjuryResolver,
+  type NbaTeamRatingsRow,
 } from "./featureSnapshot";
 import { createEspnNbaGameInjuryResolver } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
@@ -161,6 +162,12 @@ export async function buildNbaDailyEdgePipeline(
     injuryResolver?: InjuryResolver;
     /** Read-only same-input audit hook; production callers omit this. */
     professionalArtifact?: NbaPortableModelArtifact;
+    /** Read-only same-input audit hook for the superseded injury-count cap. */
+    retainLegacyInjuryCap?: boolean;
+    /** Read-only same-input ratings audit hook; production callers omit this. */
+    teamRatingsOverride?: readonly NbaTeamRatingsRow[];
+    /** Read-only same-input audit hook for the superseded price-incoherent grade path. */
+    retainLegacyGradeEconomics?: boolean;
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
@@ -178,7 +185,10 @@ export async function buildNbaDailyEdgePipeline(
   const buildResults: SnapshotBuildResult[] = [];
   for (const d of utcDatesToQuery) {
     buildResults.push(
-      await buildNbaFeatureSnapshotsWithProvenance(d, { injuryResolver }),
+      await buildNbaFeatureSnapshotsWithProvenance(d, {
+        injuryResolver,
+        teamRatingsOverride: options.teamRatingsOverride,
+      }),
     );
   }
 
@@ -502,7 +512,11 @@ export async function buildNbaDailyEdgePipeline(
       externalGameId: s.game_external_id,
       marketReader: reader,
     });
-    const pred = applyNbaProfessionalCandidate({ baseline, candidate });
+    const pred = applyNbaProfessionalCandidate({
+      baseline,
+      candidate,
+      retainLegacyInjuryCap: options.retainLegacyInjuryCap,
+    });
     const splitsRow = matchSplitsRow(
       splits,
       s.home_team.abbreviation,
@@ -521,6 +535,7 @@ export async function buildNbaDailyEdgePipeline(
       splitsRow,
       opportunities: gameOpps,
       spreadReaderStats: buildNbaSpreadReaderStats(featureRow),
+      retainLegacyGradeEconomics: options.retainLegacyGradeEconomics,
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,

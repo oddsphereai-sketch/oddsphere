@@ -213,8 +213,28 @@ function pickConfidence(probability: number): number {
 export function applyNbaProfessionalCandidate(args: {
   baseline: NbaModelV1Output;
   candidate: ReturnType<typeof buildNbaProfessionalCandidate>;
+  /** Same-input audit hook for the superseded count-only injury cap. */
+  retainLegacyInjuryCap?: boolean;
 }): NbaModelV1Output {
-  const { baseline, candidate } = args;
+  const { baseline, candidate, retainLegacyInjuryCap = false } = args;
+  // The professional model cannot treat every listed player as the same
+  // basketball impact. Keep exact availability evidence, but retire the
+  // legacy count-only cap. Missing-source risk still flows through the
+  // model's data-quality tier; price/coverage caps remain untouched.
+  const professionalCaps = retainLegacyInjuryCap
+    ? baseline.v1_breakdown.applied_caps
+    : baseline.v1_breakdown.applied_caps.filter((entry) => entry.source !== "injury");
+  const professionalAvailabilityReasons = retainLegacyInjuryCap ? [] : [
+    baseline.v1_breakdown.injury_review.major_out_count > 0
+      ? `${baseline.v1_breakdown.injury_review.major_out_count} verified OUT player(s); no count-only professional confidence cap applied.`
+      : null,
+    baseline.v1_breakdown.injury_review.major_unknown_count > 0
+      ? `${baseline.v1_breakdown.injury_review.major_unknown_count} unresolved player status(es); availability remains explicit data-quality context.`
+      : null,
+  ].filter((reason): reason is string => reason !== null);
+  const nonLegacyCapNotes = retainLegacyInjuryCap
+    ? baseline.audit.model_integrity_notes
+    : baseline.audit.model_integrity_notes.filter((note) => !note.includes("confidence capped"));
   const mlHome = candidate.probabilities.ml_home_win_prob;
   const spreadHome = candidate.probabilities.spread_home_cover_prob;
   const totalOver = candidate.probabilities.total_over_prob;
@@ -271,7 +291,8 @@ export function applyNbaProfessionalCandidate(args: {
         },
       },
       model_integrity_notes: [
-        ...baseline.audit.model_integrity_notes,
+        ...nonLegacyCapNotes,
+        ...professionalAvailabilityReasons,
         `Professional independent release: ${candidate.modelRelease}.`,
         `Unified projection release: ${candidate.final.release}.`,
         candidate.final.movementApplied
@@ -285,8 +306,28 @@ export function applyNbaProfessionalCandidate(args: {
     v1_probabilities: candidate.probabilities,
     v1_breakdown: {
       ...baseline.v1_breakdown,
+      injury_review: {
+        ...baseline.v1_breakdown.injury_review,
+        confidence_cap: retainLegacyInjuryCap
+          ? baseline.v1_breakdown.injury_review.confidence_cap
+          : null,
+        reasons: retainLegacyInjuryCap
+          ? baseline.v1_breakdown.injury_review.reasons
+          : [
+              ...baseline.v1_breakdown.injury_review.reasons.filter(
+                (reason) => !reason.includes("confidence capped"),
+              ),
+              ...professionalAvailabilityReasons,
+            ],
+      },
+      applied_caps: professionalCaps,
       notes: [
-        ...baseline.v1_breakdown.notes,
+        ...(retainLegacyInjuryCap
+          ? baseline.v1_breakdown.notes
+          : [
+              ...baseline.v1_breakdown.notes.filter((note) => !note.includes("confidence capped")),
+              ...professionalAvailabilityReasons,
+            ]),
         "Professional point-in-time scorer and independent-first categorical market reader applied.",
       ],
     },

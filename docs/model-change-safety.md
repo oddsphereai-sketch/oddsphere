@@ -1,5 +1,55 @@
 # Model change safety protocol
 
+## Owner-directed correctness candidate: NBA verified availability without a count-only cap
+
+On 2026-10-21 Daniel Mengel explicitly rejected automatic injury score adjustments and confidence
+caps and directed Oddsphere to treat player availability and market reaction as nuanced evidence.
+The bounded candidate is documented in
+`docs/model-audits/2026-10-21-nba-player-availability-reader-predeclaration.md`.
+
+For future unlocked NBA rows only, the exact-game ESPN resolver may retain and display provider
+player id, name, position, normalized status, injury type, report timestamp, and expected-return
+date. Missing or malformed team reports remain unavailable. The current professional independent
+score and the validated target-book-excluded categorical market reader remain authoritative; no
+fixed player points, injury-count score shift, automatic side change, or new market authority is
+permitted. The candidate may remove only the legacy generic `source=injury` confidence ceiling from
+professional actionability because it has no player, minutes, role, replacement, chronology, or
+repricing model. Every other price, freshness, coverage, target-exclusion, grade, and data-quality
+control remains active.
+
+Because grades may change, the combined model/prediction-record r14 and grade-policy r8 releases must advance
+together with rating-input market marriage r16. Publication requires a same-input board-impact report, score/probability/side/price/stake
+parity, focused NBA reader/writer/lock tests, TypeScript, the full model-change gate, latest-main
+integration safety, protected PR checks, and post-deploy proof of exact report coverage, release
+identity, one writer/lease, coherent cards, and unchanged locks. Roll back future unlocked output on
+mixed releases, identity drift, lock mutation, unexpected board contraction, provider-load growth,
+or a live impact different from the reviewed comparison.
+
+## NBA exact team-rating identity and prior-season recovery
+
+On 2026-10-21 the live NBA audit found four of 11 games incorrectly marked
+fallback despite complete lines, splits, and injuries. The Basketball Reference
+ratings importer did not resolve the stored `GS`, `WSH`, `UTAH`, and `NO`
+abbreviations to provider `GSW`, `WAS`, `UTA`, and `NOP`, so those teams were
+also absent from the prior-season pack required by the opening-month handoff.
+
+The integrated future-unlocked release advances to model r14, market marriage r16, grade r8,
+daily refresh r11, and team-rating refresh r1. Both identities resolve through
+the existing exact NBA registry, ambiguous matches fail closed, and the full
+daily writer performs one bounded prior-season recovery only while any current
+team lacks a regular-season row. Intraday cadence, model equations, market-
+reader rules, prices, stakes, sole writer, `prediction_pipeline:nba` lease,
+tracking boundary, and stored locks remain unchanged.
+
+The final exact same-input 11-game rehearsal moves fallback games from four to zero,
+changes zero scores, sides, probabilities, or prices, and moves actionables 6 to
+7 through two positive-model-EV promotions and one negative-model-EV demotion.
+Publication requires the focused identity/refresh/model/lock
+tests, full model-change gate, latest-main integration safety, protected PR,
+and live proof of 30-team prior coverage, 11 high-quality games, coherent
+reader output, healthy tracking, and unchanged locks. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-team-rating-identity-recovery-r13.md`.
+
 ## NFL player props exact close metadata recovery
 
 On 2026-10-21 the player-props writer was confirmed to lose closing metadata

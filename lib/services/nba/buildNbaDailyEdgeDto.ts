@@ -97,6 +97,8 @@ function injurySummary(snapshot: NbaGameSnapshot): {
   away_unknown: number;
   home_known: boolean;
   away_known: boolean;
+  home_players: NbaGameSnapshot["home_injuries"];
+  away_players: NbaGameSnapshot["away_injuries"];
 } {
   return {
     home_out: snapshot.home_injuries.filter((i) => i.status === "out").length,
@@ -107,6 +109,8 @@ function injurySummary(snapshot: NbaGameSnapshot): {
     away_unknown: snapshot.away_injuries.filter((i) => i.status === "unknown").length,
     home_known: snapshot.data_quality.home_injuries_known,
     away_known: snapshot.data_quality.away_injuries_known,
+    home_players: snapshot.home_injuries,
+    away_players: snapshot.away_injuries,
   };
 }
 
@@ -266,6 +270,8 @@ export function buildNbaDailyEdgeGameDto(opts: {
   splitsRow: NbaSplitsRow | null;
   opportunities: NbaOpportunity[];
   spreadReaderStats?: NbaSpreadReaderStats;
+  /** Same-input audit hook for the superseded exact-price grade path. */
+  retainLegacyGradeEconomics?: boolean;
 }): NbaDailyEdgeGameDto {
   const intel = buildNbaGameIntelligence({
     snapshot: opts.snapshot,
@@ -274,6 +280,7 @@ export function buildNbaDailyEdgeGameDto(opts: {
     splitsRow: opts.splitsRow,
     opportunities: opts.opportunities,
     injuriesSource: opts.provenance.injuries_source,
+    enforcePositiveModelEv: opts.retainLegacyGradeEconomics !== true,
   });
 
   return {

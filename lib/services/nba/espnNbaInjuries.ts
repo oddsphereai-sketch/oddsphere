@@ -14,8 +14,9 @@
  *   • Status normalization: ESPN's status strings ("Out", "Day-To-Day",
  *     "Questionable", "Probable", "Available") are mapped to our compact
  *     NbaInjuryStatus union. Unknown strings → "unknown".
- *   • Player_id mapping is left null in v0 — we don't yet have an NBA
- *     player table populated; admin preview only shows the ESPN name.
+ *   • Player_id mapping is left null — we don't yet have an internal NBA
+ *     player table populated. ESPN identity and report detail are retained in
+ *     explicitly provider-scoped fields instead of being discarded.
  */
 
 import type { NbaInjuryStatus, NbaPlayerInjury } from "../../automodel/nba/types";
@@ -146,11 +147,21 @@ export function parseEspnInjuriesPayload(
   for (const entry of list) {
     if (entry === null || typeof entry !== "object") continue;
     const e = entry as {
-      athlete?: { id?: number | string; displayName?: string };
-      athletes?: Array<{ id?: number | string; displayName?: string; status?: string }>;
+      athlete?: {
+        id?: number | string;
+        displayName?: string;
+        position?: { abbreviation?: string; displayName?: string };
+      };
+      athletes?: Array<{
+        id?: number | string;
+        displayName?: string;
+        status?: string;
+        position?: { abbreviation?: string; displayName?: string };
+      }>;
       status?: string;
       type?: string;
-      details?: { type?: string };
+      date?: string;
+      details?: { type?: string; returnDate?: string };
     };
     // Flat shape: top-level athlete + status
     if (e.athlete !== undefined) {
@@ -161,8 +172,13 @@ export function parseEspnInjuriesPayload(
       if (name !== null) {
         out.push({
           player_id: null,
+          source_player_id: e.athlete.id === undefined ? null : String(e.athlete.id),
           name,
           status: normalizeStatus(e.status ?? e.type ?? e.details?.type ?? null),
+          position: e.athlete.position?.abbreviation ?? e.athlete.position?.displayName ?? null,
+          injury_type: e.details?.type ?? null,
+          reported_at: typeof e.date === "string" ? e.date : null,
+          expected_return_at: typeof e.details?.returnDate === "string" ? e.details.returnDate : null,
         });
       }
       continue;
@@ -175,8 +191,13 @@ export function parseEspnInjuriesPayload(
         if (name === null) continue;
         out.push({
           player_id: null,
+          source_player_id: ath.id === undefined ? null : String(ath.id),
           name,
           status: normalizeStatus(ath.status ?? e.type ?? null),
+          position: ath.position?.abbreviation ?? ath.position?.displayName ?? null,
+          injury_type: e.details?.type ?? null,
+          reported_at: typeof e.date === "string" ? e.date : null,
+          expected_return_at: typeof e.details?.returnDate === "string" ? e.details.returnDate : null,
         });
       }
     }

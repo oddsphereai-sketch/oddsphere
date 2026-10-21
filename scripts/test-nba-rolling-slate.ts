@@ -71,7 +71,7 @@ const cronSource = readFileSync(
   "utf8",
 );
 assert.match(cronSource, /nbaScheduleSeedDates\(etDateDashed, intraday\)/);
-assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_21_r10_reconciled_current_board/);
+assert.match(cronSource, /nba_daily_refresh_schedule_2026_10_21_r11_exact_team_rating_identity/);
 assert.match(cronSource, /lineTotals\.linesRemoved/);
 assert.match(cronSource, /NBA line refresh partial/);
 assert.match(cronSource, /loadNbaRollingSchedule\(etDateDashed\)/);

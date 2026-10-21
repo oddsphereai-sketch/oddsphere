@@ -3617,11 +3617,12 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_21_r12_current_execution_quote`
-- Market marriage: `nba_market_marriage_2026_10_21_r15_current_execution_target_exclusion`
+- Model / prediction record: `nba_professional_unified_2026_10_21_r14_rating_identity_verified_availability`
+- Market marriage: `nba_market_marriage_2026_10_21_r16_complete_team_rating_inputs`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_21_r6_current_execution_economics`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_21_r10_reconciled_current_board`
+- Grade policy: `nba_grade_policy_2026_10_21_r8_rating_identity_no_count_cap`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_21_r11_exact_team_rating_identity`
+- Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r1_exact_team_identity_prior_recovery`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
@@ -3657,6 +3658,33 @@ snapshots also stop computing or persisting the rejected zero-authority
 independent-score shadow; its offline audit remains reproducible. Existing r11
 locks retain exact stored precedence. Evidence and rollback:
 `docs/model-audits/2026-10-21-nba-current-execution-quote-coherence-r12.md`.
+
+The October 21 combined r14/r16/r8 release keeps every r12 score, side,
+probability, selected price, reader rule, and market threshold unchanged while
+repairing the model-quality input gate for four stored/provider abbreviation
+pairs: `GS`/`GSW`, `WSH`/`WAS`, `UTAH`/`UTA`, and `NO`/`NOP`. The daily full
+writer performs one bounded prior-season recovery when any of the 30 current
+teams lacks its opening-month regular-season pack and skips that provider work
+after coverage is complete. Exact ESPN player identity, position, status,
+injury type, report time, and expected return are retained and displayed for
+unlocked cards; absence counts no longer impose the legacy generic confidence
+cap. Missing reports still fail closed through the existing data-quality tier.
+No fixed player points, automatic score adjustment, forced side, or new market
+authority is added. The current target-book-excluded professional reader remains
+the only validated path that may alter the coherent score.
+
+The strict same-input 11-game / 33-market rehearsal has 11/11 verified two-team
+reports and 62 player rows. Fallback games move four to zero; scores, sides,
+probabilities, and prices change zero times. Grades change four times: MIL
+Moneyline Watchlist to Best Angle and MEM Moneyline Watchlist to Lean promote;
+CHA Moneyline moves Lean to Best Angle within the actionable board; HOU
+Moneyline at -365 moves Lean to Watchlist because its 78.28% model probability
+does not clear positive expected return at that exact price. Actionables move
+6 to 7 with two promotions, one demotion, and zero negative-model-EV actions.
+Intraday cadence, writer, lease, tracking boundary, and locked payloads remain
+unchanged. Evidence and rollback:
+`docs/model-audits/2026-10-21-nba-team-rating-identity-recovery-r13.md` and
+`docs/model-audits/2026-10-21-nba-rating-availability-r14-result.md`.
 
 The October 20 r2 complete-card lock repair leaves the r11 forecast and the existing
 three-market T-60 writer unchanged. It overlays only the authoritative column
@@ -3837,7 +3865,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_19_r9_complete_line_board`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_21_r11_exact_team_rating_identity`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
