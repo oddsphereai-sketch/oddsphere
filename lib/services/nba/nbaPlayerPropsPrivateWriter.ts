@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchEspnNbaGameInjuries } from "./espnNbaInjuries";
+import { canonicalNbaAbbreviation, fetchEspnNbaGameInjuries } from "./espnNbaInjuries";
 import { buildNbaPlayerPropsForwardDecisions } from "./nbaPlayerPropsFrozenRuntime";
 import { advanceNbaPlayerPropsCandidateLifecycle } from "./nbaPlayerPropsLifecycle";
 import { collectNbaPlayerPropsLiveMarket } from "./nbaPlayerPropsLiveCollector";
@@ -27,7 +27,7 @@ import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementSto
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_21_r2_chronological_market_identity" as const;
+  "nba_player_props_private_writer_2026_10_21_r3_schedule_team_identity" as const;
 
 export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   release: typeof NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE;
@@ -101,8 +101,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   });
   if (mergedMarket.added > 0) await writeNbaPlayerPropsMarketHistory({ client: args.client, history: mergedMarket.history });
   const missingScheduledGames = slateSchedule.filter((scheduled) => !live.games.some((game) =>
-    normalize(game.homeTeam) === normalize(scheduled.homeTeam)
-      && normalize(game.awayTeam) === normalize(scheduled.awayTeam)));
+    nbaPlayerPropsScheduleGameMatches(scheduled, game)));
   if (missingScheduledGames.length > 0) {
     return {
       ...result("last_known_good_preserved"),
@@ -297,6 +296,14 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       ...(settlement?.corrected ? [`official_stat_corrections_recorded:${settlement.corrected}`] : []),
     ],
   };
+}
+
+export function nbaPlayerPropsScheduleGameMatches(
+  scheduled: Pick<NbaRollingScheduleGame, "homeTeam" | "awayTeam">,
+  provider: Readonly<{ homeTeam: string; awayTeam: string }>,
+): boolean {
+  return canonicalNbaAbbreviation(provider.homeTeam) === canonicalNbaAbbreviation(scheduled.homeTeam)
+    && canonicalNbaAbbreviation(provider.awayTeam) === canonicalNbaAbbreviation(scheduled.awayTeam);
 }
 
 async function explicitOutPlayers(

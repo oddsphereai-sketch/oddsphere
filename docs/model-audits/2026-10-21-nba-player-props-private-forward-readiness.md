@@ -19,7 +19,7 @@ row, stake, or member-request provider fetch.
 - Lifecycle:
   `nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only`
 - Writer/store/state/tracking/settlement:
-  `nba_player_props_private_writer_2026_10_21_r2_chronological_market_identity`,
+  `nba_player_props_private_writer_2026_10_21_r3_schedule_team_identity`,
   `nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity`,
   `nba_player_props_current_state_2026_10_21_r2_regular_and_ist`,
   `nba_player_props_private_tracking_store_2026_10_21_r1_immutable`, and
@@ -60,6 +60,12 @@ row, stake, or member-request provider fetch.
   box scores settle wins/losses/pushes, zero-minute or absent players void, and
   official stat corrections append a new settlement revision without changing
   the locked prediction.
+- The first production-private cycle verified 29,789 checksum-decoded market
+  observations across all 11 scheduled games. Schedule-to-provider coverage
+  canonicalizes ESPN's `GS`, `NO`, `UTAH`, and `WSH` abbreviations to the
+  provider's `GSW`, `NOP`, `UTA`, and `WAS` identities before deciding whether
+  a scheduled game is missing; genuine missing games still preserve the prior
+  private snapshot.
 
 ## Historical evidence and board impact
 
