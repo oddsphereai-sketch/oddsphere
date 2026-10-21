@@ -25,6 +25,17 @@ const rebuilt = buildNbaPlayerPropsMemberSnapshot({
 assert.deepEqual(rebuilt, snapshot);
 
 const scopes = new Set<string>();
+const markets = new Set(snapshot.decisions.map((row) => row.market));
+assert.deepEqual([...markets].sort(), [
+  "assists",
+  "points",
+  "points_assists",
+  "points_rebounds",
+  "points_rebounds_assists",
+  "rebounds",
+  "rebounds_assists",
+  "threes",
+]);
 const slateDates = new Set(snapshot.games.map((game) => new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York",
   year: "numeric",
@@ -41,9 +52,20 @@ for (const row of snapshot.decisions) {
   assert(row.priceLadder.every((quote) => Number.isInteger(quote.americanPrice) && quote.americanPrice !== 0));
   assert([...row.role, ...row.production, ...row.matchup].every((metric) => Number.isFinite(metric.value)));
   if (row.grade === "Best Angle" || row.grade === "Lean") {
-    assert(["points", "assists", "points_rebounds_assists"].includes(row.market));
     assert.notEqual(row.gradePolicySource, "forecast_only");
     assert(row.probability >= 0.5, `${row.decisionKey} has an actionable grade below 50% chosen-side probability`);
+    if (row.gradePolicySource === "universal_market_relative_lean") {
+      assert(["rebounds", "threes"].includes(row.market));
+      assert.equal(row.grade, "Lean");
+    }
+    if (row.gradePolicySource === "combo_market_relative_lean") {
+      assert(["points_rebounds", "points_assists", "rebounds_assists"].includes(row.market));
+      assert.equal(row.grade, "Lean");
+    }
+    if (row.gradePolicySource === "forward_only_market_relative_lean") {
+      assert.equal(row.market, "threes");
+      assert.equal(row.grade, "Lean");
+    }
   }
 }
 

@@ -15,13 +15,17 @@ grade, stake, or member-facing row.
 The exact-price replay now covers all 360 chronological research games rather
 than the earlier 60-game sparse sample. It contains 360,522 genuine archived
 opening observations and is identified by immutable-input SHA-256
-`b8e20c78dabed1f461e8eb9e26c85c61316ba801ac94cf776969c45544d93da8`.
+`68c71ef30494811a94b53a1a3d873947b65a49a20af2e1743c1038023ecf385f`.
+The r5 dataset reuses the already captured exact openings with zero new
+provider calls and adds point-in-time opportunity context; the reuse utility
+requires identical game identity, complete opening coverage, unique provider
+observation identifiers, and one derived feature release.
 The larger sample invalidated several apparently strong results from the sparse
 pilot; those earlier qualifications are withdrawn rather than carried forward.
 The consolidated grade report is release
-`nba_player_props_model_tournament_2026_10_20_r9_best_angle_noninferiority`,
+`nba_player_props_model_tournament_2026_10_21_r11_coherent_all_market_relative_leans`,
 with SHA-256
-`5f6eb5d4ce88d90a2df0daaf69f368957a4c9947f30a6a4f29bd9e54ba550a3b`.
+`3dbe4b39ded536aebba0f16a3f468e09a20468ab091addc5ece6e1d1c03e14c7`.
 
 The current replay uses five non-overlapping chronological stages:
 
@@ -66,11 +70,14 @@ while the remaining Assists Leans went 15-7. Calibration therefore preserves
 Assists Leans without manufacturing a misleading Best label.
 
 Rebounds, Threes, Points + Rebounds, Points + Assists, and Rebounds + Assists
-did not survive untouched confirmation. They remain private research
-markets. The failure is not hidden by flattening the future member board: their
-structural projections and grade signals continue separately, while the two
-ungated surfaces and the role-qualified Assists surface establish a real
-release boundary.
+did not qualify their original standalone grade policies. They remain private
+research markets. A later product-surface audit added sparse Lean candidates:
+an inherited all-market policy for Rebounds, a side-neutral relative policy for
+Threes, and one shared side-neutral policy for the three secondary
+combinations. They do not create Best Angles or daily quotas, and a market can
+remain empty on a slate when no row qualifies. Because this product-surface
+work occurred after confirmation outcomes were opened, every fallback policy
+remains forward-confirmation-only and is not a public release pass.
 
 The local forward observer also proved current provider coverage on October 20:
 three games, nine sportsbooks, every foundation market, 2,588 complete two-way
@@ -248,10 +255,10 @@ prediction, grade, stake, lock, writer, or schedule changed during this work.
 | Immutable historical dataset | Passed for the 360-game exact-price replay | Add an independent season and preserve the immutable SHA for every run |
 | Reproducible offline replay | Passed | Retain cache SHA and release identity for every future run |
 | Independent model tournament | Mixed; separate candidates selected by market | Continue structural work for the five failed grade markets and add an independent season/window |
-| Projection stability | Sufficient to forward-test Points, PRA, and role-qualified Assists grades; not a release pass for the other five markets | Retain market-specific candidates; do not restore sparse-sample qualifications |
+| Projection stability | Sufficient to forward-test Points, PRA, and role-qualified Assists grades; the other five markets now have sparse shared Lean candidates only | Retain market-specific forecasts and forward-confirm the three frozen fallback policies |
 | Distribution calibration | Not tested | Fit predictive distributions and test interval coverage/Brier/log loss |
 | Market-reading marriage | Opening-only candidates passed | Capture target-excluded T-180/T-60/T-15/lock snapshots and validate movement |
-| Grade/ROI calibration | Passed for Points and PRA relative Best/Lean surfaces and role-qualified Assists Leans; failed for the other five markets | Forward-test the frozen passing surfaces; continue market-specific structural work for failures; do not manufacture unsupported Best tiers |
+| Grade/ROI calibration | Passed retrospectively for Points and PRA relative Best/Lean surfaces and role-qualified Assists Leans; all eight markets have at least one confirmation actionable through three sparse fallback policies | Forward-test every frozen surface; keep fallback markets Lean-only and never force a daily market quota |
 | Settlement/private tracking | Private append-only contract built; runtime capture not yet enabled | Connect it only to the future sole authoritative observer, then prove DNP, void, overtime, and stat-correction handling |
 | Production launch | Not requested and not performed | Keep all work private until the forward release is explicitly approved |
 

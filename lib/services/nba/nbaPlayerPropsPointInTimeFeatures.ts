@@ -7,7 +7,7 @@ import type {
 import { buildNbaPointInTimeFeatures } from "./nbaPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_player_props_point_in_time_features_2026_10_20_r3_long_horizon_rates" as const;
+  "nba_player_props_point_in_time_features_2026_10_21_r5_opportunity_context" as const;
 
 const RESULT_AVAILABILITY_HOURS = 5;
 
@@ -63,6 +63,15 @@ export type NbaPlayerPropFeatureRow = {
   touches_per_minute_5: number | null;
   passes_per_minute_5: number | null;
   rebound_chances_per_minute_5: number | null;
+  rebound_chances_off_per_minute_5: number | null;
+  rebound_chances_def_per_minute_5: number | null;
+  rebound_capture_rate_5: number | null;
+  offensive_rebound_percentage_mean_5: number | null;
+  defensive_rebound_percentage_mean_5: number | null;
+  fg3_percentage_10: number | null;
+  fg3_percentage_20: number | null;
+  fg3_percentage_season: number | null;
+  three_point_attempt_share_mean_5: number | null;
   true_shooting_mean_5: number | null;
   assist_percentage_mean_5: number | null;
   points_share_mean_5: number | null;
@@ -78,12 +87,24 @@ export type NbaPlayerPropFeatureRow = {
   team_offensive_rebound_rate_5: number | null;
   opponent_defensive_rebound_percentage_5: number | null;
   opponent_rebound_chances_per100_5: number | null;
+  opponent_rebound_chances_off_per100_5: number | null;
+  opponent_rebound_chances_def_per100_5: number | null;
+  opponent_offensive_rebound_percentage_5: number | null;
   team_three_point_attempt_share_5: number | null;
+  opponent_three_point_attempt_share_5: number | null;
   opponent_matchup_three_point_pct_5: number | null;
   opponent_contested_shots_per100_5: number | null;
   team_rest_days: number | null;
   team_back_to_back: number | null;
   opponent_rest_days: number | null;
+  team_rotation_expected_players_5: number | null;
+  team_rotation_expected_top1_minutes_5: number | null;
+  team_rotation_continuity_5: number | null;
+  team_rotation_latest_vs_recent_5: number | null;
+  opponent_rotation_expected_players_5: number | null;
+  opponent_rotation_expected_top1_minutes_5: number | null;
+  opponent_rotation_continuity_5: number | null;
+  opponent_rotation_latest_vs_recent_5: number | null;
   target_minutes: number | null;
   target_points: number | null;
   target_rebounds: number | null;
@@ -117,6 +138,11 @@ type PlayerObservation = {
   touches: number | null;
   passes: number | null;
   reboundChances: number | null;
+  reboundChancesOff: number | null;
+  reboundChancesDef: number | null;
+  offensiveReboundPercentage: number | null;
+  defensiveReboundPercentage: number | null;
+  threePointAttemptShare: number | null;
   trueShooting: number | null;
   assistPercentage: number | null;
   pointsShare: number | null;
@@ -292,6 +318,15 @@ function buildFeatureRow(args: {
     touches_per_minute_5: optionalPerMinute(recent5, "touches"),
     passes_per_minute_5: optionalPerMinute(recent5, "passes"),
     rebound_chances_per_minute_5: optionalPerMinute(recent5, "reboundChances"),
+    rebound_chances_off_per_minute_5: optionalPerMinute(recent5, "reboundChancesOff"),
+    rebound_chances_def_per_minute_5: optionalPerMinute(recent5, "reboundChancesDef"),
+    rebound_capture_rate_5: optionalRatio(recent5, "rebounds", "reboundChances"),
+    offensive_rebound_percentage_mean_5: mean(nonNull(recent5.map((row) => row.offensiveReboundPercentage))),
+    defensive_rebound_percentage_mean_5: mean(nonNull(recent5.map((row) => row.defensiveReboundPercentage))),
+    fg3_percentage_10: ratioOfSums(recent10, "threes", "fg3a"),
+    fg3_percentage_20: ratioOfSums(recent20, "threes", "fg3a"),
+    fg3_percentage_season: ratioOfSums(seasonHistory, "threes", "fg3a"),
+    three_point_attempt_share_mean_5: mean(nonNull(recent5.map((row) => row.threePointAttemptShare))),
     true_shooting_mean_5: mean(nonNull(recent5.map((row) => row.trueShooting))),
     assist_percentage_mean_5: mean(nonNull(recent5.map((row) => row.assistPercentage))),
     points_share_mean_5: mean(nonNull(recent5.map((row) => row.pointsShare))),
@@ -307,12 +342,24 @@ function buildFeatureRow(args: {
     team_offensive_rebound_rate_5: contextNumber(`${teamPrefix}_offensiveReboundRate_5`),
     opponent_defensive_rebound_percentage_5: contextNumber(`${opponentPrefix}_defensiveReboundPercentage_5`),
     opponent_rebound_chances_per100_5: contextNumber(`${opponentPrefix}_reboundChancesPer100_5`),
+    opponent_rebound_chances_off_per100_5: contextNumber(`${opponentPrefix}_reboundChancesOffPer100_5`),
+    opponent_rebound_chances_def_per100_5: contextNumber(`${opponentPrefix}_reboundChancesDefPer100_5`),
+    opponent_offensive_rebound_percentage_5: contextNumber(`${opponentPrefix}_offensiveReboundPercentage_5`),
     team_three_point_attempt_share_5: contextNumber(`${teamPrefix}_threePointAttemptShare_5`),
+    opponent_three_point_attempt_share_5: contextNumber(`${opponentPrefix}_threePointAttemptShare_5`),
     opponent_matchup_three_point_pct_5: contextNumber(`${opponentPrefix}_matchupThreePointPct_5`),
     opponent_contested_shots_per100_5: contextNumber(`${opponentPrefix}_contestedShotsPer100_5`),
     team_rest_days: contextNumber(`${teamPrefix}_rest_days`),
     team_back_to_back: contextNumber(`${teamPrefix}_back_to_back`),
     opponent_rest_days: contextNumber(`${opponentPrefix}_rest_days`),
+    team_rotation_expected_players_5: contextNumber(`${teamPrefix}_rotation_expected_players_5`),
+    team_rotation_expected_top1_minutes_5: contextNumber(`${teamPrefix}_rotation_expected_top1_minutes_5`),
+    team_rotation_continuity_5: contextNumber(`${teamPrefix}_rotation_continuity_5`),
+    team_rotation_latest_vs_recent_5: contextNumber(`${teamPrefix}_rotation_latest_vs_recent_5`),
+    opponent_rotation_expected_players_5: contextNumber(`${opponentPrefix}_rotation_expected_players_5`),
+    opponent_rotation_expected_top1_minutes_5: contextNumber(`${opponentPrefix}_rotation_expected_top1_minutes_5`),
+    opponent_rotation_continuity_5: contextNumber(`${opponentPrefix}_rotation_continuity_5`),
+    opponent_rotation_latest_vs_recent_5: contextNumber(`${opponentPrefix}_rotation_latest_vs_recent_5`),
     target_minutes: target?.minutes ?? null,
     target_points: target?.points ?? null,
     target_rebounds: rebounds,
@@ -353,6 +400,11 @@ function observation(
     touches: advanced?.touches ?? null,
     passes: advanced?.passes ?? null,
     reboundChances: advanced?.reboundChancesTotal ?? null,
+    reboundChancesOff: advanced?.reboundChancesOff ?? null,
+    reboundChancesDef: advanced?.reboundChancesDef ?? null,
+    offensiveReboundPercentage: advanced?.offensiveReboundPercentage ?? null,
+    defensiveReboundPercentage: advanced?.defensiveReboundPercentage ?? null,
+    threePointAttemptShare: advanced?.threePointAttemptShare ?? null,
     trueShooting: advanced?.trueShootingPercentage ?? null,
     assistPercentage: advanced?.assistPercentage ?? null,
     pointsShare: totals.points > 0 ? box.points / totals.points : null,
@@ -394,12 +446,33 @@ function perMinute(rows: readonly PlayerObservation[], key: keyof PlayerObservat
 
 function optionalPerMinute(
   rows: readonly PlayerObservation[],
-  key: "touches" | "passes" | "reboundChances",
+  key: "touches" | "passes" | "reboundChances" | "reboundChancesOff" | "reboundChancesDef",
 ): number | null {
   const available = rows.filter((row) => row[key] !== null);
   const minutes = available.reduce((total, row) => total + row.minutes, 0);
   if (minutes <= 0) return null;
   return available.reduce((total, row) => total + (row[key] ?? 0), 0) / minutes;
+}
+
+function optionalRatio(
+  rows: readonly PlayerObservation[],
+  numeratorKey: "rebounds",
+  denominatorKey: "reboundChances",
+): number | null {
+  const available = rows.filter((row) => row[denominatorKey] !== null);
+  const denominator = available.reduce((total, row) => total + (row[denominatorKey] ?? 0), 0);
+  if (denominator <= 0) return null;
+  return available.reduce((total, row) => total + row[numeratorKey], 0) / denominator;
+}
+
+function ratioOfSums(
+  rows: readonly PlayerObservation[],
+  numeratorKey: "threes",
+  denominatorKey: "fg3a",
+): number | null {
+  const denominator = rows.reduce((total, row) => total + row[denominatorKey], 0);
+  if (denominator <= 0) return null;
+  return rows.reduce((total, row) => total + row[numeratorKey], 0) / denominator;
 }
 
 function nonNull(values: readonly (number | null)[]): number[] {

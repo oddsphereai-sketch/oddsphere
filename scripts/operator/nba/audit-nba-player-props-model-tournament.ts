@@ -42,6 +42,14 @@ type CandidateName =
   | "structural_direct_counts"
   | "structural_log_counts"
   | "opportunity_direct_counts"
+  // Retained as explicit research candidates for reproducible rejected-model
+  // diagnostics. They are not part of the active tournament candidate list.
+  | "direct_market_counts"
+  | "direct_market_log_counts"
+  | "bias_corrected_structural_direct_counts"
+  | "bias_corrected_structural_log_counts"
+  | "bias_corrected_direct_market_counts"
+  | "boosted_market_counts"
   | "market_read_all_disagreements"
   | "market_read_2pp_disagreements"
   | "market_read_5pp_disagreements"
@@ -123,6 +131,15 @@ type StructuralFeature =
   | "touches_per_minute_5"
   | "passes_per_minute_5"
   | "rebound_chances_per_minute_5"
+  | "rebound_chances_off_per_minute_5"
+  | "rebound_chances_def_per_minute_5"
+  | "rebound_capture_rate_5"
+  | "offensive_rebound_percentage_mean_5"
+  | "defensive_rebound_percentage_mean_5"
+  | "fg3_percentage_10"
+  | "fg3_percentage_20"
+  | "fg3_percentage_season"
+  | "three_point_attempt_share_mean_5"
   | "true_shooting_mean_5"
   | "assist_percentage_mean_5"
   | "points_share_mean_5"
@@ -138,7 +155,11 @@ type StructuralFeature =
   | "team_offensive_rebound_rate_5"
   | "opponent_defensive_rebound_percentage_5"
   | "opponent_rebound_chances_per100_5"
+  | "opponent_rebound_chances_off_per100_5"
+  | "opponent_rebound_chances_def_per100_5"
+  | "opponent_offensive_rebound_percentage_5"
   | "team_three_point_attempt_share_5"
+  | "opponent_three_point_attempt_share_5"
   | "opponent_matchup_three_point_pct_5"
   | "opponent_contested_shots_per100_5"
 >;
@@ -151,6 +172,31 @@ type StructuralCountModel = {
   scales: number[];
   coefficients: number[];
   lambda: number;
+};
+
+type DirectMarketCountModel = {
+  market: Market;
+  transform: "identity" | "log1p";
+  features: StructuralFeature[];
+  means: number[];
+  scales: number[];
+  coefficients: number[];
+  lambda: number;
+};
+
+type BoostedStump = {
+  feature: StructuralFeature;
+  imputation: number;
+  threshold: number;
+  left: number;
+  right: number;
+};
+
+type BoostedMarketCountModel = {
+  market: Market;
+  base: number;
+  learningRate: number;
+  stumps: BoostedStump[];
 };
 
 type Metrics = {
@@ -429,7 +475,7 @@ async function main(): Promise<void> {
   );
 
   const report = {
-    release: "nba_player_props_model_tournament_2026_10_20_r9_best_angle_noninferiority",
+    release: "nba_player_props_model_tournament_2026_10_21_r11_coherent_all_market_relative_leans",
     mode: "offline_research_only",
     actionable: false,
     sourceDatasetRelease: dataset.release,
@@ -482,7 +528,7 @@ async function main(): Promise<void> {
     const previewOutput = path.resolve(previewOutputValue);
     await mkdir(path.dirname(previewOutput), { recursive: true });
     await writeFile(previewOutput, `${JSON.stringify({
-      release: "nba_player_props_private_product_preview_2026_10_21_r1",
+      release: "nba_player_props_private_product_preview_2026_10_21_r3_coherent_all_market_relative_leans",
       mode: "private_historical_visual_qa_only",
       actionable: false,
       sourceDatasetRelease: dataset.release,
@@ -675,6 +721,238 @@ function opportunityCountCandidate(): Candidate {
         .reduce((sum, component) => sum + predictStructuralCount(row, models[component], minuteModel), 0);
     },
   };
+}
+
+function directMarketCountCandidate(
+  name: Extract<CandidateName, "direct_market_counts" | "direct_market_log_counts">,
+  transform: DirectMarketCountModel["transform"],
+): Candidate {
+  return {
+    name,
+    fit(rows) {
+      const minuteModel = fitMinuteRegression(rows);
+      const models = Object.fromEntries(MARKETS.map((market) => [
+        market,
+        fitDirectMarketCountModel(rows, market, transform, minuteModel),
+      ])) as Record<Market, DirectMarketCountModel>;
+      return (row, market) => predictDirectMarketCount(row, models[market], minuteModel);
+    },
+  };
+}
+
+function residualBiasCorrectedCandidate(
+  name: Extract<CandidateName,
+    | "bias_corrected_structural_direct_counts"
+    | "bias_corrected_structural_log_counts"
+    | "bias_corrected_direct_market_counts">,
+  base: Candidate,
+): Candidate {
+  return {
+    name,
+    fit(rows) {
+      const games = [...new Map(chronological(rows).map((row) => [row.game_id, row.feature_cutoff])).entries()]
+        .sort((left, right) => Date.parse(left[1]) - Date.parse(right[1]) || left[0] - right[0]);
+      const split = Math.max(4, Math.min(games.length - 2, Math.floor(games.length * 0.75)));
+      const trainIds = new Set(games.slice(0, split).map(([gameId]) => gameId));
+      const validateIds = new Set(games.slice(split).map(([gameId]) => gameId));
+      const train = rows.filter((row) => trainIds.has(row.game_id));
+      const validate = rows.filter((row) => validateIds.has(row.game_id));
+      const validationPredict = base.fit(train);
+      const correction = Object.fromEntries(MARKETS.map((market) => {
+        const residuals = validate.flatMap((row) => {
+          const actual = target(row, market);
+          return actual === null ? [] : [actual - validationPredict(row, market)];
+        });
+        return [market, median(residuals) ?? 0];
+      })) as Record<Market, number>;
+      const finalPredict = base.fit(rows);
+      return (row, market) => Math.max(0, finalPredict(row, market) + correction[market]);
+    },
+  };
+}
+
+function boostedMarketCountCandidate(): Candidate {
+  return {
+    name: "boosted_market_counts",
+    fit(rows) {
+      const minuteModel = fitMinuteRegression(rows);
+      const models = Object.fromEntries(MARKETS.map((market) => [
+        market,
+        fitBoostedMarketCountModel(rows, market, minuteModel),
+      ])) as Record<Market, BoostedMarketCountModel>;
+      return (row, market) => predictBoostedMarketCount(row, models[market], minuteModel);
+    },
+  };
+}
+
+function fitBoostedMarketCountModel(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  market: Market,
+  minuteModel: MinuteRegression,
+): BoostedMarketCountModel {
+  const ordered = chronological(rows).filter((row) => target(row, market) !== null);
+  const games = [...new Map(ordered.map((row) => [row.game_id, row.feature_cutoff])).entries()]
+    .sort((left, right) => Date.parse(left[1]) - Date.parse(right[1]) || left[0] - right[0]);
+  const split = Math.max(4, Math.min(games.length - 2, Math.floor(games.length * 0.8)));
+  const trainIds = new Set(games.slice(0, split).map(([gameId]) => gameId));
+  const validateIds = new Set(games.slice(split).map(([gameId]) => gameId));
+  const train = ordered.filter((row) => trainIds.has(row.game_id));
+  const validate = ordered.filter((row) => validateIds.has(row.game_id));
+  const learningRate = 0.05;
+  const staged = fitBoostedMarketCountModelAtIterations(train, market, minuteModel, learningRate, 60);
+  const candidateIterations = [10, 20, 30, 40, 50, 60];
+  const bestIterations = candidateIterations.map((iterations) => ({
+    iterations,
+    mae: boostedMarketCountMae(validate, { ...staged, stumps: staged.stumps.slice(0, iterations) }, minuteModel),
+  })).sort((left, right) => left.mae - right.mae || left.iterations - right.iterations)[0]?.iterations ?? 20;
+  return fitBoostedMarketCountModelAtIterations(ordered, market, minuteModel, learningRate, bestIterations);
+}
+
+function fitBoostedMarketCountModelAtIterations(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  market: Market,
+  minuteModel: MinuteRegression,
+  learningRate: number,
+  iterations: number,
+): BoostedMarketCountModel {
+  const features = [...new Set(marketComponents(market).flatMap((component) => STRUCTURAL_FEATURES[component]))];
+  const actual = rows.map((row) => target(row, market) ?? 0);
+  const base = mean(actual) ?? 0;
+  const predictions = rows.map(() => base);
+  const featureValues = new Map(features.map((feature) => {
+    const raw = rows.map((row) => structuralFeatureValue(row, feature, minuteModel));
+    const imputation = median(nonNull(raw)) ?? 0;
+    return [feature, {
+      imputation,
+      values: raw.map((value) => value ?? imputation),
+    }] as const;
+  }));
+  const stumps: BoostedStump[] = [];
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const residuals = actual.map((value, index) => value - predictions[index]!);
+    let best: (BoostedStump & { squaredError: number }) | null = null;
+    for (const feature of features) {
+      const prepared = featureValues.get(feature)!;
+      const sorted = [...prepared.values].sort((left, right) => left - right);
+      const thresholds = [0.1, 0.25, 0.4, 0.6, 0.75, 0.9]
+        .map((fraction) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * fraction))]!)
+        .filter((value, index, values) => index === 0 || value !== values[index - 1]);
+      for (const threshold of thresholds) {
+        const leftResiduals = residuals.filter((_, index) => prepared.values[index]! <= threshold);
+        const rightResiduals = residuals.filter((_, index) => prepared.values[index]! > threshold);
+        if (leftResiduals.length < 20 || rightResiduals.length < 20) continue;
+        const left = mean(leftResiduals) ?? 0;
+        const right = mean(rightResiduals) ?? 0;
+        const squaredError = residuals.reduce((sum, residual, index) => {
+          const fitted = prepared.values[index]! <= threshold ? left : right;
+          return sum + (residual - fitted) ** 2;
+        }, 0);
+        if (!best || squaredError < best.squaredError) {
+          best = { feature, imputation: prepared.imputation, threshold, left, right, squaredError };
+        }
+      }
+    }
+    if (!best) break;
+    const { squaredError: _squaredError, ...stump } = best;
+    stumps.push(stump);
+    const prepared = featureValues.get(stump.feature)!;
+    predictions.forEach((_, index) => {
+      predictions[index] = predictions[index]! + learningRate
+        * (prepared.values[index]! <= stump.threshold ? stump.left : stump.right);
+    });
+  }
+  return { market, base, learningRate, stumps };
+}
+
+function predictBoostedMarketCount(
+  row: NbaPlayerPropFeatureRow,
+  model: BoostedMarketCountModel,
+  minuteModel: MinuteRegression,
+): number {
+  const value = model.stumps.reduce((prediction, stump) => {
+    const raw = structuralFeatureValue(row, stump.feature, minuteModel) ?? stump.imputation;
+    return prediction + model.learningRate * (raw <= stump.threshold ? stump.left : stump.right);
+  }, model.base);
+  return Math.max(0, value);
+}
+
+function boostedMarketCountMae(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  model: BoostedMarketCountModel,
+  minuteModel: MinuteRegression,
+): number {
+  const errors = rows.flatMap((row) => {
+    const actual = target(row, model.market);
+    return actual === null ? [] : [Math.abs(predictBoostedMarketCount(row, model, minuteModel) - actual)];
+  });
+  return mean(errors) ?? Infinity;
+}
+
+function fitDirectMarketCountModel(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  market: Market,
+  transform: DirectMarketCountModel["transform"],
+  minuteModel: MinuteRegression,
+): DirectMarketCountModel {
+  const ordered = chronological(rows).filter((row) => target(row, market) !== null);
+  const split = Math.max(8, Math.min(ordered.length - 4, Math.floor(ordered.length * 0.75)));
+  const train = ordered.slice(0, split);
+  const validate = ordered.slice(split);
+  const lambdas = [0.1, 1, 5, 20, 100];
+  const selectedLambda = lambdas.map((lambda) => fitDirectMarketCountModelAtLambda(
+    train,
+    market,
+    transform,
+    minuteModel,
+    lambda,
+  )).sort((left, right) => directMarketCountMae(validate, left, minuteModel)
+    - directMarketCountMae(validate, right, minuteModel))[0]?.lambda ?? 20;
+  return fitDirectMarketCountModelAtLambda(ordered, market, transform, minuteModel, selectedLambda);
+}
+
+function fitDirectMarketCountModelAtLambda(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  market: Market,
+  transform: DirectMarketCountModel["transform"],
+  minuteModel: MinuteRegression,
+  lambda: number,
+): DirectMarketCountModel {
+  const features = [...new Set(marketComponents(market).flatMap((component) => STRUCTURAL_FEATURES[component]))];
+  const values = rows.map((row) => features.map((feature) => structuralFeatureValue(row, feature, minuteModel)));
+  const means = features.map((_, index) => mean(nonNull(values.map((row) => row[index]))) ?? 0);
+  const scales = features.map((_, index) => standardDeviation(nonNull(values.map((row) => row[index]))) || Math.max(1, Math.abs(means[index]!)));
+  const x = values.map((row) => [
+    1,
+    ...row.map((item, index) => ((item ?? means[index]!) - means[index]!) / scales[index]!),
+  ]);
+  const targets = rows.map((row) => target(row, market) ?? 0);
+  const y = transform === "log1p" ? targets.map((item) => Math.log1p(Math.max(0, item))) : targets;
+  return { market, transform, features, means, scales, coefficients: ridgeSolve(x, y, lambda), lambda };
+}
+
+function predictDirectMarketCount(
+  row: NbaPlayerPropFeatureRow,
+  model: DirectMarketCountModel,
+  minuteModel: MinuteRegression,
+): number {
+  let value = model.coefficients[0] ?? 0;
+  model.features.forEach((feature, index) => {
+    const raw = structuralFeatureValue(row, feature, minuteModel) ?? model.means[index]!;
+    value += (model.coefficients[index + 1] ?? 0) * ((raw - model.means[index]!) / model.scales[index]!);
+  });
+  return Math.max(0, model.transform === "log1p" ? Math.expm1(value) : value);
+}
+
+function directMarketCountMae(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  model: DirectMarketCountModel,
+  minuteModel: MinuteRegression,
+): number {
+  const errors = rows.flatMap((row) => {
+    const actual = target(row, model.market);
+    return actual === null ? [] : [Math.abs(predictDirectMarketCount(row, model, minuteModel) - actual)];
+  });
+  return mean(errors) ?? Infinity;
 }
 
 function marketArbitrationCandidate(
@@ -1252,11 +1530,19 @@ function buildExactPriceGradeResearch(args: {
   confirmationPredictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
 }) {
   const canonicalByScope = new Map(args.canonical.map((offer) => [offer.scopeKey, offer]));
+  const reliabilityRows: ExactPriceReplayRow[] = [];
   const policyRows: ExactPriceReplayRow[] = [];
   const confirmationRows: ExactPriceReplayRow[] = [];
   const previewRows: Array<ExactPriceReplayRow & {
     grade: GradeName;
-    gradePolicySource: "points_ungated_ranked" | "assists_role_stable_ranked" | "pra_relative_best" | "forecast_only";
+    gradePolicySource:
+      | "points_ungated_ranked"
+      | "assists_role_stable_ranked"
+      | "pra_relative_best"
+      | "universal_market_relative_lean"
+      | "combo_market_relative_lean"
+      | "forward_only_market_relative_lean"
+      | "forecast_only";
   }> = [];
   const prepareMarket = (market: Market) => {
     const candidate = args.selectedByMarket[market];
@@ -1307,6 +1593,7 @@ function buildExactPriceGradeResearch(args: {
     const calibratedReliabilityFit = applyGradeReliabilityModel(reliabilityFitRaw, reliabilityModel);
     const calibratedGradePolicy = applyGradeReliabilityModel(gradePolicyRaw, reliabilityModel);
     const calibratedConfirmed = applyGradeReliabilityModel(confirmed, reliabilityModel);
+    reliabilityRows.push(...calibratedReliabilityFit);
     policyRows.push(...calibratedGradePolicy);
     confirmationRows.push(...calibratedConfirmed);
     const policySearch = selectExploratoryGradePolicy(calibratedGradePolicy);
@@ -1322,6 +1609,11 @@ function buildExactPriceGradeResearch(args: {
       gradePolicyRaw,
       confirmed,
       ["all"],
+    );
+    const slateRelativeLeanAudit = auditSlateRelativeLeanPolicy(
+      calibratedReliabilityFit,
+      calibratedGradePolicy,
+      calibratedConfirmed,
     );
     const relativeBestAngleAudit = auditRelativeBestAngleTier(
       calibratedGradePolicy,
@@ -1369,6 +1661,7 @@ function buildExactPriceGradeResearch(args: {
       ),
       rankedGradeAudit,
       ungatedRankedGradeAudit,
+      slateRelativeLeanAudit,
       gradePolicy: exactPriceReplaySummary(calibratedGradePolicy),
       confirmation: exactPriceReplaySummary(calibratedConfirmed),
       exploratoryPolicy: policySearch.policy,
@@ -1378,20 +1671,100 @@ function buildExactPriceGradeResearch(args: {
       relativeBestAngleAudit,
     }];
   }));
+  const pooledSlateRelativeLeanAudit = auditPooledSlateRelativeLeanPolicy({
+    reliabilityFit: reliabilityRows,
+    gradePolicy: policyRows,
+    confirmation: confirmationRows,
+  });
+  const uncoveredSlateRelativeLeanAudits = {
+    singleStat: auditPooledSlateRelativeLeanPolicy({
+      reliabilityFit: reliabilityRows,
+      gradePolicy: policyRows,
+      confirmation: confirmationRows,
+      markets: ["rebounds", "threes"],
+    }),
+    combos: auditPooledSlateRelativeLeanPolicy({
+      reliabilityFit: reliabilityRows,
+      gradePolicy: policyRows,
+      confirmation: confirmationRows,
+      markets: ["points_rebounds", "points_assists", "rebounds_assists"],
+    }),
+  };
+  const universalSingleStatLeanAudit = auditInheritedPooledSlateRelativeLeanPolicy({
+    policy: pooledSlateRelativeLeanAudit.selectedPolicy,
+    reliabilityFit: reliabilityRows,
+    gradePolicy: policyRows,
+    confirmation: confirmationRows,
+    markets: ["rebounds", "threes"],
+  });
+  const inheritedReboundLeanAudit = auditInheritedPooledSlateRelativeLeanPolicy({
+    policy: pooledSlateRelativeLeanAudit.selectedPolicy,
+    reliabilityFit: reliabilityRows,
+    gradePolicy: policyRows,
+    confirmation: confirmationRows,
+    markets: ["rebounds"],
+  });
+  const threesForwardOnlyLeanAudit = {
+    ...byMarket.threes.slateRelativeLeanAudit,
+    retrospectiveProductDecisionAfterOutcomeReview: true,
+    requiresForwardConfirmation: true,
+    publicQualified: false,
+    semantics: "preconfirmation_selected_best_available_private_lean_only",
+  };
+  const inheritedReboundRows = inheritedReboundLeanAudit.verdict.qualified
+    ? selectPooledSlateRelativeLeanRows(
+      confirmationRows,
+      inheritedReboundLeanAudit.inheritedPolicy,
+      inheritedReboundLeanAudit.markets,
+    )
+    : [];
+  const threesForwardOnlyRows = selectPooledSlateRelativeLeanRows(
+    confirmationRows,
+    threesForwardOnlyLeanAudit.selectedPolicy,
+    ["threes"],
+  );
+  const comboRows = uncoveredSlateRelativeLeanAudits.combos.verdict.qualified
+    ? selectPooledSlateRelativeLeanRows(
+      confirmationRows,
+      uncoveredSlateRelativeLeanAudits.combos.selectedPolicy,
+      uncoveredSlateRelativeLeanAudits.combos.markets,
+    )
+    : [];
+  const inheritedReboundScopeKeys = new Set(inheritedReboundRows.map((row) => row.scopeKey));
+  const threesForwardOnlyScopeKeys = new Set(threesForwardOnlyRows.map((row) => row.scopeKey));
+  const comboScopeKeys = new Set(comboRows.map((row) => row.scopeKey));
+  const expandedPreviewRows = previewRows.map((row) => {
+    if (row.grade === "Best Angle" || row.grade === "Lean") return row;
+    if (inheritedReboundScopeKeys.has(row.scopeKey)) {
+      return { ...row, grade: "Lean" as const, gradePolicySource: "universal_market_relative_lean" as const };
+    }
+    if (threesForwardOnlyScopeKeys.has(row.scopeKey)) {
+      return { ...row, grade: "Lean" as const, gradePolicySource: "forward_only_market_relative_lean" as const };
+    }
+    if (comboScopeKeys.has(row.scopeKey)) {
+      return { ...row, grade: "Lean" as const, gradePolicySource: "combo_market_relative_lean" as const };
+    }
+    return row;
+  });
   const report = {
-    release: "nba_player_props_exact_price_grade_research_2026_10_20_r8_best_angle_noninferiority",
+    release: "nba_player_props_exact_price_grade_research_2026_10_21_r10_coherent_all_market_relative_leans",
     status: "opened_retrospective_research_only",
     actionable: false,
     targetBookExcluded: true,
     gradePolicy: exactPriceReplaySummary(policyRows),
     confirmation: exactPriceReplaySummary(confirmationRows),
     byMarket,
+    pooledSlateRelativeLeanAudit,
+    uncoveredSlateRelativeLeanAudits,
+    universalSingleStatLeanAudit,
+    inheritedReboundLeanAudit,
+    threesForwardOnlyLeanAudit,
     actionableCoherenceAudit: {
-      baseline: summarizeActionableCoherence(previewRows, () => true),
-      probabilityAtLeastHalf: summarizeActionableCoherence(previewRows, (row) => row.finalProbability >= 0.5),
-      nonnegativeExactPriceEv: summarizeActionableCoherence(previewRows, (row) => row.expectedValue >= 0),
+      baseline: summarizeActionableCoherence(expandedPreviewRows, () => true),
+      probabilityAtLeastHalf: summarizeActionableCoherence(expandedPreviewRows, (row) => row.finalProbability >= 0.5),
+      nonnegativeExactPriceEv: summarizeActionableCoherence(expandedPreviewRows, (row) => row.expectedValue >= 0),
       coherentProbabilityAndPrice: summarizeActionableCoherence(
-        previewRows,
+        expandedPreviewRows,
         (row) => row.finalProbability >= 0.5 && row.expectedValue >= 0,
       ),
     },
@@ -1401,8 +1774,8 @@ function buildExactPriceGradeResearch(args: {
       "Policies are exploratory candidates for private forward tracking, not member grades or stakes.",
     ],
   };
-  const previewGameIds = selectPreviewGames(previewRows);
-  const selectedPreviewRows = previewRows.filter((row) => previewGameIds.has(row.gameId));
+  const previewGameIds = selectPreviewGames(expandedPreviewRows);
+  const selectedPreviewRows = expandedPreviewRows.filter((row) => previewGameIds.has(row.gameId));
   return {
     report,
     previewRows: selectedPreviewRows,
@@ -1955,7 +2328,11 @@ type RankEligibilityGate =
   | "all"
   | "established_role"
   | "not_back_to_back"
-  | "established_role_not_back_to_back";
+  | "established_role_not_back_to_back"
+  | "over_only"
+  | "under_only"
+  | "established_role_over"
+  | "established_role_under";
 
 type RankGradePolicy = Readonly<{
   signalFamily: RankSignalFamily;
@@ -2173,6 +2550,10 @@ function rankEligibility(row: ExactPriceReplayRow, gate: RankEligibilityGate): b
   if (gate === "established_role") return establishedRole;
   if (gate === "not_back_to_back") return !row.teamBackToBack;
   if (gate === "established_role_not_back_to_back") return establishedRole && !row.teamBackToBack;
+  if (gate === "over_only") return row.finalSide === "over";
+  if (gate === "under_only") return row.finalSide === "under";
+  if (gate === "established_role_over") return establishedRole && row.finalSide === "over";
+  if (gate === "established_role_under") return establishedRole && row.finalSide === "under";
   return true;
 }
 
@@ -2223,6 +2604,477 @@ function rankGrade(row: ExactPriceReplayRow, policy: RankGradePolicy): GradeName
   if (eligible && priceQualified && score >= policy.leanThreshold) return "Lean";
   if (eligible && score >= policy.leanThreshold) return "Watchlist";
   return "No Play";
+}
+
+type SlateRelativeLeanPolicy = Readonly<{
+  signalFamily: RankSignalFamily;
+  eligibilityGate: RankEligibilityGate;
+  maxPerSlate: 1 | 2;
+  minimumProbability: number;
+  minimumExpectedValue: number;
+  minimumAmericanPrice: number;
+  requireReferenceBook: boolean;
+}>;
+
+function auditSlateRelativeLeanPolicy(
+  reliabilityFit: readonly ExactPriceReplayRow[],
+  gradePolicy: readonly ExactPriceReplayRow[],
+  confirmation: readonly ExactPriceReplayRow[],
+) {
+  const families: readonly RankSignalFamily[] = [
+    "raw_model_probability",
+    "projection_distance",
+    "target_excluded_probability",
+    "target_price_probability",
+    "market_consensus",
+    "model_market_consensus",
+    "target_excluded_expected_value",
+    "model_market_conservative_expected_value",
+    "model_market_average_expected_value",
+  ];
+  const gates: readonly RankEligibilityGate[] = [
+    "all",
+    "established_role",
+    "not_back_to_back",
+    "established_role_not_back_to_back",
+  ];
+  const scoreReliability = buildSlateRelativeLeanScorer(reliabilityFit, families);
+  const scoreGradePolicy = buildSlateRelativeLeanScorer(gradePolicy, families);
+  const scoreConfirmation = buildSlateRelativeLeanScorer(confirmation, families);
+  const candidatePolicies: SlateRelativeLeanPolicy[] = [];
+  for (const signalFamily of families) {
+    for (const eligibilityGate of gates) {
+      for (const maxPerSlate of [1, 2] as const) {
+        for (const minimumProbability of [0.5, 0.52, 0.54]) {
+          for (const minimumExpectedValue of [-0.03, 0, 0.02]) {
+            for (const minimumAmericanPrice of [-150, -130, -110]) {
+              for (const requireReferenceBook of [false, true]) {
+                candidatePolicies.push({
+                  signalFamily,
+                  eligibilityGate,
+                  maxPerSlate,
+                  minimumProbability,
+                  minimumExpectedValue,
+                  minimumAmericanPrice,
+                  requireReferenceBook,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  const reliabilityMinimumRows = Math.min(8, Math.max(4, new Set(reliabilityFit.map((row) => easternDateForPreview(row.featureCutoff))).size));
+  const gradeMinimumRows = Math.min(8, Math.max(4, new Set(gradePolicy.map((row) => easternDateForPreview(row.featureCutoff))).size));
+  const evaluated = candidatePolicies.map((policy) => ({
+    policy,
+    reliabilityFit: scoreReliability(policy),
+    gradePolicy: scoreGradePolicy(policy),
+  }));
+  const eligible = evaluated.filter(({ reliabilityFit: fit, gradePolicy: grade }) =>
+    fit.actionable.records >= reliabilityMinimumRows
+    && grade.actionable.records >= gradeMinimumRows
+    && (fit.actionable.hitRate ?? 0) >= 0.52
+    && (grade.actionable.hitRate ?? 0) >= 0.52
+    && (fit.actionable.roi ?? -1) > -0.02
+    && (grade.actionable.roi ?? -1) > -0.02);
+  const selected = (eligible.length > 0 ? eligible : evaluated)
+    .sort((left, right) => robustSlateRelativeLeanScore(right) - robustSlateRelativeLeanScore(left)
+      || right.gradePolicy.actionable.records - left.gradePolicy.actionable.records)[0]!;
+  const confirmed = scoreConfirmation(selected.policy);
+  const onePerSlatePolicy = { ...selected.policy, maxPerSlate: 1 as const };
+  const onePerSlate = {
+    policy: onePerSlatePolicy,
+    reliabilityFit: scoreReliability(onePerSlatePolicy),
+    gradePolicy: scoreGradePolicy(onePerSlatePolicy),
+    confirmation: scoreConfirmation(onePerSlatePolicy),
+  };
+  const reasons: string[] = [];
+  if (selected.reliabilityFit.actionable.records < reliabilityMinimumRows) reasons.push("fewer_than_minimum_reliability_fit_relative_leans");
+  if ((selected.reliabilityFit.actionable.hitRate ?? 0) < 0.52) reasons.push("reliability_fit_relative_lean_hit_below_52_percent");
+  if ((selected.reliabilityFit.actionable.roi ?? -1) <= -0.02) reasons.push("reliability_fit_relative_lean_roi_below_minus_2_percent");
+  if (selected.gradePolicy.actionable.records < gradeMinimumRows) reasons.push("fewer_than_minimum_grade_policy_relative_leans");
+  if ((selected.gradePolicy.actionable.hitRate ?? 0) < 0.52) reasons.push("grade_policy_relative_lean_hit_below_52_percent");
+  if ((selected.gradePolicy.actionable.roi ?? -1) <= -0.02) reasons.push("grade_policy_relative_lean_roi_below_minus_2_percent");
+  if (confirmed.actionable.records < gradeMinimumRows) reasons.push("fewer_than_minimum_confirmation_relative_leans");
+  if ((confirmed.actionable.hitRate ?? 0) < 0.52) reasons.push("confirmation_relative_lean_hit_below_52_percent");
+  if ((confirmed.actionable.roi ?? -1) <= -0.02) reasons.push("confirmation_relative_lean_roi_below_minus_2_percent");
+  return {
+    semantics: "highest_ranked_coherent_opportunities_per_market_slate",
+    policySelectionExcludedConfirmation: true,
+    policySelectedAcrossTwoPreConfirmationWindows: true,
+    eligiblePolicyCount: eligible.length,
+    selectedPolicy: selected.policy,
+    reliabilityFit: selected.reliabilityFit,
+    gradePolicy: selected.gradePolicy,
+    confirmation: confirmed,
+    onePerSlateDiagnostic: onePerSlate,
+    verdict: { qualified: reasons.length === 0, reasons },
+  };
+}
+
+function auditPooledSlateRelativeLeanPolicy(args: {
+  reliabilityFit: readonly ExactPriceReplayRow[];
+  gradePolicy: readonly ExactPriceReplayRow[];
+  confirmation: readonly ExactPriceReplayRow[];
+  markets?: readonly Market[];
+}) {
+  const markets = args.markets ?? MARKETS;
+  const families: readonly RankSignalFamily[] = [
+    "raw_model_probability",
+    "projection_distance",
+    "target_excluded_probability",
+    "target_price_probability",
+    "market_consensus",
+    "model_market_consensus",
+    "target_excluded_expected_value",
+    "model_market_conservative_expected_value",
+    "model_market_average_expected_value",
+  ];
+  const gates: readonly RankEligibilityGate[] = [
+    "all",
+    "established_role",
+    "not_back_to_back",
+    "established_role_not_back_to_back",
+  ];
+  const scoreReliability = buildPooledSlateRelativeLeanScorer(args.reliabilityFit, families, markets);
+  const scoreGradePolicy = buildPooledSlateRelativeLeanScorer(args.gradePolicy, families, markets);
+  const scoreConfirmation = buildPooledSlateRelativeLeanScorer(args.confirmation, families, markets);
+  const candidatePolicies: SlateRelativeLeanPolicy[] = [];
+  for (const signalFamily of families) {
+    for (const eligibilityGate of gates) {
+      for (const maxPerSlate of [1, 2] as const) {
+        for (const minimumProbability of [0.5, 0.52, 0.54]) {
+          for (const minimumExpectedValue of [-0.03, 0, 0.02]) {
+            for (const minimumAmericanPrice of [-150, -130, -110]) {
+              for (const requireReferenceBook of [false, true]) {
+                candidatePolicies.push({
+                  signalFamily,
+                  eligibilityGate,
+                  maxPerSlate,
+                  minimumProbability,
+                  minimumExpectedValue,
+                  minimumAmericanPrice,
+                  requireReferenceBook,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  const evaluated = candidatePolicies.map((policy) => ({
+    policy,
+    reliabilityFit: scoreReliability(policy),
+    gradePolicy: scoreGradePolicy(policy),
+  }));
+  const minimumWindowRecords = markets.length * 3;
+  const eligible = evaluated.filter(({ reliabilityFit: fit, gradePolicy: grade }) =>
+    fit.actionable.records >= minimumWindowRecords
+    && grade.actionable.records >= minimumWindowRecords
+    && markets.every((market) => (fit.byMarket[market]?.records ?? 0) >= 2
+      && (grade.byMarket[market]?.records ?? 0) >= 2)
+    && (fit.actionable.hitRate ?? 0) >= 0.52
+    && (grade.actionable.hitRate ?? 0) >= 0.52
+    && (fit.actionable.roi ?? -1) > -0.02
+    && (grade.actionable.roi ?? -1) > -0.02);
+  const selected = (eligible.length > 0 ? eligible : evaluated)
+    .sort((left, right) => robustPooledSlateRelativeLeanScore(right, markets)
+      - robustPooledSlateRelativeLeanScore(left, markets)
+      || right.gradePolicy.actionable.records - left.gradePolicy.actionable.records)[0]!;
+  const confirmation = scoreConfirmation(selected.policy);
+  const reasons: string[] = [];
+  if (eligible.length === 0) reasons.push("no_policy_qualified_across_both_preconfirmation_windows");
+  if ((confirmation.actionable.hitRate ?? 0) < 0.52) reasons.push("confirmation_pooled_hit_below_52_percent");
+  if ((confirmation.actionable.roi ?? -1) <= -0.02) reasons.push("confirmation_pooled_roi_below_minus_2_percent");
+  for (const market of markets) {
+    const summary = confirmation.byMarket[market];
+    if ((summary?.records ?? 0) < 3) reasons.push(`${market}_confirmation_fewer_than_3`);
+    if ((summary?.hitRate ?? 0) < 0.40) reasons.push(`${market}_confirmation_hit_below_40_percent`);
+  }
+  return {
+    semantics: "one_preconfirmation_selected_policy_ranked_within_each_market_and_slate",
+    markets,
+    policySelectionExcludedConfirmation: true,
+    selectedPolicy: selected.policy,
+    eligiblePolicyCount: eligible.length,
+    reliabilityFit: selected.reliabilityFit,
+    gradePolicy: selected.gradePolicy,
+    confirmation,
+    verdict: { qualified: reasons.length === 0, reasons },
+  };
+}
+
+function auditInheritedPooledSlateRelativeLeanPolicy(args: {
+  policy: SlateRelativeLeanPolicy;
+  reliabilityFit: readonly ExactPriceReplayRow[];
+  gradePolicy: readonly ExactPriceReplayRow[];
+  confirmation: readonly ExactPriceReplayRow[];
+  markets: readonly Market[];
+}) {
+  const scoreReliability = buildPooledSlateRelativeLeanScorer(
+    args.reliabilityFit,
+    [args.policy.signalFamily],
+    args.markets,
+  );
+  const scoreGradePolicy = buildPooledSlateRelativeLeanScorer(
+    args.gradePolicy,
+    [args.policy.signalFamily],
+    args.markets,
+  );
+  const scoreConfirmation = buildPooledSlateRelativeLeanScorer(
+    args.confirmation,
+    [args.policy.signalFamily],
+    args.markets,
+  );
+  const reliabilityFit = scoreReliability(args.policy);
+  const gradePolicy = scoreGradePolicy(args.policy);
+  const confirmation = scoreConfirmation(args.policy);
+  const combinedRecords = reliabilityFit.actionable.records
+    + gradePolicy.actionable.records
+    + confirmation.actionable.records;
+  const combinedWins = reliabilityFit.actionable.wins
+    + gradePolicy.actionable.wins
+    + confirmation.actionable.wins;
+  const combinedUnits = reliabilityFit.actionable.units
+    + gradePolicy.actionable.units
+    + confirmation.actionable.units;
+  const combined = {
+    records: combinedRecords,
+    wins: combinedWins,
+    losses: combinedRecords - combinedWins,
+    hitRate: combinedRecords > 0 ? combinedWins / combinedRecords : null,
+    units: combinedUnits,
+    roi: combinedRecords > 0 ? combinedUnits / combinedRecords : null,
+  };
+  const reasons: string[] = [];
+  const windows = [reliabilityFit, gradePolicy, confirmation];
+  if (windows.some((window) => window.actionable.records < args.markets.length * 2)) {
+    reasons.push("chronological_window_too_sparse");
+  }
+  if (windows.some((window) => (window.actionable.hitRate ?? 0) < 0.40)) {
+    reasons.push("chronological_window_hit_below_40_percent");
+  }
+  if ((combined.hitRate ?? 0) < 0.55) reasons.push("combined_three_window_hit_below_55_percent");
+  if ((combined.roi ?? -1) <= 0) reasons.push("combined_three_window_roi_not_positive");
+  if ((confirmation.actionable.hitRate ?? 0) < 0.50) reasons.push("confirmation_hit_below_50_percent");
+  if ((confirmation.actionable.roi ?? -1) <= -0.02) reasons.push("confirmation_roi_below_minus_2_percent");
+  for (const market of args.markets) {
+    if ((confirmation.byMarket[market]?.records ?? 0) < 3) reasons.push(`${market}_confirmation_fewer_than_3`);
+    if ((confirmation.byMarket[market]?.hitRate ?? 0) < 0.40) reasons.push(`${market}_confirmation_hit_below_40_percent`);
+  }
+  return {
+    semantics: "all_market_policy_inherited_without_single_stat_refit",
+    policySelectionExcludedSingleStatOutcomes: true,
+    markets: args.markets,
+    inheritedPolicy: args.policy,
+    reliabilityFit,
+    gradePolicy,
+    confirmation,
+    combined,
+    retrospectivePolicyChangeAfterOutcomeReview: true,
+    requiresForwardConfirmation: true,
+    verdict: { qualified: reasons.length === 0, reasons },
+  };
+}
+
+function selectPooledSlateRelativeLeanRows(
+  rows: readonly ExactPriceReplayRow[],
+  policy: SlateRelativeLeanPolicy,
+  markets: readonly Market[],
+): ExactPriceReplayRow[] {
+  const dates = [...new Set(rows.map((row) => easternDateForPreview(row.featureCutoff)))].sort();
+  const selected: ExactPriceReplayRow[] = [];
+  for (const market of markets) {
+    for (const date of dates) {
+      const ranked = rows
+        .filter((row) => row.market === market && easternDateForPreview(row.featureCutoff) === date)
+        .sort((left, right) => rankSignal(right, policy.signalFamily) - rankSignal(left, policy.signalFamily)
+          || right.finalProbability - left.finalProbability
+          || right.expectedValue - left.expectedValue
+          || left.scopeKey.localeCompare(right.scopeKey));
+      let retained = 0;
+      for (const row of ranked) {
+        if (!rankEligibility(row, policy.eligibilityGate)
+          || row.finalProbability < policy.minimumProbability
+          || row.expectedValue < policy.minimumExpectedValue
+          || row.americanPrice < policy.minimumAmericanPrice
+          || (policy.requireReferenceBook && row.targetExcludedReferenceBooks < 1)) continue;
+        selected.push(row);
+        retained += 1;
+        if (retained >= policy.maxPerSlate) break;
+      }
+    }
+  }
+  return selected;
+}
+
+function buildPooledSlateRelativeLeanScorer(
+  rows: readonly ExactPriceReplayRow[],
+  families: readonly RankSignalFamily[],
+  markets: readonly Market[],
+) {
+  const dates = [...new Set(rows.map((row) => easternDateForPreview(row.featureCutoff)))].sort();
+  const sorted = new Map<RankSignalFamily, Map<string, ExactPriceReplayRow[]>>();
+  for (const family of families) {
+    const groups = new Map<string, ExactPriceReplayRow[]>();
+    for (const market of markets) {
+      for (const date of dates) {
+        groups.set(`${market}|${date}`, rows
+          .filter((row) => row.market === market && easternDateForPreview(row.featureCutoff) === date)
+          .sort((left, right) => rankSignal(right, family) - rankSignal(left, family)
+            || right.finalProbability - left.finalProbability
+            || right.expectedValue - left.expectedValue
+            || left.scopeKey.localeCompare(right.scopeKey)));
+      }
+    }
+    sorted.set(family, groups);
+  }
+  return (policy: SlateRelativeLeanPolicy) => {
+    const selected: ExactPriceReplayRow[] = [];
+    const groups = sorted.get(policy.signalFamily)!;
+    for (const market of markets) {
+      for (const date of dates) {
+        let retained = 0;
+        for (const row of groups.get(`${market}|${date}`) ?? []) {
+          if (!rankEligibility(row, policy.eligibilityGate)
+            || row.finalProbability < policy.minimumProbability
+            || row.expectedValue < policy.minimumExpectedValue
+            || row.americanPrice < policy.minimumAmericanPrice
+            || (policy.requireReferenceBook && row.targetExcludedReferenceBooks < 1)) continue;
+          selected.push(row);
+          retained += 1;
+          if (retained >= policy.maxPerSlate) break;
+        }
+      }
+    }
+    const summarize = (values: readonly ExactPriceReplayRow[]) => {
+      const wins = values.filter((row) => row.finalSide === row.outcomeSide).length;
+      const units = values.reduce((sum, row) => sum + unitReturn(
+        row.finalSide === row.outcomeSide,
+        row.americanPrice,
+      ), 0);
+      const overs = values.filter((row) => row.finalSide === "over").length;
+      return {
+        records: values.length,
+        wins,
+        losses: values.length - wins,
+        hitRate: values.length > 0 ? wins / values.length : null,
+        units,
+        roi: values.length > 0 ? units / values.length : null,
+        overs,
+        unders: values.length - overs,
+      };
+    };
+    return {
+      actionable: summarize(selected),
+      byMarket: Object.fromEntries(markets.map((market) => [
+        market,
+        summarize(selected.filter((row) => row.market === market)),
+      ])) as Partial<Record<Market, ReturnType<typeof summarize>>>,
+      slateDates: dates.length,
+      slatesWithActionable: new Set(selected.map((row) => easternDateForPreview(row.featureCutoff))).size,
+      boardShare: rows.length > 0 ? selected.length / rows.length : null,
+    };
+  };
+}
+
+function robustPooledSlateRelativeLeanScore(candidate: {
+  reliabilityFit: ReturnType<ReturnType<typeof buildPooledSlateRelativeLeanScorer>>;
+  gradePolicy: ReturnType<ReturnType<typeof buildPooledSlateRelativeLeanScorer>>;
+}, markets: readonly Market[]): number {
+  const aggregate = Math.min(
+    slateRelativeLeanScore(candidate.reliabilityFit),
+    slateRelativeLeanScore(candidate.gradePolicy),
+  );
+  const marketFloor = Math.min(...markets.map((market) => Math.min(
+    (candidate.reliabilityFit.byMarket[market]?.hitRate ?? 0) - 0.5,
+    (candidate.gradePolicy.byMarket[market]?.hitRate ?? 0) - 0.5,
+  )));
+  return aggregate + 0.25 * marketFloor;
+}
+
+function scoreSlateRelativeLeanPolicy(
+  rows: readonly ExactPriceReplayRow[],
+  policy: SlateRelativeLeanPolicy,
+) {
+  return buildSlateRelativeLeanScorer(rows, [policy.signalFamily])(policy);
+}
+
+function buildSlateRelativeLeanScorer(
+  rows: readonly ExactPriceReplayRow[],
+  families: readonly RankSignalFamily[],
+) {
+  const slateDates = [...new Set(rows.map((row) => easternDateForPreview(row.featureCutoff)))].sort();
+  const sortedByFamilyAndDate = new Map<RankSignalFamily, Map<string, ExactPriceReplayRow[]>>();
+  for (const family of families) {
+    const byDate = new Map<string, ExactPriceReplayRow[]>();
+    for (const date of slateDates) {
+      byDate.set(date, rows
+        .filter((row) => easternDateForPreview(row.featureCutoff) === date)
+        .sort((left, right) => rankSignal(right, family) - rankSignal(left, family)
+          || right.finalProbability - left.finalProbability
+          || right.expectedValue - left.expectedValue
+          || left.scopeKey.localeCompare(right.scopeKey)));
+    }
+    sortedByFamilyAndDate.set(family, byDate);
+  }
+  return (policy: SlateRelativeLeanPolicy) => {
+    const selected: ExactPriceReplayRow[] = [];
+    const byDate = sortedByFamilyAndDate.get(policy.signalFamily)!;
+    for (const date of slateDates) {
+      let retained = 0;
+      for (const row of byDate.get(date) ?? []) {
+        if (!rankEligibility(row, policy.eligibilityGate)
+          || row.finalProbability < policy.minimumProbability
+          || row.expectedValue < policy.minimumExpectedValue
+          || row.americanPrice < policy.minimumAmericanPrice
+          || (policy.requireReferenceBook && row.targetExcludedReferenceBooks < 1)) continue;
+        selected.push(row);
+        retained += 1;
+        if (retained >= policy.maxPerSlate) break;
+      }
+    }
+    const wins = selected.filter((row) => row.finalSide === row.outcomeSide).length;
+    const units = selected.reduce((sum, row) => sum + unitReturn(
+      row.finalSide === row.outcomeSide,
+      row.americanPrice,
+    ), 0);
+    const overs = selected.filter((row) => row.finalSide === "over").length;
+    return {
+      actionable: {
+        records: selected.length,
+        wins,
+        losses: selected.length - wins,
+        hitRate: selected.length > 0 ? wins / selected.length : null,
+        units,
+        roi: selected.length > 0 ? units / selected.length : null,
+        overs,
+        unders: selected.length - overs,
+      },
+      slateDates: slateDates.length,
+      slatesWithActionable: new Set(selected.map((row) => easternDateForPreview(row.featureCutoff))).size,
+      boardShare: rows.length > 0 ? selected.length / rows.length : null,
+    };
+  };
+}
+
+function slateRelativeLeanScore(summary: ReturnType<typeof scoreSlateRelativeLeanPolicy>): number {
+  return (summary.actionable.roi ?? -1)
+    + 0.35 * ((summary.actionable.hitRate ?? 0) - 0.5)
+    + 0.02 * Math.min(summary.actionable.records, 10);
+}
+
+function robustSlateRelativeLeanScore(candidate: {
+  reliabilityFit: ReturnType<typeof scoreSlateRelativeLeanPolicy>;
+  gradePolicy: ReturnType<typeof scoreSlateRelativeLeanPolicy>;
+}): number {
+  return Math.min(
+    slateRelativeLeanScore(candidate.reliabilityFit),
+    slateRelativeLeanScore(candidate.gradePolicy),
+  );
 }
 
 function gradeRowWithRelativeBest(

@@ -36,29 +36,42 @@ model, grades, writer, or public route.
 
 ## Forecast and grade evidence
 
-The immutable historical input SHA-256 remains
-`b8e20c78dabed1f461e8eb9e26c85c61316ba801ac94cf776969c45544d93da8`.
-On the untouched chronological confirmation block, the coherent actionable
-surface (chosen-side probability at least 50%) produced:
+The immutable r5 historical input SHA-256 is
+`68c71ef30494811a94b53a1a3d873947b65a49a20af2e1743c1038023ecf385f`.
+It reuses the already captured exact opening archive with zero additional
+provider calls while adding point-in-time opportunity context.
+On the untouched chronological confirmation block, the expanded private
+actionable surface produced:
 
 | Market | Record | Hit rate | Units | ROI |
 | --- | ---: | ---: | ---: | ---: |
 | Points | 34-24 | 58.6% | +3.21 | +5.5% |
+| Rebounds | 5-1 | 83.3% | +2.81 | +46.8% |
 | Assists | 14-7 | 66.7% | +3.75 | +17.9% |
+| Threes | 4-3 | 57.1% | +0.93 | +13.2% |
 | Points + rebounds + assists | 16-7 | 69.6% | +6.54 | +28.5% |
-| Combined | 64-38 | 62.7% | +13.51 | +13.2% |
+| Points + rebounds | 3-1 | 75.0% | +1.83 | +45.8% |
+| Points + assists | 4-3 | 57.1% | +0.77 | +11.1% |
+| Rebounds + assists | 4-3 | 57.1% | +0.60 | +8.5% |
+| Combined | 84-49 | 63.2% | +20.44 | +15.4% |
 
-This is retrospective confirmation, not a forward guarantee. Rebounds,
-threes, points + rebounds, points + assists, and rebounds + assists remain
-forecast-visible but cannot receive Lean or Best Angle until their own grade
-policy qualifies.
+This is retrospective confirmation, not a forward guarantee. The original
+qualified surfaces for Points, Assists, and PRA are unchanged. Rebounds
+inherits a slate-relative policy selected across all eight markets. Threes uses
+its strongest side-neutral, pre-confirmation-selected relative-Lean policy. The
+three secondary combination markets share one separately selected side-neutral
+combination policy. Those five markets may receive only sparse private
+Leans—never Best Angles—and all fallback policies require forward confirmation
+before public activation. This prevents a permanent zero-actionable market
+without manufacturing a daily quota or forcing a play when no row meets the
+evidence gates.
 
-The private three-game visual slate contains 48 canonical reads: three Best
-Angles, eight Leans, ten Watchlists, and 27 No Plays. Actionables are five
-Overs and six Unders across Points, Assists, and PRA, so the design is neither
-flat nor side-skewed. A grade/probability contradiction found during product
-integration was repaired: a sub-50% chosen-side forecast stays visible as a
-Watchlist rather than being mislabeled actionable.
+The private three-game visual slate contains 48 canonical reads: two Best
+Angles, 12 Leans, nine Watchlists, and 25 No Plays. The slate has actionables
+in seven markets; not every market is forced to populate on every slate. A
+grade/probability contradiction found during product integration remains
+repaired: a sub-50% chosen-side forecast stays visible as a Watchlist rather
+than being mislabeled actionable.
 
 ## Visual and safety verification
 
@@ -88,8 +101,9 @@ Watchlist rather than being mislabeled actionable.
    demand so a full NBA slate does not inflate page payloads.
 5. Capture forward T-180/T-60/T-15/lock prices and validate movement, CLV,
    settlement, board counts, and grade calibration by release.
-6. Qualify the remaining five market grade surfaces or keep them forecast-only
-   at launch.
+6. Forward-confirm the three frozen sparse-Lean fallback policies before any
+   public activation; a market may be eligible for a Lean without receiving a
+   forced play on every slate.
 7. Complete current-main integration safety, protected PR checks, owner
    approval, and post-deploy live proof.
 

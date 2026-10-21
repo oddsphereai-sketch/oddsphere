@@ -2,9 +2,9 @@ import type { NbaPlayerPropMarket, NbaPlayerPropSide } from "./nbaPlayerPropsCon
 import type { NbaPlayerPropsReaderMetric } from "./nbaPlayerPropsReaderContract";
 
 export const NBA_PLAYER_PROPS_PRODUCT_CANDIDATE_RELEASE =
-  "nba_player_props_product_candidate_2026_10_21_r1_private_preview" as const;
+  "nba_player_props_product_candidate_2026_10_21_r3_coherent_all_market_relative_leans" as const;
 export const NBA_PLAYER_PROPS_MEMBER_SNAPSHOT_CANDIDATE_RELEASE =
-  "nba_player_props_member_snapshot_candidate_2026_10_21_r1_disabled" as const;
+  "nba_player_props_member_snapshot_candidate_2026_10_21_r3_coherent_all_market_relative_leans_disabled" as const;
 export const NBA_PLAYER_PROPS_LOCK_CANDIDATE_RELEASE =
   "nba_player_props_lock_candidate_2026_10_21_r1_immutable" as const;
 
@@ -53,6 +53,9 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
     | "points_ungated_ranked"
     | "assists_role_stable_ranked"
     | "pra_relative_best"
+    | "universal_market_relative_lean"
+    | "combo_market_relative_lean"
+    | "forward_only_market_relative_lean"
     | "forecast_only";
   role: readonly NbaPlayerPropsReaderMetric[];
   production: readonly NbaPlayerPropsReaderMetric[];
@@ -164,4 +167,3 @@ function gradeRank(grade: NbaPlayerPropsMemberGrade): number {
 function timestamp(value: string, field: string): void {
   if (!Number.isFinite(Date.parse(value))) throw new Error(`NBA props ${field} is invalid.`);
 }
-
