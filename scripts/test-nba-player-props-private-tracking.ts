@@ -10,6 +10,8 @@ import {
   settleNbaPlayerPropsPrivateTrackingRow,
   type NbaPlayerPropsPrivateTrackingHistory,
 } from "../lib/services/nba/nbaPlayerPropsPrivateTracking";
+import { buildNbaPlayerPropsSettlementRevision } from "../lib/services/nba/nbaPlayerPropsSettlementStore";
+import type { NbaPlayerPropsCurrentState } from "../lib/services/nba/nbaPlayerPropsCurrentState";
 
 const lockedAt = "2026-10-20T22:00:00.000Z";
 const base = {
@@ -75,5 +77,77 @@ assert.equal(report.byMarket.rebounds?.mainLine.independentProjection.mae, 2.900
 assert.deepEqual(report.byMarket.rebounds?.cushions["+1"], {
   records: 1, wins: 1, losses: 0, pushes: 0, hitRate: 1,
 });
+
+const officialBox = {
+  rowId: 17,
+  gameId: 1,
+  playerId: 7,
+  teamId: 10,
+  minutes: 32,
+  points: 18,
+  oreb: 2,
+  dreb: 5,
+  ast: 4,
+  fg3m: 2,
+  blk: 0,
+  stl: 1,
+  turnover: 2,
+  fga: 12,
+  fgm: 6,
+  fg3a: 5,
+  fta: 4,
+  ftm: 4,
+  pf: 2,
+  plusMinus: 3,
+} satisfies NbaPlayerPropsCurrentState["boxes"][number];
+
+const pushRevision = buildNbaPlayerPropsSettlementRevision({
+  row: { ...row, rowKey: row.rowKey.replace("|7.5|", "|7|"), line: 7 },
+  box: officialBox,
+  prior: null,
+  observedAt: "2026-10-21T04:00:00.000Z",
+});
+assert.equal(pushRevision.status, "added");
+assert.equal(pushRevision.revision.actual, 7);
+assert.equal(pushRevision.revision.result, "push");
+assert.equal(pushRevision.revision.unitReturn, 0);
+
+const dnpRevision = buildNbaPlayerPropsSettlementRevision({
+  row,
+  box: { ...officialBox, minutes: 0 },
+  prior: null,
+  observedAt: "2026-10-21T04:00:00.000Z",
+});
+assert.equal(dnpRevision.revision.actual, null);
+assert.equal(dnpRevision.revision.result, "void");
+assert.equal(dnpRevision.revision.unitReturn, 0);
+
+const missingBoxRevision = buildNbaPlayerPropsSettlementRevision({
+  row,
+  box: null,
+  prior: null,
+  observedAt: "2026-10-21T04:00:00.000Z",
+});
+assert.equal(missingBoxRevision.revision.result, "void");
+
+const correctedRevision = buildNbaPlayerPropsSettlementRevision({
+  row,
+  box: { ...officialBox, oreb: 3, dreb: 6 },
+  prior: dnpRevision.revision,
+  observedAt: "2026-10-21T10:00:00.000Z",
+});
+assert.equal(correctedRevision.status, "corrected");
+assert.equal(correctedRevision.revision.revision, 2);
+assert.equal(correctedRevision.revision.actual, 9);
+assert.equal(correctedRevision.revision.result, "win");
+
+const preservedRevision = buildNbaPlayerPropsSettlementRevision({
+  row,
+  box: { ...officialBox, oreb: 3, dreb: 6 },
+  prior: correctedRevision.revision,
+  observedAt: "2026-10-21T11:00:00.000Z",
+});
+assert.equal(preservedRevision.status, "preserved");
+assert.deepEqual(preservedRevision.revision, correctedRevision.revision);
 
 console.log("NBA player props private tracking tests passed.");

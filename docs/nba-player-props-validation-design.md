@@ -1,7 +1,33 @@
 # NBA Player Props: Historical Pilot and Reader Design
 
-Date: 2026-10-20
-Status: offline research only; not approved for production
+Date: 2026-10-21
+Status: private production observer active; member publication disabled
+
+## Private runtime closeout
+
+The private candidate now runs inside the existing NBA daily-refresh lease; it
+does not add a second scheduler or member-request fetch. The live observer stores
+bounded opening/prior/current quote chronology, produces one canonical line and
+one coherent projection/side per player-market, writes an immutable T-60 private
+tracking record, and records append-only official settlement revisions. The
+member route, member navigation, public Tracking page, and public NBA props gate
+remain disabled.
+
+The first 2026 live slate produced 11 games, 647 canonical decisions across all
+eight foundation markets, seven sportsbooks, no empty price ladders, no duplicate
+canonical scopes, and no projection/side contradictions. The quote-history
+compaction preserves the first, prior, and current distinct economic states and
+refreshes unchanged quotes without unbounded append growth. BALLDONTLIE remains
+the primary broad-board source; The Odds API remains gap/reference-only.
+
+Everything that can be verified without elapsed games is now exercised by the
+readiness suite: provider identity, bounded request planning, chronology,
+target-book exclusion, model/side coherence, price ladders, reader evidence,
+single-writer scheduling, last-known-good continuity, lock immutability,
+DNP/missing-box voids, pushes, official-stat revisions, and public-gate
+separation. Actual forward lock capture, settlement, release-pure hit rate, ROI,
+calibration, and market-reader corrections versus harms necessarily require the
+scheduled games to occur.
 
 ## Scope
 
