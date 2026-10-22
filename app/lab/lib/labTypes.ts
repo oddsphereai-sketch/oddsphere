@@ -485,6 +485,8 @@ export type MarketEdgeDto = {
    * reader may explain the stored grade with it, but may not re-grade.
    */
   writerMovementDirection?: "support" | "resistance" | "neutral" | null;
+  /** Provenance for the movement direction consumed by the active reader. */
+  readerMovementSource?: "displayed_same_book_trail" | "writer_market_anchor" | null;
   lastMovePrevAmerican?: number | null;
   lastMoveNextAmerican?: number | null;
   lastMoveAtIso?: string | null;

@@ -1,5 +1,41 @@
 # Model change safety protocol
 
+## Owner-directed correction: verified full NFL trail and active-reader movement
+
+On 2026-10-22 Daniel Mengel rejected the newly collapsed `NE +136 → +136`
+moneyline display and required the complete known movement plus an explicit
+proof that the active reader consumes it. The source audit proved that the
+August 5 Caesars `NE -105 / CHI -125` pair is the provider-native opening for
+the exact NE-CHI event, not a cross-game or cross-book row. All 50 retained
+Caesars observations from October 20 through October 22 are the later
+`NE +136 / CHI -162` pair. The prior 14-day NFL presentation cutoff therefore
+discarded valid evidence and is superseded for future unlocked NFL cards.
+
+NFL fixture/snapshot r48/r40 restores only verified exact-event, same-book,
+pre-kickoff provider openings. It keeps every retained writer observation and
+the exact current endpoint, derives support/resistance from that same displayed
+trail, and passes the direction into the active recommendation reader instead
+of `null`. A material point move owns the direction; price movement is used
+only at an unchanged line and must change implied probability by at least one
+percentage point. Invalid, inverted, or cross-book trails remain neutral. No
+missing intermediate quote is reconstructed or fabricated.
+
+The shared deep audit now counts the reader actually active on each sport and,
+for a reader declaring displayed-same-book authority, independently blocks a
+missing, opposite, or movement-without-trail direction. It accepts a long-range
+provider opening when that exact-event timestamp predates kickoff and rejects a
+provider opening at or after kickoff. Existing current-price recency,
+chronology, terminal-price, terminal-book, and lock checks remain active.
+
+The same-input 14-game / 42-market NFL comparison changes zero picks, grades,
+current prices, current books, resolved reader statuses, or actionable counts.
+All 42 candidate markets retain a genuine changed observation and at least
+three known stops; NE moneyline becomes `-105 opening → +136 first retained →
++136 current`, and its active reader records `resistance`. Locked records are
+unchanged. CFB retains its preceding bounded-cycle rule until a separate
+release-pure replay can validate its older landmarks. Evidence and rollback:
+`docs/model-audits/2026-10-22-nfl-full-market-trail-reader.md`.
+
 ## Owner-directed correction: cross-sport current-quote and opening-cycle authority
 
 On 2026-10-22 Daniel Mengel directed Oddsphere to correct opening lines and line tracking

@@ -8,7 +8,25 @@ Last reviewed: 2026-10-22
 
 ## Cross-sport confidence / execution contract
 
-- October 22 current-quote authority: the shared Daily Edge audit now independently
+- October 22 verified full NFL trail and active-reader movement supersedes only
+  the NFL 14-day opening presentation rule below. The exact Caesars NE-CHI
+  event owns the August 5 `NE -105 / CHI -125` opening, while all 50 retained
+  October 20-22 Caesars observations are `NE +136 / CHI -162`. Future-unlocked
+  NFL cards therefore retain exact-event, same-book, pre-kickoff provider
+  openings regardless of age and feed the displayed trail's verified movement
+  direction into the active reader. Fixture/snapshot advance to
+  `nfl_weekly_member_fixture_2026_10_22_r48_verified_full_market_trail` /
+  `nfl_forward_member_snapshot_2026_10_22_r40_verified_full_market_trail`.
+  The 14-game / 42-market same-input comparison changes zero picks, grades,
+  current prices, current books, resolved reader statuses, or actionable
+  counts; all 42 markets have a changed observation and at least three retained
+  stops. The shared audit now inspects active reader fields and rejects a
+  displayed-trail reader that omits or contradicts its verified movement.
+  CFB and every locked payload remain on their preceding contracts. Evidence:
+  `docs/model-audits/2026-10-22-nfl-full-market-trail-reader.md`.
+
+- October 22 current-quote authority predecessor (its NFL opening-age rule is
+  superseded above; NHL and CFB portions remain active): the shared Daily Edge audit now independently
   verifies unlocked current-quote recency, trail chronology, terminal book/price identity,
   and whether an NFL/CFB opener belongs to the current 14-day market cycle. Raw long-range
   openings remain stored evidence, but cannot be presented as current game-week movement;

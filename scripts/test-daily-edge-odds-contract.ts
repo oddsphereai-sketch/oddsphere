@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { auditDailyEdgeBoards } from "../lib/services/dailyEdgeDeepAudit";
-import {
-  DAILY_EDGE_CURRENT_MARKET_CYCLE_OPENING_MAX_DAYS,
-  isCurrentMarketCycleOpening,
-} from "../lib/services/dailyEdge/marketCycleOpening";
+import { isVerifiedEventOpening } from "../lib/services/dailyEdge/marketCycleOpening";
+import { verifiedTrailMovementDirection } from "../lib/services/dailyEdge/verifiedTrailMovement";
 import {
   NHL_CURRENT_QUOTE_RELATIVE_FRESH_MINUTES,
   selectNhlBestPriceQuote,
@@ -11,22 +9,44 @@ import {
 import { buildNhlTwoSidedPriceTrail } from "../lib/services/nhl/nhlPriceTrail";
 
 const kickoff = "2026-10-23T00:15:00.000Z";
-assert.equal(DAILY_EDGE_CURRENT_MARKET_CYCLE_OPENING_MAX_DAYS, 14);
-assert.equal(isCurrentMarketCycleOpening({
+assert.equal(isVerifiedEventOpening({
   openingObservedAt: "2026-10-13T00:15:00.000Z",
   gameStartAt: kickoff,
   locked: false,
 }), true, "a real game-week opener remains eligible");
-assert.equal(isCurrentMarketCycleOpening({
+assert.equal(isVerifiedEventOpening({
   openingObservedAt: "2026-08-05T00:11:14.898Z",
   gameStartAt: kickoff,
   locked: false,
-}), false, "a preseason/look-ahead opener cannot anchor the current-cycle trail");
-assert.equal(isCurrentMarketCycleOpening({
+}), true, "an exact-event provider opener remains eligible regardless of age");
+assert.equal(isVerifiedEventOpening({
+  openingObservedAt: "2026-10-23T00:16:00.000Z",
+  gameStartAt: kickoff,
+  locked: false,
+}), false, "a post-kickoff quote cannot be called an opening");
+assert.equal(isVerifiedEventOpening({
   openingObservedAt: "2026-08-05T00:11:14.898Z",
   gameStartAt: kickoff,
   locked: true,
 }), true, "a later reader release cannot reinterpret a locked trail");
+
+const neMoneylineTrail = [
+  { american: -105, line: null, observedAt: "2026-08-05T00:11:14.898Z", sportsbook: "caesars" },
+  { american: 136, line: null, observedAt: "2026-10-22T11:00:00.000Z", sportsbook: "Caesars" },
+];
+assert.equal(verifiedTrailMovementDirection({
+  market: "moneyline",
+  pick: "NE",
+  trail: neMoneylineTrail,
+}), "resistance", "the exact NE price move is reader resistance");
+assert.equal(verifiedTrailMovementDirection({
+  market: "spread",
+  pick: "NE +3",
+  trail: [
+    { american: -112, line: 2.5, observedAt: "2026-10-13T21:04:03.235Z", sportsbook: "betrivers" },
+    { american: -110, line: 3, observedAt: "2026-10-22T11:00:00.000Z", sportsbook: "BetRivers" },
+  ],
+}), "resistance", "a selected-side spread moving +2.5 to +3 is reader resistance");
 
 const currentRows = [
   { game_id: 1, market_type: "total", sportsbook: "hardrock", side: "over", line_value: 6.5, odds_american: -110, observed_at: "2026-10-22T04:18:27.000Z" },
@@ -117,11 +137,77 @@ const longRangeAudit = auditDailyEdgeBoards({
             { label: "open", american: -105, sportsbook: "caesars", source: "provider_opening", observedAt: "2026-08-05T00:11:14.898Z" },
             { label: "current", american: 136, sportsbook: "caesars", source: "current_line", observedAt: "2026-10-22T11:00:00.000Z" },
           ],
+          writerMovementDirection: "resistance",
+          readerMovementSource: "displayed_same_book_trail",
+          recommendationDecision: {
+            lineMovement: "resistance",
+            resolvedMarketRead: { status: "resistance", label: "Market Resistance" },
+          },
         },
       },
     }],
   },
 }, { generatedAt: "2026-10-22T11:13:00.000Z" });
-assert.equal(longRangeAudit.summary.issueCounts.long_range_opener_used_as_current_cycle, 1);
+assert.equal(longRangeAudit.summary.criticalIssues, 0, "a verified long-range exact-event opener is valid");
+
+const omittedReaderMovement = auditDailyEdgeBoards({
+  nfl: {
+    games: [{
+      awayTeam: "NE",
+      homeTeam: "CHI",
+      gameStartAt: kickoff,
+      lockState: "open",
+      markets: {
+        moneyline: {
+          pick: "NE",
+          grade: "market_watch",
+          verdict: { key: "watchlist" },
+          publicSplits: [],
+          currentPriceAmerican: 136,
+          currentPriceSportsbook: "caesars",
+          currentPriceObservedAt: "2026-10-22T11:00:00.000Z",
+          oddsTrail: neMoneylineTrail,
+          writerMovementDirection: "resistance",
+          readerMovementSource: "displayed_same_book_trail",
+          recommendationDecision: {
+            lineMovement: null,
+            resolvedMarketRead: { status: "resistance", label: "Market Resistance" },
+          },
+        },
+      },
+    }],
+  },
+}, { generatedAt: "2026-10-22T11:13:00.000Z" });
+assert.equal(omittedReaderMovement.summary.issueCounts.active_reader_omits_verified_movement, 1);
+
+const invertedReaderMovement = auditDailyEdgeBoards({
+  nfl: {
+    games: [{
+      awayTeam: "NE",
+      homeTeam: "CHI",
+      gameStartAt: kickoff,
+      lockState: "open",
+      markets: {
+        moneyline: {
+          pick: "NE",
+          grade: "market_watch",
+          verdict: { key: "watchlist" },
+          publicSplits: [],
+          currentPriceAmerican: 136,
+          currentPriceSportsbook: "caesars",
+          currentPriceObservedAt: "2026-10-22T11:00:00.000Z",
+          oddsTrail: neMoneylineTrail,
+          writerMovementDirection: "resistance",
+          readerMovementSource: "displayed_same_book_trail",
+          recommendationDecision: {
+            lineMovement: "support",
+            resolvedMarketRead: { status: "support", label: "Market Support" },
+          },
+        },
+      },
+    }],
+  },
+}, { generatedAt: "2026-10-22T11:13:00.000Z" });
+assert.equal(invertedReaderMovement.summary.issueCounts.active_reader_movement_wrong_for_visible_trail, 1);
 
 console.log("Daily Edge odds-contract tests passed.");

@@ -1,4 +1,5 @@
 import { isDisplayableAmericanOdds } from "../streaming/oddsSanity";
+import { verifiedTrailMovementDirection } from "./dailyEdge/verifiedTrailMovement";
 
 export const DAILY_EDGE_DEEP_AUDIT_SPORTS = [
   "mlb",
@@ -63,7 +64,10 @@ const CRITICAL_REASONS = new Set([
   "odds_trail_chronology_inverted",
   "odds_trail_terminal_price_mismatch",
   "odds_trail_terminal_book_mismatch",
-  "long_range_opener_used_as_current_cycle",
+  "provider_opening_not_before_game",
+  "active_reader_omits_verified_movement",
+  "active_reader_movement_wrong_for_visible_trail",
+  "active_reader_movement_without_visible_move",
   "source_chain_previous_not_current",
   "market_read_direction_wrong_for_visible_trail",
   "directional_read_without_visible_move",
@@ -214,7 +218,8 @@ function hasVisibleMovement(sport: string, slot: string, market: Row): boolean {
 function effectiveOpenAmerican(market: Row): number | null {
   return n(market.lineOpenAmerican) ??
     n(market.oddspherePostedAmerican) ??
-    n(market.marketReadV2?.movement?.firstTrackedPrice);
+    n(market.marketReadV2?.movement?.firstTrackedPrice) ??
+    n(Array.isArray(market.oddsTrail) ? market.oddsTrail[0]?.american : null);
 }
 
 function effectiveTerminalAmerican(market: Row): number | null {
@@ -223,7 +228,8 @@ function effectiveTerminalAmerican(market: Row): number | null {
     market.priceUnavailableAtLock === true;
   return locked
     ? n(market.lockedLineAmerican) ?? n(market.priceAmerican) ?? n(market.marketReadV2?.movement?.currentPrice)
-    : n(market.currentPriceAmerican) ?? n(market.marketReadV2?.movement?.currentPrice) ?? n(market.priceAmerican);
+    : n(market.currentPriceAmerican) ?? n(market.marketReadV2?.movement?.currentPrice) ?? n(market.priceAmerican) ??
+      n(Array.isArray(market.oddsTrail) ? market.oddsTrail.at(-1)?.american : null);
 }
 
 function issueSeverity(reason: string): DailyEdgeAuditSeverity {
@@ -240,8 +246,12 @@ function actionFor(reason: string): string {
     case "odds_trail_chronology_inverted":
     case "odds_trail_terminal_price_mismatch":
     case "odds_trail_terminal_book_mismatch":
-    case "long_range_opener_used_as_current_cycle":
-      return "repair_same_book_current_cycle_price_trail";
+    case "provider_opening_not_before_game":
+      return "repair_same_book_event_price_trail";
+    case "active_reader_omits_verified_movement":
+    case "active_reader_movement_wrong_for_visible_trail":
+    case "active_reader_movement_without_visible_move":
+      return "repair_active_reader_movement_input";
     case "source_chain_previous_not_current":
       return "hide_bad_odds_move_previous_stop";
     case "market_read_direction_wrong_for_visible_trail":
@@ -338,9 +348,20 @@ export function auditDailyEdgeBoards(
         const read = market.marketReadV2 && typeof market.marketReadV2 === "object"
           ? market.marketReadV2 as Row
           : null;
-        if (read) summary.sports[sport]!.reads += 1;
+        const recommendationRead = market.recommendationDecision?.resolvedMarketRead &&
+          typeof market.recommendationDecision.resolvedMarketRead === "object"
+          ? market.recommendationDecision.resolvedMarketRead as Row
+          : null;
+        const hasActiveRead = read !== null || recommendationRead !== null ||
+          typeof market.marketSignal === "string" || typeof market.sharpStatus === "string";
+        if (hasActiveRead) summary.sports[sport]!.reads += 1;
         const sharpMoney = read?.sourceSummary?.sharpMoney ?? null;
-        if (sharpMoney) summary.sports[sport]!.sharpRows += 1;
+        const recommendationSharpRows = Array.isArray(market.recommendationDecision?.sharpBookSplits?.rows)
+          ? market.recommendationDecision.sharpBookSplits.rows.length
+          : 0;
+        if (sharpMoney || recommendationSharpRows > 0 || Array.isArray(market.sportsbookSplits) && market.sportsbookSplits.length > 0) {
+          summary.sports[sport]!.sharpRows += 1;
+        }
 
         const displayedOdds = [
           ["first", n(market.lineOpenAmerican)],
@@ -436,17 +457,53 @@ export function auditDailyEdgeBoards(
         }
         if (
           isUnlocked
-          && (sport === "nfl" || sport === "cfb")
           && firstStop?.source === "provider_opening"
           && Number.isFinite(firstObservedMs)
           && Number.isFinite(gameStartMs)
-          && gameStartMs - firstObservedMs > 14 * 24 * 60 * 60_000
+          && firstObservedMs >= gameStartMs
         ) {
-          push("long_range_opener_used_as_current_cycle", sport, game, slot, market, {
+          push("provider_opening_not_before_game", sport, game, slot, market, {
             openingObservedAt: firstStop.observedAt ?? null,
             gameStartAt: game.gameStartAt ?? game.gameTime ?? null,
-            ageDays: Math.round((gameStartMs - firstObservedMs) / (24 * 60 * 60_000) * 10) / 10,
           });
+        }
+
+        const activeMovement = market.recommendationDecision?.lineMovement;
+        const activeMovementDirection: Direction = activeMovement === "support" || activeMovement === "resistance"
+          ? activeMovement
+          : "neutral";
+        const declaredWriterDirection: Direction = market.writerMovementDirection === "support" || market.writerMovementDirection === "resistance"
+          ? market.writerMovementDirection
+          : "neutral";
+        const readerUsesDisplayedTrail = market.readerMovementSource === "displayed_same_book_trail";
+        if (readerUsesDisplayedTrail) {
+          const namedMarket = marketLabel(sport, slot);
+          const displayedDirection = namedMarket === "moneyline" || namedMarket === "spread" || namedMarket === "total"
+            ? verifiedTrailMovementDirection({
+                market: namedMarket,
+                pick: market.pick ?? null,
+                trail: Array.isArray(market.oddsTrail) ? market.oddsTrail : [],
+              })
+            : "neutral";
+          if (displayedDirection !== "neutral" && activeMovement == null) {
+            push("active_reader_omits_verified_movement", sport, game, slot, market, {
+              displayedDirection,
+              readerMovementSource: market.readerMovementSource,
+            });
+          }
+          if (activeMovementDirection !== "neutral" && displayedDirection === "neutral") {
+            push("active_reader_movement_without_visible_move", sport, game, slot, market, {
+              activeMovement: activeMovementDirection,
+              writerMovementDirection: declaredWriterDirection,
+            });
+          }
+          if (activeMovementDirection !== "neutral" && displayedDirection !== "neutral" && activeMovementDirection !== displayedDirection) {
+            push("active_reader_movement_wrong_for_visible_trail", sport, game, slot, market, {
+              activeMovement: activeMovementDirection,
+              displayedDirection,
+              writerMovementDirection: declaredWriterDirection,
+            });
+          }
         }
 
         const prev = n(market.lastMovePrevAmerican);

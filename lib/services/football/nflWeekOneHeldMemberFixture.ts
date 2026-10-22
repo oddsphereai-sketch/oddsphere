@@ -44,10 +44,11 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
-import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
+import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
+import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_22_r47_current_market_cycle_opening" as const;
+  "nfl_weekly_member_fixture_2026_10_22_r48_verified_full_market_trail" as const;
 
 const NFL_FOUNDATIONAL_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_15_r32_foundational_no_weight_score" as const;
@@ -678,7 +679,7 @@ function buildNflRecommendationDecision(args: {
     marketReadV2: null,
     marketReadV2Enabled: false,
     sharpBookSplitsOverride: value.split.sharp,
-    lineMovementOverride: null,
+    lineMovementOverride: value.market.writerMovementDirection ?? null,
     allowBestAngleMarketConflict: value.decision !== null,
   });
   return buildRecommendationDecision({
@@ -1108,6 +1109,11 @@ function applyPublishedDecision(
       locked: decision.stage === "t60_locked",
     },
   }) : [];
+  const writerMovementDirection = verifiedTrailMovementDirection({
+    market: input.slot,
+    pick: selectedLabel,
+    trail: oddsTrail,
+  });
   const selectedSplit = base.publicSplits.find((row) => row.side === selectedSide) ?? null;
   const isBestAngle = decision.grade === "Best Angle";
   const isLean = decision.grade === "Lean";
@@ -1184,6 +1190,8 @@ function applyPublishedDecision(
       stops: opposingStops,
     },
     marketInterpretation: null,
+    writerMovementDirection,
+    readerMovementSource: "displayed_same_book_trail",
     lastMovePrevAmerican: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 2]!.american : null,
     lastMoveNextAmerican: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 1]!.american : null,
     lastMoveAtIso: oddsTrail.length > 1 ? oddsTrail[oddsTrail.length - 1]!.observedAt : null,
@@ -1262,7 +1270,7 @@ function buildSameBookTrail(args: {
     ];
     for (const quote of openingBooks) {
       if (normalizeBookName(quote.sportsbook) !== book) continue;
-      if (!isCurrentMarketCycleOpening({
+      if (!isVerifiedEventOpening({
         openingObservedAt: quote.observedAt,
         gameStartAt,
         locked: args.terminal.locked === true,
@@ -1282,7 +1290,7 @@ function buildSameBookTrail(args: {
 
   const operationalOpening = args.rows[0]?.payload.market.operationalOpening ?? null;
   if (operationalOpening && normalizeBookName(operationalOpening.quote.sportsbook) === book) {
-    const openingEligible = isCurrentMarketCycleOpening({
+    const openingEligible = isVerifiedEventOpening({
       openingObservedAt: operationalOpening.capturedAt,
       gameStartAt,
       locked: args.terminal.locked === true,
