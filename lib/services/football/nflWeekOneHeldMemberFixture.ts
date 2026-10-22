@@ -44,9 +44,10 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 import { nflFootballEvidenceStats } from "./footballMemberEvidence";
 import type { NflRegularSharpMarket, NflRegularSharpSplit } from "./sharpApiNflSplits";
+import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_16_r46_availability_adjusted_starter_authority" as const;
+  "nfl_weekly_member_fixture_2026_10_22_r47_current_market_cycle_opening" as const;
 
 const NFL_FOUNDATIONAL_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_15_r32_foundational_no_weight_score" as const;
@@ -1240,6 +1241,7 @@ function buildSameBookTrail(args: {
   };
 }): OddsTrailStopDto[] {
   const book = normalizeBookName(args.sportsbook);
+  const gameStartAt = args.rows[0]?.gameStartAt ?? null;
   const candidates: OddsTrailStopDto[] = [];
   const append = (stop: OddsTrailStopDto, replaceDuplicate = false) => {
     const key = `${normalizeBookName(stop.sportsbook ?? "")}:${stop.observedAt}:${stop.american}:${stop.line ?? "null"}`;
@@ -1260,6 +1262,11 @@ function buildSameBookTrail(args: {
     ];
     for (const quote of openingBooks) {
       if (normalizeBookName(quote.sportsbook) !== book) continue;
+      if (!isCurrentMarketCycleOpening({
+        openingObservedAt: quote.observedAt,
+        gameStartAt,
+        locked: args.terminal.locked === true,
+      })) continue;
       const side = quoteSide(quote, args.slot, args.selectedPrimary);
       if (!side) continue;
       append({
@@ -1275,8 +1282,13 @@ function buildSameBookTrail(args: {
 
   const operationalOpening = args.rows[0]?.payload.market.operationalOpening ?? null;
   if (operationalOpening && normalizeBookName(operationalOpening.quote.sportsbook) === book) {
+    const openingEligible = isCurrentMarketCycleOpening({
+      openingObservedAt: operationalOpening.capturedAt,
+      gameStartAt,
+      locked: args.terminal.locked === true,
+    });
     const side = quoteSide(operationalOpening.quote, args.slot, args.selectedPrimary);
-    if (side) {
+    if (side && openingEligible) {
       append({
         american: side.american,
         line: side.line,

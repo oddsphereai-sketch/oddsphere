@@ -62,6 +62,7 @@
     "test:lab-api": "tsx --env-file=.env.local scripts/test-lab-api.ts",
     "test:lab-daily-edge": "tsx --env-file=.env.local scripts/test-lab-daily-edge.ts",
     "test:daily-edge-experience": "tsx scripts/test-daily-edge-experience.ts",
+    "test:daily-edge-odds-contract": "tsx scripts/test-daily-edge-odds-contract.ts",
     "test:nba-spread-reader-stats": "tsx scripts/test-nba-spread-reader-stats.ts",
     "test:daily-edge-board-dates": "tsx scripts/test-daily-edge-board-dates.ts",
     "test:weekly-reader-lifecycle": "tsx scripts/test-daily-edge-experience.ts",

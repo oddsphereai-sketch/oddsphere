@@ -4,9 +4,26 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-21
+Last reviewed: 2026-10-22
 
 ## Cross-sport confidence / execution contract
+
+- October 22 current-quote authority: the shared Daily Edge audit now independently
+  verifies unlocked current-quote recency, trail chronology, terminal book/price identity,
+  and whether an NFL/CFB opener belongs to the current 14-day market cycle. Raw long-range
+  openings remain stored evidence, but cannot be presented as current game-week movement;
+  locked cards retain exact stored precedence. NFL fixture/snapshot advance to
+  `nfl_weekly_member_fixture_2026_10_22_r47_current_market_cycle_opening` /
+  `nfl_forward_member_snapshot_2026_10_22_r39_current_market_cycle_opening`; CFB
+  fixture/snapshot/reader advance to
+  `cfb_v1_member_fixture_2026_10_22_r93_current_market_cycle_opening` /
+  `cfb_forward_member_snapshot_2026_10_22_r53_current_market_cycle_opening` /
+  `cfb_member_snapshot_reader_2026_10_22_r38_current_market_cycle_opening`.
+  The same-input impact is zero picks, zero grades, zero current prices, and zero
+  current-book changes in NFL/CFB, while 17 misleading NFL opening landmarks are removed.
+  NHL's sport-specific fresh-pair release is recorded in its champion section below.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-22-daily-edge-current-quote-authority.md`.
 
 - October 21 complete-health certification contract:
   `daily_edge_complete_health_contract_2026_10_21_r2_public_cfb_availability`
@@ -3975,15 +3992,28 @@ three-market pricing for both upcoming games. Predictions, prices, grades,
 locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
 
-## NHL regular-season champion (active from 2026-10-15)
+## NHL regular-season champion (active from 2026-10-22)
 
-- Model: `nhl_regular_2026_r18_fast_state_direct_probability`
-- Calibration: `nhl_regular_calibration_2026_r18_fast_state_direct_probability`
-- Decision: `nhl_regular_decision_2026_r18_fast_state_direct_probability`
-- Reader: `nhl_daily_edge_reader_2026_10_15_r14_fast_state_direct_probability`
+- Model: `nhl_regular_2026_r19_fresh_quote_authority`
+- Calibration: `nhl_regular_calibration_2026_r19_fresh_quote_authority`
+- Decision: `nhl_regular_decision_2026_r19_fresh_quote_authority`
+- Reader: `nhl_daily_edge_reader_2026_10_22_r15_fresh_quote_authority`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 22 r19/r15 quote-authority release preserves the r18 independent
+score, probabilities, sides, market-reader rules, and grade thresholds while
+requiring the evaluated exact-price book to be within 120 minutes of the freshest
+complete two-sided pair for the exact game and market. The same fresh canonical
+board owns both displayed sides and the trail endpoint; history later than that
+endpoint is excluded. A pre-writer fallback applies the same exact-price gate as
+the sole writer, while every stored writer verdict and locked payload retains
+unconditional precedence. On the exact 12-game / 36-market October 22 rehearsal,
+13 displayed book-price tuples advance to fresh pairs, with zero pick changes,
+zero grade changes, and an unchanged 1 Best Angle / 19 Lean / 16 Watchlist board.
+Stale-current and inverted-trail criticals fall to zero. Evidence and rollback:
+`docs/model-audits/2026-10-22-daily-edge-current-quote-authority.md`.
 
 October 20 lock-authority repair: the NHL pregame sweep now classifies and
 locks the exact current-release three-market `prediction_records` tuple that

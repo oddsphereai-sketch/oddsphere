@@ -1,5 +1,5 @@
 import type { OddsTrailStopDto } from "../../../app/lab/lib/labTypes";
-import { canonicalizeNhlLineRows } from "./nhlLineBoard";
+import { canonicalizeNhlLineRows, selectNhlFreshCurrentLineBoard } from "./nhlLineBoard";
 
 export type NhlPriceTrailRow = {
   market_type: string;
@@ -97,7 +97,14 @@ function trailFor(args: {
     Date.parse(left.observed_at ?? "") - Date.parse(right.observed_at ?? "")
   ));
   const current = latest(args.live.filter(matches));
-  const rows: Array<NhlPriceTrailRow & { source: "line_history" | "current_line" }> = historical.map((row) => ({
+  const currentObservedMs = Date.parse(current?.observed_at ?? "");
+  const chronologicalHistory = Number.isFinite(currentObservedMs)
+    ? historical.filter((row) => {
+        const observedMs = Date.parse(row.observed_at ?? "");
+        return Number.isFinite(observedMs) && observedMs <= currentObservedMs;
+      })
+    : historical;
+  const rows: Array<NhlPriceTrailRow & { source: "line_history" | "current_line" }> = chronologicalHistory.map((row) => ({
     ...row,
     source: "line_history" as const,
   }));
@@ -143,7 +150,7 @@ export function buildNhlTwoSidedPriceTrail(args: {
   opposingLine: number | null;
   preferredBook: string | null;
 }): NhlTwoSidedPriceTrail {
-  const live = canonicalizeNhlLineRows(args.live, { scopeKey: () => "current" });
+  const live = selectNhlFreshCurrentLineBoard(args.live);
   const history = canonicalizeNhlLineRows(args.history, {
     scopeKey: (row) => row.observed_at ?? "unknown",
   });

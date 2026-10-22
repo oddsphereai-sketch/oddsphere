@@ -121,9 +121,10 @@ import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
 import { CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
+import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_15_r92_full_product_coordinator_compatibility" as const;
+  "cfb_v1_member_fixture_2026_10_22_r93_current_market_cycle_opening" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_15_r80_full_product_coordinator_compatibility" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
@@ -2143,6 +2144,7 @@ function buildSameBookTrail(args: {
   terminal: { american: number; line: number | null; observedAt: string; locked: boolean };
 }): OddsTrailStopDto[] {
   const sportsbook = normalizeBook(args.sportsbook);
+  const gameStartAt = args.rows[0]?.gameStartAt ?? null;
   const candidates: OddsTrailStopDto[] = [];
   const append = (stop: OddsTrailStopDto, replaceDuplicate = false) => {
     const key = `${normalizeBook(stop.sportsbook ?? "")}:${stop.observedAt}:${stop.american}:${stop.line ?? "null"}`;
@@ -2169,6 +2171,11 @@ function buildSameBookTrail(args: {
     if (!family || !opening) continue;
     const [observedAt, , freshness, homeOrTotalLine, firstPrice, secondPrice] = opening;
     if (freshness === "x") continue;
+    if (!isCurrentMarketCycleOpening({
+      openingObservedAt: observedAt,
+      gameStartAt,
+      locked: args.terminal.locked,
+    })) continue;
     const selected = args.side === "away" || args.side === "over"
       ? { american: firstPrice, line: args.market === "spread" && homeOrTotalLine !== null ? -homeOrTotalLine : homeOrTotalLine }
       : { american: secondPrice, line: homeOrTotalLine };
@@ -2184,6 +2191,11 @@ function buildSameBookTrail(args: {
   for (const row of args.rows) {
     const opening = row.payload.market.providerOpening;
     if (!opening || normalizeBook(opening.sportsbook) !== sportsbook) continue;
+    if (!isCurrentMarketCycleOpening({
+      openingObservedAt: opening.marketObservedAt?.[args.market] ?? opening.observedAt,
+      gameStartAt,
+      locked: args.terminal.locked,
+    })) continue;
     const value = quoteFor(opening, args.market, args.side);
     if (!value) continue;
     append({
@@ -2198,8 +2210,13 @@ function buildSameBookTrail(args: {
 
   const operationalOpening = args.rows[0]?.payload.market.operationalOpening ?? null;
   if (operationalOpening && normalizeBook(operationalOpening.quote.sportsbook) === sportsbook) {
+    const openingEligible = isCurrentMarketCycleOpening({
+      openingObservedAt: operationalOpening.capturedAt,
+      gameStartAt,
+      locked: args.terminal.locked,
+    });
     const value = quoteFor(operationalOpening.quote, args.market, args.side);
-    if (value) append({
+    if (value && openingEligible) append({
       american: value.price,
       line: value.line,
       observedAt: operationalOpening.capturedAt,

@@ -18,6 +18,8 @@ export type NhlSelectedPriceQuote = {
   observed_at: string | null;
 };
 
+export const NHL_CURRENT_QUOTE_RELATIVE_FRESH_MINUTES = 120 as const;
+
 function normalizedBook(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -29,6 +31,40 @@ function lineKey(value: number | null): string {
 function observationTime(row: NhlCanonicalLineRow): number {
   const parsed = Date.parse(row.source_timestamp ?? row.observed_at ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * Keep the newest complete two-sided quote per book, then reject a book whose
+ * complete tuple materially predates the freshest tuple for the same game and
+ * market. This is relative rather than wall-clock freshness: a quiet market
+ * remains usable when every book is quiet, while an abandoned book can no
+ * longer win price shopping or become the target-exclusion authority merely
+ * because its old price is numerically better.
+ */
+export function selectNhlFreshCurrentLineBoard<T extends NhlCanonicalLineRow>(
+  rows: readonly T[],
+  maxRelativeAgeMinutes: number = NHL_CURRENT_QUOTE_RELATIVE_FRESH_MINUTES,
+): T[] {
+  if (!Number.isFinite(maxRelativeAgeMinutes) || maxRelativeAgeMinutes < 0) {
+    throw new Error("NHL current-line relative freshness must be non-negative.");
+  }
+  const canonical = canonicalizeNhlLineRows(rows);
+  const anchorByMarket = new Map<string, number>();
+  for (const row of canonical) {
+    const observed = observationTime(row);
+    if (!Number.isFinite(observed) || observed <= 0) continue;
+    const key = `${String(row.game_id ?? "slate")}|${row.market_type}`;
+    anchorByMarket.set(key, Math.max(anchorByMarket.get(key) ?? Number.NEGATIVE_INFINITY, observed));
+  }
+  const withinWindow = canonical.filter((row) => {
+    const observed = observationTime(row);
+    const key = `${String(row.game_id ?? "slate")}|${row.market_type}`;
+    const anchor = anchorByMarket.get(key);
+    return anchor !== undefined && observed >= anchor - maxRelativeAgeMinutes * 60_000;
+  });
+  // Re-canonicalize after the age filter so a side whose complement aged out
+  // cannot survive as a one-sided current quote.
+  return canonicalizeNhlLineRows(withinWindow);
 }
 
 function median(values: readonly number[]): number {
@@ -177,7 +213,7 @@ export function selectNhlBestPriceQuote<T extends NhlCanonicalLineRow>(args: {
   side: "home" | "away" | "over" | "under";
   line: number | null;
 }): NhlSelectedPriceQuote | null {
-  const candidates = canonicalizeNhlLineRows(args.rows).filter((row) => (
+  const candidates = selectNhlFreshCurrentLineBoard(args.rows).filter((row) => (
     row.market_type === args.market
     && row.side === args.side
     && row.odds_american !== null

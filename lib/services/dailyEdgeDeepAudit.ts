@@ -11,6 +11,8 @@ export const DAILY_EDGE_DEEP_AUDIT_SPORTS = [
   "nba",
 ] as const;
 
+// The audit deliberately inspects heterogeneous versioned DTO payloads.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
 export type DailyEdgeAuditSeverity = "critical" | "warning";
@@ -57,6 +59,11 @@ type Direction = "support" | "resistance" | "neutral";
 const CRITICAL_REASONS = new Set([
   "implausible_displayed_american_odds",
   "stale_price_displayed_as_current",
+  "current_quote_not_recently_verified",
+  "odds_trail_chronology_inverted",
+  "odds_trail_terminal_price_mismatch",
+  "odds_trail_terminal_book_mismatch",
+  "long_range_opener_used_as_current_cycle",
   "source_chain_previous_not_current",
   "market_read_direction_wrong_for_visible_trail",
   "directional_read_without_visible_move",
@@ -228,7 +235,13 @@ function actionFor(reason: string): string {
     case "implausible_displayed_american_odds":
       return "block_display_of_bad_odds";
     case "stale_price_displayed_as_current":
+    case "current_quote_not_recently_verified":
       return "hide_stale_price_or_use_fresher_trusted_price";
+    case "odds_trail_chronology_inverted":
+    case "odds_trail_terminal_price_mismatch":
+    case "odds_trail_terminal_book_mismatch":
+    case "long_range_opener_used_as_current_cycle":
+      return "repair_same_book_current_cycle_price_trail";
     case "source_chain_previous_not_current":
       return "hide_bad_odds_move_previous_stop";
     case "market_read_direction_wrong_for_visible_trail":
@@ -266,6 +279,7 @@ export function auditDailyEdgeBoards(
   boardsBySport: Record<string, Row>,
   opts: { generatedAt?: string } = {},
 ): DailyEdgeDeepAuditResult {
+  const auditNowMs = Date.parse(opts.generatedAt ?? new Date().toISOString());
   const issues: DailyEdgeDeepAuditIssue[] = [];
   const summary: DailyEdgeDeepAuditSummary = {
     sports: {},
@@ -292,7 +306,9 @@ export function auditDailyEdgeBoards(
     if (severity === "critical") summary.criticalIssues += 1;
     else summary.warnings += 1;
     if (reason === "implausible_displayed_american_odds") summary.badOddsRejected += 1;
-    if (reason === "stale_price_displayed_as_current") summary.stalePricesRejected += 1;
+    if (reason === "stale_price_displayed_as_current" || reason === "current_quote_not_recently_verified") {
+      summary.stalePricesRejected += 1;
+    }
     if (reason === "source_chain_previous_not_current") summary.sourceChainTrailsHidden += 1;
     issues.push({
       severity,
@@ -352,6 +368,84 @@ export function auditDailyEdgeBoards(
           push("stale_price_displayed_as_current", sport, game, slot, market, {
             price: market.priceAmerican,
             observedAt: market.priceObservedAt ?? null,
+          });
+        }
+
+        const isUnlocked = game.lockState !== "locked" && market.lockedLineAt == null;
+        const gameStartMs = Date.parse(String(game.gameStartAt ?? game.gameTime ?? ""));
+        const currentObservedAt = typeof market.currentPriceObservedAt === "string"
+          ? market.currentPriceObservedAt
+          : typeof market.priceObservedAt === "string"
+            ? market.priceObservedAt
+            : null;
+        const currentObservedMs = Date.parse(currentObservedAt ?? "");
+        const explicitlyCheckedAt = typeof market.marketPrediction?.freshnessCheckedAt === "string"
+          ? market.marketPrediction.freshnessCheckedAt
+          : null;
+        const explicitlyCheckedMs = Date.parse(explicitlyCheckedAt ?? "");
+        const nearKickoff = Number.isFinite(gameStartMs)
+          && Number.isFinite(auditNowMs)
+          && gameStartMs >= auditNowMs
+          && gameStartMs - auditNowMs <= 48 * 60 * 60_000;
+        const currentTooOld = Number.isFinite(currentObservedMs)
+          && Number.isFinite(auditNowMs)
+          && auditNowMs - currentObservedMs > 180 * 60_000;
+        const recentlyVerified = Number.isFinite(explicitlyCheckedMs)
+          && Number.isFinite(auditNowMs)
+          && auditNowMs - explicitlyCheckedMs <= 180 * 60_000;
+        if (isUnlocked && nearKickoff && n(market.currentPriceAmerican) !== null && currentTooOld && !recentlyVerified) {
+          push("current_quote_not_recently_verified", sport, game, slot, market, {
+            observedAt: currentObservedAt,
+            ageMinutes: Math.round((auditNowMs - currentObservedMs) / 60_000),
+            freshnessCheckedAt: explicitlyCheckedAt,
+          });
+        }
+
+        const trail = Array.isArray(market.oddsTrail) ? market.oddsTrail as Row[] : [];
+        const firstStop = trail[0] ?? null;
+        const terminalStop = trail.at(-1) ?? null;
+        const firstObservedMs = Date.parse(String(firstStop?.observedAt ?? ""));
+        const terminalObservedMs = Date.parse(String(terminalStop?.observedAt ?? ""));
+        if (
+          isUnlocked && trail.length > 1
+          && Number.isFinite(firstObservedMs) && Number.isFinite(terminalObservedMs)
+          && firstObservedMs > terminalObservedMs
+        ) {
+          push("odds_trail_chronology_inverted", sport, game, slot, market, {
+            firstObservedAt: firstStop?.observedAt ?? null,
+            terminalObservedAt: terminalStop?.observedAt ?? null,
+          });
+        }
+        const displayedCurrent = n(market.currentPriceAmerican) ?? n(market.priceAmerican);
+        const terminalAmerican = n(terminalStop?.american);
+        if (isUnlocked && displayedCurrent !== null && terminalAmerican !== null && displayedCurrent !== terminalAmerican) {
+          push("odds_trail_terminal_price_mismatch", sport, game, slot, market, {
+            displayedCurrent,
+            terminalAmerican,
+          });
+        }
+        const displayedBook = String(market.currentPriceSportsbook ?? market.marketSource ?? "")
+          .toLowerCase().replace(/[^a-z0-9]/g, "");
+        const terminalBook = String(terminalStop?.sportsbook ?? "")
+          .toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (isUnlocked && displayedBook && terminalBook && displayedBook !== terminalBook) {
+          push("odds_trail_terminal_book_mismatch", sport, game, slot, market, {
+            displayedBook: market.currentPriceSportsbook ?? market.marketSource ?? null,
+            terminalBook: terminalStop?.sportsbook ?? null,
+          });
+        }
+        if (
+          isUnlocked
+          && (sport === "nfl" || sport === "cfb")
+          && firstStop?.source === "provider_opening"
+          && Number.isFinite(firstObservedMs)
+          && Number.isFinite(gameStartMs)
+          && gameStartMs - firstObservedMs > 14 * 24 * 60 * 60_000
+        ) {
+          push("long_range_opener_used_as_current_cycle", sport, game, slot, market, {
+            openingObservedAt: firstStop.observedAt ?? null,
+            gameStartAt: game.gameStartAt ?? game.gameTime ?? null,
+            ageDays: Math.round((gameStartMs - firstObservedMs) / (24 * 60 * 60_000) * 10) / 10,
           });
         }
 
