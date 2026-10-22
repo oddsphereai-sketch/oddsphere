@@ -3747,16 +3747,17 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_21_r15_moneyline_evidence_grade`
-- Market marriage: `nba_market_marriage_2026_10_21_r17_moneyline_evidence_grade`
+- Model / prediction record: `nba_professional_unified_2026_10_22_r16_roster_regime_residual`
+- Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r1`
+- Market marriage: `nba_market_marriage_2026_10_22_r18_roster_regime_residual`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_21_r9_moneyline_evidence_guard`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry`
+- Grade policy: `nba_grade_policy_2026_10_22_r10_roster_regime_residual`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_22_r14_roster_regime_residual`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_20_r2_complete_card_precedence`
+- Member lock publication: `nba_member_lock_publication_2026_10_22_r3_roster_regime_residual`
 - Locked member snapshot: `nba_locked_member_snapshot_2026_10_20_r2_complete_card_evidence`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
@@ -3782,6 +3783,19 @@ retains Best Angle, Charlotte retains the same side/score/probability/price but 
 Lean, Memphis retains its validated Spread-authored flip and Lean, total actionables remain unchanged,
 and no new Best Angle is created. Existing locked payloads retain exact stored precedence. Evidence:
 `docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-result.md`.
+
+The October 22 r16/r18/r10 roster-regime release keeps the frozen professional score artifact and
+qualified market reader in their established independent-first order, but closes the early-season
+roster discontinuity gap for future unlocked rows. A point-in-time, zero-intercept residual uses
+current active rosters, prior-season player impact, retained rotation minutes, and verified OUT
+availability only when continuity is at or below 65%; its effect decays over 16 games. It uses no
+manual team bump, fixed injury points, confidence cap, or public-split rule. High-continuity teams
+remain exactly unchanged, and provider gaps fail neutral with an audit reason. Untouched 2025
+confirmation improves team-score, margin, and total MAE, winner accuracy, Brier score, and log loss.
+On the two-game October 22 same-input board, CLE at PHI changes from CLE by 3.0 to PHI by 2.7 and
+Moneyline Lean to Watch at the current PHI price; DEN at OKC is unchanged. There are zero
+promotions, one demotion, and zero incoherent score tuples. Evidence and rollback:
+`docs/model-audits/2026-10-22-nba-roster-regime-residual-r16.md`.
 
 The October 21 r12/r15/r6 current-execution release, paired with r10 line refresh,
 reconciles every successful provider game/market response as the authoritative
@@ -4008,7 +4022,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_21_r13_current_slate_active_registry`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_22_r14_roster_regime_residual`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.

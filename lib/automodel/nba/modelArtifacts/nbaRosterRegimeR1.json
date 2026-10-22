@@ -1,0 +1,5402 @@
+{
+  "release": "nba_roster_regime_residual_2026_10_22_r1",
+  "provider": "balldontlie",
+  "providerSeason": 2026,
+  "priorSeason": 2025,
+  "features": [
+    "home_incoming_outgoing_net_delta_k16",
+    "away_incoming_outgoing_net_delta_k16",
+    "home_incoming_outgoing_pie_delta_k16",
+    "away_incoming_outgoing_pie_delta_k16",
+    "home_roster_turnover_minutes_decayed_k16",
+    "away_roster_turnover_minutes_decayed_k16"
+  ],
+  "retainedMinutesThreshold": 0.65,
+  "decayGames": 16,
+  "model": {
+    "family": "zero_intercept_ridge",
+    "alpha": 1000
+  },
+  "margin": {
+    "coefficients": [
+      0.5031236159657514,
+      -0.07038981841606005,
+      0.7192515270386365,
+      -0.7586663365989386,
+      0.07637639712618867,
+      -0.22089952390114734
+    ],
+    "rms": [
+      0.28985774605398473,
+      0.2875834791985031,
+      0.0011544215875841312,
+      0.0011926936170876255,
+      0.09028408144167692,
+      0.09102052790559452
+    ]
+  },
+  "total": {
+    "coefficients": [
+      -0.3013710665150212,
+      -0.020497918489490206,
+      0.8642865281934065,
+      0.2789921928795851,
+      0.292708982682413,
+      0.5481881327177343
+    ],
+    "rms": [
+      0.28985774605398473,
+      0.2875834791985031,
+      0.0011544215875841312,
+      0.0011926936170876255,
+      0.09028408144167692,
+      0.09102052790559452
+    ]
+  },
+  "players": [
+    {
+      "id": 17896078,
+      "name": "Aaron Wiggins",
+      "games": 65,
+      "minutes": 21.8,
+      "pie": 0.082,
+      "estimatedNet": 6.1
+    },
+    {
+      "id": 1028037477,
+      "name": "Ajay Mitchell",
+      "games": 57,
+      "minutes": 25.8,
+      "pie": 0.116,
+      "estimatedNet": 15.8
+    },
+    {
+      "id": 219,
+      "name": "Al Horford",
+      "games": 45,
+      "minutes": 21.5,
+      "pie": 0.104,
+      "estimatedNet": -1.3
+    },
+    {
+      "id": 89,
+      "name": "Alex Caruso",
+      "games": 56,
+      "minutes": 18.2,
+      "pie": 0.093,
+      "estimatedNet": 18.4
+    },
+    {
+      "id": 17896062,
+      "name": "Alperen Sengun",
+      "games": 72,
+      "minutes": 33.3,
+      "pie": 0.142,
+      "estimatedNet": 1.9
+    },
+    {
+      "id": 56677825,
+      "name": "Amen Thompson",
+      "games": 79,
+      "minutes": 37.4,
+      "pie": 0.128,
+      "estimatedNet": 6.4
+    },
+    {
+      "id": 17553995,
+      "name": "Austin Reaves",
+      "games": 51,
+      "minutes": 34.5,
+      "pie": 0.137,
+      "estimatedNet": 5
+    },
+    {
+      "id": 56677858,
+      "name": "Brandin Podziemski",
+      "games": 82,
+      "minutes": 28.4,
+      "pie": 0.114,
+      "estimatedNet": -1.2
+    },
+    {
+      "id": 1057392335,
+      "name": "Brooks Barnhizer",
+      "games": 40,
+      "minutes": 8.7,
+      "pie": 0.062,
+      "estimatedNet": -11.7
+    },
+    {
+      "id": 210,
+      "name": "Buddy Hield",
+      "games": 51,
+      "minutes": 16.1,
+      "pie": 0.085,
+      "estimatedNet": -5.5
+    },
+    {
+      "id": 56677833,
+      "name": "Cason Wallace",
+      "games": 77,
+      "minutes": 26.6,
+      "pie": 0.076,
+      "estimatedNet": 12.9
+    },
+    {
+      "id": 38017685,
+      "name": "Chet Holmgren",
+      "games": 69,
+      "minutes": 28.9,
+      "pie": 0.154,
+      "estimatedNet": 16.4
+    },
+    {
+      "id": 1057849685,
+      "name": "Chris Youngblood",
+      "games": 34,
+      "minutes": 5.4,
+      "pie": 0.059,
+      "estimatedNet": 2.9
+    },
+    {
+      "id": 83,
+      "name": "Clint Capela",
+      "games": 75,
+      "minutes": 12.3,
+      "pie": 0.11,
+      "estimatedNet": 8.2
+    },
+    {
+      "id": 22,
+      "name": "Deandre Ayton",
+      "games": 72,
+      "minutes": 27.2,
+      "pie": 0.117,
+      "estimatedNet": 1
+    },
+    {
+      "id": 185,
+      "name": "Draymond Green",
+      "games": 68,
+      "minutes": 27.5,
+      "pie": 0.084,
+      "estimatedNet": -2.6
+    },
+    {
+      "id": 1603383,
+      "name": "Gabe Vincent",
+      "games": 53,
+      "minutes": 16.6,
+      "pie": 0.033,
+      "estimatedNet": 2
+    },
+    {
+      "id": 2189,
+      "name": "Gary Payton II",
+      "games": 73,
+      "minutes": 15.6,
+      "pie": 0.114,
+      "estimatedNet": 0.5
+    },
+    {
+      "id": 57875092,
+      "name": "Gui Santos",
+      "games": 68,
+      "minutes": 20.5,
+      "pie": 0.097,
+      "estimatedNet": 0
+    },
+    {
+      "id": 201,
+      "name": "Isaiah Hartenstein",
+      "games": 47,
+      "minutes": 24.2,
+      "pie": 0.143,
+      "estimatedNet": 15.3
+    },
+    {
+      "id": 38017684,
+      "name": "Jabari Smith Jr.",
+      "games": 77,
+      "minutes": 35.1,
+      "pie": 0.093,
+      "estimatedNet": 4.2
+    },
+    {
+      "id": 38017728,
+      "name": "Jake LaRavia",
+      "games": 82,
+      "minutes": 25.1,
+      "pie": 0.067,
+      "estimatedNet": 0.7
+    },
+    {
+      "id": 457,
+      "name": "Jarred Vanderbilt",
+      "games": 65,
+      "minutes": 17.3,
+      "pie": 0.08,
+      "estimatedNet": 1.3
+    },
+    {
+      "id": 666626,
+      "name": "Jaxson Hayes",
+      "games": 66,
+      "minutes": 18.3,
+      "pie": 0.109,
+      "estimatedNet": 3
+    },
+    {
+      "id": 38017706,
+      "name": "Jaylin Williams",
+      "games": 65,
+      "minutes": 19.7,
+      "pie": 0.115,
+      "estimatedNet": 11.5
+    },
+    {
+      "id": 79,
+      "name": "Jimmy Butler",
+      "games": 38,
+      "minutes": 31.1,
+      "pie": 0.155,
+      "estimatedNet": 6.7
+    },
+    {
+      "id": 17553979,
+      "name": "Jonathan Kuminga",
+      "games": 36,
+      "minutes": 23.1,
+      "pie": 0.111,
+      "estimatedNet": 5
+    },
+    {
+      "id": 356,
+      "name": "Josh Okogie",
+      "games": 78,
+      "minutes": 17.4,
+      "pie": 0.056,
+      "estimatedNet": 6.1
+    },
+    {
+      "id": 140,
+      "name": "Kevin Durant",
+      "games": 78,
+      "minutes": 36.4,
+      "pie": 0.15,
+      "estimatedNet": 4.6
+    },
+    {
+      "id": 666541,
+      "name": "Luguentz Dort",
+      "games": 69,
+      "minutes": 26.8,
+      "pie": 0.049,
+      "estimatedNet": 9.4
+    },
+    {
+      "id": 132,
+      "name": "Luka Doncic",
+      "games": 64,
+      "minutes": 35.8,
+      "pie": 0.188,
+      "estimatedNet": 4.4
+    },
+    {
+      "id": 420,
+      "name": "Marcus Smart",
+      "games": 62,
+      "minutes": 28.5,
+      "pie": 0.059,
+      "estimatedNet": 7.7
+    },
+    {
+      "id": 1028047928,
+      "name": "Quinten Post",
+      "games": 67,
+      "minutes": 17.3,
+      "pie": 0.089,
+      "estimatedNet": 1.5
+    },
+    {
+      "id": 1028028519,
+      "name": "Reed Sheppard",
+      "games": 82,
+      "minutes": 26.2,
+      "pie": 0.102,
+      "estimatedNet": 2.6
+    },
+    {
+      "id": 666609,
+      "name": "Rui Hachimura",
+      "games": 68,
+      "minutes": 28.3,
+      "pie": 0.073,
+      "estimatedNet": 2.3
+    },
+    {
+      "id": 175,
+      "name": "Shai Gilgeous-Alexander",
+      "games": 68,
+      "minutes": 33.2,
+      "pie": 0.207,
+      "estimatedNet": 16.9
+    },
+    {
+      "id": 115,
+      "name": "Stephen Curry",
+      "games": 43,
+      "minutes": 30.9,
+      "pie": 0.146,
+      "estimatedNet": 2.8
+    },
+    {
+      "id": 3,
+      "name": "Steven Adams",
+      "games": 32,
+      "minutes": 22.8,
+      "pie": 0.1,
+      "estimatedNet": 9.9
+    },
+    {
+      "id": 38017695,
+      "name": "Tari Eason",
+      "games": 60,
+      "minutes": 25.8,
+      "pie": 0.083,
+      "estimatedNet": 5.5
+    },
+    {
+      "id": 1057395872,
+      "name": "Will Richard",
+      "games": 69,
+      "minutes": 20,
+      "pie": 0.063,
+      "estimatedNet": -3.5
+    },
+    {
+      "id": 38017733,
+      "name": "A.J. Green",
+      "games": 78,
+      "minutes": 29.1,
+      "pie": 0.058,
+      "estimatedNet": -3.8
+    },
+    {
+      "id": 1028026717,
+      "name": "AJ Johnson",
+      "games": 48,
+      "minutes": 9.4,
+      "pie": 0.045,
+      "estimatedNet": -8.3
+    },
+    {
+      "id": 1028034846,
+      "name": "Adem Bona",
+      "games": 71,
+      "minutes": 17.4,
+      "pie": 0.069,
+      "estimatedNet": 1
+    },
+    {
+      "id": 1028028405,
+      "name": "Alexandre Sarr",
+      "games": 48,
+      "minutes": 27.2,
+      "pie": 0.121,
+      "estimatedNet": -11.4
+    },
+    {
+      "id": 666511,
+      "name": "Amir Coffey",
+      "games": 46,
+      "minutes": 10.7,
+      "pie": 0.068,
+      "estimatedNet": -1.1
+    },
+    {
+      "id": 137,
+      "name": "Andre Drummond",
+      "games": 63,
+      "minutes": 19.5,
+      "pie": 0.113,
+      "estimatedNet": -2.9
+    },
+    {
+      "id": 56677852,
+      "name": "Andre Jackson Jr.",
+      "games": 48,
+      "minutes": 8.5,
+      "pie": 0.044,
+      "estimatedNet": -9.5
+    },
+    {
+      "id": 475,
+      "name": "Andrew Wiggins",
+      "games": 68,
+      "minutes": 30.3,
+      "pie": 0.092,
+      "estimatedNet": 0.1
+    },
+    {
+      "id": 419,
+      "name": "Anfernee Simons",
+      "games": 55,
+      "minutes": 24.9,
+      "pie": 0.096,
+      "estimatedNet": 1.3
+    },
+    {
+      "id": 56677827,
+      "name": "Anthony Black",
+      "games": 64,
+      "minutes": 29.8,
+      "pie": 0.09,
+      "estimatedNet": 0.6
+    },
+    {
+      "id": 3547302,
+      "name": "Anthony Gill",
+      "games": 55,
+      "minutes": 17.3,
+      "pie": 0.08,
+      "estimatedNet": -14.1
+    },
+    {
+      "id": 1028046422,
+      "name": "Ariel Hukporti",
+      "games": 54,
+      "minutes": 9.2,
+      "pie": 0.084,
+      "estimatedNet": 5
+    },
+    {
+      "id": 56677826,
+      "name": "Ausar Thompson",
+      "games": 73,
+      "minutes": 26,
+      "pie": 0.101,
+      "estimatedNet": 11.9
+    },
+    {
+      "id": 17895983,
+      "name": "Ayo Dosunmu",
+      "games": 69,
+      "minutes": 27.3,
+      "pie": 0.114,
+      "estimatedNet": -1.5
+    },
+    {
+      "id": 4,
+      "name": "Bam Adebayo",
+      "games": 73,
+      "minutes": 32.4,
+      "pie": 0.138,
+      "estimatedNet": 6
+    },
+    {
+      "id": 1057279760,
+      "name": "Ben Saraf",
+      "games": 44,
+      "minutes": 20.8,
+      "pie": 0.06,
+      "estimatedNet": -13.3
+    },
+    {
+      "id": 377,
+      "name": "Bobby Portis",
+      "games": 67,
+      "minutes": 24.2,
+      "pie": 0.122,
+      "estimatedNet": -6.6
+    },
+    {
+      "id": 227,
+      "name": "Brandon Ingram",
+      "games": 77,
+      "minutes": 33.8,
+      "pie": 0.121,
+      "estimatedNet": 0.8
+    },
+    {
+      "id": 56677823,
+      "name": "Brandon Miller",
+      "games": 65,
+      "minutes": 30.3,
+      "pie": 0.113,
+      "estimatedNet": 6.1
+    },
+    {
+      "id": 1028025235,
+      "name": "Carlton Carrington",
+      "games": 82,
+      "minutes": 27.7,
+      "pie": 0.072,
+      "estimatedNet": -15
+    },
+    {
+      "id": 303,
+      "name": "CJ McCollum",
+      "games": 76,
+      "minutes": 29.8,
+      "pie": 0.105,
+      "estimatedNet": 0.9
+    },
+    {
+      "id": 17896075,
+      "name": "Cade Cunningham",
+      "games": 64,
+      "minutes": 33.9,
+      "pie": 0.159,
+      "estimatedNet": 10.3
+    },
+    {
+      "id": 1028048549,
+      "name": "Cam Spencer",
+      "games": 72,
+      "minutes": 23.8,
+      "pie": 0.12,
+      "estimatedNet": -4.1
+    },
+    {
+      "id": 17896048,
+      "name": "Cam Thomas",
+      "games": 42,
+      "minutes": 21,
+      "pie": 0.089,
+      "estimatedNet": -12.9
+    },
+    {
+      "id": 56677831,
+      "name": "Cam Whitmore",
+      "games": 21,
+      "minutes": 16.9,
+      "pie": 0.082,
+      "estimatedNet": -17.5
+    },
+    {
+      "id": 277,
+      "name": "Caris LeVert",
+      "games": 60,
+      "minutes": 19.2,
+      "pie": 0.081,
+      "estimatedNet": 0.3
+    },
+    {
+      "id": 1057266649,
+      "name": "Cedric Coward",
+      "games": 62,
+      "minutes": 25.8,
+      "pie": 0.11,
+      "estimatedNet": -0.2
+    },
+    {
+      "id": 58,
+      "name": "Chris Boucher",
+      "games": 9,
+      "minutes": 10.5,
+      "pie": 0.04,
+      "estimatedNet": 7.3
+    },
+    {
+      "id": 3547251,
+      "name": "Cole Anthony",
+      "games": 35,
+      "minutes": 15,
+      "pie": 0.082,
+      "estimatedNet": -8.3
+    },
+    {
+      "id": 413,
+      "name": "Collin Sexton",
+      "games": 68,
+      "minutes": 23.7,
+      "pie": 0.113,
+      "estimatedNet": -5.4
+    },
+    {
+      "id": 17896045,
+      "name": "Corey Kispert",
+      "games": 58,
+      "minutes": 18.6,
+      "pie": 0.088,
+      "estimatedNet": -6.9
+    },
+    {
+      "id": 56677872,
+      "name": "Craig Porter",
+      "games": 64,
+      "minutes": 17.9,
+      "pie": 0.092,
+      "estimatedNet": 5.3
+    },
+    {
+      "id": 38017719,
+      "name": "Dalen Terry",
+      "games": 48,
+      "minutes": 11.5,
+      "pie": 0.076,
+      "estimatedNet": -3
+    },
+    {
+      "id": 17553994,
+      "name": "Davion Mitchell",
+      "games": 70,
+      "minutes": 28.6,
+      "pie": 0.083,
+      "estimatedNet": 4.3
+    },
+    {
+      "id": 17896038,
+      "name": "Day'Ron Sharpe",
+      "games": 62,
+      "minutes": 18.7,
+      "pie": 0.141,
+      "estimatedNet": -6
+    },
+    {
+      "id": 666940,
+      "name": "Dean Wade",
+      "games": 59,
+      "minutes": 22.3,
+      "pie": 0.074,
+      "estimatedNet": 7.1
+    },
+    {
+      "id": 1057274415,
+      "name": "Derik Queen",
+      "games": 81,
+      "minutes": 25,
+      "pie": 0.109,
+      "estimatedNet": -6.8
+    },
+    {
+      "id": 473,
+      "name": "Derrick White",
+      "games": 77,
+      "minutes": 34.1,
+      "pie": 0.109,
+      "estimatedNet": 10.5
+    },
+    {
+      "id": 3547287,
+      "name": "Desmond Bane",
+      "games": 82,
+      "minutes": 33.6,
+      "pie": 0.111,
+      "estimatedNet": 1.6
+    },
+    {
+      "id": 38017730,
+      "name": "Dominick Barlow",
+      "games": 71,
+      "minutes": 23.8,
+      "pie": 0.078,
+      "estimatedNet": 2
+    },
+    {
+      "id": 322,
+      "name": "Donovan Mitchell",
+      "games": 70,
+      "minutes": 33.5,
+      "pie": 0.152,
+      "estimatedNet": 7.2
+    },
+    {
+      "id": 1057279425,
+      "name": "Drake Powell",
+      "games": 63,
+      "minutes": 20.9,
+      "pie": 0.053,
+      "estimatedNet": -15.5
+    },
+    {
+      "id": 19465585,
+      "name": "Dru Smith",
+      "games": 70,
+      "minutes": 16.3,
+      "pie": 0.091,
+      "estimatedNet": -0.9
+    },
+    {
+      "id": 397,
+      "name": "Duncan Robinson",
+      "games": 77,
+      "minutes": 27.4,
+      "pie": 0.078,
+      "estimatedNet": 9.8
+    },
+    {
+      "id": 38017677,
+      "name": "Dyson Daniels",
+      "games": 76,
+      "minutes": 33.2,
+      "pie": 0.106,
+      "estimatedNet": 6.2
+    },
+    {
+      "id": 1057266813,
+      "name": "Egor Demin",
+      "games": 52,
+      "minutes": 25.2,
+      "pie": 0.081,
+      "estimatedNet": -7.7
+    },
+    {
+      "id": 17896076,
+      "name": "Evan Mobley",
+      "games": 65,
+      "minutes": 31.9,
+      "pie": 0.135,
+      "estimatedNet": 5.8
+    },
+    {
+      "id": 17896026,
+      "name": "Franz Wagner",
+      "games": 34,
+      "minutes": 30,
+      "pie": 0.134,
+      "estimatedNet": 3.7
+    },
+    {
+      "id": 196,
+      "name": "Gary Harris",
+      "games": 48,
+      "minutes": 13.8,
+      "pie": 0.048,
+      "estimatedNet": -10.6
+    },
+    {
+      "id": 3089,
+      "name": "Gary Trent Jr.",
+      "games": 65,
+      "minutes": 21.2,
+      "pie": 0.047,
+      "estimatedNet": -12.2
+    },
+    {
+      "id": 15,
+      "name": "Giannis Antetokounmpo",
+      "games": 36,
+      "minutes": 28.9,
+      "pie": 0.213,
+      "estimatedNet": 4.6
+    },
+    {
+      "id": 666442,
+      "name": "Goga Bitadze",
+      "games": 64,
+      "minutes": 15.2,
+      "pie": 0.122,
+      "estimatedNet": 1.5
+    },
+    {
+      "id": 56677828,
+      "name": "Gradey Dick",
+      "games": 76,
+      "minutes": 14,
+      "pie": 0.07,
+      "estimatedNet": 4.7
+    },
+    {
+      "id": 488,
+      "name": "Guerschon Yabusele",
+      "games": 67,
+      "minutes": 15,
+      "pie": 0.077,
+      "estimatedNet": -7.9
+    },
+    {
+      "id": 17896024,
+      "name": "Herbert Jones",
+      "games": 56,
+      "minutes": 28.4,
+      "pie": 0.053,
+      "estimatedNet": -1.2
+    },
+    {
+      "id": 1057845705,
+      "name": "Hunter Dickinson",
+      "games": 5,
+      "minutes": 8.5,
+      "pie": 0.01,
+      "estimatedNet": -39.8
+    },
+    {
+      "id": 3547269,
+      "name": "Immanuel Quickley",
+      "games": 70,
+      "minutes": 31.9,
+      "pie": 0.118,
+      "estimatedNet": 2.7
+    },
+    {
+      "id": 3547247,
+      "name": "Isaac Okoro",
+      "games": 63,
+      "minutes": 26.9,
+      "pie": 0.05,
+      "estimatedNet": -7.1
+    },
+    {
+      "id": 3547267,
+      "name": "Isaiah Stewart",
+      "games": 58,
+      "minutes": 22.7,
+      "pie": 0.095,
+      "estimatedNet": 2.1
+    },
+    {
+      "id": 666786,
+      "name": "Ja Morant",
+      "games": 20,
+      "minutes": 28.4,
+      "pie": 0.128,
+      "estimatedNet": -5.1
+    },
+    {
+      "id": 38017711,
+      "name": "Jabari Walker",
+      "games": 64,
+      "minutes": 11.9,
+      "pie": 0.073,
+      "estimatedNet": -0.6
+    },
+    {
+      "id": 56677785,
+      "name": "Jaime Jaquez Jr.",
+      "games": 75,
+      "minutes": 28.3,
+      "pie": 0.113,
+      "estimatedNet": 3.3
+    },
+    {
+      "id": 373,
+      "name": "Jakob Poeltl",
+      "games": 46,
+      "minutes": 25,
+      "pie": 0.115,
+      "estimatedNet": 2.2
+    },
+    {
+      "id": 73,
+      "name": "Jalen Brunson",
+      "games": 74,
+      "minutes": 35,
+      "pie": 0.135,
+      "estimatedNet": 5.7
+    },
+    {
+      "id": 38017694,
+      "name": "Jalen Duren",
+      "games": 70,
+      "minutes": 28.2,
+      "pie": 0.177,
+      "estimatedNet": 10.6
+    },
+    {
+      "id": 17896040,
+      "name": "Jalen Johnson",
+      "games": 72,
+      "minutes": 35.2,
+      "pie": 0.161,
+      "estimatedNet": 3.4
+    },
+    {
+      "id": 3547264,
+      "name": "Jalen Smith",
+      "games": 53,
+      "minutes": 20.7,
+      "pie": 0.109,
+      "estimatedNet": 4.2
+    },
+    {
+      "id": 17896073,
+      "name": "Jalen Suggs",
+      "games": 57,
+      "minutes": 27.6,
+      "pie": 0.11,
+      "estimatedNet": 5
+    },
+    {
+      "id": 56677722,
+      "name": "Jalen Wilson",
+      "games": 54,
+      "minutes": 15.9,
+      "pie": 0.061,
+      "estimatedNet": -10.5
+    },
+    {
+      "id": 1028038426,
+      "name": "Jamal Shead",
+      "games": 82,
+      "minutes": 22.6,
+      "pie": 0.078,
+      "estimatedNet": 5.6
+    },
+    {
+      "id": 1028243201,
+      "name": "Jamison Battle",
+      "games": 61,
+      "minutes": 8.5,
+      "pie": 0.079,
+      "estimatedNet": 7.4
+    },
+    {
+      "id": 231,
+      "name": "Jaren Jackson Jr.",
+      "games": 48,
+      "minutes": 30.3,
+      "pie": 0.107,
+      "estimatedNet": -2.1
+    },
+    {
+      "id": 9,
+      "name": "Jarrett Allen",
+      "games": 56,
+      "minutes": 27.1,
+      "pie": 0.143,
+      "estimatedNet": 7.2
+    },
+    {
+      "id": 1057396260,
+      "name": "Javon Small",
+      "games": 41,
+      "minutes": 20.2,
+      "pie": 0.109,
+      "estimatedNet": -4.9
+    },
+    {
+      "id": 666604,
+      "name": "Javonte Green",
+      "games": 82,
+      "minutes": 17.6,
+      "pie": 0.095,
+      "estimatedNet": 8
+    },
+    {
+      "id": 70,
+      "name": "Jaylen Brown",
+      "games": 71,
+      "minutes": 34.4,
+      "pie": 0.152,
+      "estimatedNet": 5.4
+    },
+    {
+      "id": 1028039105,
+      "name": "Jaylen Wells",
+      "games": 69,
+      "minutes": 26.4,
+      "pie": 0.069,
+      "estimatedNet": -5.6
+    },
+    {
+      "id": 1028028993,
+      "name": "Jaylon Tyson",
+      "games": 66,
+      "minutes": 26.9,
+      "pie": 0.092,
+      "estimatedNet": 3.9
+    },
+    {
+      "id": 1057267077,
+      "name": "Jeremiah Fears",
+      "games": 82,
+      "minutes": 25.8,
+      "pie": 0.093,
+      "estimatedNet": -6.9
+    },
+    {
+      "id": 17896063,
+      "name": "Jericho Sims",
+      "games": 67,
+      "minutes": 19.7,
+      "pie": 0.083,
+      "estimatedNet": -9.8
+    },
+    {
+      "id": 19465326,
+      "name": "Jock Landale",
+      "games": 68,
+      "minutes": 22.1,
+      "pie": 0.098,
+      "estimatedNet": -3.4
+    },
+    {
+      "id": 145,
+      "name": "Joel Embiid",
+      "games": 38,
+      "minutes": 31.6,
+      "pie": 0.163,
+      "estimatedNet": 7.2
+    },
+    {
+      "id": 666703,
+      "name": "John Konchar",
+      "games": 56,
+      "minutes": 19.9,
+      "pie": 0.09,
+      "estimatedNet": -4.5
+    },
+    {
+      "id": 229,
+      "name": "Jonathan Isaac",
+      "games": 52,
+      "minutes": 10,
+      "pie": 0.078,
+      "estimatedNet": -1.9
+    },
+    {
+      "id": 1028037494,
+      "name": "Jonathan Mogbo",
+      "games": 40,
+      "minutes": 6.2,
+      "pie": 0.101,
+      "estimatedNet": -7.6
+    },
+    {
+      "id": 100,
+      "name": "Jordan Clarkson",
+      "games": 72,
+      "minutes": 17.8,
+      "pie": 0.068,
+      "estimatedNet": 4.5
+    },
+    {
+      "id": 56677837,
+      "name": "Jordan Hawkins",
+      "games": 51,
+      "minutes": 13.6,
+      "pie": 0.055,
+      "estimatedNet": -9.1
+    },
+    {
+      "id": 666848,
+      "name": "Jordan Poole",
+      "games": 39,
+      "minutes": 23.9,
+      "pie": 0.073,
+      "estimatedNet": -7.7
+    },
+    {
+      "id": 17896065,
+      "name": "Josh Giddey",
+      "games": 54,
+      "minutes": 32.1,
+      "pie": 0.142,
+      "estimatedNet": -4.9
+    },
+    {
+      "id": 38017715,
+      "name": "Josh Minott",
+      "games": 49,
+      "minutes": 17,
+      "pie": 0.104,
+      "estimatedNet": 0.3
+    },
+    {
+      "id": 17896039,
+      "name": "Justin Champagnie",
+      "games": 69,
+      "minutes": 20,
+      "pie": 0.106,
+      "estimatedNet": -9.6
+    },
+    {
+      "id": 1028214238,
+      "name": "Justin Edwards",
+      "games": 64,
+      "minutes": 15.3,
+      "pie": 0.068,
+      "estimatedNet": -3
+    },
+    {
+      "id": 447,
+      "name": "Karl-Anthony Towns",
+      "games": 75,
+      "minutes": 31,
+      "pie": 0.154,
+      "estimatedNet": 6.6
+    },
+    {
+      "id": 45088184,
+      "name": "Keaton Wallace",
+      "games": 53,
+      "minutes": 10.1,
+      "pie": 0.077,
+      "estimatedNet": -7.4
+    },
+    {
+      "id": 1028029127,
+      "name": "Kel'el Ware",
+      "games": 77,
+      "minutes": 22.1,
+      "pie": 0.137,
+      "estimatedNet": -0.7
+    },
+    {
+      "id": 360,
+      "name": "Kelly Oubre Jr.",
+      "games": 50,
+      "minutes": 31.5,
+      "pie": 0.083,
+      "estimatedNet": -0.3
+    },
+    {
+      "id": 81,
+      "name": "Kentavious Caldwell-Pope",
+      "games": 51,
+      "minutes": 21.3,
+      "pie": 0.083,
+      "estimatedNet": -4.2
+    },
+    {
+      "id": 221,
+      "name": "Kevin Huerter",
+      "games": 69,
+      "minutes": 22.5,
+      "pie": 0.093,
+      "estimatedNet": 2
+    },
+    {
+      "id": 666849,
+      "name": "Kevin Porter Jr.",
+      "games": 38,
+      "minutes": 33.2,
+      "pie": 0.132,
+      "estimatedNet": -4.7
+    },
+    {
+      "id": 315,
+      "name": "Khris Middleton",
+      "games": 63,
+      "minutes": 22.8,
+      "pie": 0.073,
+      "estimatedNet": -10.3
+    },
+    {
+      "id": 1057263194,
+      "name": "Kon Knueppel",
+      "games": 81,
+      "minutes": 31.5,
+      "pie": 0.115,
+      "estimatedNet": 3.6
+    },
+    {
+      "id": 378,
+      "name": "Kristaps Porzingis",
+      "games": 32,
+      "minutes": 24,
+      "pie": 0.124,
+      "estimatedNet": 2.8
+    },
+    {
+      "id": 265,
+      "name": "Kyle Kuzma",
+      "games": 69,
+      "minutes": 26.2,
+      "pie": 0.096,
+      "estimatedNet": -6.5
+    },
+    {
+      "id": 1028026060,
+      "name": "KyShawn George",
+      "games": 48,
+      "minutes": 29,
+      "pie": 0.09,
+      "estimatedNet": -11.3
+    },
+    {
+      "id": 3547239,
+      "name": "LaMelo Ball",
+      "games": 72,
+      "minutes": 28,
+      "pie": 0.134,
+      "estimatedNet": 6
+    },
+    {
+      "id": 414,
+      "name": "Landry Shamet",
+      "games": 51,
+      "minutes": 23,
+      "pie": 0.07,
+      "estimatedNet": 7.8
+    },
+    {
+      "id": 340,
+      "name": "Larry Nance Jr.",
+      "games": 35,
+      "minutes": 12.8,
+      "pie": 0.062,
+      "estimatedNet": -3.2
+    },
+    {
+      "id": 27,
+      "name": "Lonzo Ball",
+      "games": 35,
+      "minutes": 20.8,
+      "pie": 0.077,
+      "estimatedNet": 0.7
+    },
+    {
+      "id": 17896056,
+      "name": "Luka Garza",
+      "games": 69,
+      "minutes": 16.2,
+      "pie": 0.103,
+      "estimatedNet": 3.9
+    },
+    {
+      "id": 254,
+      "name": "Luke Kennard",
+      "games": 78,
+      "minutes": 21.5,
+      "pie": 0.089,
+      "estimatedNet": 1.3
+    },
+    {
+      "id": 24,
+      "name": "Marvin Bagley III",
+      "games": 60,
+      "minutes": 20,
+      "pie": 0.123,
+      "estimatedNet": -8.5
+    },
+    {
+      "id": 1028025177,
+      "name": "Matas Buzelis",
+      "games": 77,
+      "minutes": 29.2,
+      "pie": 0.097,
+      "estimatedNet": -4.9
+    },
+    {
+      "id": 375,
+      "name": "Michael Porter Jr.",
+      "games": 52,
+      "minutes": 32.5,
+      "pie": 0.141,
+      "estimatedNet": -7.6
+    },
+    {
+      "id": 61,
+      "name": "Mikal Bridges",
+      "games": 82,
+      "minutes": 32.8,
+      "pie": 0.099,
+      "estimatedNet": 6.4
+    },
+    {
+      "id": 62,
+      "name": "Miles Bridges",
+      "games": 77,
+      "minutes": 31,
+      "pie": 0.114,
+      "estimatedNet": 1.8
+    },
+    {
+      "id": 17896033,
+      "name": "Miles McBride",
+      "games": 41,
+      "minutes": 26.3,
+      "pie": 0.085,
+      "estimatedNet": 10.4
+    },
+    {
+      "id": 56677806,
+      "name": "Mouhamed Gueye",
+      "games": 77,
+      "minutes": 15.3,
+      "pie": 0.075,
+      "estimatedNet": 2.5
+    },
+    {
+      "id": 38017725,
+      "name": "Moussa Diabate",
+      "games": 73,
+      "minutes": 26,
+      "pie": 0.108,
+      "estimatedNet": 7.5
+    },
+    {
+      "id": 452,
+      "name": "Myles Turner",
+      "games": 71,
+      "minutes": 26.9,
+      "pie": 0.086,
+      "estimatedNet": -5.5
+    },
+    {
+      "id": 17553967,
+      "name": "Neemias Queta",
+      "games": 76,
+      "minutes": 25.3,
+      "pie": 0.13,
+      "estimatedNet": 12
+    },
+    {
+      "id": 666508,
+      "name": "Nicolas Claxton",
+      "games": 69,
+      "minutes": 27.8,
+      "pie": 0.117,
+      "estimatedNet": -12.7
+    },
+    {
+      "id": 666400,
+      "name": "Nickeil Alexander-Walker",
+      "games": 78,
+      "minutes": 33.4,
+      "pie": 0.105,
+      "estimatedNet": 4.2
+    },
+    {
+      "id": 38017696,
+      "name": "Nikola Jovic",
+      "games": 47,
+      "minutes": 17.2,
+      "pie": 0.073,
+      "estimatedNet": 0.8
+    },
+    {
+      "id": 460,
+      "name": "Nikola Vucevic",
+      "games": 64,
+      "minutes": 28.4,
+      "pie": 0.127,
+      "estimatedNet": -1
+    },
+    {
+      "id": 56677843,
+      "name": "Noah Clowney",
+      "games": 66,
+      "minutes": 27,
+      "pie": 0.072,
+      "estimatedNet": -9.1
+    },
+    {
+      "id": 1057275262,
+      "name": "Nolan Traoré",
+      "games": 56,
+      "minutes": 22.2,
+      "pie": 0.056,
+      "estimatedNet": -10.4
+    },
+    {
+      "id": 380,
+      "name": "Norman Powell",
+      "games": 58,
+      "minutes": 29.6,
+      "pie": 0.113,
+      "estimatedNet": 0.1
+    },
+    {
+      "id": 18,
+      "name": "OG Anunoby",
+      "games": 67,
+      "minutes": 33.2,
+      "pie": 0.099,
+      "estimatedNet": 9.1
+    },
+    {
+      "id": 38017620,
+      "name": "Ochai Agbaji",
+      "games": 62,
+      "minutes": 15.7,
+      "pie": 0.057,
+      "estimatedNet": -2.2
+    },
+    {
+      "id": 56677859,
+      "name": "Olivier-Maxence Prosper",
+      "games": 53,
+      "minutes": 18.6,
+      "pie": 0.103,
+      "estimatedNet": -8.5
+    },
+    {
+      "id": 3547244,
+      "name": "Onyeka Okongwu",
+      "games": 74,
+      "minutes": 31,
+      "pie": 0.104,
+      "estimatedNet": 1.7
+    },
+    {
+      "id": 38017683,
+      "name": "Paolo Banchero",
+      "games": 72,
+      "minutes": 34.7,
+      "pie": 0.138,
+      "estimatedNet": -0.1
+    },
+    {
+      "id": 3547248,
+      "name": "Patrick Williams",
+      "games": 72,
+      "minutes": 20.5,
+      "pie": 0.057,
+      "estimatedNet": -10.5
+    },
+    {
+      "id": 3547270,
+      "name": "Paul Reed",
+      "games": 65,
+      "minutes": 13.9,
+      "pie": 0.153,
+      "estimatedNet": 8.2
+    },
+    {
+      "id": 3547276,
+      "name": "Payton Pritchard",
+      "games": 79,
+      "minutes": 32.3,
+      "pie": 0.12,
+      "estimatedNet": 6.4
+    },
+    {
+      "id": 1028036986,
+      "name": "Pelle Larsson",
+      "games": 70,
+      "minutes": 26.4,
+      "pie": 0.084,
+      "estimatedNet": 2.9
+    },
+    {
+      "id": 17895858,
+      "name": "Quentin Grimes",
+      "games": 75,
+      "minutes": 29.4,
+      "pie": 0.092,
+      "estimatedNet": 0.7
+    },
+    {
+      "id": 666423,
+      "name": "RJ Barrett",
+      "games": 57,
+      "minutes": 30.3,
+      "pie": 0.112,
+      "estimatedNet": 5.6
+    },
+    {
+      "id": 1028026508,
+      "name": "Ronald Holland II",
+      "games": 78,
+      "minutes": 19.9,
+      "pie": 0.085,
+      "estimatedNet": 4.3
+    },
+    {
+      "id": 1057384362,
+      "name": "Ryan Kalkbrenner",
+      "games": 69,
+      "minutes": 21.4,
+      "pie": 0.108,
+      "estimatedNet": -0.9
+    },
+    {
+      "id": 38017712,
+      "name": "Ryan Rollins",
+      "games": 74,
+      "minutes": 32.1,
+      "pie": 0.111,
+      "estimatedNet": -2.8
+    },
+    {
+      "id": 3547256,
+      "name": "Saddiq Bey",
+      "games": 72,
+      "minutes": 31.2,
+      "pie": 0.112,
+      "estimatedNet": -3.2
+    },
+    {
+      "id": 17896060,
+      "name": "Sam Hauser",
+      "games": 78,
+      "minutes": 24.8,
+      "pie": 0.08,
+      "estimatedNet": 8
+    },
+    {
+      "id": 3547299,
+      "name": "Sam Merrill",
+      "games": 52,
+      "minutes": 26.5,
+      "pie": 0.081,
+      "estimatedNet": 8
+    },
+    {
+      "id": 17896059,
+      "name": "Sandro Mamukelashvili",
+      "games": 80,
+      "minutes": 21.9,
+      "pie": 0.123,
+      "estimatedNet": 4.7
+    },
+    {
+      "id": 17896067,
+      "name": "Santi Aldama",
+      "games": 43,
+      "minutes": 27.9,
+      "pie": 0.115,
+      "estimatedNet": -2.8
+    },
+    {
+      "id": 17896055,
+      "name": "Scottie Barnes",
+      "games": 80,
+      "minutes": 33.5,
+      "pie": 0.139,
+      "estimatedNet": 4.2
+    },
+    {
+      "id": 17896029,
+      "name": "Sharife Cooper",
+      "games": 41,
+      "minutes": 17.1,
+      "pie": 0.094,
+      "estimatedNet": -11.5
+    },
+    {
+      "id": 38017739,
+      "name": "Simone Fontecchio",
+      "games": 70,
+      "minutes": 16.7,
+      "pie": 0.09,
+      "estimatedNet": 3.7
+    },
+    {
+      "id": 1057384156,
+      "name": "Sion James",
+      "games": 82,
+      "minutes": 22.5,
+      "pie": 0.062,
+      "estimatedNet": 2.2
+    },
+    {
+      "id": 383,
+      "name": "Taurean Prince",
+      "games": 26,
+      "minutes": 23.5,
+      "pie": 0.073,
+      "estimatedNet": -2.5
+    },
+    {
+      "id": 666743,
+      "name": "Terance Mann",
+      "games": 63,
+      "minutes": 24.3,
+      "pie": 0.066,
+      "estimatedNet": -8.7
+    },
+    {
+      "id": 2148,
+      "name": "Thanasis Antetokounmpo",
+      "games": 34,
+      "minutes": 4.4,
+      "pie": 0.094,
+      "estimatedNet": -1
+    },
+    {
+      "id": 1028028379,
+      "name": "Tidjane Salaun",
+      "games": 37,
+      "minutes": 15.6,
+      "pie": 0.102,
+      "estimatedNet": -0.7
+    },
+    {
+      "id": 200,
+      "name": "Tobias Harris",
+      "games": 63,
+      "minutes": 27.7,
+      "pie": 0.112,
+      "estimatedNet": 8.1
+    },
+    {
+      "id": 490,
+      "name": "Trae Young",
+      "games": 15,
+      "minutes": 25.6,
+      "pie": 0.128,
+      "estimatedNet": -9.5
+    },
+    {
+      "id": 1057262985,
+      "name": "Tre Johnson",
+      "games": 60,
+      "minutes": 24,
+      "pie": 0.068,
+      "estimatedNet": -11.5
+    },
+    {
+      "id": 3547274,
+      "name": "Tre Jones",
+      "games": 65,
+      "minutes": 27,
+      "pie": 0.126,
+      "estimatedNet": -2.7
+    },
+    {
+      "id": 17896036,
+      "name": "Tre Mann",
+      "games": 53,
+      "minutes": 12.6,
+      "pie": 0.062,
+      "estimatedNet": -13.1
+    },
+    {
+      "id": 64269023,
+      "name": "Trey Jemison",
+      "games": 13,
+      "minutes": 6.3,
+      "pie": 0.027,
+      "estimatedNet": -16.3
+    },
+    {
+      "id": 18677986,
+      "name": "Trey Murphy III",
+      "games": 66,
+      "minutes": 35.5,
+      "pie": 0.122,
+      "estimatedNet": -3.5
+    },
+    {
+      "id": 1016384149,
+      "name": "Tristan Vukcevic",
+      "games": 49,
+      "minutes": 13.7,
+      "pie": 0.11,
+      "estimatedNet": -14.3
+    },
+    {
+      "id": 1028025497,
+      "name": "Tristan Da Silva",
+      "games": 77,
+      "minutes": 24.7,
+      "pie": 0.085,
+      "estimatedNet": 1.6
+    },
+    {
+      "id": 1028036898,
+      "name": "Tyler Kolek",
+      "games": 62,
+      "minutes": 11.7,
+      "pie": 0.101,
+      "estimatedNet": 5.9
+    },
+    {
+      "id": 38017722,
+      "name": "Tyrese Martin",
+      "games": 46,
+      "minutes": 16.9,
+      "pie": 0.077,
+      "estimatedNet": -11.3
+    },
+    {
+      "id": 3547254,
+      "name": "Tyrese Maxey",
+      "games": 70,
+      "minutes": 38,
+      "pie": 0.15,
+      "estimatedNet": 1.9
+    },
+    {
+      "id": 1057395754,
+      "name": "Tyrese Proctor",
+      "games": 50,
+      "minutes": 10.9,
+      "pie": 0.087,
+      "estimatedNet": -1.3
+    },
+    {
+      "id": 249,
+      "name": "Tyus Jones",
+      "games": 67,
+      "minutes": 14.6,
+      "pie": 0.065,
+      "estimatedNet": -6.5
+    },
+    {
+      "id": 1057261935,
+      "name": "VJ Edgecombe",
+      "games": 75,
+      "minutes": 35,
+      "pie": 0.092,
+      "estimatedNet": 1.8
+    },
+    {
+      "id": 85,
+      "name": "Wendell Carter Jr.",
+      "games": 78,
+      "minutes": 29.3,
+      "pie": 0.096,
+      "estimatedNet": 1.4
+    },
+    {
+      "id": 1057279594,
+      "name": "Will Riley",
+      "games": 74,
+      "minutes": 22.1,
+      "pie": 0.08,
+      "estimatedNet": -14.4
+    },
+    {
+      "id": 3547285,
+      "name": "Xavier Tillman",
+      "games": 30,
+      "minutes": 6.1,
+      "pie": 0.069,
+      "estimatedNet": -5.8
+    },
+    {
+      "id": 1028027567,
+      "name": "Yves Missi",
+      "games": 66,
+      "minutes": 19.7,
+      "pie": 0.087,
+      "estimatedNet": -1.3
+    },
+    {
+      "id": 1028028244,
+      "name": "Zaccharie Risacher",
+      "games": 67,
+      "minutes": 22.4,
+      "pie": 0.07,
+      "estimatedNet": -0.4
+    },
+    {
+      "id": 17896027,
+      "name": "Ziaire Williams",
+      "games": 56,
+      "minutes": 22.9,
+      "pie": 0.079,
+      "estimatedNet": -10
+    },
+    {
+      "id": 666969,
+      "name": "Zion Williamson",
+      "games": 62,
+      "minutes": 29.7,
+      "pie": 0.141,
+      "estimatedNet": -2.5
+    },
+    {
+      "id": 1057260888,
+      "name": "Airious Bailey",
+      "games": 72,
+      "minutes": 27.6,
+      "pie": 0.069,
+      "estimatedNet": -10.3
+    },
+    {
+      "id": 117,
+      "name": "Anthony Davis",
+      "games": 20,
+      "minutes": 31.3,
+      "pie": 0.151,
+      "estimatedNet": -4.3
+    },
+    {
+      "id": 3547238,
+      "name": "Anthony Edwards",
+      "games": 61,
+      "minutes": 35,
+      "pie": 0.145,
+      "estimatedNet": 3.7
+    },
+    {
+      "id": 48,
+      "name": "Bismack Biyombo",
+      "games": 25,
+      "minutes": 5.7,
+      "pie": 0.024,
+      "estimatedNet": -28.2
+    },
+    {
+      "id": 38017693,
+      "name": "Blake Wesley",
+      "games": 31,
+      "minutes": 11.6,
+      "pie": 0.075,
+      "estimatedNet": -10.5
+    },
+    {
+      "id": 17896031,
+      "name": "Nah'Shon Hyland",
+      "games": 71,
+      "minutes": 16.6,
+      "pie": 0.101,
+      "estimatedNet": 4.8
+    },
+    {
+      "id": 37,
+      "name": "Bradley Beal",
+      "games": 6,
+      "minutes": 20.2,
+      "pie": 0.018,
+      "estimatedNet": -9.3
+    },
+    {
+      "id": 24489167,
+      "name": "Brandon Williams",
+      "games": 66,
+      "minutes": 22.2,
+      "pie": 0.115,
+      "estimatedNet": -5.7
+    },
+    {
+      "id": 56677842,
+      "name": "Brice Sensabaugh",
+      "games": 75,
+      "minutes": 23.5,
+      "pie": 0.09,
+      "estimatedNet": -9.5
+    },
+    {
+      "id": 283,
+      "name": "Brook Lopez",
+      "games": 75,
+      "minutes": 21.8,
+      "pie": 0.076,
+      "estimatedNet": 2.3
+    },
+    {
+      "id": 666747,
+      "name": "Caleb Martin",
+      "games": 58,
+      "minutes": 14.8,
+      "pie": 0.063,
+      "estimatedNet": -9.1
+    },
+    {
+      "id": 1028035215,
+      "name": "Cam Christie",
+      "games": 55,
+      "minutes": 8.7,
+      "pie": 0.071,
+      "estimatedNet": -0.4
+    },
+    {
+      "id": 1057271360,
+      "name": "Carter Bryant",
+      "games": 71,
+      "minutes": 11.5,
+      "pie": 0.071,
+      "estimatedNet": 2.1
+    },
+    {
+      "id": 367,
+      "name": "Chris Paul",
+      "games": 16,
+      "minutes": 14.2,
+      "pie": 0.064,
+      "estimatedNet": -15.8
+    },
+    {
+      "id": 1028029291,
+      "name": "Cody Williams",
+      "games": 67,
+      "minutes": 24.3,
+      "pie": 0.057,
+      "estimatedNet": -10.7
+    },
+    {
+      "id": 38017727,
+      "name": "Collin Gillespie",
+      "games": 80,
+      "minutes": 28.5,
+      "pie": 0.108,
+      "estimatedNet": 3.3
+    },
+    {
+      "id": 1057262088,
+      "name": "Cooper Flagg",
+      "games": 70,
+      "minutes": 33.5,
+      "pie": 0.128,
+      "estimatedNet": -4.8
+    },
+    {
+      "id": 405,
+      "name": "D'Angelo Russell",
+      "games": 26,
+      "minutes": 19,
+      "pie": 0.098,
+      "estimatedNet": -2.9
+    },
+    {
+      "id": 407,
+      "name": "Dario Saric",
+      "games": 5,
+      "minutes": 8.2,
+      "pie": 0.015,
+      "estimatedNet": 1
+    },
+    {
+      "id": 1028245237,
+      "name": "David Jones",
+      "games": 11,
+      "minutes": 6.2,
+      "pie": 0.133,
+      "estimatedNet": 20.6
+    },
+    {
+      "id": 125,
+      "name": "DeMar DeRozan",
+      "games": 77,
+      "minutes": 31.2,
+      "pie": 0.111,
+      "estimatedNet": -10.8
+    },
+    {
+      "id": 3547242,
+      "name": "Deni Avdija",
+      "games": 66,
+      "minutes": 33.3,
+      "pie": 0.149,
+      "estimatedNet": -0.8
+    },
+    {
+      "id": 409,
+      "name": "Dennis Schroder",
+      "games": 70,
+      "minutes": 24.2,
+      "pie": 0.094,
+      "estimatedNet": -4.9
+    },
+    {
+      "id": 56677840,
+      "name": "Dereck Lively II",
+      "games": 7,
+      "minutes": 16.5,
+      "pie": 0.094,
+      "estimatedNet": 5.5
+    },
+    {
+      "id": 247,
+      "name": "Derrick Jones Jr.",
+      "games": 50,
+      "minutes": 27,
+      "pie": 0.072,
+      "estimatedNet": 5.4
+    },
+    {
+      "id": 57,
+      "name": "Devin Booker",
+      "games": 64,
+      "minutes": 33.5,
+      "pie": 0.142,
+      "estimatedNet": 3.7
+    },
+    {
+      "id": 3547246,
+      "name": "Devin Vassell",
+      "games": 67,
+      "minutes": 30.5,
+      "pie": 0.087,
+      "estimatedNet": 11.6
+    },
+    {
+      "id": 66,
+      "name": "Dillon Brooks",
+      "games": 56,
+      "minutes": 30.4,
+      "pie": 0.088,
+      "estimatedNet": -0.1
+    },
+    {
+      "id": 1028025344,
+      "name": "Donovan Clingan",
+      "games": 77,
+      "minutes": 27.2,
+      "pie": 0.139,
+      "estimatedNet": -0.9
+    },
+    {
+      "id": 131,
+      "name": "Donte DiVincenzo",
+      "games": 82,
+      "minutes": 30.4,
+      "pie": 0.084,
+      "estimatedNet": 6.9
+    },
+    {
+      "id": 147,
+      "name": "Drew Eubanks",
+      "games": 42,
+      "minutes": 13.1,
+      "pie": 0.082,
+      "estimatedNet": -11.4
+    },
+    {
+      "id": 379,
+      "name": "Dwight Powell",
+      "games": 63,
+      "minutes": 14.4,
+      "pie": 0.073,
+      "estimatedNet": -2.3
+    },
+    {
+      "id": 1057845274,
+      "name": "Dylan Cardwell",
+      "games": 44,
+      "minutes": 20.6,
+      "pie": 0.089,
+      "estimatedNet": -4.3
+    },
+    {
+      "id": 1057262518,
+      "name": "Dylan Harper",
+      "games": 69,
+      "minutes": 22.6,
+      "pie": 0.113,
+      "estimatedNet": 9.5
+    },
+    {
+      "id": 8,
+      "name": "Grayson Allen",
+      "games": 51,
+      "minutes": 28.8,
+      "pie": 0.105,
+      "estimatedNet": 0.2
+    },
+    {
+      "id": 30,
+      "name": "Harrison Barnes",
+      "games": 77,
+      "minutes": 25.8,
+      "pie": 0.075,
+      "estimatedNet": 7.2
+    },
+    {
+      "id": 1028046464,
+      "name": "Harrison Ingram",
+      "games": 7,
+      "minutes": 3.7,
+      "pie": 0.086,
+      "estimatedNet": -22.2
+    },
+    {
+      "id": 493,
+      "name": "Ivica Zubac",
+      "games": 48,
+      "minutes": 30.1,
+      "pie": 0.13,
+      "estimatedNet": -2.9
+    },
+    {
+      "id": 38017679,
+      "name": "Jaden Hardy",
+      "games": 57,
+      "minutes": 15.8,
+      "pie": 0.066,
+      "estimatedNet": -5.3
+    },
+    {
+      "id": 3547259,
+      "name": "Jaden McDaniels",
+      "games": 73,
+      "minutes": 31.7,
+      "pie": 0.088,
+      "estimatedNet": 4.3
+    },
+    {
+      "id": 192,
+      "name": "James Harden",
+      "games": 70,
+      "minutes": 34.8,
+      "pie": 0.143,
+      "estimatedNet": 1.1
+    },
+    {
+      "id": 56677851,
+      "name": "Jaylen Clark",
+      "games": 68,
+      "minutes": 13.1,
+      "pie": 0.054,
+      "estimatedNet": 5.6
+    },
+    {
+      "id": 182,
+      "name": "Jerami Grant",
+      "games": 57,
+      "minutes": 29.7,
+      "pie": 0.094,
+      "estimatedNet": -0.2
+    },
+    {
+      "id": 101,
+      "name": "John Collins",
+      "games": 69,
+      "minutes": 27.1,
+      "pie": 0.098,
+      "estimatedNet": -0.8
+    },
+    {
+      "id": 666767,
+      "name": "Jordan McLaughlin",
+      "games": 44,
+      "minutes": 6.4,
+      "pie": 0.091,
+      "estimatedNet": -10
+    },
+    {
+      "id": 214,
+      "name": "Jrue Holiday",
+      "games": 53,
+      "minutes": 29.4,
+      "pie": 0.124,
+      "estimatedNet": 4.7
+    },
+    {
+      "id": 38017649,
+      "name": "Julian Champagnie",
+      "games": 82,
+      "minutes": 27.6,
+      "pie": 0.091,
+      "estimatedNet": 12.1
+    },
+    {
+      "id": 387,
+      "name": "Julius Randle",
+      "games": 79,
+      "minutes": 33,
+      "pie": 0.128,
+      "estimatedNet": 4.6
+    },
+    {
+      "id": 349,
+      "name": "Jusuf Nurkic",
+      "games": 41,
+      "minutes": 26.4,
+      "pie": 0.121,
+      "estimatedNet": -8.6
+    },
+    {
+      "id": 274,
+      "name": "Kawhi Leonard",
+      "games": 65,
+      "minutes": 32.1,
+      "pie": 0.185,
+      "estimatedNet": 8.4
+    },
+    {
+      "id": 666682,
+      "name": "Keldon Johnson",
+      "games": 82,
+      "minutes": 23.3,
+      "pie": 0.118,
+      "estimatedNet": 7.5
+    },
+    {
+      "id": 38017714,
+      "name": "Keon Ellis",
+      "games": 72,
+      "minutes": 20.5,
+      "pie": 0.058,
+      "estimatedNet": -4.5
+    },
+    {
+      "id": 56677834,
+      "name": "Keyonte George",
+      "games": 54,
+      "minutes": 33.1,
+      "pie": 0.122,
+      "estimatedNet": -8.3
+    },
+    {
+      "id": 443,
+      "name": "Klay Thompson",
+      "games": 69,
+      "minutes": 21.7,
+      "pie": 0.077,
+      "estimatedNet": -5.8
+    },
+    {
+      "id": 56677849,
+      "name": "Kobe Brown",
+      "games": 61,
+      "minutes": 15.8,
+      "pie": 0.078,
+      "estimatedNet": -9.7
+    },
+    {
+      "id": 1057396055,
+      "name": "Kobe Sanders",
+      "games": 68,
+      "minutes": 19.9,
+      "pie": 0.062,
+      "estimatedNet": 1.3
+    },
+    {
+      "id": 139,
+      "name": "Kris Dunn",
+      "games": 82,
+      "minutes": 27.2,
+      "pie": 0.074,
+      "estimatedNet": 1.5
+    },
+    {
+      "id": 56677791,
+      "name": "Kris Murray",
+      "games": 57,
+      "minutes": 23.4,
+      "pie": 0.063,
+      "estimatedNet": 0.3
+    },
+    {
+      "id": 1028035794,
+      "name": "Kyle Filipowski",
+      "games": 77,
+      "minutes": 23.4,
+      "pie": 0.106,
+      "estimatedNet": -6.6
+    },
+    {
+      "id": 297,
+      "name": "Lauri Markkanen",
+      "games": 42,
+      "minutes": 34.3,
+      "pie": 0.139,
+      "estimatedNet": -3.3
+    },
+    {
+      "id": 261,
+      "name": "Luke Kornet",
+      "games": 68,
+      "minutes": 21,
+      "pie": 0.109,
+      "estimatedNet": 4.3
+    },
+    {
+      "id": 324,
+      "name": "Malik Monk",
+      "games": 62,
+      "minutes": 22,
+      "pie": 0.094,
+      "estimatedNet": -8.5
+    },
+    {
+      "id": 38017698,
+      "name": "Mark Williams",
+      "games": 60,
+      "minutes": 23.6,
+      "pie": 0.141,
+      "estimatedNet": -1.1
+    },
+    {
+      "id": 666923,
+      "name": "Matisse Thybulle",
+      "games": 30,
+      "minutes": 16,
+      "pie": 0.093,
+      "estimatedNet": 8.3
+    },
+    {
+      "id": 38017697,
+      "name": "Max Christie",
+      "games": 77,
+      "minutes": 29.1,
+      "pie": 0.079,
+      "estimatedNet": -6.5
+    },
+    {
+      "id": 1057390745,
+      "name": "Maxime Raynaud",
+      "games": 74,
+      "minutes": 26.5,
+      "pie": 0.109,
+      "estimatedNet": -10.1
+    },
+    {
+      "id": 104,
+      "name": "Mike Conley",
+      "games": 54,
+      "minutes": 18.4,
+      "pie": 0.061,
+      "estimatedNet": 1
+    },
+    {
+      "id": 1057845382,
+      "name": "Moussa Cisse",
+      "games": 38,
+      "minutes": 13.9,
+      "pie": 0.087,
+      "estimatedNet": 0.7
+    },
+    {
+      "id": 3547293,
+      "name": "Naji Marshall",
+      "games": 74,
+      "minutes": 29.5,
+      "pie": 0.106,
+      "estimatedNet": -4.3
+    },
+    {
+      "id": 667378,
+      "name": "Naz Reid",
+      "games": 77,
+      "minutes": 26.1,
+      "pie": 0.112,
+      "estimatedNet": 4
+    },
+    {
+      "id": 3547282,
+      "name": "Nick Richards",
+      "games": 48,
+      "minutes": 14.6,
+      "pie": 0.079,
+      "estimatedNet": -9.6
+    },
+    {
+      "id": 33,
+      "name": "Nicolas Batum",
+      "games": 74,
+      "minutes": 17.5,
+      "pie": 0.058,
+      "estimatedNet": 0.6
+    },
+    {
+      "id": 2221,
+      "name": "Nigel Hayes",
+      "games": 27,
+      "minutes": 7.2,
+      "pie": 0.028,
+      "estimatedNet": -17.8
+    },
+    {
+      "id": 1057276634,
+      "name": "Nique Clifford",
+      "games": 75,
+      "minutes": 25.1,
+      "pie": 0.062,
+      "estimatedNet": -4.4
+    },
+    {
+      "id": 1028036515,
+      "name": "Oso Ighodaro",
+      "games": 82,
+      "minutes": 22.1,
+      "pie": 0.09,
+      "estimatedNet": 4.6
+    },
+    {
+      "id": 666950,
+      "name": "P.J. Washington",
+      "games": 56,
+      "minutes": 31,
+      "pie": 0.093,
+      "estimatedNet": -6.6
+    },
+    {
+      "id": 1028245994,
+      "name": "Riley Minix",
+      "games": 9,
+      "minutes": 6.5,
+      "pie": 0.114,
+      "estimatedNet": 25.1
+    },
+    {
+      "id": 351,
+      "name": "Royce O'Neale",
+      "games": 78,
+      "minutes": 28.4,
+      "pie": 0.082,
+      "estimatedNet": -3.4
+    },
+    {
+      "id": 176,
+      "name": "Rudy Gobert",
+      "games": 76,
+      "minutes": 31.3,
+      "pie": 0.121,
+      "estimatedNet": 5.5
+    },
+    {
+      "id": 472,
+      "name": "Russell Westbrook",
+      "games": 64,
+      "minutes": 28.9,
+      "pie": 0.105,
+      "estimatedNet": -10.4
+    },
+    {
+      "id": 1028025723,
+      "name": "Ryan Dunn",
+      "games": 70,
+      "minutes": 19.4,
+      "pie": 0.081,
+      "estimatedNet": 2.4
+    },
+    {
+      "id": 1057847894,
+      "name": "Ryan Nembhard",
+      "games": 60,
+      "minutes": 19.5,
+      "pie": 0.087,
+      "estimatedNet": -2.1
+    },
+    {
+      "id": 38017690,
+      "name": "Shaedon Sharpe",
+      "games": 50,
+      "minutes": 29.4,
+      "pie": 0.108,
+      "estimatedNet": -3
+    },
+    {
+      "id": 1028025261,
+      "name": "Stephon Castle",
+      "games": 68,
+      "minutes": 30,
+      "pie": 0.117,
+      "estimatedNet": 9.4
+    },
+    {
+      "id": 338,
+      "name": "Svi Mykhailiuk",
+      "games": 50,
+      "minutes": 23.1,
+      "pie": 0.074,
+      "estimatedNet": -4.8
+    },
+    {
+      "id": 56677824,
+      "name": "Taylor Hendricks",
+      "games": 59,
+      "minutes": 19,
+      "pie": 0.077,
+      "estimatedNet": -10
+    },
+    {
+      "id": 1028028501,
+      "name": "Terrence Shannon Jr.",
+      "games": 43,
+      "minutes": 12.5,
+      "pie": 0.069,
+      "estimatedNet": -5.9
+    },
+    {
+      "id": 56677850,
+      "name": "Toumani Camara",
+      "games": 82,
+      "minutes": 33.3,
+      "pie": 0.073,
+      "estimatedNet": 0.1
+    },
+    {
+      "id": 56677822,
+      "name": "Victor Wembanyama",
+      "games": 64,
+      "minutes": 29.2,
+      "pie": 0.209,
+      "estimatedNet": 16.3
+    },
+    {
+      "id": 38017705,
+      "name": "Walker Kessler",
+      "games": 5,
+      "minutes": 30.8,
+      "pie": 0.138,
+      "estimatedNet": 5.4
+    },
+    {
+      "id": 1057271583,
+      "name": "Walter Clayton Jr.",
+      "games": 69,
+      "minutes": 20.4,
+      "pie": 0.073,
+      "estimatedNet": -10.2
+    },
+    {
+      "id": 1057275769,
+      "name": "Hansen Yang",
+      "games": 43,
+      "minutes": 7,
+      "pie": 0.027,
+      "estimatedNet": -16
+    },
+    {
+      "id": 1057279105,
+      "name": "Yanic Konan Niederhauser",
+      "games": 41,
+      "minutes": 10.3,
+      "pie": 0.098,
+      "estimatedNet": 7.8
+    },
+    {
+      "id": 268,
+      "name": "Zach LaVine",
+      "games": 39,
+      "minutes": 31.4,
+      "pie": 0.096,
+      "estimatedNet": -11.6
+    },
+    {
+      "id": 3547250,
+      "name": "Aaron Nesmith",
+      "games": 45,
+      "minutes": 29.7,
+      "pie": 0.067,
+      "estimatedNet": -7
+    },
+    {
+      "id": 38017507,
+      "name": "Andrew Nembhard",
+      "games": 57,
+      "minutes": 31.3,
+      "pie": 0.111,
+      "estimatedNet": -9.2
+    },
+    {
+      "id": 56677861,
+      "name": "Ben Sheppard",
+      "games": 65,
+      "minutes": 21.4,
+      "pie": 0.066,
+      "estimatedNet": -8.3
+    },
+    {
+      "id": 38017686,
+      "name": "Bennedict Mathurin",
+      "games": 54,
+      "minutes": 30,
+      "pie": 0.105,
+      "estimatedNet": -3.3
+    },
+    {
+      "id": 1028218679,
+      "name": "Branden Carlson",
+      "games": 42,
+      "minutes": 11.6,
+      "pie": 0.109,
+      "estimatedNet": -0.5
+    },
+    {
+      "id": 17896035,
+      "name": "Isaiah Jackson",
+      "games": 55,
+      "minutes": 16.5,
+      "pie": 0.104,
+      "estimatedNet": -1.9
+    },
+    {
+      "id": 56677832,
+      "name": "Jarace Walker",
+      "games": 76,
+      "minutes": 25.7,
+      "pie": 0.09,
+      "estimatedNet": -10.3
+    },
+    {
+      "id": 17896103,
+      "name": "Jay Huff",
+      "games": 82,
+      "minutes": 21,
+      "pie": 0.092,
+      "estimatedNet": -5.9
+    },
+    {
+      "id": 1028035897,
+      "name": "Johnny Furphy",
+      "games": 35,
+      "minutes": 18.4,
+      "pie": 0.066,
+      "estimatedNet": -2.8
+    },
+    {
+      "id": 3547243,
+      "name": "Obi Toppin",
+      "games": 24,
+      "minutes": 17.7,
+      "pie": 0.143,
+      "estimatedNet": -4.4
+    },
+    {
+      "id": 38017716,
+      "name": "Ousmane Dieng",
+      "games": 57,
+      "minutes": 19.3,
+      "pie": 0.075,
+      "estimatedNet": -9.2
+    },
+    {
+      "id": 416,
+      "name": "Pascal Siakam",
+      "games": 62,
+      "minutes": 33.2,
+      "pie": 0.13,
+      "estimatedNet": -4.6
+    },
+    {
+      "id": 1057395638,
+      "name": "Taelon Peter",
+      "games": 38,
+      "minutes": 13,
+      "pie": 0.057,
+      "estimatedNet": -9.8
+    },
+    {
+      "id": 60,
+      "name": "Tony Bradley",
+      "games": 41,
+      "minutes": 11,
+      "pie": 0.074,
+      "estimatedNet": -14.6
+    },
+    {
+      "id": 177,
+      "name": "Aaron Gordon",
+      "games": 36,
+      "minutes": 27.9,
+      "pie": 0.117,
+      "estimatedNet": 11.4
+    },
+    {
+      "id": 69,
+      "name": "Bruce Brown",
+      "games": 82,
+      "minutes": 24.4,
+      "pie": 0.069,
+      "estimatedNet": -0.2
+    },
+    {
+      "id": 666679,
+      "name": "Cameron Johnson",
+      "games": 54,
+      "minutes": 30.5,
+      "pie": 0.075,
+      "estimatedNet": 9.2
+    },
+    {
+      "id": 38017709,
+      "name": "Christian Braun",
+      "games": 44,
+      "minutes": 31.8,
+      "pie": 0.076,
+      "estimatedNet": 9.3
+    },
+    {
+      "id": 335,
+      "name": "Jamal Murray",
+      "games": 75,
+      "minutes": 35.4,
+      "pie": 0.142,
+      "estimatedNet": 5.6
+    },
+    {
+      "id": 455,
+      "name": "Jonas Valanciunas",
+      "games": 65,
+      "minutes": 13.4,
+      "pie": 0.15,
+      "estimatedNet": -2.9
+    },
+    {
+      "id": 246,
+      "name": "Nikola Jokic",
+      "games": 65,
+      "minutes": 34.8,
+      "pie": 0.213,
+      "estimatedNet": 10.3
+    },
+    {
+      "id": 38017721,
+      "name": "Peyton Watson",
+      "games": 54,
+      "minutes": 29.6,
+      "pie": 0.087,
+      "estimatedNet": 6.2
+    },
+    {
+      "id": 1028255289,
+      "name": "Spencer Jones",
+      "games": 64,
+      "minutes": 22.1,
+      "pie": 0.045,
+      "estimatedNet": 2.2
+    },
+    {
+      "id": 191,
+      "name": "Tim Hardaway Jr.",
+      "games": 80,
+      "minutes": 26.6,
+      "pie": 0.085,
+      "estimatedNet": 4.2
+    },
+    {
+      "id": 1057396966,
+      "name": "Amari Williams",
+      "games": 22,
+      "minutes": 6.6,
+      "pie": 0.079,
+      "estimatedNet": -18.8
+    },
+    {
+      "id": 1057279093,
+      "name": "Asa Newell",
+      "games": 44,
+      "minutes": 11.4,
+      "pie": 0.074,
+      "estimatedNet": -4.8
+    },
+    {
+      "id": 1028028434,
+      "name": "Baylor Scheierman",
+      "games": 77,
+      "minutes": 18.6,
+      "pie": 0.085,
+      "estimatedNet": 5.9
+    },
+    {
+      "id": 1057389625,
+      "name": "Chaz Lanier",
+      "games": 34,
+      "minutes": 7.7,
+      "pie": 0.045,
+      "estimatedNet": -0.9
+    },
+    {
+      "id": 1028240128,
+      "name": "Daniss Jenkins",
+      "games": 72,
+      "minutes": 20.2,
+      "pie": 0.1,
+      "estimatedNet": 5.4
+    },
+    {
+      "id": 56677830,
+      "name": "GG Jackson",
+      "games": 55,
+      "minutes": 21.4,
+      "pie": 0.108,
+      "estimatedNet": -3.4
+    },
+    {
+      "id": 1057277425,
+      "name": "Hugo González",
+      "games": 74,
+      "minutes": 14.6,
+      "pie": 0.067,
+      "estimatedNet": 11.4
+    },
+    {
+      "id": 1028257937,
+      "name": "Jahmir Young",
+      "games": 14,
+      "minutes": 4.2,
+      "pie": 0.048,
+      "estimatedNet": -0.8
+    },
+    {
+      "id": 56677839,
+      "name": "Jett Howard",
+      "games": 55,
+      "minutes": 12.6,
+      "pie": 0.07,
+      "estimatedNet": -6.9
+    },
+    {
+      "id": 56677864,
+      "name": "Jordan Walsh",
+      "games": 68,
+      "minutes": 17.8,
+      "pie": 0.08,
+      "estimatedNet": 5.8
+    },
+    {
+      "id": 17896097,
+      "name": "Jose Alvarado",
+      "games": 69,
+      "minutes": 19.9,
+      "pie": 0.088,
+      "estimatedNet": 2.4
+    },
+    {
+      "id": 202,
+      "name": "Josh Hart",
+      "games": 66,
+      "minutes": 30.2,
+      "pie": 0.118,
+      "estimatedNet": 5.1
+    },
+    {
+      "id": 1028125584,
+      "name": "Keshad Johnson",
+      "games": 32,
+      "minutes": 8.7,
+      "pie": 0.083,
+      "estimatedNet": 13.5
+    },
+    {
+      "id": 1028243921,
+      "name": "N'Faly Dante",
+      "games": 4,
+      "minutes": 3.9,
+      "pie": 0.116,
+      "estimatedNet": 21.1
+    },
+    {
+      "id": 1028244692,
+      "name": "PJ Hall",
+      "games": 19,
+      "minutes": 11.2,
+      "pie": 0.098,
+      "estimatedNet": -5.9
+    },
+    {
+      "id": 4197387,
+      "name": "Vit Krejci",
+      "games": 65,
+      "minutes": 21.4,
+      "pie": 0.068,
+      "estimatedNet": -2
+    },
+    {
+      "id": 1028046517,
+      "name": "Bronny James",
+      "games": 42,
+      "minutes": 8.9,
+      "pie": 0.058,
+      "estimatedNet": -4.6
+    },
+    {
+      "id": 38017710,
+      "name": "Christian Koloko",
+      "games": 27,
+      "minutes": 13.2,
+      "pie": 0.046,
+      "estimatedNet": -1.6
+    },
+    {
+      "id": 1028026974,
+      "name": "Dalton Knecht",
+      "games": 54,
+      "minutes": 10.2,
+      "pie": 0.069,
+      "estimatedNet": -5.7
+    },
+    {
+      "id": 406,
+      "name": "Domantas Sabonis",
+      "games": 19,
+      "minutes": 29.7,
+      "pie": 0.131,
+      "estimatedNet": -14.4
+    },
+    {
+      "id": 56783340,
+      "name": "Duop Reath",
+      "games": 32,
+      "minutes": 8.1,
+      "pie": 0.067,
+      "estimatedNet": -8.2
+    },
+    {
+      "id": 1028205331,
+      "name": "Isaac Jones",
+      "games": 7,
+      "minutes": 5.1,
+      "pie": 0.036,
+      "estimatedNet": -39.1
+    },
+    {
+      "id": 1057271099,
+      "name": "Joan Beringer",
+      "games": 40,
+      "minutes": 7.9,
+      "pie": 0.107,
+      "estimatedNet": 4.7
+    },
+    {
+      "id": 226,
+      "name": "Joe Ingles",
+      "games": 27,
+      "minutes": 5.7,
+      "pie": 0.096,
+      "estimatedNet": -2.8
+    },
+    {
+      "id": 38017630,
+      "name": "Johnny Juzang",
+      "games": 21,
+      "minutes": 4.2,
+      "pie": 0.085,
+      "estimatedNet": -0.8
+    },
+    {
+      "id": 18678058,
+      "name": "Jordan Goodwin",
+      "games": 70,
+      "minutes": 22.5,
+      "pie": 0.098,
+      "estimatedNet": 3.4
+    },
+    {
+      "id": 1057268513,
+      "name": "Khaman Maluach",
+      "games": 46,
+      "minutes": 8.9,
+      "pie": 0.098,
+      "estimatedNet": 2.6
+    },
+    {
+      "id": 56677782,
+      "name": "Leonard Miller",
+      "games": 46,
+      "minutes": 15.6,
+      "pie": 0.104,
+      "estimatedNet": -1.4
+    },
+    {
+      "id": 17553992,
+      "name": "Moses Moody",
+      "games": 60,
+      "minutes": 25.7,
+      "pie": 0.083,
+      "estimatedNet": 1.8
+    },
+    {
+      "id": 795959473,
+      "name": "Pat Spencer",
+      "games": 66,
+      "minutes": 18.6,
+      "pie": 0.087,
+      "estimatedNet": -3.4
+    },
+    {
+      "id": 1057383369,
+      "name": "Rasheer Fleming",
+      "games": 55,
+      "minutes": 12.2,
+      "pie": 0.056,
+      "estimatedNet": 7.1
+    },
+    {
+      "id": 56677829,
+      "name": "Rayan Rupert",
+      "games": 64,
+      "minutes": 16.8,
+      "pie": 0.055,
+      "estimatedNet": -14.4
+    },
+    {
+      "id": 1028025639,
+      "name": "Rob Dillingham",
+      "games": 65,
+      "minutes": 14.9,
+      "pie": 0.06,
+      "estimatedNet": -6.9
+    },
+    {
+      "id": 56677799,
+      "name": "Trayce Jackson-Davis",
+      "games": 53,
+      "minutes": 9.4,
+      "pie": 0.1,
+      "estimatedNet": -6.4
+    },
+    {
+      "id": 38017724,
+      "name": "Caleb Houstan",
+      "games": 18,
+      "minutes": 4.2,
+      "pie": 0.103,
+      "estimatedNet": 1.5
+    },
+    {
+      "id": 56677795,
+      "name": "Jacob Toppin",
+      "games": 5,
+      "minutes": 3.4,
+      "pie": 0.181,
+      "estimatedNet": 42.4
+    },
+    {
+      "id": 3547240,
+      "name": "James Wiseman",
+      "games": 4,
+      "minutes": 14.6,
+      "pie": 0.01,
+      "estimatedNet": -8.8
+    },
+    {
+      "id": 1057279571,
+      "name": "Jase Richardson",
+      "games": 54,
+      "minutes": 10.9,
+      "pie": 0.074,
+      "estimatedNet": -4.4
+    },
+    {
+      "id": 56677857,
+      "name": "Julian Phillips",
+      "games": 48,
+      "minutes": 8.9,
+      "pie": 0.046,
+      "estimatedNet": -2
+    },
+    {
+      "id": 371,
+      "name": "Mason Plumlee",
+      "games": 20,
+      "minutes": 8.6,
+      "pie": 0.084,
+      "estimatedNet": -6
+    },
+    {
+      "id": 1028274126,
+      "name": "RayJ Dennis",
+      "games": 17,
+      "minutes": 12.1,
+      "pie": 0.051,
+      "estimatedNet": -16.2
+    },
+    {
+      "id": 1028026514,
+      "name": "DaRon Holmes II",
+      "games": 25,
+      "minutes": 8.4,
+      "pie": 0.095,
+      "estimatedNet": -4.8
+    },
+    {
+      "id": 17896071,
+      "name": "Isaiah Livers",
+      "games": 36,
+      "minutes": 9.6,
+      "pie": 0.05,
+      "estimatedNet": 2.8
+    },
+    {
+      "id": 56677582,
+      "name": "Jalen Pickett",
+      "games": 50,
+      "minutes": 16.1,
+      "pie": 0.084,
+      "estimatedNet": -0.5
+    },
+    {
+      "id": 56677776,
+      "name": "Julian Strawther",
+      "games": 57,
+      "minutes": 15.1,
+      "pie": 0.082,
+      "estimatedNet": -0.3
+    },
+    {
+      "id": 3547268,
+      "name": "Zeke Nnaji",
+      "games": 52,
+      "minutes": 12,
+      "pie": 0.07,
+      "estimatedNet": -7.1
+    },
+    {
+      "id": 1057268940,
+      "name": "Collin Murray-Boyles",
+      "games": 57,
+      "minutes": 21.9,
+      "pie": 0.098,
+      "estimatedNet": 2.5
+    },
+    {
+      "id": 666656,
+      "name": "De'Andre Hunter",
+      "games": 45,
+      "minutes": 26.1,
+      "pie": 0.077,
+      "estimatedNet": -1.6
+    },
+    {
+      "id": 1057278805,
+      "name": "Liam McNeeley",
+      "games": 31,
+      "minutes": 11.9,
+      "pie": 0.079,
+      "estimatedNet": -1.3
+    },
+    {
+      "id": 1057848654,
+      "name": "Mark Sears",
+      "games": 7,
+      "minutes": 3.7,
+      "pie": 0.078,
+      "estimatedNet": 30.6
+    },
+    {
+      "id": 1057847026,
+      "name": "Miles Kelly",
+      "games": 14,
+      "minutes": 9.6,
+      "pie": 0.064,
+      "estimatedNet": -5.3
+    },
+    {
+      "id": 105,
+      "name": "Pat Connaughton",
+      "games": 42,
+      "minutes": 7.1,
+      "pie": 0.117,
+      "estimatedNet": -6.2
+    },
+    {
+      "id": 44477085,
+      "name": "Quenton Jackson",
+      "games": 49,
+      "minutes": 18.3,
+      "pie": 0.096,
+      "estimatedNet": -3.2
+    },
+    {
+      "id": 53,
+      "name": "Bogdan Bogdanovic",
+      "games": 23,
+      "minutes": 19.7,
+      "pie": 0.069,
+      "estimatedNet": -3.5
+    },
+    {
+      "id": 1057847504,
+      "name": "Chris Mañon",
+      "games": 9,
+      "minutes": 5.1,
+      "pie": 0.086,
+      "estimatedNet": 3.5
+    },
+    {
+      "id": 1028025242,
+      "name": "Devin Carter",
+      "games": 38,
+      "minutes": 18.4,
+      "pie": 0.094,
+      "estimatedNet": -7.6
+    },
+    {
+      "id": 213,
+      "name": "Aaron Holiday",
+      "games": 57,
+      "minutes": 13.7,
+      "pie": 0.063,
+      "estimatedNet": 8.4
+    },
+    {
+      "id": 1028036878,
+      "name": "Bobi Klintman",
+      "games": 12,
+      "minutes": 5.9,
+      "pie": 0.039,
+      "estimatedNet": 2.8
+    },
+    {
+      "id": 38017708,
+      "name": "Bryce McGowens",
+      "games": 42,
+      "minutes": 21,
+      "pie": 0.067,
+      "estimatedNet": -3.7
+    },
+    {
+      "id": 1057847330,
+      "name": "Caleb Love",
+      "games": 49,
+      "minutes": 20.7,
+      "pie": 0.079,
+      "estimatedNet": -6.6
+    },
+    {
+      "id": 56677845,
+      "name": "Colby Jones",
+      "games": 1,
+      "minutes": 6.8,
+      "pie": 0.256,
+      "estimatedNet": 87.4
+    },
+    {
+      "id": 250,
+      "name": "DeAndre Jordan",
+      "games": 12,
+      "minutes": 16.6,
+      "pie": 0.119,
+      "estimatedNet": -0.2
+    },
+    {
+      "id": 38017663,
+      "name": "E.J. Liddell",
+      "games": 26,
+      "minutes": 13.4,
+      "pie": 0.087,
+      "estimatedNet": -6.6
+    },
+    {
+      "id": 178,
+      "name": "Eric Gordon",
+      "games": 6,
+      "minutes": 12.3,
+      "pie": 0.083,
+      "estimatedNet": -16.5
+    },
+    {
+      "id": 1057848561,
+      "name": "Hunter Sallis",
+      "games": 7,
+      "minutes": 3.7,
+      "pie": 0.024,
+      "estimatedNet": -26.3
+    },
+    {
+      "id": 56677871,
+      "name": "Hunter Tyson",
+      "games": 21,
+      "minutes": 7.7,
+      "pie": 0.065,
+      "estimatedNet": -6.3
+    },
+    {
+      "id": 38017707,
+      "name": "JD Davison",
+      "games": 28,
+      "minutes": 7.8,
+      "pie": 0.09,
+      "estimatedNet": 3.8
+    },
+    {
+      "id": 1028029111,
+      "name": "Ja'Kobe Walter",
+      "games": 72,
+      "minutes": 20.5,
+      "pie": 0.069,
+      "estimatedNet": 1.2
+    },
+    {
+      "id": 3547301,
+      "name": "Jae'Sean Tate",
+      "games": 46,
+      "minutes": 8.8,
+      "pie": 0.067,
+      "estimatedNet": -0.4
+    },
+    {
+      "id": 188,
+      "name": "Jeff Green",
+      "games": 30,
+      "minutes": 5.8,
+      "pie": 0.061,
+      "estimatedNet": -7.8
+    },
+    {
+      "id": 1028245777,
+      "name": "Karlo Matkovic",
+      "games": 62,
+      "minutes": 14.7,
+      "pie": 0.108,
+      "estimatedNet": -2.1
+    },
+    {
+      "id": 1028267470,
+      "name": "Luke Travers",
+      "games": 12,
+      "minutes": 8.6,
+      "pie": 0.071,
+      "estimatedNet": -9.7
+    },
+    {
+      "id": 1057390538,
+      "name": "Micah Peavy",
+      "games": 61,
+      "minutes": 15,
+      "pie": 0.044,
+      "estimatedNet": -4.6
+    },
+    {
+      "id": 56677846,
+      "name": "Nick Smith Jr.",
+      "games": 30,
+      "minutes": 12.5,
+      "pie": 0.067,
+      "estimatedNet": -0.4
+    },
+    {
+      "id": 1057385481,
+      "name": "Noah Penda",
+      "games": 59,
+      "minutes": 12.8,
+      "pie": 0.076,
+      "estimatedNet": -5.3
+    },
+    {
+      "id": 38017717,
+      "name": "Ron Harper Jr.",
+      "games": 29,
+      "minutes": 10.9,
+      "pie": 0.086,
+      "estimatedNet": 2.4
+    },
+    {
+      "id": 56677817,
+      "name": "Sidy Cissoko",
+      "games": 75,
+      "minutes": 19.1,
+      "pie": 0.036,
+      "estimatedNet": -2.1
+    },
+    {
+      "id": 74,
+      "name": "Thomas Bryant",
+      "games": 60,
+      "minutes": 12.2,
+      "pie": 0.115,
+      "estimatedNet": 2.5
+    },
+    {
+      "id": 1028267166,
+      "name": "Tolu Smith",
+      "games": 15,
+      "minutes": 9.2,
+      "pie": 0.117,
+      "estimatedNet": -2.6
+    },
+    {
+      "id": 1043947937,
+      "name": "Tyson Etienne",
+      "games": 24,
+      "minutes": 15.8,
+      "pie": 0.071,
+      "estimatedNet": -11.2
+    },
+    {
+      "id": 1057391756,
+      "name": "Jamir Watkins",
+      "games": 50,
+      "minutes": 20.6,
+      "pie": 0.069,
+      "estimatedNet": -7.1
+    },
+    {
+      "id": 1057393207,
+      "name": "Mohamed Diawara",
+      "games": 69,
+      "minutes": 9.2,
+      "pie": 0.076,
+      "estimatedNet": 5.6
+    },
+    {
+      "id": 1057846109,
+      "name": "Myron Gardner",
+      "games": 45,
+      "minutes": 9.1,
+      "pie": 0.093,
+      "estimatedNet": 8.7
+    },
+    {
+      "id": 17896058,
+      "name": "Trendon Watford",
+      "games": 53,
+      "minutes": 16.3,
+      "pie": 0.093,
+      "estimatedNet": -7.2
+    },
+    {
+      "id": 1057849029,
+      "name": "Jahmyl Telfort",
+      "games": 8,
+      "minutes": 4,
+      "pie": -0.064,
+      "estimatedNet": -2.1
+    },
+    {
+      "id": 1028264794,
+      "name": "Elijah Harkless",
+      "games": 26,
+      "minutes": 21,
+      "pie": 0.055,
+      "estimatedNet": -1.9
+    },
+    {
+      "id": 17554005,
+      "name": "Mac McClung",
+      "games": 11,
+      "minutes": 12.3,
+      "pie": 0.047,
+      "estimatedNet": -13.2
+    },
+    {
+      "id": 56677844,
+      "name": "Bilal Coulibaly",
+      "games": 56,
+      "minutes": 26.2,
+      "pie": 0.082,
+      "estimatedNet": -12.8
+    },
+    {
+      "id": 3547272,
+      "name": "Isaiah Joe",
+      "games": 71,
+      "minutes": 21.2,
+      "pie": 0.099,
+      "estimatedNet": 10.6
+    },
+    {
+      "id": 39398582,
+      "name": "Orlando Robinson",
+      "games": 4,
+      "minutes": 6.2,
+      "pie": 0.074,
+      "estimatedNet": -33.1
+    },
+    {
+      "id": 399,
+      "name": "Mitchell Robinson",
+      "games": 60,
+      "minutes": 19.6,
+      "pie": 0.124,
+      "estimatedNet": 8.7
+    },
+    {
+      "id": 12,
+      "name": "Kyle Anderson",
+      "games": 43,
+      "minutes": 19.8,
+      "pie": 0.095,
+      "estimatedNet": -4.2
+    },
+    {
+      "id": 476,
+      "name": "Robert Williams III",
+      "games": 59,
+      "minutes": 17.1,
+      "pie": 0.163,
+      "estimatedNet": 2.6
+    },
+    {
+      "id": 38017731,
+      "name": "Vince Williams Jr.",
+      "games": 40,
+      "minutes": 20.5,
+      "pie": 0.085,
+      "estimatedNet": 1
+    },
+    {
+      "id": 17896021,
+      "name": "Jeremiah Robinson-Earl",
+      "games": 22,
+      "minutes": 16.4,
+      "pie": 0.069,
+      "estimatedNet": -10.7
+    },
+    {
+      "id": 666577,
+      "name": "Daniel Gafford",
+      "games": 55,
+      "minutes": 21.7,
+      "pie": 0.114,
+      "estimatedNet": -6.8
+    },
+    {
+      "id": 282,
+      "name": "Kevon Looney",
+      "games": 21,
+      "minutes": 14.6,
+      "pie": 0.093,
+      "estimatedNet": -8.8
+    },
+    {
+      "id": 87,
+      "name": "Jevon Carter",
+      "games": 53,
+      "minutes": 16.4,
+      "pie": 0.074,
+      "estimatedNet": -6.5
+    },
+    {
+      "id": 1057382509,
+      "name": "Johni Broome",
+      "games": 11,
+      "minutes": 5,
+      "pie": -0.02,
+      "estimatedNet": -19.2
+    },
+    {
+      "id": 1028038474,
+      "name": "K.J. Simpson",
+      "games": 20,
+      "minutes": 12.9,
+      "pie": 0.065,
+      "estimatedNet": -4.4
+    },
+    {
+      "id": 285,
+      "name": "Kevin Love",
+      "games": 37,
+      "minutes": 16.6,
+      "pie": 0.103,
+      "estimatedNet": -6
+    },
+    {
+      "id": 1057387526,
+      "name": "Koby Brea",
+      "games": 12,
+      "minutes": 7,
+      "pie": 0.101,
+      "estimatedNet": -6.3
+    },
+    {
+      "id": 286,
+      "name": "Kyle Lowry",
+      "games": 14,
+      "minutes": 8.4,
+      "pie": 0.013,
+      "estimatedNet": -14.4
+    },
+    {
+      "id": 1028025498,
+      "name": "Pacome Dadiet",
+      "games": 29,
+      "minutes": 4.7,
+      "pie": 0.085,
+      "estimatedNet": -0.9
+    },
+    {
+      "id": 17895854,
+      "name": "Charles Bassey",
+      "games": 13,
+      "minutes": 11.7,
+      "pie": 0.136,
+      "estimatedNet": -10.7
+    },
+    {
+      "id": 1057280779,
+      "name": "Danny Wolf",
+      "games": 57,
+      "minutes": 20.8,
+      "pie": 0.096,
+      "estimatedNet": -9.6
+    },
+    {
+      "id": 38017692,
+      "name": "Malaki Branham",
+      "games": 28,
+      "minutes": 9.8,
+      "pie": 0.099,
+      "estimatedNet": -5.4
+    },
+    {
+      "id": 1028027372,
+      "name": "Jared McCain",
+      "games": 67,
+      "minutes": 17.3,
+      "pie": 0.079,
+      "estimatedNet": 4.8
+    },
+    {
+      "id": 666748,
+      "name": "Cody Martin",
+      "games": 4,
+      "minutes": 13.8,
+      "pie": 0.045,
+      "estimatedNet": -20.5
+    },
+    {
+      "id": 666581,
+      "name": "Darius Garland",
+      "games": 45,
+      "minutes": 29.9,
+      "pie": 0.112,
+      "estimatedNet": 3.7
+    },
+    {
+      "id": 1042560902,
+      "name": "Nae'Qwan Tomlin",
+      "games": 64,
+      "minutes": 15.7,
+      "pie": 0.069,
+      "estimatedNet": 4.7
+    },
+    {
+      "id": 38017699,
+      "name": "Jeremy Sochan",
+      "games": 44,
+      "minutes": 10.6,
+      "pie": 0.081,
+      "estimatedNet": -2.5
+    },
+    {
+      "id": 358,
+      "name": "Kelly Olynyk",
+      "games": 42,
+      "minutes": 8.6,
+      "pie": 0.096,
+      "estimatedNet": -6.8
+    },
+    {
+      "id": 27924547,
+      "name": "Lindy Waters III",
+      "games": 40,
+      "minutes": 7.1,
+      "pie": 0.052,
+      "estimatedNet": -3
+    },
+    {
+      "id": 3547249,
+      "name": "Precious Achiuwa",
+      "games": 73,
+      "minutes": 23.9,
+      "pie": 0.102,
+      "estimatedNet": -6
+    },
+    {
+      "id": 17895966,
+      "name": "Jalen Green",
+      "games": 32,
+      "minutes": 25.9,
+      "pie": 0.106,
+      "estimatedNet": -0.2
+    },
+    {
+      "id": 1028025362,
+      "name": "Isaiah Collier",
+      "games": 59,
+      "minutes": 25.7,
+      "pie": 0.102,
+      "estimatedNet": -13.4
+    },
+    {
+      "id": 161,
+      "name": "De'Aaron Fox",
+      "games": 72,
+      "minutes": 31,
+      "pie": 0.117,
+      "estimatedNet": 9.3
+    },
+    {
+      "id": 257,
+      "name": "Maxi Kleber",
+      "games": 43,
+      "minutes": 10.7,
+      "pie": 0.038,
+      "estimatedNet": 5.8
+    },
+    {
+      "id": 330,
+      "name": "Monte Morris",
+      "games": 6,
+      "minutes": 10.8,
+      "pie": 0.076,
+      "estimatedNet": -15.8
+    },
+    {
+      "id": 304,
+      "name": "T.J. McConnell",
+      "games": 56,
+      "minutes": 17.2,
+      "pie": 0.15,
+      "estimatedNet": -6.5
+    },
+    {
+      "id": 64270026,
+      "name": "Pete Nance",
+      "games": 47,
+      "minutes": 15.7,
+      "pie": 0.078,
+      "estimatedNet": -5.7
+    },
+    {
+      "id": 38017700,
+      "name": "Wendell Moore Jr.",
+      "games": 6,
+      "minutes": 9.9,
+      "pie": 0.063,
+      "estimatedNet": 34.8
+    },
+    {
+      "id": 1028246478,
+      "name": "Daeqwon Plowden",
+      "games": 32,
+      "minutes": 26.4,
+      "pie": 0.057,
+      "estimatedNet": -10.5
+    },
+    {
+      "id": 305,
+      "name": "Doug McDermott",
+      "games": 29,
+      "minutes": 15.1,
+      "pie": 0.055,
+      "estimatedNet": -10.3
+    },
+    {
+      "id": 56677856,
+      "name": "Jordan Miller",
+      "games": 60,
+      "minutes": 22.1,
+      "pie": 0.106,
+      "estimatedNet": 2
+    },
+    {
+      "id": 436,
+      "name": "Garrett Temple",
+      "games": 22,
+      "minutes": 3.3,
+      "pie": 0.051,
+      "estimatedNet": 3.1
+    },
+    {
+      "id": 1028038100,
+      "name": "Antonio Reeves",
+      "games": 10,
+      "minutes": 6.8,
+      "pie": 0.099,
+      "estimatedNet": 13.7
+    },
+    {
+      "id": 38017734,
+      "name": "Jamal Cain",
+      "games": 40,
+      "minutes": 12.1,
+      "pie": 0.081,
+      "estimatedNet": 2.3
+    },
+    {
+      "id": 1057386376,
+      "name": "Adou Thiero",
+      "games": 25,
+      "minutes": 6,
+      "pie": 0.054,
+      "estimatedNet": -11.4
+    },
+    {
+      "id": 1028025754,
+      "name": "Zach Edey",
+      "games": 11,
+      "minutes": 25.8,
+      "pie": 0.157,
+      "estimatedNet": 15.8
+    },
+    {
+      "id": 666956,
+      "name": "Coby White",
+      "games": 50,
+      "minutes": 25,
+      "pie": 0.112,
+      "estimatedNet": 4.4
+    },
+    {
+      "id": 64270311,
+      "name": "Drew Peterson",
+      "games": 6,
+      "minutes": 10.7,
+      "pie": 0,
+      "estimatedNet": -8.7
+    },
+    {
+      "id": 172,
+      "name": "Paul George",
+      "games": 37,
+      "minutes": 30.7,
+      "pie": 0.117,
+      "estimatedNet": 4.4
+    },
+    {
+      "id": 44477062,
+      "name": "Jamaree Bouyea",
+      "games": 46,
+      "minutes": 14,
+      "pie": 0.103,
+      "estimatedNet": 0.2
+    },
+    {
+      "id": 237,
+      "name": "LeBron James",
+      "games": 60,
+      "minutes": 33.2,
+      "pie": 0.154,
+      "estimatedNet": 3.8
+    },
+    {
+      "id": 1058091815,
+      "name": "Javonte Cooke",
+      "games": 19,
+      "minutes": 4.9,
+      "pie": 0.019,
+      "estimatedNet": -28.1
+    },
+    {
+      "id": 1057394959,
+      "name": "Jahmai Mashack",
+      "games": 31,
+      "minutes": 21.7,
+      "pie": 0.041,
+      "estimatedNet": -13
+    },
+    {
+      "id": 38017688,
+      "name": "Keegan Murray",
+      "games": 23,
+      "minutes": 34.5,
+      "pie": 0.078,
+      "estimatedNet": -8.8
+    },
+    {
+      "id": 666754,
+      "name": "Garrison Mathews",
+      "games": 15,
+      "minutes": 13.1,
+      "pie": 0.072,
+      "estimatedNet": -1.2
+    },
+    {
+      "id": 38017682,
+      "name": "Jaden Ivey",
+      "games": 37,
+      "minutes": 18.1,
+      "pie": 0.091,
+      "estimatedNet": 1.3
+    },
+    {
+      "id": 1057272081,
+      "name": "Noa Essengue",
+      "games": 2,
+      "minutes": 3,
+      "pie": -0.095,
+      "estimatedNet": -104.7
+    },
+    {
+      "id": 56677854,
+      "name": "Chris Livingston",
+      "games": 3,
+      "minutes": 5.8,
+      "pie": 0.104,
+      "estimatedNet": 19.4
+    },
+    {
+      "id": 64268165,
+      "name": "Tosan Evbuomwan",
+      "games": 5,
+      "minutes": 1.5,
+      "pie": -0.043,
+      "estimatedNet": -41.9
+    },
+    {
+      "id": 666633,
+      "name": "Tyler Herro",
+      "games": 33,
+      "minutes": 31.3,
+      "pie": 0.122,
+      "estimatedNet": -0.6
+    },
+    {
+      "id": 1028203948,
+      "name": "Isaiah Crawford",
+      "games": 14,
+      "minutes": 6.6,
+      "pie": 0.087,
+      "estimatedNet": -8.2
+    },
+    {
+      "id": 1046672580,
+      "name": "Drew Timme",
+      "games": 27,
+      "minutes": 8.7,
+      "pie": 0.084,
+      "estimatedNet": -3.9
+    },
+    {
+      "id": 480,
+      "name": "Kenrich Williams",
+      "games": 56,
+      "minutes": 15.3,
+      "pie": 0.098,
+      "estimatedNet": 3.2
+    },
+    {
+      "id": 38017703,
+      "name": "Jalen Williams",
+      "games": 33,
+      "minutes": 28.4,
+      "pie": 0.135,
+      "estimatedNet": 12.6
+    },
+    {
+      "id": 1057846921,
+      "name": "Curtis Jones",
+      "games": 10,
+      "minutes": 8.8,
+      "pie": 0.075,
+      "estimatedNet": 14.5
+    },
+    {
+      "id": 1028245974,
+      "name": "Emanuel Miller",
+      "games": 5,
+      "minutes": 6.6,
+      "pie": 0.093,
+      "estimatedNet": -32.4
+    },
+    {
+      "id": 1057395493,
+      "name": "Lachlan Olbrich",
+      "games": 37,
+      "minutes": 9.3,
+      "pie": 0.074,
+      "estimatedNet": 1.2
+    },
+    {
+      "id": 1057846535,
+      "name": "Chucky Hepburn",
+      "games": 2,
+      "minutes": 6.6,
+      "pie": -0.1,
+      "estimatedNet": -61.4
+    },
+    {
+      "id": 1028203085,
+      "name": "Trey Alexander",
+      "games": 9,
+      "minutes": 12.3,
+      "pie": 0.078,
+      "estimatedNet": -9.9
+    },
+    {
+      "id": 17896117,
+      "name": "Ethan Thompson",
+      "games": 32,
+      "minutes": 20.4,
+      "pie": 0.051,
+      "estimatedNet": -0.1
+    },
+    {
+      "id": 1057272939,
+      "name": "Kasparas Jakučionis",
+      "games": 53,
+      "minutes": 17.8,
+      "pie": 0.073,
+      "estimatedNet": 3.3
+    },
+    {
+      "id": 114,
+      "name": "Seth Curry",
+      "games": 10,
+      "minutes": 13.3,
+      "pie": 0.093,
+      "estimatedNet": -5.6
+    },
+    {
+      "id": 1028254340,
+      "name": "Trentyn Flowers",
+      "games": 2,
+      "minutes": 2.8,
+      "pie": 0.128,
+      "estimatedNet": -29.5
+    },
+    {
+      "id": 313,
+      "name": "De'Anthony Melton",
+      "games": 49,
+      "minutes": 23,
+      "pie": 0.09,
+      "estimatedNet": 3.3
+    },
+    {
+      "id": 102,
+      "name": "Zach Collins",
+      "games": 10,
+      "minutes": 18.4,
+      "pie": 0.123,
+      "estimatedNet": 5.9
+    },
+    {
+      "id": 56677792,
+      "name": "Marcus Sasser",
+      "games": 38,
+      "minutes": 12,
+      "pie": 0.078,
+      "estimatedNet": 11.1
+    },
+    {
+      "id": 17554004,
+      "name": "AJ Lawson",
+      "games": 24,
+      "minutes": 9.4,
+      "pie": 0.091,
+      "estimatedNet": -0.8
+    },
+    {
+      "id": 1057389862,
+      "name": "Alijah Martin",
+      "games": 23,
+      "minutes": 6.3,
+      "pie": 0.062,
+      "estimatedNet": -7.9
+    },
+    {
+      "id": 1028047255,
+      "name": "Kevin McCullar Jr.",
+      "games": 21,
+      "minutes": 7.4,
+      "pie": 0.062,
+      "estimatedNet": -8
+    },
+    {
+      "id": 3547258,
+      "name": "Josh Green",
+      "games": 58,
+      "minutes": 15.7,
+      "pie": 0.059,
+      "estimatedNet": 10
+    },
+    {
+      "id": 666505,
+      "name": "Brandon Clarke",
+      "games": 2,
+      "minutes": 10.2,
+      "pie": 0.023,
+      "estimatedNet": -23.9
+    },
+    {
+      "id": 1057846206,
+      "name": "Vladislav Goldin",
+      "games": 9,
+      "minutes": 2.7,
+      "pie": 0.105,
+      "estimatedNet": -0.4
+    },
+    {
+      "id": 1057389374,
+      "name": "Kam Jones",
+      "games": 37,
+      "minutes": 16.7,
+      "pie": 0.061,
+      "estimatedNet": -9.9
+    },
+    {
+      "id": 158,
+      "name": "Dorian Finney-Smith",
+      "games": 37,
+      "minutes": 16.8,
+      "pie": 0.034,
+      "estimatedNet": 1.2
+    },
+    {
+      "id": 19465584,
+      "name": "Micah Potter",
+      "games": 47,
+      "minutes": 19.3,
+      "pie": 0.114,
+      "estimatedNet": -4.9
+    },
+    {
+      "id": 28,
+      "name": "Mo Bamba",
+      "games": 4,
+      "minutes": 11,
+      "pie": 0.091,
+      "estimatedNet": -7.6
+    },
+    {
+      "id": 56677778,
+      "name": "Oscar Tshiebwe",
+      "games": 27,
+      "minutes": 16.6,
+      "pie": 0.125,
+      "estimatedNet": -9.9
+    },
+    {
+      "id": 666965,
+      "name": "Grant Williams",
+      "games": 36,
+      "minutes": 19.8,
+      "pie": 0.089,
+      "estimatedNet": 9.9
+    },
+    {
+      "id": 462,
+      "name": "Moritz Wagner",
+      "games": 36,
+      "minutes": 11.8,
+      "pie": 0.106,
+      "estimatedNet": -10.9
+    },
+    {
+      "id": 56677838,
+      "name": "Kobe Bufkin",
+      "games": 16,
+      "minutes": 7.5,
+      "pie": 0.038,
+      "estimatedNet": -26
+    },
+    {
+      "id": 38017691,
+      "name": "TyTy Washington Jr.",
+      "games": 16,
+      "minutes": 5.5,
+      "pie": 0.082,
+      "estimatedNet": -21.8
+    },
+    {
+      "id": 1057968644,
+      "name": "LJ Cryer",
+      "games": 18,
+      "minutes": 16.2,
+      "pie": 0.07,
+      "estimatedNet": 1.7
+    },
+    {
+      "id": 1028265620,
+      "name": "Malevy Leons",
+      "games": 25,
+      "minutes": 11.1,
+      "pie": 0.062,
+      "estimatedNet": -10.2
+    },
+    {
+      "id": 38017704,
+      "name": "Patrick Baldwin Jr.",
+      "games": 9,
+      "minutes": 11.4,
+      "pie": 0.052,
+      "estimatedNet": -12.9
+    },
+    {
+      "id": 266,
+      "name": "Skal Labissiere",
+      "games": 3,
+      "minutes": 12.5,
+      "pie": 0.124,
+      "estimatedNet": 1.6
+    },
+    {
+      "id": 1028026812,
+      "name": "Dillon Jones",
+      "games": 7,
+      "minutes": 5.6,
+      "pie": 0.053,
+      "estimatedNet": 9.4
+    },
+    {
+      "id": 1028242168,
+      "name": "Isaiah Stevens",
+      "games": 3,
+      "minutes": 14.3,
+      "pie": 0.093,
+      "estimatedNet": -8.4
+    },
+    {
+      "id": 666676,
+      "name": "Ty Jerome",
+      "games": 15,
+      "minutes": 22.6,
+      "pie": 0.162,
+      "estimatedNet": -6.3
+    },
+    {
+      "id": 1028265377,
+      "name": "Yuki Kawamura",
+      "games": 18,
+      "minutes": 11.6,
+      "pie": 0.082,
+      "estimatedNet": -4.1
+    },
+    {
+      "id": 1028244219,
+      "name": "Tristan Enaruna",
+      "games": 9,
+      "minutes": 9.5,
+      "pie": 0.105,
+      "estimatedNet": 20.8
+    },
+    {
+      "id": 44477024,
+      "name": "Stanley Umude",
+      "games": 2,
+      "minutes": 3.3,
+      "pie": 0.029,
+      "estimatedNet": -132.3
+    },
+    {
+      "id": 1057396191,
+      "name": "Max Shulga",
+      "games": 11,
+      "minutes": 3.3,
+      "pie": -0.038,
+      "estimatedNet": -8
+    },
+    {
+      "id": 56677747,
+      "name": "Scoot Henderson",
+      "games": 30,
+      "minutes": 24.9,
+      "pie": 0.086,
+      "estimatedNet": 2.5
+    },
+    {
+      "id": 38017656,
+      "name": "Scotty Pippen Jr.",
+      "games": 10,
+      "minutes": 21.2,
+      "pie": 0.086,
+      "estimatedNet": -7.6
+    },
+    {
+      "id": 1057846172,
+      "name": "Keshon Gilbert",
+      "games": 4,
+      "minutes": 18.4,
+      "pie": 0.049,
+      "estimatedNet": -35.3
+    },
+    {
+      "id": 17896094,
+      "name": "Dalano Banton",
+      "games": 6,
+      "minutes": 10.3,
+      "pie": 0.051,
+      "estimatedNet": -4.9
+    },
+    {
+      "id": 1028045812,
+      "name": "Enrique Freeman",
+      "games": 4,
+      "minutes": 9.3,
+      "pie": 0.091,
+      "estimatedNet": 33.1
+    },
+    {
+      "id": 38017676,
+      "name": "MarJon Beauchamp",
+      "games": 14,
+      "minutes": 14,
+      "pie": 0.087,
+      "estimatedNet": -5.1
+    },
+    {
+      "id": 38017718,
+      "name": "Buddy Boeheim",
+      "games": 4,
+      "minutes": 3.8,
+      "pie": 0.028,
+      "estimatedNet": 13.1
+    },
+    {
+      "id": 1059542426,
+      "name": "Kadary Richmond",
+      "games": 3,
+      "minutes": 22.3,
+      "pie": 0.129,
+      "estimatedNet": 6.5
+    },
+    {
+      "id": 1057847334,
+      "name": "Lawson Lovering",
+      "games": 2,
+      "minutes": 24.6,
+      "pie": 0.07,
+      "estimatedNet": -0.8
+    },
+    {
+      "id": 1028028932,
+      "name": "Nikola Topic",
+      "games": 10,
+      "minutes": 16,
+      "pie": 0.063,
+      "estimatedNet": -12.6
+    },
+    {
+      "id": 1028214958,
+      "name": "Blake Hinson",
+      "games": 14,
+      "minutes": 20.4,
+      "pie": 0.101,
+      "estimatedNet": 6.1
+    },
+    {
+      "id": 38017723,
+      "name": "Alondes Williams",
+      "games": 4,
+      "minutes": 25.2,
+      "pie": 0.133,
+      "estimatedNet": 17.8
+    },
+    {
+      "id": 368,
+      "name": "Cameron Payne",
+      "games": 22,
+      "minutes": 17,
+      "pie": 0.096,
+      "estimatedNet": -8.3
+    },
+    {
+      "id": 38017720,
+      "name": "Trevor Keels",
+      "games": 8,
+      "minutes": 1.9,
+      "pie": 0.039,
+      "estimatedNet": 13.4
+    },
+    {
+      "id": 1057397172,
+      "name": "Rocco Zikarsky",
+      "games": 5,
+      "minutes": 7.3,
+      "pie": 0.151,
+      "estimatedNet": 10.6
+    },
+    {
+      "id": 3547241,
+      "name": "Killian Hayes",
+      "games": 23,
+      "minutes": 17.6,
+      "pie": 0.071,
+      "estimatedNet": -3
+    },
+    {
+      "id": 1028268560,
+      "name": "Darius Brown",
+      "games": 1,
+      "minutes": 2.7,
+      "pie": 0,
+      "estimatedNet": -51.1
+    },
+    {
+      "id": 334,
+      "name": "Dejounte Murray",
+      "games": 14,
+      "minutes": 27.8,
+      "pie": 0.138,
+      "estimatedNet": 1.5
+    },
+    {
+      "id": 1057396603,
+      "name": "John Tonje",
+      "games": 6,
+      "minutes": 7,
+      "pie": 0.061,
+      "estimatedNet": -3.7
+    },
+    {
+      "id": 56677866,
+      "name": "Leaky Black",
+      "games": 15,
+      "minutes": 28.9,
+      "pie": 0.051,
+      "estimatedNet": -11.6
+    },
+    {
+      "id": 1059875475,
+      "name": "Grant Nelson",
+      "games": 4,
+      "minutes": 8.8,
+      "pie": 0.1,
+      "estimatedNet": -12.5
+    },
+    {
+      "id": 47738533,
+      "name": "Jeenathan Williams",
+      "games": 14,
+      "minutes": 17.1,
+      "pie": 0.056,
+      "estimatedNet": -11.1
+    },
+    {
+      "id": 1060111739,
+      "name": "Julian Reese",
+      "games": 13,
+      "minutes": 30.9,
+      "pie": 0.092,
+      "estimatedNet": -14.2
+    },
+    {
+      "id": 1057848025,
+      "name": "Norchad Omier",
+      "games": 6,
+      "minutes": 3.9,
+      "pie": 0.16,
+      "estimatedNet": -50.9
+    },
+    {
+      "id": 1057848244,
+      "name": "John Poulakidas",
+      "games": 13,
+      "minutes": 19.5,
+      "pie": 0.069,
+      "estimatedNet": -3.4
+    },
+    {
+      "id": 434,
+      "name": "Jayson Tatum",
+      "games": 16,
+      "minutes": 32.6,
+      "pie": 0.159,
+      "estimatedNet": 9.9
+    },
+    {
+      "id": 38017729,
+      "name": "David Roddy",
+      "games": 5,
+      "minutes": 14.6,
+      "pie": 0.128,
+      "estimatedNet": 4.6
+    },
+    {
+      "id": 3092,
+      "name": "Haywood Highsmith",
+      "games": 7,
+      "minutes": 13,
+      "pie": 0.107,
+      "estimatedNet": 4.6
+    },
+    {
+      "id": 1057846840,
+      "name": "Chaney Johnson",
+      "games": 17,
+      "minutes": 20.4,
+      "pie": 0.099,
+      "estimatedNet": -9.4
+    },
+    {
+      "id": 56677862,
+      "name": "Jalen Slawson",
+      "games": 13,
+      "minutes": 23.9,
+      "pie": 0.09,
+      "estimatedNet": -3.5
+    },
+    {
+      "id": 1077620166,
+      "name": "Andersson Garcia",
+      "games": 5,
+      "minutes": 33.8,
+      "pie": 0.052,
+      "estimatedNet": -10.4
+    },
+    {
+      "id": 1058921044,
+      "name": "Sean Pedulla",
+      "games": 7,
+      "minutes": 4.4,
+      "pie": 0.05,
+      "estimatedNet": -32.8
+    },
+    {
+      "id": 1057845216,
+      "name": "Tyler Burton",
+      "games": 12,
+      "minutes": 25.6,
+      "pie": 0.061,
+      "estimatedNet": -23.9
+    },
+    {
+      "id": 17554002,
+      "name": "DeJon Jarreau",
+      "games": 11,
+      "minutes": 21,
+      "pie": 0.073,
+      "estimatedNet": -24
+    },
+    {
+      "id": 173,
+      "name": "Taj Gibson",
+      "games": 10,
+      "minutes": 9.7,
+      "pie": 0.081,
+      "estimatedNet": -7.8
+    },
+    {
+      "id": 1028038570,
+      "name": "Tyler Smith",
+      "games": 12,
+      "minutes": 13.8,
+      "pie": 0.059,
+      "estimatedNet": -5.2
+    },
+    {
+      "id": 1059992972,
+      "name": "Bez Mbeng",
+      "games": 15,
+      "minutes": 32.8,
+      "pie": 0.06,
+      "estimatedNet": -12.4
+    },
+    {
+      "id": 1059753274,
+      "name": "Malachi Smith",
+      "games": 15,
+      "minutes": 23.9,
+      "pie": 0.102,
+      "estimatedNet": -11.1
+    },
+    {
+      "id": 666908,
+      "name": "Max Strus",
+      "games": 12,
+      "minutes": 24,
+      "pie": 0.088,
+      "estimatedNet": 0.7
+    },
+    {
+      "id": 11891374,
+      "name": "Omer Yurtseven",
+      "games": 9,
+      "minutes": 11.6,
+      "pie": 0.054,
+      "estimatedNet": -4.8
+    },
+    {
+      "id": 1076658911,
+      "name": "Jayson Kent",
+      "games": 5,
+      "minutes": 4.5,
+      "pie": 0.245,
+      "estimatedNet": 3
+    },
+    {
+      "id": 1059635020,
+      "name": "Payton Sandfort",
+      "games": 4,
+      "minutes": 15.8,
+      "pie": 0.066,
+      "estimatedNet": -12.8
+    },
+    {
+      "id": 1028112004,
+      "name": "Zyon Pullin",
+      "games": 5,
+      "minutes": 8.5,
+      "pie": 0.11,
+      "estimatedNet": 15.6
+    },
+    {
+      "id": 1028271147,
+      "name": "Alex Morales",
+      "games": 4,
+      "minutes": 5.9,
+      "pie": -0.006,
+      "estimatedNet": -0.5
+    },
+    {
+      "id": 56677738,
+      "name": "Colin Castleton",
+      "games": 4,
+      "minutes": 5.3,
+      "pie": 0.098,
+      "estimatedNet": -1.9
+    },
+    {
+      "id": 1028266882,
+      "name": "Cormac Ryan",
+      "games": 11,
+      "minutes": 24.6,
+      "pie": 0.104,
+      "estimatedNet": -6.3
+    },
+    {
+      "id": 38017702,
+      "name": "Kennedy Chandler",
+      "games": 11,
+      "minutes": 32.3,
+      "pie": 0.081,
+      "estimatedNet": -7.7
+    },
+    {
+      "id": 1057846700,
+      "name": "CJ Huntley",
+      "games": 4,
+      "minutes": 10.1,
+      "pie": 0.061,
+      "estimatedNet": 12.2
+    },
+    {
+      "id": 165,
+      "name": "Markelle Fultz",
+      "games": 5,
+      "minutes": 7.2,
+      "pie": 0,
+      "estimatedNet": -42
+    },
+    {
+      "id": 666675,
+      "name": "DaQuan Jeffries",
+      "games": 3,
+      "minutes": 20,
+      "pie": 0.078,
+      "estimatedNet": -0.3
+    },
+    {
+      "id": 24572055,
+      "name": "Olivier Sarr",
+      "games": 4,
+      "minutes": 9.8,
+      "pie": 0.088,
+      "estimatedNet": 28.8
+    },
+    {
+      "id": 1060015883,
+      "name": "Adama Bal",
+      "games": 8,
+      "minutes": 30.2,
+      "pie": 0.052,
+      "estimatedNet": -28.8
+    },
+    {
+      "id": 1060010671,
+      "name": "Alex Antetokounmpo",
+      "games": 6,
+      "minutes": 3.4,
+      "pie": 0.196,
+      "estimatedNet": 3.9
+    },
+    {
+      "id": 1080034288,
+      "name": "Lucas Williamson",
+      "games": 7,
+      "minutes": 32,
+      "pie": 0.044,
+      "estimatedNet": -23.1
+    },
+    {
+      "id": 56677841,
+      "name": "Dariq Whitehead",
+      "games": 6,
+      "minutes": 30.5,
+      "pie": 0.062,
+      "estimatedNet": -22
+    },
+    {
+      "id": 1080278663,
+      "name": "Toby Okani",
+      "games": 6,
+      "minutes": 36.2,
+      "pie": 0.013,
+      "estimatedNet": -25.5
+    },
+    {
+      "id": 24102396,
+      "name": "Trevon Scott",
+      "games": 6,
+      "minutes": 30.4,
+      "pie": 0.053,
+      "estimatedNet": -18.3
+    },
+    {
+      "id": 1059059437,
+      "name": "Josh Oduro",
+      "games": 3,
+      "minutes": 27.3,
+      "pie": 0.05,
+      "estimatedNet": -3.4
+    },
+    {
+      "id": 377705601,
+      "name": "Mouhamadou Gueye",
+      "games": 2,
+      "minutes": 22.7,
+      "pie": 0.073,
+      "estimatedNet": -19.5
+    },
+    {
+      "id": 1081266162,
+      "name": "Hayden Gray",
+      "games": 1,
+      "minutes": 24.8,
+      "pie": 0.05,
+      "estimatedNet": -24.6
+    },
+    {
+      "id": 1028047609,
+      "name": "Tristen Newton",
+      "games": 1,
+      "minutes": 12,
+      "pie": 0.149,
+      "estimatedNet": 12.4
+    }
+  ],
+  "teamRosters": [
+    {
+      "team": "ATL",
+      "teamId": 1,
+      "playerIds": [
+        3547244,
+        303,
+        17896040,
+        56677806,
+        1028035632,
+        1603383,
+        210,
+        45088184,
+        17553979,
+        666400,
+        17896045,
+        38017724,
+        1028028244,
+        38017677,
+        1057279093,
+        17895703,
+        60,
+        56783340,
+        1028243921,
+        19465326
+      ]
+    },
+    {
+      "team": "BKN",
+      "teamId": 3,
+      "playerIds": [
+        24102396,
+        17896038,
+        17896027,
+        666508,
+        375,
+        56677871,
+        38017722,
+        56677722,
+        38017620,
+        38017715,
+        1057266813,
+        1057275262,
+        56677843,
+        1057279425,
+        1059875475,
+        1059753274,
+        666743,
+        1057279760,
+        1057280779
+      ]
+    },
+    {
+      "team": "BOS",
+      "teamId": 2,
+      "playerIds": [
+        70,
+        434,
+        17896060,
+        473,
+        56677864,
+        17896056,
+        3547276,
+        1028028434,
+        1057396603,
+        1057277425,
+        17553967,
+        1057396966,
+        38017717,
+        17896094,
+        1057396191,
+        460,
+        58
+      ]
+    },
+    {
+      "team": "CHA",
+      "teamId": 4,
+      "playerIds": [
+        1057263194,
+        3547285,
+        3547239,
+        38017692,
+        3547258,
+        666965,
+        666956,
+        17896036,
+        1028028379,
+        1057278805,
+        38017725,
+        105,
+        62,
+        56677823,
+        1057384156,
+        1057384362
+      ]
+    },
+    {
+      "team": "CHI",
+      "teamId": 5,
+      "playerIds": [
+        1028025639,
+        488,
+        1028025177,
+        1057272081,
+        3547282,
+        3547247,
+        419,
+        56677782,
+        413,
+        102,
+        3547248,
+        3547264,
+        3547274,
+        377705601,
+        17896065,
+        38017682
+      ]
+    },
+    {
+      "team": "CLE",
+      "teamId": 6,
+      "playerIds": [
+        192,
+        1028028993,
+        38017714,
+        666940,
+        56677872,
+        3547299,
+        9,
+        409,
+        340,
+        1057395754,
+        1042560902,
+        666908,
+        322,
+        17896076,
+        74
+      ]
+    },
+    {
+      "team": "DAL",
+      "teamId": 7,
+      "playerIds": [
+        666950,
+        17896021,
+        3547293,
+        24,
+        56677840,
+        24489167,
+        666577,
+        666747,
+        1028026717,
+        228,
+        315,
+        1057262088,
+        38017697,
+        379,
+        1057847894,
+        443
+      ]
+    },
+    {
+      "team": "DEN",
+      "teamId": 8,
+      "playerIds": [
+        38017721,
+        56677776,
+        69,
+        1028255289,
+        246,
+        56677582,
+        3547268,
+        38017709,
+        1028026514,
+        666679,
+        455,
+        249,
+        335,
+        177,
+        191
+      ]
+    },
+    {
+      "team": "DET",
+      "teamId": 9,
+      "playerIds": [
+        277,
+        3547270,
+        38017694,
+        3547267,
+        1028036878,
+        56677826,
+        1028026508,
+        200,
+        407,
+        1028240128,
+        1028267166,
+        1057389625,
+        221,
+        397,
+        17896075,
+        1028205331,
+        56677792,
+        666604
+      ]
+    },
+    {
+      "team": "GSW",
+      "teamId": 10,
+      "playerIds": [
+        219,
+        56677858,
+        185,
+        115,
+        79,
+        378,
+        57875092,
+        313,
+        1028047928,
+        2189,
+        114,
+        17895854,
+        1057395872,
+        11891374,
+        795959473,
+        17553992
+      ]
+    },
+    {
+      "team": "HOU",
+      "teamId": 11,
+      "playerIds": [
+        3,
+        38017695,
+        83,
+        458,
+        140,
+        17896062,
+        356,
+        38017684,
+        56677825,
+        158,
+        1028028519,
+        213,
+        3547301,
+        38017707,
+        188
+      ]
+    },
+    {
+      "team": "IND",
+      "teamId": 12,
+      "playerIds": [
+        666748,
+        56677849,
+        56677832,
+        44477085,
+        3547240,
+        1028255881,
+        3547250,
+        666754,
+        330,
+        17896103,
+        493,
+        38017507,
+        3547243,
+        304,
+        56677861,
+        1028035897,
+        1057389374,
+        19465584,
+        3547245,
+        416
+      ]
+    },
+    {
+      "team": "LAC",
+      "teamId": 13,
+      "playerIds": [
+        666581,
+        33,
+        1057279105,
+        139,
+        37,
+        56677856,
+        101,
+        247,
+        283,
+        38017686,
+        17896035,
+        1028035215,
+        1057396055,
+        53,
+        274
+      ]
+    },
+    {
+      "team": "LAL",
+      "teamId": 14,
+      "playerIds": [
+        38017728,
+        666626,
+        420,
+        22,
+        666609,
+        56677838,
+        254,
+        257,
+        17553995,
+        1028026974,
+        1028046517,
+        56677846,
+        1057386376,
+        237,
+        132,
+        457
+      ]
+    },
+    {
+      "team": "MEM",
+      "teamId": 15,
+      "playerIds": [
+        666786,
+        1080278663,
+        1080034288,
+        56677824,
+        1028025754,
+        1057266649,
+        38017656,
+        38017710,
+        17896067,
+        56677830,
+        178,
+        1028048549,
+        173,
+        666505,
+        666676,
+        1057847334,
+        1057271583,
+        56677859,
+        1028039105,
+        81,
+        344,
+        17554002,
+        1057845216,
+        1060015883
+      ]
+    },
+    {
+      "team": "MIA",
+      "teamId": 16,
+      "playerIds": [
+        38017696,
+        666633,
+        38017739,
+        475,
+        403,
+        4,
+        380,
+        1028029127,
+        56677785,
+        1057272939,
+        1028125584,
+        1028036986,
+        1028257937,
+        1057846109,
+        19465585,
+        17553994
+      ]
+    },
+    {
+      "team": "MIL",
+      "teamId": 17,
+      "playerIds": [
+        196,
+        3089,
+        38017716,
+        38017733,
+        2148,
+        666849,
+        64270026,
+        15,
+        56677852,
+        17896063,
+        377,
+        38017712,
+        383,
+        452,
+        265,
+        17896048
+      ]
+    },
+    {
+      "team": "MIN",
+      "teamId": 18,
+      "playerIds": [
+        1028028501,
+        176,
+        3547259,
+        387,
+        131,
+        56677857,
+        56677851,
+        1057271099,
+        17895983,
+        12,
+        17896031,
+        3547238,
+        667378,
+        104,
+        226
+      ]
+    },
+    {
+      "team": "NOP",
+      "teamId": 19,
+      "playerIds": [
+        666969,
+        3547256,
+        1057274415,
+        56677837,
+        18677986,
+        666848,
+        334,
+        250,
+        1057267077,
+        1028245777,
+        17896024,
+        282,
+        1028027567,
+        1057390538,
+        38017708
+      ]
+    },
+    {
+      "team": "NYK",
+      "teamId": 20,
+      "playerIds": [
+        18,
+        17896033,
+        61,
+        73,
+        666713,
+        202,
+        399,
+        17896097,
+        414,
+        1028036898,
+        1028046422,
+        1057393207,
+        447,
+        38017699,
+        1028025498,
+        100
+      ]
+    },
+    {
+      "team": "OKC",
+      "teamId": 21,
+      "playerIds": [
+        56677841,
+        3547272,
+        56677833,
+        38017703,
+        1028028932,
+        175,
+        666541,
+        17896078,
+        201,
+        1028027372,
+        1028037477,
+        89,
+        38017685,
+        38017706,
+        480,
+        1057274983
+      ]
+    },
+    {
+      "team": "ORL",
+      "teamId": 22,
+      "playerIds": [
+        17896026,
+        229,
+        1028025497,
+        56677839,
+        17896073,
+        666442,
+        462,
+        3547287,
+        38017683,
+        85,
+        56677827,
+        1057385481,
+        38017734,
+        87,
+        1057279571
+      ]
+    },
+    {
+      "team": "PHI",
+      "teamId": 23,
+      "playerIds": [
+        137,
+        145,
+        1057261935,
+        17895858,
+        17896058,
+        3547254,
+        368,
+        360,
+        38017730,
+        1028214238,
+        1028034846,
+        38017711,
+        1057382509,
+        38017719,
+        172,
+        286
+      ]
+    },
+    {
+      "team": "PHX",
+      "teamId": 24,
+      "playerIds": [
+        351,
+        1057268513,
+        1028025723,
+        3547251,
+        38017698,
+        17895966,
+        18678058,
+        57,
+        1028036515,
+        1057383369,
+        44477062,
+        8,
+        66,
+        3092,
+        2221,
+        666511,
+        38017727
+      ]
+    },
+    {
+      "team": "POR",
+      "teamId": 25,
+      "playerIds": [
+        38017690,
+        278,
+        56677817,
+        214,
+        182,
+        3547242,
+        56677850,
+        56677829,
+        56677791,
+        4197387,
+        476,
+        56677747,
+        1028025344,
+        1057275769,
+        38017693,
+        666923
+      ]
+    },
+    {
+      "team": "SAC",
+      "teamId": 26,
+      "playerIds": [
+        406,
+        125,
+        324,
+        38017688,
+        38017704,
+        1028025242,
+        1057276634,
+        472,
+        3547249,
+        3547241,
+        1057390745,
+        1057845274,
+        268,
+        666656,
+        666675,
+        147,
+        305
+      ]
+    },
+    {
+      "team": "SAS",
+      "teamId": 27,
+      "playerIds": [
+        48,
+        1057271360,
+        261,
+        1028025261,
+        3547246,
+        38017649,
+        161,
+        30,
+        358,
+        56677822,
+        1057262518,
+        27924547,
+        371,
+        666682,
+        666767
+      ]
+    },
+    {
+      "team": "TOR",
+      "teamId": 28,
+      "playerIds": [
+        17896055,
+        3547269,
+        56677799,
+        666423,
+        17896007,
+        1057268940,
+        56677828,
+        17896059,
+        227,
+        1028037494,
+        373,
+        1028029111,
+        436,
+        1028243201,
+        17554004,
+        1028038426,
+        367,
+        165
+      ]
+    },
+    {
+      "team": "UTA",
+      "teamId": 29,
+      "playerIds": [
+        666703,
+        56677842,
+        38017705,
+        231,
+        38017731,
+        28,
+        1028029291,
+        56677834,
+        1028035794,
+        1057260888,
+        349,
+        285,
+        1028025362,
+        338,
+        1059992972,
+        1081266162,
+        297,
+        27,
+        1077620166,
+        38017702
+      ]
+    },
+    {
+      "team": "WAS",
+      "teamId": 30,
+      "playerIds": [
+        38017679,
+        405,
+        56677831,
+        1057279594,
+        1028025235,
+        117,
+        1059542426,
+        266,
+        1057262985,
+        17896039,
+        56677844,
+        38017723,
+        1057846172,
+        1057391756,
+        151,
+        490,
+        1028028405,
+        1028026060,
+        1016384149,
+        3547302
+      ]
+    }
+  ]
+}

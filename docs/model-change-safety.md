@@ -132,6 +132,38 @@ requires focused identity/cron tests, full model-change verification, latest-
 main integration safety, and live proof that the prior pass returns
 `already-complete` with no provider fetch.
 
+## Owner-directed correctness candidate: NBA roster-regime residual r1
+
+On 2026-10-22 Daniel Mengel directed Oddsphere to close the NBA trade, roster-strength, and
+availability gap without a manual team rating, fixed injury-point table, confidence cap, or
+automatic market-following rule. The bounded release is documented in
+`docs/model-audits/2026-10-22-nba-roster-regime-residual-r16.md`.
+
+For future unlocked rows only, the frozen professional score artifact remains the independent
+baseline. A separate zero-intercept ridge residual may correct its coherent margin and total only
+when either team retains at most 65% of the prior rotation's minutes. Its six inputs are the
+home/away incoming-versus-outgoing estimated-net difference, PIE difference, and decayed rotation
+turnover, all built from point-in-time prior-season player profiles and the provider's current
+active roster. The effect decays over 16 current-season games. Verified exact-game OUT players may
+leave the expected top-eight rotation; questionable, probable, unknown, or absent reports cannot
+manufacture an absence. Teams above the continuity boundary must preserve exact score parity.
+
+The existing qualified market reader remains downstream and separate. One adjusted independent
+margin/total tuple must own the displayed score, winner, Spread direction, Total direction,
+probabilities, and existing grade economics. The residual can move either team in either direction;
+the existing positive exact-price EV and evidence rules remain the symmetric promotion path. It
+cannot directly set a grade or stake, and a current-board contraction must be reported rather than
+hidden. Provider failure, incomplete 30-team active-roster coverage, identity mismatch, or missing
+prior profile fails neutral to the frozen independent score with an explicit audit reason.
+
+Publication requires release-pure chronological validation, untouched-season confirmation, the
+same-input current-board promotion/demotion report, active-roster 30/30 proof, focused independent /
+reader / site / writer / lock tests, TypeScript, the full model-change gate, latest-main integration
+safety, protected PR checks, and post-deploy proof of release identity, one writer/lease, coherent
+cards, healthy provider coverage, and unchanged locked payloads. Roll back future unlocked output
+on a mixed release, active-roster gap, high-continuity score change, incoherent score tuple,
+unreviewed board impact, or any lock mutation.
+
 ## Owner-directed correctness candidate: NBA verified availability without a count-only cap
 
 On 2026-10-21 Daniel Mengel explicitly rejected automatic injury score adjustments and confidence
