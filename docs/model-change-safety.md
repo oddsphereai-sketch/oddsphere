@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed correction: cross-sport current-quote and opening-cycle authority
+
+On 2026-10-22 Daniel Mengel directed Oddsphere to correct opening lines and line tracking
+across every Daily Edge model after an NFL card presented a months-old look-ahead opener
+as current game-week movement. The bounded correction and exact board-impact report are
+documented in
+`docs/model-audits/2026-10-22-daily-edge-current-quote-authority.md`.
+
+Raw provider opening evidence remains stored. Future-unlocked NFL and CFB cards may call
+an observation the current-cycle opening only when it falls within 14 days of kickoff;
+otherwise they begin at the first writer-verified same-book current-cycle observation.
+Future-unlocked NHL exact-price selection rejects a complete book pair more than 120
+minutes behind the freshest complete pair for that game and market, and history later
+than the current endpoint cannot enter the trail. The shared audit independently enforces
+current-quote verification, chronological order, terminal book/price identity, and the
+football opening-cycle boundary for every applicable Daily Edge board.
+
+The zero-write rehearsal changes zero NFL, CFB, or NHL picks and zero grades. NFL removes
+17 long-range trail landmarks; NHL changes 13 stale/lagging displayed book-price tuples
+while keeping its 1 Best Angle / 19 Lean / 16 Watchlist board. CFB output is identical.
+Locked payloads retain exact stored precedence. Publication requires the focused sport,
+snapshot-transition, and odds-contract tests, TypeScript, the full model-change gate,
+latest-main integration safety, protected PR checks, sole-writer refreshes, and a live
+zero-critical deep audit. Rollback applies only to future unlocked output and may not
+rewrite a stored lock.
+
 ## CFB public injury-news fallback with zero model authority
 
 On 2026-10-21 Daniel Mengel rejected a new injury-data subscription and a

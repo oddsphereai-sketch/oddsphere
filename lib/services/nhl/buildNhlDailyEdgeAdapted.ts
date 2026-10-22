@@ -17,6 +17,7 @@ import {
 import {
   NHL_REGULAR_MODEL_RELEASE,
   NHL_REGULAR_TRANSITION_MODEL_RELEASES,
+  resolveNhlPriceAwareVerdict,
   type NhlFeatureSnapshot,
   type NhlModelOutput,
 } from "../../automodel/nhlRegularModelV1";
@@ -57,7 +58,7 @@ import {
 import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMarket";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_15_r14_fast_state_direct_probability" as const;
+  "nhl_daily_edge_reader_2026_10_22_r15_fresh_quote_authority" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -674,6 +675,42 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         fairProbability: puckLineOpp?.fair_probability ?? null,
       };
 
+      // The writer persists exact-price-aware verdicts, but a newly deployed
+      // release can be read briefly before its first writer pass. Keep only
+      // that unlocked/no-writer fallback on the identical decision contract.
+      // Stored payloads (especially locked public records) remain authoritative
+      // and are passed through byte-for-byte at the decision layer.
+      const displayModel: NhlModelOutput = storedPayload ? model : {
+        ...model,
+        moneyline: {
+          ...model.moneyline,
+          verdict: resolveNhlPriceAwareVerdict(
+            "moneyline",
+            model.moneyline.verdict,
+            mlBundle.priceAmerican,
+            model.moneyline.probability,
+          ),
+        },
+        total: {
+          ...model.total,
+          verdict: resolveNhlPriceAwareVerdict(
+            "total",
+            model.total.verdict,
+            totalBundle.priceAmerican,
+            model.total.probability,
+          ),
+        },
+        puck_line: {
+          ...model.puck_line,
+          verdict: resolveNhlPriceAwareVerdict(
+            "spread",
+            model.puck_line.verdict,
+            puckLineBundle.priceAmerican,
+            model.puck_line.probability,
+          ),
+        },
+      };
+
       const input: NhlAdapterGameInput = {
         gameId: g.id,
         externalId: g.external_id,
@@ -683,7 +720,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         status: g.status,
         homeScore: g.home_score,
         awayScore: g.away_score,
-        model,
+        model: displayModel,
         snapshot,
         mlBundle,
         totalBundle,

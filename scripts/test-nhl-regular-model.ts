@@ -966,12 +966,13 @@ assert.match(reader, /selectNhlBestPriceQuote\(\{ rows: quoteRows, market: "spre
 assert.match(reader, /predictionPayloadByGame/, "reader preserves the writer-owned active-release tuple before and after lock");
 assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware writer decision for every NHL market");
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
+assert.match(reader, /const displayModel: NhlModelOutput = storedPayload \? model : \{/, "stored writer and locked verdicts take precedence over the unlocked no-writer price-aware fallback");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_10_15_r14_fast_state_direct_probability/, "reader release records the fast-state candidate while preserving immutable NHL price mapping");
+assert.match(reader, /nhl_daily_edge_reader_2026_10_22_r15_fresh_quote_authority/, "reader release records fresh-quote authority while preserving immutable NHL price mapping");
 assert.match(writer, /select\("external_id"\)/, "writer verifies exact settled-game replay identities instead of count parity");
 assert.match(reader, /select\("external_id"\)/, "reader verifies the same exact settled-game replay identities");
 assert.match(reader, /r\.locked_at !== null \|\| !replayComplete/, "reader preserves a stored transition predecessor while fresh replay evidence is incomplete");
-assert.match(reader, /!storedPayload && openingWindow && !model\.layers\.fast_state_direct_active/, "reader cannot synthesize an r18 opening-window forecast without fast-state evidence");
+assert.match(reader, /!storedPayload && openingWindow && !model\.layers\.fast_state_direct_active/, "reader cannot synthesize an opening-window forecast without fast-state evidence");
 assert.match(reader, /resolveNhlLockedPriceQuote/, "reader renders the stored locked price tuple instead of mutable current odds");
 assert.match(writer, /evaluated_quotes/, "writer freezes the selected price, book, side, and line together");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");
