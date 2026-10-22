@@ -30,7 +30,7 @@ import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/
 
 const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum");
 assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
 assert(artifact.robustMinuteModel, "robust rebound release requires its rotation-aware minute model");
 assert(artifact.robustModels?.rebounds, "robust rebound release requires a frozen rebound component");
@@ -41,6 +41,16 @@ assert.equal(
   nbaPlayerPropsArtifactSha256({ beta: 2, alpha: { delta: [3, 4], gamma: 1 } }),
   nbaPlayerPropsArtifactSha256({ alpha: { gamma: 1, delta: [3, 4] }, beta: 2 }),
   "artifact checksums must remain stable when a server bundler reorders object keys",
+);
+assert.notEqual(
+  nbaPlayerPropsArtifactSha256({ alpha: 1.0000000000000002 }),
+  nbaPlayerPropsArtifactSha256({ alpha: 1 }),
+  "artifact checksums must retain exact finite-number identity",
+);
+assert.equal(
+  nbaPlayerPropsArtifactSha256({ alpha: -0 }),
+  nbaPlayerPropsArtifactSha256({ alpha: 0 }),
+  "artifact checksums must follow ordinary JSON negative-zero semantics",
 );
 assert.equal(nbaPlayerPropsScheduleGameMatches(
   { awayTeam: "GS", homeTeam: "LAL" },

@@ -692,7 +692,7 @@ function buildFrozenRuntimeArtifact(args: {
   ]));
   const byMarket = args.exactPriceGradeResearch.byMarket;
   const artifactWithoutChecksum = {
-    release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum",
+    release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum",
     publicEnabled: false,
     sourceDatasetRelease: args.dataset.release,
     sourceInputsSha256: args.dataset.immutableInputsSha256,

@@ -267,8 +267,8 @@ Last reviewed: 2026-10-22
   `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
 - NBA player props remain member-disabled. The current private forward-readiness
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum` /
-  `nba_player_props_forward_decision_2026_10_22_r3_canonical_checksum_disabled` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum` /
+  `nba_player_props_forward_decision_2026_10_22_r4_binary_checksum_disabled` /
   `nba_player_props_product_candidate_2026_10_22_r5_private_forward_ready` /
   `nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only`.
   The sole private writer is
@@ -295,14 +295,16 @@ Last reviewed: 2026-10-22
   demotions with a pre-confirmation-selected one-per-slate points+rebounds Lean
   promotion. On the untouched 72-game confirmation block, exact-price
   direction improved from 52.62% to 52.92%; actionables moved from 133 at
-  63.16% and +15.37% ROI to 137 at 63.50% and +16.21% ROI. R3 also canonicalizes
-  recursive artifact keys before checksum validation so the server bundler
-  cannot reject the identical frozen payload solely because it changed JSON
-  object insertion order. Prior-season state bootstrap plus release-pure
+  63.16% and +15.37% ROI to 137 at 63.50% and +16.21% ROI. R4 uses a
+  type-tagged checksum encoding with sorted keys, byte-length-prefixed strings,
+  preserved array order, and IEEE-754 number bytes. This keeps artifact
+  validation stable across server bundlers and Node/V8 runtimes without
+  weakening fail-closed integrity. Prior-season state bootstrap plus release-pure
   forward results remain prerequisites for a separate public activation.
   Evidence and rollback:
   `docs/model-audits/2026-10-21-nba-player-props-private-forward-readiness.md`
-  and `docs/model-audits/2026-10-22-nba-player-props-structural-v2-result.md`.
+  and `docs/model-audits/2026-10-22-nba-player-props-structural-v2-result.md`,
+  plus `docs/model-audits/2026-10-22-nba-player-props-portable-artifact-checksum-r4.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
