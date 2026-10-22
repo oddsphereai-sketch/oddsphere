@@ -19,9 +19,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_22_r5_active_role_integrity_disabled" as const;
+  "nba_player_props_forward_decision_2026_10_22_r6_rebound_grade_recalibration_disabled" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";

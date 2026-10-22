@@ -35,7 +35,16 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration");
+assert.equal(
+  artifact.sourceGradeRelease,
+  "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
+);
+assert.equal(artifact.gradePolicies.rebounds.kind, "slate_relative_lean");
+assert.equal(artifact.gradePolicies.rebounds.policy.signalFamily, "model_market_conservative_expected_value");
+assert.equal(artifact.gradePolicies.rebounds.policy.eligibilityGate, "established_role");
+assert.equal(artifact.gradePolicies.rebounds.policy.maxPerSlate, 1);
+assert.equal(artifact.gradePolicies.rebounds.policy.requireReferenceBook, true);
 assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
 assert.match(
   frozenRuntimeSource,
@@ -157,7 +166,9 @@ const observations = NBA_PLAYER_PROPS_FOUNDATION_MARKETS.flatMap((market, market
       offerType: "over_under",
       side: side as "over" | "under",
       line,
-      americanPrice: sideIndex === 0 ? -108 - bookIndex : -112 + bookIndex,
+      americanPrice: market === "rebounds"
+        ? (sportsbook === "bet365" ? (sideIndex === 0 ? -105 : -115) : (sideIndex === 0 ? 130 : -160))
+        : (sideIndex === 0 ? -108 - bookIndex : -112 + bookIndex),
       observedAt,
       fetchedAt: observedAt,
       isOpening: false,
@@ -180,6 +191,13 @@ for (const decision of first) {
   assert(decision.targetExcludedReferenceBooks >= 1);
   assert(decision.probability >= 0 && decision.probability <= 1);
 }
+const calibratedRebound = first.find((decision) => decision.market === "rebounds");
+assert.equal(calibratedRebound?.calibrationRelease, artifact.sourceGradeRelease);
+assert.equal(
+  calibratedRebound?.grade,
+  "Lean",
+  "the approved established-role/reference-book rebound selector must activate on a coherent forward slate",
+);
 
 const underMarket = observations.filter((row) => row.market === "points").map((row) => ({
   ...row,

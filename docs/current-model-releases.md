@@ -280,15 +280,15 @@ Last reviewed: 2026-10-22
   `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
 - NBA player props remain member-disabled. The current private forward-readiness
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity` /
-  `nba_player_props_forward_decision_2026_10_22_r5_active_role_integrity_disabled` /
-  `nba_player_props_product_candidate_2026_10_22_r6_active_role_integrity` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration` /
+  `nba_player_props_forward_decision_2026_10_22_r6_rebound_grade_recalibration_disabled` /
+  `nba_player_props_product_candidate_2026_10_22_r7_rebound_grade_recalibration` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
   `nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity` /
-  `nba_player_props_exact_price_grade_2026_10_22_r12_active_role_integrity_private_only`.
+  `nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_10_22_r5_active_role_integrity`; it
+  `nba_player_props_private_writer_2026_10_22_r6_rebound_grade_recalibration`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is
@@ -323,12 +323,22 @@ Last reviewed: 2026-10-22
   manufacturing zero. The 17,258-row same-runtime comparison improves broad
   accuracy from 52.93% to 53.13%, but the inherited action layer falls from
   56.16% to 54.94%; the public gate therefore remains off pending a separately
-  qualified grade recalibration.
+  qualified grade recalibration. The approved private r6/r13 rebound-only
+  recalibration preserves seven market policies and replaces only the one-per-
+  slate rebound Lean selector with established-role and target-excluded
+  reference-book requirements. The untouched confirmation block remains 147
+  actionables while moving from 91-56 (61.90%, +13.05% ROI) to 93-54 (63.27%,
+  +15.53% ROI), with five paired promotions and five demotions. Across all
+  three chronological windows, board count changes from 401 to 395 (-1.50%);
+  every market retains actionables. Projections, sides, probabilities, prices,
+  Best Angles, provider cadence, layout, locks, and writer topology are
+  unchanged; public/member activation remains disabled.
   Evidence and rollback:
   `docs/model-audits/2026-10-21-nba-player-props-private-forward-readiness.md`
   and `docs/model-audits/2026-10-22-nba-player-props-structural-v2-result.md`,
   `docs/model-audits/2026-10-22-nba-player-props-portable-artifact-checksum-r4.md`,
-  plus `docs/model-audits/2026-10-22-nba-player-props-active-role-integrity.md`.
+  `docs/model-audits/2026-10-22-nba-player-props-active-role-integrity.md`, plus
+  `docs/model-audits/2026-10-22-nba-player-props-grade-recalibration-predeclaration.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.

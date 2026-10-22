@@ -60,9 +60,30 @@ function eligible(row: Row, gate: string): boolean {
   return true;
 }
 
-function directGrade(row: Row, config: Record<string, any>): Grade {
+function directGrade(row: Row, config: {
+  kind: string;
+  policy: Record<string, unknown>;
+  bestAngleQualified?: boolean;
+  relativeBest?: { signalFamily: string; threshold: number } | null;
+}): Grade {
   let grade: Grade = "No Play";
-  const policy = config.policy;
+  const policy = config.policy as {
+    signalFamily: string;
+    bestSignalFamily: string;
+    eligibilityGate: string;
+    minimumAmericanPrice: number;
+    leanThreshold: number;
+    bestThreshold: number;
+    bestProbability: number;
+    bestEv: number;
+    bestMarketProbability: number;
+    leanProbability: number;
+    leanEv: number;
+    leanMarketProbability: number;
+    leanRequiresReferenceBook: boolean;
+    watchProbability: number;
+    watchEv: number;
+  };
   if (config.kind === "ranked") {
     const isEligible = eligible(row, policy.eligibilityGate);
     const score = signal(row, policy.signalFamily);
@@ -105,6 +126,21 @@ async function main() {
         minimumExpectedValue: -0.03,
         minimumAmericanPrice: -130,
         requireReferenceBook: false,
+      },
+      publicQualified: false,
+    };
+  }
+  if (process.argv.includes("--recalibrate-rebounds-universal")) {
+    artifact.gradePolicies.rebounds = {
+      kind: "slate_relative_lean",
+      policy: {
+        signalFamily: "model_market_conservative_expected_value",
+        eligibilityGate: "established_role",
+        maxPerSlate: 1,
+        minimumProbability: 0.5,
+        minimumExpectedValue: -0.03,
+        minimumAmericanPrice: -130,
+        requireReferenceBook: true,
       },
       publicQualified: false,
     };
@@ -170,9 +206,9 @@ async function main() {
     void _discarded;
     const payload = {
       ...candidatePayload,
-      release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity",
+      release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration",
       sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity",
-      sourceGradeRelease: "nba_player_props_exact_price_grade_2026_10_22_r12_active_role_integrity_private_only",
+      sourceGradeRelease: "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
       gradePolicies: artifact.gradePolicies,
     };
     const composed = {
