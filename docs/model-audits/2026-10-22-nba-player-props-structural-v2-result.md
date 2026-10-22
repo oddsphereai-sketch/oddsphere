@@ -65,18 +65,22 @@ Board impact is +4 net actionables; the release does not flatten the board.
 
 The first post-merge production invocation correctly failed closed before
 publishing because the server bundle changed imported JSON object insertion
-order and the r2 runtime hashed `JSON.stringify` output directly. R3 replaces
-that packaging-sensitive check with recursive canonical key ordering. The
-artifact payload, selected models, projections, probabilities, sides, grades,
-provider cadence, writer, lease, public gate, and locked rows are otherwise
-unchanged.
+order and the r2 runtime hashed `JSON.stringify` output directly. R3 replaced
+that packaging-sensitive check with recursive canonical key ordering. Local
+source and optimized server bundles then matched exactly, but the hosted
+runtime still rejected the artifact, exposing a second dependency on decimal
+number rendering across Node/V8 runtimes. R4 replaces textual number rendering
+with an exact IEEE-754 binary encoding while retaining recursive key ordering,
+array order, string identity, and fail-closed validation. The artifact payload,
+selected models, projections, probabilities, sides, grades, provider cadence,
+writer, lease, public gate, and locked rows are otherwise unchanged.
 
 ## Releases and rollback
 
 - Frozen artifact:
-  `nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum`
+  `nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum`
 - Decision:
-  `nba_player_props_forward_decision_2026_10_22_r3_canonical_checksum_disabled`
+  `nba_player_props_forward_decision_2026_10_22_r4_binary_checksum_disabled`
 - Model:
   `nba_player_props_model_tournament_2026_10_22_r12_robust_rebounds_full_refit`
 - Grade/calibration:
