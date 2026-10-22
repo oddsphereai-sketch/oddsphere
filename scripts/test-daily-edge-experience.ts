@@ -1435,6 +1435,13 @@ check(
     candidateSource.includes('current < first ? `${spreadSide} strengthened` : `${spreadSide} eased`') &&
     !candidateSource.includes("showSplits && !football ? <CompactPointLineMovement"),
 );
+check(
+  "Spread and Total line maps retain Opening, Prior, and Current when a real Prior repeats an endpoint",
+  candidateSource.includes('>{point("Opening", first)}') &&
+    candidateSource.includes('{point("Prior", previous)}') &&
+    candidateSource.includes('{point("Current", current, true)}') &&
+    !candidateSource.includes("previousAddsInformation"),
+);
 const wnbaSpreadPointLinePulse = resolvePointLineMarketPulseMovement({
   pick: "POR +4.5",
   marketReadV2: {
@@ -1809,17 +1816,17 @@ check(
     candidateSource.includes("displayedSharp?.rows.length"),
 );
 check(
-  "compact football movement omits Prior only when it duplicates the stored endpoints",
-  candidateSource.includes("const previousMatchesOpening = value.previous === value.open") &&
-    candidateSource.includes("const previousMatchesCurrent = value.previous === value.current") &&
-    candidateSource.includes("value.previous !== null && !previousMatchesOpening && !previousMatchesCurrent") &&
-    candidateSource.includes('compact && !previousAddsInformation ? "grid-cols-[auto_1fr_auto]"') &&
+  "compact football movement shows every real three-observation trail even when Prior repeats Current",
+  candidateSource.includes("value.hasIntermediateObservation === true") &&
+    candidateSource.includes("Never manufacture Prior for a two-stop trail") &&
+    candidateSource.includes('showPrior ? "grid-cols-[auto_1fr_auto_1fr_auto]" : "grid-cols-[auto_1fr_auto]"') &&
+    !candidateSource.includes("previousAddsInformation") &&
     candidateSource.includes('<PricePoint label="Prior"'),
 );
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_10_19_r26_mlb_market_scoped_record_overlay" &&
+    "daily_edge_member_presentation_2026_10_22_r27_three_observation_trail" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&

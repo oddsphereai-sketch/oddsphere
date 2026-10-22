@@ -8,6 +8,19 @@ Last reviewed: 2026-10-22
 
 ## Cross-sport confidence / execution contract
 
+- October 22 member presentation r27 preserves the full verified compact
+  `Opening -> Prior -> Current` map whenever a same-book trail contains a real
+  intermediate observation, even when Prior repeats Opening or Current. A
+  two-observation trail remains two observations; the renderer never invents a
+  timestamp or quote. Spread and Total line maps likewise retain a real Prior
+  when its point line repeats an endpoint. On the current 14-game NFL board, all 42 markets retain
+  at least three raw observations: 11 compact maps regain a repeated but real
+  Prior and 31 already display three distinct states. Stored evidence, reader
+  direction, model outputs, prices, picks, grades, locks, tracking, writers,
+  and cadence are unchanged. Member presentation advances to
+  `daily_edge_member_presentation_2026_10_22_r27_three_observation_trail`.
+  Evidence: `docs/model-audits/2026-10-22-daily-edge-three-observation-trail.md`.
+
 - October 22 verified full NFL trail and active-reader movement supersedes only
   the NFL 14-day opening presentation rule below. The exact Caesars NE-CHI
   event owns the August 5 `NE -105 / CHI -125` opening, while all 50 retained

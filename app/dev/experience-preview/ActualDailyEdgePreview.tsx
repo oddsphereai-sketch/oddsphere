@@ -1380,13 +1380,16 @@ function CompactOddsMovement({ market, tone, lineClass, compact = false, illustr
     const directionClass = direction.tone === "emerald" ? "text-emerald-300" : direction.tone === "teal" ? "text-teal-300" : direction.tone === "red" ? "text-red-300" : direction.tone === "amber" ? "text-amber-300" : "text-gray-600";
     const connectorClass = direction.tone === "emerald" ? "from-gray-700 via-emerald-500/50 to-emerald-400/50" : direction.tone === "teal" ? "from-gray-700 via-teal-500/40 to-teal-400/40" : direction.tone === "red" ? "from-gray-700 via-red-500/55 to-red-400/55" : direction.tone === "amber" ? "from-gray-700 via-amber-500/45 to-amber-400/45" : selected ? lineClass : "from-gray-700 via-violet-500/40 to-gray-600";
     const openingPoint = <PricePoint label={value.openingLabel} value={formatAmerican(value.open)} line={value.openLine} />;
-    const previousMatchesOpening = value.previous === value.open && sameTrackedLine(value.previousLine, value.openLine);
-    const previousMatchesCurrent = value.previous === value.current && sameTrackedLine(value.previousLine, value.currentLine);
-    const previousAddsInformation = value.previous !== null && !previousMatchesOpening && !previousMatchesCurrent;
+    // A repeated Prior is still a real timestamped market observation. Keep
+    // the compact football map at Opening -> Prior -> Current whenever the
+    // same-book trail actually contains an intermediate capture; suppressing
+    // a duplicate value falsely makes a three-observation trail look like a
+    // two-observation trail. Never manufacture Prior for a two-stop trail.
+    const showPrior = !compact || value.hasIntermediateObservation === true;
     const compactDirection = compact && selected && value.coherentTrail && value.open !== null && value.current !== null
       ? footballMovementSignal(market, value).value
       : direction.label;
-    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{compactDirection}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div>{value.coherentTrail ? <div className={`mt-3 grid items-center gap-2 ${compact && !previousAddsInformation ? "grid-cols-[auto_1fr_auto]" : "grid-cols-[auto_1fr_auto_1fr_auto]"}`}>{openingPoint}<div className={`h-px bg-gradient-to-r ${connectorClass}`} />{compact && !previousAddsInformation ? null : <><PricePoint label="Prior" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /></>}<PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div> : <div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">Current quote</p><p className="mt-0.5 font-mono text-sm font-black text-gray-200">{formatAmerican(value.current)}</p></div><p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p></div>}</div>;
+    return <div className="rounded-lg border border-white/[0.08] bg-black/20 p-3"><div className="flex items-center justify-between gap-2"><p className="text-[9px] font-black text-gray-200">{label}</p><div className="flex items-center gap-2"><span className={`text-[7px] font-black uppercase tracking-wider ${directionClass}`}>{compactDirection}</span><p className="text-[7px] font-semibold text-gray-600">{value.sportsbook ? formatSportsbook(value.sportsbook) : "book unavailable"}</p></div></div>{value.coherentTrail ? <div className={`mt-3 grid items-center gap-2 ${showPrior ? "grid-cols-[auto_1fr_auto_1fr_auto]" : "grid-cols-[auto_1fr_auto]"}`}>{openingPoint}<div className={`h-px bg-gradient-to-r ${connectorClass}`} />{showPrior ? <><PricePoint label="Prior" value={formatAmerican(value.previous)} line={value.previousLine} /><div className={`h-px bg-gradient-to-r ${connectorClass}`} /></> : null}<PricePoint label="Current" value={formatAmerican(value.current)} line={value.currentLine} tone={direction.tone} /></div> : <div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">Current quote</p><p className="mt-0.5 font-mono text-sm font-black text-gray-200">{formatAmerican(value.current)}</p></div><p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p></div>}</div>;
   };
   const rows = soccerBoard?.rows.length
     ? [...soccerBoard.rows]
@@ -1506,7 +1509,20 @@ function latestAvailabilityReportTime(report: DailyEdgeGameAvailability): string
 
 type OddsTrailStop = NonNullable<MarketEdgeDto["oddsTrail"]>[number];
 
-function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; previous: number | null; current: number | null; openLine: number | null; previousLine: number | null; currentLine: number | null; sportsbook: string | null; coherentTrail: boolean; openingLabel: "Opening" } {
+type CoherentMovement = {
+  open: number | null;
+  previous: number | null;
+  current: number | null;
+  openLine: number | null;
+  previousLine: number | null;
+  currentLine: number | null;
+  sportsbook: string | null;
+  coherentTrail: boolean;
+  openingLabel: "Opening";
+  hasIntermediateObservation?: boolean;
+};
+
+function resolveCoherentMovement(market: MarketEdgeDto): CoherentMovement {
   const displayedPrice = currentDisplayedPrice(market);
   const displayedBook = currentDisplayedSportsbook(market);
   const trail = (market.oddsTrail ?? [])
@@ -1554,7 +1570,7 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
       }
     }
     if (previous === null && coherent.length >= 2) previous = coherent[coherent.length - 2]!;
-    return { open: first.american, previous: previous?.american ?? null, current: terminal.american, openLine: first.line, previousLine: previous?.line ?? null, currentLine: terminal.line ?? first.line, sportsbook: terminal.sportsbook, coherentTrail: true, openingLabel: "Opening" };
+    return { open: first.american, previous: previous?.american ?? null, current: terminal.american, openLine: first.line, previousLine: previous?.line ?? null, currentLine: terminal.line ?? first.line, sportsbook: terminal.sportsbook, coherentTrail: true, openingLabel: "Opening", hasIntermediateObservation: coherent.length >= 3 };
   }
   // A current-only best-price trail must stay attached to that exact stored
   // quote. `marketReadV2.movement` belongs to the writer-time evaluation and
@@ -1578,6 +1594,7 @@ function resolveCoherentMovement(market: MarketEdgeDto): { open: number | null; 
     sportsbook: currentOnly.sportsbook,
     coherentTrail: false,
     openingLabel: "Opening",
+    hasIntermediateObservation: false,
   };
 }
 
@@ -1592,8 +1609,6 @@ function sameTrackedLine(first: number | null, current: number | null): boolean 
 }
 
 type MarketPulseTone = "emerald" | "amber" | "gray";
-type CoherentMovement = ReturnType<typeof resolveCoherentMovement>;
-
 function resolveMarketPulseMovement(market: MarketEdgeDto): CoherentMovement {
   return resolveFirstInningMarketPulseMovement(market) ??
     resolvePointLineMarketPulseMovement(market) ??
@@ -1657,6 +1672,7 @@ function resolveStandaloneMovement(
     sportsbook: terminalBook,
     coherentTrail,
     openingLabel: "Opening",
+    hasIntermediateObservation: sameBook.length >= 3,
   };
 }
 
@@ -1692,6 +1708,7 @@ function resolveOpposingMovement(market: MarketEdgeDto): CoherentMovement | null
     sportsbook: terminal.sportsbook,
     coherentTrail,
     openingLabel: "Opening",
+    hasIntermediateObservation: sameBook.length >= 3,
   };
 }
 
