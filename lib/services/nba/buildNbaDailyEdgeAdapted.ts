@@ -34,6 +34,12 @@ import {
 import { createEspnNbaGameInjuryResolver } from "./espnNbaInjuries";
 import { runNbaAutoModelV2 } from "../../automodel/nba/nbaAutoModelV2";
 import type { NbaPortableModelArtifact } from "../../automodel/nba/nbaPortableScoreModel";
+import { scoreNbaPortableModel } from "../../automodel/nba/nbaPortableScoreModel";
+import {
+  applyNbaRosterRegime,
+  fetchNbaLiveRosterSnapshot,
+  type NbaLiveRosterSnapshot,
+} from "../../automodel/nba/nbaRosterRegime";
 import {
   assertNbaChampionRuntime,
   NBA_MARKET_MARRIAGE_RELEASE,
@@ -170,6 +176,10 @@ export async function buildNbaDailyEdgePipeline(
     retainLegacyGradeEconomics?: boolean;
     /** Read-only same-input audit hook for the superseded Moneyline Best Angle path. */
     retainLegacyMoneylineEvidenceGrade?: boolean;
+    /** Deterministic audit/test hook. Production resolves the active provider roster once per build. */
+    rosterRegimeRosterOverride?: NbaLiveRosterSnapshot;
+    /** Read-only same-input audit hook for the superseded score path without roster-regime correction. */
+    retainLegacyRosterRegime?: boolean;
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
@@ -236,6 +246,11 @@ export async function buildNbaDailyEdgePipeline(
     currentGames: currentState.games,
     currentBoxes: currentState.boxes,
   });
+  const liveRoster = options.rosterRegimeRosterOverride ?? (
+    snapshots.length === 0
+      ? await fetchNbaLiveRosterSnapshot({ apiKey: "" })
+      : await fetchNbaLiveRosterSnapshot()
+  );
 
   // Resolve external_id → games.id so we can pull lines from DB.
   const gameExternalIds = snapshots.map((s) => s.game_external_id);
@@ -460,12 +475,28 @@ export async function buildNbaDailyEdgePipeline(
     const featureRow = professionalFeatures.get(s.game_external_id);
     if (!featureRow) throw new Error(`Missing NBA professional feature row for ${s.game_external_id}.`);
     const portableFeatureRow = selectNbaProfessionalPortableFeatures(featureRow);
+    const rawIndependent = scoreNbaPortableModel(professionalArtifact, portableFeatureRow);
+    const rosterRegime = applyNbaRosterRegime({
+      independent: rawIndependent,
+      providerSeason,
+      homeTeam: s.home_team.abbreviation,
+      awayTeam: s.away_team.abbreviation,
+      homeCurrentGames: Number(featureRow.home_current_games ?? 0),
+      awayCurrentGames: Number(featureRow.away_current_games ?? 0),
+      homeInjuries: s.home_injuries,
+      awayInjuries: s.away_injuries,
+      liveRoster,
+    });
+    const selectedIndependent = options.retainLegacyRosterRegime
+      ? rawIndependent
+      : rosterRegime.score;
     const previewCandidate = buildNbaProfessionalCandidate({
       artifact: professionalArtifact,
       featureRow: portableFeatureRow,
       lines,
       history: movementHistory,
       externalGameId: s.game_external_id,
+      independentOverride: selectedIndependent,
     });
     const independentMlSide = previewCandidate.independent.marginHome >= 0 ? "home" as const : "away" as const;
     const independentSpreadSide = previewCandidate.consensus.spreadHome === null ||
@@ -513,6 +544,7 @@ export async function buildNbaDailyEdgePipeline(
       history: movementHistory,
       externalGameId: s.game_external_id,
       marketReader: reader,
+      independentOverride: selectedIndependent,
     });
     const pred = applyNbaProfessionalCandidate({
       baseline,
@@ -548,6 +580,10 @@ export async function buildNbaDailyEdgePipeline(
         away_score: candidate.independent.awayScore,
         total: candidate.independent.total,
         margin_home: candidate.independent.marginHome,
+      },
+      roster_regime: {
+        ...rosterRegime.audit,
+        selected: !options.retainLegacyRosterRegime,
       },
       market_consensus: {
         home_moneyline_probability: candidate.consensus.mlHomeNoVig,
