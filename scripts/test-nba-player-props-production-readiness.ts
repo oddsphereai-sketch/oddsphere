@@ -5,6 +5,7 @@ import {
   buildNbaPlayerPropsForwardDecisions,
   nbaPlayerPropsFrozenRuntimeArtifact,
 } from "../lib/services/nba/nbaPlayerPropsFrozenRuntime";
+import { nbaPlayerPropsArtifactSha256 } from "../lib/services/nba/nbaPlayerPropsArtifactChecksum";
 import {
   mergeNbaPlayerPropsCurrentState,
   NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE,
@@ -29,13 +30,18 @@ import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/
 
 const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum");
 assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
 assert(artifact.robustMinuteModel, "robust rebound release requires its rotation-aware minute model");
 assert(artifact.robustModels?.rebounds, "robust rebound release requires a frozen rebound component");
 assert.equal(artifact.gradePolicies.points_rebounds.kind, "slate_relative_lean");
 assert.equal(artifact.gradePolicies.points_rebounds.policy.maxPerSlate, 1);
 assert.equal(artifact.gradePolicies.points_rebounds.policy.signalFamily, "target_price_probability");
+assert.equal(
+  nbaPlayerPropsArtifactSha256({ beta: 2, alpha: { delta: [3, 4], gamma: 1 } }),
+  nbaPlayerPropsArtifactSha256({ alpha: { gamma: 1, delta: [3, 4] }, beta: 2 }),
+  "artifact checksums must remain stable when a server bundler reorders object keys",
+);
 assert.equal(nbaPlayerPropsScheduleGameMatches(
   { awayTeam: "GS", homeTeam: "LAL" },
   { awayTeam: "GSW", homeTeam: "LAL" },

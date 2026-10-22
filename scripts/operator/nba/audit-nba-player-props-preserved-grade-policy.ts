@@ -1,6 +1,6 @@
 /** Offline-only comparison of a candidate forecast against an existing frozen grade policy. */
-import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { nbaPlayerPropsArtifactSha256 } from "../../../lib/services/nba/nbaPlayerPropsArtifactChecksum";
 
 type Grade = "Best Angle" | "Lean" | "Watchlist" | "No Play";
 type Row = Record<string, unknown> & {
@@ -170,14 +170,14 @@ async function main() {
     void _discarded;
     const payload = {
       ...candidatePayload,
-      release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward",
+      release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum",
       sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_22_r12_robust_rebounds_full_refit",
       sourceGradeRelease: "nba_player_props_exact_price_grade_2026_10_22_r11_preserved_plus_pr_promotion",
       gradePolicies: artifact.gradePolicies,
     };
     const composed = {
       ...payload,
-      payloadSha256: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+      payloadSha256: nbaPlayerPropsArtifactSha256(payload),
     };
     await writeFile(candidateArtifactOutput, `${JSON.stringify(composed, null, 2)}\n`, "utf8");
   }
