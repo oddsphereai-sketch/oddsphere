@@ -11,6 +11,8 @@ import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSel
 import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecycle";
 import { readNbaPlayerPropsPrivateSnapshot } from "@/lib/services/nba/nbaPlayerPropsPrivateStore";
 import { buildNbaPlayerPropsMemberSnapshot } from "@/lib/services/nba/nbaPlayerPropsProductContract";
+import { readPlayerPropsLeagueActivity } from "@/lib/services/playerProps/playerPropsLeagueActivity.server";
+import { preferredPlayerPropsHref } from "./lib/playerPropsLeagues";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Player Props | Oddsphere", robots: { index: false, follow: false } };
@@ -19,8 +21,12 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   const query = await searchParams;
   const nflEnabled = process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true";
   const nbaEnabled = process.env.NBA_PLAYER_PROPS_MEMBER_ENABLED === "true";
+  if (query.league !== "nba" && query.league !== "nfl") {
+    const activity = await readPlayerPropsLeagueActivity().catch(() => ({}));
+    redirect(preferredPlayerPropsHref(activity, { nflEnabled, nbaEnabled }));
+  }
   if (query.league === "nba") {
-    if (!nbaEnabled) redirect("/mlb/props");
+    if (!nbaEnabled) redirect("/player-props");
     const slateDate = nbaPlayerPropsSlateDate();
     const snapshotResult = await readMemberDataWithDeadline({
       label: "nba-player-props-snapshot",
@@ -38,11 +44,11 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
     const requestedReader = typeof query.reader === "string" ? query.reader : null;
     const initialSelectedKey = snapshot.decisions.some((row) => row.decisionKey === requestedReader) ? requestedReader : null;
     return <ProductAppFrame>
-      <PlayerPropsLeaguePills league="nba" nflEnabled={nflEnabled} nbaEnabled />
+      <PlayerPropsLeaguePills league="nba" nflEnabled={nflEnabled} nbaEnabled currentGameCount={snapshot.games.length} currentPropCount={snapshot.decisions.length} />
       <NbaPlayerPropsProductDashboard snapshot={snapshot} initialSelectedKey={initialSelectedKey} />
     </ProductAppFrame>;
   }
-  if (!nflEnabled || query.league !== "nfl") redirect("/mlb/props");
+  if (!nflEnabled || query.league !== "nfl") redirect("/player-props");
   const season = bounded(process.env.NFL_FORWARD_SEASON, 2026);
   const configuredWeek = bounded(process.env.NFL_FORWARD_WEEK, 1);
   const calendarWeek = resolveNflForwardWeek({ season, configuredWeek });
@@ -61,7 +67,7 @@ export default async function PlayerPropsPage({ searchParams }: { searchParams: 
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   const initialSelectedKey = memberSnapshot?.memberDecisions.some((row) => decisionKey(row) === requestedReader) ? requestedReader : null;
   const transport = memberSnapshot ? encodeNflPlayerPropsMemberTransport(memberSnapshot) : null;
-  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled nbaEnabled={nbaEnabled} /><NflPlayerPropsProductDashboardTransport transport={transport} initialSelectedKey={initialSelectedKey} dataUnavailable={snapshotResult.unavailable} /></ProductAppFrame>;
+  return <ProductAppFrame><PlayerPropsLeaguePills league="nfl" nflEnabled nbaEnabled={nbaEnabled} currentGameCount={new Set(memberSnapshot?.memberDecisions.map((row) => row.gameId) ?? []).size} currentPropCount={memberSnapshot?.memberDecisions.length ?? 0} /><NflPlayerPropsProductDashboardTransport transport={transport} initialSelectedKey={initialSelectedKey} dataUnavailable={snapshotResult.unavailable} /></ProductAppFrame>;
 }
 
 function bounded(value: string | undefined, fallback: number): number { const parsed = Number(value ?? fallback); return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback; }
