@@ -1,7 +1,7 @@
 import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_INDEPENDENT_RESEARCH_RELEASE =
-  "nba_player_props_independent_research_unfit_2026_10_20_r2_matchup_context" as const;
+  "nba_player_props_independent_research_2026_10_22_r3_full_legal_refit" as const;
 
 export const NBA_PLAYER_PROP_COMPONENTS = ["points", "rebounds", "assists", "threes"] as const;
 export type NbaPlayerPropComponent = (typeof NBA_PLAYER_PROP_COMPONENTS)[number];
@@ -150,14 +150,20 @@ export function fitNbaPlayerPropsIndependentResearchModel(
   const participationPrior = clamp01(train.filter((row) => (row.target_minutes ?? 0) > 0).length / train.length);
   const minuteWeights = selectMinuteWeights(validate);
   const participationPriorStrength = selectParticipationStrength(validate, participationPrior);
+  const selectionModels = {} as Record<NbaPlayerPropComponent, StandardizedRidge>;
   const componentModels = {} as Record<NbaPlayerPropComponent, StandardizedRidge>;
   const validationMetrics = {} as Record<NbaPlayerPropComponent, number | null>;
 
   for (const component of NBA_PLAYER_PROP_COMPONENTS) {
     const spec = COMPONENT_SPEC[component];
     const lambda = selectRidgeLambda(train, validate, spec, minuteWeights);
-    componentModels[component] = fitStandardizedRidge(appearanceTrain, spec, lambda);
-    validationMetrics[component] = componentMae(validate, componentModels[component], spec, minuteWeights);
+    selectionModels[component] = fitStandardizedRidge(appearanceTrain, spec, lambda);
+    validationMetrics[component] = componentMae(validate, selectionModels[component], spec, minuteWeights);
+    componentModels[component] = fitStandardizedRidge(
+      ordered.filter((row) => (row.target_minutes ?? 0) > 0),
+      spec,
+      lambda,
+    );
   }
 
   const validationResiduals = validate.flatMap((row) => {
@@ -168,7 +174,7 @@ export function fitNbaPlayerPropsIndependentResearchModel(
       const spec = COMPONENT_SPEC[component];
       const target = row[spec.target];
       if (target === null) return [];
-      residual[component] = target - clampNonnegative(predictRate(row, componentModels[component]) * minutes);
+      residual[component] = target - clampNonnegative(predictRate(row, selectionModels[component]) * minutes);
     }
     return [residual];
   });
@@ -178,7 +184,7 @@ export function fitNbaPlayerPropsIndependentResearchModel(
     mode: "offline_research_only",
     actionable: false,
     trainedThrough: ordered.at(-1)!.feature_cutoff,
-    trainingRows: train.length,
+    trainingRows: ordered.length,
     validationRows: validate.length,
     minuteWeights,
     participationPrior,

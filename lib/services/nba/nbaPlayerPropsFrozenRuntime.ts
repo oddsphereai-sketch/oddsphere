@@ -18,9 +18,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_21_r1_private_forward" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_21_r1_private_disabled" as const;
+  "nba_player_props_forward_decision_2026_10_22_r2_private_disabled" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -83,6 +83,8 @@ type FrozenArtifact = Readonly<{
   structuralDirectModels: Readonly<Record<Component, StructuralCountModel>>;
   structuralLogModels: Readonly<Record<Component, StructuralCountModel>>;
   opportunityModels: Readonly<Record<Component, StructuralCountModel>>;
+  robustMinuteModel?: MinuteRegression;
+  robustModels?: Readonly<Record<Component, StructuralCountModel>>;
   distributions: Readonly<Record<FoundationMarket, Readonly<{ bias: number; standardDeviation: number }>>>;
   reliabilityModels: Readonly<Record<FoundationMarket, ReliabilityModel>>;
   gradePolicies: Readonly<Record<FoundationMarket, Readonly<{
@@ -169,6 +171,10 @@ export function nbaPlayerPropsFrozenRuntimeArtifact(): FrozenArtifact {
       || !artifact.distributions[market] || !artifact.reliabilityModels[market]
       || !artifact.gradePolicies[market]) {
       throw new Error(`NBA props frozen runtime artifact is incomplete for ${market}.`);
+    }
+    if (artifact.underlyingByMarket[market] === "robust_component_counts"
+      && (!artifact.robustMinuteModel || !artifact.robustModels)) {
+      throw new Error(`NBA props frozen runtime artifact lacks robust models for ${market}.`);
     }
   }
   validatedArtifact = artifact;
@@ -304,6 +310,13 @@ function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarke
     const base = projectNbaPlayerPropsIndependent(row, artifact.ridgeModel);
     if (base.conditionalMinutes <= 0) return base.combinations[market];
     return Math.max(0, (base.combinations[market] / base.conditionalMinutes) * predictMinutes(row, artifact.minuteModel));
+  }
+  if (underlying === "robust_component_counts") {
+    return COMPONENTS[market].reduce((sum, component) => sum + predictStructural(
+      row,
+      artifact.robustModels![component],
+      artifact.robustMinuteModel!,
+    ), 0);
   }
   const models = underlying === "structural_log_counts"
     ? artifact.structuralLogModels

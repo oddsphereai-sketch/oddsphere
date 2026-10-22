@@ -2,9 +2,9 @@ import type { NbaPlayerPropMarket, NbaPlayerPropSide } from "./nbaPlayerPropsCon
 import type { NbaPlayerPropsReaderMetric } from "./nbaPlayerPropsReaderContract";
 
 export const NBA_PLAYER_PROPS_PRODUCT_CANDIDATE_RELEASE =
-  "nba_player_props_product_candidate_2026_10_21_r4_private_forward_ready" as const;
+  "nba_player_props_product_candidate_2026_10_22_r5_private_forward_ready" as const;
 export const NBA_PLAYER_PROPS_MEMBER_SNAPSHOT_CANDIDATE_RELEASE =
-  "nba_player_props_member_snapshot_candidate_2026_10_21_r4_private_forward_ready_disabled" as const;
+  "nba_player_props_member_snapshot_candidate_2026_10_22_r5_private_forward_ready_disabled" as const;
 export const NBA_PLAYER_PROPS_LOCK_CANDIDATE_RELEASE =
   "nba_player_props_lock_candidate_2026_10_21_r1_immutable" as const;
 

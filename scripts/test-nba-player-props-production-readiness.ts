@@ -29,7 +29,13 @@ import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/
 
 const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_21_r1_private_forward");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward");
+assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
+assert(artifact.robustMinuteModel, "robust rebound release requires its rotation-aware minute model");
+assert(artifact.robustModels?.rebounds, "robust rebound release requires a frozen rebound component");
+assert.equal(artifact.gradePolicies.points_rebounds.kind, "slate_relative_lean");
+assert.equal(artifact.gradePolicies.points_rebounds.policy.maxPerSlate, 1);
+assert.equal(artifact.gradePolicies.points_rebounds.policy.signalFamily, "target_price_probability");
 assert.equal(nbaPlayerPropsScheduleGameMatches(
   { awayTeam: "GS", homeTeam: "LAL" },
   { awayTeam: "GSW", homeTeam: "LAL" },
