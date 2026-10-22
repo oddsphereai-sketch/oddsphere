@@ -360,6 +360,7 @@ async function main(): Promise<void> {
   const previewOutputValue = value("--preview-output");
   const artifactOutputValue = value("--artifact-output");
   const parityOutputValue = value("--parity-output");
+  const gradeRecalibrationOutputValue = value("--grade-recalibration-output");
   const projectionOnly = hasFlag("--projection-only");
   const preserveActiveReleasePolicy = hasFlag("--preserve-active-release-policy");
   const dataset = JSON.parse(await readFile(input, "utf8")) as Dataset;
@@ -641,6 +642,19 @@ async function main(): Promise<void> {
         && row.canonicalGameId !== null
         && confirmationIds.has(Number(row.providerEventId))),
       rows: exactPriceResearch.parityRows,
+    }, null, 2)}\n`, "utf8");
+  }
+  if (gradeRecalibrationOutputValue) {
+    const gradeRecalibrationOutput = path.resolve(gradeRecalibrationOutputValue);
+    await mkdir(path.dirname(gradeRecalibrationOutput), { recursive: true });
+    await writeFile(gradeRecalibrationOutput, `${JSON.stringify({
+      release: "nba_player_props_grade_recalibration_dataset_2026_10_22_r1_active_role_integrity",
+      mode: "offline_research_only",
+      actionable: false,
+      sourceDatasetRelease: dataset.release,
+      sourceTournamentRelease: report.release,
+      immutableInputsSha256: dataset.immutableInputsSha256,
+      rows: exactPriceResearch.recalibrationRows,
     }, null, 2)}\n`, "utf8");
   }
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -2311,6 +2325,11 @@ function buildExactPriceGradeResearch(args: {
   const selectedPreviewRows = expandedPreviewRows.filter((row) => previewGameIds.has(row.gameId));
   return {
     report,
+    recalibrationRows: {
+      reliabilityFit: reliabilityRows,
+      gradePolicy: policyRows,
+      confirmation: confirmationRows,
+    },
     parityRows: expandedPreviewRows,
     previewRows: selectedPreviewRows,
     previewGameIds,
