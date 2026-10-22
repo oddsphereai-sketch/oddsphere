@@ -21,9 +21,11 @@ type GameSummary = NbaPlayerPropsMemberSnapshot["games"][number] & { reads: numb
 export function NbaPlayerPropsProductDashboard({
   snapshot,
   initialSelectedKey = null,
+  reviewSource = "historical",
 }: {
   snapshot: NbaPlayerPropsMemberSnapshot;
   initialSelectedKey?: string | null;
+  reviewSource?: "live" | "historical";
 }) {
   const [selectedGame, setSelectedGame] = useState("all");
   const [grade, setGrade] = useState<GradeFilter>("All");
@@ -50,8 +52,8 @@ export function NbaPlayerPropsProductDashboard({
 
   return <div className="w-full pb-10" data-review-surface="nba-player-props" data-product-release={snapshot.productRelease}>
     <aside className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5">
-      <p className="text-[10px] font-black uppercase text-amber-300">Private founder review · Historical confirmation slate</p>
-      <p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">This is real point-in-time model, matchup, and exact-price evidence. It cannot publish, lock, settle, or appear in member navigation.</p>
+      <p className="text-[10px] font-black uppercase text-amber-300">Private founder review · {reviewSource === "live" ? "Current candidate slate" : "Historical confirmation slate"}</p>
+      <p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">This is real point-in-time model, matchup, and exact-price evidence. It cannot appear in member navigation while publication remains disabled.</p>
     </aside>
 
     <header className="border-b border-gray-800 pb-6">
@@ -88,10 +90,9 @@ export function NbaPlayerPropsProductDashboard({
       <div className="mt-3 flex gap-2 overflow-x-auto border-t border-gray-800 pt-3">{(["All", "Best Angle", "Lean", "Watchlist", "No Play"] as GradeFilter[]).map((value) => <PlayerPropsFilterButton key={value} label={value} active={grade === value} onClick={() => setGrade(value)} />)}</div>
     </section>
 
-    <section className="py-7">
+    <section className="py-7" data-product-zone="full-board">
       <PlayerPropsSectionHeading eyebrow="Full board" title="One line. One projection. One read." count={`${rows.length} props`} />
-      <div className="mt-4 overflow-hidden rounded-lg border border-gray-800">
-        <div className="hidden grid-cols-[1.45fr_1fr_0.8fr_0.9fr_0.8fr_0.65fr] gap-3 border-b border-gray-800 bg-black/30 px-4 py-2 text-[9px] font-black uppercase text-gray-600 md:grid"><span>Player</span><span>Market</span><span>Forecast</span><span>Prediction</span><span>Price</span><span>Grade</span></div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
         {rows.map((row) => <BoardRow key={row.decisionKey} row={row} onSelect={setSelectedKey} />)}
       </div>
     </section>
@@ -110,20 +111,48 @@ function RadarCard({ row, onSelect }: { row: Row; onSelect: (key: string) => voi
   const colors = gradeColors(row.grade);
   return <PlayerPropsRadarCardFrame borderColor={colors.border} background={`linear-gradient(180deg, ${colors.background}, rgba(14,18,24,.98) 44%)`} accentColor={teamColor(row.team)} watermark={<span className="text-[96px] font-black text-white">{row.team}</span>}>
     <div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{marketLabel(row.market)}</span><GradeBadge grade={row.grade} /></div>
-    <div className="mt-4 flex items-center gap-3"><TeamBadge team={row.team} large /><div className="min-w-0"><h3 className="truncate text-lg font-black text-white">{row.playerName}</h3><p className="text-[10px] text-gray-500">{row.team} vs {row.opponent}</p></div></div>
+    <div className="mt-4 flex items-center gap-3"><PlayerVisual row={row} compact /><div className="min-w-0"><h3 className="truncate text-lg font-black text-white">{row.playerName}</h3><p className="text-[10px] text-gray-500">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</p></div></div>
     <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-gray-800 bg-gray-800"><Metric title="Projection" value={row.projection.toFixed(1)} /><Metric title="Line" value={row.line.toFixed(1)} /><Metric title="Model" value={percent(row.probability)} /></div>
     <div className="mt-4 flex items-end justify-between gap-3"><div><p className="text-[9px] font-black uppercase text-gray-600">OddSphere read</p><strong className="mt-1 block text-xl text-white">{selection(row)}</strong><p className="mt-1 text-[10px] text-gray-500">{book(row.sportsbook)} · {price(row.americanPrice)}</p></div><button type="button" onClick={() => onSelect(row.decisionKey)} className="rounded-md border border-violet-400/40 px-3 py-2 text-[10px] font-black uppercase text-violet-200 hover:bg-violet-400/10">Open reader ↑</button></div>
   </PlayerPropsRadarCardFrame>;
 }
 
 function BoardRow({ row, onSelect }: { row: Row; onSelect: (key: string) => void }) {
-  return <button type="button" onClick={() => onSelect(row.decisionKey)} className="grid w-full gap-3 border-b border-gray-800 px-4 py-4 text-left last:border-b-0 hover:bg-white/[0.025] md:grid-cols-[1.45fr_1fr_0.8fr_0.9fr_0.8fr_0.65fr] md:items-center">
-    <span className="flex min-w-0 items-center gap-3"><TeamBadge team={row.team} /><span className="min-w-0"><strong className="block truncate text-sm text-white">{row.playerName}</strong><span className="text-[10px] text-gray-500">{row.team} vs {row.opponent}</span></span></span>
-    <span><span className="block text-[9px] font-black uppercase text-gray-600 md:hidden">Market</span><strong className="text-xs text-gray-300">{marketLabel(row.market)}</strong></span>
-    <span><span className="block text-[9px] font-black uppercase text-gray-600 md:hidden">Forecast</span><strong className="text-sm tabular-nums text-white">{row.projection.toFixed(1)}</strong><span className="ml-1 text-[10px] text-gray-600">vs {row.line}</span></span>
-    <span className="font-black text-white">{selection(row)}</span>
-    <span><strong className="block text-xs text-white">{price(row.americanPrice)}</strong><span className="text-[9px] text-gray-500">{book(row.sportsbook)}</span></span>
-    <GradeBadge grade={row.grade} />
+  const colors = gradeColors(row.grade);
+  return <button
+    type="button"
+    onClick={() => onSelect(row.decisionKey)}
+    className="group relative overflow-hidden rounded-xl border bg-[#0b0e14] text-left transition hover:-translate-y-0.5 hover:border-violet-400/55 hover:shadow-[0_18px_50px_rgba(0,0,0,.32)]"
+    style={{ borderColor: colors.border }}
+  >
+    <span className="absolute inset-x-0 top-0 h-20 opacity-80" style={{ background: `linear-gradient(105deg, ${teamColor(row.team)}30, ${colors.background}, transparent 78%)` }} />
+    <span className="relative flex items-start gap-3 px-4 pt-4">
+      <PlayerVisual row={row} />
+      <span className="min-w-0 flex-1 pt-0.5">
+        <span className="flex items-start justify-between gap-3">
+          <span className="min-w-0"><strong className="block truncate text-base font-black text-white">{row.playerName}</strong><span className="mt-0.5 block text-[10px] text-gray-500">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</span></span>
+          <GradeBadge grade={row.grade} />
+        </span>
+        <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-violet-300">{marketLabel(row.market)}</span>
+      </span>
+    </span>
+    <span className="relative mt-3 grid grid-cols-[1.35fr_1fr] gap-3 px-4">
+      <span className="rounded-lg border border-gray-800 bg-black/25 p-3">
+        <span className="block text-[8px] font-black uppercase tracking-wider text-gray-600">OddSphere read</span>
+        <strong className="mt-1 block text-2xl font-black text-white">{selection(row)}</strong>
+        <span className="mt-1 block text-[10px] text-gray-500">{book(row.sportsbook)} · <span className="font-bold text-gray-300">{price(row.americanPrice)}</span></span>
+      </span>
+      <span className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800">
+        <Metric title="Projection" value={row.projection.toFixed(1)} />
+        <Metric title="Line" value={row.line.toFixed(1)} />
+        <Metric title="Confidence" value={percent(row.probability)} />
+        <Metric title="Market read" value={percent(row.targetExcludedProbability)} />
+      </span>
+    </span>
+    <span className="relative mt-4 flex items-center justify-between border-t border-gray-800 px-4 py-3 text-[9px] font-black uppercase tracking-wider">
+      <span className={movementTone(row)}>{movementLabel(row)}</span>
+      <span className="text-violet-200 transition group-hover:text-white">Open reader ↑</span>
+    </span>
   </button>;
 }
 
@@ -131,9 +160,19 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
   const bestPrices = bestPriceBySide(row.priceLadder);
   return <PlayerPropReaderDialog ariaLabel={`${row.playerName} ${marketLabel(row.market)} prop reader`} title={`${row.playerName} · ${marketLabel(row.market)}`} leading={<TeamBadge team={row.team} large />} onClose={onClose}>
     <div className="p-4 sm:p-6">
-      <div className="grid gap-3 rounded-lg border border-gray-800 bg-[#0d1015] p-4 sm:grid-cols-[1.4fr_repeat(3,1fr)] sm:items-center">
-        <div><GradeBadge grade={row.grade} /><h3 className="mt-3 text-2xl font-black text-white">{selection(row)}</h3><p className="mt-1 text-xs text-gray-500">{row.team} vs {row.opponent} · {book(row.sportsbook)} {price(row.americanPrice)}</p></div>
-        <Metric title="Projection" value={row.projection.toFixed(1)} /><Metric title="Line" value={row.line.toFixed(1)} /><Metric title="Probability" value={percent(row.probability)} />
+      <div className="relative overflow-hidden rounded-xl border border-gray-800 bg-[#0d1015] p-4 sm:p-5">
+        <div className="absolute inset-x-0 top-0 h-28 opacity-70" style={{ background: `linear-gradient(105deg, ${teamColor(row.team)}38, rgba(124,58,237,.10), transparent 75%)` }} />
+        <div className="relative grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
+          <PlayerVisual row={row} hero />
+          <div>
+            <div className="flex flex-wrap items-center gap-2"><GradeBadge grade={row.grade} /><span className="text-[9px] font-black uppercase tracking-wider text-violet-300">{marketLabel(row.market)}</span></div>
+            <h3 className="mt-3 text-3xl font-black text-white">{selection(row)}</h3>
+            <p className="mt-1 text-xs text-gray-400">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)} · {book(row.sportsbook)} {price(row.americanPrice)}</p>
+          </div>
+        </div>
+        <div className="relative mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 sm:grid-cols-4">
+          <Metric title="Projection" value={row.projection.toFixed(1)} /><Metric title="Line" value={row.line.toFixed(1)} /><Metric title="Confidence" value={percent(row.probability)} /><Metric title="Market read" value={percent(row.targetExcludedProbability)} />
+        </div>
       </div>
       <div className="mt-5 grid gap-4 lg:grid-cols-3"><EvidencePanel title="Role & minutes" metrics={row.role} /><EvidencePanel title="Recent production" metrics={row.production} /><EvidencePanel title="Matchup" metrics={row.matchup} /></div>
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -150,6 +189,17 @@ function ProbabilityBar({ title, value, tone }: { title: string; value: number; 
 function PanelTitle({ children }: { children: React.ReactNode }) { return <p className="text-[10px] font-black uppercase tracking-wider text-violet-300">{children}</p>; }
 function Metric({ title, value }: { title: string; value: string }) { return <span className="bg-gray-950 px-2 py-3 text-center"><span className="block text-[8px] font-black uppercase text-gray-600">{title}</span><strong className="mt-1 block text-sm tabular-nums text-white">{value}</strong></span>; }
 function GradeBadge({ grade }: { grade: NbaPlayerPropsMemberGrade }) { const colors = gradeColors(grade); return <span className="inline-flex w-fit rounded border px-2 py-1 text-[9px] font-black uppercase tracking-wider" style={{ borderColor: colors.border, background: colors.background, color: colors.text }}>{grade}</span>; }
+function PlayerVisual({ row, compact = false, hero = false }: { row: Row; compact?: boolean; hero?: boolean }) {
+  const dimensions = hero ? "h-24 w-24" : compact ? "h-12 w-12" : "h-16 w-14";
+  const initials = row.playerName.split(/\s+/).filter(Boolean).slice(0, 2).map((name) => name[0]).join("");
+  return <span className={`relative inline-flex shrink-0 items-end justify-center overflow-hidden rounded-xl border ${dimensions}`} style={{ borderColor: `${teamColor(row.team)}88`, background: `linear-gradient(145deg, ${teamColor(row.team)}88, #0b0e14 72%)` }}>
+    <span className={`${hero ? "text-4xl" : compact ? "text-lg" : "text-2xl"} absolute inset-0 flex items-center justify-center font-black text-white/15`}>{initials}</span>
+    <span className={`relative mb-1.5 rounded-full border bg-white shadow-[0_5px_18px_rgba(0,0,0,.38)] ${hero ? "h-12 w-12" : compact ? "h-7 w-7" : "h-9 w-9"}`} style={{ borderColor: teamColor(row.team) }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`https://a.espncdn.com/i/teamlogos/nba/500/${row.team.toLowerCase()}.png`} alt="" className="h-full w-full object-contain p-0.5" />
+    </span>
+  </span>;
+}
 function TeamBadge({ team, large = false }: { team: string; large?: boolean }) {
   const size = large ? "h-11 w-11" : "h-8 w-8";
   return <span className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border bg-white font-black ${size}`} style={{ borderColor: teamColor(team), color: teamColor(team) }}>
@@ -174,6 +224,21 @@ const TEAM_COLORS: Record<string, string> = { ATL: "#E03A3E", BOS: "#007A33", BK
 function book(value: string): string { const labels: Record<string, string> = { betmgm: "BetMGM", betrivers: "BetRivers", caesars: "Caesars", draftkings: "DraftKings", fanduel: "FanDuel" }; return labels[value.toLowerCase()] ?? value; }
 function price(value: number): string { return value > 0 ? `+${value}` : String(value); }
 function percent(value: number): string { return `${(value * 100).toFixed(1)}%`; }
+function movementLabel(row: Row): string {
+  if (!row.movement) return "";
+  const lineDelta = row.movement.currentLine - row.movement.openingLine;
+  if (lineDelta === 0 && row.movement.currentPrice === row.movement.openingPrice) return "Same-book market flat";
+  if (lineDelta > 0) return "Line moved toward Over";
+  if (lineDelta < 0) return "Line moved toward Under";
+  return row.movement.currentPrice < row.movement.openingPrice ? `Price strengthened ${capitalize(row.side)}` : `Price eased ${capitalize(row.side)}`;
+}
+function movementTone(row: Row): string {
+  if (!row.movement) return "text-gray-600";
+  const supportsSide = row.side === "over"
+    ? row.movement.currentLine > row.movement.openingLine || row.movement.currentPrice < row.movement.openingPrice
+    : row.movement.currentLine < row.movement.openingLine || row.movement.currentPrice < row.movement.openingPrice;
+  return supportsSide ? "text-emerald-300" : "text-amber-300";
+}
 function capitalize(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
 function unique(values: string[]): string[] { return [...new Set(values)]; }
 function gameTime(value: string): string { return new Date(value).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }); }

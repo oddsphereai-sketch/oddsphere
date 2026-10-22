@@ -64,6 +64,7 @@ import {
 } from "@/lib/services/nba/nbaRollingSchedule";
 import { collectNbaProfessionalGameInputs } from "@/lib/services/nba/nbaProfessionalGameInputs";
 import { refreshNbaPlayerPropsPrivateCandidate } from "@/lib/services/nba/nbaPlayerPropsPrivateWriter";
+import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecycle";
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
@@ -135,6 +136,7 @@ export async function GET(request: Request): Promise<Response> {
 
       const now = new Date();
       const etDateDashed = currentSlateDate("nba"); // YYYY-MM-DD
+      const playerPropsSlateDate = nbaPlayerPropsSlateDate(now);
       const season = currentNbaRatingsSeason(now);
       const providerSeason = currentNbaProviderSeason(now);
 
@@ -422,7 +424,7 @@ export async function GET(request: Request): Promise<Response> {
           const rollingSchedule = await loadNbaRollingSchedule(etDateDashed);
           const privatePlayerProps = await refreshNbaPlayerPropsPrivateCandidate({
             client: supabase,
-            slateDate: etDateDashed,
+            slateDate: playerPropsSlateDate,
             season: providerSeason,
             schedule: rollingSchedule.games,
             ballDontLieApiKey: balldontlieApiKey,
@@ -434,6 +436,7 @@ export async function GET(request: Request): Promise<Response> {
           privatePlayerPropsWrites = privatePlayerProps.status === "published_private" ? 1 : 0;
         } catch (error) {
           partial = true;
+          console.error("NBA private player-props candidate refresh failed", error);
           stepDetails.player_props_private_candidate = {
             public_enabled: false,
             status: "last_known_good_preserved",

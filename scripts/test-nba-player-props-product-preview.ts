@@ -70,8 +70,16 @@ for (const row of snapshot.decisions) {
 }
 
 const publicPage = readFileSync(path.join(process.cwd(), "app/player-props/page.tsx"), "utf8");
+const previewPage = readFileSync(path.join(process.cwd(), "app/dev/nba-props-preview/page.tsx"), "utf8");
+const dashboard = readFileSync(path.join(process.cwd(), "app/player-props/components/NbaPlayerPropsProductDashboard.tsx"), "utf8");
 const pills = readFileSync(path.join(process.cwd(), "app/player-props/components/PlayerPropsLeaguePills.tsx"), "utf8");
 assert(!publicPage.includes("NbaPlayerPropsProductDashboard"));
+assert.match(previewPage, /readNbaPlayerPropsPrivateSnapshot/);
+assert.match(previewPage, /nbaPlayerPropsSlateDate\(\)/);
+assert.match(previewPage, /currentCandidate \? "live" : "historical"/);
+assert.match(dashboard, /data-product-zone="full-board"/);
+assert.match(dashboard, /Market read/);
+assert.match(dashboard, /Same-book market flat/);
 assert.match(pills, /nbaEnabled && reviewMode/);
 assert(!pills.includes('nbaEnabled ? (reviewMode'));
 
