@@ -1,5 +1,10 @@
 # Daily Edge current-quote and opening-cycle authority — 2026-10-22
 
+> Superseded in part on 2026-10-22: the 14-day opening cutoff remains the CFB
+> contract, but no longer applies to NFL. The follow-up source audit proved the
+> long-range Caesars NE-CHI row was the valid exact-event opening. See
+> `2026-10-22-nfl-full-market-trail-reader.md`.
+
 ## Incident
 
 The member NFL reader displayed a real Caesars New England–Chicago price trail whose
