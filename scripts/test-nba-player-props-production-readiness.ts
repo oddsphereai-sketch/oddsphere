@@ -10,6 +10,7 @@ import {
   mergeNbaPlayerPropsCurrentState,
   NBA_PLAYER_PROPS_CURRENT_STATE_RELEASE,
 } from "../lib/services/nba/nbaPlayerPropsCurrentState";
+import { nbaPlayerPropsSlateDate } from "../lib/services/nba/nbaPlayerPropsLifecycle";
 import {
   decodeNbaPlayerPropsPrivatePayload,
   encodeNbaPlayerPropsPrivatePayload,
@@ -29,12 +30,41 @@ import { nbaPlayerPropsScheduleGameMatches } from "../lib/services/nba/nbaPlayer
 import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/nba/nbaPointInTimeFeatures";
 
 const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
+const frozenRuntimeSource = readFileSync(
+  path.join(process.cwd(), "lib/services/nba/nbaPlayerPropsFrozenRuntime.ts"),
+  "utf8",
+);
 assert.equal(artifact.publicEnabled, false);
 assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum");
 assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
+assert.match(
+  frozenRuntimeSource,
+  /readFileSync\(artifactPath, "utf8"\)/,
+  "production scoring must verify the exact traced artifact bytes instead of a bundler-rewritten JSON object",
+);
+assert.doesNotMatch(
+  frozenRuntimeSource,
+  /import frozenArtifactJson/,
+  "the frozen runtime must not import the large numeric JSON artifact through the server bundler",
+);
 assert(artifact.robustMinuteModel, "robust rebound release requires its rotation-aware minute model");
 assert(artifact.robustModels?.rebounds, "robust rebound release requires a frozen rebound component");
 assert.equal(artifact.gradePolicies.points_rebounds.kind, "slate_relative_lean");
+assert.equal(
+  nbaPlayerPropsSlateDate(new Date("2026-10-22T03:59:59.000Z")),
+  "2026-10-21",
+  "the current NBA props slate remains present through 11:59:59 p.m. Eastern",
+);
+assert.equal(
+  nbaPlayerPropsSlateDate(new Date("2026-10-22T04:00:00.000Z")),
+  "2026-10-22",
+  "the NBA props slate rolls at midnight Eastern instead of waiting for game completion",
+);
+assert.equal(
+  nbaPlayerPropsSlateDate(new Date("2026-11-02T05:00:00.000Z")),
+  "2026-11-02",
+  "the midnight Eastern boundary remains DST-safe",
+);
 assert.equal(artifact.gradePolicies.points_rebounds.policy.maxPerSlate, 1);
 assert.equal(artifact.gradePolicies.points_rebounds.policy.signalFamily, "target_price_probability");
 assert.equal(
@@ -273,6 +303,7 @@ assert.equal(correctedState.state.games.find((row) => row.gameId === games[0]!.g
 const route = readFileSync(path.join(process.cwd(), "app/api/cron/nba-daily-refresh/route.ts"), "utf8");
 assert.match(route, /refreshNbaPlayerPropsPrivateCandidate/);
 assert.match(route, /NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED/);
+assert.match(route, /nbaPlayerPropsSlateDate\(now\)/);
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert(!route.includes("setInterval("));
 

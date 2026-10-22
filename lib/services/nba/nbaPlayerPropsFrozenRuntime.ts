@@ -1,4 +1,6 @@
-import frozenArtifactJson from "./fixtures/nbaPlayerPropsFrozenRuntimeArtifact.json";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { nbaPlayerPropsArtifactSha256 } from "./nbaPlayerPropsArtifactChecksum";
 import {
   NBA_PLAYER_PROPS_FOUNDATION_MARKETS,
@@ -156,9 +158,24 @@ const COMPONENTS: Readonly<Record<FoundationMarket, readonly Component[]>> = {
 
 let validatedArtifact: FrozenArtifact | null = null;
 
+const FROZEN_ARTIFACT_RELATIVE_PATH =
+  "lib/services/nba/fixtures/nbaPlayerPropsFrozenRuntimeArtifact.json";
+
+/**
+ * Read the exact traced artifact bytes instead of importing the JSON object.
+ * Next's production bundler is free to re-emit imported JSON as JavaScript;
+ * that can alter a large numeric artifact before its integrity check runs.
+ * The serverless trace retains this static file beside the function, so the
+ * checked payload is byte-for-byte the committed artifact in every runtime.
+ */
+function readFrozenArtifact(): FrozenArtifact {
+  const artifactPath = path.join(process.cwd(), FROZEN_ARTIFACT_RELATIVE_PATH);
+  return JSON.parse(readFileSync(artifactPath, "utf8")) as FrozenArtifact;
+}
+
 export function nbaPlayerPropsFrozenRuntimeArtifact(): FrozenArtifact {
   if (validatedArtifact) return validatedArtifact;
-  const artifact = frozenArtifactJson as unknown as FrozenArtifact;
+  const artifact = readFrozenArtifact();
   if (artifact.release !== NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE || artifact.publicEnabled !== false) {
     throw new Error("NBA props frozen runtime artifact release or public gate is invalid.");
   }

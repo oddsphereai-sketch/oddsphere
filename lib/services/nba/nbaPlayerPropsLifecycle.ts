@@ -3,10 +3,11 @@ import {
   type NbaPlayerPropsMemberDecision,
   type NbaPlayerPropsMemberSnapshot,
 } from "./nbaPlayerPropsProductContract";
+import { currentSlateDate } from "../../dates/slateDate";
 import { nbaPlayerPropsCadenceStage, type NbaPlayerPropsCadenceStage } from "./nbaPlayerPropsSourcePolicy";
 
 export const NBA_PLAYER_PROPS_LIFECYCLE_CANDIDATE_RELEASE =
-  "nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only" as const;
+  "nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary" as const;
 export const NBA_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nba" as const;
 export const NBA_PLAYER_PROPS_LOCK_LEAD_MINUTES = 60;
 
@@ -26,6 +27,15 @@ export type NbaPlayerPropsRefreshPlan = Readonly<{
   lockSweepGameIds: readonly string[];
   stages: Readonly<Record<string, NbaPlayerPropsCadenceStage>>;
 }>;
+
+/**
+ * NBA props slates roll at the Eastern calendar-day boundary. Game status is
+ * deliberately irrelevant: a final does not remove the slate early, and a
+ * late game cannot hold the completed date on the next day's board.
+ */
+export function nbaPlayerPropsSlateDate(now: Date = new Date()): string {
+  return currentSlateDate("nba", now);
+}
 
 /**
  * Pure planning only. A future cron may call this behind the shared NBA

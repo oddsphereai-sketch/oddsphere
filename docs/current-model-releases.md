@@ -283,7 +283,7 @@ Last reviewed: 2026-10-22
   `nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum` /
   `nba_player_props_forward_decision_2026_10_22_r4_binary_checksum_disabled` /
   `nba_player_props_product_candidate_2026_10_22_r5_private_forward_ready` /
-  `nba_player_props_lifecycle_candidate_2026_10_21_r3_prelock_observation_only`.
+  `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   The sole private writer is
   `nba_player_props_private_writer_2026_10_21_r4_bounded_market_chronology`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
@@ -3999,6 +3999,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
 - NBA schedule: stable-input refresh once daily at `30 11 * * *`; volatile seed/line/snapshot refresh hourly at `12 6-10,12 * * *` and every 30 minutes at `12,42 0-5,13-23 * * *`; all writes fail closed unless `NBA_CRON_ENABLED=true`
+  - The private NBA player-props snapshot key advances at midnight Eastern, independent of game status. Completed games remain in their immutable prior-date snapshot; late games cannot delay the next calendar slate.
   - Current-day seed, rating, and line defects still block the member snapshot. Future-window quote defects remain visible as a partial run and retry normally, but no longer suppress an otherwise complete current slate.
 - Canonical NBA split/price evidence cadence: every 15 minutes during `0-3` and `11-23` UTC, plus an hourly `20 4-10 * * *` continuity run. The October 21 continuity repair closes the prior 03:45-11:00 UTC collection blackout, during which the authoritative NBA line writer remained healthy but the professional reader correctly rejected its separate canonical evidence as more than 120 minutes old. The additional run uses the existing leased collector, source contracts, and reader semantics; it does not weaken freshness, add a writer, or mutate locked records.
 - NBA public-tracking eligibility: `nba_tracking_window_2026_10_05_r2_preseason_only`; valid prior-season history remains eligible, dates `2026-07-01` through `2026-10-19` are excluded, and the 2026-27 regular season is eligible from `2026-10-20`
