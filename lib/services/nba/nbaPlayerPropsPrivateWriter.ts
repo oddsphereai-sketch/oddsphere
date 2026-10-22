@@ -27,7 +27,7 @@ import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementSto
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_21_r4_bounded_market_chronology" as const;
+  "nba_player_props_private_writer_2026_10_22_r5_active_role_integrity" as const;
 
 export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   release: typeof NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE;
@@ -174,8 +174,13 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     observations: mergedMarket.history.observations,
     evaluatedAt: now,
   });
+  const invalidForecasts = forward.filter((row) =>
+    !Number.isFinite(row.independentProjection)
+    || !Number.isFinite(row.finalProjection)
+    || row.independentProjection <= 0
+    || row.finalProjection <= 0);
   const minimumCoverage = Math.max(1, Math.floor(candidates.length * 0.80));
-  if (eligibleFeatures.length < minimumCoverage || forward.length === 0) {
+  if (eligibleFeatures.length < minimumCoverage || forward.length === 0 || invalidForecasts.length > 0) {
     return {
       ...result("last_known_good_preserved"),
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
@@ -184,7 +189,14 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       observationsRefreshed: mergedMarket.refreshed,
       observationConflictsPreserved: mergedMarket.conflicts,
       featureRows: eligibleFeatures.length,
-      findings: [...live.findings, `feature_coverage_below_80_percent:${eligibleFeatures.length}/${candidates.length}`],
+      findings: [
+        ...live.findings,
+        ...(eligibleFeatures.length < minimumCoverage
+          ? [`feature_coverage_below_80_percent:${eligibleFeatures.length}/${candidates.length}`]
+          : []),
+        ...(forward.length === 0 ? ["no_forward_decisions"] : []),
+        ...(invalidForecasts.length > 0 ? [`invalid_nonpositive_forecasts:${invalidForecasts.length}`] : []),
+      ],
     };
   }
   const featureByScope = new Map(eligibleFeatures.map((row) => [`${row.game_id}|${row.player_id}`, row]));

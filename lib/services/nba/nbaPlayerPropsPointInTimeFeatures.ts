@@ -7,7 +7,7 @@ import type {
 import { buildNbaPointInTimeFeatures } from "./nbaPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_POINT_IN_TIME_FEATURE_RELEASE =
-  "nba_player_props_point_in_time_features_2026_10_21_r5_opportunity_context" as const;
+  "nba_player_props_point_in_time_features_2026_10_22_r6_active_role_integrity" as const;
 
 const RESULT_AVAILABILITY_HOURS = 5;
 
@@ -31,6 +31,7 @@ export type NbaPlayerPropFeatureRow = {
   player_games_prior: number;
   team_games_prior: number;
   participation_rate_10: number | null;
+  participation_sample_10: number;
   same_team_games_10: number;
   changed_team_since_last_game: number | null;
   days_rest: number | null;
@@ -256,14 +257,43 @@ function buildFeatureRow(args: {
   target: NbaHistoricalPlayerBox | null;
   gameContext: ReturnType<typeof buildNbaPointInTimeFeatures>[number] | null;
 }): NbaPlayerPropFeatureRow {
-  const seasonHistory = args.history.filter((row) => row.season === args.game.season);
-  const recent10 = args.history.slice(-10);
-  const recent20 = args.history.slice(-20);
-  const recent5 = args.history.slice(-5);
-  const last = args.history.at(-1) ?? null;
+  // A zero-minute box row is availability evidence, not an appearance. Preserve
+  // the incumbent role windows for ordinary histories, but when DNPs dominate
+  // the latest ten observations use actual appearances for conditional role.
+  // This prevents a season boundary, team change, or injury return from turning
+  // a genuine 20-30 minute role into a near-zero forecast while leaving normal
+  // in-season windows and their qualified calibration unchanged.
+  const activeHistory = args.history.filter((row) => row.minutes > 0);
+  const rawRecent10 = args.history.slice(-10);
+  const lastActive = activeHistory.at(-1) ?? null;
+  const rawDaysRest = lastActive
+    ? (Date.parse(args.game.startTime) - lastActive.startMs) / 86_400_000
+    : null;
+  const dnpDominated = rawRecent10.length >= 3
+    && rawRecent10.filter((row) => row.minutes <= 0).length / rawRecent10.length >= 0.5;
+  const crossesLongLayoff = rawDaysRest !== null && rawDaysRest > 30;
+  const currentSeasonActiveHistory = activeHistory.filter((row) => row.season === args.game.season);
+  const earlySeasonDnpContamination = currentSeasonActiveHistory.length > 0
+    && currentSeasonActiveHistory.length <= 3
+    && rawRecent10.some((row) => row.minutes <= 0);
+  const roleHistory = dnpDominated || crossesLongLayoff || earlySeasonDnpContamination
+    ? activeHistory
+    : args.history;
+  const seasonHistory = roleHistory.filter((row) => row.season === args.game.season);
+  const recent10 = roleHistory.slice(-10);
+  const recent20 = roleHistory.slice(-20);
+  const recent5 = roleHistory.slice(-5);
   const sameTeamGames = recent10.filter((row) => row.teamId === args.candidate.teamId).length;
-  const teamRecent10 = args.teamStarts.slice(-10);
-  const appearancesInTeamWindow = recent10.filter((row) => teamRecent10.includes(row.startMs)).length;
+  const lastOtherTeamAppearance = activeHistory.findLast((row) => row.teamId !== args.candidate.teamId) ?? null;
+  const currentTeamTenureHistory = activeHistory.filter((row) =>
+    row.teamId === args.candidate.teamId
+    && (lastOtherTeamAppearance === null || row.startMs > lastOtherTeamAppearance.startMs));
+  const firstCurrentTeamAppearance = currentTeamTenureHistory[0] ?? null;
+  const teamTenureRecent10 = firstCurrentTeamAppearance === null
+    ? []
+    : args.teamStarts.filter((value) => value >= firstCurrentTeamAppearance.startMs).slice(-10);
+  const appearancesInTeamWindow = currentTeamTenureHistory.filter((row) =>
+    teamTenureRecent10.includes(row.startMs)).length;
   const target = args.target;
   const rebounds = target ? target.oreb + target.dreb : null;
   const teamPrefix = args.candidate.teamId === args.game.homeTeamId ? "home" : "away";
@@ -285,11 +315,16 @@ function buildFeatureRow(args: {
     is_home: args.candidate.teamId === args.game.homeTeamId ? 1 : 0,
     player_games_prior: args.history.length,
     team_games_prior: args.teamStarts.length,
-    participation_rate_10: teamRecent10.length > 0 ? appearancesInTeamWindow / teamRecent10.length : null,
+    participation_rate_10: teamTenureRecent10.length > 0
+      ? appearancesInTeamWindow / teamTenureRecent10.length
+      : null,
+    participation_sample_10: teamTenureRecent10.length,
     same_team_games_10: sameTeamGames,
-    changed_team_since_last_game: last ? Number(last.teamId !== args.candidate.teamId) : null,
-    days_rest: last ? (Date.parse(args.game.startTime) - last.startMs) / 86_400_000 : null,
-    minutes_mean_3: mean(args.history.slice(-3).map((row) => row.minutes)),
+    changed_team_since_last_game: lastActive ? Number(lastActive.teamId !== args.candidate.teamId) : null,
+    // Rest effects saturate; an offseason cannot be extrapolated as 190 daily
+    // rest increments through a linear minute/count model trained in-season.
+    days_rest: rawDaysRest === null ? null : Math.min(7, rawDaysRest),
+    minutes_mean_3: mean(roleHistory.slice(-3).map((row) => row.minutes)),
     minutes_mean_5: mean(recent5.map((row) => row.minutes)),
     minutes_mean_10: mean(recent10.map((row) => row.minutes)),
     minutes_mean_season: mean(seasonHistory.map((row) => row.minutes)),

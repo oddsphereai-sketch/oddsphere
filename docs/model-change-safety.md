@@ -1,5 +1,36 @@
 # Model change safety protocol
 
+## Owner-directed correction: NBA player-props active-role integrity
+
+On 2026-10-22 Daniel Mengel rejected an NBA player-prop reader example that
+reported 2.6 recent minutes for an active new-team starter and directed
+Oddsphere to close the underlying accuracy gap rather than display invented or
+misleading values. The bounded private repair is documented in
+`docs/model-audits/2026-10-22-nba-player-props-active-role-integrity.md`.
+
+For future-unlocked private NBA player-prop candidates, zero-minute box rows
+remain participation evidence but cannot depress conditional minutes or
+per-minute production when DNPs dominate, a long layoff crosses the season
+boundary, or the opening-week window is contaminated. Participation is scoped
+to the player's actual current-team tenure with its own sample size. Rest
+saturates at seven days rather than extrapolating an offseason through an
+in-season linear model. A specialized rebound zero clamp falls back only to
+the already frozen ridge projection. A market-side reflection that would cross
+below zero remains on the qualified side 0.05 below the offered line instead
+of manufacturing a zero forecast. Any remaining non-finite or non-positive
+offered forecast preserves the last coherent private snapshot.
+
+The zero-write current-slate reconstruction moves initial zero projections
+from 57 independent / 41 final to zero / zero across 155 decisions and restores
+Kentavious Caldwell-Pope's active last-ten minutes from 2.6 to 23.1. On 17,258
+common historical rows, accuracy improves from 52.93% to 53.13% and ROI from
+-2.94% to -2.49%. The old grade layer transfers imperfectly: actionables move
+from 990 at 56.16% to 961 at 54.94%, with 143 promotions and 163 demotions.
+Therefore the corrected private runtime may advance, but the member/public gate
+must remain off until a separate release-pure grade recalibration qualifies.
+No provider calls, cadence, public surface, labels, lease, or locked payloads
+change.
+
 ## Owner-directed correction: verified full NFL trail and active-reader movement
 
 On 2026-10-22 Daniel Mengel rejected the newly collapsed `NE +136 → +136`

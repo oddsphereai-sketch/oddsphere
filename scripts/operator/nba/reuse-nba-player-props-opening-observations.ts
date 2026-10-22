@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   if (coveredGames.size !== validGameIds.size) {
     throw new Error(`Opening-price coverage is incomplete: ${coveredGames.size}/${validGameIds.size} games.`);
   }
-  const release = "nba_player_props_historical_research_dataset_2026_10_21_r5_opportunity_context_exact_prices";
+  const release = "nba_player_props_historical_research_dataset_2026_10_22_r6_active_role_integrity_exact_prices";
   const derivedFeatureReleases = [...new Set([
     ...(featureDataset.featureRows ?? []).map((row) => row.release),
     ...(featureDataset.projectionFeatureRows ?? []).map((row) => row.release),
