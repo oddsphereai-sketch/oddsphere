@@ -59,7 +59,11 @@ async function main(): Promise<void> {
   if (result.mode === "dry-run") return;
 
   console.log(`\n${"─".repeat(70)}`);
-  console.log(`WRITE complete: ${result.linesWritten} lines, ${result.lineHistoryWritten} history, ${result.errors.length} errors.`);
+  console.log(
+    `WRITE complete: ${result.linesWritten} current lines (${result.linesReverified} unchanged/reverified), ` +
+      `${result.lineGroupsVerified} groups verified, ${result.lineGroupsChanged} changed, ` +
+      `${result.lineHistoryWritten} history, ${result.errors.length} errors.`,
+  );
 }
 
 main().catch((e) => { console.error("Fatal:", e); process.exit(1); });

@@ -73,7 +73,7 @@ Last reviewed: 2026-10-22
 - October 20 MLB/NHL rollover continuity advances the operational schedule
   releases to
   `mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover` and
-  `nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`. A
+  `nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board`. A
   successful authoritative MLB Stats response with zero supported games can
   now publish the exact-date empty member artifact even when the empty
   lower-authority slate provider triggers its normal fail-closed gate; the
@@ -199,7 +199,7 @@ Last reviewed: 2026-10-22
 
 ## Cross-sport market-freshness ownership (2026-10-06)
 
-- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`.
+- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board`.
   The existing leased `nhl_daily_refresh` writer now has a lightweight intraday mode every 30
   minutes during the active window: it seeds the slate, refreshes exact lines, syncs provider-
   separated splits, recomputes unlocked predictions, and republishes the coherent Daily Edge
@@ -2428,8 +2428,8 @@ The four-season chronological tournament selected the runtime configuration on 2
 - Runtime/model release: `ucl_goals_coherent_2026_10_20_r11_minimum_coherent_decimal_score`
 - Coherent outcome contract: `ucl_coherent_market_outcome_2026_10_20_r5_qualified_goals_arbitration`
 - Elo foundation: `ucl_elo_strength_foundation_2026_10_14_r1_local_public_consensus`; the prior opening-market arbitration remains a historical audit comparator and is not the active reader.
-- Display-grade/calibration release: `ucl_grade_policy_2026_10_20_r13_sabah_live_identity`
-- Sharp market-identity release: `ucl_sharp_market_identity_2026_10_20_r5_sabah_live_identity`
+- Display-grade/calibration release: `ucl_grade_policy_2026_10_22_r14_exact_diacritic_club_identity`
+- Sharp market-identity release: `ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity`
 - Competition context: `ucl_competition_context_2026_09_03_r2_qualifying_truthful`; settlement: `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`
 - Frozen history manifest: `ucl_history_manifest_2026_09_03_r1` (185/126/63, cutoff `2026-01-28T20:00:00.000Z`, match SHA-256 `00d3761b7d94851776ffb5b893bdaded8dec85657f769140a2aef0dacd306d36`; 754 team-stat rows, stat SHA-256 `3b817b9aa164ebc5141c26dddf9194611735d98708deef2b5b7f16df91314f88`)
 - Stored-quote availability authority: `ucl_stored_quote_fallback_2026_10_14_r1_complete_same_book`
@@ -2485,6 +2485,20 @@ The four-season chronological tournament selected the runtime configuration on 2
   thresholds, stakes, writer, shared lease, cadence and locked records are
   unchanged. Evidence and rollback:
   `docs/model-audits/2026-10-20-ucl-sabah-live-identity-r13.md`.
+- October 22 r14 exact diacritic/club identity repair: Sharp's current event
+  catalog names the Lille fixture home club `Bodø/Glimt`, whose `ø` character
+  does not decompose to `o` under the existing strict normalizer, and names the
+  Viking opponent `FC Sabah Masazir`. The UCL-only exact alias registry now
+  recognizes those two provider identities without permitting substring
+  matching. Fresh raw-market coverage improves from 16/18 to 18/18 fixtures;
+  selected current prices improve from 66/72 to 72/72, complete outcomes from
+  166/180 to 180/180, and held markets from six to zero. Against the current
+  stored member board, three No Plays become priced Watchlists, with zero
+  actionable promotions, zero demotions, zero side changes, and all 13 existing
+  actionables preserved. The r11 model, probabilities, projected scores,
+  market-reader math, thresholds, stakes, writer, lease, cadence, and every
+  locked record are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-22-ucl-exact-diacritic-club-identity-r14.md`.
 - October 10 professional market-reader audit: r7 remains unchanged. The exact locked forward release was 13-3 across 16 actionables (+5.461 flat-stake units), with every actionable positive at its exact offered price. Same-book no-vig movement-toward rows went 9-1, movement-against rows 1-2, and flat rows 3-0, but the required paired promotion pool was only 3-3; therefore movement remains audit context instead of an automatic switch. Authentic public splits were absent and remain neutral. The live 18-fixture readiness replay had 16 actionables, zero nonpositive-EV actionables and zero incoherent rows. Evidence and limitations: `docs/model-audits/2026-10-10-ucl-professional-market-reader-r7-result.md`.
 - October 14 full-slate market identity repair: common UCL provider aliases now resolve Manchester City/Man City, Real Betis/Betis, Shakhtar Donetsk/Shakhtar, Slovan Bratislava/S Bratislava, and VfB Stuttgart/Stuttgart without enabling substring matching. The exact live nine-fixture probe advances from 24/36 selected prices and 62/90 outcome prices to 36/36 and 90/90, including a complete 18-row multi-book PSG-Manchester City BTTS market. Against the stored still-unlocked board, 13 previously held market tuples become coherently priced, with zero prediction-side changes, six actionable promotions and zero demotions. Existing locked records remain byte-for-byte authoritative; no score, probability, prediction formula, threshold, stake, copy, label, layout, provider cadence, writer or lease changes. Evidence: `docs/model-audits/2026-10-14-ucl-full-market-identity-coverage-r8.md`.
 - October 14 bounded partial-market recovery: a live post-deploy refresh proved that provider event identity was complete while concurrent four-market reads could still return a transient 31–35 of 36 selected quotes. The UCL adapter now loads fixtures sequentially and grants exactly one recovery load to each still-incomplete fixture. The shared EPL default remains three concurrent fixtures with its existing four-fixture recovery ceiling. The repair adds no provider calls when the first pass is complete and bounds the worst case to one additional four-market fixture load per scheduled UCL game. The forecast PMF, score, side, probability, thresholds, grades, stakes, member copy/layout, sole writer, shared lease and immutable locked payloads are unchanged on identical complete input. Evidence: `docs/model-audits/2026-10-14-ucl-bounded-partial-market-recovery-r9.md`.
@@ -4040,13 +4054,30 @@ locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 
 ## NHL regular-season champion (active from 2026-10-22)
 
-- Model: `nhl_regular_2026_r19_fresh_quote_authority`
-- Calibration: `nhl_regular_calibration_2026_r19_fresh_quote_authority`
-- Decision: `nhl_regular_decision_2026_r19_fresh_quote_authority`
-- Reader: `nhl_daily_edge_reader_2026_10_22_r15_fresh_quote_authority`
+- Model: `nhl_regular_2026_r20_verified_current_board`
+- Calibration: `nhl_regular_calibration_2026_r20_verified_current_board`
+- Decision: `nhl_regular_decision_2026_r20_verified_current_board`
+- Reader: `nhl_daily_edge_reader_2026_10_22_r16_verified_current_board`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 22 r20/r16 verified-current-board release repairs the storage and
+reader boundary without changing the r19 score model, market-reader rules, or
+grade thresholds. The prior current-board comparison silently stopped at
+PostgREST's 1,000-row default, so later games could accumulate old generations;
+an unchanged complete provider pair also retained its original fetch time even
+after a successful poll. The r13 sole leased refresh now reads the full bounded
+board, replaces each complete game/market/book group, records unchanged pairs
+as freshly verified without appending false movement, and collapses legacy
+generations. NHL model and member readers paginate current rows and append-only
+movement history, refusing partial capped reads. The exact October 22
+12-game/36-market candidate remains 1 Best Angle / 19 Lean / 16 Watchlist,
+with zero pick, grade, promotion, demotion, actionable-count, or score changes;
+Detroit-Vancouver's spread advances from the stale stored endpoint to the live
+complete provider pair. Locked records retain exact stored-payload precedence.
+Evidence and rollback:
+`docs/model-audits/2026-10-22-nhl-verified-current-board-r20.md`.
 
 The October 22 r19/r15 quote-authority release preserves the r18 independent
 score, probabilities, sides, market-reader rules, and grade thresholds while

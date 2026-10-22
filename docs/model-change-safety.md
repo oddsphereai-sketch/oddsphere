@@ -580,7 +580,7 @@ and writer ownership remain unchanged.
 
 The schedule releases advance to
 `mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover` and
-`nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`. Publication
+`nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board`. Publication
 requires exact-state and cadence regressions, the focused NHL/MLB suites,
 TypeScript, full model-change verification, latest-main integration safety,
 protected pull-request checks, and post-deploy proof that NHL serves the

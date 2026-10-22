@@ -1,7 +1,7 @@
 import type { Grade } from "@/lib/types/domain/Grade";
 
 export const UCL_PREVIEW_GRADE_RELEASE =
-  "ucl_grade_policy_2026_10_20_r13_sabah_live_identity" as const;
+  "ucl_grade_policy_2026_10_22_r14_exact_diacritic_club_identity" as const;
 
 export type UclPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type UclPreviewGrade = {

@@ -52,6 +52,8 @@ export async function loadCompleteCurrentGameLines(args: {
   gameIds: readonly number[];
   marketTypes: readonly string[];
   context: string;
+  pageSize?: number;
+  maxRows?: number;
 }): Promise<CurrentGameLineRow[]> {
   if (args.gameIds.length === 0 || args.marketTypes.length === 0) return [];
   return collectBoundedCurrentGameLineRows(async (from, to) => {
@@ -65,5 +67,9 @@ export async function loadCompleteCurrentGameLines(args: {
       .range(from, to);
     if (error) throw new Error(`${args.context}: lines query failed: ${error.message}`);
     return (data ?? []) as unknown as CurrentGameLineRow[];
-  }, { context: args.context });
+  }, {
+    context: args.context,
+    pageSize: args.pageSize,
+    maxRows: args.maxRows,
+  });
 }

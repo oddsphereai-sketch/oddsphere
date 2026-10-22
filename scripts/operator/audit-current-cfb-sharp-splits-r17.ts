@@ -9,7 +9,7 @@
 import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { SharpApiClient } from "../../lib/providers/real_api/_sharpApiClient";
-import { readCfbForwardEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
+import { readCfbForwardWriterEvidence } from "../../lib/services/football/cfbForwardEvidenceStore";
 import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "../../lib/services/football/cfbWeeklyWindow";
 import { __TEST__ as cfbSharpIdentity } from "../../lib/services/football/cfbSharpApiOdds";
 
@@ -24,10 +24,12 @@ async function main(): Promise<void> {
   if (!supabaseUrl || !serviceKey || !sharpKey) throw new Error("Supabase read credentials and SHARPAPI_KEY are required.");
 
   const now = process.argv.find((value) => value.startsWith("--now="))?.slice(6) ?? new Date().toISOString();
-  const rows = await readCfbForwardEvidence({
+  const writerEvidence = await readCfbForwardWriterEvidence({
     client: createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } }),
     season: 2026,
+    now,
   });
+  const rows = writerEvidence.evidence;
   const window = activeCfbWeeklyWindow(now);
   const latest = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
@@ -87,7 +89,12 @@ async function main(): Promise<void> {
     completeTotalGames: games.filter((game) => game.markets.total.complete).length,
     pagination: response.pagination ?? null,
     quota: sharp.getQuotaState(),
-    games,
+    ...(process.argv.includes("--detail") ? { games } : {
+      missingGames: games.filter((game) => !game.matched ||
+        !game.markets.moneyline.complete ||
+        !game.markets.spread.complete ||
+        !game.markets.total.complete),
+    }),
   }, null, 2));
 }
 

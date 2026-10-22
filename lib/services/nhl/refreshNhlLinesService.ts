@@ -27,6 +27,8 @@ import {
 } from "../../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName, type NhlTeamAbbrev } from "../../providers/nhl/_teamNameNormalizer";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
+import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
+import { replaceCurrentGameLinesBatched } from "../currentGameLinesBatchWriter";
 import { canonicalizeNhlLineRows } from "./nhlLineBoard";
 import { requiresNhlPregameMarketCoverage } from "./nhlPregameCoverage";
 
@@ -49,6 +51,9 @@ export type RefreshNhlLinesResult = {
   unmatched: number;
   parsed: number;
   linesWritten: number;
+  linesReverified: number;
+  lineGroupsVerified: number;
+  lineGroupsChanged: number;
   lineHistoryWritten: number;
   errors: string[];
 };
@@ -284,7 +289,9 @@ export async function refreshNhlLines(
     return {
       mode: "no-games", gamesInDb: 0, oddsRowsFetched: 0,
       matched: 0, unmatched: 0, parsed: 0,
-      linesWritten: 0, lineHistoryWritten: 0,
+      linesWritten: 0, linesReverified: 0,
+      lineGroupsVerified: 0, lineGroupsChanged: 0,
+      lineHistoryWritten: 0,
       errors,
     };
   }
@@ -425,14 +432,15 @@ export async function refreshNhlLines(
     return {
       mode: "dry-run", gamesInDb: games.length, oddsRowsFetched: oddsRows.length,
       matched, unmatched, parsed,
-      linesWritten: 0, lineHistoryWritten: 0,
+      linesWritten: 0, linesReverified: 0,
+      lineGroupsVerified: 0, lineGroupsChanged: 0,
+      lineHistoryWritten: 0,
       errors,
     };
   }
 
-  // Apply only changed book/market groups. Insert the replacement first and
-  // retire old row ids only after success, so a failed refresh cannot empty a
-  // card. Append line_history only for changed groups.
+  // Compare against the complete current board before replacement so flat
+  // verification polls do not masquerade as economic movement in history.
   log(`\nApplying ${payloads.length} rows…`);
   const groups = new Map<string, LinePayload[]>();
   for (const p of payloads) {
@@ -441,22 +449,40 @@ export async function refreshNhlLines(
     arr.push(p);
     groups.set(k, arr);
   }
-  const { data: currentRows, error: currentRowsError } = await supabase
-    .from("lines")
-    .select("id, game_id, market_type, sportsbook, side, line_value, odds_american")
-    .in("game_id", games.map((game) => game.id))
-    .is("player_id", null)
-    .in("market_type", ["moneyline", "total", "spread"]);
-  if (currentRowsError) throw new Error(`load current NHL lines for change detection: ${currentRowsError.message}`);
-  const currentByGroup = new Map<string, Array<{ id: number; side: string; line_value: number | null; odds_american: number | null }>>();
-  for (const row of currentRows ?? []) {
+  const currentRows = await loadCompleteCurrentGameLines({
+    client: supabase,
+    gameIds: games.map((game) => game.id),
+    marketTypes: ["moneyline", "total", "spread"],
+    context: `refreshNhlLines slate=${opts.slateDate} current-board comparison`,
+    pageSize: 1_000,
+    // This high one-time repair ceiling lets the first deployment collapse
+    // legacy duplicate generations. Healthy steady state is roughly two rows
+    // per game/market/book and remains far below the bound.
+    maxRows: 100_000,
+  });
+  const currentByGroup = new Map<string, Array<{
+    id: number;
+    game_id: number;
+    market_type: string;
+    sportsbook: string;
+    side: string;
+    line_value: number | null;
+    odds_american: number | null;
+    fetched_at: string | null;
+  }>>();
+  for (const row of currentRows) {
+    if (row.side === null) continue;
     const key = `${row.game_id}|${row.market_type}|${row.sportsbook}`;
     const list = currentByGroup.get(key) ?? [];
     list.push({
       id: Number(row.id),
+      game_id: row.game_id,
+      market_type: row.market_type,
+      sportsbook: row.sportsbook,
       side: String(row.side),
       line_value: row.line_value as number | null,
       odds_american: row.odds_american as number | null,
+      fetched_at: row.fetched_at,
     });
     currentByGroup.set(key, list);
   }
@@ -466,32 +492,52 @@ export async function refreshNhlLines(
   const groupSignature = (rows: Array<{ side: string; line_value: number | null; odds_american: number | null }>): string => (
     rows.map(rowSignature).sort().join(";")
   );
-  let linesWritten = 0;
+  const currentSignature = (rows: ReturnType<typeof currentByGroup.get>): string => {
+    const canonical = canonicalizeNhlLineRows((rows ?? []).map((row) => ({
+      ...row,
+      observed_at: row.fetched_at,
+    })));
+    const newestObserved = Math.max(...canonical.map((row) => Date.parse(row.observed_at ?? "")));
+    if (!Number.isFinite(newestObserved)) return "";
+    return groupSignature(canonical.filter((row) => Date.parse(row.observed_at ?? "") === newestObserved));
+  };
   const changedPayloads: LinePayload[] = [];
+  let unchangedPayloadRows = 0;
   for (const [key, group] of groups) {
-    if (groupSignature(group) === groupSignature(currentByGroup.get(key) ?? [])) continue;
-    const { error: insErr } = await supabase.from("lines").insert(group);
-    if (insErr) {
-      const msg = `  ✗ insert ${key}: ${insErr.message}`;
-      log(msg);
-      for (let i = 0; i < group.length; i++) errors.push(msg);
+    if (groupSignature(group) === currentSignature(currentByGroup.get(key))) {
+      unchangedPayloadRows += group.length;
       continue;
     }
-    linesWritten += group.length;
     changedPayloads.push(...group);
-    const oldIds = (currentByGroup.get(key) ?? []).map((row) => row.id).filter(Number.isFinite);
-    if (oldIds.length > 0) {
-      const { error: delErr } = await supabase.from("lines").delete().in("id", oldIds);
-      if (delErr) {
-        const msg = `  ✗ retire previous ${key}: ${delErr.message}`;
-        log(msg);
-        errors.push(msg);
-      }
-    }
   }
 
+  // Every successfully returned complete provider tuple is a current quote,
+  // even when its economics are unchanged. Replace the current table in
+  // bounded batches so fetched_at means "last explicitly verified" while
+  // line_history remains economic-change-only. The same replacement also
+  // collapses legacy duplicate current generations left by truncated reads.
+  const replacement = await replaceCurrentGameLinesBatched(
+    supabase,
+    payloads,
+    `refreshNhlLines slate=${opts.slateDate}`,
+    { maxPriorRows: 100_000 },
+  );
+  if (replacement.failedGroups > 0 || replacement.cleanupFailedGroups > 0) {
+    errors.push(
+      replacement.firstError
+      ?? `NHL current-board replacement failed for ${replacement.failedGroups} group(s)`,
+    );
+  }
+  const linesWritten = replacement.insertedRows;
+  const lineGroupsVerified = replacement.insertedGroups;
+  const completeReplacement = replacement.failedGroups === 0 && replacement.cleanupFailedGroups === 0;
+  const linesReverified = completeReplacement ? unchangedPayloadRows : 0;
+  const lineGroupsChanged = completeReplacement
+    ? new Set(changedPayloads.map((row) => `${row.game_id}|${row.market_type}|${row.sportsbook}`)).size
+    : 0;
+
   const nowIso = new Date().toISOString();
-  const historyRows: LineHistoryPayload[] = changedPayloads.map((p) => ({
+  const historyRows: LineHistoryPayload[] = (completeReplacement ? changedPayloads : []).map((p) => ({
     game_id: p.game_id,
     market_type: p.market_type,
     player_id: null,
@@ -520,7 +566,9 @@ export async function refreshNhlLines(
     gamesInDb: games.length,
     oddsRowsFetched: oddsRows.length,
     matched, unmatched, parsed,
-    linesWritten, lineHistoryWritten,
+    linesWritten, linesReverified,
+    lineGroupsVerified, lineGroupsChanged,
+    lineHistoryWritten,
     errors,
   };
 }
