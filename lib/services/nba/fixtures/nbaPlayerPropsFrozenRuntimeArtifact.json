@@ -1,5 +1,5 @@
 {
-  "release": "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward",
+  "release": "nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum",
   "publicEnabled": false,
   "sourceDatasetRelease": "nba_player_props_historical_research_dataset_2026_10_21_r5_opportunity_context_exact_prices",
   "sourceInputsSha256": "68c71ef30494811a94b53a1a3d873947b65a49a20af2e1743c1038023ecf385f",
@@ -8841,5 +8841,5 @@
       "publicQualified": false
     }
   },
-  "payloadSha256": "3325d017f774cb31036befe2416d60f69b26d5dca95e769ab3543607940de9b2"
+  "payloadSha256": "8bedee89d926a440c41d670870340f504811b03d6bf5d6370936d7ff4a515ad9"
 }

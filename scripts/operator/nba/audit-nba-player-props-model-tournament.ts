@@ -6,9 +6,9 @@
  * writes.
  */
 
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { nbaPlayerPropsArtifactSha256 } from "../../../lib/services/nba/nbaPlayerPropsArtifactChecksum";
 import {
   fitNbaPlayerPropsIndependentResearchModel,
   projectNbaPlayerPropsIndependent,
@@ -692,7 +692,7 @@ function buildFrozenRuntimeArtifact(args: {
   ]));
   const byMarket = args.exactPriceGradeResearch.byMarket;
   const artifactWithoutChecksum = {
-    release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward",
+    release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum",
     publicEnabled: false,
     sourceDatasetRelease: args.dataset.release,
     sourceInputsSha256: args.dataset.immutableInputsSha256,
@@ -757,7 +757,7 @@ function buildFrozenRuntimeArtifact(args: {
   } as const;
   return {
     ...artifactWithoutChecksum,
-    payloadSha256: createHash("sha256").update(JSON.stringify(artifactWithoutChecksum)).digest("hex"),
+    payloadSha256: nbaPlayerPropsArtifactSha256(artifactWithoutChecksum),
   };
 }
 

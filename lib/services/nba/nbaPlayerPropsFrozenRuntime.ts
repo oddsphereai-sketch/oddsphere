@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
-
 import frozenArtifactJson from "./fixtures/nbaPlayerPropsFrozenRuntimeArtifact.json";
+import { nbaPlayerPropsArtifactSha256 } from "./nbaPlayerPropsArtifactChecksum";
 import {
   NBA_PLAYER_PROPS_FOUNDATION_MARKETS,
   type NbaPlayerPropMarket,
@@ -18,9 +17,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_22_r3_canonical_checksum" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_22_r2_private_disabled" as const;
+  "nba_player_props_forward_decision_2026_10_22_r3_canonical_checksum_disabled" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -164,7 +163,7 @@ export function nbaPlayerPropsFrozenRuntimeArtifact(): FrozenArtifact {
     throw new Error("NBA props frozen runtime artifact release or public gate is invalid.");
   }
   const { payloadSha256, ...payload } = artifact;
-  const actual = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  const actual = nbaPlayerPropsArtifactSha256(payload);
   if (actual !== payloadSha256) throw new Error("NBA props frozen runtime artifact checksum mismatch.");
   for (const market of NBA_PLAYER_PROPS_FOUNDATION_MARKETS) {
     if (!artifact.selectedByMarket[market] || !artifact.underlyingByMarket[market]
