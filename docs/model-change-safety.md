@@ -195,6 +195,27 @@ cards, healthy provider coverage, and unchanged locked payloads. Roll back futur
 on a mixed release, active-roster gap, high-continuity score change, incoherent score tuple,
 unreviewed board impact, or any lock mutation.
 
+## Owner-directed correctness candidate: NBA symmetric winner confirmation r2
+
+On 2026-10-22 Daniel Mengel rejected 16 corrected versus 14 harmed winner crossings as too close to
+variance to justify treating the roster residual as fully refined. The bounded response is recorded
+in `docs/model-audits/2026-10-22-nba-roster-winner-confirmation-r17.md`.
+
+The r1 primary residual remains authoritative for every non-crossing margin correction and for the
+total correction. Only when that residual reverses the independent winner does a separately fitted,
+home/away-symmetric confirmation head arbitrate the crossing. The confirmation head activates only
+at or below 55% retained rotation minutes and represents margin evidence as home-minus-away incoming
+net, PIE, and turnover effects. If it predicts the same winner, the primary correction remains exact;
+if it disagrees, its coherent margin correction replaces the primary margin correction. This is not
+a blanket no-flip rule, fixed point cap, team override, injury adjustment, or market-following rule.
+
+Publication requires chronological crossing counts and continuous metrics for every evaluated season,
+a same-input current-board comparison, explicit actionable board-count impact, exact score coherence,
+provider and release identity checks, writer and lock immutability tests, TypeScript, the full model-
+change gate, current-main integration safety, protected PR checks, and post-deploy proof. Roll back
+future unlocked generation on a mixed release, any locked-payload mutation, score incoherence, a
+current-board result outside the reviewed path, or confirmation-head artifact mismatch.
+
 ## Owner-directed correctness candidate: NBA verified availability without a count-only cap
 
 On 2026-10-21 Daniel Mengel explicitly rejected automatic injury score adjustments and confidence

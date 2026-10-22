@@ -11,6 +11,28 @@ async function main(): Promise<void> {
 const artifact = __NBA_ROSTER_REGIME_TEST__.artifact;
 assert.equal(artifact.release, NBA_ROSTER_REGIME_RELEASE);
 assert.equal(artifact.features.length, 6);
+assert.equal(artifact.winnerConfirmation.policy, "primary_flip_requires_symmetric_confirmation");
+assert.equal(artifact.winnerConfirmation.retainedMinutesThreshold, 0.55);
+assert.equal(artifact.winnerConfirmation.margin.coefficients.length, 3);
+
+const unconfirmedFlip = __NBA_ROSTER_REGIME_TEST__.confirmedMarginCorrection({
+  independentMargin: 3,
+  primaryCorrection: -5,
+  confirmationCorrection: -1,
+});
+assert.deepEqual(unconfirmedFlip, { correction: -1, applied: true });
+const confirmedFlip = __NBA_ROSTER_REGIME_TEST__.confirmedMarginCorrection({
+  independentMargin: 3,
+  primaryCorrection: -5,
+  confirmationCorrection: -4,
+});
+assert.deepEqual(confirmedFlip, { correction: -5, applied: false });
+const noPrimaryFlip = __NBA_ROSTER_REGIME_TEST__.confirmedMarginCorrection({
+  independentMargin: 3,
+  primaryCorrection: -1,
+  confirmationCorrection: -5,
+});
+assert.deepEqual(noPrimaryFlip, { correction: -1, applied: false });
 
 const rosterMap = new Map(artifact.teamRosters.map((team) => [team.teamId, [...team.playerIds]]));
 const live: NbaLiveRosterSnapshot = {
@@ -53,6 +75,8 @@ const changed = applyNbaRosterRegime({
 });
 assert.equal(changed.audit.status, "applied");
 assert.notEqual(changed.audit.marginCorrection, 0);
+assert.ok(Number.isFinite(changed.audit.primaryMarginCorrection));
+assert.ok(Number.isFinite(changed.audit.winnerConfirmationMarginCorrection));
 assert.equal(changed.score.homeScore, (changed.score.total + changed.score.marginHome) / 2);
 assert.equal(changed.score.awayScore, (changed.score.total - changed.score.marginHome) / 2);
 
@@ -98,6 +122,7 @@ const unavailable = applyNbaRosterRegime({
 });
 assert.equal(unavailable.audit.status, "unavailable");
 assert.deepEqual(unavailable.score, independent);
+assert.equal(unavailable.audit.winnerConfirmationApplied, false);
 
 const playerRows = artifact.teamRosters.flatMap((team) => team.playerIds.map((id) => ({
   id,
