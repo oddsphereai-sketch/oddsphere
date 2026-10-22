@@ -5,6 +5,8 @@ export const NBA_PLAYER_PROPS_PRODUCT_CANDIDATE_RELEASE =
   "nba_player_props_product_candidate_2026_10_22_r7_rebound_grade_recalibration" as const;
 export const NBA_PLAYER_PROPS_MEMBER_SNAPSHOT_CANDIDATE_RELEASE =
   "nba_player_props_member_snapshot_candidate_2026_10_22_r7_rebound_grade_recalibration_disabled" as const;
+export const NBA_PLAYER_PROPS_MEMBER_SURFACE_RELEASE =
+  "nba_player_props_member_surface_2026_10_22_r1_public_launch" as const;
 export const NBA_PLAYER_PROPS_LOCK_CANDIDATE_RELEASE =
   "nba_player_props_lock_candidate_2026_10_21_r1_immutable" as const;
 

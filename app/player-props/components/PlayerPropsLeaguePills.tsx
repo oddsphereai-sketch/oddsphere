@@ -7,7 +7,7 @@ export function PlayerPropsLeaguePills({ league, nflEnabled = false, nbaEnabled 
     { key: "mlb", label: "MLB", href: reviewMode ? "/dev/mlb-props-preview" : "/mlb/props" },
     { key: "nfl", label: "NFL", href: nflEnabled ? (reviewMode ? "/dev/nfl-props-preview" : "/player-props?league=nfl") : undefined },
     { key: "cfb", label: "CFB" },
-    { key: "nba", label: "NBA", href: nbaEnabled && reviewMode ? "/dev/nba-props-preview" : undefined },
+    { key: "nba", label: "NBA", href: nbaEnabled ? (reviewMode ? "/dev/nba-props-preview" : "/player-props?league=nba") : undefined },
     { key: "wnba", label: "WNBA" },
     { key: "cbb", label: "CBB" },
     { key: "nhl", label: "NHL" },

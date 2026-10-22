@@ -62,6 +62,7 @@ const ALIASED_AS: Record<string, string> = {
   "/player-props": "/mlb/props",
   "/dev/mlb-props-preview": "/mlb/props",
   "/dev/nfl-props-preview": "/mlb/props",
+  "/dev/nba-props-preview": "/mlb/props",
   "/dev/tracking-preview": "/lab/tracking",
 };
 
@@ -76,11 +77,12 @@ export default function LabAppNav() {
   const isPrivatePreview =
     pathname === "/dev/mlb-props-preview" ||
     pathname === "/dev/nfl-props-preview" ||
+    pathname === "/dev/nba-props-preview" ||
     pathname === "/dev/experience-preview" ||
     pathname === "/dev/tracking-preview" ||
     pathname === "/dev/relaunch-review";
   const tabs = isPrivatePreview
-    ? PRIVATE_REVIEW_TABS.map((tab) => tab.activeHref === "/mlb/props" && pathname === "/dev/nfl-props-preview" ? { ...tab, href: "/dev/nfl-props-preview" } : tab)
+    ? PRIVATE_REVIEW_TABS.map((tab) => tab.activeHref === "/mlb/props" && pathname === "/dev/nfl-props-preview" ? { ...tab, href: "/dev/nfl-props-preview" } : tab.activeHref === "/mlb/props" && pathname === "/dev/nba-props-preview" ? { ...tab, href: "/dev/nba-props-preview" } : tab)
     : TABS;
 
   return (

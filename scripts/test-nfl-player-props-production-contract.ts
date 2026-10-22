@@ -698,13 +698,15 @@ assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-
 assert.equal(vercel.crons.filter((cron) => /nfl.*props|props.*nfl/i.test(cron.path)).length, 0, "props does not add an independent cron");
 const memberPage = readFileSync("app/player-props/page.tsx", "utf8");
 assert.ok(memberPage.includes('process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"'));
-assert.ok(memberPage.includes('if (!enabled || query.league !== "nfl") redirect("/mlb/props")'));
+assert.ok(memberPage.includes('if (!nflEnabled || query.league !== "nfl") redirect("/mlb/props")'));
+assert.ok(memberPage.includes('if (query.league === "nba")'), "the shared route can branch to the separately gated NBA member surface");
 assert.ok(memberPage.includes("requestedReader") && memberPage.includes("initialSelectedKey"));
 assert.ok(memberPage.includes("resolveNflForwardWeek"), "the NFL props reader advances with the shared weekly NFL board");
 assert.ok(memberPage.includes("buildNflPlayerPropsMemberSnapshot(snapshot)"), "the live route serializes the public DTO, not the stored audit snapshot");
 assert.ok(memberPage.includes("NflPlayerPropsProductDashboard"), "the live NFL route uses the MLB-parity product dashboard");
 const mlbPage = readFileSync("app/mlb/props/page.tsx", "utf8");
-assert.ok(mlbPage.includes('nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"}'), "MLB hides the NFL pill until the member flag is enabled");
+assert.ok(mlbPage.includes('const nflEnabled = process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"'), "MLB hides the NFL pill until the member flag is enabled");
+assert.ok(mlbPage.includes("nflEnabled={nflEnabled}"), "every MLB board state uses the resolved NFL member flag");
 const leaguePills = readFileSync("app/player-props/components/PlayerPropsLeaguePills.tsx", "utf8");
 const leagueLink = readFileSync("app/player-props/components/PlayerPropsLeagueLink.tsx", "utf8");
 assert.ok(leaguePills.includes('href: reviewMode ? "/dev/mlb-props-preview" : "/mlb/props"'));

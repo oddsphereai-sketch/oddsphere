@@ -70,10 +70,15 @@ for (const row of snapshot.decisions) {
 }
 
 const publicPage = readFileSync(path.join(process.cwd(), "app/player-props/page.tsx"), "utf8");
+const mlbPage = readFileSync(path.join(process.cwd(), "app/mlb/props/page.tsx"), "utf8");
 const previewPage = readFileSync(path.join(process.cwd(), "app/dev/nba-props-preview/page.tsx"), "utf8");
 const dashboard = readFileSync(path.join(process.cwd(), "app/player-props/components/NbaPlayerPropsProductDashboard.tsx"), "utf8");
 const pills = readFileSync(path.join(process.cwd(), "app/player-props/components/PlayerPropsLeaguePills.tsx"), "utf8");
-assert(!publicPage.includes("NbaPlayerPropsProductDashboard"));
+assert.match(publicPage, /NBA_PLAYER_PROPS_MEMBER_ENABLED/);
+assert.match(publicPage, /NbaPlayerPropsProductDashboard/);
+assert.match(publicPage, /readNbaPlayerPropsPrivateSnapshot/);
+assert.match(publicPage, /nbaPlayerPropsSlateDate\(\)/);
+assert.match(publicPage, /query\.league === "nba"/);
 assert.match(previewPage, /readNbaPlayerPropsPrivateSnapshot/);
 assert.match(previewPage, /nbaPlayerPropsSlateDate\(\)/);
 assert.match(previewPage, /currentCandidate \? "live" : "historical"/);
@@ -87,7 +92,11 @@ assert.match(dashboard, /Compare all/);
 assert.match(dashboard, /View every model input/);
 assert.match(dashboard, /FEATURED_METRIC_KEYS/);
 assert.match(dashboard, /Same-book market flat/);
-assert.match(pills, /nbaEnabled && reviewMode/);
-assert(!pills.includes('nbaEnabled ? (reviewMode'));
+assert.match(dashboard, /data-member-surface/);
+assert.match(dashboard, /reviewMode \? <aside/);
+assert.match(pills, /nbaEnabled \? \(reviewMode/);
+assert.match(pills, /player-props\?league=nba/);
+assert.match(mlbPage, /NBA_PLAYER_PROPS_MEMBER_ENABLED/);
+assert.equal((mlbPage.match(/nbaEnabled=\{nbaEnabled\}/g) ?? []).length, 3, "every MLB board state keeps the active NBA destination in the shared league rail");
 
 process.stdout.write("NBA player-props private product preview contract passed.\n");

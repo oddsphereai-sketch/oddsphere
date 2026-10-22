@@ -159,8 +159,10 @@ assert.equal(snapshot.modelRelease, NBA_PLAYER_PROPS_MODEL_RELEASE);
 assert.equal(snapshot.modelingReady, false);
 assert.equal(snapshot.collectionComplete, true);
 
-assert.equal(NBA_PLAYER_PROPS_SOURCE_POLICY.productionWriterEnabled, false);
+assert.equal(NBA_PLAYER_PROPS_SOURCE_POLICY.productionWriterEnabled, true);
 assert.equal(NBA_PLAYER_PROPS_SOURCE_POLICY.memberFetches, false);
+assert.equal(NBA_PLAYER_PROPS_SOURCE_POLICY.routeEnabled, true);
+assert.equal(NBA_PLAYER_PROPS_SOURCE_POLICY.navigationEnabled, true);
 assert.equal(nbaPlayerPropsCadenceStage({ now: "2026-10-20T21:30:00.000Z", scheduledStart: "2026-10-21T00:00:00.000Z", slateDate: "10/20/2026" }), "t_minus_180");
 assert.equal(nbaPlayerPropsCadenceStage({ now: "2026-10-20T23:05:00.000Z", scheduledStart: "2026-10-21T00:00:00.000Z", slateDate: "10/20/2026" }), "t_minus_60");
 assert.equal(nbaPlayerPropsCadenceStage({ now: "2026-10-20T23:50:00.000Z", scheduledStart: "2026-10-21T00:00:00.000Z", slateDate: "10/20/2026" }), "t_minus_15");

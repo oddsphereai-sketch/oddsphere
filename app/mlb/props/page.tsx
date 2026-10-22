@@ -25,6 +25,8 @@ export default async function MlbPropsMemberPage({
   const query = await searchParams;
   const requestedReader = typeof query.reader === "string" ? query.reader : null;
   const presentation = isPlayerPropsExperienceCandidateEnabled() ? "candidate" : "current";
+  const nflEnabled = process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true";
+  const nbaEnabled = process.env.NBA_PLAYER_PROPS_MEMBER_ENABLED === "true";
   let dataUnavailable = false;
   if (mode.mode === "display_enabled") {
     const memberResult = await readMemberDataWithDeadline({
@@ -35,7 +37,7 @@ export default async function MlbPropsMemberPage({
     const memberSnapshot = memberResult.value;
     dataUnavailable ||= memberResult.unavailable;
     if (memberSnapshot && (!requestedReader || memberSnapshot.data.props.some((row) => row.id === requestedReader))) {
-      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"} /><PlayerPropsDashboard data={memberSnapshot.data} mode="member" initialSelectedId={requestedReader} presentation={presentation} /></ProductAppFrame>;
+      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={nflEnabled} nbaEnabled={nbaEnabled} /><PlayerPropsDashboard data={memberSnapshot.data} mode="member" initialSelectedId={requestedReader} presentation={presentation} /></ProductAppFrame>;
     }
     const displayResult = await readMemberDataWithDeadline({
       label: "mlb-player-props-display-snapshot",
@@ -50,12 +52,12 @@ export default async function MlbPropsMemberPage({
       // rendered after a prop is opened. Keep the board's price/model rows
       // byte-for-byte intact and load that evidence on demand per player.
       const memberData = buildMlbPropsMemberBoardData(snapshot.data);
-      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"} /><PlayerPropsDashboard data={memberData} mode="member" initialSelectedId={initialSelectedId} presentation={presentation} /></ProductAppFrame>;
+      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={nflEnabled} nbaEnabled={nbaEnabled} /><PlayerPropsDashboard data={memberData} mode="member" initialSelectedId={initialSelectedId} presentation={presentation} /></ProductAppFrame>;
     }
   }
 
   return <ProductAppFrame>
-    <PlayerPropsLeaguePills league="mlb" nflEnabled={process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"} />
+    <PlayerPropsLeaguePills league="mlb" nflEnabled={nflEnabled} nbaEnabled={nbaEnabled} />
     <section className="mx-auto max-w-4xl py-10 sm:py-20">
       <div className="border-y border-gray-800 py-10 sm:py-14">
         <div className="flex items-center gap-3 text-xs font-bold text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />MLB Prop Researcher</div>

@@ -573,12 +573,12 @@ function applyArtifactPolicies(rows: readonly Row[], policies: ArtifactGradePoli
     if (!config || config.kind !== "slate_relative_lean") continue;
     const policy = config.policy;
     for (const slate of groupBy(rows.filter((row) => row.market === market), (row) => easternDate(row.featureCutoff)).values()) {
-      const candidates = slate.filter((row) => artifactEligibility(row, policy.eligibilityGate))
+      const candidates = slate.filter((row) => artifactEligibility(row, policy.eligibilityGate as string))
         .filter((row) => row.finalProbability >= Number(policy.minimumProbability))
         .filter((row) => row.expectedValue >= Number(policy.minimumExpectedValue))
         .filter((row) => row.americanPrice >= Number(policy.minimumAmericanPrice))
         .filter((row) => policy.requireReferenceBook !== true || row.targetExcludedReferenceBooks >= 1)
-        .sort((left, right) => artifactSignal(right, policy.signalFamily) - artifactSignal(left, policy.signalFamily)
+        .sort((left, right) => artifactSignal(right, policy.signalFamily as string) - artifactSignal(left, policy.signalFamily as string)
           || right.finalProbability - left.finalProbability || right.expectedValue - left.expectedValue
           || left.scopeKey.localeCompare(right.scopeKey));
       for (const row of candidates.slice(0, Number(policy.maxPerSlate))) selected.add(row.scopeKey);
@@ -593,9 +593,9 @@ function artifactDirectGrade(row: Row, config: ArtifactGradeConfig | undefined):
   const policy = config.policy;
   let grade: Grade = "No Play";
   if (config.kind === "ranked") {
-    const isEligible = artifactEligibility(row, policy.eligibilityGate);
-    const score = artifactSignal(row, policy.signalFamily);
-    const best = artifactSignal(row, policy.bestSignalFamily);
+    const isEligible = artifactEligibility(row, policy.eligibilityGate as string);
+    const score = artifactSignal(row, policy.signalFamily as string);
+    const best = artifactSignal(row, policy.bestSignalFamily as string);
     const priceQualified = row.americanPrice >= Number(policy.minimumAmericanPrice);
     if (isEligible && priceQualified && score >= Number(policy.leanThreshold) && best >= Number(policy.bestThreshold)) {
       grade = config.bestAngleQualified === false ? "Lean" : "Best Angle";
