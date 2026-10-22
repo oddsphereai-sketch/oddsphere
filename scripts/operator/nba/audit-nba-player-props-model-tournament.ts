@@ -40,11 +40,16 @@ type Market = NbaPlayerPropCombination;
 type CandidateName =
   | "ridge_r2"
   | "ridge_r2_minutes_regression"
+  | "ridge_r2_role_minutes_regression"
   | "structural_direct_counts"
   | "structural_log_counts"
   | "opportunity_direct_counts"
+  | "opportunity_role_minutes_counts"
+  | "robust_component_counts"
   // Retained as explicit research candidates for reproducible rejected-model
   // diagnostics. They are not part of the active tournament candidate list.
+  | "learned_market_residual_correction"
+  | "role_segmented_independent_experts"
   | "direct_market_counts"
   | "direct_market_log_counts"
   | "bias_corrected_structural_direct_counts"
@@ -77,12 +82,18 @@ type MinuteFeature = keyof Pick<NbaPlayerPropFeatureRow,
   | "minutes_mean_10"
   | "minutes_mean_season"
   | "minutes_sd_10"
+  | "minutes_p25_10"
+  | "minutes_p75_10"
   | "participation_rate_10"
   | "same_team_games_10"
   | "changed_team_since_last_game"
   | "days_rest"
   | "is_home"
   | "team_back_to_back"
+  | "team_rotation_expected_players_5"
+  | "team_rotation_expected_top1_minutes_5"
+  | "team_rotation_continuity_5"
+  | "team_rotation_latest_vs_recent_5"
   | "player_games_prior"
 >;
 
@@ -163,6 +174,12 @@ type StructuralFeature =
   | "opponent_three_point_attempt_share_5"
   | "opponent_matchup_three_point_pct_5"
   | "opponent_contested_shots_per100_5"
+  | "minutes_p25_10"
+  | "minutes_p75_10"
+  | "team_rotation_expected_players_5"
+  | "team_rotation_expected_top1_minutes_5"
+  | "team_rotation_continuity_5"
+  | "team_rotation_latest_vs_recent_5"
 >;
 
 type StructuralCountModel = {
@@ -267,6 +284,16 @@ const MINUTE_FEATURES: MinuteFeature[] = [
   "player_games_prior",
 ];
 
+const ROLE_MINUTE_FEATURES: MinuteFeature[] = [
+  ...MINUTE_FEATURES,
+  "minutes_p25_10",
+  "minutes_p75_10",
+  "team_rotation_expected_players_5",
+  "team_rotation_expected_top1_minutes_5",
+  "team_rotation_continuity_5",
+  "team_rotation_latest_vs_recent_5",
+];
+
 const STRUCTURAL_FEATURES: Record<Component, StructuralFeature[]> = {
   points: [
     "predicted_minutes", "points_per_minute_10", "fga_per_minute_10", "fta_per_minute_10",
@@ -322,6 +349,10 @@ function value(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+function hasFlag(name: string): boolean {
+  return process.argv.includes(name);
+}
+
 async function main(): Promise<void> {
   const input = value("--input");
   if (!input) throw new Error("--input is required.");
@@ -329,6 +360,7 @@ async function main(): Promise<void> {
   const previewOutputValue = value("--preview-output");
   const artifactOutputValue = value("--artifact-output");
   const parityOutputValue = value("--parity-output");
+  const projectionOnly = hasFlag("--projection-only");
   const dataset = JSON.parse(await readFile(input, "utf8")) as Dataset;
   if (dataset.mode !== "offline_research_only" || dataset.actionable !== false) {
     throw new Error("NBA props tournament accepts only an offline, non-actionable research dataset.");
@@ -371,9 +403,12 @@ async function main(): Promise<void> {
   const candidates: Candidate[] = [
     ridgeCandidate(),
     ridgeMinutesRegressionCandidate(),
+    ridgeRoleMinutesRegressionCandidate(),
     structuralCountCandidate("structural_direct_counts", "identity"),
     structuralCountCandidate("structural_log_counts", "log1p"),
     opportunityCountCandidate(),
+    opportunityRoleMinutesCountCandidate(),
+    robustComponentCandidate(),
     marketArbitrationCandidate("market_read_all_disagreements", 0, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_2pp_disagreements", 0.02, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_5pp_disagreements", 0.05, lineByScope, marketProbabilityByScope),
@@ -447,6 +482,33 @@ async function main(): Promise<void> {
       ),
     }];
   }));
+  if (projectionOnly) {
+    const projectionReport = {
+      release: "nba_player_props_projection_tournament_2026_10_22_r2_robust_rebounds_full_refit",
+      mode: "offline_research_only",
+      actionable: false,
+      sourceDatasetRelease: dataset.release,
+      immutableInputsSha256: dataset.immutableInputsSha256,
+      split: {
+        developmentGames: developmentIds.size,
+        modelSelectionGames: modelSelectionIds.size,
+        reliabilityFitGames: reliabilityFitIds.size,
+        gradePolicyGames: gradePolicyIds.size,
+        untouchedConfirmationGames: confirmationIds.size,
+      },
+      selectionMetrics,
+      selectedByMarket,
+      confirmationCandidateMetrics,
+      confirmationMetrics,
+    };
+    if (outputValue) {
+      const output = path.resolve(outputValue);
+      await mkdir(path.dirname(output), { recursive: true });
+      await writeFile(output, `${JSON.stringify(projectionReport, null, 2)}\n`, "utf8");
+    }
+    process.stdout.write(`${JSON.stringify(projectionReport, null, 2)}\n`);
+    return;
+  }
   const exactPriceResearch = buildExactPriceGradeResearch({
     modelFitRows: gradeModelFitRows,
     reliabilityFit,
@@ -485,7 +547,7 @@ async function main(): Promise<void> {
   );
 
   const report = {
-    release: "nba_player_props_model_tournament_2026_10_21_r11_coherent_all_market_relative_leans",
+    release: "nba_player_props_model_tournament_2026_10_22_r12_robust_rebounds_full_refit",
     mode: "offline_research_only",
     actionable: false,
     sourceDatasetRelease: dataset.release,
@@ -538,7 +600,7 @@ async function main(): Promise<void> {
     const previewOutput = path.resolve(previewOutputValue);
     await mkdir(path.dirname(previewOutput), { recursive: true });
     await writeFile(previewOutput, `${JSON.stringify({
-      release: "nba_player_props_private_product_preview_2026_10_21_r3_coherent_all_market_relative_leans",
+      release: "nba_player_props_private_product_preview_2026_10_22_r4_robust_rebounds_full_refit",
       mode: "private_historical_visual_qa_only",
       actionable: false,
       sourceDatasetRelease: dataset.release,
@@ -562,7 +624,7 @@ async function main(): Promise<void> {
     const parityOutput = path.resolve(parityOutputValue);
     await mkdir(path.dirname(parityOutput), { recursive: true });
     await writeFile(parityOutput, `${JSON.stringify({
-      release: "nba_player_props_frozen_runtime_parity_2026_10_21_r1",
+      release: "nba_player_props_frozen_runtime_parity_2026_10_22_r2",
       mode: "private_historical_parity_only",
       actionable: false,
       features: confirmation,
@@ -602,6 +664,13 @@ function buildFrozenRuntimeArtifact(args: {
       fitStructuralCountModel(args.fitRows, component, "identity", minuteModel, OPPORTUNITY_FEATURES),
     ]),
   );
+  const robustMinuteModel = fitMinuteRegression(args.fitRows, ROLE_MINUTE_FEATURES);
+  const robustModels = Object.fromEntries(
+    (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+      component,
+      fitRobustStructuralCountModel(args.fitRows, component, robustMinuteModel),
+    ]),
+  );
   const underlyingByMarket = Object.fromEntries(MARKETS.map((market) => [
     market,
     underlyingIndependentCandidate(args.selectedByMarket[market], market),
@@ -623,11 +692,11 @@ function buildFrozenRuntimeArtifact(args: {
   ]));
   const byMarket = args.exactPriceGradeResearch.byMarket;
   const artifactWithoutChecksum = {
-    release: "nba_player_props_frozen_runtime_artifact_2026_10_21_r1_private_forward",
+    release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r2_private_forward",
     publicEnabled: false,
     sourceDatasetRelease: args.dataset.release,
     sourceInputsSha256: args.dataset.immutableInputsSha256,
-    sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_21_r11_coherent_all_market_relative_leans",
+    sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_22_r12_robust_rebounds_full_refit",
     sourceGradeRelease: args.exactPriceGradeResearch.release,
     trainedThrough: args.fitRows.at(-1)?.feature_cutoff ?? null,
     selectedByMarket: args.selectedByMarket,
@@ -639,6 +708,8 @@ function buildFrozenRuntimeArtifact(args: {
     structuralDirectModels,
     structuralLogModels,
     opportunityModels,
+    robustMinuteModel,
+    robustModels,
     distributions,
     reliabilityModels: Object.fromEntries(MARKETS.map((market) => [market, byMarket[market].reliabilityModel])),
     gradePolicies: {
@@ -830,6 +901,22 @@ function ridgeMinutesRegressionCandidate(): Candidate {
   };
 }
 
+function ridgeRoleMinutesRegressionCandidate(): Candidate {
+  return {
+    name: "ridge_r2_role_minutes_regression",
+    fit(rows) {
+      const baseModel = fitNbaPlayerPropsIndependentResearchModel(rows);
+      const minuteModel = fitMinuteRegression(rows, ROLE_MINUTE_FEATURES);
+      return (row, market) => {
+        const base = projectNbaPlayerPropsIndependent(row, baseModel);
+        if (base.conditionalMinutes <= 0) return base.combinations[market];
+        const rate = base.combinations[market] / base.conditionalMinutes;
+        return Math.max(0, rate * predictMinuteRegression(row, minuteModel));
+      };
+    },
+  };
+}
+
 function structuralCountCandidate(
   name: Extract<CandidateName, "structural_direct_counts" | "structural_log_counts">,
   transform: StructuralCountModel["transform"],
@@ -865,6 +952,90 @@ function opportunityCountCandidate(): Candidate {
         .reduce((sum, component) => sum + predictStructuralCount(row, models[component], minuteModel), 0);
     },
   };
+}
+
+function opportunityRoleMinutesCountCandidate(): Candidate {
+  return {
+    name: "opportunity_role_minutes_counts",
+    fit(rows) {
+      const minuteModel = fitMinuteRegression(rows, ROLE_MINUTE_FEATURES);
+      const models = Object.fromEntries(
+        (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+          component,
+          fitStructuralCountModel(rows, component, "identity", minuteModel, OPPORTUNITY_FEATURES),
+        ]),
+      ) as Record<Component, StructuralCountModel>;
+      return (row, market) => marketComponents(market)
+        .reduce((sum, component) => sum + predictStructuralCount(row, models[component], minuteModel), 0);
+    },
+  };
+}
+
+function robustComponentCandidate(): Candidate {
+  return {
+    name: "robust_component_counts",
+    fit(rows) {
+      const minuteModel = fitMinuteRegression(rows, ROLE_MINUTE_FEATURES);
+      const models = Object.fromEntries(
+        (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+          component,
+          fitRobustStructuralCountModel(rows, component, minuteModel),
+        ]),
+      ) as Record<Component, StructuralCountModel>;
+      return (row, market) => marketComponents(market)
+        .reduce((sum, component) => sum + predictStructuralCount(row, models[component], minuteModel), 0);
+    },
+  };
+}
+
+function fitRobustStructuralCountModel(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  component: Component,
+  minuteModel: MinuteRegression,
+): StructuralCountModel {
+  const ordered = chronological(rows).filter((row) => componentTarget(row, component) !== null);
+  const split = Math.max(8, Math.min(ordered.length - 4, Math.floor(ordered.length * 0.75)));
+  const train = ordered.slice(0, split);
+  const validate = ordered.slice(split);
+  const candidates = [1, 5, 20].map((lambda) =>
+    fitRobustStructuralCountModelAtLambda(train, component, minuteModel, lambda));
+  const selectedLambda = candidates.sort((left, right) =>
+    structuralCountMae(validate, left, minuteModel) - structuralCountMae(validate, right, minuteModel))[0]?.lambda ?? 5;
+  return fitRobustStructuralCountModelAtLambda(ordered, component, minuteModel, selectedLambda);
+}
+
+function fitRobustStructuralCountModelAtLambda(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  component: Component,
+  minuteModel: MinuteRegression,
+  lambda: number,
+): StructuralCountModel {
+  const features = OPPORTUNITY_FEATURES[component];
+  const values = rows.map((row) => features.map((feature) => structuralFeatureValue(row, feature, minuteModel)));
+  const means = features.map((_, index) => mean(nonNull(values.map((row) => row[index]))) ?? 0);
+  const scales = features.map((_, index) => standardDeviation(nonNull(values.map((row) => row[index]))) || Math.max(1, Math.abs(means[index]!)));
+  const x = values.map((row) => [1, ...row.map((item, index) => ((item ?? means[index]!) - means[index]!) / scales[index]!)]);
+  const y = rows.map((row) => componentTarget(row, component) ?? 0);
+  let coefficients = ridgeSolve(x, y, lambda);
+  for (let iteration = 0; iteration < 10; iteration += 1) {
+    const residuals = x.map((featuresRow, index) =>
+      y[index]! - featuresRow.reduce((sum, value, coefficientIndex) => sum + value * (coefficients[coefficientIndex] ?? 0), 0));
+    const scale = Math.max(0.25, (median(residuals.map(Math.abs)) ?? 1) * 0.75);
+    const weights = residuals.map((residual) => 1 / Math.max(scale, Math.abs(residual)));
+    coefficients = weightedRidgeSolve(x, y, weights, lambda);
+  }
+  return { component, transform: "identity", features, means, scales, coefficients, lambda };
+}
+
+function weightedRidgeSolve(
+  x: readonly number[][],
+  y: readonly number[],
+  weights: readonly number[],
+  lambda: number,
+): number[] {
+  const weightedX = x.map((row, index) => row.map((value) => value * Math.sqrt(weights[index] ?? 1)));
+  const weightedY = y.map((value, index) => value * Math.sqrt(weights[index] ?? 1));
+  return ridgeSolve(weightedX, weightedY, lambda);
 }
 
 function directMarketCountCandidate(
@@ -1131,6 +1302,190 @@ function marketArbitrationCandidate(
   };
 }
 
+type LearnedMarketCorrectionModel = {
+  means: number[];
+  scales: number[];
+  coefficients: number[];
+  lambda: number;
+};
+
+/**
+ * Learns a residual correction to the independent projection rather than a
+ * market-weighted replacement. The independent model remains the center; the
+ * opening market can confirm it, soften it, or move it through the line when
+ * that relationship was useful in earlier chronological games.
+ */
+function learnedMarketResidualCorrectionCandidate(
+  lineByScope: ReadonlyMap<string, number>,
+  probabilityByScope: ReadonlyMap<string, number>,
+): Candidate {
+  return {
+    name: "learned_market_residual_correction",
+    fit(rows) {
+      const independent = ridgeMinutesRegressionCandidate().fit(rows);
+      const models = Object.fromEntries(MARKETS.map((market) => [
+        market,
+        fitLearnedMarketCorrection(rows, market, independent, lineByScope, probabilityByScope),
+      ])) as Record<Market, LearnedMarketCorrectionModel | null>;
+      return (row, market) => {
+        const center = independent(row, market);
+        const line = lineByScope.get(scope(row, market));
+        const marketProbability = probabilityByScope.get(scope(row, market));
+        const model = models[market];
+        if (!model || line === undefined || marketProbability === undefined) return center;
+        const raw = learnedMarketCorrectionFeatures(row, center, line, marketProbability);
+        const correction = model.coefficients[0]! + raw.reduce((sum, item, index) =>
+          sum + (model.coefficients[index + 1] ?? 0) * ((item - model.means[index]!) / model.scales[index]!), 0);
+        return Math.max(0, center + correction);
+      };
+    },
+  };
+}
+
+function roleSegmentedIndependentExpertsCandidate(
+  lineByScope: ReadonlyMap<string, number>,
+): Candidate {
+  return {
+    name: "role_segmented_independent_experts",
+    fit(rows) {
+      const games = [...new Map(chronological(rows).map((row) => [row.game_id, row.feature_cutoff])).entries()]
+        .sort((left, right) => Date.parse(left[1]) - Date.parse(right[1]) || left[0] - right[0]);
+      const split = Math.max(12, Math.min(games.length - 6, Math.floor(games.length * 0.75)));
+      const trainIds = new Set(games.slice(0, split).map(([gameId]) => gameId));
+      const validateIds = new Set(games.slice(split).map(([gameId]) => gameId));
+      const train = rows.filter((row) => trainIds.has(row.game_id));
+      const validate = rows.filter((row) => validateIds.has(row.game_id));
+      const factories: Array<() => Candidate> = [
+        ridgeMinutesRegressionCandidate,
+        ridgeRoleMinutesRegressionCandidate,
+        () => structuralCountCandidate("structural_direct_counts", "identity"),
+        () => structuralCountCandidate("structural_log_counts", "log1p"),
+        opportunityCountCandidate,
+        opportunityRoleMinutesCountCandidate,
+        robustComponentCandidate,
+      ];
+      const names = factories.map((factory) => factory().name);
+      const validationPredictors = new Map(factories.map((factory) => {
+        const candidate = factory();
+        return [candidate.name, candidate.fit(train)] as const;
+      }));
+      const selections = new Map<string, CandidateName>();
+      for (const market of MARKETS) {
+        for (const segment of ["stable", "volatile", "stable_b2b", "volatile_b2b"] as const) {
+          const segmentRows = validate.filter((row) => independentExpertSegment(row) === segment);
+          const scored = names.map((name) => ({
+            name,
+            metrics: evaluate(segmentRows, market, validationPredictors.get(name)!, lineByScope),
+          })).filter((item) => item.metrics.rows >= 12 && item.metrics.mae !== null);
+          if (scored.length === 0) {
+            selections.set(`${market}|${segment}`, "ridge_r2_minutes_regression");
+            continue;
+          }
+          const minimumMae = Math.min(...scored.map((item) => item.metrics.mae ?? Infinity));
+          const frontier = scored.filter((item) => (item.metrics.mae ?? Infinity) <= minimumMae * 1.02);
+          const selected = frontier.sort((left, right) =>
+            ((right.metrics.directionHitRate ?? 0) - (left.metrics.directionHitRate ?? 0))
+            || ((left.metrics.mae ?? Infinity) - (right.metrics.mae ?? Infinity)))[0]!;
+          selections.set(`${market}|${segment}`, selected.name);
+        }
+      }
+      const finalPredictors = new Map(factories.map((factory) => {
+        const candidate = factory();
+        return [candidate.name, candidate.fit(rows)] as const;
+      }));
+      return (row, market) => {
+        const selected = selections.get(`${market}|${independentExpertSegment(row)}`)
+          ?? "ridge_r2_minutes_regression";
+        return finalPredictors.get(selected)!(row, market);
+      };
+    },
+  };
+}
+
+function independentExpertSegment(row: NbaPlayerPropFeatureRow): "stable" | "volatile" | "stable_b2b" | "volatile_b2b" {
+  const stable = row.player_games_prior >= 10 && (row.minutes_sd_10 ?? Infinity) <= 5;
+  const backToBack = row.team_back_to_back === 1;
+  if (stable) return backToBack ? "stable_b2b" : "stable";
+  return backToBack ? "volatile_b2b" : "volatile";
+}
+
+function fitLearnedMarketCorrection(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  market: Market,
+  independent: (row: NbaPlayerPropFeatureRow, market: Market) => number,
+  lineByScope: ReadonlyMap<string, number>,
+  probabilityByScope: ReadonlyMap<string, number>,
+): LearnedMarketCorrectionModel | null {
+  const prepared = chronological(rows).flatMap((row) => {
+    const actual = target(row, market);
+    const line = lineByScope.get(scope(row, market));
+    const probability = probabilityByScope.get(scope(row, market));
+    if (actual === null || line === undefined || probability === undefined) return [];
+    const center = independent(row, market);
+    return [{
+      row,
+      center,
+      actual,
+      features: learnedMarketCorrectionFeatures(row, center, line, probability),
+    }];
+  });
+  if (prepared.length < 40) return null;
+  const split = Math.max(24, Math.min(prepared.length - 12, Math.floor(prepared.length * 0.75)));
+  const train = prepared.slice(0, split);
+  const validate = prepared.slice(split);
+  const selectedLambda = [1, 5, 20, 100].map((lambda) => {
+    const model = fitLearnedMarketCorrectionAtLambda(train, lambda);
+    const mae = mean(validate.map((item) => Math.abs(
+      item.center + predictLearnedMarketCorrection(item.features, model) - item.actual,
+    ))) ?? Infinity;
+    return { lambda, mae };
+  }).sort((left, right) => left.mae - right.mae || left.lambda - right.lambda)[0]!.lambda;
+  return fitLearnedMarketCorrectionAtLambda(prepared, selectedLambda);
+}
+
+function fitLearnedMarketCorrectionAtLambda(
+  rows: ReadonlyArray<{ features: number[]; center: number; actual: number }>,
+  lambda: number,
+): LearnedMarketCorrectionModel {
+  const width = rows[0]!.features.length;
+  const means = Array.from({ length: width }, (_, index) => mean(rows.map((row) => row.features[index]!)) ?? 0);
+  const scales = Array.from({ length: width }, (_, index) =>
+    standardDeviation(rows.map((row) => row.features[index]!)) || Math.max(1, Math.abs(means[index]!)));
+  const x = rows.map((row) => [1, ...row.features.map((item, index) => (item - means[index]!) / scales[index]!)]);
+  const y = rows.map((row) => row.actual - row.center);
+  return { means, scales, coefficients: ridgeSolve(x, y, lambda), lambda };
+}
+
+function predictLearnedMarketCorrection(features: readonly number[], model: LearnedMarketCorrectionModel): number {
+  return model.coefficients[0]! + features.reduce((sum, item, index) =>
+    sum + (model.coefficients[index + 1] ?? 0) * ((item - model.means[index]!) / model.scales[index]!), 0);
+}
+
+function learnedMarketCorrectionFeatures(
+  row: NbaPlayerPropFeatureRow,
+  independentProjection: number,
+  line: number,
+  marketProbability: number,
+): number[] {
+  const independentMargin = independentProjection - line;
+  const marketMargin = marketProbability - 0.5;
+  const disagreement = Math.sign(independentMargin) !== Math.sign(marketMargin) ? 1 : 0;
+  return [
+    independentMargin,
+    marketMargin,
+    Math.abs(independentMargin),
+    Math.abs(marketMargin),
+    disagreement,
+    independentMargin * marketMargin,
+    Math.log1p(Math.max(0, row.player_games_prior)),
+    row.minutes_sd_10 ?? 0,
+    row.team_back_to_back ?? 0,
+    row.changed_team_since_last_game ?? 0,
+    row.days_rest ?? 0,
+    row.is_home ?? 0,
+  ];
+}
+
 function hybridMarketArbitrationCandidate(
   name: Extract<CandidateName,
     | "hybrid_market_read_all_disagreements"
@@ -1271,22 +1626,30 @@ function structuralCountMae(
   return mean(errors) ?? Infinity;
 }
 
-function fitMinuteRegression(rows: readonly NbaPlayerPropFeatureRow[]): MinuteRegression {
+function fitMinuteRegression(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  features: readonly MinuteFeature[] = MINUTE_FEATURES,
+): MinuteRegression {
   const ordered = chronological(rows).filter((row) => (row.target_minutes ?? 0) > 0);
   const split = Math.max(8, Math.min(ordered.length - 4, Math.floor(ordered.length * 0.75)));
   const train = ordered.slice(0, split);
   const validate = ordered.slice(split);
   const candidates = [0.1, 1, 5, 20, 100];
-  return candidates.map((lambda) => fitMinuteRegressionAtLambda(train, lambda))
-    .sort((left, right) => minuteRegressionMae(validate, left) - minuteRegressionMae(validate, right))[0]!;
+  const selectedLambda = candidates.map((lambda) => fitMinuteRegressionAtLambda(train, lambda, features))
+    .sort((left, right) => minuteRegressionMae(validate, left) - minuteRegressionMae(validate, right))[0]?.lambda ?? 20;
+  return fitMinuteRegressionAtLambda(ordered, selectedLambda, features);
 }
 
-function fitMinuteRegressionAtLambda(rows: readonly NbaPlayerPropFeatureRow[], lambda: number): MinuteRegression {
-  const means = MINUTE_FEATURES.map((feature) => mean(nonNull(rows.map((row) => row[feature]))) ?? 0);
-  const scales = MINUTE_FEATURES.map((feature, index) => standardDeviation(nonNull(rows.map((row) => row[feature]))) || Math.max(1, Math.abs(means[index]!)));
-  const x = rows.map((row) => [1, ...MINUTE_FEATURES.map((feature, index) => ((row[feature] ?? means[index]!) - means[index]!) / scales[index]!)]);
+function fitMinuteRegressionAtLambda(
+  rows: readonly NbaPlayerPropFeatureRow[],
+  lambda: number,
+  features: readonly MinuteFeature[] = MINUTE_FEATURES,
+): MinuteRegression {
+  const means = features.map((feature) => mean(nonNull(rows.map((row) => row[feature]))) ?? 0);
+  const scales = features.map((feature, index) => standardDeviation(nonNull(rows.map((row) => row[feature]))) || Math.max(1, Math.abs(means[index]!)));
+  const x = rows.map((row) => [1, ...features.map((feature, index) => ((row[feature] ?? means[index]!) - means[index]!) / scales[index]!)]);
   const y = rows.map((row) => row.target_minutes!);
-  return { features: MINUTE_FEATURES, means, scales, coefficients: ridgeSolve(x, y, lambda), lambda };
+  return { features: [...features], means, scales, coefficients: ridgeSolve(x, y, lambda), lambda };
 }
 
 function predictMinuteRegression(row: NbaPlayerPropFeatureRow, model: MinuteRegression): number {
@@ -1891,7 +2254,7 @@ function buildExactPriceGradeResearch(args: {
     return row;
   });
   const report = {
-    release: "nba_player_props_exact_price_grade_research_2026_10_21_r10_coherent_all_market_relative_leans",
+    release: "nba_player_props_exact_price_grade_research_2026_10_22_r11_robust_rebounds_full_refit",
     status: "opened_retrospective_research_only",
     actionable: false,
     targetBookExcluded: true,
