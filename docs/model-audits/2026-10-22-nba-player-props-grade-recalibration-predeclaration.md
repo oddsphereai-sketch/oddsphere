@@ -1,7 +1,7 @@
 # NBA player props exact-price grade recalibration predeclaration
 
 Date: 2026-10-22  
-Status: completed offline audit; focused private candidate awaits explicit release approval; no public or member activation
+Status: approved private forward release; public/member activation remains disabled pending production verification
 
 ## Objective and scope
 
@@ -153,3 +153,10 @@ eligible for an explicitly approved private forward release, with a new
 calibration/release family and unchanged public gate, but it is not itself
 authorization to activate the member surface. No runtime, provider, database,
 member, or locked-record state was changed by this audit.
+
+The owner approved the focused private forward release on 2026-10-22. The
+release family is frozen runtime / calibration / decision / product / snapshot /
+writer r6 / r13 / r6 / r7 / r7 / r6 with the suffix
+`rebound_grade_recalibration`. The member gate remains disabled. Publication
+must still pass the focused runtime tests, full model-change gate, current-main
+integration safety, protected pull-request checks, and production readback.

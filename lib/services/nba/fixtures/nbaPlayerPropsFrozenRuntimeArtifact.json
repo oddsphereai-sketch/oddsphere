@@ -1,10 +1,10 @@
 {
-  "release": "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity",
+  "release": "nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration",
   "publicEnabled": false,
   "sourceDatasetRelease": "nba_player_props_historical_research_dataset_2026_10_21_r5_opportunity_context_exact_prices",
   "sourceInputsSha256": "68c71ef30494811a94b53a1a3d873947b65a49a20af2e1743c1038023ecf385f",
   "sourceTournamentRelease": "nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity",
-  "sourceGradeRelease": "nba_player_props_exact_price_grade_2026_10_22_r12_active_role_integrity_private_only",
+  "sourceGradeRelease": "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
   "trainedThrough": "2026-04-04T02:00:00.000Z",
   "selectedByMarket": {
     "points": "market_read_all_disagreements",
@@ -8778,13 +8778,13 @@
     "rebounds": {
       "kind": "slate_relative_lean",
       "policy": {
-        "signalFamily": "model_market_average_expected_value",
-        "eligibilityGate": "all",
+        "signalFamily": "model_market_conservative_expected_value",
+        "eligibilityGate": "established_role",
         "maxPerSlate": 1,
-        "minimumProbability": 0.54,
+        "minimumProbability": 0.5,
         "minimumExpectedValue": -0.03,
-        "minimumAmericanPrice": -150,
-        "requireReferenceBook": false
+        "minimumAmericanPrice": -130,
+        "requireReferenceBook": true
       },
       "publicQualified": false
     },
@@ -8841,5 +8841,5 @@
       "publicQualified": false
     }
   },
-  "payloadSha256": "a681ecf08f6a01797e933eea1dcaf10d91eeea5f52019d9d96277e4845cfc5e6"
+  "payloadSha256": "bbcb4a46e93b6f54e0cf47d91ea2f89a4d4938a39a70c2d0d9216390415a2113"
 }
