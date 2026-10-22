@@ -5,7 +5,7 @@ import type { NbaPortableScore } from "./nbaPortableScoreModel";
 const artifact = require("./modelArtifacts/nbaRosterRegimeR1.json") as NbaRosterRegimeArtifact;
 
 export const NBA_ROSTER_REGIME_RELEASE =
-  "nba_roster_regime_residual_2026_10_22_r1" as const;
+  "nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation" as const;
 
 type PlayerProfile = {
   id: number;
@@ -29,6 +29,13 @@ type NbaRosterRegimeArtifact = {
   model: { family: "zero_intercept_ridge"; alpha: number };
   margin: { coefficients: number[]; rms: number[] };
   total: { coefficients: number[]; rms: number[] };
+  winnerConfirmation: {
+    family: "home_away_symmetric_zero_intercept_ridge";
+    policy: "primary_flip_requires_symmetric_confirmation";
+    retainedMinutesThreshold: number;
+    model: { family: "zero_intercept_ridge"; alpha: number };
+    margin: { coefficients: number[]; rms: number[] };
+  };
   players: PlayerProfile[];
   teamRosters: TeamRoster[];
 };
@@ -51,6 +58,9 @@ export type NbaRosterRegimeAudit = {
   awayExcludedOutPlayers: string[];
   marginCorrection: number;
   totalCorrection: number;
+  primaryMarginCorrection: number;
+  winnerConfirmationMarginCorrection: number;
+  winnerConfirmationApplied: boolean;
 };
 
 const profileById = new Map(artifact.players.map((player) => [player.id, player]));
@@ -138,6 +148,22 @@ function correction(values: readonly number[], head: NbaRosterRegimeArtifact["ma
     (value / head.rms[index]!) * head.coefficients[index]!, 0);
 }
 
+function confirmedMarginCorrection(args: {
+  independentMargin: number;
+  primaryCorrection: number;
+  confirmationCorrection: number;
+}): { correction: number; applied: boolean } {
+  const side = (margin: number) => margin >= 0 ? "home" : "away";
+  const independentSide = side(args.independentMargin);
+  const primarySide = side(args.independentMargin + args.primaryCorrection);
+  const confirmationSide = side(args.independentMargin + args.confirmationCorrection);
+  const applied = primarySide !== independentSide && confirmationSide !== primarySide;
+  return {
+    correction: applied ? args.confirmationCorrection : args.primaryCorrection,
+    applied,
+  };
+}
+
 export function applyNbaRosterRegime(args: {
   independent: NbaPortableScore;
   providerSeason: number;
@@ -161,6 +187,9 @@ export function applyNbaRosterRegime(args: {
       awayExcludedOutPlayers: [],
       marginCorrection: 0,
       totalCorrection: 0,
+      primaryMarginCorrection: 0,
+      winnerConfirmationMarginCorrection: 0,
+      winnerConfirmationApplied: false,
     },
   });
   if (artifact.release !== NBA_ROSTER_REGIME_RELEASE) return neutral("artifact_release_mismatch");
@@ -176,19 +205,44 @@ export function applyNbaRosterRegime(args: {
   const away = rotation({ teamId: awayTeamId, currentIds: awayIds, injuries: args.awayInjuries });
   if (!home || !away) return neutral("prior_player_profile_unavailable");
 
-  const sideValues = (state: typeof home, games: number) => {
-    if (state.retained > artifact.retainedMinutesThreshold) return [0, 0, 0] as const;
+  const sideValues = (state: typeof home, games: number, threshold: number) => {
+    if (state.retained > threshold) return [0, 0, 0] as const;
     const decay = artifact.decayGames / (Math.max(0, games) + artifact.decayGames);
     const turnoverDecay = (1 - state.retained) * decay;
     return [state.netDelta * turnoverDecay, state.pieDelta * turnoverDecay, turnoverDecay] as const;
   };
-  const homeValues = sideValues(home, args.homeCurrentGames);
-  const awayValues = sideValues(away, args.awayCurrentGames);
+  const homeValues = sideValues(home, args.homeCurrentGames, artifact.retainedMinutesThreshold);
+  const awayValues = sideValues(away, args.awayCurrentGames, artifact.retainedMinutesThreshold);
   const values = [
     homeValues[0], awayValues[0], homeValues[1], awayValues[1], homeValues[2], awayValues[2],
   ];
-  const marginCorrection = correction(values, artifact.margin);
+  const primaryMarginCorrection = correction(values, artifact.margin);
   const totalCorrection = correction(values, artifact.total);
+  const confirmationHomeValues = sideValues(
+    home,
+    args.homeCurrentGames,
+    artifact.winnerConfirmation.retainedMinutesThreshold,
+  );
+  const confirmationAwayValues = sideValues(
+    away,
+    args.awayCurrentGames,
+    artifact.winnerConfirmation.retainedMinutesThreshold,
+  );
+  const confirmationValues = [
+    confirmationHomeValues[0] - confirmationAwayValues[0],
+    confirmationHomeValues[1] - confirmationAwayValues[1],
+    confirmationHomeValues[2] - confirmationAwayValues[2],
+  ];
+  const winnerConfirmationMarginCorrection = correction(
+    confirmationValues,
+    artifact.winnerConfirmation.margin,
+  );
+  const confirmed = confirmedMarginCorrection({
+    independentMargin: args.independent.marginHome,
+    primaryCorrection: primaryMarginCorrection,
+    confirmationCorrection: winnerConfirmationMarginCorrection,
+  });
+  const marginCorrection = confirmed.correction;
   const status = values.every((value) => value === 0) ? "stable_roster" as const : "applied" as const;
   const marginHome = args.independent.marginHome + marginCorrection;
   const total = args.independent.total + totalCorrection;
@@ -209,6 +263,9 @@ export function applyNbaRosterRegime(args: {
       awayExcludedOutPlayers: away.excluded,
       marginCorrection,
       totalCorrection,
+      primaryMarginCorrection,
+      winnerConfirmationMarginCorrection,
+      winnerConfirmationApplied: confirmed.applied,
     },
   };
 }
@@ -279,4 +336,9 @@ export async function fetchNbaLiveRosterSnapshot(args: {
   return unavailable("active_roster_pagination_incomplete");
 }
 
-export const __NBA_ROSTER_REGIME_TEST__ = { artifact, normalizeName, rotation };
+export const __NBA_ROSTER_REGIME_TEST__ = {
+  artifact,
+  normalizeName,
+  rotation,
+  confirmedMarginCorrection,
+};

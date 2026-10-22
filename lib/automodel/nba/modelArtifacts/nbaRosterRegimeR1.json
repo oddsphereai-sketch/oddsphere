@@ -1,5 +1,5 @@
 {
-  "release": "nba_roster_regime_residual_2026_10_22_r1",
+  "release": "nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation",
   "provider": "balldontlie",
   "providerSeason": 2026,
   "priorSeason": 2025,
@@ -52,6 +52,27 @@
       0.09028408144167692,
       0.09102052790559452
     ]
+  },
+  "winnerConfirmation": {
+    "family": "home_away_symmetric_zero_intercept_ridge",
+    "policy": "primary_flip_requires_symmetric_confirmation",
+    "retainedMinutesThreshold": 0.55,
+    "model": {
+      "family": "zero_intercept_ridge",
+      "alpha": 1000
+    },
+    "margin": {
+      "coefficients": [
+        0.4614326087714143,
+        0.7855461758289318,
+        0.11421666540047978
+      ],
+      "rms": [
+        0.36110869076951707,
+        0.0014807443163841634,
+        0.09989269891146228
+      ]
+    }
   },
   "players": [
     {
