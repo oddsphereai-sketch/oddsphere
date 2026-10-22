@@ -1,7 +1,7 @@
 import { NBA_PLAYER_PROPS_FOUNDATION_MARKETS } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_SOURCE_POLICY_RELEASE =
-  "nba_player_props_source_policy_2026_10_21_r2_private_forward_ready" as const;
+  "nba_player_props_source_policy_2026_10_22_r3_member_launch" as const;
 
 export const NBA_PLAYER_PROPS_SOURCE_POLICY = {
   liveBoard: {
@@ -21,9 +21,9 @@ export const NBA_PLAYER_PROPS_SOURCE_POLICY = {
   },
   memberFetches: false,
   privateCandidateWriterAvailable: true,
-  productionWriterEnabled: false,
-  routeEnabled: false,
-  navigationEnabled: false,
+  productionWriterEnabled: true,
+  routeEnabled: true,
+  navigationEnabled: true,
 } as const;
 
 export type NbaPlayerPropsCadenceStage = "far" | "game_day" | "t_minus_180" | "t_minus_60" | "t_minus_15" | "locked";

@@ -6,6 +6,7 @@ import type {
   NbaPlayerPropsMemberGrade,
   NbaPlayerPropsMemberSnapshot,
 } from "@/lib/services/nba/nbaPlayerPropsProductContract";
+import { NBA_PLAYER_PROPS_MEMBER_SURFACE_RELEASE } from "@/lib/services/nba/nbaPlayerPropsProductContract";
 import type { NbaPlayerPropsReaderMetric } from "@/lib/services/nba/nbaPlayerPropsReaderContract";
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import {
@@ -22,10 +23,12 @@ export function NbaPlayerPropsProductDashboard({
   snapshot,
   initialSelectedKey = null,
   reviewSource = "historical",
+  reviewMode = false,
 }: {
   snapshot: NbaPlayerPropsMemberSnapshot;
   initialSelectedKey?: string | null;
   reviewSource?: "live" | "historical";
+  reviewMode?: boolean;
 }) {
   const [selectedGame, setSelectedGame] = useState("all");
   const [grade, setGrade] = useState<GradeFilter>("All");
@@ -50,20 +53,20 @@ export function NbaPlayerPropsProductDashboard({
   )).sort(sortRows), [grade, market, search, selectedGame, snapshot]);
   const selected = snapshot.decisions.find((row) => row.decisionKey === selectedKey) ?? null;
 
-  return <div className="w-full pb-10" data-review-surface="nba-player-props" data-product-release={snapshot.productRelease}>
-    <aside className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5">
+  return <div className="w-full pb-10" data-review-surface={reviewMode ? "nba-player-props" : undefined} data-member-surface={reviewMode ? undefined : "nba-player-props"} data-member-release={reviewMode ? undefined : NBA_PLAYER_PROPS_MEMBER_SURFACE_RELEASE} data-product-release={snapshot.productRelease}>
+    {reviewMode ? <aside className="mb-5 border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3 sm:px-5">
       <p className="text-[10px] font-black uppercase text-amber-300">Private founder review · {reviewSource === "live" ? "Current candidate slate" : "Historical confirmation slate"}</p>
       <p className="mt-1 max-w-4xl text-sm leading-6 text-amber-50/80">This is real point-in-time model, matchup, and exact-price evidence. It cannot appear in member navigation while publication remains disabled.</p>
-    </aside>
+    </aside> : null}
 
     <header className="border-b border-gray-800 pb-6">
       <PlayerPropsSlateHero
-        badge={<span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Review only</span>}
+        badge={reviewMode ? <span className="mb-2 inline-flex rounded border border-amber-400/30 px-2 py-1 text-[10px] font-black uppercase text-amber-200">Review only</span> : undefined}
         eyebrow={<>NBA · {dateLabel(snapshot.slateDate)}</>}
         title="Player Props"
         description="Start with the strongest qualified reads, compare the exact offered price, then open the market-specific OddSphere research."
         status={<>Snapshot {localTime(snapshot.generatedAt)}</>}
-        statusDetail={<>{snapshot.diagnostics.sportsbooks.length} exact-price books · publication disabled</>}
+        statusDetail={<>{snapshot.diagnostics.sportsbooks.length} exact-price books{reviewMode ? " · publication disabled" : ""}</>}
         metrics={[
           { label: "Best angles", value: String(snapshot.diagnostics.bestAngles), tone: "best" },
           { label: "Model leans", value: String(snapshot.diagnostics.leans), tone: "lean" },

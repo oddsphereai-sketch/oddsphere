@@ -29,6 +29,6 @@ export default async function NbaPropsPreviewPage({ searchParams }: { searchPara
   const initialSelectedKey = snapshot.decisions.some((row) => row.decisionKey === requested) ? requested : null;
   return <ProductAppFrame>
     <PlayerPropsLeaguePills league="nba" nflEnabled nbaEnabled reviewMode />
-    <NbaPlayerPropsProductDashboard snapshot={snapshot} initialSelectedKey={initialSelectedKey} reviewSource={currentCandidate ? "live" : "historical"} />
+    <NbaPlayerPropsProductDashboard snapshot={snapshot} initialSelectedKey={initialSelectedKey} reviewSource={currentCandidate ? "live" : "historical"} reviewMode />
   </ProductAppFrame>;
 }

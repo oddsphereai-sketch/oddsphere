@@ -278,7 +278,10 @@ Last reviewed: 2026-10-22
   `docs/model-audits/2026-10-16-nba-three-market-reader-correction-attribution-r4.md`, and
   `docs/model-audits/2026-10-16-nba-total-disagreement-reader-r6-result.md`, plus
   `docs/model-audits/2026-10-20-nba-reader-structural-qualification-r9-result.md`.
-- NBA player props remain member-disabled. The current private forward-readiness
+- NBA player props use member surface
+  `nba_player_props_member_surface_2026_10_22_r1_public_launch`, gated by
+  `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
+  stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
   `nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration` /
   `nba_player_props_forward_decision_2026_10_22_r6_rebound_grade_recalibration_disabled` /
@@ -302,9 +305,10 @@ Last reviewed: 2026-10-22
   player-level regular-season/NBA-Cup state with official-source corrections,
   exact-game injury exclusion, last-known-good
   private snapshots, one-hour immutable locking, internal tracking, and official
-  revisioned settlement. Public route/navigation/tracking and member-request
-  fetching remain off; public board impact is 0 promotions / 0 demotions / 0
-  rows. The r3 frozen runtime refits selected ridge components on every legal
+  revisioned settlement. Member route/navigation are enabled while public
+  tracking remains off; member-request provider fetching remains off. The
+  launch changes zero stored projections, sides, probabilities, grades, prices,
+  or locks. The r3 frozen runtime refits selected ridge components on every legal
   pre-cutoff training row after hyperparameter selection, uses the
   chronologically selected robust opportunity model for rebounds, preserves
   the previously confirmed grade policies, and pairs forecast-driven
@@ -332,13 +336,15 @@ Last reviewed: 2026-10-22
   three chronological windows, board count changes from 401 to 395 (-1.50%);
   every market retains actionables. Projections, sides, probabilities, prices,
   Best Angles, provider cadence, layout, locks, and writer topology are
-  unchanged; public/member activation remains disabled.
+  unchanged. The member surface reads this exact release family without
+  reinterpreting locked or unlocked decisions.
   Evidence and rollback:
   `docs/model-audits/2026-10-21-nba-player-props-private-forward-readiness.md`
   and `docs/model-audits/2026-10-22-nba-player-props-structural-v2-result.md`,
   `docs/model-audits/2026-10-22-nba-player-props-portable-artifact-checksum-r4.md`,
   `docs/model-audits/2026-10-22-nba-player-props-active-role-integrity.md`, plus
-  `docs/model-audits/2026-10-22-nba-player-props-grade-recalibration-predeclaration.md`.
+  `docs/model-audits/2026-10-22-nba-player-props-grade-recalibration-predeclaration.md`, plus
+  `docs/model-audits/2026-10-22-nba-player-props-member-launch.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.
