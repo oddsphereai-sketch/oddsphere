@@ -112,8 +112,12 @@ function RadarCard({ row, onSelect }: { row: Row; onSelect: (key: string) => voi
   return <PlayerPropsRadarCardFrame borderColor={colors.border} background={`linear-gradient(180deg, ${colors.background}, rgba(14,18,24,.98) 44%)`} accentColor={teamColor(row.team)} watermark={<span className="text-[96px] font-black text-white">{row.team}</span>}>
     <div className="flex items-start justify-between gap-3"><span className="text-[10px] font-black uppercase text-violet-300">{marketLabel(row.market)}</span><GradeBadge grade={row.grade} /></div>
     <div className="mt-4 flex items-center gap-3"><PlayerVisual row={row} compact /><div className="min-w-0"><h3 className="truncate text-lg font-black text-white">{row.playerName}</h3><p className="text-[10px] text-gray-500">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</p></div></div>
-    <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-gray-800 bg-gray-800"><Metric title="Projection" value={row.projection.toFixed(1)} /><Metric title="Line" value={row.line.toFixed(1)} /><Metric title="Model" value={percent(row.probability)} /></div>
-    <div className="mt-4 flex items-end justify-between gap-3"><div><p className="text-[9px] font-black uppercase text-gray-600">OddSphere read</p><strong className="mt-1 block text-xl text-white">{selection(row)}</strong><p className="mt-1 text-[10px] text-gray-500">{book(row.sportsbook)} · {price(row.americanPrice)}</p></div><button type="button" onClick={() => onSelect(row.decisionKey)} className="rounded-md border border-violet-400/40 px-3 py-2 text-[10px] font-black uppercase text-violet-200 hover:bg-violet-400/10">Open reader ↑</button></div>
+    <div className="mt-4 grid grid-cols-[1.25fr_1fr] gap-2">
+      <DecisionTile row={row} />
+      <MarketQuoteTile row={row} />
+    </div>
+    <div className="mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-800 bg-gray-800"><Metric title="Model projection" value={row.projection.toFixed(1)} /><Metric title="Pick confidence" value={percent(row.probability)} /></div>
+    <div className="mt-4 flex items-center justify-between gap-3"><p className={`text-[9px] font-black uppercase tracking-wider ${movementTone(row)}`}>{movementLabel(row)}</p><button type="button" onClick={() => onSelect(row.decisionKey)} className="rounded-md border border-violet-400/40 px-3 py-2 text-[10px] font-black uppercase text-violet-200 hover:bg-violet-400/10">Open reader ↑</button></div>
   </PlayerPropsRadarCardFrame>;
 }
 
@@ -136,18 +140,14 @@ function BoardRow({ row, onSelect }: { row: Row; onSelect: (key: string) => void
         <span className="mt-4 block text-[9px] font-black uppercase tracking-[0.14em] text-violet-300">{marketLabel(row.market)}</span>
       </span>
     </span>
-    <span className="relative mt-3 grid grid-cols-[1.35fr_1fr] gap-3 px-4">
-      <span className="rounded-lg border border-gray-800 bg-black/25 p-3">
-        <span className="block text-[8px] font-black uppercase tracking-wider text-gray-600">OddSphere read</span>
-        <strong className="mt-1 block text-2xl font-black text-white">{selection(row)}</strong>
-        <span className="mt-1 block text-[10px] text-gray-500">{book(row.sportsbook)} · <span className="font-bold text-gray-300">{price(row.americanPrice)}</span></span>
-      </span>
-      <span className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800">
-        <Metric title="Projection" value={row.projection.toFixed(1)} />
-        <Metric title="Line" value={row.line.toFixed(1)} />
-        <Metric title="Confidence" value={percent(row.probability)} />
-        <Metric title="Market read" value={percent(row.targetExcludedProbability)} />
-      </span>
+    <span className="relative mt-3 grid grid-cols-[1.2fr_1fr] gap-2 px-4">
+      <DecisionTile row={row} />
+      <MarketQuoteTile row={row} />
+    </span>
+    <span className="relative mx-4 mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800">
+      <Metric title="Model projection" value={row.projection.toFixed(1)} />
+      <Metric title="Pick confidence" value={percent(row.probability)} />
+      <Metric title="Other-book market" value={percent(row.targetExcludedProbability)} />
     </span>
     <span className="relative mt-4 flex items-center justify-between border-t border-gray-800 px-4 py-3 text-[9px] font-black uppercase tracking-wider">
       <span className={movementTone(row)}>{movementLabel(row)}</span>
@@ -165,13 +165,16 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
         <div className="relative grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
           <PlayerVisual row={row} hero />
           <div>
-            <div className="flex flex-wrap items-center gap-2"><GradeBadge grade={row.grade} /><span className="text-[9px] font-black uppercase tracking-wider text-violet-300">{marketLabel(row.market)}</span></div>
-            <h3 className="mt-3 text-3xl font-black text-white">{selection(row)}</h3>
-            <p className="mt-1 text-xs text-gray-400">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)} · {book(row.sportsbook)} {price(row.americanPrice)}</p>
+            <div className="flex flex-wrap items-center gap-2"><span className="text-[9px] font-black uppercase tracking-wider text-violet-300">{marketLabel(row.market)}</span><span className="text-[9px] text-gray-600">{row.team} vs {row.opponent} · {gameTime(row.scheduledStart)}</span></div>
+            <h3 className="mt-2 text-2xl font-black text-white">{row.playerName}</h3>
           </div>
         </div>
-        <div className="relative mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800 sm:grid-cols-4">
-          <Metric title="Projection" value={row.projection.toFixed(1)} /><Metric title="Line" value={row.line.toFixed(1)} /><Metric title="Confidence" value={percent(row.probability)} /><Metric title="Market read" value={percent(row.targetExcludedProbability)} />
+        <div className="relative mt-4 grid gap-2 sm:grid-cols-[1.2fr_1fr]">
+          <DecisionTile row={row} showGrade />
+          <MarketQuoteTile row={row} />
+        </div>
+        <div className="relative mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800">
+          <Metric title="Model projection" value={row.projection.toFixed(1)} /><Metric title="Pick confidence" value={percent(row.probability)} /><Metric title="Other-book market" value={percent(row.targetExcludedProbability)} />
         </div>
       </div>
       <div className="mt-5 grid gap-4 lg:grid-cols-3"><EvidencePanel title="Role & minutes" metrics={row.role} /><EvidencePanel title="Recent production" metrics={row.production} /><EvidencePanel title="Matchup" metrics={row.matchup} /></div>
@@ -185,6 +188,21 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
 }
 
 function EvidencePanel({ title, metrics }: { title: string; metrics: readonly NbaPlayerPropsReaderMetric[] }) { return <section className="rounded-lg border border-gray-800 bg-black/20 p-4"><PanelTitle>{title}</PanelTitle><div className="mt-3 space-y-3">{metrics.map((metric) => <div key={metric.key}><div className="flex justify-between gap-3 text-xs"><span className="text-gray-500">{metric.label}</span><strong className="text-gray-100">{metricValue(metric)}</strong></div><div className="mt-1.5 h-1 overflow-hidden rounded-full bg-gray-800"><span className="block h-full rounded-full bg-violet-400" style={{ width: `${metricWidth(metric)}%` }} /></div></div>)}</div></section>; }
+function DecisionTile({ row, showGrade = false }: { row: Row; showGrade?: boolean }) {
+  const colors = gradeColors(row.grade);
+  return <span className="rounded-lg border p-3" style={{ borderColor: colors.border, background: colors.background }}>
+    <span className="flex items-center justify-between gap-2"><span className="block text-[8px] font-black uppercase tracking-[0.16em] text-emerald-300">Our pick</span>{showGrade ? <GradeBadge grade={row.grade} /> : null}</span>
+    <strong className="mt-1 block text-xl font-black text-white sm:text-2xl">{selection(row)}</strong>
+    <span className="mt-1 block text-[9px] text-gray-500">Prediction against the listed market line</span>
+  </span>;
+}
+function MarketQuoteTile({ row }: { row: Row }) {
+  return <span className="rounded-lg border border-gray-700 bg-black/30 p-3">
+    <span className="block text-[8px] font-black uppercase tracking-[0.16em] text-sky-300">Market offer</span>
+    <strong className="mt-1 block text-lg font-black text-white sm:text-xl">{row.line.toFixed(1)} <span className="text-sm text-gray-400">· {price(row.americanPrice)}</span></strong>
+    <span className="mt-1 block text-[9px] text-gray-500">{book(row.sportsbook)} · evaluated quote</span>
+  </span>;
+}
 function ProbabilityBar({ title, value, tone }: { title: string; value: number; tone: string }) { return <div><div className="flex justify-between text-xs"><span className="text-gray-500">{title}</span><strong className="text-white">{percent(value)}</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-800"><span className={`block h-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, value * 100))}%` }} /></div></div>; }
 function PanelTitle({ children }: { children: React.ReactNode }) { return <p className="text-[10px] font-black uppercase tracking-wider text-violet-300">{children}</p>; }
 function Metric({ title, value }: { title: string; value: string }) { return <span className="bg-gray-950 px-2 py-3 text-center"><span className="block text-[8px] font-black uppercase text-gray-600">{title}</span><strong className="mt-1 block text-sm tabular-nums text-white">{value}</strong></span>; }
