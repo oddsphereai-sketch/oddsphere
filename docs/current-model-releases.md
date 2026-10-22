@@ -73,7 +73,7 @@ Last reviewed: 2026-10-22
 - October 20 MLB/NHL rollover continuity advances the operational schedule
   releases to
   `mlb_daily_refresh_schedule_2026_10_20_r2_official_empty_slate_rollover` and
-  `nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`. A
+  `nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board`. A
   successful authoritative MLB Stats response with zero supported games can
   now publish the exact-date empty member artifact even when the empty
   lower-authority slate provider triggers its normal fail-closed gate; the
@@ -199,7 +199,7 @@ Last reviewed: 2026-10-22
 
 ## Cross-sport market-freshness ownership (2026-10-06)
 
-- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry`.
+- NHL daily refresh release is `nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board`.
   The existing leased `nhl_daily_refresh` writer now has a lightweight intraday mode every 30
   minutes during the active window: it seeds the slate, refreshes exact lines, syncs provider-
   separated splits, recomputes unlocked predictions, and republishes the coherent Daily Edge
@@ -4054,13 +4054,30 @@ locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 
 ## NHL regular-season champion (active from 2026-10-22)
 
-- Model: `nhl_regular_2026_r19_fresh_quote_authority`
-- Calibration: `nhl_regular_calibration_2026_r19_fresh_quote_authority`
-- Decision: `nhl_regular_decision_2026_r19_fresh_quote_authority`
-- Reader: `nhl_daily_edge_reader_2026_10_22_r15_fresh_quote_authority`
+- Model: `nhl_regular_2026_r20_verified_current_board`
+- Calibration: `nhl_regular_calibration_2026_r20_verified_current_board`
+- Decision: `nhl_regular_decision_2026_r20_verified_current_board`
+- Reader: `nhl_daily_edge_reader_2026_10_22_r16_verified_current_board`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 22 r20/r16 verified-current-board release repairs the storage and
+reader boundary without changing the r19 score model, market-reader rules, or
+grade thresholds. The prior current-board comparison silently stopped at
+PostgREST's 1,000-row default, so later games could accumulate old generations;
+an unchanged complete provider pair also retained its original fetch time even
+after a successful poll. The r13 sole leased refresh now reads the full bounded
+board, replaces each complete game/market/book group, records unchanged pairs
+as freshly verified without appending false movement, and collapses legacy
+generations. NHL model and member readers paginate current rows and append-only
+movement history, refusing partial capped reads. The exact October 22
+12-game/36-market candidate remains 1 Best Angle / 19 Lean / 16 Watchlist,
+with zero pick, grade, promotion, demotion, actionable-count, or score changes;
+Detroit-Vancouver's spread advances from the stale stored endpoint to the live
+complete provider pair. Locked records retain exact stored-payload precedence.
+Evidence and rollback:
+`docs/model-audits/2026-10-22-nhl-verified-current-board-r20.md`.
 
 The October 22 r19/r15 quote-authority release preserves the r18 independent
 score, probabilities, sides, market-reader rules, and grade thresholds while

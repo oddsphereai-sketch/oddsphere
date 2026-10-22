@@ -3,11 +3,12 @@ import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 import { nhlFastScoringFeatures, type NhlFastTeamState } from "./nhlFastState2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r19_fresh_quote_authority" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r19_fresh_quote_authority" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r19_fresh_quote_authority" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r20_verified_current_board" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r20_verified_current_board" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r20_verified_current_board" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r19_fresh_quote_authority",
   "nhl_regular_2026_r18_fast_state_direct_probability",
   "nhl_regular_2026_r17_target_excluded_total_reconciliation",
   "nhl_regular_2026_r16_exact_quote_price_mapping",
@@ -21,6 +22,7 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r19_fresh_quote_authority",
   "nhl_regular_calibration_2026_r18_fast_state_direct_probability",
   "nhl_regular_calibration_2026_r17_target_excluded_total_reconciliation",
   "nhl_regular_calibration_2026_r16_exact_quote_price_mapping",

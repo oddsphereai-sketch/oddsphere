@@ -39,6 +39,7 @@ import {
 } from "./nhlScheduleIdentity";
 import { fetchNhlScheduleForDate } from "../../providers/nhl/_nhlApiClient";
 import { canonicalizeNhlLineRows } from "./nhlLineBoard";
+import { loadCompleteNhlCurrentLines, loadCompleteNhlLineHistory } from "./nhlLineStore";
 
 export type BuildSnapshotOptions = {
   /** games.id (sport='nhl'). */
@@ -522,32 +523,39 @@ export async function buildNhlFeatureSnapshot(
 
   // 5. Lines (moneyline + total + the actual paired puck line) for the
   // market layer.
-  const { data: linesData } = await supabase
-    .from("lines")
-    .select("market_type, sportsbook, side, line_value, odds_american, implied_probability, fetched_at")
-    .eq("game_id", opts.gameId)
-    .is("player_id", null)
-    .in("market_type", ["moneyline", "total", "spread"]);
+  const linesData = await loadCompleteNhlCurrentLines(
+    opts.gameId,
+    `buildNhlFeatureSnapshot game_id=${opts.gameId}`,
+  );
   // #39 — drop blocked books (fliff, kalshi) at the load point so every
   // downstream selection (ML implied prob, total line) is clean. Previously
   // only selectMainNhlTotalLine filtered; the ML implied-prob path did not.
-  const lines = canonicalizeNhlLineRows((((linesData ?? []) as Array<DbLineRow & { fetched_at: string | null }>).filter(
+  const lines = canonicalizeNhlLineRows(((linesData as Array<{
+    market_type: string;
+    sportsbook: string;
+    side: string | null;
+    line_value: number | null;
+    odds_american: number | null;
+    fetched_at: string | null;
+  }>).filter(
     (l) => !isBlockedSportsbook(l.sportsbook),
-  ).map((line) => ({ ...line, observed_at: line.fetched_at }))));
+  ).filter((line): line is typeof line & { side: string } => line.side !== null).map((line) => ({
+    ...line,
+    implied_probability: americanToImplied(line.odds_american),
+    observed_at: line.fetched_at,
+  }))));
   const { prob: marketHomeProb, bookCount } = pickMlImpliedProbHome(lines);
   const marketTotalLine = selectMainNhlTotalLine(lines);
   const marketPuckLine = selectMainNhlPuckLinePair(lines);
   const marketPuckProbabilities = puckLineBreakEvenProbabilities(lines, marketPuckLine);
   log(`  market: ML home prob=${marketHomeProb?.toFixed(3) ?? "n/a"} (${bookCount} books), total line=${marketTotalLine?.toFixed(1) ?? "n/a"}`);
 
-  const { data: historyData } = await supabase
-    .from("line_history")
-    .select("market_type, sportsbook, side, line_value, odds_american, recorded_at")
-    .eq("game_id", opts.gameId)
-    .is("player_id", null)
-    .in("market_type", ["moneyline", "total"])
-    .order("recorded_at", { ascending: true });
-  const historyLines = canonicalizeNhlLineRows(((historyData ?? []) as Array<{
+  const historyData = await loadCompleteNhlLineHistory({
+    gameId: opts.gameId,
+    marketTypes: ["moneyline", "total"],
+    context: `buildNhlFeatureSnapshot game_id=${opts.gameId}`,
+  });
+  const historyLines = canonicalizeNhlLineRows((historyData as Array<{
     market_type: string; sportsbook: string; side: string; line_value: number | null;
     odds_american: number | null; recorded_at: string | null;
   }>).filter((raw) => !isBlockedSportsbook(raw.sportsbook)).map((raw) => ({

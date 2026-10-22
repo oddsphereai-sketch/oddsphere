@@ -50,7 +50,7 @@ import { NHL_SHARP_ODDS_COLLECTOR_RELEASE } from "@/lib/providers/nhl/_sharpApiN
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_20_r12_morning_rollover_retry";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -156,6 +156,9 @@ export async function GET(request: Request): Promise<Response> {
         unmatched: linesResult.unmatched,
         parsed: linesResult.parsed,
         linesWritten: linesResult.linesWritten,
+        linesReverified: linesResult.linesReverified,
+        lineGroupsVerified: linesResult.lineGroupsVerified,
+        lineGroupsChanged: linesResult.lineGroupsChanged,
         lineHistoryWritten: linesResult.lineHistoryWritten,
         errorCount: linesResult.errors.length,
       };

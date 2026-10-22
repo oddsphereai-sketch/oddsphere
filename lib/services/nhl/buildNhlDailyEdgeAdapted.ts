@@ -49,16 +49,16 @@ import { loadNhlOpponentAdjustedState } from "./loadNhlOpponentAdjustedState";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { buildNhlTwoSidedPriceTrail } from "./nhlPriceTrail";
 import {
-  canonicalizeNhlLineRows,
   resolveNhlLockedPriceQuote,
   selectNhlBestPriceQuote,
   type NhlCanonicalLineRow,
   type NhlSelectedPriceQuote,
 } from "./nhlLineBoard";
 import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMarket";
+import { loadCompleteNhlLineHistory } from "./nhlLineStore";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_22_r15_fresh_quote_authority" as const;
+  "nhl_daily_edge_reader_2026_10_22_r16_verified_current_board" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -414,33 +414,18 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       // stored under market_type="spread" in our lines table, same
       // convention as NBA). Puck line is an official NHL market, so the
       // real line and price must remain coherent with the tracked read.
-      const { data: linesData } = await supabase
-        .from("lines")
-        .select("market_type, sportsbook, side, line_value, odds_american, fetched_at")
-        .eq("game_id", g.id)
-        .is("player_id", null)
-        .in("market_type", ["moneyline", "total", "spread"]);
-      const lines = canonicalizeNhlLineRows(((linesData ?? []) as Array<{
-        market_type: string; sportsbook: string; side: string;
-        line_value: number | null; odds_american: number | null;
-        fetched_at: string | null;
-      }>).filter((line) => !isBlockedSportsbook(line.sportsbook)).map((line) => ({
-        ...line,
-        observed_at: line.fetched_at,
-      })));
+      const lines = built.meta.market_lines;
 
       // Pull line_history once for the same game so we can surface the
       // first-observed price per (market, side) as "open" alongside
       // current. line_value is included so the spread filter can
       // distinguish the natural puck-line side from the alt line.
-      const { data: histData } = await supabase
-        .from("line_history")
-        .select("market_type, sportsbook, side, line_value, odds_american, recorded_at")
-        .eq("game_id", g.id)
-        .is("player_id", null)
-        .in("market_type", ["moneyline", "total", "spread"])
-        .order("recorded_at", { ascending: true });
-      const history = ((histData ?? []) as Array<{
+      const histData = await loadCompleteNhlLineHistory({
+        gameId: g.id,
+        marketTypes: ["moneyline", "total", "spread"],
+        context: `buildNhlDailyEdgeAdapted game_id=${g.id}`,
+      });
+      const history = (histData as Array<{
         market_type: string; sportsbook: string; side: string;
         line_value: number | null;
         odds_american: number | null; recorded_at: string | null;
