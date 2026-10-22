@@ -7,7 +7,7 @@
  * Active-state is now path-based — each module gets its own route segment.
  *
  *   /lab/daily-edge    → Daily Edge
- *   /mlb/props         → Player Props
+ *   /player-props      → Player Props (resolves the first active league)
  *   /lab/tracking      → Model Tracking (member-facing, Phase 6B.2b)
  *   /lab/my-bets       → How It Works
  *   /lab/account       → Account (stub, V1)
@@ -39,14 +39,14 @@ type Tab = {
 
 const TABS: Tab[] = [
   { href: "/lab/daily-edge",   label: "Daily Edge",   icon: "🎯" },
-  { href: "/mlb/props",        label: "Player Props", icon: "🎮" },
+  { href: "/player-props",     label: "Player Props", icon: "🎮" },
   { href: "/lab/tracking",     label: "Tracking",     icon: "📈" },
   { href: "/lab/my-bets",      label: "How It Works", icon: "📖" },
 ];
 
 const PRIVATE_REVIEW_TABS: Tab[] = [
   { href: `/dev/experience-preview?sport=mlb&date=${DAILY_EDGE_REVIEW_SLATES.mlb?.date ?? ""}&fresh=1`, label: "Daily Edge", icon: "🎯", activeHref: "/lab/daily-edge" },
-  { href: "/dev/mlb-props-preview", label: "Player Props", icon: "🎮", activeHref: "/mlb/props" },
+  { href: "/dev/mlb-props-preview", label: "Player Props", icon: "🎮", activeHref: "/player-props" },
   { href: "/dev/tracking-preview", label: "Tracking", icon: "📈", activeHref: "/lab/tracking" },
 ];
 
@@ -58,11 +58,11 @@ const ALIASED_AS: Record<string, string> = {
   "/lab/design-preview": "/lab/daily-edge",
   "/dev/experience-preview": "/lab/daily-edge",
   "/dev/football-preview": "/lab/daily-edge",
-  "/lab/player-props": "/mlb/props",
-  "/player-props": "/mlb/props",
-  "/dev/mlb-props-preview": "/mlb/props",
-  "/dev/nfl-props-preview": "/mlb/props",
-  "/dev/nba-props-preview": "/mlb/props",
+  "/lab/player-props": "/player-props",
+  "/mlb/props": "/player-props",
+  "/dev/mlb-props-preview": "/player-props",
+  "/dev/nfl-props-preview": "/player-props",
+  "/dev/nba-props-preview": "/player-props",
   "/dev/tracking-preview": "/lab/tracking",
 };
 
@@ -82,7 +82,7 @@ export default function LabAppNav() {
     pathname === "/dev/tracking-preview" ||
     pathname === "/dev/relaunch-review";
   const tabs = isPrivatePreview
-    ? PRIVATE_REVIEW_TABS.map((tab) => tab.activeHref === "/mlb/props" && pathname === "/dev/nfl-props-preview" ? { ...tab, href: "/dev/nfl-props-preview" } : tab.activeHref === "/mlb/props" && pathname === "/dev/nba-props-preview" ? { ...tab, href: "/dev/nba-props-preview" } : tab)
+    ? PRIVATE_REVIEW_TABS.map((tab) => tab.activeHref === "/player-props" && pathname === "/dev/nfl-props-preview" ? { ...tab, href: "/dev/nfl-props-preview" } : tab.activeHref === "/player-props" && pathname === "/dev/nba-props-preview" ? { ...tab, href: "/dev/nba-props-preview" } : tab)
     : TABS;
 
   return (

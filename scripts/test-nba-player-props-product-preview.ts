@@ -74,6 +74,7 @@ const mlbPage = readFileSync(path.join(process.cwd(), "app/mlb/props/page.tsx"),
 const previewPage = readFileSync(path.join(process.cwd(), "app/dev/nba-props-preview/page.tsx"), "utf8");
 const dashboard = readFileSync(path.join(process.cwd(), "app/player-props/components/NbaPlayerPropsProductDashboard.tsx"), "utf8");
 const pills = readFileSync(path.join(process.cwd(), "app/player-props/components/PlayerPropsLeaguePills.tsx"), "utf8");
+const leagueRegistry = readFileSync(path.join(process.cwd(), "app/player-props/lib/playerPropsLeagues.ts"), "utf8");
 assert.match(publicPage, /NBA_PLAYER_PROPS_MEMBER_ENABLED/);
 assert.match(publicPage, /NbaPlayerPropsProductDashboard/);
 assert.match(publicPage, /readNbaPlayerPropsPrivateSnapshot/);
@@ -94,8 +95,9 @@ assert.match(dashboard, /FEATURED_METRIC_KEYS/);
 assert.match(dashboard, /Same-book market flat/);
 assert.match(dashboard, /data-member-surface/);
 assert.match(dashboard, /reviewMode \? <aside/);
-assert.match(pills, /nbaEnabled \? \(reviewMode/);
-assert.match(pills, /player-props\?league=nba/);
+assert.match(pills, /playerPropsLeagueDefinitions/);
+assert.match(leagueRegistry, /args\.nbaEnabled \? \(reviewMode/);
+assert.match(leagueRegistry, /player-props\?league=nba/);
 assert.match(mlbPage, /NBA_PLAYER_PROPS_MEMBER_ENABLED/);
 assert.equal((mlbPage.match(/nbaEnabled=\{nbaEnabled\}/g) ?? []).length, 3, "every MLB board state keeps the active NBA destination in the shared league rail");
 

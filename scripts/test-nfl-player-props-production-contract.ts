@@ -698,7 +698,7 @@ assert.equal(vercel.crons.filter((cron) => cron.path === "/api/cron/nfl-forward-
 assert.equal(vercel.crons.filter((cron) => /nfl.*props|props.*nfl/i.test(cron.path)).length, 0, "props does not add an independent cron");
 const memberPage = readFileSync("app/player-props/page.tsx", "utf8");
 assert.ok(memberPage.includes('process.env.NFL_PLAYER_PROPS_MEMBER_ENABLED === "true"'));
-assert.ok(memberPage.includes('if (!nflEnabled || query.league !== "nfl") redirect("/mlb/props")'));
+assert.ok(memberPage.includes('if (!nflEnabled || query.league !== "nfl") redirect("/player-props")'));
 assert.ok(memberPage.includes('if (query.league === "nba")'), "the shared route can branch to the separately gated NBA member surface");
 assert.ok(memberPage.includes("requestedReader") && memberPage.includes("initialSelectedKey"));
 assert.ok(memberPage.includes("resolveNflForwardWeek"), "the NFL props reader advances with the shared weekly NFL board");
@@ -709,9 +709,9 @@ assert.ok(mlbPage.includes('const nflEnabled = process.env.NFL_PLAYER_PROPS_MEMB
 assert.ok(mlbPage.includes("nflEnabled={nflEnabled}"), "every MLB board state uses the resolved NFL member flag");
 const leaguePills = readFileSync("app/player-props/components/PlayerPropsLeaguePills.tsx", "utf8");
 const leagueLink = readFileSync("app/player-props/components/PlayerPropsLeagueLink.tsx", "utf8");
-assert.ok(leaguePills.includes('href: reviewMode ? "/dev/mlb-props-preview" : "/mlb/props"'));
-assert.ok(leaguePills.includes('reviewMode ? "/dev/nfl-props-preview" : "/player-props?league=nfl"'));
-assert.ok(leaguePills.includes('active ? "Active" : item.href ? "View props" : "Coming soon"'));
+assert.ok(leaguePills.includes("playerPropsLeagueDefinitions"));
+assert.ok(leaguePills.includes("orderPlayerPropsLeagueDefinitions"));
+assert.ok(leaguePills.includes('activeBoard ? "Active" : item.href ? activityLoaded ? "No games today" : "View props" : "Coming soon"'));
 assert.ok(leaguePills.includes("<PlayerPropsLeagueLink"), "both live league pills use the shared intent-prefetch link");
 assert.ok(leagueLink.includes('from "next/link"') && leagueLink.includes('from "next/navigation"'));
 assert.ok(leagueLink.includes("router.prefetch(href)"), "league intent warms the exact canonical destination");
@@ -722,8 +722,9 @@ assert.equal((mlbReader.match(/PropLeagueRail/g) ?? []).length, 0, "MLB dashboar
 const productShellRoutes = readFileSync("lib/navigation/productShellRoutes.ts", "utf8");
 for (const route of ["/mlb/props", "/player-props", "/dev/mlb-props-preview", "/dev/nfl-props-preview"]) assert.ok(productShellRoutes.includes(`"${route}"`));
 const labAppNav = readFileSync("app/lab/components/LabAppNav.tsx", "utf8");
-assert.ok(labAppNav.includes('"/player-props": "/mlb/props"'));
-assert.ok(labAppNav.includes('"/dev/nfl-props-preview": "/mlb/props"'));
+assert.ok(labAppNav.includes('href: "/player-props"'));
+assert.ok(labAppNav.includes('"/mlb/props": "/player-props"'));
+assert.ok(labAppNav.includes('"/dev/nfl-props-preview": "/player-props"'));
 const migration = readFileSync("lib/db/schema-migration-v39-nfl-player-props-tracking.sql", "utf8");
 for (const required of [
   "CREATE TABLE IF NOT EXISTS public.nfl_player_prop_records",

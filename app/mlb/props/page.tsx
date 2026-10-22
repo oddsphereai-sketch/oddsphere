@@ -37,7 +37,7 @@ export default async function MlbPropsMemberPage({
     const memberSnapshot = memberResult.value;
     dataUnavailable ||= memberResult.unavailable;
     if (memberSnapshot && (!requestedReader || memberSnapshot.data.props.some((row) => row.id === requestedReader))) {
-      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={nflEnabled} nbaEnabled={nbaEnabled} /><PlayerPropsDashboard data={memberSnapshot.data} mode="member" initialSelectedId={requestedReader} presentation={presentation} /></ProductAppFrame>;
+      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={nflEnabled} nbaEnabled={nbaEnabled} currentGameCount={memberSnapshot.data.summary.gamesWithProps} currentPropCount={memberSnapshot.data.props.length} /><PlayerPropsDashboard data={memberSnapshot.data} mode="member" initialSelectedId={requestedReader} presentation={presentation} /></ProductAppFrame>;
     }
     const displayResult = await readMemberDataWithDeadline({
       label: "mlb-player-props-display-snapshot",
@@ -52,7 +52,7 @@ export default async function MlbPropsMemberPage({
       // rendered after a prop is opened. Keep the board's price/model rows
       // byte-for-byte intact and load that evidence on demand per player.
       const memberData = buildMlbPropsMemberBoardData(snapshot.data);
-      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={nflEnabled} nbaEnabled={nbaEnabled} /><PlayerPropsDashboard data={memberData} mode="member" initialSelectedId={initialSelectedId} presentation={presentation} /></ProductAppFrame>;
+      return <ProductAppFrame><PlayerPropsLeaguePills league="mlb" nflEnabled={nflEnabled} nbaEnabled={nbaEnabled} currentGameCount={memberData.summary.gamesWithProps} currentPropCount={memberData.props.length} /><PlayerPropsDashboard data={memberData} mode="member" initialSelectedId={initialSelectedId} presentation={presentation} /></ProductAppFrame>;
     }
   }
 
