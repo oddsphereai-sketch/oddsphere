@@ -1,7 +1,7 @@
 import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeatures";
 
 export const NBA_PLAYER_PROPS_INDEPENDENT_RESEARCH_RELEASE =
-  "nba_player_props_independent_research_2026_10_22_r3_full_legal_refit" as const;
+  "nba_player_props_independent_research_2026_10_22_r4_active_role_integrity" as const;
 
 export const NBA_PLAYER_PROP_COMPONENTS = ["points", "rebounds", "assists", "threes"] as const;
 export type NbaPlayerPropComponent = (typeof NBA_PLAYER_PROP_COMPONENTS)[number];
@@ -334,7 +334,7 @@ function predictMinutes(row: NbaPlayerPropFeatureRow, weights: MinuteWeights): n
 }
 
 function predictParticipation(row: NbaPlayerPropFeatureRow, prior: number, strength: number): number {
-  const sample = Math.min(10, row.team_games_prior);
+  const sample = Math.min(10, row.participation_sample_10 ?? row.team_games_prior);
   const observed = row.participation_rate_10 ?? prior;
   return clamp01((observed * sample + prior * strength) / (sample + strength));
 }

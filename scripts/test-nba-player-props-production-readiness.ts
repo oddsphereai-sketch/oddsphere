@@ -35,7 +35,7 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity");
 assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
 assert.match(
   frozenRuntimeSource,
@@ -174,10 +174,38 @@ assert.equal(first.length, NBA_PLAYER_PROPS_FOUNDATION_MARKETS.length);
 for (const decision of first) {
   assert.equal(decision.publicEnabled, false);
   assert.equal(decision.side, decision.finalProjection > decision.line ? "over" : "under");
+  assert(decision.independentProjection > 0, "offered standard props require a positive independent forecast");
+  assert(decision.finalProjection > 0, "market arbitration may not manufacture a zero forecast");
   assert(decision.targetExcludedBooks >= 1);
   assert(decision.targetExcludedReferenceBooks >= 1);
   assert(decision.probability >= 0 && decision.probability <= 1);
 }
+
+const underMarket = observations.filter((row) => row.market === "points").map((row) => ({
+  ...row,
+  line: 0.5,
+  americanPrice: row.side === "over" ? 150 : -200,
+}));
+const coherentUnder = buildNbaPlayerPropsForwardDecisions({ features, observations: underMarket });
+assert.equal(coherentUnder.length, 1);
+assert.equal(coherentUnder[0]?.side, "under");
+assert.equal(coherentUnder[0]?.finalProjection, 0.45,
+  "a market disagreement may not reflect a positive counting forecast through zero");
+
+const reboundStressFeature = [{
+  ...features[0]!,
+  rebounds_per_minute_10: 10,
+  rebounds_per_minute_20: 10,
+  rebounds_per_minute_season: 10,
+}];
+const reboundMarket = observations.filter((row) => row.market === "rebounds");
+const robustFallback = buildNbaPlayerPropsForwardDecisions({
+  features: reboundStressFeature,
+  observations: reboundMarket,
+});
+assert.equal(robustFallback.length, 1);
+assert((robustFallback[0]?.independentProjection ?? 0) > 0,
+  "an out-of-domain robust clamp must fall back to the positive frozen ridge forecast");
 
 const chronological = [
   ...observations.filter((row) => row.market === "points").map((row) => ({

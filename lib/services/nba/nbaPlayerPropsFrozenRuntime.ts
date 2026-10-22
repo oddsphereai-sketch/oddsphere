@@ -19,9 +19,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_22_r4_binary_checksum_disabled" as const;
+  "nba_player_props_forward_decision_2026_10_22_r5_active_role_integrity_disabled" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -328,11 +328,17 @@ function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarke
     return Math.max(0, (base.combinations[market] / base.conditionalMinutes) * predictMinutes(row, artifact.minuteModel));
   }
   if (underlying === "robust_component_counts") {
-    return COMPONENTS[market].reduce((sum, component) => sum + predictStructural(
+    const projection = COMPONENTS[market].reduce((sum, component) => sum + predictStructural(
       row,
       artifact.robustModels![component],
       artifact.robustMinuteModel!,
     ), 0);
+    if (projection > 0) return projection;
+    // The robust count model is the qualified rebound model, but an exact-zero
+    // output for a currently offered standard prop is an out-of-domain
+    // extrapolation rather than a plausible basketball forecast. Fall back to
+    // the separately validated ridge model instead of exposing the clamp.
+    return projectNbaPlayerPropsIndependent(row, artifact.ridgeModel).combinations[market];
   }
   const models = underlying === "structural_log_counts"
     ? artifact.structuralLogModels
@@ -365,7 +371,7 @@ function resolveFinalProjection(args: {
   const distance = Math.max(0.05, Math.abs(args.independentProjection - args.offer.canonicalLine));
   const candidateProjection = candidateSide === independentSide
     ? args.independentProjection
-    : Math.max(0, args.offer.canonicalLine + (candidateSide === "over" ? distance : -distance));
+    : coherentFlippedProjection(args.offer.canonicalLine, distance, candidateSide);
   const exactArbitration = args.exactPriceMinimumMarketDistance === null
     ? null
     : resolveTargetExcludedArbitration({
@@ -425,7 +431,7 @@ function resolveTargetExcludedArbitration(args: {
       return {
         target,
         evidence,
-        finalProjection: Math.max(0, args.offer.canonicalLine + (side === "over" ? distance : -distance)),
+        finalProjection: coherentFlippedProjection(args.offer.canonicalLine, distance, side),
         mode: "target_excluded_arbitration" as const,
       };
     }
@@ -435,6 +441,16 @@ function resolveTargetExcludedArbitration(args: {
     side = desired;
   }
   return null;
+}
+
+function coherentFlippedProjection(line: number, distance: number, side: Side): number {
+  const mirrored = line + (side === "over" ? distance : -distance);
+  if (side === "over" || mirrored > 0) return mirrored;
+  // Equal-distance reflection can cross below zero when the independent model
+  // and a target-excluded market read strongly disagree. Zero is not evidence;
+  // keep the chosen Under side but represent the conflict conservatively just
+  // below the offered line rather than manufacturing an impossible forecast.
+  return Math.max(0.001, line - 0.05);
 }
 
 function selectedMarketProbability(rows: readonly NbaPlayerPropPriceObservation[], selectedCandidate: string): number | null {

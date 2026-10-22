@@ -233,6 +233,75 @@ assert.equal(mutated[1]?.points_per_minute_10, playerFeatures[1]?.points_per_min
 assert.equal(mutated[1]?.threes_per_minute_season, playerFeatures[1]?.threes_per_minute_season, "long-horizon rates remain point-in-time");
 assert.equal(mutated[1]?.target_points, 99, "the target remains available for offline scoring only");
 
+const roleGames: NbaHistoricalGame[] = Array.from({ length: 10 }, (_, index) => ({
+  gameId: 100 + index,
+  season: 2025,
+  startTime: new Date(Date.UTC(2026, 3, 1 + index)).toISOString(),
+  homeTeamId: index === 9 ? 4 : 1,
+  awayTeamId: index === 9 ? 5 : 2,
+  homeTeam: index === 9 ? "PHI" : "ORL",
+  awayTeam: index === 9 ? "CLE" : "MIA",
+  homeScore: 100,
+  awayScore: 95,
+}));
+const roleBoxes = roleGames.slice(0, 9).flatMap((game, index) => [
+  box(game.gameId, 1_000 + index, 1, 81, index === 0 ? 26 : 0, index === 0 ? 10 : 0),
+  box(game.gameId, 1_500 + index, 1, 83, 34, 20),
+  box(game.gameId, 2_000 + index, 2, 82, 32, 18),
+]);
+const roleFeature = buildNbaPlayerPropsPointInTimeFeatures({
+  games: roleGames.slice(0, 9),
+  upcomingGames: [{
+    gameId: 109,
+    season: 2025,
+    startTime: roleGames[9]!.startTime,
+    homeTeamId: 4,
+    awayTeamId: 5,
+    homeTeam: "PHI",
+    awayTeam: "CLE",
+  }],
+  boxes: roleBoxes,
+  candidates: [{ gameId: 109, playerId: 81, playerName: "Role Test", teamId: 4 }],
+  emitGameIds: new Set([109]),
+})[0]!;
+assert.equal(roleFeature.player_games_prior, 9, "DNP rows remain available to the participation model");
+assert.equal(roleFeature.minutes_mean_10, 26, "DNP rows cannot depress conditional minutes");
+assert.equal(roleFeature.points_per_minute_10, 10 / 26, "DNP rows cannot truncate active production windows");
+assert.equal(roleFeature.participation_rate_10, null, "prior-team DNPs cannot become current-team participation evidence");
+assert.equal(roleFeature.participation_sample_10, 0);
+assert.equal(roleFeature.changed_team_since_last_game, 1, "the active prior-team appearance still identifies a team change");
+
+const teamTenureGames: NbaHistoricalGame[] = [
+  { gameId: 200, season: 2026, startTime: "2026-10-18T00:00:00.000Z", homeTeamId: 1, awayTeamId: 2, homeTeam: "ORL", awayTeam: "MIA", homeScore: 100, awayScore: 95 },
+  { gameId: 201, season: 2026, startTime: "2026-10-20T00:00:00.000Z", homeTeamId: 4, awayTeamId: 5, homeTeam: "PHI", awayTeam: "CLE", homeScore: 108, awayScore: 101 },
+];
+const teamTenureFeature = buildNbaPlayerPropsPointInTimeFeatures({
+  games: teamTenureGames,
+  upcomingGames: [{
+    gameId: 202,
+    season: 2026,
+    startTime: "2026-10-22T00:00:00.000Z",
+    homeTeamId: 4,
+    awayTeamId: 6,
+    homeTeam: "PHI",
+    awayTeam: "DEN",
+  }],
+  boxes: [
+    box(200, 3_000, 1, 81, 0, 0),
+    box(200, 3_004, 1, 84, 30, 12),
+    box(200, 3_001, 2, 82, 30, 12),
+    box(201, 3_002, 4, 81, 26, 10),
+    box(201, 3_003, 5, 83, 30, 12),
+  ],
+  candidates: [{ gameId: 202, playerId: 81, playerName: "Team Tenure Test", teamId: 4 }],
+  emitGameIds: new Set([202]),
+})[0]!;
+assert.equal(teamTenureFeature.participation_rate_10, 1, "participation begins with the player's current-team tenure");
+assert.equal(teamTenureFeature.participation_sample_10, 1, "participation confidence uses the observed team-tenure sample");
+assert.equal(teamTenureFeature.minutes_mean_10, 26, "prior-team DNPs cannot contaminate an early-season current role");
+assert.equal(teamTenureFeature.same_team_games_10, 1);
+assert.equal(teamTenureFeature.changed_team_since_last_game, 0);
+
 const syntheticRows = Array.from({ length: 160 }, (_, index) => {
   const minutes = 24 + (index % 13);
   const pointsRate = 0.45 + (index % 9) * 0.035;

@@ -361,6 +361,7 @@ async function main(): Promise<void> {
   const artifactOutputValue = value("--artifact-output");
   const parityOutputValue = value("--parity-output");
   const projectionOnly = hasFlag("--projection-only");
+  const preserveActiveReleasePolicy = hasFlag("--preserve-active-release-policy");
   const dataset = JSON.parse(await readFile(input, "utf8")) as Dataset;
   if (dataset.mode !== "offline_research_only" || dataset.actionable !== false) {
     throw new Error("NBA props tournament accepts only an offline, non-actionable research dataset.");
@@ -436,10 +437,17 @@ async function main(): Promise<void> {
     ]));
   }
 
-  const selectedByMarket = Object.fromEntries(MARKETS.map((market) => [
+  let selectedByMarket = Object.fromEntries(MARKETS.map((market) => [
     market,
     selectCandidate(candidates, selectionMetrics, market),
   ])) as Record<Market, CandidateName>;
+  const activeArtifact = preserveActiveReleasePolicy
+    ? JSON.parse(await readFile(path.resolve("lib/services/nba/fixtures/nbaPlayerPropsFrozenRuntimeArtifact.json"), "utf8")) as {
+        selectedByMarket: Record<Market, CandidateName>;
+        gradePolicies: Record<Market, Readonly<Record<string, unknown>>>;
+      }
+    : null;
+  if (activeArtifact) selectedByMarket = activeArtifact.selectedByMarket;
 
   const gradeModelFitRows = chronological([...development, ...modelSelection]);
   const gradePredictors = new Map<CandidateName, ReturnType<Candidate["fit"]>>();
@@ -484,7 +492,7 @@ async function main(): Promise<void> {
   }));
   if (projectionOnly) {
     const projectionReport = {
-      release: "nba_player_props_projection_tournament_2026_10_22_r2_robust_rebounds_full_refit",
+      release: "nba_player_props_projection_tournament_2026_10_22_r3_active_role_integrity",
       mode: "offline_research_only",
       actionable: false,
       sourceDatasetRelease: dataset.release,
@@ -526,6 +534,7 @@ async function main(): Promise<void> {
     selectedByMarket,
     predictors,
     exactPriceGradeResearch,
+    preservedGradePolicies: activeArtifact?.gradePolicies ?? null,
   });
   const selectionWindowGames = orderedGames.slice(0, modelSelectionEnd);
   const selectionWindowIds = new Set(selectionWindowGames.map((game) => game.gameId));
@@ -547,7 +556,7 @@ async function main(): Promise<void> {
   );
 
   const report = {
-    release: "nba_player_props_model_tournament_2026_10_22_r12_robust_rebounds_full_refit",
+    release: "nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity",
     mode: "offline_research_only",
     actionable: false,
     sourceDatasetRelease: dataset.release,
@@ -600,7 +609,7 @@ async function main(): Promise<void> {
     const previewOutput = path.resolve(previewOutputValue);
     await mkdir(path.dirname(previewOutput), { recursive: true });
     await writeFile(previewOutput, `${JSON.stringify({
-      release: "nba_player_props_private_product_preview_2026_10_22_r4_robust_rebounds_full_refit",
+      release: "nba_player_props_private_product_preview_2026_10_22_r5_active_role_integrity",
       mode: "private_historical_visual_qa_only",
       actionable: false,
       sourceDatasetRelease: dataset.release,
@@ -624,7 +633,7 @@ async function main(): Promise<void> {
     const parityOutput = path.resolve(parityOutputValue);
     await mkdir(path.dirname(parityOutput), { recursive: true });
     await writeFile(parityOutput, `${JSON.stringify({
-      release: "nba_player_props_frozen_runtime_parity_2026_10_22_r2",
+      release: "nba_player_props_frozen_runtime_parity_2026_10_22_r3_active_role_integrity",
       mode: "private_historical_parity_only",
       actionable: false,
       features: confirmation,
@@ -643,6 +652,7 @@ function buildFrozenRuntimeArtifact(args: {
   selectedByMarket: Readonly<Record<Market, CandidateName>>;
   predictors: ReadonlyMap<CandidateName, ReturnType<Candidate["fit"]>>;
   exactPriceGradeResearch: ReturnType<typeof buildExactPriceGradeResearch>["report"];
+  preservedGradePolicies: Record<Market, Readonly<Record<string, unknown>>> | null;
 }) {
   const ridgeModel = fitNbaPlayerPropsIndependentResearchModel(args.fitRows);
   const minuteModel = fitMinuteRegression(args.fitRows);
@@ -692,11 +702,11 @@ function buildFrozenRuntimeArtifact(args: {
   ]));
   const byMarket = args.exactPriceGradeResearch.byMarket;
   const artifactWithoutChecksum = {
-    release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum",
+    release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity",
     publicEnabled: false,
     sourceDatasetRelease: args.dataset.release,
     sourceInputsSha256: args.dataset.immutableInputsSha256,
-    sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_22_r12_robust_rebounds_full_refit",
+    sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity",
     sourceGradeRelease: args.exactPriceGradeResearch.release,
     trainedThrough: args.fitRows.at(-1)?.feature_cutoff ?? null,
     selectedByMarket: args.selectedByMarket,
@@ -712,7 +722,7 @@ function buildFrozenRuntimeArtifact(args: {
     robustModels,
     distributions,
     reliabilityModels: Object.fromEntries(MARKETS.map((market) => [market, byMarket[market].reliabilityModel])),
-    gradePolicies: {
+    gradePolicies: args.preservedGradePolicies ?? {
       points: {
         kind: "ranked",
         policy: byMarket.points.ungatedRankedGradeAudit.policy,
@@ -755,10 +765,26 @@ function buildFrozenRuntimeArtifact(args: {
       },
     },
   } as const;
+  assertFiniteArtifactNumbers(artifactWithoutChecksum);
   return {
     ...artifactWithoutChecksum,
     payloadSha256: nbaPlayerPropsArtifactSha256(artifactWithoutChecksum),
   };
+}
+
+function assertFiniteArtifactNumbers(value: unknown, path = "artifact"): void {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error(`NBA props artifact contains a non-finite number at ${path}.`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertFiniteArtifactNumbers(item, `${path}[${index}]`));
+    return;
+  }
+  if (value && typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([key, item]) =>
+      assertFiniteArtifactNumbers(item, `${path}.${key}`));
+  }
 }
 
 function walkForward(
@@ -2254,7 +2280,7 @@ function buildExactPriceGradeResearch(args: {
     return row;
   });
   const report = {
-    release: "nba_player_props_exact_price_grade_research_2026_10_22_r11_robust_rebounds_full_refit",
+    release: "nba_player_props_exact_price_grade_2026_10_22_r12_active_role_integrity_private_only",
     status: "opened_retrospective_research_only",
     actionable: false,
     targetBookExcluded: true,

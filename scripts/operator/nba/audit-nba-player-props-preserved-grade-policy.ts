@@ -156,7 +156,7 @@ async function main() {
   if (process.argv.includes("--parity-output")) {
     await writeFile(value("--parity-output"), `${JSON.stringify({
       ...parity,
-      release: "nba_player_props_frozen_runtime_parity_2026_10_22_r2",
+      release: "nba_player_props_frozen_runtime_parity_2026_10_22_r3_active_role_integrity",
       rows: graded,
     }, null, 2)}\n`, "utf8");
   }
@@ -170,9 +170,9 @@ async function main() {
     void _discarded;
     const payload = {
       ...candidatePayload,
-      release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r4_binary_checksum",
-      sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_22_r12_robust_rebounds_full_refit",
-      sourceGradeRelease: "nba_player_props_exact_price_grade_2026_10_22_r11_preserved_plus_pr_promotion",
+      release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity",
+      sourceTournamentRelease: "nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity",
+      sourceGradeRelease: "nba_player_props_exact_price_grade_2026_10_22_r12_active_role_integrity_private_only",
       gradePolicies: artifact.gradePolicies,
     };
     const composed = {

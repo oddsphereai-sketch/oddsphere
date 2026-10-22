@@ -1,6 +1,6 @@
 {
-  "productRelease": "nba_player_props_product_candidate_2026_10_22_r5_private_forward_ready",
-  "snapshotRelease": "nba_player_props_member_snapshot_candidate_2026_10_22_r5_private_forward_ready_disabled",
+  "productRelease": "nba_player_props_product_candidate_2026_10_22_r6_active_role_integrity",
+  "snapshotRelease": "nba_player_props_member_snapshot_candidate_2026_10_22_r6_active_role_integrity_disabled",
   "lockRelease": "nba_player_props_lock_candidate_2026_10_21_r1_immutable",
   "mode": "private_historical_visual_qa_only",
   "publicEnabled": false,
