@@ -13,7 +13,7 @@ import type { SharpApiOddsRow } from "./SharpApiSoccerOddsProvider";
 export const SHARP_EPL_LEAGUE = "england_-_premier_league" as const;
 export const SHARP_UCL_LEAGUE = "uefa_-_champions_league" as const;
 export const UCL_SHARP_MARKET_IDENTITY_RELEASE =
-  "ucl_sharp_market_identity_2026_10_20_r5_sabah_live_identity" as const;
+  "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity" as const;
 const SHARP_MARKET_TYPE = {
   match_result: "moneyline",
   double_chance: "double_chance",
@@ -101,10 +101,11 @@ const TEAM_ALIASES: Record<string, string[]> = {
 };
 
 const UCL_TEAM_ALIASES: Record<string, string[]> = {
-  sabahfk: ["sabah", "sabahmasazir", "sabahbakufk"],
-  sabah: ["sabahfk", "sabahmasazir", "sabahbakufk"],
-  sabahmasazir: ["sabah", "sabahfk", "sabahbakufk"],
-  sabahbakufk: ["sabah", "sabahfk", "sabahmasazir"],
+  sabahfk: ["sabah", "sabahmasazir", "fcsabahmasazir", "sabahbakufk"],
+  sabah: ["sabahfk", "sabahmasazir", "fcsabahmasazir", "sabahbakufk"],
+  sabahmasazir: ["sabah", "sabahfk", "fcsabahmasazir", "sabahbakufk"],
+  fcsabahmasazir: ["sabah", "sabahfk", "sabahmasazir", "sabahbakufk"],
+  sabahbakufk: ["sabah", "sabahfk", "sabahmasazir", "fcsabahmasazir"],
   asroma: ["roma"],
   roma: ["asroma"],
   fcporto: ["porto"],
@@ -114,8 +115,9 @@ const UCL_TEAM_ALIASES: Record<string, string[]> = {
   eindhoven: ["psv", "psveindhoven"],
   sscnapoli: ["napoli"],
   napoli: ["sscnapoli"],
-  bodoglimt: ["bodoeglimt"],
-  bodoeglimt: ["bodoglimt"],
+  bodoglimt: ["bodoeglimt", "bodglimt"],
+  bodoeglimt: ["bodoglimt", "bodglimt"],
+  bodglimt: ["bodoglimt", "bodoeglimt"],
   fcbarcelona: ["barcelona"],
   barcelona: ["fcbarcelona"],
   manchesterunited: ["manunited"],

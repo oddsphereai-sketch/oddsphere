@@ -62,16 +62,34 @@ async function main() {
       isolated: coverage(isolated),
     });
   }
+  const fixtureGaps = rows.flatMap((row) => {
+    const missing = MARKET_NAMES.filter((market) => {
+      const value = row.shared[market];
+      const expectedSelections = market === "match_result" || market === "double_chance" ? 3 : 2;
+      return value.events.length !== 1 || value.books.length === 0 || value.selections.length !== expectedSelections;
+    });
+    return missing.length > 0 ? [{
+      matchId: row.matchId,
+      fixture: row.fixture,
+      kickoff: row.kickoff,
+      eventId: row.sharedEventId,
+      missing,
+      coverage: row.shared,
+    }] : [];
+  });
   console.log(JSON.stringify({
     mode: "read_only",
-    providerEvents: eventCatalog.map((event) => ({
+    providerEventCount: eventCatalog.length,
+    fixtureCount: rows.length,
+    completeFixtures: rows.length - fixtureGaps.length,
+    fixtureGaps,
+    ...(process.argv.includes("--detail") ? { providerEvents: eventCatalog.map((event) => ({
       id: event.id ?? null,
       home: event.home_team ?? null,
       away: event.away_team ?? null,
       kickoff: event.start_time ?? null,
       marketCount: event.market_count ?? null,
-    })),
-    fixtures: rows,
+    })), fixtures: rows } : {}),
   }, null, 2));
 }
 
