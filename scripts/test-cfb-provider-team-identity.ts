@@ -13,6 +13,7 @@ const confirmedProviderLabels = [
   ["MTSU", "Middle Tennessee Blue Raiders", "Middle Tenn ST Blue Raiders"],
   ["MASS", "Massachusetts Minutemen", "UMass"],
   ["NMSU", "New Mexico State Aggies", "NM State"],
+  ["UVA", "Virginia Cavaliers", "Virginia"],
 ] as const;
 
 for (const [abbreviation, expectedName, observed] of confirmedProviderLabels) {
@@ -37,6 +38,11 @@ assert.equal(
   cfbProviderTeamMatches({ abbreviation: "ALST", expectedName: "Alabama State Hornets", observed: "Alabama" }),
   false,
   "generic Alabama cannot attach to Alabama State",
+);
+assert.equal(
+  cfbProviderTeamMatches({ abbreviation: "VT", expectedName: "Virginia Tech Hokies", observed: "Virginia" }),
+  false,
+  "Virginia's exact school alias cannot attach to Virginia Tech",
 );
 assert.equal(
   cfbProviderTeamMatches({ abbreviation: "M-OH", expectedName: "Miami (OH) RedHawks", observed: "Miami FL" }),

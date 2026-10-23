@@ -30,6 +30,7 @@ export const CFB_PROVIDER_TEAM_ALIASES: Readonly<Record<string, readonly string[
   UL: ["Louisiana", "Louisiana Lafayette"],
   UALB: ["Albany", "UAlbany"],
   USM: ["Southern Miss", "Southern Mississippi", "Southern Mississippi Golden Eagles"],
+  UVA: ["Virginia"],
   "W&M": ["William & Mary", "William and Mary"],
   YSU: ["Youngstown State", "Youngstown St", "Youngstown St Penguins"],
 };

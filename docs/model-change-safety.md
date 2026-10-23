@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## Owner-directed correction: CFB Virginia split identity
+
+On 2026-10-23 Daniel Mengel reported missing fallback sharp splits for
+Virginia-Duke and directed Oddsphere to repair real ingestion or mapping gaps
+and verify the complete Daily Edge system. The source audit proved the exact
+complete DraftKings split row was present at SharpAPI and current, while the
+central CFB resolver rejected provider label `Virginia` because the generic
+prefix path also saw Virginia Tech.
+
+For future unlocked CFB captures, the abbreviation-scoped exact provider alias
+`UVA -> Virginia` is authoritative. The generic ambiguity guard remains intact,
+and the same label is explicitly rejected for `VT`. Sharp split source r4
+records the behavior change. The same audit found that the exact ACC injury
+report appeared eleven minutes after the last successful official-source pass.
+Collector r64 therefore applies the existing hourly cadence throughout the
+final twelve pregame hours, rather than only the final three, and the sole
+writer r135 records both corrections. The 12-request ceiling, six-hour default
+cadence, provider hierarchy, pagination, model equations, thresholds, grades,
+stakes, member reader, and the `prediction_pipeline:cfb` lease are unchanged.
+Existing locked payloads retain exact stored precedence.
+
+Publication requires the declared same-input board-impact report, identity and
+SharpAPI split tests, the focused CFB suite, TypeScript, full model-change
+verification, latest-main integration proof, protected PR checks, and live
+proof that Duke-Virginia receives the exact provider row. Evidence and rollback:
+`docs/model-audits/2026-10-23-cfb-virginia-split-identity-predeclaration.md`.
+
 ## Owner-directed provisional exception: NHL specialized margin/Total handoff r22
 
 On 2026-10-23 Daniel Mengel rejected leaving the live NHL model unchanged after
