@@ -87,3 +87,34 @@ opening consensus but not complete target-excluded same-book movement and
 lock-time evidence. The October 22 target-excluded reconstruction was net
 neutral (two disagreement flips corrected and two harmed), so the complete
 live reader and grade transfer still require a release-pure forward slate.
+
+## Authentic current-season evidence inventory
+
+A SELECT-only production inventory found that the bounded forward chronology
+began on October 21. The October 22 slate contains 157 immutable locked and
+officially settleable decisions. Every row has a matching evaluated quote at
+or before lock, a verified same-book opening/current pair, and a target-
+excluded comparison; 148 of 157 also have a distinct prior state. No cross-
+book movement or reconstructed lock timestamp is used.
+
+Across those 157 locks, the stored independent forecast was 108-49 (68.79%),
+while the released final member prediction was 96-61 (61.15%). A simple 2 pp
+target-excluded disagreement replay around the stored independent forecast was
+100-57 (63.69%) and changed 32 sides. It is not a release candidate: it mixes
+markets whose arbitration behavior differs and uses the old independent
+rebound projection. It proves that the full evidence chain is replayable and
+also confirms that blanket market flipping is harmful.
+
+For standalone rebounds, all 22 settled locks have the complete evidence
+chain. The active independent forecast was 10-12, and the released final read
+was 9-13. The support-weighted rebound candidate's same-input reconstruction
+was 12-10 independently; its exact target-excluded disagreements were net
+neutral. That is useful current-season development evidence, but it was
+reconstructed after outcomes and cannot be called a release-pure forward
+confirmation.
+
+The dedicated settlement envelope had not yet been written when the inventory
+ran. The official current-state box store nevertheless contained every needed
+October 22 player result, so the audit settled all 157 locks in memory without
+writing or altering any record. The missing envelope is an operational
+settlement-cadence finding, not missing outcome data.
