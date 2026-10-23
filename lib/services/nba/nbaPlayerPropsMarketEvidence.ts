@@ -1,7 +1,7 @@
 import type { NbaPlayerPropPriceObservation, NbaPlayerPropSide } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_MARKET_EVIDENCE_RELEASE =
-  "nba_player_props_market_evidence_research_2026_10_21_r2_forward_chronology" as const;
+  "nba_player_props_market_evidence_2026_10_23_r3_canonical_coverage" as const;
 
 export type NbaPlayerPropsCanonicalOfferSet = {
   scopeKey: string;
@@ -44,23 +44,41 @@ export function selectNbaPlayerPropsCanonicalOfferSets(
   return selectCanonicalOfferSets(rows, false);
 }
 
-/** Forward-only selector: each sportsbook votes from its newest complete snapshot. */
+/**
+ * Forward-only selector: retain each sportsbook's newest complete pair at every
+ * currently offered line. Providers timestamp individual props independently,
+ * so a single sportsbook-wide maximum timestamp is not a valid slate snapshot.
+ */
 export function selectNbaPlayerPropsCurrentCanonicalOfferSets(
   rows: readonly NbaPlayerPropPriceObservation[],
 ): NbaPlayerPropsCanonicalOfferSet[] {
   return selectCanonicalOfferSets(rows, true);
 }
 
+/** Exact deployed predecessor retained only for release-pure A/B audits. */
+export function selectNbaPlayerPropsLegacyCurrentCanonicalOfferSetsForAudit(
+  rows: readonly NbaPlayerPropPriceObservation[],
+): NbaPlayerPropsCanonicalOfferSet[] {
+  return selectCanonicalOfferSets(rows, "legacy");
+}
+
 function selectCanonicalOfferSets(
   rows: readonly NbaPlayerPropPriceObservation[],
-  currentOnly: boolean,
+  currentOnly: boolean | "legacy",
 ): NbaPlayerPropsCanonicalOfferSet[] {
   const scopes = groupBy(rows.filter(resolvedObservation), marketScopeKey);
   return [...scopes.entries()].map(([scopeKey, scopeRows]) => {
-    const selectableRows = currentOnly ? latestSnapshotByBook(scopeRows) : scopeRows;
+    const selectableRows = currentOnly === "legacy"
+      ? latestSnapshotByBook(scopeRows)
+      : currentOnly
+        ? latestCurrentPairRowsByBookLine(scopeRows)
+        : scopeRows;
     const summaries = summarizeLines(selectableRows);
     const complete = summaries.filter((summary) => summary.completeBooks > 0);
-    const candidates = complete.length > 0 ? complete : summaries;
+    const corroborated = complete.filter((summary) => summary.completeBooks >= 2);
+    const candidates = currentOnly !== "legacy" && corroborated.length > 0
+      ? corroborated
+      : complete.length > 0 ? complete : summaries;
     const bookVotes = sportsbookLineVotes(selectableRows);
     for (const vote of bookVotes) {
       const summary = summaries.find((row) => row.line === vote);
@@ -83,6 +101,15 @@ function selectCanonicalOfferSets(
       allObservedLines: summaries.map((row) => row.line).sort((a, b) => a - b),
     };
   }).sort((a, b) => a.scopeKey.localeCompare(b.scopeKey));
+}
+
+function latestSnapshotByBook(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
+  const output: NbaPlayerPropPriceObservation[] = [];
+  for (const values of groupBy(rows, (row) => normalizeBook(row.sportsbook)).values()) {
+    const latest = Math.max(...values.map((row) => Date.parse(row.observedAt)));
+    output.push(...values.filter((row) => Date.parse(row.observedAt) === latest));
+  }
+  return output;
 }
 
 /**
@@ -214,11 +241,12 @@ function sportsbookLineVotes(rows: readonly NbaPlayerPropPriceObservation[]): nu
   return votes;
 }
 
-function latestSnapshotByBook(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
+function latestCurrentPairRowsByBookLine(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
   const output: NbaPlayerPropPriceObservation[] = [];
-  for (const values of groupBy(rows, (row) => normalizeBook(row.sportsbook)).values()) {
-    const latest = Math.max(...values.map((row) => Date.parse(row.observedAt)));
-    output.push(...values.filter((row) => Date.parse(row.observedAt) === latest));
+  const current = rows.filter((row) => !row.isOpening && !row.isLive);
+  for (const values of groupBy(current, (row) => `${normalizeBook(row.sportsbook)}|${row.line}`).values()) {
+    const pair = latestPairState(values);
+    if (pair) output.push(pair.over, pair.under);
   }
   return output;
 }

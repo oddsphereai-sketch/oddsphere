@@ -27,7 +27,7 @@ import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementSto
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_22_r6_rebound_grade_recalibration" as const;
+  "nba_player_props_private_writer_2026_10_23_r7_canonical_coverage" as const;
 
 export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   release: typeof NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE;
@@ -91,6 +91,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     theOddsApiKey: args.theOddsApiKey,
     includeOpenings: args.fullRefresh,
     canonicalPlayersByName,
+    knownPlayerIdentitiesById: Object.fromEntries([...players.values()].map((player) => [String(player.playerId), {
+      playerName: player.playerName,
+      playerTeam: player.latestTeamId === null ? null : String(player.latestTeamId),
+    }])),
     fetchImpl: args.fetchImpl,
   });
   const previousMarket = await readNbaPlayerPropsMarketHistory({ client: args.client, slateDate: args.slateDate });
@@ -172,6 +176,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   const forward = buildNbaPlayerPropsForwardDecisions({
     features: eligibleFeatures,
     observations: mergedMarket.history.observations,
+    currentObservations: live.observations,
     evaluatedAt: now,
   });
   const invalidForecasts = forward.filter((row) =>

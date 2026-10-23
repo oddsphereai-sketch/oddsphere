@@ -38,7 +38,7 @@ export type NbaPlayerPropsPrivateTrackingRow = Readonly<{
   grade: string;
   marketMovement: string | null;
   marketEvidence?: Readonly<{
-    mode: "target_excluded_arbitration" | "candidate_projection";
+    mode: "target_excluded_arbitration" | "candidate_projection" | "independent_projection";
     targetExcludedBooks: number;
     targetExcludedReferenceBooks: number;
     movement: Readonly<{

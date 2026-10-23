@@ -284,18 +284,18 @@ Last reviewed: 2026-10-23
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
   `nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader` /
-  `nba_player_props_forward_decision_2026_10_23_r7_rebound_family_market_reader` /
-  `nba_player_props_product_candidate_2026_10_22_r7_rebound_grade_recalibration` /
+  `nba_player_props_forward_decision_2026_10_23_r8_canonical_coverage` /
+  `nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
   `nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity` /
   `nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_10_22_r6_rebound_grade_recalibration`; it
+  `nba_player_props_private_writer_2026_10_23_r7_canonical_coverage`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is
-  `nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology`: the
+  `nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity`: the
   deployed r3 envelope migrates in place, unchanged polling refreshes current
   evidence without unbounded duplicate rows, and every quote scope retains its
   first, prior, and current distinct price states for opening/movement reading.
@@ -348,6 +348,23 @@ Last reviewed: 2026-10-23
   and Lean counts remain 1 and 2, with zero actionable promotions or demotions.
   Existing locks remain byte-authoritative. Evidence and rollback:
   `docs/model-audits/2026-10-23-nba-player-props-rebound-family-market-reader.md`.
+  The October 23 r8 canonical-coverage repair retains every independent model,
+  calibration, and grade policy while correcting provider snapshot semantics.
+  The provider timestamps individual player/line rows independently; the prior
+  sportsbook-wide maximum-timestamp selector silently discarded valid current
+  pairs. R8 retains the newest complete pair per sportsbook and line, prefers a
+  corroborated line when one exists, and emits exactly one canonical member row.
+  A genuine one-book market receives the unchanged independent projection at a
+  genuine exact price, null other-book probability, and mandatory No Play; it
+  cannot enter direct or slate-relative promotions. A bounded current-player
+  identity lookup repairs current-team assignment only when stored identity is
+  absent or conflicts with the scheduled matchup. On the final October 23
+  same-feed A/B, 1,084/1,084 supported foundation scopes receive decisions,
+  actionables remain 36, all 202 one-book rows remain non-actionable, and only
+  one canonical line changes—from an uncorroborated line to the two-book main
+  line. No provider-specific model coefficient, projection, grade threshold,
+  cadence, lease, copy, label, or locked record changes. Evidence and rollback:
+  `docs/model-audits/2026-10-23-nba-player-props-canonical-coverage-result.md`.
   Evidence and rollback:
   `docs/model-audits/2026-10-21-nba-player-props-private-forward-readiness.md`
   and `docs/model-audits/2026-10-22-nba-player-props-structural-v2-result.md`,
@@ -355,7 +372,8 @@ Last reviewed: 2026-10-23
   `docs/model-audits/2026-10-22-nba-player-props-active-role-integrity.md`, plus
   `docs/model-audits/2026-10-22-nba-player-props-grade-recalibration-predeclaration.md`, plus
   `docs/model-audits/2026-10-22-nba-player-props-member-launch.md`, plus
-  `docs/model-audits/2026-10-23-nba-player-props-rebound-family-market-reader.md`.
+  `docs/model-audits/2026-10-23-nba-player-props-rebound-family-market-reader.md`, plus
+  `docs/model-audits/2026-10-23-nba-player-props-canonical-coverage-result.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.

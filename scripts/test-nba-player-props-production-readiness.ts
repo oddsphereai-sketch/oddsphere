@@ -29,6 +29,7 @@ import {
   selectNbaPlayerPropsCurrentCanonicalOfferSets,
 } from "../lib/services/nba/nbaPlayerPropsMarketEvidence";
 import { buildNbaPlayerPropsPointInTimeFeatures } from "../lib/services/nba/nbaPlayerPropsPointInTimeFeatures";
+import { applyResolvedPlayerIdentities } from "../lib/services/nba/nbaPlayerPropsLiveCollector";
 import { nbaPlayerPropsScheduleGameMatches } from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
 import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/nba/nbaPointInTimeFeatures";
 
@@ -300,6 +301,63 @@ const chronologicalEvidence = buildNbaPlayerPropsMarketEvidence({ target, observ
 assert.equal(chronologicalEvidence.openingLine, 23.5);
 assert.equal(chronologicalEvidence.currentLine, 24.5);
 assert.equal(chronologicalEvidence.targetExcludedBooks, 2, "each target-excluded sportsbook counts only its latest complete pair");
+
+const staggeredCurrent = [
+  ...observations.filter((row) => row.market === "points" && row.sportsbook !== "bet365").map((row) => ({
+    ...row,
+    providerObservationId: `staggered-main-${row.providerObservationId}`,
+    line: 24.5,
+    observedAt: row.sportsbook === "fanduel"
+      ? "2026-10-21T12:00:01.000Z"
+      : "2026-10-21T12:00:02.000Z",
+    isOpening: false,
+  })),
+  ...observations.filter((row) => row.market === "points" && row.sportsbook === "fanduel").map((row) => ({
+    ...row,
+    providerObservationId: `staggered-alternate-${row.providerObservationId}`,
+    line: 25.5,
+    observedAt: "2026-10-21T12:00:03.000Z",
+    isOpening: false,
+  })),
+];
+const staggeredOffer = selectNbaPlayerPropsCurrentCanonicalOfferSets(staggeredCurrent)[0]!;
+assert.equal(staggeredOffer.canonicalLine, 24.5,
+  "independently timestamped provider rows must preserve the corroborated current line");
+assert.equal(staggeredOffer.completeBooks, 2,
+  "a newer one-book alternate may not displace a corroborated main line");
+assert.deepEqual(staggeredOffer.allObservedLines, [24.5, 25.5],
+  "alternate ladders remain internal evidence while the member row stays singular");
+
+const singleBookCurrent = observations.filter((row) =>
+  row.market === "points" && row.sportsbook === "fanduel");
+const independentOnly = buildNbaPlayerPropsForwardDecisions({
+  features,
+  observations: observations.filter((row) => row.market === "points"),
+  currentObservations: singleBookCurrent,
+});
+assert.equal(independentOnly.length, 1,
+  "a valid single-book player market must retain one genuine independent forecast");
+assert.equal(independentOnly[0]?.marketEvidenceMode, "independent_projection");
+assert.equal(independentOnly[0]?.targetExcludedProbability, null);
+assert.equal(independentOnly[0]?.targetExcludedBooks, 0);
+assert.equal(independentOnly[0]?.grade, "No Play",
+  "a single-book recovery may never become actionable without independent market confirmation");
+assert.equal(independentOnly[0]?.finalProjection, independentOnly[0]?.independentProjection,
+  "thin market coverage may not distort the independent projection");
+
+const resolvedIdentity = applyResolvedPlayerIdentities([
+  { ...singleBookCurrent[0]!, playerName: null, playerTeam: "99" },
+], [{
+  id: 10,
+  first_name: "Test",
+  last_name: "Player",
+  team: { id: 1 },
+}]);
+assert.equal(resolvedIdentity[0]?.playerName, "Test Player");
+assert.equal(resolvedIdentity[0]?.playerTeam, "1",
+  "a bounded current-player lookup must replace a stale traded-player team identity without changing the prop quote");
+assert.equal(resolvedIdentity[0]?.line, singleBookCurrent[0]?.line);
+assert.equal(resolvedIdentity[0]?.americanPrice, singleBookCurrent[0]?.americanPrice);
 
 const initialHistory = mergeNbaPlayerPropsMarketHistory({
   previous: null,

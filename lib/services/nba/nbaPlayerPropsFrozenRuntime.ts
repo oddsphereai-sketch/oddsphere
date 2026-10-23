@@ -14,6 +14,7 @@ import {
 import {
   buildNbaPlayerPropsMarketEvidence,
   selectNbaPlayerPropsCurrentCanonicalOfferSets,
+  type NbaPlayerPropsCanonicalOfferSet,
 } from "./nbaPlayerPropsMarketEvidence";
 import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeatures";
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
@@ -21,7 +22,7 @@ import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract"
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
   "nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_23_r7_rebound_family_market_reader" as const;
+  "nba_player_props_forward_decision_2026_10_23_r8_canonical_coverage" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -122,10 +123,10 @@ export type NbaPlayerPropsForwardDecision = Readonly<{
   sportsbook: string;
   americanPrice: number;
   expectedValue: number;
-  targetExcludedProbability: number;
+  targetExcludedProbability: number | null;
   targetExcludedBooks: number;
   targetExcludedReferenceBooks: number;
-  marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection";
+  marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection" | "independent_projection";
   grade: NbaPlayerPropsMemberGrade;
   gradePolicySource:
     | "points_ungated_ranked"
@@ -202,6 +203,7 @@ export function nbaPlayerPropsFrozenRuntimeArtifact(): NbaPlayerPropsFrozenArtif
 export function buildNbaPlayerPropsForwardDecisions(args: {
   features: readonly NbaPlayerPropFeatureRow[];
   observations: readonly NbaPlayerPropPriceObservation[];
+  currentObservations?: readonly NbaPlayerPropPriceObservation[];
   evaluatedAt?: string;
 }): NbaPlayerPropsForwardDecision[] {
   return buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
@@ -215,10 +217,13 @@ export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
   artifact: NbaPlayerPropsFrozenArtifact;
   features: readonly NbaPlayerPropFeatureRow[];
   observations: readonly NbaPlayerPropPriceObservation[];
+  currentObservations?: readonly NbaPlayerPropPriceObservation[];
+  currentOfferSets?: readonly NbaPlayerPropsCanonicalOfferSet[];
   evaluatedAt?: string;
 }): NbaPlayerPropsForwardDecision[] {
   const artifact = args.artifact;
-  const offers = selectNbaPlayerPropsCurrentCanonicalOfferSets(args.observations);
+  const offers = args.currentOfferSets
+    ?? selectNbaPlayerPropsCurrentCanonicalOfferSets(args.currentObservations ?? args.observations);
   const historyByScope = groupBy(args.observations, marketScopeKey);
   const featureByScope = new Map(args.features.map((row) => [`${row.game_id}|${row.player_id}`, row]));
   const scored: ScoredDecision[] = [];
@@ -262,20 +267,24 @@ export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
     const independentProbability = independentSide === "over"
       ? independentProbabilityOver
       : 1 - independentProbabilityOver;
-    const targetExcludedProbability = side === "over"
-      ? evidence.targetExcludedOverProbability!
-      : 1 - evidence.targetExcludedOverProbability!;
-    const probability = reliabilityProbability({
-      model: artifact.reliabilityModels[market],
-      rawProbability,
-      finalProjection,
-      independentProjection,
-      line: offer.canonicalLine,
-      standardDeviation: distribution.standardDeviation,
-      targetExcludedProbability,
-      targetPriceProbability: implied(target.americanPrice),
-      referenceBookConfirmation: evidence.targetExcludedReferenceBooks > 0,
-    });
+    const targetExcludedProbability = evidence.targetExcludedOverProbability === null
+      ? null
+      : side === "over"
+        ? evidence.targetExcludedOverProbability
+        : 1 - evidence.targetExcludedOverProbability;
+    const probability = targetExcludedProbability === null
+      ? independentProbability
+      : reliabilityProbability({
+        model: artifact.reliabilityModels[market],
+        rawProbability,
+        finalProjection,
+        independentProjection,
+        line: offer.canonicalLine,
+        standardDeviation: distribution.standardDeviation,
+        targetExcludedProbability,
+        targetPriceProbability: implied(target.americanPrice),
+        referenceBookConfirmation: evidence.targetExcludedReferenceBooks > 0,
+      });
     const base: ScoredDecision = {
       release: NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
       modelRelease: artifact.sourceTournamentRelease,
@@ -330,7 +339,9 @@ export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
       independentProbability: round(row.independentProbability, 6),
       probability: round(row.probability, 6),
       expectedValue: round(row.expectedValue, 6),
-      targetExcludedProbability: round(row.targetExcludedProbability, 6),
+      targetExcludedProbability: row.targetExcludedProbability === null
+        ? null
+        : round(row.targetExcludedProbability, 6),
     };
   });
 }
@@ -375,6 +386,7 @@ function resolveFinalProjection(args: {
   evaluatedAt?: string;
 }) {
   const independentSide: Side = args.independentProjection > args.offer.canonicalLine ? "over" : "under";
+  if (args.offer.completeBooks < 2) return resolveIndependentOnlyProjection(args, independentSide);
   const usesCandidateMarketRead = args.selectedCandidate.includes("market_read") || args.selectedCandidate.includes("fanduel_");
   const candidateMarketOver = usesCandidateMarketRead
     ? selectedMarketProbability(args.offer.observations, args.selectedCandidate)
@@ -409,12 +421,42 @@ function resolveFinalProjection(args: {
     observations: args.historyObservations,
     evaluatedAt: args.evaluatedAt ?? target.observedAt,
   });
-  if (evidence.targetExcludedOverProbability === null || evidence.targetExcludedBooks < 1) return null;
+  if (evidence.targetExcludedOverProbability === null || evidence.targetExcludedBooks < 1) {
+    return resolveIndependentOnlyProjection(args, independentSide);
+  }
   return {
     target,
     evidence,
     finalProjection: candidateProjection,
     mode: "candidate_projection" as const,
+  };
+}
+
+function resolveIndependentOnlyProjection(
+  args: Parameters<typeof resolveFinalProjection>[0],
+  independentSide: Side,
+) {
+  const target = args.offer.observations
+    .filter((row) => row.side === independentSide)
+    .sort((left, right) => right.americanPrice - left.americanPrice)[0];
+  if (!target) return null;
+  const observed = buildNbaPlayerPropsMarketEvidence({
+    target,
+    observations: args.historyObservations,
+    evaluatedAt: args.evaluatedAt ?? target.observedAt,
+  });
+  return {
+    target,
+    evidence: {
+      ...observed,
+      targetExcludedOverProbability: null,
+      targetExcludedBooks: 0,
+      targetExcludedReferenceBooks: 0,
+      qualifiedForDecisionReplay: false,
+      health: [...new Set([...observed.health, "current_line_not_corroborated"])],
+    },
+    finalProjection: args.independentProjection,
+    mode: "independent_projection" as const,
   };
 }
 
@@ -498,6 +540,9 @@ function selectedMarketProbability(rows: readonly NbaPlayerPropPriceObservation[
 }
 
 function applyDirectGrade(row: ScoredDecision, artifact: NbaPlayerPropsFrozenArtifact): ScoredDecision {
+  if (row.marketEvidenceMode === "independent_projection") {
+    return { ...row, grade: "No Play", gradePolicySource: "forecast_only" };
+  }
   const config = artifact.gradePolicies[row.market];
   let grade: NbaPlayerPropsMemberGrade = "No Play";
   let gradePolicySource: ScoredDecision["gradePolicySource"] = "forecast_only";
@@ -514,11 +559,12 @@ function applyDirectGrade(row: ScoredDecision, artifact: NbaPlayerPropsFrozenArt
     gradePolicySource = row.market === "points" ? "points_ungated_ranked" : "assists_role_stable_ranked";
   } else if (config.kind === "threshold_relative_best") {
     const policy = config.policy;
+    const targetExcludedProbability = row.targetExcludedProbability ?? 0;
     if (row.probability >= Number(policy.bestProbability) && row.expectedValue >= Number(policy.bestEv)
-      && row.targetExcludedProbability >= Number(policy.bestMarketProbability)
+      && targetExcludedProbability >= Number(policy.bestMarketProbability)
       && row.targetExcludedReferenceBooks >= 1) grade = "Best Angle";
     else if (row.probability >= Number(policy.leanProbability) && row.expectedValue >= Number(policy.leanEv)
-      && row.targetExcludedProbability >= Number(policy.leanMarketProbability)
+      && targetExcludedProbability >= Number(policy.leanMarketProbability)
       && (policy.leanRequiresReferenceBook !== true || row.targetExcludedReferenceBooks >= 1)) grade = "Lean";
     else if (row.probability >= Number(policy.watchProbability) && row.expectedValue >= Number(policy.watchEv)) grade = "Watchlist";
     if ((grade === "Best Angle" || grade === "Lean") && config.relativeBest) {
@@ -538,6 +584,7 @@ function applySlateRelativeGrades(rows: readonly ScoredDecision[], artifact: Nba
     const policy = config.policy;
     for (const slateRows of groupBy(rows.filter((row) => row.market === market), (row) => row.slateDate).values()) {
       const candidates = slateRows
+        .filter((row) => row.marketEvidenceMode !== "independent_projection")
         .filter((row) => eligibility(row, String(policy.eligibilityGate) as EligibilityGate))
         .filter((row) => row.probability >= Number(policy.minimumProbability))
         .filter((row) => row.expectedValue >= Number(policy.minimumExpectedValue))
@@ -562,16 +609,17 @@ function applySlateRelativeGrades(rows: readonly ScoredDecision[], artifact: Nba
 
 function signal(row: ScoredDecision, family: SignalFamily): number {
   const targetPrice = implied(row.americanPrice);
+  const targetExcluded = row.targetExcludedProbability ?? 0.5;
   if (family === "raw_model_probability") return row.rawProbability;
   if (family === "projection_distance") return Math.abs(row.finalProjection - row.line) / Math.max(0.25, row.projectionStandardDeviation);
-  if (family === "target_excluded_probability") return row.targetExcludedProbability;
+  if (family === "target_excluded_probability") return targetExcluded;
   if (family === "target_price_probability") return targetPrice;
-  if (family === "market_consensus") return (row.targetExcludedProbability + targetPrice) / 2;
-  if (family === "model_market_consensus") return (row.rawProbability + row.targetExcludedProbability + targetPrice) / 3;
-  if (family === "target_excluded_expected_value") return expectedValue(row.targetExcludedProbability, row.americanPrice);
+  if (family === "market_consensus") return (targetExcluded + targetPrice) / 2;
+  if (family === "model_market_consensus") return (row.rawProbability + targetExcluded + targetPrice) / 3;
+  if (family === "target_excluded_expected_value") return expectedValue(targetExcluded, row.americanPrice);
   const probability = family === "model_market_conservative_expected_value"
-    ? Math.min(row.rawProbability, row.targetExcludedProbability)
-    : (row.rawProbability + row.targetExcludedProbability) / 2;
+    ? Math.min(row.rawProbability, targetExcluded)
+    : (row.rawProbability + targetExcluded) / 2;
   return expectedValue(probability, row.americanPrice);
 }
 
