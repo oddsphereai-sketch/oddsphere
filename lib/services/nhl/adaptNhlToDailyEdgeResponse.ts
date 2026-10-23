@@ -141,7 +141,7 @@ function buildPublicSplits(
   return arr;
 }
 
-export const __NHL_ADAPTER_TEST__ = { buildPublicSplits };
+export const __NHL_ADAPTER_TEST__ = { buildPublicSplits, logoFor };
 
 /**
  * Build the keyStats rows for a market from the model's feature
@@ -233,6 +233,9 @@ function buildKeyStats(
 }
 
 const NHL_LOGO_BASE = "https://a.espncdn.com/i/teamlogos/nhl/500";
+const NHL_ESPN_LOGO_SLUG: Record<string, string> = {
+  LAK: "la",
+};
 
 /** NHL verdict → shared Daily Edge Verdict union. */
 function verdictKeyMap(v: NhlVerdictKey): Verdict {
@@ -318,7 +321,8 @@ function startMinutesEt(utcIso: string | null): number {
 }
 
 function logoFor(abbr: string): string {
-  return `${NHL_LOGO_BASE}/${abbr.toLowerCase()}.png`;
+  const slug = NHL_ESPN_LOGO_SLUG[abbr.toUpperCase()] ?? abbr.toLowerCase();
+  return `${NHL_LOGO_BASE}/${slug}.png`;
 }
 
 function buildPredictionDto(

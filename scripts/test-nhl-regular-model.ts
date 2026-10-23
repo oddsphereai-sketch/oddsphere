@@ -131,6 +131,11 @@ assert.equal(resolveNhlPriceAwareVerdict("moneyline", "best_angle", null, 0.70),
 assert.equal(resolveNhlPriceAwareVerdict("spread", "watchlist", 120, 0.60), "lean", "a validated 5pp puck-line exact-price edge provides the paired promotion");
 assert.equal(resolveNhlPriceAwareVerdict("spread", "watchlist", -120, 0.58), "watchlist", "a puck-line promotion still requires its exact-price edge");
 assert.equal(resolveNhlPriceAwareVerdict("moneyline", "watchlist", 120, 0.60), "watchlist", "the puck-line promotion cannot leak into Moneylines");
+assert.equal(
+  __NHL_ADAPTER_TEST__.logoFor("LAK"),
+  "https://a.espncdn.com/i/teamlogos/nhl/500/la.png",
+  "the Los Angeles Kings use ESPN's noncanonical `la` logo slug",
+);
 
 assert.deepEqual(
   __NHL_ADAPTER_TEST__.buildPublicSplits(
