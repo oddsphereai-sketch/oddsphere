@@ -4102,7 +4102,7 @@ assert.match(sharedTypes, /footballOnlyProjection\?:/, "the legacy secondary for
 const dailyEdgeShell = readFileSync(path.resolve("app/lab/components/daily-edge/DailyEdgeShell.tsx"), "utf8");
 assert.match(dailyEdgeShell, /const usesSportOwnedLogo = isSoccer \|\| shellSport === "cfb";/,
   "CFB team abbreviations must never fall through to another sport's ESPN logo namespace");
-assert.match(dailyEdgeShell, /if \(usesSportOwnedLogo && !sportOwnedLogo\)/,
+assert.match(dailyEdgeShell, /if \(usesSportOwnedLogo && !logo\)/,
   "CFB teams without an authoritative sport-owned logo must render the abbreviation fallback");
 const trackingRefresh = readFileSync(path.resolve("lib/services/trackingRefreshService.ts"), "utf8");
 assert.match(trackingRefresh, /sport === "cfb"/);
