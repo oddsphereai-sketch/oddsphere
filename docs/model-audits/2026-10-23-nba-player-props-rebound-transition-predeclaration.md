@@ -86,3 +86,28 @@ This candidate is `robust_support_weighted_minutes_counts`. The original gates
 remain unchanged. Because the first candidate's outcomes are now development
 evidence, only later release-pure forward results can provide final
 qualification.
+
+## End-to-end market-reading addendum
+
+Passing the independent-projection gates does not qualify the member-facing
+forecast. Before reviewing market-aware outcomes, two fixed arbitration
+variants are declared around `robust_support_weighted_minutes_counts`:
+
+- `support_weighted_market_read_2pp_disagreements` changes side only when the
+  archived opening consensus disagrees with the independent forecast and is at
+  least 2 percentage points from 50%;
+- `support_weighted_market_read_5pp_disagreements` applies the same rule at 5
+  percentage points.
+
+Both variants preserve the independent projection's absolute distance from
+the canonical line when a flip is called for. They do not blend the projection
+toward the market, change an agreeing forecast, search player identities, use
+outcomes, or alter grades. The two cutoffs are existing tournament policies,
+not result-tuned thresholds.
+
+The market-aware candidate advances only if its final direction is better than
+the support-weighted independent forecast in both the two-season and separate
+opening-season confirmation windows, does not materially worsen MAE, and does
+not create a one-sided prediction collapse. Historical archives can validate
+opening-consensus arbitration only; same-book movement, late price discovery,
+and target-excluded live evidence still require release-pure forward scoring.

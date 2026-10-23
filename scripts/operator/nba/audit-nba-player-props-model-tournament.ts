@@ -48,6 +48,8 @@ type CandidateName =
   | "robust_component_counts"
   | "robust_generic_minutes_counts"
   | "robust_support_weighted_minutes_counts"
+  | "support_weighted_market_read_2pp_disagreements"
+  | "support_weighted_market_read_5pp_disagreements"
   // Retained as explicit research candidates for reproducible rejected-model
   // diagnostics. They are not part of the active tournament candidate list.
   | "learned_market_residual_correction"
@@ -415,6 +417,8 @@ async function main(): Promise<void> {
     robustComponentCandidate(),
     robustGenericMinutesCandidate(),
     robustSupportWeightedMinutesCandidate(),
+    supportWeightedMarketArbitrationCandidate("support_weighted_market_read_2pp_disagreements", 0.02, lineByScope, marketProbabilityByScope),
+    supportWeightedMarketArbitrationCandidate("support_weighted_market_read_5pp_disagreements", 0.05, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_all_disagreements", 0, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_2pp_disagreements", 0.02, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_5pp_disagreements", 0.05, lineByScope, marketProbabilityByScope),
@@ -1380,6 +1384,51 @@ function marketArbitrationCandidate(
     name,
     fit(rows) {
       const independent = ridgeMinutesRegressionCandidate().fit(rows);
+      return (row, market) => {
+        const center = independent(row, market);
+        const key = scope(row, market);
+        const line = lineByScope.get(key);
+        const marketProbability = probabilityByScope.get(key);
+        if (line === undefined || marketProbability === undefined) return center;
+        const marketDistance = Math.abs(marketProbability - 0.5);
+        const independentOver = center > line;
+        const marketOver = marketProbability > 0.5;
+        if (marketDistance < minimumMarketDistance || independentOver === marketOver) return center;
+        const projectionDistance = Math.max(0.05, Math.abs(center - line));
+        return Math.max(0, line + (marketOver ? projectionDistance : -projectionDistance));
+      };
+    },
+  };
+}
+
+function supportWeightedMarketArbitrationCandidate(
+  name: Extract<CandidateName,
+    | "support_weighted_market_read_2pp_disagreements"
+    | "support_weighted_market_read_5pp_disagreements">,
+  minimumMarketDistance: number,
+  lineByScope: ReadonlyMap<string, number>,
+  probabilityByScope: ReadonlyMap<string, number>,
+): Candidate {
+  return marketArbitrationAroundCandidate(
+    name,
+    robustSupportWeightedMinutesCandidate(),
+    minimumMarketDistance,
+    lineByScope,
+    probabilityByScope,
+  );
+}
+
+function marketArbitrationAroundCandidate(
+  name: CandidateName,
+  independentCandidate: Candidate,
+  minimumMarketDistance: number,
+  lineByScope: ReadonlyMap<string, number>,
+  probabilityByScope: ReadonlyMap<string, number>,
+): Candidate {
+  return {
+    name,
+    fit(rows) {
+      const independent = independentCandidate.fit(rows);
       return (row, market) => {
         const center = independent(row, market);
         const key = scope(row, market);

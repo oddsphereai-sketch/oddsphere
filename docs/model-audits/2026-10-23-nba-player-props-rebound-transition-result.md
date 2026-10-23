@@ -58,3 +58,32 @@ release identity. It may not be presented as validated or replace the member
 runtime until that release-pure result is available, grade transfer is checked,
 paired promotion/demotion impact is reported, all model-change tests pass, and
 locked-record precedence is proven unchanged.
+
+## End-to-end market-reading result
+
+The independently qualified forecast was also evaluated through the declared
+opening-consensus arbitration layer. The 2-percentage-point disagreement rule
+passed both historical confirmation checks; the 5-percentage-point rule did
+not and is rejected.
+
+| Confirmation window | Independent | 2 pp market-aware | Net correct | Independent MAE | Market-aware MAE |
+|---|---:|---:|---:|---:|---:|
+| Two-season, 1,661 priced rows | 51.90% | 52.68% | +13 | 1.9908 | 1.9854 |
+| Opening-season, 343 priced rows | 58.60% | 59.48% | +3 | 1.9581 | 1.9489 |
+
+The same rule also improved both development-selection windows: 55.66% to
+58.43% on 866 two-season decisions and 54.12% to 58.82% on 170 opening-season
+decisions. Over share rose from 33.05% to 40.46% in the large confirmation
+window and from 37.32% to 44.61% in the opening-season confirmation window, so
+the gain is not an Under quota or a flattened side distribution.
+
+The 5-point alternative improved the large confirmation window only from
+51.90% to 52.14%, then reduced opening-season confirmation from 58.60% to
+57.43%. It fails the predeclared cross-window gate.
+
+This establishes that market reading can improve the candidate's final side,
+not merely its grade. It does not yet authorize publication. The archive has
+opening consensus but not complete target-excluded same-book movement and
+lock-time evidence. The October 22 target-excluded reconstruction was net
+neutral (two disagreement flips corrected and two harmed), so the complete
+live reader and grade transfer still require a release-pure forward slate.
