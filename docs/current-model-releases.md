@@ -3824,7 +3824,7 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_22_r17_roster_winner_confirmation`
+- Model / prediction record: `nba_professional_unified_2026_10_23_r18_official_injury_fallback`
 - Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation`
 - Market marriage: `nba_market_marriage_2026_10_22_r19_roster_winner_confirmation`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
@@ -3885,6 +3885,21 @@ cohort moves from 16 / 14 to 6 / 4; team-score MAE, margin MAE, Brier, and log l
 r16, total MAE is identical, and 1,210 winner calls remain unchanged. The two-game October 22 board
 is unchanged because Philadelphia is confirmed by both heads and DEN-OKC remains high continuity.
 Evidence and rollback: `docs/model-audits/2026-10-22-nba-roster-winner-confirmation-r17.md`.
+
+The October 23 r18 official-injury fallback retains ESPN's exact event summary
+as first authority and uses the latest official NBA injury PDF only when ESPN
+does not publish a complete two-team payload. It requires the exact Eastern
+game date, exact matchup, and complete exact team sections; missing,
+not-yet-submitted, malformed, or mismatched reports fail closed. The strict
+12-game / 36-market comparison improves verified two-team coverage from 11 to
+12 and published player rows from 57 to 63 with zero pick, score, selected
+price, actionable-promotion, or actionable-demotion changes. Detroit Moneyline
+moves Lean to Best Angle through the existing complete-evidence gate, while its
+winner and 120.74-113.84 score remain unchanged. No fixed injury points, score
+adjustment, forced side, cap, or new market authority is added. Existing locks
+retain exact stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-23-nba-official-injury-fallback-predeclaration.md`
+and `docs/model-audits/2026-10-23-nba-official-injury-fallback-result.md`.
 
 The October 21 r12/r15/r6 current-execution release, paired with r10 line refresh,
 reconciles every successful provider game/market response as the authoritative

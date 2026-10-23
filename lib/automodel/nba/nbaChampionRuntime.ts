@@ -1,5 +1,5 @@
 export const NBA_MODEL_RELEASE =
-  "nba_professional_unified_2026_10_22_r17_roster_winner_confirmation" as const;
+  "nba_professional_unified_2026_10_23_r18_official_injury_fallback" as const;
 export const NBA_MARKET_MARRIAGE_RELEASE =
   "nba_market_marriage_2026_10_22_r19_roster_winner_confirmation" as const;
 export const NBA_GRADE_POLICY_RELEASE =

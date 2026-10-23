@@ -122,8 +122,8 @@ export type NbaSnapshotProvenance = {
   market_book_priority: readonly string[];
   home_ratings: NbaTeamRatingsProvenance;
   away_ratings: NbaTeamRatingsProvenance;
-  /** ESPN injuries fetched (true) vs unknown (false) per team. */
-  injuries_source: "espn" | "none";
+  /** Exact-game injury authority enabled (ESPN plus official NBA fallback). */
+  injuries_source: "verified_game_report" | "espn" | "none";
   injuries_known_home: boolean;
   injuries_known_away: boolean;
 };
@@ -156,6 +156,7 @@ function pickPriorityRow(rows: LineRow[]): LineRow | null {
 
 export type InjuryResolver = (opts: {
   gameExternalId: number;
+  gameStartsAt: string;
   teamAbbreviation: string;
   teamExternalId: number;
   awayTeamAbbreviation: string;
@@ -574,6 +575,7 @@ async function runBuild(
       try {
         const home = await opts.injuryResolver({
           gameExternalId: g.external_id,
+          gameStartsAt: g.game_date,
           teamAbbreviation: homeTeam.abbreviation,
           teamExternalId: homeTeam.external_id,
           awayTeamAbbreviation: awayTeam.abbreviation,
@@ -589,6 +591,7 @@ async function runBuild(
       try {
         const away = await opts.injuryResolver({
           gameExternalId: g.external_id,
+          gameStartsAt: g.game_date,
           teamAbbreviation: awayTeam.abbreviation,
           teamExternalId: awayTeam.external_id,
           awayTeamAbbreviation: awayTeam.abbreviation,
@@ -672,7 +675,7 @@ async function runBuild(
       market_book_priority: BOOK_PRIORITY,
       home_ratings: provenanceFromRow(homeTeam.id, homeRatingsRow),
       away_ratings: provenanceFromRow(awayTeam.id, awayRatingsRow),
-      injuries_source: opts.injuryResolver !== undefined ? "espn" : "none",
+      injuries_source: opts.injuryResolver !== undefined ? "verified_game_report" : "none",
       injuries_known_home: homeInjuriesKnown,
       injuries_known_away: awayInjuriesKnown,
     });

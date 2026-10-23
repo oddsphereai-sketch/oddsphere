@@ -1,5 +1,28 @@
 # Model change safety protocol
 
+## Owner-directed correction: official NBA injury fallback
+
+On 2026-10-23 Daniel Mengel directed Oddsphere to repair missing injury evidence
+as an actual source-coverage problem and verify the entire Daily Edge system.
+ESPN's exact Detroit-Miami event returned no injury groups while the official
+NBA 2:00 PM ET report contained complete exact sections for both teams.
+
+For future unlocked NBA rows, r18 retains ESPN exact-event authority first and
+uses the latest official NBA PDF only for the exact Eastern game date and
+matchup when ESPN is incomplete. Both exact team sections must parse; wrong
+date/matchup, missing sections, malformed rows, not-yet-submitted reports, and
+network or extraction failures remain unknown. No fixed player points, score
+adjustment, side flip, cap, or new reader authority is added.
+
+The same-input 12-game / 36-market audit improves verified two-team coverage
+from 11 to 12 and player rows from 57 to 63. There are zero pick, projection,
+price, actionable-promotion, or actionable-demotion changes. Detroit Moneyline
+moves Lean to Best Angle under the existing complete-evidence gate; the score
+and winner do not move because the official Out rows are non-rotation two-way
+players. Existing locks retain exact precedence. Evidence and rollback:
+`docs/model-audits/2026-10-23-nba-official-injury-fallback-predeclaration.md`
+and `docs/model-audits/2026-10-23-nba-official-injury-fallback-result.md`.
+
 ## Owner-directed correction: CFB Virginia split identity
 
 On 2026-10-23 Daniel Mengel reported missing fallback sharp splits for

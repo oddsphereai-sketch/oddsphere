@@ -48,8 +48,8 @@ export function NbaSourceBadges({
       <Badge label="SharpAPI splits" on={sources.has_splits} caveat="Consensus only — no per-book splits" />
       <Badge label="SharpAPI EV" on={sources.has_opportunities} />
       <Badge
-        label={injuryIngestEnabled ? "ESPN injuries" : "Injuries (not enabled)"}
-        on={injuryIngestEnabled && provenance.injuries_source === "espn"}
+        label={injuryIngestEnabled ? "Verified game injuries" : "Injuries (not enabled)"}
+        on={injuryIngestEnabled && provenance.injuries_source !== "none"}
         caveat={injuryIngestEnabled ? undefined : "Set NBA_INJURY_INGEST_ENABLED=true to enable"}
       />
       <Badge

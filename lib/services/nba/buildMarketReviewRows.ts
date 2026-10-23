@@ -132,7 +132,7 @@ function injuriesSummary(
   return (
     `${homeAbbr}: ${homeOut} out, ${homeUnknown} unknown · ` +
     `${awayAbbr}: ${awayOut} out, ${awayUnknown} unknown · ` +
-    `ESPN ${provenance.injuries_known_home && provenance.injuries_known_away ? "✓" : "partial"}`
+    `verified report ${provenance.injuries_known_home && provenance.injuries_known_away ? "✓" : "partial"}`
   );
 }
 
