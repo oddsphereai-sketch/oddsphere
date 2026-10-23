@@ -6,15 +6,20 @@ import type { NbaPlayerPropPriceObservation } from "./nbaPlayerPropsContract";
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE =
-  "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology" as const;
+  "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity" as const;
 const NBA_PLAYER_PROPS_PRIVATE_STORE_LEGACY_RELEASES = new Set([
+  "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology",
   "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity",
 ]);
 export const NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_JSON_BYTES = 32_000_000;
 export const NBA_PLAYER_PROPS_PRIVATE_SNAPSHOT_MAX_GZIP_BYTES = 2_000_000;
 const NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_JSON_BYTES = 64_000_000;
 const NBA_PLAYER_PROPS_PRIVATE_STATE_MAX_GZIP_BYTES = 8_000_000;
-const NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES = 64_000_000;
+// A full 12-game NBA slate with the already-bounded first/prior/current quote
+// chronology is roughly 63 MB uncompressed but only about 1.3 MB gzipped.
+// Keep the lossless three-state evidence and align the JSON ceiling with the
+// existing 150k-row hard cap instead of dropping movement evidence.
+export const NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES = 96_000_000;
 const NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_GZIP_BYTES = 8_000_000;
 const MAX_MARKET_OBSERVATIONS = 150_000;
 const MAX_CURRENT_STATES_PER_QUOTE = 3;
