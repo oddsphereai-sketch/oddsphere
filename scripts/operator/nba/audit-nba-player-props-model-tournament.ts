@@ -46,6 +46,8 @@ type CandidateName =
   | "opportunity_direct_counts"
   | "opportunity_role_minutes_counts"
   | "robust_component_counts"
+  | "robust_generic_minutes_counts"
+  | "robust_support_weighted_minutes_counts"
   // Retained as explicit research candidates for reproducible rejected-model
   // diagnostics. They are not part of the active tournament candidate list.
   | "learned_market_residual_correction"
@@ -411,6 +413,8 @@ async function main(): Promise<void> {
     opportunityCountCandidate(),
     opportunityRoleMinutesCountCandidate(),
     robustComponentCandidate(),
+    robustGenericMinutesCandidate(),
+    robustSupportWeightedMinutesCandidate(),
     marketArbitrationCandidate("market_read_all_disagreements", 0, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_2pp_disagreements", 0.02, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_5pp_disagreements", 0.05, lineByScope, marketProbabilityByScope),
@@ -1024,6 +1028,57 @@ function robustComponentCandidate(): Candidate {
       ) as Record<Component, StructuralCountModel>;
       return (row, market) => marketComponents(market)
         .reduce((sum, component) => sum + predictStructuralCount(row, models[component], minuteModel), 0);
+    },
+  };
+}
+
+function robustGenericMinutesCandidate(): Candidate {
+  return {
+    name: "robust_generic_minutes_counts",
+    fit(rows) {
+      const minuteModel = fitMinuteRegression(rows, MINUTE_FEATURES);
+      const models = Object.fromEntries(
+        (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+          component,
+          fitRobustStructuralCountModel(rows, component, minuteModel),
+        ]),
+      ) as Record<Component, StructuralCountModel>;
+      return (row, market) => marketComponents(market)
+        .reduce((sum, component) => sum + predictStructuralCount(row, models[component], minuteModel), 0);
+    },
+  };
+}
+
+function robustSupportWeightedMinutesCandidate(): Candidate {
+  return {
+    name: "robust_support_weighted_minutes_counts",
+    fit(rows) {
+      const roleMinutes = fitMinuteRegression(rows, ROLE_MINUTE_FEATURES);
+      const genericMinutes = fitMinuteRegression(rows, MINUTE_FEATURES);
+      const roleModels = Object.fromEntries(
+        (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+          component,
+          fitRobustStructuralCountModel(rows, component, roleMinutes),
+        ]),
+      ) as Record<Component, StructuralCountModel>;
+      const genericModels = Object.fromEntries(
+        (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+          component,
+          fitRobustStructuralCountModel(rows, component, genericMinutes),
+        ]),
+      ) as Record<Component, StructuralCountModel>;
+      const supportIndex = roleMinutes.features.indexOf("same_team_games_10");
+      const supportMean = roleMinutes.means[supportIndex] ?? 0;
+      const supportScale = Math.max(0.25, roleMinutes.scales[supportIndex] ?? 1);
+      return (row, market) => {
+        const z = ((row.same_team_games_10 ?? supportMean) - supportMean) / supportScale;
+        const roleSupport = Math.exp(-0.5 * z * z);
+        const roleProjection = marketComponents(market)
+          .reduce((sum, component) => sum + predictStructuralCount(row, roleModels[component], roleMinutes), 0);
+        const genericProjection = marketComponents(market)
+          .reduce((sum, component) => sum + predictStructuralCount(row, genericModels[component], genericMinutes), 0);
+        return roleSupport * roleProjection + (1 - roleSupport) * genericProjection;
+      };
     },
   };
 }
