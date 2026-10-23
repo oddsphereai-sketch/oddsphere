@@ -58,7 +58,7 @@ import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMark
 import { loadCompleteNhlLineHistory } from "./nhlLineStore";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_22_r16_verified_current_board" as const;
+  "nhl_daily_edge_reader_2026_10_23_r17_specialized_margin_total_handoff" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -406,7 +406,10 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
       const model = storedPayload?.model ?? marketAware!.model;
       const openingWindow = snapshot.game_type === 2
         && Math.max(snapshot.home.current_season_games ?? 0, snapshot.away.current_season_games ?? 0) < 10;
-      if (!storedPayload && openingWindow && !model.layers.fast_state_direct_active) {
+      if (!storedPayload
+        && openingWindow
+        && !model.layers.fast_state_direct_active
+        && !model.layers.specialized_margin_total_handoff_active) {
         throw new Error(`fast-state evidence incomplete (${replayedState.gamesApplied}/${expectedPriorGames}); no compatible stored predecessor`);
       }
 

@@ -3,11 +3,12 @@ import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 import { nhlFastScoringFeatures, type NhlFastTeamState } from "./nhlFastState2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r20_verified_current_board" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r20_verified_current_board" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r20_verified_current_board" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r22_specialized_margin_total_handoff" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r22_specialized_margin_total_handoff" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r22_specialized_margin_total_handoff" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r20_verified_current_board",
   "nhl_regular_2026_r19_fresh_quote_authority",
   "nhl_regular_2026_r18_fast_state_direct_probability",
   "nhl_regular_2026_r17_target_excluded_total_reconciliation",
@@ -22,6 +23,7 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r20_verified_current_board",
   "nhl_regular_calibration_2026_r19_fresh_quote_authority",
   "nhl_regular_calibration_2026_r18_fast_state_direct_probability",
   "nhl_regular_calibration_2026_r17_target_excluded_total_reconciliation",
@@ -199,6 +201,7 @@ export type NhlModelOutput = {
     total_market_sequence_direction: "over" | "under" | null;
     roster_prior_active: boolean;
     fast_state_direct_active: boolean;
+    specialized_margin_total_handoff_active: boolean;
   };
   independent_goal_diff: number;
   independent_total_goals: number;
@@ -508,18 +511,22 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
     snapshot.away.opponent_adjusted_attack,
     snapshot.away.opponent_adjusted_defense_weakness,
   ].every((value) => value !== null && Number.isFinite(value));
-  const openingWindow = snapshot.game_type === 2
-    && Math.max(snapshot.home.current_season_games ?? 0, snapshot.away.current_season_games ?? 0) < 10;
-  const fastStateDirectActive = openingWindow
+  const maximumCurrentSeasonGames = Math.max(
+    snapshot.home.current_season_games ?? 0,
+    snapshot.away.current_season_games ?? 0,
+  );
+  const openingWindow = snapshot.game_type === 2 && maximumCurrentSeasonGames < 10;
+  const fastStateAvailable = openingWindow
     && snapshot.home.fast_state != null
     && snapshot.away.fast_state != null;
-  const fastHomeFeatures = fastStateDirectActive
+  const fastStateDirectActive = fastStateAvailable && maximumCurrentSeasonGames < 7;
+  const fastHomeFeatures = fastStateAvailable
     ? nhlFastScoringFeatures(
       snapshot.home.fast_state!, snapshot.away.fast_state!, true, null,
       snapshot.home.rest_days, snapshot.away.rest_days,
     )
     : null;
-  const fastAwayFeatures = fastStateDirectActive
+  const fastAwayFeatures = fastStateAvailable
     ? nhlFastScoringFeatures(
       snapshot.away.fast_state!, snapshot.home.fast_state!, false, null,
       snapshot.away.rest_days, snapshot.home.rest_days,
@@ -532,8 +539,19 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
     ? rosterScoreFeatures(snapshot.away, snapshot.home)
     : null;
   const rosterPriorActive = homeRosterFeatures !== null && awayRosterFeatures !== null;
-  const activeHomeFeatures = fastHomeFeatures ?? homeRosterFeatures ?? homeFeatures;
-  const activeAwayFeatures = fastAwayFeatures ?? awayRosterFeatures ?? awayFeatures;
+  const specializedMarginTotalHandoffActive = maximumCurrentSeasonGames >= 7
+    && maximumCurrentSeasonGames < 10
+    && fastStateAvailable
+    && rosterPriorActive;
+  const specializedRosterComparator = specializedMarginTotalHandoffActive
+    ? nhlRegularModelV1({
+      ...snapshot,
+      home: { ...snapshot.home, fast_state: null },
+      away: { ...snapshot.away, fast_state: null },
+    })
+    : null;
+  const activeHomeFeatures = (fastStateDirectActive ? fastHomeFeatures : null) ?? homeRosterFeatures ?? homeFeatures;
+  const activeAwayFeatures = (fastStateDirectActive ? fastAwayFeatures : null) ?? awayRosterFeatures ?? awayFeatures;
   const scoreHome = clamp(dot(
     activeHomeFeatures,
     rosterPriorActive ? ROSTER_SCORE_BETA : SCORE_BETA,
@@ -556,13 +574,38 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const abilityHomeProbability = logistic(dot(abilityFeatures, ABILITY_BETA));
   const abilityMargin = logit(abilityHomeProbability) / ML_SLOPE;
   const independentTotal = clamp(scoreHome + scoreAway, 4.5, 8);
+  const fastIndependentTotal = fastHomeFeatures !== null && fastAwayFeatures !== null
+    ? clamp(
+      clamp(dot(fastHomeFeatures, SCORE_BETA), 1.25, 5.25)
+      + clamp(dot(fastAwayFeatures, SCORE_BETA), 1.25, 5.25),
+      4.5,
+      8,
+    )
+    : independentTotal;
+  const activeIndependentTotal = specializedMarginTotalHandoffActive
+    ? fastIndependentTotal
+    : independentTotal;
   const directHomeProbability = fastStateDirectActive
     ? directOpeningHomeProbability(fastHomeFeatures!, fastAwayFeatures!)
     : null;
   const independentGoalDiff = directHomeProbability !== null
     ? goalDiffForHomeWin(independentTotal, directHomeProbability) ?? scoreMargin
     : rosterPriorActive
-      ? scoreMargin
+      ? specializedMarginTotalHandoffActive
+        ? goalDiffForHomeWin(
+          activeIndependentTotal,
+          jointDistribution(
+            Math.max(0, (
+              specializedRosterComparator!.independent_total_goals
+              + specializedRosterComparator!.independent_goal_diff
+            ) / 2),
+            Math.max(0, (
+              specializedRosterComparator!.independent_total_goals
+              - specializedRosterComparator!.independent_goal_diff
+            ) / 2),
+          ).homeWin,
+        ) ?? scoreMargin
+        : scoreMargin
       : (1 - ABILITY_WEIGHT) * scoreMargin + ABILITY_WEIGHT * abilityMargin;
 
   const marketHome = snapshot.market.market_home_prob;
@@ -572,7 +615,9 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const totalMovement = snapshot.market.same_book_total_move !== null
     ? clamp(snapshot.market.same_book_total_move * 0.35, -0.25, 0.25)
     : 0;
-  const opponentAdjustedIndependentTotal = hasOpponentAdjustedState && !fastStateDirectActive
+  const opponentAdjustedIndependentTotal = hasOpponentAdjustedState
+    && !fastStateDirectActive
+    && !specializedMarginTotalHandoffActive
     ? clamp(
       clamp(dot([
         ...homeFeatures.slice(0, 19),
@@ -587,9 +632,9 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       4.5,
       8,
     )
-    : independentTotal;
+    : activeIndependentTotal;
   const incumbentExpectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement, 4.5, 8);
-  const activeExpectedTotal = clamp(independentTotal + totalMovement, 4.5, 8);
+  const activeExpectedTotal = clamp(activeIndependentTotal + totalMovement, 4.5, 8);
   const independentDistribution = jointDistribution(
     Math.max(0, (activeExpectedTotal + independentGoalDiff) / 2),
     Math.max(0, (activeExpectedTotal - independentGoalDiff) / 2),
@@ -643,9 +688,16 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       4.5,
       8,
     );
-  const expectedGoalDiff = marketTargetTotal === null
-    ? incumbentGoalDiff
-    : goalDiffForHomeWin(expectedTotal, incumbentDistribution.homeWin) ?? incumbentGoalDiff;
+  const specializedRosterHomeProbability = specializedRosterComparator === null
+    ? null
+    : specializedRosterComparator.moneyline.pick.startsWith(snapshot.home.abbreviation)
+      ? specializedRosterComparator.moneyline.probability
+      : 1 - specializedRosterComparator.moneyline.probability;
+  const expectedGoalDiff = specializedRosterHomeProbability !== null
+    ? goalDiffForHomeWin(expectedTotal, specializedRosterHomeProbability) ?? incumbentGoalDiff
+    : marketTargetTotal === null
+      ? incumbentGoalDiff
+      : goalDiffForHomeWin(expectedTotal, incumbentDistribution.homeWin) ?? incumbentGoalDiff;
   const projectedHome = Math.max(0, (expectedTotal + expectedGoalDiff) / 2);
   const projectedAway = Math.max(0, (expectedTotal - expectedGoalDiff) / 2);
   const finalDistribution = jointDistribution(projectedHome, projectedAway);
@@ -713,12 +765,12 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       rest_advantage_goals: SCORE_BETA[16] * (activeHomeFeatures[16]! - activeAwayFeatures[16]!),
       home_ice_goals: SCORE_BETA[1]!,
       series_context_goals: 0,
-      team_strength_diff_raw: scoreMargin,
+      team_strength_diff_raw: specializedMarginTotalHandoffActive ? independentGoalDiff : scoreMargin,
       special_teams_diff_raw: (activeHomeFeatures[10]! + activeHomeFeatures[11]!) - (activeAwayFeatures[10]! + activeAwayFeatures[11]!),
       market_goal_diff: marketGoalDiff,
       split_movement_goals: 0,
-      market_decision: marketDecision,
-      market_target_home_probability: marketTargetHomeProbability,
+      market_decision: specializedRosterComparator?.layers.market_decision ?? marketDecision,
+      market_target_home_probability: specializedRosterComparator?.layers.market_target_home_probability ?? marketTargetHomeProbability,
       total_market_authority: totalMarketAuthority,
       total_market_target_goals: marketTargetTotal,
       total_market_target_over_probability: readMatchesLine ? totalRead.over_probability : null,
@@ -728,6 +780,7 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       total_market_sequence_direction: readMatchesLine ? totalRead.stable_sequence_direction : null,
       roster_prior_active: rosterPriorActive,
       fast_state_direct_active: fastStateDirectActive,
+      specialized_margin_total_handoff_active: specializedMarginTotalHandoffActive,
     },
     independent_goal_diff: independentGoalDiff,
     independent_total_goals: opponentAdjustedIndependentTotal,

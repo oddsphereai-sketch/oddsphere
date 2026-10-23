@@ -4116,15 +4116,38 @@ three-market pricing for both upcoming games. Predictions, prices, grades,
 locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
 
-## NHL regular-season champion (active from 2026-10-22)
+## NHL regular-season champion (active from 2026-10-23)
 
-- Model: `nhl_regular_2026_r20_verified_current_board`
-- Calibration: `nhl_regular_calibration_2026_r20_verified_current_board`
-- Decision: `nhl_regular_decision_2026_r20_verified_current_board`
-- Reader: `nhl_daily_edge_reader_2026_10_22_r16_verified_current_board`
+- Model: `nhl_regular_2026_r22_specialized_margin_total_handoff`
+- Calibration: `nhl_regular_calibration_2026_r22_specialized_margin_total_handoff`
+- Decision: `nhl_regular_decision_2026_r22_specialized_margin_total_handoff`
+- Reader: `nhl_daily_edge_reader_2026_10_23_r17_specialized_margin_total_handoff`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The October 23 r22/r17 release makes one bounded opening-window architecture
+correction. Games zero through six retain the qualified fast-state head. At
+maximum team games seven through nine, the released roster head owns the
+market-free winner/margin axis while the fast-state head continues to own the
+market-free Total axis; the two axes are solved into one coherent score tuple
+before the existing Moneyline and target-excluded Total readers run. At ten
+games the mature statistical path resumes unchanged. This is not a weighted
+blend and no market number enters either independent head.
+
+The frozen exact-price replay covers 165 settled 2026 games. Full-cohort
+Moneyline improves from 102-63 to 107-58 and Brier from 0.23212 to 0.23018;
+margin MAE improves from 2.16967 to 2.13081 while Total direction and Total MAE
+remain 81-83-1 and 1.71291. On combined r18/r20 confirmation, Moneyline moves
+22-25 to 27-20 and margin MAE 2.29627 to 2.17400; Total remains 23-24 and
+Total MAE 1.51507. Exact-price actionables contract from 319 to 311 while
+record and units improve from 187-131-1 / -3.31u to 187-123-1 / +7.38u, with
+14 promotions and 22 demotions. The untouched r20 cell loses the maximum one
+net actionable win permitted by the frozen gate. The exact October 23 live
+input dry run changes zero of six current market picks or grades and retains
+two actionables. Existing locked r18-r20 payloads remain immutable and render
+before the new reader semantics. Evidence and rollback:
+`docs/model-audits/2026-10-23-nhl-specialized-margin-total-handoff-r22-result.md`.
 
 The October 22 r20/r16 verified-current-board release repairs the storage and
 reader boundary without changing the r19 score model, market-reader rules, or
