@@ -27,6 +27,10 @@ limited to defects supported by exact source evidence.
    T-60 observer quotes were backfilled through the existing recovery path.
    Forty historical nulls without exact evidence remain null; no locked
    decision tuple was changed or reconstructed.
+5. **NBA official injury fallback.** ESPN's exact Detroit-Miami summary omitted
+   injury groups while the official NBA report published complete sections for
+   both teams. Production now retains ESPN first and falls back to the latest
+   exact-date, exact-match official NBA PDF with two-team fail-closed parsing.
 
 ## CFB impact declaration
 
@@ -60,9 +64,10 @@ reader responding to the restored split, not a rigid injury adjustment.
   priced with movement trails, and current injury/market evidence inside its
   freshness contract.
 - **NBA:** all 12 current games had complete multi-book Moneyline, spread, and
-  Total sequences. Both teams had verified availability coverage in all 12;
-  the injury audit changed no pick, projection, or price and created no
-  actionable promotion/demotion.
+  Total sequences. The official fallback closes the one ESPN omission, moving
+  verified two-team availability from 11/12 to 12/12. The same-input audit
+  changed no pick, projection, selected price, actionable promotion, or
+  actionable demotion.
 - **NHL:** two-game slate, all three markets priced for both games, complete
   current roster/goalie provenance, 15-book market context, and the current
   r22 release.

@@ -20,6 +20,7 @@
  */
 
 import type { NbaInjuryStatus, NbaPlayerInjury } from "../../automodel/nba/types";
+import { createOfficialNbaGameInjuryResolver } from "./officialNbaInjuryReport";
 
 export type EspnNbaInjuryFetchOptions = {
   log?: (m: string) => void;
@@ -28,6 +29,7 @@ export type EspnNbaInjuryFetchOptions = {
 
 export type EspnNbaGameInjuryRequest = {
   gameExternalId: number;
+  gameStartsAt: string;
   teamAbbreviation: string;
   teamExternalId: number;
   awayTeamAbbreviation: string;
@@ -106,7 +108,7 @@ export async function fetchEspnNbaGameInjuries(
 }
 
 /** One cached ESPN summary request per game, shared by both team resolver calls. */
-export function createEspnNbaGameInjuryResolver(
+export function createEspnOnlyNbaGameInjuryResolver(
   opts: EspnNbaInjuryFetchOptions = {},
 ): (request: EspnNbaGameInjuryRequest) => Promise<NbaPlayerInjury[] | null> {
   const cache = new Map<number, Promise<EspnNbaGameInjuries | null>>();
@@ -123,6 +125,24 @@ export function createEspnNbaGameInjuryResolver(
     }
     const resolved = await report;
     return resolved?.teams.get(canonicalNbaAbbreviation(request.teamAbbreviation)) ?? null;
+  };
+}
+
+/**
+ * Production resolver: ESPN exact-event authority first, then the official
+ * NBA report for the exact ET date and matchup. A fallback is accepted only
+ * when both teams have complete exact sections; otherwise availability stays
+ * unknown.
+ */
+export function createEspnNbaGameInjuryResolver(
+  opts: EspnNbaInjuryFetchOptions = {},
+): (request: EspnNbaGameInjuryRequest) => Promise<NbaPlayerInjury[] | null> {
+  const espn = createEspnOnlyNbaGameInjuryResolver(opts);
+  const official = createOfficialNbaGameInjuryResolver(opts);
+  return async (request) => {
+    const espnPlayers = await espn(request);
+    if (espnPlayers !== null) return espnPlayers;
+    return official(request);
   };
 }
 

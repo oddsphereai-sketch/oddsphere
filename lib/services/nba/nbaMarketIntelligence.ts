@@ -106,8 +106,8 @@ export type SourceBadges = {
   limited_book_coverage: boolean;
   /** Books that supplied at least one row. */
   books: string[];
-  /** ESPN injuries fetched (true) vs not enabled. */
-  injuries_source: "espn" | "none";
+  /** Exact-game injury authority enabled (ESPN plus official NBA fallback). */
+  injuries_source: "verified_game_report" | "espn" | "none";
   /** Source family when a sportsbook-specific /splits row was selected. */
   splits_source: "sportsbook" | null;
   splits_sportsbook: string | null;
@@ -818,7 +818,7 @@ export function buildNbaGameIntelligence(opts: {
   lines: NbaLineRow[];
   splitsRow: NbaSplitsRow | null;
   opportunities: NbaOpportunity[];
-  injuriesSource: "espn" | "none";
+  injuriesSource: "verified_game_report" | "espn" | "none";
   /** Same-input audit hook; production uses the coherent exact-price gate. */
   enforcePositiveModelEv?: boolean;
   /** Same-input audit hook for the superseded Moneyline Best Angle path. */
