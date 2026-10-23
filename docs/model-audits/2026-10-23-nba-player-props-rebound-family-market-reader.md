@@ -1,6 +1,6 @@
 # NBA player-props rebound-family market-reader repair
 
-Date: 2026-10-23  
+Date: 2026-10-23
 Status: production candidate for future-unlocked rows; locked rows remain immutable
 
 ## Owner direction

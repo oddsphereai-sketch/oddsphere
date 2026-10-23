@@ -1,6 +1,6 @@
 # NBA player-props rebound transition candidate predeclaration
 
-Date: 2026-10-23  
+Date: 2026-10-23
 Status: offline research only; no member or writer change authorized
 
 ## Owner objective

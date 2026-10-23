@@ -1,6 +1,6 @@
 # NBA player-props rebound transition candidate result
 
-Date: 2026-10-23  
+Date: 2026-10-23
 Status: qualified for release-pure forward evaluation; not authorized for member publication
 
 ## Outcome
