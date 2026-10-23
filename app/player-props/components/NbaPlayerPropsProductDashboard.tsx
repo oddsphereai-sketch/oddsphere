@@ -235,11 +235,7 @@ function SameBookMovement({ row }: { row: Row }) {
   const hasTrail = hasPrior || hasDifferentOpening;
   const supportsPick = movementSupportsSide(row);
   const directionTone = supportsPick ? "text-emerald-300" : "text-amber-300";
-  const connectorTone = supportsPick
-    ? "from-gray-700 via-emerald-500/55 to-emerald-400/55"
-    : "from-gray-700 via-amber-500/50 to-amber-400/50";
-  const openingPoint = <PropMovementPoint label="Opening" line={movement.openingLine} americanPrice={movement.openingPrice} />;
-  const currentPoint = <PropMovementPoint label="Current" line={movement.currentLine} americanPrice={movement.currentPrice} current tone={supportsPick ? "emerald" : "amber"} />;
+  const currentTone = supportsPick ? "emerald" : "amber";
   return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3" aria-label={`${book(movement.sportsbook)} same-book market movement`}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
@@ -248,25 +244,25 @@ function SameBookMovement({ row }: { row: Row }) {
       </div>
       <span className={`text-[7px] font-black uppercase tracking-wider ${hasTrail ? directionTone : "text-gray-500"}`}>{hasTrail ? movementLabel(row) : "Current quote"}</span>
     </div>
-    {hasTrail ? <div className={`mt-3 grid items-center gap-2 ${hasPrior ? "grid-cols-[auto_1fr_auto_1fr_auto]" : "grid-cols-[auto_1fr_auto]"}`}>
-      {openingPoint}
-      <div aria-hidden="true" className={`h-px bg-gradient-to-r ${connectorTone}`} />
-      {hasPrior ? <>
-        <PropMovementPoint label="Prior" line={movement.priorLine} americanPrice={movement.priorPrice} />
-        <div aria-hidden="true" className={`h-px bg-gradient-to-r ${connectorTone}`} />
-      </> : null}
-      {currentPoint}
-    </div> : <div className="mt-3 flex items-end justify-between gap-3">
-      {currentPoint}
-      <p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p>
-    </div>}
+    <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.07] bg-black/25">
+      <div className="grid grid-cols-[3.25rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] bg-white/[0.025]">
+        <span aria-hidden="true" />
+        {(["Opening", "Prior", "Current"] as const).map((label) => <span key={label} className="px-2 py-1.5 text-center text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</span>)}
+      </div>
+      <PropMovementTrack label="Line" values={[movement.openingLine, movement.priorLine, movement.currentLine]} currentTone={currentTone} />
+      <PropMovementTrack label="Odds" values={[movement.openingPrice, movement.priorPrice, movement.currentPrice]} formatValue={price} currentTone={currentTone} />
+    </div>
+    {!hasTrail ? <p className="mt-2 text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p> : null}
   </section>;
 }
-function PropMovementPoint({ label, line, americanPrice, current = false, tone = "gray" }: { label: string; line: number | null; americanPrice: number | null; current?: boolean; tone?: "emerald" | "amber" | "gray" }) {
-  const valueTone = !current ? "text-gray-200" : tone === "emerald" ? "text-emerald-200" : tone === "amber" ? "text-amber-200" : "text-violet-200";
-  return <div className="min-w-0">
-    <p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p>
-    <p className={`mt-0.5 whitespace-nowrap font-mono text-sm font-black ${valueTone}`}>{line === null ? "—" : line} <span className="text-[10px] text-gray-500">{americanPrice === null ? "—" : price(americanPrice)}</span></p>
+function PropMovementTrack({ label, values, formatValue = String, currentTone }: { label: "Line" | "Odds"; values: readonly (number | null)[]; formatValue?: (value: number) => string; currentTone: "emerald" | "amber" }) {
+  const currentClass = currentTone === "emerald" ? "text-emerald-200" : "text-amber-200";
+  return <div className="grid grid-cols-[3.25rem_repeat(3,minmax(0,1fr))] border-b border-white/[0.06] last:border-b-0">
+    <span className="flex items-center px-2 py-2 text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">{label}</span>
+    {values.map((value, index) => <span key={`${label}-${index}`} className={`relative flex items-center justify-center border-l border-white/[0.05] px-1 py-2 font-mono text-xs font-black ${index === values.length - 1 ? currentClass : "text-gray-200"}`}>
+      {index > 0 ? <span aria-hidden="true" className="absolute left-0 -translate-x-1/2 bg-[#0a0d14] px-0.5 text-[7px] text-gray-700">→</span> : null}
+      {value === null ? "—" : formatValue(value)}
+    </span>)}
   </div>;
 }
 function EvidencePanel({ title, metrics }: { title: string; metrics: readonly NbaPlayerPropsReaderMetric[] }) { return <section className="rounded-lg border border-gray-800 bg-black/20 p-4"><PanelTitle>{title}</PanelTitle><div className="mt-3 space-y-2">{metrics.map((metric) => <div key={metric.key} className="flex justify-between gap-3 border-b border-gray-800 pb-2 text-xs last:border-b-0 last:pb-0"><span className="text-gray-500">{metric.label}</span><strong className="text-gray-100">{metricValue(metric)}</strong></div>)}</div></section>; }
