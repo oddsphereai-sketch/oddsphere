@@ -406,6 +406,12 @@ const ESPN_NBA_SLUG: Record<string, string> = {
   // Add here if a logo 404s: e.g. NYK: "ny", SAS: "sa".
 };
 
+// ESPN uses `la` for the Los Angeles Kings even though the canonical NHL
+// abbreviation throughout Oddsphere is `LAK`.
+const ESPN_NHL_SLUG: Record<string, string> = {
+  LAK: "la",
+};
+
 function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
   if (sport === "nba") {
     const slug = ESPN_NBA_SLUG[abbr] ?? abbr.toLowerCase();
@@ -415,7 +421,8 @@ function espnLogoUrl(abbr: string, sport: Sport = "mlb"): string {
     return `https://a.espncdn.com/i/teamlogos/wnba/500/${abbr.toLowerCase()}.png`;
   }
   if (sport === "nhl") {
-    return `https://a.espncdn.com/i/teamlogos/nhl/500/${abbr.toLowerCase()}.png`;
+    const slug = ESPN_NHL_SLUG[abbr.toUpperCase()] ?? abbr.toLowerCase();
+    return `https://a.espncdn.com/i/teamlogos/nhl/500/${slug}.png`;
   }
   if (sport === "soccer") {
     // No CDN logos sourced for WC teams yet. UI renders abbreviation
@@ -4525,7 +4532,7 @@ function marketingTeamLogo(sport: Sport, abbreviation: string): string | null {
     const slug = team === "NYK" ? "ny" : team.toLowerCase();
     return `https://a.espncdn.com/i/teamlogos/nba/500/${slug}.png`;
   }
-  if (sport === "nhl") return `https://a.espncdn.com/i/teamlogos/nhl/500/${team.toLowerCase()}.png`;
+  if (sport === "nhl") return espnLogoUrl(team, "nhl");
   if (sport === "mlb") {
     const slug = team === "CWS" ? "chw" : team === "ATH" ? "oak" : team.toLowerCase();
     return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`;

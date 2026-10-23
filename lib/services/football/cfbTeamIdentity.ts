@@ -976,6 +976,11 @@ export const CFB_TEAM_IDENTITIES = {
     "logoUrl": "https://a.espncdn.com/i/teamlogos/ncaa/500/3101.png",
     "primaryColor": "#000000"
   },
+  "UVA": {
+    "displayName": "Virginia Cavaliers",
+    "logoUrl": "https://a.espncdn.com/i/teamlogos/ncaa/500/258.png",
+    "primaryColor": "#232D4B"
+  },
   "VAN": {
     "displayName": "Vanderbilt Commodores",
     "logoUrl": "https://a.espncdn.com/i/teamlogos/ncaa/500/238.png",
@@ -1073,4 +1078,3 @@ export type CfbTeamIdentity = (typeof CFB_TEAM_IDENTITIES)[keyof typeof CFB_TEAM
 export function cfbTeamIdentity(abbreviation: string): CfbTeamIdentity | null {
   return (CFB_TEAM_IDENTITIES as Record<string, CfbTeamIdentity>)[abbreviation.toUpperCase()] ?? null;
 }
-

@@ -132,6 +132,13 @@ function check(label: string, condition: boolean) {
 }
 
 check(
+  "the Daily Edge shell resolves the Los Angeles Kings through ESPN's `la` NHL logo slug",
+  legacyDailyEdgeSource.includes('const ESPN_NHL_SLUG: Record<string, string> = {') &&
+    legacyDailyEdgeSource.includes('LAK: "la"') &&
+    legacyDailyEdgeSource.includes("ESPN_NHL_SLUG[abbr.toUpperCase()]"),
+);
+
+check(
   "CFB weekly member reads allow the measured compact-snapshot transfer window",
   candidateMemberPageSource.includes("const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000"),
 );
