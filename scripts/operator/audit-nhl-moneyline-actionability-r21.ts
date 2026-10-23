@@ -290,8 +290,8 @@ function modelPrice(game: Game, model: NhlModelOutput, market: AllMarket): numbe
   return bestMarketPrice(game.row.snapshot_json!, market, selected, targetLine);
 }
 
-function performance(games: readonly Game[], source: "fast" | "handoff") {
-  const selectModel = (game: Game) => source === "fast" ? game.fast : handoffModel(game);
+function performance(games: readonly Game[], source: "fast" | "handoff" | "specialized") {
+  const selectModel = (game: Game) => source === "fast" ? game.fast : source === "specialized" ? specializedHandoffModel(game) : handoffModel(game);
   const byMarket = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => {
     const entries = games.map((game) => {
       const model = selectModel(game);
@@ -328,17 +328,144 @@ function performance(games: readonly Game[], source: "fast" | "handoff") {
   return { byMarket, score };
 }
 
-type ActionabilitySource = "fast" | "handoff" | "handoff_spread56";
+type ActionabilitySource = "fast" | "handoff" | "handoff_spread56" | "handoff_puck_platt" | "handoff_coherent_package" | "handoff_evidence_total" | "specialized";
+
+const HANDOFF_PUCK_PLATT_INTERCEPT = 0.9295113063140249;
+const HANDOFF_PUCK_PLATT_SLOPE = 0.002986632490336848;
+
+function calibratedHandoffPuckProbability(probability: number): number {
+  const bounded = Math.max(0.001, Math.min(0.999, probability));
+  const logOdds = Math.log(bounded / (1 - bounded));
+  return 1 / (1 + Math.exp(-(HANDOFF_PUCK_PLATT_INTERCEPT + HANDOFF_PUCK_PLATT_SLOPE * logOdds)));
+}
+
+function puckVerdict(probability: number, marketProbability: number | null): NhlVerdictKey {
+  if (marketProbability === null) return "watchlist";
+  const edge = probability - marketProbability;
+  if (probability >= 0.70 && edge >= 0.05) return "best_angle";
+  if ((probability >= 0.58 && edge >= 0.015) || edge >= 0.05) return "lean";
+  return "watchlist";
+}
+
+function poissonPmf(lambda: number, maximum = 12): number[] {
+  const values = [Math.exp(-lambda)];
+  for (let index = 1; index <= maximum; index += 1) values.push(values[index - 1]! * lambda / index);
+  values[maximum] = values[maximum]! + Math.max(0, 1 - values.reduce((sum, value) => sum + value, 0));
+  return values;
+}
+
+function scoreDistribution(homeGoals: number, awayGoals: number) {
+  const homePmf = poissonPmf(homeGoals);
+  const awayPmf = poissonPmf(awayGoals);
+  const margin = new Map<number, number>();
+  let homeRegulation = 0;
+  let tie = 0;
+  for (let home = 0; home < homePmf.length; home += 1) {
+    for (let away = 0; away < awayPmf.length; away += 1) {
+      const probability = homePmf[home]! * awayPmf[away]!;
+      margin.set(home - away, (margin.get(home - away) ?? 0) + probability);
+      if (home > away) homeRegulation += probability;
+      else if (home === away) tie += probability;
+    }
+  }
+  const overtimeHome = 1 / (1 + Math.exp(-0.42 * (homeGoals - awayGoals)));
+  return { homeWin: homeRegulation + tie * overtimeHome, margin };
+}
+
+function goalDiffForProbability(total: number, targetHomeProbability: number): number {
+  let low = -Math.min(5, total - 2.5);
+  let high = Math.min(5, total - 2.5);
+  for (let iteration = 0; iteration < 60; iteration += 1) {
+    const middle = (low + high) / 2;
+    const home = Math.max(0, (total + middle) / 2);
+    const away = Math.max(0, (total - middle) / 2);
+    if (scoreDistribution(home, away).homeWin < targetHomeProbability) low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+}
+
+function specializedHandoffModel(game: Game): NhlModelOutput {
+  const maximumGames = Math.max(game.snapshot.home.current_season_games ?? 0, game.snapshot.away.current_season_games ?? 0);
+  if (maximumGames < 7) return game.fast;
+  if (maximumGames >= 10) return game.comparator;
+  const comparatorIndependentDistribution = scoreDistribution(
+    Math.max(0, (game.comparator.independent_total_goals + game.comparator.independent_goal_diff) / 2),
+    Math.max(0, (game.comparator.independent_total_goals - game.comparator.independent_goal_diff) / 2),
+  );
+  const independentGoalDiff = goalDiffForProbability(game.fast.independent_total_goals, comparatorIndependentDistribution.homeWin);
+  const comparatorHomeProbability = game.comparator.moneyline.pick.startsWith(game.snapshot.home.abbreviation)
+    ? game.comparator.moneyline.probability
+    : 1 - game.comparator.moneyline.probability;
+  const expectedTotal = game.fast.expected_total_goals;
+  const expectedGoalDiff = goalDiffForProbability(expectedTotal, comparatorHomeProbability);
+  const projectedHome = Math.max(0, (expectedTotal + expectedGoalDiff) / 2);
+  const projectedAway = Math.max(0, (expectedTotal - expectedGoalDiff) / 2);
+  const distribution = scoreDistribution(projectedHome, projectedAway);
+  const marketHome = game.snapshot.market.market_home_prob;
+  const homeFavorite = marketHome === null ? expectedGoalDiff >= 0 : marketHome >= 0.5;
+  const homeLine = game.snapshot.market.market_home_puck_line ?? (homeFavorite ? -1.5 : 1.5);
+  const awayLine = game.snapshot.market.market_away_puck_line ?? -homeLine;
+  let homeCoverProbability = 0;
+  for (const [margin, probability] of distribution.margin) if (margin + homeLine > 0) homeCoverProbability += probability;
+  const pickHome = homeCoverProbability >= 0.5;
+  const probability = pickHome ? homeCoverProbability : 1 - homeCoverProbability;
+  const marketProbability = pickHome
+    ? game.snapshot.market.market_home_puck_prob
+    : game.snapshot.market.market_away_puck_prob;
+  const pickLine = pickHome ? homeLine : awayLine;
+  return {
+    ...structuredClone(game.comparator),
+    layers: {
+      ...structuredClone(game.comparator.layers),
+      team_strength_goals: independentGoalDiff,
+      team_strength_diff_raw: independentGoalDiff,
+      total_market_authority: game.fast.layers.total_market_authority,
+      total_market_target_goals: game.fast.layers.total_market_target_goals,
+      total_market_target_over_probability: game.fast.layers.total_market_target_over_probability,
+      total_market_complete_books: game.fast.layers.total_market_complete_books,
+      total_market_named_books: game.fast.layers.total_market_named_books,
+      total_market_excluded_sportsbook: game.fast.layers.total_market_excluded_sportsbook,
+      total_market_sequence_direction: game.fast.layers.total_market_sequence_direction,
+    },
+    independent_goal_diff: independentGoalDiff,
+    independent_total_goals: game.fast.independent_total_goals,
+    expected_goal_diff: expectedGoalDiff,
+    expected_total_goals: expectedTotal,
+    projected_home_goals: projectedHome,
+    projected_away_goals: projectedAway,
+    total: structuredClone(game.fast.total),
+    puck_line: {
+      pick: `${pickHome ? game.snapshot.home.abbreviation : game.snapshot.away.abbreviation} ${pickLine > 0 ? "+" : ""}${pickLine.toFixed(1)}`,
+      probability,
+      confidence: probability,
+      verdict: puckVerdict(probability, marketProbability),
+      model_market_gap_pct: marketProbability === null ? null : probability - marketProbability,
+      notes: [`${(probability * 100).toFixed(1)}% cover probability at ${pickLine > 0 ? "+" : ""}${pickLine.toFixed(1)}.`],
+      puck_line_value: pickLine,
+    },
+  };
+}
 
 function allMarketActionability(games: readonly Game[], source: ActionabilitySource) {
-  const selectModel = (game: Game) => source === "fast" ? game.fast : handoffModel(game);
+  const selectModel = (game: Game) => source === "fast" ? game.fast : source === "specialized" ? specializedHandoffModel(game) : handoffModel(game);
   const entries = games.flatMap((game) => (["moneyline", "spread", "total"] as const).map((market) => {
     const model = selectModel(game);
-    const probability = modelProbability(model, market);
+    const maximumGames = Math.max(game.snapshot.home.current_season_games ?? 0, game.snapshot.away.current_season_games ?? 0);
+    const plattActive = (source === "handoff_puck_platt" || source === "handoff_coherent_package" || source === "handoff_evidence_total")
+      && market === "spread" && maximumGames >= 7 && maximumGames < 10;
+    const probability = plattActive
+      ? calibratedHandoffPuckProbability(modelProbability(model, market))
+      : modelProbability(model, market);
     const price = modelPrice(game, model, market);
-    const baseVerdict = resolveNhlPriceAwareVerdict(market, modelVerdict(model, market), price, probability);
+    const selectedSide = modelSide(model, game, market);
+    const marketProbability = market === "spread"
+      ? selectedSide === 1 ? game.snapshot.market.market_home_puck_prob : game.snapshot.market.market_away_puck_prob
+      : null;
+    const rawVerdict = plattActive ? puckVerdict(probability, marketProbability) : modelVerdict(model, market);
+    const baseVerdict = resolveNhlPriceAwareVerdict(market, rawVerdict, price, probability);
     const exactPriceEdge = price === null ? null : probability - implied(price);
-    const verdict = source === "handoff_spread56"
+    const spread56Verdict = source === "handoff_spread56"
       && market === "spread"
       && baseVerdict === "watchlist"
       && probability >= 0.56
@@ -346,6 +473,26 @@ function allMarketActionability(games: readonly Game[], source: ActionabilitySou
       && exactPriceEdge >= 0.015
       ? "lean"
       : baseVerdict;
+    const exactPriceVerdict = source === "handoff_coherent_package"
+      && actionable(spread56Verdict)
+      && exactPriceEdge !== null
+      && exactPriceEdge < 0
+      ? "watchlist"
+      : spread56Verdict;
+    const totalLine = game.snapshot.market.market_total_line;
+    const independentTotalStrong = totalLine !== null && Math.abs(model.independent_total_goals - totalLine) >= 0.50;
+    const readerTarget = model.layers.total_market_target_goals;
+    const readerDirectionAgrees = totalLine !== null
+      && readerTarget !== null
+      && model.layers.total_market_complete_books >= 2
+      && (readerTarget > totalLine ? 1 : -1) === selectedSide;
+    const verdict = source === "handoff_evidence_total"
+      && market === "total"
+      && actionable(exactPriceVerdict)
+      && !independentTotalStrong
+      && !readerDirectionAgrees
+      ? "watchlist"
+      : exactPriceVerdict;
     return {
       gameId: game.id,
       date: game.date,
@@ -384,6 +531,144 @@ function allMarketActionability(games: readonly Game[], source: ActionabilitySou
     byMarket: Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [market, summarize(selected.filter((entry) => entry.market === market))])),
     entries,
     decisions: entries.map((entry) => entry.verdict),
+  };
+}
+
+function specializedHandoffComparison(games: readonly Game[]) {
+  const incumbent = allMarketActionability(games, "fast");
+  const candidate = allMarketActionability(games, "specialized");
+  const compact = (source: ReturnType<typeof allMarketActionability>) => ({ actionable: source.actionable, byMarket: source.byMarket });
+  return {
+    incumbent: performance(games, "fast"),
+    candidate: performance(games, "specialized"),
+    actionability: {
+      incumbent: compact(incumbent),
+      candidate: compact(candidate),
+      promotions: candidate.decisions.filter((verdict, index) => actionable(verdict) && !actionable(incumbent.decisions[index]!)).length,
+      demotions: candidate.decisions.filter((verdict, index) => !actionable(verdict) && actionable(incumbent.decisions[index]!)).length,
+    },
+  };
+}
+
+function productionSpecializedParity(games: readonly Game[]) {
+  const rows = games.map((game) => {
+    const expected = specializedHandoffModel(game);
+    const actual = game.fast;
+    const numeric = [
+      Math.abs(actual.independent_goal_diff - expected.independent_goal_diff),
+      Math.abs(actual.independent_total_goals - expected.independent_total_goals),
+      Math.abs(actual.expected_goal_diff - expected.expected_goal_diff),
+      Math.abs(actual.expected_total_goals - expected.expected_total_goals),
+      Math.abs(actual.projected_home_goals - expected.projected_home_goals),
+      Math.abs(actual.projected_away_goals - expected.projected_away_goals),
+      Math.abs(actual.moneyline.probability - expected.moneyline.probability),
+      Math.abs(actual.total.probability - expected.total.probability),
+      Math.abs(actual.puck_line.probability - expected.puck_line.probability),
+    ];
+    const categoricalMatch = actual.moneyline.pick === expected.moneyline.pick
+      && actual.moneyline.verdict === expected.moneyline.verdict
+      && actual.total.pick === expected.total.pick
+      && actual.total.verdict === expected.total.verdict
+      && actual.puck_line.pick === expected.puck_line.pick
+      && actual.puck_line.verdict === expected.puck_line.verdict;
+    return { gameId: game.id, maximumDifference: Math.max(...numeric), categoricalMatch };
+  });
+  return {
+    games: rows.length,
+    exactCategoricalMatches: rows.filter((row) => row.categoricalMatch).length,
+    maximumNumericDifference: round(Math.max(...rows.map((row) => row.maximumDifference)), 12),
+    failures: rows.filter((row) => !row.categoricalMatch || row.maximumDifference >= 1e-10),
+  };
+}
+
+function evidenceQualifiedTotalPackageComparison(games: readonly Game[]) {
+  const incumbent = allMarketActionability(games, "fast");
+  const candidate = allMarketActionability(games, "handoff_evidence_total");
+  const compact = (source: ReturnType<typeof allMarketActionability>) => ({
+    actionable: source.actionable,
+    byMarket: source.byMarket,
+  });
+  return {
+    incumbent: compact(incumbent),
+    candidate: compact(candidate),
+    impact: {
+      promotions: candidate.decisions.filter((verdict, index) => actionable(verdict) && !actionable(incumbent.decisions[index]!)).length,
+      demotions: candidate.decisions.filter((verdict, index) => !actionable(verdict) && actionable(incumbent.decisions[index]!)).length,
+    },
+    changedActionability: candidate.entries.flatMap((entry, index) => {
+      const before = incumbent.entries[index]!;
+      if (actionable(entry.verdict) === actionable(before.verdict)) return [];
+      return [{
+        gameId: entry.gameId,
+        date: entry.date,
+        matchup: entry.matchup,
+        market: entry.market,
+        before: {
+          side: before.side,
+          verdict: before.verdict,
+          probability: round(before.probability),
+          price: before.price,
+          exactPriceEdge: round(before.exactPriceEdge),
+          result: before.result,
+        },
+        after: {
+          side: entry.side,
+          verdict: entry.verdict,
+          probability: round(entry.probability),
+          price: entry.price,
+          exactPriceEdge: round(entry.exactPriceEdge),
+          result: entry.result,
+        },
+      }];
+    }),
+    changedSidesOrResults: candidate.entries.flatMap((entry, index) => {
+      const before = incumbent.entries[index]!;
+      if (entry.side === before.side && entry.result === before.result) return [];
+      return [{
+        gameId: entry.gameId,
+        date: entry.date,
+        matchup: entry.matchup,
+        market: entry.market,
+        before: { side: before.side, verdict: before.verdict, result: before.result },
+        after: { side: entry.side, verdict: entry.verdict, result: entry.result },
+      }];
+    }),
+  };
+}
+
+function coherentPackageComparison(games: readonly Game[]) {
+  const incumbent = allMarketActionability(games, "fast");
+  const candidate = allMarketActionability(games, "handoff_coherent_package");
+  const compact = (source: ReturnType<typeof allMarketActionability>) => ({
+    actionable: source.actionable,
+    byMarket: source.byMarket,
+  });
+  const impact = {
+    promotions: candidate.decisions.filter((verdict, index) => actionable(verdict) && !actionable(incumbent.decisions[index]!)).length,
+    demotions: candidate.decisions.filter((verdict, index) => !actionable(verdict) && actionable(incumbent.decisions[index]!)).length,
+  };
+  const negativeEdgeActionables = candidate.entries.filter((entry) => actionable(entry.verdict) && (entry.exactPriceEdge ?? -Infinity) < 0).length;
+  return { incumbent: compact(incumbent), candidate: compact(candidate), impact, negativeEdgeActionables };
+}
+
+function handoffPuckProbabilityCalibration(games: readonly Game[]) {
+  const incumbent = allMarketActionability(games, "fast");
+  const handoff = allMarketActionability(games, "handoff");
+  const calibrated = allMarketActionability(games, "handoff_puck_platt");
+  const compact = (source: ReturnType<typeof allMarketActionability>) => ({
+    actionable: source.actionable,
+    byMarket: source.byMarket,
+  });
+  const impact = (after: ReturnType<typeof allMarketActionability>, before: ReturnType<typeof allMarketActionability>) => ({
+    promotions: after.decisions.filter((verdict, index) => actionable(verdict) && !actionable(before.decisions[index]!)).length,
+    demotions: after.decisions.filter((verdict, index) => !actionable(verdict) && actionable(before.decisions[index]!)).length,
+  });
+  return {
+    incumbent: compact(incumbent),
+    handoff: compact(handoff),
+    calibrated: compact(calibrated),
+    calibratedVsIncumbent: impact(calibrated, incumbent),
+    calibratedVsHandoff: impact(calibrated, handoff),
   };
 }
 
@@ -619,6 +904,19 @@ async function main(): Promise<void> {
   }]));
   const handoffValidation = Object.fromEntries(Object.entries(cohorts).map(([name, values]) => [name, handoffComparison(values)]));
   const handoffPuckCalibrationValidation = Object.fromEntries(Object.entries(cohorts).map(([name, values]) => [name, handoffPuckCalibration(values)]));
+  const handoffPuckProbabilityCalibrationValidation = Object.fromEntries(Object.entries(cohorts).map(([name, values]) => [name, handoffPuckProbabilityCalibration(values)]));
+  const coherentPackageValidation = Object.fromEntries(Object.entries(cohorts).map(([name, values]) => [name, coherentPackageComparison(values)]));
+  const evidenceQualifiedTotalPackageValidation = Object.fromEntries(Object.entries(cohorts).map(([name, values]) => [name, evidenceQualifiedTotalPackageComparison(values)]));
+  const specializedHandoffValidation = Object.fromEntries(Object.entries(cohorts).map(([name, values]) => [name, specializedHandoffComparison(values)]));
+  if (process.argv.includes("--parity-only")) {
+    console.log(JSON.stringify({
+      release: "nhl_specialized_handoff_production_parity_2026_10_23_r1",
+      readOnly: true,
+      writes: 0,
+      productionSpecializedParity: productionSpecializedParity(games),
+    }, null, 2));
+    return;
+  }
   if (process.argv.includes("--diagnostics-only")) {
     console.log(JSON.stringify({
       release: "nhl_moneyline_actionability_audit_2026_10_23_r1",
@@ -628,6 +926,11 @@ async function main(): Promise<void> {
       headDiagnostics,
       handoffValidation,
       handoffPuckCalibrationValidation,
+      handoffPuckProbabilityCalibrationValidation,
+      coherentPackageValidation,
+      evidenceQualifiedTotalPackageValidation,
+      specializedHandoffValidation,
+      productionSpecializedParity: productionSpecializedParity(games),
     }, null, 2));
     return;
   }
@@ -647,6 +950,11 @@ async function main(): Promise<void> {
     headDiagnostics,
     handoffValidation,
     handoffPuckCalibrationValidation,
+    handoffPuckProbabilityCalibrationValidation,
+    coherentPackageValidation,
+    evidenceQualifiedTotalPackageValidation,
+    specializedHandoffValidation,
+    productionSpecializedParity: productionSpecializedParity(games),
     evaluations,
   }, null, process.argv.includes("--compact") ? 0 : 2));
 }

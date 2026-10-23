@@ -310,6 +310,11 @@ const fastAfterWindow = nhlRegularModelV1({
   away: { ...base.away, fast_state: openingFastState.get("BOS")!, current_season_games: 10 },
 });
 assert.equal(fastAfterWindow.layers.fast_state_direct_active, false, "the qualified opening model cannot leak past a team's tenth game");
+assert.equal(
+  fastAfterWindow.layers.specialized_margin_total_handoff_active,
+  false,
+  "the specialized handoff cannot leak past the opening window",
+);
 const targetExcludedRead = {
   exact_line: 6.5,
   over_probability: 0.59,
@@ -369,6 +374,79 @@ const weakRosterPrior = {
   ixg: 0.4,
   points: 1.0,
 };
+const sixGameFastHead = nhlRegularModelV1({
+  ...base,
+  home: {
+    ...base.home,
+    fast_state: openingFastState.get("FLA")!,
+    roster_prior: strongRosterPrior,
+    current_season_games: 6,
+  },
+  away: {
+    ...base.away,
+    fast_state: openingFastState.get("BOS")!,
+    roster_prior: weakRosterPrior,
+    current_season_games: 6,
+  },
+});
+const sevenGameSpecializedHandoff = nhlRegularModelV1({
+  ...base,
+  home: {
+    ...base.home,
+    fast_state: openingFastState.get("FLA")!,
+    roster_prior: strongRosterPrior,
+    current_season_games: 7,
+  },
+  away: {
+    ...base.away,
+    fast_state: openingFastState.get("BOS")!,
+    roster_prior: weakRosterPrior,
+    current_season_games: 7,
+  },
+});
+const sevenGameRosterComparator = nhlRegularModelV1({
+  ...base,
+  home: {
+    ...base.home,
+    fast_state: null,
+    roster_prior: strongRosterPrior,
+    current_season_games: 7,
+  },
+  away: {
+    ...base.away,
+    fast_state: null,
+    roster_prior: weakRosterPrior,
+    current_season_games: 7,
+  },
+});
+assert.equal(sixGameFastHead.layers.fast_state_direct_active, true, "fast winner head remains authoritative through six games");
+assert.equal(sixGameFastHead.layers.specialized_margin_total_handoff_active, false);
+assert.equal(sevenGameSpecializedHandoff.layers.fast_state_direct_active, false, "seven games hands margin authority to the roster head");
+assert.equal(sevenGameSpecializedHandoff.layers.roster_prior_active, true);
+assert.equal(sevenGameSpecializedHandoff.layers.specialized_margin_total_handoff_active, true);
+assert.equal(
+  sevenGameSpecializedHandoff.moneyline.pick,
+  sevenGameRosterComparator.moneyline.pick,
+  "seven-game handoff preserves the roster head's final Moneyline side",
+);
+assert.ok(
+  Math.abs(sevenGameSpecializedHandoff.moneyline.probability - sevenGameRosterComparator.moneyline.probability) < 1e-12,
+  "seven-game handoff preserves the roster head's final Moneyline probability",
+);
+assert.ok(
+  Math.abs(sevenGameSpecializedHandoff.independent_total_goals - sixGameFastHead.independent_total_goals) < 1e-12,
+  "seven-game handoff preserves the fast independent Total",
+);
+assert.ok(
+  Math.abs(sevenGameSpecializedHandoff.expected_total_goals - sixGameFastHead.expected_total_goals) < 1e-12,
+  "the same Total reader evidence preserves the coherent final Total across the head handoff",
+);
+assert.equal(sevenGameSpecializedHandoff.total.pick, sixGameFastHead.total.pick);
+assert.ok(Math.abs(sevenGameSpecializedHandoff.total.probability - sixGameFastHead.total.probability) < 1e-12);
+assert.ok(
+  Math.abs(sevenGameSpecializedHandoff.projected_home_goals + sevenGameSpecializedHandoff.projected_away_goals - sevenGameSpecializedHandoff.expected_total_goals) < 1e-12,
+  "specialized heads reconcile into one final score tuple",
+);
 const corroboratedFlip = nhlRegularModelV1({
   ...base,
   home: {
@@ -975,11 +1053,11 @@ assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware wri
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
 assert.match(reader, /const displayModel: NhlModelOutput = storedPayload \? model : \{/, "stored writer and locked verdicts take precedence over the unlocked no-writer price-aware fallback");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_10_22_r16_verified_current_board/, "reader release records complete verified current-board authority while preserving immutable NHL price mapping");
+assert.match(reader, /nhl_daily_edge_reader_2026_10_23_r17_specialized_margin_total_handoff/, "reader release records the specialized margin/Total handoff while preserving immutable NHL price mapping");
 assert.match(writer, /select\("external_id"\)/, "writer verifies exact settled-game replay identities instead of count parity");
 assert.match(reader, /select\("external_id"\)/, "reader verifies the same exact settled-game replay identities");
 assert.match(reader, /r\.locked_at !== null \|\| !replayComplete/, "reader preserves a stored transition predecessor while fresh replay evidence is incomplete");
-assert.match(reader, /!storedPayload && openingWindow && !model\.layers\.fast_state_direct_active/, "reader cannot synthesize an opening-window forecast without fast-state evidence");
+assert.match(reader, /!model\.layers\.specialized_margin_total_handoff_active/, "reader accepts only the fast head or the qualified specialized handoff during the opening window");
 assert.match(reader, /resolveNhlLockedPriceQuote/, "reader renders the stored locked price tuple instead of mutable current odds");
 assert.match(writer, /evaluated_quotes/, "writer freezes the selected price, book, side, and line together");
 assert.match(pregameSweep, /externalIdsFilter:\s*externalIds/, "T-60 writer refreshes only the games entering the lock window");

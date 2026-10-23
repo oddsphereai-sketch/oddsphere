@@ -75,6 +75,7 @@ def forecast_pair(base: Any, direct: Any, row: dict[str, Any], probability: floa
 
 def metrics(rows: list[dict[str, Any]], source: str, base: Any) -> dict[str, Any]:
     wins = 0
+    puck_wins = puck_losses = total_wins = total_losses = 0
     brier = log_loss = team_error = margin_error = total_error = 0.0
     for row in rows:
         probability = row[f"{source}_probability"]
@@ -88,6 +89,25 @@ def metrics(rows: list[dict[str, Any]], source: str, base: Any) -> dict[str, Any
         team_error += abs(home - row["home_goals"]) + abs(away - row["away_goals"])
         margin_error += abs((home - away) - (row["home_goals"] - row["away_goals"]))
         total_error += abs((home + away) - (row["home_goals"] + row["away_goals"]))
+        actual_margin = row["home_goals"] - row["away_goals"]
+        actual_total = row["home_goals"] + row["away_goals"]
+        distribution = base.distribution(home, away)
+        market = row.get("market")
+        if market and market.get("home_spread") is not None:
+            line = market["home_spread"]
+            actual_axis = actual_margin + line
+            if abs(actual_axis) > 1e-9:
+                home_cover = sum(mass for margin, mass in distribution["margin"].items() if margin + line > 0)
+                predicted_home = home_cover >= .5
+                puck_wins += int(predicted_home == (actual_axis > 0))
+                puck_losses += int(predicted_home != (actual_axis > 0))
+        if market and market.get("total") is not None:
+            line = market["total"]
+            actual_axis = actual_total - line
+            if abs(actual_axis) > 1e-9:
+                predicted_over = home + away > line
+                total_wins += int(predicted_over == (actual_axis > 0))
+                total_losses += int(predicted_over != (actual_axis > 0))
     count = len(rows)
     return {
         "n": count,
@@ -98,13 +118,17 @@ def metrics(rows: list[dict[str, Any]], source: str, base: Any) -> dict[str, Any
         "team_mae": team_error / (2 * count) if count else None,
         "margin_mae": margin_error / count if count else None,
         "total_mae": total_error / count if count else None,
+        "puck_line": f"{puck_wins}-{puck_losses}",
+        "puck_line_accuracy": puck_wins / (puck_wins + puck_losses) if puck_wins + puck_losses else None,
+        "total_direction": f"{total_wins}-{total_losses}",
+        "total_direction_accuracy": total_wins / (total_wins + total_losses) if total_wins + total_losses else None,
     }
 
 
 def cohort_report(rows: list[dict[str, Any]], base: Any) -> dict[str, Any]:
     return {
         source: metrics(rows, source, base)
-        for source in ("fast", "roster", "seven_game_handoff")
+        for source in ("fast", "roster", "seven_game_handoff", "specialized_handoff")
     }
 
 
@@ -143,6 +167,7 @@ def main() -> None:
         fast_home, fast_away = forecast_pair(base, direct, fast_row, fast_probability)
         roster_probability = base.distribution(row["ind_home"], row["ind_away"])["home_win"]
         use_fast = max(row["home_games"], row["away_games"]) < 7
+        specialized_home, specialized_away = forecast_pair(base, direct, fast_row, roster_probability)
         evaluated.append({
             **row,
             "maximum_games": max(row["home_games"], row["away_games"]),
@@ -155,6 +180,9 @@ def main() -> None:
             "seven_game_handoff_probability": fast_probability if use_fast else roster_probability,
             "seven_game_handoff_home": fast_home if use_fast else row["ind_home"],
             "seven_game_handoff_away": fast_away if use_fast else row["ind_away"],
+            "specialized_handoff_probability": fast_probability if use_fast else roster_probability,
+            "specialized_handoff_home": fast_home if use_fast else specialized_home,
+            "specialized_handoff_away": fast_away if use_fast else specialized_away,
         })
 
     buckets = {

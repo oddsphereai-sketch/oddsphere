@@ -348,7 +348,9 @@ export async function writeNhlPredictionRecords(
       const meta = built.meta;
       const openingWindow = snapshot.game_type === 2
         && Math.max(snapshot.home.current_season_games ?? 0, snapshot.away.current_season_games ?? 0) < 10;
-      if (openingWindow && !model.layers.fast_state_direct_active) {
+      if (openingWindow
+        && !model.layers.fast_state_direct_active
+        && !model.layers.specialized_margin_total_handoff_active) {
         throw new Error(`NHL fast-state evidence incomplete (${opponentAdjusted.gamesApplied}/${expectedPriorGames} prior games); prediction write failed closed`);
       }
 

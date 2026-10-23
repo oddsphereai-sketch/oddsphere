@@ -1,5 +1,39 @@
 # Model change safety protocol
 
+## Owner-directed provisional exception: NHL specialized margin/Total handoff r22
+
+On 2026-10-23 Daniel Mengel rejected leaving the live NHL model unchanged after
+the audit identified avoidable opening-window error and directed Oddsphere to
+finish a qualified improvement. The predeclared architecture and opened result
+are documented in
+`docs/model-audits/2026-10-23-nhl-specialized-margin-total-handoff-r22-predeclaration.md`
+and
+`docs/model-audits/2026-10-23-nhl-specialized-margin-total-handoff-r22-result.md`.
+
+For future-unlocked regular-season games, r22 retains the qualified fast-state
+head through maximum team game six. At games seven through nine, the released
+roster head owns the independent winner/margin axis while the fast-state head
+retains the independent Total axis. One coherent score tuple is solved before
+the existing qualified Moneyline and target-excluded Total readers run. At game
+ten the mature statistical path resumes. No market number enters an independent
+head, no weighted blend is introduced, and no reader or grade threshold changes.
+
+The frozen 165-game exact-price replay improves Moneyline from 102-63 to 107-58,
+Moneyline Brier from 0.23212 to 0.23018, margin MAE from 2.16967 to 2.13081, and
+all-market exact-price units from -3.31u to +7.38u while actionables contract
+from 319 to 311. Total direction and Total MAE are unchanged. Fourteen
+promotions and 22 demotions satisfy the paired-impact requirement. The exact
+October 23 current-board dry run changes zero picks or grades and retains two
+actionables. The rejected flat puck calibration and Total grade candidates have
+no production authority.
+
+Publication requires the focused NHL suite, TypeScript, full model-change
+verification, a clean latest-main integration proof, protected PR checks, and
+post-deploy proof of the r22/r17 identifiers, complete current quotes, reader
+coherence, and sole-writer health. Existing locked r18-r20 payloads remain
+immutable and take unconditional reader precedence. Rollback applies only to
+future unlocked rows and cannot rewrite or reinterpret a stored lock.
+
 ## Owner-directed correction: NBA player-props active-role integrity
 
 On 2026-10-22 Daniel Mengel rejected an NBA player-prop reader example that
