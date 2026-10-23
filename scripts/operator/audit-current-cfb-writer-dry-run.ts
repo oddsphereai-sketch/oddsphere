@@ -54,6 +54,12 @@ async function main(): Promise<void> {
         away: payload.decisions.forecast.expectedAwayPoints,
         home: payload.decisions.forecast.expectedHomePoints,
       },
+      availability: {
+        injuryStatus: payload.availability.injuryStatus,
+        reportSource: payload.availability.report?.source ?? null,
+        reportUpdatedAt: payload.availability.report?.reportUpdatedAt ?? null,
+        unavailablePlayers: payload.availability.report?.teams.reduce((sum, team) => sum + team.players.filter((player) => player.status === "Out" || player.status === "Unavailable").length, 0) ?? 0,
+      },
       currentBooks: payload.market.currentBooks.map((book) => ({
         sportsbook: book.sportsbook,
         provider: book.provider,
@@ -79,6 +85,7 @@ async function main(): Promise<void> {
         line: decision.evaluatedQuote.line,
         price: decision.evaluatedQuote.price,
         sportsbook: decision.evaluatedQuote.sportsbook,
+        probability: decision.forecastProbability,
         grade: decision.grade,
       })),
       held: payload.decisions.heldMarkets,

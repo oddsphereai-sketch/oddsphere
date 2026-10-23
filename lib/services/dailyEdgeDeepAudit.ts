@@ -437,7 +437,12 @@ export function auditDailyEdgeBoards(
             terminalObservedAt: terminalStop?.observedAt ?? null,
           });
         }
-        const displayedCurrent = n(market.currentPriceAmerican) ?? n(market.priceAmerican);
+        // The executable best price may deliberately come from a different
+        // book than the same-book movement trail. When the DTO publishes an
+        // explicit movement reference, that reference—not the best executable
+        // quote—is the terminal identity the visible trail must prove.
+        const displayedCurrent = n(market.movementReferencePriceAmerican) ??
+          n(market.currentPriceAmerican) ?? n(market.priceAmerican);
         const terminalAmerican = n(terminalStop?.american);
         if (isUnlocked && displayedCurrent !== null && terminalAmerican !== null && displayedCurrent !== terminalAmerican) {
           push("odds_trail_terminal_price_mismatch", sport, game, slot, market, {
@@ -445,13 +450,15 @@ export function auditDailyEdgeBoards(
             terminalAmerican,
           });
         }
-        const displayedBook = String(market.currentPriceSportsbook ?? market.marketSource ?? "")
+        const displayedBook = String(market.movementReferenceSportsbook ??
+          market.currentPriceSportsbook ?? market.marketSource ?? "")
           .toLowerCase().replace(/[^a-z0-9]/g, "");
         const terminalBook = String(terminalStop?.sportsbook ?? "")
           .toLowerCase().replace(/[^a-z0-9]/g, "");
         if (isUnlocked && displayedBook && terminalBook && displayedBook !== terminalBook) {
           push("odds_trail_terminal_book_mismatch", sport, game, slot, market, {
-            displayedBook: market.currentPriceSportsbook ?? market.marketSource ?? null,
+            displayedBook: market.movementReferenceSportsbook ??
+              market.currentPriceSportsbook ?? market.marketSource ?? null,
             terminalBook: terminalStop?.sportsbook ?? null,
           });
         }

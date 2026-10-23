@@ -41,6 +41,24 @@ async function main(): Promise<void> {
     under: { ticketsPct: 45, moneyPct: 49 },
   });
 
+  const virginiaGame: NcaafGame = {
+    ...game,
+    providerGameId: "457380",
+    scheduledStart: "2026-10-23T23:00:00.000Z",
+    away: { ...game.away, abbreviation: "DUKE", name: "Duke Blue Devils" },
+    home: { ...game.home, abbreviation: "UVA", name: "Virginia Cavaliers" },
+  };
+  const virginiaResult = await fetchCfbSharpApiSplits({
+    games: [virginiaGame],
+    client: new StubClient([row({
+      event_id: "ncaaf_dukebluedevils_virginiacavaliers_2026-10-23_b3",
+      away_team: "Duke",
+      home_team: "Virginia",
+    })]),
+  });
+  assert.equal(virginiaResult.matchedGames, 1, "exact Virginia school shorthand must resolve to UVA");
+  assert.equal(virginiaResult.recordsByGame[virginiaGame.providerGameId]?.length, 1);
+
   const wrongDate = await fetchCfbSharpApiSplits({ games: [game], client: new StubClient([row({ event_id: "ncaaf_hawaiirainbowwarriors_stanfordcardinal_2026-08-28" })]) });
   assert.equal(wrongDate.matchedGames, 0, "wrong-date split rows fail closed");
 

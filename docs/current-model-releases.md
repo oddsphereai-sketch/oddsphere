@@ -659,6 +659,27 @@ Last reviewed: 2026-10-23
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 23 Virginia exact-school split identity: future-unlocked SharpAPI
+  split capture advances to
+  `cfb_sharpapi_splits_2026_10_23_r4_virginia_exact_school_identity` and the
+  sole writer advances to
+  `cfb_forward_evidence_writer_2026_10_23_r135_virginia_split_and_pregame_availability`.
+  SharpAPI published a current complete DraftKings row for Duke-Virginia, but
+  the shared resolver rejected exact provider label `Virginia` because the
+  generic prefix path also saw Virginia Tech. The abbreviation-scoped alias
+  `UVA -> Virginia` now supplies exact authority while an explicit regression
+  test keeps that label invalid for `VT`. All other identity ambiguity guards,
+  The same audit found that the exact ACC injury report was published after the
+  last successful writer pass; the bounded official-source collector therefore
+  advances to
+  `cfb_forward_evidence_collector_2026_10_23_r64_twelve_hour_official_availability`
+  and uses its existing hourly cadence throughout the final twelve pregame
+  hours instead of only the final three. The 12-request ceiling, six-hour
+  default cadence, provider hierarchy, model equations, grades, stakes, reader
+  semantics, the sole `prediction_pipeline:cfb` lease, and locked-record
+  precedence are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-23-cfb-virginia-split-identity-predeclaration.md`.
+
 - October 21 public injury-news fallback: the future-unlocked collector and
   sole writer advance to
   `cfb_forward_evidence_collector_2026_10_21_r63_public_injury_news_fallback` /

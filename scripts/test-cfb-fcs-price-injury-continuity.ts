@@ -269,6 +269,16 @@ assert.equal(shouldFetchCfbOfficialConferenceAvailability({
   now: "2026-10-07T18:00:00.000Z",
   existing: [{ providerGameId: game.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE, requestBudget: { officialAvailability: 12 } } }] as never,
 }), true, "a scheduled pregame refresh must pick up the final official report");
+assert.equal(shouldFetchCfbOfficialConferenceAvailability({
+  games: [{ ...game, scheduledStart: "2026-10-08T03:30:00.000Z" }],
+  now: "2026-10-07T17:00:00.000Z",
+  existing: [{ providerGameId: game.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE, requestBudget: { officialAvailability: 12 } } }] as never,
+}), false, "the expanded pregame cadence must remain bounded inside its hourly interval");
+assert.equal(shouldFetchCfbOfficialConferenceAvailability({
+  games: [{ ...game, scheduledStart: "2026-10-08T03:30:00.000Z" }],
+  now: "2026-10-07T17:31:00.000Z",
+  existing: [{ providerGameId: game.providerGameId, capturedAt: "2026-10-07T16:30:00.000Z", payload: { collectorRelease: CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE, requestBudget: { officialAvailability: 12 } } }] as never,
+}), true, "official reports must refresh hourly throughout the final twelve pregame hours");
 
 const otherGame = { ...game, providerGameId: "987654", scheduledStart: "2026-10-08T23:30:00.000Z" };
 assert.equal(shouldFetchCfbOfficialConferenceAvailability({

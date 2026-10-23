@@ -110,6 +110,7 @@ import {
 import { buildCfbGameAvailability, latestVerifiedCfbGameAvailabilityByGame } from "./cfbGameAvailability";
 import {
   CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES,
+  CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_WINDOW_MINUTES,
   CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES,
   fetchCfbOfficialConferenceAvailability,
   type CfbOfficialConferenceAvailabilityResult,
@@ -178,7 +179,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_21_r134_public_injury_news_fallback" as const;
+  "cfb_forward_evidence_writer_2026_10_23_r135_virginia_split_and_pregame_availability" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -1627,7 +1628,7 @@ export function shouldFetchCfbOfficialConferenceAvailability(args: {
   }
   return args.games.some((game) => {
     const untilStart = Date.parse(game.scheduledStart) - nowMs;
-    const minimumMinutes = untilStart > 0 && untilStart <= 3 * 60 * 60_000
+    const minimumMinutes = untilStart > 0 && untilStart <= CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_WINDOW_MINUTES * 60_000
       ? CFB_OFFICIAL_CONFERENCE_AVAILABILITY_PREGAME_REFRESH_MINUTES
       : CFB_OFFICIAL_CONFERENCE_AVAILABILITY_REFRESH_MINUTES;
     const lastFetch = latestFetchByGame.get(game.providerGameId) ?? 0;

@@ -3,7 +3,7 @@ import type { NcaafGame } from "./balldontlieNcaafSlate";
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_SHARP_API_SPLITS_RELEASE =
-  "cfb_sharpapi_splits_2026_10_12_r3_central_team_identity" as const;
+  "cfb_sharpapi_splits_2026_10_23_r4_virginia_exact_school_identity" as const;
 export const CFB_SHARP_API_SPLITS_MAX_GAMES = 128 as const;
 export const CFB_SHARP_API_SPLITS_MAX_ROWS = 200 as const;
 

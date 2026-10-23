@@ -104,6 +104,44 @@ function board(market: Record<string, unknown>) {
 
 {
   const result = auditDailyEdgeBoards({
+    mlb: board({
+      priceAmerican: -184,
+      currentPriceAmerican: -176,
+      currentPriceSportsbook: "onexbet",
+      movementReferencePriceAmerican: -184,
+      movementReferenceSportsbook: "pinnacle",
+      oddsTrail: [{ american: -181, sportsbook: "pinnacle" }, { american: -184, sportsbook: "pinnacle" }],
+      marketReadV2: { label: "Movement history limited", sourceSummary: {}, movement: { currentPrice: -176 } },
+    }),
+  });
+  check(
+    "best executable quote may differ from explicit same-book movement reference",
+    !result.summary.issueCounts.odds_trail_terminal_price_mismatch &&
+      !result.summary.issueCounts.odds_trail_terminal_book_mismatch,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
+    mlb: board({
+      priceAmerican: -184,
+      currentPriceAmerican: -176,
+      currentPriceSportsbook: "onexbet",
+      movementReferencePriceAmerican: -183,
+      movementReferenceSportsbook: "fanduel",
+      oddsTrail: [{ american: -181, sportsbook: "pinnacle" }, { american: -184, sportsbook: "pinnacle" }],
+      marketReadV2: { label: "Movement history limited", sourceSummary: {}, movement: { currentPrice: -176 } },
+    }),
+  });
+  check(
+    "explicit movement reference must match terminal trail identity",
+    result.summary.issueCounts.odds_trail_terminal_price_mismatch === 1 &&
+      result.summary.issueCounts.odds_trail_terminal_book_mismatch === 1,
+  );
+}
+
+{
+  const result = auditDailyEdgeBoards({
     wnba: board({
       priceAmerican: -124,
       currentPriceAmerican: -128,
