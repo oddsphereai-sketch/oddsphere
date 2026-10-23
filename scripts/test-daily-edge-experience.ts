@@ -139,6 +139,13 @@ check(
 );
 
 check(
+  "CFB cached snapshots recover only exact sport-owned logo identities",
+  legacyDailyEdgeSource.includes('import { cfbTeamIdentity }') &&
+    legacyDailyEdgeSource.includes('shellSport === "cfb" ? cfbTeamIdentity(abbr)?.logoUrl') &&
+    legacyDailyEdgeSource.includes("if (usesSportOwnedLogo && !sportOwnedLogo)"),
+);
+
+check(
   "CFB weekly member reads allow the measured compact-snapshot transfer window",
   candidateMemberPageSource.includes("const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000"),
 );

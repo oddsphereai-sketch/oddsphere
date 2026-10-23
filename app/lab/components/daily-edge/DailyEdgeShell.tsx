@@ -62,6 +62,7 @@ import type {
 import type { Sport } from "@/lib/types/domain/Sport";
 import { isContextOnlyDisplayMarket } from "@/lib/config/officialTrackingMarkets";
 import { TWO_SIDED_KEY_STAT_LABELS, keyStatIsTwoSided } from "@/lib/services/keyStatsFormatter";
+import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
 import { eplTeamLogo } from "@/lib/services/epl/eplTeamAssets";
 import { wnbaLogoUrl } from "@/lib/services/wnba/wnbaTeams";
 import { teamPrimaryColor } from "./teamColors";
@@ -652,18 +653,20 @@ const LOGO_FILTER: Record<string, string> = {
 function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; size: number }) {
   // For MLB/NBA/NHL the DB's `teams.logo_url` column is unreliable, so
   // ESPN is the primary CDN. Soccer/UCL and CFB must use only a supplied
-  // sport-owned logo: a CFB abbreviation such as MIA is not an MLB team
-  // identity and must never fall through to the Marlins CDN asset.
+  // sport-owned logo. CFB may recover an exact abbreviation from its own
+  // identity catalog so a pre-deploy cached snapshot with a null logo can
+  // still render correctly; it must never fall through to another sport.
   // Both branches share the abbr-disc fallback so missing or broken
   // sport-owned assets never leave an empty circle.
   const shellSport = useShellSport();
   const [errored, setErrored] = useState(false);
   const isSoccer = shellSport === "soccer" || shellSport === "ucl";
   const usesSportOwnedLogo = isSoccer || shellSport === "cfb";
-  const src = usesSportOwnedLogo ? (logo ?? "") : espnLogoUrl(abbr, shellSport);
+  const sportOwnedLogo = logo ?? (shellSport === "cfb" ? cfbTeamIdentity(abbr)?.logoUrl ?? null : null);
+  const src = usesSportOwnedLogo ? (sportOwnedLogo ?? "") : espnLogoUrl(abbr, shellSport);
   const filter = LOGO_FILTER[abbr];
 
-  if (usesSportOwnedLogo && !logo) {
+  if (usesSportOwnedLogo && !sportOwnedLogo) {
     return (
       <div
         className="inline-flex items-center justify-center rounded-full bg-violet-500/[0.12] border border-violet-400/30 text-violet-100 font-bold tracking-tight shrink-0 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.10)]"
