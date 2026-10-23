@@ -16,6 +16,8 @@ import {
   decodeNbaPlayerPropsPrivatePayload,
   encodeNbaPlayerPropsPrivatePayload,
   mergeNbaPlayerPropsMarketHistory,
+  NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES,
+  NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
 } from "../lib/services/nba/nbaPlayerPropsPrivateStore";
 import {
   NBA_PLAYER_PROPS_OBSERVATION_RELEASE,
@@ -347,7 +349,13 @@ assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
   ...envelope,
   release: "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity",
 }, "market_history"), initialHistory.history, "the deployed r3 private payload must migrate without losing observations");
+assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
+  ...envelope,
+  release: "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology",
+}, "market_history"), initialHistory.history, "the deployed r4 private payload must migrate without losing observations");
 assert.equal(decodeNbaPlayerPropsPrivatePayload({ ...envelope, checksum: "bad" }, "market_history"), null);
+assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, 96_000_000);
+assert.equal(NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE, "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity");
 
 let boundedHistory = initialHistory.history;
 for (let index = 1; index <= 8; index += 1) {
