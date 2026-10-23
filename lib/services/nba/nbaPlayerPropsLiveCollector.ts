@@ -8,7 +8,7 @@ import type {
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_10_21_r3_chronological_quotes" as const;
+  "nba_player_props_live_collector_2026_10_23_r4_current_player_identity" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -42,6 +42,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
   includeOpenings: boolean;
   useTheOddsApiForGameIds?: ReadonlySet<string>;
   canonicalPlayersByName?: Readonly<Record<string, string>>;
+  knownPlayerIdentitiesById?: Readonly<Record<string, Readonly<{ playerName: string | null; playerTeam: string | null }>>>;
   fetchImpl?: typeof fetch;
 }): Promise<NbaPlayerPropsLiveCollection> {
   const fetchedAt = new Date().toISOString();
@@ -68,8 +69,9 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     awayTeam: game.awayTeam,
     scheduledStart: game.scheduledStart,
   }]));
-  const observations: NbaPlayerPropPriceObservation[] = [];
+  let observations: NbaPlayerPropPriceObservation[] = [];
   let bdlRequests = gameEnvelopes.length;
+  const findings: string[] = [];
   for (const game of games) {
     const current = await requestJson({
       url: `${BDL_BASE}/v2/odds/player_props?game_id=${encodeURIComponent(game.providerGameId)}`,
@@ -99,10 +101,44 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     }
   }
 
+  if (args.knownPlayerIdentitiesById) {
+    observations = observations.map((row) => {
+      if (row.provider !== "balldontlie" || !row.providerPlayerId) return row;
+      const identity = args.knownPlayerIdentitiesById?.[row.providerPlayerId];
+      return identity ? {
+        ...row,
+        playerName: row.playerName ?? identity.playerName,
+        playerTeam: row.playerTeam ?? identity.playerTeam,
+      } : row;
+    });
+  }
+  const unresolvedPlayerIds = [...new Set(observations.flatMap((row) =>
+    row.provider === "balldontlie" && row.providerPlayerId && (
+      !row.playerName || !row.playerTeam || !playerTeamMatchesGame(row, teamIdsByGame)
+    )
+      ? [row.providerPlayerId]
+      : []))];
+  for (let offset = 0; offset < unresolvedPlayerIds.length; offset += 100) {
+    const ids = unresolvedPlayerIds.slice(offset, offset + 100);
+    const url = new URL(`${BDL_BASE}/v1/players`);
+    url.searchParams.set("per_page", "100");
+    for (const id of ids) url.searchParams.append("player_ids[]", id);
+    try {
+      const response = await requestJson({
+        url: url.toString(),
+        headers: { Authorization: args.ballDontLieApiKey, Accept: "application/json" },
+        fetchImpl,
+      });
+      bdlRequests += 1;
+      observations = applyResolvedPlayerIdentities(observations, data(response.body));
+    } catch {
+      findings.push(`balldontlie_player_identity_lookup_failed:${ids.length}`);
+    }
+  }
+
   let theOddsApiRequests = 0;
   let creditsUsed = 0;
   let creditsRemaining: number | null = null;
-  const findings: string[] = [];
   const inferredGapIds = new Set(games.filter((game) => {
     const gameRows = observations.filter((row) => row.canonicalGameId === game.canonicalGameId
       && (row.side === "over" || row.side === "under"));
@@ -158,6 +194,38 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     theOddsApiCreditsRemaining: creditsRemaining,
     findings,
   };
+}
+
+export function applyResolvedPlayerIdentities(
+  rows: readonly NbaPlayerPropPriceObservation[],
+  players: readonly Record<string, unknown>[],
+): NbaPlayerPropPriceObservation[] {
+  const identityById = new Map(players.flatMap((player) => {
+    const playerId = scalarId(player.id);
+    const teamId = scalarId(object(player.team)?.id) ?? scalarId(player.team_id);
+    const playerName = [text(player.first_name), text(player.last_name)].filter(Boolean).join(" ") || null;
+    return playerId && (teamId || playerName) ? [[playerId, { teamId, playerName }] as const] : [];
+  }));
+  return rows.map((row) => {
+    if (row.provider !== "balldontlie" || !row.providerPlayerId) return row;
+    const identity = identityById.get(row.providerPlayerId);
+    if (!identity) return row;
+    return {
+      ...row,
+      playerName: identity.playerName ?? row.playerName,
+      playerTeam: identity.teamId ?? row.playerTeam,
+    };
+  });
+}
+
+function playerTeamMatchesGame(
+  row: NbaPlayerPropPriceObservation,
+  teamIdsByGame: Readonly<Record<string, Readonly<{ home: number; away: number }>>>,
+): boolean {
+  if (!row.canonicalGameId || !row.playerTeam) return false;
+  const game = teamIdsByGame[row.canonicalGameId];
+  const teamId = Number(row.playerTeam);
+  return Boolean(game && (teamId === game.home || teamId === game.away));
 }
 
 function gameIdentity(value: Record<string, unknown>): NbaPlayerPropGameIdentity | null {

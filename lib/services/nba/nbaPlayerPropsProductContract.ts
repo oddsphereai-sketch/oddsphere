@@ -2,9 +2,9 @@ import type { NbaPlayerPropMarket, NbaPlayerPropSide } from "./nbaPlayerPropsCon
 import type { NbaPlayerPropsReaderMetric } from "./nbaPlayerPropsReaderContract";
 
 export const NBA_PLAYER_PROPS_PRODUCT_CANDIDATE_RELEASE =
-  "nba_player_props_product_candidate_2026_10_22_r7_rebound_grade_recalibration" as const;
+  "nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage" as const;
 export const NBA_PLAYER_PROPS_MEMBER_SNAPSHOT_CANDIDATE_RELEASE =
-  "nba_player_props_member_snapshot_candidate_2026_10_22_r7_rebound_grade_recalibration_disabled" as const;
+  "nba_player_props_member_snapshot_candidate_2026_10_23_r8_canonical_coverage_disabled" as const;
 export const NBA_PLAYER_PROPS_MEMBER_SURFACE_RELEASE =
   "nba_player_props_member_surface_2026_10_22_r1_public_launch" as const;
 export const NBA_PLAYER_PROPS_LOCK_CANDIDATE_RELEASE =
@@ -51,10 +51,10 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
   sportsbook: string;
   americanPrice: number;
   expectedValue: number;
-  targetExcludedProbability: number;
+  targetExcludedProbability: number | null;
   targetExcludedBooks: number;
   targetExcludedReferenceBooks: number;
-  marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection";
+  marketEvidenceMode: "target_excluded_arbitration" | "candidate_projection" | "independent_projection";
   gradePolicySource:
     | "points_ungated_ranked"
     | "assists_role_stable_ranked"
@@ -130,6 +130,19 @@ export function buildNbaPlayerPropsMemberSnapshot(args: {
     if (!Number.isFinite(decision.projection) || !Number.isFinite(decision.line)
       || !Number.isFinite(decision.probability) || decision.probability < 0 || decision.probability > 1) {
       throw new Error(`NBA props decision ${decision.decisionKey} has invalid forecast values.`);
+    }
+    if (decision.targetExcludedProbability !== null && (
+      !Number.isFinite(decision.targetExcludedProbability)
+      || decision.targetExcludedProbability < 0
+      || decision.targetExcludedProbability > 1
+    )) throw new Error(`NBA props decision ${decision.decisionKey} has invalid other-book probability.`);
+    if (decision.marketEvidenceMode === "independent_projection" && (
+      decision.targetExcludedProbability !== null
+      || decision.targetExcludedBooks !== 0
+      || decision.grade !== "No Play"
+    )) throw new Error(`NBA props independent-only decision ${decision.decisionKey} may not imply corroboration or actionability.`);
+    if (decision.marketEvidenceMode !== "independent_projection" && decision.targetExcludedProbability === null) {
+      throw new Error(`NBA props corroborated decision ${decision.decisionKey} is missing its other-book probability.`);
     }
     const expectedSide = decision.projection > decision.line ? "over" : "under";
     if (decision.side !== expectedSide) throw new Error(`NBA props decision ${decision.decisionKey} contradicts its projection.`);

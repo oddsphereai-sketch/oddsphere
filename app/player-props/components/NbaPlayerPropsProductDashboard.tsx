@@ -150,7 +150,7 @@ function BoardRow({ row, onSelect }: { row: Row; onSelect: (key: string) => void
     <span className="relative mx-4 mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800">
       <Metric title="Model projection" value={row.projection.toFixed(1)} />
       <Metric title="Pick confidence" value={percent(row.probability)} />
-      <Metric title="Other-book market" value={percent(row.targetExcludedProbability)} />
+      <Metric title="Other-book market" value={row.targetExcludedProbability === null ? "—" : percent(row.targetExcludedProbability)} />
     </span>
     <span className="relative mt-4 flex items-center justify-between border-t border-gray-800 px-4 py-3 text-[9px] font-black uppercase tracking-wider">
       <span className={movementTone(row)}>{movementLabel(row)}</span>
@@ -179,7 +179,7 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
           <MarketQuoteTile row={row} />
         </div>
         <div className="relative mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-gray-800 bg-gray-800">
-          <Metric title="Model projection" value={row.projection.toFixed(1)} /><Metric title="Pick confidence" value={percent(row.probability)} /><Metric title="Other-book market" value={percent(row.targetExcludedProbability)} />
+          <Metric title="Model projection" value={row.projection.toFixed(1)} /><Metric title="Pick confidence" value={percent(row.probability)} /><Metric title="Other-book market" value={row.targetExcludedProbability === null ? "—" : percent(row.targetExcludedProbability)} />
         </div>
       </div>
       <FeaturedEvidence row={row} />
@@ -190,7 +190,7 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
             {bestPickQuote ? <PriceChoiceCard title={`Best ${capitalize(row.side)}`} quote={bestPickQuote} selected /> : null}
             {bestOpposingQuote ? <PriceChoiceCard title={`Best ${capitalize(otherSide)}`} quote={bestOpposingQuote} /> : null}
           </div>
-          <div className="rounded-lg border border-gray-800 bg-black/25 p-4"><ProbabilityBar title="OddSphere forecast" value={row.probability} tone="bg-violet-400" /><div className="mt-4"><ProbabilityBar title="Other-book market" value={row.targetExcludedProbability} tone="bg-sky-400" /></div></div>
+          <div className="rounded-lg border border-gray-800 bg-black/25 p-4"><ProbabilityBar title="OddSphere forecast" value={row.probability} tone="bg-violet-400" />{row.targetExcludedProbability === null ? <div className="mt-4"><Metric title="Other-book market" value="—" /></div> : <div className="mt-4"><ProbabilityBar title="Other-book market" value={row.targetExcludedProbability} tone="bg-sky-400" /></div>}</div>
         </div>
         {row.movement ? <div className="mt-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2.5"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Same-book move</span><p className="mt-1 text-xs text-gray-300">{book(row.movement.sportsbook)} · {row.movement.openingLine} {price(row.movement.openingPrice)} → {row.movement.currentLine} {price(row.movement.currentPrice)}</p></div> : null}
         <details className="mt-3 rounded-lg border border-gray-800 bg-black/20">
