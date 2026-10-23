@@ -11,7 +11,7 @@ import {
 import type { NbaPlayerPropsMemberSnapshot } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_STORE_RELEASE =
-  "nba_player_props_private_tracking_store_2026_10_21_r1_immutable" as const;
+  "nba_player_props_private_tracking_store_2026_10_23_r2_compact_market_evidence" as const;
 const RETENTION_DAYS = 550;
 
 export function nbaPlayerPropsPrivateTrackingKey(season: number, slateDate: string): string {
@@ -63,6 +63,12 @@ export function buildNbaPlayerPropsLockedTrackingRows(args: {
       finalProbability: row.probability,
       grade: row.grade,
       marketMovement: row.movement ? `${row.movement.openingLine}->${row.movement.currentLine}` : null,
+      marketEvidence: {
+        mode: row.marketEvidenceMode,
+        targetExcludedBooks: row.targetExcludedBooks,
+        targetExcludedReferenceBooks: row.targetExcludedReferenceBooks,
+        movement: row.movement,
+      },
       observedAt: row.evaluatedAt,
       lockedAt: row.lockedAt,
       modelRelease: row.modelRelease,
@@ -86,8 +92,8 @@ export async function captureNbaPlayerPropsPrivateTracking(args: {
     return { written: false, added: 0, preserved: merged.preserved, conflicts: merged.conflicts, total: merged.rows.length };
   }
   const history: NbaPlayerPropsPrivateTrackingHistory = {
-    kind: "nba_player_props_private_tracking_history_v1",
-    schema: "nba_player_props_private_tracking_history_v1",
+    kind: "nba_player_props_private_tracking_history_v2",
+    schema: "nba_player_props_private_tracking_history_v2",
     captureRelease: NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE,
     season: args.season,
     slateDate: args.slateDate,

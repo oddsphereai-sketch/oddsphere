@@ -7,9 +7,11 @@ import type {
 import type { NbaPlayerPropMarket } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE =
-  "nba_player_props_private_tracking_2026_10_21_r2_private_forward" as const;
+  "nba_player_props_private_tracking_2026_10_23_r3_compact_market_evidence" as const;
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA =
-  "nba_player_props_private_tracking_history_v1" as const;
+  "nba_player_props_private_tracking_history_v2" as const;
+const LEGACY_TRACKING_RELEASE = "nba_player_props_private_tracking_2026_10_21_r2_private_forward" as const;
+const LEGACY_TRACKING_SCHEMA = "nba_player_props_private_tracking_history_v1" as const;
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_MAX_ROWS = 24_000;
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_MAX_JSON_BYTES = 40_000_000;
 export const NBA_PLAYER_PROPS_PRIVATE_TRACKING_MAX_GZIP_BYTES = 3_000_000;
@@ -35,16 +37,30 @@ export type NbaPlayerPropsPrivateTrackingRow = Readonly<{
   finalProbability: number;
   grade: string;
   marketMovement: string | null;
+  marketEvidence?: Readonly<{
+    mode: "target_excluded_arbitration" | "candidate_projection";
+    targetExcludedBooks: number;
+    targetExcludedReferenceBooks: number;
+    movement: Readonly<{
+      sportsbook: string;
+      openingLine: number;
+      priorLine: number | null;
+      currentLine: number;
+      openingPrice: number;
+      priorPrice: number | null;
+      currentPrice: number;
+    }> | null;
+  }>;
   observedAt: string;
   lockedAt: string;
   modelRelease: string;
   calibrationRelease: string;
   decisionRelease: string;
-  captureRelease: typeof NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE;
+  captureRelease: typeof NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE | typeof LEGACY_TRACKING_RELEASE;
 }>;
 
 export type NbaPlayerPropsPrivateTrackingHistory = Readonly<{
-  kind: "nba_player_props_private_tracking_history_v1";
+  kind: "nba_player_props_private_tracking_history_v2";
   schema: typeof NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA;
   captureRelease: typeof NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE;
   season: number;
@@ -55,7 +71,7 @@ export type NbaPlayerPropsPrivateTrackingHistory = Readonly<{
 }>;
 
 export type NbaPlayerPropsPrivateTrackingEnvelope = Readonly<{
-  kind: "nba_player_props_private_tracking_envelope_v1";
+  kind: "nba_player_props_private_tracking_envelope_v2";
   schema: typeof NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA;
   captureRelease: typeof NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE;
   encoding: "gzip-base64";
@@ -65,6 +81,15 @@ export type NbaPlayerPropsPrivateTrackingEnvelope = Readonly<{
   uncompressedBytes: number;
   compressedBytes: number;
   payload: string;
+}>;
+
+type EncodedTrackingPayload = Readonly<{
+  payload: string;
+  checksum: string;
+  season: number;
+  slateDate: string;
+  uncompressedBytes: number;
+  compressedBytes: number;
 }>;
 
 export function buildNbaPlayerPropsPrivateTrackingRow(
@@ -82,6 +107,7 @@ export function buildNbaPlayerPropsPrivateTrackingRow(
   if (!Number.isInteger(input.americanPrice) || input.americanPrice === 0) {
     throw new Error("NBA props private tracking americanPrice is invalid.");
   }
+  if (input.marketEvidence) validateMarketEvidence(input.marketEvidence);
   const rowKey = [
     input.decisionRelease,
     input.gameId,
@@ -165,7 +191,7 @@ export function encodeNbaPlayerPropsPrivateTrackingHistory(
     throw new Error("NBA props private tracking gzip limit exceeded.");
   }
   return {
-    kind: "nba_player_props_private_tracking_envelope_v1",
+    kind: "nba_player_props_private_tracking_envelope_v2",
     schema: NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA,
     captureRelease: NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE,
     encoding: "gzip-base64",
@@ -181,7 +207,7 @@ export function encodeNbaPlayerPropsPrivateTrackingHistory(
 export function decodeNbaPlayerPropsPrivateTrackingHistory(
   value: unknown,
 ): NbaPlayerPropsPrivateTrackingHistory | null {
-  if (!isEnvelope(value)) return null;
+  if (!isEnvelope(value) && !isLegacyEnvelope(value)) return null;
   try {
     const compressed = Buffer.from(value.payload, "base64");
     if (compressed.byteLength !== value.compressedBytes) return null;
@@ -190,9 +216,16 @@ export function decodeNbaPlayerPropsPrivateTrackingHistory(
     const json = decoded.toString("utf8");
     if (createHash("sha256").update(json).digest("hex") !== value.checksum) return null;
     const parsed = JSON.parse(json) as unknown;
-    return isHistory(parsed) && parsed.season === value.season && parsed.slateDate === value.slateDate
-      ? parsed
-      : null;
+    if (isHistory(parsed) && parsed.season === value.season && parsed.slateDate === value.slateDate) return parsed;
+    if (isLegacyHistory(parsed) && parsed.season === value.season && parsed.slateDate === value.slateDate) {
+      return {
+        ...parsed,
+        kind: "nba_player_props_private_tracking_history_v2",
+        schema: NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA,
+        captureRelease: NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE,
+      };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -200,7 +233,7 @@ export function decodeNbaPlayerPropsPrivateTrackingHistory(
 
 function isEnvelope(value: unknown): value is NbaPlayerPropsPrivateTrackingEnvelope {
   return isRecord(value)
-    && value.kind === "nba_player_props_private_tracking_envelope_v1"
+    && value.kind === "nba_player_props_private_tracking_envelope_v2"
     && value.schema === NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA
     && value.captureRelease === NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE
     && value.encoding === "gzip-base64"
@@ -212,9 +245,23 @@ function isEnvelope(value: unknown): value is NbaPlayerPropsPrivateTrackingEnvel
     && typeof value.payload === "string";
 }
 
+function isLegacyEnvelope(value: unknown): value is EncodedTrackingPayload {
+  return isRecord(value)
+    && value.kind === "nba_player_props_private_tracking_envelope_v1"
+    && value.schema === LEGACY_TRACKING_SCHEMA
+    && value.captureRelease === LEGACY_TRACKING_RELEASE
+    && value.encoding === "gzip-base64"
+    && typeof value.checksum === "string"
+    && Number.isInteger(value.season)
+    && typeof value.slateDate === "string"
+    && Number.isInteger(value.uncompressedBytes)
+    && Number.isInteger(value.compressedBytes)
+    && typeof value.payload === "string";
+}
+
 function isHistory(value: unknown): value is NbaPlayerPropsPrivateTrackingHistory {
   return isRecord(value)
-    && value.kind === "nba_player_props_private_tracking_history_v1"
+    && value.kind === "nba_player_props_private_tracking_history_v2"
     && value.schema === NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA
     && value.captureRelease === NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE
     && Number.isInteger(value.season)
@@ -222,6 +269,36 @@ function isHistory(value: unknown): value is NbaPlayerPropsPrivateTrackingHistor
     && typeof value.createdAt === "string"
     && typeof value.updatedAt === "string"
     && Array.isArray(value.rows);
+}
+
+function isLegacyHistory(value: unknown): value is Omit<NbaPlayerPropsPrivateTrackingHistory, "kind" | "schema" | "captureRelease"> & {
+  kind: "nba_player_props_private_tracking_history_v1";
+  schema: typeof LEGACY_TRACKING_SCHEMA;
+  captureRelease: typeof LEGACY_TRACKING_RELEASE;
+} {
+  return isRecord(value)
+    && value.kind === "nba_player_props_private_tracking_history_v1"
+    && value.schema === LEGACY_TRACKING_SCHEMA
+    && value.captureRelease === LEGACY_TRACKING_RELEASE
+    && Number.isInteger(value.season)
+    && typeof value.slateDate === "string"
+    && typeof value.createdAt === "string"
+    && typeof value.updatedAt === "string"
+    && Array.isArray(value.rows);
+}
+
+function validateMarketEvidence(value: NonNullable<NbaPlayerPropsPrivateTrackingRow["marketEvidence"]>): void {
+  if (!Number.isInteger(value.targetExcludedBooks) || value.targetExcludedBooks < 0
+    || !Number.isInteger(value.targetExcludedReferenceBooks) || value.targetExcludedReferenceBooks < 0) {
+    throw new Error("NBA props private tracking market book counts are invalid.");
+  }
+  if (!value.movement) return;
+  validateFinite(value.movement.openingLine, "marketEvidence.movement.openingLine");
+  validateFinite(value.movement.currentLine, "marketEvidence.movement.currentLine");
+  validateFinite(value.movement.openingPrice, "marketEvidence.movement.openingPrice");
+  validateFinite(value.movement.currentPrice, "marketEvidence.movement.currentPrice");
+  if (value.movement.priorLine !== null) validateFinite(value.movement.priorLine, "marketEvidence.movement.priorLine");
+  if (value.movement.priorPrice !== null) validateFinite(value.movement.priorPrice, "marketEvidence.movement.priorPrice");
 }
 
 function validateFinite(value: number, field: string): void {
