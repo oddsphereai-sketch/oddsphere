@@ -192,7 +192,7 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
           </div>
           <div className="rounded-lg border border-gray-800 bg-black/25 p-4"><ProbabilityBar title="OddSphere forecast" value={row.probability} tone="bg-violet-400" />{row.targetExcludedProbability === null ? <div className="mt-4"><Metric title="Other-book market" value="—" /></div> : <div className="mt-4"><ProbabilityBar title="Other-book market" value={row.targetExcludedProbability} tone="bg-sky-400" /></div>}</div>
         </div>
-        {row.movement ? <div className="mt-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2.5"><span className="text-[9px] font-black uppercase tracking-wider text-gray-500">Same-book move</span><p className="mt-1 text-xs text-gray-300">{book(row.movement.sportsbook)} · {row.movement.openingLine} {price(row.movement.openingPrice)} → {row.movement.currentLine} {price(row.movement.currentPrice)}</p></div> : null}
+        {row.movement ? <SameBookMovement row={row} /> : null}
         <details className="mt-3 rounded-lg border border-gray-800 bg-black/20">
           <summary className="cursor-pointer list-none px-3 py-3 text-xs font-black text-violet-200">Compare all {row.priceLadder.length} available prices <span aria-hidden="true" className="float-right text-gray-600">＋</span></summary>
           <div className="border-t border-gray-800 px-3 py-1">{row.priceLadder.map((quote, index) => <div key={`${quote.sportsbook}-${quote.side}-${index}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-gray-800 py-2 text-xs last:border-b-0"><strong className="text-gray-200">{book(quote.sportsbook)}</strong><span className={quote.side === row.side ? "text-emerald-300" : "text-gray-500"}>{capitalize(quote.side)} {quote.line}</span><strong className="text-white">{price(quote.americanPrice)}</strong></div>)}</div>
@@ -227,6 +227,48 @@ function PriceChoiceCard({ title, quote, selected = false }: { title: string; qu
     <span className="mt-1 block text-xs text-gray-400">{price(quote.americanPrice)} · {book(quote.sportsbook)}</span>
   </div>;
 }
+function SameBookMovement({ row }: { row: Row }) {
+  const movement = row.movement;
+  if (!movement) return null;
+  const hasPrior = movement.priorLine !== null || movement.priorPrice !== null;
+  const hasDifferentOpening = movement.openingLine !== movement.currentLine || movement.openingPrice !== movement.currentPrice;
+  const hasTrail = hasPrior || hasDifferentOpening;
+  const supportsPick = movementSupportsSide(row);
+  const directionTone = supportsPick ? "text-emerald-300" : "text-amber-300";
+  const connectorTone = supportsPick
+    ? "from-gray-700 via-emerald-500/55 to-emerald-400/55"
+    : "from-gray-700 via-amber-500/50 to-amber-400/50";
+  const openingPoint = <PropMovementPoint label="Opening" line={movement.openingLine} americanPrice={movement.openingPrice} />;
+  const currentPoint = <PropMovementPoint label="Current" line={movement.currentLine} americanPrice={movement.currentPrice} current tone={supportsPick ? "emerald" : "amber"} />;
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3" aria-label={`${book(movement.sportsbook)} same-book market movement`}>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">Same-book movement</p>
+        <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{book(movement.sportsbook)} · {capitalize(row.side)} {row.line}</p>
+      </div>
+      <span className={`text-[7px] font-black uppercase tracking-wider ${hasTrail ? directionTone : "text-gray-500"}`}>{hasTrail ? movementLabel(row) : "Current quote"}</span>
+    </div>
+    {hasTrail ? <div className={`mt-3 grid items-center gap-2 ${hasPrior ? "grid-cols-[auto_1fr_auto_1fr_auto]" : "grid-cols-[auto_1fr_auto]"}`}>
+      {openingPoint}
+      <div aria-hidden="true" className={`h-px bg-gradient-to-r ${connectorTone}`} />
+      {hasPrior ? <>
+        <PropMovementPoint label="Prior" line={movement.priorLine} americanPrice={movement.priorPrice} />
+        <div aria-hidden="true" className={`h-px bg-gradient-to-r ${connectorTone}`} />
+      </> : null}
+      {currentPoint}
+    </div> : <div className="mt-3 flex items-end justify-between gap-3">
+      {currentPoint}
+      <p className="max-w-[13rem] text-right text-[7px] leading-relaxed text-gray-600">No earlier different same-book quote is stored.</p>
+    </div>}
+  </section>;
+}
+function PropMovementPoint({ label, line, americanPrice, current = false, tone = "gray" }: { label: string; line: number | null; americanPrice: number | null; current?: boolean; tone?: "emerald" | "amber" | "gray" }) {
+  const valueTone = !current ? "text-gray-200" : tone === "emerald" ? "text-emerald-200" : tone === "amber" ? "text-amber-200" : "text-violet-200";
+  return <div className="min-w-0">
+    <p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p>
+    <p className={`mt-0.5 whitespace-nowrap font-mono text-sm font-black ${valueTone}`}>{line === null ? "—" : line} <span className="text-[10px] text-gray-500">{americanPrice === null ? "—" : price(americanPrice)}</span></p>
+  </div>;
+}
 function EvidencePanel({ title, metrics }: { title: string; metrics: readonly NbaPlayerPropsReaderMetric[] }) { return <section className="rounded-lg border border-gray-800 bg-black/20 p-4"><PanelTitle>{title}</PanelTitle><div className="mt-3 space-y-2">{metrics.map((metric) => <div key={metric.key} className="flex justify-between gap-3 border-b border-gray-800 pb-2 text-xs last:border-b-0 last:pb-0"><span className="text-gray-500">{metric.label}</span><strong className="text-gray-100">{metricValue(metric)}</strong></div>)}</div></section>; }
 function DecisionTile({ row, showGrade = false }: { row: Row; showGrade?: boolean }) {
   const colors = gradeColors(row.grade);
@@ -250,9 +292,9 @@ function GradeBadge({ grade }: { grade: NbaPlayerPropsMemberGrade }) { const col
 function PlayerVisual({ row, compact = false, hero = false }: { row: Row; compact?: boolean; hero?: boolean }) {
   const dimensions = hero ? "h-24 w-24" : compact ? "h-12 w-12" : "h-16 w-14";
   const initials = row.playerName.split(/\s+/).filter(Boolean).slice(0, 2).map((name) => name[0]).join("");
-  return <span className={`relative inline-flex shrink-0 items-end justify-center overflow-hidden rounded-xl border ${dimensions}`} style={{ borderColor: `${teamColor(row.team)}88`, background: `linear-gradient(145deg, ${teamColor(row.team)}88, #0b0e14 72%)` }}>
+  return <span className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-xl border ${dimensions}`} style={{ borderColor: `${teamColor(row.team)}88`, background: `linear-gradient(145deg, ${teamColor(row.team)}88, #0b0e14 72%)` }}>
     <span className={`${hero ? "text-4xl" : compact ? "text-lg" : "text-2xl"} absolute inset-0 flex items-center justify-center font-black text-white/15`}>{initials}</span>
-    <span className={`relative mb-1.5 rounded-full border bg-white shadow-[0_5px_18px_rgba(0,0,0,.38)] ${hero ? "h-12 w-12" : compact ? "h-7 w-7" : "h-9 w-9"}`} style={{ borderColor: teamColor(row.team) }}>
+    <span className={`relative rounded-full border bg-white shadow-[0_5px_18px_rgba(0,0,0,.38)] ${hero ? "h-14 w-14" : compact ? "h-8 w-8" : "h-10 w-10"}`} style={{ borderColor: teamColor(row.team) }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={`https://a.espncdn.com/i/teamlogos/nba/500/${row.team.toLowerCase()}.png`} alt="" className="h-full w-full object-contain p-0.5" />
     </span>
@@ -315,7 +357,7 @@ function bestExactQuote(row: Row, side: "over" | "under"): Row["priceLadder"][nu
 }
 function teamColor(team: string): string { return TEAM_COLORS[team] ?? "#7c3aed"; }
 const TEAM_COLORS: Record<string, string> = { ATL: "#E03A3E", BOS: "#007A33", BKN: "#000000", CHA: "#1D1160", CHI: "#CE1141", CLE: "#860038", DAL: "#00538C", DEN: "#0E2240", DET: "#C8102E", GSW: "#1D428A", HOU: "#CE1141", IND: "#002D62", LAC: "#C8102E", LAL: "#552583", MEM: "#5D76A9", MIA: "#98002E", MIL: "#00471B", MIN: "#0C2340", NOP: "#0C2340", NYK: "#006BB6", OKC: "#007AC1", ORL: "#0077C0", PHI: "#006BB6", PHX: "#1D1160", POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#CE1141", UTA: "#002B5C", WAS: "#002B5C" };
-function book(value: string): string { const labels: Record<string, string> = { betmgm: "BetMGM", betrivers: "BetRivers", caesars: "Caesars", draftkings: "DraftKings", fanduel: "FanDuel" }; return labels[value.toLowerCase()] ?? value; }
+function book(value: string): string { const labels: Record<string, string> = { bet365: "bet365", betmgm: "BetMGM", betparx: "betPARX", betrivers: "BetRivers", caesars: "Caesars", draftkings: "DraftKings", fanduel: "FanDuel", novig: "NoVig", pinnacle: "Pinnacle", polymarket: "Polymarket" }; return labels[value.toLowerCase()] ?? value; }
 function price(value: number): string { return value > 0 ? `+${value}` : String(value); }
 function percent(value: number): string { return `${(value * 100).toFixed(1)}%`; }
 function movementLabel(row: Row): string {
@@ -328,10 +370,13 @@ function movementLabel(row: Row): string {
 }
 function movementTone(row: Row): string {
   if (!row.movement) return "text-gray-600";
-  const supportsSide = row.side === "over"
+  return movementSupportsSide(row) ? "text-emerald-300" : "text-amber-300";
+}
+function movementSupportsSide(row: Row): boolean {
+  if (!row.movement) return false;
+  return row.side === "over"
     ? row.movement.currentLine > row.movement.openingLine || row.movement.currentPrice < row.movement.openingPrice
     : row.movement.currentLine < row.movement.openingLine || row.movement.currentPrice < row.movement.openingPrice;
-  return supportsSide ? "text-emerald-300" : "text-amber-300";
 }
 function capitalize(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
 function unique(values: string[]): string[] { return [...new Set(values)]; }
