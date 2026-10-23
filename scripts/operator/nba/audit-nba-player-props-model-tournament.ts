@@ -722,6 +722,7 @@ function buildFrozenRuntimeArtifact(args: {
     market,
     targetExcludedArbitrationThreshold(market),
   ]));
+  const exactPriceArbitrationMovementPolicy = Object.fromEntries(MARKETS.map((market) => [market, "none"]));
   const byMarket = args.exactPriceGradeResearch.byMarket;
   const artifactWithoutChecksum = {
     release: "nba_player_props_frozen_runtime_artifact_2026_10_22_r5_active_role_integrity",
@@ -735,6 +736,7 @@ function buildFrozenRuntimeArtifact(args: {
     underlyingByMarket,
     candidateMarketMinimumDistance,
     exactPriceArbitrationMinimumDistance,
+    exactPriceArbitrationMovementPolicy,
     ridgeModel,
     minuteModel,
     structuralDirectModels,
