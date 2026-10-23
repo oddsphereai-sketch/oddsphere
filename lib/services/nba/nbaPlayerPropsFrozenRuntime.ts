@@ -19,9 +19,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_22_r6_rebound_grade_recalibration_disabled" as const;
+  "nba_player_props_forward_decision_2026_10_23_r7_rebound_family_market_reader" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -68,7 +68,7 @@ type ReliabilityModel = Readonly<{
   coefficients: readonly number[];
 }>;
 
-type FrozenArtifact = Readonly<{
+export type NbaPlayerPropsFrozenArtifact = Readonly<{
   release: typeof NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE;
   publicEnabled: false;
   sourceInputsSha256: string;
@@ -79,6 +79,7 @@ type FrozenArtifact = Readonly<{
   underlyingByMarket: Readonly<Record<FoundationMarket, string>>;
   candidateMarketMinimumDistance: Readonly<Record<FoundationMarket, number | null>>;
   exactPriceArbitrationMinimumDistance: Readonly<Record<FoundationMarket, number | null>>;
+  exactPriceArbitrationMovementPolicy: Readonly<Record<FoundationMarket, "none" | "not_opposed">>;
   ridgeModel: NbaPlayerPropsIndependentResearchModel;
   minuteModel: MinuteRegression;
   structuralDirectModels: Readonly<Record<Component, StructuralCountModel>>;
@@ -156,7 +157,7 @@ const COMPONENTS: Readonly<Record<FoundationMarket, readonly Component[]>> = {
   rebounds_assists: ["rebounds", "assists"],
 };
 
-let validatedArtifact: FrozenArtifact | null = null;
+let validatedArtifact: NbaPlayerPropsFrozenArtifact | null = null;
 
 const FROZEN_ARTIFACT_RELATIVE_PATH =
   "lib/services/nba/fixtures/nbaPlayerPropsFrozenRuntimeArtifact.json";
@@ -168,12 +169,12 @@ const FROZEN_ARTIFACT_RELATIVE_PATH =
  * The serverless trace retains this static file beside the function, so the
  * checked payload is byte-for-byte the committed artifact in every runtime.
  */
-function readFrozenArtifact(): FrozenArtifact {
+function readFrozenArtifact(): NbaPlayerPropsFrozenArtifact {
   const artifactPath = path.join(process.cwd(), FROZEN_ARTIFACT_RELATIVE_PATH);
-  return JSON.parse(readFileSync(artifactPath, "utf8")) as FrozenArtifact;
+  return JSON.parse(readFileSync(artifactPath, "utf8")) as NbaPlayerPropsFrozenArtifact;
 }
 
-export function nbaPlayerPropsFrozenRuntimeArtifact(): FrozenArtifact {
+export function nbaPlayerPropsFrozenRuntimeArtifact(): NbaPlayerPropsFrozenArtifact {
   if (validatedArtifact) return validatedArtifact;
   const artifact = readFrozenArtifact();
   if (artifact.release !== NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE || artifact.publicEnabled !== false) {
@@ -185,7 +186,7 @@ export function nbaPlayerPropsFrozenRuntimeArtifact(): FrozenArtifact {
   for (const market of NBA_PLAYER_PROPS_FOUNDATION_MARKETS) {
     if (!artifact.selectedByMarket[market] || !artifact.underlyingByMarket[market]
       || !artifact.distributions[market] || !artifact.reliabilityModels[market]
-      || !artifact.gradePolicies[market]) {
+      || !artifact.gradePolicies[market] || !artifact.exactPriceArbitrationMovementPolicy[market]) {
       throw new Error(`NBA props frozen runtime artifact is incomplete for ${market}.`);
     }
     if (artifact.underlyingByMarket[market] === "robust_component_counts"
@@ -203,7 +204,20 @@ export function buildNbaPlayerPropsForwardDecisions(args: {
   observations: readonly NbaPlayerPropPriceObservation[];
   evaluatedAt?: string;
 }): NbaPlayerPropsForwardDecision[] {
-  const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
+  return buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
+    ...args,
+    artifact: nbaPlayerPropsFrozenRuntimeArtifact(),
+  });
+}
+
+/** Read-only release-comparison seam; production callers use the checked-in artifact above. */
+export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
+  artifact: NbaPlayerPropsFrozenArtifact;
+  features: readonly NbaPlayerPropFeatureRow[];
+  observations: readonly NbaPlayerPropPriceObservation[];
+  evaluatedAt?: string;
+}): NbaPlayerPropsForwardDecision[] {
+  const artifact = args.artifact;
   const offers = selectNbaPlayerPropsCurrentCanonicalOfferSets(args.observations);
   const historyByScope = groupBy(args.observations, marketScopeKey);
   const featureByScope = new Map(args.features.map((row) => [`${row.game_id}|${row.player_id}`, row]));
@@ -223,6 +237,7 @@ export function buildNbaPlayerPropsForwardDecisions(args: {
       selectedCandidate: artifact.selectedByMarket[market],
       candidateMinimumMarketDistance: artifact.candidateMarketMinimumDistance[market],
       exactPriceMinimumMarketDistance: artifact.exactPriceArbitrationMinimumDistance[market],
+      exactPriceMovementPolicy: artifact.exactPriceArbitrationMovementPolicy[market],
       historyObservations: historyByScope.get(offer.scopeKey) ?? offer.observations,
       evaluatedAt: args.evaluatedAt,
     });
@@ -320,7 +335,7 @@ export function buildNbaPlayerPropsForwardDecisions(args: {
   });
 }
 
-function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarket, artifact: FrozenArtifact): number {
+function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarket, artifact: NbaPlayerPropsFrozenArtifact): number {
   const underlying = artifact.underlyingByMarket[market];
   if (underlying === "ridge_r2_minutes_regression") {
     const base = projectNbaPlayerPropsIndependent(row, artifact.ridgeModel);
@@ -355,6 +370,7 @@ function resolveFinalProjection(args: {
   selectedCandidate: string;
   candidateMinimumMarketDistance: number | null;
   exactPriceMinimumMarketDistance: number | null;
+  exactPriceMovementPolicy: "none" | "not_opposed";
   historyObservations: readonly NbaPlayerPropPriceObservation[];
   evaluatedAt?: string;
 }) {
@@ -378,6 +394,7 @@ function resolveFinalProjection(args: {
       offer: args.offer,
       independentProjection: args.independentProjection,
       minimumMarketDistance: args.exactPriceMinimumMarketDistance,
+      movementPolicy: args.exactPriceMovementPolicy,
       historyObservations: args.historyObservations,
       evaluatedAt: args.evaluatedAt,
     });
@@ -405,6 +422,7 @@ function resolveTargetExcludedArbitration(args: {
   offer: ReturnType<typeof selectNbaPlayerPropsCurrentCanonicalOfferSets>[number];
   independentProjection: number;
   minimumMarketDistance: number;
+  movementPolicy: "none" | "not_opposed";
   historyObservations: readonly NbaPlayerPropPriceObservation[];
   evaluatedAt?: string;
 }) {
@@ -423,9 +441,11 @@ function resolveTargetExcludedArbitration(args: {
     });
     if (evidence.targetExcludedOverProbability === null || evidence.targetExcludedBooks < 1) return null;
     const marketDistance = Math.abs(evidence.targetExcludedOverProbability - 0.5);
-    const desired: Side = marketDistance >= args.minimumMarketDistance
+    let desired: Side = marketDistance >= args.minimumMarketDistance
       ? evidence.targetExcludedOverProbability > 0.5 ? "over" : "under"
       : independentSide;
+    if (desired !== independentSide && args.movementPolicy === "not_opposed"
+      && marketMovementOpposes(evidence, desired)) desired = independentSide;
     if (desired === side) {
       const distance = Math.max(0.05, Math.abs(args.independentProjection - args.offer.canonicalLine));
       return {
@@ -441,6 +461,14 @@ function resolveTargetExcludedArbitration(args: {
     side = desired;
   }
   return null;
+}
+
+function marketMovementOpposes(
+  evidence: ReturnType<typeof buildNbaPlayerPropsMarketEvidence>,
+  side: Side,
+): boolean {
+  const opposed = side === "over" ? "toward_under" : "toward_over";
+  return evidence.lineMovement === opposed || evidence.priceMovement === opposed;
 }
 
 function coherentFlippedProjection(line: number, distance: number, side: Side): number {
@@ -469,7 +497,7 @@ function selectedMarketProbability(rows: readonly NbaPlayerPropPriceObservation[
   return consensusNoVigOver(rows);
 }
 
-function applyDirectGrade(row: ScoredDecision, artifact: FrozenArtifact): ScoredDecision {
+function applyDirectGrade(row: ScoredDecision, artifact: NbaPlayerPropsFrozenArtifact): ScoredDecision {
   const config = artifact.gradePolicies[row.market];
   let grade: NbaPlayerPropsMemberGrade = "No Play";
   let gradePolicySource: ScoredDecision["gradePolicySource"] = "forecast_only";
@@ -502,7 +530,7 @@ function applyDirectGrade(row: ScoredDecision, artifact: FrozenArtifact): Scored
   return { ...row, grade, gradePolicySource };
 }
 
-function applySlateRelativeGrades(rows: readonly ScoredDecision[], artifact: FrozenArtifact): ScoredDecision[] {
+function applySlateRelativeGrades(rows: readonly ScoredDecision[], artifact: NbaPlayerPropsFrozenArtifact): ScoredDecision[] {
   const selected = new Set<string>();
   for (const market of NBA_PLAYER_PROPS_FOUNDATION_MARKETS) {
     const config = artifact.gradePolicies[market];
