@@ -283,8 +283,8 @@ Last reviewed: 2026-10-23
   `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration` /
-  `nba_player_props_forward_decision_2026_10_22_r6_rebound_grade_recalibration_disabled` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader` /
+  `nba_player_props_forward_decision_2026_10_23_r7_rebound_family_market_reader` /
   `nba_player_props_product_candidate_2026_10_22_r7_rebound_grade_recalibration` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
@@ -338,13 +338,24 @@ Last reviewed: 2026-10-23
   Best Angles, provider cadence, layout, locks, and writer topology are
   unchanged. The member surface reads this exact release family without
   reinterpreting locked or unlocked decisions.
+  The October 23 r7 rebound-family reader repair retains every frozen independent
+  model and grade policy while replacing permissive exact-price overrides for
+  Rebounds, Rebounds + Assists, and PRA. A proposed flip now requires a target-
+  excluded consensus at least four percentage points from 50% and no opposing
+  same-book line or no-vig price movement. On the exact 73-decision October 22
+  runtime replay, final direction improves from 48-25 to 53-20; Rebound MAE
+  improves 3.067 to 2.890, RA 3.111 to 2.909, and PRA 6.682 to 6.596. Best Angle
+  and Lean counts remain 1 and 2, with zero actionable promotions or demotions.
+  Existing locks remain byte-authoritative. Evidence and rollback:
+  `docs/model-audits/2026-10-23-nba-player-props-rebound-family-market-reader.md`.
   Evidence and rollback:
   `docs/model-audits/2026-10-21-nba-player-props-private-forward-readiness.md`
   and `docs/model-audits/2026-10-22-nba-player-props-structural-v2-result.md`,
   `docs/model-audits/2026-10-22-nba-player-props-portable-artifact-checksum-r4.md`,
   `docs/model-audits/2026-10-22-nba-player-props-active-role-integrity.md`, plus
   `docs/model-audits/2026-10-22-nba-player-props-grade-recalibration-predeclaration.md`, plus
-  `docs/model-audits/2026-10-22-nba-player-props-member-launch.md`.
+  `docs/model-audits/2026-10-22-nba-player-props-member-launch.md`, plus
+  `docs/model-audits/2026-10-23-nba-player-props-rebound-family-market-reader.md`.
 - The operator readiness audit now measures the newest line and split age per game and reports
   games with no line, rather than treating a recent snapshot publish time as proof of fresh source
   evidence. This is operational detection only and changes no prediction.

@@ -34,6 +34,58 @@ coherence, and sole-writer health. Existing locked r18-r20 payloads remain
 immutable and take unconditional reader precedence. Rollback applies only to
 future unlocked rows and cannot rewrite or reinterpret a stored lock.
 
+## NBA player-props lossless market-history capacity repair
+
+On 2026-10-23 the deployed rebound-family decision release was healthy, but
+the authoritative NBA refresh preserved the previous member board because the
+current 12-game slate's already-bounded market history reached 63,266,114 JSON
+bytes and the next lossless write crossed the old 64 MB safety ceiling. The
+last-known-good guard worked: no partial candidate, unlocked rewrite, or
+locked-row mutation was published.
+
+Private-store r5 raises only the market-history JSON ceiling to 96 MB. The
+150,000-row hard cap, 8 MB gzip cap, first/prior/current quote compaction,
+checksum, exact-event/book/player identity, single writer, NBA lease, model,
+decision, grades, cadence, member surface, and locked-record precedence remain
+unchanged. The stored payload is about 1.27 MB compressed, and retaining all
+three verified quote states avoids changing any prediction or market-reader
+input merely to satisfy the storage envelope.
+
+Publication requires legacy r3/r4 decode compatibility, the focused NBA props
+contract suite, TypeScript, the full model-change gate, latest-main integration
+safety, protected PR checks, an authoritative sole-writer refresh, live proof
+of private-store r5 plus decision r7, and an exact locked-snapshot hash match.
+Evidence and rollback:
+`docs/model-audits/2026-10-23-nba-player-props-market-history-capacity.md`.
+
+## Owner-directed correction: NBA rebound-family market arbitration
+
+On 2026-10-23 Daniel Mengel directed Oddsphere to repair rebound-family NBA
+player props as one independent-model/market-reading product, while keeping
+market evidence capable of correcting a forecast and preserving the member
+surface. The release-pure October 22 inventory found that broad arbitration,
+not the independent RA or PRA forecasts, caused the concentrated loss: RA fell
+from 13-3 independently to 11-5 final, and PRA fell from 16-3 to 15-4 in the
+exact frozen-runtime reconstruction.
+
+For future-unlocked decisions only, Rebounds, Rebounds + Assists, and PRA now
+require a target-book-excluded consensus at least four percentage points from
+50% before a side correction. A correction is rejected when either the exact
+same-book line trail or no-vig price trail moves against that proposed side.
+This is a categorical reader, not a market blend, fixed nudge, Under quota, or
+cross-sport rule. Qualified corrections still create one coherent final
+projection; the independent models and every grade policy remain unchanged.
+
+The exact 73-row runtime replay moves the family from 48-25 to 53-20 and
+improves MAE in each changed market. Best Angle and Lean counts remain 1 and 2;
+there are zero actionable promotions and zero actionable demotions. One losing
+Watchlist becomes a winning No Play. Existing locks remain exact and may not be
+recomputed or reinterpreted. Publication requires focused NBA props tests,
+TypeScript, the complete model-change gate, latest-main integration safety,
+protected PR checks, a sole-writer refresh, and live proof of the r7 artifact /
+decision releases. Evidence and rollback:
+`docs/model-audits/2026-10-23-nba-player-props-rebound-family-market-reader.md`.
+
 ## Owner-directed correction: NBA player-props active-role integrity
 
 On 2026-10-22 Daniel Mengel rejected an NBA player-prop reader example that

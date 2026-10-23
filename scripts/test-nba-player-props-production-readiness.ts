@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   buildNbaPlayerPropsForwardDecisions,
+  buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit,
   nbaPlayerPropsFrozenRuntimeArtifact,
 } from "../lib/services/nba/nbaPlayerPropsFrozenRuntime";
 import { nbaPlayerPropsArtifactSha256 } from "../lib/services/nba/nbaPlayerPropsArtifactChecksum";
@@ -15,6 +16,8 @@ import {
   decodeNbaPlayerPropsPrivatePayload,
   encodeNbaPlayerPropsPrivatePayload,
   mergeNbaPlayerPropsMarketHistory,
+  NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES,
+  NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
 } from "../lib/services/nba/nbaPlayerPropsPrivateStore";
 import {
   NBA_PLAYER_PROPS_OBSERVATION_RELEASE,
@@ -35,7 +38,7 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_22_r6_rebound_grade_recalibration");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader");
 assert.equal(
   artifact.sourceGradeRelease,
   "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
@@ -46,6 +49,12 @@ assert.equal(artifact.gradePolicies.rebounds.policy.eligibilityGate, "establishe
 assert.equal(artifact.gradePolicies.rebounds.policy.maxPerSlate, 1);
 assert.equal(artifact.gradePolicies.rebounds.policy.requireReferenceBook, true);
 assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
+assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds, 0.04);
+assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds_assists, 0.04);
+assert.equal(artifact.exactPriceArbitrationMinimumDistance.points_rebounds_assists, 0.04);
+assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds, "not_opposed");
+assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds_assists, "not_opposed");
+assert.equal(artifact.exactPriceArbitrationMovementPolicy.points_rebounds_assists, "not_opposed");
 assert.match(
   frozenRuntimeSource,
   /readFileSync\(artifactPath, "utf8"\)/,
@@ -225,6 +234,49 @@ assert.equal(robustFallback.length, 1);
 assert((robustFallback[0]?.independentProjection ?? 0) > 0,
   "an out-of-domain robust clamp must fall back to the positive frozen ridge forecast");
 
+const independentReboundSide = calibratedRebound!.independentSide;
+const marketReboundSide = independentReboundSide === "over" ? "under" : "over";
+const reboundMovementRows = ["fanduel", "pinnacle", "bet365"].flatMap((sportsbook) =>
+  [
+    { observedAt: "2026-10-21T10:00:00.000Z", opening: true },
+    { observedAt: "2026-10-21T12:00:00.000Z", opening: false },
+  ].flatMap(({ observedAt, opening }) => ["over", "under"].map((side): NbaPlayerPropPriceObservation => {
+    const marketOver = marketReboundSide === "over";
+    const overPrice = opening ? (marketOver ? -220 : 170) : (marketOver ? -150 : 125);
+    const underPrice = opening ? (marketOver ? 170 : -220) : (marketOver ? 125 : -150);
+    return {
+      ...reboundMarket.find((row) => row.sportsbook === sportsbook && row.side === side)!,
+      providerObservationId: `${sportsbook}-${side}-${observedAt}`,
+      americanPrice: side === "over" ? overPrice : underPrice,
+      observedAt,
+      fetchedAt: observedAt,
+      isOpening: opening,
+    };
+  })));
+const unrestrictedArtifact = {
+  ...artifact,
+  exactPriceArbitrationMovementPolicy: {
+    ...artifact.exactPriceArbitrationMovementPolicy,
+    rebounds: "none" as const,
+  },
+};
+const unrestrictedRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
+  artifact: unrestrictedArtifact,
+  features,
+  observations: reboundMovementRows,
+  evaluatedAt: "2026-10-21T12:00:00.000Z",
+})[0]!;
+const guardedRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
+  artifact,
+  features,
+  observations: reboundMovementRows,
+  evaluatedAt: "2026-10-21T12:00:00.000Z",
+})[0]!;
+assert.equal(unrestrictedRebound.side, marketReboundSide,
+  "a qualified target-excluded disagreement would flip without the movement guard");
+assert.equal(guardedRebound.side, independentReboundSide,
+  "same-book movement opposing a proposed rebound-family flip must preserve the independent side");
+
 const chronological = [
   ...observations.filter((row) => row.market === "points").map((row) => ({
     ...row,
@@ -297,7 +349,13 @@ assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
   ...envelope,
   release: "nba_player_props_private_store_2026_10_21_r3_chronological_observation_identity",
 }, "market_history"), initialHistory.history, "the deployed r3 private payload must migrate without losing observations");
+assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
+  ...envelope,
+  release: "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology",
+}, "market_history"), initialHistory.history, "the deployed r4 private payload must migrate without losing observations");
 assert.equal(decodeNbaPlayerPropsPrivatePayload({ ...envelope, checksum: "bad" }, "market_history"), null);
+assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, 96_000_000);
+assert.equal(NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE, "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity");
 
 let boundedHistory = initialHistory.history;
 for (let index = 1; index <= 8; index += 1) {
