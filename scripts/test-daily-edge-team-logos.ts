@@ -19,12 +19,22 @@ const dailyEdgeShellSource = readFileSync(
   "app/lab/components/daily-edge/DailyEdgeShell.tsx",
   "utf8",
 );
+const activeDailyEdgeSource = readFileSync(
+  "app/dev/experience-preview/ActualDailyEdgePreview.tsx",
+  "utf8",
+);
 assert.ok(dailyEdgeShellSource.includes('LAK: "la"'));
 assert.ok(dailyEdgeShellSource.includes("ESPN_NHL_SLUG[abbr.toUpperCase()]"));
 assert.ok(dailyEdgeShellSource.includes('import { cfbTeamIdentity }'));
 assert.ok(
   dailyEdgeShellSource.includes(
     'logo ?? (shellSport === "cfb" ? cfbTeamIdentity(abbr)?.logoUrl ?? null : null)',
+  ),
+);
+assert.ok(activeDailyEdgeSource.includes('import { cfbTeamIdentity }'));
+assert.ok(
+  activeDailyEdgeSource.includes(
+    'if (game.sport === "cfb") return cfbTeamIdentity(abbreviation)?.logoUrl ?? null;',
   ),
 );
 

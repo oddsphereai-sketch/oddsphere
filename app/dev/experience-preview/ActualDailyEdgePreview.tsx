@@ -87,6 +87,7 @@ import {
   type AmericanOddsRange,
 } from "@/app/lab/lib/footballOddsFilter";
 import type { NflWeekOneEvidenceBoard } from "@/lib/services/football/nflWeekOneEvidenceBoard";
+import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 import { uclTeamAsset, uclTeamLogo } from "@/lib/services/ucl/uclTeamAssets";
 import { teamPrimaryColor } from "@/app/lab/components/daily-edge/teamColors";
@@ -632,6 +633,7 @@ function memberTeamLogo(game: DailyEdgeGameDto, side: "away" | "home"): string |
   const abbreviation = side === "away" ? game.awayTeam : game.homeTeam;
   const supplied = side === "away" ? game.awayTeamLogo : game.homeTeamLogo;
   if (supplied) return supplied;
+  if (game.sport === "cfb") return cfbTeamIdentity(abbreviation)?.logoUrl ?? null;
   return game.soccerCompetitionContext?.competition === "uefa_champions_league"
     ? uclTeamLogo(abbreviation)
     : null;
