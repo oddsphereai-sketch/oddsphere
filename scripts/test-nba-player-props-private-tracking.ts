@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { summarizePrivatePlayerPropTracking } from "../lib/services/playerPropsPrivateDiagnostics";
 import {
   buildNbaPlayerPropsPrivateTrackingRow,
@@ -34,6 +36,20 @@ const base = {
   finalProbability: 0.59,
   grade: "Lean",
   marketMovement: "qualified_flip",
+  marketEvidence: {
+    mode: "target_excluded_arbitration" as const,
+    targetExcludedBooks: 4,
+    targetExcludedReferenceBooks: 2,
+    movement: {
+      sportsbook: "FanDuel",
+      openingLine: 7.5,
+      priorLine: 7.5,
+      currentLine: 7.5,
+      openingPrice: -110,
+      priorPrice: -108,
+      currentPrice: -105,
+    },
+  },
   observedAt: "2026-10-20T21:55:00.000Z",
   lockedAt,
   modelRelease: "nba-props-model-r1",
@@ -55,7 +71,7 @@ assert.equal(conflict.conflicts, 1);
 assert.equal(conflict.rows[0]?.finalProjection, 8.3, "the first locked payload remains immutable");
 
 const history: NbaPlayerPropsPrivateTrackingHistory = {
-  kind: "nba_player_props_private_tracking_history_v1",
+  kind: "nba_player_props_private_tracking_history_v2",
   schema: NBA_PLAYER_PROPS_PRIVATE_TRACKING_SCHEMA,
   captureRelease: NBA_PLAYER_PROPS_PRIVATE_TRACKING_RELEASE,
   season: 2026,
@@ -67,6 +83,32 @@ const history: NbaPlayerPropsPrivateTrackingHistory = {
 const envelope = encodeNbaPlayerPropsPrivateTrackingHistory(history);
 assert.deepEqual(decodeNbaPlayerPropsPrivateTrackingHistory(envelope), history);
 assert.equal(decodeNbaPlayerPropsPrivateTrackingHistory({ ...envelope, checksum: "bad" }), null);
+
+const { marketEvidence: _futureEvidence, ...legacyRow } = row;
+const legacyHistory = {
+  ...history,
+  kind: "nba_player_props_private_tracking_history_v1",
+  schema: "nba_player_props_private_tracking_history_v1",
+  captureRelease: "nba_player_props_private_tracking_2026_10_21_r2_private_forward",
+  rows: [{ ...legacyRow, captureRelease: "nba_player_props_private_tracking_2026_10_21_r2_private_forward" }],
+};
+const legacyJson = JSON.stringify(legacyHistory);
+const legacyCompressed = gzipSync(Buffer.from(legacyJson), { level: 9 });
+const decodedLegacy = decodeNbaPlayerPropsPrivateTrackingHistory({
+  kind: "nba_player_props_private_tracking_envelope_v1",
+  schema: "nba_player_props_private_tracking_history_v1",
+  captureRelease: "nba_player_props_private_tracking_2026_10_21_r2_private_forward",
+  encoding: "gzip-base64",
+  checksum: createHash("sha256").update(legacyJson).digest("hex"),
+  season: legacyHistory.season,
+  slateDate: legacyHistory.slateDate,
+  uncompressedBytes: Buffer.byteLength(legacyJson),
+  compressedBytes: legacyCompressed.byteLength,
+  payload: legacyCompressed.toString("base64"),
+});
+assert(decodedLegacy, "legacy tracking envelopes must remain readable");
+assert.deepEqual(decodedLegacy.rows[0], legacyHistory.rows[0], "legacy locked rows must remain byte-equivalent");
+assert.equal(decodedLegacy.rows[0]?.marketEvidence, undefined);
 
 const settled = settleNbaPlayerPropsPrivateTrackingRow({ row, actual: 10 });
 const report = summarizePrivatePlayerPropTracking([settled]);
