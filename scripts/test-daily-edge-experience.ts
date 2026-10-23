@@ -142,7 +142,10 @@ check(
   "CFB cached snapshots recover only exact sport-owned logo identities",
   legacyDailyEdgeSource.includes('import { cfbTeamIdentity }') &&
     legacyDailyEdgeSource.includes('shellSport === "cfb" ? cfbTeamIdentity(abbr)?.logoUrl') &&
-    legacyDailyEdgeSource.includes("if (usesSportOwnedLogo && !sportOwnedLogo)"),
+    legacyDailyEdgeSource.includes("if (usesSportOwnedLogo && !sportOwnedLogo)") &&
+    candidateDailyEdgeSource.includes('import { cfbTeamIdentity }') &&
+    candidateDailyEdgeSource.includes('game.sport === "cfb"') &&
+    candidateDailyEdgeSource.includes("cfbTeamIdentity(abbreviation)?.logoUrl"),
 );
 
 check(
