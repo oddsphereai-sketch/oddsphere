@@ -21,5 +21,11 @@ const dailyEdgeShellSource = readFileSync(
 );
 assert.ok(dailyEdgeShellSource.includes('LAK: "la"'));
 assert.ok(dailyEdgeShellSource.includes("ESPN_NHL_SLUG[abbr.toUpperCase()]"));
+assert.ok(dailyEdgeShellSource.includes('import { cfbTeamIdentity }'));
+assert.ok(
+  dailyEdgeShellSource.includes(
+    'logo ?? (shellSport === "cfb" ? cfbTeamIdentity(abbr)?.logoUrl ?? null : null)',
+  ),
+);
 
 console.log("Daily Edge team-logo identity tests passed.");
