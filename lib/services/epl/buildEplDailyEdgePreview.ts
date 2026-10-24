@@ -428,6 +428,24 @@ function completeSharpMarkets(rows: NormalizedSoccerOddsRecord[]): Set<Normalize
   return complete;
 }
 
+export function selectEplFixtureRecoveryIndexes(
+  markets: readonly EplSharpFixtureMarket[],
+  statuses: readonly EplShadowSlateMatch["status"][],
+  maxLoads = MAX_FIXTURE_RECOVERY_LOADS,
+): number[] {
+  const boundedMaxLoads = Math.max(0, Math.floor(maxLoads));
+  return markets
+    .map((market, index) => ({
+      index,
+      complete: completeSharpMarkets(market.odds),
+      scheduled: statuses[index] === "scheduled",
+    }))
+    .filter(({ complete }) => complete.size < 4)
+    .sort((left, right) => Number(right.scheduled) - Number(left.scheduled) || left.index - right.index)
+    .slice(0, boundedMaxLoads)
+    .map(({ index }) => index);
+}
+
 function allBookPriceObservations(
   slate: EplShadowSlate,
   fixtureMarkets: EplSharpFixtureMarket[],
@@ -1028,11 +1046,12 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     // serverless region even when an immediate independent request is
     // complete. Retry only incomplete fixtures, sequentially, and cap the
     // recovery work so an upstream outage cannot multiply paid API traffic.
-    const incomplete = markets
-      .map((market, index) => ({ index, complete: completeSharpMarkets(market.odds) }))
-      .filter(({ complete }) => complete.size < 4)
-      .slice(0, options.maxFixtureRecoveryLoads ?? MAX_FIXTURE_RECOVERY_LOADS);
-    for (const { index } of incomplete) {
+    const incompleteIndexes = selectEplFixtureRecoveryIndexes(
+      markets,
+      slate.matches.map((match) => match.status),
+      options.maxFixtureRecoveryLoads ?? MAX_FIXTURE_RECOVERY_LOADS,
+    );
+    for (const index of incompleteIndexes) {
       const match = slate.matches[index];
       const recovery = await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff })
         .catch(() => ({ eventId: null, odds: [], splits: [], splitsState: "error" as const }));

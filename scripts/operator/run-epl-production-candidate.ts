@@ -42,14 +42,19 @@ async function main() {
     total: writer.proposed.length,
     missingCurrent: writer.proposed.filter((row) => row.odds_american === null).map((row) => `${row.matchup}:${row.market}:${row.pick ?? "no-side"}`),
   };
-  const allOutcomeRows = response.games.flatMap((game) => [
+  const scheduledProviderIds = new Set(
+    slate.matches.filter((match) => match.status === "scheduled").map((match) => String(match.id)),
+  );
+  const scheduledResponseGames = response.games.filter((game) => scheduledProviderIds.has(String(game.external_id)));
+  const allOutcomeRows = scheduledResponseGames.flatMap((game) => [
     ...(game.markets.moneyline.soccerPriceBoard?.rows ?? []).map((row) => ({ market: "match_result", row })),
     ...(game.soccerDoubleChanceMarket?.soccerPriceBoard?.rows ?? []).map((row) => ({ market: "double_chance", row })),
     ...(game.markets.total.soccerPriceBoard?.rows ?? []).map((row) => ({ market: "total", row })),
     ...(game.markets.first_inning.soccerPriceBoard?.rows ?? []).map((row) => ({ market: "btts", row })),
   ]);
   const allOutcomeTrailCoverage = {
-    expected: response.games.length * 10,
+    fixtures: scheduledResponseGames.length,
+    expected: scheduledResponseGames.length * 10,
     currentRows: allOutcomeRows.length,
     rowsWithTrail: allOutcomeRows.filter(({ row }) => (row.odds_trail?.length ?? 0) > 0).length,
     providerOpenings: allOutcomeRows.filter(({ row }) => row.odds_trail?.some((stop) => stop.source === "provider_opening")).length,

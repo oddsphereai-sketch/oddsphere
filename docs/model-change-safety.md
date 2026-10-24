@@ -2578,6 +2578,37 @@ all locked r6 evidence unchanged.
 Evidence: `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-predeclaration.md`
 and `docs/model-audits/2026-09-03-ucl-epl-grade-transfer-r6-result.md`.
 
+## Owner-directed correctness exception: EPL scheduled-price recovery priority
+
+On 2026-10-24 Daniel Mengel directed Oddsphere to audit every Daily Edge and
+Player Props product and repair genuine price, line, stat, injury, model, and
+market-reading health gaps. The EPL writer's four-fixture retry allowance could
+be consumed by already-started or final matches before a later scheduled match
+with an incomplete current board. This exception is limited to the correction
+documented in
+`docs/model-audits/2026-10-24-epl-scheduled-price-recovery-priority.md`.
+
+The existing four-fixture ceiling and one-load-per-fixture rule remain exact.
+Incomplete `scheduled` fixtures receive recovery priority, with stable slate
+order inside the scheduled and non-scheduled groups; unused allowance may still
+serve non-scheduled fixtures. The complete scheduled-fixture publication gate,
+provider endpoints, model, probability, side, market reader, grade, stake,
+cadence, sole writers, shared `prediction_pipeline:soccer` lease, tracking,
+settlement, and member product remain unchanged. UCL retains its explicit
+every-incomplete-fixture recovery bound and therefore changes no request count
+or eligibility. Existing locked payloads retain exact stored precedence.
+
+The publication lifecycle advances to
+`epl_member_snapshot_lifecycle_2026_10_24_r6_scheduled_price_recovery_priority`.
+Publication requires the starvation and zero-retry regressions, the exact
+current-board price and outcome report, zero same-input side/grade/actionable
+impact, focused EPL and immutable-lock tests, TypeScript, lint, full model-
+change verification, latest-main integration safety, protected pull-request
+checks, and live proof of complete scheduled prices with unchanged locks. Roll
+back future unlocked r6 publication on request-bound growth, scheduled-fixture
+starvation, incomplete scheduled publication, unexpected board contraction,
+writer/lease overlap, or any locked-field change.
+
 ## 1. Declare scope before editing
 
 - Name every affected sport, market, model family, calibration layer, writer, reader, and cron.
