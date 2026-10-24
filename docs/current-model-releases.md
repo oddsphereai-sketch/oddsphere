@@ -3838,18 +3838,18 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_24_r19_moneyline_direction_value_separation`
+- Model / prediction record: `nba_professional_unified_2026_10_24_r20_steep_moneyline_best_angle_tier`
 - Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation`
-- Market marriage: `nba_market_marriage_2026_10_24_r20_moneyline_direction_value_separation`
+- Market marriage: `nba_market_marriage_2026_10_24_r21_steep_moneyline_best_angle_tier`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_24_r12_moneyline_direction_value_separation`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_24_r16_moneyline_direction_value_separation`
+- Grade policy: `nba_grade_policy_2026_10_24_r13_steep_moneyline_best_angle_tier`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_24_r17_steep_moneyline_best_angle_tier`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_24_r5_moneyline_direction_value_separation`
-- Locked member snapshot: `nba_locked_member_snapshot_2026_10_24_r3_moneyline_direction_value_separation`
+- Member lock publication: `nba_member_lock_publication_2026_10_24_r6_steep_moneyline_best_angle_tier`
+- Locked member snapshot: `nba_locked_member_snapshot_2026_10_24_r4_steep_moneyline_best_angle_tier`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -3876,6 +3876,12 @@ and no new Best Angle is created. Existing locked payloads retain exact stored p
 `docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-result.md`.
 
 The October 24 r19/r20/r12 direction/value separation repairs the remaining legacy ordering defect.
+The October 24 r20/r21/r13 price-tier follow-up keeps a favorite at -400 or shorter actionable only
+as a Lean, never a Best Angle. This separates likely-winner/parlay utility from the board's strongest
+straight-bet label without changing the model, reader, projection, winner, probability, exact price,
+or any locked record. Evidence:
+`docs/model-audits/2026-10-24-nba-steep-moneyline-best-angle-tier.md`.
+
 A same-side market probability above the model's probability is now treated as an unplayable price,
 not evidence that the market prefers the opponent. Qualified direct Moneyline movement, a validated
 Spread-authored winner, or the qualified Spread observation fallback owns the displayed directional
@@ -4152,7 +4158,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_24_r16_moneyline_direction_value_separation`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_24_r17_steep_moneyline_best_angle_tier`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
