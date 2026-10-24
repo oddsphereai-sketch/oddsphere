@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { EPL_BASELINE_MODEL_RELEASE, EPL_DRAW_ARBITRATION_RELEASE, EPL_SHADOW_MODEL_RELEASE, fitEplShadowModel, predictEplMatch, reconcileEplProjectedGoalsWithResult, selectEplMatchResultSide, type EplTrainingMatch } from "../lib/services/epl/eplShadowModel";
-import { bdlMoneylineRead, canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, earliestEplMarketQuote, forecastAnchoredDoubleChanceSide, hydrateEplStoredPriceHistory, trackedPrice } from "../lib/services/epl/buildEplDailyEdgePreview";
+import { bdlMoneylineRead, canonicalEplLineHistoryTimestamp, compactEplStoredPriceHistory, earliestEplMarketQuote, forecastAnchoredDoubleChanceSide, hydrateEplStoredPriceHistory, selectEplFixtureRecoveryIndexes, trackedPrice } from "../lib/services/epl/buildEplDailyEdgePreview";
 import { deriveEplMatchResultDecision, deriveEplPreviewGrade, EPL_PREVIEW_GRADE_RELEASE } from "../lib/services/epl/eplPreviewGrade";
 import { calibratedEplGoalProjection, calibratedEplTotalOverProbability, EPL_MATCH_RESULT_SCORE_READER_RELEASE, exactLockedEplScoreOutlook, impliedEplBttsYesProbability, impliedEplGoalsMarketDistribution, impliedEplMatchResultScoreOutlook } from "../lib/services/epl/eplDerivedMarketForecast";
 import { eplTeamsMatch, normalizeEplSplits } from "../lib/providers/real_api/SharpApiEplMarketProvider";
+import type { EplSharpFixtureMarket, EplSharpOddsRecord } from "../lib/providers/real_api/SharpApiEplMarketProvider";
 import { recentComparableEplMatches } from "../lib/services/epl/eplEvidence";
 import { eplSnapshotGamesNeedingLock, preserveLockedEplGames } from "../lib/services/epl/eplLockedSnapshot";
 import { eplEmergencySnapshotIsUsable } from "../lib/services/epl/eplMemberSnapshotContinuity";
@@ -16,6 +17,64 @@ const completeMarket = {
   currentPriceAmerican: -110,
   soccerPriceBoard: { rows: [{}, {}, {}] },
 };
+const incompleteFixtureMarket: EplSharpFixtureMarket = { eventId: null, odds: [], splits: [], splitsState: "unavailable" };
+const completeFixtureOdds: EplSharpOddsRecord[] = ([
+  ["match_result", "home", null],
+  ["match_result", "draw", null],
+  ["match_result", "away", null],
+  ["double_chance", "home_or_draw", null],
+  ["double_chance", "away_or_draw", null],
+  ["double_chance", "home_or_away", null],
+  ["total", "over", 2.5],
+  ["total", "under", 2.5],
+  ["btts", "yes", null],
+  ["btts", "no", null],
+] as const).map(([market, selection, line]) => ({
+  market,
+  selection,
+  line,
+  odds_american: -110,
+  odds_decimal: 1.91,
+  sportsbook: "circa",
+  provider: "sharpapi",
+  provider_endpoint: "/test",
+  fetched_at: "2026-10-24T12:00:00.000Z",
+  fetched_at_source: "provider",
+  provider_event_id: "complete-test",
+}));
+const completeFixtureMarket: EplSharpFixtureMarket = {
+  eventId: "complete-test",
+  odds: completeFixtureOdds,
+  splits: [],
+  splitsState: "unavailable",
+};
+assert.deepEqual(
+  selectEplFixtureRecoveryIndexes(
+    Array.from({ length: 6 }, () => incompleteFixtureMarket),
+    ["final", "in_progress", "final", "unknown", "scheduled", "scheduled"],
+    4,
+  ),
+  [4, 5, 0, 1],
+  "scheduled EPL fixtures must consume the bounded recovery allowance before non-scheduled fixtures",
+);
+assert.deepEqual(
+  selectEplFixtureRecoveryIndexes(
+    Array.from({ length: 6 }, () => incompleteFixtureMarket),
+    ["final", "in_progress", "final", "unknown", "scheduled", "scheduled"],
+    0,
+  ),
+  [],
+  "a zero recovery allowance must not issue a fixture retry",
+);
+assert.deepEqual(
+  selectEplFixtureRecoveryIndexes(
+    [completeFixtureMarket, completeFixtureMarket],
+    ["scheduled", "final"],
+    4,
+  ),
+  [],
+  "a complete first-pass EPL board must not issue recovery loads or change same-input outputs",
+);
 const activeCoverage = evaluateEplPublicationCoverage(
   {
     matches: [
@@ -495,7 +554,7 @@ assert.match(lockRoute, /findEplGamesEnteringLock/);
 assert.match(lockRoute, /predictions\.priorTuplesLocked[\s\S]*prior_priced_tuples_locked:\s*predictions\.priorTuplesLocked/, "fallback locks must count as writes and remain visible in cron telemetry");
 assert.match(memberStore, /current-week/);
 assert.match(memberStore, /readLatestLabResponseSnapshot/, "EPL reads need a bounded emergency fallback when a valid weekly snapshot outlives its cache deadline");
-assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_17_r5_scheduled_fixture_price_gate/, "EPL continuity behavior must carry its own immutable lifecycle release");
+assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_24_r6_scheduled_price_recovery_priority/, "EPL continuity behavior must carry its own immutable lifecycle release");
 for (const route of [refreshRoute, lockRoute]) {
   assert.match(route, /reconstructVerifiedEplLockedGames/, "every EPL publisher must reconstruct due locked games from the verified four-market DB cohort");
   assert.match(route, /authoritativeLockedProviderIds:\s*lockVerification\.completeProviderIds/, "only DB-verified locked games may replace a prior locked member card");
