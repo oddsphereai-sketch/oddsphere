@@ -1025,7 +1025,9 @@ export function selectLatestCfbMemberEvidenceRows(
   const coordinatorIntegrationPrevious = coordinatorIntegrationPreviousComplete ??
     coordinatorIntegrationPreviousBoundary ?? coordinatorIntegrationPreviousLockOverlay;
   const parlayLeanPreviousRows = rows.filter((row) =>
-    row.payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE);
+    // Stored evidence legitimately spans release literals even though the
+    // in-process decision bundle is typed to the current writer release.
+    String(row.payload.decisions.decisionRelease) === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE);
   const parlayLeanPreviousComplete = completeRowsForRelease(
     parlayLeanPreviousRows,
     CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
