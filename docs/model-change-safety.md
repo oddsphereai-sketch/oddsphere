@@ -1,5 +1,42 @@
 # Model change safety protocol
 
+## Owner-directed correction: NBA Moneyline direction/value separation
+
+On 2026-10-24 Daniel Mengel reported that San Antonio and Phoenix were shown as
+Moneyline Cautions even though the board did not contain qualified opposite-side
+market resistance, and directed Oddsphere to repair the behavior. The defect was
+the ordering of two otherwise-valid layers: an older same-side model-versus-price
+gap returned Caution before the professional directional reader could describe
+what the line actually did.
+
+For future unlocked NBA rows, r19/r20/r12 keeps the same independent score,
+roster-regime residual, categorical Spread/Total correction, exact price, and
+qualified Moneyline evidence guard. A market probability above the model's
+probability for the same selected winner is now a value/economics failure and
+therefore Watchlist, not directional Caution. Member market direction comes
+from the already-resolved qualified direct Moneyline read, the validated
+Spread-authored correction, or the qualified Spread observation fallback.
+Unqualified movement is neutral; public splits remain context-only.
+
+The exact eight-game October 24 production-input replay moves San Antonio and
+Phoenix Moneyline from Caution to Watchlist, changes six mislabeled direction
+states, and retains five Moneyline actionables. Promotions and demotions are
+both zero; scores, sides, probabilities, selected prices, and stakes are
+unchanged. San Antonio's qualified same-side Spread observation displays market
+confirmation, while Phoenix's incomplete/disagreeing directional evidence is
+neutral. The existing validated Spread correction remains the only NBA path
+that may rebuild the score and cross the winner.
+
+New unlocked prediction/market/grade releases are r19/r20/r12, the sole refresh
+advances to r16, and future lock publication/snapshot contracts advance to
+r5/r3. Legacy locked snapshots lack the new resolved-direction field and retain
+their exact prior reader interpretation. Publication requires the focused grade,
+professional-candidate, display, writer, and lock tests; TypeScript; the full
+model-change gate; latest-main integration safety; protected PR checks; and
+post-deploy proof of the release identifiers and live San Antonio/Phoenix cards.
+Evidence and rollback:
+`docs/model-audits/2026-10-24-nba-moneyline-direction-value-separation.md`.
+
 ## Owner-directed correction: official NBA injury fallback
 
 On 2026-10-23 Daniel Mengel directed Oddsphere to repair missing injury evidence

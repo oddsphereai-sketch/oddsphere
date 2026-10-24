@@ -207,17 +207,21 @@ export type GradeInput = {
   currentPriceAmerican?: number | null;
   /** Uncapped probability from the same coherent distribution that owns the pick. */
   modelProbabilityOnPick?: number | null;
-  moneylineEvidence?: {
-    directReadQualified: boolean;
-    directReadSide: "home" | "away" | null;
-    spreadReadQualified: boolean;
-    spreadReadSide: "home" | "away" | null;
-    spreadCorrectionApplied: boolean;
-  };
+  moneylineEvidence?: NbaMoneylineReaderEvidence;
   /** Same-input audit hook for the superseded Moneyline Best Angle path. */
   enforceMoneylineEvidenceGuard?: boolean;
   /** Same-input audit hook for the superseded price-incoherent grade path. */
   enforcePositiveModelEv?: boolean;
+  /** Same-input audit hook for the superseded same-side price-gap Caution. */
+  interpretMoneylinePriceGapAsConflict?: boolean;
+};
+
+export type NbaMoneylineReaderEvidence = {
+  directReadQualified: boolean;
+  directReadSide: "home" | "away" | null;
+  spreadReadQualified: boolean;
+  spreadReadSide: "home" | "away" | null;
+  spreadCorrectionApplied: boolean;
 };
 
 export type GradeOutput = {
@@ -355,7 +359,10 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
       rationale,
     };
   }
-  if (input.band === "strong_conflict") {
+  if (
+    input.band === "strong_conflict" &&
+    (input.market !== "moneyline" || input.interpretMoneylinePriceGapAsConflict === true)
+  ) {
     const capped = Math.min(input.confidence, 55);
     rationale.push(
       "The available price is materially shorter than the model's fair probability — this stays a cautious read, not a play.",

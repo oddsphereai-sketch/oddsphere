@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-23
+Last reviewed: 2026-10-24
 
 ## Cross-sport confidence / execution contract
 
@@ -3825,18 +3825,18 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_23_r18_official_injury_fallback`
+- Model / prediction record: `nba_professional_unified_2026_10_24_r19_moneyline_direction_value_separation`
 - Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation`
-- Market marriage: `nba_market_marriage_2026_10_22_r19_roster_winner_confirmation`
+- Market marriage: `nba_market_marriage_2026_10_24_r20_moneyline_direction_value_separation`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_22_r11_roster_winner_confirmation`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_22_r15_roster_winner_confirmation`
+- Grade policy: `nba_grade_policy_2026_10_24_r12_moneyline_direction_value_separation`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_24_r16_moneyline_direction_value_separation`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_22_r4_roster_winner_confirmation`
-- Locked member snapshot: `nba_locked_member_snapshot_2026_10_20_r2_complete_card_evidence`
+- Member lock publication: `nba_member_lock_publication_2026_10_24_r5_moneyline_direction_value_separation`
+- Locked member snapshot: `nba_locked_member_snapshot_2026_10_24_r3_moneyline_direction_value_separation`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -3861,6 +3861,18 @@ retains Best Angle, Charlotte retains the same side/score/probability/price but 
 Lean, Memphis retains its validated Spread-authored flip and Lean, total actionables remain unchanged,
 and no new Best Angle is created. Existing locked payloads retain exact stored precedence. Evidence:
 `docs/model-audits/2026-10-21-nba-moneyline-best-angle-evidence-result.md`.
+
+The October 24 r19/r20/r12 direction/value separation repairs the remaining legacy ordering defect.
+A same-side market probability above the model's probability is now treated as an unplayable price,
+not evidence that the market prefers the opponent. Qualified direct Moneyline movement, a validated
+Spread-authored winner, or the qualified Spread observation fallback owns the displayed directional
+state; unqualified evidence is neutral. The exact eight-game production-input replay changes San
+Antonio and Phoenix Moneyline from Caution to Watchlist, corrects six displayed direction states,
+and keeps five Moneyline actionables with zero promotions, zero demotions, and zero score, side,
+probability, selected-price, or stake changes. The established two-point Spread correction remains
+the only reader path that may rebuild the score and flip the NBA winner. Legacy locked snapshots
+retain their prior interpretation. Evidence and rollback:
+`docs/model-audits/2026-10-24-nba-moneyline-direction-value-separation.md`.
 
 The October 22 r16/r18/r10 roster-regime release keeps the frozen professional score artifact and
 qualified market reader in their established independent-first order, but closes the early-season
@@ -4127,7 +4139,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_22_r15_roster_winner_confirmation`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_24_r16_moneyline_direction_value_separation`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.

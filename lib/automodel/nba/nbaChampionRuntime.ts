@@ -1,9 +1,9 @@
 export const NBA_MODEL_RELEASE =
-  "nba_professional_unified_2026_10_23_r18_official_injury_fallback" as const;
+  "nba_professional_unified_2026_10_24_r19_moneyline_direction_value_separation" as const;
 export const NBA_MARKET_MARRIAGE_RELEASE =
-  "nba_market_marriage_2026_10_22_r19_roster_winner_confirmation" as const;
+  "nba_market_marriage_2026_10_24_r20_moneyline_direction_value_separation" as const;
 export const NBA_GRADE_POLICY_RELEASE =
-  "nba_grade_policy_2026_10_22_r11_roster_winner_confirmation" as const;
+  "nba_grade_policy_2026_10_24_r12_moneyline_direction_value_separation" as const;
 export const NBA_PREDICTION_RECORD_RELEASE = NBA_MODEL_RELEASE;
 
 export function assertNbaChampionRuntime(): void {
