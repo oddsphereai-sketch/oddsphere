@@ -1,5 +1,14 @@
 # Model change safety protocol
 
+## CFB r53 same-schema transition repair
+
+The first 2026-10-24 r53 writer cycle safely persisted 47 due rows but did not replace the compact
+member snapshot because r52 and r53 share one evidence/member schema. Fixture/snapshot/reader
+r94/r54/r39 partition those decision releases before completeness selection. A partial wave keeps
+the complete r52 board unless every missing row is an immutable lock, in which case the reader may
+overlay only refreshed r53 unlocked rows while preserving the exact r52 lock. Picks, probabilities,
+scores, prices, grades, stakes, writer ownership, and tracking are unchanged.
+
 ## Owner-directed correction: CFB selective Parlay Lean lane
 
 On 2026-10-24 Daniel Mengel directed Oddsphere to close the gap between likely-winner confidence

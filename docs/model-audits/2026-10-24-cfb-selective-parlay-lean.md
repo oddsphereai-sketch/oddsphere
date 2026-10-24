@@ -55,6 +55,13 @@ The secondary classifier is `cfb_selective_parlay_lean_profile_2026_10_24_r1`. R
 writing the profile for future unlocked rows and removes its board filter; it cannot rewrite a
 stored lock.
 
+The first production cycle exposed a same-schema transition gap: r52 and r53 use the same evidence
+and member releases, so the generic latest-row selector saw a mixed release set and rejected the
+member snapshot. Fixture/snapshot/reader r94/r54/r39 now partition those two decision releases
+before completeness checks. A partial rollout either overlays a refreshed r53 unlocked row onto an
+exact immutable r52 lock or retains the complete r52 board until every still-unlocked row refreshes.
+It never reconstructs or rewrites a lock.
+
 ## Reproduction and publication gates
 
 Run `scripts/operator/audit-cfb-selective-parlay-lean.ts` with the normal read-only operator
