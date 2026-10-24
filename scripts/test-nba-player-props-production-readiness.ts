@@ -32,6 +32,7 @@ import { buildNbaPlayerPropsPointInTimeFeatures } from "../lib/services/nba/nbaP
 import { applyResolvedPlayerIdentities } from "../lib/services/nba/nbaPlayerPropsLiveCollector";
 import { nbaPlayerPropsScheduleGameMatches } from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
 import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/nba/nbaPointInTimeFeatures";
+import { selectNbaPlayerPropsSnapshotCurrentObservations } from "./operator/nba/nba-player-props-snapshot-cycle";
 
 const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
 const frozenRuntimeSource = readFileSync(
@@ -188,6 +189,20 @@ const observations = NBA_PLAYER_PROPS_FOUNDATION_MARKETS.flatMap((market, market
       scheduledStart: upcoming.startTime,
     }));
   }));
+
+const replayCycles = [
+  ...observations.map((row) => ({ ...row, fetchedAt: "2026-10-21T11:55:00.000Z" })),
+  ...observations.map((row) => ({ ...row, fetchedAt: "2026-10-21T12:00:18.000Z" })),
+  ...observations.map((row) => ({ ...row, fetchedAt: "2026-10-21T12:04:00.000Z" })),
+  ...observations.map((row) => ({ ...row, fetchedAt: "2026-10-21T12:00:01.000Z", isOpening: true })),
+];
+const recoveredCurrentCycle = selectNbaPlayerPropsSnapshotCurrentObservations(
+  replayCycles,
+  "2026-10-21T12:00:00.000Z",
+);
+assert.equal(recoveredCurrentCycle.length, observations.length);
+assert(recoveredCurrentCycle.every((row) => row.fetchedAt === "2026-10-21T12:00:18.000Z"));
+assert(recoveredCurrentCycle.every((row) => !row.isOpening && !row.isLive));
 const first = buildNbaPlayerPropsForwardDecisions({ features, observations });
 const second = buildNbaPlayerPropsForwardDecisions({ features, observations });
 assert.deepEqual(first, second, "frozen runtime scoring must be deterministic");

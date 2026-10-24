@@ -14,6 +14,7 @@ import {
   buildNbaPlayerPropsPointInTimeFeatures,
   type NbaPlayerPropCandidate,
 } from "../../../lib/services/nba/nbaPlayerPropsPointInTimeFeatures";
+import { selectNbaPlayerPropsSnapshotCurrentObservations } from "./nba-player-props-snapshot-cycle";
 
 function value(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -78,9 +79,12 @@ async function main(): Promise<void> {
     candidates,
     emitGameIds: new Set(upcomingGames.map((game) => game.gameId)),
   });
+  const observations = market.observations;
+  const currentObservations = selectNbaPlayerPropsSnapshotCurrentObservations(observations, snapshot.generatedAt);
   const decisions = buildNbaPlayerPropsForwardDecisions({
     features,
-    observations: market.observations,
+    observations,
+    currentObservations,
     evaluatedAt: snapshot.generatedAt,
   });
   const artifact = nbaPlayerPropsFrozenRuntimeArtifact();
