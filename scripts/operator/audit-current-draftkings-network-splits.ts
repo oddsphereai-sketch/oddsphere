@@ -37,7 +37,7 @@ async function main(): Promise<void> {
         const { data: durable } = await client
           .from("lab_response_snapshots")
           .select("payload")
-          .eq("snapshot_key", "daily-edge::draftkings-network-splits::cfb::draftkings_network_splits_2026_09_20_r2_durable_last_known_good")
+          .eq("snapshot_key", "daily-edge::draftkings-network-splits::cfb::draftkings_network_splits_2026_10_12_r3_cfb_central_team_identity")
           .maybeSingle();
         const durableGames = durable && typeof durable.payload === "object" && durable.payload !== null && Array.isArray((durable.payload as { games?: unknown[] }).games)
           ? (durable.payload as { games: unknown[] }).games.length

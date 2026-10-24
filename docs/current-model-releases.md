@@ -659,6 +659,22 @@ Last reviewed: 2026-10-24
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 24 complete current-school split identity: a full read-only audit of
+  the live 44-game DraftKings Network CFB split slate found 14 exact games with
+  complete Moneyline, Spread, and Total pairs that the centralized identity
+  resolver rejected because shortened school labels collided with State/Tech
+  programs. Seventeen abbreviation-scoped, provider-confirmed labels restore
+  those exact games; six paired State/Tech labels preserve games that would
+  otherwise become newly ambiguous. Collision tests keep every neighboring
+  program rejected. Current fallback coverage moves from 30/44 games and 90/132 market
+  panels to 44/44 and 132/132. This is split-evidence identity only: no model
+  equation, projection, probability, pick, grade, stake, provider hierarchy,
+  writer topology, lease, or locked record changes. The split identity release
+  is `cfb_sharpapi_splits_2026_10_24_r6_complete_current_school_identity` and
+  the sole writer release is
+  `cfb_forward_evidence_writer_2026_10_24_r137_complete_current_school_identity`.
+  See `docs/model-audits/2026-10-24-cfb-complete-current-school-identity.md`.
+
 - October 24 current split-identity completion: the centralized provider-team
   registry adds exact abbreviation-scoped authority for `IU -> Indiana`,
   `MICH -> Michigan`, and `OU -> Oklahoma`, while collision tests continue to
