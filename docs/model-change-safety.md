@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## Owner-directed correction: NBA steep Moneyline Best Angle tier
+
+On 2026-10-24 Daniel Mengel reported that Philadelphia at -567 was too steep to be called a Best
+Angle and specified that a likely high-priced winner may remain useful as a Lean. The current quote
+was fresh and coherent, and the model's 92.02% probability produced positive exact-price EV; the
+defect was that Best Angle and Lean shared no risk-to-win distinction.
+
+For future unlocked NBA Moneylines, a favorite at -400 or shorter (80% break-even; at least four
+units risked to win one) is capped at Lean even when every existing value, confidence, injury,
+quality, and qualified market-evidence gate passes. This is a grade-tier rule only. It cannot alter
+the independent model, market reader, score, winner, probability, selected price, stake, or stored
+lock, and it does not affect plus-money underdogs or favorites better than -400.
+
+The exact October 24 production-input audit must retain the same actionable count and produce zero
+actionable promotions/demotions, score changes, side changes, probability changes, and price
+changes. Existing locked snapshots retain exact stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-24-nba-steep-moneyline-best-angle-tier.md`.
+
 ## Owner-directed correction: NBA Moneyline direction/value separation
 
 On 2026-10-24 Daniel Mengel reported that San Antonio and Phoenix were shown as

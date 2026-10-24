@@ -81,6 +81,13 @@ export const NBA_BEST_ANGLE_MIN_EDGE_PROB = 0.04;
 /** Minimum confidence for Best Angle (NBA). */
 export const NBA_BEST_ANGLE_MIN_CONFIDENCE = 62;
 
+/**
+ * Best Angle is the board's strongest straight-bet tier. A favorite priced
+ * at -400 or shorter requires risking at least four units to win one, so it
+ * may remain an actionable Lean but cannot be promoted as a Best Angle.
+ */
+export const NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE = -400;
+
 export type MarketConflictBand =
   | "support"           // compatibility token: model has positive value versus the no-vig price
   | "neutral"           // model and no-vig market probability are close
@@ -214,6 +221,8 @@ export type GradeInput = {
   enforcePositiveModelEv?: boolean;
   /** Same-input audit hook for the superseded same-side price-gap Caution. */
   interpretMoneylinePriceGapAsConflict?: boolean;
+  /** Same-input audit hook for the superseded steep-favorite Best Angle path. */
+  enforceSteepMoneylineBestAngleTier?: boolean;
 };
 
 export type NbaMoneylineReaderEvidence = {
@@ -415,6 +424,20 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   ) {
     const evidence = input.moneylineEvidence;
     const pickedSide = input.pick === "home" || input.pick === "away" ? input.pick : null;
+    const steepFavorite = input.market === "moneyline" &&
+      input.currentPriceAmerican !== null && input.currentPriceAmerican !== undefined &&
+      input.currentPriceAmerican <= NBA_ML_BEST_ANGLE_MAX_FAVORITE_PRICE;
+    if (input.enforceSteepMoneylineBestAngleTier !== false && steepFavorite) {
+      rationale.push(
+        "The model still projects a likely winner with positive value, but the current favorite price is too steep for Best Angle status.",
+      );
+      return {
+        grade: "lean",
+        effectiveConfidence: input.confidence,
+        bestAngleEligible: false,
+        rationale,
+      };
+    }
     const directOpposes = pickedSide !== null && evidence?.directReadQualified === true &&
       evidence.directReadSide !== null && evidence.directReadSide !== pickedSide;
     const spreadOpposes = pickedSide !== null && evidence?.directReadQualified !== true &&
