@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## Owner-directed correction: CFB selective Parlay Lean lane
+
+On 2026-10-24 Daniel Mengel directed Oddsphere to close the gap between likely-winner confidence
+and the official exact-price Watchlist without flooding the CFB board with Leans. Future unlocked
+CFB Moneylines may receive a separate `Parlay Lean` profile only when the official grade is
+Watchlist, probability grade is Best Angle, model probability is at least 75%, price is -200 through
+-400, same-book movement supports the side, no verified sharp/public channel resists it, injuries
+are verified, and health holds are empty.
+
+This profile never changes the official Bet grade, stake, expected value, price, prediction,
+projection, or tracking result. The settled-lock audit found three 3-0 signal-only rows, but none
+had verified injury coverage stored at lock, so the complete rule has zero historical qualifiers.
+The -450 signal sensitivity introduced a loss, and the current board excludes Texas State near -530
+plus all extreme-price and resistance cases. Actionable promotions and demotions are both zero.
+Decision/schema releases advance to r53/r40, the profile is stored before future locks, and all r52
+and earlier locks retain exact reader precedence. Evidence and rollback:
+`docs/model-audits/2026-10-24-cfb-selective-parlay-lean.md`.
+
 ## Owner-directed correction: NBA steep Moneyline Best Angle tier
 
 On 2026-10-24 Daniel Mengel reported that Philadelphia at -567 was too steep to be called a Best

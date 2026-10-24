@@ -2422,7 +2422,7 @@ function FootballDecisionSummary({ game, market, marketKey, sport }: { game: Dai
     : priceCalibratedValueLane
       ? "Price-calibrated bet probability"
       : "Selected-side probability";
-  return <section className="mt-4 rounded-lg border border-violet-400/15 bg-violet-400/[0.035] p-3" aria-label="Football decision summary"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Outcome forecast</p><p className="mt-1 text-lg font-black text-white">{winner} · {(probability * 100).toFixed(1)}%</p><p className="mt-1 text-[7px] font-semibold text-gray-600">{game.awayTeam} {(forecast.awayWinProbability * 100).toFixed(1)}% · {game.homeTeam} {(forecast.homeWinProbability * 100).toFixed(1)}%</p></div>{sport === "nfl" ? <span className={`rounded-full border border-gray-700 px-2 py-1 text-[7px] font-black uppercase tracking-wider ${betGrade.className}`}>Bet grade {betGrade.label}</span> : <VerdictBadge market={market} />}</div>{footballOnly && baselineWinner && baselineProbability !== null ? <p className="mt-2 text-[8px] text-gray-600">Football baseline · <span className="font-black text-gray-400">{baselineWinner} {(baselineProbability * 100).toFixed(1)}%</span></p> : sport === "cfb" ? <p className="mt-2 text-[8px] text-gray-600">Pre-release football-only snapshot</p> : null}<div className="mt-3 flex items-end justify-between gap-3 border-t border-white/[0.07] pt-3"><div className="min-w-0"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Exact-price decision</p><p className="mt-1 break-words text-xl font-black leading-tight text-white">{evaluatedSelection}</p><p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{selectionDiffers ? `Forecast · ${modelPredictionLabel}` : "Forecast and evaluated side agree"}</p></div>{market.held ? <span className="shrink-0 text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">No bet evaluated</span><span className="mt-0.5 block text-[7px] text-gray-600">Current context remains below</span></span> : <span className="shrink-0 text-right"><span className="block font-mono text-base font-black text-gray-100">{formatAmerican(evaluatedPrice)}</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">{evaluatedBook ?? "Sportsbook unavailable"}</span></span>}</div><DecisionMetricGrid market={market} probabilityLabel={selectedProbabilityLabel} compact /></section>;
+  return <section className="mt-4 rounded-lg border border-violet-400/15 bg-violet-400/[0.035] p-3" aria-label="Football decision summary"><div className="flex items-start justify-between gap-3"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">Outcome forecast</p><p className="mt-1 text-lg font-black text-white">{winner} · {(probability * 100).toFixed(1)}%</p><p className="mt-1 text-[7px] font-semibold text-gray-600">{game.awayTeam} {(forecast.awayWinProbability * 100).toFixed(1)}% · {game.homeTeam} {(forecast.homeWinProbability * 100).toFixed(1)}%</p></div>{sport === "nfl" ? <span className={`rounded-full border border-gray-700 px-2 py-1 text-[7px] font-black uppercase tracking-wider ${betGrade.className}`}>Bet grade {betGrade.label}</span> : <div className="flex flex-wrap justify-end gap-1.5"><VerdictBadge market={market} />{market.parlayProfile ? <ParlayLeanBadge /> : null}</div>}</div>{footballOnly && baselineWinner && baselineProbability !== null ? <p className="mt-2 text-[8px] text-gray-600">Football baseline · <span className="font-black text-gray-400">{baselineWinner} {(baselineProbability * 100).toFixed(1)}%</span></p> : sport === "cfb" ? <p className="mt-2 text-[8px] text-gray-600">Pre-release football-only snapshot</p> : null}<div className="mt-3 flex items-end justify-between gap-3 border-t border-white/[0.07] pt-3"><div className="min-w-0"><p className="text-[7px] font-black uppercase tracking-[0.15em] text-gray-600">Exact-price decision</p><p className="mt-1 break-words text-xl font-black leading-tight text-white">{evaluatedSelection}</p><p className="mt-1 text-[8px] font-semibold leading-relaxed text-violet-200/65">{selectionDiffers ? `Forecast · ${modelPredictionLabel}` : "Forecast and evaluated side agree"}</p></div>{market.held ? <span className="shrink-0 text-right"><span className="block text-[8px] font-black uppercase tracking-wider text-amber-200">No bet evaluated</span><span className="mt-0.5 block text-[7px] text-gray-600">Current context remains below</span></span> : <span className="shrink-0 text-right"><span className="block font-mono text-base font-black text-gray-100">{formatAmerican(evaluatedPrice)}</span><span className="mt-0.5 block text-[7px] font-bold text-gray-600">{evaluatedBook ?? "Sportsbook unavailable"}</span></span>}</div><DecisionMetricGrid market={market} probabilityLabel={selectedProbabilityLabel} compact /></section>;
 }
 
 function PredictionDriverCard({ stat, away, home, awayStarter, homeStarter, marketKey, pick, competitionLabel, compact = false, illustrativeSample = false }: { stat: MarketEdgeDto["keyStats"][number]; away: string; home: string; awayStarter: string | null; homeStarter: string | null; marketKey: MarketKey; pick: string | null; competitionLabel?: string; compact?: boolean; illustrativeSample?: boolean }) {
@@ -2535,7 +2535,7 @@ function AnalysisCard({ label, text }: { label: string; text: string }) {
   return <section className="rounded-xl border border-violet-400/20 bg-violet-500/[0.05] p-4"><p className="text-[8px] font-black uppercase tracking-[0.15em] text-violet-200">{label}</p><p className="mt-2 text-[11px] leading-relaxed text-gray-300">{text}</p></section>;
 }
 
-type BoardFilter = "all" | "best_angle" | "lean" | "watchlist" | "caution" | "no_play";
+type BoardFilter = "all" | "best_angle" | "lean" | "parlay_lean" | "watchlist" | "caution" | "no_play";
 
 function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchGameDetail, groupByDay = false, cfbScopeControl, marketingSample = false }: { games: DailyEdgeGameDto[]; sport: Sport; activeId: string; activeMarket: MarketKey; selectGame: (game: DailyEdgeGameDto, market?: MarketKey) => void | Promise<void>; prefetchGameDetail: (game: DailyEdgeGameDto) => void; groupByDay?: boolean; cfbScopeControl?: { active: CfbBoardScope; fbsCount: number; divisionICount: number; onChange: (scope: CfbBoardScope) => void }; marketingSample?: boolean }) {
   const [filter, setFilter] = useState<BoardFilter>("all");
@@ -2548,6 +2548,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
     { key: "all", label: "All" },
     { key: "best_angle", label: "Best Angle" },
     { key: "lean", label: "Lean" },
+    ...(sport === "cfb" ? [{ key: "parlay_lean" as const, label: "Parlay Lean" }] : []),
     { key: "watchlist", label: "Watchlist" },
     ...(marketingSample ? [] : [{ key: "caution" as const, label: "Caution" }]),
     { key: "no_play", label: "No Play" },
@@ -2571,7 +2572,9 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
     && oddsInputsValid
     && (oddsRange.min !== null || oddsRange.max !== null);
   const matchesFilter = (market: MarketEdgeDto, key: Exclude<BoardFilter, "all">) =>
-    dailyEdgePresentationVerdict(market).key === key;
+    key === "parlay_lean"
+      ? market.parlayProfile?.role === "parlay_only"
+      : dailyEdgePresentationVerdict(market).key === key;
   const marketMatchesOdds = (market: MarketEdgeDto) => !oddsFilterActive
     || americanOddsInRange(currentDisplayedPrice(market), oddsRange);
   const searchedGames = sport === "cfb" && cfbSearch.trim()
@@ -2714,6 +2717,7 @@ function BoardGameCard({ game, sport, headlineMarket, active, activeMarket, sele
           <CompactMatchupIdentity game={game} sport={sport} />
           <div className="flex min-h-8 flex-wrap items-center gap-2">
             <VerdictBadge market={headline} large />
+            {headline.parlayProfile ? <ParlayLeanBadge /> : null}
             {finalScore ? <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-300">Final · {game.awayTeam} {finalScore.away}–{finalScore.home} {game.homeTeam}</span> : <DailyEdgeGameStartTime game={game} className="text-[10px] text-gray-500" />}
             <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
           </div>
@@ -3055,6 +3059,10 @@ function VerdictBadge({ market, large = false }: { market: MarketEdgeDto; large?
   const verdict = dailyEdgePresentationVerdict(market);
   const style = verdictStyle(verdict.key);
   return <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border font-black uppercase tracking-[0.12em] ${style} ${large ? "px-3 py-1.5 text-[10px]" : "px-2.5 py-1 text-[8px]"}`}>{verdictSymbol(verdict.key)} {verdict.label}</span>;
+}
+
+function ParlayLeanBadge() {
+  return <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-fuchsia-400/30 bg-fuchsia-400/[0.09] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-fuchsia-200">◆ Parlay Lean</span>;
 }
 
 function VerdictGlyph({ market }: { market: MarketEdgeDto }) {

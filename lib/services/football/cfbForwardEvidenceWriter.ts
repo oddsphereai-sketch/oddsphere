@@ -48,13 +48,14 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE, CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE, CFB_V1_DECISION_RELEASE, CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE, CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE, CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE, CFB_V1_DECISION_RELEASE, CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE, CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE, CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
 import {
   applyCfbIndependentPriceCorroborationLane,
   applyCfbMarketSharpAwareGrades,
+  applyCfbSelectiveParlayLeanProfile,
   buildCfbMarketSharpAwareForecast,
   CFB_MARKET_SHADOW_WEIGHT,
   CFB_MARKET_SHARP_AWARE_CANDIDATE_RELEASE,
@@ -1032,13 +1033,18 @@ export async function runCfbForwardEvidenceWriter(args: {
       bundle: marketAwareDecisions,
       availability: quarterbackAvailability.availability,
     });
-    const fullDecisionBundle = applyCfbIndependentPriceCorroborationLane({
+    const priceLaneDecisionBundle = applyCfbIndependentPriceCorroborationLane({
       bundle: availabilityAwareDecisionBundle,
       enabled: independentPriceLaneEnabled,
     });
-    const publishedHealthHolds = independentPriceLaneEnabled && fullDecisionBundle.evaluatedBets.length > 0
+    const publishedHealthHolds = independentPriceLaneEnabled && priceLaneDecisionBundle.evaluatedBets.length > 0
       ? decisionHealthHolds
       : healthHolds;
+    const fullDecisionBundle = applyCfbSelectiveParlayLeanProfile({
+      bundle: priceLaneDecisionBundle,
+      verifiedInjuryReport: injuryReport !== null,
+      healthHolds: publishedHealthHolds,
+    });
     const decisions = publishCfbForwardDecisionBundle(fullDecisionBundle, playbookLine, espnReferenceLine, {
       spread: preferredCfbContextBook(displayBooks, "spread"),
       total: preferredCfbContextBook(displayBooks, "total"),
@@ -1863,7 +1869,7 @@ function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePa
     (String(payload.schemaRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
-    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
     payload.decisions.publicationEnabled &&
     (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
     Boolean(payload.decisions.marketOutlooks);
