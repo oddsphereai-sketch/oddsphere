@@ -11,6 +11,7 @@ import {
   buildNbaPlayerPropsPointInTimeFeatures,
   type NbaPlayerPropCandidate,
 } from "../../../lib/services/nba/nbaPlayerPropsPointInTimeFeatures";
+import { selectNbaPlayerPropsSnapshotCurrentObservations } from "./nba-player-props-snapshot-cycle";
 
 loadEnvConfig(argument("env-dir") ?? process.cwd());
 
@@ -67,10 +68,12 @@ async function main(): Promise<void> {
     candidates,
     emitGameIds: gameIds,
   });
-  const observations = market.observations.filter((row) => Date.parse(row.observedAt) <= Date.parse(snapshot.generatedAt));
+  const observations = market.observations;
+  const currentObservations = selectNbaPlayerPropsSnapshotCurrentObservations(observations, snapshot.generatedAt);
   const candidateRows = buildNbaPlayerPropsForwardDecisions({
     features,
     observations,
+    currentObservations,
     evaluatedAt: snapshot.generatedAt,
   });
   const before = snapshot.decisions.filter((row) => MARKETS.has(row.market));
