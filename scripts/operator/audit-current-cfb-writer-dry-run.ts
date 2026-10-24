@@ -33,6 +33,8 @@ async function main(): Promise<void> {
     playbookApiKey,
     sharpApiKey,
     collegeFootballDataApiKey: process.env.CFBD_API_KEY ?? null,
+    theOddsApiKey: process.env.THE_ODDS_API_KEY ?? null,
+    sportsDataIoApiKey: process.env.SPORTSDATAIO_CFB_API_KEY ?? null,
     weatherProvider: null,
     auditPayloads: (payloads) => {
       focusedPayloads = focusMatchups.size > 0

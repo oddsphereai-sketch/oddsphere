@@ -659,6 +659,19 @@ Last reviewed: 2026-10-24
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 24 current split-identity completion: the centralized provider-team
+  registry adds exact abbreviation-scoped authority for `IU -> Indiana`,
+  `MICH -> Michigan`, and `OU -> Oklahoma`, while collision tests continue to
+  reject Indiana State, Michigan State, and Oklahoma State. This restores the
+  established DraftKings Network split fallback for Indiana-Michigan and
+  Oklahoma-Mississippi State without changing any prediction, probability,
+  score, grade, stake, provider hierarchy, or locked record. The split identity
+  release is
+  `cfb_sharpapi_splits_2026_10_24_r5_indiana_michigan_oklahoma_exact_school_identity`
+  and the sole writer release is
+  `cfb_forward_evidence_writer_2026_10_24_r136_current_split_identity_completion`.
+  See `docs/model-audits/2026-10-24-cfb-current-split-identity-completion.md`.
+
 - October 23 Virginia exact-school split identity: future-unlocked SharpAPI
   split capture advances to
   `cfb_sharpapi_splits_2026_10_23_r4_virginia_exact_school_identity` and the
