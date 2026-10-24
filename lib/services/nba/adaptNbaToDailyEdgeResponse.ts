@@ -145,7 +145,12 @@ function buildPickLabel(intel: MarketIntelligence): string | null {
 
 // MarketSignal union: market_confirmed | market_neutral | market_resistance |
 // public_smoke | steam_alert
-function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
+export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
+  if (intel.market === "moneyline" && intel.qualified_market_direction !== undefined) {
+    if (intel.qualified_market_direction.state === "confirmed") return "market_confirmed";
+    if (intel.qualified_market_direction.state === "resistance") return "market_resistance";
+    return "market_neutral";
+  }
   switch (intel.conflict_band) {
     case "support":             return "market_confirmed";
     case "neutral":             return "market_neutral";

@@ -31,6 +31,7 @@ import {
   noVigPair,
   type GradeOutput,
   type MarketConflictBand,
+  type NbaMoneylineReaderEvidence,
 } from "./nbaMarketReview";
 import type {
   NbaSplitsRow,
@@ -171,6 +172,11 @@ export type MarketIntelligence = {
   effective_confidence: number;
   best_angle_eligible: boolean;
   rationale: string[];
+  /**
+   * Qualified directional evidence resolved by the prediction pipeline.
+   * Optional so legacy locked snapshots retain their exact stored behavior.
+   */
+  qualified_market_direction?: NbaMoneylineDirectionalSignal;
 
   // ── Splits ──
   splits: {
@@ -185,6 +191,33 @@ export type MarketIntelligence = {
   /** Honest label set by route layer; "No opener available" when applicable. */
   movement_note: string;
 };
+
+export type NbaMoneylineDirectionalSignal = {
+  state: "confirmed" | "resistance" | "neutral";
+  source: "validated_spread_correction" | "direct_moneyline" | "spread_observation" | "none";
+};
+
+export function resolveNbaMoneylineDirectionalSignal(
+  pickSide: "home" | "away",
+  evidence: NbaMoneylineReaderEvidence | undefined,
+): NbaMoneylineDirectionalSignal {
+  if (evidence?.spreadCorrectionApplied === true) {
+    return { state: "confirmed", source: "validated_spread_correction" };
+  }
+  if (evidence?.directReadQualified === true && evidence.directReadSide !== null) {
+    return {
+      state: evidence.directReadSide === pickSide ? "confirmed" : "resistance",
+      source: "direct_moneyline",
+    };
+  }
+  if (evidence?.spreadReadQualified === true && evidence.spreadReadSide !== null) {
+    return {
+      state: evidence.spreadReadSide === pickSide ? "confirmed" : "resistance",
+      source: "spread_observation",
+    };
+  }
+  return { state: "neutral", source: "none" };
+}
 
 export type NbaGameIntelligence = {
   game_external_id: number;
@@ -464,6 +497,10 @@ function buildMl(
     enforceMoneylineEvidenceGuard,
     enforcePositiveModelEv,
   });
+  const qualifiedMarketDirection = resolveNbaMoneylineDirectionalSignal(
+    pickSide,
+    prediction.audit.professional_grade_context?.moneyline,
+  );
 
   const opp = findOppFor(opps, "moneyline", pickSide, null);
 
@@ -516,6 +553,7 @@ function buildMl(
     effective_confidence: grade.effectiveConfidence,
     best_angle_eligible: grade.bestAngleEligible,
     rationale: grade.rationale,
+    qualified_market_direction: qualifiedMarketDirection,
     splits: {
       pick_side: pickSplits,
       other_side: otherSplits,
