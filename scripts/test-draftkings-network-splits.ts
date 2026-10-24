@@ -300,6 +300,25 @@ assert.deepEqual(cfbApplied, { matchedGames: 1, populatedMarkets: 3 }, "CFB prov
 for (const [awayTeam, homeTeam, awayDisplay, homeDisplay, providerAway, providerHome] of [
   ["IU", "MICH", "Indiana Hoosiers", "Michigan Wolverines", "Indiana", "Michigan"],
   ["OU", "MSST", "Oklahoma Sooners", "Mississippi State Bulldogs", "Oklahoma", "Mississippi State"],
+  ["RUTG", "NU", "Rutgers Scarlet Knights", "Northwestern Wildcats", "Rutgers", "Northwestern"],
+  ["RICE", "FAU", "Rice Owls", "Florida Atlantic Owls", "Rice", "Florida Atlantic"],
+  ["BAY", "KU", "Baylor Bears", "Kansas Jayhawks", "Baylor", "Kansas"],
+  ["ORE", "ILL", "Oregon Ducks", "Illinois Fighting Illini", "Oregon", "Illinois"],
+  ["TENN", "SC", "Tennessee Volunteers", "South Carolina Gamecocks", "Tennessee", "South Carolina"],
+  ["MSU", "UCLA", "Michigan State Spartans", "UCLA Bruins", "Michigan State", "UCLA"],
+  ["ODU", "LT", "Old Dominion Monarchs", "Louisiana Tech Bulldogs", "Old Dominion", "Louisiana Tech"],
+  ["COLO", "OKST", "Colorado Buffaloes", "Oklahoma State Cowboys", "Colorado", "Oklahoma State"],
+  ["VT", "CLEM", "Virginia Tech Hokies", "Clemson Tigers", "Virginia Tech", "Clemson"],
+  ["MISS", "TEX", "Ole Miss Rebels", "Texas Longhorns", "Ole Miss", "Texas"],
+  ["SYR", "UNC", "Syracuse Orange", "North Carolina Tar Heels", "Syracuse", "North Carolina"],
+  ["ISU", "ARIZ", "Iowa State Cyclones", "Arizona Wildcats", "Iowa State", "Arizona"],
+  ["NDSU", "UNM", "North Dakota State Bison", "New Mexico Lobos", "North Dakota State", "New Mexico"],
+  ["HOU", "UTAH", "Houston Cougars", "Utah Utes", "Houston", "Utah"],
+  ["TTU", "CIN", "Texas Tech Red Raiders", "Cincinnati Bearcats", "Texas Tech", "Cincinnati"],
+  ["TA&M", "ALA", "Texas A&M Aggies", "Alabama Crimson Tide", "Texas A&M", "Alabama"],
+  ["KSU", "ASU", "Kansas State Wildcats", "Arizona State Sun Devils", "Kansas State", "Arizona State"],
+  ["SDSU", "CSU", "San Diego State Aztecs", "Colorado State Rams", "San Diego State", "Colorado State"],
+  ["USU", "TXST", "Utah State Aggies", "Texas State Bobcats", "Utah State", "Texas State"],
 ] as const) {
   const exactSchoolResponse = footballResponse("cfb", awayTeam, homeTeam, awayDisplay, homeDisplay);
   const exactSchoolApplied = applyDraftKingsNetworkSplitFallback(exactSchoolResponse, {

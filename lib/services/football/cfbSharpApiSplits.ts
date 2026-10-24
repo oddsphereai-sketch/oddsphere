@@ -3,7 +3,7 @@ import type { NcaafGame } from "./balldontlieNcaafSlate";
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_SHARP_API_SPLITS_RELEASE =
-  "cfb_sharpapi_splits_2026_10_24_r5_indiana_michigan_oklahoma_exact_school_identity" as const;
+  "cfb_sharpapi_splits_2026_10_24_r6_complete_current_school_identity" as const;
 export const CFB_SHARP_API_SPLITS_MAX_GAMES = 128 as const;
 export const CFB_SHARP_API_SPLITS_MAX_ROWS = 200 as const;
 

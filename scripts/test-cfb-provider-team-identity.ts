@@ -17,6 +17,29 @@ const confirmedProviderLabels = [
   ["IU", "Indiana Hoosiers", "Indiana"],
   ["MICH", "Michigan Wolverines", "Michigan"],
   ["OU", "Oklahoma Sooners", "Oklahoma"],
+  ["NU", "Northwestern Wildcats", "Northwestern"],
+  ["FAU", "Florida Atlantic Owls", "Florida Atlantic"],
+  ["KU", "Kansas Jayhawks", "Kansas"],
+  ["ORE", "Oregon Ducks", "Oregon"],
+  ["ILL", "Illinois Fighting Illini", "Illinois"],
+  ["TENN", "Tennessee Volunteers", "Tennessee"],
+  ["SC", "South Carolina Gamecocks", "South Carolina"],
+  ["MSU", "Michigan State Spartans", "Michigan State"],
+  ["LT", "Louisiana Tech Bulldogs", "Louisiana Tech"],
+  ["COLO", "Colorado Buffaloes", "Colorado"],
+  ["OKST", "Oklahoma State Cowboys", "Oklahoma State"],
+  ["VT", "Virginia Tech Hokies", "Virginia Tech"],
+  ["TEX", "Texas Longhorns", "Texas"],
+  ["UNC", "North Carolina Tar Heels", "North Carolina"],
+  ["ARIZ", "Arizona Wildcats", "Arizona"],
+  ["UNM", "New Mexico Lobos", "New Mexico"],
+  ["HOU", "Houston Cougars", "Houston"],
+  ["TTU", "Texas Tech Red Raiders", "Texas Tech"],
+  ["TA&M", "Texas A&M Aggies", "Texas A&M"],
+  ["KSU", "Kansas State Wildcats", "Kansas State"],
+  ["ASU", "Arizona State Sun Devils", "Arizona State"],
+  ["CSU", "Colorado State Rams", "Colorado State"],
+  ["TXST", "Texas State Bobcats", "Texas State"],
 ] as const;
 
 for (const [abbreviation, expectedName, observed] of confirmedProviderLabels) {
@@ -67,6 +90,38 @@ assert.equal(
   false,
   "Oklahoma's exact school alias cannot attach to Oklahoma State",
 );
+
+for (const [abbreviation, expectedName, observed] of [
+  ["NWST", "Northwestern State Demons", "Northwestern"],
+  ["FLA", "Florida Gators", "Florida Atlantic"],
+  ["KSU", "Kansas State Wildcats", "Kansas"],
+  ["ORST", "Oregon State Beavers", "Oregon"],
+  ["ILST", "Illinois State Redbirds", "Illinois"],
+  ["TNST", "Tennessee State Tigers", "Tennessee"],
+  ["SCST", "South Carolina State Bulldogs", "South Carolina"],
+  ["MICH", "Michigan Wolverines", "Michigan State"],
+  ["UL", "Louisiana Ragin' Cajuns", "Louisiana Tech"],
+  ["CSU", "Colorado State Rams", "Colorado"],
+  ["OU", "Oklahoma Sooners", "Oklahoma State"],
+  ["UVA", "Virginia Cavaliers", "Virginia Tech"],
+  ["TXST", "Texas State Bobcats", "Texas"],
+  ["NCST", "North Carolina State Wolfpack", "North Carolina"],
+  ["ASU", "Arizona State Sun Devils", "Arizona"],
+  ["NMSU", "New Mexico State Aggies", "New Mexico"],
+  ["HCU", "Houston Christian Huskies", "Houston"],
+  ["TEX", "Texas Longhorns", "Texas Tech"],
+  ["TEX", "Texas Longhorns", "Texas A&M"],
+  ["KU", "Kansas Jayhawks", "Kansas State"],
+  ["ARIZ", "Arizona Wildcats", "Arizona State"],
+  ["COLO", "Colorado Buffaloes", "Colorado State"],
+  ["TEX", "Texas Longhorns", "Texas State"],
+] as const) {
+  assert.equal(
+    cfbProviderTeamMatches({ abbreviation, expectedName, observed }),
+    false,
+    `${observed} must not cross-attach to ${abbreviation}`,
+  );
+}
 
 for (const abbreviation of Object.keys(CFB_PROVIDER_TEAM_ALIASES)) {
   if (!(abbreviation in CFB_TEAM_IDENTITIES)) continue;
