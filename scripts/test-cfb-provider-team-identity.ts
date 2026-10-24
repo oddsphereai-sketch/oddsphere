@@ -14,6 +14,9 @@ const confirmedProviderLabels = [
   ["MASS", "Massachusetts Minutemen", "UMass"],
   ["NMSU", "New Mexico State Aggies", "NM State"],
   ["UVA", "Virginia Cavaliers", "Virginia"],
+  ["IU", "Indiana Hoosiers", "Indiana"],
+  ["MICH", "Michigan Wolverines", "Michigan"],
+  ["OU", "Oklahoma Sooners", "Oklahoma"],
 ] as const;
 
 for (const [abbreviation, expectedName, observed] of confirmedProviderLabels) {
@@ -48,6 +51,21 @@ assert.equal(
   cfbProviderTeamMatches({ abbreviation: "M-OH", expectedName: "Miami (OH) RedHawks", observed: "Miami FL" }),
   false,
   "Miami provider aliases cannot cross between the Florida and Ohio programs",
+);
+assert.equal(
+  cfbProviderTeamMatches({ abbreviation: "IU", expectedName: "Indiana Hoosiers", observed: "Indiana State" }),
+  false,
+  "Indiana's exact school alias cannot attach to Indiana State",
+);
+assert.equal(
+  cfbProviderTeamMatches({ abbreviation: "MICH", expectedName: "Michigan Wolverines", observed: "Michigan State" }),
+  false,
+  "Michigan's exact school alias cannot attach to Michigan State",
+);
+assert.equal(
+  cfbProviderTeamMatches({ abbreviation: "OU", expectedName: "Oklahoma Sooners", observed: "Oklahoma State" }),
+  false,
+  "Oklahoma's exact school alias cannot attach to Oklahoma State",
 );
 
 for (const abbreviation of Object.keys(CFB_PROVIDER_TEAM_ALIASES)) {

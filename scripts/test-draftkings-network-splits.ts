@@ -297,6 +297,29 @@ const cfbApplied = applyDraftKingsNetworkSplitFallback(cfb, {
 });
 assert.deepEqual(cfbApplied, { matchedGames: 1, populatedMarkets: 3 }, "CFB provider school aliases must resolve without guessing across Miami teams");
 
+for (const [awayTeam, homeTeam, awayDisplay, homeDisplay, providerAway, providerHome] of [
+  ["IU", "MICH", "Indiana Hoosiers", "Michigan Wolverines", "Indiana", "Michigan"],
+  ["OU", "MSST", "Oklahoma Sooners", "Mississippi State Bulldogs", "Oklahoma", "Mississippi State"],
+] as const) {
+  const exactSchoolResponse = footballResponse("cfb", awayTeam, homeTeam, awayDisplay, homeDisplay);
+  const exactSchoolApplied = applyDraftKingsNetworkSplitFallback(exactSchoolResponse, {
+    source: "draftkings_network", sport: "NCAA Football", fetchedAt: "2026-10-24T14:05:26.000Z",
+    games: [{
+      providerEventId: `${awayTeam}-${homeTeam}`, awayName: providerAway, homeName: providerHome, monthDay: "9/19",
+      markets: {
+        moneyline: footballMarket("moneyline", providerAway, providerHome),
+        spread: footballMarket("spread", `${providerAway} -2.5`, `${providerHome} +2.5`),
+        total: footballMarket("total", "Over 47.5", "Under 47.5"),
+      },
+    }],
+  });
+  assert.deepEqual(
+    exactSchoolApplied,
+    { matchedGames: 1, populatedMarkets: 3 },
+    `${providerAway}-${providerHome} must receive all three exact split fallbacks`,
+  );
+}
+
 const lowerPriority = footballResponse("nfl", "WSH", "DAL");
 lowerPriority.games[0]!.markets.moneyline.sportsbookSplits = {
   label: "BetMGM Splits", rows: [], signal: null, lastUpdated: "2026-09-17T15:02:00.000Z",
