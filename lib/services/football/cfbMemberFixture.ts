@@ -90,6 +90,7 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
@@ -1023,9 +1024,36 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const coordinatorIntegrationPrevious = coordinatorIntegrationPreviousComplete ??
     coordinatorIntegrationPreviousBoundary ?? coordinatorIntegrationPreviousLockOverlay;
+  const parlayLeanPreviousComplete = completeRowsForRelease(
+    rows,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MEMBER_RELEASE,
+    CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
+  );
+  const parlayLeanPreviousBoundary = coordinatorIntegrationPrevious
+    ? immutableBoundaryTransitionRows(
+        rows,
+        now,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MEMBER_RELEASE,
+        CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
+        coordinatorIntegrationPrevious,
+      )
+    : null;
+  const parlayLeanPreviousLockOverlay = coordinatorIntegrationPrevious
+    ? immutableLockOverlayRows(
+        rows,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MEMBER_RELEASE,
+        CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
+        coordinatorIntegrationPrevious,
+      )
+    : null;
+  const parlayLeanPrevious = parlayLeanPreviousComplete ?? parlayLeanPreviousBoundary ??
+    parlayLeanPreviousLockOverlay;
   const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const coordinatorIntegrationPreviousAuthority = coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
+  const coordinatorIntegrationPreviousAuthority = parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -1038,6 +1066,7 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (parlayLeanPrevious) return parlayLeanPrevious;
   if (coordinatorIntegrationPrevious) return coordinatorIntegrationPrevious;
   if (finalWinnerPrevious) return finalWinnerPrevious;
   if (exactPriceActionabilityPrevious) return exactPriceActionabilityPrevious;
@@ -1723,6 +1752,7 @@ function buildMarket(
     finalRecScore: actionability,
     actionabilityLabel: held ? "No Play" : decision!.grade,
     displayReason: reason,
+    parlayProfile: decision?.parlayProfile ?? null,
     guidedGuide: reason,
     guidedWatchOut: "Prices, projected quarterback context, and verified kickoff weather refresh until T-60. Injury-report context remains labeled unavailable when no timestamped source exists.",
     whyLine: reason,

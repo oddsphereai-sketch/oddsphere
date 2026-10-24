@@ -154,6 +154,13 @@ check(
 );
 
 check("CFB board cards leave repeated explanatory copy to the reader", candidateDailyEdgeSource.includes('sport !== "cfb" ? <p'));
+check(
+  "CFB Parlay Lean remains a secondary confidence lane instead of replacing Bet grade",
+  candidateDailyEdgeSource.includes('key: "parlay_lean" as const, label: "Parlay Lean"') &&
+    candidateDailyEdgeSource.includes('market.parlayProfile?.role === "parlay_only"') &&
+    candidateDailyEdgeSource.includes("<VerdictBadge market={headline} large />") &&
+    candidateDailyEdgeSource.includes("{headline.parlayProfile ? <ParlayLeanBadge /> : null}"),
+);
 
 const heldPresentationMarket = {
   held: true,

@@ -273,6 +273,16 @@ export type MarketEdgeDto = {
   finalRecScore?: number | null;
   actionabilityLabel?: string;
   displayReason?: string | null;
+  /**
+   * Secondary likely-winner classification for parlay construction. It is
+   * deliberately separate from the exact-price Bet grade and tracking.
+   */
+  parlayProfile?: {
+    release: string;
+    label: "Parlay Lean";
+    role: "parlay_only";
+    reasonCodes: string[];
+  } | null;
 
   // ── 4.1.10 server-generated beginner copy (banned-terms-linted) ──
   guidedGuide: string;

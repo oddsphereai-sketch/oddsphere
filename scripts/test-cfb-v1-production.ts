@@ -109,6 +109,8 @@ import {
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   applyCfbMarketSharpAwareGrades,
   applyCfbBalancedPositiveValueRule,
+  applyCfbSelectiveParlayLeanProfile,
+  CFB_SELECTIVE_PARLAY_LEAN_PROFILE_RELEASE,
   buildCfbMarketSharpAwareForecast,
 } from "../lib/services/football/cfbMarketSharpAwareShadow";
 import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
@@ -131,6 +133,7 @@ import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE,
@@ -649,6 +652,56 @@ const prohibitiveFavorite = applyCfbBalancedPositiveValueRule({
   evaluatedLine: null, sharpDirection: "support", publicDirection: "support", movementDirection: "support", reasonCodes: [],
 });
 assert.equal(prohibitiveFavorite.finalGrade, "Watchlist", "a prohibitive favorite cannot be promoted into the actionable Lean surface");
+const profileCandidateBundle = {
+  ...productionBundle,
+  evaluatedBets: productionBundle.evaluatedBets.map((decision) => decision.market === "moneyline" ? {
+    ...decision,
+    grade: "Watchlist" as const,
+    probabilityGrade: "Best Angle" as const,
+    modelProbability: 0.815,
+    evaluatedQuote: { ...decision.evaluatedQuote, price: -360 },
+    gradeAdjustment: {
+      ...(decision.gradeAdjustment!),
+      movementDirection: "support" as const,
+      sharpDirection: "neutral" as const,
+      publicDirection: "support" as const,
+    },
+  } : decision),
+};
+const selectiveParlayProfile = applyCfbSelectiveParlayLeanProfile({
+  bundle: profileCandidateBundle,
+  verifiedInjuryReport: true,
+  healthHolds: [],
+});
+const selectiveParlayMoneyline = selectiveParlayProfile.evaluatedBets.find((decision) => decision.market === "moneyline")!;
+assert.equal(selectiveParlayMoneyline.grade, "Watchlist", "Parlay Lean must not rewrite the exact-price Bet grade");
+assert.equal(selectiveParlayMoneyline.parlayProfile?.release, CFB_SELECTIVE_PARLAY_LEAN_PROFILE_RELEASE);
+assert.equal(selectiveParlayProfile.evaluatedBets.filter((decision) => decision.parlayProfile).length, 1, "only the qualified Moneyline may receive the secondary profile");
+assert.equal(applyCfbSelectiveParlayLeanProfile({ bundle: profileCandidateBundle, verifiedInjuryReport: false, healthHolds: [] }).evaluatedBets.some((decision) => decision.parlayProfile), false, "unverified injuries must fail closed");
+const resistedParlayCandidate = {
+  ...profileCandidateBundle,
+  evaluatedBets: profileCandidateBundle.evaluatedBets.map((decision) => decision.market === "moneyline" ? {
+    ...decision,
+    gradeAdjustment: { ...decision.gradeAdjustment!, sharpDirection: "resistance" as const },
+  } : decision),
+};
+assert.equal(applyCfbSelectiveParlayLeanProfile({ bundle: resistedParlayCandidate, verifiedInjuryReport: true, healthHolds: [] }).evaluatedBets.some((decision) => decision.parlayProfile), false, "verified market resistance must block Parlay Lean");
+const prohibitiveParlayCandidate = {
+  ...profileCandidateBundle,
+  evaluatedBets: profileCandidateBundle.evaluatedBets.map((decision) => decision.market === "moneyline" ? {
+    ...decision,
+    evaluatedQuote: { ...decision.evaluatedQuote, price: -1000 },
+  } : decision),
+};
+assert.equal(applyCfbSelectiveParlayLeanProfile({ bundle: prohibitiveParlayCandidate, verifiedInjuryReport: true, healthHolds: [] }).evaluatedBets.some((decision) => decision.parlayProfile), false, "prohibitive favorites must remain outside the parlay-utility lane");
+const lowConfidenceParlayCandidate = {
+  ...profileCandidateBundle,
+  evaluatedBets: profileCandidateBundle.evaluatedBets.map((decision) => decision.market === "moneyline" ? {
+    ...decision,
+    modelProbability: 0.749,
+  } : decision),
+};
+assert.equal(applyCfbSelectiveParlayLeanProfile({ bundle: lowConfidenceParlayCandidate, verifiedInjuryReport: true, healthHolds: [] }).evaluatedBets.some((decision) => decision.parlayProfile), false, "a practical price cannot bypass the high-confidence winner floor");
 const counterSignalPromotion = applyCfbBalancedPositiveValueRule({
   market: "spread", finalGrade: "Watchlist", probabilityGrade: "Watchlist", executionStatus: "bet",
   expectedValue: 0.04, modelProbability: 0.542, marketFairProbability: 0.502, evaluatedPrice: -108,
@@ -735,6 +788,25 @@ const evidence: CfbForwardStoredEvidence = {
   payloadSha256: hashCfbForwardEvidencePayload(payload),
   payload,
 };
+const previousDecisionPayload = structuredClone(payload) as CfbForwardEvidencePayload;
+previousDecisionPayload.decisions.decisionRelease = CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE as unknown as typeof previousDecisionPayload.decisions.decisionRelease;
+previousDecisionPayload.decisions.evaluatedBets = previousDecisionPayload.decisions.evaluatedBets.map((decision) => {
+  const legacy = { ...decision };
+  legacy.decisionRelease = CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE as unknown as typeof legacy.decisionRelease;
+  delete legacy.parlayProfile;
+  return legacy;
+});
+const previousDecisionEvidence: CfbForwardStoredEvidence = {
+  ...evidence,
+  id: "r52-immutable-lock",
+  payload: previousDecisionPayload,
+  payloadSha256: hashCfbForwardEvidencePayload(previousDecisionPayload),
+};
+assert.equal(
+  selectLatestCfbMemberEvidenceRows([previousDecisionEvidence], "2026-08-29T18:00:00.000Z")[0]?.id,
+  "r52-immutable-lock",
+  "the r53 rollout must retain exact r52 locked payload precedence without synthesizing Parlay Lean",
+);
 
 function releaseTransitionPayload(args: {
   providerGameId: string;

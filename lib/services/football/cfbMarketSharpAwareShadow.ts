@@ -90,6 +90,11 @@ export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MODEL_PROBABILITY = 0.65 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MIN_MARKET_PROBABILITY = 0.60 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MIN_PRICE = -700 as const;
 export const CFB_MONEYLINE_PARLAY_LEAN_MAX_PRICE = -201 as const;
+export const CFB_SELECTIVE_PARLAY_LEAN_PROFILE_RELEASE =
+  "cfb_selective_parlay_lean_profile_2026_10_24_r1" as const;
+export const CFB_SELECTIVE_PARLAY_LEAN_MIN_MODEL_PROBABILITY = 0.75 as const;
+export const CFB_SELECTIVE_PARLAY_LEAN_MIN_PRICE = -400 as const;
+export const CFB_SELECTIVE_PARLAY_LEAN_MAX_PRICE = -200 as const;
 export const CFB_INDEPENDENT_PRICE_SPREAD_LEAN_MIN_MODEL_PROBABILITY = 0.58 as const;
 
 type CanonicalSide = "home" | "away" | "over" | "under";
@@ -477,6 +482,50 @@ export function applyCfbIndependentPriceCorroborationLane(args: {
         gradeAdjustment: decision.gradeAdjustment ? {
           ...decision.gradeAdjustment,
           reasonCodes: [...decision.gradeAdjustment.reasonCodes, "independent_price_lane_actionability_cap"],
+        } : null,
+      };
+    }),
+  };
+}
+
+/**
+ * Identify a selective likely-winner lane without turning a negative-EV
+ * favorite into an actionable straight bet. This runs after every grade cap,
+ * and the resulting profile is stored with the decision before T-60 lock.
+ */
+export function applyCfbSelectiveParlayLeanProfile(args: {
+  bundle: CfbV1DecisionBundle;
+  verifiedInjuryReport: boolean;
+  healthHolds: string[];
+}): CfbV1DecisionBundle {
+  return {
+    ...args.bundle,
+    evaluatedBets: args.bundle.evaluatedBets.map((decision) => {
+      const adjustment = decision.gradeAdjustment;
+      const qualifies = args.verifiedInjuryReport &&
+        args.healthHolds.length === 0 &&
+        decision.market === "moneyline" &&
+        decision.grade === "Watchlist" &&
+        decision.probabilityGrade === "Best Angle" &&
+        decision.modelProbability >= CFB_SELECTIVE_PARLAY_LEAN_MIN_MODEL_PROBABILITY &&
+        decision.evaluatedQuote.price >= CFB_SELECTIVE_PARLAY_LEAN_MIN_PRICE &&
+        decision.evaluatedQuote.price <= CFB_SELECTIVE_PARLAY_LEAN_MAX_PRICE &&
+        adjustment?.movementDirection === "support" &&
+        adjustment.sharpDirection !== "resistance" &&
+        adjustment.publicDirection !== "resistance";
+      return {
+        ...decision,
+        parlayProfile: qualifies ? {
+          release: CFB_SELECTIVE_PARLAY_LEAN_PROFILE_RELEASE,
+          label: "Parlay Lean" as const,
+          role: "parlay_only" as const,
+          reasonCodes: [
+            "high_win_probability",
+            "supported_same_book_movement",
+            "no_verified_market_resistance",
+            "verified_injury_report",
+            "price_inside_parlay_utility_band",
+          ],
         } : null,
       };
     }),

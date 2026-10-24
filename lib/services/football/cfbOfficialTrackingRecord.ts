@@ -35,6 +35,7 @@ import {
   CFB_V1_CALIBRATION_RELEASE,
   CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
@@ -531,7 +532,7 @@ function assertCfbPublishedPregameRecoveryPayload(payload: CfbForwardEvidencePay
       (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
       (String(payload.schemaRelease) === CFB_FORWARD_PRICE_QB_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_QB_PREVIOUS_MEMBER_RELEASE) ||
       (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) ||
-    (payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE) ||
+    (payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_MARKET_READER_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE && payload.decisions.decisionRelease !== CFB_V1_PRICE_QB_PREVIOUS_DECISION_RELEASE) ||
     !payload.decisions.publicationEnabled ||
     !supportedForecastRelease ||
     !Number.isFinite(capturedAt) ||
@@ -574,7 +575,8 @@ export function isEligibleCfbOfficialTrackingPayload(payload: CfbForwardEvidence
   if (
     payload.schemaRelease !== CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
     payload.memberRelease !== CFB_FORWARD_MEMBER_RELEASE ||
-    payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE ||
+    (payload.decisions.decisionRelease !== CFB_V1_DECISION_RELEASE &&
+      payload.decisions.decisionRelease !== CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE) ||
     payload.authoritativeForecast?.release !== CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE ||
     payload.authoritativeForecast.status !== "market_sharp_applied" ||
     !payload.decisions.publicationEnabled ||
