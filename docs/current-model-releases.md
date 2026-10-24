@@ -659,6 +659,20 @@ Last reviewed: 2026-10-24
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 24 selective Parlay Lean and same-schema rollout repair: decision/schema releases are
+  `cfb_v1_daily_edge_decision_2026_10_24_r53_selective_parlay_lean_profile` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_24_r40_selective_parlay_lean_profile`. Future-unlocked
+  CFB Moneyline Watchlists receive a separate Parlay Lean profile only at 75%+ model probability,
+  -200 through -400, supportive movement, no verified resistance, verified injury coverage, and
+  zero health holds. It does not change the official grade, stake, prediction, or tracking tuple.
+  Fixture/snapshot/reader advance to
+  `cfb_v1_member_fixture_2026_10_24_r94_same_schema_decision_transition` /
+  `cfb_forward_member_snapshot_2026_10_24_r54_same_schema_decision_transition` /
+  `cfb_member_snapshot_reader_2026_10_24_r39_same_schema_decision_transition` so a partial r52/r53
+  wave cannot suppress the board. Exact r52 locks retain precedence. The existing sole writer and
+  `prediction_pipeline:cfb` lease are unchanged. Evidence:
+  `docs/model-audits/2026-10-24-cfb-selective-parlay-lean.md`.
+
 - October 24 complete current-school split identity: a full read-only audit of
   the live 44-game DraftKings Network CFB split slate found 14 exact games with
   complete Moneyline, Spread, and Total pairs that the centralized identity

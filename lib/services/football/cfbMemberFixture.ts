@@ -125,7 +125,7 @@ import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMark
 import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_22_r93_current_market_cycle_opening" as const;
+  "cfb_v1_member_fixture_2026_10_24_r94_same_schema_decision_transition" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_15_r80_full_product_coordinator_compatibility" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
@@ -1024,15 +1024,17 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const coordinatorIntegrationPrevious = coordinatorIntegrationPreviousComplete ??
     coordinatorIntegrationPreviousBoundary ?? coordinatorIntegrationPreviousLockOverlay;
+  const parlayLeanPreviousRows = rows.filter((row) =>
+    row.payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE);
   const parlayLeanPreviousComplete = completeRowsForRelease(
-    rows,
+    parlayLeanPreviousRows,
     CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
     CFB_FORWARD_MEMBER_RELEASE,
     CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   );
   const parlayLeanPreviousBoundary = coordinatorIntegrationPrevious
     ? immutableBoundaryTransitionRows(
-        rows,
+        parlayLeanPreviousRows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
@@ -1042,7 +1044,7 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const parlayLeanPreviousLockOverlay = coordinatorIntegrationPrevious
     ? immutableLockOverlayRows(
-        rows,
+        parlayLeanPreviousRows,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,
         CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
@@ -1051,13 +1053,15 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const parlayLeanPrevious = parlayLeanPreviousComplete ?? parlayLeanPreviousBoundary ??
     parlayLeanPreviousLockOverlay;
-  const current = completeRowsForRelease(rows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
+  const currentDecisionRows = rows.filter((row) =>
+    row.payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE);
+  const current = completeRowsForRelease(currentDecisionRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
   const coordinatorIntegrationPreviousAuthority = parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
-        rows,
+        currentDecisionRows,
         now,
         CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
         CFB_FORWARD_MEMBER_RELEASE,

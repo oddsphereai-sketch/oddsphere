@@ -808,6 +808,77 @@ assert.equal(
   "the r53 rollout must retain exact r52 locked payload precedence without synthesizing Parlay Lean",
 );
 
+const sameSchemaPreviousRows = ["same-schema-locked", "same-schema-unlocked"].map((providerGameId, index) => {
+  const previous = structuredClone(previousDecisionPayload) as CfbForwardEvidencePayload;
+  previous.slateGameCount = 2;
+  previous.game.providerGameId = providerGameId;
+  previous.game.scheduledStart = "2026-10-24T19:00:00.000Z";
+  previous.stage = index === 0 ? "t60" : "unlocked";
+  previous.capturedAt = index === 0 ? "2026-10-24T18:10:00.000Z" : "2026-10-24T16:00:00.000Z";
+  previous.captureTiming = "on_time";
+  previous.t60LagMinutes = index === 0 ? 10 : null;
+  previous.decisions.trackingEnabled = index === 0;
+  previous.decisions.evaluatedBets = previous.decisions.evaluatedBets.map((decision) => ({
+    ...decision,
+    providerGameId,
+    gameStartsAt: previous.game.scheduledStart,
+    stage: index === 0 ? "t60_locked" as const : "unlocked" as const,
+    evaluatedAt: previous.capturedAt,
+    lockedAt: index === 0 ? previous.capturedAt : null,
+    evaluatedQuote: { ...decision.evaluatedQuote, providerGameId, observedAt: previous.capturedAt },
+  }));
+  return {
+    ...evidence,
+    id: `r52-${providerGameId}`,
+    providerGameId,
+    stage: previous.stage,
+    capturedAt: previous.capturedAt,
+    gameStartAt: previous.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(previous),
+    payload: previous,
+  } satisfies CfbForwardStoredEvidence;
+});
+const sameSchemaCurrentPayload = structuredClone(payload) as CfbForwardEvidencePayload;
+sameSchemaCurrentPayload.slateGameCount = 2;
+sameSchemaCurrentPayload.game.providerGameId = "same-schema-unlocked";
+sameSchemaCurrentPayload.game.scheduledStart = "2026-10-24T19:00:00.000Z";
+sameSchemaCurrentPayload.stage = "unlocked";
+sameSchemaCurrentPayload.capturedAt = "2026-10-24T17:00:00.000Z";
+sameSchemaCurrentPayload.decisions.trackingEnabled = false;
+sameSchemaCurrentPayload.decisions.evaluatedBets = sameSchemaCurrentPayload.decisions.evaluatedBets.map((decision) => ({
+  ...decision,
+  providerGameId: "same-schema-unlocked",
+  gameStartsAt: sameSchemaCurrentPayload.game.scheduledStart,
+  stage: "unlocked" as const,
+  evaluatedAt: sameSchemaCurrentPayload.capturedAt,
+  lockedAt: null,
+  evaluatedQuote: { ...decision.evaluatedQuote, providerGameId: "same-schema-unlocked", observedAt: sameSchemaCurrentPayload.capturedAt },
+}));
+const sameSchemaTransitionSelection = selectLatestCfbMemberEvidenceRows([
+  ...sameSchemaPreviousRows,
+  {
+    ...evidence,
+    id: "r53-same-schema-unlocked",
+    providerGameId: "same-schema-unlocked",
+    stage: "unlocked",
+    capturedAt: sameSchemaCurrentPayload.capturedAt,
+    gameStartAt: sameSchemaCurrentPayload.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(sameSchemaCurrentPayload),
+    payload: sameSchemaCurrentPayload,
+  },
+], "2026-10-24T17:05:00.000Z");
+assert.equal(sameSchemaTransitionSelection.length, 2);
+assert.equal(
+  sameSchemaTransitionSelection.find((row) => row.providerGameId === "same-schema-locked")?.id,
+  "r52-same-schema-locked",
+  "a decision-only rollout must preserve the exact locked r52 row",
+);
+assert.equal(
+  sameSchemaTransitionSelection.find((row) => row.providerGameId === "same-schema-unlocked")?.id,
+  "r53-same-schema-unlocked",
+  "a decision-only rollout must publish the refreshed unlocked r53 row",
+);
+
 function releaseTransitionPayload(args: {
   providerGameId: string;
   gameStartsAt: string;
