@@ -258,9 +258,10 @@ Last reviewed: 2026-10-24
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`, plus
   `docs/model-audits/2026-10-16-nba-split-fallback-team-identity-result.md`.
 - NBA internal professional market reader is
-  `nba_professional_market_reader_2026_10_20_r6_structural_qualification`. It consumes the
+  `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
   prediction pipeline. It excludes the independent model's best-execution sportsbook by market,
+  excludes prediction-market exchanges from sportsbook consensus and movement authority,
   removes vig before comparing price movement, compares Spread/Total prices only at the same number,
   and fails closed on incomplete pagination, missing sequences, named reversal/buyback, or material
   book disagreement. Exact-line flow may confirm or resist a read, but missing or line-mismatched flow
@@ -3868,15 +3869,15 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_24_r20_steep_moneyline_best_angle_tier`
+- Model / prediction record: `nba_professional_unified_2026_10_25_r21_exchange_source_exclusion`
 - Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation`
-- Market marriage: `nba_market_marriage_2026_10_24_r21_steep_moneyline_best_angle_tier`
+- Market marriage: `nba_market_marriage_2026_10_25_r22_exchange_source_exclusion`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_24_r13_steep_moneyline_best_angle_tier`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_24_r17_steep_moneyline_best_angle_tier`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_25_r18_exchange_source_exclusion`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
-- Internal market reader: `nba_professional_market_reader_2026_10_20_r6_structural_qualification`
+- Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
 - Member lock publication: `nba_member_lock_publication_2026_10_24_r6_steep_moneyline_best_angle_tier`
 - Locked member snapshot: `nba_locked_member_snapshot_2026_10_24_r4_steep_moneyline_best_angle_tier`
@@ -4188,7 +4189,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_24_r17_steep_moneyline_best_angle_tier`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_25_r18_exchange_source_exclusion`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
