@@ -70,6 +70,7 @@ import {
 } from "./nflForwardEvidenceCapture";
 import { buildNflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import { buildNflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
+import { buildNflThreeStateMarketAuthority } from "./nflThreeStateMarketReader";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNflSharpOdds,
@@ -109,7 +110,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_19_r65_availability_arbitration_shadow" as const;
+  "nfl_forward_evidence_writer_2026_10_25_r66_three_state_market_reader" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -565,6 +566,18 @@ export async function runNflForwardEvidenceWriter(args: {
         sharpSplits,
         excludedFamiliesByMarket,
       }),
+      threeStateMarketAuthorityFactory: exactProviderScore
+        ? (excludedFamiliesByMarket) => buildNflThreeStateMarketAuthority({
+            evaluatedAt: capturedAt,
+            snapshots: namedSequenceSnapshots,
+            current,
+            comparableCurrentBooks,
+            playbookLine,
+            playbookSplits,
+            sharpSplits,
+            excludedFamilies: excludedFamiliesByMarket.moneyline,
+          })
+        : undefined,
       ...(exactProviderScore ? {
         marketOutcomeBuilder: buildNflNoWeightMarketEvidenceOutcomeForecast,
         // If the evaluated sportsbook cannot be removed from a stable market

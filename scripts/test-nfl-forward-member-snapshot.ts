@@ -207,11 +207,47 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const threeStatePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_22_r40_verified_full_market_trail";
+  const threeStatePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_22_r48_verified_full_market_trail";
+  const threeStatePreviousPayload = {
+    ...snapshot,
+    snapshotRelease: threeStatePreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair",
+    fixtureRelease: threeStatePreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: threeStatePreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl",
+    "daily-edge",
+    2026,
+    1,
+    threeStatePreviousSnapshotRelease,
+    threeStatePreviousFixtureRelease,
+    threeStatePreviousPayload.memberRelease,
+    threeStatePreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = threeStatePreviousPayload;
+  const threeStateContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(threeStateContinuityRead?.snapshotRelease, threeStatePreviousSnapshotRelease);
+  assert.equal(JSON.stringify(threeStateContinuityRead?.fixture), JSON.stringify(threeStatePreviousPayload.fixture),
+    "the immediate r40/r48 predecessor must retain exact stored reader precedence");
+
   const personnelCoveragePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_15_r37_personnel_coverage_repair";
   const personnelCoveragePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_15_r45_personnel_coverage_repair";
   const personnelCoveragePreviousPayload = {
     ...snapshot,
     snapshotRelease: personnelCoveragePreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair",
     fixtureRelease: personnelCoveragePreviousFixtureRelease,
     fixture: {
       ...fixture,

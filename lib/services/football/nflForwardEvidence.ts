@@ -180,7 +180,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_10_09_r30_provider_feed_continuity"
       | "nfl_v1_member_release_2026_10_15_r31_personnel_evidence_eligibility"
       | "nfl_v1_member_release_2026_10_15_r32_foundational_no_weight_score"
-      | "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair";
+      | "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair"
+      | "nfl_v1_member_release_2026_10_25_r34_three_state_market_reader";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

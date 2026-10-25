@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## Owner-directed provisional exception: NFL three-state market reader
+
+On 2026-10-25 Daniel Mengel explicitly approved a future-games-only provisional release after the
+loss-ledger audit established that the live zero-weight reader corrected Totals but made no NFL
+Moneyline or Spread side changes. The released candidate is documented in
+`docs/model-audits/2026-10-25-nfl-three-state-market-reader-production-release.md`.
+
+For future unlocked NFL games, r34/r29/r28/r37 separates three market states: confirmation of the
+independent winner; qualified value/Spread resistance that cannot cross the outright winner; and an
+outright correction only when a stable target-excluded named-book read, independent fresh flow,
+and the median no-vig Moneyline across at least three target-excluded book families all agree across
+the natural 50% boundary. The Total reader is frozen. A market signal cannot manufacture a new
+actionable Moneyline. Qualified value resistance may demote a resisted Moneyline, while an actually
+changed, authority-aligned, nonnegative-EV Spread Watchlist may become Lean; it can never become a
+Best Angle from this rule.
+
+The 74-game exact-provider/checksum-matched replay improves winner accuracy from 67.1% to 68.5%,
+Spread accuracy from 51.4% to 58.3%, all-market exact-price actionables from 30-22/+5.45u to
+34-15/+16.07u, team-score MAE from 6.950 to 6.894, and margin MAE from 9.139 to 8.883. It produces
+two Spread promotions, four Moneyline demotions, and one Spread demotion; Total remains 14-2 and
+unchanged. The October 25 live-input 14-game/42-decision current-board rehearsal changes zero picks,
+probabilities, or grades and reports zero health holds. Because the broader signal family was
+inspected before this refinement and no complete
+2024/2025 forward store exists, these figures are not a pristine holdout; the owner approval is the
+explicit provisional exception. Existing locks retain exact stored precedence and rollback applies
+only to future unlocked rows.
+
 ## CFB r53 same-schema transition repair
 
 The first 2026-10-24 r53 writer cycle safely persisted 47 due rows but did not replace the compact

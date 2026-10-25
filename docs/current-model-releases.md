@@ -393,6 +393,31 @@ Last reviewed: 2026-10-24
 
 ## NFL Daily Edge generalized weekly production release
 
+### Three-state target-excluded market reader (r34)
+
+- Active member / model / calibration / decision / grade releases are
+  `nfl_v1_member_release_2026_10_25_r34_three_state_market_reader` /
+  `nfl_v1_daily_edge_model_2026_10_25_r29_three_state_market_reader` /
+  `nfl_v1_daily_edge_calibration_2026_10_25_r28_three_state_market_reader` /
+  `nfl_v1_daily_edge_decision_2026_10_25_r37_three_state_market_reader` /
+  `nfl_v1_grade_policy_2026_10_25_r37_three_state_market_reader`.
+- The active target-excluded resolver / zero-weight reader / side reader / Spread model are
+  `nfl_target_excluded_market_outcome_2026_10_25_r15_three_state_reader` /
+  `nfl_v1_no_weight_market_reader_2026_10_25_r2_three_state` /
+  `nfl_three_state_market_reader_2026_10_25_r1` /
+  `nfl_v1_spread_market_direction_2026_10_25_r17_three_state_market_reader`.
+- The sole `prediction_pipeline:nfl` writer / fixture / compact snapshot are
+  `nfl_forward_evidence_writer_2026_10_25_r66_three_state_market_reader` /
+  `nfl_weekly_member_fixture_2026_10_25_r49_three_state_market_reader` /
+  `nfl_forward_member_snapshot_2026_10_25_r41_three_state_market_reader`. The r40/r48/r33/r36
+  family remains the immediate immutable-lock and startup-continuity predecessor.
+- Stable named-book price movement must be independently confirmed by fresh non-owning flow after
+  the evaluated sportsbook families are excluded. An outright correction additionally requires the
+  median no-vig Moneyline from at least three target-excluded book families to cross 50%; otherwise
+  the evidence is value/Spread resistance and cannot change the winner. Total behavior is unchanged.
+  Evidence, gates, provisional owner authorization, and rollback are in
+  `docs/model-audits/2026-10-25-nfl-three-state-market-reader-production-release.md`.
+
 ### Availability arbitration prospective shadow (r65 writer candidate)
 
 - The model / calibration / decision / grade family remains r28 / r27 / r36 / r36. Future unlocked

@@ -10,7 +10,15 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_10_25_r41_three_state_market_reader" as const;
+const NFL_THREE_STATE_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_22_r40_verified_full_market_trail" as const;
+const NFL_THREE_STATE_PREVIOUS_FIXTURE_RELEASE =
+  "nfl_weekly_member_fixture_2026_10_22_r48_verified_full_market_trail" as const;
+const NFL_THREE_STATE_PREVIOUS_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair" as const;
+const NFL_THREE_STATE_PREVIOUS_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair" as const;
 const NFL_FULL_MARKET_TRAIL_PREVIOUS_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_22_r39_current_market_cycle_opening" as const;
 const NFL_FULL_MARKET_TRAIL_PREVIOUS_FIXTURE_RELEASE =
@@ -204,6 +212,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_THREE_STATE_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_FULL_MARKET_TRAIL_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_CURRENT_MARKET_CYCLE_PREVIOUS_SNAPSHOT_RELEASE,
   NFL_PERSONNEL_COVERAGE_PREVIOUS_SNAPSHOT_RELEASE,
@@ -307,6 +316,7 @@ function nflForwardMemberSnapshotKeyForRelease(
   snapshotRelease: string,
 ): string {
   const current = snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE;
+  const threeStatePrevious = snapshotRelease === NFL_THREE_STATE_PREVIOUS_SNAPSHOT_RELEASE;
   const fullMarketTrailPrevious = snapshotRelease === NFL_FULL_MARKET_TRAIL_PREVIOUS_SNAPSHOT_RELEASE;
   const currentMarketCyclePrevious = snapshotRelease === NFL_CURRENT_MARKET_CYCLE_PREVIOUS_SNAPSHOT_RELEASE;
   const personnelCoveragePrevious = snapshotRelease === NFL_PERSONNEL_COVERAGE_PREVIOUS_SNAPSHOT_RELEASE;
@@ -341,6 +351,8 @@ function nflForwardMemberSnapshotKeyForRelease(
     snapshotRelease,
     current
       ? NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE
+      : threeStatePrevious
+        ? NFL_THREE_STATE_PREVIOUS_FIXTURE_RELEASE
       : fullMarketTrailPrevious
         ? NFL_FULL_MARKET_TRAIL_PREVIOUS_FIXTURE_RELEASE
       : currentMarketCyclePrevious
@@ -396,10 +408,8 @@ function nflForwardMemberSnapshotKeyForRelease(
               : NFL_PREVIOUS_FIXTURE_RELEASE,
     current
       ? NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE
-      : currentMarketCyclePrevious
-        ? NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE
-      : personnelCoveragePrevious
-        ? NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE
+      : threeStatePrevious || fullMarketTrailPrevious || currentMarketCyclePrevious || personnelCoveragePrevious
+        ? NFL_THREE_STATE_PREVIOUS_MEMBER_RELEASE
       : foundationalPrevious
         ? NFL_FOUNDATIONAL_PREVIOUS_MEMBER_RELEASE
       : personnelEligibilityPrevious
@@ -447,10 +457,8 @@ function nflForwardMemberSnapshotKeyForRelease(
             : NFL_PREVIOUS_MEMBER_RELEASE,
     current
       ? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE
-      : currentMarketCyclePrevious
-        ? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE
-      : personnelCoveragePrevious
-        ? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE
+      : threeStatePrevious || fullMarketTrailPrevious || currentMarketCyclePrevious || personnelCoveragePrevious
+        ? NFL_THREE_STATE_PREVIOUS_DECISION_RELEASE
       : foundationalPrevious
         ? NFL_FOUNDATIONAL_PREVIOUS_DECISION_RELEASE
       : personnelEligibilityPrevious
@@ -696,19 +704,24 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
+  const threeStatePreviousContract =
+    memberRelease === NFL_THREE_STATE_PREVIOUS_MEMBER_RELEASE &&
+    decisionRelease === NFL_THREE_STATE_PREVIOUS_DECISION_RELEASE &&
+    fixtureRelease === NFL_THREE_STATE_PREVIOUS_FIXTURE_RELEASE &&
+    heldMemberFixtureRelease === NFL_THREE_STATE_PREVIOUS_FIXTURE_RELEASE;
   const fullMarketTrailPreviousContract =
-    memberRelease === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
-    decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
+    memberRelease === NFL_THREE_STATE_PREVIOUS_MEMBER_RELEASE &&
+    decisionRelease === NFL_THREE_STATE_PREVIOUS_DECISION_RELEASE &&
     fixtureRelease === NFL_FULL_MARKET_TRAIL_PREVIOUS_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_FULL_MARKET_TRAIL_PREVIOUS_FIXTURE_RELEASE;
   const currentMarketCyclePreviousContract =
-    memberRelease === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
-    decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
+    memberRelease === NFL_THREE_STATE_PREVIOUS_MEMBER_RELEASE &&
+    decisionRelease === NFL_THREE_STATE_PREVIOUS_DECISION_RELEASE &&
     fixtureRelease === NFL_CURRENT_MARKET_CYCLE_PREVIOUS_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_CURRENT_MARKET_CYCLE_PREVIOUS_FIXTURE_RELEASE;
   const personnelCoveragePreviousContract =
-    memberRelease === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
-    decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
+    memberRelease === NFL_THREE_STATE_PREVIOUS_MEMBER_RELEASE &&
+    decisionRelease === NFL_THREE_STATE_PREVIOUS_DECISION_RELEASE &&
     fixtureRelease === NFL_PERSONNEL_COVERAGE_PREVIOUS_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_PERSONNEL_COVERAGE_PREVIOUS_FIXTURE_RELEASE;
   const foundationalPreviousContract =
@@ -840,7 +853,7 @@ function validateNflForwardMemberSnapshot(
   if (
     ![NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES].includes(snapshot.snapshotRelease as typeof NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE) ||
     snapshot.evidenceRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    (!currentContract && !fullMarketTrailPreviousContract && !currentMarketCyclePreviousContract && !personnelCoveragePreviousContract && !foundationalPreviousContract && !personnelEligibilityPreviousContract && !personnelPreviousContract && !professionalPreviousContract && !marketStatePreviousContract && !namedSequenceReleasePreviousContract && !namedSequencePreviousContract && !exactQuoteLabelPreviousContract && !spreadGradePreviousContract && !jointMoneylinePreviousContract && !marketMarriagePreviousContract && !paidScorePreviousContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
+    (!currentContract && !threeStatePreviousContract && !fullMarketTrailPreviousContract && !currentMarketCyclePreviousContract && !personnelCoveragePreviousContract && !foundationalPreviousContract && !personnelEligibilityPreviousContract && !personnelPreviousContract && !professionalPreviousContract && !marketStatePreviousContract && !namedSequenceReleasePreviousContract && !namedSequencePreviousContract && !exactQuoteLabelPreviousContract && !spreadGradePreviousContract && !jointMoneylinePreviousContract && !marketMarriagePreviousContract && !paidScorePreviousContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
     snapshot.season !== expected.season ||
     snapshot.week !== expected.week ||
     snapshot.fixture?.week?.week !== expected.week ||
