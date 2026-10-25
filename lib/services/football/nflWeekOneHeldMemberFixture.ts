@@ -48,11 +48,15 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_25_r49_three_state_market_reader" as const;
+  "nfl_weekly_member_fixture_2026_10_25_r50_two_source_flow_boundary" as const;
 
 const NFL_THREE_STATE_PRECEDING_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair" as const;
+  "nfl_v1_member_release_2026_10_25_r34_three_state_market_reader" as const;
 const NFL_THREE_STATE_PRECEDING_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_25_r37_three_state_market_reader" as const;
+const NFL_PERSONNEL_COVERAGE_PRECEDING_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_15_r33_personnel_coverage_repair" as const;
+const NFL_PERSONNEL_COVERAGE_PRECEDING_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_10_15_r36_personnel_coverage_repair" as const;
 
 const NFL_FOUNDATIONAL_PRECEDING_MEMBER_RELEASE =
@@ -262,6 +266,9 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     (row.payload.decisions.modelPromotionStatus === NFL_THREE_STATE_PRECEDING_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_THREE_STATE_PRECEDING_DECISION_RELEASE)) ||
+    (row.payload.decisions.modelPromotionStatus === NFL_PERSONNEL_COVERAGE_PRECEDING_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_PERSONNEL_COVERAGE_PRECEDING_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_FOUNDATIONAL_PRECEDING_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_FOUNDATIONAL_PRECEDING_DECISION_RELEASE)) ||

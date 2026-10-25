@@ -15,7 +15,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_THREE_STATE_MARKET_READER_RELEASE =
-  "nfl_three_state_market_reader_2026_10_25_r1" as const;
+  "nfl_three_state_market_reader_2026_10_25_r2_two_source_flow_boundary" as const;
 
 type Snapshot = {
   capturedAt: string;
@@ -27,6 +27,7 @@ export type NflThreeStateMarketAuthority = {
   status: "available" | "unavailable";
   reason:
     | "qualified_named_price_and_independent_flow"
+    | "qualified_named_price_and_two_source_flow"
     | "no_stable_named_moneyline_direction"
     | "named_moneyline_disagreement"
     | "opposing_flow"
@@ -83,37 +84,47 @@ export function buildNflThreeStateMarketAuthority(args: {
     return unavailable("named_moneyline_disagreement", excludedFamilies);
   }
   const side = stableNamed[0]!.direction!;
+  const namedSources = [...new Set(stableNamed.map((trail) => normalizeBook(trail.source)))].sort();
   if (state.splits.some((split) => split.direction === -side)) {
     return unavailable("opposing_flow", excludedFamilies);
   }
-  const namedSources = [...new Set(stableNamed.map((trail) => normalizeBook(trail.source)))].sort();
   const confirmingSplits = state.splits.filter((split) =>
     split.direction === side &&
     (split.sportsbook === null || !namedSources.includes(normalizeBook(split.sportsbook)))
   );
-  if (confirmingSplits.length === 0) {
+  if (confirmingSplits.length > 0) {
+    return available({
+      reason: "qualified_named_price_and_independent_flow",
+      side,
+      namedSources,
+      confirmingSplitSources: [...new Set(confirmingSplits.map((split) =>
+        split.sportsbook === null ? split.source : normalizeBook(split.sportsbook)))].sort(),
+      args,
+      excludedFamilies,
+    });
+  }
+  const independentFlows = twoSourceMoneylineFlows({
+    evaluatedAt: args.evaluatedAt,
+    playbookSplits: args.playbookSplits,
+    sharpSplits: args.sharpSplits,
+    excludedFamilies,
+    namedSources,
+  });
+  if (independentFlows.some((flow) => flow.direction === -side)) {
+    return unavailable("opposing_flow", excludedFamilies);
+  }
+  const confirmingFlows = independentFlows.filter((flow) => flow.direction === side);
+  if (new Set(confirmingFlows.map((flow) => flow.source)).size < 2) {
     return unavailable("no_independent_flow_confirmation", excludedFamilies);
   }
-  return {
-    release: NFL_THREE_STATE_MARKET_READER_RELEASE,
-    status: "available",
-    reason: "qualified_named_price_and_independent_flow",
+  return available({
+    reason: "qualified_named_price_and_two_source_flow",
     side,
-    outcomeBoundarySide: targetExcludedMoneylineSide({
-      books: args.comparableCurrentBooks,
-      excludedFamilies,
-      evaluatedAt: args.evaluatedAt,
-    }),
-    spreadBoundary: targetExcludedSpreadBoundary({
-      books: args.comparableCurrentBooks,
-      excludedFamilies,
-      evaluatedAt: args.evaluatedAt,
-    }),
     namedSources,
-    confirmingSplitSources: [...new Set(confirmingSplits.map((split) =>
-      split.sportsbook === null ? split.source : normalizeBook(split.sportsbook)))].sort(),
+    confirmingSplitSources: [...new Set(confirmingFlows.map((flow) => flow.source))].sort(),
+    args,
     excludedFamilies,
-  };
+  });
 }
 
 export function applyNflThreeStateMarketReader(args: {
@@ -138,9 +149,13 @@ export function applyNflThreeStateMarketReader(args: {
     } else {
       state = "value_resistance";
       const boundary = args.authority.spreadBoundary;
-      if (boundary !== null && args.authority.side !== sign(initialHomeMargin - boundary)) {
-        const candidate = 2 * boundary - initialHomeMargin;
-        if (sign(candidate) === independentSide && total > Math.abs(candidate)) {
+      if (boundary !== null && boundary !== 0 && args.authority.side !== sign(initialHomeMargin - boundary)) {
+        const candidate = args.authority.reason === "qualified_named_price_and_two_source_flow"
+          ? boundary / 2
+          : 2 * boundary - initialHomeMargin;
+        if (sign(candidate) === independentSide &&
+            sign(candidate - boundary) === args.authority.side &&
+            total > Math.abs(candidate)) {
           finalHomeMargin = candidate;
           spreadBoundaryCorrectionApplied = true;
         }
@@ -173,6 +188,70 @@ export function applyNflThreeStateMarketReader(args: {
     noWeightMarketReader: args.forecast.noWeightMarketReader,
     threeStateMarketReader,
   };
+}
+
+function available(args: {
+  reason: Extract<NflThreeStateMarketAuthority["reason"],
+    "qualified_named_price_and_independent_flow" | "qualified_named_price_and_two_source_flow">;
+  side: NflMarketStateSide;
+  namedSources: string[];
+  confirmingSplitSources: string[];
+  args: Parameters<typeof buildNflThreeStateMarketAuthority>[0];
+  excludedFamilies: string[];
+}): NflThreeStateMarketAuthority {
+  return {
+    release: NFL_THREE_STATE_MARKET_READER_RELEASE,
+    status: "available",
+    reason: args.reason,
+    side: args.side,
+    outcomeBoundarySide: targetExcludedMoneylineSide({
+      books: args.args.comparableCurrentBooks,
+      excludedFamilies: args.excludedFamilies,
+      evaluatedAt: args.args.evaluatedAt,
+    }),
+    spreadBoundary: targetExcludedSpreadBoundary({
+      books: args.args.comparableCurrentBooks,
+      excludedFamilies: args.excludedFamilies,
+      evaluatedAt: args.args.evaluatedAt,
+    }),
+    namedSources: args.namedSources,
+    confirmingSplitSources: args.confirmingSplitSources,
+    excludedFamilies: args.excludedFamilies,
+  };
+}
+
+function twoSourceMoneylineFlows(args: {
+  evaluatedAt: string;
+  playbookSplits: NflForwardPlaybookSplitSet | null;
+  sharpSplits: NflRegularSharpSplitSet | null;
+  excludedFamilies: string[];
+  namedSources: string[];
+}): Array<{ source: string; direction: NflMarketStateSide }> {
+  const evaluatedAt = Date.parse(args.evaluatedAt);
+  const excluded = new Set(args.excludedFamilies);
+  const result: Array<{ source: string; direction: NflMarketStateSide }> = [];
+  const add = (source: string, observedAt: string, homeMoneyPct: number | null, homeBetsPct: number | null) => {
+    const observed = Date.parse(observedAt);
+    const ageMinutes = (evaluatedAt - observed) / 60_000;
+    if (!Number.isFinite(observed) || !Number.isFinite(ageMinutes) || ageMinutes < 0 || ageMinutes > 120 ||
+        !Number.isFinite(homeMoneyPct) || !Number.isFinite(homeBetsPct)) return;
+    const gap = (homeMoneyPct as number) - (homeBetsPct as number);
+    if (Math.abs(gap) < 2) return;
+    result.push({ source, direction: sign(gap) });
+  };
+  const publicSplit = args.playbookSplits?.moneyline;
+  if (publicSplit) {
+    add("public_consensus", publicSplit.capturedAt, publicSplit.homeMoneyPct, publicSplit.homeBetsPct);
+  }
+  const sharpSplit = args.sharpSplits?.moneyline;
+  if (sharpSplit) {
+    const family = normalizeBook(sharpSplit.sourceSportsbook ?? "");
+    if (family && !excluded.has(family) && !args.namedSources.includes(family)) {
+      add(family, sharpSplit.providerFetchedAt ?? sharpSplit.capturedAt,
+        sharpSplit.homeMoneyPct, sharpSplit.homeBetsPct);
+    }
+  }
+  return result;
 }
 
 function unavailable(

@@ -35,9 +35,9 @@ export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
   "nfl_v1_weekly_pooled_discrete_probability_2026_10_15_r15_foundational_no_weight_score" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_10_25_r17_three_state_reader" as const;
+  "nfl_v1_market_evidence_outcome_2026_10_25_r18_two_source_flow_boundary" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_10_25_r16_three_state_reader" as const;
+  "nfl_v1_market_evidence_representative_score_2026_10_25_r17_two_source_flow_boundary" as const;
 export const NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE =
   "nfl_v1_paid_team_score_model_2026_10_08_r4_named_sequence" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
@@ -61,7 +61,7 @@ export const NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP = 1 as const;
 export const NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP = 8 as const;
 export const NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP = 10 as const;
 export const NFL_V1_NO_WEIGHT_MARKET_READER_RELEASE =
-  "nfl_v1_no_weight_market_reader_2026_10_25_r2_three_state" as const;
+  "nfl_v1_no_weight_market_reader_2026_10_25_r3_two_source_flow_boundary" as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -99,7 +99,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_09_r11_market_state_identity"
       | "nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity"
       | "nfl_target_excluded_market_outcome_2026_10_15_r14_independent_fallback"
-      | "nfl_target_excluded_market_outcome_2026_10_25_r15_three_state_reader";
+      | "nfl_target_excluded_market_outcome_2026_10_25_r15_three_state_reader"
+      | "nfl_target_excluded_market_outcome_2026_10_25_r16_two_source_flow_boundary";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;

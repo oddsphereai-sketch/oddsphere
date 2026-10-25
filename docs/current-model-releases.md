@@ -393,6 +393,34 @@ Last reviewed: 2026-10-24
 
 ## NFL Daily Edge generalized weekly production release
 
+### Two-source flow boundary repair (r35)
+
+- Active member / model / calibration / decision / grade releases are
+  `nfl_v1_member_release_2026_10_25_r35_two_source_flow_boundary` /
+  `nfl_v1_daily_edge_model_2026_10_25_r30_two_source_flow_boundary` /
+  `nfl_v1_daily_edge_calibration_2026_10_25_r29_two_source_flow_boundary` /
+  `nfl_v1_daily_edge_decision_2026_10_25_r38_two_source_flow_boundary` /
+  `nfl_v1_grade_policy_2026_10_25_r38_two_source_flow_boundary`.
+- Active target-excluded resolver / zero-weight reader / side reader / Spread model are
+  `nfl_target_excluded_market_outcome_2026_10_25_r16_two_source_flow_boundary` /
+  `nfl_v1_no_weight_market_reader_2026_10_25_r3_two_source_flow_boundary` /
+  `nfl_three_state_market_reader_2026_10_25_r2_two_source_flow_boundary` /
+  `nfl_v1_spread_market_direction_2026_10_25_r18_two_source_flow_boundary`.
+- The sole `prediction_pipeline:nfl` writer / fixture / compact snapshot are
+  `nfl_forward_evidence_writer_2026_10_25_r67_two_source_flow_boundary` /
+  `nfl_weekly_member_fixture_2026_10_25_r50_two_source_flow_boundary` /
+  `nfl_forward_member_snapshot_2026_10_25_r42_two_source_flow_boundary`. The r41/r49/r34/r37
+  family is the immediate immutable-lock and startup-continuity predecessor; r40 and older reader
+  precedence remains intact.
+- The r34 material-flow authority is preserved. Only when it is unavailable may a persistent,
+  unreversed target-excluded named-book move qualify through two fresh independent agreeing flows:
+  Playbook consensus and a non-owning SharpAPI sportsbook, each with at least a two percentage-point
+  money-minus-ticket gap. Opposition vetoes. The three-family target-excluded 50% Moneyline
+  boundary still owns winner correction; otherwise only a winner-preserving Spread interval may
+  move. Total, thresholds, stakes, price economics, writer ownership, and locks are unchanged.
+  Evidence and rollback are in
+  `docs/model-audits/2026-10-25-nfl-two-source-flow-boundary-result.md`.
+
 ### Three-state target-excluded market reader (r34)
 
 - Active member / model / calibration / decision / grade releases are
