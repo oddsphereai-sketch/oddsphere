@@ -24,7 +24,7 @@ import {
 } from "./nflThreeStateMarketReader";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_25_r15_three_state_reader" as const;
+  "nfl_target_excluded_market_outcome_2026_10_25_r16_two_source_flow_boundary" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;

@@ -1,5 +1,29 @@
 # Model change safety protocol
 
+## Owner-directed provisional exception: NFL two-source flow boundary
+
+On 2026-10-25 Daniel Mengel directed Oddsphere to repair the NFL reader after the immutable
+Baltimore and San Francisco losses exposed a real authority gap, while explicitly rejecting an
+automatic market-move flip rule. The released r35/r30/r29/r38 candidate is additive to r34: it
+preserves the existing material-flow authority and only fills its unavailable state when a
+persistent, unreversed target-excluded named-book move is confirmed by both fresh Playbook flow and
+a fresh non-owning SharpAPI sportsbook, each at a two percentage-point money-minus-ticket gap or
+greater. Any opposing flow vetoes.
+
+The target-excluded median no-vig Moneyline across at least three distinct fresh families remains
+the only authority that may cross the outright winner. Otherwise the winner is preserved and only
+the Spread interval may change. Total is frozen. The exact 74-game completed replay is identical to
+the deployed reader: 50-23-1 winners, 41-31-2 Spreads, 34-17/+14.07u actionables, and zero
+promotions, demotions, side changes, or Total changes. The two reported locked defects reproduce the
+new state: Cincinnati corrects the Baltimore winner, while San Francisco remains the winner and
+Atlanta becomes the cover side. They are supporting defect cases, not a pristine holdout.
+
+The owner-directed exception permits this rare future-unlocked missing-state repair because it
+preserves the completed replay and existing board rather than flattening or broadly flipping it.
+Existing r34 and older locks remain byte-for-byte authoritative. Evidence and rollback:
+`docs/model-audits/2026-10-25-nfl-two-source-flow-boundary-predeclaration.md` and
+`docs/model-audits/2026-10-25-nfl-two-source-flow-boundary-result.md`.
+
 ## Owner-directed provisional exception: NFL three-state market reader
 
 On 2026-10-25 Daniel Mengel explicitly approved a future-games-only provisional release after the

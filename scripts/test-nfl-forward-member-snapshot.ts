@@ -207,6 +207,37 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const twoSourcePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_25_r41_three_state_market_reader";
+  const twoSourcePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_25_r49_three_state_market_reader";
+  const twoSourcePreviousPayload = {
+    ...snapshot,
+    snapshotRelease: twoSourcePreviousSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_25_r34_three_state_market_reader",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_25_r37_three_state_market_reader",
+    fixtureRelease: twoSourcePreviousFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: twoSourcePreviousFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl", "daily-edge", 2026, 1,
+    twoSourcePreviousSnapshotRelease,
+    twoSourcePreviousFixtureRelease,
+    twoSourcePreviousPayload.memberRelease,
+    twoSourcePreviousPayload.decisionRelease,
+  ].join("::");
+  storedPayload = twoSourcePreviousPayload;
+  const twoSourceContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(twoSourceContinuityRead?.snapshotRelease, twoSourcePreviousSnapshotRelease);
+  assert.equal(JSON.stringify(twoSourceContinuityRead?.fixture), JSON.stringify(twoSourcePreviousPayload.fixture),
+    "the immediate r41/r49/r34/r37 predecessor must retain exact stored reader precedence");
+
   const threeStatePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_22_r40_verified_full_market_trail";
   const threeStatePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_22_r48_verified_full_market_trail";
   const threeStatePreviousPayload = {
@@ -239,7 +270,7 @@ async function main() {
   });
   assert.equal(threeStateContinuityRead?.snapshotRelease, threeStatePreviousSnapshotRelease);
   assert.equal(JSON.stringify(threeStateContinuityRead?.fixture), JSON.stringify(threeStatePreviousPayload.fixture),
-    "the immediate r40/r48 predecessor must retain exact stored reader precedence");
+    "the r40/r48 predecessor must retain exact stored reader precedence");
 
   const personnelCoveragePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_15_r37_personnel_coverage_repair";
   const personnelCoveragePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_15_r45_personnel_coverage_repair";

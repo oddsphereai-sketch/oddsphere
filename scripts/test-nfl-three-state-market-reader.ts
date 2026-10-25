@@ -36,7 +36,7 @@ const base = buildNflIndependentScoreBaseForecast({
 const authority = (overrides: Partial<NflThreeStateMarketAuthority>): NflThreeStateMarketAuthority => ({
   release: NFL_THREE_STATE_MARKET_READER_RELEASE,
   status: "available",
-  reason: "qualified_named_price_and_independent_flow",
+  reason: "qualified_named_price_and_two_source_flow",
   side: 1,
   outcomeBoundarySide: 1,
   spreadBoundary: 3,
@@ -63,13 +63,13 @@ const valueResistance = applyNflThreeStateMarketReader({
   forecast: base,
   authority: authority({ side: -1, outcomeBoundarySide: 1, spreadBoundary: 3 }),
 });
-assert.equal(valueResistance.expectedHomeScore - valueResistance.expectedAwayScore, 2);
+assert.equal(valueResistance.expectedHomeScore - valueResistance.expectedAwayScore, 1.5);
 assert.equal(valueResistance.threeStateMarketReader?.state, "value_resistance");
 assert.equal(valueResistance.threeStateMarketReader?.spreadBoundaryCorrectionApplied, true);
 
 const rejectedWinnerCross = applyNflThreeStateMarketReader({
   forecast: base,
-  authority: authority({ side: -1, outcomeBoundarySide: 1, spreadBoundary: 1 }),
+  authority: authority({ side: -1, outcomeBoundarySide: 1, spreadBoundary: -1 }),
 });
 assert.equal(rejectedWinnerCross.expectedHomeScore - rejectedWinnerCross.expectedAwayScore, 4,
   "value resistance cannot cross the outright winner boundary");
@@ -103,7 +103,7 @@ const builtAuthority = buildNflThreeStateMarketAuthority({
   comparableCurrentBooks: books,
   playbookLine: null,
   playbookSplits: splitSet(65, 45),
-  sharpSplits: null,
+  sharpSplits: sharpSplitSet(64, 44),
   excludedFamilies: ["fanduel"],
 });
 assert.equal(builtAuthority.status, "available");
@@ -112,6 +112,150 @@ assert.equal(builtAuthority.outcomeBoundarySide, -1,
   "target-excluded fair Moneyline probability owns the natural outright-winner boundary");
 assert.equal(builtAuthority.spreadBoundary, 3);
 assert.deepEqual(builtAuthority.excludedFamilies, ["fanduel"]);
+
+const subtleTwoSourceAuthority = buildNflThreeStateMarketAuthority({
+  evaluatedAt,
+  snapshots: [{
+    capturedAt: evaluatedAt,
+    markets: {
+      moneyline: { families: moneylineFamilies },
+      spread: { families: [] },
+      total: { families: [] },
+    },
+  }],
+  current: books[0]!,
+  comparableCurrentBooks: books,
+  playbookLine: null,
+  playbookSplits: splitSet(47, 45),
+  sharpSplits: sharpSplitSet(48, 45),
+  excludedFamilies: ["fanduel"],
+});
+assert.equal(subtleTwoSourceAuthority.status, "available",
+  "two independent agreeing 2pp/3pp flows confirm a persistent named-book move");
+
+const oneSourceAuthority = buildNflThreeStateMarketAuthority({
+  evaluatedAt,
+  snapshots: [{
+    capturedAt: evaluatedAt,
+    markets: {
+      moneyline: { families: moneylineFamilies },
+      spread: { families: [] },
+      total: { families: [] },
+    },
+  }],
+  current: books[0]!,
+  comparableCurrentBooks: books,
+  playbookLine: null,
+  playbookSplits: splitSet(47, 45),
+  sharpSplits: null,
+  excludedFamilies: ["fanduel"],
+});
+assert.equal(oneSourceAuthority.reason, "no_independent_flow_confirmation",
+  "one subtle source cannot authorize a side read");
+
+const opposingFlowAuthority = buildNflThreeStateMarketAuthority({
+  evaluatedAt,
+  snapshots: [{
+    capturedAt: evaluatedAt,
+    markets: {
+      moneyline: { families: moneylineFamilies },
+      spread: { families: [] },
+      total: { families: [] },
+    },
+  }],
+  current: books[0]!,
+  comparableCurrentBooks: books,
+  playbookLine: null,
+  playbookSplits: splitSet(47, 45),
+  sharpSplits: sharpSplitSet(43, 45),
+  excludedFamilies: ["fanduel"],
+});
+assert.equal(opposingFlowAuthority.reason, "opposing_flow",
+  "an opposing second source vetoes the side read");
+
+const baltimoreAuthority = buildNflThreeStateMarketAuthority({
+  evaluatedAt,
+  snapshots: [{
+    capturedAt: evaluatedAt,
+    markets: {
+      moneyline: { families: [
+        ["circa", "s", "c", null,
+          ["2026-10-25T14:00:00.000Z", 120, "f", null, 146, -174],
+          ["2026-10-25T15:00:00.000Z", 60, "f", null, -154, 130]],
+      ] },
+      spread: { families: [] },
+      total: { families: [] },
+    },
+  }],
+  current: book("fanduel", -150, 128, 3),
+  comparableCurrentBooks: [
+    book("fanduel", -150, 128, 3),
+    book("draftkings", -154, 130, 3),
+    book("betmgm", -148, 126, 2.5),
+    book("caesars", -152, 129, 3.5),
+  ],
+  playbookLine: null,
+  playbookSplits: splitSet(30, 32),
+  sharpSplits: sharpSplitSet(25, 28),
+  excludedFamilies: ["fanduel"],
+});
+assert.equal(baltimoreAuthority.reason, "qualified_named_price_and_two_source_flow");
+assert.equal(baltimoreAuthority.side, -1);
+assert.equal(baltimoreAuthority.outcomeBoundarySide, -1);
+const baltimoreCorrection = applyNflThreeStateMarketReader({ forecast: base, authority: baltimoreAuthority });
+assert.equal(baltimoreCorrection.expectedHomeScore - baltimoreCorrection.expectedAwayScore, -4,
+  "the Cincinnati-over-Baltimore pattern crosses the target-excluded 50% boundary and corrects the winner");
+
+const sanFranciscoBase = buildNflIndependentScoreBaseForecast({
+  baseForecast: getNflV1WeekOneOutcomeForecast({
+    providerGameId: "sf-atl-regression",
+    awayTeam: "SF",
+    homeTeam: "ATL",
+    weeklyFallback: { projectedHomeMargin: -7.873, marketTotal: 45 },
+  }),
+  independentScore: {
+    expectedHomeMargin: -7.873,
+    expectedTotal: 45,
+    marketInputPolicy: "prohibited_from_independent_score",
+  },
+});
+const sanFranciscoAuthority = buildNflThreeStateMarketAuthority({
+  evaluatedAt,
+  snapshots: [{
+    capturedAt: evaluatedAt,
+    markets: {
+      moneyline: { families: [
+        ["circa", "s", "c", null,
+          ["2026-10-25T14:00:00.000Z", 120, "f", null, -178, 158],
+          ["2026-10-25T15:00:00.000Z", 60, "f", null, -140, 120]],
+      ] },
+      spread: { families: [] },
+      total: { families: [] },
+    },
+  }],
+  current: book("fanduel", -142, 120, 2.5),
+  comparableCurrentBooks: [
+    book("fanduel", -142, 120, 2.5),
+    book("draftkings", -140, 118, 2.5),
+    book("betmgm", -145, 122, 3),
+    book("caesars", -138, 116, 2.5),
+  ],
+  playbookLine: null,
+  playbookSplits: splitSet(29, 27),
+  sharpSplits: sharpSplitSet(19, 16),
+  excludedFamilies: ["fanduel"],
+});
+assert.equal(sanFranciscoAuthority.reason, "qualified_named_price_and_two_source_flow");
+assert.equal(sanFranciscoAuthority.side, 1);
+assert.equal(sanFranciscoAuthority.outcomeBoundarySide, -1);
+const sanFranciscoCorrection = applyNflThreeStateMarketReader({
+  forecast: sanFranciscoBase,
+  authority: sanFranciscoAuthority,
+});
+assert.equal(sanFranciscoCorrection.expectedHomeScore - sanFranciscoCorrection.expectedAwayScore, -1.25,
+  "the Atlanta resistance pattern changes the cover side without blindly flipping the SF winner");
+assert.equal(sanFranciscoCorrection.threeStateMarketReader?.outcomeCorrectionApplied, false);
+assert.equal(sanFranciscoCorrection.threeStateMarketReader?.spreadBoundaryCorrectionApplied, true);
 
 const baseline = bundle([
   decision("moneyline", "HME", "Lean", 0.56, 0.54, -110, null),
@@ -157,6 +301,28 @@ function book(sportsbook: string, awayPrice: number, homePrice: number, homeLine
 
 function splitSet(homeMoneyPct: number, homeBetsPct: number) {
   const row = {
+    provider: "playbook" as const,
+    capturedAt: "2026-10-25T15:30:00.000Z",
+    booksUsed: 6,
+    homeMoneyPct,
+    awayMoneyPct: 100 - homeMoneyPct,
+    homeBetsPct,
+    awayBetsPct: 100 - homeBetsPct,
+    overMoneyPct: 50,
+    underMoneyPct: 50,
+    overBetsPct: 50,
+    underBetsPct: 50,
+  };
+  return { moneyline: row, spread: row, total: row };
+}
+
+function sharpSplitSet(homeMoneyPct: number, homeBetsPct: number) {
+  const row = {
+    provider: "sharpapi" as const,
+    providerGameId: "three-state-test",
+    sourceEventId: "three-state-test-event",
+    sourceSportsbook: "draftkings",
+    providerFetchedAt: "2026-10-25T15:30:00.000Z",
     capturedAt: "2026-10-25T15:30:00.000Z",
     homeMoneyPct,
     awayMoneyPct: 100 - homeMoneyPct,
@@ -204,12 +370,12 @@ function bundle(evaluatedBets: NflRegularEvaluatedBetDecision[]): NflV1Actionabl
   return {
     evaluatedBets,
     outcomeConfidence: [],
-    modelPromotionStatus: "nfl_v1_member_release_2026_10_25_r34_three_state_market_reader",
+    modelPromotionStatus: "nfl_v1_member_release_2026_10_25_r35_two_source_flow_boundary",
     publicationEnabled: true,
     trackingEnabled: false,
-    modelRelease: "nfl_v1_daily_edge_model_2026_10_25_r29_three_state_market_reader",
-    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_25_r28_three_state_market_reader",
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_25_r37_three_state_market_reader",
-    policyRelease: "nfl_v1_grade_policy_2026_10_25_r37_three_state_market_reader",
+    modelRelease: "nfl_v1_daily_edge_model_2026_10_25_r30_two_source_flow_boundary",
+    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_25_r29_two_source_flow_boundary",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_25_r38_two_source_flow_boundary",
+    policyRelease: "nfl_v1_grade_policy_2026_10_25_r38_two_source_flow_boundary",
   };
 }
