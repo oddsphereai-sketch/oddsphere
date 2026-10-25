@@ -1,3 +1,5 @@
+import { isNbaAuthoritativeSportsbook } from "./nbaMarketSourceEligibility";
+
 export const NBA_CURRENT_LINE_RELATIVE_FRESH_MINUTES = 120 as const;
 
 export type NbaCurrentLineBoardRow = {
@@ -33,6 +35,7 @@ export function selectNbaCurrentLineBoard<T extends NbaCurrentLineBoardRow>(
 
   const latestByIdentity = new Map<string, T>();
   for (const row of rows) {
+    if (!isNbaAuthoritativeSportsbook(row.sportsbook)) continue;
     const key = [
       row.sportsbook.trim().toLowerCase(),
       row.market_type.trim().toLowerCase(),

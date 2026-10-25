@@ -24,7 +24,6 @@
  * the calling routes and are unaffected by this helper.
  */
 
-import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
 import { publicSplitsSupported } from "../../config/publicSplitsCapability";
 import {
   buildNbaFeatureSnapshotsWithProvenance,
@@ -108,6 +107,7 @@ import {
   type NbaMemberGameEvidence,
 } from "./nbaMemberMarketEvidence";
 import { buildNbaSpreadReaderStats } from "./nbaSpreadReaderStats";
+import { isNbaAuthoritativeSportsbook } from "./nbaMarketSourceEligibility";
 
 const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
 
@@ -279,7 +279,7 @@ export async function buildNbaDailyEdgePipeline(
     for (const l of lineRows) {
       const ext = dbIdToExt.get(l.game_id);
       if (ext === undefined) continue;
-      if (isBlockedSportsbook(l.sportsbook)) continue; // never use blocked books (e.g. fliff)
+      if (!isNbaAuthoritativeSportsbook(l.sportsbook)) continue;
       const arr = linesByExtId.get(ext) ?? [];
       arr.push({
         market_type: l.market_type,
@@ -440,7 +440,11 @@ export async function buildNbaDailyEdgePipeline(
     }
     for (const row of rows) {
       const externalId = Number(row.canonical_event_id);
-      if (!Number.isFinite(externalId) || !["moneyline", "spread", "total"].includes(row.market_type)) continue;
+      if (
+        !Number.isFinite(externalId) ||
+        !["moneyline", "spread", "total"].includes(row.market_type) ||
+        !isNbaAuthoritativeSportsbook(row.sportsbook)
+      ) continue;
       const gameReaderRows = readerPriceRowsByGame.get(externalId) ?? [];
       gameReaderRows.push({
         sportsbook: row.sportsbook,
