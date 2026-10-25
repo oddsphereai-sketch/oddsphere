@@ -352,6 +352,9 @@ assert.doesNotMatch(
 );
 assert.match(writer, /resolveNflTargetExcludedProduction/);
 assert.match(writer, /buildNflNoWeightMarketEvidenceOutcomeForecast/);
+assert.equal((writer.match(/buildNflThreeStateMarketAuthority\(\{/g) ?? []).length, 1,
+  "three-state authority must run only inside the existing target-excluded writer path");
+assert.match(writer, /threeStateMarketAuthorityFactory: exactProviderScore/);
 assert.match(writer, /fallbackOutcome: baseOutcome/,
   "missing target-free market evidence must preserve the independent score");
 assert.equal((writer.match(/buildNflProfessionalMarketAuthority\(\{/g) ?? []).length, 1,
@@ -370,7 +373,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_19_r65_availability_arbitration_shadow/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_25_r66_three_state_market_reader/);
 assert.match(writer, /exactProviderScoreShadow: exactProviderScore/);
 assert.match(writer, /availabilityArbitrationShadow/);
 assert.match(writer, /mergeNflAvailabilityWithPrior/);

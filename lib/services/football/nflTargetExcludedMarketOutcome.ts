@@ -18,9 +18,13 @@ import {
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import type { NflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
+import {
+  applyNflThreeStateMarketReader,
+  type NflThreeStateMarketAuthority,
+} from "./nflThreeStateMarketReader";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_15_r14_independent_fallback" as const;
+  "nfl_target_excluded_market_outcome_2026_10_25_r15_three_state_reader" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -75,6 +79,9 @@ export function resolveNflTargetExcludedProduction(args: {
   professionalMarketAuthorityFactory?: (
     excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
   ) => NflProfessionalMarketAuthority;
+  threeStateMarketAuthorityFactory?: (
+    excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
+  ) => NflThreeStateMarketAuthority;
   marketOutcomeBuilder?: typeof buildNflMarketEvidenceOutcomeForecast;
   fallbackOutcome?: NflV1WeekOneOutcomeForecast;
 }): {
@@ -158,7 +165,7 @@ export function resolveNflTargetExcludedProduction(args: {
         })
       : args.professionalMarketAuthority;
     diagnosticProfessionalAuthority = professionalMarketAuthority ?? null;
-    const outcomeCandidate = (args.marketOutcomeBuilder ?? buildNflMarketEvidenceOutcomeForecast)({
+    const preThreeStateOutcome = (args.marketOutcomeBuilder ?? buildNflMarketEvidenceOutcomeForecast)({
       baseForecast: args.baseOutcome,
       footballHomeMargin: args.shadowMoneyline.footballProjection.projectedHomeMargin,
       current: targetFreeCurrent,
@@ -178,7 +185,19 @@ export function resolveNflTargetExcludedProduction(args: {
       professionalMarketAuthority,
       evaluatedAt: args.evaluatedAt,
     });
-    const productionCandidate = buildProduction(outcomeCandidate);
+    const threeStateAuthority = args.threeStateMarketAuthorityFactory?.({
+      moneyline: excluded.margin,
+      spread: excluded.margin,
+      total: excluded.total,
+    });
+    const outcomeCandidate = threeStateAuthority
+      ? applyNflThreeStateMarketReader({ forecast: preThreeStateOutcome, authority: threeStateAuthority })
+      : preThreeStateOutcome;
+    const productionCandidate = applyNflThreeStateGradePolicy({
+      baseline: buildProduction(preThreeStateOutcome),
+      candidate: buildProduction(outcomeCandidate),
+      outcome: outcomeCandidate,
+    });
     const nextExcluded = evaluatedTargetFamilies(productionCandidate.evaluatedBets);
     if (!nextExcluded) return fallback();
     if (targetFamilySignature(nextExcluded) === signature) {
@@ -191,13 +210,68 @@ export function resolveNflTargetExcludedProduction(args: {
         marginExcludedSportsbooks: anchor.marginExcludedSportsbooks,
         totalExcludedSportsbooks: anchor.totalExcludedSportsbooks,
       };
+      const baselineOutcome = { ...preThreeStateOutcome, targetExclusion };
       const outcome = { ...outcomeCandidate, targetExclusion };
-      return { outcome, production: buildProduction(outcome), targetExclusion, diagnosticProfessionalAuthority };
+      const finalProduction = applyNflThreeStateGradePolicy({
+        baseline: buildProduction(baselineOutcome),
+        candidate: buildProduction(outcome),
+        outcome,
+      });
+      return { outcome, production: finalProduction, targetExclusion, diagnosticProfessionalAuthority };
     }
     production = productionCandidate;
     excluded = nextExcluded;
   }
   return fallback();
+}
+
+export function applyNflThreeStateGradePolicy(args: {
+  baseline: NflV1ActionableGradeBundle;
+  candidate: NflV1ActionableGradeBundle;
+  outcome: NflV1WeekOneOutcomeForecast;
+}): NflV1ActionableGradeBundle {
+  const reader = args.outcome.threeStateMarketReader;
+  if (!reader || reader.status !== "available") return args.candidate;
+  const baselineByMarket = new Map(args.baseline.evaluatedBets.map((decision) => [decision.market, decision]));
+  const evaluatedBets = args.candidate.evaluatedBets.map((decision) => {
+    const baseline = baselineByMarket.get(decision.market);
+    if (!baseline) return decision;
+    if (decision.market === "total") return baseline;
+    if (decision.market === "moneyline") {
+      if (reader.state === "value_resistance" && actionable(decision.grade)) {
+        return { ...decision, grade: "Watchlist" };
+      }
+      if (gradeRank(decision.grade) > gradeRank(baseline.grade) && actionable(decision.grade) &&
+          !actionable(baseline.grade)) {
+        return { ...decision, grade: "Watchlist" };
+      }
+      return decision;
+    }
+    const side = decision.side === args.outcome.homeTeam ? 1 : -1;
+    const eligiblePromotion = reader.state === "value_resistance" &&
+      reader.spreadBoundaryCorrectionApplied && baseline.grade === "Watchlist" &&
+      side === reader.side && decision.expectedValue >= 0 &&
+      decision.modelProbability >= decision.marketFairProbability;
+    if (gradeRank(decision.grade) > gradeRank(baseline.grade)) {
+      if (eligiblePromotion) return { ...decision, grade: "Lean" };
+      if (actionable(decision.grade) && !actionable(baseline.grade)) {
+        return { ...decision, grade: "Watchlist" };
+      }
+      return actionable(baseline.grade) ? { ...decision, grade: baseline.grade } : decision;
+    }
+    return eligiblePromotion && decision.grade === "Watchlist"
+      ? { ...decision, grade: "Lean" }
+      : decision;
+  });
+  return { ...args.candidate, evaluatedBets };
+}
+
+function actionable(grade: string): boolean {
+  return grade === "Best Angle" || grade === "Lean";
+}
+
+function gradeRank(grade: string): number {
+  return grade === "Best Angle" ? 3 : grade === "Lean" ? 2 : grade === "Watchlist" ? 1 : 0;
 }
 
 /**
