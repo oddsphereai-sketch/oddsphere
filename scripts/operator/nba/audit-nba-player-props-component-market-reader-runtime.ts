@@ -39,6 +39,7 @@ type Market = (typeof MARKETS)[number];
 type Compared = Readonly<{
   market: Market;
   actual: number;
+  feature: NbaPlayerPropFeatureRow;
   baseline: NbaPlayerPropsForwardDecision;
   candidate: NbaPlayerPropsForwardDecision;
 }>;
@@ -46,7 +47,19 @@ type Compared = Readonly<{
 async function main(): Promise<void> {
   const season = Number(argument("season") ?? "2026");
   const dates = requiredArgument("dates").split(",").map((date) => date.trim()).filter(Boolean);
-  const candidateArtifact = readArtifact(requiredArgument("candidate-artifact"));
+  const rawCandidateArtifact = readArtifact(requiredArgument("candidate-artifact"));
+  const candidateArtifact: NbaPlayerPropsFrozenArtifact = {
+    ...rawCandidateArtifact,
+    ...(process.argv.includes("--generic-rebound-minutes")
+      ? { robustMinuteModel: rawCandidateArtifact.minuteModel }
+      : {}),
+    underlyingByMarket: {
+      ...rawCandidateArtifact.underlyingByMarket,
+      ...(process.argv.includes("--ra-robust-components")
+        ? { rebounds_assists: "robust_component_counts" as const }
+        : {}),
+    },
+  };
   const baselineArtifact = readArtifact(
     argument("baseline-artifact") ?? "lib/services/nba/fixtures/nbaPlayerPropsFrozenRuntimeArtifact.json",
   );
@@ -117,14 +130,22 @@ async function main(): Promise<void> {
       currentObservations,
       evaluatedAt,
     });
-    const candidateByScope = new Map(candidate.map((row) => [row.scopeKey, row]));
     const featureByScope = new Map(features.map((row) => [`${row.game_id}|${row.player_id}`, row]));
+    const baselineByScope = new Map(baseline.map((row) => [row.scopeKey, row]));
+    const candidateByScope = new Map(candidate.map((row) => {
+      const feature = featureByScope.get(`${row.gameId}|${row.playerId}`);
+      const selected = process.argv.includes("--low-tenure-only")
+        && (feature?.same_team_games_10 ?? 10) >= 3
+        ? baselineByScope.get(row.scopeKey) ?? row
+        : row;
+      return [row.scopeKey, selected];
+    }));
     for (const before of baseline) {
       const after = candidateByScope.get(before.scopeKey);
       const feature = featureByScope.get(`${before.gameId}|${before.playerId}`);
       const actual = feature ? actualFor(before.market as Market, feature) : null;
-      if (!after || actual === null || actual === before.line) continue;
-      compared.push({ market: before.market as Market, actual, baseline: before, candidate: after });
+      if (!after || !feature || actual === null || actual === before.line) continue;
+      compared.push({ market: before.market as Market, actual, feature, baseline: before, candidate: after });
     }
     dateInventory.push({
       slateDate,
@@ -146,6 +167,10 @@ async function main(): Promise<void> {
     dates: dateInventory,
     overall: summarize(compared),
     byMarket: Object.fromEntries(MARKETS.map((market) => [market, summarize(compared.filter((row) => row.market === market))])),
+    reboundFamilySegments: segmentSummary(compared.filter((row) =>
+      row.market === "rebounds" || row.market === "rebounds_assists")),
+    reboundSegments: segmentSummary(compared.filter((row) => row.market === "rebounds")),
+    reboundsAssistsSegments: segmentSummary(compared.filter((row) => row.market === "rebounds_assists")),
     gradeImpact: gradeImpact(compared),
     coherence: {
       candidateSideProjectionDisagreements: compared.filter(({ candidate }) =>
@@ -158,6 +183,56 @@ async function main(): Promise<void> {
       targetBookExcludedRuntime: true,
     },
   }, null, 2)}\n`);
+}
+
+function segmentSummary(rows: readonly Compared[]) {
+  const definitions: Record<string, (row: Compared) => boolean> = {
+    changed_team: (row) => row.feature.changed_team_since_last_game === 1,
+    stable_team: (row) => row.feature.changed_team_since_last_game !== 1,
+    under_5_prior_games: (row) => row.feature.player_games_prior < 5,
+    games_5_to_9: (row) => row.feature.player_games_prior >= 5 && row.feature.player_games_prior < 10,
+    games_10_plus: (row) => row.feature.player_games_prior >= 10,
+    current_team_tenure_0_to_2: (row) => row.feature.same_team_games_10 < 3,
+    current_team_tenure_3_to_5: (row) => row.feature.same_team_games_10 >= 3 && row.feature.same_team_games_10 < 6,
+    current_team_tenure_6_to_9: (row) => row.feature.same_team_games_10 >= 6 && row.feature.same_team_games_10 < 10,
+    current_team_tenure_10: (row) => row.feature.same_team_games_10 >= 10,
+    volatile_minutes: (row) => (row.feature.minutes_sd_10 ?? Infinity) > 5,
+    stable_minutes: (row) => (row.feature.minutes_sd_10 ?? Infinity) <= 5,
+    projected_low_minutes: (row) => (row.feature.minutes_mean_5 ?? 0) < 24,
+    projected_rotation_minutes: (row) => (row.feature.minutes_mean_5 ?? 0) >= 24 && (row.feature.minutes_mean_5 ?? 0) < 32,
+    projected_high_minutes: (row) => (row.feature.minutes_mean_5 ?? 0) >= 32,
+    back_to_back: (row) => row.feature.team_back_to_back === 1,
+    rested: (row) => row.feature.team_back_to_back !== 1,
+    line_5_or_lower: (row) => row.baseline.line <= 5,
+    line_5_5_to_8_5: (row) => row.baseline.line > 5 && row.baseline.line <= 8.5,
+    line_above_8_5: (row) => row.baseline.line > 8.5,
+    selected_over: (row) => row.candidate.side === "over",
+    selected_under: (row) => row.candidate.side === "under",
+    low_line_over: (row) => row.baseline.line <= 5 && row.candidate.side === "over",
+    low_line_under: (row) => row.baseline.line <= 5 && row.candidate.side === "under",
+    rested_over: (row) => row.feature.team_back_to_back !== 1 && row.candidate.side === "over",
+    rested_under: (row) => row.feature.team_back_to_back !== 1 && row.candidate.side === "under",
+    rotation_minutes_over: (row) => (row.feature.minutes_mean_5 ?? 0) >= 24
+      && (row.feature.minutes_mean_5 ?? 0) < 32 && row.candidate.side === "over",
+    rotation_minutes_under: (row) => (row.feature.minutes_mean_5 ?? 0) >= 24
+      && (row.feature.minutes_mean_5 ?? 0) < 32 && row.candidate.side === "under",
+    rotation_over_low_line: (row) => (row.feature.minutes_mean_5 ?? 0) >= 24
+      && (row.feature.minutes_mean_5 ?? 0) < 32 && row.candidate.side === "over" && row.baseline.line <= 5,
+    rotation_over_higher_line: (row) => (row.feature.minutes_mean_5 ?? 0) >= 24
+      && (row.feature.minutes_mean_5 ?? 0) < 32 && row.candidate.side === "over" && row.baseline.line > 5,
+    rested_over_low_line: (row) => row.feature.team_back_to_back !== 1
+      && row.candidate.side === "over" && row.baseline.line <= 5,
+    rested_over_higher_line: (row) => row.feature.team_back_to_back !== 1
+      && row.candidate.side === "over" && row.baseline.line > 5,
+  };
+  return Object.fromEntries(Object.entries(definitions).map(([name, include]) => {
+    const selected = rows.filter(include);
+    return [name, {
+      ...summarize(selected),
+      meanActualMinusIndependent: mean(selected.map(({ actual, baseline }) => actual - baseline.independentProjection)),
+      meanActualMinusFinal: mean(selected.map(({ actual, candidate }) => actual - candidate.finalProjection)),
+    }];
+  }));
 }
 
 function summarize(rows: readonly Compared[]) {

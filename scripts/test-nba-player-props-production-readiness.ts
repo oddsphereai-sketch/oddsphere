@@ -5,6 +5,7 @@ import {
   buildNbaPlayerPropsForwardDecisions,
   buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit,
   nbaPlayerPropsFrozenRuntimeArtifact,
+  type NbaPlayerPropsFrozenArtifact,
 } from "../lib/services/nba/nbaPlayerPropsFrozenRuntime";
 import { nbaPlayerPropsArtifactSha256 } from "../lib/services/nba/nbaPlayerPropsArtifactChecksum";
 import {
@@ -40,7 +41,7 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes");
 assert.equal(
   artifact.sourceGradeRelease,
   "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
@@ -223,6 +224,40 @@ assert.equal(
   "Lean",
   "the approved established-role/reference-book rebound selector must activate on a coherent forward slate",
 );
+
+const tenureRoutingArtifact: NbaPlayerPropsFrozenArtifact = {
+  ...artifact,
+  genericMinutesUntilCurrentTeamAppearancesByMarket: { rebounds: 3 },
+  minuteModel: { features: [], means: [], scales: [], coefficients: [10], lambda: 1 },
+  robustMinuteModel: { features: [], means: [], scales: [], coefficients: [30], lambda: 1 },
+  robustModels: {
+    ...artifact.robustModels!,
+    rebounds: {
+      component: "rebounds",
+      transform: "identity",
+      features: ["predicted_minutes"],
+      means: [0],
+      scales: [1],
+      coefficients: [0, 1],
+      lambda: 1,
+    },
+  },
+};
+const reboundObservations = observations.filter((row) => row.market === "rebounds");
+const lowTenureRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
+  artifact: tenureRoutingArtifact,
+  features: [{ ...features[0]!, same_team_games_10: 2 }],
+  observations: reboundObservations,
+})[0]!;
+const establishedRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
+  artifact: tenureRoutingArtifact,
+  features: [{ ...features[0]!, same_team_games_10: 10 }],
+  observations: reboundObservations,
+})[0]!;
+assert.equal(lowTenureRebound.independentProjection, 10,
+  "fewer than three current-team appearances must use the generic minute head");
+assert.equal(establishedRebound.independentProjection, 30,
+  "established current-team roles must retain the rotation-aware minute head");
 
 const underMarket = observations.filter((row) => row.market === "points").map((row) => ({
   ...row,

@@ -1,5 +1,35 @@
 # Model change safety protocol
 
+## NBA player-props low-tenure minute routing r9/r10
+
+On 2026-10-26 Daniel Mengel rejected the rebound-family hit rates as an
+acceptable endpoint and directed Oddsphere to pursue genuine projection and
+direction improvement without flattening the board. The release-pure loss
+ledger found that the writer's one-game `changed_team_since_last_game` flag was
+not a sufficient role-state boundary: after a player's first appearance for a
+new team it returned to false even while the player still had only one or two
+current-team appearances.
+
+For future unlocked Rebounds rows only, r9/r10 uses the already-frozen generic
+minute model while `same_team_games_10 < 3`; at three current-team appearances
+the existing rotation-aware minute model resumes. The robust rebound component,
+market reader, distributions, reliability, exact-price grade policies, cadence,
+writer, member surface, and every non-Rebounds market remain unchanged.
+
+Across 2,646 exact October 22-25 locks, the candidate improves Rebounds from
+183-184 (49.86%) to 188-179 (51.23%), lowers Rebound MAE from 3.039 to 2.850,
+and improves the complete board by five net decisions. It makes 21 Rebound side
+changes (13 corrected, eight harmed), preserves all grade counts, and has zero
+projection/side contradictions. A 360-game historical block and a separate
+900-game cross-season replay are effectively neutral on this narrowly scoped
+route; the global generic-minute alternative is rejected because it loses one
+net current decision. Replacing Rebounds + Assists with a component sum is also
+rejected because it loses two net current decisions. Existing locks remain
+byte-for-byte authoritative. Evidence and rollback:
+`docs/model-audits/2026-10-26-nba-player-props-latent-component-redesign-predeclaration.md`
+and
+`docs/model-audits/2026-10-26-nba-player-props-low-tenure-minutes-result.md`.
+
 ## NBA player-props rebound component market reader r8
 
 On 2026-10-26 Daniel Mengel directed Oddsphere to diagnose player-prop markets
