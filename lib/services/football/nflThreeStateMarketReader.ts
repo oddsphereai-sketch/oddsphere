@@ -15,7 +15,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_THREE_STATE_MARKET_READER_RELEASE =
-  "nfl_three_state_market_reader_2026_10_25_r2_two_source_flow_boundary" as const;
+  "nfl_three_state_market_reader_2026_10_26_r3_cross_market_consensus" as const;
 
 type Snapshot = {
   capturedAt: string;
@@ -28,6 +28,7 @@ export type NflThreeStateMarketAuthority = {
   reason:
     | "qualified_named_price_and_independent_flow"
     | "qualified_named_price_and_two_source_flow"
+    | "qualified_named_price_flow_and_cross_market_consensus"
     | "no_stable_named_moneyline_direction"
     | "named_moneyline_disagreement"
     | "opposing_flow"
@@ -114,17 +115,41 @@ export function buildNflThreeStateMarketAuthority(args: {
     return unavailable("opposing_flow", excludedFamilies);
   }
   const confirmingFlows = independentFlows.filter((flow) => flow.direction === side);
-  if (new Set(confirmingFlows.map((flow) => flow.source)).size < 2) {
-    return unavailable("no_independent_flow_confirmation", excludedFamilies);
+  if (new Set(confirmingFlows.map((flow) => flow.source)).size >= 2) {
+    return available({
+      reason: "qualified_named_price_and_two_source_flow",
+      side,
+      namedSources,
+      confirmingSplitSources: [...new Set(confirmingFlows.map((flow) => flow.source))].sort(),
+      args,
+      excludedFamilies,
+    });
   }
-  return available({
-    reason: "qualified_named_price_and_two_source_flow",
-    side,
-    namedSources,
-    confirmingSplitSources: [...new Set(confirmingFlows.map((flow) => flow.source))].sort(),
-    args,
+  const outcomeBoundarySide = targetExcludedMoneylineSide({
+    books: args.comparableCurrentBooks,
     excludedFamilies,
+    evaluatedAt: args.evaluatedAt,
   });
+  const spreadBoundary = targetExcludedSpreadBoundary({
+    books: args.comparableCurrentBooks,
+    excludedFamilies,
+    evaluatedAt: args.evaluatedAt,
+  });
+  return confirmingFlows.length > 0 && outcomeBoundarySide === side &&
+    spreadBoundary !== null && sign(spreadBoundary) === side
+    ? available({
+        reason: "qualified_named_price_flow_and_cross_market_consensus",
+        side,
+        namedSources,
+        confirmingSplitSources: [...new Set([
+          ...confirmingFlows.map((flow) => flow.source),
+          "target_excluded_moneyline_consensus",
+          "target_excluded_spread_consensus",
+        ])].sort(),
+        args,
+        excludedFamilies,
+      })
+    : unavailable("no_independent_flow_confirmation", excludedFamilies);
 }
 
 export function applyNflThreeStateMarketReader(args: {
@@ -144,13 +169,20 @@ export function applyNflThreeStateMarketReader(args: {
       state = "confirmation";
     } else if (args.authority.outcomeBoundarySide === args.authority.side) {
       state = "outcome_correction";
-      finalHomeMargin = -initialHomeMargin;
+      const boundary = args.authority.spreadBoundary;
+      const crossMarketCandidate = boundary === null ? null : 2 * boundary - initialHomeMargin;
+      finalHomeMargin = args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus" &&
+        boundary !== null && crossMarketCandidate !== null && sign(crossMarketCandidate) === args.authority.side &&
+        sign(crossMarketCandidate - boundary) === args.authority.side && total > Math.abs(crossMarketCandidate)
+        ? crossMarketCandidate
+        : -initialHomeMargin;
       outcomeCorrectionApplied = true;
     } else {
       state = "value_resistance";
       const boundary = args.authority.spreadBoundary;
       if (boundary !== null && boundary !== 0 && args.authority.side !== sign(initialHomeMargin - boundary)) {
-        const candidate = args.authority.reason === "qualified_named_price_and_two_source_flow"
+        const candidate = args.authority.reason === "qualified_named_price_and_two_source_flow" ||
+          args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus"
           ? boundary / 2
           : 2 * boundary - initialHomeMargin;
         if (sign(candidate) === independentSide &&
@@ -192,7 +224,8 @@ export function applyNflThreeStateMarketReader(args: {
 
 function available(args: {
   reason: Extract<NflThreeStateMarketAuthority["reason"],
-    "qualified_named_price_and_independent_flow" | "qualified_named_price_and_two_source_flow">;
+    "qualified_named_price_and_independent_flow" | "qualified_named_price_and_two_source_flow" |
+    "qualified_named_price_flow_and_cross_market_consensus">;
   side: NflMarketStateSide;
   namedSources: string[];
   confirmingSplitSources: string[];

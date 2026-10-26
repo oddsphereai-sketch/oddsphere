@@ -50,6 +50,7 @@ type Variant = {
   exactSequenceExclusion?: boolean;
   professionalMarketAuthority?: boolean;
   exactProviderScore?: boolean;
+  preferExactProviderScore?: boolean;
   noWeightMarketReader?: boolean;
   corroboratedMoneylineAuthority?: boolean;
   moneylineOutcomeBoundary?: boolean;
@@ -57,6 +58,7 @@ type Variant = {
   threeStateSpreadPromotion?: boolean;
   productionThreeStateReader?: boolean;
   legacyProductionThreeStateReader?: boolean;
+  currentProductionThreeStateReader?: boolean;
 };
 type Side = -1 | 1;
 type AuthorityRead = { side: Side | null; tier: 0 | 1 | 2 | 3; families: string[]; conflicts: string[] };
@@ -152,6 +154,16 @@ const VARIANTS: Record<string, Variant> = {
     publicSplits: true, sharpSplits: true, direction: true,
     professionalMarketAuthority: true, exactProviderScore: true, noWeightMarketReader: true,
     productionThreeStateReader: true, legacyProductionThreeStateReader: true,
+  },
+  settledProductionThreeStateNoWeight: {
+    publicSplits: true, sharpSplits: true, direction: true,
+    professionalMarketAuthority: true, noWeightMarketReader: true, preferExactProviderScore: true,
+    productionThreeStateReader: true,
+  },
+  settledCurrentProductionThreeStateNoWeight: {
+    publicSplits: true, sharpSplits: true, direction: true,
+    professionalMarketAuthority: true, noWeightMarketReader: true, preferExactProviderScore: true,
+    productionThreeStateReader: true, currentProductionThreeStateReader: true,
   },
 };
 
@@ -470,7 +482,7 @@ function projectionResult(replay: Replay, market: Market, cushion = 0): Result {
 
 function replay(game: Game, variant: Variant): Replay {
   const payload = game.payload;
-  const exactProvider = variant.exactProviderScore
+  const exactProvider = variant.exactProviderScore || variant.preferExactProviderScore
     ? game.exactProviderScore
     : null;
   if (variant.exactProviderScore && !exactProvider) {
@@ -577,8 +589,10 @@ function replay(game: Game, variant: Variant): Replay {
           sharpSplits: payload.market.sharpApiSplits,
           excludedFamilies: excludedFamiliesByMarket.moneyline,
         });
-        return variant.legacyProductionThreeStateReader &&
-          authority.reason === "qualified_named_price_and_two_source_flow"
+        return (variant.legacyProductionThreeStateReader &&
+          authority.reason === "qualified_named_price_and_two_source_flow") ||
+          (variant.currentProductionThreeStateReader &&
+            authority.reason === "qualified_named_price_flow_and_cross_market_consensus")
           ? { ...authority, status: "unavailable" as const, reason: "no_independent_flow_confirmation" as const,
               side: null, outcomeBoundarySide: null, spreadBoundary: null,
               namedSources: [], confirmingSplitSources: [] }
@@ -589,6 +603,7 @@ function replay(game: Game, variant: Variant): Replay {
       marketOutcomeBuilder: buildNflNoWeightMarketEvidenceOutcomeForecast,
       fallbackOutcome: base,
     } : {}),
+    suppressNuancedMarginOverlay: variant.currentProductionThreeStateReader,
   });
   if (!variant.corroboratedMoneylineAuthority) {
     return { game, forecast: resolved.outcome, decisions: resolved.production.evaluatedBets };
@@ -1569,7 +1584,11 @@ async function main() {
   const games = (evidenceRead.data ?? []).flatMap((row): Game[] => {
     const payload = row.payload as NflForwardEvidencePayload;
     const replayKey = `${payload.game.scheduledStart.slice(0, 10)}:${normalizeReplayTeam(payload.game.away.abbreviation)}@${normalizeReplayTeam(payload.game.home.abbreviation)}`;
-    const exactProviderScore = exactReplayByGame.get(replayKey) ?? null;
+    const storedExact = payload.exactProviderScoreShadow;
+    const exactProviderScore = exactReplayByGame.get(replayKey) ?? (storedExact ? {
+      margin: storedExact.expectedHomeMargin,
+      total: storedExact.expectedTotal,
+    } : null);
     if (!exactProviderScore && !payload.paidProjectionShadow) return [];
     if (hashNflForwardEvidencePayload(payload) !== row.payload_sha256) throw new Error(`Checksum mismatch ${row.payload_sha256}.`);
     const related = byHash.get(row.payload_sha256) ?? [];
@@ -1585,6 +1604,22 @@ async function main() {
     }];
   }).sort((a, b) => a.payload.game.scheduledStart.localeCompare(b.payload.game.scheduledStart));
   if (games.length < 18) throw new Error(`Expected at least 18 paid-projection games; got ${games.length}.`);
+  if (process.argv.includes("--settled-production-summary")) {
+    const baseline = games.map((game) => replay(game, VARIANTS.settledCurrentProductionThreeStateNoWeight!));
+    const candidate = games.map((game) => replay(game, VARIANTS.settledProductionThreeStateNoWeight!));
+    console.log(JSON.stringify({
+      release: "nfl_2026_settled_production_reader_audit_2026_10_26_r1",
+      readOnly: true,
+      writes: 0,
+      games: games.length,
+      baseline: summarize(baseline),
+      candidate: summarize(candidate),
+      impact: compare(baseline, candidate),
+      chronology: chronologicalProductAudit(baseline, candidate),
+      forecastImpact: compareForecasts(baseline, candidate),
+    }, null, 2));
+    return;
+  }
   if (gradeCalibration) {
     const exactGames = games.filter((game) => game.exactProviderScore !== null);
     if (exactGames.length < 18) {

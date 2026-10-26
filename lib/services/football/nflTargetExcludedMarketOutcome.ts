@@ -26,7 +26,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_25_r17_unified_total_interpreter" as const;
+  "nfl_target_excluded_market_outcome_2026_10_26_r18_nuanced_market_reader" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -90,6 +90,8 @@ export function resolveNflTargetExcludedProduction(args: {
   }>;
   marketOutcomeBuilder?: typeof buildNflMarketEvidenceOutcomeForecast;
   fallbackOutcome?: NflV1WeekOneOutcomeForecast;
+  /** Internal/read-only switch that resolves the pre-overlay unified baseline. */
+  suppressNuancedMarginOverlay?: boolean;
 }): {
   outcome: NflV1WeekOneOutcomeForecast;
   production: NflV1ActionableGradeBundle;
@@ -123,6 +125,82 @@ export function resolveNflTargetExcludedProduction(args: {
   };
   if (!args.shadowMoneyline.footballProjection || !args.current.spread || !args.current.total) {
     return fallback();
+  }
+
+  /*
+   * The established target-excluded resolver owns the unified Moneyline,
+   * Spread, and Total forecast. Resolve it first, then let the categorical
+   * market reader operate only on the shared margin axis. This keeps an NFL
+   * side correction from silently changing an unrelated Total decision.
+   *
+   * The recursive call is the pre-release baseline path: it retains the
+   * previously shipped authority routes and exact-target convergence rules.
+   */
+  if (!args.suppressNuancedMarginOverlay && args.threeStateMarketAuthorityFactory) {
+    const authorityFactory = args.threeStateMarketAuthorityFactory;
+    const baseline = resolveNflTargetExcludedProduction({
+      ...args,
+      suppressNuancedMarginOverlay: true,
+      threeStateMarketAuthorityFactory: (excludedFamiliesByMarket) => {
+        const authority = authorityFactory(excludedFamiliesByMarket);
+        return authority.reason === "qualified_named_price_flow_and_cross_market_consensus"
+          ? unavailableCandidateAuthority(authority)
+          : authority;
+      },
+    });
+    const initialTargets = evaluatedTargetFamilies(baseline.production.evaluatedBets);
+    if (!initialTargets) return baseline;
+    let marginExcluded = [...initialTargets.margin].sort();
+    let safeResistance: typeof baseline | null = null;
+    const familyBound = Math.min(
+      9,
+      new Set(args.comparableCurrentBooks.map((book) => normalizeBook(book.sportsbook)).filter(Boolean)).size + 1,
+    );
+    for (let iteration = 0; iteration < familyBound; iteration++) {
+      const authority = authorityFactory({
+        moneyline: marginExcluded,
+        spread: marginExcluded,
+        total: initialTargets.total,
+      });
+      const classified = applyNflThreeStateMarketReader({ forecast: baseline.outcome, authority });
+      const reader = classified.threeStateMarketReader;
+      if (reader?.status !== "available") return safeResistance ?? baseline;
+
+      if (reader.state === "value_resistance") {
+        const gradeOnlyOutcome = {
+          ...baseline.outcome,
+          threeStateMarketReader: {
+            ...reader,
+            finalHomeMargin: reader.initialHomeMargin,
+            spreadBoundaryCorrectionApplied: false,
+          },
+        };
+        safeResistance = {
+          ...baseline,
+          outcome: gradeOnlyOutcome,
+          production: applyNflThreeStateGradePolicy({
+            baseline: baseline.production,
+            candidate: baseline.production,
+            outcome: gradeOnlyOutcome,
+            demoteOpposedSpreadActionable: true,
+          }),
+        };
+      }
+
+      const candidate = applyNflThreeStateGradePolicy({
+        baseline: baseline.production,
+        candidate: buildProduction(classified),
+        outcome: classified,
+        demoteOpposedSpreadActionable: true,
+      });
+      const targets = evaluatedTargetFamilies(candidate.evaluatedBets);
+      if (!targets) return safeResistance ?? baseline;
+      if (targets.margin.every((family) => marginExcluded.includes(family))) {
+        return { ...baseline, outcome: classified, production: candidate };
+      }
+      marginExcluded = [...new Set([...marginExcluded, ...targets.margin])].sort();
+    }
+    return safeResistance ?? baseline;
   }
 
   let production = buildProduction(args.incumbentOutcome);
@@ -250,6 +328,7 @@ export function applyNflThreeStateGradePolicy(args: {
   baseline: NflV1ActionableGradeBundle;
   candidate: NflV1ActionableGradeBundle;
   outcome: NflV1WeekOneOutcomeForecast;
+  demoteOpposedSpreadActionable?: boolean;
 }): NflV1ActionableGradeBundle {
   const reader = args.outcome.threeStateMarketReader;
   if (!reader || reader.status !== "available") return args.candidate;
@@ -269,6 +348,10 @@ export function applyNflThreeStateGradePolicy(args: {
       return decision;
     }
     const side = decision.side === args.outcome.homeTeam ? 1 : -1;
+    if (args.demoteOpposedSpreadActionable === true && reader.state === "value_resistance" &&
+        side !== reader.side && actionable(decision.grade)) {
+      return { ...decision, grade: "Watchlist" };
+    }
     const eligiblePromotion = reader.state === "value_resistance" &&
       reader.spreadBoundaryCorrectionApplied && baseline.grade === "Watchlist" &&
       side === reader.side && decision.expectedValue >= 0 &&
@@ -293,6 +376,21 @@ function actionable(grade: string): boolean {
 
 function gradeRank(grade: string): number {
   return grade === "Best Angle" ? 3 : grade === "Lean" ? 2 : grade === "Watchlist" ? 1 : 0;
+}
+
+function unavailableCandidateAuthority(
+  authority: NflThreeStateMarketAuthority,
+): NflThreeStateMarketAuthority {
+  return {
+    ...authority,
+    status: "unavailable",
+    reason: "no_independent_flow_confirmation",
+    side: null,
+    outcomeBoundarySide: null,
+    spreadBoundary: null,
+    namedSources: [],
+    confirmingSplitSources: [],
+  };
 }
 
 /**

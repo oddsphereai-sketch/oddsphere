@@ -206,6 +206,46 @@ const baltimoreCorrection = applyNflThreeStateMarketReader({ forecast: base, aut
 assert.equal(baltimoreCorrection.expectedHomeScore - baltimoreCorrection.expectedAwayScore, -4,
   "the Cincinnati-over-Baltimore pattern crosses the target-excluded 50% boundary and corrects the winner");
 
+const crossMarketBaltimoreAuthority = buildNflThreeStateMarketAuthority({
+  evaluatedAt,
+  snapshots: [{
+    capturedAt: evaluatedAt,
+    markets: {
+      moneyline: { families: [
+        ["circa", "s", "c", null,
+          ["2026-10-25T14:00:00.000Z", 120, "f", null, 146, -174],
+          ["2026-10-25T15:00:00.000Z", 60, "f", null, -154, 130]],
+      ] },
+      spread: { families: [] },
+      total: { families: [] },
+    },
+  }],
+  current: book("fanduel", -150, 128, 3),
+  comparableCurrentBooks: [
+    book("fanduel", -150, 128, 3),
+    book("draftkings", -154, 130, 3),
+    book("betmgm", -148, 126, 2.5),
+    book("caesars", -152, 129, 3.5),
+  ],
+  playbookLine: null,
+  playbookSplits: splitSet(30, 32),
+  sharpSplits: null,
+  excludedFamilies: ["fanduel"],
+});
+assert.equal(crossMarketBaltimoreAuthority.reason,
+  "qualified_named_price_flow_and_cross_market_consensus",
+  "one independent flow may qualify only when target-excluded Moneyline and Spread consensus agree");
+const crossMarketBaltimoreCorrection = applyNflThreeStateMarketReader({
+  forecast: base,
+  authority: crossMarketBaltimoreAuthority,
+});
+assert.equal(crossMarketBaltimoreCorrection.expectedHomeScore -
+  crossMarketBaltimoreCorrection.expectedAwayScore, -10,
+"the cross-market route reflects the stale independent margin across the target-free spread boundary");
+assert.ok(Math.abs(crossMarketBaltimoreCorrection.expectedHomeScore +
+  crossMarketBaltimoreCorrection.expectedAwayScore - 44) < 1e-6,
+"the cross-market correction cannot alter the Total projection");
+
 const sanFranciscoBase = buildNflIndependentScoreBaseForecast({
   baseForecast: getNflV1WeekOneOutcomeForecast({
     providerGameId: "sf-atl-regression",
@@ -272,6 +312,25 @@ assert.deepEqual(
   graded.evaluatedBets.find((row) => row.market === "total"),
   baseline.evaluatedBets.find((row) => row.market === "total"),
   "the three-state side reader cannot change Total decisions",
+);
+
+const opposedSpreadBaseline = bundle([
+  decision("moneyline", "HME", "Lean", 0.56, 0.54, -110, null),
+  decision("spread", "HME", "Lean", 0.56, 0.54, -110, -3),
+  decision("total", "Over 44", "Lean", 0.56, 0.54, -110, 44),
+]);
+const opposedSpread = applyNflThreeStateGradePolicy({
+  baseline: opposedSpreadBaseline,
+  candidate: opposedSpreadBaseline,
+  outcome: valueResistance,
+  demoteOpposedSpreadActionable: true,
+});
+assert.equal(opposedSpread.evaluatedBets.find((row) => row.market === "spread")?.grade, "Watchlist",
+  "qualified value resistance demotes an actionable Spread opposed to the reader side");
+assert.deepEqual(
+  opposedSpread.evaluatedBets.find((row) => row.market === "total"),
+  opposedSpreadBaseline.evaluatedBets.find((row) => row.market === "total"),
+  "a Spread demotion cannot leak into the Total decision",
 );
 
 const outcomeCandidate = bundle(baseline.evaluatedBets.map((row) =>
@@ -370,12 +429,12 @@ function bundle(evaluatedBets: NflRegularEvaluatedBetDecision[]): NflV1Actionabl
   return {
     evaluatedBets,
     outcomeConfidence: [],
-    modelPromotionStatus: "nfl_v1_member_release_2026_10_25_r36_unified_total_interpreter",
+    modelPromotionStatus: "nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader",
     publicationEnabled: true,
     trackingEnabled: false,
-    modelRelease: "nfl_v1_daily_edge_model_2026_10_25_r31_unified_total_interpreter",
-    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_25_r30_unified_total_interpreter",
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_25_r39_unified_total_interpreter",
-    policyRelease: "nfl_v1_grade_policy_2026_10_25_r39_unified_total_interpreter",
+    modelRelease: "nfl_v1_daily_edge_model_2026_10_26_r32_nuanced_market_reader",
+    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_26_r31_nuanced_market_reader",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r40_nuanced_market_reader",
+    policyRelease: "nfl_v1_grade_policy_2026_10_26_r40_nuanced_market_reader",
   };
 }
