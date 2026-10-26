@@ -300,8 +300,8 @@ Last reviewed: 2026-10-26
   `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes` /
-  `nba_player_props_forward_decision_2026_10_26_r10_low_tenure_minutes` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_26_r10_rebound_threes_architecture` /
+  `nba_player_props_forward_decision_2026_10_26_r11_rebound_threes_architecture` /
   `nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
@@ -342,6 +342,23 @@ Last reviewed: 2026-10-26
   blocks are effectively neutral. The rejected global-minute and coherent R+A
   alternatives receive no runtime authority. Evidence and rollback:
   `docs/model-audits/2026-10-26-nba-player-props-low-tenure-minutes-result.md`.
+  The r10/r11 architecture release then changes only future unlocked Rebounds
+  and Threes. Rebounds uses the already-frozen ridge rate plus minute-regression
+  head with the existing target-excluded FanDuel/reference-book disagreement
+  reader; Threes uses the already-frozen structural direct count head. No model
+  coefficient, residual distribution, reliability model or grade policy is
+  refit. On the exact 2,646-decision October 22-25 production-path replay,
+  all-market direction improves from 1,478-1,168 (55.86%) to 1,485-1,161
+  (56.12%) and MAE improves from 4.562 to 4.499. Rebounds improves 188-179 to
+  192-175 and MAE 2.850 to 2.385; Threes improves 185-146 to 188-143 with MAE
+  1.126 to 1.137. The 49 existing actionables remain 29-20. Two actionable
+  promotions are paired with two demotions, leaving grade counts unchanged.
+  The October 26 zero-write board preserves 762 decisions, all eight markets
+  and the 8/19/26 Best Angle/Lean/Watchlist counts with one promotion paired to
+  one demotion. The rejected broad rebuild receives no authority. Evidence and
+  rollback:
+  `docs/model-audits/2026-10-26-nba-player-props-rebound-threes-architecture-predeclaration.md`
+  and `docs/model-audits/2026-10-26-nba-player-props-rebound-threes-architecture-result.md`.
   The original member launch changed zero
   stored projections, sides, probabilities, grades, prices, or locks. The r3
   frozen runtime refits selected ridge components on every legal
