@@ -468,6 +468,28 @@ export function resolveNflTargetExcludedMarketAnchor(args: {
   };
 }
 
+export function resolveNflTargetExcludedMoneylineHomeProbability(args: {
+  books: NflPreviewBookOdds[];
+  excludedSportsbooks: Iterable<string>;
+  evaluatedAt: string;
+  freshnessMinutes?: number;
+  minimumFamilies?: number;
+}): number | null {
+  const evaluatedAt = Date.parse(args.evaluatedAt);
+  if (!Number.isFinite(evaluatedAt)) throw new Error("NFL target-excluded Moneyline evaluatedAt is invalid.");
+  const freshnessMs = (args.freshnessMinutes ?? 120) * 60_000;
+  const minimumFamilies = args.minimumFamilies ?? 3;
+  const excluded = normalizedSet(args.excludedSportsbooks);
+  const books = distinctLatestBooks(args.books).filter((book) =>
+    !excluded.has(normalizeBook(book.sportsbook)) && book.moneyline !== null &&
+    isFresh(book.observedAt, evaluatedAt, freshnessMs));
+  if (books.length < minimumFamilies) return null;
+  return median(books.map((book) => twoSidedFair(
+    book.moneyline!.homePrice,
+    book.moneyline!.awayPrice,
+  )));
+}
+
 function evaluatedTargetFamilies(
   decisions: NflV1ActionableGradeBundle["evaluatedBets"],
 ): NflEvaluatedTargetFamilies | null {

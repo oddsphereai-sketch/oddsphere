@@ -8,6 +8,23 @@ Last reviewed: 2026-10-26
 
 ## Cross-sport confidence / execution contract
 
+- October 26 NFL complete-signal semantic interpretation advances model / calibration / decision /
+  grade / member to `nfl_v1_daily_edge_model_2026_10_26_r35_complete_signal_interpretation` /
+  `nfl_v1_daily_edge_calibration_2026_10_26_r34_complete_signal_interpretation` /
+  `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
+  `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
+  `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation` /
+  `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
+  `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
+  receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
+  59-game repair ledger, Moneyline stays 35-23-1 with better Brier, Spread improves 25-32-2 to
+  31-26-2, +3 improves 33-25-1 to 38-20-1, +6 improves 41-18 to 44-15, Total remains 37-22, and
+  actionables improve 28-10/+15.53u to 32-7/+22.39u with one added play. This is an owner-directed
+  provisional repair, not a pristine holdout. Only future unlocked rows use it; every existing lock
+  retains exact stored precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-26-nfl-complete-signal-interpretation-result.md`.
+
 - October 26 NFL joint side-market arbitration advances model / calibration / decision / grade /
   member to `nfl_v1_daily_edge_model_2026_10_26_r34_joint_side_market_arbitration` /
   `nfl_v1_daily_edge_calibration_2026_10_26_r33_joint_side_market_arbitration` /
@@ -460,7 +477,27 @@ Last reviewed: 2026-10-26
 
 ## NFL Daily Edge generalized weekly production release
 
-### Joint side-market arbitration (r39)
+### Complete-signal semantic interpretation (r40)
+
+- Active member / model / calibration / decision / grade releases are
+  `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation` /
+  `nfl_v1_daily_edge_model_2026_10_26_r35_complete_signal_interpretation` /
+  `nfl_v1_daily_edge_calibration_2026_10_26_r34_complete_signal_interpretation` /
+  `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
+  `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
+- The active sole writer / fixture / compact snapshot are
+  `nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation` /
+  `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
+  `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
+- The semantic reader preserves every captured observation in a game ledger and assigns each one an
+  explicit role before resolving one coherent Margin/Total score. Injury and weather timing are
+  context, not automatic point adjustments; named discovery, retail follow-through, resistance,
+  reversals, buyback, number/price divergence, key-number transitions, split agreement/disagreement,
+  and unavailable evidence cannot silently disappear. Existing locks preserve exact stored payload
+  precedence. Evidence and rollback are in
+  `docs/model-audits/2026-10-26-nfl-complete-signal-interpretation-result.md`.
+
+### Joint side-market arbitration predecessor (r39)
 
 - Active member / model / calibration / decision / grade releases are
   `nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration` /

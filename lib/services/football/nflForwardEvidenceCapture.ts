@@ -6,12 +6,12 @@ import type { NflRegularSharpSplit } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "nfl_daily_edge_forward_context_capture_2026_10_09_r8_market_state_identity" as const;
-export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec3" as const;
-export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
+  "nfl_daily_edge_forward_context_capture_2026_10_26_r9_lossless_price_history" as const;
+export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec4" as const;
+export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 24 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
-export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;
-export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_GAME_BYTES = 24 * 1024;
+export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 24 * 1024;
+export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_GAME_BYTES = 72 * 1024;
 export const NFL_FORWARD_CONTEXT_CAPTURE_FRESH_MINUTES = 120 as const;
 
 type Market = NflRegularDecisionMarket;
@@ -52,6 +52,7 @@ export type NflForwardContextMarket = {
     targetExcludedObserved: number;
     targetExcludedRetained: number;
     chronologyPairsRetained: number;
+    targetExcludedChronologyPairsRetained: number;
     ownershipMetadata: "not_loaded";
     truncated: boolean;
   };
@@ -122,8 +123,7 @@ export function buildNflForwardContextCapture(args: {
   independentTargetFree: boolean;
   independentRelease: string;
   authoritativeForecast: NflV1WeekOneOutcomeForecast;
-}): NflForwardContextCapture | null {
-  try {
+}): NflForwardContextCapture {
     const decisions = new Map(args.payload.decisions.evaluatedBets.map((row) => [row.market, row]));
     const markets = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [
       market,
@@ -139,7 +139,13 @@ export function buildNflForwardContextCapture(args: {
         sharpEvidence: args.payload.market.sharpApiSplits?.[market] ?? null,
       }),
     ])) as Record<Market, NflForwardContextMarket>;
-    if (Object.values(markets).some((market) => market.bytes > NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES)) return null;
+    const oversizedMarket = Object.values(markets).find((market) =>
+      market.bytes > NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES);
+    if (oversizedMarket) {
+      throw new Error(
+        `NFL ${oversizedMarket.market} price-history capture exceeded ${NFL_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES} bytes.`,
+      );
+    }
     const firstDecision = args.payload.decisions.evaluatedBets[0] ?? null;
     const capture = withBytes({
       release: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
@@ -183,11 +189,31 @@ export function buildNflForwardContextCapture(args: {
       },
       bytes: 0,
     });
-    return nflForwardContextCaptureAddedBytes(capture) <= NFL_FORWARD_CONTEXT_CAPTURE_MAX_GAME_BYTES
-      ? capture
-      : null;
-  } catch {
-    return null;
+    const addedBytes = nflForwardContextCaptureAddedBytes(capture);
+    if (addedBytes > NFL_FORWARD_CONTEXT_CAPTURE_MAX_GAME_BYTES) {
+      throw new Error(`NFL price-history capture exceeded ${NFL_FORWARD_CONTEXT_CAPTURE_MAX_GAME_BYTES} bytes.`);
+    }
+    assertNflForwardContextCaptureCompleteness(capture);
+    return capture;
+}
+
+export function assertNflForwardContextCaptureCompleteness(capture: NflForwardContextCapture): void {
+  for (const market of Object.values(capture.markets)) {
+    if (market.coverage.truncated || market.coverage.completeOmitted !== 0) {
+      throw new Error(`NFL ${market.market} price history was truncated.`);
+    }
+    if (market.coverage.completeObserved === 0 || market.coverage.completeRetained === 0) {
+      throw new Error(`NFL ${market.market} has no complete current price pair.`);
+    }
+    if (market.coverage.chronologyPairsRetained === 0) {
+      throw new Error(`NFL ${market.market} has no opening-to-current price history.`);
+    }
+    if (market.evaluated && market.coverage.targetExcludedRetained === 0) {
+      throw new Error(`NFL ${market.market} has no target-excluded current price pair.`);
+    }
+    if (market.evaluated && market.coverage.targetExcludedChronologyPairsRetained === 0) {
+      throw new Error(`NFL ${market.market} has no target-excluded opening-to-current price history.`);
+    }
   }
 }
 
@@ -207,7 +233,13 @@ export function buildNflForwardContextMarket(args: {
   const ordered = [...complete].sort((first, second) =>
     priority(first, evaluatedFamily) - priority(second, evaluatedFamily) ||
     canonicalBook(first.sportsbook).localeCompare(canonicalBook(second.sportsbook)));
-  const retained = ordered.slice(0, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
+  if (ordered.length > NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET) {
+    throw new Error(
+      `NFL ${args.market} price history has ${ordered.length} book families; ` +
+      `lossless limit is ${NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET}.`,
+    );
+  }
+  const retained = ordered;
   const openingByFamily = earliestByFamily([
     ...args.openingBooks,
     args.operationalOpening,
@@ -226,6 +258,8 @@ export function buildNflForwardContextMarket(args: {
   const retainedNames = new Set(families.map((family) => family[0]));
   const targetExcludedObserved = complete.filter((book) => canonicalBook(book.sportsbook) !== evaluatedFamily).length;
   const targetExcludedFamilies = families.map((family) => family[0]).filter((family) => family !== evaluatedFamily);
+  const targetExcludedChronologyPairsRetained = families.filter((family) =>
+    family[0] !== evaluatedFamily && family[4] !== null).length;
   const evaluated = args.decision ? {
     identity: shortHash([
       args.decision.providerGameId, args.market, evaluatedFamily,
@@ -251,8 +285,9 @@ export function buildNflForwardContextMarket(args: {
       targetExcludedObserved,
       targetExcludedRetained: targetExcludedFamilies.length,
       chronologyPairsRetained: families.filter((family) => family[4] !== null).length,
+      targetExcludedChronologyPairsRetained,
       ownershipMetadata: "not_loaded" as const,
-      truncated: complete.length > families.length,
+      truncated: false,
     },
     public: compactPublic(args.publicEvidence, args.market),
     sharp: compactSharp(args.sharpEvidence, args.market),

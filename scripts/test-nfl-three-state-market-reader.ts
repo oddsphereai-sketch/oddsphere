@@ -499,12 +499,12 @@ function bundle(evaluatedBets: NflRegularEvaluatedBetDecision[]): NflV1Actionabl
   return {
     evaluatedBets,
     outcomeConfidence: [],
-    modelPromotionStatus: "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration",
+    modelPromotionStatus: "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation",
     publicationEnabled: true,
     trackingEnabled: false,
-    modelRelease: "nfl_v1_daily_edge_model_2026_10_26_r34_joint_side_market_arbitration",
-    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_26_r33_joint_side_market_arbitration",
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r42_joint_side_market_arbitration",
-    policyRelease: "nfl_v1_grade_policy_2026_10_26_r42_joint_side_market_arbitration",
+    modelRelease: "nfl_v1_daily_edge_model_2026_10_26_r35_complete_signal_interpretation",
+    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_26_r34_complete_signal_interpretation",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation",
+    policyRelease: "nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation",
   };
 }

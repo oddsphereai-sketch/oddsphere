@@ -138,6 +138,32 @@ export type NflForwardEvidencePayload = {
   injuries: DailyEdgeGameAvailability | null;
   weather: NflForwardWeatherSnapshot;
   outcomeForecast: NflV1WeekOneOutcomeForecast;
+  /** Future-unlocked semantic audit trail; absent on legacy locks, which retain exact stored precedence. */
+  fullGameEvidenceInterpretation?: {
+    runtimeRelease: string;
+    ledgerRelease: string;
+    arbiterRelease: string;
+    status: "applied" | "neutral" | "unavailable";
+    sideStory: string;
+    totalStory: string;
+    interpretationAccounting: {
+      capturedSignals: number;
+      interpretedCapturedSignals: number;
+      allCapturedInterpreted: boolean;
+      usableSignals: number;
+      interpretedSignals: number;
+      allUsableInterpreted: boolean;
+    };
+    signalInterpretations: Array<{
+      signalId: string;
+      market: "moneyline" | "spread" | "total" | "game";
+      source: string;
+      roles: string[];
+      affects: "side_story" | "total_story" | "context_only" | "data_quality";
+      stance: "supports_released" | "resists_released" | "non_directional";
+      explanation: string;
+    }>;
+  };
   /** Internal forward evidence only; no member or tracking reader may consume this field. */
   paidProjectionShadow?: NflPaidProjectionShadow;
   /** Exact market-free score before the downstream market reader; internal audit evidence only. */
@@ -185,7 +211,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_10_25_r35_two_source_flow_boundary"
       | "nfl_v1_member_release_2026_10_25_r36_unified_total_interpreter"
       | "nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader"
-      | "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration";
+      | "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration"
+      | "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;
