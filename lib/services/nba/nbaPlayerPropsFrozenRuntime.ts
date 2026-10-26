@@ -20,9 +20,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_26_r10_rebound_threes_architecture" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_26_r11_cross_season_market_heads" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_26_r11_rebound_threes_architecture" as const;
+  "nba_player_props_forward_decision_2026_10_26_r12_cross_season_market_heads" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -69,6 +69,16 @@ type ReliabilityModel = Readonly<{
   coefficients: readonly number[];
 }>;
 
+type NbaPlayerPropsModelBundle = Readonly<{
+  ridgeModel: NbaPlayerPropsIndependentResearchModel;
+  minuteModel: MinuteRegression;
+  structuralDirectModels: Readonly<Record<Component, StructuralCountModel>>;
+  structuralLogModels: Readonly<Record<Component, StructuralCountModel>>;
+  opportunityModels: Readonly<Record<Component, StructuralCountModel>>;
+  robustMinuteModel?: MinuteRegression;
+  robustModels?: Readonly<Record<Component, StructuralCountModel>>;
+}>;
+
 export type NbaPlayerPropsFrozenArtifact = Readonly<{
   release: typeof NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE;
   publicEnabled: false;
@@ -89,6 +99,8 @@ export type NbaPlayerPropsFrozenArtifact = Readonly<{
   opportunityModels: Readonly<Record<Component, StructuralCountModel>>;
   robustMinuteModel?: MinuteRegression;
   robustModels?: Readonly<Record<Component, StructuralCountModel>>;
+  modelBundles?: Readonly<Record<string, NbaPlayerPropsModelBundle>>;
+  modelBundleByMarket?: Readonly<Partial<Record<FoundationMarket, string>>>;
   distributions: Readonly<Record<FoundationMarket, Readonly<{ bias: number; standardDeviation: number }>>>;
   reliabilityModels: Readonly<Record<FoundationMarket, ReliabilityModel>>;
   gradePolicies: Readonly<Record<FoundationMarket, Readonly<{
@@ -335,7 +347,7 @@ export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
     return {
       ...row,
       independentProjection: round(row.independentProjection, 3),
-      finalProjection: round(row.finalProjection, 3),
+      finalProjection: coherentRoundedProjection(row.finalProjection, row.line, row.side),
       rawProbability: round(row.rawProbability, 6),
       independentProbability: round(row.independentProbability, 6),
       probability: round(row.probability, 6),
@@ -348,21 +360,24 @@ export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
 }
 
 function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarket, artifact: NbaPlayerPropsFrozenArtifact): number {
+  const bundleKey = artifact.modelBundleByMarket?.[market];
+  const models = bundleKey ? artifact.modelBundles?.[bundleKey] : artifact;
+  if (!models) throw new Error(`NBA props model bundle ${bundleKey} is missing for ${market}.`);
   const underlying = artifact.underlyingByMarket[market];
   if (underlying === "ridge_r2_minutes_regression") {
-    const base = projectNbaPlayerPropsIndependent(row, artifact.ridgeModel);
+    const base = projectNbaPlayerPropsIndependent(row, models.ridgeModel);
     if (base.conditionalMinutes <= 0) return base.combinations[market];
-    return Math.max(0, (base.combinations[market] / base.conditionalMinutes) * predictMinutes(row, artifact.minuteModel));
+    return Math.max(0, (base.combinations[market] / base.conditionalMinutes) * predictMinutes(row, models.minuteModel));
   }
   if (underlying === "robust_component_counts") {
     const genericMinuteThreshold = artifact.genericMinutesUntilCurrentTeamAppearancesByMarket?.[market];
     const minuteModel = genericMinuteThreshold !== undefined
       && row.same_team_games_10 < genericMinuteThreshold
-      ? artifact.minuteModel
-      : artifact.robustMinuteModel!;
+      ? models.minuteModel
+      : models.robustMinuteModel!;
     const projection = COMPONENTS[market].reduce((sum, component) => sum + predictStructural(
       row,
-      artifact.robustModels![component],
+      models.robustModels![component],
       minuteModel,
     ), 0);
     if (projection > 0) return projection;
@@ -370,15 +385,22 @@ function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarke
     // output for a currently offered standard prop is an out-of-domain
     // extrapolation rather than a plausible basketball forecast. Fall back to
     // the separately validated ridge model instead of exposing the clamp.
-    return projectNbaPlayerPropsIndependent(row, artifact.ridgeModel).combinations[market];
+    return projectNbaPlayerPropsIndependent(row, models.ridgeModel).combinations[market];
   }
-  const models = underlying === "structural_log_counts"
-    ? artifact.structuralLogModels
+  const structuralModels = underlying === "structural_log_counts"
+    ? models.structuralLogModels
     : underlying === "opportunity_direct_counts"
-      ? artifact.opportunityModels
-      : artifact.structuralDirectModels;
+      ? models.opportunityModels
+      : models.structuralDirectModels;
   return COMPONENTS[market].reduce((sum, component) =>
-    sum + predictStructural(row, models[component], artifact.minuteModel), 0);
+    sum + predictStructural(row, structuralModels[component], models.minuteModel), 0);
+}
+
+function coherentRoundedProjection(projection: number, line: number, side: Side): number {
+  const rounded = round(projection, 3);
+  if (side === "over" && rounded <= line) return round(line + 0.001, 3);
+  if (side === "under" && rounded >= line) return round(line - 0.001, 3);
+  return rounded;
 }
 
 function resolveFinalProjection(args: {

@@ -300,8 +300,8 @@ Last reviewed: 2026-10-26
   `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_26_r10_rebound_threes_architecture` /
-  `nba_player_props_forward_decision_2026_10_26_r11_rebound_threes_architecture` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_26_r11_cross_season_market_heads` /
+  `nba_player_props_forward_decision_2026_10_26_r12_cross_season_market_heads` /
   `nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
@@ -359,6 +359,21 @@ Last reviewed: 2026-10-26
   rollback:
   `docs/model-audits/2026-10-26-nba-player-props-rebound-threes-architecture-predeclaration.md`
   and `docs/model-audits/2026-10-26-nba-player-props-rebound-threes-architecture-result.md`.
+  The r11/r12 selective cross-season release changes only future unlocked
+  Points, Assists, Points + Rebounds + Assists, and Rebounds + Assists rows.
+  Rebounds, Threes, Points + Rebounds, and Points + Assists retain the stronger
+  r10 heads. The existing target-excluded market reader, exact-price policies,
+  residual distributions, reliability models, and grade policies remain the
+  sole calibration surface. On the exact 2,646-decision October 22-25
+  production-path replay, direction improves from 1,485-1,161 (56.12%) to
+  1,496-1,150 (56.54%), while MAE improves from 4.499 to 4.264. The selected
+  markets improve by 1 win for Points, 1 for Assists, 2 for PRA, and 7 for
+  Rebounds + Assists. Existing Threes is preserved because its alternative
+  harmed the actionable confirmation subset. The board is not flattened:
+  13 actionable promotions pair with 11 demotions, Best Angles remain eight,
+  and Leans increase from 41 to 43. Locked records retain stored precedence.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-26-nba-player-props-cross-season-market-heads-result.md`.
   The original member launch changed zero
   stored projections, sides, probabilities, grades, prices, or locks. The r3
   frozen runtime refits selected ridge components on every legal

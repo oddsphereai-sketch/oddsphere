@@ -42,9 +42,9 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r10_rebound_threes_architecture");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r11_cross_season_market_heads");
 assert.equal(NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
-  "nba_player_props_forward_decision_2026_10_26_r11_rebound_threes_architecture");
+  "nba_player_props_forward_decision_2026_10_26_r12_cross_season_market_heads");
 assert.equal(
   artifact.sourceGradeRelease,
   "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
@@ -54,7 +54,14 @@ assert.equal(artifact.gradePolicies.rebounds.policy.signalFamily, "model_market_
 assert.equal(artifact.gradePolicies.rebounds.policy.eligibilityGate, "established_role");
 assert.equal(artifact.gradePolicies.rebounds.policy.maxPerSlate, 1);
 assert.equal(artifact.gradePolicies.rebounds.policy.requireReferenceBook, true);
-assert.equal(artifact.sourceTournamentRelease, "nba_player_props_model_tournament_2026_10_26_r14_rebound_threes_architecture");
+assert.equal(artifact.sourceTournamentRelease, "nba_player_props_model_tournament_2026_10_26_r15_cross_season_market_heads");
+assert.equal(artifact.modelBundleByMarket?.points, "cross_season_r15");
+assert.equal(artifact.modelBundleByMarket?.assists, "cross_season_r15");
+assert.equal(artifact.modelBundleByMarket?.points_rebounds_assists, "cross_season_r15");
+assert.equal(artifact.modelBundleByMarket?.rebounds_assists, "cross_season_r15");
+assert.equal(artifact.modelBundleByMarket?.rebounds, undefined);
+assert.equal(artifact.modelBundleByMarket?.threes, undefined);
+assert(artifact.modelBundles?.cross_season_r15, "qualified markets require their traced cross-season model bundle");
 assert.equal(artifact.selectedByMarket.rebounds, "fanduel_confirmed_2pp_disagreements");
 assert.equal(artifact.underlyingByMarket.rebounds, "ridge_r2_minutes_regression");
 assert.equal(artifact.candidateMarketMinimumDistance.rebounds, 0.02);
