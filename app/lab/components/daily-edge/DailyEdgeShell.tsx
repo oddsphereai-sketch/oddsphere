@@ -4516,13 +4516,31 @@ function marketingPreviewMarket(input: MarketingPreviewMarketInput): MarketEdgeD
 }
 
 const MARKETING_TEAM_DISPLAY_NAMES: Partial<Record<Sport, Record<string, string>>> = {
-  nfl: { BUF: "Buffalo Bills", KC: "Kansas City Chiefs" },
-  cfb: { ORE: "Oregon Ducks", PSU: "Penn State Nittany Lions" },
+  nfl: {
+    BUF: "Buffalo Bills",
+    KC: "Kansas City Chiefs",
+    DAL: "Dallas Cowboys",
+    PHI: "Philadelphia Eagles",
+    GB: "Green Bay Packers",
+    SF: "San Francisco 49ers",
+  },
+  cfb: {
+    ORE: "Oregon Ducks",
+    PSU: "Penn State Nittany Lions",
+    MICH: "Michigan Wolverines",
+    OSU: "Ohio State Buckeyes",
+    TEX: "Texas Longhorns",
+    UGA: "Georgia Bulldogs",
+  },
 };
 
 const MARKETING_CFB_TEAM_LOGOS: Record<string, string> = {
   ORE: "https://a.espncdn.com/i/teamlogos/ncaa/500/2483.png",
   PSU: "https://a.espncdn.com/i/teamlogos/ncaa/500/213.png",
+  MICH: "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png",
+  OSU: "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png",
+  TEX: "https://a.espncdn.com/i/teamlogos/ncaa/500/251.png",
+  UGA: "https://a.espncdn.com/i/teamlogos/ncaa/500/61.png",
 };
 
 function marketingTeamLogo(sport: Sport, abbreviation: string): string | null {
@@ -5276,6 +5294,150 @@ function marketingSampleMarket(input: {
   });
 }
 
+type MarketingSampleMarketSpec = Omit<Parameters<typeof marketingSampleMarket>[0], "date">;
+
+const MARKETING_SAMPLE_PRICE_PROFILES = {
+  plus_to_even: { opening: 108, prior: 103, current: -101, opposingOpening: -119, opposingPrior: -113, opposingCurrent: -109 },
+  favorite_support: { opening: -105, prior: -110, current: -115, opposingOpening: -105, opposingPrior: 100, opposingCurrent: 105 },
+  steady_support: { opening: -102, prior: -106, current: -110, opposingOpening: -108, opposingPrior: -104, opposingCurrent: 100 },
+  underdog_support: { opening: 118, prior: 112, current: 105, opposingOpening: -130, opposingPrior: -124, opposingCurrent: -115 },
+  price_resistance: { opening: -121, prior: -116, current: -110, opposingOpening: 111, opposingPrior: 106, opposingCurrent: 100 },
+  heavy_price: { opening: -135, prior: -140, current: -145, opposingOpening: 115, opposingPrior: 120, opposingCurrent: 125 },
+} as const;
+
+function marketingMarketSpec(
+  input: Omit<MarketingSampleMarketSpec, "opening" | "prior" | "current" | "opposingOpening" | "opposingPrior" | "opposingCurrent"> & {
+    priceProfile?: keyof typeof MARKETING_SAMPLE_PRICE_PROFILES;
+  },
+): MarketingSampleMarketSpec {
+  const { priceProfile = "steady_support", ...market } = input;
+  return { ...market, ...MARKETING_SAMPLE_PRICE_PROFILES[priceProfile] };
+}
+
+function marketingSampleGame(input: {
+  id: string;
+  sport: Sport;
+  date: string;
+  awayTeam: string;
+  homeTeam: string;
+  gameTime: string;
+  projected: { away: number; home: number };
+  representativeScore?: { away: number; home: number };
+  footballProjection?: NonNullable<DailyEdgeGameDto["footballProjection"]>;
+  decisionLine: string;
+  moneyline: MarketingSampleMarketSpec;
+  total: MarketingSampleMarketSpec;
+  secondary: MarketingSampleMarketSpec;
+}): DailyEdgeGameDto {
+  return marketingPreviewGame({
+    id: input.id,
+    sport: input.sport,
+    awayTeam: input.awayTeam,
+    homeTeam: input.homeTeam,
+    gameTime: input.gameTime,
+    snapshotAt: `${input.date}T19:30:00.000Z`,
+    projected: input.projected,
+    representativeScore: input.representativeScore,
+    footballProjection: input.footballProjection,
+    decisionLine: input.decisionLine,
+    awayStarter: null,
+    homeStarter: null,
+    markets: {
+      moneyline: marketingSampleMarket({ date: input.date, ...input.moneyline }),
+      total: marketingSampleMarket({ date: input.date, ...input.total }),
+      first_inning: marketingSampleMarket({ date: input.date, ...input.secondary }),
+    },
+  });
+}
+
+function marketingSoccerSampleGame(input: {
+  id: string;
+  date: string;
+  awayTeam: string;
+  homeTeam: string;
+  gameTime: string;
+  expectedGoals: { away: number; home: number };
+  representativeScore: { away: number; home: number };
+  outcomeConfidence: number;
+  outcomeVerdict: Exclude<VerdictKey, "caution">;
+  decisionLine: string;
+  outcomeGuide: string;
+  outcomeWatchOut: string;
+  total: MarketingSampleMarketSpec;
+  btts: MarketingSampleMarketSpec;
+}): DailyEdgeGameDto {
+  const observedAt = (hour: string) => `${input.date}T${hour}:00.000Z`;
+  const selected = MARKETING_SOCCER_MATCH_RESULT_PRICES.selected;
+  const draw = MARKETING_SOCCER_MATCH_RESULT_PRICES.draw;
+  const away = MARKETING_SOCCER_MATCH_RESULT_PRICES.away;
+  const pickMoneyPct = input.outcomeVerdict === "lean" ? 62 : input.outcomeVerdict === "watchlist" ? 57 : 68;
+  const pickBetsPct = input.outcomeVerdict === "lean" ? 54 : input.outcomeVerdict === "watchlist" ? 52 : 53;
+
+  return marketingPreviewGame({
+    id: input.id,
+    sport: "soccer",
+    awayTeam: input.awayTeam,
+    homeTeam: input.homeTeam,
+    gameTime: input.gameTime,
+    snapshotAt: observedAt("19:30"),
+    projected: input.representativeScore,
+    decisionLine: input.decisionLine,
+    awayStarter: null,
+    homeStarter: null,
+    soccerCompetitionContext: { competition: "english_premier_league", stage: null, leg: null, aggregateBefore: null, neutralVenue: false, regulationTime: true, advancementMarket: false, provenance: "illustrative sample" },
+    soccerProjection: {
+      matchResultOutlook: { expectedGoals: input.expectedGoals, likelyScore: input.representativeScore, likelyScoreProbability: 0.11, medianTotal: 3, mostLikelyTotal: 3 },
+      expectedGoals: input.expectedGoals,
+      goalOutlookProbabilities: { home: input.outcomeConfidence, draw: 0.25, away: 1 - input.outcomeConfidence - 0.25, over25: 0.58, under25: 0.42, bttsYes: 0.57, bttsNo: 0.43 },
+      likelyScore: input.representativeScore,
+      likelyScoreProbability: 0.11,
+      representativeScore: input.representativeScore,
+      representativeScoreProbability: 0.11,
+      medianTotal: 3,
+      mostLikelyTotal: 3,
+    },
+    markets: {
+      moneyline: marketingPreviewMarket({
+        pick: "home",
+        confidence: input.outcomeConfidence,
+        verdict: input.outcomeVerdict,
+        grade: input.outcomeVerdict === "best_angle" ? "best_signal" : "model_only",
+        modelProb: input.outcomeConfidence,
+        marketFairProb: marketingNoVigProbability(selected, [draw, away]),
+        priceAmerican: selected,
+        lineOpenAmerican: 125,
+        oddsTrail: [
+          { american: 125, line: null, observedAt: observedAt("18:00"), sportsbook: "consensus", source: "line_history", label: "first" },
+          { american: 118, line: null, observedAt: observedAt("19:00"), sportsbook: "consensus", source: "line_history", label: "move" },
+          { american: selected, line: null, observedAt: observedAt("19:30"), sportsbook: "consensus", source: "current_line", label: "current" },
+        ],
+        publicSplits: [
+          { side: "home", label: input.homeTeam, moneyPct: pickMoneyPct, betsPct: pickBetsPct },
+          { side: "draw", label: "Draw", moneyPct: 17, betsPct: 20 },
+          { side: "away", label: input.awayTeam, moneyPct: 83 - pickMoneyPct, betsPct: 80 - pickBetsPct },
+        ],
+        sharpBookSplits: [
+          { side: "home", label: input.homeTeam, moneyPct: 70, betsPct: 40 },
+          { side: "draw", label: "Draw", moneyPct: 13, betsPct: 22 },
+          { side: "away", label: input.awayTeam, moneyPct: 17, betsPct: 38 },
+        ],
+        splitsUpdatedAt: observedAt("19:30"),
+        sharpUpdatedAt: observedAt("19:21"),
+        guidedGuide: input.outcomeGuide,
+        guidedWatchOut: input.outcomeWatchOut,
+        whyLine: `Driver: ${input.outcomeGuide}`,
+        riskLine: input.outcomeWatchOut,
+        keyStats: [
+          { label: "Expected goals", awayValue: input.expectedGoals.away.toFixed(1), homeValue: input.expectedGoals.home.toFixed(1), source: "computed" },
+          { label: "Representative final", awayValue: String(input.representativeScore.away), homeValue: String(input.representativeScore.home), source: "computed" },
+        ],
+      }),
+      total: marketingSampleMarket({ date: input.date, ...input.total }),
+      first_inning: marketingSampleMarket({ date: input.date, ...input.btts }),
+    },
+  });
+}
+
 const marketingCfbPreviewGames: DailyEdgeGameDto[] = [
   marketingPreviewGame({
     id: "marketing-cfb-3001",
@@ -5400,6 +5562,117 @@ const marketingSoccerPreviewGames: DailyEdgeGameDto[] = [
   }),
 ];
 
+const marketingAdditionalPreviewGames = {
+  nfl: [
+    marketingSampleGame({
+      id: "marketing-nfl-2002", sport: "nfl", date: "2026-10-12", awayTeam: "DAL", homeTeam: "PHI", gameTime: "4:25 PM",
+      projected: { away: 23, home: 27 }, footballProjection: marketingFootballProjection(0.42, 23.4, 27.1),
+      decisionLine: "PHI has the stronger outcome forecast, but a competitive division matchup keeps the grade below Best Angle.",
+      moneyline: marketingMarketSpec({ pick: "PHI", opposingPick: "DAL", pickSide: "home", opposingSide: "away", confidence: 0.58, verdict: "lean", priceProfile: "favorite_support", guide: "PHI has the stronger outcome projection, and consensus pricing moved toward the home side.", watchOut: "A shorter favorite price would leave less room for error.", keyStats: [{ label: "Success rate", awayValue: "46%", homeValue: "51%", source: "computed" }, { label: "Pressure rate", awayValue: "29%", homeValue: "34%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Under", opposingPick: "Over 52.5", pickSide: "under", opposingSide: "over", confidence: 0.57, verdict: "watchlist", priceProfile: "steady_support", line: 52.5, opposingLine: 52.5, modelTotal: 50.5, marketTotal: 52.5, guide: "The 50.5-point projection leans Under 52.5, with modest consensus support.", watchOut: "Short fields or defensive scores would pressure the Under." }),
+      secondary: marketingMarketSpec({ pick: "DAL +4.5", opposingPick: "PHI -4.5", pickSide: "away", opposingSide: "home", confidence: 0.55, verdict: "no_play", priceProfile: "heavy_price", line: 4.5, opposingLine: -4.5, guide: "DAL +4.5 is plausible in the score distribution, but the price removes the remaining value.", watchOut: "Heavy juice keeps the spread at No Play." }),
+    }),
+    marketingSampleGame({
+      id: "marketing-nfl-2003", sport: "nfl", date: "2026-10-12", awayTeam: "GB", homeTeam: "SF", gameTime: "8:15 PM",
+      projected: { away: 22, home: 25 }, footballProjection: marketingFootballProjection(0.44, 21.8, 24.6),
+      decisionLine: "SF owns a narrow model edge, but the matchup and current prices keep every market below a top-tier grade.",
+      moneyline: marketingMarketSpec({ pick: "SF", opposingPick: "GB", pickSide: "home", opposingSide: "away", confidence: 0.56, verdict: "watchlist", priceProfile: "price_resistance", guide: "SF has a small outcome edge, though consensus pricing moved slightly away from the pick.", watchOut: "The movement conflict caps this at Watchlist.", keyStats: [{ label: "Early-down EPA", awayValue: "+0.05/play", homeValue: "+0.07/play", source: "computed" }, { label: "Red-zone TD rate", awayValue: "58%", homeValue: "61%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Over", opposingPick: "Under 44.5", pickSide: "over", opposingSide: "under", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", line: 44.5, opposingLine: 44.5, modelTotal: 46.4, marketTotal: 44.5, guide: "The 46.4-point projection leans Over 44.5, with only modest price confirmation.", watchOut: "The cushion is too small for a stronger grade." }),
+      secondary: marketingMarketSpec({ pick: "GB +3.5", opposingPick: "SF -3.5", pickSide: "away", opposingSide: "home", confidence: 0.54, verdict: "no_play", priceProfile: "heavy_price", line: 3.5, opposingLine: -3.5, guide: "GB +3.5 is near the model margin, leaving no meaningful spread edge.", watchOut: "Price and margin uncertainty make this a No Play." }),
+    }),
+  ],
+  cfb: [
+    marketingSampleGame({
+      id: "marketing-cfb-3002", sport: "cfb", date: "2026-10-17", awayTeam: "MICH", homeTeam: "OSU", gameTime: "12:00 PM",
+      projected: { away: 24, home: 30 }, footballProjection: marketingFootballProjection(0.38, 24.2, 29.6, "illustrative_cfb_sample"),
+      decisionLine: "OSU has the stronger outcome forecast, while rivalry variance keeps the read at Lean.",
+      moneyline: marketingMarketSpec({ pick: "OSU", opposingPick: "MICH", pickSide: "home", opposingSide: "away", confidence: 0.62, verdict: "lean", priceProfile: "favorite_support", guide: "OSU combines a stronger scoring outlook with consensus movement toward the home side.", watchOut: "Rivalry volatility keeps this below Best Angle.", keyStats: [{ label: "Explosive pass rate", awayValue: "10%", homeValue: "15%", source: "computed" }, { label: "Havoc rate", awayValue: "17%", homeValue: "21%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Under", opposingPick: "Over 55.5", pickSide: "under", opposingSide: "over", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", line: 55.5, opposingLine: 55.5, modelTotal: 53.8, marketTotal: 55.5, guide: "The 53.8-point projection leans Under 55.5, with limited consensus confirmation.", watchOut: "Explosive plays could erase the narrow cushion." }),
+      secondary: marketingMarketSpec({ pick: "MICH +7", opposingPick: "OSU -7", pickSide: "away", opposingSide: "home", confidence: 0.54, verdict: "no_play", priceProfile: "heavy_price", line: 7, opposingLine: -7, guide: "The projected margin sits too close to MICH +7 to create a usable spread edge.", watchOut: "The current price keeps this at No Play." }),
+    }),
+    marketingSampleGame({
+      id: "marketing-cfb-3003", sport: "cfb", date: "2026-10-17", awayTeam: "TEX", homeTeam: "UGA", gameTime: "7:30 PM",
+      projected: { away: 27, home: 29 }, footballProjection: marketingFootballProjection(0.46, 27.4, 28.8, "illustrative_cfb_sample"),
+      decisionLine: "UGA has a narrow outcome edge, while the total offers the clearer model-versus-market gap.",
+      moneyline: marketingMarketSpec({ pick: "UGA", opposingPick: "TEX", pickSide: "home", opposingSide: "away", confidence: 0.54, verdict: "watchlist", priceProfile: "price_resistance", guide: "UGA has a slight outcome edge, but consensus movement does not fully confirm it.", watchOut: "The narrow projection and market resistance cap the grade.", keyStats: [{ label: "Line yards", awayValue: "3.1", homeValue: "3.4", source: "computed" }, { label: "Passing success", awayValue: "49%", homeValue: "50%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Over", opposingPick: "Under 54.5", pickSide: "over", opposingSide: "under", confidence: 0.57, verdict: "lean", priceProfile: "favorite_support", line: 54.5, opposingLine: 54.5, modelTotal: 56.2, marketTotal: 54.5, guide: "The 56.2-point projection supports Over 54.5, and consensus pricing moved toward the Over.", watchOut: "The edge weakens if the line reaches 56." }),
+      secondary: marketingMarketSpec({ pick: "TEX +3.5", opposingPick: "UGA -3.5", pickSide: "away", opposingSide: "home", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", line: 3.5, opposingLine: -3.5, guide: "The score distribution keeps TEX inside +3.5 with modest market support.", watchOut: "The spread edge remains thinner than the total read." }),
+    }),
+  ],
+  nba: [
+    marketingSampleGame({
+      id: "marketing-nba-4002", sport: "nba", date: "2026-10-18", awayTeam: "DEN", homeTeam: "OKC", gameTime: "8:00 PM",
+      projected: { away: 112.8, home: 116.2 }, representativeScore: { away: 113, home: 116 },
+      decisionLine: "OKC has the stronger outcome projection, while the total carries a separate pace-based edge.",
+      moneyline: marketingMarketSpec({ pick: "OKC", opposingPick: "DEN", pickSide: "home", opposingSide: "away", confidence: 0.59, verdict: "lean", priceProfile: "favorite_support", guide: "OKC pairs a stronger half-court projection with consensus movement toward the home side.", watchOut: "Late lineup news remains the main sensitivity.", keyStats: [{ label: "Net rating", awayValue: "+5.8", homeValue: "+8.1", source: "computed" }, { label: "Turnover rate", awayValue: "12.6%", homeValue: "10.9%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Over", opposingPick: "Under 226.5", pickSide: "over", opposingSide: "under", confidence: 0.57, verdict: "lean", priceProfile: "steady_support", line: 226.5, opposingLine: 226.5, modelTotal: 229, marketTotal: 226.5, guide: "The 229-point projection supports Over 226.5, with consensus pricing moving the same way.", watchOut: "A slower-than-expected half-court game would challenge the edge." }),
+      secondary: marketingMarketSpec({ pick: "DEN +5.5", opposingPick: "OKC -5.5", pickSide: "away", opposingSide: "home", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", line: 5.5, opposingLine: -5.5, guide: "DEN +5.5 has score-distribution support, but the spread signal remains modest.", watchOut: "The matchup edge still favors OKC outright." }),
+    }),
+    marketingSampleGame({
+      id: "marketing-nba-4003", sport: "nba", date: "2026-10-18", awayTeam: "LAL", homeTeam: "PHX", gameTime: "10:00 PM",
+      projected: { away: 111, home: 113.5 }, representativeScore: { away: 111, home: 114 },
+      decisionLine: "PHX has a small outcome edge, but the Under is the cleaner model-versus-market read.",
+      moneyline: marketingMarketSpec({ pick: "PHX", opposingPick: "LAL", pickSide: "home", opposingSide: "away", confidence: 0.56, verdict: "watchlist", priceProfile: "price_resistance", guide: "PHX has a narrow model edge, while consensus pricing has shown mild resistance.", watchOut: "The gap is too small for an actionable moneyline grade.", keyStats: [{ label: "Half-court offense", awayValue: "Top 11", homeValue: "Top 8", source: "computed" }, { label: "Transition frequency", awayValue: "14%", homeValue: "12%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Under", opposingPick: "Over 228.5", pickSide: "under", opposingSide: "over", confidence: 0.58, verdict: "lean", priceProfile: "favorite_support", line: 228.5, opposingLine: 228.5, modelTotal: 224.5, marketTotal: 228.5, guide: "The 224.5-point projection supports Under 228.5, with consensus movement toward the Under.", watchOut: "Efficient perimeter shooting is the main risk." }),
+      secondary: marketingMarketSpec({ pick: "LAL +4.5", opposingPick: "PHX -4.5", pickSide: "away", opposingSide: "home", confidence: 0.54, verdict: "no_play", priceProfile: "heavy_price", line: 4.5, opposingLine: -4.5, guide: "LAL +4.5 is within the score distribution, but the price offers no usable edge.", watchOut: "Heavy juice keeps the spread at No Play." }),
+    }),
+  ],
+  nhl: [
+    marketingSampleGame({
+      id: "marketing-nhl-5002", sport: "nhl", date: "2026-10-16", awayTeam: "NYR", homeTeam: "NJD", gameTime: "7:00 PM",
+      projected: { away: 3.1, home: 3.4 }, representativeScore: { away: 3, home: 4 },
+      decisionLine: "NJD has the stronger five-on-five profile, with consensus movement and sharp-book money supporting the home side.",
+      moneyline: marketingMarketSpec({ pick: "NJD", opposingPick: "NYR", pickSide: "home", opposingSide: "away", confidence: 0.61, verdict: "best_angle", priceProfile: "plus_to_even", guide: "NJD combines a 61% model probability with consensus movement and a clear sharp-book money gap.", watchOut: "Confirmed goaltenders can materially change the projection.", keyStats: [{ label: "Expected-goal share", awayValue: "50%", homeValue: "56%", source: "computed" }, { label: "High-danger share", awayValue: "48%", homeValue: "57%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Over", opposingPick: "Under 6", pickSide: "over", opposingSide: "under", confidence: 0.57, verdict: "lean", priceProfile: "favorite_support", line: 6, opposingLine: 6, modelTotal: 6.5, marketTotal: 6, guide: "The 6.5-goal projection supports Over 6, with consensus pricing moving toward the Over.", watchOut: "Strong confirmed goaltending would reduce the total edge." }),
+      secondary: marketingMarketSpec({ pick: "NYR +1.5", opposingPick: "NJD -1.5", pickSide: "away", opposingSide: "home", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", line: 1.5, opposingLine: -1.5, guide: "NYR +1.5 has distribution support, but the puck-line price is not especially attractive.", watchOut: "The heavy favorite protection caps the grade." }),
+    }),
+    marketingSampleGame({
+      id: "marketing-nhl-5003", sport: "nhl", date: "2026-10-16", awayTeam: "VGK", homeTeam: "LAK", gameTime: "10:30 PM",
+      projected: { away: 2.9, home: 3.1 }, representativeScore: { away: 3, home: 4 },
+      decisionLine: "LAK has a narrow outcome edge, while the lower-scoring total presents the cleaner read.",
+      moneyline: marketingMarketSpec({ pick: "LAK", opposingPick: "VGK", pickSide: "home", opposingSide: "away", confidence: 0.55, verdict: "watchlist", priceProfile: "price_resistance", guide: "LAK has a small model edge, but consensus pricing has not confirmed it.", watchOut: "Goalie uncertainty and price resistance keep this on Watchlist.", keyStats: [{ label: "Expected-goal share", awayValue: "51%", homeValue: "53%", source: "computed" }, { label: "Penalty kill", awayValue: "81%", homeValue: "84%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Under", opposingPick: "Over 6.5", pickSide: "under", opposingSide: "over", confidence: 0.58, verdict: "lean", priceProfile: "favorite_support", line: 6.5, opposingLine: 6.5, modelTotal: 6, marketTotal: 6.5, guide: "The six-goal projection supports Under 6.5, with consensus movement toward the Under.", watchOut: "Empty-net variance is the primary late-game risk." }),
+      secondary: marketingMarketSpec({ pick: "VGK +1.5", opposingPick: "LAK -1.5", pickSide: "away", opposingSide: "home", confidence: 0.54, verdict: "no_play", priceProfile: "heavy_price", line: 1.5, opposingLine: -1.5, guide: "VGK +1.5 is directionally reasonable, but the heavy price removes the value.", watchOut: "The current puck-line price makes this a No Play." }),
+    }),
+  ],
+  wnba: [
+    marketingSampleGame({
+      id: "marketing-wnba-6002", sport: "wnba", date: "2026-08-30", awayTeam: "IND", homeTeam: "CHI", gameTime: "6:00 PM",
+      projected: { away: 85.2, home: 80.6 }, representativeScore: { away: 85, home: 81 },
+      decisionLine: "IND has the stronger outcome forecast, while the total also benefits from a clear pace gap.",
+      moneyline: marketingMarketSpec({ pick: "IND", opposingPick: "CHI", pickSide: "away", opposingSide: "home", confidence: 0.59, verdict: "lean", priceProfile: "favorite_support", guide: "IND has the stronger scoring outlook, with consensus movement supporting the road side.", watchOut: "Late player availability remains the main sensitivity.", keyStats: [{ label: "Net rating", awayValue: "+5.2", homeValue: "-1.4", source: "computed" }, { label: "Offensive rebound rate", awayValue: "31%", homeValue: "26%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Over", opposingPick: "Under 162.5", pickSide: "over", opposingSide: "under", confidence: 0.58, verdict: "lean", priceProfile: "steady_support", line: 162.5, opposingLine: 162.5, modelTotal: 165.8, marketTotal: 162.5, guide: "The 165.8-point projection supports Over 162.5, with consensus pricing moving toward the Over.", watchOut: "A slower half-court pace would narrow the edge." }),
+      secondary: marketingMarketSpec({ pick: "IND -3.5", opposingPick: "CHI +3.5", pickSide: "away", opposingSide: "home", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", line: -3.5, opposingLine: 3.5, guide: "IND -3.5 has model support, but the spread edge remains modest.", watchOut: "The current number leaves limited late-game cushion." }),
+    }),
+    marketingSampleGame({
+      id: "marketing-wnba-6003", sport: "wnba", date: "2026-08-30", awayTeam: "LV", homeTeam: "SEA", gameTime: "9:00 PM",
+      projected: { away: 82.4, home: 83.1 }, representativeScore: { away: 82, home: 83 },
+      decisionLine: "SEA has a slight outcome edge, but the Under offers the clearer projection gap.",
+      moneyline: marketingMarketSpec({ pick: "SEA", opposingPick: "LV", pickSide: "home", opposingSide: "away", confidence: 0.55, verdict: "watchlist", priceProfile: "price_resistance", guide: "SEA has a narrow outcome edge, though consensus pricing has shown mild resistance.", watchOut: "The model gap is too small for an actionable moneyline grade.", keyStats: [{ label: "Net rating", awayValue: "+3.7", homeValue: "+4.1", source: "computed" }, { label: "Turnover rate", awayValue: "14.2%", homeValue: "13.8%", source: "computed" }] }),
+      total: marketingMarketSpec({ pick: "Under", opposingPick: "Over 168.5", pickSide: "under", opposingSide: "over", confidence: 0.58, verdict: "lean", priceProfile: "favorite_support", line: 168.5, opposingLine: 168.5, modelTotal: 165.5, marketTotal: 168.5, guide: "The 165.5-point projection supports Under 168.5, with consensus movement toward the Under.", watchOut: "Efficient transition scoring would challenge the read." }),
+      secondary: marketingMarketSpec({ pick: "LV +2.5", opposingPick: "SEA -2.5", pickSide: "away", opposingSide: "home", confidence: 0.54, verdict: "no_play", priceProfile: "heavy_price", line: 2.5, opposingLine: -2.5, guide: "LV +2.5 sits close to the projected margin, but the price provides no added value.", watchOut: "Heavy juice keeps the spread at No Play." }),
+    }),
+  ],
+  soccer: [
+    marketingSoccerSampleGame({
+      id: "marketing-soccer-7002", date: "2026-10-18", awayTeam: "CHE", homeTeam: "MNC", gameTime: "2:00 PM",
+      expectedGoals: { away: 1.1, home: 2 }, representativeScore: { away: 1, home: 2 }, outcomeConfidence: 0.58, outcomeVerdict: "lean",
+      decisionLine: "MNC has the stronger regulation-time outlook, while the total also benefits from a coherent goal projection.",
+      outcomeGuide: "MNC has a 58% regulation-time model probability, consensus movement toward the home side, and supportive sharp-book money.", outcomeWatchOut: "The three-way market retains meaningful draw risk.",
+      total: marketingMarketSpec({ pick: "Over", opposingPick: "Under 2.5", pickSide: "over", opposingSide: "under", confidence: 0.58, verdict: "lean", priceProfile: "favorite_support", line: 2.5, opposingLine: 2.5, modelTotal: 3.1, marketTotal: 2.5, guide: "The 3.1-goal projection supports Over 2.5, with consensus movement toward the Over.", watchOut: "Finishing variance remains the main risk." }),
+      btts: marketingMarketSpec({ pick: "Yes", opposingPick: "No", pickSide: "over", opposingSide: "under", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", guide: "Both Teams To Score: Yes has modest model and consensus support.", watchOut: "The edge is not wide enough to move above Watchlist." }),
+    }),
+    marketingSoccerSampleGame({
+      id: "marketing-soccer-7003", date: "2026-10-18", awayTeam: "TOT", homeTeam: "NEW", gameTime: "4:30 PM",
+      expectedGoals: { away: 1.4, home: 1.6 }, representativeScore: { away: 1, home: 2 }, outcomeConfidence: 0.54, outcomeVerdict: "watchlist",
+      decisionLine: "NEW has a narrow regulation-time edge, while BTTS offers the clearest supporting market read.",
+      outcomeGuide: "NEW has a slight home-win edge, but consensus movement and the draw probability keep the outcome market mixed.", outcomeWatchOut: "A high draw probability caps the Match Result grade.",
+      total: marketingMarketSpec({ pick: "Over", opposingPick: "Under 2.5", pickSide: "over", opposingSide: "under", confidence: 0.56, verdict: "watchlist", priceProfile: "steady_support", line: 2.5, opposingLine: 2.5, modelTotal: 3, marketTotal: 2.5, guide: "The three-goal projection leans Over 2.5, with modest consensus support.", watchOut: "The total edge is narrow after accounting for finishing variance." }),
+      btts: marketingMarketSpec({ pick: "Yes", opposingPick: "No", pickSide: "over", opposingSide: "under", confidence: 0.58, verdict: "lean", priceProfile: "favorite_support", guide: "Both Teams To Score: Yes is supported by both clubs' expected-goal profiles and consensus movement.", watchOut: "An early tactical stalemate would challenge the read." }),
+    }),
+  ],
+} satisfies Record<"nfl" | "cfb" | "nba" | "nhl" | "wnba" | "soccer", DailyEdgeGameDto[]>;
+
 const marketingMlbPreviewSnapshot: DailyEdgeResponse = {
   as_of: "2026-08-10T16:30:00.000Z",
   sport: "mlb",
@@ -5421,27 +5694,27 @@ const marketingNflPreviewSnapshot: DailyEdgeResponse = {
   slateState: "today_published",
   slate_status: "published",
   last_slate_update_at: "2026-10-12T19:30:00.000Z",
-  games: marketingNflPreviewGames,
+  games: [...marketingNflPreviewGames, ...marketingAdditionalPreviewGames.nfl],
 };
 
 const marketingCfbPreviewSnapshot: DailyEdgeResponse = {
-  as_of: "2026-10-17T19:30:00.000Z", sport: "cfb", date: "2026-10-17", requested_date: "2026-10-17", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-17T19:30:00.000Z", games: marketingCfbPreviewGames,
+  as_of: "2026-10-17T19:30:00.000Z", sport: "cfb", date: "2026-10-17", requested_date: "2026-10-17", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-17T19:30:00.000Z", games: [...marketingCfbPreviewGames, ...marketingAdditionalPreviewGames.cfb],
 };
 
 const marketingNbaPreviewSnapshot: DailyEdgeResponse = {
-  as_of: "2026-10-18T19:30:00.000Z", sport: "nba", date: "2026-10-18", requested_date: "2026-10-18", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-18T19:30:00.000Z", games: marketingNbaPreviewGames,
+  as_of: "2026-10-18T19:30:00.000Z", sport: "nba", date: "2026-10-18", requested_date: "2026-10-18", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-18T19:30:00.000Z", games: [...marketingNbaPreviewGames, ...marketingAdditionalPreviewGames.nba],
 };
 
 const marketingNhlPreviewSnapshot: DailyEdgeResponse = {
-  as_of: "2026-10-16T19:30:00.000Z", sport: "nhl", date: "2026-10-16", requested_date: "2026-10-16", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-16T19:30:00.000Z", games: marketingNhlPreviewGames,
+  as_of: "2026-10-16T19:30:00.000Z", sport: "nhl", date: "2026-10-16", requested_date: "2026-10-16", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-16T19:30:00.000Z", games: [...marketingNhlPreviewGames, ...marketingAdditionalPreviewGames.nhl],
 };
 
 const marketingSoccerPreviewSnapshot: DailyEdgeResponse = {
-  as_of: "2026-10-18T15:30:00.000Z", sport: "soccer", date: "2026-10-18", requested_date: "2026-10-18", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-18T15:30:00.000Z", games: marketingSoccerPreviewGames,
+  as_of: "2026-10-18T15:30:00.000Z", sport: "soccer", date: "2026-10-18", requested_date: "2026-10-18", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-10-18T15:30:00.000Z", games: [...marketingSoccerPreviewGames, ...marketingAdditionalPreviewGames.soccer],
 };
 
 const marketingWnbaPreviewSnapshot: DailyEdgeResponse = {
-  as_of: "2026-08-30T19:30:00.000Z", sport: "wnba", date: "2026-08-30", requested_date: "2026-08-30", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-08-30T19:30:00.000Z", games: marketingWnbaPreviewGames,
+  as_of: "2026-08-30T19:30:00.000Z", sport: "wnba", date: "2026-08-30", requested_date: "2026-08-30", fallback_used: false, slateState: "today_published", slate_status: "published", last_slate_update_at: "2026-08-30T19:30:00.000Z", games: [...marketingWnbaPreviewGames, ...marketingAdditionalPreviewGames.wnba],
 };
 
 export const MARKETING_PREVIEW_SPORTS = ["nfl", "cfb", "nba", "nhl", "mlb", "soccer", "wnba"] as const satisfies readonly Sport[];
