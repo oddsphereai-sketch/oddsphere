@@ -8,21 +8,21 @@ Last reviewed: 2026-10-26
 
 ## Cross-sport confidence / execution contract
 
-- October 26 NFL nuanced market reader advances model / calibration / decision / grade / member to
-  `nfl_v1_daily_edge_model_2026_10_26_r32_nuanced_market_reader` /
-  `nfl_v1_daily_edge_calibration_2026_10_26_r31_nuanced_market_reader` /
-  `nfl_v1_daily_edge_decision_2026_10_26_r40_nuanced_market_reader` /
-  `nfl_v1_grade_policy_2026_10_26_r40_nuanced_market_reader` /
-  `nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader`. Persistent named-book price
-  direction plus one independent flow may act only when fresh target-excluded no-vig Moneyline and
-  Spread consensus both agree and no flow opposes it. The reader may correct the winner only across
-  the outright boundary; otherwise it preserves the winner, adjusts the shared margin, and demotes
-  an opposed actionable side. Total is resolved first and remains exactly unchanged. The 59-game
-  read-only replay improves winner direction 32-26-1 to 33-25-1, Spread 19-38-2 to 21-36-2, and
-  actionables 22-22 (-1.58u) to 22-14 (+6.15u), with three corrected side decisions, zero wrong-way
-  changes, and zero Total changes. The r39/r36/r51/r43 tuple remains the immediate immutable-reader
-  predecessor. Evidence and rollback:
-  `docs/model-audits/2026-10-26-nfl-nuanced-market-reader-result.md`.
+- October 26 NFL joint side-market arbitration advances model / calibration / decision / grade /
+  member to `nfl_v1_daily_edge_model_2026_10_26_r34_joint_side_market_arbitration` /
+  `nfl_v1_daily_edge_calibration_2026_10_26_r33_joint_side_market_arbitration` /
+  `nfl_v1_daily_edge_decision_2026_10_26_r42_joint_side_market_arbitration` /
+  `nfl_v1_grade_policy_2026_10_26_r42_joint_side_market_arbitration` /
+  `nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration`. The reader distinguishes
+  agreement on the outright winner from agreement on the market cover. It also recognizes a bounded
+  cross-market resistance state when fresh independent flow opposes an apparent named-book upset
+  move and target-excluded Moneyline plus Spread consensus both remain on the favorite. Total is
+  resolved first and cannot be changed by either side route. Against r40, the 59-game read-only
+  replay improves Moneyline 33-25-1 to 35-23-1, Spread 21-36-2 to 25-32-2, and published
+  actionables 22-14 (+6.15u) to 28-10 (+15.53u), while Total stays exactly 37-22 with identical
+  grades, probabilities, units, and 9.4960 MAE. The r40/r37/r52/r44 tuple is the immediate
+  immutable-reader predecessor. Evidence and rollback:
+  `docs/model-audits/2026-10-26-nfl-joint-side-market-arbitration-result.md`.
 
 - October 22 member presentation r27 preserves the full verified compact
   `Opening -> Prior -> Current` map whenever a same-book trail contains a real
@@ -428,34 +428,47 @@ Last reviewed: 2026-10-26
 
 ## NFL Daily Edge generalized weekly production release
 
-### Nuanced target-excluded side-market reader (r37)
+### Joint side-market arbitration (r39)
 
 - Active member / model / calibration / decision / grade releases are
+  `nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration` /
+  `nfl_v1_daily_edge_model_2026_10_26_r34_joint_side_market_arbitration` /
+  `nfl_v1_daily_edge_calibration_2026_10_26_r33_joint_side_market_arbitration` /
+  `nfl_v1_daily_edge_decision_2026_10_26_r42_joint_side_market_arbitration` /
+  `nfl_v1_grade_policy_2026_10_26_r42_joint_side_market_arbitration`.
+- Active target-excluded resolver / zero-weight reader / unified Total reader / side reader /
+  Spread / Total models are
+  `nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration` /
+  `nfl_v1_no_weight_market_reader_2026_10_25_r4_unified_total_interpreter` /
+  `nfl_unified_total_market_interpreter_2026_10_25_r1` /
+  `nfl_three_state_market_reader_2026_10_26_r5_joint_side_market_arbitration` /
+  `nfl_v1_spread_market_direction_2026_10_26_r21_joint_side_market_arbitration` /
+  `nfl_v1_total_market_evidence_2026_10_25_r13_unified_total_interpreter`.
+- The sole `prediction_pipeline:nfl` writer / fixture / compact snapshot are
+  `nfl_forward_evidence_writer_2026_10_26_r71_joint_side_market_arbitration` /
+  `nfl_weekly_member_fixture_2026_10_26_r54_joint_side_market_arbitration` /
+  `nfl_forward_member_snapshot_2026_10_26_r46_joint_side_market_arbitration`. The
+  r44/r52/r37/r40 nuanced-reader tuple is the immediate immutable-lock and startup-continuity
+  predecessor.
+- The established unified forecast resolves first. A side correction then requires persistent,
+  unreversed named-book Moneyline price direction and target-excluded Moneyline plus Spread
+  consensus. Confirmation requires agreement on both the projected winner and projected cover.
+  When fresh independent flow opposes the named move and both target-excluded side markets remain
+  on that opposing side, the move is classified as cross-market resistance instead of ignored.
+  Crossing the outright boundary may correct the winner; otherwise value resistance preserves the
+  winner while crossing the Spread boundary when qualified. The Total projection and decision are
+  frozen to the established unified result.
+  Evidence and rollback are in
+  `docs/model-audits/2026-10-26-nfl-joint-side-market-arbitration-result.md`.
+
+### Nuanced target-excluded side-market reader predecessor (r37)
+
+- The immediate predecessor and rollback target is
   `nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader` /
   `nfl_v1_daily_edge_model_2026_10_26_r32_nuanced_market_reader` /
   `nfl_v1_daily_edge_calibration_2026_10_26_r31_nuanced_market_reader` /
   `nfl_v1_daily_edge_decision_2026_10_26_r40_nuanced_market_reader` /
-  `nfl_v1_grade_policy_2026_10_26_r40_nuanced_market_reader`.
-- Active target-excluded resolver / zero-weight reader / unified Total reader / side reader /
-  Spread / Total models are
-  `nfl_target_excluded_market_outcome_2026_10_26_r18_nuanced_market_reader` /
-  `nfl_v1_no_weight_market_reader_2026_10_25_r4_unified_total_interpreter` /
-  `nfl_unified_total_market_interpreter_2026_10_25_r1` /
-  `nfl_three_state_market_reader_2026_10_26_r3_cross_market_consensus` /
-  `nfl_v1_spread_market_direction_2026_10_26_r19_nuanced_market_reader` /
-  `nfl_v1_total_market_evidence_2026_10_25_r13_unified_total_interpreter`.
-- The sole `prediction_pipeline:nfl` writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_26_r69_nuanced_market_reader` /
-  `nfl_weekly_member_fixture_2026_10_26_r52_nuanced_market_reader` /
-  `nfl_forward_member_snapshot_2026_10_26_r44_nuanced_market_reader`. The
-  r43/r51/r36/r39 unified-Total tuple is the immediate immutable-lock and startup-continuity
-  predecessor.
-- The established unified forecast resolves first. A side correction then requires persistent,
-  unreversed named-book Moneyline price direction, no opposing flow, an aligned independent flow,
-  and aligned target-excluded Moneyline and Spread consensus. Crossing the outright boundary may
-  correct the winner; otherwise value resistance preserves the winner while correcting the cover
-  margin and demoting an opposed actionable side. The Total projection and decision are frozen to
-  the established unified result. Evidence and rollback are in
+  `nfl_v1_grade_policy_2026_10_26_r40_nuanced_market_reader`. Evidence and rollback are in
   `docs/model-audits/2026-10-26-nfl-nuanced-market-reader-result.md`.
 
 ### Unified target-excluded Total interpreter predecessor (r36)

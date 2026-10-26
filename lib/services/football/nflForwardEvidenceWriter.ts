@@ -110,7 +110,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_26_r69_nuanced_market_reader" as const;
+  "nfl_forward_evidence_writer_2026_10_26_r71_joint_side_market_arbitration" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;

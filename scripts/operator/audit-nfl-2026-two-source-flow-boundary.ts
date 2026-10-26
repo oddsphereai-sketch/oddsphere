@@ -165,6 +165,10 @@ const VARIANTS: Record<string, Variant> = {
     professionalMarketAuthority: true, noWeightMarketReader: true, preferExactProviderScore: true,
     productionThreeStateReader: true, currentProductionThreeStateReader: true,
   },
+  settledIndependentNoWeight: {
+    publicSplits: false, sharpSplits: false, direction: false,
+    noWeightMarketReader: true, preferExactProviderScore: true,
+  },
 };
 
 function namedSequenceAuthority(game: Game): NflNamedMarketSequenceAuthority {
@@ -1604,6 +1608,149 @@ async function main() {
     }];
   }).sort((a, b) => a.payload.game.scheduledStart.localeCompare(b.payload.game.scheduledStart));
   if (games.length < 18) throw new Error(`Expected at least 18 paid-projection games; got ${games.length}.`);
+  if (process.argv.includes("--market-disagreement-audit")) {
+    const independent = games.map((game) => replay(game, VARIANTS.settledIndependentNoWeight!));
+    const live = games.map((game) => replay(game, VARIANTS.settledProductionThreeStateNoWeight!));
+    const liveByGame = new Map(live.map((row) => [row.game.payload.game.providerGameId, row]));
+    const rows = independent.map((row) => {
+      const game = row.game;
+      const payload = game.payload;
+      const exclusions = exactAuthorityExclusions(game);
+      const snapshots = game.histories.flatMap((history) => history.payload.contextualEvidenceCapture
+        ? [{ capturedAt: history.capturedAt, markets: history.payload.contextualEvidenceCapture.markets }]
+        : []);
+      const authority = buildNflThreeStateMarketAuthority({
+        evaluatedAt: payload.capturedAt,
+        snapshots,
+        current: payload.market.current,
+        comparableCurrentBooks: payload.market.comparableCurrentBooks,
+        playbookLine: payload.market.playbookLine,
+        playbookSplits: payload.market.playbookSplits,
+        sharpSplits: payload.market.sharpApiSplits,
+        excludedFamilies: exclusions.moneyline,
+      });
+      const moneylineState = marketState(game, "moneyline");
+      const marketStates = Object.fromEntries(MARKETS.map((market) => {
+        const state = marketState(game, market);
+        return [market, {
+          namedDirection: state.namedDirection,
+          resistance: state.resistance,
+          trails: state.trails.map((trail) => ({
+            source: trail.source,
+            sourceClass: trail.sourceClass,
+            direction: trail.direction,
+            numberDirection: trail.numberDirection,
+            priceDirection: trail.priceDirection,
+            persistenceTimeShare: trail.persistenceTimeShare,
+            openingNumber: trail.openingNumber,
+            currentNumber: trail.currentNumber,
+            numberDelta: trail.numberDelta,
+            fairProbabilityDeltaPp: trail.fairProbabilityDeltaPp,
+            moveOrder: trail.moveOrder,
+            reversalMagnitude: trail.reversalMagnitude,
+            buybackToOpening: trail.buybackToOpening,
+            crossedKeyNumbers: trail.crossedKeyNumbers,
+          })),
+          splits: state.splits,
+        }];
+      }));
+      const stableNamed = moneylineState.trails.filter((trail) =>
+        trail.sourceClass === "named" && trail.direction !== null &&
+        trail.persistenceTimeShare >= 2 / 3 && trail.reversalMagnitude === 0 &&
+        !trail.buybackToOpening);
+      const namedDirection = stableNamed.length > 0 &&
+        new Set(stableNamed.map((trail) => trail.direction)).size === 1
+        ? stableNamed[0]!.direction
+        : null;
+      const independentMargin = row.forecast.expectedHomeScore - row.forecast.expectedAwayScore;
+      const independentMoneylineSide = sign(independentMargin);
+      const spreadLine = payload.market.current.spread?.homeLine ?? null;
+      const independentSpreadSide = spreadLine === null ? null : sign(independentMargin + spreadLine);
+      const liveRow = liveByGame.get(payload.game.providerGameId)!;
+      const liveMargin = liveRow.forecast.expectedHomeScore - liveRow.forecast.expectedAwayScore;
+      const actualMargin = game.actualHome - game.actualAway;
+      const decision = (candidate: Replay, market: Market) => {
+        const value = candidate.decisions.find((item) => item.market === market);
+        return value ? {
+          side: value.side,
+          grade: value.grade,
+          result: decisionResult(game, market, value.side, value.evaluatedQuote.line),
+          probability: value.modelProbability,
+          price: value.evaluatedQuote.price,
+          line: value.evaluatedQuote.line,
+        } : null;
+      };
+      return {
+        game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
+        scheduledStart: payload.game.scheduledStart,
+        actual: `${game.actualAway}-${game.actualHome}`,
+        source: game.exactProviderScore ? "exact_provider" : "paid_projection",
+        coverage: {
+          healthHolds: payload.coverage.healthHolds,
+          injuries: payload.coverage.injuries,
+          expectedQuarterbacks: payload.coverage.expectedQuarterbacks,
+          playbookSplits: payload.coverage.playbookSplits,
+          sharpApiSplits: payload.coverage.sharpApiSplits,
+          quarterbackHistory: payload.coverage.quarterbackHistory ?? null,
+        },
+        margins: { independent: independentMargin, live: liveMargin, actual: actualMargin, spreadLine },
+        independent: {
+          moneylineSide: independentMoneylineSide,
+          spreadSide: independentSpreadSide,
+          moneyline: decision(row, "moneyline"),
+          spread: decision(row, "spread"),
+        },
+        live: {
+          moneylineSide: sign(liveMargin),
+          spreadSide: spreadLine === null ? null : sign(liveMargin + spreadLine),
+          moneyline: decision(liveRow, "moneyline"),
+          spread: decision(liveRow, "spread"),
+          reader: liveRow.forecast.threeStateMarketReader ?? null,
+        },
+        market: {
+          states: marketStates,
+          professionalAuthority: professionalMarketAuthority(game, exclusions),
+          namedDirection,
+          stableNamed: stableNamed.map((trail) => ({
+            source: trail.source,
+            direction: trail.direction,
+            persistenceTimeShare: trail.persistenceTimeShare,
+            openingAt: trail.openingAt,
+            currentAt: trail.currentAt,
+            fairProbabilityDeltaPp: trail.fairProbabilityDeltaPp,
+            numberDelta: trail.numberDelta,
+            moveOrder: trail.moveOrder,
+            reversalMagnitude: trail.reversalMagnitude,
+            buybackToOpening: trail.buybackToOpening,
+            crossedKeyNumbers: trail.crossedKeyNumbers,
+          })),
+          flows: moneylineState.splits.map((split) => ({
+            source: split.source,
+            sportsbook: split.sportsbook,
+            direction: split.direction,
+            gapPp: split.gapPp,
+            observedAt: split.observedAt,
+          })),
+          targetExcludedMoneylineSide: targetExcludedMoneylineOutcomeSide(game),
+          targetExcludedSpreadBoundary: targetExcludedSpreadBoundary(game),
+          authority,
+        },
+      };
+    });
+    console.log(JSON.stringify({
+      release: "nfl_2026_market_disagreement_audit_2026_10_26_r1",
+      readOnly: true,
+      writes: 0,
+      baseSha: "b958b4aeee76d6bcae933fa832bd2a1d41fca8ed",
+      games: games.length,
+      independentSummary: summarize(independent),
+      liveSummary: summarize(live),
+      impact: compare(independent, live),
+      chronology: chronologicalProductAudit(independent, live),
+      rows,
+    }, null, 2));
+    return;
+  }
   if (process.argv.includes("--settled-production-summary")) {
     const baseline = games.map((game) => replay(game, VARIANTS.settledCurrentProductionThreeStateNoWeight!));
     const candidate = games.map((game) => replay(game, VARIANTS.settledProductionThreeStateNoWeight!));

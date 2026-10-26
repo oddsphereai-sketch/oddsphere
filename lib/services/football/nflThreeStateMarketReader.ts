@@ -15,7 +15,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_THREE_STATE_MARKET_READER_RELEASE =
-  "nfl_three_state_market_reader_2026_10_26_r3_cross_market_consensus" as const;
+  "nfl_three_state_market_reader_2026_10_26_r5_joint_side_market_arbitration" as const;
 
 type Snapshot = {
   capturedAt: string;
@@ -29,6 +29,7 @@ export type NflThreeStateMarketAuthority = {
     | "qualified_named_price_and_independent_flow"
     | "qualified_named_price_and_two_source_flow"
     | "qualified_named_price_flow_and_cross_market_consensus"
+    | "qualified_opposing_flow_and_cross_market_consensus"
     | "no_stable_named_moneyline_direction"
     | "named_moneyline_disagreement"
     | "opposing_flow"
@@ -86,8 +87,38 @@ export function buildNflThreeStateMarketAuthority(args: {
   }
   const side = stableNamed[0]!.direction!;
   const namedSources = [...new Set(stableNamed.map((trail) => normalizeBook(trail.source)))].sort();
-  if (state.splits.some((split) => split.direction === -side)) {
-    return unavailable("opposing_flow", excludedFamilies);
+  const targetOutcomeSide = targetExcludedMoneylineSide({
+    books: args.comparableCurrentBooks,
+    excludedFamilies,
+    evaluatedAt: args.evaluatedAt,
+  });
+  const targetSpreadBoundary = targetExcludedSpreadBoundary({
+    books: args.comparableCurrentBooks,
+    excludedFamilies,
+    evaluatedAt: args.evaluatedAt,
+  });
+  const crossMarketResistance = (sources: string[]) =>
+    targetOutcomeSide === -side && targetSpreadBoundary !== null && sign(targetSpreadBoundary) === -side
+      ? available({
+          reason: "qualified_opposing_flow_and_cross_market_consensus",
+          side: -side as NflMarketStateSide,
+          namedSources,
+          confirmingSplitSources: [...new Set([
+            ...sources,
+            "target_excluded_moneyline_consensus",
+            "target_excluded_spread_consensus",
+          ])].sort(),
+          args,
+          excludedFamilies,
+        })
+      : unavailable("opposing_flow", excludedFamilies);
+  const opposingStateSplits = state.splits.filter((split) => split.direction === -side);
+  if (opposingStateSplits.length > 0) {
+    const agreeingStateSplits = state.splits.some((split) => split.direction === side);
+    return agreeingStateSplits
+      ? unavailable("opposing_flow", excludedFamilies)
+      : crossMarketResistance(opposingStateSplits.map((split) =>
+          split.sportsbook === null ? split.source : normalizeBook(split.sportsbook)));
   }
   const confirmingSplits = state.splits.filter((split) =>
     split.direction === side &&
@@ -111,8 +142,11 @@ export function buildNflThreeStateMarketAuthority(args: {
     excludedFamilies,
     namedSources,
   });
-  if (independentFlows.some((flow) => flow.direction === -side)) {
-    return unavailable("opposing_flow", excludedFamilies);
+  const opposingIndependentFlows = independentFlows.filter((flow) => flow.direction === -side);
+  if (opposingIndependentFlows.length > 0) {
+    return independentFlows.some((flow) => flow.direction === side)
+      ? unavailable("opposing_flow", excludedFamilies)
+      : crossMarketResistance(opposingIndependentFlows.map((flow) => flow.source));
   }
   const confirmingFlows = independentFlows.filter((flow) => flow.direction === side);
   if (new Set(confirmingFlows.map((flow) => flow.source)).size >= 2) {
@@ -165,13 +199,19 @@ export function applyNflThreeStateMarketReader(args: {
   let spreadBoundaryCorrectionApplied = false;
 
   if (args.authority.status === "available" && args.authority.side !== null) {
-    if (args.authority.side === independentSide) {
+    const boundary = args.authority.spreadBoundary;
+    const independentSpreadSide = boundary === null || boundary === 0
+      ? independentSide
+      : sign(initialHomeMargin - boundary);
+    if (args.authority.side === independentSide && args.authority.side === independentSpreadSide) {
       state = "confirmation";
-    } else if (args.authority.outcomeBoundarySide === args.authority.side) {
+    } else if (args.authority.side !== independentSide &&
+        args.authority.outcomeBoundarySide === args.authority.side) {
       state = "outcome_correction";
-      const boundary = args.authority.spreadBoundary;
       const crossMarketCandidate = boundary === null ? null : 2 * boundary - initialHomeMargin;
-      finalHomeMargin = args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus" &&
+      const crossMarketOutcome = args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus" ||
+        args.authority.reason === "qualified_opposing_flow_and_cross_market_consensus";
+      finalHomeMargin = crossMarketOutcome &&
         boundary !== null && crossMarketCandidate !== null && sign(crossMarketCandidate) === args.authority.side &&
         sign(crossMarketCandidate - boundary) === args.authority.side && total > Math.abs(crossMarketCandidate)
         ? crossMarketCandidate
@@ -179,10 +219,9 @@ export function applyNflThreeStateMarketReader(args: {
       outcomeCorrectionApplied = true;
     } else {
       state = "value_resistance";
-      const boundary = args.authority.spreadBoundary;
       if (boundary !== null && boundary !== 0 && args.authority.side !== sign(initialHomeMargin - boundary)) {
-        const candidate = args.authority.reason === "qualified_named_price_and_two_source_flow" ||
-          args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus"
+        const sharpSideIsMarketUnderdog = args.authority.side !== sign(boundary);
+        const candidate = sharpSideIsMarketUnderdog
           ? boundary / 2
           : 2 * boundary - initialHomeMargin;
         if (sign(candidate) === independentSide &&
@@ -225,7 +264,8 @@ export function applyNflThreeStateMarketReader(args: {
 function available(args: {
   reason: Extract<NflThreeStateMarketAuthority["reason"],
     "qualified_named_price_and_independent_flow" | "qualified_named_price_and_two_source_flow" |
-    "qualified_named_price_flow_and_cross_market_consensus">;
+    "qualified_named_price_flow_and_cross_market_consensus" |
+    "qualified_opposing_flow_and_cross_market_consensus">;
   side: NflMarketStateSide;
   namedSources: string[];
   confirmingSplitSources: string[];
