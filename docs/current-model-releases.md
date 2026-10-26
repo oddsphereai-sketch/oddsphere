@@ -795,6 +795,19 @@ Last reviewed: 2026-10-26
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 26 paid-provider retry cadence: the sole CFB writer advances to
+  `cfb_forward_evidence_writer_2026_10_26_r138_paid_provider_retry_cadence`.
+  A completed provider cycle with an FCS price gap and zero The Odds API
+  requests now serves as the fallback-gate evaluation boundary; that same gap
+  cannot re-open the complete provider bundle until the established 60-minute
+  fallback cadence is due. Initial opening, ordinary hourly, reference-line
+  completion, and T-60 paths are unchanged, and the five-minute scheduler
+  remains in place for lock tolerance. Models, calibrations, predictions,
+  probabilities, grades, stakes, public-splits cadence, the sole
+  `prediction_pipeline:cfb` lease, and all stored locks are unchanged. The
+  r137 writer is the immediate rollback predecessor. Evidence:
+  `docs/model-audits/2026-10-26-cfb-paid-provider-retry-cadence.md`.
+
 - October 24 selective Parlay Lean and same-schema rollout repair: decision/schema releases are
   `cfb_v1_daily_edge_decision_2026_10_24_r53_selective_parlay_lean_profile` /
   `cfb_v1_exact_price_decision_tuple_2026_10_24_r40_selective_parlay_lean_profile`. Future-unlocked

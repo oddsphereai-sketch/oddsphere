@@ -29,6 +29,32 @@ candidate, release boundary, and rollback are documented in
 and
 `docs/model-audits/2026-10-26-nba-player-props-component-market-reader-result.md`.
 
+## Owner-directed correction: CFB paid-provider retry cadence
+
+On 2026-10-26 Daniel Mengel directed Oddsphere to stop avoidable Playbook
+overage without making odds, prices, locks, or other data late. The accepted
+scope is documented in
+`docs/model-audits/2026-10-26-cfb-paid-provider-retry-cadence.md`.
+
+This correction is limited to a CFB FCS-gap retry-state defect. A completed
+full provider capture that records zero The Odds API requests proves that the
+fallback gate was evaluated; the same gap may not trigger another full provider
+cycle until the existing 60-minute fallback cadence is due. Initial opening,
+ordinary hourly, reference-completion, and T-60 paths remain unchanged. The
+five-minute cron remains in place so the immutable T-60 window keeps multiple
+attempts, and T-60 continues to outrank every completion trigger.
+
+The sole writer advances to
+`cfb_forward_evidence_writer_2026_10_26_r138_paid_provider_retry_cadence`.
+Models, calibrations, decisions, grades, stakes, readers, the public-splits
+15-minute cadence, the `prediction_pipeline:cfb` lease, and all stored locks
+remain unchanged. Publication requires recent/60-minute/T-60 cadence
+regressions, the focused CFB suite, TypeScript, full model-change verification,
+latest-main integration safety, protected pull-request checks, and live proof
+that natural no-collection cycles replace the five-minute full-provider loop.
+Roll back to r137 if any opening, ordinary hourly refresh, or T-60 lock is late,
+or if an immutable row changes.
+
 ## Owner-directed provisional exception: NFL two-source flow boundary
 
 On 2026-10-25 Daniel Mengel directed Oddsphere to repair the NFL reader after the immutable
