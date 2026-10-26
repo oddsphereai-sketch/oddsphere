@@ -300,8 +300,8 @@ Last reviewed: 2026-10-26
   `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader` /
-  `nba_player_props_forward_decision_2026_10_23_r8_canonical_coverage` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader` /
+  `nba_player_props_forward_decision_2026_10_26_r9_component_market_reader` /
   `nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
@@ -324,8 +324,16 @@ Last reviewed: 2026-10-26
   private snapshots, one-hour immutable locking, internal tracking, and official
   revisioned settlement. Member route/navigation are enabled while public
   tracking remains off; member-request provider fetching remains off. The
-  launch changes zero stored projections, sides, probabilities, grades, prices,
-  or locks. The r3 frozen runtime refits selected ridge components on every legal
+  r8/r9 rebound-component reader retains every independent model and grade
+  policy while lowering only Rebounds and Rebounds + Assists target-book-
+  excluded correction gates from four points to two and removing the movement
+  veto for those two markets. The exact 2,646-row October 22-25 runtime replay
+  improves direction from 55.33% to 55.67%, improves MAE from 4.596 to 4.588,
+  and produces 14 corrected changes versus five harms. Grade counts and the
+  October 26 unlocked board's 41 Leans/eight Best Angles are unchanged; locked
+  rows retain exact stored precedence. The original member launch changed zero
+  stored projections, sides, probabilities, grades, prices, or locks. The r3
+  frozen runtime refits selected ridge components on every legal
   pre-cutoff training row after hyperparameter selection, uses the
   chronologically selected robust opportunity model for rebounds, preserves
   the previously confirmed grade policies, and pairs forecast-driven

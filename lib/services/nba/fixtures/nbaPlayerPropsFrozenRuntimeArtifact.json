@@ -1,5 +1,5 @@
 {
-  "release": "nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader",
+  "release": "nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader",
   "publicEnabled": false,
   "sourceDatasetRelease": "nba_player_props_historical_research_dataset_2026_10_21_r5_opportunity_context_exact_prices",
   "sourceInputsSha256": "68c71ef30494811a94b53a1a3d873947b65a49a20af2e1743c1038023ecf385f",
@@ -38,13 +38,13 @@
   },
   "exactPriceArbitrationMinimumDistance": {
     "points": null,
-    "rebounds": 0.04,
+    "rebounds": 0.02,
     "assists": 0.02,
     "threes": 0.05,
     "points_rebounds_assists": 0.04,
     "points_rebounds": null,
     "points_assists": null,
-    "rebounds_assists": 0.04
+    "rebounds_assists": 0.02
   },
   "ridgeModel": {
     "release": "nba_player_props_independent_research_unfit_2026_10_20_r2_matchup_context",
@@ -8843,13 +8843,13 @@
   },
   "exactPriceArbitrationMovementPolicy": {
     "points": "none",
-    "rebounds": "not_opposed",
+    "rebounds": "none",
     "assists": "none",
     "threes": "none",
     "points_rebounds_assists": "not_opposed",
     "points_rebounds": "none",
     "points_assists": "none",
-    "rebounds_assists": "not_opposed"
+    "rebounds_assists": "none"
   },
-  "payloadSha256": "e2e9411b1fd5610acb8a859e6138a8d32c7523e181b5d1037e4d77790bd8f403"
+  "payloadSha256": "5671ed12bba086afc2cdafe20564b5ef4eadc90a794efb626921909080b25f55"
 }
