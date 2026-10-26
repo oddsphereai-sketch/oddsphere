@@ -48,6 +48,7 @@ type CandidateName =
   | "robust_component_counts"
   | "robust_generic_minutes_counts"
   | "robust_support_weighted_minutes_counts"
+  | "robust_low_tenure_generic_minutes_counts"
   | "support_weighted_market_read_2pp_disagreements"
   | "support_weighted_market_read_5pp_disagreements"
   // Retained as explicit research candidates for reproducible rejected-model
@@ -417,6 +418,7 @@ async function main(): Promise<void> {
     robustComponentCandidate(),
     robustGenericMinutesCandidate(),
     robustSupportWeightedMinutesCandidate(),
+    robustLowTenureGenericMinutesCandidate(),
     supportWeightedMarketArbitrationCandidate("support_weighted_market_read_2pp_disagreements", 0.02, lineByScope, marketProbabilityByScope),
     supportWeightedMarketArbitrationCandidate("support_weighted_market_read_5pp_disagreements", 0.05, lineByScope, marketProbabilityByScope),
     marketArbitrationCandidate("market_read_all_disagreements", 0, lineByScope, marketProbabilityByScope),
@@ -1084,6 +1086,27 @@ function robustSupportWeightedMinutesCandidate(): Candidate {
         const genericProjection = marketComponents(market)
           .reduce((sum, component) => sum + predictStructuralCount(row, genericModels[component], genericMinutes), 0);
         return roleSupport * roleProjection + (1 - roleSupport) * genericProjection;
+      };
+    },
+  };
+}
+
+function robustLowTenureGenericMinutesCandidate(): Candidate {
+  return {
+    name: "robust_low_tenure_generic_minutes_counts",
+    fit(rows) {
+      const roleMinutes = fitMinuteRegression(rows, ROLE_MINUTE_FEATURES);
+      const genericMinutes = fitMinuteRegression(rows, MINUTE_FEATURES);
+      const models = Object.fromEntries(
+        (["points", "rebounds", "assists", "threes"] as const).map((component) => [
+          component,
+          fitRobustStructuralCountModel(rows, component, roleMinutes),
+        ]),
+      ) as Record<Component, StructuralCountModel>;
+      return (row, market) => {
+        const minuteModel = row.same_team_games_10 < 3 ? genericMinutes : roleMinutes;
+        return marketComponents(market)
+          .reduce((sum, component) => sum + predictStructuralCount(row, models[component], minuteModel), 0);
       };
     },
   };

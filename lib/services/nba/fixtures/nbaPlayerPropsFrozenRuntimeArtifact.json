@@ -1,5 +1,5 @@
 {
-  "release": "nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader",
+  "release": "nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes",
   "publicEnabled": false,
   "sourceDatasetRelease": "nba_player_props_historical_research_dataset_2026_10_21_r5_opportunity_context_exact_prices",
   "sourceInputsSha256": "68c71ef30494811a94b53a1a3d873947b65a49a20af2e1743c1038023ecf385f",
@@ -8851,5 +8851,8 @@
     "points_assists": "none",
     "rebounds_assists": "none"
   },
-  "payloadSha256": "5671ed12bba086afc2cdafe20564b5ef4eadc90a794efb626921909080b25f55"
+  "genericMinutesUntilCurrentTeamAppearancesByMarket": {
+    "rebounds": 3
+  },
+  "payloadSha256": "6a074fc089e80507280769899990ca550c35625fa736220c205da6b11c88fe5d"
 }

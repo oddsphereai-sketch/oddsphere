@@ -300,8 +300,8 @@ Last reviewed: 2026-10-26
   `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader` /
-  `nba_player_props_forward_decision_2026_10_26_r9_component_market_reader` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes` /
+  `nba_player_props_forward_decision_2026_10_26_r10_low_tenure_minutes` /
   `nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
@@ -331,7 +331,18 @@ Last reviewed: 2026-10-26
   improves direction from 55.33% to 55.67%, improves MAE from 4.596 to 4.588,
   and produces 14 corrected changes versus five harms. Grade counts and the
   October 26 unlocked board's 41 Leans/eight Best Angles are unchanged; locked
-  rows retain exact stored precedence. The original member launch changed zero
+  rows retain exact stored precedence. The r9/r10 low-tenure repair then routes
+  only future unlocked Rebounds rows with fewer than three current-team
+  appearances through the already-frozen generic minute head; established
+  roles retain the rotation-aware head. The same 2,646-lock replay improves
+  Rebounds from 49.86% to 51.23%, lowers Rebound MAE from 3.039 to 2.850, and
+  gains five net all-market decisions with 13 corrections versus eight harms.
+  Best Angle, Lean, and Watchlist counts remain 8, 41, and 44; promotions and
+  demotions are both zero. The 360-game and 900-game historical confirmation
+  blocks are effectively neutral. The rejected global-minute and coherent R+A
+  alternatives receive no runtime authority. Evidence and rollback:
+  `docs/model-audits/2026-10-26-nba-player-props-low-tenure-minutes-result.md`.
+  The original member launch changed zero
   stored projections, sides, probabilities, grades, prices, or locks. The r3
   frozen runtime refits selected ridge components on every legal
   pre-cutoff training row after hyperparameter selection, uses the

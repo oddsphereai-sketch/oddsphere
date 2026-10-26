@@ -20,9 +20,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_26_r9_component_market_reader" as const;
+  "nba_player_props_forward_decision_2026_10_26_r10_low_tenure_minutes" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -78,6 +78,7 @@ export type NbaPlayerPropsFrozenArtifact = Readonly<{
   payloadSha256: string;
   selectedByMarket: Readonly<Record<FoundationMarket, string>>;
   underlyingByMarket: Readonly<Record<FoundationMarket, string>>;
+  genericMinutesUntilCurrentTeamAppearancesByMarket?: Readonly<Partial<Record<FoundationMarket, number>>>;
   candidateMarketMinimumDistance: Readonly<Record<FoundationMarket, number | null>>;
   exactPriceArbitrationMinimumDistance: Readonly<Record<FoundationMarket, number | null>>;
   exactPriceArbitrationMovementPolicy: Readonly<Record<FoundationMarket, "none" | "not_opposed">>;
@@ -354,10 +355,15 @@ function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarke
     return Math.max(0, (base.combinations[market] / base.conditionalMinutes) * predictMinutes(row, artifact.minuteModel));
   }
   if (underlying === "robust_component_counts") {
+    const genericMinuteThreshold = artifact.genericMinutesUntilCurrentTeamAppearancesByMarket?.[market];
+    const minuteModel = genericMinuteThreshold !== undefined
+      && row.same_team_games_10 < genericMinuteThreshold
+      ? artifact.minuteModel
+      : artifact.robustMinuteModel!;
     const projection = COMPONENTS[market].reduce((sum, component) => sum + predictStructural(
       row,
       artifact.robustModels![component],
-      artifact.robustMinuteModel!,
+      minuteModel,
     ), 0);
     if (projection > 0) return projection;
     // The robust count model is the qualified rebound model, but an exact-zero

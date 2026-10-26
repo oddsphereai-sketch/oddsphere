@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-/** Builds the predeclared component-aware market-reader artifact without refitting. */
+/** Builds the predeclared low-tenure rebound artifact without refitting. */
 import { readFileSync, writeFileSync } from "node:fs";
 
 import { nbaPlayerPropsArtifactSha256 } from "../../../lib/services/nba/nbaPlayerPropsArtifactChecksum";
@@ -22,7 +22,8 @@ const { payloadSha256: _priorChecksum, ...prior } = source;
 void _priorChecksum;
 const artifact = {
   ...prior,
-  release: "nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader",
+  release: "nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes",
+  genericMinutesUntilCurrentTeamAppearancesByMarket: { rebounds: 3 },
   exactPriceArbitrationMinimumDistance: exactDistance,
   exactPriceArbitrationMovementPolicy: movementPolicy,
 };
