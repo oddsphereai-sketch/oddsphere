@@ -3363,6 +3363,38 @@ unseededFcsEvidence.payload.market.currentBooks = [];
 unseededFcsEvidence.payload.market.displayBooks = [];
 unseededFcsEvidence.payload.requestBudget.theOddsApi = 0;
 assert.equal(cfbTheOddsApiProviderSeedNeeded(unseededFcsEvidence, "2026-08-28T20:00:00.000Z"), true);
+const recentlyEvaluatedFcsEvidence = structuredClone(unseededFcsEvidence);
+recentlyEvaluatedFcsEvidence.capturedAt = "2026-08-28T19:55:00.000Z";
+recentlyEvaluatedFcsEvidence.payload.capturedAt = recentlyEvaluatedFcsEvidence.capturedAt;
+assert.equal(
+  cfbTheOddsApiProviderSeedNeeded(recentlyEvaluatedFcsEvidence, "2026-08-28T20:00:00.000Z"),
+  false,
+  "a zero-request fallback evaluation must not reopen the complete provider bundle five minutes later",
+);
+assert.equal(
+  cfbForwardReleaseRefreshNeed([recentlyEvaluatedFcsEvidence], "2026-08-28T20:00:00.000Z"),
+  null,
+  "the five-minute T-60 scheduler must not become a paid-provider retry loop",
+);
+const t60DueDuringProviderCooldown = structuredClone(recentlyEvaluatedFcsEvidence);
+t60DueDuringProviderCooldown.gameStartAt = "2026-08-28T21:00:00.000Z";
+t60DueDuringProviderCooldown.payload.game.scheduledStart = t60DueDuringProviderCooldown.gameStartAt;
+assert.deepEqual(
+  resolveCfbForwardCollectionNeed({
+    ordinaryNeed: determineCfbForwardCollectionNeed({
+      existing: [t60DueDuringProviderCooldown],
+      now: "2026-08-28T20:00:00.000Z",
+    }),
+    releaseNeed: cfbForwardReleaseRefreshNeed([t60DueDuringProviderCooldown], "2026-08-28T20:00:00.000Z"),
+  }),
+  { collect: true, reason: "t60_due", cadenceMinutes: null },
+  "a due T-60 capture must remain immediate while the paid-provider retry is cooling down",
+);
+assert.equal(
+  cfbTheOddsApiProviderSeedNeeded(recentlyEvaluatedFcsEvidence, "2026-08-28T20:55:00.000Z"),
+  true,
+  "an unresolved provider seed must become eligible again at the documented hourly cadence",
+);
 assert.deepEqual(
   cfbForwardReleaseRefreshNeed([unseededFcsEvidence], "2026-08-28T20:00:00.000Z"),
   { collect: true, reason: "provider_seed_due", cadenceMinutes: 0 },
@@ -3510,8 +3542,8 @@ assert.deepEqual(
     latestByGame: new Map(completionExisting.map((row) => [row.providerGameId, row])),
     now: "2026-08-28T20:00:00.000Z",
   }).map((plan) => plan.game.providerGameId).sort(),
-  [cadenceDueGame.providerGameId, seedOnlyGame.providerGameId].sort(),
-  "provider seeding must not starve an FBS game whose ordinary hourly refresh is already due",
+  [cadenceDueGame.providerGameId],
+  "a cooling provider seed must stay excluded without starving an FBS game whose ordinary hourly refresh is due",
 );
 const referenceOnlyEvidence = structuredClone(seedOnlyEvidence);
 referenceOnlyEvidence.payload.game.away.fbs = true;

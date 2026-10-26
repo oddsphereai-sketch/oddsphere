@@ -96,7 +96,9 @@ import {
 } from "./cfbCollegeFootballDataLines";
 import {
   CFB_THE_ODDS_API_CREDITS_PER_PULL,
+  CFB_THE_ODDS_API_FAR_REFRESH_MINUTES,
   CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
+  CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES,
   fetchCfbTheOddsApiFallback,
   fetchCfbTheOddsApiHistoricalOpenings,
   shouldFetchCfbTheOddsApiFallback,
@@ -180,13 +182,17 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_24_r137_complete_current_school_identity" as const;
+  "cfb_forward_evidence_writer_2026_10_26_r138_paid_provider_retry_cadence" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_CURRENT_ODDS_GAMES_PER_RUN = CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
+export const CFB_FORWARD_PROVIDER_SEED_RETRY_MINUTES = Math.min(
+  CFB_THE_ODDS_API_FAR_REFRESH_MINUTES,
+  CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES,
+);
 
 type CfbForwardCollectionNeed = ReturnType<typeof determineCfbForwardCollectionNeed>;
 
@@ -1687,13 +1693,21 @@ export function cfbForwardReleaseRefreshNeed(rows: CfbForwardStoredEvidence[], n
 export function cfbTheOddsApiProviderSeedNeeded(row: CfbForwardStoredEvidence | undefined, now: string): boolean {
   if (!row) return false;
   const nowMs = Date.parse(now);
+  const capturedAt = Date.parse(row.capturedAt);
   const startsAt = Date.parse(row.gameStartAt);
-  if (!Number.isFinite(nowMs) || !Number.isFinite(startsAt) || nowMs >= startsAt) return false;
+  if (!Number.isFinite(nowMs) || !Number.isFinite(capturedAt) || !Number.isFinite(startsAt) || nowMs >= startsAt) return false;
   if (row.payload.game.away.fbs || row.payload.game.home.fbs) return false;
   if ((row.payload.requestBudget.theOddsApi ?? 0) > 0) return false;
   const books = [...row.payload.market.currentBooks, ...(row.payload.market.displayBooks ?? [])];
   if (books.some((book) => book.provider === "theoddsapi")) return false;
-  return cfbBooksNeedSharpFallback(row.payload.market.currentBooks);
+  if (!cfbBooksNeedSharpFallback(row.payload.market.currentBooks)) return false;
+  // A zero-request result means the paid fallback was evaluated but could not
+  // run (for example, missing credentials or the credit reserve). Treat the
+  // completed full-slate capture as that evaluation boundary so the five-minute
+  // T-60 scheduler cannot turn the documented hourly fallback into a hot loop.
+  // Opening collection and due T-60 plans are resolved independently and keep
+  // their existing priority.
+  return nowMs - capturedAt >= CFB_FORWARD_PROVIDER_SEED_RETRY_MINUTES * 60_000;
 }
 
 export function cfbReferenceCompletionNeeded(row: CfbForwardStoredEvidence | undefined, now: string): boolean {
