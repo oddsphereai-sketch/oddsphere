@@ -15,7 +15,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_THREE_STATE_MARKET_READER_RELEASE =
-  "nfl_three_state_market_reader_2026_10_26_r3_cross_market_consensus" as const;
+  "nfl_three_state_market_reader_2026_10_26_r4_winner_cover_arbitration" as const;
 
 type Snapshot = {
   capturedAt: string;
@@ -165,11 +165,15 @@ export function applyNflThreeStateMarketReader(args: {
   let spreadBoundaryCorrectionApplied = false;
 
   if (args.authority.status === "available" && args.authority.side !== null) {
-    if (args.authority.side === independentSide) {
+    const boundary = args.authority.spreadBoundary;
+    const independentSpreadSide = boundary === null || boundary === 0
+      ? independentSide
+      : sign(initialHomeMargin - boundary);
+    if (args.authority.side === independentSide && args.authority.side === independentSpreadSide) {
       state = "confirmation";
-    } else if (args.authority.outcomeBoundarySide === args.authority.side) {
+    } else if (args.authority.side !== independentSide &&
+        args.authority.outcomeBoundarySide === args.authority.side) {
       state = "outcome_correction";
-      const boundary = args.authority.spreadBoundary;
       const crossMarketCandidate = boundary === null ? null : 2 * boundary - initialHomeMargin;
       finalHomeMargin = args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus" &&
         boundary !== null && crossMarketCandidate !== null && sign(crossMarketCandidate) === args.authority.side &&
@@ -179,10 +183,9 @@ export function applyNflThreeStateMarketReader(args: {
       outcomeCorrectionApplied = true;
     } else {
       state = "value_resistance";
-      const boundary = args.authority.spreadBoundary;
       if (boundary !== null && boundary !== 0 && args.authority.side !== sign(initialHomeMargin - boundary)) {
-        const candidate = args.authority.reason === "qualified_named_price_and_two_source_flow" ||
-          args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus"
+        const sharpSideIsMarketUnderdog = args.authority.side !== sign(boundary);
+        const candidate = sharpSideIsMarketUnderdog
           ? boundary / 2
           : 2 * boundary - initialHomeMargin;
         if (sign(candidate) === independentSide &&

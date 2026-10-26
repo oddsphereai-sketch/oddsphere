@@ -207,6 +207,40 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const winnerCoverPredecessorSnapshotRelease =
+    "nfl_forward_member_snapshot_2026_10_26_r44_nuanced_market_reader";
+  const winnerCoverPredecessorFixtureRelease =
+    "nfl_weekly_member_fixture_2026_10_26_r52_nuanced_market_reader";
+  const winnerCoverPredecessorPayload = {
+    ...snapshot,
+    snapshotRelease: winnerCoverPredecessorSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r40_nuanced_market_reader",
+    fixtureRelease: winnerCoverPredecessorFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: winnerCoverPredecessorFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl", "daily-edge", 2026, 1,
+    winnerCoverPredecessorSnapshotRelease,
+    winnerCoverPredecessorFixtureRelease,
+    winnerCoverPredecessorPayload.memberRelease,
+    winnerCoverPredecessorPayload.decisionRelease,
+  ].join("::");
+  storedPayload = winnerCoverPredecessorPayload;
+  const winnerCoverContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(winnerCoverContinuityRead?.snapshotRelease, winnerCoverPredecessorSnapshotRelease);
+  assert.equal(JSON.stringify(winnerCoverContinuityRead?.fixture),
+    JSON.stringify(winnerCoverPredecessorPayload.fixture),
+    "the immediate r44/r52/r37/r40 predecessor must retain exact stored reader precedence");
+
   const twoSourcePreviousSnapshotRelease = "nfl_forward_member_snapshot_2026_10_25_r41_three_state_market_reader";
   const twoSourcePreviousFixtureRelease = "nfl_weekly_member_fixture_2026_10_25_r49_three_state_market_reader";
   const twoSourcePreviousPayload = {

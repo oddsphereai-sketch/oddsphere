@@ -26,7 +26,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_26_r18_nuanced_market_reader" as const;
+  "nfl_target_excluded_market_outcome_2026_10_26_r19_winner_cover_arbitration" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
