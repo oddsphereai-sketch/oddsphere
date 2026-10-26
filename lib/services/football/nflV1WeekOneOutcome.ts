@@ -17,6 +17,7 @@ import {
 import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import type { NflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
 import type { NflThreeStateMarketReader } from "./nflThreeStateMarketReader";
+import type { NflUnifiedTotalMarketInterpretation } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE =
   "nfl_v1_week_one_outcome_artifact_2026_08_23_r2_discrete_joint" as const;
@@ -35,9 +36,9 @@ export const NFL_V1_WEEKLY_OUTCOME_DISTRIBUTION_RELEASE =
 export const NFL_V1_WEEKLY_OUTCOME_PROBABILITY_RELEASE =
   "nfl_v1_weekly_pooled_discrete_probability_2026_10_15_r15_foundational_no_weight_score" as const;
 export const NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE =
-  "nfl_v1_market_evidence_outcome_2026_10_25_r18_two_source_flow_boundary" as const;
+  "nfl_v1_market_evidence_outcome_2026_10_25_r19_unified_total_interpreter" as const;
 export const NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE =
-  "nfl_v1_market_evidence_representative_score_2026_10_25_r17_two_source_flow_boundary" as const;
+  "nfl_v1_market_evidence_representative_score_2026_10_25_r18_unified_total_interpreter" as const;
 export const NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE =
   "nfl_v1_paid_team_score_model_2026_10_08_r4_named_sequence" as const;
 export const NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE =
@@ -61,7 +62,7 @@ export const NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP = 1 as const;
 export const NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP = 8 as const;
 export const NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP = 10 as const;
 export const NFL_V1_NO_WEIGHT_MARKET_READER_RELEASE =
-  "nfl_v1_no_weight_market_reader_2026_10_25_r3_two_source_flow_boundary" as const;
+  "nfl_v1_no_weight_market_reader_2026_10_25_r4_unified_total_interpreter" as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -100,7 +101,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_09_r13_provider_feed_continuity"
       | "nfl_target_excluded_market_outcome_2026_10_15_r14_independent_fallback"
       | "nfl_target_excluded_market_outcome_2026_10_25_r15_three_state_reader"
-      | "nfl_target_excluded_market_outcome_2026_10_25_r16_two_source_flow_boundary";
+      | "nfl_target_excluded_market_outcome_2026_10_25_r16_two_source_flow_boundary"
+      | "nfl_target_excluded_market_outcome_2026_10_25_r17_unified_total_interpreter";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -189,6 +191,7 @@ export type NflV1WeekOneOutcomeForecast = {
     qualifiedTotalCorrectionApplied: boolean;
   };
   threeStateMarketReader?: NflThreeStateMarketReader;
+  unifiedTotalMarketInterpreter?: NflUnifiedTotalMarketInterpretation;
 };
 
 export type NflV1CrossMarketWinnerCoherence = {
@@ -342,6 +345,35 @@ export function buildNflCategoricalMarketAdjustedForecast(args: {
       args.expectedTotal <= Math.abs(args.expectedHomeMargin) ||
       args.marketInputPolicy !== "qualified_categorical_boundary_no_scalar_blend") {
     throw new Error(`NFL categorical market-adjusted score is invalid for ${args.baseForecast.providerGameId}.`);
+  }
+  return outcomeFromDistributions({
+    providerGameId: args.baseForecast.providerGameId,
+    awayTeam: args.baseForecast.awayTeam,
+    homeTeam: args.baseForecast.homeTeam,
+    marginDistribution: shiftedDistribution(
+      args.baseForecast.marginDistribution,
+      args.expectedHomeMargin,
+      false,
+    ),
+    totalDistribution: shiftedDistribution(
+      args.baseForecast.totalDistribution,
+      args.expectedTotal,
+      true,
+    ),
+  });
+}
+
+/** Re-center one coherent score tuple after a qualified continuous market residual. */
+export function buildNflUnifiedMarketAdjustedForecast(args: {
+  baseForecast: NflV1WeekOneOutcomeForecast;
+  expectedHomeMargin: number;
+  expectedTotal: number;
+  marketInputPolicy: "target_excluded_continuous_residual";
+}): NflV1WeekOneOutcomeForecast {
+  if (!Number.isFinite(args.expectedHomeMargin) || !Number.isFinite(args.expectedTotal) ||
+      args.expectedTotal <= Math.abs(args.expectedHomeMargin) ||
+      args.marketInputPolicy !== "target_excluded_continuous_residual") {
+    throw new Error(`NFL unified market-adjusted score is invalid for ${args.baseForecast.providerGameId}.`);
   }
   return outcomeFromDistributions({
     providerGameId: args.baseForecast.providerGameId,

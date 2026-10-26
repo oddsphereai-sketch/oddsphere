@@ -48,8 +48,12 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_25_r50_two_source_flow_boundary" as const;
+  "nfl_weekly_member_fixture_2026_10_25_r51_unified_total_interpreter" as const;
 
+const NFL_UNIFIED_TOTAL_PREDECESSOR_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_25_r35_two_source_flow_boundary" as const;
+const NFL_UNIFIED_TOTAL_PREDECESSOR_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_25_r38_two_source_flow_boundary" as const;
 const NFL_THREE_STATE_PRECEDING_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_25_r34_three_state_market_reader" as const;
 const NFL_THREE_STATE_PRECEDING_DECISION_RELEASE =
@@ -263,6 +267,9 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_UNIFIED_TOTAL_PREDECESSOR_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_UNIFIED_TOTAL_PREDECESSOR_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_THREE_STATE_PRECEDING_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_THREE_STATE_PRECEDING_DECISION_RELEASE)) ||

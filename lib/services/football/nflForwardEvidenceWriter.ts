@@ -110,7 +110,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_25_r67_two_source_flow_boundary" as const;
+  "nfl_forward_evidence_writer_2026_10_25_r68_unified_total_interpreter" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -578,6 +578,7 @@ export async function runNflForwardEvidenceWriter(args: {
             excludedFamilies: excludedFamiliesByMarket.moneyline,
           })
         : undefined,
+      marketStateSnapshots: exactProviderScore && plan.stage === "t60" ? namedSequenceSnapshots : undefined,
       ...(exactProviderScore ? {
         marketOutcomeBuilder: buildNflNoWeightMarketEvidenceOutcomeForecast,
         // If the evaluated sportsbook cannot be removed from a stable market
