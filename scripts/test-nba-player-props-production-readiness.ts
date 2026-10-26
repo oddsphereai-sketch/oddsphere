@@ -40,7 +40,7 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_23_r7_rebound_family_market_reader");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r8_component_market_reader");
 assert.equal(
   artifact.sourceGradeRelease,
   "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
@@ -51,11 +51,11 @@ assert.equal(artifact.gradePolicies.rebounds.policy.eligibilityGate, "establishe
 assert.equal(artifact.gradePolicies.rebounds.policy.maxPerSlate, 1);
 assert.equal(artifact.gradePolicies.rebounds.policy.requireReferenceBook, true);
 assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
-assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds, 0.04);
-assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds_assists, 0.04);
+assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds, 0.02);
+assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds_assists, 0.02);
 assert.equal(artifact.exactPriceArbitrationMinimumDistance.points_rebounds_assists, 0.04);
-assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds, "not_opposed");
-assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds_assists, "not_opposed");
+assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds, "none");
+assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds_assists, "none");
 assert.equal(artifact.exactPriceArbitrationMovementPolicy.points_rebounds_assists, "not_opposed");
 assert.match(
   frozenRuntimeSource,
@@ -269,29 +269,14 @@ const reboundMovementRows = ["fanduel", "pinnacle", "bet365"].flatMap((sportsboo
       isOpening: opening,
     };
   })));
-const unrestrictedArtifact = {
-  ...artifact,
-  exactPriceArbitrationMovementPolicy: {
-    ...artifact.exactPriceArbitrationMovementPolicy,
-    rebounds: "none" as const,
-  },
-};
-const unrestrictedRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
-  artifact: unrestrictedArtifact,
-  features,
-  observations: reboundMovementRows,
-  evaluatedAt: "2026-10-21T12:00:00.000Z",
-})[0]!;
-const guardedRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
+const correctedRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit({
   artifact,
   features,
   observations: reboundMovementRows,
   evaluatedAt: "2026-10-21T12:00:00.000Z",
 })[0]!;
-assert.equal(unrestrictedRebound.side, marketReboundSide,
-  "a qualified target-excluded disagreement would flip without the movement guard");
-assert.equal(guardedRebound.side, independentReboundSide,
-  "same-book movement opposing a proposed rebound-family flip must preserve the independent side");
+assert.equal(correctedRebound.side, marketReboundSide,
+  "a qualified target-excluded rebound disagreement must be able to correct the independent side");
 
 const chronological = [
   ...observations.filter((row) => row.market === "points").map((row) => ({

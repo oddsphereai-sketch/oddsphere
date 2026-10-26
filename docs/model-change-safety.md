@@ -1,5 +1,34 @@
 # Model change safety protocol
 
+## NBA player-props rebound component market reader r8
+
+On 2026-10-26 Daniel Mengel directed Oddsphere to diagnose player-prop markets
+as connected component forecasts and improve prediction accuracy without a
+generic cross-market rule or a flatter board. The exact stored-lock replay
+rejected a broader Points/Threes candidate and qualified only the Rebounds and
+Rebounds + Assists correction.
+
+For future-unlocked rows, r8/r9 retains every frozen independent model and grade
+policy. Rebounds and Rebounds + Assists may cross the offered line only when
+genuine target-book-excluded consensus is at least two percentage points from
+50%. The prior four-point plus movement-veto rule is removed for those two
+markets because exact release-pure replay showed that it suppressed more correct
+corrections than it protected. Every other player-prop market is unchanged.
+
+Across 2,646 resolved October 22-25 decisions, the candidate improves all-market
+direction from 1,464-1,182 (55.33%) to 1,473-1,173 (55.67%) and MAE from 4.596
+to 4.588. Rebounds improve by seven net decisions and Rebounds + Assists by two.
+There are 14 corrected changes and five harms, zero side/projection
+contradictions, zero actionable promotions or demotions, and identical grade
+counts. The October 26 unlocked 744-row rehearsal keeps all grade counts and has
+zero invalid forecasts.
+
+Existing locks remain byte-for-byte authoritative. Evidence, rejected broader
+candidate, release boundary, and rollback are documented in
+`docs/model-audits/2026-10-26-nba-player-props-component-market-reader-predeclaration.md`
+and
+`docs/model-audits/2026-10-26-nba-player-props-component-market-reader-result.md`.
+
 ## Owner-directed provisional exception: NFL two-source flow boundary
 
 On 2026-10-25 Daniel Mengel directed Oddsphere to repair the NFL reader after the immutable
