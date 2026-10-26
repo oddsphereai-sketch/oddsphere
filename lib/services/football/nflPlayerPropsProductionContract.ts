@@ -1,5 +1,4 @@
 import {
-  NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   nflPlayerPropsRuntimePolicy,
   type NflPlayerPropsRuntimeBoard,
@@ -15,11 +14,11 @@ import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLine";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_10_15_r45_independent_rushing_yards" as const;
+  "nfl_player_props_member_2026_10_26_r46_market_marriage" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_10_15_r27_independent_rushing_yards" as const;
+  "nfl_player_props_member_lifecycle_2026_10_26_r28_market_marriage" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile" as const;
+  "nfl_player_props_decision_2026_10_15_r32_independent_rushing_yards" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
@@ -180,11 +179,10 @@ function releaseCoherentRetainedUnlockedDecision(
 ): NflPlayerPropsRuntimeDecision | null {
   if (prior.decisionRelease === NFL_PLAYER_PROPS_DECISION_RELEASE) return prior;
   if (prior.decisionRelease !== NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE) return null;
-  // The settlement-aligned release changes the rushing-attempts point model.
-  // Keep the established conservative continuity boundary: only Anytime TD is
-  // behavior-identical and may bridge one still-fresh partial provider cycle.
-  // Ordinary rows must be freshly recomputed rather than relabeled under a
-  // release that did not score them.
+  // The market-marriage release changes ordinary forecasts and receiver grade
+  // thresholds. Only the behavior-identical Anytime TD market may bridge one
+  // still-fresh partial provider cycle. Ordinary rows must be freshly
+  // recomputed rather than relabeled under a release that did not score them.
   if (prior.market !== "anytime_td") return null;
   return {
     ...prior,
