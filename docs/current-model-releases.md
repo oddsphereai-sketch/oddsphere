@@ -393,6 +393,34 @@ Last reviewed: 2026-10-24
 
 ## NFL Daily Edge generalized weekly production release
 
+### Unified target-excluded Total interpreter (r36)
+
+- Active member / model / calibration / decision / grade releases are
+  `nfl_v1_member_release_2026_10_25_r36_unified_total_interpreter` /
+  `nfl_v1_daily_edge_model_2026_10_25_r31_unified_total_interpreter` /
+  `nfl_v1_daily_edge_calibration_2026_10_25_r30_unified_total_interpreter` /
+  `nfl_v1_daily_edge_decision_2026_10_25_r39_unified_total_interpreter` /
+  `nfl_v1_grade_policy_2026_10_25_r39_unified_total_interpreter`.
+- Active target-excluded resolver / zero-weight reader / unified Total reader / side reader / Total
+  model are `nfl_target_excluded_market_outcome_2026_10_25_r17_unified_total_interpreter` /
+  `nfl_v1_no_weight_market_reader_2026_10_25_r4_unified_total_interpreter` /
+  `nfl_unified_total_market_interpreter_2026_10_25_r1` /
+  `nfl_three_state_market_reader_2026_10_25_r2_two_source_flow_boundary` /
+  `nfl_v1_total_market_evidence_2026_10_25_r13_unified_total_interpreter`.
+- The sole `prediction_pipeline:nfl` writer / fixture / compact snapshot are
+  `nfl_forward_evidence_writer_2026_10_25_r68_unified_total_interpreter` /
+  `nfl_weekly_member_fixture_2026_10_25_r51_unified_total_interpreter` /
+  `nfl_forward_member_snapshot_2026_10_25_r43_unified_total_interpreter`. The r42/r50/r35/r38 tuple
+  is the immediate immutable-lock and startup-continuity predecessor.
+- At the verified T-60 boundary only, a frozen ridge residual continuously interprets the stable
+  target-excluded Total anchor, no-vig price, named/retail movement sequence, persistence, reversal,
+  buyback, independent public/sharp flow, agreement, and capture timing. It re-centers the complete
+  Total distribution so public score, probability, pick, and grade remain coherent. Earlier unlocked
+  rows retain r35 behavior; the artifact is neutral outside its frozen 0.8–1.0 hour timing support.
+  Moneyline, Spread, side reader, exact-price economics, grade thresholds, stakes, and all existing
+  locks are unchanged. Evidence and rollback are in
+  `docs/model-audits/2026-10-25-nfl-unified-total-market-interpreter-result.md`.
+
 ### Two-source flow boundary repair (r35)
 
 - Active member / model / calibration / decision / grade releases are

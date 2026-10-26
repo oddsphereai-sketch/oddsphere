@@ -44,6 +44,7 @@ type FeatureRow = {
   independentTotal: number;
   incumbentMargin: number;
   incumbentTotal: number;
+  evaluatedTotalLine: number;
   actualMargin: number;
   actualTotal: number;
   features: Record<string, number>;
@@ -101,6 +102,12 @@ const TOTAL_FEATURE_GROUPS = {
     "total_named_number_move", "total_retail_number_move",
     "total_persistence", "total_reversal", "total_buyback_share",
     "playbook_total_gap", "sharp_total_gap", "total_signal_agreement", "hours_to_start",
+  ],
+  runtime: [
+    "market_total_gap", "total_fair_over_centered", "total_family_count",
+    "total_named_number_move", "total_retail_number_move",
+    "total_persistence", "total_reversal", "total_buyback_share",
+    "playbook_total_gap", "sharp_total_gap", "total_signal_agreement",
   ],
 } as const;
 
@@ -169,7 +176,8 @@ function featureRow(args: {
   const moneylineBook = decisions.get("moneyline")?.evaluatedQuote.sportsbook;
   const spreadBook = decisions.get("spread")?.evaluatedQuote.sportsbook;
   const totalBook = decisions.get("total")?.evaluatedQuote.sportsbook;
-  if (!moneylineBook || !spreadBook || !totalBook) return null;
+  const evaluatedTotalLine = decisions.get("total")?.evaluatedQuote.line;
+  if (!moneylineBook || !spreadBook || !totalBook || typeof evaluatedTotalLine !== "number") return null;
   const marginExcluded = [...new Set([moneylineBook, spreadBook].map(normalizeBook))];
   const totalExcluded = [normalizeBook(totalBook)];
   const anchor = resolveNflTargetExcludedMarketAnchor({
@@ -272,6 +280,7 @@ function featureRow(args: {
     independentTotal: args.independentTotal,
     incumbentMargin: args.payload.outcomeForecast.expectedHomeScore - args.payload.outcomeForecast.expectedAwayScore,
     incumbentTotal: args.payload.outcomeForecast.expectedHomeScore + args.payload.outcomeForecast.expectedAwayScore,
+    evaluatedTotalLine,
     actualMargin: args.actualHome - args.actualAway,
     actualTotal: args.actualHome + args.actualAway,
     features,
@@ -342,11 +351,25 @@ function metrics(rows: readonly FeatureRow[], marginModel: RidgeModel | null, to
     return { row, margin, total };
   });
   const resolvedWinners = scored.filter(({ row }) => row.actualMargin !== 0);
+  const resolvedTotals = scored.filter(({ row, total }) =>
+    sign(row.actualTotal - row.evaluatedTotalLine) !== 0 && sign(total - row.evaluatedTotalLine) !== 0);
+  const resolvedIndependentTotals = scored.filter(({ row }) =>
+    sign(row.actualTotal - row.evaluatedTotalLine) !== 0 && sign(row.independentTotal - row.evaluatedTotalLine) !== 0);
+  const resolvedIncumbentTotals = scored.filter(({ row }) =>
+    sign(row.actualTotal - row.evaluatedTotalLine) !== 0 && sign(row.incumbentTotal - row.evaluatedTotalLine) !== 0);
   return {
     games: rows.length,
     winnerAccuracy: resolvedWinners.length === 0 ? null : resolvedWinners.filter(({ row, margin }) => sign(margin) === sign(row.actualMargin)).length / resolvedWinners.length,
     marginMae: mean(scored.map(({ row, margin }) => Math.abs(margin - row.actualMargin))),
     totalMae: mean(scored.map(({ row, total }) => Math.abs(total - row.actualTotal))),
+    totalSideAccuracy: resolvedTotals.length === 0 ? null : resolvedTotals.filter(({ row, total }) =>
+      sign(total - row.evaluatedTotalLine) === sign(row.actualTotal - row.evaluatedTotalLine)).length / resolvedTotals.length,
+    independentTotalSideAccuracy: resolvedIndependentTotals.length === 0 ? null : resolvedIndependentTotals.filter(({ row }) =>
+      sign(row.independentTotal - row.evaluatedTotalLine) === sign(row.actualTotal - row.evaluatedTotalLine)).length /
+      resolvedIndependentTotals.length,
+    incumbentTotalSideAccuracy: resolvedIncumbentTotals.length === 0 ? null : resolvedIncumbentTotals.filter(({ row }) =>
+      sign(row.incumbentTotal - row.evaluatedTotalLine) === sign(row.actualTotal - row.evaluatedTotalLine)).length /
+      resolvedIncumbentTotals.length,
     meanAbsoluteMarginCorrection: mean(scored.map(({ row, margin }) => Math.abs(margin - row.independentMargin))),
     meanAbsoluteTotalCorrection: mean(scored.map(({ row, total }) => Math.abs(total - row.independentTotal))),
   };
@@ -359,6 +382,80 @@ function incumbentMetrics(rows: readonly FeatureRow[]) {
     winnerAccuracy: resolved.length === 0 ? null : resolved.filter((row) => sign(row.incumbentMargin) === sign(row.actualMargin)).length / resolved.length,
     marginMae: mean(rows.map((row) => Math.abs(row.incumbentMargin - row.actualMargin))),
     totalMae: mean(rows.map((row) => Math.abs(row.incumbentTotal - row.actualTotal))),
+  };
+}
+
+function forwardEvaluation(
+  rows: readonly FeatureRow[],
+  featureNames: readonly string[],
+  target: "margin" | "total",
+  alpha: number,
+  intercept: boolean,
+) {
+  const predictions: Array<{ row: FeatureRow; value: number }> = [];
+  const dates = [...new Set(rows.map((row) => row.scheduledStart.slice(0, 10)))];
+  for (const date of dates) {
+    const test = rows.filter((row) => row.scheduledStart.slice(0, 10) === date);
+    const training = rows.filter((row) => row.scheduledStart.slice(0, 10) < date);
+    if (training.length < 24) continue;
+    const model = fit(training, featureNames, target, alpha, intercept);
+    for (const row of test) {
+      const base = target === "margin" ? row.independentMargin : row.independentTotal;
+      predictions.push({ row, value: base + correction(model, row) });
+    }
+  }
+  const resolved = target === "margin" ? predictions.filter(({ row }) => row.actualMargin !== 0) : predictions;
+  const resolvedTotals = target === "total" ? predictions.filter(({ row, value }) =>
+    sign(row.actualTotal - row.evaluatedTotalLine) !== 0 && sign(value - row.evaluatedTotalLine) !== 0) : [];
+  const byDate = [...new Set(predictions.map(({ row }) => row.scheduledStart.slice(0, 10)))].map((date) => {
+    const dated = predictions.filter(({ row }) => row.scheduledStart.slice(0, 10) === date);
+    return {
+      date,
+      rows: dated.length,
+      mae: mean(dated.map(({ row, value }) => Math.abs(value - (target === "margin" ? row.actualMargin : row.actualTotal)))),
+      baselineMae: mean(dated.map(({ row }) => Math.abs(
+        (target === "margin" ? row.independentMargin : row.independentTotal) -
+        (target === "margin" ? row.actualMargin : row.actualTotal),
+      ))),
+      incumbentMae: mean(dated.map(({ row }) => Math.abs(
+        (target === "margin" ? row.incumbentMargin : row.incumbentTotal) -
+        (target === "margin" ? row.actualMargin : row.actualTotal),
+      ))),
+    };
+  });
+  return {
+    rows: predictions.length,
+    mae: mean(predictions.map(({ row, value }) => Math.abs(value - (target === "margin" ? row.actualMargin : row.actualTotal)))),
+    baselineMae: mean(predictions.map(({ row }) => Math.abs(
+      (target === "margin" ? row.independentMargin : row.independentTotal) -
+      (target === "margin" ? row.actualMargin : row.actualTotal),
+    ))),
+    incumbentMae: mean(predictions.map(({ row }) => Math.abs(
+      (target === "margin" ? row.incumbentMargin : row.incumbentTotal) -
+      (target === "margin" ? row.actualMargin : row.actualTotal),
+    ))),
+    winnerAccuracy: target !== "margin" || resolved.length === 0 ? null
+      : resolved.filter(({ row, value }) => sign(value) === sign(row.actualMargin)).length / resolved.length,
+    baselineWinnerAccuracy: target !== "margin" || resolved.length === 0 ? null
+      : resolved.filter(({ row }) => sign(row.independentMargin) === sign(row.actualMargin)).length / resolved.length,
+    incumbentWinnerAccuracy: target !== "margin" || resolved.length === 0 ? null
+      : resolved.filter(({ row }) => sign(row.incumbentMargin) === sign(row.actualMargin)).length / resolved.length,
+    totalSideAccuracy: target !== "total" || resolvedTotals.length === 0 ? null
+      : resolvedTotals.filter(({ row, value }) =>
+          sign(value - row.evaluatedTotalLine) === sign(row.actualTotal - row.evaluatedTotalLine)).length / resolvedTotals.length,
+    baselineTotalSideAccuracy: target !== "total" || resolvedTotals.length === 0 ? null
+      : resolvedTotals.filter(({ row }) =>
+          sign(row.independentTotal - row.evaluatedTotalLine) === sign(row.actualTotal - row.evaluatedTotalLine)).length /
+        resolvedTotals.length,
+    incumbentTotalSideAccuracy: target !== "total" || resolvedTotals.length === 0 ? null
+      : resolvedTotals.filter(({ row }) =>
+          sign(row.incumbentTotal - row.evaluatedTotalLine) === sign(row.actualTotal - row.evaluatedTotalLine)).length /
+        resolvedTotals.length,
+    changes: target !== "margin" ? null : {
+      corrections: resolved.filter(({ row, value }) => sign(row.independentMargin) !== sign(row.actualMargin) && sign(value) === sign(row.actualMargin)).length,
+      harms: resolved.filter(({ row, value }) => sign(row.independentMargin) === sign(row.actualMargin) && sign(value) !== sign(row.actualMargin)).length,
+    },
+    byDate,
   };
 }
 
@@ -446,6 +543,7 @@ async function main() {
   const fitRows = [...training, ...selection];
   const marginModel = fit(fitRows, marginNames, "margin", selectedMargin.alpha, false);
   const totalModel = fit(fitRows, totalNames, "total", selectedTotal.alpha, true);
+  const runtimeTotalAlpha100Model = fit(fitRows, TOTAL_FEATURE_GROUPS.runtime, "total", 100, true);
   const baseline = metrics(confirmation, null, null);
   const incumbent = incumbentMetrics(confirmation);
   const candidate = metrics(confirmation, marginModel, totalModel);
@@ -461,7 +559,27 @@ async function main() {
       harm: sign(row.independentMargin) === sign(row.actualMargin) && sign(nextMargin) !== sign(row.actualMargin),
     }];
   });
-  console.log(JSON.stringify({
+  const rollingMargin = Object.entries(MARGIN_FEATURE_GROUPS).flatMap(([group, names]) => ALPHAS.map((alpha) => ({
+    group,
+    alpha,
+    ...forwardEvaluation(unique, names, "margin", alpha, false),
+  }))).sort((left, right) => left.mae - right.mae || (right.winnerAccuracy ?? 0) - (left.winnerAccuracy ?? 0));
+  const rollingTotal = Object.entries(TOTAL_FEATURE_GROUPS).flatMap(([group, names]) => ALPHAS.map((alpha) => ({
+    group,
+    alpha,
+    ...forwardEvaluation(unique, names, "total", alpha, true),
+  }))).sort((left, right) => left.mae - right.mae);
+  const confirmationMarginTournament = Object.entries(MARGIN_FEATURE_GROUPS).flatMap(([group, names]) => ALPHAS.map((alpha) => ({
+    group,
+    alpha,
+    ...metrics(confirmation, fit(fitRows, names, "margin", alpha, false), null),
+  }))).sort((left, right) => left.marginMae - right.marginMae || (right.winnerAccuracy ?? 0) - (left.winnerAccuracy ?? 0));
+  const confirmationTotalTournament = Object.entries(TOTAL_FEATURE_GROUPS).flatMap(([group, names]) => ALPHAS.map((alpha) => ({
+    group,
+    alpha,
+    ...metrics(confirmation, null, fit(fitRows, names, "total", alpha, true)),
+  }))).sort((left, right) => left.totalMae - right.totalMae);
+  const report = {
     release: RELEASE,
     readOnly: true,
     writes: 0,
@@ -474,8 +592,48 @@ async function main() {
       corrections: changes.filter((row) => row.correction).length,
       harms: changes.filter((row) => row.harm).length,
     },
+    rollingForwardDiagnostic: {
+      openedDevelopmentOnly: true,
+      margin: rollingMargin,
+      total: rollingTotal,
+    },
+    openedConfirmationDiagnostic: {
+      developmentOnly: true,
+      margin: confirmationMarginTournament,
+      total: confirmationTotalTournament,
+    },
     models: { margin: marginModel, total: totalModel },
-  }, null, 2));
+  };
+  const summary = process.argv.includes("--summary") ? {
+    release: report.release,
+    coverage: report.coverage,
+    selected: report.selected,
+    confirmation: report.confirmation,
+    winnerChanges: report.winnerChanges,
+    rollingCompleteTotalAlpha100: rollingTotal.find(({ group, alpha }) => group === "complete" && alpha === 100),
+    rollingRuntimeTotalAlpha100: rollingTotal.find(({ group, alpha }) => group === "runtime" && alpha === 100),
+    openedConfirmationBestMargin: confirmationMarginTournament[0],
+    openedConfirmationBestTotal: confirmationTotalTournament[0],
+    openedConfirmationCompleteTotalAlpha100: confirmationTotalTournament.find(({ group, alpha }) =>
+      group === "complete" && alpha === 100),
+    openedConfirmationRuntimeTotalAlpha100: confirmationTotalTournament.find(({ group, alpha }) =>
+      group === "runtime" && alpha === 100),
+    rollingRuntimeTotals: rollingTotal.filter(({ group }) => group === "runtime"),
+    openedConfirmationRuntimeTotals: confirmationTotalTournament.filter(({ group }) => group === "runtime"),
+    runtimeTotalAlpha100Model,
+    completeTotalAlpha100Model: fit(fitRows, TOTAL_FEATURE_GROUPS.complete, "total", 100, true),
+    hoursToStartRange: {
+      fit: {
+        minimum: Math.min(...fitRows.map((row) => row.features.hours_to_start ?? Number.NaN)),
+        maximum: Math.max(...fitRows.map((row) => row.features.hours_to_start ?? Number.NaN)),
+      },
+      confirmation: {
+        minimum: Math.min(...confirmation.map((row) => row.features.hours_to_start ?? Number.NaN)),
+        maximum: Math.max(...confirmation.map((row) => row.features.hours_to_start ?? Number.NaN)),
+      },
+    },
+  } : report;
+  console.log(JSON.stringify(summary, null, 2));
 }
 
 main().catch((error) => {

@@ -18,13 +18,15 @@ import {
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 import type { NflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import type { NflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
+import type { NflForwardContextMarket } from "./nflForwardEvidenceCapture";
 import {
   applyNflThreeStateMarketReader,
   type NflThreeStateMarketAuthority,
 } from "./nflThreeStateMarketReader";
+import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_25_r16_two_source_flow_boundary" as const;
+  "nfl_target_excluded_market_outcome_2026_10_25_r17_unified_total_interpreter" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -82,6 +84,10 @@ export function resolveNflTargetExcludedProduction(args: {
   threeStateMarketAuthorityFactory?: (
     excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
   ) => NflThreeStateMarketAuthority;
+  marketStateSnapshots?: Array<{
+    capturedAt: string;
+    markets: Record<"moneyline" | "spread" | "total", Pick<NflForwardContextMarket, "families">>;
+  }>;
   marketOutcomeBuilder?: typeof buildNflMarketEvidenceOutcomeForecast;
   fallbackOutcome?: NflV1WeekOneOutcomeForecast;
 }): {
@@ -185,16 +191,31 @@ export function resolveNflTargetExcludedProduction(args: {
       professionalMarketAuthority,
       evaluatedAt: args.evaluatedAt,
     });
+    const unifiedOutcome = args.marketStateSnapshots
+      ? applyNflUnifiedTotalMarketInterpreter({
+          forecast: preThreeStateOutcome,
+          independentForecast: args.baseOutcome,
+          evaluatedAt: args.evaluatedAt,
+          gameStartsAt: args.gameStartsAt,
+          snapshots: args.marketStateSnapshots,
+          current: args.current,
+          playbookLine: args.playbookLine,
+          playbookSplits: args.playbookSplits,
+          sharpSplits: targetFreeSharpSplits(args.sharpSplits, excluded),
+          excludedFamilies: excluded.total,
+          targetExcludedAnchor: anchor,
+        })
+      : preThreeStateOutcome;
     const threeStateAuthority = args.threeStateMarketAuthorityFactory?.({
       moneyline: excluded.margin,
       spread: excluded.margin,
       total: excluded.total,
     });
     const outcomeCandidate = threeStateAuthority
-      ? applyNflThreeStateMarketReader({ forecast: preThreeStateOutcome, authority: threeStateAuthority })
-      : preThreeStateOutcome;
+      ? applyNflThreeStateMarketReader({ forecast: unifiedOutcome, authority: threeStateAuthority })
+      : unifiedOutcome;
     const productionCandidate = applyNflThreeStateGradePolicy({
-      baseline: buildProduction(preThreeStateOutcome),
+      baseline: buildProduction(unifiedOutcome),
       candidate: buildProduction(outcomeCandidate),
       outcome: outcomeCandidate,
     });
@@ -210,7 +231,7 @@ export function resolveNflTargetExcludedProduction(args: {
         marginExcludedSportsbooks: anchor.marginExcludedSportsbooks,
         totalExcludedSportsbooks: anchor.totalExcludedSportsbooks,
       };
-      const baselineOutcome = { ...preThreeStateOutcome, targetExclusion };
+      const baselineOutcome = { ...unifiedOutcome, targetExclusion };
       const outcome = { ...outcomeCandidate, targetExclusion };
       const finalProduction = applyNflThreeStateGradePolicy({
         baseline: buildProduction(baselineOutcome),
