@@ -10,7 +10,7 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_10_26_r45_winner_cover_arbitration" as const;
+  "nfl_forward_member_snapshot_2026_10_26_r46_joint_side_market_arbitration" as const;
 const NFL_WINNER_COVER_PREDECESSOR_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_26_r44_nuanced_market_reader" as const;
 const NFL_WINNER_COVER_PREDECESSOR_FIXTURE_RELEASE =

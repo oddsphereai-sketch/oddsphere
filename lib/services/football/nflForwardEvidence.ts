@@ -185,7 +185,7 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_10_25_r35_two_source_flow_boundary"
       | "nfl_v1_member_release_2026_10_25_r36_unified_total_interpreter"
       | "nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader"
-      | "nfl_v1_member_release_2026_10_26_r38_winner_cover_arbitration";
+      | "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

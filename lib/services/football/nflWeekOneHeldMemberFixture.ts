@@ -48,7 +48,7 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_10_26_r53_winner_cover_arbitration" as const;
+  "nfl_weekly_member_fixture_2026_10_26_r54_joint_side_market_arbitration" as const;
 
 const NFL_WINNER_COVER_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader" as const;

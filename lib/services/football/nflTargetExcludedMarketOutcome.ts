@@ -26,7 +26,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_26_r19_winner_cover_arbitration" as const;
+  "nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -143,7 +143,8 @@ export function resolveNflTargetExcludedProduction(args: {
       suppressNuancedMarginOverlay: true,
       threeStateMarketAuthorityFactory: (excludedFamiliesByMarket) => {
         const authority = authorityFactory(excludedFamiliesByMarket);
-        return authority.reason === "qualified_named_price_flow_and_cross_market_consensus"
+        return authority.reason === "qualified_named_price_flow_and_cross_market_consensus" ||
+          authority.reason === "qualified_opposing_flow_and_cross_market_consensus"
           ? unavailableCandidateAuthority(authority)
           : authority;
       },

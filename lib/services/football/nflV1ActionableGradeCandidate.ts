@@ -29,7 +29,7 @@ export const NFL_V1_ACTIONABLE_GRADE_POLICY_RELEASE =
 export const NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE =
   NFL_V1_MEMBER_RELEASE;
 export const NFL_V1_EVENT_CONTAINED_SPREAD_MODEL_RELEASE =
-  "nfl_v1_spread_market_direction_2026_10_26_r20_winner_cover_arbitration" as const;
+  "nfl_v1_spread_market_direction_2026_10_26_r21_joint_side_market_arbitration" as const;
 export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
   "nfl_v1_total_market_evidence_2026_10_25_r13_unified_total_interpreter" as const;
 

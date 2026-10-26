@@ -1630,6 +1630,30 @@ async function main() {
         excludedFamilies: exclusions.moneyline,
       });
       const moneylineState = marketState(game, "moneyline");
+      const marketStates = Object.fromEntries(MARKETS.map((market) => {
+        const state = marketState(game, market);
+        return [market, {
+          namedDirection: state.namedDirection,
+          resistance: state.resistance,
+          trails: state.trails.map((trail) => ({
+            source: trail.source,
+            sourceClass: trail.sourceClass,
+            direction: trail.direction,
+            numberDirection: trail.numberDirection,
+            priceDirection: trail.priceDirection,
+            persistenceTimeShare: trail.persistenceTimeShare,
+            openingNumber: trail.openingNumber,
+            currentNumber: trail.currentNumber,
+            numberDelta: trail.numberDelta,
+            fairProbabilityDeltaPp: trail.fairProbabilityDeltaPp,
+            moveOrder: trail.moveOrder,
+            reversalMagnitude: trail.reversalMagnitude,
+            buybackToOpening: trail.buybackToOpening,
+            crossedKeyNumbers: trail.crossedKeyNumbers,
+          })),
+          splits: state.splits,
+        }];
+      }));
       const stableNamed = moneylineState.trails.filter((trail) =>
         trail.sourceClass === "named" && trail.direction !== null &&
         trail.persistenceTimeShare >= 2 / 3 && trail.reversalMagnitude === 0 &&
@@ -1684,6 +1708,8 @@ async function main() {
           reader: liveRow.forecast.threeStateMarketReader ?? null,
         },
         market: {
+          states: marketStates,
+          professionalAuthority: professionalMarketAuthority(game, exclusions),
           namedDirection,
           stableNamed: stableNamed.map((trail) => ({
             source: trail.source,

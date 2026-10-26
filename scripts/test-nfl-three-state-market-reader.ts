@@ -201,6 +201,48 @@ const opposingFlowAuthority = buildNflThreeStateMarketAuthority({
 assert.equal(opposingFlowAuthority.reason, "opposing_flow",
   "an opposing second source vetoes the side read");
 
+const resistanceBooks: NflPreviewBookOdds[] = [
+  book("fanduel", -145, 125, 2.5),
+  book("draftkings", -140, 120, 3),
+  book("betmgm", -138, 118, 3),
+  book("caesars", -142, 122, 3.5),
+];
+const crossMarketResistanceAuthority = buildNflThreeStateMarketAuthority({
+  evaluatedAt,
+  snapshots: [{
+    capturedAt: evaluatedAt,
+    markets: {
+      moneyline: { families: moneylineFamilies },
+      spread: { families: [] },
+      total: { families: [] },
+    },
+  }],
+  current: resistanceBooks[0]!,
+  comparableCurrentBooks: resistanceBooks,
+  playbookLine: null,
+  playbookSplits: splitSet(43, 45),
+  sharpSplits: null,
+  excludedFamilies: ["fanduel"],
+});
+assert.equal(crossMarketResistanceAuthority.status, "available");
+assert.equal(crossMarketResistanceAuthority.reason,
+  "qualified_opposing_flow_and_cross_market_consensus");
+assert.equal(crossMarketResistanceAuthority.side, -1,
+  "opposing flow plus target-excluded Moneyline and Spread consensus identifies resistance to the named move");
+assert.equal(crossMarketResistanceAuthority.outcomeBoundarySide, -1);
+assert.equal(crossMarketResistanceAuthority.spreadBoundary, -3);
+const crossMarketResistanceCorrection = applyNflThreeStateMarketReader({
+  forecast: narrowHomeWinner,
+  authority: crossMarketResistanceAuthority,
+});
+assert.equal(crossMarketResistanceCorrection.threeStateMarketReader?.state, "outcome_correction");
+assert.equal(crossMarketResistanceCorrection.expectedHomeScore -
+  crossMarketResistanceCorrection.expectedAwayScore, -8,
+  "the resistance route mirrors the stale upset margin across the target-excluded Spread boundary");
+assert.ok(Math.abs(crossMarketResistanceCorrection.expectedHomeScore +
+  crossMarketResistanceCorrection.expectedAwayScore - 44) < 1e-6,
+  "cross-market resistance cannot alter the independently resolved Total projection");
+
 const baltimoreAuthority = buildNflThreeStateMarketAuthority({
   evaluatedAt,
   snapshots: [{
@@ -457,12 +499,12 @@ function bundle(evaluatedBets: NflRegularEvaluatedBetDecision[]): NflV1Actionabl
   return {
     evaluatedBets,
     outcomeConfidence: [],
-    modelPromotionStatus: "nfl_v1_member_release_2026_10_26_r38_winner_cover_arbitration",
+    modelPromotionStatus: "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration",
     publicationEnabled: true,
     trackingEnabled: false,
-    modelRelease: "nfl_v1_daily_edge_model_2026_10_26_r33_winner_cover_arbitration",
-    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_26_r32_winner_cover_arbitration",
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r41_winner_cover_arbitration",
-    policyRelease: "nfl_v1_grade_policy_2026_10_26_r41_winner_cover_arbitration",
+    modelRelease: "nfl_v1_daily_edge_model_2026_10_26_r34_joint_side_market_arbitration",
+    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_26_r33_joint_side_market_arbitration",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r42_joint_side_market_arbitration",
+    policyRelease: "nfl_v1_grade_policy_2026_10_26_r42_joint_side_market_arbitration",
   };
 }
