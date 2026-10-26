@@ -490,6 +490,17 @@ Last reviewed: 2026-10-26
 
 ## NFL Daily Edge generalized weekly production release
 
+### Cross-sport Market Brain foundation (shadow capture only)
+
+- `market_brain_contract_2026_10_26_r1_masked_joint_state` and
+  `nfl_market_brain_shadow_2026_10_26_r1_complete_ledger_adapter` define an internal-only, production-
+  inert evidence and artifact boundary. The NFL adapter retains every complete-ledger observation,
+  represents missing values with explicit masks, and joins Moneyline, Spread, and Total around one
+  Margin/Total state. Without a validated artifact it returns `capture_only` and cannot affect a
+  prediction, probability, projection, grade, stake, writer, display, or lock. The active NFL releases
+  below are unchanged. Contract, evidence limitations, and the next research gate are frozen in
+  `docs/model-audits/2026-10-26-market-brain-foundation-predeclaration.md`.
+
 ### Complete-signal semantic interpretation (r40)
 
 - Active member / model / calibration / decision / grade releases are
