@@ -60,6 +60,8 @@ import {
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
 } from "./nflV1WeekOneOutcome";
 import {
+  resolveNflTargetExcludedMarketAnchor,
+  resolveNflTargetExcludedMoneylineHomeProbability,
   resolveNflTargetExcludedProduction,
 } from "./nflTargetExcludedMarketOutcome";
 import {
@@ -102,6 +104,8 @@ import {
   NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
 } from "./nflExactProviderScoreRuntime";
 import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
+import { buildNflMarketState } from "./nflMarketState";
+import { applyNflFullGameEvidenceRuntime } from "./nflFullGameEvidenceRuntime";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
@@ -110,7 +114,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_26_r71_joint_side_market_arbitration" as const;
+  "nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -587,7 +591,79 @@ export async function runNflForwardEvidenceWriter(args: {
         fallbackOutcome: baseOutcome,
       } : {}),
     });
-    const { outcome, production } = resolved;
+    const excludedFamiliesByMarket = nflFullGameExcludedFamilies(resolved.production.evaluatedBets);
+    const targetExcludedAnchor = resolveNflTargetExcludedMarketAnchor({
+      books: comparableCurrentBooks,
+      marginExcludedSportsbooks: excludedFamiliesByMarket.moneyline,
+      totalExcludedSportsbooks: excludedFamiliesByMarket.total,
+      evaluatedAt: capturedAt,
+    });
+    const moneylineHomeFairProbability = resolveNflTargetExcludedMoneylineHomeProbability({
+      books: comparableCurrentBooks,
+      excludedSportsbooks: excludedFamiliesByMarket.moneyline,
+      evaluatedAt: capturedAt,
+    });
+    const marketStates = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [
+      market,
+      buildNflMarketState({
+        market,
+        evaluatedAt: capturedAt,
+        snapshots: namedSequenceSnapshots,
+        current,
+        playbookLine,
+        playbookSplits,
+        sharpSplits,
+      }),
+    ])) as Record<"moneyline" | "spread" | "total", ReturnType<typeof buildNflMarketState>>;
+    const fromMarginTotal = (margin: number, total: number) => ({
+      expectedAwayScore: (total - margin) / 2,
+      expectedHomeScore: (total + margin) / 2,
+    });
+    const existingLockedRecord = hasImmutableNflLockedRecord(historicalExisting, plan.game.providerGameId);
+    const semantic = applyNflFullGameEvidenceRuntime({
+      providerGameId: plan.game.providerGameId,
+      awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation,
+      gameStartsAt: plan.game.scheduledStart,
+      evaluatedAt: capturedAt,
+      releasedForecast: resolved.outcome,
+      baselineProduction: resolved.production,
+      current,
+      comparableCurrentBooks,
+      shadowMoneyline,
+      targetExcludedMarket: targetExcludedAnchor && moneylineHomeFairProbability !== null
+        ? { ...targetExcludedAnchor, moneylineHomeFairProbability }
+        : null,
+      states: marketStates,
+      excludedFamiliesByMarket,
+      playbookSplits,
+      sharpSplits,
+      forecastCandidates: [
+        {
+          source: "independent_exact_stat",
+          forecast: exactProviderScore
+            ? fromMarginTotal(exactProviderScore.expectedHomeMargin, exactProviderScore.expectedTotal)
+            : null,
+        },
+        {
+          source: "player_aware",
+          forecast: paidProjectionShadow
+            ? fromMarginTotal(paidProjectionShadow.projectedHomeMargin, paidProjectionShadow.projectedTotal)
+            : null,
+        },
+        { source: "released_current", forecast: resolved.outcome },
+      ],
+      availability: {
+        injuriesAvailable: injuries !== null,
+        injuryReportUpdatedAt: injuries?.reportUpdatedAt ?? null,
+        injuryPlayerCount: injuries?.teams.reduce((sum, team) => sum + team.players.length, 0) ?? null,
+        expectedQuarterbacksAvailable: expectedQuarterbacks,
+        playerAwareForecastAvailable: Boolean(paidProjectionShadow),
+        weatherAvailable: weatherCoverage,
+      },
+      existingLockedRecord,
+    });
+    const { outcome, production } = semantic;
     const availabilityArbitrationShadow = exactProviderScore && paidProjectionShadow
       ? buildNflAvailabilityArbitrationShadow({
           providerDepth: { away: providerAwayDepth, home: providerHomeDepth },
@@ -666,6 +742,18 @@ export async function runNflForwardEvidenceWriter(args: {
       injuries,
       weather,
       outcomeForecast: outcome,
+      ...(!existingLockedRecord ? {
+        fullGameEvidenceInterpretation: {
+          runtimeRelease: semantic.release,
+          ledgerRelease: semantic.ledger.release,
+          arbiterRelease: semantic.arbitration.release,
+          status: semantic.arbitration.status,
+          sideStory: semantic.arbitration.sideStory,
+          totalStory: semantic.arbitration.totalStory,
+          interpretationAccounting: semantic.arbitration.interpretationAccounting,
+          signalInterpretations: semantic.arbitration.signalInterpretations,
+        },
+      } : {}),
       ...(paidProjectionShadow ? { paidProjectionShadow } : {}),
       ...(exactProviderScore ? { exactProviderScoreShadow: exactProviderScore } : {}),
       ...(availabilityArbitrationShadow ? { availabilityArbitrationShadow } : {}),
@@ -712,10 +800,7 @@ export async function runNflForwardEvidenceWriter(args: {
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
       authoritativeForecast: outcome,
     });
-    return [{
-      ...payload,
-      ...(contextualEvidenceCapture ? { contextualEvidenceCapture } : {}),
-    }];
+    return [{ ...payload, contextualEvidenceCapture }];
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown_payload_failure";
       payloadBuildHolds.push(`game_${plan.game.providerGameId}_held_${reason}`);
@@ -835,6 +920,16 @@ function normalizeBook(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function nflFullGameExcludedFamilies(
+  decisions: NflForwardEvidencePayload["decisions"]["evaluatedBets"],
+): Record<"moneyline" | "spread" | "total", string[]> {
+  const selected = (market: "moneyline" | "spread" | "total") => normalizeBook(
+    decisions.find((decision) => decision.market === market)?.evaluatedQuote.sportsbook ?? "",
+  );
+  const margin = [...new Set([selected("moneyline"), selected("spread")].filter(Boolean))];
+  return { moneyline: margin, spread: margin, total: [selected("total")].filter(Boolean) };
+}
+
 function matchPlaybookRowsOptional<T extends PlaybookLineGame | PlaybookSplitGame>(
   games: NflPreviewGame[],
   rows: T[],
@@ -921,6 +1016,18 @@ export function latestVerifiedInjuriesForGame(
     .filter((row) => row.providerGameId === providerGameId && row.payload.injuries !== null)
     .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]
     ?.payload.injuries ?? null;
+}
+
+/** Exact stored lock boundary; semantic candidates may never reinterpret this row. */
+export function hasImmutableNflLockedRecord(
+  rows: NflForwardStoredEvidence[],
+  providerGameId: string,
+): boolean {
+  return rows.some((row) => row.providerGameId === providerGameId && row.stage === "t60" &&
+    row.payload.stage === "t60" && row.payload.decisions.trackingEnabled === true &&
+    row.payload.decisions.evaluatedBets.length === 3 &&
+    row.payload.decisions.evaluatedBets.every((decision) =>
+      decision.stage === "t60_locked" && decision.lockedAt !== null));
 }
 
 /** Ensure a provider quote can never appear newer than the decision consuming it. */

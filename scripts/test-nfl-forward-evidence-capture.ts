@@ -201,10 +201,12 @@ for (const market of Object.values(nextCapture.markets)) {
 
 for (const market of Object.values(capture.markets)) {
   assert.equal(market.coverage.completeObserved, sportsbooks.length + 1);
-  assert.equal(market.coverage.completeRetained, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
-  assert.equal(market.coverage.completeOmitted, sportsbooks.length + 1 - NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
-  assert.equal(market.families.length, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET);
-  assert.equal(market.coverage.chronologyPairsRetained, NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET - 1);
+  assert.equal(market.coverage.completeRetained, sportsbooks.length + 1);
+  assert.equal(market.coverage.completeOmitted, 0);
+  assert.equal(market.families.length, sportsbooks.length + 1);
+  assert.equal(market.coverage.chronologyPairsRetained, sportsbooks.length);
+  assert.equal(market.coverage.targetExcludedChronologyPairsRetained, sportsbooks.length - 1);
+  assert.equal(market.coverage.truncated, false);
   assert.ok(!market.targetExcludedFamilies.includes("fanduel"), "evaluated family must be target-excluded");
   assert.ok(market.public && market.sharp, "one authentic public and one authentic sharp record are retained");
   assert.ok(Number(Boolean(market.public)) + Number(Boolean(market.sharp)) <=
@@ -223,19 +225,11 @@ const missing = payload();
 missing.market.playbookSplits = null;
 missing.market.sharpApiSplits = null;
 missing.market.comparableCurrentBooks = [missing.market.current];
-const missingCapture = buildNflForwardContextCapture({
+assert.throws(() => buildNflForwardContextCapture({
   payload: missing, independentForecast: forecast, independentTargetFree: false,
   independentRelease: "weekly-market-fallback", authoritativeForecast: forecast,
-});
-assert.ok(missingCapture, "missing optional evidence and singleton pricing must not erase capture");
-assert.equal(missingCapture.prior.status, "unavailable");
-for (const market of Object.values(missingCapture.markets)) {
-  assert.equal(market.public, null);
-  assert.equal(market.sharp, null);
-  assert.equal(market.coverage.targetExcludedObserved, 0);
-}
-assert.deepEqual(missingCapture.authoritative.decisions, capture.authoritative.decisions,
-  "missing evidence must not change the authoritative downstream decisions");
+}), /no target-excluded current price pair/,
+"singleton pricing must fail explicitly instead of silently publishing an evidence-incomplete game");
 
 const stress = Array.from({ length: 16 }, (_, index) => {
   const row = payload(index);
@@ -258,10 +252,10 @@ const circular: { self?: unknown } = {};
 circular.self = circular;
 const invalid = payload();
 (invalid.weather as unknown as { forecast: unknown }).forecast = circular;
-assert.equal(buildNflForwardContextCapture({
+assert.throws(() => buildNflForwardContextCapture({
   payload: invalid, independentForecast: forecast, independentTargetFree: true,
   independentRelease: "target-free-artifact", authoritativeForecast: forecast,
-}), null, "capture serialization failure must be isolated as omission");
+}), "capture serialization failure must fail explicitly instead of becoming a silent omission");
 
 const helperSource = readFileSync("lib/services/football/nflForwardEvidenceCapture.ts", "utf8");
 assert.doesNotMatch(helperSource, /\b(?:fetch|insert|upsert|delete)\s*\(|\.from\s*\(/,

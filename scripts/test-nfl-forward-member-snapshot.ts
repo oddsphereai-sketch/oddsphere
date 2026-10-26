@@ -207,6 +207,40 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const completeSignalPredecessorSnapshotRelease =
+    "nfl_forward_member_snapshot_2026_10_26_r46_joint_side_market_arbitration";
+  const completeSignalPredecessorFixtureRelease =
+    "nfl_weekly_member_fixture_2026_10_26_r54_joint_side_market_arbitration";
+  const completeSignalPredecessorPayload = {
+    ...snapshot,
+    snapshotRelease: completeSignalPredecessorSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r42_joint_side_market_arbitration",
+    fixtureRelease: completeSignalPredecessorFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: completeSignalPredecessorFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl", "daily-edge", 2026, 1,
+    completeSignalPredecessorSnapshotRelease,
+    completeSignalPredecessorFixtureRelease,
+    completeSignalPredecessorPayload.memberRelease,
+    completeSignalPredecessorPayload.decisionRelease,
+  ].join("::");
+  storedPayload = completeSignalPredecessorPayload;
+  const completeSignalContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.equal(completeSignalContinuityRead?.snapshotRelease, completeSignalPredecessorSnapshotRelease);
+  assert.equal(JSON.stringify(completeSignalContinuityRead?.fixture),
+    JSON.stringify(completeSignalPredecessorPayload.fixture),
+    "the immediate r46/r54/r39/r42 predecessor must retain exact stored reader precedence");
+
   const winnerCoverPredecessorSnapshotRelease =
     "nfl_forward_member_snapshot_2026_10_26_r44_nuanced_market_reader";
   const winnerCoverPredecessorFixtureRelease =

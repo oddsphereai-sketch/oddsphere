@@ -98,6 +98,14 @@ const releaseTransitionRows = rows.map((row, index) => {
       decisionRelease: "nfl_v1_daily_edge_decision_2026_09_21_r21_opening_market_direction",
     }));
   }
+  if (index === 2) {
+    copy.payload.decisions.modelPromotionStatus =
+      "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration";
+    copy.payload.decisions.evaluatedBets = copy.payload.decisions.evaluatedBets.map((decision) => ({
+      ...decision,
+      decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r42_joint_side_market_arbitration",
+    }));
+  }
   return copy;
 });
 assert.equal(

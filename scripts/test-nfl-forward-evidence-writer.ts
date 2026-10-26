@@ -28,6 +28,7 @@ import {
   buildNflWeekOneEvidenceBoard,
 } from "../lib/services/football/nflWeekOneEvidenceBoard";
 import {
+  hasImmutableNflLockedRecord,
   latestVerifiedInjuriesForGame,
   nflEvidenceCapturedAt,
   preserveVerifiedNflLockedGames,
@@ -373,7 +374,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_26_r71_joint_side_market_arbitration/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation/);
 assert.match(writer, /exactProviderScoreShadow: exactProviderScore/);
 assert.match(writer, /availabilityArbitrationShadow/);
 assert.match(writer, /mergeNflAvailabilityWithPrior/);
@@ -577,6 +578,28 @@ assert.equal(
   null,
   "injury continuity must never cross provider game identity",
 );
+const explicitStoredLock = {
+  ...stored("t60", "2026-09-10T00:00:00.000Z"),
+  payload: {
+    ...completePayload("2026-09-10T00:00:00.000Z", -150),
+    stage: "t60",
+    decisions: {
+      evaluatedBets: ["moneyline", "spread", "total"].map((market) => ({
+        market,
+        stage: "t60_locked",
+        lockedAt: "2026-09-10T00:00:00.000Z",
+      })),
+      outcomeConfidence: [],
+      modelPromotionStatus: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+      publicationEnabled: true,
+      trackingEnabled: true,
+    },
+  },
+} as unknown as NflForwardStoredEvidence;
+assert.equal(hasImmutableNflLockedRecord([explicitStoredLock], game.providerGameId), true,
+  "the writer must recognize an exact three-market stored T-60 lock before semantic publication");
+assert.equal(hasImmutableNflLockedRecord([explicitStoredLock], "different-game"), false,
+  "stored-lock precedence must remain exact-game scoped");
 assert.equal(
   nflEvidenceCapturedAt("2026-09-09T23:20:00.000Z", [{
     ...completePayload("2026-09-09T23:20:00.000Z", -150).market.current,
