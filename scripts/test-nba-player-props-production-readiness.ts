@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   buildNbaPlayerPropsForwardDecisions,
   buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit,
+  NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
   nbaPlayerPropsFrozenRuntimeArtifact,
   type NbaPlayerPropsFrozenArtifact,
 } from "../lib/services/nba/nbaPlayerPropsFrozenRuntime";
@@ -41,7 +42,9 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r10_rebound_threes_architecture");
+assert.equal(NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
+  "nba_player_props_forward_decision_2026_10_26_r11_rebound_threes_architecture");
 assert.equal(
   artifact.sourceGradeRelease,
   "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
@@ -51,7 +54,13 @@ assert.equal(artifact.gradePolicies.rebounds.policy.signalFamily, "model_market_
 assert.equal(artifact.gradePolicies.rebounds.policy.eligibilityGate, "established_role");
 assert.equal(artifact.gradePolicies.rebounds.policy.maxPerSlate, 1);
 assert.equal(artifact.gradePolicies.rebounds.policy.requireReferenceBook, true);
-assert.equal(artifact.selectedByMarket.rebounds, "robust_component_counts");
+assert.equal(artifact.sourceTournamentRelease, "nba_player_props_model_tournament_2026_10_26_r14_rebound_threes_architecture");
+assert.equal(artifact.selectedByMarket.rebounds, "fanduel_confirmed_2pp_disagreements");
+assert.equal(artifact.underlyingByMarket.rebounds, "ridge_r2_minutes_regression");
+assert.equal(artifact.candidateMarketMinimumDistance.rebounds, 0.02);
+assert.equal(artifact.selectedByMarket.threes, "structural_direct_counts");
+assert.equal(artifact.underlyingByMarket.threes, "structural_direct_counts");
+assert.equal(artifact.candidateMarketMinimumDistance.threes, null);
 assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds, 0.02);
 assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds_assists, 0.02);
 assert.equal(artifact.exactPriceArbitrationMinimumDistance.points_rebounds_assists, 0.04);
@@ -68,8 +77,8 @@ assert.doesNotMatch(
   /import frozenArtifactJson/,
   "the frozen runtime must not import the large numeric JSON artifact through the server bundler",
 );
-assert(artifact.robustMinuteModel, "robust rebound release requires its rotation-aware minute model");
-assert(artifact.robustModels?.rebounds, "robust rebound release requires a frozen rebound component");
+assert(artifact.robustMinuteModel, "the artifact retains the prior robust model for immutable legacy/audit replay");
+assert(artifact.robustModels?.rebounds, "the artifact retains the prior rebound component for immutable legacy/audit replay");
 assert.equal(artifact.gradePolicies.points_rebounds.kind, "slate_relative_lean");
 assert.equal(
   nbaPlayerPropsSlateDate(new Date("2026-10-22T03:59:59.000Z")),
@@ -227,6 +236,7 @@ assert.equal(
 
 const tenureRoutingArtifact: NbaPlayerPropsFrozenArtifact = {
   ...artifact,
+  underlyingByMarket: { ...artifact.underlyingByMarket, rebounds: "robust_component_counts" },
   genericMinutesUntilCurrentTeamAppearancesByMarket: { rebounds: 3 },
   minuteModel: { features: [], means: [], scales: [], coefficients: [10], lambda: 1 },
   robustMinuteModel: { features: [], means: [], scales: [], coefficients: [30], lambda: 1 },
@@ -255,9 +265,9 @@ const establishedRebound = buildNbaPlayerPropsForwardDecisionsFromArtifactForAud
   observations: reboundObservations,
 })[0]!;
 assert.equal(lowTenureRebound.independentProjection, 10,
-  "fewer than three current-team appearances must use the generic minute head");
+  "legacy robust-rebound replay must preserve its low-tenure generic minute head");
 assert.equal(establishedRebound.independentProjection, 30,
-  "established current-team roles must retain the rotation-aware minute head");
+  "legacy robust-rebound replay must preserve its established-role minute head");
 
 const underMarket = observations.filter((row) => row.market === "points").map((row) => ({
   ...row,

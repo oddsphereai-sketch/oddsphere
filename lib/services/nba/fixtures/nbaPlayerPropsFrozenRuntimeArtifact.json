@@ -1,16 +1,16 @@
 {
-  "release": "nba_player_props_frozen_runtime_artifact_2026_10_26_r9_low_tenure_minutes",
+  "release": "nba_player_props_frozen_runtime_artifact_2026_10_26_r10_rebound_threes_architecture",
   "publicEnabled": false,
   "sourceDatasetRelease": "nba_player_props_historical_research_dataset_2026_10_21_r5_opportunity_context_exact_prices",
   "sourceInputsSha256": "68c71ef30494811a94b53a1a3d873947b65a49a20af2e1743c1038023ecf385f",
-  "sourceTournamentRelease": "nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity",
+  "sourceTournamentRelease": "nba_player_props_model_tournament_2026_10_26_r14_rebound_threes_architecture",
   "sourceGradeRelease": "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
   "trainedThrough": "2026-04-04T02:00:00.000Z",
   "selectedByMarket": {
     "points": "market_read_all_disagreements",
-    "rebounds": "robust_component_counts",
+    "rebounds": "fanduel_confirmed_2pp_disagreements",
     "assists": "fanduel_confirmed_2pp_disagreements",
-    "threes": "market_read_5pp_disagreements",
+    "threes": "structural_direct_counts",
     "points_rebounds_assists": "market_read_all_disagreements",
     "points_rebounds": "structural_direct_counts",
     "points_assists": "fanduel_read_2pp_disagreements",
@@ -18,9 +18,9 @@
   },
   "underlyingByMarket": {
     "points": "ridge_r2_minutes_regression",
-    "rebounds": "robust_component_counts",
+    "rebounds": "ridge_r2_minutes_regression",
     "assists": "ridge_r2_minutes_regression",
-    "threes": "ridge_r2_minutes_regression",
+    "threes": "structural_direct_counts",
     "points_rebounds_assists": "ridge_r2_minutes_regression",
     "points_rebounds": "structural_direct_counts",
     "points_assists": "ridge_r2_minutes_regression",
@@ -28,9 +28,9 @@
   },
   "candidateMarketMinimumDistance": {
     "points": 0,
-    "rebounds": null,
+    "rebounds": 0.02,
     "assists": 0.02,
-    "threes": 0.05,
+    "threes": null,
     "points_rebounds_assists": 0,
     "points_rebounds": null,
     "points_assists": 0.02,
@@ -8851,8 +8851,6 @@
     "points_assists": "none",
     "rebounds_assists": "none"
   },
-  "genericMinutesUntilCurrentTeamAppearancesByMarket": {
-    "rebounds": 3
-  },
-  "payloadSha256": "6a074fc089e80507280769899990ca550c35625fa736220c205da6b11c88fe5d"
+  "genericMinutesUntilCurrentTeamAppearancesByMarket": {},
+  "payloadSha256": "9e49cd047b2ebcf3e68459b361754e29126c5d203ff2ed754a39a8afd9a26fc1"
 }
