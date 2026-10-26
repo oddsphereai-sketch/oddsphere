@@ -32,6 +32,7 @@ import { collectNflForwardWeather } from "./nflVenueWeather";
 import {
   completeSharpApiNflSplitSet,
   fetchSharpApiNflSplits,
+  unavailableNflSharpApiSplitSources,
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
@@ -106,6 +107,7 @@ import {
 import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import { buildNflMarketState } from "./nflMarketState";
 import { applyNflFullGameEvidenceRuntime } from "./nflFullGameEvidenceRuntime";
+import { buildNflMarketBrainShadow, nflMarketBrainCaptureFailure } from "./nflMarketBrainShadow";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
@@ -114,7 +116,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation" as const;
+  "nfl_forward_evidence_writer_2026_10_26_r74_market_brain_observable_tape" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -282,6 +284,10 @@ export async function runNflForwardEvidenceWriter(args: {
     })
       .catch(() => ({
         splitsByGame: {} as Record<string, NflRegularSharpSplitSet>,
+        sourcesByGame: Object.fromEntries(slate.games.map((game) => [
+          game.providerGameId,
+          unavailableNflSharpApiSplitSources(),
+        ])),
         requests: 1,
         rows: 0,
         dates: [],
@@ -389,6 +395,8 @@ export async function runNflForwardEvidenceWriter(args: {
     const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
       ?? previous?.payload.market.sharpApiSplits
       ?? null;
+    const sharpSplitSources = sharpResult.sourcesByGame[plan.game.providerGameId]
+      ?? unavailableNflSharpApiSplitSources();
     const contextCurrentBooks = captureBooksWithSharpBooks(
       comparableCurrentBooks,
       circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
@@ -736,6 +744,7 @@ export async function runNflForwardEvidenceWriter(args: {
         playbookLine,
         playbookSplits,
         sharpApiSplits: sharpSplits,
+        sharpApiSplitSources: sharpSplitSources,
       },
       startersAndDepth: { away: awayDepth, home: homeDepth },
       providerStartersAndDepth: { away: providerAwayDepth, home: providerHomeDepth },
@@ -800,7 +809,20 @@ export async function runNflForwardEvidenceWriter(args: {
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
       authoritativeForecast: outcome,
     });
-    return [{ ...payload, contextualEvidenceCapture }];
+    let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
+    if (!existingLockedRecord) {
+      try {
+        marketBrainShadow = buildNflMarketBrainShadow({ game: plan.game, capture: contextualEvidenceCapture, sharpSplitSources });
+      } catch (error) {
+        // Shadow evidence may report its own failure, but it must never block or alter production output.
+        marketBrainShadow = nflMarketBrainCaptureFailure({ eventId: plan.game.providerGameId, capturedAt, error });
+      }
+    }
+    return [{
+      ...payload,
+      contextualEvidenceCapture,
+      ...(marketBrainShadow ? { marketBrainShadow } : {}),
+    }];
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown_payload_failure";
       payloadBuildHolds.push(`game_${plan.game.providerGameId}_held_${reason}`);

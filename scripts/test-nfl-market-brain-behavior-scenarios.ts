@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS,
+  type MarketBrainAction,
+  type NflMarketStory,
+} from "../lib/services/marketBrain/nflMarketBrainBehaviorScenarios";
+
+const scenarios = NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS;
+assert.equal(new Set(scenarios.map((row) => row.id)).size, scenarios.length, "scenario ids must be unique");
+const requiredStories: NflMarketStory[] = [
+  "genuine_discovery", "resistance", "reversal_buyback", "retail_only_steam",
+  "split_price_disagreement", "cross_market_contradiction", "news_sequence",
+  "source_outage", "target_book_isolation", "stale_evidence", "key_number_transition",
+];
+for (const story of requiredStories) assert.ok(scenarios.some((row) => row.story === story), `missing story: ${story}`);
+for (const scenario of scenarios) {
+  assert.ok(scenario.observableStory.length > 0 && scenario.context.length > 0);
+  assert.ok(scenario.acceptableActions.includes(scenario.preferredAction));
+  assert.ok(scenario.forbiddenActions.every((action) => !scenario.acceptableActions.includes(action)));
+  assert.ok(scenario.rationale.length > 40);
+}
+const actions = new Set<MarketBrainAction>(scenarios.map((row) => row.preferredAction));
+for (const action of ["confirm", "recenter", "flip", "fade_market", "retain", "stand_down"] as const) {
+  assert.ok(actions.has(action), `behavior corpus must exercise ${action}`);
+}
+assert.ok(scenarios.some((row) => row.story === "source_outage" && row.preferredAction === "confirm"));
+assert.ok(scenarios.some((row) => row.story === "source_outage" && row.preferredAction === "stand_down"),
+  "missing data must be interpreted in context rather than mapped to one automatic action");
+
+const source = readFileSync("lib/services/marketBrain/nflMarketBrainBehaviorScenarios.ts", "utf8");
+assert.doesNotMatch(source, /(?:three|four|two)\s+(?:of|out of)\s+(?:three|four)|minimumSignals|signalCount|points?\s*[+=>]/i,
+  "the behavior corpus must not become a disguised signal quota or points table");
+
+console.log("NFL Market Brain frozen behavior scenarios: nuanced follow/fade/uncertainty stories without vote quotas passed");

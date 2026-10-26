@@ -10,12 +10,13 @@ import type {
   NflRegularOutcomeConfidence,
 } from "./nflRegularDecisionEvidence";
 import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
-import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
+import type { NflRegularSharpSplitSet, NflSharpApiSplitSource } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 import type { NflExactProviderIndependentScore } from "./nflExactProviderScoreRuntime";
 import type { NflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
+import type { NflMarketBrainCaptureResult } from "./nflMarketBrainShadow";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_09_01_r6_forecast_value_separation" as const;
@@ -125,6 +126,8 @@ export type NflForwardEvidencePayload = {
     playbookLine: NflForwardPlaybookLine | null;
     playbookSplits: NflForwardPlaybookSplitSet | null;
     sharpApiSplits: NflRegularSharpSplitSet | null;
+    /** All requested split books and explicit missing/invalid states; shadow-only. */
+    sharpApiSplitSources?: NflSharpApiSplitSource[];
   };
   startersAndDepth: {
     away: NflForwardTeamDepthSnapshot;
@@ -171,6 +174,8 @@ export type NflForwardEvidencePayload = {
   /** Prospective injury/player/market agreement diagnostic with zero decision authority. */
   availabilityArbitrationShadow?: NflAvailabilityArbitrationShadow;
   contextualEvidenceCapture?: NflForwardContextCapture;
+  /** Internal observable tape only; ignored by production, member, and tracking readers. */
+  marketBrainShadow?: NflMarketBrainCaptureResult;
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];

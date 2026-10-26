@@ -14,7 +14,7 @@ Last reviewed: 2026-10-26
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_26_r74_market_brain_observable_tape` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -492,13 +492,20 @@ Last reviewed: 2026-10-26
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_contract_2026_10_26_r1_masked_joint_state` and
-  `nfl_market_brain_shadow_2026_10_26_r1_complete_ledger_adapter` define an internal-only, production-
-  inert evidence and artifact boundary. The NFL adapter retains every complete-ledger observation,
-  represents missing values with explicit masks, and joins Moneyline, Spread, and Total around one
-  Margin/Total state. Without a validated artifact it returns `capture_only` and cannot affect a
-  prediction, probability, projection, grade, stake, writer, display, or lock. The active NFL releases
-  below are unchanged. Contract, evidence limitations, and the next research gate are frozen in
+- `market_brain_contract_2026_10_26_r2_observable_evidence_tape` and
+  `nfl_market_brain_shadow_2026_10_26_r2_observable_tape` define an internal-only, production-inert
+  evidence boundary. The sole writer `nfl_forward_evidence_writer_2026_10_26_r74_market_brain_observable_tape`
+  consumes `nfl_sharpapi_splits_2026_10_26_r3_all_source_manifest` and stores the tape prospectively
+  for future unlocked rows. It retains raw opening/current quote
+  pairs, target-versus-target-excluded provenance, every exact-identity Circa/DraftKings/BetMGM split
+  row, explicit missing/incomplete/duplicate source states, and the current-feed blind spots. Source
+  reputation is distinct from event leadership; a book brand never proves who originated a move.
+  Without a validated artifact it returns `capture_only` and cannot affect a prediction, probability,
+  projection, grade, stake, member display, tracking record, or lock. Existing locks are not adapted.
+  `nfl_market_brain_behavior_scenarios_2026_10_26_r1` freezes nuanced follow, fade, resistance,
+  reversal, outage, stale-evidence, news-sequence, and cross-market acceptance stories without
+  turning them into executable quotas; no resolver has qualified against them.
+  Contract, evidence limitations, and the next research gate are frozen in
   `docs/model-audits/2026-10-26-market-brain-foundation-predeclaration.md`.
 
 ### Complete-signal semantic interpretation (r40)
@@ -510,7 +517,7 @@ Last reviewed: 2026-10-26
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation` /
+  `nfl_forward_evidence_writer_2026_10_26_r74_market_brain_observable_tape` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an

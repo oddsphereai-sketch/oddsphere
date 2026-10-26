@@ -5,7 +5,7 @@ import {
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
 
 export const NFL_SHARP_API_SPLITS_RELEASE =
-  "nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity" as const;
+  "nfl_sharpapi_splits_2026_10_26_r3_all_source_manifest" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -42,7 +42,16 @@ export type SharpApiNflSplitRow = {
   fetched_at?: string | null;
 };
 
-const SOURCE_BOOK_PRIORITY = ["circa", "draftkings", "betmgm"] as const;
+export const NFL_SHARP_API_SPLIT_BOOKS = ["circa", "draftkings", "betmgm"] as const;
+export type NflSharpApiSplitBook = typeof NFL_SHARP_API_SPLIT_BOOKS[number];
+export type NflSharpApiSplitSourceStatus = "observed" | "incomplete" | "duplicate" | "unavailable";
+export type NflSharpApiSplitSource = {
+  sportsbook: NflSharpApiSplitBook;
+  status: NflSharpApiSplitSourceStatus;
+  matchedRows: number;
+  /** Every exact-identity row survives, including incomplete and duplicate rows. */
+  observations: NflRegularSharpSplitSet[];
+};
 
 type SharpApiNflSplitMarket = {
   bets_pct?: Record<string, number | string | null> | null;
@@ -82,7 +91,10 @@ export async function fetchSharpApiNflSplits(args: {
   client?: SharpClient;
 }): Promise<{
   release: typeof NFL_SHARP_API_SPLITS_RELEASE;
+  /** Backward-compatible preferred complete set used by the incumbent reader. */
   splitsByGame: Record<string, NflRegularSharpSplitSet>;
+  /** Lossless source manifest for shadow research; never used by the incumbent reader. */
+  sourcesByGame: Record<string, NflSharpApiSplitSource[]>;
   requests: number;
   rows: number;
   dates: string[];
@@ -100,9 +112,11 @@ export async function fetchSharpApiNflSplits(args: {
     maxPages: 1,
   });
   const datedRows = dates.map((date) => ({ date, rows }));
+  const sourcesByGame = matchAllSharpApiNflSplitRows(args.games, datedRows, args.capturedAt);
   return {
     release: NFL_SHARP_API_SPLITS_RELEASE,
-    splitsByGame: matchSharpApiNflSplitRows(args.games, datedRows, args.capturedAt),
+    splitsByGame: selectPreferredSharpApiNflSplits(sourcesByGame),
+    sourcesByGame,
     requests: 1,
     rows: rows.length,
     dates,
@@ -114,8 +128,16 @@ export function matchSharpApiNflSplitRows(
   datedRows: DatedRows[],
   capturedAt: string,
 ): Record<string, NflRegularSharpSplitSet> {
+  return selectPreferredSharpApiNflSplits(matchAllSharpApiNflSplitRows(games, datedRows, capturedAt));
+}
+
+export function matchAllSharpApiNflSplitRows(
+  games: NflPreviewGame[],
+  datedRows: DatedRows[],
+  capturedAt: string,
+): Record<string, NflSharpApiSplitSource[]> {
   const rowsByDate = new Map(datedRows.map((value) => [value.date, value.rows]));
-  const matched: Record<string, NflRegularSharpSplitSet> = {};
+  const matched: Record<string, NflSharpApiSplitSource[]> = {};
   for (const game of games) {
     const date = nflLocalDate(game.scheduledStart);
     const candidates = (rowsByDate.get(date) ?? []).filter((row) =>
@@ -124,16 +146,39 @@ export function matchSharpApiNflSplitRows(
       sameNflTeam(row.away_team, game.away.abbreviation, game.away.name) &&
       rowDateMatches(row, date)
     );
-    const selected = SOURCE_BOOK_PRIORITY.flatMap((sportsbook) => {
+    matched[game.providerGameId] = NFL_SHARP_API_SPLIT_BOOKS.map((sportsbook) => {
       const rows = candidates.filter((row) => normalize(row.sportsbook ?? "") === sportsbook);
-      if (rows.length !== 1) return [];
-      const normalized = normalizeSharpApiNflSplit(game.providerGameId, capturedAt, rows[0]!);
-      return completeSharpApiNflSplitSet(normalized) ? [normalized] : [];
-    })[0] ?? null;
-    if (selected === null) continue;
-    matched[game.providerGameId] = selected;
+      const observations = rows.map((row) => normalizeSharpApiNflSplit(game.providerGameId, capturedAt, row));
+      const status: NflSharpApiSplitSourceStatus = rows.length === 0 ? "unavailable"
+        : rows.length > 1 ? "duplicate"
+        : completeSharpApiNflSplitSet(observations[0]) ? "observed"
+        : "incomplete";
+      return { sportsbook, status, matchedRows: rows.length, observations };
+    });
   }
   return matched;
+}
+
+export function unavailableNflSharpApiSplitSources(): NflSharpApiSplitSource[] {
+  return NFL_SHARP_API_SPLIT_BOOKS.map((sportsbook) => ({
+    sportsbook,
+    status: "unavailable",
+    matchedRows: 0,
+    observations: [],
+  }));
+}
+
+function selectPreferredSharpApiNflSplits(
+  sourcesByGame: Record<string, NflSharpApiSplitSource[]>,
+): Record<string, NflRegularSharpSplitSet> {
+  const selected: Record<string, NflRegularSharpSplitSet> = {};
+  for (const [gameId, sources] of Object.entries(sourcesByGame)) {
+    const source = NFL_SHARP_API_SPLIT_BOOKS
+      .map((sportsbook) => sources.find((row) => row.sportsbook === sportsbook))
+      .find((row) => row?.status === "observed");
+    if (source?.observations[0]) selected[gameId] = source.observations[0];
+  }
+  return selected;
 }
 
 export function normalizeSharpApiNflSplit(

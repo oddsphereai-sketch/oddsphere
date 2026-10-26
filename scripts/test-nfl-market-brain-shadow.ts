@@ -1,303 +1,150 @@
 import assert from "node:assert/strict";
-
-import type { NflFullGameEvidenceLedger, NflFullGameEvidenceSignal } from
-  "@/lib/services/football/nflFullGameEvidenceLedger";
-import { NFL_FULL_GAME_EVIDENCE_LEDGER_RELEASE } from
-  "@/lib/services/football/nflFullGameEvidenceLedger";
-import { buildNflMarketBrainShadow } from "@/lib/services/football/nflMarketBrainShadow";
+import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
-  MARKET_BRAIN_CONTRACT_RELEASE,
-  validateMarketBrainArtifact,
-  type MarketBrainArtifact,
-} from "@/lib/services/marketBrain/marketBrainContract";
+  NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+  type NflForwardContextCapture,
+  type NflForwardContextMarket,
+} from "../lib/services/football/nflForwardEvidenceCapture";
+import {
+  buildNflMarketBrainShadow,
+  nflMarketBrainCaptureFailure,
+} from "../lib/services/football/nflMarketBrainShadow";
+import {
+  normalizeSharpApiNflSplit,
+  type NflSharpApiSplitSource,
+} from "../lib/services/football/sharpApiNflSplits";
+import { MARKET_BRAIN_CONTRACT_RELEASE } from "../lib/services/marketBrain/marketBrainContract";
 
-const evaluatedAt = "2026-10-26T20:00:00.000Z";
-const baseSignal = (overrides: Partial<NflFullGameEvidenceSignal> & Pick<NflFullGameEvidenceSignal, "id">):
-NflFullGameEvidenceSignal => {
-  const { id, ...rest } = overrides;
-  return {
-    id,
-    kind: "availability",
-    market: "game",
-    source: "unknown",
-    targetExcluded: null,
-    observedAt: evaluatedAt,
-    status: "usable",
-    side: null,
-    value: null,
-    continuousMagnitude: null,
-    disposition: "uncertainty",
-    reason: "fixture",
-    submittedTo: "full_game_evidence_arbiter",
-    influenceClass: "uncertainty",
-    ...rest,
-  };
+const capturedAt = "2026-10-26T20:00:00.000Z";
+const openedAt = "2026-10-26T16:00:00.000Z";
+const game: NflPreviewGame = {
+  providerGameId: "nfl-fixture",
+  providerWeek: 8,
+  season: 2026,
+  scheduledStart: "2026-10-26T21:00:00.000Z",
+  status: "scheduled",
+  away: { id: 1, abbreviation: "NE", name: "New England Patriots" },
+  home: { id: 2, abbreviation: "SEA", name: "Seattle Seahawks" },
 };
 
-const signals: NflFullGameEvidenceSignal[] = [
-  baseSignal({
-    id: "forecast",
-    kind: "forecast_expert",
-    market: "moneyline",
-    source: "independent_exact",
-    side: "home",
-    value: 2.5,
-    continuousMagnitude: 2.5,
-    disposition: "supports",
-    influenceClass: "forecast_candidate",
-  }),
-  baseSignal({
-    id: "market-moneyline",
-    kind: "target_excluded_market",
-    market: "moneyline",
-    source: "target_excluded_market_consensus",
-    targetExcluded: true,
-    side: "home",
-    value: 0.54,
-    continuousMagnitude: 0.04,
-    disposition: "supports",
-    influenceClass: "continuous_market_evidence",
-  }),
-  baseSignal({
-    id: "market-spread",
-    kind: "target_excluded_market",
-    market: "spread",
-    source: "target_excluded_market_consensus",
-    targetExcluded: true,
-    side: "away",
-    value: -3,
-    continuousMagnitude: 0.5,
-    disposition: "resists",
-    influenceClass: "continuous_market_evidence",
-  }),
-  baseSignal({
-    id: "market-total",
-    kind: "target_excluded_market",
-    market: "total",
-    source: "target_excluded_market_consensus",
-    targetExcluded: true,
-    side: "under",
-    value: 44.5,
-    continuousMagnitude: 1.5,
-    disposition: "resists",
-    influenceClass: "continuous_market_evidence",
-  }),
-  baseSignal({
-    id: "circa-path",
-    kind: "book_trail",
-    market: "moneyline",
-    source: "circa",
-    sourceClass: "named",
-    targetExcluded: true,
-    observedAt: "2026-10-26T19:58:00.000Z",
-    side: "home",
-    value: 0.56,
-    continuousMagnitude: 0.015,
-    disposition: "supports",
-    influenceClass: "continuous_market_evidence",
-    marketObservation: {
-      openingAt: "2026-10-26T16:00:00.000Z",
-      currentAt: "2026-10-26T19:58:00.000Z",
-      firstNumberMoveAt: null,
-      firstPriceMoveAt: "2026-10-26T17:00:00.000Z",
-      lastEconomicMoveAt: "2026-10-26T19:58:00.000Z",
-      openingNumber: null,
-      currentNumber: null,
-      numberDelta: null,
-      openingFairFirstProbability: 0.545,
-      currentFairFirstProbability: 0.56,
-      fairProbabilityDeltaPp: 1.5,
-      holdDeltaPp: -0.2,
-      numberDirection: null,
-      priceDirection: 1,
+function market(name: "moneyline" | "spread" | "total"): NflForwardContextMarket {
+  const line = name === "moneyline" ? null : name === "spread" ? -3.5 : 45.5;
+  return {
+    market: name,
+    evaluated: { identity: `${name}-target`, family: "draftkings", side: name === "total" ? "o" : "h", line, price: -110, observedAt: capturedAt, completePairRetained: true },
+    families: [
+      ["circa", "s", "c", null, [openedAt, 240, "s", line, -105, -115], [capturedAt, 0, "f", line, -108, -112]],
+      ["draftkings", "b", "n", null, [openedAt, 240, "s", line, -110, -110], [capturedAt, 0, "f", line, -110, -110]],
+    ],
+    targetExcludedFamilies: ["circa"],
+    coverage: {
+      completeObserved: 2, completeRetained: 2, completeOmitted: 0,
+      targetExcludedObserved: 1, targetExcludedRetained: 1,
+      chronologyPairsRetained: 2, targetExcludedChronologyPairsRetained: 1,
+      ownershipMetadata: "not_loaded", truncated: false,
     },
-    marketPath: {
-      persistenceTimeShare: 0.61,
-      reversalMagnitude: 0.2,
-      buybackToOpening: false,
-      moveOrder: "price_only",
-      crossedKeyNumbers: [],
+    public: ["p", capturedAt, 12, 57, 43, 43, 57],
+    sharp: null,
+    final: null,
+    coherence: { evaluatedFamilyExcluded: true, exactPairComplete: true },
+    bytes: 1,
+  };
+}
+
+const capture: NflForwardContextCapture = {
+  release: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+  schema: "nflfec4",
+  mode: "market_sequence_and_capture",
+  productionDecisionEffect: true,
+  gameId: game.providerGameId,
+  capturedAt,
+  releases: { evidence: "evidence", collector: "collector", member: "member", model: "model", calibration: "calibration", decision: "decision" },
+  prior: {
+    status: "available", reason: "week_one_artifact_target_free", release: "target-free-prior",
+    outcome: {
+      pmf: {
+        margin: { sha256: "margin-sha", support: 20, mass: 1, mean: 2.5, sd: 10 },
+        total: { sha256: "total-sha", support: 30, mass: 1, mean: 46, sd: 9 },
+      },
+      expected: [21.75, 24.25], representative: [21, 24], win: [0.43, 0.55, 0.02],
     },
-  }),
-  baseSignal({
-    id: "small-public-split",
-    kind: "split",
-    market: "moneyline",
-    source: "public_consensus",
-    targetExcluded: true,
-    observedAt: "2026-10-26T19:59:00.000Z",
-    side: "away",
-    value: -1,
-    continuousMagnitude: 1,
-    disposition: "resists",
-    influenceClass: "continuous_market_evidence",
-    splitContext: {
-      ageMinutes: 1,
-      moneyPct: 49,
-      ticketPct: 50,
-      booksUsed: 1,
-      exactLineMatched: true,
-      denominatorKnown: false,
-      qualifiedForDirection: false,
+  },
+  authoritative: {
+    pmf: {
+      margin: { sha256: "auth-margin", support: 20, mass: 1, mean: 3, sd: 10 },
+      total: { sha256: "auth-total", support: 30, mass: 1, mean: 45, sd: 9 },
     },
-  }),
-  baseSignal({
-    id: "missing-sharp-split",
-    kind: "split",
-    market: "moneyline",
-    source: "sharpapi",
-    targetExcluded: true,
-    observedAt: null,
-    status: "unavailable",
-    side: null,
-    value: null,
-    continuousMagnitude: null,
-    disposition: "unavailable",
-    reason: "source_not_available",
-    influenceClass: "data_quality",
-  }),
-  baseSignal({
-    id: "weather-missing",
-    source: "weather",
-    status: "unavailable",
-    observedAt: null,
-    value: 0,
-    disposition: "unavailable",
-    influenceClass: "data_quality",
-  }),
+    expected: [21, 24], representative: [21, 24], win: [0.42, 0.56, 0.02], decisions: [],
+  },
+  markets: { moneyline: market("moneyline"), spread: market("spread"), total: market("total") },
+  context: {
+    rosterDepthSha256: "roster", injurySha256: null, weatherSha256: "weather",
+    quarterbacks: { away: [null, null, "unknown", capturedAt], home: [null, null, "unknown", capturedAt] },
+    injury: [null, null, null, 0], weather: ["controlled_indoor", capturedAt, "forecast"],
+  },
+  coherence: {
+    priorPmfValid: true, authoritativePmfValid: true, expectedScoresMatchPmf: true,
+    winnerMatchesScore: true, allEvaluatedFamiliesExcluded: true, missingEvidenceNeutral: true,
+  },
+  bytes: 1,
+};
+
+const splitRow = (sportsbook: string, homeMoney: number) => normalizeSharpApiNflSplit(game.providerGameId, capturedAt, {
+  event_id: `${sportsbook}-event`, sportsbook, fetched_at: capturedAt,
+  moneyline: { handle_pct: { home: homeMoney, away: 100 - homeMoney }, bets_pct: { home: 50, away: 50 } },
+  spread: { handle_pct: { home: homeMoney, away: 100 - homeMoney }, bets_pct: { home: 50, away: 50 } },
+  total: { handle_pct: { over: homeMoney, under: 100 - homeMoney }, bets_pct: { over: 50, under: 50 } },
+});
+const splitSources: NflSharpApiSplitSource[] = [
+  { sportsbook: "circa", status: "observed", matchedRows: 1, observations: [splitRow("circa", 62)] },
+  { sportsbook: "draftkings", status: "observed", matchedRows: 1, observations: [splitRow("draftkings", 37)] },
+  { sportsbook: "betmgm", status: "unavailable", matchedRows: 0, observations: [] },
 ];
 
-const ledger: NflFullGameEvidenceLedger = {
-  release: NFL_FULL_GAME_EVIDENCE_LEDGER_RELEASE,
-  evaluatedAt,
-  finalAxes: {
-    homeMargin: 2.5,
-    total: 46,
-    moneylineSide: "home",
-    spreadSide: "home",
-    totalSide: "over",
-  },
-  marketContexts: {
-    moneyline: {
-      namedDirection: 1,
-      namedLeadCompletedAt: "2026-10-26T17:00:00.000Z",
-      followerSources: [],
-      followerDelaysMinutes: [],
-      resistance: "flow_resistance",
-    },
-    spread: {
-      namedDirection: -1,
-      namedLeadCompletedAt: "2026-10-26T17:15:00.000Z",
-      followerSources: [],
-      followerDelaysMinutes: [],
-      resistance: "none",
-    },
-    total: {
-      namedDirection: -1,
-      namedLeadCompletedAt: null,
-      followerSources: [],
-      followerDelaysMinutes: [],
-      resistance: "book_disagreement",
-    },
-  },
-  signals,
-  accounting: {
-    captured: signals.length,
-    usable: signals.filter((signal) => signal.status === "usable").length,
-    accountedUsable: signals.filter((signal) => signal.status === "usable").length,
-    supports: 3,
-    resists: 3,
-    uncertainty: 0,
-    stale: 0,
-    unavailable: 2,
-    allUsableAccounted: true,
-  },
-};
-
-const unchanged = JSON.stringify(ledger);
-const targetMarket = {
-  homeSpread: -3.5,
-  total: 45.5,
-  homeMoneylineFairProbability: 0.52,
-};
-const shadow = buildNflMarketBrainShadow({ eventId: "nfl-fixture", ledger, targetMarket });
-
-assert.equal(JSON.stringify(ledger), unchanged, "the shadow adapter cannot mutate its source ledger");
+const shadow = buildNflMarketBrainShadow({ game, capture, sharpSplitSources: splitSources });
+const unchangedInputs = JSON.stringify({ capture, splitSources });
+buildNflMarketBrainShadow({ game, capture, sharpSplitSources: splitSources });
+assert.equal(JSON.stringify({ capture, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
 assert.equal(shadow.case.release, MARKET_BRAIN_CONTRACT_RELEASE);
-assert.equal(shadow.case.mode, "shadow");
-assert.equal(shadow.case.visibility, "internal_only");
-assert.equal(shadow.case.invariants.productionInfluenceAllowed, false);
-assert.equal(shadow.case.invariants.lockedRecordMutationAllowed, false);
+assert.equal(shadow.case.mode, "shadow_capture");
 assert.equal(shadow.decision.status, "capture_only");
 assert.equal(shadow.decision.productionApplied, false);
-assert.equal(shadow.decision.candidate, null);
-assert.deepEqual(shadow.decision.baseline, { homeMargin: 2.5, total: 46 });
-assert.equal(shadow.case.observations.length, signals.length, "every ledger signal must survive the adapter");
-assert.deepEqual(shadow.case.targetMarket, targetMarket);
-assert.deepEqual(shadow.case.targetExcludedMarket, {
-  homeMargin: -3,
-  total: 44.5,
-  homeMoneylineFairProbability: 0.54,
-});
+assert.equal(shadow.case.accounting.providedObservations, shadow.case.accounting.retainedObservations);
+assert.equal(shadow.case.invariants.allExpectedInputsAccounted, true);
+assert.equal(shadow.case.invariants.productionInfluenceAllowed, false);
+assert.equal(shadow.case.invariants.displayContractAuthority, false);
+assert.equal(shadow.case.blindSpots.length, 7);
+assert.equal(shadow.case.expectedInputs.find((row) => row.id === "availability:injury_report")?.availability, "unavailable");
+assert.equal(shadow.case.observations.find((row) => row.id === "weather:game")?.categorical.status, "controlled_indoor");
 
-const smallSplit = shadow.case.observations.find((row) => row.id === "small-public-split");
-assert.ok(smallSplit);
-assert.deepEqual(smallSplit.features.split_gap_pp, { value: -1, observed: 1 },
-  "a sub-threshold split remains continuous evidence");
-assert.ok(smallSplit.tags.includes("legacy_split_qualified:false"),
-  "the old qualification is provenance, not a new-brain authority gate");
-assert.equal(smallSplit.denominatorKnown, false);
-assert.equal(smallSplit.exactLineMatched, true);
+const split = (book: string) => shadow.case.observations.find((row) =>
+  row.modality === "identified_book_split" && row.market === "moneyline" && row.source.participant === book);
+assert.equal(split("circa")?.values.first_money_pct.value, 38);
+assert.equal(split("draftkings")?.values.first_money_pct.value, 63,
+  "opposing identified-book observations must survive without a preferred-source collapse");
+assert.equal(split("circa")?.observedRole, "unknown",
+  "a professional-book reputation must not be mislabeled as observed leadership");
+assert.equal(split("circa")?.sourcePrior, "professional_book");
 
-const missingSplit = shadow.case.observations.find((row) => row.id === "missing-sharp-split");
-assert.ok(missingSplit);
-assert.equal(missingSplit.availability, "unavailable");
-assert.deepEqual(missingSplit.features.split_gap_pp, { value: null, observed: 0 },
-  "missing SharpAPI evidence must not masquerade as a zero gap");
-assert.equal(shadow.case.coverage.split.observed, 1);
-assert.equal(shadow.case.coverage.split.unavailable, 1);
+for (const marketName of ["moneyline", "spread", "total"] as const) {
+  const target = shadow.case.observations.filter((row) => row.market === marketName && row.modality === "price_quote" && row.targetRelation === "evaluated");
+  const excluded = shadow.case.observations.filter((row) => row.market === marketName && row.modality === "price_quote" && row.targetRelation === "target_excluded");
+  assert.equal(target.length, 2, `${marketName} must retain target opening and current quotes`);
+  assert.equal(excluded.length, 2, `${marketName} must retain target-excluded opening and current quotes`);
+}
 
-assert.equal(shadow.case.observations.find((row) => row.id === "market-moneyline")?.axis, "margin");
-assert.equal(shadow.case.observations.find((row) => row.id === "market-spread")?.axis, "margin");
-assert.equal(shadow.case.observations.find((row) => row.id === "market-total")?.axis, "total");
+const absent = shadow.case.expectedInputs.find((row) => row.id === "identified_book_split:moneyline:betmgm");
+assert.deepEqual(absent && { availability: absent.availability, observations: absent.observationIds.length, reason: absent.reason },
+  { availability: "unavailable", observations: 0, reason: "source_unavailable" });
+assert.deepEqual(shadow.case.expectedInputs.find((row) => row.id === "price:moneyline:pinnacle"), {
+  id: "price:moneyline:pinnacle", modality: "price_quote", provider: "sharpapi", participant: "pinnacle",
+  expectation: "required", availability: "unavailable", observationIds: [], reason: "no_complete_quote_pair",
+}, "a missing required price source must remain visible in the manifest");
+assert.ok(shadow.case.observations.every((row) => !["leader", "follower", "resistor", "reversal"].includes(row.observedRole)),
+  "a single snapshot cannot invent market sequence roles");
+assert.deepEqual(nflMarketBrainCaptureFailure({ eventId: game.providerGameId, capturedAt, error: new Error("fixture") }), {
+  release: shadow.release, status: "capture_failed", productionApplied: false,
+  eventId: game.providerGameId, capturedAt, reason: "fixture",
+}, "shadow capture failures must remain explicit without gaining production authority");
 
-const reversed = buildNflMarketBrainShadow({
-  eventId: "nfl-fixture",
-  ledger: { ...ledger, signals: [...ledger.signals].reverse() },
-  targetMarket,
-});
-assert.deepEqual(
-  shadow.case.observations.map((row) => row.id),
-  reversed.case.observations.map((row) => row.id),
-  "the canonical case order cannot depend on provider insertion order",
-);
-
-const validArtifact: MarketBrainArtifact = {
-  release: "fixture_artifact",
-  sport: "nfl",
-  architecture: "masked_sequence_encoder_joint_margin_total",
-  featureContractRelease: MARKET_BRAIN_CONTRACT_RELEASE,
-  trainedThrough: "2026-09-30T23:59:59.000Z",
-  chronologicalValidation: {
-    selectionStartsAt: "2026-10-01T00:00:00.000Z",
-    confirmationStartsAt: "2026-10-15T00:00:00.000Z",
-    confirmationEndsAt: "2026-10-26T00:00:00.000Z",
-    games: 32,
-  },
-  calibration: {
-    marginCalibrated: true,
-    totalCalibrated: true,
-    flipProbabilityCalibrated: true,
-  },
-  missingnessRegimesEvaluated: ["no_splits", "public_only", "identified_book_only"],
-  sourceAblationsEvaluated: ["without_circa", "without_public_splits"],
-  immutableChecksum: "fixture-checksum",
-};
-assert.deepEqual(validateMarketBrainArtifact(validArtifact), []);
-assert.deepEqual(validateMarketBrainArtifact({
-  ...validArtifact,
-  calibration: { ...validArtifact.calibration, flipProbabilityCalibrated: false },
-  missingnessRegimesEvaluated: [],
-}), ["incomplete_calibration", "missingness_not_evaluated"]);
-
-console.log("NFL Market Brain shadow contract: continuous evidence, missingness, joint state, and no-authority gate passed");
+console.log("NFL Market Brain observable tape: raw quotes, opposing splits, explicit missingness, blind spots, and no-authority gate passed");

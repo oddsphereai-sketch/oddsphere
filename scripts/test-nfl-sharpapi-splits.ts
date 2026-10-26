@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   completeSharpApiNflSplitSet,
   fetchSharpApiNflSplits,
+  matchAllSharpApiNflSplitRows,
   matchSharpApiNflSplitRows,
   NFL_SHARP_API_SPLITS_RELEASE,
   normalizeSharpApiNflSplit,
@@ -72,6 +73,20 @@ assert.ok(matchSharpApiNflSplitRows(
 
 const draftKings = { ...row, sportsbook: "draftkings", fetched_at: "2026-08-21T17:02:00Z" };
 const betMgm = { ...row, sportsbook: "betmgm", fetched_at: "2026-08-21T17:03:00Z" };
+const allSources = matchAllSharpApiNflSplitRows(
+  [game],
+  [{ date: "2026-09-09", rows: [
+    row,
+    { ...draftKings, moneyline: { ...draftKings.moneyline, handle_pct: { home: 35, away: 65 } } },
+    betMgm,
+  ] }],
+  "2026-08-21T17:04:00Z",
+)[game.providerGameId]!;
+assert.deepEqual(allSources.map((source) => source.sportsbook), ["circa", "draftkings", "betmgm"]);
+assert.ok(allSources.every((source) => source.status === "observed" && source.observations.length === 1));
+assert.equal(allSources.find((source) => source.sportsbook === "circa")?.observations[0]?.moneyline.homeMoneyPct, 61);
+assert.equal(allSources.find((source) => source.sportsbook === "draftkings")?.observations[0]?.moneyline.homeMoneyPct, 35,
+  "conflicting identified-book observations must survive independently");
 assert.equal(
   matchSharpApiNflSplitRows(
     [game],
@@ -80,11 +95,18 @@ assert.equal(
   )[game.providerGameId]?.moneyline.sourceSportsbook,
   "circa",
 );
-
 const incompleteCirca = {
   ...row,
   total: { bets_pct: { over: 0.57, under: 0.43 }, handle_pct: null },
 };
+const sourceStates = matchAllSharpApiNflSplitRows(
+  [game], [{ date: "2026-09-09", rows: [row, { ...row }, incompleteCirca, draftKings] }],
+  "2026-08-21T17:04:00Z",
+)[game.providerGameId]!;
+assert.equal(sourceStates.find((source) => source.sportsbook === "circa")?.status, "duplicate");
+assert.equal(sourceStates.find((source) => source.sportsbook === "circa")?.observations.length, 3,
+  "duplicate exact-identity rows must be retained instead of dropped");
+assert.equal(sourceStates.find((source) => source.sportsbook === "betmgm")?.status, "unavailable");
 assert.equal(
   matchSharpApiNflSplitRows(
     [game],
@@ -156,8 +178,11 @@ async function testFetchContract(): Promise<void> {
     maxPages: 1,
   }]);
   assert.equal(fetched.splitsByGame[game.providerGameId]?.moneyline.sourceSportsbook, "circa");
+  assert.equal(fetched.sourcesByGame[game.providerGameId]?.length, 3);
+  assert.equal(fetched.sourcesByGame[game.providerGameId]?.find((source) => source.sportsbook === "draftkings")?.status,
+    "unavailable");
 }
 
 void testFetchContract().then(() => {
-  console.log("NFL SharpAPI split normalization, identity, date, completeness, and request-contract tests passed.");
+  console.log("NFL SharpAPI lossless all-source split manifest and backward-compatible selection tests passed.");
 });

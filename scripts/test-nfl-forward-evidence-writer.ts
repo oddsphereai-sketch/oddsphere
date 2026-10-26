@@ -374,7 +374,22 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_26_r74_market_brain_observable_tape/);
+assert.match(writer, /buildNflMarketBrainShadow/);
+assert.match(writer, /!existingLockedRecord[\s\S]*buildNflMarketBrainShadow/,
+  "Market Brain capture must never reinterpret a pre-existing locked record");
+assert.ok(writer.lastIndexOf("buildNflMarketBrainShadow({") > writer.indexOf("const payload: NflForwardEvidencePayload"),
+  "Market Brain capture must be downstream of the completed production payload");
+assert.match(writer, /catch \(error\) \{[\s\S]*nflMarketBrainCaptureFailure/,
+  "a Market Brain capture failure must become inert audit evidence instead of holding production");
+for (const readerPath of [
+  "lib/services/football/nflWeekOneHeldMemberFixture.ts",
+  "lib/services/football/nflForwardMemberSnapshotStore.ts",
+  "lib/services/football/nflOfficialTrackingRecord.ts",
+]) {
+  assert.doesNotMatch(readFileSync(path.resolve(readerPath), "utf8"), /marketBrainShadow/,
+    `${readerPath} must not consume the shadow tape`);
+}
 assert.match(writer, /exactProviderScoreShadow: exactProviderScore/);
 assert.match(writer, /availabilityArbitrationShadow/);
 assert.match(writer, /mergeNflAvailabilityWithPrior/);
