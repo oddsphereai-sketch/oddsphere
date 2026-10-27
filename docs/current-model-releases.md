@@ -283,10 +283,11 @@ Last reviewed: 2026-10-27
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
   `market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`. The existing leased
-  refresh may store exact-date, exact-matchup SharpAPI NBA split rows with their real source book
-  for the same bounded seven-day window used by the member schedule. The league-level endpoint is
+  refresh may store exact-date, exact-matchup Owls NBA split rows with their real source book for
+  the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
-  date-plus-matchup identity are discarded. Current-day preseason rehearsal remains observable,
+  date-plus-matchup identity are discarded. No active refresh makes a SharpAPI split request;
+  retained SharpAPI rows are historical audit evidence only. Current-day preseason rehearsal remains observable,
   while future preseason games are excluded from the rolling capture.
   DraftKings ticket/handle observations and BetMGM ticket-only observations remain distinct; no
   row is relabeled as consensus and no missing handle is inferred. NBA provider-history calls stay
