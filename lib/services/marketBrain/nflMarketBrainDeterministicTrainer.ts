@@ -91,8 +91,8 @@ export function trainNflMarketBrainRegularizedJointResidual(args: {
     const rebuiltFeatures = buildNflMarketBrainResolverFeatures(example.sequence);
     if (!declared || seen.has(example.sequence.eventId) || example.outcome.eventId !== example.sequence.eventId ||
       example.sequence.startsAt !== declared.startsAt || example.sequence.cutoffAt !== declared.cutoffAt ||
-      example.sequence.captureWindow.firstCapturedAt !== declared.firstCaptureAt ||
-      example.sequence.captureWindow.lastCapturedAt !== declared.lastCaptureAt ||
+      Date.parse(example.sequence.captureWindow.firstCapturedAt) < Date.parse(declared.captureWindowOpensAt) ||
+      Date.parse(example.sequence.captureWindow.lastCapturedAt) > Date.parse(declared.captureWindowClosesAt) ||
       example.outcome.labelAvailableAt !== declared.outcomeOpenedAt ||
       example.features.eventId !== example.sequence.eventId ||
       example.features.inputSequenceChecksum !== example.sequence.checksum ||

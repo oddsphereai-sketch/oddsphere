@@ -165,6 +165,12 @@ function priceManifest(
     participant: provider === "sharpapi" ? sportsbook.toLowerCase() : null,
     providerFetchedAt: observedAt,
     rawResponseSha256: rawPriceSha256(rows),
+    rawParserInput: {
+      schema: "football_raw_price_parser_input_v1",
+      sha256: rawPriceSha256(rows),
+      payload: rows,
+      bytes: Buffer.byteLength(JSON.stringify(rows), "utf8"),
+    },
     returnedRows: 1,
     matchedRows: 1,
     unmatchedRows: 0,

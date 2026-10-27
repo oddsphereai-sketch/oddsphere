@@ -9,7 +9,8 @@ import {
   buildNflMarketBrainResearchManifest,
   evaluateNflMarketBrainResearchCase,
   persistNflMarketBrainResearchManifest,
-  persistNflMarketBrainResearchPrediction,
+  persistVerifiedNflMarketBrainFinalOutcome,
+  readNflMarketBrainResearchPrediction,
   summarizeNflMarketBrainResearchRun,
 } from "../lib/services/marketBrain/nflMarketBrainResearchEvaluator";
 import { materializeNflMarketBrainSequence, type NflMarketBrainSequence } from
@@ -31,23 +32,28 @@ const researchManifestDraft = buildNflMarketBrainResearchManifest({
     { role: "development", evidenceStatus: "opened_development_only", events: [{
       eventId: "dev", foldId: "week-1", startsAt: "2026-08-20T20:00:00.000Z",
       cutoffAt: "2026-08-19T16:00:00.000Z",
-      firstCaptureAt: "2026-08-19T12:00:00.000Z", lastCaptureAt: "2026-08-19T16:00:00.000Z",
+      captureWindowOpensAt: "2026-08-19T12:00:00.000Z", captureWindowClosesAt: "2026-08-19T16:00:00.000Z",
+      expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000001", stage: "t60", plannedAt: "2026-08-19T16:00:00.000Z" }],
       outcomeOpenedAt: "2026-08-21T00:00:00.000Z",
     }] },
     { role: "selection", evidenceStatus: "untouched", events: ["correction", "harm"].map((eventId) => ({
-      eventId, foldId: "week-2", startsAt, cutoffAt, firstCaptureAt: cutoffAt,
-      lastCaptureAt: cutoffAt, outcomeOpenedAt: null,
+      eventId, foldId: "week-2", startsAt, cutoffAt, captureWindowOpensAt: cutoffAt,
+      captureWindowClosesAt: cutoffAt,
+      expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000002", stage: "t60" as const, plannedAt: cutoffAt }],
+      outcomeOpenedAt: null,
     })) },
     { role: "confirmation", evidenceStatus: "untouched", events: [{
       eventId: "confirm", foldId: "week-3", startsAt: "2026-09-17T20:00:00.000Z",
       cutoffAt: "2026-09-17T16:00:00.000Z",
-      firstCaptureAt: "2026-09-17T12:00:00.000Z", lastCaptureAt: "2026-09-17T16:00:00.000Z",
+      captureWindowOpensAt: "2026-09-17T12:00:00.000Z", captureWindowClosesAt: "2026-09-17T16:00:00.000Z",
+      expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000003", stage: "t60", plannedAt: "2026-09-17T16:00:00.000Z" }],
       outcomeOpenedAt: null,
     }] },
     { role: "prospective_shadow", evidenceStatus: "prospective", events: [{
       eventId: "future", foldId: "week-4", startsAt: "2026-09-24T20:00:00.000Z",
       cutoffAt: "2026-09-24T16:00:00.000Z",
-      firstCaptureAt: "2026-09-24T12:00:00.000Z", lastCaptureAt: "2026-09-24T16:00:00.000Z",
+      captureWindowOpensAt: "2026-09-24T12:00:00.000Z", captureWindowClosesAt: "2026-09-24T16:00:00.000Z",
+      expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000004", stage: "t60", plannedAt: "2026-09-24T16:00:00.000Z" }],
       outcomeOpenedAt: null,
     }] },
   ],
@@ -88,6 +94,9 @@ async function candidate(args: {
   const prediction = {
     eventId: args.sequence.eventId, cutoffAt: args.sequence.cutoffAt, startsAt: args.sequence.startsAt,
     release: "candidate-r1", trainedThrough, inferredAt: "2026-09-10T16:01:00.000Z",
+    resolverOutputChecksum: "7".repeat(64),
+    researchInputRecordId: `input-${args.sequence.eventId}`,
+    researchInputChecksum: "f".repeat(64), captureSetChecksum: "1".repeat(64),
     artifactSha256: "a".repeat(64), tournamentChecksum: "b".repeat(64),
     family: "regularized_joint_residual" as const,
     featureRelease: "feature-r1", featureChecksum: "c".repeat(64),
@@ -97,10 +106,15 @@ async function candidate(args: {
     marginMean: args.marginMeanOverride ?? marginMean, totalMean,
     marginDistribution, totalDistribution, jointScoreStates: states,
     jointPosteriorSha256: marketBrainSha256(posterior),
+    zeroMarketPosterior: {
+      awayWinProbability, homeWinProbability, tieProbability, marginMean, totalMean,
+      marginDistribution, totalDistribution, jointScoreStates: states,
+      jointPosteriorSha256: marketBrainSha256(posterior),
+    },
   };
-  return persistNflMarketBrainResearchPrediction({
-    prediction,
-    client: predictionPersistenceClient(prediction) as never,
+  return readNflMarketBrainResearchPrediction({
+    predictionSha256: marketBrainSha256(prediction),
+    client: predictionReadClient(prediction) as never,
   });
 }
 
@@ -176,7 +190,7 @@ const correction = evaluateNflMarketBrainResearchCase({
     { margin: -2, total: 42, probability: 0.15 }, { margin: -2, total: 44, probability: 0.15 },
     { margin: 4, total: 42, probability: 0.35 }, { margin: 4, total: 44, probability: 0.35 },
   ] }),
-  outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
+  outcome: await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24),
 });
 assert.equal(correction.disagreement, "correction");
 assert.equal(correction.baseline.winnerCorrect, false);
@@ -206,7 +220,7 @@ const harm = evaluateNflMarketBrainResearchCase({
     { margin: -2, total: 40, probability: 0.35 }, { margin: -2, total: 42, probability: 0.35 },
     { margin: 3, total: 41, probability: 0.15 }, { margin: 3, total: 43, probability: 0.15 },
   ] }),
-  outcome: { eventId: "harm", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
+  outcome: await verifiedOutcome("harm", "2026-09-11T00:00:00.000Z", 20, 24),
 });
 assert.equal(harm.disagreement, "harm");
 
@@ -217,7 +231,7 @@ const dependencyGood = evaluateNflMarketBrainResearchCase({
     { margin: -2, total: 42, probability: 0.5 },
     { margin: 4, total: 44, probability: 0.5 },
   ] }),
-  outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
+  outcome: await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24),
 });
 const dependencyWrong = evaluateNflMarketBrainResearchCase({
   researchManifest, partitionRole: "selection",
@@ -226,7 +240,7 @@ const dependencyWrong = evaluateNflMarketBrainResearchCase({
     { margin: 4, total: 42, probability: 0.5 },
     { margin: -2, total: 44, probability: 0.5 },
   ] }),
-  outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
+  outcome: await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24),
 });
 assert.equal(dependencyGood.candidate.marginalCompositeLogScore,
   dependencyWrong.candidate.marginalCompositeLogScore,
@@ -248,12 +262,13 @@ assert.throws(
 const postCutoffCandidate = await candidate({ sequence: correctionSequence.materialized, states: [
   { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
 ] });
+const cutoffOutcome = await verifiedOutcome("correction", cutoffAt, 20, 24);
 assert.throws(
   () => evaluateNflMarketBrainResearchCase({
     researchManifest, partitionRole: "selection",
     sequence: correctionSequence.materialized,
     candidate: postCutoffCandidate,
-    outcome: { eventId: "correction", finalAt: cutoffAt, awayScore: 20, homeScore: 24 },
+    outcome: cutoffOutcome,
   }),
   /strictly after cutoff/,
   "outcomes available at or before the feature cutoff must be rejected",
@@ -321,27 +336,46 @@ function manifestPersistenceClient(
   };
 }
 
-function predictionPersistenceClient(prediction: Record<string, unknown>) {
+function predictionReadClient(prediction: Record<string, unknown>) {
   const predictionPayload = marketBrainCanonicalJson(prediction);
   return {
     from() {
       return {
-        insert() {
-          return {
-            select() {
-              return { single: async () => ({ data: {
+        select() {
+          return { eq() { return this; }, single: async () => ({ data: {
                 id: `prediction-${String(prediction.eventId)}`,
                 prediction_sha256: marketBrainSha256(prediction),
                 prediction,
                 prediction_payload: predictionPayload,
                 created_at: "2026-09-10T16:02:00.000Z",
               }, error: null }) };
-            },
-          };
         },
       };
     },
   };
+}
+
+async function verifiedOutcome(eventId: string, finalAt: string, awayScore: number, homeScore: number) {
+  let storedOutcome: Record<string, unknown> | null = null;
+  const client = {
+    from(table: string) {
+      if (table === "games") {
+        return { select() { return { eq() { return this; }, single: async () => ({ data: {
+          id: eventId === "harm" ? "2" : "1", external_id: eventId, status: "final",
+          away_score: awayScore, home_score: homeScore, provider_ids: { balldontlie: eventId }, updated_at: finalAt,
+        }, error: null }) }; } };
+      }
+      assert.equal(table, "nfl_market_brain_research_outcomes");
+      return { insert(row: Record<string, unknown>) { storedOutcome = row.outcome as Record<string, unknown>; return {
+        select() { return { single: async () => ({ data: {
+          id: `outcome-${eventId}`, outcome_checksum: row.outcome_checksum,
+          outcome: storedOutcome, outcome_payload: row.outcome_payload,
+          created_at: "2026-09-12T00:00:00.000Z",
+        }, error: null }) }; },
+      }; } };
+    },
+  };
+  return persistVerifiedNflMarketBrainFinalOutcome({ client: client as never, eventId });
 }
 
 void main();

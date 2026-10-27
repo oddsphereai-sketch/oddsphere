@@ -1,7 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r11_full_incumbent_distribution" as const;
+  "market_brain_contract_2026_10_27_r12_raw_parser_input_receipt" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -103,6 +103,7 @@ export type MarketBrainSourceManifest = {
   /** Wall-clock receipt boundary; never earlier than the provider fetch timestamp. */
   receivedAt: string;
   rawResponseSha256: string | null;
+  rawParserInputSha256: string | null;
   returnedRows: number;
   matchedRows: number;
   unmatchedRows: number;

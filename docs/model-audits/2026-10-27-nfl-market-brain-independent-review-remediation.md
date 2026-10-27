@@ -188,6 +188,42 @@ it cannot be relabeled as the richer Market Brain tape. No real-tape Market Brai
 until the blockers above are closed and a representative, no-authority canary has actually been
 captured.
 
+## Fifth-review blocker closure
+
+The real-tape blockers above are now closed in the local, disabled implementation—not by assuming
+that the model works, but by making the future proof falsifiable:
+
+- Untouched events declare planned window boundaries and one or more UUID run/stage attempts. They no
+  longer claim to know future provider-completion timestamps.
+- `nfl_market_brain_capture_sets` is finalized by the server after window close. Its trigger compares
+  the receipt with every database row in the event window, requires every declared attempt to appear
+  as either a successful tape or `capture_failed`, requires each database receipt—not merely its
+  caller timestamp—to land inside the precommitted window, rechecks the exact pre-window manifest,
+  and prevents later inserts into a finalized window.
+- `nfl_market_brain_research_inputs` durably stores the exact canonical sequence and feature bytes
+  before inference, so expiry of short-lived capture tapes cannot make a prediction irreproducible.
+- Resolver inference accepts only that privately attested input. Its returned object receives a
+  process-private attestation; the prediction writer no longer accepts a caller-authored posterior.
+- Each resolver output includes a zero-market posterior built on the identical feasible NFL score
+  support and prior smoothing with every learned tilt fixed to zero. Evaluation can therefore separate
+  reconstruction effects from learned market information.
+- Research outcomes are loaded from an exact finalized `games` row and appended to
+  `nfl_market_brain_research_outcomes`; the evaluator rejects caller-provided score labels.
+- The canary is deterministic and outcome-blind but stratified by kickoff, favorite direction, spread
+  magnitude, and total regime. Provider return order can no longer define the sample.
+- Exact rows handed to the BDL and SharpAPI price parsers are content-addressed once in a research-only
+  30-day archive. It adds no provider request, caps each parser input at 2 MiB and the archive at
+  256 MiB, and is stripped before authoritative writes. Whole HTTP envelopes, provider-internal
+  suspension history, limits, and private order flow remain explicitly unavailable.
+
+The proof-chain test deliberately omits one scheduled attempt and verifies that finalization fails.
+It also backdates a caller timestamp while placing the server receipt after the window and verifies
+that finalization still fails. It then includes one successful tape and one failed attempt, verifies
+exact capture-set membership, rejects a copied receipt, and persists the derived sequence/features. This is proof of provenance and
+completeness behavior, not proof of predictive benefit. The shadow table still had zero real rows at
+the last read-only inspection; a representative prospective canary and settled outcomes remain
+necessary before fitting or judging the candidate.
+
 ## Cost and request envelope
 
 Market Brain makes zero incremental provider requests; it reuses already-fetched writer evidence.
@@ -195,6 +231,8 @@ Each tape is capped at 96 KiB. Under the deliberately conservative assumption of
 captures per game per week, the uncompressed hard maximum is 252 MiB per week and 4.43 GiB across an
 18-week regular season. Actual event-scoped tapes and database compression should be lower, but live
 shadow activation must measure real p50/p95/p99 bytes and database growth before expanding retention.
+Content-addressed raw parser inputs are stored once per provider response, expire after 30 days, and
+have an additional hard 256 MiB global envelope; they are not multiplied by the number of canary games.
 
 ## Evidence still required
 

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { NflForwardEvidencePayload } from "./nflForwardEvidence";
+import { rawPriceSha256 } from "./footballRawPriceManifest";
 import {
   NFL_MARKET_BRAIN_SHADOW_RELEASE,
   type NflMarketBrainCaptureResult,
@@ -23,11 +24,31 @@ type StoredPriorArtifactRow = {
 
 type StoredShadowRow = {
   id: string;
+  run_id?: string;
+  capture_attempt_id?: string;
+  season?: number;
+  week?: number;
   provider_game_id: string;
+  stage?: "opening" | "unlocked" | "t60";
+  captured_at?: string;
+  created_at?: string;
   shadow: NflMarketBrainCaptureResult;
   shadow_sha256: string;
   shadow_payload: string;
   prior_artifact_sha256: string | null;
+};
+
+export type NflMarketBrainStoredShadowCapture = {
+  recordId: string;
+  runId: string;
+  season: number;
+  week: number;
+  providerGameId: string;
+  stage: "opening" | "unlocked" | "t60";
+  capturedAt: string;
+  serverCreatedAt: string;
+  shadowSha256: string;
+  captureResult: NflMarketBrainCaptureResult;
 };
 
 type StoredArtifactRow = {
@@ -92,6 +113,26 @@ export async function appendNflMarketBrainShadows(args: {
   apply: boolean;
   signal?: AbortSignal;
 }): Promise<{ proposed: number; inserted: number; existing: number; hashes: string[] }> {
+  const rawParserInputs = new Map<string, {
+    parser_input_sha256: string;
+    schema_release: string;
+    parser_input: unknown[];
+    parser_input_payload: string;
+  }>();
+  for (const payload of args.payloads) {
+    for (const input of payload.marketBrainRawParserInputs ?? []) {
+      if (rawPriceSha256(input.payload) !== input.sha256 ||
+        Buffer.byteLength(JSON.stringify(input.payload), "utf8") !== input.bytes) {
+        throw new Error("NFL Market Brain raw parser input checksum or byte count is invalid.");
+      }
+      rawParserInputs.set(input.sha256, {
+        parser_input_sha256: input.sha256,
+        schema_release: input.schema,
+        parser_input: input.payload,
+        parser_input_payload: JSON.stringify(input.payload),
+      });
+    }
+  }
   const artifacts = new Map<string, {
     artifact_sha256: string;
     shadow_release: string;
@@ -120,6 +161,7 @@ export async function appendNflMarketBrainShadows(args: {
       shadow_release: shadow.release,
       contract_release: "case" in shadow ? shadow.case.release : MARKET_BRAIN_CONTRACT_RELEASE,
       run_id: args.runId,
+      capture_attempt_id: requireCaptureAttemptId(payload),
       season: payload.season,
       week: payload.week,
       provider_game_id: payload.game.providerGameId,
@@ -133,6 +175,13 @@ export async function appendNflMarketBrainShadows(args: {
   });
   const hashes = rows.map((row) => row.shadow_sha256);
   if (!args.apply || rows.length === 0) return { proposed: rows.length, inserted: 0, existing: 0, hashes };
+  if (rawParserInputs.size > 0) {
+    let rawQuery = args.client.from("nfl_market_brain_raw_parser_inputs")
+      .upsert([...rawParserInputs.values()], { onConflict: "parser_input_sha256", ignoreDuplicates: true });
+    if (args.signal) rawQuery = rawQuery.abortSignal(args.signal);
+    const { error: rawError } = await rawQuery;
+    if (rawError) throw new Error(`NFL Market Brain raw parser-input archive failed: ${rawError.message}`);
+  }
   if (artifacts.size > 0) {
     let artifactQuery = args.client.from("nfl_market_brain_prior_artifacts")
       .upsert([...artifacts.values()], { onConflict: "artifact_sha256", ignoreDuplicates: true });
@@ -143,7 +192,7 @@ export async function appendNflMarketBrainShadows(args: {
   let query = args.client
     .from("nfl_market_brain_shadow_snapshots")
     .upsert(rows, {
-      onConflict: "shadow_release,provider_game_id,stage,captured_at,shadow_sha256",
+      onConflict: "shadow_release,provider_game_id,capture_attempt_id",
       ignoreDuplicates: true,
     });
   if (args.signal) query = query.abortSignal(args.signal);
@@ -231,6 +280,125 @@ export async function readNflMarketBrainShadows(args: {
   });
 }
 
+/**
+ * Reads the complete bounded database membership for one frozen event window.
+ * Unlike the broad offline reader, this includes storage identities, run
+ * attempts, failures, and server receipt times needed to attest completeness.
+ */
+export async function readNflMarketBrainStoredShadowCaptures(args: {
+  client: SupabaseClient;
+  eventId: string;
+  windowOpensAt: string;
+  windowClosesAt: string;
+  maximumRows?: number;
+  signal?: AbortSignal;
+}): Promise<NflMarketBrainStoredShadowCapture[]> {
+  const maximumRows = args.maximumRows ?? 1_000;
+  if (!Number.isInteger(maximumRows) || maximumRows < 1 || maximumRows > 1_000) {
+    throw new Error("NFL Market Brain capture-set row limit must be between 1 and 1000.");
+  }
+  const opens = new Date(args.windowOpensAt);
+  const closes = new Date(args.windowClosesAt);
+  if (!Number.isFinite(opens.getTime()) || !Number.isFinite(closes.getTime()) || opens > closes) {
+    throw new Error("NFL Market Brain capture-set window is invalid.");
+  }
+  let query = args.client.from("nfl_market_brain_shadow_snapshots")
+    .select("id,run_id,capture_attempt_id,season,week,provider_game_id,stage,captured_at,created_at,shadow,shadow_sha256,shadow_payload,prior_artifact_sha256")
+    .eq("provider_game_id", args.eventId)
+    .eq("shadow_release", NFL_MARKET_BRAIN_SHADOW_RELEASE)
+    .eq("contract_release", MARKET_BRAIN_CONTRACT_RELEASE)
+    .gte("captured_at", opens.toISOString())
+    .lte("captured_at", closes.toISOString())
+    .order("captured_at", { ascending: true })
+    .order("id", { ascending: true })
+    .range(0, maximumRows);
+  if (args.signal) query = query.abortSignal(args.signal);
+  const { data, error } = await query;
+  if (error) throw new Error(`NFL Market Brain capture-set read failed: ${error.message}`);
+  const rows = (data ?? []) as StoredShadowRow[];
+  if (rows.length > maximumRows) {
+    throw new Error(`NFL Market Brain capture set exceeded its bounded ${maximumRows}-row limit.`);
+  }
+  verifyStoredRows(rows);
+  const hydrated = await hydrateStoredRows({ client: args.client, rows, signal: args.signal });
+  return rows.map((row, index) => {
+    if (!row.capture_attempt_id || !row.stage || row.season === undefined || row.week === undefined ||
+      !row.captured_at || !row.created_at) {
+      throw new Error(`NFL Market Brain capture-set row is missing server metadata: ${row.id}`);
+    }
+    return {
+      recordId: row.id,
+      runId: row.capture_attempt_id,
+      season: row.season,
+      week: row.week,
+      providerGameId: row.provider_game_id,
+      stage: row.stage,
+      capturedAt: new Date(row.captured_at).toISOString(),
+      serverCreatedAt: new Date(row.created_at).toISOString(),
+      shadowSha256: row.shadow_sha256,
+      captureResult: hydrated[index]!,
+    };
+  });
+}
+
+function verifyStoredRows(rows: StoredShadowRow[]): void {
+  for (const row of rows) {
+    if (marketBrainCanonicalJson(row.shadow) !== row.shadow_payload ||
+      hashNflMarketBrainShadow(row.shadow) !== row.shadow_sha256 ||
+      marketBrainSha256(JSON.parse(row.shadow_payload)) !== row.shadow_sha256) {
+      throw new Error(`NFL Market Brain stored shadow checksum mismatch: ${row.id}`);
+    }
+    const embeddedPrior = "case" in row.shadow
+      ? row.shadow.case.prior.kind === "margin_total_distribution"
+        ? row.shadow.case.prior.artifact.sha256
+        : row.shadow.case.prior.kind === "margin_total_distribution_ref"
+        ? row.shadow.case.prior.artifactSha256
+        : null
+      : null;
+    if (embeddedPrior !== row.prior_artifact_sha256) {
+      throw new Error(`NFL Market Brain stored shadow prior reference mismatch: ${row.id}`);
+    }
+  }
+}
+
+async function hydrateStoredRows(args: {
+  client: SupabaseClient;
+  rows: StoredShadowRow[];
+  signal?: AbortSignal;
+}): Promise<NflMarketBrainCaptureResult[]> {
+  const needed = [...new Set(args.rows.flatMap((row) =>
+    row.prior_artifact_sha256 ? [row.prior_artifact_sha256] : []))];
+  const artifactMap = new Map<string, MarketBrainMarginTotalArtifact>();
+  if (needed.length > 0) {
+    let query = args.client.from("nfl_market_brain_prior_artifacts")
+      .select("artifact_sha256,prior_artifact")
+      .in("artifact_sha256", needed)
+      .gt("expires_at", new Date().toISOString());
+    if (args.signal) query = query.abortSignal(args.signal);
+    const { data, error } = await query;
+    if (error) throw new Error(`NFL Market Brain prior-artifact read failed: ${error.message}`);
+    for (const row of (data ?? []) as StoredArtifactRow[]) artifactMap.set(row.artifact_sha256, row.prior_artifact);
+  }
+  return args.rows.map((row) => {
+    const shadow = structuredClone(row.shadow);
+    if (!("case" in shadow) || shadow.case.prior.kind !== "margin_total_distribution_ref") return shadow;
+    const reference = shadow.case.prior;
+    const artifact = artifactMap.get(reference.artifactSha256);
+    if (!artifact) throw new Error(`NFL Market Brain prior artifact is missing: ${reference.artifactSha256}`);
+    shadow.case.prior = {
+      kind: "margin_total_distribution",
+      release: reference.release,
+      marginMean: reference.marginMean,
+      totalMean: reference.totalMean,
+      marginDistributionSha256: reference.marginDistributionSha256,
+      totalDistributionSha256: reference.totalDistributionSha256,
+      artifact,
+    };
+    assertMarketBrainPrior(shadow.case.prior, shadow.case.eventId, shadow.case.evaluatedAt);
+    return shadow;
+  });
+}
+
 export async function purgeExpiredNflMarketBrainResearch(args: {
   client: SupabaseClient;
   limit?: number;
@@ -250,4 +418,12 @@ export async function purgeExpiredNflMarketBrainResearch(args: {
 
 export function hashNflMarketBrainShadow(shadow: NflMarketBrainCaptureResult): string {
   return marketBrainSha256(shadow);
+}
+
+function requireCaptureAttemptId(payload: NflForwardEvidencePayload): string {
+  const attemptId = payload.marketBrainCaptureAttemptId;
+  if (!attemptId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attemptId)) {
+    throw new Error("NFL Market Brain shadow append requires a predeclared capture-attempt UUID.");
+  }
+  return attemptId;
 }

@@ -8,9 +8,9 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESEARCH_EVALUATOR_RELEASE =
-  "nfl_market_brain_research_evaluator_2026_10_27_r10_released_reader_comparator" as const;
+  "nfl_market_brain_research_evaluator_2026_10_27_r11_attested_tape_and_outcome" as const;
 export const NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE =
-  "nfl_market_brain_research_manifest_2026_10_27_r4_database_precommit_all_untouched" as const;
+  "nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows" as const;
 
 export type NflMarketBrainResearchPrediction = {
   eventId: string;
@@ -19,6 +19,10 @@ export type NflMarketBrainResearchPrediction = {
   release: string;
   trainedThrough: string;
   inferredAt: string;
+  resolverOutputChecksum: string;
+  researchInputRecordId: string;
+  researchInputChecksum: string;
+  captureSetChecksum: string;
   artifactSha256: string;
   tournamentChecksum: string;
   family: "regularized_joint_residual";
@@ -37,6 +41,17 @@ export type NflMarketBrainResearchPrediction = {
   totalDistribution: MarketBrainDiscreteDistribution;
   jointScoreStates: Array<{ margin: number; total: number; probability: number }>;
   jointPosteriorSha256: string;
+  zeroMarketPosterior: {
+    awayWinProbability: number;
+    homeWinProbability: number;
+    tieProbability: number;
+    marginMean: number;
+    totalMean: number;
+    marginDistribution: MarketBrainDiscreteDistribution;
+    totalDistribution: MarketBrainDiscreteDistribution;
+    jointScoreStates: Array<{ margin: number; total: number; probability: number }>;
+    jointPosteriorSha256: string;
+  };
 };
 
 const persistedPredictionBrand: unique symbol = Symbol("persistedNflMarketBrainResearchPrediction");
@@ -54,7 +69,25 @@ export type NflMarketBrainFinalOutcome = {
   finalAt: string;
   awayScore: number;
   homeScore: number;
+  source: {
+    table: "games";
+    gameRecordId: string;
+    providerIds: unknown;
+    sourceUpdatedAt: string;
+    sourceRowSha256: string;
+  };
+  checksum: string;
 };
+
+export type NflMarketBrainAttestedFinalOutcome = NflMarketBrainFinalOutcome & {
+  readonly persistenceAttestation: {
+    recordId: string;
+    serverCreatedAt: string;
+    outcomeChecksum: string;
+  };
+};
+
+const attestedFinalOutcomes = new WeakSet<object>();
 
 type Winner = "away" | "home" | "tie";
 type Metrics = {
@@ -104,6 +137,7 @@ export type NflMarketBrainResearchEvaluation = {
   finalAt: string;
   actual: { winner: Winner; margin: number; total: number };
   baseline: Metrics;
+  zeroMarket: Metrics;
   incumbent: Metrics;
   candidate: Metrics;
   deltas: {
@@ -114,6 +148,12 @@ export type NflMarketBrainResearchEvaluation = {
     marginTotalDistributionLogScoreImprovement: number | null;
   };
   incumbentDeltas: {
+    brierImprovement: number;
+    logLossImprovement: number;
+    marginMaeImprovement: number;
+    totalMaeImprovement: number;
+  };
+  zeroMarketDeltas: {
     brierImprovement: number;
     logLossImprovement: number;
     marginMaeImprovement: number;
@@ -131,13 +171,14 @@ export type NflMarketBrainResearchEvaluation = {
 export function evaluateNflMarketBrainResearchCase(args: {
   sequence: NflMarketBrainSequence;
   candidate: NflMarketBrainAttestedResearchPrediction;
-  outcome: NflMarketBrainFinalOutcome;
+  outcome: NflMarketBrainAttestedFinalOutcome;
   researchManifest: NflMarketBrainAttestedResearchManifest;
   partitionRole: Exclude<NflMarketBrainResearchPartition["role"], "development">;
 }): NflMarketBrainResearchEvaluation {
   const { sequence, candidate, outcome } = args;
   assertNflMarketBrainAttestedResearchManifest(args.researchManifest);
   assertNflMarketBrainAttestedResearchPrediction(candidate);
+  assertNflMarketBrainAttestedFinalOutcome(outcome);
   if (candidate.trainingManifestChecksum !== args.researchManifest.checksum ||
     candidate.release !== args.researchManifest.candidateRelease) {
     throw new Error("NFL Market Brain prediction is not bound to the persisted research manifest.");
@@ -148,9 +189,11 @@ export function evaluateNflMarketBrainResearchCase(args: {
     throw new Error("NFL Market Brain evaluated event is absent from its declared manifest partition.");
   }
   if (manifestEvent.startsAt !== sequence.startsAt || manifestEvent.cutoffAt !== sequence.cutoffAt ||
-    sequence.captureWindow.firstCapturedAt !== manifestEvent.firstCaptureAt ||
-    sequence.captureWindow.lastCapturedAt !== manifestEvent.lastCaptureAt) {
-    throw new Error("NFL Market Brain sequence does not match its precommitted event capture window.");
+    requiredTimestamp(sequence.captureWindow.firstCapturedAt, "sequence.firstCapturedAt") <
+      requiredTimestamp(manifestEvent.captureWindowOpensAt, "manifest.captureWindowOpensAt") ||
+    requiredTimestamp(sequence.captureWindow.lastCapturedAt, "sequence.lastCapturedAt") >
+      requiredTimestamp(manifestEvent.captureWindowClosesAt, "manifest.captureWindowClosesAt")) {
+    throw new Error("NFL Market Brain sequence falls outside its precommitted planned capture window.");
   }
   if (manifestEvent.outcomeOpenedAt !== null) {
     throw new Error("NFL Market Brain untouched evaluation partition contains opened outcome evidence.");
@@ -221,6 +264,19 @@ export function evaluateNflMarketBrainResearchCase(args: {
     actualTotal,
     actualWinner,
   });
+  const zeroMarketProbabilities = validateProbabilities(candidate.zeroMarketPosterior);
+  const zeroMarket = metrics({
+    probabilities: zeroMarketProbabilities,
+    marginMean: candidate.zeroMarketPosterior.marginMean,
+    totalMean: candidate.zeroMarketPosterior.totalMean,
+    marginDistribution: candidate.zeroMarketPosterior.marginDistribution,
+    totalDistribution: candidate.zeroMarketPosterior.totalDistribution,
+    jointScoreStates: candidate.zeroMarketPosterior.jointScoreStates,
+    evaluationEnvelope: sequence.evaluationEnvelope,
+    actualMargin,
+    actualTotal,
+    actualWinner,
+  });
   const incumbent = metrics({
     probabilities: incumbentProbabilities,
     marginMean: sequence.incumbentComparator.marginMean,
@@ -261,6 +317,7 @@ export function evaluateNflMarketBrainResearchCase(args: {
     finalAt: new Date(finalAt).toISOString(),
     actual: { winner: actualWinner, margin: actualMargin, total: actualTotal },
     baseline,
+    zeroMarket,
     incumbent,
     candidate: evaluatedCandidate,
     deltas: {
@@ -278,6 +335,12 @@ export function evaluateNflMarketBrainResearchCase(args: {
       logLossImprovement: incumbent.logLoss - evaluatedCandidate.logLoss,
       marginMaeImprovement: incumbent.marginAbsoluteError - evaluatedCandidate.marginAbsoluteError,
       totalMaeImprovement: incumbent.totalAbsoluteError - evaluatedCandidate.totalAbsoluteError,
+    },
+    zeroMarketDeltas: {
+      brierImprovement: zeroMarket.multiclassBrier - evaluatedCandidate.multiclassBrier,
+      logLossImprovement: zeroMarket.logLoss - evaluatedCandidate.logLoss,
+      marginMaeImprovement: zeroMarket.marginAbsoluteError - evaluatedCandidate.marginAbsoluteError,
+      totalMaeImprovement: zeroMarket.totalAbsoluteError - evaluatedCandidate.totalAbsoluteError,
     },
     disagreement,
     invariants: {
@@ -342,12 +405,15 @@ export function summarizeNflMarketBrainResearchRun(
     harms: rows.filter((row) => row.disagreement === "harm").length,
     changedBothWrong: rows.filter((row) => row.disagreement === "changed_both_wrong").length,
     candidateWinnerAccuracy: average((row) => Number(row.candidate.winnerCorrect)),
+    zeroMarketWinnerAccuracy: average((row) => Number(row.zeroMarket.winnerCorrect)),
     baselineWinnerAccuracy: average((row) => Number(row.baseline.winnerCorrect)),
     incumbentWinnerAccuracy: average((row) => Number(row.incumbent.winnerCorrect)),
     candidateBrier: average((row) => row.candidate.multiclassBrier),
+    zeroMarketBrier: average((row) => row.zeroMarket.multiclassBrier),
     baselineBrier: average((row) => row.baseline.multiclassBrier),
     incumbentBrier: average((row) => row.incumbent.multiclassBrier),
     candidateLogLoss: average((row) => row.candidate.logLoss),
+    zeroMarketLogLoss: average((row) => row.zeroMarket.logLoss),
     baselineLogLoss: average((row) => row.baseline.logLoss),
     incumbentLogLoss: average((row) => row.incumbent.logLoss),
     incumbentMarginalCompositeLogScore: average((row) => row.incumbent.marginalCompositeLogScore),
@@ -356,9 +422,11 @@ export function summarizeNflMarketBrainResearchRun(
     candidateMarginTotalDistributionLogScore: averageNullable((row) => row.candidate.marginTotalDistributionLogScore),
     baselineMarginTotalDistributionLogScore: averageNullable((row) => row.baseline.marginTotalDistributionLogScore),
     candidateMarginMae: average((row) => row.candidate.marginAbsoluteError),
+    zeroMarketMarginMae: average((row) => row.zeroMarket.marginAbsoluteError),
     baselineMarginMae: average((row) => row.baseline.marginAbsoluteError),
     incumbentMarginMae: average((row) => row.incumbent.marginAbsoluteError),
     candidateTotalMae: average((row) => row.candidate.totalAbsoluteError),
+    zeroMarketTotalMae: average((row) => row.zeroMarket.totalAbsoluteError),
     baselineTotalMae: average((row) => row.baseline.totalAbsoluteError),
     incumbentTotalMae: average((row) => row.incumbent.totalAbsoluteError),
     foldCount: new Set(rows.map((row) => row.foldId)).size,
@@ -389,8 +457,13 @@ export type NflMarketBrainResearchPartition = {
     foldId: string;
     startsAt: string;
     cutoffAt: string;
-    firstCaptureAt: string;
-    lastCaptureAt: string;
+    captureWindowOpensAt: string;
+    captureWindowClosesAt: string;
+    expectedCaptureAttempts: Array<{
+      runId: string;
+      stage: "opening" | "unlocked" | "t60";
+      plannedAt: string;
+    }>;
     /** Null means the outcome had not been opened when the manifest was persisted. */
     outcomeOpenedAt: string | null;
   }>;
@@ -441,10 +514,27 @@ export function buildNflMarketBrainResearchManifest(args: {
       eventIds.add(event.eventId);
       const startsAt = requiredTimestamp(event.startsAt, `${partition.role}.startsAt`);
       const cutoffAt = requiredTimestamp(event.cutoffAt, `${partition.role}.cutoffAt`);
-      const firstCaptureAt = requiredTimestamp(event.firstCaptureAt, `${partition.role}.firstCaptureAt`);
-      const lastCaptureAt = requiredTimestamp(event.lastCaptureAt, `${partition.role}.lastCaptureAt`);
-      if (firstCaptureAt > cutoffAt || cutoffAt > lastCaptureAt || lastCaptureAt >= startsAt) {
-        throw new Error("NFL Market Brain manifest capture window must be ordered and pre-kickoff.");
+      const captureWindowOpensAt = requiredTimestamp(
+        event.captureWindowOpensAt, `${partition.role}.captureWindowOpensAt`);
+      const captureWindowClosesAt = requiredTimestamp(
+        event.captureWindowClosesAt, `${partition.role}.captureWindowClosesAt`);
+      if (captureWindowOpensAt > captureWindowClosesAt || captureWindowClosesAt > cutoffAt || cutoffAt >= startsAt) {
+        throw new Error("NFL Market Brain planned capture window must close by cutoff and precede kickoff.");
+      }
+      if (event.expectedCaptureAttempts.length === 0) {
+        throw new Error("NFL Market Brain manifest must predeclare at least one capture attempt per event.");
+      }
+      const attemptIds = new Set<string>();
+      for (const attempt of event.expectedCaptureAttempts) {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attempt.runId) ||
+          attemptIds.has(attempt.runId)) {
+          throw new Error("NFL Market Brain manifest capture attempt identities must be unique UUIDs per event.");
+        }
+        attemptIds.add(attempt.runId);
+        const plannedAt = requiredTimestamp(attempt.plannedAt, `${partition.role}.expectedCaptureAttempts.plannedAt`);
+        if (plannedAt < captureWindowOpensAt || plannedAt > captureWindowClosesAt) {
+          throw new Error("NFL Market Brain planned capture attempt falls outside its frozen event window.");
+        }
       }
       const outcomeOpenedAt = event.outcomeOpenedAt === null ? null
         : requiredTimestamp(event.outcomeOpenedAt, `${partition.role}.outcomeOpenedAt`);
@@ -455,7 +545,7 @@ export function buildNflMarketBrainResearchManifest(args: {
       } else if (outcomeOpenedAt !== null) {
         throw new Error(`NFL Market Brain ${partition.role} evidence was already opened at manifest persistence.`);
       }
-      return { startsAt, cutoffAt, firstCaptureAt, lastCaptureAt };
+      return { startsAt, cutoffAt, captureWindowOpensAt, captureWindowClosesAt };
     });
     if (times.length === 0) throw new Error(`NFL Market Brain ${partition.role} partition cannot be empty.`);
     if (partition.role === "development") {
@@ -464,9 +554,9 @@ export function buildNflMarketBrainResearchManifest(args: {
         return {
           foldId,
           firstCaptureAt: Math.min(...events.map((event) => requiredTimestamp(
-            event.firstCaptureAt, `development.${foldId}.firstCaptureAt`))),
+            event.captureWindowOpensAt, `development.${foldId}.captureWindowOpensAt`))),
           lastCaptureAt: Math.max(...events.map((event) => requiredTimestamp(
-            event.lastCaptureAt, `development.${foldId}.lastCaptureAt`))),
+            event.captureWindowClosesAt, `development.${foldId}.captureWindowClosesAt`))),
         };
       }).sort((a, b) => a.firstCaptureAt - b.firstCaptureAt || a.foldId.localeCompare(b.foldId));
       for (let index = 1; index < foldRanges.length; index += 1) {
@@ -476,10 +566,10 @@ export function buildNflMarketBrainResearchManifest(args: {
         }
       }
     }
-    if (Math.min(...times.map((time) => time.firstCaptureAt)) - priorCaptureMax < args.purgeGapHours * 60 * 60 * 1_000) {
+    if (Math.min(...times.map((time) => time.captureWindowOpensAt)) - priorCaptureMax < args.purgeGapHours * 60 * 60 * 1_000) {
       throw new Error("NFL Market Brain research partitions overlap or violate rolling chronology.");
     }
-    priorCaptureMax = Math.max(...times.map((time) => time.lastCaptureAt));
+    priorCaptureMax = Math.max(...times.map((time) => time.captureWindowClosesAt));
     const validStatus = partition.role === "development"
       ? partition.evidenceStatus === "opened_development_only"
       : partition.role === "prospective_shadow"
@@ -532,7 +622,7 @@ export function assertNflMarketBrainAttestedResearchManifest(
   const earliestUntouchedCapture = Math.min(...manifest.partitions
     .filter((partition) => partition.role !== "development")
     .flatMap((partition) => partition.events.map((event) =>
-      requiredTimestamp(event.firstCaptureAt, `${partition.role}.firstCaptureAt`))));
+      requiredTimestamp(event.captureWindowOpensAt, `${partition.role}.captureWindowOpensAt`))));
   if (!(persistedManifestBrand in attested) || !receipt ||
     receipt.recordId !== manifest.storageId ||
     receipt.manifestChecksum !== manifest.checksum ||
@@ -552,7 +642,7 @@ function attestPersistedNflMarketBrainResearchManifest(args: {
   const earliestUntouchedCapture = Math.min(...args.manifest.partitions
     .filter((partition) => partition.role !== "development")
     .flatMap((partition) => partition.events.map((event) =>
-      requiredTimestamp(event.firstCaptureAt, `${partition.role}.firstCaptureAt`))));
+      requiredTimestamp(event.captureWindowOpensAt, `${partition.role}.captureWindowOpensAt`))));
   if (args.stored.id !== args.manifest.storageId ||
     args.stored.manifestChecksum !== args.manifest.checksum ||
     serverCreatedAt < requiredTimestamp(args.manifest.createdAt, "createdAt") ||
@@ -651,29 +741,36 @@ type PersistedPredictionRow = {
 
 export async function persistNflMarketBrainResearchPrediction(args: {
   client: SupabaseClient;
-  prediction: NflMarketBrainResearchPrediction;
+  resolverOutput: import("./nflMarketBrainResolverContract").NflMarketBrainResolverShadowOutput;
   signal?: AbortSignal;
 }): Promise<NflMarketBrainAttestedResearchPrediction> {
-  assertResearchPredictionEnvelope(args.prediction);
-  const predictionPayload = marketBrainCanonicalJson(args.prediction);
-  const predictionSha256 = marketBrainSha256(args.prediction);
+  const resolver = await import("./nflMarketBrainResolverContract");
+  resolver.assertNflMarketBrainResolverShadowOutput(args.resolverOutput);
+  const prediction = resolver.resolverOutputAsResearchPrediction(args.resolverOutput);
+  assertResearchPredictionEnvelope(prediction);
+  const predictionPayload = marketBrainCanonicalJson(prediction);
+  const predictionSha256 = marketBrainSha256(prediction);
   let query = args.client.from("nfl_market_brain_research_predictions").insert({
     prediction_sha256: predictionSha256,
-    event_id: args.prediction.eventId,
-    cutoff_at: args.prediction.cutoffAt,
-    starts_at: args.prediction.startsAt,
-    candidate_release: args.prediction.release,
-    artifact_sha256: args.prediction.artifactSha256,
-    training_manifest_checksum: args.prediction.trainingManifestChecksum,
-    sequence_checksum: args.prediction.sequenceChecksum,
-    feature_checksum: args.prediction.featureChecksum,
-    prediction: args.prediction,
+    event_id: prediction.eventId,
+    cutoff_at: prediction.cutoffAt,
+    starts_at: prediction.startsAt,
+    candidate_release: prediction.release,
+    artifact_sha256: prediction.artifactSha256,
+    training_manifest_checksum: prediction.trainingManifestChecksum,
+    research_input_id: prediction.researchInputRecordId,
+    research_input_checksum: prediction.researchInputChecksum,
+    capture_set_checksum: prediction.captureSetChecksum,
+    resolver_output_checksum: prediction.resolverOutputChecksum,
+    sequence_checksum: prediction.sequenceChecksum,
+    feature_checksum: prediction.featureChecksum,
+    prediction,
     prediction_payload: predictionPayload,
   }).select("id,prediction_sha256,prediction,prediction_payload,created_at");
   if (args.signal) query = query.abortSignal(args.signal);
   const { data, error } = await query.single();
   if (error) throw new Error(`NFL Market Brain research prediction persistence failed: ${error.message}`);
-  return attestedPredictionFromStoredRow(data as PersistedPredictionRow | null, args.prediction);
+  return attestedPredictionFromStoredRow(data as PersistedPredictionRow | null, prediction);
 }
 
 export async function readNflMarketBrainResearchPrediction(args: {
@@ -734,12 +831,136 @@ function attestedPredictionFromStoredRow(
   return attested;
 }
 
+type VerifiedGameRow = {
+  id: string;
+  external_id: string;
+  status: string;
+  away_score: number | null;
+  home_score: number | null;
+  provider_ids: unknown;
+  updated_at: string;
+};
+
+type StoredOutcomeRow = {
+  id: string;
+  outcome_checksum: string;
+  outcome: unknown;
+  outcome_payload: string;
+  created_at: string;
+};
+
+/** Reads an exact finalized NFL game row and appends an immutable research-label receipt. */
+export async function persistVerifiedNflMarketBrainFinalOutcome(args: {
+  client: SupabaseClient;
+  eventId: string;
+  signal?: AbortSignal;
+}): Promise<NflMarketBrainAttestedFinalOutcome> {
+  let gameQuery = args.client.from("games")
+    .select("id,external_id,status,away_score,home_score,provider_ids,updated_at")
+    .eq("sport", "nfl")
+    .eq("external_id", args.eventId)
+    .eq("status", "final");
+  if (args.signal) gameQuery = gameQuery.abortSignal(args.signal);
+  const { data: gameData, error: gameError } = await gameQuery.single();
+  if (gameError) throw new Error(`NFL Market Brain verified final read failed: ${gameError.message}`);
+  const game = gameData as VerifiedGameRow | null;
+  if (!game || !Number.isInteger(game.away_score) || !Number.isInteger(game.home_score) ||
+    game.away_score! < 0 || game.home_score! < 0) {
+    throw new Error("NFL Market Brain final outcome requires a complete regulation-final games row.");
+  }
+  const sourceRow = {
+    id: game.id,
+    externalId: game.external_id,
+    status: game.status,
+    awayScore: game.away_score,
+    homeScore: game.home_score,
+    providerIds: game.provider_ids,
+    updatedAt: new Date(requiredTimestamp(game.updated_at, "games.updatedAt")).toISOString(),
+  };
+  const withoutChecksum = {
+    eventId: game.external_id,
+    finalAt: sourceRow.updatedAt,
+    awayScore: game.away_score!,
+    homeScore: game.home_score!,
+    source: {
+      table: "games" as const,
+      gameRecordId: game.id,
+      providerIds: structuredClone(game.provider_ids),
+      sourceUpdatedAt: sourceRow.updatedAt,
+      sourceRowSha256: marketBrainSha256(sourceRow),
+    },
+  };
+  const outcome: NflMarketBrainFinalOutcome = {
+    ...withoutChecksum,
+    checksum: marketBrainSha256(withoutChecksum),
+  };
+  let outcomeQuery = args.client.from("nfl_market_brain_research_outcomes").insert({
+    outcome_checksum: outcome.checksum,
+    event_id: outcome.eventId,
+    game_id: outcome.source.gameRecordId,
+    source_row_sha256: outcome.source.sourceRowSha256,
+    final_at: outcome.finalAt,
+    outcome,
+    outcome_payload: marketBrainCanonicalJson(withoutChecksum),
+  }).select("id,outcome_checksum,outcome,outcome_payload,created_at");
+  if (args.signal) outcomeQuery = outcomeQuery.abortSignal(args.signal);
+  const { data, error } = await outcomeQuery.single();
+  if (error) throw new Error(`NFL Market Brain final-outcome receipt failed: ${error.message}`);
+  return attestFinalOutcome(data as StoredOutcomeRow | null, outcome);
+}
+
+export function assertNflMarketBrainAttestedFinalOutcome(
+  outcome: NflMarketBrainFinalOutcome,
+): asserts outcome is NflMarketBrainAttestedFinalOutcome {
+  const attested = outcome as NflMarketBrainAttestedFinalOutcome;
+  const { checksum, persistenceAttestation: _receipt, ...payload } = attested;
+  if (!attestedFinalOutcomes.has(outcome) || !attested.persistenceAttestation ||
+    checksum !== marketBrainSha256(payload) ||
+    attested.persistenceAttestation.outcomeChecksum !== checksum ||
+    requiredTimestamp(attested.persistenceAttestation.serverCreatedAt, "outcomeReceipt") <
+      requiredTimestamp(outcome.finalAt, "outcome.finalAt")) {
+    throw new Error("NFL Market Brain evaluation requires a verified immutable final-outcome receipt.");
+  }
+}
+
+function attestFinalOutcome(
+  row: StoredOutcomeRow | null,
+  expected: NflMarketBrainFinalOutcome,
+): NflMarketBrainAttestedFinalOutcome {
+  if (!row || typeof row.outcome !== "object" || row.outcome === null) {
+    throw new Error("NFL Market Brain final-outcome persistence returned no verifiable row.");
+  }
+  const stored = row.outcome as NflMarketBrainFinalOutcome;
+  const { checksum, ...payload } = stored;
+  if (checksum !== row.outcome_checksum || checksum !== marketBrainSha256(payload) ||
+    row.outcome_payload !== marketBrainCanonicalJson(payload) ||
+    marketBrainCanonicalJson(stored) !== marketBrainCanonicalJson(expected)) {
+    throw new Error("NFL Market Brain stored final outcome differs from its verified game row.");
+  }
+  const attested = {
+    ...structuredClone(stored),
+    persistenceAttestation: {
+      recordId: row.id,
+      serverCreatedAt: new Date(requiredTimestamp(row.created_at, "outcomeReceipt")).toISOString(),
+      outcomeChecksum: row.outcome_checksum,
+    },
+  } as NflMarketBrainAttestedFinalOutcome;
+  attestedFinalOutcomes.add(attested);
+  Object.freeze(attested);
+  assertNflMarketBrainAttestedFinalOutcome(attested);
+  return attested;
+}
+
 function assertResearchPredictionEnvelope(prediction: NflMarketBrainResearchPrediction): void {
   if (!prediction.eventId.trim() || !prediction.release.trim() ||
     !/^[a-f0-9]{64}$/.test(prediction.artifactSha256) ||
     !/^[a-f0-9]{64}$/.test(prediction.trainingManifestChecksum) ||
     !/^[a-f0-9]{64}$/.test(prediction.sequenceChecksum) ||
     !/^[a-f0-9]{64}$/.test(prediction.featureChecksum) ||
+    !prediction.researchInputRecordId.trim() ||
+    !/^[a-f0-9]{64}$/.test(prediction.researchInputChecksum) ||
+    !/^[a-f0-9]{64}$/.test(prediction.captureSetChecksum) ||
+    !/^[a-f0-9]{64}$/.test(prediction.resolverOutputChecksum) ||
     requiredTimestamp(prediction.cutoffAt, "prediction.cutoffAt") >=
       requiredTimestamp(prediction.startsAt, "prediction.startsAt") ||
     requiredTimestamp(prediction.inferredAt, "prediction.inferredAt") <
@@ -750,6 +971,18 @@ function assertResearchPredictionEnvelope(prediction: NflMarketBrainResearchPred
   }
   assertPredictionIdentity(prediction);
   validateCandidateCoherence(prediction);
+  validateCandidateCoherence({
+    ...prediction,
+    awayWinProbability: prediction.zeroMarketPosterior.awayWinProbability,
+    homeWinProbability: prediction.zeroMarketPosterior.homeWinProbability,
+    tieProbability: prediction.zeroMarketPosterior.tieProbability,
+    marginMean: prediction.zeroMarketPosterior.marginMean,
+    totalMean: prediction.zeroMarketPosterior.totalMean,
+    marginDistribution: prediction.zeroMarketPosterior.marginDistribution,
+    totalDistribution: prediction.zeroMarketPosterior.totalDistribution,
+    jointScoreStates: prediction.zeroMarketPosterior.jointScoreStates,
+    jointPosteriorSha256: prediction.zeroMarketPosterior.jointPosteriorSha256,
+  });
 }
 
 function stripPredictionAttestation(
@@ -788,9 +1021,9 @@ function validateCandidateCoherence(candidate: NflMarketBrainResearchPrediction)
     totalDistribution: jointTotal,
     marginMean: distributionMean(jointMargin),
     totalMean: distributionMean(jointTotal),
-    awayWinProbability: derivedProbabilities.away,
-    homeWinProbability: derivedProbabilities.home,
-    tieProbability: derivedProbabilities.tie,
+    awayWinProbability: declaredProbabilities.away,
+    homeWinProbability: declaredProbabilities.home,
+    tieProbability: declaredProbabilities.tie,
     awayScoreMean: (totalMean - marginMean) / 2,
     homeScoreMean: (totalMean + marginMean) / 2,
   };

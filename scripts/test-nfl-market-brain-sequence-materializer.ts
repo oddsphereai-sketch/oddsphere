@@ -165,6 +165,7 @@ const marketCase = buildMarketBrainCase({
     providerFetchedAt: cutoffAt,
     receivedAt: cutoffAt,
     rawResponseSha256: "a".repeat(64),
+    rawParserInputSha256: null,
     returnedRows: 1,
     matchedRows: 1,
     unmatchedRows: 0,

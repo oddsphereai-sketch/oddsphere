@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -9,6 +10,7 @@ import {
   readNflMarketBrainShadows,
 } from "../lib/services/football/nflMarketBrainShadowStore";
 import { NFL_MARKET_BRAIN_SHADOW_RELEASE } from "../lib/services/football/nflMarketBrainShadow";
+import { resolveNflMarketBrainCaptureAttempt } from "../lib/services/football/nflForwardEvidenceWriter";
 import { MARKET_BRAIN_CONTRACT_RELEASE } from "../lib/services/marketBrain/marketBrainContract";
 import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrainCanonical";
 
@@ -28,12 +30,30 @@ const payload = {
   capturedAt: shadow.capturedAt,
   game: { providerGameId: shadow.eventId },
   marketBrainShadow: shadow,
+  marketBrainCaptureAttemptId: "00000000-0000-4000-8000-000000000001",
+  marketBrainRawParserInputs: [{
+    schema: "football_raw_price_parser_input_v1",
+    payload: [{ event_id: shadow.eventId, market_type: "moneyline" }],
+    sha256: "",
+    bytes: 0,
+  }],
 } as unknown as NflForwardEvidencePayload;
+(payload.marketBrainRawParserInputs![0] as { sha256: string }).sha256 =
+  createHash("sha256").update(JSON.stringify(payload.marketBrainRawParserInputs![0]!.payload)).digest("hex");
+(payload.marketBrainRawParserInputs![0] as { bytes: number }).bytes =
+  Buffer.byteLength(JSON.stringify(payload.marketBrainRawParserInputs![0]!.payload), "utf8");
 
 const inserted: Array<Record<string, unknown>> = [];
+const rawArchived: Array<Record<string, unknown>> = [];
 let shadowUpserts = 0;
 const client = {
   from(table: string) {
+    if (table === "nfl_market_brain_raw_parser_inputs") {
+      return { upsert(rows: Array<Record<string, unknown>>) {
+        rawArchived.push(...rows);
+        return Promise.resolve({ error: null });
+      } };
+    }
     assert.equal(table, "nfl_market_brain_shadow_snapshots");
     return {
       upsert(rows: Array<Record<string, unknown>>, options: Record<string, unknown>) {
@@ -51,6 +71,19 @@ const client = {
 };
 
 async function main() {
+  const scheduledAttempt = resolveNflMarketBrainCaptureAttempt({
+    key: "event-1:unlocked", capturedAt: "2026-10-27T13:05:00.000Z",
+    schedule: [
+      { attemptId: "00000000-0000-4000-8000-000000000011",
+        windowOpensAt: "2026-10-27T12:55:00.000Z", windowClosesAt: "2026-10-27T13:10:00.000Z" },
+      { attemptId: "00000000-0000-4000-8000-000000000012",
+        windowOpensAt: "2026-10-27T13:55:00.000Z", windowClosesAt: "2026-10-27T14:10:00.000Z" },
+    ],
+  });
+  assert.equal(scheduledAttempt, "00000000-0000-4000-8000-000000000011");
+  assert.throws(() => resolveNflMarketBrainCaptureAttempt({
+    key: "event-1:unlocked", capturedAt: "2026-10-27T13:30:00.000Z", schedule: [],
+  }), /missing or ambiguous/);
   const dry = await appendNflMarketBrainShadows({
     client: client as never,
     runId: payload.runId,
@@ -71,8 +104,11 @@ async function main() {
   assert.equal(inserted[0]?.shadow, shadow);
   assert.equal(inserted[0]?.shadow_payload, marketBrainCanonicalJson(shadow));
   assert.equal(inserted[0]?.prior_artifact_sha256, null);
+  assert.equal(inserted[0]?.capture_attempt_id, payload.marketBrainCaptureAttemptId);
   assert.equal(inserted[0]?.contract_release, shadow.release.startsWith("nfl_market_brain_shadow")
     ? MARKET_BRAIN_CONTRACT_RELEASE : null);
+  assert.equal(rawArchived.length, 1);
+  assert.equal(rawArchived[0]?.parser_input_sha256, payload.marketBrainRawParserInputs![0]!.sha256);
 
   const duplicate = await appendNflMarketBrainShadows({
     client: client as never, runId: payload.runId, payloads: [payload], apply: true,
@@ -114,6 +150,10 @@ async function main() {
     "the optional research index read must have a hard latency bound");
   assert.match(writer, /appendNflMarketBrainShadows\([\s\S]*signal: writeAbort\.signal/,
     "the optional research append must have a hard abort boundary");
+  assert.match(writer, /selectNflMarketBrainCanaryGames/,
+    "the canary must use deterministic pregame strata rather than provider return order");
+  assert.match(writer, /marketBrainRawParserInputs/,
+    "exact parser inputs must remain a research-only sidecar stripped from authoritative evidence");
   assert.match(writer, /marketBrainCaptureEnabled/,
     "research capture must be explicitly enabled rather than silently activating on merge");
   const authoritativeStore = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceStore.ts"), "utf8");
@@ -138,6 +178,8 @@ async function main() {
     "research capture must require a second explicit canary approval");
   assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CANARY_MAX_GAMES/,
     "research capture must have a bounded per-run canary surface");
+  assert.match(route, /NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON/,
+    "the cron must carry manifest-predeclared attempt UUIDs rather than its future-generated run id");
   assert.match(route, /market_brain_persistence_error: result\.marketBrainPersistenceError/);
   assert.match(route, /result\.marketBrainCaptureFailures > 0/,
     "a captured research failure must make cron health partial rather than appearing healthy");
@@ -156,6 +198,9 @@ async function main() {
   assert.doesNotMatch(migration.replace(/--[^\n]*/g, ""),
     /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_market_brain_shadow_snapshots/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_research_manifests/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_raw_parser_inputs/);
+  assert.match(migration, /interval '30 days'/,
+    "raw parser inputs must have short bounded retention rather than open-ended storage cost");
   assert.match(migration, /octet_length\(manifest::text\) <= 2097152/);
   assert.match(migration, /GRANT SELECT, INSERT ON TABLE public\.nfl_market_brain_research_manifests TO service_role/);
   assert.doesNotMatch(migration.replace(/--[^\n]*/g, ""),

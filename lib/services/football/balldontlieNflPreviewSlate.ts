@@ -1,5 +1,6 @@
 import {
   markRawPriceDuplicates,
+  footballRawPriceParserInput,
   rawPriceSha256,
   type FootballRawPriceMarket,
   type FootballRawPriceObservation,
@@ -11,7 +12,7 @@ import {
 export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
-  "balldontlie_nfl_regular_slate_2026_10_26_r5_raw_price_manifest" as const;
+  "balldontlie_nfl_regular_slate_2026_10_27_r6_raw_parser_input" as const;
 export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
   "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
 
@@ -589,6 +590,7 @@ export function buildBalldontlieRawPriceManifest(args: {
     participant: null,
     providerFetchedAt: args.providerFetchedAt,
     rawResponseSha256: args.rawResponseSha256 ?? rawPriceSha256(args.values),
+    rawParserInput: footballRawPriceParserInput(args.values),
     returnedRows: args.values.length,
     matchedRows,
     unmatchedRows,

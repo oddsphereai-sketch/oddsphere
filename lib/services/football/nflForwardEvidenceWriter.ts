@@ -5,6 +5,7 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import { marketBrainPriorArtifactSha256 } from "@/lib/services/marketBrain/marketBrainContract";
+import { marketBrainSha256 } from "@/lib/services/marketBrain/marketBrainCanonical";
 import {
   fetchBalldontlieNflSlateAvailability,
   mergeNflAvailabilityWithPrior,
@@ -129,7 +130,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r81_market_brain_health_truthful" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -197,6 +198,12 @@ export async function runNflForwardEvidenceWriter(args: {
   marketBrainCaptureEnabled?: boolean;
   /** Canary-only hard ceiling on distinct games captured in one writer run. */
   marketBrainCaptureMaxGames?: number;
+  /** All future event:stage attempt windows predeclared by the persisted research manifest. */
+  marketBrainCaptureAttemptSchedule?: Record<string, Array<{
+    attemptId: string;
+    windowOpensAt: string;
+    windowClosesAt: string;
+  }>>;
 }): Promise<NflForwardWriterResult> {
   if (args.marketBrainCaptureEnabled && (!Number.isInteger(args.marketBrainCaptureMaxGames) ||
     args.marketBrainCaptureMaxGames! < 1 || args.marketBrainCaptureMaxGames! > 4)) {
@@ -254,9 +261,23 @@ export async function runNflForwardEvidenceWriter(args: {
     capturedAt: args.now,
     unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
   });
-  const marketBrainCanaryGames = new Set(uniquePlannedGames(plans.map((plan) => plan.game))
-    .slice(0, args.marketBrainCaptureMaxGames ?? 0)
+  const marketBrainCanaryGames = new Set(selectNflMarketBrainCanaryGames({
+    games: uniquePlannedGames(plans.map((plan) => plan.game)),
+    currentOddsByGame: slate.currentOddsByGame,
+    season: args.season,
+    week: args.week,
+    maximumGames: args.marketBrainCaptureMaxGames ?? 0,
+  })
     .map((game) => game.providerGameId));
+  const marketBrainAttemptIds = new Map<string, string>();
+  if (args.marketBrainCaptureEnabled) {
+    for (const plan of plans.filter((row) => marketBrainCanaryGames.has(row.game.providerGameId))) {
+      const key = `${plan.game.providerGameId}:${plan.stage}`;
+      marketBrainAttemptIds.set(key, resolveNflMarketBrainCaptureAttempt({
+        key, capturedAt: args.now, schedule: args.marketBrainCaptureAttemptSchedule?.[key] ?? [],
+      }));
+    }
+  }
   if (plans.length === 0) {
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
@@ -895,8 +916,11 @@ export async function runNflForwardEvidenceWriter(args: {
         }))),
     ];
     let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
+    let marketBrainRawParserInputs: NflForwardEvidencePayload["marketBrainRawParserInputs"];
     if (args.marketBrainCaptureEnabled && marketBrainCanaryGames.has(plan.game.providerGameId) &&
       !existingLockedRecord) {
+      marketBrainRawParserInputs = marketBrainPriceManifests.flatMap((manifest) =>
+        manifest.rawParserInput ? [manifest.rawParserInput] : []);
       try {
         marketBrainShadow = buildNflMarketBrainShadow({
           game: plan.game,
@@ -948,6 +972,10 @@ export async function runNflForwardEvidenceWriter(args: {
       ...payload,
       contextualEvidenceCapture,
       ...(marketBrainShadow ? { marketBrainShadow } : {}),
+      ...(marketBrainShadow ? {
+        marketBrainCaptureAttemptId: marketBrainAttemptIds.get(`${plan.game.providerGameId}:${plan.stage}`),
+      } : {}),
+      ...(marketBrainRawParserInputs ? { marketBrainRawParserInputs } : {}),
     }];
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown_payload_failure";
@@ -1255,6 +1283,63 @@ function uniquePlannedGames(games: NflPreviewGame[]): NflPreviewGame[] {
   return games.filter((game, index) => games.findIndex((candidate) => candidate.providerGameId === game.providerGameId) === index);
 }
 
+/**
+ * Outcome-blind deterministic stratified canary sampling. It avoids selecting
+ * whichever fixtures the provider happened to return first and spreads a tiny
+ * canary across kickoff, favorite direction, spread size, and total regime.
+ */
+export function selectNflMarketBrainCanaryGames(args: {
+  games: NflPreviewGame[];
+  currentOddsByGame: Record<string, NflPreviewBookOdds>;
+  season: number;
+  week: number;
+  maximumGames: number;
+}): NflPreviewGame[] {
+  if (args.maximumGames === 0) return [];
+  const candidates = uniquePlannedGames(args.games).map((game) => {
+    const odds = args.currentOddsByGame[game.providerGameId];
+    const homeLine = odds?.spread?.homeLine ?? null;
+    const total = odds?.total?.line ?? null;
+    const kickoffHour = new Date(game.scheduledStart).getUTCHours();
+    const stratum = [
+      kickoffHour < 21 ? "early" : kickoffHour < 24 ? "middle" : "late",
+      homeLine === null ? "favorite_unknown" : homeLine < 0 ? "home_favorite" : homeLine > 0 ? "away_favorite" : "pickem",
+      homeLine === null ? "spread_unknown" : Math.abs(homeLine) < 3 ? "spread_close" : Math.abs(homeLine) < 7 ? "spread_mid" : "spread_large",
+      total === null ? "total_unknown" : total < 42 ? "total_low" : total < 48 ? "total_mid" : "total_high",
+    ].join("|");
+    return { game, stratum, rank: marketBrainSha256({
+      release: "nfl_market_brain_canary_stratified_v1", season: args.season,
+      week: args.week, eventId: game.providerGameId,
+    }) };
+  }).sort((a, b) => a.rank.localeCompare(b.rank));
+  const distinct: typeof candidates = [];
+  const repeats: typeof candidates = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.stratum)) repeats.push(candidate);
+    else { seen.add(candidate.stratum); distinct.push(candidate); }
+  }
+  return [...distinct, ...repeats].slice(0, args.maximumGames).map((candidate) => candidate.game);
+}
+
+export function resolveNflMarketBrainCaptureAttempt(args: {
+  key: string;
+  capturedAt: string;
+  schedule: Array<{ attemptId: string; windowOpensAt: string; windowClosesAt: string }>;
+}): string {
+  const capturedAt = Date.parse(args.capturedAt);
+  const matches = args.schedule.filter((attempt) => {
+    const opens = Date.parse(attempt.windowOpensAt);
+    const closes = Date.parse(attempt.windowClosesAt);
+    return Number.isFinite(opens) && Number.isFinite(closes) && opens <= capturedAt && capturedAt <= closes;
+  });
+  if (matches.length !== 1 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(matches[0]?.attemptId ?? "")) {
+    throw new Error(`NFL Market Brain capture attempt was missing or ambiguous for ${args.key}.`);
+  }
+  return matches[0]!.attemptId;
+}
+
 function stageCounts(payloads: NflForwardEvidencePayload[]): Record<"opening" | "unlocked" | "t60", number> {
   return {
     opening: payloads.filter((payload) => payload.stage === "opening").length,
@@ -1264,7 +1349,12 @@ function stageCounts(payloads: NflForwardEvidencePayload[]): Record<"opening" | 
 }
 
 function withoutMarketBrainShadow(payload: NflForwardEvidencePayload): NflForwardEvidencePayload {
-  const { marketBrainShadow: _marketBrainShadow, ...authoritative } = payload;
+  const {
+    marketBrainShadow: _marketBrainShadow,
+    marketBrainCaptureAttemptId: _marketBrainCaptureAttemptId,
+    marketBrainRawParserInputs: _marketBrainRawParserInputs,
+    ...authoritative
+  } = payload;
   return authoritative as NflForwardEvidencePayload;
 }
 

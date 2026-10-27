@@ -16,15 +16,22 @@ import {
   resolverOutputAsResearchPrediction,
   type NflMarketBrainSerializedWeights,
 } from "../lib/services/marketBrain/nflMarketBrainResolverContract";
-import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrainCanonical";
+import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
+import {
+  NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE,
+  readNflMarketBrainResearchInput,
+} from "../lib/services/marketBrain/nflMarketBrainResearchInput";
 import {
   buildNflMarketBrainResearchManifest,
+  persistNflMarketBrainResearchPrediction,
   persistNflMarketBrainResearchManifest,
 } from "../lib/services/marketBrain/nflMarketBrainResearchEvaluator";
 import {
   buildNflMarketBrainResolverFeatures,
+  type NflMarketBrainResolverFeatures,
 } from "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
-import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
+import { materializeNflMarketBrainSequence, type NflMarketBrainSequence } from
+  "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { trainNflMarketBrainRegularizedJointResidual } from
   "../lib/services/marketBrain/nflMarketBrainDeterministicTrainer";
 
@@ -77,17 +84,20 @@ async function trainingManifestFor(candidateRelease: string) {
       { role: "selection", evidenceStatus: "untouched", events: [{
         eventId: "resolver-fixture", foldId: "selection-week", startsAt,
         cutoffAt,
-        firstCaptureAt: "2026-10-20T12:00:00.000Z", lastCaptureAt: cutoffAt, outcomeOpenedAt: null,
+        captureWindowOpensAt: "2026-10-20T12:00:00.000Z", captureWindowClosesAt: cutoffAt,
+        expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000101", stage: "t60", plannedAt: cutoffAt }], outcomeOpenedAt: null,
       }] },
       { role: "confirmation", evidenceStatus: "untouched", events: [{
         eventId: "confirmation-fixture", foldId: "confirmation-week", startsAt: "2026-10-27T20:00:00.000Z",
         cutoffAt: "2026-10-27T16:00:00.000Z",
-        firstCaptureAt: "2026-10-27T12:00:00.000Z", lastCaptureAt: "2026-10-27T16:00:00.000Z", outcomeOpenedAt: null,
+        captureWindowOpensAt: "2026-10-27T12:00:00.000Z", captureWindowClosesAt: "2026-10-27T16:00:00.000Z",
+        expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000102", stage: "t60", plannedAt: "2026-10-27T16:00:00.000Z" }], outcomeOpenedAt: null,
       }] },
       { role: "prospective_shadow", evidenceStatus: "prospective", events: [{
         eventId: "prospective-fixture", foldId: "prospective-week", startsAt: "2026-11-03T20:00:00.000Z",
         cutoffAt: "2026-11-03T16:00:00.000Z",
-        firstCaptureAt: "2026-11-03T12:00:00.000Z", lastCaptureAt: "2026-11-03T16:00:00.000Z", outcomeOpenedAt: null,
+        captureWindowOpensAt: "2026-11-03T12:00:00.000Z", captureWindowClosesAt: "2026-11-03T16:00:00.000Z",
+        expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000103", stage: "t60", plannedAt: "2026-11-03T16:00:00.000Z" }], outcomeOpenedAt: null,
       }] },
     ],
   });
@@ -97,6 +107,7 @@ async function trainingManifestFor(candidateRelease: string) {
   });
 }
 const trainingManifest = await trainingManifestFor("nfl-market-brain-resolver-fixture-r1");
+const researchInput = await fixtureResearchInput(sequence, features, trainingManifest.checksum);
 const trainingResult = trainNflMarketBrainRegularizedJointResidual({
   manifest: trainingManifest,
   examples: developmentExamples(),
@@ -122,8 +133,7 @@ const reloadedArtifact = await readNflMarketBrainResolverArtifact({
 assert.equal(reloadedArtifact.artifact.sha256, artifact.sha256,
   "a process restart must recreate private artifact attestation only from exact stored bytes");
 const shadow = buildNflMarketBrainResolverShadowOutput({
-  sequence,
-  features,
+  researchInput,
   artifact,
   weights: fixtureWeights,
   inferredAt: cutoffAt,
@@ -179,26 +189,41 @@ assert.throws(
 );
 
 const research = resolverOutputAsResearchPrediction(shadow);
+assert.equal(research.resolverOutputChecksum, shadow.checksum);
 assert.equal(research.sequenceChecksum, sequence.checksum);
 assert.deepEqual(research.marginDistribution, shadow.posterior.marginDistribution);
 assert.deepEqual(research.totalDistribution, shadow.posterior.totalDistribution);
+assert.ok(Math.abs(shadow.zeroMarketPosterior.awayWinProbability + shadow.zeroMarketPosterior.tieProbability +
+  shadow.zeroMarketPosterior.homeWinProbability - 1) < 1e-9);
+const persistedPrediction = await persistNflMarketBrainResearchPrediction({
+  client: predictionPersistenceClient() as never,
+  resolverOutput: shadow,
+});
+assert.equal(persistedPrediction.resolverOutputChecksum, shadow.checksum);
+await assert.rejects(
+  () => persistNflMarketBrainResearchPrediction({
+    client: predictionPersistenceClient() as never,
+    resolverOutput: structuredClone(shadow),
+  }),
+  /verified resolver output/,
+  "a caller-authored or copied posterior cannot enter the prediction ledger",
+);
 
-const replay = buildNflMarketBrainResolverShadowOutput({ sequence, features, artifact,
+const replay = buildNflMarketBrainResolverShadowOutput({ researchInput, artifact,
   weights: fixtureWeights, inferredAt: cutoffAt });
 assert.equal(replay.checksum, shadow.checksum,
   "the persisted weights and fixed vectorizer must exactly reproduce the posterior");
-assert.throws(() => buildNflMarketBrainResolverShadowOutput({ sequence, features, artifact,
+assert.throws(() => buildNflMarketBrainResolverShadowOutput({ researchInput, artifact,
   weights: { ...fixtureWeights, coefficients: fixtureWeights.coefficients.map((value, index) =>
     index === 0 ? value + 0.01 : value) }, inferredAt: cutoffAt }), /do not match the bound artifact bytes/,
 "caller-supplied score states or unbound coefficients must not influence inference");
-assert.throws(() => buildNflMarketBrainResolverShadowOutput({ sequence, features,
+assert.throws(() => buildNflMarketBrainResolverShadowOutput({ researchInput,
   artifact: structuredClone(artifact) as typeof artifact, weights: fixtureWeights, inferredAt: cutoffAt }),
 /append-only artifact persistence attestation/,
 "a structural copy must lose the private database-backed artifact attestation");
 assert.throws(
   () => buildNflMarketBrainResolverShadowOutput({
-    sequence,
-    features,
+    researchInput,
     artifact,
     weights: fixtureWeights,
     inferredAt: startsAt,
@@ -238,8 +263,10 @@ function developmentEventsFixture() {
     foldId: index < 2 ? "development-week-a" : "development-week-b",
     startsAt: index < 2 ? "2026-08-13T20:00:00.000Z" : "2026-08-20T20:00:00.000Z",
     cutoffAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
-    firstCaptureAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
-    lastCaptureAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
+    captureWindowOpensAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
+    captureWindowClosesAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
+    expectedCaptureAttempts: [{ runId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      stage: "t60" as const, plannedAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z" }],
     outcomeOpenedAt: index < 2 ? "2026-08-14T00:00:00.000Z" : "2026-08-21T00:00:00.000Z",
   }));
 }
@@ -293,6 +320,37 @@ function manifestPersistenceClient(manifest: ReturnType<typeof buildNflMarketBra
   };
 }
 
+async function fixtureResearchInput(
+  sequence: NflMarketBrainSequence,
+  features: NflMarketBrainResolverFeatures,
+  manifestChecksum: string,
+) {
+  const payload = {
+    release: NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE,
+    eventId: sequence.eventId,
+    cutoffAt: sequence.cutoffAt,
+    startsAt: sequence.startsAt,
+    captureSetRecordId: "00000000-0000-4000-8000-000000000201",
+    captureSetChecksum: "9".repeat(64),
+    manifestChecksum,
+    sequence,
+    features,
+    sequenceChecksum: sequence.checksum,
+    featureChecksum: features.checksum,
+  };
+  const researchInput = { ...payload, checksum: marketBrainSha256(payload) };
+  return readNflMarketBrainResearchInput({
+    checksum: researchInput.checksum,
+    client: { from() { return { select() { return { eq() { return this; }, single: async () => ({ data: {
+      id: researchInput.captureSetRecordId,
+      research_input_checksum: researchInput.checksum,
+      research_input: reorderObjectKeys(researchInput),
+      research_input_payload: marketBrainCanonicalJson(payload),
+      created_at: cutoffAt,
+    }, error: null }) }; } }; } } as never,
+  });
+}
+
 function resolverArtifactPersistenceClient(
   artifact: ReturnType<typeof bindNflMarketBrainResolverArtifact>,
   weights: NflMarketBrainSerializedWeights,
@@ -308,6 +366,20 @@ function resolverArtifactPersistenceClient(
     from() { return {
       insert() { return { select() { return { single: async () => ({ data: row, error: null }) }; } }; },
       select() { return { eq() { return this; }, single: async () => ({ data: row, error: null }) }; },
+    }; },
+  };
+}
+
+function predictionPersistenceClient() {
+  return {
+    from() { return {
+      insert(row: Record<string, unknown>) { return { select() { return { single: async () => ({ data: {
+        id: "00000000-0000-4000-8000-000000000501",
+        prediction_sha256: row.prediction_sha256,
+        prediction: row.prediction,
+        prediction_payload: row.prediction_payload,
+        created_at: "2026-10-20T16:01:00.000Z",
+      }, error: null }) }; } }; },
     }; },
   };
 }

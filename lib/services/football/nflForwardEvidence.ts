@@ -17,6 +17,7 @@ import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionSh
 import type { NflExactProviderIndependentScore } from "./nflExactProviderScoreRuntime";
 import type { NflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import type { NflMarketBrainCaptureResult } from "./nflMarketBrainShadow";
+import type { FootballRawPriceResponseManifest } from "./footballRawPriceManifest";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_09_01_r6_forecast_value_separation" as const;
@@ -27,7 +28,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow" as const;
+  "nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -174,6 +175,10 @@ export type NflForwardEvidencePayload = {
   contextualEvidenceCapture?: NflForwardContextCapture;
   /** Internal observable tape only; ignored by production, member, and tracking readers. */
   marketBrainShadow?: NflMarketBrainCaptureResult;
+  /** Predeclared manifest attempt identity; distinct from the execution's cron run id. */
+  marketBrainCaptureAttemptId?: string;
+  /** Research-only exact parser inputs; stripped before every authoritative write. */
+  marketBrainRawParserInputs?: NonNullable<FootballRawPriceResponseManifest["rawParserInput"]>[];
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];

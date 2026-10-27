@@ -14,7 +14,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r81_market_brain_health_truthful` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -492,16 +492,19 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_contract_2026_10_27_r11_full_incumbent_distribution` and
-  `nfl_market_brain_shadow_2026_10_27_r11_full_incumbent_distribution` define an internal-only,
+- `market_brain_contract_2026_10_27_r12_raw_parser_input_receipt` and
+  `nfl_market_brain_shadow_2026_10_27_r12_raw_parser_input_receipt` define an internal-only,
   production-inert evidence boundary. The sole writer
-  `nfl_forward_evidence_writer_2026_10_27_r81_market_brain_health_truthful`
+  `nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar`
   consumes `nfl_sharpapi_splits_2026_10_27_r5_pagination_metadata_closed`. Research capture is
   explicitly disabled unless both `NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED=true` and
   `NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED=true`; a one-to-four-game per-run canary cap is also
-  mandatory. Merging the code does not begin storage. When separately enabled for a reviewed shadow canary, it stores tapes only for
-  future unlocked rows. `balldontlie_nfl_regular_slate_2026_10_26_r5_raw_price_manifest` and
-  `football_sharp_price_capture_2026_10_26_r3_raw_response_manifest` attach raw response hashes,
+  mandatory. `NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON` must also carry every predeclared future
+  event/stage attempt UUID with a nonoverlapping execution window; a missing or ambiguous current
+  slot fails closed and is never replaced by the cron's execution-time run id. Merging the code does
+  not begin storage. When separately enabled for a reviewed shadow canary, it stores tapes only for
+  future unlocked rows. `balldontlie_nfl_regular_slate_2026_10_27_r6_raw_parser_input` and
+  `football_sharp_price_capture_2026_10_27_r4_raw_parser_input` attach raw response hashes,
   returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
   incomplete price sides before complete-pair normalization or family replacement. The tape retains
   exact-evaluated versus
@@ -521,7 +524,10 @@ Last reviewed: 2026-10-27
   16-game, 168-capture week before database compression). Market Brain construction performs zero
   provider requests and reuses the writer's already-fetched odds, splits, availability, and context.
   Full-slate responses are represented per game by event rows plus response digest/accounting rather
-  than copied in full. Player-level injury facts and numeric weather values are retained. Each tape
+  than copied in full. Exact rows handed to each price parser are separately content-addressed once,
+  retained for 30 days under a 2 MiB per-response and 256 MiB global cap, and never copied into the
+  authoritative payload. This adds no provider request and permits parser-omission audits. Player-level
+  injury facts and numeric weather values are retained. Each tape
   is capped at 96 KiB, removed before the authoritative NFL evidence append, and only then written to
   the separate append-only `nfl_market_brain_shadow_snapshots` research table; sidecar read/write
   failures cannot roll back authoritative evidence, member, tracking, or lock work and are bounded by
@@ -529,7 +535,7 @@ Last reviewed: 2026-10-27
   error and every per-game capture failure. The database enforces 96 KiB rows, 256 MiB weekly and
   5 GiB season ceilings, content-addressed prior/artifact ceilings, and a 210-day tape expiry boundary.
   The scheduled cleanup route invokes the bounded purge only while the two-key canary is approved.
-  `nfl_market_brain_sequence_materializer_2026_10_27_r12_capture_membership_incumbent_distribution` replays only cases
+  `nfl_market_brain_sequence_materializer_2026_10_27_r13_finalized_capture_input` replays only cases
   and observations available by an explicit cutoff, excludes the exact target and its entire source
   family before feature construction, pairs individual sides without zero-filling, preserves unpaired
   observed quotes as explicit uncertainty tokens, retains every capture's source-availability state,
@@ -540,8 +546,8 @@ Last reviewed: 2026-10-27
   resolved by participant sort order. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
-  `nfl_market_brain_research_evaluator_2026_10_27_r10_released_reader_comparator` and
-  `nfl_market_brain_research_manifest_2026_10_27_r4_database_precommit_all_untouched` form a research-only proof
+  `nfl_market_brain_research_evaluator_2026_10_27_r11_attested_tape_and_outcome` and
+  `nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows` form a research-only proof
   boundary: outcomes must arrive strictly after cutoff and game start, candidate predictions must
   bind the exact sequence checksum and predate the case, mixed releases and duplicate events are
   rejected, and persisted rolling-origin development/selection/confirmation/prospective capture
@@ -565,9 +571,9 @@ Last reviewed: 2026-10-27
   `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` freezes 13 nuanced follow, fade,
   resistance, reversal, outage, stale-evidence, news-sequence, and cross-market stories as non-one-hot
   action distributions without turning them into inference quotas.
-  `nfl_market_brain_resolver_contract_2026_10_27_r8_contextual_joint_exponential`,
-  `nfl_market_brain_resolver_features_2026_10_27_r8_book_specific_field_missingness_vector`, and
-  `nfl_market_brain_tournament_2026_10_27_r8_contextual_joint_exponential` freeze one implemented
+  `nfl_market_brain_resolver_contract_2026_10_27_r9_attested_input_zero_market`,
+  `nfl_market_brain_resolver_features_2026_10_27_r9_finalized_capture_input`, and
+  `nfl_market_brain_tournament_2026_10_27_r9_attested_input_zero_market` freeze one implemented
   regularized residual baseline, its regularization grid and executable parameter-shape boundary,
   contextual source/direction/state basis plus preprocessing/loss/coherence/optimizer/seed/serialization contracts,
   complete development-only row membership, an executable earlier-to-later rolling tournament,
@@ -582,14 +588,16 @@ Last reviewed: 2026-10-27
   `nfl_market_brain_case_audit_2026_10_27_r2_complete_normalized_chronological_dossier` provides a
   complete normalized read-only dossier for every observation, paired and unpaired quote, split,
   outage, context row, exclusion, source manifest, consumed feature, candidate consequence, and
-  postgame delta without assigning a manual verdict. It does not claim to retain raw provider bodies;
-  those remain represented by canonical response/row hashes and accounting.
-  An October 27 real-tape re-review keeps actual capture and fitting blocked: the prospective manifest
-  still predeclares exact future ingestion endpoints instead of deterministic window/attempt identities,
-  a database-complete capture-set receipt is not yet required, and the prediction ledger does not yet
-  prove by private resolver attestation that the stored posterior was generated from its bound artifact
-  and feature bytes. Verified outcomes, a same-reconstruction zero-market comparator, and durable
-  sequence/feature receipts are also still required. A read-only audit checksum-validated 107 locked
+  postgame delta without assigning a manual verdict. Exact price-parser input rows now have a bounded
+  private archive; whole HTTP envelopes and unobservable private order flow are still not claimed.
+  The October 27 real-tape re-review blockers are now closed in code: manifests predeclare planned
+  windows and deterministic run/stage attempts; a server-finalized capture-set receipt must exactly
+  equal all success/failure rows in the database and freezes the window against late insertion; exact
+  sequences/features receive a durable append-only receipt before inference; only an in-process private
+  resolver output can enter the prediction writer; evaluation labels come from an immutable receipt over
+  an exact finalized `games` row; and every candidate is scored against a same-support zero-market
+  reconstruction as well as the independent prior and released reader. The canary is selected by
+  deterministic pregame kickoff/favorite/spread/total strata rather than provider order. A read-only audit checksum-validated 107 locked
   T-60 NFL payloads across Weeks 1–7 (106 settled), with complete current/opening/playbook/context
   chronology but uneven identified SharpAPI coverage. The live research table currently contains zero
   Market Brain shadow rows, so those older release-mixed payloads cannot be represented as if they
@@ -612,7 +620,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_27_r81_market_brain_health_truthful` /
+  `nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an

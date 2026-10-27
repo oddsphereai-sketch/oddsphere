@@ -8,6 +8,7 @@ import type { NflPreviewBookOdds, NflPreviewGame } from "./balldontlieNflPreview
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 import {
   markRawPriceDuplicates,
+  footballRawPriceParserInput,
   rawPriceSha256,
   type FootballRawPriceObservation,
   type FootballRawPriceResponseManifest,
@@ -15,7 +16,7 @@ import {
 } from "./footballRawPriceManifest";
 
 export const FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE =
-  "football_sharp_price_capture_2026_10_26_r3_raw_response_manifest" as const;
+  "football_sharp_price_capture_2026_10_27_r4_raw_parser_input" as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK = 12 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_PAGE_SIZE = 200 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_TIMEOUT_MS = 20_000 as const;
@@ -148,6 +149,7 @@ async function fetchFootballSharpOdds(args: {
           participant: sportsbook,
           providerFetchedAt,
           rawResponseSha256: null,
+          rawParserInput: null,
           returnedRows: 0,
           matchedRows: 0,
           unmatchedRows: 0,
@@ -340,6 +342,7 @@ export function buildSharpRawPriceManifest(args: {
     participant: args.sportsbook,
     providerFetchedAt: args.providerFetchedAt,
     rawResponseSha256: args.rawResponseSha256 ?? rawPriceSha256(args.rows),
+    rawParserInput: footballRawPriceParserInput(args.rows),
     returnedRows: args.rows.length,
     matchedRows,
     unmatchedRows,

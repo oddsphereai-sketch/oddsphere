@@ -32,7 +32,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r11_full_incumbent_distribution" as const;
+  "nfl_market_brain_shadow_2026_10_27_r12_raw_parser_input_receipt" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -223,6 +223,7 @@ function sharpSplitManifest(
     providerFetchedAt: args.capture.capturedAt,
     receivedAt: manifest.responseReceivedAt,
     rawResponseSha256: manifest.rawResponseSha256,
+    rawParserInputSha256: null,
     returnedRows: manifest.returnedRows,
     matchedRows: manifest.matchedRows,
     unmatchedRows: manifest.unmatchedRows,
@@ -488,6 +489,7 @@ function addRawPrices(
       providerFetchedAt: manifest.providerFetchedAt,
       receivedAt: args.retrievalCompletedAt,
       rawResponseSha256: manifest.rawResponseSha256,
+      rawParserInputSha256: manifest.rawParserInput?.sha256 ?? null,
       returnedRows: manifest.returnedRows,
       matchedRows: manifest.matchedRows,
       unmatchedRows: manifest.unmatchedRows,

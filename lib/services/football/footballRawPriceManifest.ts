@@ -38,6 +38,13 @@ export type FootballRawPriceResponseManifest = {
   participant: string | null;
   providerFetchedAt: string;
   rawResponseSha256: string | null;
+  /** Exact rows handed to the parser, retained only by the bounded research sidecar. */
+  rawParserInput: {
+    schema: "football_raw_price_parser_input_v1";
+    sha256: string;
+    payload: unknown[];
+    bytes: number;
+  } | null;
   returnedRows: number;
   matchedRows: number;
   unmatchedRows: number;
@@ -66,6 +73,7 @@ export function failedFootballRawPriceManifest(args: {
     participant: args.participant,
     providerFetchedAt: args.providerFetchedAt,
     rawResponseSha256: null,
+    rawParserInput: null,
     returnedRows: 0,
     matchedRows: 0,
     unmatchedRows: 0,
@@ -74,6 +82,20 @@ export function failedFootballRawPriceManifest(args: {
     failed: true,
     failureReason: args.reason,
     observationsByGame: Object.fromEntries(args.gameIds.map((gameId) => [gameId, []])),
+  };
+}
+
+export function footballRawPriceParserInput(values: unknown[]) {
+  const payload = structuredClone(values);
+  const bytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
+  if (bytes <= 0 || bytes > 2 * 1024 * 1024) {
+    throw new Error("Football raw-price parser input exceeds the bounded 2 MiB research archive limit.");
+  }
+  return {
+    schema: "football_raw_price_parser_input_v1" as const,
+    sha256: rawPriceSha256(payload),
+    payload,
+    bytes,
   };
 }
 

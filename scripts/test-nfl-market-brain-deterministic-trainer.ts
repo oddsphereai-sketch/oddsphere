@@ -25,8 +25,10 @@ const developmentEvents = Array.from({ length: 8 }, (_, index) => ({
   foldId: index < 4 ? "development-week-a" : "development-week-b",
   startsAt: index < 4 ? "2026-08-13T20:00:00.000Z" : startsAt,
   cutoffAt: index < 4 ? "2026-08-12T16:00:00.000Z" : cutoffAt,
-  firstCaptureAt: index < 4 ? "2026-08-12T16:00:00.000Z" : cutoffAt,
-  lastCaptureAt: index < 4 ? "2026-08-12T16:00:00.000Z" : cutoffAt,
+  captureWindowOpensAt: index < 4 ? "2026-08-12T16:00:00.000Z" : cutoffAt,
+  captureWindowClosesAt: index < 4 ? "2026-08-12T16:00:00.000Z" : cutoffAt,
+  expectedCaptureAttempts: [{ runId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    stage: "t60" as const, plannedAt: index < 4 ? "2026-08-12T16:00:00.000Z" : cutoffAt }],
   outcomeOpenedAt: index < 4 ? "2026-08-14T00:00:00.000Z" : labelAvailableAt,
 }));
 
@@ -40,18 +42,21 @@ async function main() {
       { role: "development", evidenceStatus: "opened_development_only", events: developmentEvents },
       { role: "selection", evidenceStatus: "untouched", events: [{
         eventId: "selection", foldId: "selection-week", startsAt: "2026-09-10T20:00:00.000Z",
-        cutoffAt: "2026-09-10T16:00:00.000Z", firstCaptureAt: "2026-09-10T16:00:00.000Z",
-        lastCaptureAt: "2026-09-10T16:00:00.000Z", outcomeOpenedAt: null,
+        cutoffAt: "2026-09-10T16:00:00.000Z", captureWindowOpensAt: "2026-09-10T16:00:00.000Z",
+        captureWindowClosesAt: "2026-09-10T16:00:00.000Z",
+        expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000101", stage: "t60", plannedAt: "2026-09-10T16:00:00.000Z" }], outcomeOpenedAt: null,
       }] },
       { role: "confirmation", evidenceStatus: "untouched", events: [{
         eventId: "confirmation", foldId: "confirmation-week", startsAt: "2026-09-17T20:00:00.000Z",
-        cutoffAt: "2026-09-17T16:00:00.000Z", firstCaptureAt: "2026-09-17T16:00:00.000Z",
-        lastCaptureAt: "2026-09-17T16:00:00.000Z", outcomeOpenedAt: null,
+        cutoffAt: "2026-09-17T16:00:00.000Z", captureWindowOpensAt: "2026-09-17T16:00:00.000Z",
+        captureWindowClosesAt: "2026-09-17T16:00:00.000Z",
+        expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000102", stage: "t60", plannedAt: "2026-09-17T16:00:00.000Z" }], outcomeOpenedAt: null,
       }] },
       { role: "prospective_shadow", evidenceStatus: "prospective", events: [{
         eventId: "prospective", foldId: "prospective-week", startsAt: "2026-09-24T20:00:00.000Z",
-        cutoffAt: "2026-09-24T16:00:00.000Z", firstCaptureAt: "2026-09-24T16:00:00.000Z",
-        lastCaptureAt: "2026-09-24T16:00:00.000Z", outcomeOpenedAt: null,
+        cutoffAt: "2026-09-24T16:00:00.000Z", captureWindowOpensAt: "2026-09-24T16:00:00.000Z",
+        captureWindowClosesAt: "2026-09-24T16:00:00.000Z",
+        expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000103", stage: "t60", plannedAt: "2026-09-24T16:00:00.000Z" }], outcomeOpenedAt: null,
       }] },
     ],
   });

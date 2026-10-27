@@ -14,7 +14,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r12_capture_membership_incumbent_distribution" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r13_finalized_capture_input" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
