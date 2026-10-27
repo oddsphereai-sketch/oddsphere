@@ -128,6 +128,22 @@ const NFL_PAID_SCORE_PRECEDING_MEMBER_RELEASE =
 const NFL_PAID_SCORE_PRECEDING_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_09_28_r24_paid_team_score" as const;
 
+const NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES = new Set<string>([
+  "nfl_forward_evidence_collector_2026_09_28_r16_injury_continuity",
+  "nfl_forward_evidence_collector_2026_10_06_r17_hourly_market_freshness",
+  "nfl_forward_evidence_collector_2026_10_08_r18_game_designation_continuity",
+  "nfl_forward_evidence_collector_2026_10_09_r19_provider_feed_continuity",
+  "nfl_forward_evidence_collector_2026_10_15_r20_personnel_evidence_eligibility",
+  "nfl_forward_evidence_collector_2026_10_15_r21_foundational_no_weight_score",
+  "nfl_forward_evidence_collector_2026_10_15_r22_personnel_coverage_repair",
+  "nfl_forward_evidence_collector_2026_10_16_r23_availability_adjusted_starter_authority",
+  "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow",
+  "nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar",
+  "nfl_forward_evidence_collector_2026_10_27_r26_source_evidence_release_binding",
+  "nfl_forward_evidence_collector_2026_10_27_r27_research_failure_isolation",
+  NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+]);
+
 const NFL_PREVIOUS_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_27_r21_pressure_direction" as const;
 const NFL_PREVIOUS_DECISION_RELEASE =
@@ -571,7 +587,7 @@ function buildHeldGame(
     total: nflSourceSplitEvidence(payload, "total", movementRows),
     spread: nflSourceSplitEvidence(payload, "spread", movementRows),
   };
-  const projected = payload.collectorRelease === NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE
+  const projected = NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES.has(payload.collectorRelease)
     ? {
         away: roundToTenths(outcome.expectedAwayScore),
         home: roundToTenths(outcome.expectedHomeScore),

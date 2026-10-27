@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   completeSharpApiNflSplitSet,
   fetchSharpApiNflSplits,
+  matchAllSharpApiNflSplitRows,
   matchSharpApiNflSplitRows,
   NFL_SHARP_API_SPLITS_RELEASE,
   normalizeSharpApiNflSplit,
@@ -72,6 +73,20 @@ assert.ok(matchSharpApiNflSplitRows(
 
 const draftKings = { ...row, sportsbook: "draftkings", fetched_at: "2026-08-21T17:02:00Z" };
 const betMgm = { ...row, sportsbook: "betmgm", fetched_at: "2026-08-21T17:03:00Z" };
+const allSources = matchAllSharpApiNflSplitRows(
+  [game],
+  [{ date: "2026-09-09", rows: [
+    row,
+    { ...draftKings, moneyline: { ...draftKings.moneyline, handle_pct: { home: 35, away: 65 } } },
+    betMgm,
+  ] }],
+  "2026-08-21T17:04:00Z",
+)[game.providerGameId]!;
+assert.deepEqual(allSources.map((source) => source.sportsbook), ["circa", "draftkings", "betmgm"]);
+assert.ok(allSources.every((source) => source.status === "observed" && source.observations.length === 1));
+assert.equal(allSources.find((source) => source.sportsbook === "circa")?.observations[0]?.moneyline.homeMoneyPct, 61);
+assert.equal(allSources.find((source) => source.sportsbook === "draftkings")?.observations[0]?.moneyline.homeMoneyPct, 35,
+  "conflicting identified-book observations must survive independently");
 assert.equal(
   matchSharpApiNflSplitRows(
     [game],
@@ -80,11 +95,18 @@ assert.equal(
   )[game.providerGameId]?.moneyline.sourceSportsbook,
   "circa",
 );
-
 const incompleteCirca = {
   ...row,
   total: { bets_pct: { over: 0.57, under: 0.43 }, handle_pct: null },
 };
+const sourceStates = matchAllSharpApiNflSplitRows(
+  [game], [{ date: "2026-09-09", rows: [row, { ...row }, incompleteCirca, draftKings] }],
+  "2026-08-21T17:04:00Z",
+)[game.providerGameId]!;
+assert.equal(sourceStates.find((source) => source.sportsbook === "circa")?.status, "duplicate");
+assert.equal(sourceStates.find((source) => source.sportsbook === "circa")?.observations.length, 3,
+  "duplicate exact-identity rows must be retained instead of dropped");
+assert.equal(sourceStates.find((source) => source.sportsbook === "betmgm")?.status, "unavailable");
 assert.equal(
   matchSharpApiNflSplitRows(
     [game],
@@ -122,6 +144,20 @@ assert.deepEqual(
   {},
 );
 
+const undated = { ...row, event_id: "nfl_patriots_seahawks", event_start_time: null };
+assert.ok(
+  matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [undated] }], "2026-08-21T17:01:00Z")[
+    game.providerGameId
+  ],
+  "the feature-off incumbent matcher must retain its deployed undated-row semantics",
+);
+assert.ok(
+  matchAllSharpApiNflSplitRows(
+    [game], [{ date: "2026-09-09", rows: [undated] }], "2026-08-21T17:01:00Z",
+  )[game.providerGameId]?.every((source) => source.status === "unavailable"),
+  "the opt-in research ledger must fail closed without provider kickoff or date-bearing event identity",
+);
+
 const crossLeague = { ...row, league: "cfl" };
 assert.deepEqual(
   matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [crossLeague] }], "2026-08-21T17:01:00Z"),
@@ -140,6 +176,8 @@ async function testFetchContract(): Promise<void> {
     apiKey: "test-key",
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
+    clock: () => "2026-08-21T17:04:05Z",
+    captureResearchManifest: true,
     client: {
       async fetchAll<T>(options: { path: string; query?: unknown; maxPages?: number }): Promise<T[]> {
         calls.push({ path: options.path, query: options.query, maxPages: options.maxPages });
@@ -150,14 +188,82 @@ async function testFetchContract(): Promise<void> {
   assert.equal(fetched.release, NFL_SHARP_API_SPLITS_RELEASE);
   assert.equal(fetched.requests, 1);
   assert.equal(fetched.rows, 1);
+  assert.equal(fetched.captureManifest?.returnedRows, 1);
+  assert.equal(fetched.captureManifest?.matchedRows, 1);
+  assert.equal(fetched.captureManifest?.responseReceivedAt, "2026-08-21T17:04:05.000Z");
   assert.deepEqual(calls, [{
     path: "/splits",
     query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
     maxPages: 1,
   }]);
   assert.equal(fetched.splitsByGame[game.providerGameId]?.moneyline.sourceSportsbook, "circa");
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.length, 3);
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.find((source) => source.sportsbook === "draftkings")?.status,
+    "unavailable");
 }
 
-void testFetchContract().then(() => {
-  console.log("NFL SharpAPI split normalization, identity, date, completeness, and request-contract tests passed.");
+async function testTruncationFailsClosed(): Promise<void> {
+  const fetched = await fetchSharpApiNflSplits({
+    apiKey: "test-key",
+    games: [game],
+    capturedAt: "2026-08-21T17:04:00Z",
+    clock: () => "2026-08-21T17:04:05Z",
+    captureResearchManifest: true,
+    client: { async fetchAll<T>(): Promise<T[]> { return Array.from({ length: 200 }, () => row) as T[]; } },
+  });
+  assert.equal(fetched.captureManifest?.status, "failed");
+  assert.equal(fetched.captureManifest?.failureReason, "sharpapi_split_capture_incomplete_response");
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.every((source) => source.status === "unavailable"), true);
+}
+
+async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
+  const rows = Array.from({ length: 200 }, (_, index) => ({
+    ...row,
+    event_id: `unmatched-${index}`,
+    away_team: "Unknown Away",
+    home_team: "Unknown Home",
+  }));
+  const fetched = await fetchSharpApiNflSplits({
+    apiKey: "test-key",
+    games: [game],
+    capturedAt: "2026-08-21T17:04:00Z",
+    clock: () => "2026-08-21T17:04:05Z",
+    captureResearchManifest: true,
+    client: {
+      async fetchAll<T>(options: { onPage?: (response: {
+        data: T[]; pagination: { total: number; count: number; offset: number; has_more: boolean };
+      }, pageIndex: number) => void }): Promise<T[]> {
+        options.onPage?.({ data: rows as T[], pagination: { total: 200, count: 200, offset: 0, has_more: false } }, 0);
+        return rows as T[];
+      },
+    },
+  });
+  assert.equal(fetched.captureManifest?.returnedRows, 200);
+  assert.equal(fetched.captureManifest?.unmatchedRows, 200);
+}
+
+async function testShortPageStillFailsWhenProviderDeclaresMore(): Promise<void> {
+  const rows = Array.from({ length: 100 }, () => row);
+  const fetched = await fetchSharpApiNflSplits({
+    apiKey: "test-key",
+    games: [game],
+    capturedAt: "2026-08-21T17:04:00Z",
+    captureResearchManifest: true,
+    client: {
+      async fetchAll<T>(options: { onPage?: (response: {
+        data: T[]; pagination: { total: number; count: number; offset: number; has_more: boolean };
+      }, pageIndex: number) => void }): Promise<T[]> {
+        options.onPage?.({ data: rows as T[], pagination: { total: 250, count: 100, offset: 0, has_more: true } }, 0);
+        return rows as T[];
+      },
+    },
+  });
+  assert.equal(fetched.captureManifest?.status, "failed",
+    "provider-declared truncation must fail research closed even when the returned page is shorter than the requested limit");
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.every((source) => source.status === "unavailable"), true);
+}
+
+void Promise.all([testFetchContract(), testTruncationFailsClosed(), testExactFullPageRequiresExplicitCompleteness(),
+  testShortPageStillFailsWhenProviderDeclaresMore()]).then(() => {
+  console.log("NFL SharpAPI lossless all-source split manifest and backward-compatible selection tests passed.");
 });

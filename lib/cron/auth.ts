@@ -25,6 +25,10 @@ const CRON_ROUTE_FLAGS: Record<string, { env: string; defaultEnabled: boolean }>
   "/api/cron/pregame-sweep": { env: "CRON_PREGAME_SWEEP_ENABLED", defaultEnabled: true },
   "/api/cron/tracking-refresh": { env: "CRON_TRACKING_REFRESH_ENABLED", defaultEnabled: true },
   "/api/cron/cleanup-stream-tables": { env: "CRON_CLEANUP_ENABLED", defaultEnabled: true },
+  "/api/cron/nfl-market-brain-retention": {
+    env: "NFL_MARKET_BRAIN_RETENTION_CRON_ENABLED",
+    defaultEnabled: false,
+  },
 };
 
 function cronRouteEnabled(pathname: string): { enabled: true } | { enabled: false; env: string; reason: string } {

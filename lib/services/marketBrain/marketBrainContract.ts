@@ -1,0 +1,834 @@
+import { marketBrainSha256 } from "./marketBrainCanonical";
+
+export const MARKET_BRAIN_CONTRACT_RELEASE =
+  "market_brain_contract_2026_10_27_r21_frozen_decision_envelopes" as const;
+export const MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE =
+  "market_brain_prior_model_path_policy_2026_10_27_r2_output_receipt_required" as const;
+
+export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
+export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
+export type MarketBrainModality = "model_prior" | "price_quote" | "public_split" | "identified_book_split" | "availability" | "weather" | "other_context";
+export type MarketBrainAvailability = "observed" | "incomplete" | "duplicate" | "stale" | "future" | "unavailable" | "identity_mismatch" | "unsupported";
+export type MarketBrainObservedRole = "leader" | "follower" | "resistor" | "reversal" | "static" | "conflicted" | "unknown";
+export type MarketBrainSourcePrior = "professional_book" | "retail_book" | "public_aggregate" | "independent_model" | "context_provider" | "unknown";
+
+export type MarketBrainNumericFeature = { value: number | null; observed: 0 | 1 };
+
+export type MarketBrainSubject =
+  | { kind: "two_team_game"; awayId: string; homeId: string; startsAt: string }
+  | { kind: "three_way_fixture"; awayId: string; homeId: string; startsAt: string }
+  | { kind: "player_market"; playerId: string; teamId: string | null; opponentId: string | null; startsAt: string; stat: string };
+
+export type MarketBrainDiscreteDistribution = {
+  values: number[];
+  probabilities: number[];
+};
+
+export type MarketBrainPriorInputComponent = {
+  id: string;
+  category: "model_artifact" | "historical_results" | "team_statistics" | "play_by_play" |
+    "schedule_context" | "venue_context" | "weather_context" | "external_projection" | "other";
+  release: string;
+  availableAt: string;
+  sha256: string;
+  marketRelation: "excluded_by_construction" | "may_include_market_information" | "unknown";
+};
+
+export type MarketBrainPriorInputLineage = {
+  schema: "market_brain_prior_input_lineage_v1";
+  eventId: string;
+  modelPath: "nfl_exact_provider" | "nfl_week_one_static_artifact" | "external_projection" | "fixture" | "other";
+  modelRelease: string;
+  asOf: string;
+  declaredMarketInputPolicy: "market_inputs_prohibited" | "market_inputs_present" | "unknown";
+  components: MarketBrainPriorInputComponent[];
+  qualification: "eligible" | "ineligible";
+  sha256: string;
+};
+
+type MarketBrainPriorModelPathPolicy = {
+  release: typeof MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE;
+  qualification: "registered_independent_path" | "unverified_path";
+};
+
+/**
+ * Contract-owned path policy. A caller cannot make an external or unknown path
+ * executable merely by describing its own inputs as market-free.
+ */
+export const MARKET_BRAIN_PRIOR_MODEL_PATH_POLICIES: Readonly<Record<
+  MarketBrainPriorInputLineage["modelPath"], MarketBrainPriorModelPathPolicy
+>> = Object.freeze({
+  nfl_exact_provider: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "unverified_path",
+  }),
+  nfl_week_one_static_artifact: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "registered_independent_path",
+  }),
+  external_projection: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "unverified_path",
+  }),
+  fixture: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "unverified_path",
+  }),
+  other: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "unverified_path",
+  }),
+});
+
+export type MarketBrainMarginTotalArtifact = {
+  schema: "market_brain_margin_total_artifact_v2";
+  eventId: string;
+  release: string;
+  availableAt: string;
+  inputLineage: MarketBrainPriorInputLineage;
+  sha256: string;
+  marginDistribution: MarketBrainDiscreteDistribution;
+  totalDistribution: MarketBrainDiscreteDistribution;
+};
+
+export type MarketBrainPrior =
+  | {
+      kind: "margin_total_distribution";
+      release: string;
+      marginMean: number;
+      totalMean: number;
+      marginDistributionSha256: string;
+      totalDistributionSha256: string;
+      artifact: MarketBrainMarginTotalArtifact;
+    }
+  | {
+      kind: "margin_total_distribution_ref";
+      release: string;
+      marginMean: number;
+      totalMean: number;
+      marginDistributionSha256: string;
+      totalDistributionSha256: string;
+      artifactSha256: string;
+      inputLineageSha256: string;
+      inputQualification: "eligible" | "ineligible";
+    }
+  | { kind: "score_distribution"; release: string; scoreDistributionSha256: string }
+  | { kind: "player_outcome_distribution"; release: string; mean: number; distributionSha256: string }
+  | { kind: "unavailable"; release: string; reason: string };
+
+export type MarketBrainObservation = {
+  id: string;
+  eventId: string;
+  sport: MarketBrainSport;
+  market: MarketBrainMarket;
+  modality: MarketBrainModality;
+  source: { provider: string; feed: string; participant: string | null };
+  /** Reputation/classification known before this event; never asserted as event leadership. */
+  sourcePrior: MarketBrainSourcePrior;
+  /** Derived only from observed chronology. Brand names do not imply this role. */
+  observedRole: MarketBrainObservedRole;
+  /** Provider event time retained for convenient ordering. See `timing` for availability-safe replay. */
+  observedAt: string | null;
+  timing: {
+    providerObservedAt: string | null;
+    providerFetchedAt: string | null;
+    ingestedAt: string;
+    /** Earliest time this row was available to Oddsphere inference. */
+    availableAt: string;
+  };
+  availability: MarketBrainAvailability;
+  targetRelation: "evaluated" | "same_family_as_evaluated" | "target_excluded" | "not_applicable" | "unknown";
+  values: Record<string, MarketBrainNumericFeature>;
+  categorical: Record<string, string | boolean | null>;
+  audit: { sourceRelease: string; sourceObservationId: string; notes: string[] };
+};
+
+export type MarketBrainExpectedInput = {
+  id: string;
+  market: MarketBrainMarket;
+  modality: MarketBrainModality;
+  provider: string;
+  participant: string | null;
+  expectation: "required" | "opportunistic" | "unsupported";
+  availability: MarketBrainAvailability;
+  observationIds: string[];
+  reason: string | null;
+};
+
+export type MarketBrainSourceManifest = {
+  id: string;
+  release: string;
+  provider: string;
+  feed: string;
+  participant: string | null;
+  providerFetchedAt: string;
+  /** Wall-clock receipt boundary; never earlier than the provider fetch timestamp. */
+  receivedAt: string;
+  rawResponseSha256: string | null;
+  rawParserInputSchemaRelease: string | null;
+  rawParserInputSha256: string | null;
+  returnedRows: number;
+  matchedRows: number;
+  unmatchedRows: number;
+  ambiguousRows: number;
+  ledgerScope: "full_response" | "event_rows_with_response_digest";
+  ledgerRows: number;
+  omittedRows: number;
+  rows: Array<{
+    rowIndex: number;
+    rawRowSha256: string;
+    disposition: "matched" | "unmatched" | "ambiguous";
+    providerGameId: string | null;
+    /** Exact book/source participant for this raw row; null only when the row cannot identify one. */
+    participant: string | null;
+    retainedObservationIds: string[];
+  }>;
+  retainedObservationIds: string[];
+  status: "observed" | "failed";
+  failureReason: string | null;
+};
+
+export type MarketBrainEvaluatedTarget = {
+  identity: string;
+  family: string;
+  selection: "away" | "home" | "draw" | "over" | "under" | "yes" | "no";
+  line: number | null;
+  price: number;
+  observedAt: string;
+};
+
+export type MarketBrainFrozenDecisionQuote = MarketBrainEvaluatedTarget & {
+  settlementTerms: string;
+};
+
+export type MarketBrainDecisionEnvelope = {
+  schema: "market_brain_decision_envelope_v1";
+  market: MarketBrainMarket;
+  incumbentDecision:
+    | { decision: "action"; grade: string; quoteIdentity: string; decisionRelease: string | null }
+    | { decision: "pass"; grade: string; quoteIdentity: null; decisionRelease: string | null };
+  quoteMenu: MarketBrainFrozenDecisionQuote[];
+};
+
+export function assertMarketBrainEvaluatedTarget(
+  market: MarketBrainMarket,
+  target: MarketBrainEvaluatedTarget,
+  availableBy: string,
+): void {
+  const availableByMs = Date.parse(availableBy);
+  const observedAtMs = Date.parse(target.observedAt);
+  const validAmericanPrice = Number.isFinite(target.price) && target.price !== 0 &&
+    (target.price <= -100 || target.price >= 100);
+  const sideSelection = target.selection === "away" || target.selection === "home";
+  const totalSelection = target.selection === "over" || target.selection === "under";
+  const validLine = market === "moneyline" || market === "match_result" || market === "btts"
+    ? target.line === null
+    : market === "spread" || market === "total" || market === "player_prop" ? Number.isFinite(target.line)
+    : target.line === null || Number.isFinite(target.line);
+  const validSelection = market === "moneyline" || market === "spread" ? sideSelection
+    : market === "total" || market === "player_prop" ? totalSelection
+    : market === "match_result" ? sideSelection || target.selection === "draw"
+    : market === "btts" ? target.selection === "yes" || target.selection === "no"
+    : true;
+  if (!target.identity.trim() || !target.family.trim() || !validAmericanPrice ||
+    !Number.isFinite(observedAtMs) || !Number.isFinite(availableByMs) || observedAtMs > availableByMs ||
+    !validLine || !validSelection) {
+    throw new Error(`Invalid Market Brain evaluated target: ${market}`);
+  }
+}
+
+export type MarketBrainBlindSpot = {
+  id: "absolute_handle" | "ticket_count" | "bet_size_distribution" | "book_limits" | "move_origin" | "suspension_lifecycle" | "private_order_flow";
+  status: "unobservable_by_current_feeds";
+};
+
+export type MarketBrainIncumbentComparator = {
+  kind: "released_semantic_reader";
+  availableAt: string;
+  releases: {
+    model: string | null;
+    calibration: string | null;
+    decision: string | null;
+  };
+  awayWinProbability: number;
+  homeWinProbability: number;
+  tieProbability: number;
+  marginMean: number;
+  totalMean: number;
+  marginDistribution: MarketBrainDiscreteDistribution;
+  totalDistribution: MarketBrainDiscreteDistribution;
+  marginDistributionSha256: string;
+  totalDistributionSha256: string;
+};
+
+export type MarketBrainCase = {
+  release: typeof MARKET_BRAIN_CONTRACT_RELEASE;
+  sport: MarketBrainSport;
+  eventId: string;
+  evaluatedAt: string;
+  visibility: "internal_only";
+  mode: "shadow_capture";
+  temporalScope: "point_in_time_snapshot";
+  captureBoundary: "raw_provider_response" | "normalized_provider_observation";
+  captureLimitations: string[];
+  subject: MarketBrainSubject;
+  prior: MarketBrainPrior;
+  incumbentComparator?: MarketBrainIncumbentComparator | null;
+  evaluatedTargets: Partial<Record<MarketBrainMarket, MarketBrainEvaluatedTarget>>;
+  /** Evaluation-only exact price menu. It is excluded from every trainer feature. */
+  decisionEnvelopes: Partial<Record<MarketBrainMarket, MarketBrainDecisionEnvelope>>;
+  observations: MarketBrainObservation[];
+  sourceManifests: MarketBrainSourceManifest[];
+  expectedInputs: MarketBrainExpectedInput[];
+  blindSpots: MarketBrainBlindSpot[];
+  accounting: {
+    providedObservations: number;
+    retainedObservations: number;
+    sourceManifests: number;
+    expectedInputs: number;
+    expectedInputsAccounted: number;
+    observed: number;
+    unavailableOrUnsupported: number;
+  };
+  invariants: {
+    missingValuesAreMasked: true;
+    allProvidedObservationsRetained: true;
+    allReturnedSourceRowsAccounted: true;
+    allExpectedInputsAccounted: true;
+    sourceReputationSeparatedFromObservedRole: true;
+    providerFetchIngestAvailabilityTimesSeparated: true;
+    targetQuoteSeparatedFromEvidence: true;
+    displayContractAuthority: false;
+    lockedRecordMutationAllowed: false;
+    productionInfluenceAllowed: false;
+  };
+};
+
+export const MARKET_BRAIN_BLIND_SPOTS: MarketBrainBlindSpot[] = [
+  "absolute_handle", "ticket_count", "bet_size_distribution", "book_limits",
+  "move_origin", "suspension_lifecycle", "private_order_flow",
+].map((id) => ({ id: id as MarketBrainBlindSpot["id"], status: "unobservable_by_current_feeds" as const }));
+
+export function numericFeature(value: number | null | undefined): MarketBrainNumericFeature {
+  return typeof value === "number" && Number.isFinite(value) ? { value, observed: 1 } : { value: null, observed: 0 };
+}
+
+export function bindMarketBrainMarginTotalPrior(args: {
+  eventId: string;
+  release: string;
+  availableAt: string;
+  inputLineage: MarketBrainPriorInputLineage;
+  marginDistribution: MarketBrainDiscreteDistribution;
+  totalDistribution: MarketBrainDiscreteDistribution;
+}): Extract<MarketBrainPrior, { kind: "margin_total_distribution" }> {
+  const artifactWithoutHash = {
+    schema: "market_brain_margin_total_artifact_v2" as const,
+    eventId: args.eventId,
+    release: args.release,
+    availableAt: args.availableAt,
+    inputLineage: structuredClone(args.inputLineage),
+    marginDistribution: cloneDistribution(args.marginDistribution),
+    totalDistribution: cloneDistribution(args.totalDistribution),
+  };
+  const artifact: MarketBrainMarginTotalArtifact = {
+    ...artifactWithoutHash,
+    sha256: marketBrainSha256(artifactWithoutHash),
+  };
+  const prior = {
+    kind: "margin_total_distribution" as const,
+    release: args.release,
+    marginMean: distributionMean(artifact.marginDistribution),
+    totalMean: distributionMean(artifact.totalDistribution),
+    marginDistributionSha256: marketBrainSha256(artifact.marginDistribution),
+    totalDistributionSha256: marketBrainSha256(artifact.totalDistribution),
+    artifact,
+  };
+  assertMarketBrainPrior(prior, args.eventId, args.availableAt);
+  return prior;
+}
+
+export function referenceMarketBrainMarginTotalPrior(
+  prior: Extract<MarketBrainPrior, { kind: "margin_total_distribution" }>,
+): Extract<MarketBrainPrior, { kind: "margin_total_distribution_ref" }> {
+  return {
+    kind: "margin_total_distribution_ref",
+    release: prior.release,
+    marginMean: prior.marginMean,
+    totalMean: prior.totalMean,
+    marginDistributionSha256: prior.marginDistributionSha256,
+    totalDistributionSha256: prior.totalDistributionSha256,
+    artifactSha256: prior.artifact.sha256,
+    inputLineageSha256: prior.artifact.inputLineage.sha256,
+    inputQualification: prior.artifact.inputLineage.qualification,
+  };
+}
+
+export function bindMarketBrainPriorInputLineage(args: Omit<MarketBrainPriorInputLineage,
+  "schema" | "qualification" | "sha256">): MarketBrainPriorInputLineage {
+  const components = [...args.components]
+    .map((component) => ({ ...component }))
+    .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  const qualification = expectedPriorInputQualification(args.modelPath,
+    args.declaredMarketInputPolicy, components);
+  const withoutHash = {
+    schema: "market_brain_prior_input_lineage_v1" as const,
+    ...args,
+    components,
+    qualification,
+  };
+  const lineage = { ...withoutHash, sha256: marketBrainSha256(withoutHash) };
+  assertMarketBrainPriorInputLineage(lineage, args.eventId, args.asOf);
+  return lineage;
+}
+
+export function assertMarketBrainPriorInputLineage(
+  lineage: MarketBrainPriorInputLineage,
+  eventId: string,
+  availableAt: string,
+): void {
+  const availableAtMs = Date.parse(availableAt);
+  const asOfMs = Date.parse(lineage.asOf);
+  const componentIds = new Set<string>();
+  const componentOrderCanonical = lineage.components.every((component, index) =>
+    index === 0 || lineage.components[index - 1]!.id < component.id);
+  const validComponents = lineage.components.length > 0 && lineage.components.every((component) => {
+    const componentAt = Date.parse(component.availableAt);
+    const unique = component.id.trim().length > 0 && !componentIds.has(component.id);
+    componentIds.add(component.id);
+    return unique && component.release.trim().length > 0 && /^[a-f0-9]{64}$/.test(component.sha256) &&
+      Number.isFinite(componentAt) && componentAt <= asOfMs && componentAt <= availableAtMs;
+  });
+  const expectedQualification = expectedPriorInputQualification(lineage.modelPath,
+    lineage.declaredMarketInputPolicy, lineage.components);
+  const withoutHash = {
+    schema: lineage.schema,
+    eventId: lineage.eventId,
+    modelPath: lineage.modelPath,
+    modelRelease: lineage.modelRelease,
+    asOf: lineage.asOf,
+    declaredMarketInputPolicy: lineage.declaredMarketInputPolicy,
+    components: lineage.components,
+    qualification: lineage.qualification,
+  };
+  if (lineage.schema !== "market_brain_prior_input_lineage_v1" || lineage.eventId !== eventId ||
+    !lineage.modelRelease.trim() || !Number.isFinite(availableAtMs) || !Number.isFinite(asOfMs) ||
+    asOfMs > availableAtMs || !validComponents || !componentOrderCanonical ||
+    lineage.qualification !== expectedQualification ||
+    lineage.sha256 !== marketBrainSha256(withoutHash)) {
+    throw new Error("Market Brain prior input lineage is invalid or self-inconsistent.");
+  }
+}
+
+export function assertMarketBrainPriorInputLineageQualified(prior: MarketBrainPrior): void {
+  if (prior.kind !== "margin_total_distribution") {
+    throw new Error("Market Brain executable research requires an exact prior artifact.");
+  }
+  if (prior.artifact.inputLineage.qualification !== "eligible") {
+    throw new Error("Market Brain independent prior input lineage is not qualified against market double counting.");
+  }
+}
+
+function expectedPriorInputQualification(
+  modelPath: MarketBrainPriorInputLineage["modelPath"],
+  declaredMarketInputPolicy: MarketBrainPriorInputLineage["declaredMarketInputPolicy"],
+  components: MarketBrainPriorInputComponent[],
+): MarketBrainPriorInputLineage["qualification"] {
+  const policy = MARKET_BRAIN_PRIOR_MODEL_PATH_POLICIES[modelPath];
+  return policy?.qualification === "registered_independent_path" &&
+    declaredMarketInputPolicy === "market_inputs_prohibited" && components.length > 0 &&
+    components.every((component) => component.marketRelation === "excluded_by_construction")
+    ? "eligible" : "ineligible";
+}
+
+export function marketBrainPriorArtifactSha256(prior: MarketBrainPrior): string | null {
+  return prior.kind === "margin_total_distribution" ? prior.artifact.sha256
+    : prior.kind === "margin_total_distribution_ref" ? prior.artifactSha256 : null;
+}
+
+export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string, evaluatedAt: string): void {
+  if (!prior.release.trim()) throw new Error("Market Brain prior release is required.");
+  if (prior.kind === "margin_total_distribution_ref") {
+    if (![prior.marginMean, prior.totalMean].every(Number.isFinite) ||
+      ![prior.marginDistributionSha256, prior.totalDistributionSha256, prior.artifactSha256, prior.inputLineageSha256]
+        .every((value) => /^[a-f0-9]{64}$/.test(value)) ||
+      !["eligible", "ineligible"].includes(prior.inputQualification) ||
+      !Number.isFinite(Date.parse(evaluatedAt))) {
+      throw new Error(`Market Brain prior artifact reference is invalid for ${eventId}.`);
+    }
+    return;
+  }
+  if (prior.kind !== "margin_total_distribution") return;
+  const artifact = prior.artifact;
+  if (artifact.schema !== "market_brain_margin_total_artifact_v2" || artifact.eventId !== eventId ||
+    artifact.release !== prior.release || artifact.inputLineage.modelRelease !== prior.release) {
+    throw new Error("Market Brain prior artifact identity diverged from its case.");
+  }
+  if (!Number.isFinite(Date.parse(artifact.availableAt)) || Date.parse(artifact.availableAt) > Date.parse(evaluatedAt)) {
+    throw new Error("Market Brain prior artifact was unavailable at case evaluation.");
+  }
+  assertDistribution(artifact.marginDistribution, "margin");
+  assertDistribution(artifact.totalDistribution, "total");
+  assertMarketBrainPriorInputLineage(artifact.inputLineage, eventId, artifact.availableAt);
+  const artifactWithoutHash = {
+    schema: artifact.schema,
+    eventId: artifact.eventId,
+    release: artifact.release,
+    availableAt: artifact.availableAt,
+    inputLineage: artifact.inputLineage,
+    marginDistribution: artifact.marginDistribution,
+    totalDistribution: artifact.totalDistribution,
+  };
+  if (artifact.sha256 !== marketBrainSha256(artifactWithoutHash) ||
+    prior.marginDistributionSha256 !== marketBrainSha256(artifact.marginDistribution) ||
+    prior.totalDistributionSha256 !== marketBrainSha256(artifact.totalDistribution)) {
+    throw new Error("Market Brain prior artifact checksum mismatch.");
+  }
+  if (Math.abs(prior.marginMean - distributionMean(artifact.marginDistribution)) > 1e-9 ||
+    Math.abs(prior.totalMean - distributionMean(artifact.totalDistribution)) > 1e-9) {
+    throw new Error("Market Brain prior artifact mean mismatch.");
+  }
+}
+
+export function buildMarketBrainCase(args: Omit<MarketBrainCase,
+  "release" | "visibility" | "mode" | "temporalScope" | "decisionEnvelopes" | "accounting" | "invariants"> & {
+    decisionEnvelopes?: MarketBrainCase["decisionEnvelopes"];
+  }): MarketBrainCase {
+  if (!args.eventId.trim()) throw new Error("Market Brain eventId is required.");
+  if (!Number.isFinite(Date.parse(args.evaluatedAt))) throw new Error("Market Brain evaluatedAt is invalid.");
+  if (!Number.isFinite(Date.parse(args.subject.startsAt))) throw new Error("Market Brain startsAt is invalid.");
+  assertMarketBrainPrior(args.prior, args.eventId, args.evaluatedAt);
+  if (args.incumbentComparator) {
+    const comparator = args.incumbentComparator;
+    const probabilityMass = comparator.awayWinProbability + comparator.homeWinProbability +
+      comparator.tieProbability;
+    if (comparator.kind !== "released_semantic_reader" ||
+      !Number.isFinite(Date.parse(comparator.availableAt)) ||
+      Date.parse(comparator.availableAt) > Date.parse(args.evaluatedAt) ||
+      ![comparator.awayWinProbability, comparator.homeWinProbability, comparator.tieProbability]
+        .every((value) => Number.isFinite(value) && value >= 0 && value <= 1) ||
+      Math.abs(probabilityMass - 1) > 1e-9 ||
+      ![comparator.marginMean, comparator.totalMean].every(Number.isFinite) ||
+      ![comparator.marginDistributionSha256, comparator.totalDistributionSha256]
+        .every((value) => /^[a-f0-9]{64}$/.test(value))) {
+      throw new Error("Market Brain incumbent comparator is invalid or unavailable at evaluation.");
+    }
+    assertDistribution(comparator.marginDistribution, "incumbent margin");
+    assertDistribution(comparator.totalDistribution, "incumbent total");
+    const incumbentWin = comparator.marginDistribution.values.reduce((result, margin, index) => {
+      const probability = comparator.marginDistribution.probabilities[index]!;
+      if (margin < 0) result.away += probability;
+      else if (margin > 0) result.home += probability;
+      else result.tie += probability;
+      return result;
+    }, { away: 0, home: 0, tie: 0 });
+    if (comparator.marginDistributionSha256 !== marketBrainSha256(comparator.marginDistribution) ||
+      comparator.totalDistributionSha256 !== marketBrainSha256(comparator.totalDistribution) ||
+      Math.abs(comparator.marginMean - distributionMean(comparator.marginDistribution)) > 1e-9 ||
+      Math.abs(comparator.totalMean - distributionMean(comparator.totalDistribution)) > 1e-9 ||
+      Math.abs(comparator.awayWinProbability - incumbentWin.away) > 1e-9 ||
+      Math.abs(comparator.homeWinProbability - incumbentWin.home) > 1e-9 ||
+      Math.abs(comparator.tieProbability - incumbentWin.tie) > 1e-9) {
+      throw new Error("Market Brain incumbent comparator distributions are incoherent.");
+    }
+  }
+  const observationIds = new Set<string>();
+  for (const observation of args.observations) {
+    if (observation.eventId !== args.eventId || observation.sport !== args.sport) {
+      throw new Error(`Market Brain observation ${observation.id} has the wrong event or sport identity.`);
+    }
+    if (observationIds.has(observation.id)) throw new Error(`Duplicate Market Brain observation: ${observation.id}`);
+    observationIds.add(observation.id);
+    if (observation.observedAt !== null && !Number.isFinite(Date.parse(observation.observedAt))) {
+      throw new Error(`Invalid Market Brain observation time: ${observation.id}`);
+    }
+    for (const [name, value] of Object.entries(observation.timing)) {
+      if (value !== null && !Number.isFinite(Date.parse(value))) {
+        throw new Error(`Invalid Market Brain ${name}: ${observation.id}`);
+      }
+    }
+    if (observation.observedAt !== observation.timing.providerObservedAt) {
+      throw new Error(`Market Brain provider observation time alias diverged: ${observation.id}`);
+    }
+    const evaluatedAt = Date.parse(args.evaluatedAt);
+    const observedAt = observation.timing.providerObservedAt === null
+      ? null : Date.parse(observation.timing.providerObservedAt);
+    const fetchedAt = observation.timing.providerFetchedAt === null
+      ? null : Date.parse(observation.timing.providerFetchedAt);
+    const ingestedAt = Date.parse(observation.timing.ingestedAt);
+    const availableAt = Date.parse(observation.timing.availableAt);
+    if (availableAt < ingestedAt ||
+      (observation.timing.providerFetchedAt !== null &&
+        availableAt < Date.parse(observation.timing.providerFetchedAt)) ||
+      (observedAt !== null && fetchedAt !== null && fetchedAt < observedAt) ||
+      (observedAt !== null && observedAt > availableAt) ||
+      (observation.availability !== "future" &&
+        (availableAt > evaluatedAt || ingestedAt > evaluatedAt ||
+          (fetchedAt !== null && fetchedAt > evaluatedAt) || (observedAt !== null && observedAt > evaluatedAt)))) {
+      throw new Error(`Market Brain observation was available before fetch or ingestion: ${observation.id}`);
+    }
+    for (const [name, feature] of Object.entries(observation.values)) {
+      const valid = feature.observed === 0 ? feature.value === null : Number.isFinite(feature.value);
+      if (!valid) throw new Error(`Invalid Market Brain feature mask: ${observation.id}:${name}`);
+    }
+  }
+  const expectedIds = new Set<string>();
+  for (const expected of args.expectedInputs) {
+    if (expectedIds.has(expected.id)) throw new Error(`Duplicate Market Brain expected input: ${expected.id}`);
+    expectedIds.add(expected.id);
+    if (expected.observationIds.some((id) => !observationIds.has(id))) {
+      throw new Error(`Market Brain expected input ${expected.id} references an unknown observation.`);
+    }
+    if (expected.availability === "observed" && expected.observationIds.length === 0) {
+      throw new Error(`Observed Market Brain expected input ${expected.id} has no observation.`);
+    }
+    if (expected.expectation === "unsupported" && expected.availability !== "unsupported") {
+      throw new Error(`Unsupported Market Brain input ${expected.id} has inconsistent availability.`);
+    }
+  }
+  for (const [market, target] of Object.entries(args.evaluatedTargets)) {
+    if (target) assertMarketBrainEvaluatedTarget(market as MarketBrainMarket, target, args.evaluatedAt);
+  }
+  const decisionEnvelopes = canonicalDecisionEnvelopes(
+    args.decisionEnvelopes ?? {}, args.evaluatedTargets, args.evaluatedAt,
+  );
+  const manifestIds = new Set<string>();
+  const manifestOwnerByObservationId = new Map<string, string>();
+  const observationById = new Map(args.observations.map((observation) => [observation.id, observation]));
+  for (const manifest of args.sourceManifests) {
+    if (manifestIds.has(manifest.id)) throw new Error(`Duplicate Market Brain source manifest: ${manifest.id}`);
+    manifestIds.add(manifest.id);
+    if (!manifest.release.trim()) {
+      throw new Error(`Market Brain source manifest release is required: ${manifest.id}`);
+    }
+    if (!Number.isFinite(Date.parse(manifest.providerFetchedAt))) {
+      throw new Error(`Invalid Market Brain source manifest fetch time: ${manifest.id}`);
+    }
+    if (!Number.isFinite(Date.parse(manifest.receivedAt)) ||
+      Date.parse(manifest.receivedAt) < Date.parse(manifest.providerFetchedAt) ||
+      Date.parse(manifest.receivedAt) > Date.parse(args.evaluatedAt)) {
+      throw new Error(`Invalid Market Brain source manifest receipt time: ${manifest.id}`);
+    }
+    if (Date.parse(manifest.providerFetchedAt) > Date.parse(args.evaluatedAt)) {
+      throw new Error(`Market Brain source manifest was fetched after case evaluation: ${manifest.id}`);
+    }
+    for (const [name, value] of Object.entries({
+      returnedRows: manifest.returnedRows,
+      matchedRows: manifest.matchedRows,
+      unmatchedRows: manifest.unmatchedRows,
+      ambiguousRows: manifest.ambiguousRows,
+      ledgerRows: manifest.ledgerRows,
+      omittedRows: manifest.omittedRows,
+    })) {
+      if (!Number.isInteger(value) || value < 0) throw new Error(`Invalid Market Brain source manifest ${name}: ${manifest.id}`);
+    }
+    if (manifest.returnedRows !== manifest.matchedRows + manifest.unmatchedRows + manifest.ambiguousRows) {
+      throw new Error(`Market Brain source manifest row accounting diverged: ${manifest.id}`);
+    }
+    if (manifest.rows.length !== manifest.ledgerRows ||
+      manifest.returnedRows !== manifest.ledgerRows + manifest.omittedRows) {
+      throw new Error(`Market Brain source manifest row ledger diverged: ${manifest.id}`);
+    }
+    const dispositions = {
+      matched: manifest.rows.filter((row) => row.disposition === "matched").length,
+      unmatched: manifest.rows.filter((row) => row.disposition === "unmatched").length,
+      ambiguous: manifest.rows.filter((row) => row.disposition === "ambiguous").length,
+    };
+    if (manifest.ledgerScope === "full_response" &&
+      (dispositions.matched !== manifest.matchedRows || dispositions.unmatched !== manifest.unmatchedRows ||
+      dispositions.ambiguous !== manifest.ambiguousRows)) {
+      throw new Error(`Market Brain source manifest disposition accounting diverged: ${manifest.id}`);
+    }
+    if (manifest.rows.some((row) => !Number.isInteger(row.rowIndex) || row.rowIndex < 0 ||
+      !/^[a-f0-9]{64}$/.test(row.rawRowSha256) || row.retainedObservationIds.some((id) => !observationIds.has(id)))) {
+      throw new Error(`Market Brain source manifest row ledger is invalid: ${manifest.id}`);
+    }
+    for (const row of manifest.rows) {
+      for (const id of row.retainedObservationIds) {
+        const observation = observationById.get(id)!;
+        if ((observation.modality === "price_quote" || observation.modality === "identified_book_split") &&
+          (row.participant === null || observation.source.participant !== row.participant)) {
+          throw new Error(`Market Brain source manifest row participant diverged from observation ${id}.`);
+        }
+      }
+    }
+    if (manifest.status === "observed" && (manifest.rawResponseSha256 === null ||
+      !/^[a-f0-9]{64}$/.test(manifest.rawResponseSha256) || manifest.failureReason !== null)) {
+      throw new Error(`Observed Market Brain source manifest is incomplete: ${manifest.id}`);
+    }
+    if (manifest.status === "failed" && (manifest.rawResponseSha256 !== null || manifest.failureReason === null)) {
+      throw new Error(`Failed Market Brain source manifest is inconsistent: ${manifest.id}`);
+    }
+    if (manifest.retainedObservationIds.some((id) => !observationIds.has(id))) {
+      throw new Error(`Market Brain source manifest ${manifest.id} references an unknown observation.`);
+    }
+    const rowObservationIds = manifest.rows.flatMap((row) => row.retainedObservationIds);
+    const rowObservationSet = new Set(rowObservationIds);
+    const retainedObservationSet = new Set(manifest.retainedObservationIds);
+    if (rowObservationSet.size !== rowObservationIds.length ||
+      retainedObservationSet.size !== manifest.retainedObservationIds.length ||
+      rowObservationSet.size !== retainedObservationSet.size ||
+      [...rowObservationSet].some((id) => !retainedObservationSet.has(id))) {
+      throw new Error(`Market Brain source manifest observation ownership diverged: ${manifest.id}`);
+    }
+    for (const id of manifest.retainedObservationIds) {
+      const observation = observationById.get(id)!;
+      const existingOwner = manifestOwnerByObservationId.get(id);
+      if (existingOwner !== undefined) {
+        throw new Error(`Market Brain observation ${id} is claimed by conflicting manifests ${existingOwner} and ${manifest.id}.`);
+      }
+      if (observation.source.provider !== manifest.provider || observation.source.feed !== manifest.feed ||
+        observation.audit.sourceRelease !== manifest.release ||
+        (manifest.participant !== null && observation.source.participant !== manifest.participant)) {
+        throw new Error(`Market Brain source manifest release or feed diverged from observation ${id}.`);
+      }
+      manifestOwnerByObservationId.set(id, manifest.id);
+    }
+  }
+  for (const observation of args.observations) {
+    if ((observation.modality === "price_quote" || observation.modality === "identified_book_split") &&
+      !manifestOwnerByObservationId.has(observation.id)) {
+      throw new Error(`Market Brain source-backed observation has no source manifest owner: ${observation.id}`);
+    }
+  }
+  const observations = [...args.observations].sort((a, b) =>
+    timestamp(a.timing.availableAt) - timestamp(b.timing.availableAt) ||
+    timestamp(a.observedAt) - timestamp(b.observedAt) || a.id.localeCompare(b.id));
+  return {
+    release: MARKET_BRAIN_CONTRACT_RELEASE,
+    ...args,
+    decisionEnvelopes,
+    visibility: "internal_only",
+    mode: "shadow_capture",
+    temporalScope: "point_in_time_snapshot",
+    observations,
+    accounting: {
+      providedObservations: args.observations.length,
+      retainedObservations: observations.length,
+      sourceManifests: args.sourceManifests.length,
+      expectedInputs: args.expectedInputs.length,
+      expectedInputsAccounted: args.expectedInputs.length,
+      observed: observations.filter((row) => row.availability === "observed").length,
+      unavailableOrUnsupported: args.expectedInputs.filter((row) => ["unavailable", "unsupported", "identity_mismatch"].includes(row.availability)).length,
+    },
+    invariants: {
+      missingValuesAreMasked: true,
+      allProvidedObservationsRetained: true,
+      allReturnedSourceRowsAccounted: true,
+      allExpectedInputsAccounted: true,
+      sourceReputationSeparatedFromObservedRole: true,
+      providerFetchIngestAvailabilityTimesSeparated: true,
+      targetQuoteSeparatedFromEvidence: true,
+      displayContractAuthority: false,
+      lockedRecordMutationAllowed: false,
+      productionInfluenceAllowed: false,
+    },
+  };
+}
+
+export function assertMarketBrainCase(value: unknown): asserts value is MarketBrainCase {
+  try {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("case is not an object");
+    }
+    const candidate = value as MarketBrainCase;
+    const rebuilt = buildMarketBrainCase({
+      sport: candidate.sport,
+      eventId: candidate.eventId,
+      evaluatedAt: candidate.evaluatedAt,
+      captureBoundary: candidate.captureBoundary,
+      captureLimitations: candidate.captureLimitations,
+      subject: candidate.subject,
+      prior: candidate.prior,
+      evaluatedTargets: candidate.evaluatedTargets,
+      decisionEnvelopes: candidate.decisionEnvelopes,
+      observations: candidate.observations,
+      sourceManifests: candidate.sourceManifests,
+      expectedInputs: candidate.expectedInputs,
+      blindSpots: candidate.blindSpots,
+      ...("incumbentComparator" in candidate
+        ? { incumbentComparator: candidate.incumbentComparator }
+        : {}),
+    });
+    if (marketBrainSha256(candidate) !== marketBrainSha256(rebuilt)) {
+      throw new Error("derived fields or contract identity diverged");
+    }
+  } catch (error) {
+    throw new Error(`Invalid Market Brain case: ${error instanceof Error ? error.message : "unknown shape"}`);
+  }
+}
+
+function canonicalDecisionEnvelopes(
+  envelopes: MarketBrainCase["decisionEnvelopes"],
+  evaluatedTargets: MarketBrainCase["evaluatedTargets"],
+  evaluatedAt: string,
+): MarketBrainCase["decisionEnvelopes"] {
+  return Object.fromEntries(Object.entries(envelopes).map(([marketName, envelope]) => {
+    const market = marketName as MarketBrainMarket;
+    if (!envelope || envelope.schema !== "market_brain_decision_envelope_v1" ||
+      envelope.market !== market || !envelope.incumbentDecision.grade.trim() ||
+      envelope.incumbentDecision.decisionRelease !== null &&
+        !envelope.incumbentDecision.decisionRelease.trim() ||
+      envelope.quoteMenu.length === 0 || envelope.quoteMenu.length > 64) {
+      throw new Error(`Invalid Market Brain decision envelope: ${market}`);
+    }
+    const quoteIds = new Set<string>();
+    const quoteMenu = envelope.quoteMenu.map((quote) => {
+      assertMarketBrainEvaluatedTarget(market, quote, evaluatedAt);
+      if (!quote.settlementTerms.trim() || quoteIds.has(quote.identity)) {
+        throw new Error(`Invalid or duplicate Market Brain decision quote: ${market}:${quote.identity}`);
+      }
+      quoteIds.add(quote.identity);
+      return structuredClone(quote);
+    }).sort((left, right) => compareAscii(left.identity, right.identity));
+    const incumbent = envelope.incumbentDecision;
+    if (incumbent.decision === "action" && !quoteIds.has(incumbent.quoteIdentity) ||
+      incumbent.decision === "pass" && incumbent.quoteIdentity !== null) {
+      throw new Error(`Market Brain incumbent decision is not executable: ${market}`);
+    }
+    const target = evaluatedTargets[market];
+    if (target && !quoteMenu.some((quote) => sameEvaluatedQuote(quote, target))) {
+      throw new Error(`Market Brain evaluated target is absent from its exact quote menu: ${market}`);
+    }
+    return [market, {
+      schema: "market_brain_decision_envelope_v1" as const,
+      market,
+      incumbentDecision: structuredClone(incumbent),
+      quoteMenu,
+    }];
+  }));
+}
+
+function sameEvaluatedQuote(left: MarketBrainEvaluatedTarget, right: MarketBrainEvaluatedTarget) {
+  return left.identity === right.identity && left.family === right.family &&
+    left.selection === right.selection && left.line === right.line && left.price === right.price &&
+    left.observedAt === right.observedAt;
+}
+
+function compareAscii(left: string, right: string) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function cloneDistribution(distribution: MarketBrainDiscreteDistribution): MarketBrainDiscreteDistribution {
+  return { values: [...distribution.values], probabilities: [...distribution.probabilities] };
+}
+
+function assertDistribution(distribution: MarketBrainDiscreteDistribution, name: string): void {
+  if (distribution.values.length === 0 || distribution.values.length !== distribution.probabilities.length ||
+    distribution.values.some((value) => !Number.isFinite(value)) ||
+    distribution.probabilities.some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new Error(`Market Brain ${name} prior distribution is invalid.`);
+  }
+  const mass = distribution.probabilities.reduce((sum, value) => sum + value, 0);
+  if (Math.abs(mass - 1) > 1e-6) throw new Error(`Market Brain ${name} prior distribution mass is invalid.`);
+}
+
+function distributionMean(distribution: MarketBrainDiscreteDistribution): number {
+  return distribution.values.reduce((sum, value, index) => sum + value * distribution.probabilities[index]!, 0);
+}
+
+
+function timestamp(value: string | null): number {
+  if (value === null) return Number.POSITIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}

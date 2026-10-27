@@ -16,6 +16,8 @@ import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
 import type { NflExactProviderIndependentScore } from "./nflExactProviderScoreRuntime";
 import type { NflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
+import type { NflMarketBrainCaptureResult } from "./nflMarketBrainShadow";
+import type { FootballRawPriceResponseManifest } from "./footballRawPriceManifest";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_09_01_r6_forecast_value_separation" as const;
@@ -26,7 +28,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow" as const;
+  "nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -171,6 +173,12 @@ export type NflForwardEvidencePayload = {
   /** Prospective injury/player/market agreement diagnostic with zero decision authority. */
   availabilityArbitrationShadow?: NflAvailabilityArbitrationShadow;
   contextualEvidenceCapture?: NflForwardContextCapture;
+  /** Internal observable tape only; ignored by production, member, and tracking readers. */
+  marketBrainShadow?: NflMarketBrainCaptureResult;
+  /** Predeclared manifest attempt identity; distinct from the execution's cron run id. */
+  marketBrainCaptureAttemptId?: string;
+  /** Research-only exact parser inputs; stripped before every authoritative write. */
+  marketBrainRawParserInputs?: NonNullable<FootballRawPriceResponseManifest["rawParserInput"]>[];
   decisions: {
     evaluatedBets: NflRegularEvaluatedBetDecision[];
     outcomeConfidence: NflRegularOutcomeConfidence[];
@@ -447,6 +455,10 @@ export function determineNflForwardCollectionNeed(args: {
 }
 
 export function hashNflForwardEvidencePayload(payload: NflForwardAnyEvidencePayload): string {
+  // Historical rows written before sidecar isolation retain their exact full
+  // payload hash. New authoritative writes are guarded in the store and never
+  // contain the sidecar, so the same function preserves both eras without
+  // reinterpreting an immutable stored row.
   return createHash("sha256").update(stableJson(payload)).digest("hex");
 }
 

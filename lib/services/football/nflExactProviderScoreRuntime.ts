@@ -9,6 +9,8 @@ export const NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE =
   "nfl_exact_provider_score_artifact_2026_10_15_r11" as const;
 export const NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE =
   "nfl_exact_provider_independent_score_2026_10_15_r11" as const;
+export const NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE =
+  "nfl_exact_provider_score_context_2026_10_15_r1" as const;
 export const NFL_EXACT_PROVIDER_MARGIN_RELEASE =
   "nfl_exact_provider_margin_2026_10_15_r7" as const;
 export const NFL_EXACT_PROVIDER_TOTAL_RELEASE =
@@ -89,12 +91,13 @@ type Artifact = {
 
 // Keep the generated tree payload outside the TypeScript AST. The route trace
 // explicitly packages this deterministic asset for the server runtime.
-const ARTIFACT = JSON.parse(
-  gunzipSync(readFileSync(path.join(
+const ARTIFACT_COMPRESSED_BYTES = readFileSync(path.join(
     process.cwd(),
     "lib/services/football/modelArtifacts/nflExactProviderScoreR11.json.gz",
-  ))).toString("utf8"),
-) as Artifact;
+  ));
+export const NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256 =
+  "9bd7f4fdc830a372c1d92b65ed669fd1607468e66e9898cbf6d667496acebb66" as const;
+const ARTIFACT = JSON.parse(gunzipSync(ARTIFACT_COMPRESSED_BYTES).toString("utf8")) as Artifact;
 const METRICS: readonly Metric[] = [
   "explosive_rate", "sack_rate", "turnover_rate", "plays",
   "redzone_td_rate", "no_huddle_rate", "points",

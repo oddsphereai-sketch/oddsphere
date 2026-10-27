@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import artifactJson from "../lib/services/football/modelArtifacts/nflV1WeekOneOutcome.json";
+import { marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
 import { readFileSync } from "node:fs";
 import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
@@ -18,6 +20,7 @@ import {
   nflV1WeekOneLineProbabilities,
   NFL_V1_OUTCOME_MODEL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
 } from "../lib/services/football/nflV1WeekOneOutcome";
 import { buildNflV1ActionableGradeBundle } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import {
@@ -29,6 +32,9 @@ import {
   NFL_R6_SOURCE_POINT_MODEL_RELEASE,
   type NflR6ShadowMoneylineDecision,
 } from "../lib/services/football/nflR6MoneylineShadow";
+
+assert.equal(marketBrainSha256(artifactJson), NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
+  "the independent-prior lineage hash must bind the exact frozen Week 1 artifact");
 
 const capturedAt = "2026-08-22T13:50:56.934Z";
 const weekOneSlate = [
@@ -113,6 +119,31 @@ assert.equal(
   16,
   "a release transition must preserve every immutable T-60 game until its current-release replacement exists",
 );
+const currentCollectorSnapshot = buildNflWeekOneHeldMemberFixture(releaseTransitionRows).snapshot;
+for (const collectorRelease of [
+  "nfl_forward_evidence_collector_2026_09_28_r16_injury_continuity",
+  "nfl_forward_evidence_collector_2026_10_06_r17_hourly_market_freshness",
+  "nfl_forward_evidence_collector_2026_10_08_r18_game_designation_continuity",
+  "nfl_forward_evidence_collector_2026_10_09_r19_provider_feed_continuity",
+  "nfl_forward_evidence_collector_2026_10_15_r20_personnel_evidence_eligibility",
+  "nfl_forward_evidence_collector_2026_10_15_r21_foundational_no_weight_score",
+  "nfl_forward_evidence_collector_2026_10_15_r22_personnel_coverage_repair",
+  "nfl_forward_evidence_collector_2026_10_16_r23_availability_adjusted_starter_authority",
+  "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow",
+  "nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar",
+  "nfl_forward_evidence_collector_2026_10_27_r26_source_evidence_release_binding",
+  "nfl_forward_evidence_collector_2026_10_27_r27_research_failure_isolation",
+]) {
+  const historicalLockedRows = structuredClone(releaseTransitionRows);
+  for (const row of historicalLockedRows) {
+    (row.payload as unknown as { collectorRelease: string }).collectorRelease = collectorRelease;
+  }
+  assert.deepEqual(
+    buildNflWeekOneHeldMemberFixture(historicalLockedRows).snapshot,
+    currentCollectorSnapshot,
+    `${collectorRelease} immutable T-60 scores, predictions, recommendations, grades, and stakes must retain expected-score-tenths semantics`,
+  );
+}
 const invalidUnlockedTransitionRows = structuredClone(releaseTransitionRows);
 invalidUnlockedTransitionRows[1]!.stage = "unlocked";
 invalidUnlockedTransitionRows[1]!.payload.stage = "unlocked";

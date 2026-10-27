@@ -71,6 +71,7 @@ import {
 } from "./signalEvidenceClassifier";
 import type { MarketSignalSource } from "./marketSignalDerivationService";
 import type { TotalProjectionReconciliation } from "../automodel/totalProjectionReconciliation";
+import { isUnlockedForSharedDerivation } from "./sharedDerivationLockGuard";
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
@@ -1065,7 +1066,12 @@ export async function deriveGradesForSlate(
   };
 
   for (const row of gamePreds) {
-    if (row.game_id === null) continue;
+    if (
+      row.game_id === null ||
+      !isUnlockedForSharedDerivation(row.locked_at)
+    ) {
+      continue;
+    }
     const picks = picksFromRow(row);
 
     // Phase 2: best-effort listed_line check from sport_specific JSONB.
@@ -1321,7 +1327,7 @@ export async function updateGradesForSlate(
     const ou = slate.games.ou.get(id) ?? null;
     const nrfi = slate.games.nrfi.get(id) ?? null;
 
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from("game_predictions")
       .update({
         ml_grade: ml?.grade ?? null,
@@ -1331,12 +1337,17 @@ export async function updateGradesForSlate(
         nrfi_grade: nrfi?.grade ?? null,
         nrfi_signal_type: nrfi?.signal_type ?? null,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .is("locked_at", null)
+      .select("id");
     if (error) {
       throw new Error(
         `gradeDerivationService: game_predictions update failed for id=${id}: ${error.message}`
       );
     }
+    // A concurrent lock between derivation and this UPDATE is expected to
+    // win. Counts describe persisted writes, not attempted writes.
+    if ((updatedRows ?? []).length === 0) continue;
     gamesUpdated++;
     if (ml !== null) perMarket.ml.written++;
     if (ou !== null) perMarket.ou.written++;

@@ -345,7 +345,11 @@ export class SharpApiClient {
    * but honors `?offset=N` correctly.
    */
   async fetchAll<T>(
-    opts: SharpApiRequestOptions & { maxPages?: number }
+    opts: SharpApiRequestOptions & {
+      maxPages?: number;
+      /** Optional read-only receipt of the exact pages already fetched. */
+      onPage?: (response: SharpApiResponse<T[]>, pageIndex: number) => void;
+    }
   ): Promise<T[]> {
     const maxPages = opts.maxPages ?? 10;
     const out: T[] = [];
@@ -361,6 +365,7 @@ export class SharpApiClient {
         signal: opts.signal,
         retryRateLimitInternally: opts.retryRateLimitInternally,
       });
+      opts.onPage?.(res, page);
       const chunk = Array.isArray(res.data) ? res.data : [];
       out.push(...chunk);
       if (chunk.length === 0) break;

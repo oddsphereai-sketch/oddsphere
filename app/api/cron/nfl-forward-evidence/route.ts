@@ -12,6 +12,8 @@ import { runNflPlayerPropsProductionWriter } from "@/lib/services/football/nflPl
 import { planNflPlayerPropsRefresh } from "@/lib/services/football/nflPlayerPropsCadence";
 import { readNflPlayerPropsSnapshot } from "@/lib/services/football/nflPlayerPropsSnapshotStore";
 import { resolveNflForwardWeek, resolveNflOperationalWeek } from "@/lib/services/football/nflForwardWeekSelection";
+import { resolveNflMarketBrainCaptureConfiguration } from
+  "@/lib/services/football/nflMarketBrainCaptureConfig";
 
 export const maxDuration = 300;
 
@@ -68,6 +70,14 @@ export async function GET(request: Request): Promise<Response> {
     if (currentSeasonState.apiCalls > 0) {
       await writeNflPlayerPropsCurrentSeasonState({ client: supabase, state: currentSeasonState.state });
     }
+    // Resolved after the authoritative current-season state refresh. Invalid
+    // research configuration is data, never an exception from this route.
+    const marketBrainConfiguration = resolveNflMarketBrainCaptureConfiguration(process.env);
+    const marketBrainCaptureRequested = marketBrainConfiguration.requested;
+    const marketBrainCaptureEnabled = marketBrainConfiguration.enabled;
+    const marketBrainCaptureMaxGames = marketBrainConfiguration.maximumGames;
+    const marketBrainCaptureAttemptSchedule = marketBrainConfiguration.attemptSchedule;
+    const marketBrainConfigurationError = marketBrainConfiguration.error;
     const result = await runNflForwardEvidenceWriter({
       client: supabase,
       season,
@@ -80,6 +90,9 @@ export async function GET(request: Request): Promise<Response> {
       sharpApiKey,
       weatherProvider,
       exactProviderCandidate: true,
+      marketBrainCaptureEnabled,
+      marketBrainCaptureMaxGames,
+      marketBrainCaptureAttemptSchedule,
     });
     let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
     let playerPropsError: string | null = null;
@@ -122,12 +135,33 @@ export async function GET(request: Request): Promise<Response> {
       finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
       || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"
       || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED") ?? [];
+    const marketBrainDetails = marketBrainCaptureRequested || marketBrainConfigurationError !== null
+      ? {
+          market_brain_capture_requested: marketBrainCaptureRequested,
+          market_brain_capture_enabled: marketBrainCaptureEnabled,
+          market_brain_configuration_error: marketBrainConfigurationError,
+          market_brain_capture_canary_limit: marketBrainCaptureMaxGames,
+          market_brain_shadows_proposed: result.marketBrainShadowsProposed,
+          market_brain_shadows_inserted: result.marketBrainShadowsInserted,
+          market_brain_shadows_existing: result.marketBrainShadowsExisting,
+          market_brain_capture_failures: result.marketBrainCaptureFailures,
+          market_brain_capture_failure_reasons: result.marketBrainCaptureFailureReasons,
+          market_brain_persistence_attempted: result.marketBrainPersistenceAttempted,
+          market_brain_persistence_error: result.marketBrainPersistenceError,
+        }
+      : {};
     return {
       records_updated: result.inserted + (playerProps?.memberRows ?? 0),
       api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
       partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null
+        || result.marketBrainPersistenceError !== null
+        || result.marketBrainCaptureFailures > 0
+        || marketBrainConfigurationError !== null
         || playerPropsError !== null || playerPropsCriticalHealth.length > 0,
-      error_message: [result.healthHolds.join(","), result.memberSnapshotError, playerPropsError, playerPropsCriticalHealth.join(",")]
+      error_message: [result.healthHolds.join(","), result.memberSnapshotError,
+        result.marketBrainPersistenceError, ...result.marketBrainCaptureFailureReasons,
+        marketBrainConfigurationError,
+        playerPropsError, playerPropsCriticalHealth.join(",")]
         .filter(Boolean).join(",") || null,
       details: {
         writer_release: result.writerRelease,
@@ -157,6 +191,7 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
+        ...marketBrainDetails,
         player_props_enabled: playerPropsEnabled,
         player_props_cadence: playerPropsCadence,
         player_props_cadence_error: playerPropsCadenceError,

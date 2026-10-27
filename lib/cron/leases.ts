@@ -1,4 +1,7 @@
 import { supabase } from "../db/supabase";
+import { cronJobName } from "./leaseIdentity";
+
+export { cronJobName } from "./leaseIdentity";
 
 export type CronLeaseAcquireResult =
   | {
@@ -23,10 +26,6 @@ export type CronLeaseAcquireResult =
 
 function leaseUnavailable(message: string): boolean {
   return /function .*try_acquire_cron_job_lease.* does not exist|relation .*cron_job_leases.* does not exist|schema cache/i.test(message);
-}
-
-export function cronJobName(dataSource: string, sport: string | null): string {
-  return sport ? `${dataSource}:${sport}` : dataSource;
 }
 
 export async function acquireCronJobLease(opts: {

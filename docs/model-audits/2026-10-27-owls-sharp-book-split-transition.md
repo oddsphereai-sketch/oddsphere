@@ -42,7 +42,11 @@ resolved market-read status/copy, and source-health metadata may change.
 Release identifiers:
 
 - Member presentation: `daily_edge_member_presentation_2026_10_27_r28_owls_sharp_book_splits`
-- Market Intelligence capture: `market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`
+- Market Intelligence capture: `market_intelligence_v2_shadow_capture_2026_10_27_r6_all_owls_named_book_splits`
+
+Capture r6 supersedes r5 only for internal retention: display still chooses one complete priority
+pair, while canonical Market Intelligence stores every complete fresh Circa, DraftKings, and BetMGM
+pair separately for market-reading research. It changes no writer-owned prediction field.
 
 ## Verification and rollback
 

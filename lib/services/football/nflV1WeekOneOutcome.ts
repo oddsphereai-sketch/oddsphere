@@ -21,6 +21,8 @@ import type { NflUnifiedTotalMarketInterpretation } from "./nflUnifiedTotalMarke
 
 export const NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE =
   "nfl_v1_week_one_outcome_artifact_2026_08_23_r2_discrete_joint" as const;
+export const NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256 =
+  "e1b669279fdeb73fb022b9e788a3d5a6c54a61a5a10f2ad7a8171bb8795067cd" as const;
 export const NFL_V1_OUTCOME_MODEL_RELEASE =
   "nfl_v1_discrete_drive_outcome_2026_08_23_r2" as const;
 export const NFL_V1_OUTCOME_DISTRIBUTION_RELEASE =
@@ -262,6 +264,14 @@ export function getNflV1WeekOneOutcomeForecast(args: {
 
 export function hasNflV1WeekOneOutcomeForecast(providerGameId: string): boolean {
   return forecasts.has(providerGameId);
+}
+
+/** Exact frozen-artifact row lookup for provenance verification. */
+export function readNflV1WeekOneOutcomeArtifactForecast(
+  providerGameId: string,
+): NflV1WeekOneOutcomeForecast | null {
+  const forecast = forecasts.get(providerGameId);
+  return forecast ? structuredClone(forecast) : null;
 }
 
 /**

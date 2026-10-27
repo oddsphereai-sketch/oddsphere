@@ -5,11 +5,21 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
 import {
+  bindMarketBrainPriorInputLineage,
+  marketBrainPriorArtifactSha256,
+  type MarketBrainPriorInputLineage,
+} from "@/lib/services/marketBrain/marketBrainContract";
+import { marketBrainSha256 } from "@/lib/services/marketBrain/marketBrainCanonical";
+import {
   fetchBalldontlieNflSlateAvailability,
   mergeNflAvailabilityWithPrior,
   nflAvailabilityRequestBudgetMaximum,
 } from "./balldontlieNflAvailability";
-import { fetchBalldontlieNflRegularSlate, type NflPreviewBookOdds, type NflPreviewGame } from "./balldontlieNflPreviewSlate";
+import {
+  fetchBalldontlieNflRegularSlate,
+  type NflPreviewBookOdds,
+  type NflPreviewGame,
+} from "./balldontlieNflPreviewSlate";
 import { fetchBalldontlieNflTeamDepthSnapshots } from "./balldontlieNflRoster";
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
@@ -32,6 +42,8 @@ import { collectNflForwardWeather } from "./nflVenueWeather";
 import {
   completeSharpApiNflSplitSet,
   fetchSharpApiNflSplits,
+  NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+  unavailableNflSharpApiSplitSources,
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
@@ -58,6 +70,7 @@ import {
   NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE,
   NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
 } from "./nflV1WeekOneOutcome";
 import {
   resolveNflTargetExcludedMarketAnchor,
@@ -76,6 +89,7 @@ import { buildNflThreeStateMarketAuthority } from "./nflThreeStateMarketReader";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNflSharpOdds,
+  FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
   FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS,
   FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
 } from "./sharpApiFootballSharpOdds";
@@ -96,16 +110,36 @@ import {
   readNflForwardMemberSnapshot,
   writeNflForwardMemberSnapshot,
 } from "./nflForwardMemberSnapshotStore";
-import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
+import {
+  readNflPlayerPropsCurrentSeasonState,
+  type NflPlayerPropsCurrentSeasonState,
+} from "./nflPlayerPropsCurrentSeasonState";
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 import {
   buildNflExactProviderIndependentScore,
   buildNflExactProviderScoreContext,
+  NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE,
+  NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
+  NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE,
   NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
+  type NflExactProviderScoreContext,
 } from "./nflExactProviderScoreRuntime";
 import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import { buildNflMarketState } from "./nflMarketState";
 import { applyNflFullGameEvidenceRuntime } from "./nflFullGameEvidenceRuntime";
+import {
+  buildNflMarketBrainShadow,
+  nflMarketBrainCaptureFailure,
+} from "./nflMarketBrainShadow";
+import {
+  appendNflMarketBrainShadows,
+  readNflMarketBrainPriorArtifactIndex,
+} from "./nflMarketBrainShadowStore";
+import {
+  buildNflOwlsMarketBrainSplitEvidence,
+  readNflOwlsMarketBrainSplitEvidence,
+} from "./nflOwlsMarketBrainSplits";
+import { failedFootballRawPriceManifest } from "./footballRawPriceManifest";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
@@ -114,7 +148,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -142,6 +176,13 @@ export type NflForwardWriterResult = {
   trackingRecordsProposed: number;
   trackingRecordsInserted: number;
   trackingRecordsExisting: number;
+  marketBrainShadowsProposed: number;
+  marketBrainShadowsInserted: number;
+  marketBrainShadowsExisting: number;
+  marketBrainCaptureFailures: number;
+  marketBrainCaptureFailureReasons: string[];
+  marketBrainPersistenceAttempted: boolean;
+  marketBrainPersistenceError: string | null;
 };
 
 type NflTrackingWriteResult = Pick<
@@ -169,9 +210,37 @@ export async function runNflForwardEvidenceWriter(args: {
   auditPayloads?: (payloads: NflForwardEvidencePayload[]) => void;
   /** Test/audit-only provider injection; production always uses the default fetcher. */
   sharpSplitsFetcher?: typeof fetchSharpApiNflSplits;
+  /** Test/audit-only canonical evidence injection; never calls Owls directly. */
+  owlsMarketBrainSplitEvidenceReader?: typeof readNflOwlsMarketBrainSplitEvidence;
   /** Explicit foundational-score gate. Locked rows retain stored payload precedence. */
   exactProviderCandidate?: boolean;
+  /** Research capture is opt-in and has no model/member/tracking authority. */
+  marketBrainCaptureEnabled?: boolean;
+  /** Canary-only hard ceiling on distinct games captured in one writer run. */
+  marketBrainCaptureMaxGames?: number;
+  /** All future event:stage attempt windows predeclared by the persisted research manifest. */
+  marketBrainCaptureAttemptSchedule?: Record<string, Array<{
+    attemptId: string;
+    windowOpensAt: string;
+    windowClosesAt: string;
+  }>>;
 }): Promise<NflForwardWriterResult> {
+  let marketBrainCaptureEnabled = args.marketBrainCaptureEnabled === true;
+  let marketBrainConfigurationError: string | null = null;
+  if (marketBrainCaptureEnabled && (!Number.isInteger(args.marketBrainCaptureMaxGames) ||
+    args.marketBrainCaptureMaxGames! < 1 || args.marketBrainCaptureMaxGames! > 4)) {
+    marketBrainCaptureEnabled = false;
+    marketBrainConfigurationError = "nfl_market_brain_capture_disabled_invalid_canary_limit";
+  }
+  if (marketBrainCaptureEnabled) {
+    try {
+      validateNflMarketBrainCaptureAttemptSchedule(args.marketBrainCaptureAttemptSchedule, args.now);
+    } catch (error) {
+      marketBrainCaptureEnabled = false;
+      marketBrainConfigurationError = `nfl_market_brain_capture_disabled_attempt_schedule:${
+        error instanceof Error ? error.message : "unknown_error"}`.slice(0, 512);
+    }
+  }
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
   // make Postgres cancel the writer before it reaches the provider slate.
@@ -210,6 +279,7 @@ export async function runNflForwardEvidenceWriter(args: {
     season: args.season,
     week: args.week,
     apiKey: args.balldontlieApiKey,
+    captureRawPriceManifest: marketBrainCaptureEnabled,
   });
   const plans = planNflForwardEvidenceCaptures({
     games: slate.games,
@@ -217,6 +287,52 @@ export async function runNflForwardEvidenceWriter(args: {
     capturedAt: args.now,
     unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
   });
+  const marketBrainCanaryGames = new Set(marketBrainCaptureEnabled
+    ? selectNflMarketBrainCanaryGames({
+        games: uniquePlannedGames(plans.map((plan) => plan.game)),
+        currentOddsByGame: slate.currentOddsByGame,
+        season: args.season,
+        week: args.week,
+        maximumGames: args.marketBrainCaptureMaxGames!,
+      }).map((game) => game.providerGameId)
+    : []);
+  const marketBrainAttemptIds = new Map<string, string>();
+  if (marketBrainCaptureEnabled) {
+    try {
+      for (const plan of plans.filter((row) => marketBrainCanaryGames.has(row.game.providerGameId))) {
+        const key = `${plan.game.providerGameId}:${plan.stage}`;
+        marketBrainAttemptIds.set(key, resolveNflMarketBrainCaptureAttempt({
+          key, capturedAt: args.now, schedule: args.marketBrainCaptureAttemptSchedule?.[key] ?? [],
+        }));
+      }
+    } catch (error) {
+      marketBrainCaptureEnabled = false;
+      marketBrainCanaryGames.clear();
+      marketBrainAttemptIds.clear();
+      marketBrainConfigurationError = `nfl_market_brain_capture_disabled_attempt_schedule:${
+        error instanceof Error ? error.message : "unknown_error"}`.slice(0, 512);
+    }
+  }
+  // No research read begins until the selected canary games have resolved to
+  // exactly one predeclared attempt. A malformed schedule therefore cannot add
+  // database load to the authoritative writer.
+  const marketBrainPriorArtifactRead = marketBrainCaptureEnabled
+    ? boundedMarketBrainPriorArtifactRead(args)
+    : Promise.resolve({
+        rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
+        error: null as string | null,
+      });
+  const marketBrainOwlsSplitRead = marketBrainCaptureEnabled
+    ? boundedMarketBrainOwlsSplitRead({
+        client: args.client,
+        games: slate.games.filter((game) => marketBrainCanaryGames.has(game.providerGameId)),
+        evaluatedAt: args.now,
+        reader: args.owlsMarketBrainSplitEvidenceReader ?? readNflOwlsMarketBrainSplitEvidence,
+      })
+    : Promise.resolve({
+        byGame: {} as Awaited<ReturnType<typeof readNflOwlsMarketBrainSplitEvidence>>,
+        error: null as string | null,
+      });
   if (plans.length === 0) {
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
@@ -279,16 +395,35 @@ export async function runNflForwardEvidenceWriter(args: {
       apiKey: args.sharpApiKey,
       games: slate.games,
       capturedAt: args.now,
+      captureResearchManifest: marketBrainCaptureEnabled,
     })
       .catch(() => ({
         splitsByGame: {} as Record<string, NflRegularSharpSplitSet>,
+        sourcesByGame: Object.fromEntries(slate.games.map((game) => [
+          game.providerGameId,
+          unavailableNflSharpApiSplitSources(),
+        ])),
         requests: 1,
         rows: 0,
         dates: [],
+        captureManifest: {
+          release: NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+          responseReceivedAt: args.apply ? new Date().toISOString() : args.now,
+          rawResponseSha256: null,
+          status: "failed" as const,
+          failureReason: "sharpapi_split_capture_failed",
+          returnedRows: 0,
+          matchedRows: 0,
+          unmatchedRows: 0,
+          ambiguousRows: 0,
+          rows: [],
+        },
       })),
     fetchSharpApiNflSharpOdds({
       apiKey: args.sharpApiKey,
       games: uniquePlannedGames(plans.map((plan) => plan.game)),
+      capturedAt: args.now,
+      captureRawPriceManifest: marketBrainCaptureEnabled,
     })
       .then((result) => ({ result, requests: result.requests }))
       .catch(() => ({
@@ -328,6 +463,9 @@ export async function runNflForwardEvidenceWriter(args: {
     }));
   }
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
+  // This is deliberately later than every provider promise used by the research tape.
+  // Dry-runs retain their injected clock so replays remain deterministic.
+  const retrievalCompletedAt = args.apply ? new Date().toISOString() : args.now;
   const paidProjectionShadows = {
     ...storedPaidProjectionShadows,
     ...(paidProjectionFetch?.byGame ?? {}),
@@ -335,12 +473,35 @@ export async function runNflForwardEvidenceWriter(args: {
   const paidProjectionRequestsMaximum = paidProjectionRefreshDue ? NFL_PAID_PROJECTION_MAX_PAGES : 0;
   const apiCallsMaximum = slate.providerRequests + rosters.requests + availabilityRequestsMaximum + paidProjectionRequestsMaximum
     + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
+  // The lightweight research index read overlaps provider collection and has a hard abort.
+  // It can never hold the production writer indefinitely.
+  const marketBrainPriorArtifactReadResult = await marketBrainPriorArtifactRead;
+  const storedMarketBrainPriorArtifacts = marketBrainPriorArtifactReadResult.rows;
+  const marketBrainReadError = marketBrainPriorArtifactReadResult.error;
+  const marketBrainOwlsSplitReadResult = await marketBrainOwlsSplitRead;
+  const marketBrainOwlsSplitByGame = marketBrainOwlsSplitReadResult.byGame;
+  const marketBrainOwlsSplitReadError = marketBrainOwlsSplitReadResult.error;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
+  const knownPriorArtifactsByGame = new Map<string, Set<string>>();
   for (const row of historicalExisting) {
     const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
     books.push(...row.payload.market.comparableCurrentBooks);
     books.push(...nflForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
     captureHistoryBooksByGame.set(row.providerGameId, books);
+    const shadow = row.payload.marketBrainShadow;
+    if (shadow && "case" in shadow) {
+      const sha256 = marketBrainPriorArtifactSha256(shadow.case.prior);
+      if (sha256) {
+        const artifacts = knownPriorArtifactsByGame.get(row.providerGameId) ?? new Set<string>();
+        artifacts.add(sha256);
+        knownPriorArtifactsByGame.set(row.providerGameId, artifacts);
+      }
+    }
+  }
+  for (const row of storedMarketBrainPriorArtifacts) {
+    const artifacts = knownPriorArtifactsByGame.get(row.providerGameId) ?? new Set<string>();
+    artifacts.add(row.priorArtifactSha256);
+    knownPriorArtifactsByGame.set(row.providerGameId, artifacts);
   }
 
   const payloadBuildHolds: string[] = [];
@@ -389,9 +550,12 @@ export async function runNflForwardEvidenceWriter(args: {
     const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
       ?? previous?.payload.market.sharpApiSplits
       ?? null;
+    const sharpSplitSources = sharpResult.sourcesByGame?.[plan.game.providerGameId]
+      ?? unavailableNflSharpApiSplitSources();
+    const sharpCurrentBooks = circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [];
     const contextCurrentBooks = captureBooksWithSharpBooks(
       comparableCurrentBooks,
-      circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
+      sharpCurrentBooks,
     );
     const contextOpeningBooks = [
       ...comparableProviderOpeningBooks,
@@ -472,10 +636,13 @@ export async function runNflForwardEvidenceWriter(args: {
           marketHomeMargin: -current.spread.homeLine,
         })
       : null;
-    const exactProviderScore = args.exactProviderCandidate && currentSeasonState
+    const exactProviderScoreContext = args.exactProviderCandidate && currentSeasonState
+      ? buildNflExactProviderScoreContext({ game: plan.game, currentSeasonState, weather })
+      : null;
+    const exactProviderScore = exactProviderScoreContext && currentSeasonState
       ? buildNflExactProviderIndependentScore({
           currentSeasonState,
-          context: buildNflExactProviderScoreContext({ game: plan.game, currentSeasonState, weather }),
+          context: exactProviderScoreContext,
         })
       : null;
     const legacyBaseOutcome = getNflV1WeekOneOutcomeForecast({
@@ -800,7 +967,103 @@ export async function runNflForwardEvidenceWriter(args: {
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
       authoritativeForecast: outcome,
     });
-    return [{ ...payload, contextualEvidenceCapture }];
+    const marketBrainPriceManifests = [
+      ...(slate.rawPriceResponseManifests
+        ? [slate.rawPriceResponseManifests.opening, slate.rawPriceResponseManifests.current]
+        : []),
+      ...(circaAttempt.result?.rawPriceResponseManifests ?? FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.map((participant) =>
+        failedFootballRawPriceManifest({
+          release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+          provider: "sharpapi",
+          feed: "main_odds",
+          participant,
+          providerFetchedAt: capturedAt,
+          gameIds: slate.games.map((game) => game.providerGameId),
+          reason: "sharpapi_price_capture_failed",
+        }))),
+    ];
+    let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
+    let marketBrainRawParserInputs: NflForwardEvidencePayload["marketBrainRawParserInputs"];
+    if (marketBrainCaptureEnabled && marketBrainCanaryGames.has(plan.game.providerGameId) &&
+      !existingLockedRecord) {
+      marketBrainRawParserInputs = marketBrainPriceManifests.flatMap((manifest) =>
+        manifest.rawParserInput ? [manifest.rawParserInput] : []);
+      try {
+        const independentForecastAvailableAt = hasTargetFreePrior
+          ? exactProviderScore
+            ? retrievalCompletedAt
+            : paidProjectionShadow
+            ? paidProjectionFetch?.byGame[plan.game.providerGameId]
+              ? retrievalCompletedAt
+              : paidProjectionShadow.fetchedAt
+            : "2026-08-23T00:00:00.000Z"
+          : null;
+        const independentPriorInputLineage = hasTargetFreePrior && independentForecastAvailableAt
+          ? buildNflIndependentPriorInputLineage({
+              eventId: plan.game.providerGameId,
+              independentRelease: exactProviderScore
+                ? NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE
+                : paidProjectionShadow
+                ? NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
+                : NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+              availableAt: independentForecastAvailableAt,
+              exactProviderScoreContext,
+              currentSeasonState,
+              paidProjectionShadow,
+            })
+          : null;
+        marketBrainShadow = buildNflMarketBrainShadow({
+          game: plan.game,
+          capture: contextualEvidenceCapture,
+          injuries,
+          weather,
+          independentForecast: hasTargetFreePrior ? baseOutcome : null,
+          authoritativeForecast: outcome,
+          independentForecastAvailableAt,
+          independentForecastProvenance: !hasTargetFreePrior
+            ? "unavailable"
+            : exactProviderScore
+            ? "fresh"
+            : paidProjectionShadow
+            ? paidProjectionFetch?.byGame[plan.game.providerGameId]
+              ? "fresh"
+              : paidProjectionRefreshDue && paidProjectionFetch === null
+              ? "stored_after_failed_refresh"
+              : "stored_cache"
+            : "static_artifact",
+          independentPriorInputLineage,
+          retrievalCompletedAt,
+          knownPriorArtifactSha256: [...(knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? [])],
+          rawPriceResponseManifests: marketBrainPriceManifests,
+          identifiedSplitEvidence: marketBrainOwlsSplitByGame[plan.game.providerGameId] ??
+            buildNflOwlsMarketBrainSplitEvidence({
+              gameId: plan.game.providerGameId,
+              evaluatedAt: capturedAt,
+              rows: [],
+            }),
+        });
+        if ("case" in marketBrainShadow) {
+          const sha256 = marketBrainPriorArtifactSha256(marketBrainShadow.case.prior);
+          if (sha256) {
+            const artifacts = knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? new Set<string>();
+            artifacts.add(sha256);
+            knownPriorArtifactsByGame.set(plan.game.providerGameId, artifacts);
+          }
+        }
+      } catch (error) {
+        // Shadow evidence may report its own failure, but it must never block or alter production output.
+        marketBrainShadow = nflMarketBrainCaptureFailure({ eventId: plan.game.providerGameId, capturedAt, error });
+      }
+    }
+    return [{
+      ...payload,
+      contextualEvidenceCapture,
+      ...(marketBrainShadow ? { marketBrainShadow } : {}),
+      ...(marketBrainShadow ? {
+        marketBrainCaptureAttemptId: marketBrainAttemptIds.get(`${plan.game.providerGameId}:${plan.stage}`),
+      } : {}),
+      ...(marketBrainRawParserInputs ? { marketBrainRawParserInputs } : {}),
+    }];
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown_payload_failure";
       payloadBuildHolds.push(`game_${plan.game.providerGameId}_held_${reason}`);
@@ -809,11 +1072,17 @@ export async function runNflForwardEvidenceWriter(args: {
   });
 
   args.auditPayloads?.(payloads);
-  const write = await appendNflForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
+  const authoritativePayloads = payloads.map(withoutMarketBrainShadow);
+  const write = await appendNflForwardEvidence({
+    client: args.client,
+    runId: args.runId,
+    payloads: authoritativePayloads,
+    apply: args.apply,
+  });
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,
     existing: historicalExisting,
-    payloads,
+    payloads: authoritativePayloads,
     season: args.season,
     week: args.week,
     now: args.now,
@@ -821,10 +1090,41 @@ export async function runNflForwardEvidenceWriter(args: {
   });
   const tracking = await writeOfficialTrackingFromPayloads({
     client: args.client,
-    payloads: [...currentT60Payloads(existing), ...payloads.filter((payload) => payload.stage === "t60")],
+    payloads: [...currentT60Payloads(existing), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
     apply: args.apply,
   });
+  let marketBrainWrite = {
+    proposed: payloads.filter((payload) => payload.marketBrainShadow).length,
+    inserted: 0,
+    existing: 0,
+  };
+  let marketBrainWriteError: string | null = null;
+  if (marketBrainCaptureEnabled) {
+    const writeAbort = new AbortController();
+    const writeTimeout = setTimeout(() => writeAbort.abort(), 2_000);
+    try {
+      marketBrainWrite = await appendNflMarketBrainShadows({
+        client: args.client,
+        runId: args.runId,
+        payloads,
+        apply: args.apply,
+        signal: writeAbort.signal,
+      });
+    } catch (error) {
+      // Every authoritative/member/tracking write has already completed. Research persistence is last and fail-open.
+      marketBrainWriteError = error instanceof Error ? error.message : "unknown_market_brain_shadow_append_failure";
+    } finally {
+      clearTimeout(writeTimeout);
+    }
+  }
   const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
+  const marketBrainCaptureFailureReasons = [
+    ...(marketBrainConfigurationError ? [marketBrainConfigurationError] : []),
+    ...payloads.flatMap((payload) => {
+      const shadow = payload.marketBrainShadow;
+      return shadow && "status" in shadow && shadow.status === "capture_failed" ? [shadow.reason] : [];
+    }),
+  ];
   const quarterbackHealthReasons = payloads.flatMap((payload) => {
     const away = payload.startersAndDepth.away.starterStatus;
     const home = payload.startersAndDepth.home.starterStatus;
@@ -854,6 +1154,14 @@ export async function runNflForwardEvidenceWriter(args: {
       ...payloadBuildHolds,
     ])].sort(),
     publicationAttempted: args.apply,
+    marketBrainShadowsProposed: marketBrainWrite.proposed,
+    marketBrainShadowsInserted: marketBrainWrite.inserted,
+    marketBrainShadowsExisting: marketBrainWrite.existing,
+    marketBrainCaptureFailures: marketBrainCaptureFailureReasons.length,
+    marketBrainCaptureFailureReasons: [...new Set(marketBrainCaptureFailureReasons)].sort(),
+    marketBrainPersistenceAttempted: marketBrainCaptureEnabled && args.apply && marketBrainWrite.proposed > 0,
+    marketBrainPersistenceError: [marketBrainReadError, marketBrainOwlsSplitReadError, marketBrainWriteError]
+      .filter(Boolean).join("; ") || null,
     ...memberSnapshot,
     ...tracking,
   };
@@ -1066,12 +1374,170 @@ function uniquePlannedGames(games: NflPreviewGame[]): NflPreviewGame[] {
   return games.filter((game, index) => games.findIndex((candidate) => candidate.providerGameId === game.providerGameId) === index);
 }
 
+/**
+ * Outcome-blind deterministic stratified canary sampling. It avoids selecting
+ * whichever fixtures the provider happened to return first and spreads a tiny
+ * canary across kickoff, favorite direction, spread size, and total regime.
+ */
+export function selectNflMarketBrainCanaryGames(args: {
+  games: NflPreviewGame[];
+  currentOddsByGame: Record<string, NflPreviewBookOdds>;
+  season: number;
+  week: number;
+  maximumGames: number;
+}): NflPreviewGame[] {
+  if (args.maximumGames === 0) return [];
+  const candidates = uniquePlannedGames(args.games).map((game) => {
+    const odds = args.currentOddsByGame[game.providerGameId];
+    const homeLine = odds?.spread?.homeLine ?? null;
+    const total = odds?.total?.line ?? null;
+    const kickoffHour = new Date(game.scheduledStart).getUTCHours();
+    const stratum = [
+      kickoffHour < 21 ? "early" : kickoffHour < 24 ? "middle" : "late",
+      homeLine === null ? "favorite_unknown" : homeLine < 0 ? "home_favorite" : homeLine > 0 ? "away_favorite" : "pickem",
+      homeLine === null ? "spread_unknown" : Math.abs(homeLine) < 3 ? "spread_close" : Math.abs(homeLine) < 7 ? "spread_mid" : "spread_large",
+      total === null ? "total_unknown" : total < 42 ? "total_low" : total < 48 ? "total_mid" : "total_high",
+    ].join("|");
+    return { game, stratum, rank: marketBrainSha256({
+      release: "nfl_market_brain_canary_stratified_v1", season: args.season,
+      week: args.week, eventId: game.providerGameId,
+    }) };
+  }).sort((a, b) => a.rank.localeCompare(b.rank));
+  const distinct: typeof candidates = [];
+  const repeats: typeof candidates = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.stratum)) repeats.push(candidate);
+    else { seen.add(candidate.stratum); distinct.push(candidate); }
+  }
+  return [...distinct, ...repeats].slice(0, args.maximumGames).map((candidate) => candidate.game);
+}
+
+export function resolveNflMarketBrainCaptureAttempt(args: {
+  key: string;
+  capturedAt: string;
+  schedule: Array<{ attemptId: string; windowOpensAt: string; windowClosesAt: string }>;
+}): string {
+  const capturedAt = Date.parse(args.capturedAt);
+  const matches = args.schedule.filter((attempt) => {
+    const opens = Date.parse(attempt.windowOpensAt);
+    const closes = Date.parse(attempt.windowClosesAt);
+    return Number.isFinite(opens) && Number.isFinite(closes) && opens <= capturedAt && capturedAt <= closes;
+  });
+  if (matches.length !== 1 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(matches[0]?.attemptId ?? "")) {
+    throw new Error(`NFL Market Brain capture attempt was missing or ambiguous for ${args.key}.`);
+  }
+  return matches[0]!.attemptId;
+}
+
+export function validateNflMarketBrainCaptureAttemptSchedule(
+  schedule: Parameters<typeof runNflForwardEvidenceWriter>[0]["marketBrainCaptureAttemptSchedule"],
+  capturedAt: string,
+): void {
+  const captureMs = Date.parse(capturedAt);
+  if (!Number.isFinite(captureMs) || !schedule || Object.keys(schedule).length === 0) {
+    throw new Error("NFL Market Brain capture schedule is absent or the capture time is invalid.");
+  }
+  const attemptIds = new Set<string>();
+  let activeWindows = 0;
+  for (const [key, windows] of Object.entries(schedule)) {
+    if (!/^[^:]+:(opening|unlocked|t60)$/.test(key) || !Array.isArray(windows) || windows.length === 0) {
+      throw new Error(`NFL Market Brain capture schedule entry is invalid for ${key}.`);
+    }
+    const ordered = windows.map((window) => {
+      const opens = Date.parse(window.windowOpensAt);
+      const closes = Date.parse(window.windowClosesAt);
+      if (!Number.isFinite(opens) || !Number.isFinite(closes) || opens > closes ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(window.attemptId)) {
+        throw new Error(`NFL Market Brain capture schedule window is invalid for ${key}.`);
+      }
+      if (attemptIds.has(window.attemptId)) {
+        throw new Error(`NFL Market Brain capture schedule reuses attempt ${window.attemptId}.`);
+      }
+      attemptIds.add(window.attemptId);
+      if (opens <= captureMs && captureMs <= closes) activeWindows += 1;
+      return { opens, closes };
+    }).sort((left, right) => left.opens - right.opens);
+    for (let index = 1; index < ordered.length; index += 1) {
+      if (ordered[index]!.opens <= ordered[index - 1]!.closes) {
+        throw new Error(`NFL Market Brain capture schedule windows overlap for ${key}.`);
+      }
+    }
+  }
+  if (activeWindows === 0) {
+    throw new Error("NFL Market Brain capture schedule has no active window for this run.");
+  }
+}
+
 function stageCounts(payloads: NflForwardEvidencePayload[]): Record<"opening" | "unlocked" | "t60", number> {
   return {
     opening: payloads.filter((payload) => payload.stage === "opening").length,
     unlocked: payloads.filter((payload) => payload.stage === "unlocked").length,
     t60: payloads.filter((payload) => payload.stage === "t60").length,
   };
+}
+
+function withoutMarketBrainShadow(payload: NflForwardEvidencePayload): NflForwardEvidencePayload {
+  const {
+    marketBrainShadow: _marketBrainShadow,
+    marketBrainCaptureAttemptId: _marketBrainCaptureAttemptId,
+    marketBrainRawParserInputs: _marketBrainRawParserInputs,
+    ...authoritative
+  } = payload;
+  return authoritative as NflForwardEvidencePayload;
+}
+
+async function boundedMarketBrainPriorArtifactRead(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+}) {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 2_000);
+  try {
+    const rows = await readNflMarketBrainPriorArtifactIndex({
+      client: args.client,
+      season: args.season,
+      week: args.week,
+      signal: abort.signal,
+    });
+    return { rows, error: null as string | null };
+  } catch (error) {
+    return {
+      rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
+      error: error instanceof Error ? error.message : "unknown_market_brain_shadow_read_failure",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function boundedMarketBrainOwlsSplitRead(args: {
+  client: SupabaseClient;
+  games: NflPreviewGame[];
+  evaluatedAt: string;
+  reader: typeof readNflOwlsMarketBrainSplitEvidence;
+}) {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 2_000);
+  try {
+    const byGame = await args.reader({
+      client: args.client,
+      games: args.games,
+      evaluatedAt: args.evaluatedAt,
+      signal: abort.signal,
+    });
+    return { byGame, error: null as string | null };
+  } catch (error) {
+    return {
+      byGame: {} as Awaited<ReturnType<typeof readNflOwlsMarketBrainSplitEvidence>>,
+      error: error instanceof Error ? error.message : "unknown_nfl_owls_market_brain_split_read_failure",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function emptyResult(
@@ -1107,6 +1573,13 @@ function emptyResult(
     apiCallsMaximum: 0,
     healthHolds: [],
     publicationAttempted: false,
+    marketBrainShadowsProposed: 0,
+    marketBrainShadowsInserted: 0,
+    marketBrainShadowsExisting: 0,
+    marketBrainCaptureFailures: 0,
+    marketBrainCaptureFailureReasons: [],
+    marketBrainPersistenceAttempted: false,
+    marketBrainPersistenceError: null,
     ...memberSnapshot,
     ...tracking,
   };
@@ -1431,6 +1904,95 @@ function normalizeTrackedNflStatus(value: string): string {
   if (normalized === "in_progress" || normalized === "live") return "in_progress";
   if (normalized === "postponed" || normalized === "canceled" || normalized === "cancelled") return normalized;
   return "scheduled";
+}
+
+function buildNflIndependentPriorInputLineage(args: {
+  eventId: string;
+  independentRelease: string;
+  availableAt: string;
+  exactProviderScoreContext: NflExactProviderScoreContext | null;
+  currentSeasonState: NflPlayerPropsCurrentSeasonState | null;
+  paidProjectionShadow: NflPaidProjectionShadow | null;
+}): MarketBrainPriorInputLineage {
+  const shapeComponent = {
+    id: "nfl_discrete_score_shape",
+    category: "model_artifact" as const,
+    release: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+    availableAt: "2026-08-23T00:00:00.000Z",
+    sha256: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
+    marketRelation: "excluded_by_construction" as const,
+  };
+  if (args.exactProviderScoreContext && args.currentSeasonState) {
+    return bindMarketBrainPriorInputLineage({
+      eventId: args.eventId,
+      modelPath: "nfl_exact_provider",
+      modelRelease: args.independentRelease,
+      asOf: args.availableAt,
+      declaredMarketInputPolicy: "market_inputs_prohibited",
+      components: [
+        shapeComponent,
+        {
+          id: "nfl_exact_provider_model_artifact",
+          category: "model_artifact",
+          release: NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE,
+          availableAt: "2026-10-15T00:00:00.000Z",
+          sha256: NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
+          marketRelation: "excluded_by_construction",
+        },
+        {
+          id: "nfl_completed_game_state",
+          category: "team_statistics",
+          release: args.currentSeasonState.release,
+          availableAt: args.currentSeasonState.updatedAt,
+          sha256: marketBrainSha256({
+            release: args.currentSeasonState.release,
+            season: args.currentSeasonState.season,
+            completeThroughWeek: args.currentSeasonState.completeThroughWeek,
+            games: args.currentSeasonState.games,
+            teamStats: args.currentSeasonState.teamStats,
+            playMetrics: args.currentSeasonState.playMetrics,
+          }),
+          marketRelation: "excluded_by_construction",
+        },
+        {
+          id: "nfl_pregame_schedule_venue_context",
+          category: "venue_context",
+          release: NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE,
+          availableAt: args.availableAt,
+          sha256: marketBrainSha256(args.exactProviderScoreContext),
+          marketRelation: "excluded_by_construction",
+        },
+      ],
+    });
+  }
+  if (args.paidProjectionShadow) {
+    return bindMarketBrainPriorInputLineage({
+      eventId: args.eventId,
+      modelPath: "external_projection",
+      modelRelease: args.independentRelease,
+      asOf: args.availableAt,
+      declaredMarketInputPolicy: "unknown",
+      components: [
+        shapeComponent,
+        {
+          id: "balldontlie_weekly_projection",
+          category: "external_projection",
+          release: args.paidProjectionShadow.release,
+          availableAt: args.paidProjectionShadow.fetchedAt,
+          sha256: marketBrainSha256(args.paidProjectionShadow),
+          marketRelation: "unknown",
+        },
+      ],
+    });
+  }
+  return bindMarketBrainPriorInputLineage({
+    eventId: args.eventId,
+    modelPath: "nfl_week_one_static_artifact",
+    modelRelease: args.independentRelease,
+    asOf: args.availableAt,
+    declaredMarketInputPolicy: "market_inputs_prohibited",
+    components: [shapeComponent],
+  });
 }
 
 function normalizeTeam(value: unknown): string {

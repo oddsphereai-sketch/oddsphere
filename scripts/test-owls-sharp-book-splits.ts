@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { OwlsInsightAuthError, OwlsInsightClient } from "../lib/providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookSplits,
+  selectAllCompleteNamedBookSplits,
   selectCompleteNamedBookSplit,
   type RawOwlsSplitsResponse,
 } from "../lib/providers/owls/owlsSharpBookSplits";
@@ -74,6 +75,21 @@ const selected = selectCompleteNamedBookSplit(normalized.observations, {
 assert.equal(selected.length, 2);
 assert.ok(selected.every((row) => row.sourceBook === "circa"));
 assert.deepEqual(selected.map((row) => row.side), ["away", "home"]);
+
+const allNamedBooks = selectAllCompleteNamedBookSplits([
+  ...normalized.observations,
+  ...normalized.observations
+    .filter((row) => row.sourceBook === "circa" && row.market === "moneyline")
+    .map((row) => ({ ...row, sourceBook: "draftkings" as const, sourceType: "retail_book" as const })),
+], {
+  providerEventId: "nba:Away@Home-20261027",
+  market: "moneyline",
+  nowMs: Date.parse("2026-10-27T20:10:00.000Z"),
+});
+assert.equal(allNamedBooks.length, 4);
+assert.deepEqual(allNamedBooks.map((row) => row.sourceBook), [
+  "circa", "circa", "draftkings", "draftkings",
+]);
 
 const stale = selectCompleteNamedBookSplit(normalized.observations, {
   providerEventId: "nba:Away@Home-20261027",
