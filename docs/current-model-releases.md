@@ -492,6 +492,13 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
+- Shared future-unlocked `game_predictions` market-signal and grade derivation is versioned as
+  `shared_derivation_lock_guard_2026_10_27_r1_locked_record_immutability`. Both shared services now
+  exclude rows whose `locked_at` is already set and repeat `locked_at IS NULL` on the update, so a
+  lock racing between read and write wins. Update telemetry counts only rows returned by that
+  conditional write. This candidate changes no stored lock, model output, price, stake, provider
+  request, or member snapshot and remains unpublished pending the real-PostgreSQL locked/unlocked
+  companion proof required by MB-043.
 - `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope` freezes the complete
   adapter scope before any production influence: NFL, CFB, NBA, WNBA, MLB, NHL, EPL, UCL, FIFA
   World Cup, NFL Player Props, NBA Player Props, and MLB Player Props are active product rows; CBB is a separate

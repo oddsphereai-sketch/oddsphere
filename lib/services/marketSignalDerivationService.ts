@@ -66,6 +66,7 @@ import type { Sport } from "../types/domain/Sport";
 import type { Side } from "../types/domain/Lines";
 import type { MarketSignal } from "../types/domain/Grade";
 import type { SharpSignalRecord } from "../providers/interfaces/ISharpSignalProvider";
+import { isUnlockedForSharedDerivation } from "./sharedDerivationLockGuard";
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
@@ -222,6 +223,7 @@ type GamePredRow = {
   predicted_ml_winner: "home" | "away" | null;
   predicted_ou_side: "over" | "under" | null;
   predicted_nrfi: boolean | null;
+  locked_at: string | null;
 };
 
 type PropPredRow = {
@@ -365,7 +367,7 @@ export async function deriveMarketSignalsForSlate(
   const { data: gamePredsRaw } = await supabase
     .from("game_predictions")
     .select(
-      "id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi"
+      "id, game_id, predicted_ml_winner, predicted_ou_side, predicted_nrfi, locked_at"
     )
     .in("game_id", gameIds);
   const gamePreds = (gamePredsRaw ?? []) as GamePredRow[];
@@ -402,7 +404,12 @@ export async function deriveMarketSignalsForSlate(
   };
 
   for (const row of gamePreds) {
-    if (row.game_id === null) continue;
+    if (
+      row.game_id === null ||
+      !isUnlockedForSharedDerivation(row.locked_at)
+    ) {
+      continue;
+    }
     const picks = picksFromRow(row);
 
     // Per-market: derive a signal only when the model picked that market.
@@ -500,19 +507,24 @@ export async function updateMarketSignalsForSlate(
     const ou = slate.games.ou.get(id) ?? null;
     const nrfi = slate.games.nrfi.get(id) ?? null;
 
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from("game_predictions")
       .update({
         ml_market_signal: ml,
         ou_market_signal: ou,
         nrfi_market_signal: nrfi,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .is("locked_at", null)
+      .select("id");
     if (error) {
       throw new Error(
         `marketSignalDerivationService: game_predictions update failed for id=${id}: ${error.message}`
       );
     }
+    // A concurrent lock between the slate read and this UPDATE is expected
+    // to win. Do not claim a write when the predicate matched no row.
+    if ((updatedRows ?? []).length === 0) continue;
     gamesUpdated++;
     if (ml !== null) perMarket.ml.written++;
     if (ou !== null) perMarket.ou.written++;

@@ -253,6 +253,12 @@ database, predictive, or production proof.
   `prediction_pipeline` lease with bounded retry. The executable registry test resolves every primary
   and fallback authority route and proves its source-level required lease contract. Real-PostgreSQL
   simultaneous-acquisition proof remains outstanding, so MB-044 remains open.
+- **MB-043:** shared market-signal and grade derivation now loads `locked_at`, omits already locked
+  `game_predictions` rows, repeats `locked_at IS NULL` at the write boundary to defeat a concurrent
+  lock race, and counts only rows returned by that conditional update. The focused executable
+  contract is part of `preverify:model-change`. The required real-PostgreSQL frozen-row plus unlocked-
+  companion proof, pregame-sweep exercise, complete stored-tuple comparison, and member-DTO byte
+  comparison remain outstanding, so MB-043 remains open and this guard is not published.
 
 Verification recorded for this slice:
 
