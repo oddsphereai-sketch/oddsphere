@@ -1,7 +1,7 @@
 {
-  "decisionRelease": "nfl_player_props_decision_2026_10_27_r37_passing_completions_direction",
-  "modelRelease": "nfl_player_props_distribution_model_2026_10_27_r31_passing_completions_direction",
-  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_10_27_r33_passing_completions_direction",
+  "decisionRelease": "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction",
+  "modelRelease": "nfl_player_props_distribution_model_2026_10_27_r32_passing_yards_direction",
+  "calibrationRelease": "nfl_player_props_distribution_calibration_2026_10_27_r34_passing_yards_direction",
   "touchdownModelRelease": "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   "touchdownCalibrationRelease": "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
   "marketBoardRelease": "nfl_player_props_exact_market_board_2026_09_01_r2_cross_line_opening",
@@ -44,7 +44,7 @@
     "maximumGradeWithoutSameLineIndependentActionConfirmation": "Watchlist"
   },
   "marketCoherentProjection": {
-    "release": "nfl_player_props_market_coherent_projection_2026_10_27_r7_passing_completions_direction",
+    "release": "nfl_player_props_market_coherent_projection_2026_10_27_r8_passing_yards_direction",
     "eligibleMarkets": ["passing_attempts", "passing_completions", "passing_yards", "receiving_yards", "receptions", "rushing_attempts", "rushing_yards"],
     "probabilitySource": "target_excluded_single_posterior_distribution",
     "preservesIndependentProjectionAsEvidence": true,
@@ -55,6 +55,7 @@
     "default": "incumbent_market_specific_posterior",
     "receivingYards": "incumbent_target_excluded_market_specific_posterior",
     "passingCompletions": "target_book_excluded_source_weighted_direction_on_disagreement",
+    "passingYards": "target_book_excluded_direction_on_disagreement_at_one_percentage_point_or_more",
     "receptions": "independent_direction_with_target_excluded_within_side_calibration",
     "evaluatedBookExcluded": true,
     "continuousCrossMarketWeighting": false

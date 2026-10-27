@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## NFL player-props Passing Yards direction r38
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to improve player-prop prediction accuracy rather
+than cosmetically balance directions. For future-unlocked Passing Yards only, a fresh target-book-
+excluded market direction at least one percentage point from 50% may correct an independent/market
+direction disagreement. The independent point projection remains market-free; agreement, missing
+evidence, and market toss-ups retain the incumbent posterior.
+
+Across 54 exact canonical member-line Week 6-7 outcomes, direction improves from 28-26 (51.9%) to
+33-21 (61.1%). Week 6 improves 14-14 to 17-11 and Week 7 improves 14-12 to 16-10. All five changed
+forecasts are corrections and none is a harm. The four existing actionables are unchanged at 1-3;
+the release does not conceal that grade result. The 523-row Week 8 no-write rehearsal retains all
+12 Passing Yards side rows and produces zero Passing Yards side changes, promotions, or demotions at
+that timestamp. Every other market, grade threshold, provider ceiling, cadence, UI, writer topology,
+and lease remain unchanged. Existing locks retain exact precedence. Evidence and rollback:
+`docs/model-audits/2026-10-27-nfl-player-props-passing-yards-direction-predeclaration.md` and
+`docs/model-audits/2026-10-27-nfl-player-props-passing-yards-direction-result.md`.
+
 ## NFL player-props Passing Completions direction r37
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to improve player-prop prediction accuracy rather
