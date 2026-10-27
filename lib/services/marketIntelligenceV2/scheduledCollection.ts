@@ -63,6 +63,7 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
     result.recordsUpdated += shadow.splitObservationsWritten + shadow.priceObservationsWritten;
     result.apiCallsMade += shadow.playbookSplitRowsFetched > 0 ? 1 : 0;
     result.apiCallsMade += shadow.owlsSplitRowsFetched > 0 ? 1 : 0;
+    result.apiCallsMade += shadow.owlsPriceRowsFetched > 0 ? 1 : 0;
     result.apiCallsMade += shadow.sharpapiSplitRowsFetched > 0 ? 1 : 0;
     result.errors.push(...shadow.errors);
   } catch (e) {

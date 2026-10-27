@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed capture: Owls current Circa/Pinnacle prices
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to continue replacing SharpAPI with Owls for the
+current sharp-book odds and line-tracking feed while leaving the predictive market reader to its
+separate task. The bounded r8 change adds one Owls `/odds` request per supported sport and collection
+cycle to the existing observation-only Market Intelligence V2 collector. It retains only complete,
+coherent two-sided Moneyline, Spread, and Total pairs from Circa and Pinnacle, preserves each book's
+provider timestamp, and rejects malformed prices, asymmetric numbers, wrong-sport rows, unknown
+teams, and ambiguous games.
+
+The collector writes only the existing shadow price-observation table. It does not write `lines`,
+`line_history`, predictions, grades, stakes, locks, tracking rows, member DTOs, or any sport model;
+it therefore has no market-reader or prediction authority. Existing SharpAPI observations retain
+their historical meaning and are not relabeled, reconstructed, or deleted. The active split lane
+remains Owls-only and continues to make zero SharpAPI split requests.
+
+Capture release advances to
+`market_intelligence_v2_shadow_capture_2026_10_27_r8_owls_sharp_book_prices`. A live read-only probe
+at 22:37 UTC (18:37 ET) returned current Circa/Pinnacle timestamps within the same collection minute for NBA,
+NHL, NFL, NCAAF, MLB, and WNBA. The first live rehearsal exposed abbreviation-only NHL canonical
+teams; r8 now resolves both Owls full names and database abbreviations through the established NHL
+registry before exact game matching. Unknown identities still fail closed. Same-input promotions,
+demotions, side changes, probability changes, grade changes, and actionable-count changes are zero
+by contract. Evidence and rollback:
+`docs/model-audits/2026-10-27-owls-current-sharp-book-price-capture.md`.
+
 ## Owner-directed repair: CFB locked-card sharp-split continuity
 
 On 2026-10-27 Daniel Mengel reported that the Delaware–Western Kentucky Sharp Book Splits were

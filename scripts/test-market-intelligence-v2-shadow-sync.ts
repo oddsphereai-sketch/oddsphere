@@ -1,5 +1,6 @@
 import {
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE,
+  buildOwlsSharpPriceObservations,
   collectCompleteCountedPages,
   assessAdvertisedSharpHistoryCoverage,
   dedupeSharpApiHistorySplitObservations,
@@ -29,8 +30,95 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity",
+    "market_intelligence_v2_shadow_capture_2026_10_27_r8_owls_sharp_book_prices",
 );
+
+{
+  const mapped = buildOwlsSharpPriceObservations({
+    sport: "nba",
+    fetchedAt: new Date("2026-10-27T22:18:00.000Z"),
+    games: [{
+      id: 1,
+      externalId: 401909878,
+      slateDate: "2026-10-27",
+      gameDate: "2026-10-28T00:00:00.000Z",
+      homeTeamId: 2,
+      awayTeamId: 1,
+      homeAbbr: "NY",
+      awayAbbr: "DET",
+      homeName: "New York Knicks",
+      awayName: "Detroit Pistons",
+    }],
+    rows: [{
+      sport: "nba",
+      providerEventId: "nba:Detroit Pistons@New York Knicks-20261028",
+      providerNumericEventId: "123",
+      scheduledStart: "2026-10-28T00:10:00.000Z",
+      homeTeam: "New York Knicks",
+      awayTeam: "Detroit Pistons",
+      sportsbook: "circa",
+      observedAt: "2026-10-27T22:17:16.758Z",
+      market: "spread",
+      side: "away",
+      line: 4,
+      americanPrice: -110,
+      decimalPrice: 1.909090909,
+      noVigProbability: 0.5,
+    }],
+  });
+  check(
+    "Owls sharp price maps full professional team names onto the canonical NBA event",
+    mapped.rejected.length === 0 &&
+      mapped.observations.length === 1 &&
+      mapped.observations[0]?.canonical_event_id === "401909878" &&
+      mapped.observations[0]?.sportsbook === "circa" &&
+      mapped.observations[0]?.selection_key.endsWith(":away") === true &&
+      mapped.observations[0]?.provider_timestamp === "2026-10-27T22:17:16.758Z",
+  );
+}
+
+{
+  const mapped = buildOwlsSharpPriceObservations({
+    sport: "nhl",
+    fetchedAt: new Date("2026-10-27T22:38:00.000Z"),
+    games: [{
+      id: 2,
+      externalId: 2026020188,
+      slateDate: "2026-10-27",
+      gameDate: "2026-10-27T23:00:00.000Z",
+      homeTeamId: 4,
+      awayTeamId: 3,
+      homeAbbr: "PHI",
+      awayAbbr: "CBJ",
+      homeName: "PHI",
+      awayName: "CBJ",
+    }],
+    rows: [{
+      sport: "nhl",
+      providerEventId: "nhl:Columbus Blue Jackets@Philadelphia Flyers-20261027",
+      providerNumericEventId: "456",
+      scheduledStart: "2026-10-27T23:00:00.000Z",
+      homeTeam: "Philadelphia Flyers",
+      awayTeam: "Columbus Blue Jackets",
+      sportsbook: "pinnacle",
+      observedAt: "2026-10-27T22:37:33.553Z",
+      market: "moneyline",
+      side: "home",
+      line: null,
+      americanPrice: -125,
+      decimalPrice: 1.8,
+      noVigProbability: 0.54,
+    }],
+  });
+  check(
+    "Owls sharp price maps full NHL names onto abbreviation-only canonical teams",
+    mapped.rejected.length === 0 &&
+      mapped.observations.length === 1 &&
+      mapped.observations[0]?.canonical_event_id === "2026020188" &&
+      mapped.observations[0]?.sportsbook === "pinnacle" &&
+      mapped.observations[0]?.provider_timestamp === "2026-10-27T22:37:33.553Z",
+  );
+}
 
 function check(label: string, ok: boolean, detail?: string): void {
   if (ok) pass++;
@@ -73,6 +161,14 @@ function check(label: string, ok: boolean, detail?: string): void {
 check(
   "MLB key normalizes full team names",
   marketIntelligenceGameKey("mlb", "Houston Astros", "Detroit Tigers") === "HOU@DET",
+);
+check(
+  "NHL key uses the canonical abbreviation registry for provider full names",
+  marketIntelligenceGameKey("nhl", "Columbus Blue Jackets", "Philadelphia Flyers") === "CBJ@PHI",
+);
+check(
+  "NHL key resolves the database abbreviation form through the same registry",
+  marketIntelligenceGameKey("nhl", "CBJ", "PHI") === "CBJ@PHI",
 );
 
 {

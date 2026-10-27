@@ -306,7 +306,7 @@ Last reviewed: 2026-10-27
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`. The existing leased
+  `market_intelligence_v2_shadow_capture_2026_10_27_r8_owls_sharp_book_prices`. The existing leased
   refresh may store exact-date, exact-matchup Owls NBA split rows with their real source book for
   the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
@@ -328,12 +328,19 @@ Last reviewed: 2026-10-27
   abbreviation variants (`GS`, `NO`, `NY`, `SA`, `UTAH`, and `WSH`) before exact matchup comparison.
   It repairs missing opening-night DraftKings fallback rows without loosening date, league,
   orientation, or unknown-team gates. R6 applies that same canonical resolver to Owls full provider
-  names before the unchanged exact identity gates; r5 remains the immediate predecessor. Evidence
-  and rollback:
+  names before the unchanged exact identity gates; r5 remains the immediate predecessor. R8 adds
+  current Circa and Pinnacle Moneyline, Spread, and Total pairs from Owls' `/odds` response to the
+  existing price-observation shadow table. One league-level request is made per collection cycle.
+  Only complete coherent two-sided pairs with a valid book timestamp are accepted; provider full
+  names must resolve to the exact canonical game, including abbreviation-only NHL team rows. This is
+  observation-only capture: it does not update `lines`, `line_history`, member DTOs, predictions,
+  grades, stakes, locks, or tracking, and it has no market-reader authority. Legacy SharpAPI price
+  observations remain unchanged historical evidence. Evidence and rollback:
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`, plus
   `docs/model-audits/2026-10-16-nba-split-fallback-team-identity-result.md` and
-  `docs/model-audits/2026-10-27-owls-pro-basketball-team-identity-repair.md`.
+  `docs/model-audits/2026-10-27-owls-pro-basketball-team-identity-repair.md`, plus
+  `docs/model-audits/2026-10-27-owls-current-sharp-book-price-capture.md`.
 - NBA internal professional market reader is
   `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the
