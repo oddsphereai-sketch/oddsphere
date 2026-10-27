@@ -8,6 +8,17 @@ Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
+- October 27 CFB locked-card sharp-split continuity advances shared member presentation to
+  `daily_edge_member_presentation_2026_10_27_r30_cfb_locked_prelock_splits`. When a legacy locked
+  CFB fixture never stored a Sharp Book Splits section, the authenticated detail reader may render
+  a separately labeled reconstruction only from a complete exact-game observation captured no later
+  than the immutable lock instant. An existing locked section always wins, post-lock rows fail
+  closed, and the reconstructed values cannot enter the locked market read or change a prediction,
+  probability, price, grade, stake, tracking record, writer, cadence, or lease. The production
+  DEL@WKU rehearsal restored three Circa sections captured at 17:44:55 ET before the 18:00:15 ET
+  lock while the complete locked decision JSON remained byte-for-byte unchanged. Evidence and
+  rollback: `docs/model-audits/2026-10-27-cfb-locked-prelock-split-continuity.md`.
+
 - October 27 Owls professional-basketball identity repair advances shared member presentation to
   `daily_edge_member_presentation_2026_10_27_r29_owls_pro_team_identity` and Market Intelligence
   capture to `market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`. The

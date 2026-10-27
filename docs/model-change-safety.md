@@ -1,5 +1,27 @@
 # Model change safety protocol
 
+## Owner-directed repair: CFB locked-card sharp-split continuity
+
+On 2026-10-27 Daniel Mengel reported that the Delaware–Western Kentucky Sharp Book Splits were
+visible before the CFB T-60 lock and absent afterward. Production evidence proved that Owls retained
+a complete exact-game Circa Moneyline, Spread, and Total observation at 17:44:55 ET, before the
+immutable 18:00:15 ET lock, while the locked CFB fixture had never stored a sharp-split section.
+The shared response overlay intentionally skipped every locked card, so the presentation discarded
+the independently persisted pre-lock evidence even though the prediction record remained healthy.
+
+Member presentation r30 permits one bounded reader-only reconstruction: an authenticated CFB detail
+read may fill a missing `sportsbookSplits` field only from an exact-game complete pair whose market
+timestamp is no later than `lockedAt`. It never replaces an existing locked section, rejects every
+post-lock row, preserves the proof timestamp, labels the values `Pre-lock evidence`, and does not
+write or reinterpret the locked recommendation, market reader, probability, price, grade, stake,
+tracking row, or evidence payload. The ordinary overlay still skips locked cards by default.
+
+An exact production rehearsal populated all three missing DEL@WKU presentation sections from Circa
+at 17:44:55 ET and proved the locked decision JSON byte-for-byte unchanged. Same-input promotions,
+demotions, side changes, probability changes, grade changes, and actionable-count changes are zero
+by contract. Evidence and rollback:
+`docs/model-audits/2026-10-27-cfb-locked-prelock-split-continuity.md`.
+
 ## Owner-directed repair: Owls professional-basketball team identity
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to repair the missing member-visible Sharp Book

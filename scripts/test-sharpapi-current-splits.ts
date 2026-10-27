@@ -178,10 +178,69 @@ assert.equal(transitionedFeed.source, "owls_current_splits", "Owls owns the new 
 
 const locked = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
 locked.games[0]!.lockState = "locked";
+locked.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
 assert.deepEqual(
   applySharpApiCurrentSplitOverlay(locked, owlsFeed, now),
   { matchedGames: 0, populatedMarkets: 0 },
   "Owls overlays never mutate locked member snapshots",
+);
+
+const lockedPreLock = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+lockedPreLock.games[0]!.lockState = "locked";
+lockedPreLock.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+const lockedPreLockFeed = {
+  ...owlsFeed,
+  fetchedAt: "2026-09-20T19:59:00.000Z",
+  rows: [complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T19:59:00.000Z")],
+};
+assert.deepEqual(
+  applySharpApiCurrentSplitOverlay(lockedPreLock, lockedPreLockFeed, now, {
+    reconstructMissingLockedPreLock: true,
+  }),
+  { matchedGames: 1, populatedMarkets: 3 },
+  "an exact observation captured before lock may reconstruct only a missing display field",
+);
+for (const market of Object.values(lockedPreLock.games[0]!.markets)) {
+  assert.equal(market?.sportsbookSplits?.evidenceContext, "locked_prelock_reconstruction");
+  assert.equal(market?.sportsbookSplits?.lastUpdated, "2026-09-20T19:59:00.000Z");
+  assert.equal(market?.recommendationDecision?.sharpBookSplits, null, "the immutable locked decision stays untouched");
+}
+
+const lockedPostLock = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+lockedPostLock.games[0]!.lockState = "locked";
+lockedPostLock.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+assert.deepEqual(
+  applySharpApiCurrentSplitOverlay(lockedPostLock, owlsFeed, now, {
+    reconstructMissingLockedPreLock: true,
+  }),
+  { matchedGames: 1, populatedMarkets: 0 },
+  "a post-lock observation cannot be attached to an immutable card",
+);
+assert.equal(lockedPostLock.games[0]!.markets.moneyline.sportsbookSplits, null);
+
+const lockedStored = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+lockedStored.games[0]!.lockState = "locked";
+lockedStored.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+lockedStored.games[0]!.markets.moneyline.recommendationDecision!.sharpBookSplits = {
+  label: "Sharp Book Splits",
+  rows: [
+    { side: "away", label: "LIB", moneyPct: 55, betsPct: 51 },
+    { side: "home", label: "CCU", moneyPct: 45, betsPct: 49 },
+  ],
+  signal: null,
+  lastUpdated: "2026-09-20T19:58:00.000Z",
+};
+applySharpApiCurrentSplitOverlay(lockedStored, lockedPreLockFeed, now, {
+  reconstructMissingLockedPreLock: true,
+});
+assert.equal(lockedStored.games[0]!.markets.moneyline.sportsbookSplits, null, "stored locked evidence keeps exact precedence");
+assert.equal(lockedStored.games[0]!.markets.moneyline.recommendationDecision!.sharpBookSplits?.rows[0]?.moneyPct, 55);
+
+assert.equal(sanitizeRetainedSharpSplitPresentation(lockedPreLock), 3);
+assert.equal(
+  lockedPreLock.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated,
+  "2026-09-20T19:59:00.000Z",
+  "the pre-lock proof timestamp remains visible",
 );
 
 const retainedComplete = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T19:00:00.000Z");
