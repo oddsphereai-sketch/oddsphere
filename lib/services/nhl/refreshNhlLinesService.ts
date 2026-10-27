@@ -1,21 +1,18 @@
 /**
  * Phase 7L Phase 1 — NHL lines refresh service.
  *
- * Mirrors the NBA pattern with the Phase 7K Fix 1 baked in from the
- * start: input is ET slate_date; DB lookup filters by games.slate_date
- * equality; SharpAPI's UTC date(s) are derived internally from matched
- * games' game_date column. Late tips that live in UTC the next day are
- * found cleanly.
+ * Input is ET slate_date; DB lookup filters by games.slate_date equality,
+ * then matches Owls rows by canonical teams and provider start time. Late
+ * tips that live in UTC the next day are found cleanly.
  *
  * Scope:
- *   • Reads:  SharpAPI /odds (NHL), our games + teams (sport='nhl').
+ *   • Reads:  Owls /odds (NHL), our games + teams (sport='nhl').
  *   • Writes: lines (sport-agnostic via game_id FK), line_history
  *             (append-only intraday snapshots).
  *   • NEVER writes any other table.
- *   • SHARPAPI_KEY received by argument; never logged.
+ *   • OWLS_INSIGHT_API_KEY received by argument; never logged.
  *
- * Markets: moneyline + total_goals + puck_line (the three game-line
- * markets confirmed in the probe). Skips alternate / non-main lines.
+ * Markets: moneyline + total + spread, complete two-sided pairs only.
  */
 
 import { supabase } from "../../db/supabase";
@@ -26,6 +23,11 @@ import {
   type SharpNhlOddsRow,
 } from "../../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName, type NhlTeamAbbrev } from "../../providers/nhl/_teamNameNormalizer";
+import { OwlsInsightClient } from "../../providers/owls/owlsInsightClient";
+import {
+  normalizeOwlsSharpBookOdds,
+  type RawOwlsOddsResponse,
+} from "../../providers/owls/owlsSharpBookOdds";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
 import { replaceCurrentGameLinesBatched } from "../currentGameLinesBatchWriter";
@@ -35,8 +37,10 @@ import { requiresNhlPregameMarketCoverage } from "./nhlPregameCoverage";
 export type RefreshNhlLinesOptions = {
   /** ET sports-day in YYYY-MM-DD. Filters games.slate_date directly. */
   slateDate: string;
-  /** SharpAPI bearer token. NEVER logged. */
-  sharpApiKey: string;
+  /** Owls is the active production source for complete Circa/Pinnacle pairs. */
+  owlsApiKey?: string;
+  /** Legacy operator-only fallback; active crons do not pass this. */
+  sharpApiKey?: string;
   dryRun: boolean;
   /** Optional exact NHL API game ids for a targeted pre-lock refresh. */
   externalIdsFilter?: number[];
@@ -55,6 +59,15 @@ export type RefreshNhlLinesResult = {
   lineGroupsVerified: number;
   lineGroupsChanged: number;
   lineHistoryWritten: number;
+  /** Canonical complete provider board used by read-only impact audits. */
+  canonicalLines: Array<{
+    gameId: number;
+    marketType: "moneyline" | "spread" | "total";
+    sportsbook: string;
+    side: "home" | "away" | "over" | "under";
+    lineValue: number | null;
+    oddsAmerican: number | null;
+  }>;
   errors: string[];
 };
 
@@ -292,6 +305,7 @@ export async function refreshNhlLines(
       linesWritten: 0, linesReverified: 0,
       lineGroupsVerified: 0, lineGroupsChanged: 0,
       lineHistoryWritten: 0,
+      canonicalLines: [],
       errors,
     };
   }
@@ -310,41 +324,74 @@ export async function refreshNhlLines(
     gameAbbrs.set(g.id, { home: homeAbbr, away: awayAbbr });
   }
 
-  const sharpApiDates = sharpApiDatesForGames(pregameGames);
-  log(`SharpAPI event dates (UTC): ${sharpApiDates.join(", ")}`);
-  const events: SharpNhlEvent[] = [];
-  for (const date of sharpApiDates) {
-    try {
-      events.push(...await fetchSharpNhlEvents(date, opts.sharpApiKey, log));
-    } catch (error) {
-      errors.push(`SharpAPI event catalog ${date}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
   const oddsRows: SharpNhlOddsRow[] = [];
-  for (const game of pregameGames) {
-    const abbrs = gameAbbrs.get(game.id);
-    if (!abbrs) {
-      errors.push(`game_id=${game.id}: canonical NHL teams unavailable`);
-      continue;
-    }
-    const event = selectSharpNhlEvent(events, game, abbrs.home, abbrs.away);
-    if (!event?.id) {
-      errors.push(`game_id=${game.id}: SharpAPI event not found`);
-      continue;
-    }
-    try {
-      const batch = await fetchSharpNhlEventOdds(event.id, opts.sharpApiKey, log);
-      oddsRows.push(...batch);
-    } catch (error) {
-      errors.push(`game_id=${game.id}: SharpAPI event odds failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  log(`SharpAPI /odds rows fetched: ${oddsRows.length}`);
-
   let matched = 0;
   let unmatched = 0;
   let parsed = 0;
   const preparedPayloads: PreparedLinePayload[] = [];
+  if (opts.owlsApiKey) {
+    const response = await new OwlsInsightClient(opts.owlsApiKey).odds<RawOwlsOddsResponse>("nhl");
+    const coverage = normalizeOwlsSharpBookOdds(response.body, "nhl");
+    for (const row of coverage.prices) {
+      const homeAbbr = normalizeNhlTeamName(row.homeTeam);
+      const awayAbbr = normalizeNhlTeamName(row.awayTeam);
+      const game = pregameGames.find((candidate) => {
+        const abbrs = gameAbbrs.get(candidate.id);
+        if (!abbrs || abbrs.home !== homeAbbr || abbrs.away !== awayAbbr) return false;
+        const distanceMs = Math.abs(Date.parse(row.scheduledStart ?? "") - Date.parse(candidate.game_date));
+        return Number.isFinite(distanceMs) && distanceMs <= 12 * 3_600_000;
+      });
+      if (!game) { unmatched++; continue; }
+      matched++;
+      parsed++;
+      preparedPayloads.push({
+        game_id: game.id,
+        market_type: row.market,
+        player_id: null,
+        sportsbook: row.sportsbook,
+        side: row.side,
+        line_value: row.line,
+        odds_american: row.americanPrice,
+        odds_decimal: row.decimalPrice,
+        implied_probability: impliedProbability(row.americanPrice),
+        ev_percent: null,
+        fair_odds: null,
+        source_timestamp: row.observedAt,
+      });
+    }
+    log(`Owls /odds normalized rows: ${preparedPayloads.length}`);
+  } else if (opts.sharpApiKey) {
+    const sharpApiDates = sharpApiDatesForGames(pregameGames);
+    log(`Legacy SharpAPI event dates (UTC): ${sharpApiDates.join(", ")}`);
+    const events: SharpNhlEvent[] = [];
+    for (const date of sharpApiDates) {
+      try {
+        events.push(...await fetchSharpNhlEvents(date, opts.sharpApiKey, log));
+      } catch (error) {
+        errors.push(`Legacy SharpAPI event catalog ${date}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    for (const game of pregameGames) {
+      const abbrs = gameAbbrs.get(game.id);
+      if (!abbrs) {
+        errors.push(`game_id=${game.id}: canonical NHL teams unavailable`);
+        continue;
+      }
+      const event = selectSharpNhlEvent(events, game, abbrs.home, abbrs.away);
+      if (!event?.id) {
+        errors.push(`game_id=${game.id}: legacy SharpAPI event not found`);
+        continue;
+      }
+      try {
+        oddsRows.push(...await fetchSharpNhlEventOdds(event.id, opts.sharpApiKey, log));
+      } catch (error) {
+        errors.push(`game_id=${game.id}: legacy SharpAPI event odds failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    log(`Legacy SharpAPI /odds rows fetched: ${oddsRows.length}`);
+  } else {
+    throw new Error("Owls NHL odds key missing");
+  }
 
   for (const r of oddsRows) {
     if (
@@ -392,15 +439,29 @@ export async function refreshNhlLines(
     parsed++;
     preparedPayloads.push(payload);
   }
+  const oddsRowsFetched = opts.owlsApiKey ? preparedPayloads.length : oddsRows.length;
 
-  // SharpAPI can return exact duplicates or multiple observations for one
+  // A provider can return exact duplicates or multiple observations for one
   // named book. Keep the newest deterministic quote and only complete
   // two-sided pairs. A partial refresh leaves the prior complete DB group in
   // place instead of erasing a side from the member board.
+  const sourceTimestampByIdentity = new Map<string, string | null>();
   const payloads: LinePayload[] = canonicalizeNhlLineRows(preparedPayloads).map(({ source_timestamp, ...payload }) => {
+    sourceTimestampByIdentity.set(
+      `${payload.game_id}|${payload.market_type}|${payload.sportsbook}|${payload.side}|${payload.line_value ?? "null"}|${payload.odds_american ?? "null"}`,
+      source_timestamp,
+    );
     void source_timestamp;
     return payload;
   });
+  const canonicalLines: RefreshNhlLinesResult["canonicalLines"] = payloads.map((line) => ({
+    gameId: line.game_id,
+    marketType: line.market_type as "moneyline" | "spread" | "total",
+    sportsbook: line.sportsbook,
+    side: line.side as "home" | "away" | "over" | "under",
+    lineValue: line.line_value,
+    oddsAmerican: line.odds_american,
+  }));
 
   log(`\nProcessed: matched=${matched} unmatched=${unmatched} parsed=${parsed}`);
 
@@ -418,7 +479,7 @@ export async function refreshNhlLines(
       const expectedSides = market === "total" ? ["over", "under"] : ["home", "away"];
       const sides = gameMarkets?.get(market);
       if (expectedSides.some((side) => !sides?.has(side))) {
-        errors.push(`game_id=${game.id}: incomplete SharpAPI ${market} coverage`);
+        errors.push(`game_id=${game.id}: incomplete ${opts.owlsApiKey ? "Owls" : "legacy SharpAPI"} ${market} coverage`);
       }
     }
   }
@@ -430,11 +491,12 @@ export async function refreshNhlLines(
     }
     if (payloads.length > 8) log(`    … and ${payloads.length - 8} more`);
     return {
-      mode: "dry-run", gamesInDb: games.length, oddsRowsFetched: oddsRows.length,
+      mode: "dry-run", gamesInDb: games.length, oddsRowsFetched,
       matched, unmatched, parsed,
       linesWritten: 0, linesReverified: 0,
       lineGroupsVerified: 0, lineGroupsChanged: 0,
       lineHistoryWritten: 0,
+      canonicalLines,
       errors,
     };
   }
@@ -536,7 +598,6 @@ export async function refreshNhlLines(
     ? new Set(changedPayloads.map((row) => `${row.game_id}|${row.market_type}|${row.sportsbook}`)).size
     : 0;
 
-  const nowIso = new Date().toISOString();
   const historyRows: LineHistoryPayload[] = (completeReplacement ? changedPayloads : []).map((p) => ({
     game_id: p.game_id,
     market_type: p.market_type,
@@ -546,7 +607,9 @@ export async function refreshNhlLines(
     line_value: p.line_value,
     odds_american: p.odds_american,
     is_opener: false,
-    recorded_at: nowIso,
+    recorded_at: sourceTimestampByIdentity.get(
+      `${p.game_id}|${p.market_type}|${p.sportsbook}|${p.side}|${p.line_value ?? "null"}|${p.odds_american ?? "null"}`,
+    ) ?? new Date().toISOString(),
   }));
   let lineHistoryWritten = 0;
   if (historyRows.length > 0) {
@@ -564,11 +627,12 @@ export async function refreshNhlLines(
   return {
     mode: "write",
     gamesInDb: games.length,
-    oddsRowsFetched: oddsRows.length,
+    oddsRowsFetched,
     matched, unmatched, parsed,
     linesWritten, linesReverified,
     lineGroupsVerified, lineGroupsChanged,
     lineHistoryWritten,
+    canonicalLines,
     errors,
   };
 }

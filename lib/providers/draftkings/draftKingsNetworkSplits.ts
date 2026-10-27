@@ -410,18 +410,19 @@ export async function populateDailyEdgeDraftKingsFallback(
   response: DailyEdgeResponse,
   sport: Sport,
 ): Promise<DraftKingsNetworkOverlayResult> {
+  const options = { reconstructMissingLockedPreLock: true } as const;
   // Apply the prior display authority before evaluating current sources. This
   // makes the source-hold decision deterministic rather than dependent on
   // which concurrent provider read happens to mutate the response first.
-  const continuity = await loadDailyEdgeSharpBookSplitContinuity(response, sport);
+  const continuity = await loadDailyEdgeSharpBookSplitContinuity(response, sport, options);
   const [current, durableFeed] = await Promise.all([
-    populateDailyEdgeSharpApiCurrentSplits(response, sport),
+    populateDailyEdgeSharpApiCurrentSplits(response, sport, options),
     readCachedDraftKingsNetworkSplits(sport).catch((error) => {
       console.warn(`DraftKings Network split fallback skipped: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }),
   ]);
-  const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed);
+  const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed, options);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
   alignMarketReadsToDisplayedSharpBookSplits(response);
   await persistDailyEdgeSharpBookSplitContinuity(response, sport, continuity.feed);
@@ -443,7 +444,7 @@ export async function populateDailyEdgeStoredSplitFallback(
   options: SharpApiCurrentSplitOverlayOptions = {},
 ): Promise<DraftKingsNetworkOverlayResult> {
   const [continuity, sharpFeed, draftKingsFeed] = await Promise.all([
-    loadDailyEdgeSharpBookSplitContinuity(response, sport),
+    loadDailyEdgeSharpBookSplitContinuity(response, sport, options),
     readStoredSharpApiCurrentSplits(sport).catch(() => null),
     readStoredDraftKingsNetworkSplits(sport).catch(() => null),
   ]);

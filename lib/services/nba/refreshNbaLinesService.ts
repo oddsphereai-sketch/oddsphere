@@ -7,10 +7,9 @@
  *
  * What this does:
  *   • Loads NBA games + teams for the requested date.
- *   • Fetches the current NBA board from SharpAPI /odds, one canonical
- *     game market at a time, using cursor pagination. SharpAPI does not
- *     document a `date` filter on this endpoint; slate isolation happens
- *     locally through exact home/away matching against the requested games.
+ *   • Fetches one current NBA board from Owls and retains only complete
+ *     Circa/Pinnacle two-sided full-game markets. Slate isolation happens
+ *     locally through exact home/away and start-time matching.
  *   • Matches each odds row to one of our `games` rows by team-name
  *     overlap (display_name + last-token fallback).
  *   • Normalizes market + side, builds (game_id, market_type,
@@ -23,17 +22,22 @@
  *
  * Service contract (vs. CLI wrapper):
  *   • NO process.exit / process.argv / process.env access.
- *   • Caller passes `sharpApiKey` directly — service does NOT read
- *     SHARPAPI_KEY from env. NEVER logs the key.
+ *   • Caller passes `owlsApiKey` directly — service does NOT read
+ *     provider credentials from env. NEVER logs the key.
  *   • Caller-supplied logger; service runs silent when omitted.
  *   • Returns a typed Result with per-step counts so the cron route
  *     can log structured outcomes to data_refresh_log.
- *   • mode="no-games" short-circuits before any SharpAPI fetch (saves
+ *   • mode="no-games" short-circuits before any provider fetch (saves
  *     a request when there's nothing to match against).
  */
 
 import { supabase } from "../../db/supabase";
 import { normalizeTeamAbbr } from "../../providers/playbook/playbookTeamNormalizer";
+import { OwlsInsightClient } from "../../providers/owls/owlsInsightClient";
+import {
+  normalizeOwlsSharpBookOdds,
+  type RawOwlsOddsResponse,
+} from "../../providers/owls/owlsSharpBookOdds";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
 
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
@@ -48,11 +52,10 @@ export type RefreshNbaLinesOptions = {
    * internally — callers never have to think about it.
    */
   slateDate: string;
-  /**
-   * SharpAPI bearer token. Passed in by caller; service does not read
-   * SHARPAPI_KEY from process.env. NEVER logged.
-   */
-  sharpApiKey: string;
+  /** Owls is the active production source for complete Circa/Pinnacle pairs. */
+  owlsApiKey?: string;
+  /** Legacy operator-only fallback; active crons do not pass this. */
+  sharpApiKey?: string;
   /** false = perform DB writes; true = dry-run (read-only). */
   dryRun: boolean;
   /** Optional bounded T-60 refresh; absent means the full slate. */
@@ -128,6 +131,7 @@ type SharpOddsRow = {
   event_start_time?: string;
   last_seen_at?: string;
   wire_received_at?: string;
+  provider_timestamp?: string;
 };
 
 type LineUpsertPayload = {
@@ -143,6 +147,8 @@ type LineUpsertPayload = {
   ev_percent: number | null;
   fair_odds: number | null;
 };
+
+type PreparedLineUpsertPayload = LineUpsertPayload & { source_timestamp: string | null };
 
 type LineHistoryPayload = {
   game_id: number;
@@ -446,7 +452,7 @@ function buildLinePayload(
   gameId: number,
   market: "moneyline" | "spread" | "total",
   side: "home" | "away" | "over" | "under",
-): LineUpsertPayload | null {
+): PreparedLineUpsertPayload | null {
   const sportsbook = (row.sportsbook ?? "").toLowerCase();
   if (sportsbook === "") return null;
   const american =
@@ -473,11 +479,12 @@ function buildLinePayload(
     implied_probability: implied,
     ev_percent: asNumberOrNull(row.ev_percent),
     fair_odds: asNumberOrNull(row.fair_odds),
+    source_timestamp: row.provider_timestamp ?? row.last_seen_at ?? row.wire_received_at ?? null,
   };
 }
 
 /**
- * Refresh NBA lines from SharpAPI. See module docstring for the
+ * Refresh NBA lines from Owls. See module docstring for the
  * service contract.
  */
 export async function refreshNbaLines(
@@ -516,30 +523,65 @@ export async function refreshNbaLines(
   const teams = await loadNbaTeams();
   const teamById = new Map<number, TeamRow>(teams.map((t) => [t.id, t]));
 
-  // 3. Discover the provider's exact event ids, then fetch only those events'
+  // 3. Fetch one league-level Owls board in production. The legacy SharpAPI
+  // branch remains only for focused operator compatibility while the old
+  // account is retired; active cron callers pass owlsApiKey exclusively.
   // three game markets. SharpAPI does not document a date filter; its old
   // ignored `date` query made this writer download an unrelated board. Event
   // identity plus team and start-time matching prevents future same-pair games
   // and thousands of alternate lines from exhausting global pagination.
-  const events = await fetchNbaCurrentEvents(opts.sharpApiKey, log);
-  const eventTargets = eventTargetsForGames(events, games, teamById);
-  const eventIds = eventTargets.map((target) => target.eventId);
-  const reconciliationGameIds = new Set(eventTargets.map((target) => target.gameId));
-  if (eventTargets.length < games.length) {
-    const missing = games.length - eventTargets.length;
-    errors.push(`SharpAPI NBA event identity unavailable for ${missing} of ${games.length} scoped game(s); unmatched games preserved.`);
+  let oddsRows: SharpOddsRow[] = [];
+  const reconciliationGameIds = new Set<number>();
+  if (opts.owlsApiKey) {
+    const response = await new OwlsInsightClient(opts.owlsApiKey).odds<RawOwlsOddsResponse>("nba");
+    const coverage = normalizeOwlsSharpBookOdds(response.body, "nba");
+    oddsRows = coverage.prices.flatMap((row) => {
+      const game = matchGame(row.homeTeam, row.awayTeam, games, teamById);
+      const distanceMs = game === null || row.scheduledStart === null
+        ? Number.POSITIVE_INFINITY
+        : Math.abs(Date.parse(row.scheduledStart) - Date.parse(game.game_date));
+      if (game === null || !Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000) return [];
+      reconciliationGameIds.add(game.id);
+      return [{
+        event_id: row.providerEventId,
+        sportsbook: row.sportsbook,
+        market_type: row.market,
+        side: row.side,
+        line: row.line,
+        odds_american: row.americanPrice,
+        odds_decimal: row.decimalPrice,
+        home_team: row.homeTeam,
+        away_team: row.awayTeam,
+        event_start_time: row.scheduledStart ?? undefined,
+        provider_timestamp: row.observedAt,
+        is_main_line: true,
+      }];
+    });
+    if (reconciliationGameIds.size < games.length) {
+      errors.push(`Owls NBA event identity unavailable for ${games.length - reconciliationGameIds.size} of ${games.length} scoped game(s); unmatched games preserved.`);
+    }
+    log(`Owls /odds normalized rows: ${oddsRows.length}`);
+  } else if (opts.sharpApiKey) {
+    const events = await fetchNbaCurrentEvents(opts.sharpApiKey, log);
+    const eventTargets = eventTargetsForGames(events, games, teamById);
+    const eventIds = eventTargets.map((target) => target.eventId);
+    eventTargets.forEach((target) => reconciliationGameIds.add(target.gameId));
+    if (eventTargets.length < games.length) {
+      errors.push(`Legacy SharpAPI NBA event identity unavailable for ${games.length - eventTargets.length} of ${games.length} scoped game(s); unmatched games preserved.`);
+    }
+    oddsRows = eventIds.length === 0
+      ? []
+      : await fetchNbaCurrentOddsBoard(opts.sharpApiKey, log, fetch, eventIds);
+    log(`Legacy SharpAPI /odds rows fetched: ${oddsRows.length}`);
+  } else {
+    throw new Error("Owls NBA odds key missing");
   }
-  log(`SharpAPI matched event ids: ${eventIds.length}`);
-  const oddsRows = eventIds.length === 0
-    ? []
-    : await fetchNbaCurrentOddsBoard(opts.sharpApiKey, log, fetch, eventIds);
-  log(`SharpAPI /odds rows fetched: ${oddsRows.length}`);
 
   // 4. Match + normalize + build payloads.
   let matched = 0;
   let unmatched = 0;
   let parsed = 0;
-  const payloads: LineUpsertPayload[] = [];
+  const payloads: PreparedLineUpsertPayload[] = [];
 
   for (const r of oddsRows) {
     if (r.is_live === true || r.is_stale_pregame_price === true) continue;
@@ -597,7 +639,7 @@ export async function refreshNbaLines(
   // main line makes an opening-to-current reader invent movement within a
   // single provider response. Alternate-line prices require their own
   // price-aware contract rather than contaminating main-line chronology.
-  type Tagged = LineUpsertPayload & { _is_main_flag?: boolean | null };
+  type Tagged = PreparedLineUpsertPayload & { _is_main_flag?: boolean | null };
   const dedupeByGroup = new Map<string, Tagged>();
   for (const p of payloads as Tagged[]) {
     const k = `${p.game_id}|${p.market_type}|${p.side}|${p.sportsbook}`;
@@ -614,12 +656,18 @@ export async function refreshNbaLines(
     const dNew = Math.abs((p.odds_american ?? -110) + 110);
     if (dNew < dExisting) dedupeByGroup.set(k, p);
   }
+  const preparedByIdentity = new Map<string, string | null>();
   const dedupedPayloadsBeforePairGate: LineUpsertPayload[] = [...dedupeByGroup.values()].map(
     (p) => {
       // Strip the tracking tag before write — schema doesn't have it.
       const rest = { ...p };
       delete rest._is_main_flag;
-      return rest;
+      const { source_timestamp, ...payload } = rest;
+      preparedByIdentity.set(
+        `${payload.game_id}|${payload.market_type}|${payload.sportsbook}|${payload.side}|${payload.line_value ?? "null"}|${payload.odds_american ?? "null"}`,
+        source_timestamp,
+      );
+      return payload;
     },
   );
   const completeBoard = selectCompleteExecutableBookPairs(dedupedPayloadsBeforePairGate);
@@ -710,15 +758,18 @@ export async function refreshNbaLines(
         continue;
       }
 
+      if (proposed.length === 0) continue;
+      const managedBooks = opts.owlsApiKey ? ["circa", "pinnacle"] : null;
       const existingIds: number[] = [];
       for (let from = 0; ; from += 1000) {
-        const { data: existing, error: readErr } = await supabase
+        let existingQuery = supabase
           .from("lines")
           .select("id")
           .eq("game_id", gameId)
           .eq("market_type", market)
-          .is("player_id", null)
-          .range(from, from + 999);
+          .is("player_id", null);
+        if (managedBooks !== null) existingQuery = existingQuery.in("sportsbook", managedBooks);
+        const { data: existing, error: readErr } = await existingQuery.range(from, from + 999);
         if (readErr) {
           const msg = `  ✗ read existing ${key}: ${readErr.message}`;
           log(msg);
@@ -762,7 +813,6 @@ export async function refreshNbaLines(
   }
 
   // 7. line_history append-only snapshot (Phase v0c-DE).
-  const nowIso = new Date().toISOString();
   const historyRows: LineHistoryPayload[] = writtenPayloads.map((p) => ({
     game_id: p.game_id,
     market_type: p.market_type,
@@ -772,7 +822,9 @@ export async function refreshNbaLines(
     line_value: p.line_value,
     odds_american: p.odds_american,
     is_opener: false,
-    recorded_at: nowIso,
+    recorded_at: preparedByIdentity.get(
+      `${p.game_id}|${p.market_type}|${p.sportsbook}|${p.side}|${p.line_value ?? "null"}|${p.odds_american ?? "null"}`,
+    ) ?? new Date().toISOString(),
   }));
   let lineHistoryWritten = 0;
   if (historyRows.length > 0) {

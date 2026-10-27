@@ -2,10 +2,10 @@
  * Phase 7L Phase 1 — NHL lines refresh operator (CLI wrapper).
  *
  * Two-key gate: --apply + NHL_LINES_DB_WRITES_ENABLED=true.
- * SHARPAPI_KEY read from env, passed by argument to the service, never logged.
+ * OWLS_INSIGHT_API_KEY read from env, passed by argument to the service, never logged.
  *
  * CLI surface: --date 2026-06-09 (ET slate-date). The service treats the
- * value as ET slate_date and derives SharpAPI's UTC date(s) internally.
+ * value as ET slate_date and matches Owls rows by canonical matchup and time.
  */
 
 import {
@@ -24,9 +24,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const apply = readBoolFlag(argv, "--apply");
-  const sharpKey = process.env.SHARPAPI_KEY;
-  if (!sharpKey) {
-    console.error("✗ SHARPAPI_KEY missing from env");
+  const owlsKey = process.env.OWLS_INSIGHT_API_KEY;
+  if (!owlsKey) {
+    console.error("✗ OWLS_INSIGHT_API_KEY missing from env");
     process.exit(1);
   }
 
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   try {
     result = await refreshNhlLines({
       slateDate: date,
-      sharpApiKey: sharpKey,
+      owlsApiKey: owlsKey,
       dryRun: !write,
       logger: (m) => console.log(m),
     });

@@ -24,8 +24,8 @@ import { refreshNbaLines } from "../../../lib/services/nba/refreshNbaLinesServic
 
 const RELEASE = "nba_professional_current_board_audit_2026_10_16_r2_independent_first";
 const date = process.argv[2] ?? "2026-10-20";
-const sharpApiKey = process.env.SHARPAPI_KEY;
-if (!sharpApiKey) throw new Error("SHARPAPI_KEY is required.");
+const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+if (!owlsApiKey) throw new Error("OWLS_INSIGHT_API_KEY is required.");
 
 async function main(): Promise<void> {
 const window = etSlateDateToUtcWindow(date);
@@ -45,7 +45,7 @@ const built = {
     .filter((row, index, rows) => seen.has(row.game_external_id) &&
       rows.findIndex((candidate) => candidate.game_external_id === row.game_external_id) === index),
 };
-const refresh = await refreshNbaLines({ slateDate: date, sharpApiKey: sharpApiKey!, dryRun: true });
+const refresh = await refreshNbaLines({ slateDate: date, owlsApiKey: owlsApiKey!, dryRun: true });
 const externalIds = built.snapshots.map((snapshot) => snapshot.game_external_id);
 const { data: games, error: gameError } = await supabase
   .from("games")

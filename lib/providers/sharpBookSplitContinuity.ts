@@ -32,6 +32,10 @@ export type SharpBookSplitContinuityResult = {
   feed: SharpBookSplitContinuityFeed | null;
 };
 
+export type SharpBookSplitContinuityOptions = {
+  reconstructMissingLockedPreLock?: boolean;
+};
+
 function snapshotKey(sport: Sport, slateDate: string): string {
   return `daily-edge::sharp-book-split-continuity::${sport}::${slateDate}::${CONTINUITY_RELEASE}`;
 }
@@ -39,12 +43,13 @@ function snapshotKey(sport: Sport, slateDate: string): string {
 export async function loadDailyEdgeSharpBookSplitContinuity(
   response: DailyEdgeResponse,
   sport: Sport,
+  options: SharpBookSplitContinuityOptions = {},
 ): Promise<SharpBookSplitContinuityResult> {
   try {
     const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
     const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(snapshotKey(sport, response.date));
     const feed = validateFeed(stored?.payload, sport, response.date);
-    const applied = applySharpBookSplitContinuity(response, feed);
+    const applied = applySharpBookSplitContinuity(response, feed, Date.now(), options);
     return { ...applied, feed };
   } catch (error) {
     console.warn(`Sharp-book split continuity read failed for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
@@ -56,6 +61,7 @@ export function applySharpBookSplitContinuity(
   response: DailyEdgeResponse,
   feed: SharpBookSplitContinuityFeed | null,
   nowMs = Date.now(),
+  options: SharpBookSplitContinuityOptions = {},
 ): Omit<SharpBookSplitContinuityResult, "feed"> {
   if (!feed || feed.sport !== response.sport || feed.slateDate !== response.date) {
     return { matchedGames: 0, populatedMarkets: 0 };
@@ -63,7 +69,10 @@ export function applySharpBookSplitContinuity(
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
-    if (game.lockState === "locked") continue;
+    const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
+      ? Date.parse(game.lockedAt ?? "")
+      : null;
+    if (game.lockState === "locked" && !Number.isFinite(lockedCutoffMs)) continue;
     const matches = feed.games.filter((candidate) => retainedGameMatches(candidate, game));
     if (matches.length !== 1) continue;
     matchedGames += 1;
@@ -71,6 +80,16 @@ export function applySharpBookSplitContinuity(
       const retained = matches[0]!.markets[marketKey];
       const market = game.markets[marketKey];
       if (!retained || !market || sectionQuality(retained) !== 2) continue;
+      if (lockedCutoffMs !== null) {
+        if (
+          market.sportsbookSplits?.rows.length ||
+          market.recommendationDecision?.sharpBookSplits?.rows.length ||
+          sectionTimestamp(retained) > lockedCutoffMs
+        ) continue;
+        market.sportsbookSplits = preLockReconstruction(retained);
+        populatedMarkets += 1;
+        continue;
+      }
       const existing = market.sportsbookSplits ?? null;
       const selected = existing && sectionQuality(existing) === 2
         ? preferredActiveSection(retained, existing, nowMs)
@@ -80,6 +99,22 @@ export function applySharpBookSplitContinuity(
     }
   }
   return { matchedGames, populatedMarkets };
+}
+
+function preLockReconstruction(section: MarketSplitDisplaySection): MarketSplitDisplaySection {
+  const sourceObservedAt = validTimestamp(section.sourceObservedAt) ?? latestSectionTimestamp(section);
+  return {
+    ...cloneRetainedSection(section),
+    evidenceContext: "locked_prelock_reconstruction",
+    sourceObservedAt,
+    lastUpdated: sourceObservedAt,
+    rows: section.rows.map((row) => ({
+      ...row,
+      observedAt: sourceObservedAt,
+      freshnessCheckedAt: sourceObservedAt,
+      isStale: false,
+    })),
+  };
 }
 
 /**

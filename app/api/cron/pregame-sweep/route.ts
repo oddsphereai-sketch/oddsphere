@@ -623,17 +623,17 @@ export async function GET(request: Request) {
         }
       }
       if (partition.entering_lock.length > 0 && sport === "nhl") {
-        const sharpApiKey = process.env.SHARPAPI_KEY;
-        if (!sharpApiKey) throw new Error("SHARPAPI_KEY missing from NHL T-60 refresh");
+        const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+        if (!owlsApiKey) throw new Error("OWLS_INSIGHT_API_KEY missing from NHL T-60 refresh");
         const enteringExternalIds = partition.entering_lock.map((game) => game.external_id);
         nhlPreLockLines = await refreshNhlLines({
           slateDate: date,
-          sharpApiKey,
+          owlsApiKey,
           dryRun: false,
           externalIdsFilter: enteringExternalIds,
         });
         records += nhlPreLockLines.linesWritten + nhlPreLockLines.lineHistoryWritten;
-        apiCalls += 1 + nhlPreLockLines.gamesInDb;
+        apiCalls += 1;
         nhlPreLockSplits = await syncPublicSplitsObservations({
           supabase,
           sport: "nhl",
@@ -644,11 +644,11 @@ export async function GET(request: Request) {
         records += nhlPreLockSplits.upserted;
       }
       if (partition.entering_lock.length > 0 && sport === "nba") {
-        const sharpApiKey = process.env.SHARPAPI_KEY;
-        if (!sharpApiKey) throw new Error("SHARPAPI_KEY missing from NBA T-60 refresh");
+        const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+        if (!owlsApiKey) throw new Error("OWLS_INSIGHT_API_KEY missing from NBA T-60 refresh");
         nbaPreLockLines = await refreshNbaLines({
           slateDate: date,
-          sharpApiKey,
+          owlsApiKey,
           dryRun: false,
           externalIdsFilter: partition.entering_lock.map((game) => game.external_id),
         });

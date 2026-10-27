@@ -12,8 +12,8 @@
  *   1. Build NBA feature snapshots (DB-only) for the ET slate window
  *   2. Resolve injuries via ESPN (best-effort)
  *   3. Run the independent-first NBA model per game
- *   4. Pull lines + splits + opportunities (lines from DB; splits + opps
- *      live via SharpAPI if SHARPAPI_KEY is set, else gracefully missing)
+ *   4. Pull persisted lines and provider-separated market evidence. The
+ *      retired SharpAPI request-time split/opportunity lane is never called.
  *   5. Compose per-game NbaDailyEdgeGameDto
  *   6. Adapt to MLB-shaped DailyEdgeResponse
  *
@@ -55,14 +55,12 @@ import {
   type NbaDailyEdgeGameDto,
 } from "./buildNbaDailyEdgeDto";
 import {
-  fetchNbaSplits,
   matchSplitsRow,
   type NbaSplitsRow,
 } from "./nbaSplitsClient";
 
 assertNbaChampionRuntime();
 import {
-  fetchNbaOpportunities,
   matchOpportunitiesForGame,
   type NbaOpportunity,
 } from "./nbaOpportunitiesClient";
@@ -296,23 +294,11 @@ export async function buildNbaDailyEdgePipeline(
     }
   }
 
-  // Fetch /splits and /opportunities/ev for NBA (best-effort).
-  const sharpKey = process.env.SHARPAPI_KEY;
-  let splits: NbaSplitsRow[] = [];
-  let opportunities: NbaOpportunity[] = [];
-  if (sharpKey !== undefined && sharpKey !== "") {
-    try {
-      splits = await fetchNbaSplits(sharpKey);
-    } catch (e) {
-      // Never log the key. Only the failure message.
-      console.warn(`nba daily-edge: /splits fetch failed: ${(e as Error).message}`);
-    }
-    try {
-      opportunities = await fetchNbaOpportunities(sharpKey);
-    } catch (e) {
-      console.warn(`nba daily-edge: /opportunities fetch failed: ${(e as Error).message}`);
-    }
-  }
+  // SharpAPI is retired. These legacy adapter slots remain empty; current
+  // public consensus and named-book evidence arrive through the persisted,
+  // provider-separated Playbook/Owls lanes below.
+  const splits: NbaSplitsRow[] = [];
+  const opportunities: NbaOpportunity[] = [];
 
   // Internal decision evidence only. This is deliberately separate from the
   // member-card adapter: the pipeline reads the market; the adapter only
@@ -662,12 +648,9 @@ export async function buildNbaDailyEdgePipeline(
     }),
   );
 
-  const marketSignalsCapability =
-    sharpKey === undefined || sharpKey === ""
-      ? ("unavailable_no_api_key" as const)
-      : publicSplitsSupported("nba")
-      ? ("available" as const)
-      : ("unavailable_unvalidated_source" as const);
+  const marketSignalsCapability = publicSplitsSupported("nba")
+    ? ("available" as const)
+    : ("unavailable_unvalidated_source" as const);
 
   const nbaDto: NbaDailyEdgeDto = {
     as_of: new Date().toISOString(),

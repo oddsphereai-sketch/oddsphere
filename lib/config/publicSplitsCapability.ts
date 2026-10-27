@@ -66,9 +66,9 @@ export const PUBLIC_SPLITS_CAPABILITY: Record<string, SportSplitsCapability> = {
     note: "Display-only approved 2026-10-16 after a 48/48 current-board game-market audit of complete coherent Playbook pairs. Model/grade use remains audit_required pending immutable forward validation.",
   },
   nhl: {
-    sharpSignalsProvider: "sharpapi", playbookSplits: true, sharpApiSplits: true,
+    sharpSignalsProvider: "none", playbookSplits: true, sharpApiSplits: false,
     status: "supported",
-    note: "Verified 2026-09-23: Playbook supplies all three game markets across the opening slate and SharpAPI supplies per-book NHL splits; persistent observations provide silent last-known-good fallback.",
+    note: "Playbook owns Public Consensus. Owls owns fresh named-book splits through Market Intelligence V2; no active SharpAPI split request remains.",
   },
   nfl: {
     sharpSignalsProvider: "none", playbookSplits: true, sharpApiSplits: false,

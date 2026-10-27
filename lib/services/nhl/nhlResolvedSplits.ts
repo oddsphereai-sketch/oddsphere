@@ -20,10 +20,11 @@ export type ResolvedNhlSplitsEvent = SharpNhlSplitsEvent & {
 
 /**
  * NHL product contract: the last complete provider observation remains usable
- * until a newer complete observation replaces it. The resolver still prefers
- * Playbook and silently falls back to SharpAPI, but NHL deliberately has no
- * age expiry because removing the section is worse than retaining the latest
- * verified money+ticket observation. No freshness copy is exposed to members.
+ * until a newer complete observation replaces it. Playbook is the active
+ * Public Consensus source. Historical SharpAPI rows may still explain an
+ * immutable older payload, but no new SharpAPI request is made. NHL
+ * deliberately has no age expiry because removing the section is worse than
+ * retaining the latest verified money+ticket observation.
  */
 export async function resolvedNhlSplitsByGame(
   supabase: SupabaseClient,

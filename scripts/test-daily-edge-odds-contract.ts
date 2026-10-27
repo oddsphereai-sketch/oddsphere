@@ -89,6 +89,64 @@ assert.deepEqual(trail.selected.map((stop) => stop.observedAt), [
   "2026-10-22T10:18:27.000Z",
 ], "history observed after the current endpoint is excluded rather than producing an inverted trail");
 
+const fullTrailLive = [
+  { market_type: "total", sportsbook: "circa", side: "over", line_value: 6.5, odds_american: -109, observed_at: "2026-10-22T10:30:00.000Z" },
+  { market_type: "total", sportsbook: "circa", side: "under", line_value: 6.5, odds_american: -111, observed_at: "2026-10-22T10:30:00.000Z" },
+  { market_type: "total", sportsbook: "pinnacle", side: "over", line_value: 6.5, odds_american: -108, observed_at: "2026-10-22T10:30:00.000Z" },
+  { market_type: "total", sportsbook: "pinnacle", side: "under", line_value: 6.5, odds_american: -112, observed_at: "2026-10-22T10:30:00.000Z" },
+  { market_type: "total", sportsbook: "fanduel", side: "over", line_value: 6.5, odds_american: -105, observed_at: "2026-10-22T10:30:00.000Z" },
+  { market_type: "total", sportsbook: "fanduel", side: "under", line_value: 6.5, odds_american: -115, observed_at: "2026-10-22T10:30:00.000Z" },
+];
+const retailHistory = [
+  { market_type: "total", sportsbook: "fanduel", side: "over", line_value: 6.5, odds_american: -110, observed_at: "2026-10-22T08:00:00.000Z" },
+  { market_type: "total", sportsbook: "fanduel", side: "under", line_value: 6.5, odds_american: -110, observed_at: "2026-10-22T08:00:00.000Z" },
+  { market_type: "total", sportsbook: "fanduel", side: "over", line_value: 6.5, odds_american: -108, observed_at: "2026-10-22T09:00:00.000Z" },
+  { market_type: "total", sportsbook: "fanduel", side: "under", line_value: 6.5, odds_american: -112, observed_at: "2026-10-22T09:00:00.000Z" },
+];
+const deepestRetailTrail = buildNhlTwoSidedPriceTrail({
+  live: fullTrailLive,
+  history: retailHistory,
+  market: "total",
+  selectedSide: "over",
+  opposingSide: "under",
+  selectedLine: 6.5,
+  opposingLine: 6.5,
+  preferredBook: "fanduel",
+});
+assert.equal(deepestRetailTrail.sportsbook, "fanduel", "a complete three-point retail trail beats current-only sharp books");
+assert.equal(new Set(deepestRetailTrail.selected.map((stop) => stop.sportsbook)).size, 1);
+
+const circaHistory = [
+  { market_type: "total", sportsbook: "circa", side: "over", line_value: 6.5, odds_american: -112, observed_at: "2026-10-22T08:05:00.000Z" },
+  { market_type: "total", sportsbook: "circa", side: "under", line_value: 6.5, odds_american: -108, observed_at: "2026-10-22T08:05:00.000Z" },
+  { market_type: "total", sportsbook: "circa", side: "over", line_value: 6.5, odds_american: -110, observed_at: "2026-10-22T09:05:00.000Z" },
+  { market_type: "total", sportsbook: "circa", side: "under", line_value: 6.5, odds_american: -110, observed_at: "2026-10-22T09:05:00.000Z" },
+];
+const completeCircaTrail = buildNhlTwoSidedPriceTrail({
+  live: fullTrailLive,
+  history: [...retailHistory, ...circaHistory],
+  market: "total",
+  selectedSide: "over",
+  opposingSide: "under",
+  selectedLine: 6.5,
+  opposingLine: 6.5,
+  preferredBook: "fanduel",
+});
+assert.equal(completeCircaTrail.sportsbook, "circa", "Circa wins the equal-depth same-book trail tiebreak");
+assert.equal(new Set(completeCircaTrail.selected.map((stop) => stop.sportsbook)).size, 1);
+const lockedPreferredTrail = buildNhlTwoSidedPriceTrail({
+  live: fullTrailLive,
+  history: [...retailHistory, ...circaHistory],
+  market: "total",
+  selectedSide: "over",
+  opposingSide: "under",
+  selectedLine: 6.5,
+  opposingLine: 6.5,
+  preferredBook: "fanduel",
+  preservePreferredBook: true,
+});
+assert.equal(lockedPreferredTrail.sportsbook, "fanduel", "locked records retain their legacy sportsbook association");
+
 const audit = auditDailyEdgeBoards({
   nhl: {
     games: [{

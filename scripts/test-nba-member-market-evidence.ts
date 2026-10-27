@@ -120,6 +120,44 @@ assert.deepEqual(
   "a current-only quote may render but must not fabricate an opening or move",
 );
 
+const sharpCurrentOnly = [
+  price("spread", "away", "circa", -107, 5.5, "2026-10-16T17:56:00Z"),
+  price("spread", "home", "circa", -113, -5.5, "2026-10-16T17:56:00Z"),
+];
+const retailDepthWins = buildNbaMemberGameEvidence({
+  game,
+  priceRows: [...priceRows, ...sharpCurrentOnly],
+  splitRows,
+  evaluatedAt,
+});
+assert.equal(
+  retailDepthWins.spread.movementReferenceSportsbook,
+  "fanduel",
+  "a complete three-point retail chronology must beat a current-only sharp quote",
+);
+assert.equal(new Set(retailDepthWins.spread.oddsTrail.map((stop) => stop.sportsbook)).size, 1);
+
+const circaTrailRows = [
+  price("spread", "away", "circa", -104, 5.5, "2026-10-16T13:05:00Z"),
+  price("spread", "home", "circa", -116, -5.5, "2026-10-16T13:05:00Z"),
+  price("spread", "away", "circa", -106, 5.5, "2026-10-16T15:05:00Z"),
+  price("spread", "home", "circa", -114, -5.5, "2026-10-16T15:05:00Z"),
+  ...sharpCurrentOnly,
+];
+const circaDepthWins = buildNbaMemberGameEvidence({
+  game,
+  priceRows: [...priceRows, ...circaTrailRows],
+  splitRows,
+  evaluatedAt,
+});
+assert.equal(
+  circaDepthWins.spread.movementReferenceSportsbook,
+  "circa",
+  "Circa must win when it has the same complete three-point depth",
+);
+assert.equal(new Set(circaDepthWins.spread.oddsTrail.map((stop) => stop.sportsbook)).size, 1);
+assert.equal(new Set(circaDepthWins.spread.opposingOddsTrail?.stops.map((stop) => stop.sportsbook)).size, 1);
+
 const stale = buildNbaMemberGameEvidence({
   game,
   priceRows,

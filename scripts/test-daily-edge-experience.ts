@@ -50,7 +50,6 @@ import {
 import {
   DAILY_EDGE_FORECAST_UNAVAILABLE_LABEL,
   DAILY_EDGE_SPREAD_UNAVAILABLE_LABEL,
-  DAILY_EDGE_TOTAL_UNAVAILABLE_LABEL,
   dailyEdgeExactPriceSelectionLabel,
   dailyEdgeMarketPredictionProbability,
   dailyEdgeMarketPredictionProvenanceLabel,
@@ -1850,7 +1849,7 @@ check(
 check(
   "a context-only CFB line never promises missing sportsbook odds",
   DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID ===
-    "daily_edge_member_presentation_2026_10_27_r30_cfb_locked_prelock_splits" &&
+    "daily_edge_member_presentation_2026_10_27_r31_cross_sport_locked_split_continuity" &&
     candidateSource.includes("Sportsbook odds unavailable") &&
     candidateSource.includes("Consensus line only") &&
     candidateSource.includes("No eligible named-book American price was captured") &&

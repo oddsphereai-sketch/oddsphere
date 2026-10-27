@@ -86,6 +86,46 @@ const wrongGame = response();
 wrongGame.games[0]!.homeTeam = "OTHER";
 assert.deepEqual(applySharpBookSplitContinuity(wrongGame, retained), { matchedGames: 0, populatedMarkets: 0 });
 
+const lockedRestored = response();
+lockedRestored.games[0]!.lockState = "locked";
+lockedRestored.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+const preLockRetained = {
+  ...retained,
+  games: [{
+    ...retained.games[0]!,
+    markets: { moneyline: section("Sharp Book Splits", "2026-09-20T19:59:00.000Z", [62, 38], [54, 46], "circa") },
+  }],
+};
+assert.deepEqual(
+  applySharpBookSplitContinuity(lockedRestored, preLockRetained, Date.parse("2026-09-20T20:10:00.000Z"), {
+    reconstructMissingLockedPreLock: true,
+  }),
+  { matchedGames: 1, populatedMarkets: 1 },
+  "a retained exact-game pre-lock observation may restore only a missing locked display field",
+);
+assert.equal(lockedRestored.games[0]!.markets.moneyline.sportsbookSplits?.evidenceContext, "locked_prelock_reconstruction");
+assert.equal(lockedRestored.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, "2026-09-20T19:59:00.000Z");
+assert.equal(lockedRestored.games[0]!.markets.moneyline.recommendationDecision?.sharpBookSplits, null, "locked decision evidence remains untouched");
+
+const lockedPostLockRejected = response();
+lockedPostLockRejected.games[0]!.lockState = "locked";
+lockedPostLockRejected.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+const postLockRetained = {
+  ...retained,
+  games: [{
+    ...retained.games[0]!,
+    markets: { moneyline: section("Sharp Book Splits", "2026-09-20T20:01:00.000Z", [62, 38], [54, 46], "circa") },
+  }],
+};
+assert.deepEqual(
+  applySharpBookSplitContinuity(lockedPostLockRejected, postLockRetained, Date.parse("2026-09-20T20:10:00.000Z"), {
+    reconstructMissingLockedPreLock: true,
+  }),
+  { matchedGames: 1, populatedMarkets: 0 },
+  "post-lock continuity evidence cannot alter a locked public record",
+);
+assert.equal(lockedPostLockRejected.games[0]!.markets.moneyline.sportsbookSplits, null);
+
 const authority = response();
 authority.games[0]!.markets.moneyline.recommendationDecision!.sharpBookSplits = section(
   "Sharp Book Splits",

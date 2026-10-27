@@ -30,10 +30,7 @@ import type { PlaybookSplitGame } from "../providers/playbook/types";
 import { normalizeMlbTeamName } from "../providers/real_api/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../providers/playbook/playbookTeamNormalizer";
 import { publicSplitsCapability, shouldObservePlaybook } from "../config/publicSplitsCapability";
-import {
-  fetchSharpNhlSplits,
-  type SharpNhlSplitsEvent,
-} from "../providers/nhl/_sharpApiNhlClient";
+import type { SharpNhlSplitsEvent } from "../providers/nhl/_sharpApiNhlClient";
 import { normalizeNhlTeamName } from "../providers/nhl/_teamNameNormalizer";
 
 type Side = "home" | "away" | "over" | "under";
@@ -261,7 +258,6 @@ export async function syncPublicSplitsObservations(opts: {
   const ids = eligibleGames.map((g) => g.id as number);
   if (ids.length === 0) { logger(`${sport} ${slateDate}: no games`); return res; }
   const keyById = new Map<number, string>();
-  const nhlAbbrKeyById = new Map<number, string>();
   const slateGames: SlateGame[] = [];
   for (const g of eligibleGames) {
     const k = sport === "mlb" ? `${abbr.get(g.away_team_id as number)}@${abbr.get(g.home_team_id as number)}` : gameKey(sport, tname.get(g.away_team_id as number), tname.get(g.home_team_id as number));
@@ -275,55 +271,14 @@ export async function syncPublicSplitsObservations(opts: {
         seasonType: (g.season_type as string | null) ?? null,
       });
     }
-    if (sport === "nhl") {
-      const away = abbr.get(g.away_team_id as number)?.toUpperCase();
-      const home = abbr.get(g.home_team_id as number)?.toUpperCase();
-      if (away && home) nhlAbbrKeyById.set(g.id as number, `${away}@${home}`);
-    }
   }
 
   const rows: ObsRow[] = [];
 
-  // NHL SharpAPI does not flow through sharp_signals. Read it once at slate
-  // scope and persist provider-separated observations directly. Upsert never
-  // deletes older observations, so a temporary upstream gap leaves the last
-  // complete money+ticket read available to the NHL resolver.
-  if (sport === "nhl" && process.env.SHARPAPI_KEY) {
-    try {
-      const byMatchup = reduceSharpNhlSplits(await fetchSharpNhlSplits(slateDate, process.env.SHARPAPI_KEY));
-      for (const [gameId, key] of nhlAbbrKeyById) {
-        const event = byMatchup.get(key);
-        if (!event) continue;
-        const observedAt = event.fetched_at ?? new Date().toISOString();
-        const cells: Array<{ market: Market; side: Side; bet: number | null; money: number | null }> = [
-          { market: "moneyline", side: "home", bet: sharpPct(event.moneyline?.bets_pct?.home), money: sharpPct(event.moneyline?.handle_pct?.home) },
-          { market: "moneyline", side: "away", bet: sharpPct(event.moneyline?.bets_pct?.away), money: sharpPct(event.moneyline?.handle_pct?.away) },
-          { market: "total", side: "over", bet: sharpPct(event.total?.bets_pct?.over), money: sharpPct(event.total?.handle_pct?.over) },
-          { market: "total", side: "under", bet: sharpPct(event.total?.bets_pct?.under), money: sharpPct(event.total?.handle_pct?.under) },
-          { market: "spread", side: "home", bet: sharpPct(event.spread?.bets_pct?.home), money: sharpPct(event.spread?.handle_pct?.home) },
-          { market: "spread", side: "away", bet: sharpPct(event.spread?.bets_pct?.away), money: sharpPct(event.spread?.handle_pct?.away) },
-        ];
-        for (const cell of cells) {
-          if (cell.bet === null || cell.money === null) continue;
-          if (!shouldPersistSplitMirrorObservation({ sport, bettingPct: cell.bet, moneyPct: cell.money })) continue;
-          rows.push({
-            provider: "sharpapi",
-            sport,
-            game_id: gameId,
-            market_type: cell.market,
-            side: cell.side,
-            public_betting_pct: cell.bet,
-            public_money_pct: cell.money,
-            books_used: null,
-            observed_at: observedAt,
-          });
-          res.sharpapiRows++;
-        }
-      }
-    } catch (error) {
-      res.errors.push(`sharpapi NHL fetch: ${(error as Error).message}`);
-    }
-  }
+  // NHL no longer makes a SharpAPI request. Playbook owns Public Consensus;
+  // Owls named-book splits are collected by Market Intelligence V2. Existing
+  // historical SharpAPI observations remain immutable and may still explain
+  // an older locked payload, but this writer never creates a new one.
 
   // ── SharpAPI observations: mirror sharp_signals (sports where it's SharpAPI) ──
   if (sport !== "nhl" && publicSplitsCapability(sport).sharpSignalsProvider === "sharpapi") {

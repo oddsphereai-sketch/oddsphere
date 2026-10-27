@@ -1,5 +1,42 @@
 # Model change safety protocol
 
+## Owner-directed repair: cross-sport locked split continuity
+
+On 2026-10-27 Daniel Mengel reported that Sharp Book Splits had disappeared across NBA, NHL, CFB,
+and effectively the full active slate after games locked. The provider was healthy; the durable
+Owls overlay overwrote the pre-lock row with each newer poll, while the immutable reader correctly
+rejected post-lock evidence and the continuity reader skipped locked cards.
+
+Presentation r31 retains a bounded 96-observation history per exact event/book and permits only a
+missing display field to use the newest complete observation at or before `lockedAt`. Existing
+locked evidence wins, every post-lock row fails closed, proof timestamps remain visible, and locked
+recommendations and market-reader state are untouched. The production-snapshot rehearsal restored
+12/12 NBA and 33/33 NHL market sections from preserved pre-lock Circa evidence. CFB populated 106
+eligible sections; the overwritten DEL@WKU observation is recovered after deployment from the
+exact values and timestamp already documented in the r30 incident audit, without changing its
+locked fixture. Evidence and rollback:
+`docs/model-audits/2026-10-27-cross-sport-locked-split-continuity.md`.
+
+## Owner-directed cutover: Owls current NBA/NHL odds
+
+On 2026-10-27 Daniel Mengel confirmed that SharpAPI had been cancelled and
+directed Oddsphere to complete the Owls takeover. The bounded release moves the
+active NBA/NHL full-game line writers, pregame refreshes, tracking refresh, and
+request-time reader away from SharpAPI. Owls supplies complete Circa/Pinnacle
+Moneyline, Spread, and Total pairs with provider timestamps; Playbook remains
+Public Consensus and coherent same-book retail trails remain the display
+fallback. Locked payloads retain exact precedence.
+
+NBA advances to model r22 / market marriage r23 and NHL advances to model,
+calibration, and decision r23 so provider-input generations cannot be blended.
+The live zero-write rehearsals matched 48/48 NBA rows and 132/132 NHL slate
+rows with zero incomplete-market errors. The NBA same-model comparison changed
+zero picks, prices, promotions, demotions, or actionables. NHL's live provider
+board contained genuine price movement, which is permitted only for future
+unlocked rows under the unchanged grade rules. Evidence, SharpAPI retirement
+boundary, release accounting, and rollback:
+`docs/model-audits/2026-10-27-owls-current-odds-cutover.md`.
+
 ## Owner-directed capture: Owls current Circa/Pinnacle prices
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to continue replacing SharpAPI with Owls for the
