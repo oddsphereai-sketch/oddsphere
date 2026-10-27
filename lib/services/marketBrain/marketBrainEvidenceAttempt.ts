@@ -11,7 +11,7 @@ import {
 } from "./marketBrainProductRegistry";
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_RELEASE =
-  "market_brain_evidence_attempt_2026_10_27_r1_append_only_all_product_ledger" as const;
+  "market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger" as const;
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_OUTCOMES = [
   "success_with_rows",
@@ -62,7 +62,7 @@ export type MarketBrainEvidenceAttemptAccounting = Readonly<{
 export type MarketBrainEvidenceAttemptPayload = Readonly<{
   attemptId: string;
   product: MarketBrainActiveProductKey;
-  qualificationScopeKey: string;
+  qualificationScopeKeys: readonly string[];
   provider: string;
   feed: string;
   participant: string | null;
@@ -165,10 +165,14 @@ function assertPayload(payload: MarketBrainEvidenceAttemptPayload): void {
   const feed = roster?.feeds.find((row) => row.provider === payload.provider && row.feed === payload.feed &&
     row.phases.includes(payload.phase) && (row.participant === null || row.participant === payload.participant));
   const participantRoster = roster?.participantRosters.find((row) => row.provider === payload.provider);
+  const requestedScopeSet = new Set(payload.qualificationScopeKeys);
+  const canonicalScopeKeys = registration?.qualificationScopeKeys.filter((scope) => requestedScopeSet.has(scope));
   const participantAllowed = payload.participant === null || feed?.participant === payload.participant ||
     participantRoster?.mode === "provider_catalog" ||
     participantRoster?.namedParticipants.some((row) => row.participant === payload.participant);
-  if (!registration || !roster || !registration.qualificationScopeKeys.includes(payload.qualificationScopeKey) ||
+  if (!registration || !roster || payload.qualificationScopeKeys.length < 1 ||
+    requestedScopeSet.size !== payload.qualificationScopeKeys.length ||
+    JSON.stringify(canonicalScopeKeys) !== JSON.stringify(payload.qualificationScopeKeys) ||
     !feed || !participantAllowed || participantRoster?.excludedParticipants.includes(payload.participant ?? "")) {
     throw new Error("Market Brain evidence attempt is outside its frozen product/feed/participant contract.");
   }
@@ -239,7 +243,7 @@ function toRow(attempt: MarketBrainEvidenceAttempt): Record<string, unknown> {
   const { checksum: _checksum, ...checksumPayload } = attempt;
   return {
     release: attempt.release, attempt_id: attempt.attemptId, product_key: attempt.product,
-    qualification_scope_key: attempt.qualificationScopeKey, provider: attempt.provider, feed: attempt.feed,
+    qualification_scope_keys: attempt.qualificationScopeKeys, provider: attempt.provider, feed: attempt.feed,
     participant: attempt.participant, event_id: attempt.eventId, phase: attempt.phase,
     planned_at: attempt.plannedAt, window_opens_at: attempt.windowOpensAt, window_closes_at: attempt.windowClosesAt,
     started_at: attempt.startedAt, completed_at: attempt.completedAt, outcome: attempt.outcome,

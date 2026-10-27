@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
     'mlb_daily_edge', 'nhl_daily_edge', 'epl_daily_edge', 'ucl_daily_edge',
     'soccer_world_cup_daily_edge', 'nfl_player_props', 'nba_player_props', 'mlb_player_props'
   )),
-  qualification_scope_key text NOT NULL,
+  qualification_scope_keys text[] NOT NULL CHECK (cardinality(qualification_scope_keys) > 0),
   provider text NOT NULL,
   feed text NOT NULL,
   participant text,
@@ -60,30 +60,30 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
   CHECK (window_opens_at <= planned_at AND planned_at <= window_closes_at),
   CHECK (
     (product_key IN ('nfl_daily_edge', 'cfb_daily_edge', 'nba_daily_edge', 'wnba_daily_edge', 'nhl_daily_edge')
-      AND qualification_scope_key IN ('moneyline', 'spread', 'total')) OR
+      AND qualification_scope_keys <@ ARRAY['moneyline', 'spread', 'total']::text[]) OR
     (product_key = 'mlb_daily_edge'
-      AND qualification_scope_key IN ('full_game_moneyline', 'full_game_total', 'first_inning_nrfi_yrfi')) OR
+      AND qualification_scope_keys <@ ARRAY['full_game_moneyline', 'full_game_total', 'first_inning_nrfi_yrfi']::text[]) OR
     (product_key IN ('epl_daily_edge', 'ucl_daily_edge', 'soccer_world_cup_daily_edge')
-      AND qualification_scope_key IN ('match_result', 'double_chance', 'total', 'btts')) OR
-    (product_key = 'nfl_player_props' AND qualification_scope_key IN (
+      AND qualification_scope_keys <@ ARRAY['match_result', 'double_chance', 'total', 'btts']::text[]) OR
+    (product_key = 'nfl_player_props' AND qualification_scope_keys <@ ARRAY[
       'passing_attempts', 'passing_completions', 'passing_yards', 'rushing_attempts', 'rushing_yards',
       'receptions', 'receiving_yards', 'passing_tds', 'interceptions', 'rushing_receiving_yards',
       'touchdowns', 'anytime_td', 'first_td', 'longest_pass', 'longest_reception', 'longest_rush',
       'fg_made', 'kicking_points'
-    )) OR
-    (product_key = 'nba_player_props' AND qualification_scope_key IN (
+    ]) OR
+    (product_key = 'nba_player_props' AND qualification_scope_keys <@ ARRAY[
       'points', 'rebounds', 'assists', 'threes', 'points_rebounds_assists', 'points_rebounds',
       'points_assists', 'rebounds_assists', 'blocks', 'steals', 'blocks_steals', 'turnovers',
       'field_goals', 'free_throws_made', 'free_throws_attempted', 'double_double', 'triple_double',
       'points_q1', 'rebounds_q1', 'assists_q1'
-    )) OR
-    (product_key = 'mlb_player_props' AND qualification_scope_key IN (
+    ]) OR
+    (product_key = 'mlb_player_props' AND qualification_scope_keys <@ ARRAY[
       'pitcher_strikeouts', 'pitcher_outs', 'pitcher_hits_allowed', 'pitcher_walks',
       'pitcher_earned_runs', 'pitcher_record_a_win', 'batter_strikeouts', 'batter_hits',
       'batter_total_bases', 'batter_home_runs', 'batter_rbis', 'batter_runs_scored',
       'batter_hits_runs_rbis', 'batter_singles', 'batter_doubles', 'batter_triples',
       'batter_walks', 'batter_stolen_bases', 'first_home_run'
-    ))
+    ])
   ),
   CHECK (completed_at >= planned_at),
   CHECK (started_at IS NULL OR (started_at >= window_opens_at AND started_at <= completed_at)),
@@ -108,12 +108,14 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r1_append_only_all_product_ledger'
+  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger'
+    OR cardinality(NEW.qualification_scope_keys) <>
+      (SELECT count(DISTINCT scope_key) FROM unnest(NEW.qualification_scope_keys) AS scope_key)
     OR NEW.attempt_payload <> jsonb_build_object(
       'release', NEW.release,
       'attemptId', NEW.attempt_id::text,
       'product', NEW.product_key,
-      'qualificationScopeKey', NEW.qualification_scope_key,
+      'qualificationScopeKeys', to_jsonb(NEW.qualification_scope_keys),
       'provider', NEW.provider,
       'feed', NEW.feed,
       'participant', NEW.participant,

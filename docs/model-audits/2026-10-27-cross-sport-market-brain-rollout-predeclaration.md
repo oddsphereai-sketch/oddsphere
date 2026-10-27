@@ -6,7 +6,7 @@ Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_famil
 
 Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts`
 
-Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r1_append_only_all_product_ledger`
+Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger`
 
 ## Objective
 
@@ -42,7 +42,8 @@ would erase absent books, failed requests, and parser omissions from the evidenc
 
 Every planned source attempt must produce one immutable receipt under the shared attempt release,
 including skipped, failed, genuinely empty, partial, and successful attempts. The receipt binds product,
-independent qualification scope, feed, participant, event, planned window, request/page counts, parser and
+the canonical ordered set of independent scopes informed by that request, feed, participant, event,
+planned window, request/page counts, parser and
 raw-response provenance, and exact row conservation. An insert collision is successful only when the
 stored canonical bytes are identical; retries cannot update an earlier receipt. The v47 schema and service
 contract exist on the candidate branch, but no source adapter is wired to it and the migration is not

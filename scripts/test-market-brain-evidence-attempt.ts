@@ -27,7 +27,7 @@ const ZERO_ACCOUNTING = Object.freeze({
 const successPayload: MarketBrainEvidenceAttemptPayload = Object.freeze({
   attemptId: "10000000-0000-4000-8000-000000000001",
   product: "nba_daily_edge",
-  qualificationScopeKey: "moneyline",
+  qualificationScopeKeys: Object.freeze(["moneyline", "spread", "total"]),
   provider: "sharpapi",
   feed: "main_odds",
   participant: "circa",
@@ -114,7 +114,9 @@ assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
 })));
 
 for (const [name, invalid] of [
-  ["qualification scope", payload({ qualificationScopeKey: "first_half_moneyline" })],
+  ["qualification scope", payload({ qualificationScopeKeys: ["first_half_moneyline"] })],
+  ["duplicate scope", payload({ qualificationScopeKeys: ["moneyline", "moneyline"] })],
+  ["noncanonical scope order", payload({ qualificationScopeKeys: ["spread", "moneyline"] })],
   ["feed", payload({ feed: "unknown_odds" })],
   ["phase", payload({ phase: "settlement" })],
   ["raw accounting", payload({ accounting: { ...successPayload.accounting, rawRows: 5 } })],
@@ -129,7 +131,7 @@ for (const [name, invalid] of [
 
 assert.throws(() => createMarketBrainEvidenceAttempt(payload({
   product: "ucl_daily_edge",
-  qualificationScopeKey: "moneyline",
+  qualificationScopeKeys: ["match_result", "double_chance", "total", "btts"],
   provider: "sharpapi",
   feed: "soccer_market_odds",
   participant: "polymarket",
@@ -140,7 +142,9 @@ const migration = readFileSync(resolve(process.cwd(),
   "lib/db/schema-migration-v47-market-brain-evidence-attempts.sql"), "utf8");
 assert.match(migration, /PRIMARY KEY \(release, attempt_id\)/);
 assert.match(migration, /product_key text NOT NULL CHECK \(product_key IN/);
-assert.match(migration, /product_key = 'nba_player_props' AND qualification_scope_key IN/);
+assert.match(migration, /product_key = 'nba_player_props' AND qualification_scope_keys <@ ARRAY/);
+assert.match(migration, /count\(DISTINCT scope_key\)/,
+  "the database must reject duplicate qualification scopes in a joint attempt");
 assert.match(migration, /raw_rows = parsed_rows \+ unsupported_rows \+ malformed_rows/);
 assert.match(migration, /parsed_rows = matched_rows \+ unmatched_rows \+ ambiguous_rows/);
 assert.match(migration, /matched_rows = retained_rows \+ duplicate_rows \+ filtered_rows \+ write_failed_rows/);
