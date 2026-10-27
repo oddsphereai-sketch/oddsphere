@@ -40,6 +40,8 @@ const confirmedProviderLabels = [
   ["ASU", "Arizona State Sun Devils", "Arizona State"],
   ["CSU", "Colorado State Rams", "Colorado State"],
   ["TXST", "Texas State Bobcats", "Texas State"],
+  ["FIU", "Florida International Panthers", "FIU Panthers"],
+  ["ULM", "UL Monroe Warhawks", "Louisiana-Monroe Warhawks"],
 ] as const;
 
 for (const [abbreviation, expectedName, observed] of confirmedProviderLabels) {

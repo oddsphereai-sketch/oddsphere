@@ -14,6 +14,7 @@ import type {
   MarketSplitSourceBook,
   MarketSplitSourceType,
 } from "../../types/domain/MarketIntelligenceV2";
+import type { NormalizedOwlsSplitObservation } from "../../providers/owls/owlsSharpBookSplits";
 import { verifiedUnitSplitPct } from "../splitEvidenceQuality";
 
 export type CanonicalAdapterResult<T> = {
@@ -228,6 +229,75 @@ export function buildPlaybookSplitObservationsV2(opts: {
         ingestion_run_id: opts.ingestionRunId ?? null,
         raw_payload_hash: stablePayloadHash({ provider: "playbook", market, side: v.side, rawMarket }),
       });
+    }
+  }
+
+  return { observations, rejected };
+}
+
+/**
+ * Persist only complete two-sided Owls named-book evidence. Partial ticket-only
+ * rows remain available to provider diagnostics but may not enter the market
+ * reader as if they were verified money-and-ticket splits.
+ */
+export function buildOwlsSplitObservationsV2(opts: {
+  rows: readonly NormalizedOwlsSplitObservation[];
+  canonicalEventId: string;
+  league: string;
+  fetchedAt: string;
+  minutesToStart?: number | null;
+  ingestionRunId?: string | null;
+  canonicalMarketId: (market: MarketIntelligenceMarketType) => string;
+  selectionKey: (market: MarketIntelligenceMarketType, side: MarketIntelligenceSelectionSide) => string;
+}): CanonicalAdapterResult<MarketSplitObservationV2> {
+  const observations: MarketSplitObservationV2[] = [];
+  const rejected: CanonicalObservationRejection[] = [];
+
+  for (const market of Object.keys(MARKET_SIDES) as MarketIntelligenceMarketType[]) {
+    const marketRows = opts.rows.filter((row) => row.market === market);
+    const books = [...new Set(marketRows.map((row) => row.sourceBook))];
+    for (const sourceBook of books) {
+      const pair = marketRows.filter((row) => row.sourceBook === sourceBook);
+      const providerEventId = pair[0]?.providerEventId ?? null;
+      if (
+        pair.length !== 2 ||
+        pair.some((row) => !row.complete || row.betsPct === null || row.moneyPct === null) ||
+        pair[0]?.observedAt !== pair[1]?.observedAt
+      ) {
+        rejected.push(reject("owls", {
+          providerEventId,
+          market,
+          selectionKey: null,
+          reason: `incomplete or mismatched Owls ${sourceBook} ${market} pair`,
+        }));
+        continue;
+      }
+
+      for (const row of pair) {
+        observations.push({
+          canonical_event_id: opts.canonicalEventId,
+          canonical_market_id: opts.canonicalMarketId(market),
+          league: opts.league,
+          market_type: market,
+          selection_key: opts.selectionKey(market, row.side),
+          provider: "owls",
+          source_book: row.sourceBook,
+          source_type: row.sourceType,
+          bets_pct: row.betsPct,
+          money_pct: row.moneyPct,
+          market_line: row.line,
+          market_price: row.price,
+          split_line_basis: "provider_explicit",
+          books_used: null,
+          provider_event_id: row.providerEventId,
+          source_observed_at: row.observedAt,
+          fetched_at: opts.fetchedAt,
+          source_timestamp_verified: true,
+          minutes_to_start: opts.minutesToStart ?? null,
+          ingestion_run_id: opts.ingestionRunId ?? null,
+          raw_payload_hash: stablePayloadHash(row),
+        });
+      }
     }
   }
 

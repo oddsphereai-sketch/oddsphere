@@ -1,6 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { applySharpBookSplitSectionToDecision } from "@/lib/services/recommendationDecision";
 
 const CONTINUITY_RELEASE = "sharp_book_split_continuity_2026_09_20_r1" as const;
 const CONTINUITY_TTL_MS = 5 * 60 * 1000;
@@ -62,6 +63,7 @@ export function applySharpBookSplitContinuity(
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
+    if (game.lockState === "locked") continue;
     const matches = feed.games.filter((candidate) => retainedGameMatches(candidate, game));
     if (matches.length !== 1) continue;
     matchedGames += 1;
@@ -107,6 +109,62 @@ export function reconcileDailyEdgeSharpBookSplitAuthority(
     }
   }
   return preferredFallbacks;
+}
+
+/**
+ * Mirror the final verified response-boundary sharp-book section into the
+ * open-card market reader. Locked cards are immutable, and this pass never
+ * changes a pick, probability, evaluated price, grade, stake or tracking row.
+ */
+export function alignMarketReadsToDisplayedSharpBookSplits(response: DailyEdgeResponse): number {
+  let aligned = 0;
+  const decisionKey = {
+    moneyline: "moneyline",
+    total: "total",
+    first_inning: "firstInning",
+  } as const;
+  for (const game of response.games) {
+    if (game.lockState === "locked") continue;
+    for (const marketKey of MARKET_KEYS) {
+      const market = game.markets[marketKey];
+      const section = market?.sportsbookSplits ?? null;
+      if (!market || !section || sectionQuality(section) !== 2) continue;
+      const key = decisionKey[marketKey];
+      if (market.recommendationDecision) {
+        market.recommendationDecision = applySharpBookSplitSectionToDecision({
+          sport: response.sport,
+          marketKey: key,
+          decision: market.recommendationDecision,
+          section,
+        });
+      }
+      const gameDecision = game.recommendationDecision?.markets[key];
+      if (gameDecision) {
+        game.recommendationDecision!.markets[key] = applySharpBookSplitSectionToDecision({
+          sport: response.sport,
+          marketKey: key,
+          decision: gameDecision,
+          section,
+        });
+      }
+      market.sharpBookAvailability = {
+        status: "complete",
+        message: "Sharp-book splits are available for this market.",
+        lastUpdated: null,
+      };
+      aligned += 1;
+    }
+    if (game.recommendationDecision) {
+      const decisions = Object.values(game.recommendationDecision.markets).filter(Boolean);
+      const sharpAvailable = decisions.some((decision) => decision?.sharpBookSplits !== null);
+      game.recommendationDecision.sourceState.sharpBookSplitsAvailable = sharpAvailable;
+      game.recommendationDecision.sourceState.sourceConflict = decisions.some((decision) => decision?.sourceConflict === true);
+      game.recommendationDecision.sourceState.missingExpectedSources = sharpAvailable
+        ? game.recommendationDecision.sourceState.missingExpectedSources.filter((source) => source !== "Sharp Book Splits")
+        : game.recommendationDecision.sourceState.missingExpectedSources;
+    }
+  }
+  return aligned;
 }
 
 export async function persistDailyEdgeSharpBookSplitContinuity(

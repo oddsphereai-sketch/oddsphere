@@ -1,4 +1,4 @@
-import { buildRecommendationDecision } from "../lib/services/recommendationDecision";
+import { applySharpBookSplitSectionToDecision, buildRecommendationDecision } from "../lib/services/recommendationDecision";
 import { applyDailyEdgeRenderedCopyFlags } from "../lib/services/dailyEdge/memberFacingCopyRenderer";
 import { buildEdgeStackRows } from "../app/lab/lib/edgeStackRows";
 import type { MarketEdgeDto } from "../app/lab/lib/labTypes";
@@ -98,6 +98,26 @@ check("Consensus support plus sharp resistance is mixed", mixed.markets.moneylin
 check("Best Angle with mixed source state is capped", mixed.markets.moneyline?.playGrade !== "Best Angle");
 check("Mixed quick read names conflict", mixed.markets.moneyline?.quickRead.toLowerCase().includes("mixed market signals") === true);
 check("Source conflict tracked", mixed.sourceState.sourceConflict === true);
+
+const owlsAligned = applySharpBookSplitSectionToDecision({
+  sport: "mlb",
+  marketKey: "moneyline",
+  decision: aligned.markets.moneyline!,
+  section: {
+    label: "Sharp Book Splits",
+    sourceBook: "circa",
+    sourceObservedAt: "2026-06-28T16:01:00.000Z",
+    lastUpdated: null,
+    signal: null,
+    rows: [
+      { side: "away", label: "CWS", betsPct: 54, moneyPct: 67, isStale: false },
+      { side: "home", label: "KC", betsPct: 46, moneyPct: 33, isStale: false },
+    ],
+  },
+});
+check("Owls sharp-book evidence reaches the market reader", owlsAligned.resolvedMarketRead.status === "aligned" && owlsAligned.sharpBookSplits?.sourceBook === "circa");
+check("Post-decision split context preserves the writer grade", owlsAligned.playGrade === aligned.markets.moneyline!.playGrade);
+check("Post-decision split context preserves the writer pick and probability", owlsAligned.pick === aligned.markets.moneyline!.pick && owlsAligned.modelProbability === aligned.markets.moneyline!.modelProbability);
 const mixedEdgeRows = buildEdgeStackRows("moneyline", {
   pick: "CWS",
   pinnacleEvPct: null,

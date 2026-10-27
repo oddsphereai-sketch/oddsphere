@@ -22,6 +22,7 @@ import {
 } from "../lib/config/marketIntelligenceV2";
 import {
   buildPlaybookSplitObservationsV2,
+  buildOwlsSplitObservationsV2,
   buildSharpApiBetMgmTicketObservationV2,
   buildSharpApiPriceObservationV2,
   buildSharpApiSplitHistoryObservationsV2,
@@ -226,6 +227,45 @@ const playbookRow: PlaybookSplitGame = {
   check("SharpAPI DraftKings source stays source-specific", home?.provider === "sharpapi" && home.source_book === "draftkings" && home.source_type === "retail_book");
   check("SharpAPI split percentages normalize from fractions", home?.bets_pct === 0.57 && home.money_pct === 0.88);
   check("SharpAPI split timestamp marked verified when present", home?.source_timestamp_verified === true);
+}
+
+{
+  const result = buildOwlsSplitObservationsV2({
+    rows: [
+      {
+        provider: "owls", providerEventId: "nba:Away@Home-20261027", sport: "nba",
+        homeTeam: "Home", awayTeam: "Away", sourceBook: "circa", sourceType: "sharp_adjacent_book",
+        market: "moneyline", side: "away", line: null, price: 130, betsPct: 0.42, moneyPct: 0.36,
+        observedAt: "2026-10-27T20:07:53.171Z", complete: true,
+      },
+      {
+        provider: "owls", providerEventId: "nba:Away@Home-20261027", sport: "nba",
+        homeTeam: "Home", awayTeam: "Away", sourceBook: "circa", sourceType: "sharp_adjacent_book",
+        market: "moneyline", side: "home", line: null, price: -150, betsPct: 0.58, moneyPct: 0.64,
+        observedAt: "2026-10-27T20:07:53.171Z", complete: true,
+      },
+    ],
+    canonicalEventId: "game-1",
+    league: "nba",
+    fetchedAt: "2026-10-27T20:10:00.000Z",
+    canonicalMarketId: marketId,
+    selectionKey,
+  });
+  const home = result.observations.find((row) => row.selection_key.endsWith(":home"));
+  check("Owls complete Circa pair enters canonical market evidence", result.observations.length === 2 && result.rejected.length === 0);
+  check("Owls canonical evidence preserves provider source time and price", home?.provider === "owls" && home.source_book === "circa" && home.market_price === -150 && home.source_timestamp_verified === true);
+
+  const partial = buildOwlsSplitObservationsV2({
+    rows: [{
+      provider: "owls", providerEventId: "nba:Away@Home-20261027", sport: "nba",
+      homeTeam: "Home", awayTeam: "Away", sourceBook: "betmgm", sourceType: "retail_book",
+      market: "moneyline", side: "home", line: null, price: null, betsPct: 0.49, moneyPct: null,
+      observedAt: "2026-10-27T20:07:53.171Z", complete: false,
+    }],
+    canonicalEventId: "game-1", league: "nba", fetchedAt: "2026-10-27T20:10:00.000Z",
+    canonicalMarketId: marketId, selectionKey,
+  });
+  check("Owls incomplete ticket-only row fails closed for market reader", partial.observations.length === 0 && partial.rejected.length === 1);
 }
 
 {
