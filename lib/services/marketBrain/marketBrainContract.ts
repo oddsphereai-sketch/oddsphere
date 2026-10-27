@@ -1,7 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r15_source_evidence_release_binding" as const;
+  "market_brain_contract_2026_10_27_r16_source_evidence_ownership" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -501,10 +501,17 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
         throw new Error(`Market Brain observation ${id} is claimed by conflicting manifests ${existingOwner} and ${manifest.id}.`);
       }
       if (observation.source.provider !== manifest.provider || observation.source.feed !== manifest.feed ||
-        observation.audit.sourceRelease !== manifest.release) {
+        observation.audit.sourceRelease !== manifest.release ||
+        (manifest.participant !== null && observation.source.participant !== manifest.participant)) {
         throw new Error(`Market Brain source manifest release or feed diverged from observation ${id}.`);
       }
       manifestOwnerByObservationId.set(id, manifest.id);
+    }
+  }
+  for (const observation of args.observations) {
+    if ((observation.modality === "price_quote" || observation.modality === "identified_book_split") &&
+      !manifestOwnerByObservationId.has(observation.id)) {
+      throw new Error(`Market Brain source-backed observation has no source manifest owner: ${observation.id}`);
     }
   }
   const observations = [...args.observations].sort((a, b) =>

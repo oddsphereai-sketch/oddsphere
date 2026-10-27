@@ -203,14 +203,17 @@ async function testFetchContract(): Promise<void> {
 }
 
 async function testTruncationFailsClosed(): Promise<void> {
-  await assert.rejects(() => fetchSharpApiNflSplits({
+  const fetched = await fetchSharpApiNflSplits({
     apiKey: "test-key",
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
     clock: () => "2026-08-21T17:04:05Z",
     captureResearchManifest: true,
     client: { async fetchAll<T>(): Promise<T[]> { return Array.from({ length: 200 }, () => row) as T[]; } },
-  }), /completeness is unproved/);
+  });
+  assert.equal(fetched.captureManifest?.status, "failed");
+  assert.equal(fetched.captureManifest?.failureReason, "sharpapi_split_capture_incomplete_response");
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.every((source) => source.status === "unavailable"), true);
 }
 
 async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
@@ -227,9 +230,11 @@ async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
     clock: () => "2026-08-21T17:04:05Z",
     captureResearchManifest: true,
     client: {
-      async fetchAll<T>(): Promise<T[]> { throw new Error("direct page metadata path expected"); },
-      async fetch<T>(): Promise<{ data: T; pagination: { total: number; count: number; offset: number; has_more: boolean } }> {
-        return { data: rows as T, pagination: { total: 200, count: 200, offset: 0, has_more: false } };
+      async fetchAll<T>(options: { onPage?: (response: {
+        data: T[]; pagination: { total: number; count: number; offset: number; has_more: boolean };
+      }, pageIndex: number) => void }): Promise<T[]> {
+        options.onPage?.({ data: rows as T[], pagination: { total: 200, count: 200, offset: 0, has_more: false } }, 0);
+        return rows as T[];
       },
     },
   });
@@ -238,20 +243,24 @@ async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
 }
 
 async function testShortPageStillFailsWhenProviderDeclaresMore(): Promise<void> {
-  await assert.rejects(() => fetchSharpApiNflSplits({
+  const rows = Array.from({ length: 100 }, () => row);
+  const fetched = await fetchSharpApiNflSplits({
     apiKey: "test-key",
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
     captureResearchManifest: true,
     client: {
-      async fetchAll<T>(): Promise<T[]> { throw new Error("direct page metadata path expected"); },
-      async fetch<T>(): Promise<{ data: T; pagination: { total: number; count: number; offset: number; has_more: boolean } }> {
-        return { data: Array.from({ length: 100 }, () => row) as T,
-          pagination: { total: 250, count: 100, offset: 0, has_more: true } };
+      async fetchAll<T>(options: { onPage?: (response: {
+        data: T[]; pagination: { total: number; count: number; offset: number; has_more: boolean };
+      }, pageIndex: number) => void }): Promise<T[]> {
+        options.onPage?.({ data: rows as T[], pagination: { total: 250, count: 100, offset: 0, has_more: true } }, 0);
+        return rows as T[];
       },
     },
-  }), /completeness is unproved/,
-  "provider-declared truncation must fail closed even when the returned page is shorter than the requested limit");
+  });
+  assert.equal(fetched.captureManifest?.status, "failed",
+    "provider-declared truncation must fail research closed even when the returned page is shorter than the requested limit");
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.every((source) => source.status === "unavailable"), true);
 }
 
 void Promise.all([testFetchContract(), testTruncationFailsClosed(), testExactFullPageRequiresExplicitCompleteness(),

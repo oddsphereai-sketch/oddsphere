@@ -211,6 +211,14 @@ conflictingManifest.id = "fixture-source-manifest-conflicting-owner";
 conflictingOwnerCase.sourceManifests.push(conflictingManifest);
 assert.throws(() => assertMarketBrainCase(conflictingOwnerCase), /claimed by conflicting manifests/,
   "a retained observation must have exactly one source-manifest owner");
+const unownedSourceCase = structuredClone(marketCase);
+unownedSourceCase.sourceManifests = [];
+assert.throws(() => assertMarketBrainCase(unownedSourceCase), /has no source manifest owner/,
+  "source-backed price and identified-split observations cannot enter features without provenance");
+const mismatchedParticipantCase = structuredClone(marketCase);
+mismatchedParticipantCase.sourceManifests[0]!.participant = "circa";
+assert.throws(() => assertMarketBrainCase(mismatchedParticipantCase), /release or feed diverged/,
+  "a participant-scoped manifest cannot claim observations from another book");
 
 const materialized = materializeNflMarketBrainSequence({ cases: [marketCase], cutoffAt });
 assert.equal(materialized.targetFamilyByMarket.spread, "draftkings");

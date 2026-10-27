@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import {
   SharpApiClient,
   type SharpApiRequestOptions,
+  type SharpApiResponse,
 } from "@/lib/providers/real_api/_sharpApiClient";
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
 
 export const NFL_SHARP_API_SPLITS_RELEASE =
   "nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity" as const;
 export const NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE =
-  "nfl_sharpapi_split_capture_manifest_2026_10_27_r1_pagination_metadata_closed" as const;
+  "nfl_sharpapi_split_capture_manifest_2026_10_27_r2_authoritative_failure_isolation" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -64,7 +65,10 @@ type SharpApiNflSplitMarket = {
 
 type DatedRows = { date: string; rows: SharpApiNflSplitRow[] };
 type SharpClient = {
-  fetchAll<T>(opts: SharpApiRequestOptions & { maxPages?: number }): Promise<T[]>;
+  fetchAll<T>(opts: SharpApiRequestOptions & {
+    maxPages?: number;
+    onPage?: (response: SharpApiResponse<T[]>, pageIndex: number) => void;
+  }): Promise<T[]>;
   fetch?<T>(opts: SharpApiRequestOptions): Promise<{
     data: T;
     pagination?: { total?: number; count?: number; offset?: number; has_more?: boolean } | null;
@@ -138,21 +142,26 @@ export async function fetchSharpApiNflSplits(args: {
     path: "/splits",
     query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
   } satisfies SharpApiRequestOptions;
-  if (!args.captureResearchManifest) {
-    const rows = await client.fetchAll<SharpApiNflSplitRow>({ ...request, maxPages: 1 });
-    const datedRows = dates.map((date) => ({ date, rows }));
-    return {
-      release: NFL_SHARP_API_SPLITS_RELEASE,
-      splitsByGame: matchSharpApiNflSplitRows(args.games, datedRows, args.capturedAt),
-      requests: 1,
-      rows: rows.length,
-      dates,
-    };
-  }
-  const page = client.fetch ? await client.fetch<SharpApiNflSplitRow[]>(request) : null;
-  const rows = page ? (Array.isArray(page.data) ? page.data : [])
-    : await client.fetchAll<SharpApiNflSplitRow>({ ...request, maxPages: 1 });
-  const pagination = page?.pagination;
+  const pageReceipts: SharpApiResponse<SharpApiNflSplitRow[]>[] = [];
+  const rows = await client.fetchAll<SharpApiNflSplitRow>({
+    ...request,
+    maxPages: 1,
+    ...(args.captureResearchManifest ? {
+      onPage: (response: SharpApiResponse<SharpApiNflSplitRow[]>, pageIndex: number) => {
+        if (pageIndex === 0) pageReceipts.push(response);
+      },
+    } : {}),
+  });
+  const datedRows = dates.map((date) => ({ date, rows }));
+  const incumbent = {
+    release: NFL_SHARP_API_SPLITS_RELEASE,
+    splitsByGame: matchSharpApiNflSplitRows(args.games, datedRows, args.capturedAt),
+    requests: 1,
+    rows: rows.length,
+    dates,
+  };
+  if (!args.captureResearchManifest) return incumbent;
+  const pagination = pageReceipts[0]?.pagination;
   const explicitlyComplete = pagination !== undefined && pagination !== null &&
     pagination.has_more === false &&
     typeof pagination.total === "number" &&
@@ -160,24 +169,23 @@ export async function fetchSharpApiNflSplits(args: {
   const explicitlyIncomplete = pagination?.has_more === true ||
     (typeof pagination?.total === "number" &&
       pagination.total > (pagination.offset ?? 0) + (pagination.count ?? rows.length));
-  if (explicitlyIncomplete || (rows.length >= 200 && !explicitlyComplete)) {
-    throw new Error("SharpAPI NFL split response reached its bounded page size; completeness is unproved.");
-  }
   const receivedCandidate = args.clock?.() ?? new Date().toISOString();
   const responseReceivedAt = Date.parse(receivedCandidate) >= Date.parse(args.capturedAt)
     ? new Date(Date.parse(receivedCandidate)).toISOString() : new Date(Date.parse(args.capturedAt)).toISOString();
-  const datedRows = dates.map((date) => ({ date, rows }));
-  const sourcesByGame = matchAllSharpApiNflSplitRows(args.games, datedRows, responseReceivedAt);
-  const captureManifest = buildSplitCaptureManifest(args.games, rows, responseReceivedAt);
+  const incomplete = explicitlyIncomplete || (rows.length >= 200 && !explicitlyComplete);
+  const observedManifest = buildSplitCaptureManifest(args.games, rows, responseReceivedAt);
+  const captureManifest: NflSharpApiSplitCaptureManifest = incomplete ? {
+    ...observedManifest,
+    rawResponseSha256: null,
+    status: "failed",
+    failureReason: "sharpapi_split_capture_incomplete_response",
+  } : observedManifest;
+  const sourcesByGame = incomplete
+    ? Object.fromEntries(args.games.map((game) => [game.providerGameId, unavailableNflSharpApiSplitSources()]))
+    : matchAllSharpApiNflSplitRows(args.games, datedRows, responseReceivedAt);
   return {
-    release: NFL_SHARP_API_SPLITS_RELEASE,
-    // Receipt time is research chronology only. The incumbent DTO retains its
-    // exact pre-Market-Brain capture-time fallback semantics.
-    splitsByGame: matchSharpApiNflSplitRows(args.games, datedRows, args.capturedAt),
+    ...incumbent,
     sourcesByGame,
-    requests: 1,
-    rows: rows.length,
-    dates,
     captureManifest,
   };
 }

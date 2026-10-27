@@ -139,6 +139,7 @@ const NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES = new Set<string>([
   "nfl_forward_evidence_collector_2026_10_16_r23_availability_adjusted_starter_authority",
   "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow",
   "nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar",
+  "nfl_forward_evidence_collector_2026_10_27_r26_source_evidence_release_binding",
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
 ]);
 

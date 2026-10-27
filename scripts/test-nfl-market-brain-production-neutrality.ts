@@ -167,7 +167,35 @@ async function main(): Promise<void> {
   assert.equal(splitsOff.sourcesByGame, undefined);
   assert.equal(splitsOn.sourcesByGame?.[game.providerGameId]?.every((row) => row.status === "unavailable"), true);
   assert.equal(splitsOn.captureManifest?.release, NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE);
-  assert.deepEqual(splitCalls, { fetchAll: 1, fetch: 1 });
+  assert.deepEqual(splitCalls, { fetchAll: 2, fetch: 0 },
+    "research capture must use the exact incumbent split request path");
+
+  const boundaryRows = [splitRow, ...Array.from({ length: 199 }, (_, index) => ({
+    ...splitRow,
+    event_id: `unmatched-${index}`,
+    away_team: "Unknown Away",
+    home_team: "Unknown Home",
+  }))];
+  const boundaryClient = {
+    async fetchAll<T>(options: { onPage?: (response: {
+      data: T[]; pagination: { total: number; count: number; offset: number; has_more: boolean };
+    }, pageIndex: number) => void }): Promise<T[]> {
+      options.onPage?.({ data: boundaryRows as T[],
+        pagination: { total: 250, count: 200, offset: 0, has_more: true } }, 0);
+      return boundaryRows as T[];
+    },
+  };
+  const boundaryOff = await fetchSharpApiNflSplits({
+    apiKey: "test", games: [game], capturedAt, client: boundaryClient,
+  });
+  const boundaryOn = await fetchSharpApiNflSplits({
+    apiKey: "test", games: [game], capturedAt, client: boundaryClient,
+    clock: () => capturedAt, captureResearchManifest: true,
+  });
+  assert.deepEqual(boundaryOn.splitsByGame, boundaryOff.splitsByGame,
+    "an incomplete research page must not erase or reinterpret authoritative split data");
+  assert.equal(boundaryOn.captureManifest?.status, "failed");
+  assert.equal(boundaryOn.sourcesByGame?.[game.providerGameId]?.every((source) => source.status === "unavailable"), true);
 
   const route = readFileSync("app/api/cron/nfl-forward-evidence/route.ts", "utf8");
   assert.ok(route.indexOf("writeNflPlayerPropsCurrentSeasonState") <
