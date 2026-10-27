@@ -10,6 +10,7 @@ import {
   SharpApiNotFoundError,
 } from "../../providers/real_api/_sharpApiClient";
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
+import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
 import { OwlsInsightClient, type OwlsSport } from "../../providers/owls/owlsInsightClient";
 import {
@@ -474,6 +475,11 @@ export function marketIntelligenceGameKey(
   if (sport === "mlb") {
     const a = normalizeMlbTeamName(String(away ?? ""));
     const h = normalizeMlbTeamName(String(home ?? ""));
+    return a && h ? `${a}@${h}` : null;
+  }
+  if (sport === "nhl") {
+    const a = normalizeNhlTeamName(String(away ?? ""));
+    const h = normalizeNhlTeamName(String(home ?? ""));
     return a && h ? `${a}@${h}` : null;
   }
   return buildGameKey(sport as NormalizerSport, away, home);
