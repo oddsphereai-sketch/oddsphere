@@ -15,7 +15,7 @@ import {
 import { assertNflMarketBrainPriorInputLineageQualified } from "./nflMarketBrainPriorLineage";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r19_output_artifact_attestation" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r20_expected_feed_roster" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";

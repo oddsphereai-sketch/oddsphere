@@ -14,7 +14,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r88_output_artifact_attestation` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -492,20 +492,22 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_product_registry_2026_10_27_r1_complete_active_product_scope` freezes the complete
-  adapter scope before any production influence: NFL, CFB, NBA, WNBA, MLB, NHL, EPL, UCL, NFL
-  Player Props, NBA Player Props, and MLB Player Props are active product rows; CBB is a separate
+- `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope` freezes the complete
+  adapter scope before any production influence: NFL, CFB, NBA, WNBA, MLB, NHL, EPL, UCL, FIFA
+  World Cup, NFL Player Props, NBA Player Props, and MLB Player Props are active product rows; CBB is a separate
   prelaunch row. Every row is explicitly non-live and requires its own sport/competition/stat-family
   evidence roster, independent-prior lineage, chronology, settlement, training, calibration,
   consequence, untouched qualification, writer/lease, and locked-record proof. Shared infrastructure
   cannot transfer NFL weights, thresholds, authority, or qualification to another row. The paired
   cross-sport predeclaration also treats request/cadence/parser/identity/storage omissions as repair
   defects rather than provider blind spots and adds analyzability-attrition blocker MB-042 so failed
-  and all-failure cases cannot disappear from qualification denominators.
+  and all-failure cases cannot disappear from qualification denominators. Independent child scopes
+  prevent one league market or prop stat family from authorizing its siblings, and typed authority
+  chains distinguish capture/model, prediction-record, grade/stake, lock, member-snapshot, and reader owners.
 - `market_brain_contract_2026_10_27_r20_output_artifact_attestation` and
-  `nfl_market_brain_shadow_2026_10_27_r23_output_artifact_attestation` define an internal-only,
+  `nfl_market_brain_shadow_2026_10_27_r24_expected_feed_roster` define an internal-only,
   production-inert evidence boundary. The sole writer
-  `nfl_forward_evidence_writer_2026_10_27_r88_output_artifact_attestation`
+  `nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster`
   runs with the production-stable collector
   `nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding`,
   member fixture `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation`, and
@@ -537,6 +539,15 @@ Last reviewed: 2026-10-27
   same-family versus target-excluded provenance plus an explicit evaluated-target identity that does
   not depend on recovering an exact raw side, every exact-identity Circa/DraftKings/BetMGM split
   row, explicit missing/incomplete/duplicate source states, and the current-feed blind spots. Source
+  expectations come from
+  `market_brain_evidence_roster_2026_10_27_r2_complete_product_inventory` before any response is read: the
+  BALLDONTLIE opening/current feeds, six approved retail participants, and Circa/Pinnacle SharpAPI
+  feeds cannot disappear merely because a response omitted every row. Feed failure, missing raw
+  parser input, event-market absence, and per-participant absence remain distinct. Absolute handle,
+  ticket denominators, bet-size distribution, limits, move origin, suspension lifecycle, and private
+  order flow remain true provider blind spots and are never inferred. The roster registry contains
+  every active product; non-NFL rows remain explicitly `not_started` with every unresolved evidence
+  family mechanically visible rather than being mistaken for implemented coverage. Source
   reputation is distinct from event leadership; a book brand never proves who originated a move.
   It contains no candidate decision and cannot affect a prediction, probability, projection, grade,
   stake, member display, tracking record, or lock. These research-sidecar releases do not relabel
@@ -576,9 +587,9 @@ Last reviewed: 2026-10-27
   Retention is isolated in a separate leased route that is disabled by default and intentionally
   unscheduled until schema, alerting, and capacity readiness are approved; it never shares the
   production cleanup path.
-  `nfl_market_brain_capture_set_2026_10_27_r8_output_artifact_attestation`,
-  `nfl_market_brain_sequence_materializer_2026_10_27_r19_output_artifact_attestation`, and
-  `nfl_market_brain_research_input_2026_10_27_r8_output_artifact_attestation` replay only cases
+  `nfl_market_brain_capture_set_2026_10_27_r9_expected_feed_roster`,
+  `nfl_market_brain_sequence_materializer_2026_10_27_r20_expected_feed_roster`, and
+  `nfl_market_brain_research_input_2026_10_27_r9_expected_feed_roster` replay only cases
   and observations available by an explicit cutoff, excludes the exact target and its entire source
   family before feature construction, pairs individual sides without zero-filling, preserves unpaired
   observed quotes as explicit uncertainty tokens, retains every capture's source-availability state,
@@ -589,7 +600,7 @@ Last reviewed: 2026-10-27
   resolved by participant sort order. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
-  `nfl_market_brain_research_evaluator_2026_10_27_r18_output_artifact_attestation` and
+  `nfl_market_brain_research_evaluator_2026_10_27_r19_expected_feed_roster` and
   `nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows` form a research-only proof
   boundary: the evaluator recomputes the complete sequence checksum and re-runs NFL prior attestation
   before reading any baseline; outcomes must arrive strictly after cutoff and game start, candidate predictions must
@@ -615,10 +626,10 @@ Last reviewed: 2026-10-27
   `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` freezes 13 nuanced follow, fade,
   resistance, reversal, outage, stale-evidence, news-sequence, and cross-market stories as non-one-hot
   action distributions without turning them into inference quotas.
-  `nfl_market_brain_resolver_contract_2026_10_27_r15_output_artifact_attestation`,
-  `nfl_market_brain_resolver_features_2026_10_27_r15_output_artifact_attestation`, and
-  `nfl_market_brain_tournament_2026_10_27_r15_output_artifact_attestation`, with trainer
-  `nfl_market_brain_deterministic_trainer_2026_10_27_r10_output_artifact_attestation`, freeze one implemented
+  `nfl_market_brain_resolver_contract_2026_10_27_r16_expected_feed_roster`,
+  `nfl_market_brain_resolver_features_2026_10_27_r16_expected_feed_roster`, and
+  `nfl_market_brain_tournament_2026_10_27_r16_expected_feed_roster`, with trainer
+  `nfl_market_brain_deterministic_trainer_2026_10_27_r11_expected_feed_roster`, freeze one implemented
   regularized residual baseline, its regularization grid and executable parameter-shape boundary,
   contextual source/direction/state basis plus preprocessing/loss/coherence/optimizer/seed/serialization contracts,
   complete development-only row membership, an executable earlier-to-later rolling tournament,
@@ -630,7 +641,7 @@ Last reviewed: 2026-10-27
   evaluated cutoff. Unfrozen artifacts fail closed, and production influence remains false. No fitted resolver
   artifact or predictive qualification exists yet. Fitting and inference use the same normalized joint
   likelihood, and five continuous heads may learn Margin/Total location, uncertainty, and dependence.
-  `nfl_market_brain_case_audit_2026_10_27_r8_output_artifact_attestation` provides a
+  `nfl_market_brain_case_audit_2026_10_27_r9_expected_feed_roster` provides a
   complete normalized read-only dossier for every observation, paired and unpaired quote, split,
   outage, context row, exclusion, source manifest, consumed feature, candidate consequence, and
   postgame delta without assigning a manual verdict. Exact price-parser input rows now have a bounded
@@ -665,7 +676,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_27_r88_output_artifact_attestation` /
+  `nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an
@@ -2949,6 +2960,23 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 - Launch verification: v39 was applied successfully to the primary database. Two post-migration natural leased cycles completed at `2026-08-25T22:21:14.278Z` and `2026-08-25T22:36:14.404Z`, each with 25 bounded provider calls, no error, and no premature tracking row because every decision remains unlocked. Production QA passed at 1280px desktop and 390x844 mobile, including league-pill navigation, exact counts, market filtering, URL-addressable selection, focus/scroll containment, Escape/close behavior, centered desktop reader, and full-screen mobile reader. The current Lab still labels authentication as a future phase, so there is not yet a real signed-in session boundary to test; NFL matches the same production access contract as MLB Player Props.
 - Evidence: `docs/model-audits/2026-08-25-nfl-player-props-production-candidate-r4.md` and `docs/model-audits/2026-08-25-nfl-player-props-member-parity-launch-r1.md`.
 
+## FIFA World Cup Daily Edge legacy production release
+
+- The shipped World Cup member surface remains owned by cron job `soccer_daily_refresh`, the
+  `prediction_pipeline:soccer` lease, competition identity `fifa_world_cup`, and model identifier
+  `soccer_dixon_coles_v1` exported by `lib/services/soccer/soccerAutoModelV1.ts`. Its stored writer
+  and reader continue to preserve existing locked payloads first.
+- The October 27 writer-safety repair makes `soccer_daily_refresh` require the shared
+  `prediction_pipeline:soccer` lease with bounded retry. It changes no model, probability,
+  projection, pick, grade, price, stake, lock, settlement, or stored payload.
+- The World Cup adapter is separately registered under
+  `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope`; it does not inherit EPL or
+  UCL parameters, qualification, source authority, calibration, or consequence behavior.
+- Market Brain production influence is prohibited. Before this adapter can leave `not_started`, the
+  duplicated legacy model literal in writer/reader code must be centralized into one authoritative
+  exported release path, and World Cup-specific evidence roster, replay, settlement, calibration,
+  consequence, untouched evaluation, and prospective shadow proof must pass.
+
 ## Premier League production release (active)
 
 - Runtime/model release: `epl_goals_coherent_2026_10_13_r20_coherent_total_margin_matchup`
@@ -3172,6 +3200,12 @@ No prediction, probability, projection, market side, play grade, price, stake, o
 changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
+
+- October 27 writer-safety repair: the legacy multi-sport `morning_slate` writer now requires the
+  shared `prediction_pipeline:<sport>` lease for each sport iteration, with bounded retry. This
+  prevents its prediction, signal, grade, and publish stages from overlapping the other authoritative
+  sport writers. It changes no model, probability, projection, pick, grade, price, stake, lock,
+  settlement, or stored payload.
 
 - October 19 trusted Total scope recovery advances the market input snapshot to
   `mlb_market_input_snapshot_v4_trusted_total_scope_recovery_2026_10_19`.

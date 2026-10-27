@@ -4,7 +4,7 @@ Status: **OPEN — exhaustive inventory reconciled; remediation not complete**
 
 Inventory freeze: 2026-10-27 exhaustive full-stack, predictive, operations/database, requirements-
 trace, failure-mode, and market-science red-team. The reconciled inventory contains MB-001 through
-MB-042. New evidence must map to an existing item or
+MB-044. New evidence must map to an existing item or
 be added explicitly; it may not create an untracked side list.
 
 This is the single closure ledger for the NFL Market Brain remediation. It supersedes informal
@@ -72,6 +72,8 @@ inspection.
 | MB-040 | P1 | open | The one-to-four-game stratified canary has no target-population or inclusion-probability contract proving results generalize to the full product slate. | Freeze the full sampling frame, eligibility/exclusion reasons, strata, and inclusion probabilities; qualify on full-slate shadow or design-weighted estimates with subgroup and mixture-shift tests. |
 | MB-041 | Blocker | open | Evaluation, run summaries, and human audit dossiers trust caller-supplied sequence/evaluation objects rather than persisted replay-derived receipts. | Persist canonical evaluation receipts bound to attested input, prediction, deterministic outcome revision, manifest, quote, and consequence releases; summaries/dossiers reload receipts and recompute; forged/edited rows fail in PostgreSQL and after restart. |
 | MB-042 | Blocker | open | Research input drops failed attempts and rejects all-failure events, so evaluation can condition on analyzable tapes and hide missing-not-at-random capture attrition. | Define full-frame, captured-frame, and analyzable-frame estimands; materialize every planned attempt including failure/lateness; persist analyzability/no-prediction receipts; report coverage, subgroup/differential attrition, and conservative performance bounds; synthetic outcome-correlated failure must block qualification. |
+| MB-043 | Blocker | open | Generic post-lock market-signal and grade derivations can update stored `game_predictions` grade/signal fields after `locked_at`, even when the member snapshot separately preserves the prior public payload. | Locked rows must be excluded from every derivation update; a real-PostgreSQL test freezes an MLB row, changes post-lock inputs, runs both derivations and pregame sweep, and proves the complete stored locked projection/probability/pick/grade/price/stake/evidence tuple plus member DTO remain byte-identical while an unlocked companion updates. |
+| MB-044 | Blocker | open | The legacy MLB `morning_slate` and World Cup `soccer_daily_refresh` prediction writers used job-local leases while the registry claimed the shared sport-scoped `prediction_pipeline` lease, permitting overlapping prediction writes. | Both routes must require `prediction_pipeline:<sport>` with bounded retry; executable route/lease tests must resolve every registered writer to its declared shared lease, and real-PostgreSQL concurrency must prove overlapping writers cannot acquire it together. |
 
 ## Required acceptance amendments
 
@@ -117,7 +119,7 @@ existing closure proofs:
   cancellation, queue concurrency, and measured p50/p95 fit telemetry. One-over-limit fails before
   allocation and cancellation cannot persist an artifact.
 - **MB-022:** the executable product registry must enumerate NFL, CFB, NBA, WNBA, MLB, NHL, EPL,
-  UCL, NFL Player Props, NBA Player Props, and MLB Player Props. EPL/UCL and every league/stat-family
+  UCL, FIFA World Cup, NFL Player Props, NBA Player Props, and MLB Player Props. EPL/UCL/World Cup and every league/stat-family
   props program retain distinct adapter identity and qualification; no NFL authority transfers.
   Prelaunch CBB is registered separately and cannot activate by inheriting NBA authority.
 - **MB-040 / MB-042:** qualification reports the precommitted full frame, captured frame, and
@@ -238,6 +240,19 @@ database, predictive, or production proof.
   The candidate branch still truthfully carries new writer/collector identities; repository safety
   rejected relabeling changed orchestration as the older production releases. Full base-versus-candidate
   product/lock parity and the final release boundary therefore remain open.
+- **MB-022 / MB-030:** product registry r2 now enumerates every shipped Daily Edge competition,
+  including the previously omitted World Cup surface, and every canonical NFL/NBA/MLB prop stat
+  family. MLB first inning is a separate qualification scope, MLB run line remains non-actionable,
+  and NHL uses canonical `spread`. Each child scope has independent state/release/evaluation slots;
+  typed authority chains distinguish capture/model, record, grade, stake, lock, snapshot, and reader
+  owners. Evidence roster r2 contains every active product key; only NFL price/chronology is partially
+  implemented, while every unresolved non-NFL family remains explicitly `not_started`. This closes
+  inventory omission risk, not adapter implementation, persisted-chain proof, or cross-sport data
+  coverage, so both IDs remain open.
+- **MB-044:** `morning_slate` and `soccer_daily_refresh` now require the shared sport-scoped
+  `prediction_pipeline` lease with bounded retry. The executable registry test resolves every primary
+  and fallback authority route and proves its source-level required lease contract. Real-PostgreSQL
+  simultaneous-acquisition proof remains outstanding, so MB-044 remains open.
 
 Verification recorded for this slice:
 

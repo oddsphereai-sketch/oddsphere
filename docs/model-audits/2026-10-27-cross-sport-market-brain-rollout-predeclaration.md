@@ -2,7 +2,7 @@
 
 Status: **OPEN — scope frozen; production influence remains prohibited**
 
-Registry release: `market_brain_product_registry_2026_10_27_r1_complete_active_product_scope`
+Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope`
 
 ## Objective
 
@@ -14,9 +14,16 @@ authority, or validation to another sport.
 ## Complete active scope
 
 The executable registry covers NFL, CFB, NBA, WNBA, MLB, NHL, Premier League, Champions League,
-NFL Player Props, NBA Player Props, and MLB Player Props. Their current champion releases remain
+FIFA World Cup, NFL Player Props, NBA Player Props, and MLB Player Props. Their current champion releases remain
 the exact identifiers in the corresponding sections of `docs/current-model-releases.md`; this
 predeclaration changes none of them.
+
+The registry also freezes the smallest independent qualification scopes. MLB first-inning may not
+inherit full-game qualification. NFL, NBA, and MLB player props enumerate every named stat family
+from their canonical product catalogs; no generic `player_prop` parent can transfer authority to a
+child family. MLB run line remains context-only and cannot receive a consequence, grade, or stake
+through this work. NHL uses the persisted canonical `spread` identifier; `puck line` is presentation
+language, not a parallel prediction target.
 
 CBB is separately registered as prelaunch and unqualified. It cannot become active merely by
 sharing basketball vocabulary or NBA infrastructure; it requires its own writer, lease, source
@@ -47,8 +54,13 @@ NFL Daily Edge and NFL Player Props retain `prediction_pipeline:nfl`; CFB retain
 `prediction_pipeline:cfb`; NBA Daily Edge and NBA Player Props retain `prediction_pipeline:nba`;
 WNBA retains `prediction_pipeline:wnba`; MLB Daily Edge and MLB Player Props retain
 `prediction_pipeline:mlb`; NHL retains `prediction_pipeline:nhl`; EPL and UCL retain the shared
-`prediction_pipeline:soccer` lease. The exact current writers and release identifiers remain those
+`prediction_pipeline:soccer` lease, as does the separately registered World Cup adapter. The exact current writers and release identifiers remain those
 recorded in `docs/current-model-releases.md`.
+
+Surface lifecycle is separate from predictive authority. NFL, CFB, EPL, and UCL are member-feature-
+gated; NBA Player Props is a private forward candidate; World Cup, NBA, WNBA, MLB, NHL, NFL Player
+Props, and MLB Player Props have member-active surfaces; CBB remains prelaunch. Every Market Brain
+adapter is nevertheless non-live until its own proof is complete.
 
 ## Missing-data rule
 

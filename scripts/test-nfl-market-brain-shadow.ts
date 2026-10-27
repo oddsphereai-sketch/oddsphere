@@ -28,6 +28,10 @@ import {
 } from "../lib/services/football/sharpApiNflSplits";
 import { MARKET_BRAIN_CONTRACT_RELEASE } from "../lib/services/marketBrain/marketBrainContract";
 import {
+  MARKET_BRAIN_EVIDENCE_ROSTER_RELEASE,
+  NFL_MARKET_BRAIN_EVIDENCE_ROSTER,
+} from "../lib/services/marketBrain/marketBrainEvidenceRoster";
+import {
   buildNflMarketBrainResolverFeatures,
   nflMarketBrainTrainerInput,
   vectorizeNflMarketBrainTrainerInput,
@@ -330,6 +334,12 @@ assert.equal(shadow.case.invariants.allReturnedSourceRowsAccounted, true);
 assert.equal(shadow.case.invariants.productionInfluenceAllowed, false);
 assert.equal(shadow.case.invariants.displayContractAuthority, false);
 assert.equal(shadow.case.blindSpots.length, 7);
+assert.equal(NFL_MARKET_BRAIN_EVIDENCE_ROSTER.release, MARKET_BRAIN_EVIDENCE_ROSTER_RELEASE);
+assert.equal(
+  shadow.case.expectedInputs.filter((row) => row.id.startsWith("price_feed:")).length,
+  NFL_MARKET_BRAIN_EVIDENCE_ROSTER.feeds.length * 3,
+  "every frozen expected feed must remain visible for every game market",
+);
 const injuryPlayer = shadow.case.observations.find((row) => row.source.feed === "injury_report_player");
 assert.equal(injuryPlayer?.categorical.playerName, "Fixture Receiver");
 assert.equal(injuryPlayer?.categorical.status, "Questionable");
@@ -445,8 +455,64 @@ assert.deepEqual(absent && { availability: absent.availability, observations: ab
   { availability: "unavailable", observations: 0, reason: "source_unavailable" });
 assert.deepEqual(shadow.case.expectedInputs.find((row) => row.id === "price:moneyline:sharpapi:pinnacle"), {
   id: "price:moneyline:sharpapi:pinnacle", market: "moneyline", modality: "price_quote", provider: "sharpapi", participant: "pinnacle",
-  expectation: "required", availability: "unavailable", observationIds: [], reason: "provider_source_unavailable",
+  expectation: "required", availability: "unavailable", observationIds: [], reason: "expected_participant_not_returned",
 }, "a missing required price source must remain visible in the manifest");
+assert.deepEqual(shadow.case.expectedInputs.find((row) =>
+  row.id === "price_feed:moneyline:sharpapi:main_odds:pinnacle"), {
+  id: "price_feed:moneyline:sharpapi:main_odds:pinnacle", market: "moneyline", modality: "price_quote",
+  provider: "sharpapi", participant: "pinnacle", expectation: "required", availability: "unavailable",
+  observationIds: [], reason: "expected_feed_manifest_missing",
+}, "an expected feed must not disappear when its entire provider response is absent");
+assert.deepEqual(shadow.case.expectedInputs.find((row) =>
+  row.id === "price:moneyline:balldontlie:fanduel"), {
+  id: "price:moneyline:balldontlie:fanduel", market: "moneyline", modality: "price_quote",
+  provider: "balldontlie", participant: "fanduel", expectation: "opportunistic", availability: "unavailable",
+  observationIds: [], reason: "expected_participant_not_returned",
+}, "an approved participant omitted from a response must remain explicit");
+
+const missingCurrentFeedShadow = buildNflMarketBrainShadow({
+  ...baseShadowArgs,
+  rawPriceResponseManifests: rawPriceResponseManifests.filter((manifest) =>
+    !(manifest.provider === "balldontlie" && manifest.feed === "current_odds")),
+});
+const missingCurrentFeed = missingCurrentFeedShadow.case.expectedInputs.find((row) =>
+  row.id === "price_feed:spread:balldontlie:current_odds:all");
+assert.deepEqual(missingCurrentFeed && {
+  availability: missingCurrentFeed.availability,
+  reason: missingCurrentFeed.reason,
+}, {
+  availability: "unavailable", reason: "expected_feed_manifest_missing",
+}, "removing a whole expected feed must produce explicit missingness rather than erase the expectation");
+
+const failedPinnacleManifest: FootballRawPriceResponseManifest = {
+  release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+  provider: "sharpapi",
+  feed: "main_odds",
+  participant: "pinnacle",
+  providerFetchedAt: capturedAt,
+  rawResponseSha256: null,
+  rawParserInput: null,
+  returnedRows: 0,
+  matchedRows: 0,
+  unmatchedRows: 0,
+  ambiguousRows: 0,
+  rows: [],
+  failed: true,
+  failureReason: "fixture_provider_timeout",
+  observationsByGame: {},
+};
+const failedPinnacleShadow = buildNflMarketBrainShadow({
+  ...baseShadowArgs,
+  rawPriceResponseManifests: [...rawPriceResponseManifests, failedPinnacleManifest],
+});
+const failedPinnacleFeed = failedPinnacleShadow.case.expectedInputs.find((row) =>
+  row.id === "price_feed:total:sharpapi:main_odds:pinnacle");
+assert.deepEqual(failedPinnacleFeed && {
+  availability: failedPinnacleFeed.availability,
+  reason: failedPinnacleFeed.reason,
+}, {
+  availability: "unavailable", reason: "fixture_provider_timeout",
+}, "a provider failure must remain distinct from an omitted event market");
 assert.ok(shadow.case.observations.every((row) => row.timing.availableAt.length > 0),
   "every observation must carry a replay-safe availability time");
 assert.ok(shadow.case.observations.every((row) => !["leader", "follower", "resistor", "reversal"].includes(row.observedRole)),
