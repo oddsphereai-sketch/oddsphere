@@ -37,7 +37,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r19_research_failure_isolation" as const;
+  "nfl_market_brain_shadow_2026_10_27_r20_source_row_participant_binding" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -229,9 +229,19 @@ function sharpSplitManifest(
     throw new Error("NFL Market Brain split manifest release identity is invalid.");
   }
   const eventRows = manifest.rows.filter((row) => row.providerGameId === args.game.providerGameId);
-  const retainedObservationIds = observations
-    .filter((row) => row.source.provider === "sharpapi" && row.source.feed === "splits")
-    .map((row) => row.id);
+  const observationIds = new Set(observations.map((row) => row.id));
+  const participantOrdinals = new Map<string, number>();
+  const rows = eventRows.map((row) => {
+    const participant = row.participant;
+    const ordinal = participant === null ? -1 : participantOrdinals.get(participant) ?? 0;
+    if (participant !== null) participantOrdinals.set(participant, ordinal + 1);
+    const retainedObservationIds = participant === null ? [] :
+      (["moneyline", "spread", "total"] as const)
+        .map((market) => `split:sharpapi:${participant}:${market}:${ordinal}`)
+        .filter((id) => observationIds.has(id));
+    return { ...row, retainedObservationIds };
+  });
+  const retainedObservationIds = rows.flatMap((row) => row.retainedObservationIds);
   return {
     id: "source:sharpapi:splits:all_books",
     release: manifest.release,
@@ -250,10 +260,7 @@ function sharpSplitManifest(
     ledgerScope: "event_rows_with_response_digest",
     ledgerRows: eventRows.length,
     omittedRows: manifest.returnedRows - eventRows.length,
-    rows: eventRows.map((row, index) => ({
-      ...row,
-      retainedObservationIds: index === 0 ? retainedObservationIds : [],
-    })),
+    rows,
     retainedObservationIds,
     status: manifest.status,
     failureReason: manifest.failureReason,
@@ -499,6 +506,7 @@ function addRawPrices(
     }
     const retainedObservationIds: string[] = [];
     const caseIdBySourceId = new Map<string, string>();
+    const participantBySourceId = new Map<string, string>();
     for (const raw of manifest.observationsByGame[args.game.providerGameId] ?? []) {
       if (raw.sourceRelease !== manifest.release || raw.provider !== manifest.provider || raw.feed !== manifest.feed) {
         throw new Error("NFL Market Brain raw-price observation provenance diverged from its source manifest.");
@@ -506,6 +514,7 @@ function addRawPrices(
       const id = `quote:${raw.provider}:${raw.feed}:${raw.sourceObservationId}`;
       retainedObservationIds.push(id);
       caseIdBySourceId.set(raw.sourceObservationId, id);
+      participantBySourceId.set(raw.sourceObservationId, canonical(raw.sportsbook));
       observations.push(rawPriceObservation(args, raw, id));
     }
     const eventRows = manifest.rows.filter((row) => row.providerGameId === args.game.providerGameId);
@@ -532,6 +541,14 @@ function addRawPrices(
         rawRowSha256: row.rawRowSha256,
         disposition: row.disposition,
         providerGameId: row.providerGameId,
+        participant: row.sourceObservationIds.length === 0 ? null : (() => {
+          const participants = new Set(row.sourceObservationIds.map((sourceId) =>
+            participantBySourceId.get(sourceId) ?? "unknown"));
+          if (participants.size !== 1) {
+            throw new Error("NFL Market Brain raw-price row contains conflicting participant identities.");
+          }
+          return [...participants][0]!;
+        })(),
         retainedObservationIds: row.sourceObservationIds.flatMap((sourceId) => {
           const caseId = caseIdBySourceId.get(sourceId);
           return caseId ? [caseId] : [];

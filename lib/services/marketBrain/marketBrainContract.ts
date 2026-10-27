@@ -1,7 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r16_source_evidence_ownership" as const;
+  "market_brain_contract_2026_10_27_r17_source_row_participant_binding" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -118,6 +118,8 @@ export type MarketBrainSourceManifest = {
     rawRowSha256: string;
     disposition: "matched" | "unmatched" | "ambiguous";
     providerGameId: string | null;
+    /** Exact book/source participant for this raw row; null only when the row cannot identify one. */
+    participant: string | null;
     retainedObservationIds: string[];
   }>;
   retainedObservationIds: string[];
@@ -474,6 +476,15 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
     if (manifest.rows.some((row) => !Number.isInteger(row.rowIndex) || row.rowIndex < 0 ||
       !/^[a-f0-9]{64}$/.test(row.rawRowSha256) || row.retainedObservationIds.some((id) => !observationIds.has(id)))) {
       throw new Error(`Market Brain source manifest row ledger is invalid: ${manifest.id}`);
+    }
+    for (const row of manifest.rows) {
+      for (const id of row.retainedObservationIds) {
+        const observation = observationById.get(id)!;
+        if ((observation.modality === "price_quote" || observation.modality === "identified_book_split") &&
+          (row.participant === null || observation.source.participant !== row.participant)) {
+          throw new Error(`Market Brain source manifest row participant diverged from observation ${id}.`);
+        }
+      }
     }
     if (manifest.status === "observed" && (manifest.rawResponseSha256 === null ||
       !/^[a-f0-9]{64}$/.test(manifest.rawResponseSha256) || manifest.failureReason !== null)) {

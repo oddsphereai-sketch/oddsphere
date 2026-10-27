@@ -13,7 +13,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_CASE_AUDIT_RELEASE =
-  "nfl_market_brain_case_audit_2026_10_27_r4_source_evidence_ownership" as const;
+  "nfl_market_brain_case_audit_2026_10_27_r5_source_row_participant_binding" as const;
 
 /**
  * Complete normalized, read-only dossier for human and external review of a

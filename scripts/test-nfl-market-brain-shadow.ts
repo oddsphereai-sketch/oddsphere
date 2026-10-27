@@ -222,6 +222,7 @@ const sharpSplitCaptureManifest = {
     rawRowSha256: rawPriceSha256(sportsbook),
     disposition: "matched" as const,
     providerGameId: game.providerGameId,
+    participant: sportsbook as "circa" | "draftkings",
   })),
 };
 const baseShadowArgs = {

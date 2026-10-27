@@ -9,7 +9,7 @@ import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
 export const NFL_SHARP_API_SPLITS_RELEASE =
   "nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity" as const;
 export const NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE =
-  "nfl_sharpapi_split_capture_manifest_2026_10_27_r2_authoritative_failure_isolation" as const;
+  "nfl_sharpapi_split_capture_manifest_2026_10_27_r3_source_row_participant_binding" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -90,6 +90,7 @@ export type NflSharpApiSplitCaptureManifest = {
     rawRowSha256: string;
     disposition: "matched" | "unmatched" | "ambiguous";
     providerGameId: string | null;
+    participant: NflSharpApiSplitBook | null;
   }>;
 };
 
@@ -208,6 +209,7 @@ function buildSplitCaptureManifest(
       disposition: candidates.length === 1 ? "matched" as const
         : candidates.length > 1 ? "ambiguous" as const : "unmatched" as const,
       providerGameId: candidates.length === 1 ? candidates[0]!.providerGameId : null,
+      participant: NFL_SHARP_API_SPLIT_BOOKS.find((book) => book === normalize(row.sportsbook ?? "")) ?? null,
     };
   });
   return {

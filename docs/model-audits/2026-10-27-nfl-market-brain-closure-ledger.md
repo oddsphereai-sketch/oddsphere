@@ -163,10 +163,11 @@ database, predictive, or production proof.
   PostgreSQL fixture has not run on this host.
 - **MB-035:** raw parser archives now use `(schema_release, parser_input_sha256)` as their relational
   identity, shadow source manifests retain both components, and the store rejects a non-null manifest
-  reference unless that exact composite archive is present in the same payload. Contract r16 additionally
+  reference unless that exact composite archive is present in the same payload. Contract r17 additionally
   requires every source-backed price quote and identified-book split to have exactly one manifest owner
   and requires its provider, feed, audited source release, and any participant-scoped book identity to
-  match that owner; orphan evidence, participant substitution, duplicate ownership, and checksum-consistent
+  match that owner. Each retained observation is also bound to the participant on its exact raw ledger row,
+  so an all-books manifest cannot act as a participant-label escape hatch; orphan evidence, participant substitution, duplicate ownership, and checksum-consistent
   release substitution are rejected by focused adversarial tests. The PostgreSQL collision
   fixture is prepared but has not run here; a relational child FK and atomic write remain open under
   MB-024.
@@ -184,7 +185,7 @@ database, predictive, or production proof.
   verifies their digest, and the receipt trigger requires the source table label, NFL sport, final
   timestamp, scores, provider IDs, and update time to match the finalized `games` row. Correction
   precedence and adversarial PostgreSQL execution remain open.
-- **MB-033 / MB-036:** shadow r19 adds one explicit success/failure union. Both shapes bind release,
+- **MB-033 / MB-036:** shadow r20 adds one explicit success/failure union. Both shapes bind release,
   contract, event and capture time; success also binds NFL sport and requires evaluation no later than
   server receipt, while failure requires the fixed failed status, no production authority and a
   nonempty reason. Successful writes and reads now validate the complete production-built case, bind
@@ -196,7 +197,7 @@ database, predictive, or production proof.
   no-bypass real-PostgreSQL lifecycle proof.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
-  Every collector release from r16 through r27 is explicitly grouped under the same expected-score-tenths reader
+  Every collector release from r16 through r28 is explicitly grouped under the same expected-score-tenths reader
   semantics, with a golden mixed immutable-T-60 snapshot proving identical projected scores,
   predictions, recommendations, grades, and stakes. Incumbent provider releases remain unchanged;
   each research split/raw-price sidecar has its own exported and persisted release, all registered in

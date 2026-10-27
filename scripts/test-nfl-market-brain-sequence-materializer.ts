@@ -132,6 +132,7 @@ const observations = [
     observedAt: "2026-10-26T19:55:00.000Z", availableAt: "2026-10-26T20:05:00.000Z",
     availability: "future" }),
 ];
+const manifestParticipants = [...new Set(observations.map((observation) => observation.source.participant!))];
 const independentPrior = bindMarketBrainMarginTotalPrior({
   eventId,
   release: "fixture-independent-prior-r1",
@@ -169,20 +170,21 @@ const marketCase = buildMarketBrainCase({
     rawResponseSha256: "a".repeat(64),
     rawParserInputSchemaRelease: null,
     rawParserInputSha256: null,
-    returnedRows: 1,
-    matchedRows: 1,
+    returnedRows: manifestParticipants.length,
+    matchedRows: manifestParticipants.length,
     unmatchedRows: 0,
     ambiguousRows: 0,
     ledgerScope: "full_response",
-    ledgerRows: 1,
+    ledgerRows: manifestParticipants.length,
     omittedRows: 0,
-    rows: [{
-      rowIndex: 0,
-      rawRowSha256: "b".repeat(64),
+    rows: manifestParticipants.map((participant, rowIndex) => ({
+      rowIndex,
+      rawRowSha256: (rowIndex + 1).toString(16).repeat(64),
       disposition: "matched",
       providerGameId: eventId,
-      retainedObservationIds: observations.map((row) => row.id),
-    }],
+      participant,
+      retainedObservationIds: observations.filter((row) => row.source.participant === participant).map((row) => row.id),
+    })),
     retainedObservationIds: observations.map((row) => row.id),
     status: "observed",
     failureReason: null,
@@ -219,6 +221,10 @@ const mismatchedParticipantCase = structuredClone(marketCase);
 mismatchedParticipantCase.sourceManifests[0]!.participant = "circa";
 assert.throws(() => assertMarketBrainCase(mismatchedParticipantCase), /release or feed diverged/,
   "a participant-scoped manifest cannot claim observations from another book");
+const broadManifestForgeryCase = structuredClone(marketCase);
+broadManifestForgeryCase.observations[0]!.source.participant = "forgedbook";
+assert.throws(() => assertMarketBrainCase(broadManifestForgeryCase), /row participant diverged/,
+  "an all-books manifest must still bind each retained observation to its exact raw-row participant");
 
 const materialized = materializeNflMarketBrainSequence({ cases: [marketCase], cutoffAt });
 assert.equal(materialized.targetFamilyByMarket.spread, "draftkings");
