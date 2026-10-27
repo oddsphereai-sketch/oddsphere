@@ -128,10 +128,10 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_27_r47_receiving_direction_correction");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_27_r61_receiving_direction_correction");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_27_r48_consensus_contract_repair");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_27_r62_consensus_contract_repair");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_27_r35_receiving_direction_correction");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_27_r36_consensus_contract_repair");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 63, "slate/current+opening props/player identity/Sharp pagination and the isolated Pinnacle/NoVig reference lanes are explicitly bounded");
@@ -200,7 +200,7 @@ assert.equal(nflPlayerPropsSourceAwareReferenceOffersAvailable({
 assert.equal(nflPlayerPropsSourceAwareReferenceOffersAvailable({
   evaluatedAt: "2026-10-15T12:00:00.000Z",
   offers: [{ market: "receiving_yards", observedAt: "2026-10-15T11:59:00.000Z" }],
-}), true, "fresh Receiving Yards reference evidence enables its qualified source-aware lane");
+}), false, "Receiving Yards cannot re-enter the categorical source-aware lane rejected by consensus-line replay");
 assert.equal(nflPlayerPropsSourceAwareReferenceOffersAvailable({
   evaluatedAt: "2026-10-15T12:00:00.000Z",
   offers: [{ market: "rushing_yards", observedAt: "2026-10-15T11:59:00.000Z" }],
@@ -398,7 +398,7 @@ const precedingTouchdown = {
   market: "anytime_td" as const,
   side: "yes" as const,
   line: 0.5,
-  decisionRelease: "nfl_player_props_decision_2026_10_26_r33_market_marriage",
+  decisionRelease: "nfl_player_props_decision_2026_10_27_r34_receiving_direction_correction",
   modelRelease: "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   calibrationRelease: "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
 };
@@ -406,9 +406,9 @@ const precedingReceptions = {
   ...omittedGame,
   gameId: "game-preceding-receptions",
   market: "receptions" as const,
-  decisionRelease: "nfl_player_props_decision_2026_10_26_r33_market_marriage",
-  modelRelease: "nfl_player_props_distribution_model_2026_10_26_r27_market_marriage",
-  calibrationRelease: "nfl_player_props_distribution_calibration_2026_10_26_r29_market_marriage",
+  decisionRelease: "nfl_player_props_decision_2026_10_27_r34_receiving_direction_correction",
+  modelRelease: "nfl_player_props_distribution_model_2026_10_27_r28_receiving_direction_correction",
+  calibrationRelease: "nfl_player_props_distribution_calibration_2026_10_27_r30_receiving_direction_correction",
 };
 const precedingReleaseSnapshot = reconcileNflPlayerPropsProductionSnapshot({
   season: 2026,

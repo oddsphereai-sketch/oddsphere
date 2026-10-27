@@ -1,5 +1,32 @@
 # Model change safety protocol
 
+## NFL player-props Receiving Yards consensus-contract repair r35
+
+On 2026-10-27 the post-release audit found that the r34 Receiving Yards
+direction correction had been selected on a book-specific line contract rather
+than the member-facing consensus-line contract. The apparent direction-balance
+improvement did not survive an exact replay of the line members actually see.
+
+For future unlocked Receiving Yards rows, r35 removes only that categorical
+market-direction override and restores the incumbent target-book-excluded
+market-specific residual posterior. The independent point head, exact-price
+economics, grade thresholds, Receptions source-aware arbitration, all other
+markets, cadence, provider limits, UI, copy, sole writer, and shared NFL lease
+remain unchanged. Existing locked records retain their stored payloads and
+release identities.
+
+On exact member consensus lines, the repaired behavior beats r34 in both
+available chronological blocks. Week 6 improves from 33-28 to 36-25 and Week 7
+improves from 31-26 to 37-20. Across the ten r34 side changes, only one was a
+correction and nine were harms. Settled actionables improve from 0-1 to 4-1 and
+expand from one to five, so this is not a board-flattening repair. The frozen
+current-board replay changes only Receiving Yards: eleven exact rows, three
+forecast sides, one actionable promotion, zero demotions, and actionables 1 to
+2. Evidence and rollback:
+`docs/model-audits/2026-10-27-nfl-player-props-consensus-contract-repair-predeclaration.md`
+and
+`docs/model-audits/2026-10-27-nfl-player-props-consensus-contract-repair-result.md`.
+
 ## NFL player-props Receiving Yards direction correction r34
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to diagnose and repair the
@@ -7,7 +34,8 @@ pervasive-looking player-prop Under skew without forcing direction quotas or
 accepting the inaccurate live model as the endpoint. The release-pure audit
 rejected a generic balance rule and isolated Receiving Yards as the NFL defect.
 
-For future unlocked Receiving Yards rows only, r34 adds that market to the
+This release is superseded for future unlocked rows by r35 above. For its
+short-lived unlocked window, r34 added Receiving Yards to the
 source-aware reference lane. A fresh target-book-excluded, transported,
 source-weighted direction may cross the independent direction; agreement or
 missing evidence preserves the preceding posterior exactly. The independent
