@@ -1,7 +1,8 @@
 import type { NflPlayerPropsProductionSnapshot } from "./nflPlayerPropsProductionContract";
+import { NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE } from "./nflPlayerPropsProductionContract";
 
 export const NFL_PLAYER_PROPS_CADENCE_RELEASE =
-  "nfl_player_props_cadence_2026_10_20_r3_observed_scheduler_jitter" as const;
+  "nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh" as const;
 
 const FIFTEEN_MINUTES_MS = 15 * 60_000;
 const THIRTY_MINUTES_MS = 30 * 60_000;
@@ -20,6 +21,7 @@ export type NflPlayerPropsCadencePlan = {
   reason:
     | "missing_snapshot"
     | "invalid_snapshot_time"
+    | "release_refresh_due"
     | "lock_due"
     | "fifteen_minute_refresh_due"
     | "thirty_minute_refresh_due"
@@ -37,7 +39,7 @@ export type NflPlayerPropsCadencePlan = {
  */
 export function planNflPlayerPropsRefresh(args: {
   now: string;
-  previous: Pick<NflPlayerPropsProductionSnapshot, "generatedAt" | "board"> | null;
+  previous: (Pick<NflPlayerPropsProductionSnapshot, "generatedAt" | "board"> & { release: string }) | null;
 }): NflPlayerPropsCadencePlan {
   const nowMs = Date.parse(args.now);
   if (!Number.isFinite(nowMs)) throw new Error("NFL player props cadence now is invalid.");
@@ -46,6 +48,14 @@ export function planNflPlayerPropsRefresh(args: {
   const generatedAtMs = Date.parse(args.previous.generatedAt);
   if (!Number.isFinite(generatedAtMs) || generatedAtMs > nowMs + 60_000) {
     return plan(true, "invalid_snapshot_time", 60, null, nearestLockMinutes(args.previous, nowMs));
+  }
+
+  // A successful deployment must not leave a fresh unlocked snapshot on the
+  // preceding model family until its ordinary age cadence expires. Reuse the
+  // same sole writer and shared NFL lease; only make that existing writer due.
+  if (args.previous.release !== NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE) {
+    return plan(true, "release_refresh_due", 60, (nowMs - generatedAtMs) / 60_000,
+      nearestLockMinutes(args.previous, nowMs));
   }
 
   const unlockedUpcoming = args.previous.board.decisions.filter((row) => (

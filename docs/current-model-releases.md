@@ -2524,6 +2524,15 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 27 release-aware cadence: active cadence is
+  `nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh`. A stored member
+  snapshot whose release differs from the current runtime member release makes the existing sole
+  writer immediately due, rather than waiting as long as the ordinary hourly age cadence after a
+  deployment. Steady-state frequency and provider ceilings are unchanged; the writer still runs
+  only inside the shared `prediction_pipeline:nfl` lease. This changes no model math, projections,
+  grades, prices, thresholds, locks, tracking records, copy, labels, or layout, and existing locked
+  rows retain exact stored precedence.
+
 - October 27 Receiving Yards consensus-contract repair: active portable artifact / model /
   calibration / decision / runtime / board are
   `nfl_player_props_runtime_2026_10_27_r18_consensus_contract_repair` /
