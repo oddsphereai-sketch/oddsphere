@@ -44,6 +44,13 @@ const independentForecast = {
   marginDistribution: { values: [2, 3], probabilities: [0.5, 0.5] },
   totalDistribution: { values: [45, 47], probabilities: [0.5, 0.5] },
 };
+const authoritativeForecast = {
+  marginDistribution: {
+    values: [-3, 0, 7.607142857142857],
+    probabilities: [0.42, 0.02, 0.56],
+  },
+  totalDistribution: { values: [45], probabilities: [1] },
+};
 const distributionHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 function market(name: "moneyline" | "spread" | "total"): NflForwardContextMarket {
@@ -199,6 +206,7 @@ const sharpSplitCaptureManifest = {
 };
 const baseShadowArgs = {
   game, capture, independentForecast,
+  authoritativeForecast,
   injuries: {
     eventId: game.providerGameId,
     awayTeam: game.away.abbreviation,

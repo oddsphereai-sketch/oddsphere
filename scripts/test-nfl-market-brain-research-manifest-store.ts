@@ -7,6 +7,7 @@ import {
 } from "../lib/services/marketBrain/nflMarketBrainResearchEvaluator";
 import { persistNflMarketBrainResearchManifest } from
   "../lib/services/marketBrain/nflMarketBrainResearchManifestStore";
+import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrainCanonical";
 
 const manifest = buildNflMarketBrainResearchManifest({
   candidateRelease: "candidate-store-fixture-r1",
@@ -50,13 +51,14 @@ const client = {
         inserted = row;
         return {
           select(columns: string) {
-            assert.equal(columns, "id,manifest_checksum,manifest,created_at");
+            assert.equal(columns, "id,manifest_checksum,manifest,manifest_payload,created_at");
             return {
               abortSignal() { return this; },
               single: async () => ({ data: {
                 id: row.id,
                 manifest_checksum: row.manifest_checksum,
                 manifest: row.manifest,
+                manifest_payload: row.manifest_payload,
                 created_at: "2026-08-21T02:00:00.000Z",
               }, error: null }),
             };
@@ -82,7 +84,8 @@ async function main() {
           single: async () => ({ data: {
             id: manifest.storageId,
             manifest_checksum: manifest.checksum,
-            manifest,
+            manifest: reorderObjectKeys(manifest),
+            manifest_payload: canonicalManifestPayload(manifest),
             created_at: "2026-08-21T02:00:00.000Z",
           }, error: null }),
         }; } };
@@ -115,6 +118,7 @@ async function main() {
             id: manifest.storageId,
             manifest_checksum: manifest.checksum,
             manifest,
+            manifest_payload: canonicalManifestPayload(manifest),
             created_at: "2026-09-10T12:00:00.000Z",
           }, error: null }) }; } }; } };
         },
@@ -126,6 +130,20 @@ async function main() {
   );
 
   console.log("NFL Market Brain append-only research manifest persistence and runtime attestation passed");
+}
+
+function canonicalManifestPayload(value: typeof manifest): string {
+  const { checksum: _checksum, ...payload } = value;
+  return marketBrainCanonicalJson(payload);
+}
+
+function reorderObjectKeys<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(reorderObjectKeys) as T;
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).reverse()
+      .map(([key, child]) => [key, reorderObjectKeys(child)])) as T;
+  }
+  return value;
 }
 
 void main();

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 
 import {
   bindMarketBrainMarginTotalPrior,
@@ -10,9 +9,12 @@ import {
   buildNflMarketBrainResearchManifest,
   evaluateNflMarketBrainResearchCase,
   persistNflMarketBrainResearchManifest,
+  persistNflMarketBrainResearchPrediction,
   summarizeNflMarketBrainResearchRun,
 } from "../lib/services/marketBrain/nflMarketBrainResearchEvaluator";
-import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
+import { materializeNflMarketBrainSequence, type NflMarketBrainSequence } from
+  "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
+import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
 
 const cutoffAt = "2026-09-10T16:00:00.000Z";
 const startsAt = "2026-09-10T20:00:00.000Z";
@@ -33,7 +35,7 @@ const researchManifestDraft = buildNflMarketBrainResearchManifest({
       outcomeOpenedAt: "2026-08-21T00:00:00.000Z",
     }] },
     { role: "selection", evidenceStatus: "untouched", events: ["correction", "harm"].map((eventId) => ({
-      eventId, foldId: "week-2", startsAt, cutoffAt, firstCaptureAt: "2026-09-10T12:00:00.000Z",
+      eventId, foldId: "week-2", startsAt, cutoffAt, firstCaptureAt: cutoffAt,
       lastCaptureAt: cutoffAt, outcomeOpenedAt: null,
     })) },
     { role: "confirmation", evidenceStatus: "untouched", events: [{
@@ -55,9 +57,10 @@ const researchManifest = await persistNflMarketBrainResearchManifest({
   client: manifestPersistenceClient(researchManifestDraft, "2026-08-21T02:00:00.000Z") as never,
 });
 
-function candidate(args: {
-  sequenceChecksum: string;
+async function candidate(args: {
+  sequence: NflMarketBrainSequence;
   states: Array<{ margin: number; total: number; probability: number }>;
+  marginMeanOverride?: number;
 }) {
   const states = [...args.states].sort((a, b) => a.total - b.total || a.margin - b.margin);
   const marginal = (key: "margin" | "total") => {
@@ -82,17 +85,23 @@ function candidate(args: {
     awayScoreMean: (totalMean - marginMean) / 2,
     homeScoreMean: (totalMean + marginMean) / 2,
   };
-  return {
+  const prediction = {
+    eventId: args.sequence.eventId, cutoffAt: args.sequence.cutoffAt, startsAt: args.sequence.startsAt,
     release: "candidate-r1", trainedThrough, inferredAt: "2026-09-10T16:01:00.000Z",
     artifactSha256: "a".repeat(64), tournamentChecksum: "b".repeat(64),
     family: "regularized_joint_residual" as const,
     featureRelease: "feature-r1", featureChecksum: "c".repeat(64),
     trainingManifestChecksum: researchManifest.checksum, weightsSha256: "e".repeat(64), fittedParameterCount: 10,
-    sequenceChecksum: args.sequenceChecksum,
-    awayWinProbability, homeWinProbability, tieProbability, marginMean, totalMean,
+    sequenceChecksum: args.sequence.checksum,
+    awayWinProbability, homeWinProbability, tieProbability,
+    marginMean: args.marginMeanOverride ?? marginMean, totalMean,
     marginDistribution, totalDistribution, jointScoreStates: states,
-    jointPosteriorSha256: createHash("sha256").update(JSON.stringify(posterior)).digest("hex"),
+    jointPosteriorSha256: marketBrainSha256(posterior),
   };
+  return persistNflMarketBrainResearchPrediction({
+    prediction,
+    client: predictionPersistenceClient(prediction) as never,
+  });
 }
 
 function sequence(eventId: string, homeProbability: number) {
@@ -111,6 +120,24 @@ function sequence(eventId: string, homeProbability: number) {
     captureLimitations: [],
     subject: { kind: "two_team_game", awayId: "AWY", homeId: "HME", startsAt },
     prior,
+    incumbentComparator: {
+      kind: "released_semantic_reader",
+      availableAt: cutoffAt,
+      releases: { model: "released-model-r1", calibration: "released-calibration-r1", decision: "released-decision-r1" },
+      awayWinProbability: 1 - homeProbability,
+      homeWinProbability: homeProbability,
+      tieProbability: 0,
+      marginMean: prior.kind === "margin_total_distribution" ? prior.marginMean : 0,
+      totalMean: prior.kind === "margin_total_distribution" ? prior.totalMean : 0,
+      marginDistribution: prior.kind === "margin_total_distribution"
+        ? structuredClone(prior.artifact.marginDistribution) : { values: [0], probabilities: [1] },
+      totalDistribution: prior.kind === "margin_total_distribution"
+        ? structuredClone(prior.artifact.totalDistribution) : { values: [0], probabilities: [1] },
+      marginDistributionSha256: prior.kind === "margin_total_distribution"
+        ? prior.marginDistributionSha256 : "a".repeat(64),
+      totalDistributionSha256: prior.kind === "margin_total_distribution"
+        ? prior.totalDistributionSha256 : "b".repeat(64),
+    },
     evaluatedTargets: {
       spread: { identity: "fixture-spread", family: "targetbook", selection: "home", line: -2.5,
         price: -110, observedAt: cutoffAt },
@@ -145,7 +172,7 @@ assert.throws(
 const correction = evaluateNflMarketBrainResearchCase({
   researchManifest, partitionRole: "selection",
   sequence: correctionSequence.materialized,
-  candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+  candidate: await candidate({ sequence: correctionSequence.materialized, states: [
     { margin: -2, total: 42, probability: 0.15 }, { margin: -2, total: 44, probability: 0.15 },
     { margin: 4, total: 42, probability: 0.35 }, { margin: 4, total: 44, probability: 0.35 },
   ] }),
@@ -154,7 +181,9 @@ const correction = evaluateNflMarketBrainResearchCase({
 assert.equal(correction.disagreement, "correction");
 assert.equal(correction.baseline.winnerCorrect, false);
 assert.equal(correction.candidate.winnerCorrect, true);
+assert.equal(correction.incumbent.winnerCorrect, false);
 assert.ok(correction.deltas.brierImprovement > 0);
+assert.ok(correction.incumbentDeltas.brierImprovement > 0);
 assert.ok(Number.isFinite(correction.candidate.marginTotalDistributionLogScore));
 assert.equal(correction.baseline.marginTotalDistributionLogScore, null,
   "a marginal-only independent prior must not be assigned a fabricated joint score");
@@ -163,13 +192,17 @@ assert.equal(correction.deltas.marginTotalDistributionLogScoreImprovement, null,
 assert.ok(Math.abs(correction.deltas.marginMaeImprovement - 3.4) < 1e-9);
 assert.equal(correction.candidate.exactLines.spread?.result, "win");
 assert.equal(correction.candidate.exactLines.total?.result, "win");
+assert.ok(correction.incumbent.exactLines.spread,
+  "the released reader must be scored at the identical evaluated spread");
+assert.ok(correction.incumbent.exactLines.total,
+  "the released reader must be scored at the identical evaluated total");
 assert.equal(correction.invariants.productionInfluenceAllowed, false);
 
 const harmSequence = sequence("harm", 0.7);
 const harm = evaluateNflMarketBrainResearchCase({
   researchManifest, partitionRole: "selection",
   sequence: harmSequence.materialized,
-  candidate: candidate({ sequenceChecksum: harmSequence.materialized.checksum, states: [
+  candidate: await candidate({ sequence: harmSequence.materialized, states: [
     { margin: -2, total: 40, probability: 0.35 }, { margin: -2, total: 42, probability: 0.35 },
     { margin: 3, total: 41, probability: 0.15 }, { margin: 3, total: 43, probability: 0.15 },
   ] }),
@@ -180,7 +213,7 @@ assert.equal(harm.disagreement, "harm");
 const dependencyGood = evaluateNflMarketBrainResearchCase({
   researchManifest, partitionRole: "selection",
   sequence: correctionSequence.materialized,
-  candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+  candidate: await candidate({ sequence: correctionSequence.materialized, states: [
     { margin: -2, total: 42, probability: 0.5 },
     { margin: 4, total: 44, probability: 0.5 },
   ] }),
@@ -189,7 +222,7 @@ const dependencyGood = evaluateNflMarketBrainResearchCase({
 const dependencyWrong = evaluateNflMarketBrainResearchCase({
   researchManifest, partitionRole: "selection",
   sequence: correctionSequence.materialized,
-  candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+  candidate: await candidate({ sequence: correctionSequence.materialized, states: [
     { margin: 4, total: 42, probability: 0.5 },
     { margin: -2, total: 44, probability: 0.5 },
   ] }),
@@ -202,37 +235,35 @@ assert.ok(dependencyWrong.candidate.marginTotalDistributionLogScore! >
   dependencyGood.candidate.marginTotalDistributionLogScore!,
 "joint scoring must penalize a wrong Margin/Total pairing that marginal scores cannot see");
 
-const summary = summarizeNflMarketBrainResearchRun([correction, harm]);
+const summary = summarizeNflMarketBrainResearchRun([correction, harm], researchManifest);
 assert.deepEqual({ cases: summary.cases, corrections: summary.corrections, harms: summary.harms },
   { cases: 2, corrections: 1, harms: 1 });
+assert.equal(summary.incumbentReleases.model, "released-model-r1");
 assert.equal(summary.checksum.length, 64);
 assert.throws(
-  () => summarizeNflMarketBrainResearchRun([correction, { ...harm, candidateRelease: "candidate-r2" }]),
+  () => summarizeNflMarketBrainResearchRun(
+    [correction, { ...harm, candidateRelease: "candidate-r2" }], researchManifest),
   /mixed releases/,
 );
+const postCutoffCandidate = await candidate({ sequence: correctionSequence.materialized, states: [
+  { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
+] });
 assert.throws(
   () => evaluateNflMarketBrainResearchCase({
     researchManifest, partitionRole: "selection",
     sequence: correctionSequence.materialized,
-    candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
-      { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
-    ] }),
+    candidate: postCutoffCandidate,
     outcome: { eventId: "correction", finalAt: cutoffAt, awayScore: 20, homeScore: 24 },
   }),
   /strictly after cutoff/,
   "outcomes available at or before the feature cutoff must be rejected",
 );
-assert.throws(
-  () => evaluateNflMarketBrainResearchCase({
-    researchManifest, partitionRole: "selection",
-    sequence: correctionSequence.materialized,
-    candidate: { ...candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+await assert.rejects(
+  () => candidate({ sequence: correctionSequence.materialized, states: [
       { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
-    ] }), marginMean: 4 },
-    outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
-  }),
+    ], marginMeanOverride: 4 }),
   /incoherent with its distributions/,
-  "a candidate cannot publish point estimates that disagree with its joint-state marginals",
+  "an incoherent candidate cannot enter the append-only prediction ledger",
 );
 
 const corruptedCase = structuredClone(correctionSequence.marketCase);
@@ -268,6 +299,7 @@ function manifestPersistenceClient(
   manifest: ReturnType<typeof buildNflMarketBrainResearchManifest>,
   serverCreatedAt: string,
 ) {
+  const { checksum: _checksum, ...payload } = manifest;
   return {
     from() {
       return {
@@ -278,7 +310,31 @@ function manifestPersistenceClient(
                 id: manifest.storageId,
                 manifest_checksum: manifest.checksum,
                 manifest,
+                manifest_payload: marketBrainCanonicalJson(payload),
                 created_at: serverCreatedAt,
+              }, error: null }) };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+function predictionPersistenceClient(prediction: Record<string, unknown>) {
+  const predictionPayload = marketBrainCanonicalJson(prediction);
+  return {
+    from() {
+      return {
+        insert() {
+          return {
+            select() {
+              return { single: async () => ({ data: {
+                id: `prediction-${String(prediction.eventId)}`,
+                prediction_sha256: marketBrainSha256(prediction),
+                prediction,
+                prediction_payload: predictionPayload,
+                created_at: "2026-09-10T16:02:00.000Z",
               }, error: null }) };
             },
           };

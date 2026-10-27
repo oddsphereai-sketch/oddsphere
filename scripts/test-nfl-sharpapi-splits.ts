@@ -144,6 +144,13 @@ assert.deepEqual(
   {},
 );
 
+const undated = { ...row, event_id: "nfl_patriots_seahawks", event_start_time: null };
+assert.deepEqual(
+  matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [undated] }], "2026-08-21T17:01:00Z"),
+  {},
+  "a split row without a provider kickoff or date-bearing event identity must fail closed",
+);
+
 const crossLeague = { ...row, league: "cfl" };
 assert.deepEqual(
   matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [crossLeague] }], "2026-08-21T17:01:00Z"),

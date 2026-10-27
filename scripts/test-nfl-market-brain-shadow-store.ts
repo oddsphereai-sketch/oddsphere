@@ -10,6 +10,7 @@ import {
 } from "../lib/services/football/nflMarketBrainShadowStore";
 import { NFL_MARKET_BRAIN_SHADOW_RELEASE } from "../lib/services/football/nflMarketBrainShadow";
 import { MARKET_BRAIN_CONTRACT_RELEASE } from "../lib/services/marketBrain/marketBrainContract";
+import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrainCanonical";
 
 const shadow = {
   release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
@@ -68,6 +69,7 @@ async function main() {
   assert.deepEqual({ proposed: write.proposed, inserted: write.inserted }, { proposed: 1, inserted: 1 });
   assert.equal(inserted[0]?.shadow_sha256, hashNflMarketBrainShadow(shadow));
   assert.equal(inserted[0]?.shadow, shadow);
+  assert.equal(inserted[0]?.shadow_payload, marketBrainCanonicalJson(shadow));
   assert.equal(inserted[0]?.prior_artifact_sha256, null);
   assert.equal(inserted[0]?.contract_release, shadow.release.startsWith("nfl_market_brain_shadow")
     ? MARKET_BRAIN_CONTRACT_RELEASE : null);
@@ -88,7 +90,8 @@ async function main() {
           eq() { return this; }, gt() { return this; }, order() { return this; },
           range: async () => ({ data: [{
             id: "stored-row", provider_game_id: shadow.eventId, shadow: storedShadow,
-            shadow_sha256: hashNflMarketBrainShadow(shadow), prior_artifact_sha256: null,
+            shadow_sha256: hashNflMarketBrainShadow(shadow),
+            shadow_payload: marketBrainCanonicalJson(shadow), prior_artifact_sha256: null,
           }], error: null }),
         };
         return query;
@@ -131,6 +134,10 @@ async function main() {
 
   const route = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route.ts"), "utf8");
   assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED/);
+  assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED/,
+    "research capture must require a second explicit canary approval");
+  assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CANARY_MAX_GAMES/,
+    "research capture must have a bounded per-run canary surface");
   assert.match(route, /market_brain_persistence_error: result\.marketBrainPersistenceError/);
   assert.match(route, /result\.marketBrainCaptureFailures > 0/,
     "a captured research failure must make cron health partial rather than appearing healthy");

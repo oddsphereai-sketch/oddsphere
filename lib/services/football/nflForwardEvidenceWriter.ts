@@ -195,7 +195,13 @@ export async function runNflForwardEvidenceWriter(args: {
   exactProviderCandidate?: boolean;
   /** Research capture is opt-in and has no model/member/tracking authority. */
   marketBrainCaptureEnabled?: boolean;
+  /** Canary-only hard ceiling on distinct games captured in one writer run. */
+  marketBrainCaptureMaxGames?: number;
 }): Promise<NflForwardWriterResult> {
+  if (args.marketBrainCaptureEnabled && (!Number.isInteger(args.marketBrainCaptureMaxGames) ||
+    args.marketBrainCaptureMaxGames! < 1 || args.marketBrainCaptureMaxGames! > 4)) {
+    throw new Error("NFL Market Brain capture requires a canary limit between one and four games.");
+  }
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
   // make Postgres cancel the writer before it reaches the provider slate.
@@ -248,6 +254,9 @@ export async function runNflForwardEvidenceWriter(args: {
     capturedAt: args.now,
     unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
   });
+  const marketBrainCanaryGames = new Set(uniquePlannedGames(plans.map((plan) => plan.game))
+    .slice(0, args.marketBrainCaptureMaxGames ?? 0)
+    .map((game) => game.providerGameId));
   if (plans.length === 0) {
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
@@ -808,7 +817,6 @@ export async function runNflForwardEvidenceWriter(args: {
         playbookLine,
         playbookSplits,
         sharpApiSplits: sharpSplits,
-        sharpApiSplitSources: sharpSplitSources,
       },
       startersAndDepth: { away: awayDepth, home: homeDepth },
       providerStartersAndDepth: { away: providerAwayDepth, home: providerHomeDepth },
@@ -887,7 +895,8 @@ export async function runNflForwardEvidenceWriter(args: {
         }))),
     ];
     let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
-    if (args.marketBrainCaptureEnabled && !existingLockedRecord) {
+    if (args.marketBrainCaptureEnabled && marketBrainCanaryGames.has(plan.game.providerGameId) &&
+      !existingLockedRecord) {
       try {
         marketBrainShadow = buildNflMarketBrainShadow({
           game: plan.game,
@@ -895,6 +904,7 @@ export async function runNflForwardEvidenceWriter(args: {
           injuries,
           weather,
           independentForecast: hasTargetFreePrior ? baseOutcome : null,
+          authoritativeForecast: outcome,
           independentForecastAvailableAt: hasTargetFreePrior
             ? exactProviderScore
               ? retrievalCompletedAt

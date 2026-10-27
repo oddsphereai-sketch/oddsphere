@@ -36,7 +36,8 @@ repairs those contracts before any fitted resolver or live influence is consider
 - Research tapes are removed from the authoritative NFL payload before its append. Only after that
   succeeds is the bounded tape written to a separate append-only table. Research persistence errors
   are reported but cannot roll back authoritative evidence, member, tracking, or lock work. Capture
-  is disabled unless `NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED=true`; both the lightweight continuity
+  is disabled unless both `NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED=true` and the separate canary
+  approval flag are set; the canary is capped at four games per run. Both the lightweight continuity
   read and sidecar append have a two-second abort, and the cron reports sidecar health separately.
 - Prior-artifact reuse is scoped to the exact shadow and evidence-contract releases. A newer contract
   cannot reference prior bytes that exist only in a superseded tape family.
@@ -48,8 +49,9 @@ repairs those contracts before any fitted resolver or live influence is consider
 - One-sided, timestamp-skewed, and conflicting observed prices that cannot form a no-vig pair remain
   explicit `unpaired_observed_quote` context tokens. A later causally observed row can replace its
   earlier provider-clock-skew `future` state.
-- Simultaneous first movers with opposing directions and line/probability conflicts are labeled
-  conflicted; lexicographic participant order cannot manufacture a leader direction.
+- Simultaneous first movers with opposing directions are labeled conflicted; lexicographic participant
+  order cannot manufacture a leader direction. A price attached to a different line is no longer
+  misread as an opposing vote because the two raw numeric axes are not directly comparable.
 - The trainer input is a branded, runtime-tagged object stripped of event, artifact, raw-row, player,
   and free-text identities. Future fitters must accept that boundary rather than the audit feature object.
 - Research predictions must bind a validated persisted manifest containing fold identity, per-event
@@ -64,7 +66,7 @@ repairs those contracts before any fitted resolver or live influence is consider
   incumbent that has no joint posterior. The evaluator also carries target-safe exact selection, line,
   price, and quote time outside trainer input and computes cover/over/push probability and settled units.
 - The tournament now contains one implemented family rather than three prose-only families. Its exact
-  96-feature vector, development-only standardization, marginal likelihood, regularization grid,
+  contextual source/direction/state vector, development-fold-only standardization, joint likelihood, regularization grid,
   deterministic optimizer, convergence rule, coherent score-state construction, seed, serialization,
   observed sample count, and parameter ceiling are executable. A fixed games-per-parameter cutoff was
   removed: limited history must be disclosed and reflected in uncertainty/prospective proof, not
@@ -84,8 +86,8 @@ revision closes those defects without enabling live influence:
   selection, and line presence. Explicit `evaluated` and `same_family_as_evaluated` relations are
   excluded even when participant text is missing or inconsistent.
 - Provider event identity is part of quote-path construction. Multiple provider event ids for one
-  provider/book/market fail closed, and every intermediate line-versus-probability conflict remains a
-  conflict token rather than disappearing into endpoint movement.
+  provider/book/market fail closed. Number moves, attached prices, reversals, and cross-provider
+  disagreement remain separate rather than creating a false line-versus-price conflict.
 - SharpAPI pagination fails closed whenever provider metadata declares more rows, including a short
   page. Capture failures now make cron health partial and expose bounded failure reasons.
 - Full research tapes have a bounded checksum-verifying reader. Repeated appends are idempotent and
@@ -116,6 +118,76 @@ sequence so later sport-specific nonlinear or sequence-native candidates can com
 the evidence contract. They must be implemented, predeclared, and tested on untouched chronology;
 they cannot be added after inspecting confirmation misses.
 
+## Fourth independent re-review closure
+
+The fourth outside review found that the foundation was still too lossy and too caller-trusting for
+the intended interpretive reader. This revision keeps the end goal in focus while remaining disabled:
+
+- Every Market Brain content address now uses canonical sorted JSON. Shadow, manifest, prior,
+  coefficient, artifact, and prediction tables store canonical text beside jsonb and verify the digest
+  in Postgres, so a database restart or jsonb key reorder cannot invalidate or silently reinterpret it.
+- A research candidate must be appended before kickoff to an immutable prediction ledger. The exact
+  event, cutoff, kickoff, sequence, features, artifact, weights, manifest, posterior, and canonical
+  prediction bytes are bound together. The evaluator accepts only the private database-backed
+  attestation, and a run summary must contain the complete precommitted partition.
+- Development hyperparameters are now selected by an executable earlier-fold-to-later-fold rolling
+  tournament. The serialized transcript, every fold score, selected regularization value, training-row
+  digest, and manifest checksum are part of the immutable weights. Only an in-process result from the
+  deterministic trainer may be bound as a resolver artifact.
+- Fitting and inference now optimize the identical normalized feasible joint NFL score-state likelihood.
+  Five continuous heads may learn Margin location, Total location, Margin uncertainty, Total
+  uncertainty, and Margin/Total dependence. The frozen support includes historical legal extremes.
+- The former compact vector is expanded to preserve current target-excluded market state, professional
+  versus retail movement, leader/resistor direction, book-specific split availability and imbalance,
+  source outage/recovery transitions, QB state and changes, latest-player injury state and transitions,
+  independent-prior disagreement, and cross-market lead/lag. No fixed book weight or signal quota is
+  introduced.
+- SharpAPI split rows without either a provider kickoff or date-bearing provider event id now fail
+  closed. Identified splits are usable only in their explicit observed state; duplicate, incomplete,
+  stale, unknown, and failed rows remain missingness evidence.
+- Research-only all-book split provenance was removed from the authoritative NFL payload. Exact embedded
+  prior references must equal their relational foreign-key column, and a sentinel read distinguishes an
+  exact 5,000-row boundary from an overflow.
+- A complete normalized read-only case dossier now reconstructs each tape in chronology—every
+  observation, paired and unpaired quote, source manifest, book/source class, movement, attached
+  price, learned role, split, outage, QB/injury/weather context, exclusion, consumed feature,
+  independent prior, released-reader comparator, candidate consequence, and postgame delta—without
+  assigning a manual verdict. Raw provider bodies are not claimed; row/response hashes and accounting
+  remain the parser-audit boundary.
+- Capture requires two explicit flags plus a one-to-four-game canary limit. The existing scheduled
+  cleanup job invokes the bounded research purge only while that canary is approved.
+
+These repairs improve the review surface. They do not yet make a genuine prospective case auditable
+end to end, establish that the candidate predicts better, qualify any market action, or enable live
+influence.
+
+## Fifth independent real-tape re-review
+
+The real-tape-specific reviewer found additional blockers that code-shape review did not expose:
+
+- an untouched manifest cannot truthfully predeclare exact future provider-completion timestamps;
+  it must predeclare deterministic capture windows/attempt identities and later bind a server-created
+  complete capture-set receipt, including failures and missed attempts;
+- prediction persistence currently attests caller-submitted coherent bytes, not that the private
+  resolver actually generated those bytes from the bound artifact, weights, sequence, and features;
+- sequence/features and verified outcomes still need durable append-only receipts so a prediction
+  remains reconstructable after short-lived tape retention expires;
+- a same-score-state zero-market comparator is required to separate smoothing/support reconstruction
+  effects from learned market interpretation;
+- the fitted vector now exposes named-book quote-path identity and per-field missingness, and the
+  released semantic reader now supplies its full Margin/Total distributions for exact-line comparison,
+  but neither change is evidence of predictive benefit.
+
+A read-only production inventory on October 27 checksum-validated 107 locked T-60 NFL evidence
+payloads across Weeks 1–7; 106 were settled. Current, operational opening, playbook splits, and a
+context chronology were present for all 107 games. Exact identified SharpAPI splits were present for
+66, while Circa chronology covered 71–74 games by market and Pinnacle chronology covered 74. The
+separate `nfl_market_brain_shadow_snapshots` table exists but contains exactly zero rows. The older
+release-mixed evidence can audit the released reader and support bounded historical diagnostics, but
+it cannot be relabeled as the richer Market Brain tape. No real-tape Market Brain claim may be made
+until the blockers above are closed and a representative, no-authority canary has actually been
+captured.
+
 ## Cost and request envelope
 
 Market Brain makes zero incremental provider requests; it reuses already-fetched writer evidence.
@@ -141,9 +213,9 @@ No fitted resolver artifact exists and no predictive claim is made. Before any p
 6. Run a prospective no-authority probation and inspect every disagreement before a separate owner-
    approved production change is proposed.
 
-Before shadow capture is enabled, schedule and verify the bounded database purge function. The
-retention policy is implemented but deliberately not wired into the disabled production cron in this
-branch; capture must not be enabled with an unenforced retention lifecycle.
+Before shadow capture is enabled, apply and verify the migration, the canonical database checks, the
+two-key canary configuration, and the bounded purge through the scheduled cleanup job. Capture must
+not expand beyond the canary until measured storage and request behavior are healthy.
 
 This remediation makes the research foundation more honest and complete. It does not establish that
 following or fading any market signal improves NFL predictions, and it does not authorize going live.

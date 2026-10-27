@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { NflForwardEvidencePayload } from "./nflForwardEvidence";
@@ -12,6 +11,10 @@ import {
   marketBrainPriorArtifactSha256,
   type MarketBrainMarginTotalArtifact,
 } from "@/lib/services/marketBrain/marketBrainContract";
+import {
+  marketBrainCanonicalJson,
+  marketBrainSha256,
+} from "@/lib/services/marketBrain/marketBrainCanonical";
 
 type StoredPriorArtifactRow = {
   provider_game_id: string;
@@ -23,6 +26,7 @@ type StoredShadowRow = {
   provider_game_id: string;
   shadow: NflMarketBrainCaptureResult;
   shadow_sha256: string;
+  shadow_payload: string;
   prior_artifact_sha256: string | null;
 };
 
@@ -41,7 +45,10 @@ export async function readNflMarketBrainPriorArtifactIndex(args: {
   signal?: AbortSignal;
 }): Promise<Array<{ providerGameId: string; priorArtifactSha256: string }>> {
   const rows: StoredPriorArtifactRow[] = [];
-  for (let from = 0; from < NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK; from += NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE) {
+  for (let from = 0; from <= NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK;
+    from += NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE) {
+    const pageSize = from === NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK
+      ? 1 : NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE;
     let query = args.client
       .from("nfl_market_brain_shadow_snapshots")
       .select("provider_game_id,prior_artifact_sha256")
@@ -53,13 +60,18 @@ export async function readNflMarketBrainPriorArtifactIndex(args: {
       .not("prior_artifact_sha256", "is", null)
       .order("captured_at", { ascending: true })
       .order("id", { ascending: true })
-      .range(from, from + NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE - 1);
+      .range(from, from + pageSize - 1);
     if (args.signal) query = query.abortSignal(args.signal);
     const { data, error } = await query;
     if (error) throw new Error(`NFL Market Brain prior-artifact index read failed: ${error.message}`);
     const page = (data ?? []) as StoredPriorArtifactRow[];
+    if (from === NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK && page.length > 0) {
+      throw new Error(
+        `NFL Market Brain prior-artifact index read exceeded its bounded ${NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK}-row weekly limit.`,
+      );
+    }
     rows.push(...page);
-    if (page.length < NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE) {
+    if (page.length < pageSize) {
       return rows.map((row) => {
         if (!/^[a-f0-9]{64}$/.test(row.prior_artifact_sha256)) {
           throw new Error("NFL Market Brain prior-artifact index contains an invalid checksum.");
@@ -101,7 +113,7 @@ export async function appendNflMarketBrainShadows(args: {
         contract_release: shadow.case.release,
         provider_game_id: payload.game.providerGameId,
         prior_artifact: shadow.case.prior.artifact,
-        artifact_payload: JSON.stringify(artifactPayload),
+        artifact_payload: marketBrainCanonicalJson(artifactPayload),
       });
     }
     return [{
@@ -115,6 +127,7 @@ export async function appendNflMarketBrainShadows(args: {
       captured_at: payload.capturedAt,
       shadow,
       shadow_sha256: shadowSha256,
+      shadow_payload: marketBrainCanonicalJson(shadow),
       prior_artifact_sha256: priorArtifactSha256,
     }];
   });
@@ -147,28 +160,43 @@ export async function readNflMarketBrainShadows(args: {
   signal?: AbortSignal;
 }): Promise<NflMarketBrainCaptureResult[]> {
   const rows: StoredShadowRow[] = [];
-  for (let from = 0; from < NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK; from += NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE) {
+  for (let from = 0; from <= NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK;
+    from += NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE) {
+    const pageSize = from === NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK
+      ? 1 : NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE;
     let query = args.client.from("nfl_market_brain_shadow_snapshots")
-      .select("id,provider_game_id,shadow,shadow_sha256,prior_artifact_sha256")
+      .select("id,provider_game_id,shadow,shadow_sha256,shadow_payload,prior_artifact_sha256")
       .eq("season", args.season).eq("week", args.week)
       .eq("shadow_release", NFL_MARKET_BRAIN_SHADOW_RELEASE)
       .eq("contract_release", MARKET_BRAIN_CONTRACT_RELEASE)
       .gt("expires_at", new Date().toISOString())
       .order("captured_at", { ascending: true }).order("id", { ascending: true })
-      .range(from, from + NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE - 1);
+      .range(from, from + pageSize - 1);
     if (args.signal) query = query.abortSignal(args.signal);
     const { data, error } = await query;
     if (error) throw new Error(`NFL Market Brain shadow read failed: ${error.message}`);
     const page = (data ?? []) as StoredShadowRow[];
-    rows.push(...page);
-    if (page.length < NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE) break;
-    if (rows.length >= NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK) {
+    if (from === NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK && page.length > 0) {
       throw new Error(`NFL Market Brain shadow read exceeded ${NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK} rows.`);
     }
+    rows.push(...page);
+    if (page.length < pageSize) break;
   }
   for (const row of rows) {
-    if (hashNflMarketBrainShadow(row.shadow) !== row.shadow_sha256) {
+    if (marketBrainCanonicalJson(row.shadow) !== row.shadow_payload ||
+      hashNflMarketBrainShadow(row.shadow) !== row.shadow_sha256 ||
+      marketBrainSha256(JSON.parse(row.shadow_payload)) !== row.shadow_sha256) {
       throw new Error(`NFL Market Brain stored shadow checksum mismatch: ${row.id}`);
+    }
+    const embeddedPrior = "case" in row.shadow
+      ? row.shadow.case.prior.kind === "margin_total_distribution"
+        ? row.shadow.case.prior.artifact.sha256
+        : row.shadow.case.prior.kind === "margin_total_distribution_ref"
+        ? row.shadow.case.prior.artifactSha256
+        : null
+      : null;
+    if (embeddedPrior !== row.prior_artifact_sha256) {
+      throw new Error(`NFL Market Brain stored shadow prior reference mismatch: ${row.id}`);
     }
   }
   const needed = [...new Set(rows.flatMap((row) => row.prior_artifact_sha256 ? [row.prior_artifact_sha256] : []))];
@@ -221,15 +249,5 @@ export async function purgeExpiredNflMarketBrainResearch(args: {
 }
 
 export function hashNflMarketBrainShadow(shadow: NflMarketBrainCaptureResult): string {
-  return createHash("sha256").update(stableJson(shadow)).digest("hex");
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([first], [second]) => first.localeCompare(second))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
+  return marketBrainSha256(shadow);
 }

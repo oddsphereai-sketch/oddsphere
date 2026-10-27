@@ -10,7 +10,7 @@ import type {
   NflRegularOutcomeConfidence,
 } from "./nflRegularDecisionEvidence";
 import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
-import type { NflRegularSharpSplitSet, NflSharpApiSplitSource } from "./sharpApiNflSplits";
+import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import type { NflPaidProjectionShadow } from "./balldontlieNflWeeklyProjectionShadow";
@@ -126,8 +126,6 @@ export type NflForwardEvidencePayload = {
     playbookLine: NflForwardPlaybookLine | null;
     playbookSplits: NflForwardPlaybookSplitSet | null;
     sharpApiSplits: NflRegularSharpSplitSet | null;
-    /** All requested split books and explicit missing/invalid states; shadow-only. */
-    sharpApiSplitSources?: NflSharpApiSplitSource[];
   };
   startersAndDepth: {
     away: NflForwardTeamDepthSnapshot;

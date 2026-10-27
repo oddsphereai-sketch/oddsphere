@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { marketBrainSha256 } from "./marketBrainCanonical";
 
 import {
   MARKET_BRAIN_CONTRACT_RELEASE,
@@ -6,6 +6,7 @@ import {
   assertMarketBrainEvaluatedTarget,
   type MarketBrainCase,
   type MarketBrainExpectedInput,
+  type MarketBrainIncumbentComparator,
   type MarketBrainMarket,
   type MarketBrainObservation,
   type MarketBrainObservedRole,
@@ -13,7 +14,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r9_identity_conflict_safe" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r12_capture_membership_incumbent_distribution" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -92,12 +93,15 @@ export type NflMarketBrainSequence = {
   startsAt: string;
   cutoffAt: string;
   captureWindow: { firstCapturedAt: string; lastCapturedAt: string };
+  captureMembership: Array<{ evaluatedAt: string; caseSha256: string }>;
   prior: MarketBrainPrior;
+  incumbentComparator: MarketBrainIncumbentComparator | null;
   targetFamilyByMarket: Record<FullGameMarket, string | null>;
   /** Target-safe scoring metadata. This is never exported to trainer input. */
   evaluationEnvelope: MarketBrainCase["evaluatedTargets"];
   observations: NflMarketBrainMaterializedObservation[];
   expectedInputs: NflMarketBrainMaterializedExpectedInput[];
+  sourceManifests: MarketBrainCase["sourceManifests"];
   quotePaths: NflMarketBrainQuotePath[];
   crossMarket: NflMarketBrainCrossMarket;
   sourceAvailability: {
@@ -172,6 +176,11 @@ export function materializeNflMarketBrainSequence(args: {
     (["moneyline", "spread", "total"] as const).map((market) =>
       [market, latestCase.evaluatedTargets[market]?.family ?? null]),
   ) as Record<FullGameMarket, string | null>;
+  const targetFamiliesByMarket = Object.fromEntries(
+    (["moneyline", "spread", "total"] as const).map((market) => [market, new Set(eligibleCases
+      .flatMap((marketCase) => marketCase.evaluatedTargets[market]?.family
+        ? [canonical(marketCase.evaluatedTargets[market]!.family)] : []))]),
+  ) as Record<FullGameMarket, Set<string>>;
 
   const inputObservations = eligibleCases.flatMap((item) => item.observations);
   const deduplicated = deduplicate(inputObservations);
@@ -181,13 +190,12 @@ export function materializeNflMarketBrainSequence(args: {
   const observations = deduplicated.map((observation): NflMarketBrainMaterializedObservation => {
     const reasons: NflMarketBrainMaterializedObservation["exclusionReasons"] = [];
     if (Date.parse(observation.timing.availableAt) > cutoff) reasons.push("after_cutoff");
-    const targetFamily = isFullGameMarket(observation.market) ? targetFamilyByMarket[observation.market] : null;
     if (isMarketEvidence(observation) && observation.targetRelation === "evaluated") {
       reasons.push("evaluated_target");
     } else if (isMarketEvidence(observation) && observation.targetRelation === "same_family_as_evaluated") {
       reasons.push("same_target_family");
-    } else if (isMarketEvidence(observation) && targetFamily !== null &&
-      canonical(observation.source.participant) === canonical(targetFamily)) {
+    } else if (isMarketEvidence(observation) && isFullGameMarket(observation.market) &&
+      targetFamiliesByMarket[observation.market].has(canonical(observation.source.participant))) {
       reasons.push("same_target_family");
     }
     if (observation.modality === "public_split" && observation.targetRelation === "unknown") {
@@ -205,9 +213,9 @@ export function materializeNflMarketBrainSequence(args: {
   });
   const expectedInputs = eligibleCases.flatMap((marketCase) => marketCase.expectedInputs.map(
     (input): NflMarketBrainMaterializedExpectedInput => {
-      const targetFamily = isFullGameMarket(input.market) ? targetFamilyByMarket[input.market] : null;
       const exclusionReasons: NflMarketBrainMaterializedExpectedInput["exclusionReasons"] =
-        input.participant !== null && targetFamily !== null && canonical(input.participant) === canonical(targetFamily)
+        input.participant !== null && isFullGameMarket(input.market) &&
+          targetFamiliesByMarket[input.market].has(canonical(input.participant))
           ? ["same_target_family"] : [];
       return { input, capturedAt: marketCase.evaluatedAt, eligible: exclusionReasons.length === 0, exclusionReasons };
     },
@@ -222,7 +230,7 @@ export function materializeNflMarketBrainSequence(args: {
     ["unavailable", "identity_mismatch", "future"].includes(row.input.availability)).length;
   const observed = targetSafeInputs.filter((row) => row.input.availability === "observed").length;
   const availabilitySnapshots = eligibleCases.map((marketCase) =>
-    availabilitySnapshot(marketCase, targetFamilyByMarket));
+    availabilitySnapshot(marketCase, targetFamiliesByMarket));
   const sourceAvailability = {
     regime: availabilitySnapshots.at(-1)!.regime,
     targetSafeExpectedInputs: targetSafeInputs.length,
@@ -241,11 +249,17 @@ export function materializeNflMarketBrainSequence(args: {
       firstCapturedAt: eligibleCases[0]!.evaluatedAt,
       lastCapturedAt: latestCase.evaluatedAt,
     },
+    captureMembership: eligibleCases.map((marketCase) => ({
+      evaluatedAt: marketCase.evaluatedAt,
+      caseSha256: marketBrainSha256(marketCase),
+    })),
     prior: latestPrior,
+    incumbentComparator: structuredClone(latestCase.incumbentComparator ?? null),
     targetFamilyByMarket,
     evaluationEnvelope: structuredClone(latestCase.evaluatedTargets),
     observations,
     expectedInputs,
+    sourceManifests: structuredClone(manifests),
     quotePaths,
     crossMarket,
     sourceAvailability,
@@ -297,12 +311,12 @@ export function assertNflMarketBrainSequence(sequence: NflMarketBrainSequence): 
 
 function availabilitySnapshot(
   marketCase: MarketBrainCase,
-  targetFamilyByMarket: Record<FullGameMarket, string | null>,
+  targetFamiliesByMarket: Record<FullGameMarket, Set<string>>,
 ): NflMarketBrainSequence["sourceAvailability"]["snapshots"][number] {
   const safe = marketCase.expectedInputs.filter((input) => {
     if (input.expectation === "unsupported") return false;
-    const targetFamily = isFullGameMarket(input.market) ? targetFamilyByMarket[input.market] : null;
-    return input.participant === null || targetFamily === null || canonical(input.participant) !== canonical(targetFamily);
+    return input.participant === null || !isFullGameMarket(input.market) ||
+      !targetFamiliesByMarket[input.market].has(canonical(input.participant));
   });
   const count = (availability: MarketBrainExpectedInput["availability"]) =>
     safe.filter((input) => input.availability === availability).length;
@@ -591,19 +605,22 @@ function stepDirectionConflict(first: NflMarketBrainQuotePoint, second: NflMarke
 function netDirection(path: NflMarketBrainQuotePath): -1 | 0 | 1 {
   const line = path.lineDelta ?? 0;
   const probability = path.firstFairProbabilityDelta;
-  if (line !== 0 && probability !== 0 && Math.sign(line) !== Math.sign(probability)) return 0;
+  // When the number moves, its direction owns the path; the new attached
+  // price is compensation at that different number, not an opposing signal.
   return Math.sign(line !== 0 ? line : probability) as -1 | 0 | 1;
 }
 
 function directionConflict(
-  openingLine: number | null,
-  currentLine: number | null,
-  openingProbability: number,
-  currentProbability: number,
+  _openingLine: number | null,
+  _currentLine: number | null,
+  _openingProbability: number,
+  _currentProbability: number,
 ): boolean {
-  const line = openingLine === null || currentLine === null ? 0 : currentLine - openingLine;
-  const probability = currentProbability - openingProbability;
-  return line !== 0 && probability !== 0 && Math.sign(line) !== Math.sign(probability);
+  // A line and its attached price are one economic quote. Their raw numeric
+  // signs are not comparable when the line changes (for example 44.5/-110 to
+  // 45.5/+100), and a price-only move has no second axis to contradict it.
+  // Cross-provider and cross-market disagreement is resolved separately.
+  return false;
 }
 
 function legacyBuybackDistance(points: NflMarketBrainQuotePoint[]): number {
@@ -672,5 +689,5 @@ function nullableTimestamp(value: string | null): number {
 }
 
 function sha256(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return marketBrainSha256(value);
 }

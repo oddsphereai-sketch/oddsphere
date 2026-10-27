@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
+import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r8_validated_evaluated_targets" as const;
+  "market_brain_contract_2026_10_27_r11_full_incumbent_distribution" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -163,6 +163,25 @@ export type MarketBrainBlindSpot = {
   status: "unobservable_by_current_feeds";
 };
 
+export type MarketBrainIncumbentComparator = {
+  kind: "released_semantic_reader";
+  availableAt: string;
+  releases: {
+    model: string | null;
+    calibration: string | null;
+    decision: string | null;
+  };
+  awayWinProbability: number;
+  homeWinProbability: number;
+  tieProbability: number;
+  marginMean: number;
+  totalMean: number;
+  marginDistribution: MarketBrainDiscreteDistribution;
+  totalDistribution: MarketBrainDiscreteDistribution;
+  marginDistributionSha256: string;
+  totalDistributionSha256: string;
+};
+
 export type MarketBrainCase = {
   release: typeof MARKET_BRAIN_CONTRACT_RELEASE;
   sport: MarketBrainSport;
@@ -175,6 +194,7 @@ export type MarketBrainCase = {
   captureLimitations: string[];
   subject: MarketBrainSubject;
   prior: MarketBrainPrior;
+  incumbentComparator?: MarketBrainIncumbentComparator | null;
   evaluatedTargets: Partial<Record<MarketBrainMarket, MarketBrainEvaluatedTarget>>;
   observations: MarketBrainObservation[];
   sourceManifests: MarketBrainSourceManifest[];
@@ -310,6 +330,40 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
   if (!Number.isFinite(Date.parse(args.evaluatedAt))) throw new Error("Market Brain evaluatedAt is invalid.");
   if (!Number.isFinite(Date.parse(args.subject.startsAt))) throw new Error("Market Brain startsAt is invalid.");
   assertMarketBrainPrior(args.prior, args.eventId, args.evaluatedAt);
+  if (args.incumbentComparator) {
+    const comparator = args.incumbentComparator;
+    const probabilityMass = comparator.awayWinProbability + comparator.homeWinProbability +
+      comparator.tieProbability;
+    if (comparator.kind !== "released_semantic_reader" ||
+      !Number.isFinite(Date.parse(comparator.availableAt)) ||
+      Date.parse(comparator.availableAt) > Date.parse(args.evaluatedAt) ||
+      ![comparator.awayWinProbability, comparator.homeWinProbability, comparator.tieProbability]
+        .every((value) => Number.isFinite(value) && value >= 0 && value <= 1) ||
+      Math.abs(probabilityMass - 1) > 1e-9 ||
+      ![comparator.marginMean, comparator.totalMean].every(Number.isFinite) ||
+      ![comparator.marginDistributionSha256, comparator.totalDistributionSha256]
+        .every((value) => /^[a-f0-9]{64}$/.test(value))) {
+      throw new Error("Market Brain incumbent comparator is invalid or unavailable at evaluation.");
+    }
+    assertDistribution(comparator.marginDistribution, "incumbent margin");
+    assertDistribution(comparator.totalDistribution, "incumbent total");
+    const incumbentWin = comparator.marginDistribution.values.reduce((result, margin, index) => {
+      const probability = comparator.marginDistribution.probabilities[index]!;
+      if (margin < 0) result.away += probability;
+      else if (margin > 0) result.home += probability;
+      else result.tie += probability;
+      return result;
+    }, { away: 0, home: 0, tie: 0 });
+    if (comparator.marginDistributionSha256 !== marketBrainSha256(comparator.marginDistribution) ||
+      comparator.totalDistributionSha256 !== marketBrainSha256(comparator.totalDistribution) ||
+      Math.abs(comparator.marginMean - distributionMean(comparator.marginDistribution)) > 1e-9 ||
+      Math.abs(comparator.totalMean - distributionMean(comparator.totalDistribution)) > 1e-9 ||
+      Math.abs(comparator.awayWinProbability - incumbentWin.away) > 1e-9 ||
+      Math.abs(comparator.homeWinProbability - incumbentWin.home) > 1e-9 ||
+      Math.abs(comparator.tieProbability - incumbentWin.tie) > 1e-9) {
+      throw new Error("Market Brain incumbent comparator distributions are incoherent.");
+    }
+  }
   const observationIds = new Set<string>();
   for (const observation of args.observations) {
     if (observation.eventId !== args.eventId || observation.sport !== args.sport) {
@@ -328,9 +382,21 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
     if (observation.observedAt !== observation.timing.providerObservedAt) {
       throw new Error(`Market Brain provider observation time alias diverged: ${observation.id}`);
     }
-    if (Date.parse(observation.timing.availableAt) < Date.parse(observation.timing.ingestedAt) ||
+    const evaluatedAt = Date.parse(args.evaluatedAt);
+    const observedAt = observation.timing.providerObservedAt === null
+      ? null : Date.parse(observation.timing.providerObservedAt);
+    const fetchedAt = observation.timing.providerFetchedAt === null
+      ? null : Date.parse(observation.timing.providerFetchedAt);
+    const ingestedAt = Date.parse(observation.timing.ingestedAt);
+    const availableAt = Date.parse(observation.timing.availableAt);
+    if (availableAt < ingestedAt ||
       (observation.timing.providerFetchedAt !== null &&
-        Date.parse(observation.timing.availableAt) < Date.parse(observation.timing.providerFetchedAt))) {
+        availableAt < Date.parse(observation.timing.providerFetchedAt)) ||
+      (observedAt !== null && fetchedAt !== null && fetchedAt < observedAt) ||
+      (observedAt !== null && observedAt > availableAt) ||
+      (observation.availability !== "future" &&
+        (availableAt > evaluatedAt || ingestedAt > evaluatedAt ||
+          (fetchedAt !== null && fetchedAt > evaluatedAt) || (observedAt !== null && observedAt > evaluatedAt)))) {
       throw new Error(`Market Brain observation was available before fetch or ingestion: ${observation.id}`);
     }
     for (const [name, feature] of Object.entries(observation.values)) {
@@ -464,9 +530,6 @@ function distributionMean(distribution: MarketBrainDiscreteDistribution): number
   return distribution.values.reduce((sum, value, index) => sum + value * distribution.probabilities[index]!, 0);
 }
 
-function marketBrainSha256(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
 
 function timestamp(value: string | null): number {
   if (value === null) return Number.POSITIVE_INFINITY;

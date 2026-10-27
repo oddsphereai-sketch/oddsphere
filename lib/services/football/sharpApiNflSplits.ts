@@ -346,7 +346,7 @@ function rowDateMatches(row: SharpApiNflSplitRow, expectedDate: string): boolean
   const eventStart = validTimestamp(row.event_start_time);
   if (eventStart !== null) return nflLocalDate(eventStart) === expectedDate;
   const eventIdDate = text(row.event_id)?.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
-  return eventIdDate === null || eventIdDate === expectedDate;
+  return eventIdDate !== null && eventIdDate === expectedDate;
 }
 
 function nflLocalDate(value: string): string {

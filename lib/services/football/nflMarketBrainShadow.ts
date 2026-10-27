@@ -22,6 +22,7 @@ import type {
 } from "./footballRawPriceManifest";
 import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
+import { marketBrainSha256 } from "@/lib/services/marketBrain/marketBrainCanonical";
 import type { NflForwardWeatherSnapshot } from "./nflForwardEvidence";
 import {
   NFL_SHARP_API_SPLITS_RELEASE,
@@ -31,7 +32,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r9_ingest_time_identity_safe" as const;
+  "nfl_market_brain_shadow_2026_10_27_r11_full_incumbent_distribution" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -82,6 +83,10 @@ export function buildNflMarketBrainShadow(args: {
     marginDistribution: MarketBrainDiscreteDistribution;
     totalDistribution: MarketBrainDiscreteDistribution;
   } | null;
+  authoritativeForecast: {
+    marginDistribution: MarketBrainDiscreteDistribution;
+    totalDistribution: MarketBrainDiscreteDistribution;
+  };
   /** Intrinsic availability of the independent input, retained across cache reuse. */
   independentForecastAvailableAt: string | null;
   independentForecastProvenance: "fresh" | "stored_cache" | "stored_after_failed_refresh" | "static_artifact" | "unavailable";
@@ -150,6 +155,24 @@ export function buildNflMarketBrainShadow(args: {
       startsAt: args.game.scheduledStart,
     },
     prior,
+    incumbentComparator: {
+      kind: "released_semantic_reader",
+      availableAt: tapeIngestedAt(args),
+      releases: {
+        model: args.capture.releases.model,
+        calibration: args.capture.releases.calibration,
+        decision: args.capture.releases.decision,
+      },
+      awayWinProbability: args.capture.authoritative.win[0],
+      homeWinProbability: args.capture.authoritative.win[1],
+      tieProbability: args.capture.authoritative.win[2],
+      marginMean: args.capture.authoritative.expected[1] - args.capture.authoritative.expected[0],
+      totalMean: args.capture.authoritative.expected[1] + args.capture.authoritative.expected[0],
+      marginDistribution: structuredClone(args.authoritativeForecast.marginDistribution),
+      totalDistribution: structuredClone(args.authoritativeForecast.totalDistribution),
+      marginDistributionSha256: marketBrainSha256(args.authoritativeForecast.marginDistribution),
+      totalDistributionSha256: marketBrainSha256(args.authoritativeForecast.totalDistribution),
+    },
     evaluatedTargets: Object.fromEntries(
       (["moneyline", "spread", "total"] as const).flatMap((market) => {
         const target = args.capture.markets[market].evaluated;
@@ -240,13 +263,20 @@ function exactPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
     marginDistribution: args.independentForecast.marginDistribution,
     totalDistribution: args.independentForecast.totalDistribution,
   });
-  if (prior.marginDistributionSha256 !== expected.pmf.margin.sha256 ||
-    prior.totalDistributionSha256 !== expected.pmf.total.sha256 ||
+  // The authoritative forward-context summary predates Market Brain and uses
+  // its frozen JSON serialization. Verify compatibility at that boundary,
+  // while the research artifact itself uses canonical content addresses.
+  if (legacyDistributionSha256(prior.artifact.marginDistribution) !== expected.pmf.margin.sha256 ||
+    legacyDistributionSha256(prior.artifact.totalDistribution) !== expected.pmf.total.sha256 ||
     Math.abs(prior.marginMean - expected.pmf.margin.mean) > 1e-9 ||
     Math.abs(prior.totalMean - expected.pmf.total.mean) > 1e-9) {
     throw new Error("NFL Market Brain exact prior diverged from the captured prior summary.");
   }
   return prior;
+}
+
+function legacyDistributionSha256(distribution: MarketBrainDiscreteDistribution): string {
+  return createHash("sha256").update(JSON.stringify(distribution)).digest("hex");
 }
 
 function addContext(
@@ -662,3 +692,4 @@ function requiredPriorAvailableAt(args: Parameters<typeof buildNflMarketBrainSha
   return new Date(Date.parse(value)).toISOString();
 }
 function byteLength(value: unknown) { return Buffer.byteLength(JSON.stringify(value)); }
+import { createHash } from "node:crypto";

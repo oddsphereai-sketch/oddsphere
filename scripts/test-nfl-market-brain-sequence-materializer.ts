@@ -12,6 +12,8 @@ import {
   vectorizeNflMarketBrainTrainerInput,
 } from "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
+import { buildNflMarketBrainCaseAudit } from
+  "../lib/services/marketBrain/nflMarketBrainCaseAudit";
 
 const cutoffAt = "2026-10-26T20:00:00.000Z";
 const eventId = "nfl-sequence-fixture";
@@ -123,9 +125,11 @@ const observations = [
   quote({ participant: "betmgm", selection: "away", line: 3, price: null,
     observedAt: "2026-10-26T19:30:00.000Z", availability: "incomplete" }),
   quote({ participant: "circa", selection: "away", line: 3.5, price: -112,
-    observedAt: "2026-10-26T19:55:00.000Z", availableAt: "2026-10-26T20:05:00.000Z" }),
+    observedAt: "2026-10-26T19:55:00.000Z", availableAt: "2026-10-26T20:05:00.000Z",
+    availability: "future" }),
   quote({ participant: "circa", selection: "home", line: -3.5, price: -108,
-    observedAt: "2026-10-26T19:55:00.000Z", availableAt: "2026-10-26T20:05:00.000Z" }),
+    observedAt: "2026-10-26T19:55:00.000Z", availableAt: "2026-10-26T20:05:00.000Z",
+    availability: "future" }),
 ];
 const independentPrior = bindMarketBrainMarginTotalPrior({
   eventId,
@@ -201,8 +205,8 @@ assert.equal(materialized.accounting.targetExcluded, 5,
 assert.equal(materialized.accounting.targetExcludedExpectedInputs, 1,
   "same-family source missingness must not become a backdoor target feature");
 assert.equal(materialized.accounting.afterCutoff, 2, "provider rows unavailable by cutoff must not enter features");
-assert.equal(materialized.accounting.unavailableOrUnsupported, 1,
-  "masked incomplete evidence remains visible to the nuanced reader instead of disappearing");
+assert.equal(materialized.accounting.unavailableOrUnsupported, 3,
+  "masked incomplete and explicitly future evidence must remain accounted for instead of disappearing");
 assert.equal(materialized.quotePaths.some((path) => path.participant === "draftkings"), false);
 assert.equal(materialized.quotePaths.some((path) => path.participant === "betmgm"), false);
 
@@ -240,7 +244,9 @@ assert.doesNotMatch(JSON.stringify(resolverFeatures),
   "high-cardinality provider, player, free-text, and raw-hash identities must not become trainer features");
 const trainerInput = nflMarketBrainTrainerInput(resolverFeatures);
 const vector = vectorizeNflMarketBrainTrainerInput(trainerInput);
-assert.equal(vector.names.length, 96);
+assert.equal(vector.names.length, vector.values.length);
+assert.ok(vector.names.length > 96,
+  "the executable vector must retain source, current-state, split, transition, and cross-market nuance");
 assert.equal(new Set(vector.names).size, vector.names.length,
   "the executable vector schema must contain every contextual feature exactly once");
 const feature = (name: string) => vector.values[vector.names.indexOf(name)]!;
@@ -248,6 +254,8 @@ assert.ok(feature("spread_key_crossing_count_mean") > 0,
   "key-number transitions must enter the executable vector rather than remain audit-only prose");
 assert.ok(feature("spread_professional_source_rate") > 0,
   "professional-versus-retail context must be learnable without a fixed sportsbook weight");
+assert.equal(feature("spread_circa_observed"), 1,
+  "named professional quote paths must remain distinguishable to the learned model");
 assert.ok(feature("aligned_spread_probability_delta") !== 0,
   "cross-market state must interact with price movement instead of acting as an isolated vote");
 assert.equal(trainerInput.independentPrior.availableSecondsBeforeCutoff, 7_200);
@@ -255,6 +263,21 @@ assert.equal(JSON.stringify(trainerInput).includes(eventId), false,
   "event identity must remain provenance, never a trainer shortcut");
 assert.equal(JSON.stringify(trainerInput).includes(independentPrior.artifact.sha256), false,
   "the content-addressed prior hash must remain provenance, never a trainer shortcut");
+const caseAudit = buildNflMarketBrainCaseAudit({ sequence: materialized, features: resolverFeatures });
+assert.equal(caseAudit.timeline.every((row, index, rows) => index === 0 ||
+  Date.parse(rows[index - 1]!.observedAt) <= Date.parse(row.observedAt)), true,
+"the real-tape review dossier must preserve chronological quote order");
+assert.equal(caseAudit.splitEvidence.some((row) => row.sportsbook === "circa" && row.eligible), true,
+  "identified professional split evidence must remain independently inspectable");
+assert.equal(caseAudit.excludedEvidence.some((row) => row.reasons.includes("same_target_family")), true,
+  "the dossier must show what was excluded so a reviewer can detect hidden evidence gaps");
+assert.equal(caseAudit.observationLedger.length, materialized.observations.length,
+  "the dossier must retain every normalized observation, including unpaired and excluded rows");
+assert.equal(caseAudit.sourceManifests.length, materialized.sourceManifests.length,
+  "the dossier must retain raw-response hash and row-accounting manifests");
+assert.equal(caseAudit.consumedFeatureVector.names.length, vector.names.length,
+  "the dossier must expose the exact vector consumed by the fitted model");
+assert.equal(caseAudit.invariants.manualVerdictAssigned, false);
 
 const targetIdentityWithoutExactMatch = structuredClone(marketCase);
 for (const observation of targetIdentityWithoutExactMatch.observations) {
@@ -344,10 +367,10 @@ directionConflictCase.observations.push(
 );
 const conflictPath = materializeNflMarketBrainSequence({ cases: [directionConflictCase], cutoffAt })
   .quotePaths.find((path) => path.participant === "conflictpath")!;
-assert.equal(conflictPath.directionConflictCount, 2,
-  "opposing line and probability moves at intermediate steps must remain explicit");
-assert.equal(conflictPath.observedRole, "conflicted",
-  "a path made entirely of conflicting steps must not be mislabeled static");
+assert.equal(conflictPath.directionConflictCount, 0,
+  "a new price attached to a different line must not be misread as an opposing market vote");
+assert.equal(conflictPath.observedRole, "reversal",
+  "the actual line move and buyback must remain visible without inventing a line-versus-price conflict");
 
 const eventIdentityCase = structuredClone(marketCase);
 eventIdentityCase.observations.push(

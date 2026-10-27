@@ -145,19 +145,19 @@ roles. The research evaluator rejects labels available at or before the case, mi
 duplicate events, and non-chronological partition manifests; it records corrections and harms
 against the exact prior baseline. Feed-side omissions, bounded
 pagination, suspension lifecycle, limits, and private order flow remain explicit blind spots.
-`nfl_market_brain_resolver_contract_2026_10_27_r7_interpretive_artifact_binding` freezes the first executable
+`nfl_market_brain_resolver_contract_2026_10_27_r8_contextual_joint_exponential` freezes the first executable
 regularized joint-residual family, its exact feature vector and regularization grid, rolling-origin
 selection objective, artifact provenance, and shadow-only authority under
-`nfl_market_brain_tournament_2026_10_27_r7_interpretive_artifact_binding`. A candidate must emit one feasible
+`nfl_market_brain_tournament_2026_10_27_r8_contextual_joint_exponential`. A candidate must emit one feasible
 joint NFL score-state distribution; Margin, Total, expected team scores, and winner probabilities are
 derived from it. The independent action-probability head was removed because it could contradict that
 posterior; the resolver records only factual prior/posterior deltas and boundary crossings, which
 cannot directly assign points, grades, or stakes. No fitted resolver artifact exists, so gate 3 has
 not been passed.
-`nfl_market_brain_resolver_features_2026_10_27_r6_fixed_executable_vector` is the sole eligible trainer
+`nfl_market_brain_resolver_features_2026_10_27_r8_book_specific_field_missingness_vector` is the sole eligible trainer
 boundary: it preserves the exact independent prior and all eligible continuous paths, splits,
 context, chronology, and missingness, but excludes evaluated-family prices, splits, and expected-input
-states. Its fixed 96-value vector has a deterministic development-only fitter; target-only additions
+states. Its fixed source/direction/state vector has a deterministic rolling-development fitter; target-only additions
 cannot change its feature payload hash. No fitted artifact or predictive claim exists yet.
 This first executable family is a falsifiable baseline, not a ceiling on Market Brain sophistication.
 It must earn its place against the independent model and semantic reader. A sequence-native or

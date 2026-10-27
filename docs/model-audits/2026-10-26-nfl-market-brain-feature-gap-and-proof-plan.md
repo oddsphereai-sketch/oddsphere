@@ -131,7 +131,7 @@ model prior release that was available then. Produce a variable-length sequence/
 continuous no-vig, hold, number movement, price movement, lead/lag, persistence, reversal, buyback,
 key-number transition, disagreement, and cross-market coherence from that bounded tape.
 
-`nfl_market_brain_sequence_materializer_2026_10_27_r9_identity_conflict_safe` implements this
+`nfl_market_brain_sequence_materializer_2026_10_27_r12_capture_membership_incumbent_distribution` implements this
 boundary without a resolver: it refuses mixed events/releases, applies Oddsphere availability time
 before feature construction, masks incomplete/unsupported rows, fails conflicting immutable
 observation identities, pairs sides only when line/time identity agrees, and derives event roles from
@@ -140,7 +140,7 @@ missingness as well as prices, so the evaluated sportsbook cannot re-enter throu
 feature. It re-verifies the exact prior artifact rather than trusting stored summary fields. Data
 absence otherwise remains a learned missingness regime.
 
-`nfl_market_brain_research_evaluator_2026_10_27_r8_capture_window_bound` derives its baseline winner
+`nfl_market_brain_research_evaluator_2026_10_27_r10_released_reader_comparator` derives its baseline winner
 probabilities and Margin/Total moments from that exact artifact. It accepts outcomes only after both
 the feature cutoff and game start, requires candidate training to end before the case, binds the
 candidate to the immutable sequence checksum, rejects mixed-release aggregation, and reports Brier,
@@ -149,7 +149,8 @@ corrections, and harms. The companion chronological
 manifest prevents opened development evidence from being relabeled selection or confirmation. The
 evaluator accepts only a manifest attested by an append-only database receipt created before its
 earliest selection, confirmation, or prospective capture window; a JSON copy or caller-declared timestamp is insufficient. A
-candidate must submit complete Margin and Total distributions whose winner probabilities and moments
+candidate must also have an append-only pregame prediction receipt binding the exact event, sequence,
+features, artifact, weights, and canonical posterior bytes. It must submit complete Margin and Total distributions whose winner probabilities and moments
 exactly reconcile; an incoherent set of point estimates is rejected before scoring.
 
 ### 3. Executable learned resolver
@@ -165,8 +166,8 @@ No eligible family may use a required signal count, fixed sportsbook weight, uni
 automatic favorite/underdog rule, automatic line reflection, one-book command, or game-specific
 exception.
 
-`nfl_market_brain_resolver_contract_2026_10_27_r7_interpretive_artifact_binding` now enforces this boundary and
-`nfl_market_brain_tournament_2026_10_27_r7_interpretive_artifact_binding` freezes the one executable family,
+`nfl_market_brain_resolver_contract_2026_10_27_r8_contextual_joint_exponential` now enforces this boundary and
+`nfl_market_brain_tournament_2026_10_27_r8_contextual_joint_exponential` freezes the one executable family,
 its regularization grid, rolling-origin split policy, predictive selection objective, and fitted-
 parameter ceiling before confirmation outcomes are inspected. The
 13 behavior stories advance to `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` and
@@ -176,7 +177,7 @@ out-of-window training, impossible football score states, incoherent Margin/Tota
 probability mass, and any production authority. This is a contract/tournament freeze, not a trained
 model or evidence of predictive improvement.
 
-`nfl_market_brain_resolver_features_2026_10_27_r6_fixed_executable_vector` is the only eligible trainer
+`nfl_market_brain_resolver_features_2026_10_27_r8_book_specific_field_missingness_vector` is the only eligible trainer
 input. It exports the exact independent prior, every eligible continuous quote path, non-price
 context and split tokens, explicit eligible missingness, cross-market chronology, and source regime;
 it omits audit hashes and every evaluated-family observation or missingness state. Its payload hash

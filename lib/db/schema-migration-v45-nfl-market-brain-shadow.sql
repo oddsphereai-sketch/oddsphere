@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_shadow_snapshots (
   captured_at timestamptz NOT NULL,
   shadow jsonb NOT NULL,
   shadow_sha256 char(64) NOT NULL CHECK (shadow_sha256 ~ '^[0-9a-f]{64}$'),
+  shadow_payload text NOT NULL,
   prior_artifact_sha256 char(64) CHECK (
     prior_artifact_sha256 IS NULL OR prior_artifact_sha256 ~ '^[0-9a-f]{64}$'
   ),
@@ -42,7 +43,15 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_shadow_snapshots (
   UNIQUE (shadow_release, provider_game_id, stage, captured_at, shadow_sha256),
   FOREIGN KEY (prior_artifact_sha256)
     REFERENCES public.nfl_market_brain_prior_artifacts(artifact_sha256)
-    ON DELETE RESTRICT
+    ON DELETE RESTRICT,
+  CHECK (shadow_payload::jsonb = shadow),
+  CHECK (encode(digest(convert_to(shadow_payload, 'UTF8'), 'sha256'), 'hex') = shadow_sha256),
+  CHECK (prior_artifact_sha256 IS NOT DISTINCT FROM CASE
+    WHEN shadow #>> '{case,prior,kind}' = 'margin_total_distribution'
+      THEN shadow #>> '{case,prior,artifact,sha256}'
+    WHEN shadow #>> '{case,prior,kind}' = 'margin_total_distribution_ref'
+      THEN shadow #>> '{case,prior,artifactSha256}'
+    ELSE NULL END)
 );
 
 CREATE INDEX IF NOT EXISTS nfl_market_brain_shadow_week_captured
@@ -51,6 +60,10 @@ CREATE INDEX IF NOT EXISTS nfl_market_brain_shadow_prior_artifact
   ON public.nfl_market_brain_shadow_snapshots
     (season, week, shadow_release, contract_release, provider_game_id, prior_artifact_sha256)
   WHERE prior_artifact_sha256 IS NOT NULL;
+CREATE INDEX IF NOT EXISTS nfl_market_brain_shadow_expiry
+  ON public.nfl_market_brain_shadow_snapshots (expires_at, id);
+CREATE INDEX IF NOT EXISTS nfl_market_brain_prior_artifact_expiry
+  ON public.nfl_market_brain_prior_artifacts (expires_at, artifact_sha256);
 
 CREATE OR REPLACE FUNCTION public.enforce_nfl_market_brain_artifact_cap()
 RETURNS trigger
@@ -101,7 +114,7 @@ BEGIN
   -- Never trust caller-owned storage accounting or retention timestamps.
   NEW.created_at := statement_timestamp();
   NEW.expires_at := statement_timestamp() + interval '210 days';
-  NEW.bytes := octet_length(NEW.shadow::text);
+  NEW.bytes := octet_length(NEW.shadow_payload);
   IF NEW.bytes > 98304 THEN
     RAISE EXCEPTION 'NFL Market Brain tape exceeds the 96 KiB stored JSON limit';
   END IF;
@@ -214,11 +227,14 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_manifests (
   candidate_release text NOT NULL,
   manifest_checksum char(64) NOT NULL UNIQUE CHECK (manifest_checksum ~ '^[0-9a-f]{64}$'),
   manifest jsonb NOT NULL,
+  manifest_payload text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK ((manifest ->> 'storageId') = id),
   CHECK ((manifest ->> 'checksum') = manifest_checksum),
   CHECK ((manifest ->> 'candidateRelease') = candidate_release),
   CHECK ((manifest ->> 'release') = manifest_release),
+  CHECK (manifest_payload::jsonb = (manifest - 'checksum')),
+  CHECK (encode(digest(convert_to(manifest_payload, 'UTF8'), 'sha256'), 'hex') = manifest_checksum),
   CHECK (created_at >= (manifest ->> 'createdAt')::timestamptz),
   CHECK (octet_length(manifest::text) <= 2097152)
 );
@@ -318,3 +334,85 @@ GRANT EXECUTE ON FUNCTION public.enforce_nfl_market_brain_resolver_artifact_rece
 
 COMMENT ON TABLE public.nfl_market_brain_resolver_artifacts IS
   'Append-only exact trainer artifacts and coefficient bytes; database receipt must predate every scored cutoff.';
+
+CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_predictions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  prediction_sha256 char(64) NOT NULL UNIQUE CHECK (prediction_sha256 ~ '^[0-9a-f]{64}$'),
+  event_id text NOT NULL,
+  cutoff_at timestamptz NOT NULL,
+  starts_at timestamptz NOT NULL,
+  candidate_release text NOT NULL,
+  artifact_sha256 char(64) NOT NULL,
+  training_manifest_checksum char(64) NOT NULL,
+  sequence_checksum char(64) NOT NULL CHECK (sequence_checksum ~ '^[0-9a-f]{64}$'),
+  feature_checksum char(64) NOT NULL CHECK (feature_checksum ~ '^[0-9a-f]{64}$'),
+  prediction jsonb NOT NULL,
+  prediction_payload text NOT NULL,
+  bytes integer NOT NULL CHECK (bytes > 0 AND bytes <= 8388608),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (event_id, sequence_checksum, artifact_sha256),
+  CHECK (cutoff_at < starts_at),
+  CHECK ((prediction ->> 'eventId') = event_id),
+  CHECK ((prediction ->> 'cutoffAt')::timestamptz = cutoff_at),
+  CHECK ((prediction ->> 'startsAt')::timestamptz = starts_at),
+  CHECK ((prediction ->> 'release') = candidate_release),
+  CHECK ((prediction ->> 'artifactSha256') = artifact_sha256),
+  CHECK ((prediction ->> 'trainingManifestChecksum') = training_manifest_checksum),
+  CHECK ((prediction ->> 'sequenceChecksum') = sequence_checksum),
+  CHECK ((prediction ->> 'featureChecksum') = feature_checksum),
+  CHECK (prediction_payload::jsonb = prediction),
+  CHECK (encode(digest(convert_to(prediction_payload, 'UTF8'), 'sha256'), 'hex') = prediction_sha256),
+  FOREIGN KEY (artifact_sha256)
+    REFERENCES public.nfl_market_brain_resolver_artifacts(artifact_sha256) ON DELETE RESTRICT,
+  FOREIGN KEY (training_manifest_checksum)
+    REFERENCES public.nfl_market_brain_research_manifests(manifest_checksum) ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS nfl_market_brain_research_prediction_event
+  ON public.nfl_market_brain_research_predictions (event_id, cutoff_at, created_at);
+
+CREATE OR REPLACE FUNCTION public.enforce_nfl_market_brain_prediction_receipt()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  existing_bytes bigint;
+BEGIN
+  NEW.created_at := statement_timestamp();
+  NEW.bytes := octet_length(NEW.prediction_payload);
+  IF NEW.bytes > 8388608 THEN
+    RAISE EXCEPTION 'NFL Market Brain research prediction exceeds the 8 MiB byte limit';
+  END IF;
+  IF NEW.created_at < (NEW.prediction ->> 'inferredAt')::timestamptz OR
+     NEW.created_at >= NEW.starts_at THEN
+    RAISE EXCEPTION 'NFL Market Brain research prediction was not received pregame after inference';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('nfl_market_brain:research_predictions', 0));
+  SELECT COALESCE(SUM(bytes), 0) INTO existing_bytes
+    FROM public.nfl_market_brain_research_predictions;
+  IF existing_bytes + NEW.bytes > 2147483648 THEN
+    RAISE EXCEPTION 'NFL Market Brain research-prediction global 2 GiB cap exceeded';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS nfl_market_brain_prediction_receipt
+  ON public.nfl_market_brain_research_predictions;
+CREATE TRIGGER nfl_market_brain_prediction_receipt
+BEFORE INSERT ON public.nfl_market_brain_research_predictions
+FOR EACH ROW EXECUTE FUNCTION public.enforce_nfl_market_brain_prediction_receipt();
+
+ALTER TABLE public.nfl_market_brain_research_predictions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.nfl_market_brain_research_predictions FROM anon, authenticated;
+REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON TABLE public.nfl_market_brain_research_predictions FROM service_role;
+GRANT SELECT, INSERT ON TABLE public.nfl_market_brain_research_predictions TO service_role;
+REVOKE ALL ON FUNCTION public.enforce_nfl_market_brain_prediction_receipt()
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.enforce_nfl_market_brain_prediction_receipt() TO service_role;
+
+COMMENT ON TABLE public.nfl_market_brain_research_predictions IS
+  'Append-only canonical pregame Market Brain predictions bound to exact sequences, features, artifacts, and manifests.';

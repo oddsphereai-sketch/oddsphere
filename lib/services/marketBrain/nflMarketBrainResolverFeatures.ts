@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { marketBrainSha256 } from "./marketBrainCanonical";
 
 import type {
   MarketBrainExpectedInput,
@@ -12,7 +12,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESOLVER_FEATURE_RELEASE =
-  "nfl_market_brain_resolver_features_2026_10_27_r6_fixed_executable_vector" as const;
+  "nfl_market_brain_resolver_features_2026_10_27_r8_book_specific_field_missingness_vector" as const;
 
 const nflMarketBrainTrainerInputBrand: unique symbol = Symbol("nflMarketBrainTrainerInput");
 export type NflMarketBrainTrainerInput = Readonly<{
@@ -28,34 +28,70 @@ const QUOTE_PATH_METRICS = [
   "role_reversal_rate", "line_delta_dispersion", "probability_delta_dispersion",
 ] as const;
 
+const QUOTE_PATH_NUANCE_METRICS = [
+  "path_count", "current_line_mean", "current_fair_probability_mean", "current_hold_mean",
+  "current_line_observed_rate",
+  "professional_line_delta_mean", "professional_probability_delta_mean",
+  "retail_line_delta_mean", "retail_probability_delta_mean",
+  "professional_current_probability_mean", "retail_current_probability_mean",
+  "professional_leader_signed_probability_delta", "retail_leader_signed_probability_delta",
+] as const;
+
+const IDENTIFIED_SPLIT_BOOKS = ["circa", "draftkings", "betmgm"] as const;
+const QUOTE_PATH_BOOKS = ["circa", "pinnacle", "bookmaker", "draftkings", "betmgm"] as const;
+const QUOTE_PATH_BOOK_METRICS = [
+  "observed", "line_delta", "probability_delta", "current_probability", "leader", "resistor", "reversal",
+] as const;
+
 export const NFL_MARKET_BRAIN_ORDERED_FEATURE_NAMES = [
   "intercept",
   "prior_margin_mean",
   "prior_total_mean",
   ...(["moneyline", "spread", "total"] as const).flatMap((market) =>
     QUOTE_PATH_METRICS.map((metric) => `${market}_${metric}`)),
+  ...(["moneyline", "spread", "total"] as const).flatMap((market) =>
+    QUOTE_PATH_NUANCE_METRICS.map((metric) => `${market}_${metric}`)),
+  ...(["moneyline", "spread", "total"] as const).flatMap((market) =>
+    QUOTE_PATH_BOOKS.flatMap((book) =>
+      QUOTE_PATH_BOOK_METRICS.map((metric) => `${market}_${book}_${metric}`))),
   "side_markets_aligned",
   "side_markets_opposed",
   "cross_market_conflicted",
   "source_failure_rate",
   "source_observed_rate",
+  "source_history_failure_rate", "source_availability_transition_count", "source_recovered_before_cutoff",
   "moneyline_identified_split_imbalance",
   "spread_identified_split_imbalance",
   "total_identified_split_imbalance",
+  ...(["moneyline", "spread", "total"] as const).flatMap((market) =>
+    IDENTIFIED_SPLIT_BOOKS.flatMap((book) => [
+      `${market}_${book}_split_imbalance`, `${market}_${book}_split_observed`,
+    ])),
   "unpaired_quote_rate",
   "context_unavailable_rate",
   "away_quarterback_observed", "home_quarterback_observed",
   "away_quarterback_unavailable", "home_quarterback_unavailable",
+  "away_quarterback_active", "home_quarterback_active",
+  "away_quarterback_inactive", "home_quarterback_inactive",
+  "away_quarterback_questionable", "home_quarterback_questionable",
+  "away_quarterback_state_changed", "home_quarterback_state_changed",
   "away_out_player_count", "home_out_player_count",
   "away_questionable_player_count", "home_questionable_player_count",
+  "away_injury_state_transition_count", "home_injury_state_transition_count",
   "reportable_player_count", "injury_report_unavailable",
-  "temperature_f", "wind_speed_mph", "precipitation_probability", "precipitation_mm",
+  "reportable_player_count_observed",
+  "temperature_f", "temperature_f_observed",
+  "wind_speed_mph", "wind_speed_mph_observed",
+  "precipitation_probability", "precipitation_probability_observed",
+  "precipitation_mm", "precipitation_mm_observed",
   "weather_unavailable",
   "aligned_moneyline_probability_delta", "aligned_spread_probability_delta",
   "opposed_moneyline_probability_delta", "opposed_spread_probability_delta",
   "conflicted_moneyline_probability_delta", "conflicted_spread_probability_delta",
   "failure_moneyline_probability_delta", "failure_spread_probability_delta",
   "moneyline_split_price_interaction", "spread_split_price_interaction", "total_split_price_interaction",
+  "prior_away_probability_vs_market", "prior_margin_vs_spread_line", "prior_total_vs_market_line",
+  "side_leader_moneyline", "side_leader_spread", "side_leader_simultaneous", "side_lead_lag_minutes",
 ] as readonly string[];
 
 export type NflMarketBrainFeatureVector = {
@@ -244,6 +280,12 @@ function contextToken(
     availableSecondsBeforeCutoff: secondsBefore(Date.parse(cutoffAt), observation.timing.availableAt),
     availability: observation.availability,
     quotePairStatus,
+    stateEntityKey: observation.source.feed === "injury_report_player"
+      ? canonicalStateKey(String(observation.categorical.playerName ?? "unknown"))
+      : observation.source.feed === "depth_chart"
+      ? `${observation.source.participant ?? "unknown"}:${canonicalStateKey(String(observation.categorical.playerId ??
+        observation.categorical.name ?? "unknown"))}`
+      : null,
     values: Object.fromEntries(Object.entries(observation.values).map(([key, value]) =>
       [key, numericToken(value)])),
     categorical: Object.fromEntries(Object.entries(observation.categorical)
@@ -320,12 +362,76 @@ export function vectorizeNflMarketBrainTrainerInput(input: NflMarketBrainTrainer
       dispersion(probabilityDeltas),
     ];
   };
-  const splitImbalance = (market: "moneyline" | "spread" | "total") => mean(input.contextTokens
-    .filter((row) => row.market === market && row.modality === "identified_book_split")
+  const pathNuanceFeatures = (market: "moneyline" | "spread" | "total") => {
+    const rows = input.quotePathTokens.filter((row) => row.market === market);
+    const professional = rows.filter((row) => row.sourcePrior === "professional_book");
+    const retail = rows.filter((row) => row.sourcePrior === "retail_book");
+    const currentLines = rows.flatMap((row) => {
+      const value = row.points.at(-1)?.line;
+      return value === null || value === undefined ? [] : [value];
+    });
+    const currentProbabilities = rows.flatMap((row) => {
+      const value = row.points.at(-1)?.firstFairProbability;
+      return value === undefined ? [] : [value];
+    });
+    const currentHolds = rows.flatMap((row) => {
+      const value = row.points.at(-1)?.hold;
+      return value === undefined ? [] : [value];
+    });
+    const probabilityMean = (selected: typeof rows) => mean(selected.map((row) => row.firstFairProbabilityDelta));
+    const lineMean = (selected: typeof rows) => mean(selected.flatMap((row) => row.lineDelta === null ? [] : [row.lineDelta]));
+    const currentProbabilityMean = (selected: typeof rows) => mean(selected.flatMap((row) => {
+      const value = row.points.at(-1)?.firstFairProbability;
+      return value === undefined ? [] : [value];
+    }));
+    const leaderSigned = (selected: typeof rows) => mean(selected
+      .filter((row) => row.observedRole === "leader")
+      .map((row) => row.firstFairProbabilityDelta));
+    return [
+      rows.length,
+      mean(currentLines),
+      mean(currentProbabilities),
+      mean(currentHolds),
+      rows.length === 0 ? 0 : currentLines.length / rows.length,
+      lineMean(professional), probabilityMean(professional),
+      lineMean(retail), probabilityMean(retail),
+      currentProbabilityMean(professional), currentProbabilityMean(retail),
+      leaderSigned(professional), leaderSigned(retail),
+    ];
+  };
+  const canonicalBook = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const bookPathFeatures = (
+    market: "moneyline" | "spread" | "total",
+    book: (typeof QUOTE_PATH_BOOKS)[number],
+  ) => {
+    const rows = input.quotePathTokens.filter((row) => row.market === market &&
+      canonicalBook(row.participant) === canonicalBook(book));
+    const currentProbabilities = rows.flatMap((row) => {
+      const value = row.points.at(-1)?.firstFairProbability;
+      return value === undefined ? [] : [value];
+    });
+    return [
+      Number(rows.length > 0),
+      mean(rows.flatMap((row) => row.lineDelta === null ? [] : [row.lineDelta])),
+      mean(rows.map((row) => row.firstFairProbabilityDelta)),
+      mean(currentProbabilities),
+      Number(rows.some((row) => row.observedRole === "leader")),
+      Number(rows.some((row) => row.observedRole === "resistor")),
+      Number(rows.some((row) => row.observedRole === "reversal")),
+    ];
+  };
+  const splitImbalance = (market: "moneyline" | "spread" | "total", participant?: string) => mean(input.contextTokens
+    .filter((row) => row.market === market && row.modality === "identified_book_split" &&
+      row.availability === "observed" && (participant === undefined ||
+        row.participant?.toLowerCase() === participant.toLowerCase()))
     .flatMap((row) => {
       const value = row.values.first_money_minus_bets_pp;
       return value?.observed === 1 && value.value !== null ? [value.value] : [];
     }));
+  const splitObserved = (market: "moneyline" | "spread" | "total", participant: string) => Number(
+    input.contextTokens.some((row) => row.market === market && row.modality === "identified_book_split" &&
+      row.participant?.toLowerCase() === participant.toLowerCase() && row.availability === "observed"),
+  );
   const latestAvailability = input.sourceAvailability.snapshots.at(-1);
   const expected = latestAvailability?.targetSafeExpectedInputs ?? input.sourceAvailability.targetSafeExpectedInputs;
   const failures = latestAvailability?.failed ?? input.sourceAvailability.failed;
@@ -339,20 +445,45 @@ export function vectorizeNflMarketBrainTrainerInput(input: NflMarketBrainTrainer
     .sort((a, b) => (a.availableSecondsBeforeCutoff ?? Number.POSITIVE_INFINITY) -
       (b.availableSecondsBeforeCutoff ?? Number.POSITIVE_INFINITY))[0];
   const qb = (side: "away" | "home") => latestContext("depth_chart", side);
-  const injuries = (side: "away" | "home") => input.contextTokens.filter((row) =>
+  const injuryHistory = (side: "away" | "home") => input.contextTokens.filter((row) =>
     row.feed === "injury_report_player" && row.participant === side && row.availability === "observed");
+  const injuries = (side: "away" | "home") => {
+    const latest = new Map<string, (typeof input.contextTokens)[number]>();
+    for (const row of injuryHistory(side)) {
+      const key = row.stateEntityKey ?? `unresolved:${row.availableSecondsBeforeCutoff}`;
+      const prior = latest.get(key);
+      if (!prior || (row.availableSecondsBeforeCutoff ?? Number.POSITIVE_INFINITY) <
+        (prior.availableSecondsBeforeCutoff ?? Number.POSITIVE_INFINITY)) latest.set(key, row);
+    }
+    return [...latest.values()];
+  };
   const injuryCount = (side: "away" | "home", pattern: RegExp) => injuries(side).filter((row) =>
     pattern.test(String(row.categorical.status ?? "").toLowerCase())).length;
+  const injuryTransitions = (side: "away" | "home") => {
+    const statuses = new Map<string, Set<string>>();
+    for (const row of injuryHistory(side)) {
+      const key = row.stateEntityKey ?? "unresolved";
+      const values = statuses.get(key) ?? new Set<string>();
+      values.add(String(row.categorical.status ?? "unknown").toLowerCase());
+      statuses.set(key, values);
+    }
+    return [...statuses.values()].reduce((sum, values) => sum + Math.max(0, values.size - 1), 0);
+  };
   const report = latestContext("injury_report");
   const weather = latestContext("venue_forecast");
   const numericValue = (row: typeof weather, key: string) => {
     const value = row?.values[key];
     return value?.observed === 1 && value.value !== null ? value.value : 0;
   };
+  const numericObserved = (row: typeof weather, key: string) =>
+    Number(row?.values[key]?.observed === 1 && row.values[key]!.value !== null);
   const marketPath = (market: "moneyline" | "spread" | "total") => pathFeatures(market);
   const moneylinePath = marketPath("moneyline");
   const spreadPath = marketPath("spread");
   const totalPath = marketPath("total");
+  const moneylineNuance = pathNuanceFeatures("moneyline");
+  const spreadNuance = pathNuanceFeatures("spread");
+  const totalNuance = pathNuanceFeatures("total");
   const mlProbability = moneylinePath[1]!;
   const spreadProbability = spreadPath[1]!;
   const totalProbability = totalPath[1]!;
@@ -364,6 +495,23 @@ export function vectorizeNflMarketBrainTrainerInput(input: NflMarketBrainTrainer
   const mlSplit = splitImbalance("moneyline");
   const spreadSplit = splitImbalance("spread");
   const totalSplit = splitImbalance("total");
+  const availabilityRegimes = input.sourceAvailability.snapshots.map((row) => row.regime);
+  const historyExpected = input.sourceAvailability.snapshots.reduce((sum, row) => sum + row.targetSafeExpectedInputs, 0);
+  const historyFailures = input.sourceAvailability.snapshots.reduce((sum, row) => sum + row.failed, 0);
+  const availabilityTransitions = availabilityRegimes.slice(1)
+    .filter((regime, index) => regime !== availabilityRegimes[index]).length;
+  const recovered = availabilityRegimes.some((regime) => regime !== "complete") &&
+    availabilityRegimes.at(-1) === "complete";
+  const qbStatus = (side: "away" | "home") => String(qb(side)?.categorical.status ?? "unknown").toLowerCase();
+  const qbHistory = (side: "away" | "home") => input.contextTokens.filter((row) =>
+    row.feed === "depth_chart" && row.participant === side);
+  const qbChanged = (side: "away" | "home") => new Set(qbHistory(side).map((row) =>
+    `${row.stateEntityKey}:${String(row.categorical.status ?? "unknown").toLowerCase()}`)).size > 1;
+  const priorAwayProbability = input.independentPrior.marginDistribution.values.reduce((sum, margin, index) =>
+    margin < 0 ? sum + input.independentPrior.marginDistribution.probabilities[index]! : sum, 0);
+  const currentMoneylineProbability = moneylineNuance[2]!;
+  const currentSpreadLine = spreadNuance[1]!;
+  const currentTotalLine = totalNuance[1]!;
   const values = [
     1,
     input.independentPrior.marginMean,
@@ -371,30 +519,58 @@ export function vectorizeNflMarketBrainTrainerInput(input: NflMarketBrainTrainer
     ...moneylinePath,
     ...spreadPath,
     ...totalPath,
+    ...moneylineNuance,
+    ...spreadNuance,
+    ...totalNuance,
+    ...(["moneyline", "spread", "total"] as const).flatMap((market) =>
+      QUOTE_PATH_BOOKS.flatMap((book) => bookPathFeatures(market, book))),
     aligned,
     opposed,
     conflicted,
     failureRate,
     expected === 0 ? 0 : observed / expected,
+    historyExpected === 0 ? 1 : historyFailures / historyExpected,
+    availabilityTransitions,
+    Number(recovered),
     mlSplit,
     spreadSplit,
     totalSplit,
+    ...(["moneyline", "spread", "total"] as const).flatMap((market) =>
+      IDENTIFIED_SPLIT_BOOKS.flatMap((book) => [splitImbalance(market, book), splitObserved(market, book)])),
     input.contextTokens.length === 0 ? 0 : unpaired / input.contextTokens.length,
     contextAvailability.length === 0 ? 1 : unavailableContext / contextAvailability.length,
     Number(qb("away")?.availability === "observed"), Number(qb("home")?.availability === "observed"),
     Number(!qb("away") || qb("away")?.availability !== "observed"),
     Number(!qb("home") || qb("home")?.availability !== "observed"),
+    Number(/active|available|starter|probable/.test(qbStatus("away"))),
+    Number(/active|available|starter|probable/.test(qbStatus("home"))),
+    Number(/out|inactive|ir|reserve/.test(qbStatus("away"))),
+    Number(/out|inactive|ir|reserve/.test(qbStatus("home"))),
+    Number(/question|doubt|uncertain/.test(qbStatus("away"))),
+    Number(/question|doubt|uncertain/.test(qbStatus("home"))),
+    Number(qbChanged("away")), Number(qbChanged("home")),
     injuryCount("away", /^(?:out|injured reserve|ir)$/), injuryCount("home", /^(?:out|injured reserve|ir)$/),
     injuryCount("away", /question|doubt/), injuryCount("home", /question|doubt/),
+    injuryTransitions("away"), injuryTransitions("home"),
     numericValue(report, "reportable_players"), Number(!report || report.availability !== "observed"),
-    numericValue(weather, "temperature_f"), numericValue(weather, "wind_speed_mph"),
-    numericValue(weather, "precipitation_probability"), numericValue(weather, "precipitation_mm"),
+    numericObserved(report, "reportable_players"),
+    numericValue(weather, "temperature_f"), numericObserved(weather, "temperature_f"),
+    numericValue(weather, "wind_speed_mph"), numericObserved(weather, "wind_speed_mph"),
+    numericValue(weather, "precipitation_probability"), numericObserved(weather, "precipitation_probability"),
+    numericValue(weather, "precipitation_mm"), numericObserved(weather, "precipitation_mm"),
     Number(!weather || weather.availability !== "observed"),
     aligned * mlProbability, aligned * spreadProbability,
     opposed * mlProbability, opposed * spreadProbability,
     conflicted * mlProbability, conflicted * spreadProbability,
     failureRate * mlProbability, failureRate * spreadProbability,
     mlSplit * mlProbability, spreadSplit * spreadProbability, totalSplit * totalProbability,
+    moneylineNuance[0]! > 0 ? priorAwayProbability - currentMoneylineProbability : 0,
+    spreadNuance[0]! > 0 ? input.independentPrior.marginMean + currentSpreadLine : 0,
+    totalNuance[0]! > 0 ? input.independentPrior.totalMean - currentTotalLine : 0,
+    Number(input.crossMarket.sideLeader === "moneyline"),
+    Number(input.crossMarket.sideLeader === "spread"),
+    Number(input.crossMarket.sideLeader === "simultaneous"),
+    input.crossMarket.sideLeadLagMinutes ?? 0,
   ];
   if (values.length !== NFL_MARKET_BRAIN_ORDERED_FEATURE_NAMES.length || values.some((value) => !Number.isFinite(value))) {
     throw new Error("NFL Market Brain fixed vectorizer emitted an invalid design row.");
@@ -428,6 +604,10 @@ function contextFeed(value: string): string {
     .includes(value) ? value : "other";
 }
 
+function canonicalStateKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 function secondsBefore(cutoff: number, value: string | null): number | null {
   if (value === null) return null;
   const parsed = Date.parse(value);
@@ -435,5 +615,5 @@ function secondsBefore(cutoff: number, value: string | null): number | null {
 }
 
 function sha256(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return marketBrainSha256(value);
 }

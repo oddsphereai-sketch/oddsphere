@@ -68,6 +68,10 @@ export async function GET(request: Request): Promise<Response> {
     if (currentSeasonState.apiCalls > 0) {
       await writeNflPlayerPropsCurrentSeasonState({ client: supabase, state: currentSeasonState.state });
     }
+    const marketBrainCaptureEnabled = process.env.NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED === "true" &&
+      process.env.NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED === "true";
+    const marketBrainCaptureMaxGames = Number.parseInt(
+      process.env.NFL_MARKET_BRAIN_SHADOW_CANARY_MAX_GAMES ?? "2", 10);
     const result = await runNflForwardEvidenceWriter({
       client: supabase,
       season,
@@ -80,7 +84,8 @@ export async function GET(request: Request): Promise<Response> {
       sharpApiKey,
       weatherProvider,
       exactProviderCandidate: true,
-      marketBrainCaptureEnabled: process.env.NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED === "true",
+      marketBrainCaptureEnabled,
+      marketBrainCaptureMaxGames,
     });
     let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
     let playerPropsError: string | null = null;
@@ -162,7 +167,8 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
-        market_brain_capture_enabled: process.env.NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED === "true",
+        market_brain_capture_enabled: marketBrainCaptureEnabled,
+        market_brain_capture_canary_limit: marketBrainCaptureMaxGames,
         market_brain_shadows_proposed: result.marketBrainShadowsProposed,
         market_brain_shadows_inserted: result.marketBrainShadowsInserted,
         market_brain_shadows_existing: result.marketBrainShadowsExisting,
