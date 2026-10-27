@@ -511,6 +511,16 @@ Last reviewed: 2026-10-27
   and all-failure cases cannot disappear from qualification denominators. Independent child scopes
   prevent one league market or prop stat family from authorizing its siblings, and typed authority
   chains distinguish capture/model, prediction-record, grade/stake, lock, member-snapshot, and reader owners.
+- `market_brain_evidence_attempt_2026_10_27_r1_append_only_all_product_ledger` defines the shared,
+  still-unwired attempt receipt for every active product and qualification scope. Its frozen vocabulary
+  distinguishes captured rows, a genuine empty response, partial pagination/parser/identity/storage,
+  bounded failures, and explicit skipped reasons. Exact accounting requires every provider row to end
+  as parsed, unsupported, or malformed; every parsed row as matched, unmatched, or ambiguous; and every
+  matched row as retained, duplicate, filtered, or write-failed. The v47 candidate table is append-only,
+  binds relational columns to exact canonical payload bytes, verifies the checksum material in PostgreSQL,
+  and permits service-role insert/select only. Applying that migration or defining this receipt does not
+  schedule a request, implement a feed adapter, enable capture, or grant predictive authority. The
+  migration has not been applied and still requires real-PostgreSQL lifecycle/concurrency proof.
 - `market_brain_contract_2026_10_27_r20_output_artifact_attestation` and
   `nfl_market_brain_shadow_2026_10_27_r24_expected_feed_roster` define an internal-only,
   production-inert evidence boundary. The sole writer

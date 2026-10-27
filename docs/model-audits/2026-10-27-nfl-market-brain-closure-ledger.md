@@ -251,6 +251,17 @@ database, predictive, or production proof.
   every non-NFL feed remains explicitly `not_started`. This closes source-contract omission risk, not
   capture/parser/archive implementation, persisted-chain proof, or cross-sport data coverage, so both
   IDs remain open.
+- **MB-005 / MB-006 / MB-024 / MB-030 / MB-042:** evidence-attempt r1 and the forward-only v47
+  candidate schema define one shared append-only receipt for every product/feed/participant/event/window.
+  Success-with-rows, genuine-empty, partial, failed, and skipped states have disjoint reason semantics;
+  request/page counts and raw -> parsed/unsupported/malformed -> matched/unmatched/ambiguous ->
+  retained/duplicate/filtered/write-failed conservation prevent silent parser or storage loss. Canonical
+  checksum material, exact payload text, relational columns, timestamps, release, and payload shape are
+  bound at the database insert boundary; update/delete are rejected and insert retries attest exact bytes
+  instead of overwriting. This is still an unwired contract: planned-attempt generation, an independent
+  capture runner, per-source adapters, atomic referenced artifacts, finalized-frame serialization,
+  restart/retry behavior, attrition reports, and real-PostgreSQL adversarial/concurrency proof remain
+  outstanding. These IDs remain open, and no migration or capture was enabled.
 - **MB-044:** `morning_slate` and `soccer_daily_refresh` now require the shared sport-scoped
   `prediction_pipeline` lease with bounded retry. The executable registry test resolves every primary
   and fallback authority route and proves its source-level required lease contract. Real-PostgreSQL

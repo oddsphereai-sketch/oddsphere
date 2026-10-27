@@ -6,6 +6,8 @@ Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_famil
 
 Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts`
 
+Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r1_append_only_all_product_ledger`
+
 ## Objective
 
 Build one shared evidence, chronology, provenance, evaluation, and consequence framework while
@@ -38,6 +40,14 @@ This does not claim those feeds are captured: non-NFL entries remain `not_starte
 partial. A response-derived list can never replace the predeclared expected roster because doing so
 would erase absent books, failed requests, and parser omissions from the evidence denominator.
 
+Every planned source attempt must produce one immutable receipt under the shared attempt release,
+including skipped, failed, genuinely empty, partial, and successful attempts. The receipt binds product,
+independent qualification scope, feed, participant, event, planned window, request/page counts, parser and
+raw-response provenance, and exact row conservation. An insert collision is successful only when the
+stored canonical bytes are identical; retries cannot update an earlier receipt. The v47 schema and service
+contract exist on the candidate branch, but no source adapter is wired to it and the migration is not
+applied. Therefore this contract closes neither attempt coverage nor restart/concurrency proof.
+
 Every adapter must declare and prove:
 
 1. its independent model and market-free input lineage;
@@ -45,7 +55,7 @@ Every adapter must declare and prove:
 3. a versioned expected feed and participant roster, exact identity, availability time, and replay
    boundary for every consumed source;
 4. a complete target-family-excluded chronological evidence sequence, including failed and missed
-   expected attempts;
+   expected attempts, sourced from persisted attempt receipts rather than inferred from surviving rows;
 5. an interaction-rich learned reader that jointly interprets the available price, number, source,
    cross-market, split, news/availability, and independent-prior sequence without signal-count
    quotas or fixed sportsbook weights;
