@@ -187,6 +187,7 @@ DO $assertions$
 DECLARE
   table_count integer;
   rls_count integer;
+  nullable_json_checks text;
 BEGIN
   SELECT count(*) INTO table_count
     FROM pg_class relation
@@ -262,17 +263,21 @@ BEGIN
     RAISE EXCEPTION 'prediction provenance foreign keys are incomplete';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
+  SELECT string_agg(
+           conrelid::regclass::text || '.' || conname || ': ' || pg_get_constraintdef(oid),
+           E'\n' ORDER BY conrelid::regclass::text, conname
+         )
+    INTO nullable_json_checks
       FROM pg_constraint
      WHERE connamespace = 'public'::regnamespace
        AND contype = 'c'
        AND conrelid::regclass::text LIKE 'nfl_market_brain_%'
        AND pg_get_constraintdef(oid) ~ '(->>|#>>)'
        AND pg_get_constraintdef(oid) NOT LIKE '%IS TRUE%'
-       AND pg_get_constraintdef(oid) NOT LIKE '%IS NOT DISTINCT FROM%'
-  ) THEN
-    RAISE EXCEPTION 'a JSON relational binding remains nullable under PostgreSQL CHECK semantics';
+       AND pg_get_constraintdef(oid) NOT LIKE '%IS NOT DISTINCT FROM%';
+  IF nullable_json_checks IS NOT NULL THEN
+    RAISE EXCEPTION 'JSON relational bindings remain nullable under PostgreSQL CHECK semantics:%',
+      E'\n' || nullable_json_checks;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role' AND rolbypassrls) THEN

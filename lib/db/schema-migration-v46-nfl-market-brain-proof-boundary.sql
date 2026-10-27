@@ -1186,4 +1186,56 @@ GRANT EXECUTE ON FUNCTION public.enforce_nfl_market_brain_outcome_receipt() TO s
 COMMENT ON TABLE public.nfl_market_brain_research_outcomes IS
   'Append-only verified NFL final-score receipts sourced from exact finalized games rows; never caller-provided labels.';
 
+-- PostgreSQL CHECK constraints accept NULL, so a relational binding extracted
+-- from JSON is only fail-closed when the predicate is explicitly two-valued.
+-- Harden any such constraint left by an already-installed v46 catalog (and any
+-- expression PostgreSQL deparsed without the source-level boolean wrapper)
+-- without rewriting a stored row. Existing malformed rows make the migration
+-- fail instead of being silently reinterpreted.
+DO $market_brain_v46_harden_json_checks$
+DECLARE
+  binding record;
+BEGIN
+  FOR binding IN
+    SELECT namespace.nspname AS schema_name,
+           relation.relname AS table_name,
+           constraint_record.conname AS constraint_name,
+           pg_get_expr(constraint_record.conbin, constraint_record.conrelid) AS predicate
+      FROM pg_constraint constraint_record
+      JOIN pg_class relation ON relation.oid = constraint_record.conrelid
+      JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+     WHERE namespace.nspname = 'public'
+       AND relation.relname = ANY (ARRAY[
+         'nfl_market_brain_raw_parser_inputs',
+         'nfl_market_brain_prior_artifacts',
+         'nfl_market_brain_shadow_snapshots',
+         'nfl_market_brain_research_manifests',
+         'nfl_market_brain_capture_sets',
+         'nfl_market_brain_research_inputs',
+         'nfl_market_brain_resolver_artifacts',
+         'nfl_market_brain_research_predictions',
+         'nfl_market_brain_research_outcomes'
+       ])
+       AND constraint_record.contype = 'c'
+       AND pg_get_constraintdef(constraint_record.oid) ~ '(->>|#>>)'
+       AND pg_get_constraintdef(constraint_record.oid) NOT LIKE '%IS TRUE%'
+       AND pg_get_constraintdef(constraint_record.oid) NOT LIKE '%IS NOT DISTINCT FROM%'
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE %I.%I DROP CONSTRAINT %I',
+      binding.schema_name,
+      binding.table_name,
+      binding.constraint_name
+    );
+    EXECUTE format(
+      'ALTER TABLE %I.%I ADD CONSTRAINT %I CHECK ((%s) IS TRUE)',
+      binding.schema_name,
+      binding.table_name,
+      binding.constraint_name,
+      binding.predicate
+    );
+  END LOOP;
+END;
+$market_brain_v46_harden_json_checks$;
+
 COMMIT;

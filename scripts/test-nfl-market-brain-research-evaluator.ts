@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 
+import "./test-nfl-market-brain-json-checks";
+
 import {
   bindMarketBrainMarginTotalPrior,
   bindMarketBrainPriorInputLineage,
