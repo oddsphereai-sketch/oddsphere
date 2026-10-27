@@ -1,5 +1,29 @@
 # Model change safety protocol
 
+## Owner-directed repair: Owls professional-basketball team identity
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to repair the missing member-visible Sharp Book
+Splits and their internal market-reader context after the initial Owls transition. Production
+evidence showed that Owls returned fresh complete Circa rows for the current NBA slate, but the
+response overlay compared provider full names such as `Detroit Pistons` with member abbreviations
+such as `DET` and therefore rejected every professional-basketball game.
+
+Future-unlocked presentation now resolves NBA and WNBA provider names through the existing canonical
+Playbook team registry before the unchanged exact sport, date, orientation, completeness, and
+freshness gates run. Unknown or ambiguous teams still fail closed. Playbook remains Public Consensus;
+Owls remains the source-specific named-book lane. No pick, probability, evaluated price, grade,
+stake, lock, tracking row, writer, schedule, provider budget, or `prediction_pipeline` lease changes.
+Locked records remain byte-for-byte authoritative and are never overlaid.
+
+Shared presentation / Market Intelligence capture advance to
+`daily_edge_member_presentation_2026_10_27_r29_owls_pro_team_identity` /
+`market_intelligence_v2_shadow_capture_2026_10_27_r6_owls_pro_team_identity`. A read-only rehearsal
+against the production NBA response plus the live Owls feed matched the four current member games,
+populated all 12 Moneyline/Total/Spread sections, aligned all 12 internal market reads, and changed
+zero writer-owned output fields. Same-input promotions, demotions, side changes, probability
+changes, grade changes, and actionable-count changes are zero by contract. Evidence and rollback:
+`docs/model-audits/2026-10-27-owls-pro-basketball-team-identity-repair.md`.
+
 ## Owner-directed correction: Owls sharp-book split transition
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to replace unreliable SharpAPI split delivery with
