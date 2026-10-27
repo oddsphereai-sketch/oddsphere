@@ -70,6 +70,24 @@ persists claim-bound receipts. It has no route, cron, or
 registered production provider adapter, so this remains inert until each source adapter is implemented,
 qualified, and explicitly enabled.
 
+## Owls Insight provider-transition boundary
+
+Oddsphere's planned SharpAPI-to-Owls Insight migration changes the expected-source contract but does
+not change the Market Brain evidence semantics. The canonical provider key selected by the shadow
+adapter is `owls`. Owls' Circa, DraftKings, and BetMGM split sets are separate named-book modalities;
+none may overwrite another, be averaged into a synthetic sharp percentage, or be treated as present
+when the provider returns a partial or missing book. Price, line, split, provider-observed time,
+server-receipt time, raw-response identity, and completeness stay source-specific.
+
+The current r3 evidence roster still names SharpAPI and therefore remains a truthful record of the
+branch it was frozen against, not the intended Owls cutover. It may be replaced only after the Owls
+adapter contract is committed and can provide exact raw capture, participant-denominator accounting,
+pagination/completeness state, and replay. That change requires a new roster release and affected
+sport-adapter releases. Existing SharpAPI evidence remains immutable historical provenance and cannot
+be relabeled as Owls evidence. Market Brain must reuse the provider task's already-fetched response;
+it may not add a duplicate paid request. Until those conditions and shadow compatibility tests pass,
+the provider transition is an open blocker and grants no predictive or production authority.
+
 Every adapter must declare and prove:
 
 1. its independent model and market-free input lineage;

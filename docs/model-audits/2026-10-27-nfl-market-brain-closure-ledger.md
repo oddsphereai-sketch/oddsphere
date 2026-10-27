@@ -4,7 +4,7 @@ Status: **OPEN — exhaustive inventory reconciled; remediation not complete**
 
 Inventory freeze: 2026-10-27 exhaustive full-stack, predictive, operations/database, requirements-
 trace, failure-mode, and market-science red-team. The reconciled inventory contains MB-001 through
-MB-044. New evidence must map to an existing item or
+MB-045. New evidence must map to an existing item or
 be added explicitly; it may not create an untracked side list.
 
 This is the single closure ledger for the NFL Market Brain remediation. It supersedes informal
@@ -74,6 +74,7 @@ inspection.
 | MB-042 | Blocker | open | Research input drops failed attempts and rejects all-failure events, so evaluation can condition on analyzable tapes and hide missing-not-at-random capture attrition. | Define full-frame, captured-frame, and analyzable-frame estimands; materialize every planned attempt including failure/lateness; persist analyzability/no-prediction receipts; report coverage, subgroup/differential attrition, and conservative performance bounds; synthetic outcome-correlated failure must block qualification. |
 | MB-043 | Blocker | open | Generic post-lock market-signal and grade derivations can update stored `game_predictions` grade/signal fields after `locked_at`, even when the member snapshot separately preserves the prior public payload. | Locked rows must be excluded from every derivation update; a real-PostgreSQL test freezes an MLB row, changes post-lock inputs, runs both derivations and pregame sweep, and proves the complete stored locked projection/probability/pick/grade/price/stake/evidence tuple plus member DTO remain byte-identical while an unlocked companion updates. |
 | MB-044 | Blocker | open | The legacy MLB `morning_slate` and World Cup `soccer_daily_refresh` prediction writers used job-local leases while the registry claimed the shared sport-scoped `prediction_pipeline` lease, permitting overlapping prediction writes. | Both routes must require `prediction_pipeline:<sport>` with bounded retry; executable route/lease tests must resolve every registered writer to its declared shared lease, and real-PostgreSQL concurrency must prove overlapping writers cannot acquire it together. |
+| MB-045 | Blocker | open | Oddsphere is replacing SharpAPI with Owls Insight, but the frozen all-product evidence roster and executable NFL price/split capture still name SharpAPI. A provider-label substitution would lose or conflate Owls' separate Circa, DraftKings, and BetMGM split sets, coverage state, source clocks, or exact raw-response provenance. | Land the versioned Owls adapter first; predeclare its endpoint and named-book denominator; archive and receipt-account for every expected success, partial, empty, failed, and missing book; preserve each book/market/side/timestamp as separate evidence; retain legacy SharpAPI rows unchanged under their original provenance; prove zero extra provider requests, feature-off production parity, full replay, and an explicit shadow-only compatibility transition before changing the roster or fitting a resolver. |
 
 ## Required acceptance amendments
 
@@ -133,6 +134,11 @@ existing closure proofs:
 - Research sidecars are stripped from authoritative stored payloads.
 - Existing provider HTTP responses are intended to be reused rather than duplicated; MB-003 must be
   closed without increasing request volume.
+- The Owls Insight migration is a future-capture boundary. It cannot rewrite, relabel, suppress, or
+  reinterpret an existing SharpAPI observation, receipt, manifest, locked decision, or evaluation.
+- Named-book splits are not interchangeable replicas. Circa, DraftKings, BetMGM, and any future
+  verified book remain separate observations with explicit source, denominator semantics, timestamps,
+  completeness, and missingness; they are never averaged into a synthetic "sharp" split.
 - NFL implementation does not grant authority to any other sport or player-prop model.
 
 ## Remediation progress — not closure
@@ -251,6 +257,14 @@ database, predictive, or production proof.
   every non-NFL feed remains explicitly `not_started`. This closes source-contract omission risk, not
   capture/parser/archive implementation, persisted-chain proof, or cross-sport data coverage, so both
   IDs remain open.
+- **MB-045:** the shared case, chronology, and resolver contracts already carry provider/feed/participant
+  provenance and do not require SharpAPI by type. The frozen evidence roster and current NFL collector,
+  however, are still SharpAPI-specific. A separate provider task is preparing a shadow-only Owls adapter
+  whose canonical provider key is `owls` and whose current named split books are Circa, DraftKings, and
+  BetMGM. This branch will not guess at or duplicate that adapter. After its committed contract is
+  available, Market Brain must consume its exact captured raw response and receipts, bump the evidence-
+  roster and affected adapter releases, and add whole-book omission, partial-feed, clock, replay, and
+  legacy-provenance tests before any Owls evidence can qualify. No current status is closed by this note.
 - **MB-005 / MB-006 / MB-024 / MB-030 / MB-042:** evidence-attempt r4 and the forward-only v47
   candidate schema define one shared append-only receipt for every product/feed/participant/event/window.
   One request binds the canonical ordered set of all independent scopes it informs, preserving joint
