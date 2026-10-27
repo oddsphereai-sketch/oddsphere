@@ -13,7 +13,9 @@ fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 legacy_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v45-installed.sql"
+expanded_v45_sql="${repo_root}/lib/db/schema-migration-v45-nfl-market-brain-shadow.sql"
 upgrade_sql="${repo_root}/lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql"
+lifecycle_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v46-lifecycle-proof.sql"
 
 psql_run() {
   psql "${database_url}" -X -v ON_ERROR_STOP=1 "$@"
@@ -44,9 +46,10 @@ DO $roles$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
 END;
 $roles$;
+ALTER ROLE service_role BYPASSRLS;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS public.games (
   id bigint PRIMARY KEY,
@@ -57,6 +60,44 @@ CREATE TABLE IF NOT EXISTS public.games (
   provider_ids jsonb NOT NULL DEFAULT '{}'::jsonb,
   updated_at timestamptz NOT NULL DEFAULT statement_timestamp()
 );
+SQL
+
+# The checked-in expanded v45 source was installable under the same release
+# name as the original two-table migration. Prove that an empty installation
+# follows an explicit supported path and reaches the composite parser identity.
+psql_run -f "${expanded_v45_sql}"
+psql_run <<'SQL'
+INSERT INTO public.nfl_market_brain_raw_parser_inputs (
+  parser_input_sha256, schema_release, parser_input, parser_input_payload, bytes
+) VALUES (
+  encode(digest(convert_to('[]', 'UTF8'), 'sha256'), 'hex'), 'expanded-v45-fixture', '[]'::jsonb, '[]', 2
+);
+SQL
+failure_log="$(mktemp)"
+if psql_run -f "${upgrade_sql}" >"${failure_log}" 2>&1; then
+  echo "v46 unexpectedly replaced a nonempty expanded v45 schema" >&2
+  rm -f "${failure_log}"
+  exit 1
+fi
+grep -q "refuses to replace nonempty expanded v45 table" "${failure_log}"
+rm -f "${failure_log}"
+psql_run -Atqc "SELECT count(*) FROM public.nfl_market_brain_raw_parser_inputs" | grep -qx '1'
+psql_run -c "DELETE FROM public.nfl_market_brain_raw_parser_inputs WHERE schema_release = 'expanded-v45-fixture'"
+psql_run -f "${upgrade_sql}"
+psql_run -f "${upgrade_sql}"
+psql_run -Atqc "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.nfl_market_brain_raw_parser_inputs'::regclass AND contype = 'p'" \
+  | grep -qx 'PRIMARY KEY (schema_release, parser_input_sha256)'
+
+psql_run <<'SQL'
+DROP TABLE public.nfl_market_brain_research_predictions;
+DROP TABLE public.nfl_market_brain_research_outcomes;
+DROP TABLE public.nfl_market_brain_resolver_artifacts;
+DROP TABLE public.nfl_market_brain_research_inputs;
+DROP TABLE public.nfl_market_brain_capture_sets;
+DROP TABLE public.nfl_market_brain_research_manifests;
+DROP TABLE public.nfl_market_brain_shadow_snapshots;
+DROP TABLE public.nfl_market_brain_prior_artifacts;
+DROP TABLE public.nfl_market_brain_raw_parser_inputs;
 SQL
 
 psql_run -f "${legacy_sql}"
@@ -88,6 +129,42 @@ psql_run -Atqc "SELECT count(*) FROM public.nfl_market_brain_shadow_snapshots" |
 psql_run <<'SQL'
 DELETE FROM public.nfl_market_brain_shadow_snapshots
  WHERE shadow_release = 'legacy-shadow' AND provider_game_id = 'legacy-event';
+INSERT INTO public.nfl_market_brain_research_manifests (
+  id, manifest_release, candidate_release, persisted_at, manifest_checksum, manifest
+) VALUES (
+  'legacy-manifest', 'legacy-manifest-release', 'legacy-candidate', statement_timestamp(),
+  repeat('b', 64),
+  jsonb_build_object(
+    'storageId', 'legacy-manifest', 'checksum', repeat('b', 64),
+    'candidateRelease', 'legacy-candidate', 'release', 'legacy-manifest-release',
+    'persistedAt', statement_timestamp(), 'createdAt', statement_timestamp()
+  )
+);
+SQL
+failure_log="$(mktemp)"
+if psql_run -f "${upgrade_sql}" >"${failure_log}" 2>&1; then
+  echo "v46 unexpectedly replaced a legacy v45 schema containing only a manifest" >&2
+  rm -f "${failure_log}"
+  exit 1
+fi
+grep -q "refuses to replace nonempty legacy v45 tables" "${failure_log}"
+rm -f "${failure_log}"
+psql_run -Atqc "SELECT count(*) FROM public.nfl_market_brain_research_manifests" | grep -qx '1'
+
+psql_run <<'SQL'
+DELETE FROM public.nfl_market_brain_research_manifests WHERE id = 'legacy-manifest';
+ALTER TABLE public.nfl_market_brain_shadow_snapshots ADD COLUMN corrupt_partial_marker text;
+SQL
+failure_log="$(mktemp)"
+if psql_run -f "${upgrade_sql}" >"${failure_log}" 2>&1; then
+  echo "v46 unexpectedly accepted an adversarial partial legacy schema" >&2
+  rm -f "${failure_log}"
+  exit 1
+fi
+grep -Eq "partial or unrecognized|unrecognized post-v45" "${failure_log}"
+rm -f "${failure_log}"
+
+psql_run <<'SQL'
 DROP TABLE public.nfl_market_brain_research_manifests;
 DROP TABLE public.nfl_market_brain_shadow_snapshots;
 SQL
@@ -139,6 +216,12 @@ BEGIN
     RAISE EXCEPTION 'v46 JSON/count binding columns are absent';
   END IF;
 
+  IF (SELECT count(*) FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name LIKE 'nfl_market_brain_%'
+         AND column_name = 'canonical_release') <> 8 THEN
+    RAISE EXCEPTION 'canonical serialization release is not persisted on every canonical-hash table';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
      WHERE conrelid = 'public.nfl_market_brain_capture_sets'::regclass
@@ -158,15 +241,47 @@ BEGIN
     RAISE EXCEPTION 'raw parser archive identity is not bound to schema release plus payload digest';
   END IF;
 
+  IF (SELECT count(*) FROM pg_constraint
+       WHERE conrelid = 'public.nfl_market_brain_research_predictions'::regclass
+         AND contype = 'f'
+         AND conname = ANY (ARRAY[
+           'nfl_market_brain_prediction_research_input_fk',
+           'nfl_market_brain_prediction_research_input_checksum_fk',
+           'nfl_market_brain_prediction_capture_set_fk'
+         ])) <> 3 THEN
+    RAISE EXCEPTION 'prediction provenance foreign keys are incomplete';
+  END IF;
+
   IF EXISTS (
-    SELECT 1 FROM pg_constraint
-     WHERE conname = 'nfl_market_brain_prediction_research_input_fk'
-       AND conrelid <> 'public.nfl_market_brain_research_predictions'::regclass
+    SELECT 1
+      FROM pg_constraint
+     WHERE connamespace = 'public'::regnamespace
+       AND contype = 'c'
+       AND conrelid::regclass::text LIKE 'nfl_market_brain_%'
+       AND pg_get_constraintdef(oid) ~ '(->>|#>>)'
+       AND pg_get_constraintdef(oid) NOT LIKE '%IS TRUE%'
+       AND pg_get_constraintdef(oid) NOT LIKE '%IS NOT DISTINCT FROM%'
   ) THEN
-    RAISE EXCEPTION 'prediction constraint lookup escaped the intended relation';
+    RAISE EXCEPTION 'a JSON relational binding remains nullable under PostgreSQL CHECK semantics';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role' AND rolbypassrls) THEN
+    RAISE EXCEPTION 'service_role is not production-equivalent BYPASSRLS';
+  END IF;
+  IF NOT has_table_privilege('service_role', 'public.nfl_market_brain_research_predictions', 'SELECT') OR
+     NOT has_table_privilege('service_role', 'public.nfl_market_brain_research_predictions', 'INSERT') OR
+     has_table_privilege('service_role', 'public.nfl_market_brain_research_predictions', 'UPDATE') OR
+     has_table_privilege('service_role', 'public.nfl_market_brain_research_predictions', 'DELETE') OR
+     has_table_privilege('anon', 'public.nfl_market_brain_research_predictions', 'SELECT') THEN
+    RAISE EXCEPTION 'prediction table grants are not append-only and private';
   END IF;
 END;
 $assertions$;
+SQL
+
+psql_run -f "${lifecycle_sql}"
+
+psql_run <<'SQL'
 
 WITH fixture AS (
   SELECT '[{"event_id":"same-bytes"}]'::text AS payload

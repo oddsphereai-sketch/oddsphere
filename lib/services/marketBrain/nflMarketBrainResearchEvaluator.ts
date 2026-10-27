@@ -899,6 +899,7 @@ export async function persistVerifiedNflMarketBrainFinalOutcome(args: {
     event_id: outcome.eventId,
     game_id: outcome.source.gameRecordId,
     source_row_sha256: outcome.source.sourceRowSha256,
+    source_row_payload: marketBrainCanonicalJson(sourceRow),
     final_at: outcome.finalAt,
     outcome,
     outcome_payload: marketBrainCanonicalJson(withoutChecksum),

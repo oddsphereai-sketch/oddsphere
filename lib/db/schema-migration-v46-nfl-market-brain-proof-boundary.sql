@@ -14,6 +14,10 @@ DECLARE
   manifest_rows bigint;
   legacy_shadow boolean;
   legacy_manifest boolean;
+  expanded_v45 boolean;
+  upgraded_v46 boolean;
+  relation_name text;
+  relation_rows bigint;
 BEGIN
   IF to_regclass('public.nfl_market_brain_shadow_snapshots') IS NULL OR
      to_regclass('public.nfl_market_brain_research_manifests') IS NULL THEN
@@ -57,9 +61,75 @@ BEGIN
     DROP TABLE public.nfl_market_brain_research_manifests;
     DROP TABLE public.nfl_market_brain_shadow_snapshots;
   ELSE
-    IF NOT ('capture_attempt_id' = ANY(shadow_columns)) OR
-       NOT ('shadow_payload' = ANY(shadow_columns)) OR
-       NOT ('manifest_payload' = ANY(manifest_columns)) THEN
+    SELECT EXISTS (
+      SELECT 1 FROM pg_constraint
+       WHERE conrelid = to_regclass('public.nfl_market_brain_raw_parser_inputs')
+         AND contype = 'p'
+         AND pg_get_constraintdef(oid) = 'PRIMARY KEY (schema_release, parser_input_sha256)'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'nfl_market_brain_capture_sets'
+         AND column_name = 'expected_capture_attempts'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'nfl_market_brain_research_inputs'
+         AND column_name = 'research_input_release'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'nfl_market_brain_research_predictions'
+         AND column_name = 'canonical_release'
+    ) INTO upgraded_v46;
+
+    SELECT EXISTS (
+      SELECT 1 FROM pg_constraint
+       WHERE conrelid = to_regclass('public.nfl_market_brain_raw_parser_inputs')
+         AND contype = 'p'
+         AND pg_get_constraintdef(oid) = 'PRIMARY KEY (parser_input_sha256)'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'nfl_market_brain_capture_sets'
+         AND column_name = 'capture_set_checksum'
+    ) AND NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'nfl_market_brain_capture_sets'
+         AND column_name = 'expected_capture_attempts'
+    ) AND NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'nfl_market_brain_research_inputs'
+         AND column_name = 'research_input_release'
+    ) INTO expanded_v45;
+
+    IF upgraded_v46 THEN
+      NULL;
+    ELSIF expanded_v45 THEN
+      FOREACH relation_name IN ARRAY ARRAY[
+        'nfl_market_brain_raw_parser_inputs', 'nfl_market_brain_prior_artifacts',
+        'nfl_market_brain_shadow_snapshots', 'nfl_market_brain_research_manifests',
+        'nfl_market_brain_capture_sets', 'nfl_market_brain_research_inputs',
+        'nfl_market_brain_resolver_artifacts', 'nfl_market_brain_research_predictions',
+        'nfl_market_brain_research_outcomes'
+      ] LOOP
+        IF to_regclass('public.' || relation_name) IS NULL THEN
+          RAISE EXCEPTION 'NFL Market Brain v46 expanded-v45 catalog is missing public.%', relation_name;
+        END IF;
+        EXECUTE format('SELECT count(*) FROM public.%I', relation_name) INTO relation_rows;
+        IF relation_rows <> 0 THEN
+          RAISE EXCEPTION
+            'NFL Market Brain v46 refuses to replace nonempty expanded v45 table public.% (% rows)',
+            relation_name, relation_rows;
+        END IF;
+      END LOOP;
+
+      DROP TABLE public.nfl_market_brain_research_predictions;
+      DROP TABLE public.nfl_market_brain_research_outcomes;
+      DROP TABLE public.nfl_market_brain_resolver_artifacts;
+      DROP TABLE public.nfl_market_brain_research_inputs;
+      DROP TABLE public.nfl_market_brain_capture_sets;
+      DROP TABLE public.nfl_market_brain_research_manifests;
+      DROP TABLE public.nfl_market_brain_shadow_snapshots;
+      DROP TABLE public.nfl_market_brain_prior_artifacts;
+      DROP TABLE public.nfl_market_brain_raw_parser_inputs;
+    ELSE
       RAISE EXCEPTION 'NFL Market Brain v46 found an unrecognized post-v45 schema';
     END IF;
   END IF;
@@ -76,8 +146,9 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_raw_parser_inputs (
   bytes integer NOT NULL CHECK (bytes > 0 AND bytes <= 2097152),
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
-  CHECK (parser_input_payload::jsonb = parser_input),
-  CHECK (encode(digest(convert_to(parser_input_payload, 'UTF8'), 'sha256'), 'hex') = parser_input_sha256),
+  CHECK ((jsonb_typeof(parser_input) = 'array') IS TRUE),
+  CHECK ((parser_input_payload::jsonb = parser_input) IS TRUE),
+  CHECK ((encode(digest(convert_to(parser_input_payload, 'UTF8'), 'sha256'), 'hex') = parser_input_sha256) IS TRUE),
   PRIMARY KEY (schema_release, parser_input_sha256)
 );
 
@@ -120,6 +191,8 @@ COMMENT ON TABLE public.nfl_market_brain_raw_parser_inputs IS
 CREATE TABLE IF NOT EXISTS public.nfl_market_brain_prior_artifacts (
   artifact_sha256 char(64) PRIMARY KEY CHECK (artifact_sha256 ~ '^[0-9a-f]{64}$'),
   shadow_release text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   contract_release text NOT NULL,
   provider_game_id text NOT NULL,
   prior_artifact jsonb NOT NULL,
@@ -127,9 +200,10 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_prior_artifacts (
   bytes integer NOT NULL CHECK (bytes > 0 AND bytes <= 1048576),
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL DEFAULT (now() + interval '600 days'),
-  CHECK ((prior_artifact ->> 'sha256') = artifact_sha256),
-  CHECK (artifact_payload::jsonb = (prior_artifact - 'sha256')),
-  CHECK (encode(digest(convert_to(artifact_payload, 'UTF8'), 'sha256'), 'hex') = artifact_sha256),
+  CHECK ((jsonb_typeof(prior_artifact) = 'object') IS TRUE),
+  CHECK (((prior_artifact ->> 'sha256') = artifact_sha256) IS TRUE),
+  CHECK ((artifact_payload::jsonb = (prior_artifact - 'sha256')) IS TRUE),
+  CHECK ((encode(digest(convert_to(artifact_payload, 'UTF8'), 'sha256'), 'hex') = artifact_sha256) IS TRUE),
   CHECK (octet_length(prior_artifact::text) <= 1048576)
 );
 
@@ -139,6 +213,8 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_prior_artifacts (
 CREATE TABLE IF NOT EXISTS public.nfl_market_brain_shadow_snapshots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   shadow_release text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   contract_release text NOT NULL,
   run_id uuid NOT NULL,
   capture_attempt_id uuid NOT NULL,
@@ -161,8 +237,10 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_shadow_snapshots (
   FOREIGN KEY (prior_artifact_sha256)
     REFERENCES public.nfl_market_brain_prior_artifacts(artifact_sha256)
     ON DELETE RESTRICT,
-  CHECK (shadow_payload::jsonb = shadow),
-  CHECK (encode(digest(convert_to(shadow_payload, 'UTF8'), 'sha256'), 'hex') = shadow_sha256),
+  CHECK ((jsonb_typeof(shadow) = 'object') IS TRUE),
+  CHECK (((NOT (shadow ? 'case')) OR jsonb_typeof(shadow -> 'case') = 'object') IS TRUE),
+  CHECK ((shadow_payload::jsonb = shadow) IS TRUE),
+  CHECK ((encode(digest(convert_to(shadow_payload, 'UTF8'), 'sha256'), 'hex') = shadow_sha256) IS TRUE),
   CHECK (prior_artifact_sha256 IS NOT DISTINCT FROM CASE
     WHEN shadow #>> '{case,prior,kind}' = 'margin_total_distribution'
       THEN shadow #>> '{case,prior,artifact,sha256}'
@@ -390,18 +468,22 @@ GRANT EXECUTE ON FUNCTION public.purge_expired_nfl_market_brain_research(integer
 CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_manifests (
   id text PRIMARY KEY,
   manifest_release text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   candidate_release text NOT NULL,
   manifest_checksum char(64) NOT NULL UNIQUE CHECK (manifest_checksum ~ '^[0-9a-f]{64}$'),
   manifest jsonb NOT NULL,
   manifest_payload text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK ((manifest ->> 'storageId') = id),
-  CHECK ((manifest ->> 'checksum') = manifest_checksum),
-  CHECK ((manifest ->> 'candidateRelease') = candidate_release),
-  CHECK ((manifest ->> 'release') = manifest_release),
-  CHECK (manifest_payload::jsonb = (manifest - 'checksum')),
-  CHECK (encode(digest(convert_to(manifest_payload, 'UTF8'), 'sha256'), 'hex') = manifest_checksum),
-  CHECK (created_at >= (manifest ->> 'createdAt')::timestamptz),
+  CHECK ((jsonb_typeof(manifest) = 'object') IS TRUE),
+  CHECK ((jsonb_typeof(manifest -> 'partitions') = 'array') IS TRUE),
+  CHECK (((manifest ->> 'storageId') = id) IS TRUE),
+  CHECK (((manifest ->> 'checksum') = manifest_checksum) IS TRUE),
+  CHECK (((manifest ->> 'candidateRelease') = candidate_release) IS TRUE),
+  CHECK (((manifest ->> 'release') = manifest_release) IS TRUE),
+  CHECK ((manifest_payload::jsonb = (manifest - 'checksum')) IS TRUE),
+  CHECK ((encode(digest(convert_to(manifest_payload, 'UTF8'), 'sha256'), 'hex') = manifest_checksum) IS TRUE),
+  CHECK ((created_at >= (manifest ->> 'createdAt')::timestamptz) IS TRUE),
   CHECK (octet_length(manifest::text) <= 2097152)
 );
 
@@ -442,6 +524,8 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_capture_sets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   capture_set_checksum char(64) NOT NULL UNIQUE CHECK (capture_set_checksum ~ '^[0-9a-f]{64}$'),
   capture_set_release text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   event_id text NOT NULL,
   shadow_release text NOT NULL,
   contract_release text NOT NULL,
@@ -460,24 +544,25 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_capture_sets (
   bytes integer NOT NULL CHECK (bytes > 0 AND bytes <= 2097152),
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK (window_opens_at <= window_closes_at AND window_closes_at <= cutoff_at AND cutoff_at < starts_at),
-  CHECK ((capture_set ->> 'release') = capture_set_release),
-  CHECK ((capture_set ->> 'checksum') = capture_set_checksum),
-  CHECK ((capture_set ->> 'eventId') = event_id),
-  CHECK ((capture_set ->> 'shadowRelease') = shadow_release),
-  CHECK ((capture_set ->> 'contractRelease') = contract_release),
-  CHECK ((capture_set ->> 'manifestChecksum') = manifest_checksum),
-  CHECK ((capture_set ->> 'partitionRole') = partition_role),
-  CHECK ((capture_set ->> 'foldId') = fold_id),
-  CHECK ((capture_set ->> 'captureWindowOpensAt')::timestamptz = window_opens_at),
-  CHECK ((capture_set ->> 'captureWindowClosesAt')::timestamptz = window_closes_at),
-  CHECK ((capture_set ->> 'cutoffAt')::timestamptz = cutoff_at),
-  CHECK ((capture_set ->> 'startsAt')::timestamptz = starts_at),
-  CHECK (jsonb_typeof(capture_set -> 'expectedCaptureAttempts') = 'array'),
-  CHECK (jsonb_typeof(capture_set -> 'membership') = 'array'),
-  CHECK (jsonb_array_length(capture_set -> 'expectedCaptureAttempts') = expected_capture_attempts),
-  CHECK (jsonb_array_length(capture_set -> 'membership') = expected_capture_attempts),
-  CHECK ((capture_set ->> 'successfulCaptures')::integer = successful_captures),
-  CHECK ((capture_set ->> 'failedCaptures')::integer = failed_captures),
+  CHECK ((jsonb_typeof(capture_set) = 'object') IS TRUE),
+  CHECK (((capture_set ->> 'release') = capture_set_release) IS TRUE),
+  CHECK (((capture_set ->> 'checksum') = capture_set_checksum) IS TRUE),
+  CHECK (((capture_set ->> 'eventId') = event_id) IS TRUE),
+  CHECK (((capture_set ->> 'shadowRelease') = shadow_release) IS TRUE),
+  CHECK (((capture_set ->> 'contractRelease') = contract_release) IS TRUE),
+  CHECK (((capture_set ->> 'manifestChecksum') = manifest_checksum) IS TRUE),
+  CHECK (((capture_set ->> 'partitionRole') = partition_role) IS TRUE),
+  CHECK (((capture_set ->> 'foldId') = fold_id) IS TRUE),
+  CHECK (((capture_set ->> 'captureWindowOpensAt')::timestamptz = window_opens_at) IS TRUE),
+  CHECK (((capture_set ->> 'captureWindowClosesAt')::timestamptz = window_closes_at) IS TRUE),
+  CHECK (((capture_set ->> 'cutoffAt')::timestamptz = cutoff_at) IS TRUE),
+  CHECK (((capture_set ->> 'startsAt')::timestamptz = starts_at) IS TRUE),
+  CHECK ((jsonb_typeof(capture_set -> 'expectedCaptureAttempts') = 'array') IS TRUE),
+  CHECK ((jsonb_typeof(capture_set -> 'membership') = 'array') IS TRUE),
+  CHECK ((jsonb_array_length(capture_set -> 'expectedCaptureAttempts') = expected_capture_attempts) IS TRUE),
+  CHECK ((jsonb_array_length(capture_set -> 'membership') = expected_capture_attempts) IS TRUE),
+  CHECK (((capture_set ->> 'successfulCaptures')::integer = successful_captures) IS TRUE),
+  CHECK (((capture_set ->> 'failedCaptures')::integer = failed_captures) IS TRUE),
   CHECK (successful_captures + failed_captures = expected_capture_attempts),
   CHECK (successful_captures = jsonb_array_length(
     jsonb_path_query_array(capture_set -> 'membership', '$[*] ? (@.status == "captured")')
@@ -485,8 +570,8 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_capture_sets (
   CHECK (failed_captures = jsonb_array_length(
     jsonb_path_query_array(capture_set -> 'membership', '$[*] ? (@.status == "capture_failed")')
   )),
-  CHECK (capture_set_payload::jsonb = (capture_set - 'checksum')),
-  CHECK (encode(digest(convert_to(capture_set_payload, 'UTF8'), 'sha256'), 'hex') = capture_set_checksum),
+  CHECK ((capture_set_payload::jsonb = (capture_set - 'checksum')) IS TRUE),
+  CHECK ((encode(digest(convert_to(capture_set_payload, 'UTF8'), 'sha256'), 'hex') = capture_set_checksum) IS TRUE),
   CHECK (octet_length(capture_set_payload) <= 2097152),
   FOREIGN KEY (manifest_checksum)
     REFERENCES public.nfl_market_brain_research_manifests(manifest_checksum) ON DELETE RESTRICT,
@@ -622,6 +707,8 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_inputs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   research_input_checksum char(64) NOT NULL UNIQUE CHECK (research_input_checksum ~ '^[0-9a-f]{64}$'),
   research_input_release text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   event_id text NOT NULL,
   cutoff_at timestamptz NOT NULL,
   starts_at timestamptz NOT NULL,
@@ -635,20 +722,31 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_inputs (
   bytes integer NOT NULL CHECK (bytes > 0 AND bytes <= 16777216),
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK (cutoff_at < starts_at),
-  CHECK ((research_input ->> 'release') = research_input_release),
-  CHECK ((research_input ->> 'checksum') = research_input_checksum),
-  CHECK ((research_input ->> 'eventId') = event_id),
-  CHECK ((research_input ->> 'cutoffAt')::timestamptz = cutoff_at),
-  CHECK ((research_input ->> 'startsAt')::timestamptz = starts_at),
-  CHECK ((research_input ->> 'manifestChecksum') = manifest_checksum),
-  CHECK ((research_input ->> 'captureSetRecordId') = capture_set_id::text),
-  CHECK ((research_input ->> 'captureSetChecksum') = capture_set_checksum),
-  CHECK ((research_input ->> 'sequenceChecksum') = sequence_checksum),
-  CHECK ((research_input ->> 'featureChecksum') = feature_checksum),
-  CHECK ((research_input #>> '{sequence,checksum}') = sequence_checksum),
-  CHECK ((research_input #>> '{features,checksum}') = feature_checksum),
-  CHECK (research_input_payload::jsonb = (research_input - 'checksum')),
-  CHECK (encode(digest(convert_to(research_input_payload, 'UTF8'), 'sha256'), 'hex') = research_input_checksum),
+  CHECK ((jsonb_typeof(research_input) = 'object') IS TRUE),
+  CHECK ((jsonb_typeof(research_input -> 'sequence') = 'object') IS TRUE),
+  CHECK ((jsonb_typeof(research_input -> 'features') = 'object') IS TRUE),
+  CHECK (((research_input ->> 'release') = research_input_release) IS TRUE),
+  CHECK (((research_input ->> 'checksum') = research_input_checksum) IS TRUE),
+  CHECK (((research_input ->> 'eventId') = event_id) IS TRUE),
+  CHECK (((research_input ->> 'cutoffAt')::timestamptz = cutoff_at) IS TRUE),
+  CHECK (((research_input ->> 'startsAt')::timestamptz = starts_at) IS TRUE),
+  CHECK (((research_input ->> 'manifestChecksum') = manifest_checksum) IS TRUE),
+  CHECK (((research_input ->> 'captureSetRecordId') = capture_set_id::text) IS TRUE),
+  CHECK (((research_input ->> 'captureSetChecksum') = capture_set_checksum) IS TRUE),
+  CHECK (((research_input ->> 'sequenceChecksum') = sequence_checksum) IS TRUE),
+  CHECK (((research_input ->> 'featureChecksum') = feature_checksum) IS TRUE),
+  CHECK (((research_input #>> '{sequence,checksum}') = sequence_checksum) IS TRUE),
+  CHECK (((research_input #>> '{sequence,eventId}') = event_id) IS TRUE),
+  CHECK (((research_input #>> '{sequence,cutoffAt}')::timestamptz = cutoff_at) IS TRUE),
+  CHECK (((research_input #>> '{sequence,startsAt}')::timestamptz = starts_at) IS TRUE),
+  CHECK (((research_input #>> '{features,checksum}') = feature_checksum) IS TRUE),
+  CHECK (((research_input #>> '{features,eventId}') = event_id) IS TRUE),
+  CHECK (((research_input #>> '{features,cutoffAt}')::timestamptz = cutoff_at) IS TRUE),
+  CHECK (((research_input #>> '{features,inputSequenceChecksum}') = sequence_checksum) IS TRUE),
+  CHECK (((research_input #>> '{features,inputSequenceRelease}') =
+    (research_input #>> '{sequence,release}')) IS TRUE),
+  CHECK ((research_input_payload::jsonb = (research_input - 'checksum')) IS TRUE),
+  CHECK ((encode(digest(convert_to(research_input_payload, 'UTF8'), 'sha256'), 'hex') = research_input_checksum) IS TRUE),
   FOREIGN KEY (manifest_checksum) REFERENCES public.nfl_market_brain_research_manifests(manifest_checksum) ON DELETE RESTRICT,
   FOREIGN KEY (capture_set_id) REFERENCES public.nfl_market_brain_capture_sets(id) ON DELETE RESTRICT,
   FOREIGN KEY (capture_set_checksum) REFERENCES public.nfl_market_brain_capture_sets(capture_set_checksum) ON DELETE RESTRICT
@@ -704,6 +802,8 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_resolver_artifacts (
   artifact_sha256 char(64) PRIMARY KEY CHECK (artifact_sha256 ~ '^[0-9a-f]{64}$'),
   weights_sha256 char(64) NOT NULL UNIQUE CHECK (weights_sha256 ~ '^[0-9a-f]{64}$'),
   artifact_release text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   training_manifest_checksum char(64) NOT NULL CHECK (training_manifest_checksum ~ '^[0-9a-f]{64}$'),
   artifact jsonb NOT NULL,
   weights jsonb NOT NULL,
@@ -711,14 +811,16 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_resolver_artifacts (
   weights_payload text NOT NULL,
   bytes integer NOT NULL CHECK (bytes > 0 AND bytes <= 524288),
   created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK ((artifact ->> 'sha256') = artifact_sha256),
-  CHECK ((artifact ->> 'weightsSha256') = weights_sha256),
-  CHECK ((artifact ->> 'release') = artifact_release),
-  CHECK ((artifact ->> 'trainingManifestChecksum') = training_manifest_checksum),
-  CHECK (artifact_payload::jsonb = (artifact - 'sha256')),
-  CHECK (weights_payload::jsonb = weights),
-  CHECK (encode(digest(convert_to(artifact_payload, 'UTF8'), 'sha256'), 'hex') = artifact_sha256),
-  CHECK (encode(digest(convert_to(weights_payload, 'UTF8'), 'sha256'), 'hex') = weights_sha256),
+  CHECK ((jsonb_typeof(artifact) = 'object') IS TRUE),
+  CHECK ((jsonb_typeof(weights) = 'object') IS TRUE),
+  CHECK (((artifact ->> 'sha256') = artifact_sha256) IS TRUE),
+  CHECK (((artifact ->> 'weightsSha256') = weights_sha256) IS TRUE),
+  CHECK (((artifact ->> 'release') = artifact_release) IS TRUE),
+  CHECK (((artifact ->> 'trainingManifestChecksum') = training_manifest_checksum) IS TRUE),
+  CHECK ((artifact_payload::jsonb = (artifact - 'sha256')) IS TRUE),
+  CHECK ((weights_payload::jsonb = weights) IS TRUE),
+  CHECK ((encode(digest(convert_to(artifact_payload, 'UTF8'), 'sha256'), 'hex') = artifact_sha256) IS TRUE),
+  CHECK ((encode(digest(convert_to(weights_payload, 'UTF8'), 'sha256'), 'hex') = weights_sha256) IS TRUE),
   FOREIGN KEY (training_manifest_checksum)
     REFERENCES public.nfl_market_brain_research_manifests(manifest_checksum)
     ON DELETE RESTRICT
@@ -773,6 +875,8 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_predictions (
   cutoff_at timestamptz NOT NULL,
   starts_at timestamptz NOT NULL,
   candidate_release text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   artifact_sha256 char(64) NOT NULL,
   training_manifest_checksum char(64) NOT NULL,
   research_input_id uuid NOT NULL,
@@ -787,22 +891,25 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_predictions (
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (event_id, sequence_checksum, artifact_sha256),
   CHECK (cutoff_at < starts_at),
-  CHECK ((prediction ->> 'eventId') = event_id),
-  CHECK ((prediction ->> 'cutoffAt')::timestamptz = cutoff_at),
-  CHECK ((prediction ->> 'startsAt')::timestamptz = starts_at),
-  CHECK ((prediction ->> 'release') = candidate_release),
-  CHECK ((prediction ->> 'artifactSha256') = artifact_sha256),
-  CHECK ((prediction ->> 'trainingManifestChecksum') = training_manifest_checksum),
-  CONSTRAINT nfl_market_brain_prediction_provenance_shape CHECK (
+  CHECK ((jsonb_typeof(prediction) = 'object') IS TRUE),
+  CHECK (((prediction ->> 'eventId') = event_id) IS TRUE),
+  CHECK (((prediction ->> 'cutoffAt')::timestamptz = cutoff_at) IS TRUE),
+  CHECK (((prediction ->> 'startsAt')::timestamptz = starts_at) IS TRUE),
+  CHECK (((prediction ->> 'release') = candidate_release) IS TRUE),
+  CHECK (((prediction ->> 'artifactSha256') = artifact_sha256) IS TRUE),
+  CHECK (((prediction ->> 'trainingManifestChecksum') = training_manifest_checksum) IS TRUE),
+  CHECK (((prediction ->> 'inferredAt')::timestamptz >= cutoff_at) IS TRUE),
+  CHECK (((prediction ->> 'inferredAt')::timestamptz < starts_at) IS TRUE),
+  CONSTRAINT nfl_market_brain_prediction_provenance_shape CHECK ((
     (prediction ->> 'researchInputRecordId') = research_input_id::text AND
     (prediction ->> 'researchInputChecksum') = research_input_checksum AND
     (prediction ->> 'captureSetChecksum') = capture_set_checksum AND
     (prediction ->> 'resolverOutputChecksum') = resolver_output_checksum
-  ),
-  CHECK ((prediction ->> 'sequenceChecksum') = sequence_checksum),
-  CHECK ((prediction ->> 'featureChecksum') = feature_checksum),
-  CHECK (prediction_payload::jsonb = prediction),
-  CHECK (encode(digest(convert_to(prediction_payload, 'UTF8'), 'sha256'), 'hex') = prediction_sha256),
+  ) IS TRUE),
+  CHECK (((prediction ->> 'sequenceChecksum') = sequence_checksum) IS TRUE),
+  CHECK (((prediction ->> 'featureChecksum') = feature_checksum) IS TRUE),
+  CHECK ((prediction_payload::jsonb = prediction) IS TRUE),
+  CHECK ((encode(digest(convert_to(prediction_payload, 'UTF8'), 'sha256'), 'hex') = prediction_sha256) IS TRUE),
   FOREIGN KEY (artifact_sha256)
     REFERENCES public.nfl_market_brain_resolver_artifacts(artifact_sha256) ON DELETE RESTRICT,
   FOREIGN KEY (training_manifest_checksum)
@@ -865,14 +972,14 @@ BEGIN
        AND conname = 'nfl_market_brain_prediction_provenance_shape'
   ) THEN
     ALTER TABLE public.nfl_market_brain_research_predictions
-      ADD CONSTRAINT nfl_market_brain_prediction_provenance_shape CHECK (
+      ADD CONSTRAINT nfl_market_brain_prediction_provenance_shape CHECK ((
         research_input_checksum ~ '^[0-9a-f]{64}$' AND capture_set_checksum ~ '^[0-9a-f]{64}$' AND
         resolver_output_checksum ~ '^[0-9a-f]{64}$' AND
         (prediction ->> 'researchInputRecordId') = research_input_id::text AND
         (prediction ->> 'researchInputChecksum') = research_input_checksum AND
         (prediction ->> 'captureSetChecksum') = capture_set_checksum AND
         (prediction ->> 'resolverOutputChecksum') = resolver_output_checksum
-      );
+      ) IS TRUE);
   END IF;
 END;
 $$;
@@ -894,7 +1001,8 @@ BEGIN
   IF NEW.bytes > 8388608 THEN
     RAISE EXCEPTION 'NFL Market Brain research prediction exceeds the 8 MiB byte limit';
   END IF;
-  IF (NEW.prediction ->> 'inferredAt')::timestamptz > NEW.cutoff_at OR
+  IF (NEW.prediction ->> 'inferredAt') IS NULL OR
+     (NEW.prediction ->> 'inferredAt')::timestamptz < NEW.cutoff_at OR
      NEW.created_at < (NEW.prediction ->> 'inferredAt')::timestamptz OR
      NEW.created_at >= NEW.starts_at THEN
     RAISE EXCEPTION 'NFL Market Brain research prediction was not received pregame after inference';
@@ -958,19 +1066,25 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_research_outcomes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   outcome_checksum char(64) NOT NULL UNIQUE CHECK (outcome_checksum ~ '^[0-9a-f]{64}$'),
   event_id text NOT NULL,
+  canonical_release text NOT NULL DEFAULT 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'
+    CHECK (canonical_release = 'market_brain_canonical_json_2026_10_27_r3_strict_json_domain'),
   game_id bigint NOT NULL,
   source_row_sha256 char(64) NOT NULL CHECK (source_row_sha256 ~ '^[0-9a-f]{64}$'),
+  source_row_payload text NOT NULL,
   final_at timestamptz NOT NULL,
   outcome jsonb NOT NULL,
   outcome_payload text NOT NULL,
   bytes integer NOT NULL CHECK (bytes > 0 AND bytes <= 65536),
   created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK ((outcome ->> 'checksum') = outcome_checksum),
-  CHECK ((outcome ->> 'eventId') = event_id),
-  CHECK ((outcome #>> '{source,gameRecordId}') = game_id::text),
-  CHECK ((outcome #>> '{source,sourceRowSha256}') = source_row_sha256),
-  CHECK (outcome_payload::jsonb = (outcome - 'checksum')),
-  CHECK (encode(digest(convert_to(outcome_payload, 'UTF8'), 'sha256'), 'hex') = outcome_checksum),
+  CHECK ((jsonb_typeof(outcome) = 'object') IS TRUE),
+  CHECK ((jsonb_typeof(outcome -> 'source') = 'object') IS TRUE),
+  CHECK (((outcome ->> 'checksum') = outcome_checksum) IS TRUE),
+  CHECK (((outcome ->> 'eventId') = event_id) IS TRUE),
+  CHECK (((outcome #>> '{source,gameRecordId}') = game_id::text) IS TRUE),
+  CHECK (((outcome #>> '{source,sourceRowSha256}') = source_row_sha256) IS TRUE),
+  CHECK ((encode(digest(convert_to(source_row_payload, 'UTF8'), 'sha256'), 'hex') = source_row_sha256) IS TRUE),
+  CHECK ((outcome_payload::jsonb = (outcome - 'checksum')) IS TRUE),
+  CHECK ((encode(digest(convert_to(outcome_payload, 'UTF8'), 'sha256'), 'hex') = outcome_checksum) IS TRUE),
   FOREIGN KEY (game_id) REFERENCES public.games(id) ON DELETE RESTRICT
 );
 
@@ -988,10 +1102,21 @@ BEGIN
      verified.away_score IS NULL OR verified.home_score IS NULL OR NEW.created_at < NEW.final_at THEN
     RAISE EXCEPTION 'NFL Market Brain outcome is not backed by an exact finalized games row';
   END IF;
-  IF (NEW.outcome ->> 'awayScore')::integer <> verified.away_score OR
-     (NEW.outcome ->> 'homeScore')::integer <> verified.home_score OR
+  IF NEW.source_row_payload::jsonb IS DISTINCT FROM jsonb_build_object(
+    'id', verified.id,
+    'externalId', verified.external_id,
+    'status', verified.status,
+    'awayScore', verified.away_score,
+    'homeScore', verified.home_score,
+    'providerIds', verified.provider_ids,
+    'updatedAt', to_char(verified.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+  ) THEN
+    RAISE EXCEPTION 'NFL Market Brain outcome source-row payload diverges from its finalized games row';
+  END IF;
+  IF (NEW.outcome ->> 'awayScore')::integer IS DISTINCT FROM verified.away_score OR
+     (NEW.outcome ->> 'homeScore')::integer IS DISTINCT FROM verified.home_score OR
      NEW.outcome #> '{source,providerIds}' IS DISTINCT FROM to_jsonb(verified.provider_ids) OR
-     (NEW.outcome #>> '{source,sourceUpdatedAt}')::timestamptz <> verified.updated_at THEN
+     (NEW.outcome #>> '{source,sourceUpdatedAt}')::timestamptz IS DISTINCT FROM verified.updated_at THEN
     RAISE EXCEPTION 'NFL Market Brain outcome payload diverges from its finalized games row';
   END IF;
   IF NEW.bytes > 65536 THEN RAISE EXCEPTION 'NFL Market Brain outcome exceeds 64 KiB'; END IF;

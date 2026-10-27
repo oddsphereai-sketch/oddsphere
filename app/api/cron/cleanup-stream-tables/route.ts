@@ -25,8 +25,6 @@
  */
 import { supabase } from "@/lib/db/supabase";
 import { cronHandler } from "@/lib/cron/runCron";
-import { purgeExpiredNflMarketBrainResearch } from
-  "@/lib/services/football/nflMarketBrainShadowStore";
 
 export const maxDuration = 300;
 
@@ -98,36 +96,21 @@ export async function GET(request: Request): Promise<Response> {
       const line_history = await prune("line_history", "id", "recorded_at", lhCutoff);
       const line_movements = await prune("line_movements", "id", "moved_at", lmCutoff);
       const odds_current_stream = await prune("odds_current_stream", "id", "observed_at", ocsCutoff);
-      let nfl_market_brain_research: Awaited<ReturnType<typeof purgeExpiredNflMarketBrainResearch>> | null = null;
-      let nflMarketBrainPurgeError: string | null = null;
-      // Retention is independent of capture activation. Disabling future
-      // writes must never strand already-stored research evidence indefinitely.
-      try {
-        nfl_market_brain_research = await purgeExpiredNflMarketBrainResearch({ client: supabase, limit: 5_000 });
-      } catch (error) {
-        nflMarketBrainPurgeError = error instanceof Error ? error.message : String(error);
-      }
       const errors = [
         odds_events_raw.error,
         line_history.error,
         line_movements.error,
         odds_current_stream.error,
         lab_response_snapshots.error,
-        nflMarketBrainPurgeError,
       ].filter((x): x is string => x !== null);
 
       return {
-        records_updated: [
-          odds_events_raw.deleted,
-          line_history.deleted,
-          line_movements.deleted,
-          odds_current_stream.deleted,
+        records_updated:
+          odds_events_raw.deleted +
+          line_history.deleted +
+          line_movements.deleted +
+          odds_current_stream.deleted +
           lab_response_snapshots.deleted,
-          ...(nfl_market_brain_research
-            ? [nfl_market_brain_research.shadowsDeleted, nfl_market_brain_research.artifactsDeleted,
-                nfl_market_brain_research.rawInputsDeleted]
-            : []),
-        ].reduce((sum, value) => sum + value, 0),
         api_calls_made: 0,
         partial: errors.length > 0,
         details: {
@@ -137,18 +120,12 @@ export async function GET(request: Request): Promise<Response> {
             line_movements_days: LINE_MOVEMENTS_RETENTION_DAYS,
             odds_current_stream_days: ODDS_CURRENT_STREAM_RETENTION_DAYS,
             lab_response_snapshot_grace_hours: LAB_RESPONSE_SNAPSHOT_RETENTION_GRACE_HOURS,
-            nfl_market_brain_shadow_days: 210,
-            nfl_market_brain_prior_artifact_days: 600,
-            nfl_market_brain_raw_parser_input_days: 30,
-            nfl_market_brain_purge_limit_per_class: 5_000,
           },
           odds_events_raw,
           line_history,
           line_movements,
           odds_current_stream,
           lab_response_snapshots,
-          nfl_market_brain_research,
-          nfl_market_brain_purge_error: nflMarketBrainPurgeError,
         },
       };
     },

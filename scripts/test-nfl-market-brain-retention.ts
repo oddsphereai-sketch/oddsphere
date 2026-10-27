@@ -38,13 +38,21 @@ async function main() {
   );
   assert.equal(rpcCalls, 1, "an invalid limit must fail before issuing an RPC");
 
-  const route = readFileSync("app/api/cron/cleanup-stream-tables/route.ts", "utf8");
-  assert.match(route, /nfl_market_brain_research = await purgeExpiredNflMarketBrainResearch/);
+  const sharedRoute = readFileSync("app/api/cron/cleanup-stream-tables/route.ts", "utf8");
+  assert.doesNotMatch(sharedRoute, /MarketBrain|market_brain/,
+    "feature-off production cleanup must remain byte-for-byte independent of research retention");
+  const route = readFileSync("app/api/cron/nfl-market-brain-retention/route.ts", "utf8");
+  assert.match(route, /await purgeExpiredNflMarketBrainResearch/);
   assert.doesNotMatch(route, /NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED|NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED/,
-    "retention must run whether future capture is enabled or disabled");
-  assert.match(route, /nflMarketBrainPurgeError/);
+    "retention must be independent of future capture activation");
   assert.match(route, /rawInputsDeleted/);
-  assert.match(route, /nfl_market_brain_raw_parser_input_days: 30/);
+  assert.match(route, /raw_parser_inputs: 30/);
+  const auth = readFileSync("lib/cron/auth.ts", "utf8");
+  assert.match(auth,
+    /"\/api\/cron\/nfl-market-brain-retention"[\s\S]*NFL_MARKET_BRAIN_RETENTION_CRON_ENABLED[\s\S]*defaultEnabled: false/);
+  const schedule = readFileSync("vercel.json", "utf8");
+  assert.doesNotMatch(schedule, /nfl-market-brain-retention/,
+    "research retention must not be scheduled before operator approval");
 
   const migration = readFileSync("lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql", "utf8");
   assert.match(migration, /raw_inputs_deleted integer/);

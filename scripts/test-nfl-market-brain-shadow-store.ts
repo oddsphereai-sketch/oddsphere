@@ -8,9 +8,13 @@ import {
   appendNflMarketBrainShadows,
   hashNflMarketBrainShadow,
   readNflMarketBrainShadows,
+  validateNflMarketBrainRawParserReferences,
 } from "../lib/services/football/nflMarketBrainShadowStore";
 import { NFL_MARKET_BRAIN_SHADOW_RELEASE } from "../lib/services/football/nflMarketBrainShadow";
-import { resolveNflMarketBrainCaptureAttempt } from "../lib/services/football/nflForwardEvidenceWriter";
+import {
+  resolveNflMarketBrainCaptureAttempt,
+  validateNflMarketBrainCaptureAttemptSchedule,
+} from "../lib/services/football/nflForwardEvidenceWriter";
 import { MARKET_BRAIN_CONTRACT_RELEASE } from "../lib/services/marketBrain/marketBrainContract";
 import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrainCanonical";
 
@@ -79,6 +83,40 @@ const client = {
 };
 
 async function main() {
+  assert.doesNotThrow(() => validateNflMarketBrainCaptureAttemptSchedule({
+    "event-1:unlocked": [{
+      attemptId: "00000000-0000-4000-8000-000000000011",
+      windowOpensAt: "2026-10-27T12:55:00.000Z",
+      windowClosesAt: "2026-10-27T13:10:00.000Z",
+    }],
+  }, "2026-10-27T13:05:00.000Z"));
+  assert.throws(() => validateNflMarketBrainCaptureAttemptSchedule({}, "2026-10-27T13:05:00.000Z"),
+    /schedule is absent/);
+  assert.throws(() => validateNflMarketBrainCaptureAttemptSchedule({
+    "event-1:unlocked": [
+      { attemptId: "00000000-0000-4000-8000-000000000011",
+        windowOpensAt: "2026-10-27T12:55:00.000Z", windowClosesAt: "2026-10-27T13:10:00.000Z" },
+      { attemptId: "00000000-0000-4000-8000-000000000012",
+        windowOpensAt: "2026-10-27T13:00:00.000Z", windowClosesAt: "2026-10-27T13:20:00.000Z" },
+    ],
+  }, "2026-10-27T13:05:00.000Z"), /windows overlap/);
+  const parserReferenceShadow = {
+    case: { sourceManifests: [{
+      id: "source-one",
+      rawParserInputSchemaRelease: "parser-v1",
+      rawParserInputSha256: "a".repeat(64),
+    }] },
+  } as never;
+  assert.throws(() => validateNflMarketBrainRawParserReferences(parserReferenceShadow, new Map()),
+    /absent from this exact payload/);
+  assert.doesNotThrow(() => validateNflMarketBrainRawParserReferences(parserReferenceShadow,
+    new Map([[`parser-v1\u0000${"a".repeat(64)}`, {}]])));
+  assert.throws(() => validateNflMarketBrainRawParserReferences({
+    case: { sourceManifests: [{
+      id: "partial", rawParserInputSchemaRelease: "parser-v1", rawParserInputSha256: null,
+    }] },
+  } as never, new Map()), /partial raw parser-input reference/);
+
   const scheduledAttempt = resolveNflMarketBrainCaptureAttempt({
     key: "event-1:unlocked", capturedAt: "2026-10-27T13:05:00.000Z",
     schedule: [
@@ -157,6 +195,9 @@ async function main() {
   assert.match(writer, /const authoritativePayloads = payloads\.map\(withoutMarketBrainShadow\)/);
   assert.match(writer, /marketBrainWriteError/);
   assert.match(writer, /readNflMarketBrainPriorArtifactIndex/);
+  assert.ok(writer.indexOf("const marketBrainPriorArtifactRead") >
+    writer.indexOf("resolveNflMarketBrainCaptureAttempt({"),
+  "research database reads must start only after selected attempt schedules validate");
   assert.match(writer, /AbortController[\s\S]*2_000/,
     "the optional research index read must have a hard latency bound");
   assert.match(writer, /appendNflMarketBrainShadows\([\s\S]*signal: writeAbort\.signal/,

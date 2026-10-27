@@ -212,6 +212,15 @@ export async function runNflForwardEvidenceWriter(args: {
     marketBrainCaptureEnabled = false;
     marketBrainConfigurationError = "nfl_market_brain_capture_disabled_invalid_canary_limit";
   }
+  if (marketBrainCaptureEnabled) {
+    try {
+      validateNflMarketBrainCaptureAttemptSchedule(args.marketBrainCaptureAttemptSchedule, args.now);
+    } catch (error) {
+      marketBrainCaptureEnabled = false;
+      marketBrainConfigurationError = `nfl_market_brain_capture_disabled_attempt_schedule:${
+        error instanceof Error ? error.message : "unknown_error"}`.slice(0, 512);
+    }
+  }
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
   // make Postgres cancel the writer before it reaches the provider slate.
@@ -245,13 +254,6 @@ export async function runNflForwardEvidenceWriter(args: {
     });
     return emptyResult(need.reason, tracking, memberSnapshot);
   }
-
-  const marketBrainPriorArtifactRead = marketBrainCaptureEnabled
-    ? boundedMarketBrainPriorArtifactRead(args)
-    : Promise.resolve({
-        rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
-        error: null as string | null,
-      });
 
   const slate = await fetchBalldontlieNflRegularSlate({
     season: args.season,
@@ -291,6 +293,15 @@ export async function runNflForwardEvidenceWriter(args: {
         error instanceof Error ? error.message : "unknown_error"}`.slice(0, 512);
     }
   }
+  // No research read begins until the selected canary games have resolved to
+  // exactly one predeclared attempt. A malformed schedule therefore cannot add
+  // database load to the authoritative writer.
+  const marketBrainPriorArtifactRead = marketBrainCaptureEnabled
+    ? boundedMarketBrainPriorArtifactRead(args)
+    : Promise.resolve({
+        rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
+        error: null as string | null,
+      });
   if (plans.length === 0) {
     const memberSnapshot = await refreshCompactMemberSnapshot({
       client: args.client,
@@ -1358,6 +1369,46 @@ export function resolveNflMarketBrainCaptureAttempt(args: {
     throw new Error(`NFL Market Brain capture attempt was missing or ambiguous for ${args.key}.`);
   }
   return matches[0]!.attemptId;
+}
+
+export function validateNflMarketBrainCaptureAttemptSchedule(
+  schedule: Parameters<typeof runNflForwardEvidenceWriter>[0]["marketBrainCaptureAttemptSchedule"],
+  capturedAt: string,
+): void {
+  const captureMs = Date.parse(capturedAt);
+  if (!Number.isFinite(captureMs) || !schedule || Object.keys(schedule).length === 0) {
+    throw new Error("NFL Market Brain capture schedule is absent or the capture time is invalid.");
+  }
+  const attemptIds = new Set<string>();
+  let activeWindows = 0;
+  for (const [key, windows] of Object.entries(schedule)) {
+    if (!/^[^:]+:(opening|unlocked|t60)$/.test(key) || !Array.isArray(windows) || windows.length === 0) {
+      throw new Error(`NFL Market Brain capture schedule entry is invalid for ${key}.`);
+    }
+    const ordered = windows.map((window) => {
+      const opens = Date.parse(window.windowOpensAt);
+      const closes = Date.parse(window.windowClosesAt);
+      if (!Number.isFinite(opens) || !Number.isFinite(closes) || opens > closes ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(window.attemptId)) {
+        throw new Error(`NFL Market Brain capture schedule window is invalid for ${key}.`);
+      }
+      if (attemptIds.has(window.attemptId)) {
+        throw new Error(`NFL Market Brain capture schedule reuses attempt ${window.attemptId}.`);
+      }
+      attemptIds.add(window.attemptId);
+      if (opens <= captureMs && captureMs <= closes) activeWindows += 1;
+      return { opens, closes };
+    }).sort((left, right) => left.opens - right.opens);
+    for (let index = 1; index < ordered.length; index += 1) {
+      if (ordered[index]!.opens <= ordered[index - 1]!.closes) {
+        throw new Error(`NFL Market Brain capture schedule windows overlap for ${key}.`);
+      }
+    }
+  }
+  if (activeWindows === 0) {
+    throw new Error("NFL Market Brain capture schedule has no active window for this run.");
+  }
 }
 
 function stageCounts(payloads: NflForwardEvidencePayload[]): Record<"opening" | "unlocked" | "t60", number> {

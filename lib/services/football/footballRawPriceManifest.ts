@@ -96,10 +96,11 @@ export function footballRawPriceParserInput(values: unknown[]): {
   failureReason: string | null;
 } {
   try {
-    const payload = structuredClone(values);
-    const serialized = JSON.stringify(payload);
+    const maximumBytes = 2 * 1024 * 1024;
+    assertBoundedRawParserJson(values, maximumBytes);
+    const serialized = JSON.stringify(values);
     const bytes = Buffer.byteLength(serialized, "utf8");
-    if (bytes <= 0 || bytes > 2 * 1024 * 1024) {
+    if (bytes <= 0 || bytes > maximumBytes) {
       return {
         input: null,
         failureReason: "football_raw_price_parser_input_exceeds_2_mib_research_archive_limit",
@@ -109,18 +110,73 @@ export function footballRawPriceParserInput(values: unknown[]): {
       input: {
         schema: FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE,
         sha256: createHash("sha256").update(serialized).digest("hex"),
-        payload,
+        payload: JSON.parse(serialized) as unknown[],
         bytes,
       },
       failureReason: null,
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown_error";
     return {
       input: null,
-      failureReason: `football_raw_price_parser_input_archive_failed:${
-        error instanceof Error ? error.message : "unknown_error"}`.slice(0, 512),
+      failureReason: (message.startsWith("football_raw_price_parser_input_")
+        ? message
+        : `football_raw_price_parser_input_archive_failed:${message}`).slice(0, 512),
     };
   }
+}
+
+function assertBoundedRawParserJson(value: unknown, maximumBytes: number): void {
+  let bytes = 0;
+  const active = new WeakSet<object>();
+
+  function add(amount: number): void {
+    bytes += amount;
+    if (bytes > maximumBytes) {
+      throw new Error("football_raw_price_parser_input_exceeds_2_mib_research_archive_limit");
+    }
+  }
+
+  function visit(item: unknown, depth: number): void {
+    if (depth > 64) throw new Error("football_raw_price_parser_input_exceeds_safe_json_depth");
+    if (item === null || typeof item === "string" || typeof item === "boolean" || typeof item === "number") {
+      const serialized = JSON.stringify(item);
+      if (serialized === undefined) throw new Error("football_raw_price_parser_input_contains_non_json_value");
+      add(Buffer.byteLength(serialized, "utf8"));
+      return;
+    }
+    if (typeof item !== "object") {
+      throw new Error("football_raw_price_parser_input_contains_non_json_value");
+    }
+    if (active.has(item)) throw new Error("football_raw_price_parser_input_contains_cycle");
+    const prototype = Object.getPrototypeOf(item);
+    if (!Array.isArray(item) && prototype !== Object.prototype && prototype !== null) {
+      throw new Error("football_raw_price_parser_input_contains_non_json_object");
+    }
+    active.add(item);
+    try {
+      add(2);
+      if (Array.isArray(item)) {
+        for (let index = 0; index < item.length; index += 1) {
+          if (index > 0) add(1);
+          if (!Object.hasOwn(item, index)) throw new Error("football_raw_price_parser_input_contains_sparse_array");
+          visit(item[index], depth + 1);
+        }
+      } else {
+        const entries = Object.entries(item);
+        for (let index = 0; index < entries.length; index += 1) {
+          if (index > 0) add(1);
+          const [key, child] = entries[index]!;
+          add(Buffer.byteLength(JSON.stringify(key), "utf8") + 1);
+          visit(child, depth + 1);
+        }
+      }
+    } finally {
+      active.delete(item);
+    }
+  }
+
+  visit(value, 0);
 }
 
 export function markRawPriceDuplicates(

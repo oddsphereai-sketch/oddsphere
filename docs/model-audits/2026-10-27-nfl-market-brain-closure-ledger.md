@@ -129,28 +129,39 @@ database, predictive, or production proof.
 
 - **MB-001 / MB-010 / MB-033 / MB-036:**
   `lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql` is a forward-only transaction
-  from the exact frozen v45 fixture. It refuses nonempty legacy tables, binds capture/research JSON
-  to relational identity/count/time columns, scopes catalog checks to the exact relation, adds one
-  finalized-window identity, and enforces manifest → capture set → research input → inference →
-  prediction receipt order. `scripts/test-nfl-market-brain-postgres-v46.sh` and
+  with explicit paths for both the exact frozen two-table v45 fixture and the later expanded nine-table
+  v45 source. It refuses nonempty or partial legacy shapes, binds required JSON fields fail-closed to
+  relational identity/count/time columns, adds one finalized-window identity, and enforces manifest →
+  capture set → research input → inference → prediction receipt order. The prepared PostgreSQL fixture
+  now persists a complete manifest → capture → capture-set → research-input → artifact → prediction
+  lifecycle and rejects pre-cutoff and post-receipt inference. `scripts/test-nfl-market-brain-postgres-v46.sh` and
   `.github/workflows/market-brain-postgres-proof.yml` prepare PostgreSQL 16 execution of old-v45 →
   v46, refusal, second apply, RLS/catalog, and canonical-hash checks. This host has no PostgreSQL
   runtime, so the real-database command has **not** executed and these IDs are not closed.
-- **MB-003 / MB-004:** raw response cloning is explicit research opt-in; a payload above the 2 MiB
-  research cap becomes a shadow failure; malformed dormant config is not parsed; requested invalid
-  config and missing/ambiguous attempts disable only research. Focused foundation, writer, proof-chain,
-  and feature-off tests pass. Complete route-side-effect parity and independent closure review remain.
+- **MB-003 / MB-004:** raw response archival is explicit research opt-in; a bounded JSON preflight now
+  rejects oversize/deep/non-JSON payloads before cloning the full response, and archive failures remain
+  research-only. Malformed dormant config is not parsed; enabled schedules are structurally validated
+  before raw archival, and selected attempt windows validate before any research database read. Focused
+  foundation, writer, proof-chain, and feature-off tests pass. A separate runner and measured base-versus-
+  candidate latency/RAM/exception proof remain required.
 - **MB-034:** canonical JSON now uses explicit UTF-16 code-unit order, rejects non-finite numbers,
-  normalizes negative zero, and has a fixed JS golden vector. The PostgreSQL copy of the vector is in
-  the disposable-database test but has not run here.
+  normalizes negative zero, rejects cycles, sparse arrays, accessors, non-JSON primitives, and non-plain
+  objects, and has a fixed JS golden vector. Canonical-hash tables persist the r3 serialization release.
+  The PostgreSQL copy of the vector and multi-Node/locale execution still have not run here.
 - **MB-035:** raw parser archives now use `(schema_release, parser_input_sha256)` as their relational
-  identity, shadow source manifests retain both components, and the store test proves identical bytes
-  under two parser releases remain distinct. The PostgreSQL collision fixture is prepared but has not
-  run here, and independent closure review remains outstanding.
-- **MB-023:** the existing authenticated cleanup cron now invokes Market Brain retention regardless
-  of capture flags and reports shadow, prior-artifact, and raw-parser deletion counts, per-class cap
-  hits, remaining bytes, purge errors, and the three retention horizons. Unit and route-source tests
-  pass; PostgreSQL deletion/telemetry execution and alert integration remain outstanding.
+  identity, shadow source manifests retain both components, and the store rejects a non-null manifest
+  reference unless that exact composite archive is present in the same payload. The PostgreSQL collision
+  fixture is prepared but has not run here; a relational child FK and atomic write remain open under
+  MB-024.
+- **MB-023:** Market Brain retention was removed from the shared production cleanup route and placed in
+  a separate leased/authenticated route that is disabled by default and intentionally unscheduled. It
+  reports shadow, prior-artifact, and raw-parser deletion counts, per-class cap hits, remaining bytes,
+  and the three retention horizons. Unit and route-isolation tests pass; PostgreSQL execution, scheduling
+  approval, and alert integration remain outstanding.
+- **MB-025:** outcome rows now carry exact canonical source-row bytes, the database verifies their digest,
+  and the receipt trigger compares those bytes with the finalized `games` row in addition to scores,
+  provider IDs, and update time. NFL sport identity, correction precedence, and adversarial PostgreSQL
+  execution remain open.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
   The candidate branch still truthfully carries new writer/collector identities; repository safety

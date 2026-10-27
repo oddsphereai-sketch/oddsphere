@@ -144,6 +144,7 @@ export async function appendNflMarketBrainShadows(args: {
   const rows = args.payloads.flatMap((payload) => {
     const shadow = payload.marketBrainShadow;
     if (!shadow) return [];
+    validateNflMarketBrainRawParserReferences(shadow, rawParserInputs);
     const shadowSha256 = hashNflMarketBrainShadow(shadow);
     const priorArtifactSha256 = "case" in shadow ? marketBrainPriorArtifactSha256(shadow.case.prior) : null;
     if ("case" in shadow && shadow.case.prior.kind === "margin_total_distribution") {
@@ -203,6 +204,27 @@ export async function appendNflMarketBrainShadows(args: {
   if (error) throw new Error(`NFL Market Brain shadow append failed: ${error.message}`);
   const inserted = data?.length ?? 0;
   return { proposed: rows.length, inserted, existing: rows.length - inserted, hashes };
+}
+
+export function validateNflMarketBrainRawParserReferences(
+  shadow: NflMarketBrainCaptureResult,
+  rawParserInputs: ReadonlyMap<string, unknown>,
+): void {
+  if (!("case" in shadow)) return;
+  for (const manifest of shadow.case.sourceManifests) {
+    const schema = manifest.rawParserInputSchemaRelease;
+    const sha256 = manifest.rawParserInputSha256;
+    if ((schema === null) !== (sha256 === null)) {
+      throw new Error(
+        `NFL Market Brain source manifest ${manifest.id} has a partial raw parser-input reference.`,
+      );
+    }
+    if (schema !== null && sha256 !== null && !rawParserInputs.has(`${schema}\u0000${sha256}`)) {
+      throw new Error(
+        `NFL Market Brain source manifest ${manifest.id} references a raw parser input absent from this exact payload.`,
+      );
+    }
+  }
 }
 
 export async function readNflMarketBrainShadows(args: {
