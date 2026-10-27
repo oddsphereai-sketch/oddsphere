@@ -12,7 +12,8 @@
  *   • Graceful no-op if the table isn't applied (schema-migration-v25.sql).
  *   • Gate: PUBLIC_SPLITS_OBSERVATIONS_ENABLED=true. Default OFF so the Vercel
  *     cron entry can land without firing any write until explicitly enabled.
- *   • MLB + WNBA current ET slate, live Playbook /splits.
+ *   • Playbook public consensus plus Owls named-book splits and sharp-book
+ *     prices for every supported Daily Edge sport.
  */
 
 import { cronHandlerPerSport } from "@/lib/cron/runCron";
@@ -24,10 +25,9 @@ import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnap
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
-// NBA is observe-only until its sport-specific audit promotes the capability.
-// Capturing it now prevents opening-night validation from starting with no
-// provider history; the capability registry still blocks display/model use.
-const SPORTS: Sport[] = ["mlb", "wnba", "nhl", "nba"];
+// This remains an observation-only collector. Capability gates continue to
+// decide whether any sport may display or use the stored evidence.
+const SPORTS: Sport[] = ["mlb", "wnba", "nhl", "nba", "nfl", "cfb", "cbb"];
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandlerPerSport(
@@ -46,27 +46,19 @@ export async function GET(request: Request): Promise<Response> {
         apply: true,
         todayUtc: slate,
       });
-      // NBA remains capture-only: v2 stores provenance-qualified per-book
-      // observations, while its UI/model capability stays audit_required.
-      // One league-level provider pull is matched against the same bounded
-      // seven-day schedule window as the member board. Provider history
-      // backfill is still MLB-only; NBA builds its forward trail from repeated
-      // current snapshots without adding one request per future date.
-      const marketIntelligenceV2 = sport === "mlb" || sport === "nba"
-        ? await runScheduledMarketIntelligenceV2Collection({
-            supabase,
-            sport,
-            slateDate: slate,
-            phase: "public_splits_refresh",
-            // Incident recovery: the league-level Sharp snapshot can omit a
-            // current event while that event is already discoverable through
-            // the catalog/history route. Poll the bounded current-slate event
-            // inventory here so those rows are recovered without waiting for
-            // the hourly writer. The shared sport lease still owns the write.
-            includeSharpApiHistory: true,
-            slateDateThrough: sport === "nba" ? addDaysToSlate(slate, 6) : undefined,
-          })
-        : null;
+      // One league-level Owls request is matched to the same bounded member
+      // window. Basketball and weekly football retain a seven-day window;
+      // daily sports stay on the exact ET slate. This writes only the v2
+      // observation substrate and grants no prediction or grade authority.
+      const marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+        supabase,
+        sport,
+        slateDate: slate,
+        phase: "public_splits_refresh",
+        slateDateThrough: ["nba", "nfl", "cfb", "cbb"].includes(sport)
+          ? addDaysToSlate(slate, 6)
+          : undefined,
+      });
       const errors = [
         ...(result.skippedTableMissing ? [`${sport} ${slate}: table not applied`] : []),
         ...result.errors,

@@ -324,7 +324,7 @@ check("champion runtime refuses an explicit old model", (() => {
 })());
 check(
   "WNBA model family is single-sourced",
-  EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_7_professional_market_evidence",
+  EXPECTED_WNBA_MODEL_VERSION === "wnba_v1_8_owls_current_odds",
 );
 check(
   "WNBA distribution version is explicit",
