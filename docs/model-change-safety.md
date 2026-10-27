@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## Owner-directed correction: Owls sharp-book split transition
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to replace unreliable SharpAPI split delivery with
+Owls wherever the product expects Sharp Book Splits, including the internal context-only market
+reader, without disturbing locked predictions or the Public Consensus lane. The bounded correction
+is documented in `docs/model-audits/2026-10-27-owls-sharp-book-split-transition.md`.
+
+Playbook remains the Public Consensus authority. Owls is the only active source-specific named-book
+API feed and accepts only a fresh complete two-sided money-plus-ticket pair, preferring Circa. The
+cutover makes no new SharpAPI split requests; exact-game last-known-good display continuity may
+retain a previously verified complete pair during a temporary gap. Missing, partial, stale,
+malformed, wrong-sport, unmatched, or ambiguous rows remain neutral. The verified section may
+update the market-read context and copy for future-unlocked cards but cannot change a writer-owned
+pick, probability, price, grade, stake, lock, or tracking row. Existing locked snapshots are never
+overlaid.
+
+Shared presentation / Market Intelligence capture advance to
+`daily_edge_member_presentation_2026_10_27_r28_owls_sharp_book_splits` /
+`market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`. The existing sport
+writers, schedules, provider budgets outside this one bounded slate call, and sport-scoped
+`prediction_pipeline` leases remain unchanged. Same-input promotions, demotions, side changes,
+probability changes, grade changes, and actionable-count changes are zero by contract. Roll back
+to presentation r27 and capture r4 if Owls evidence crosses game identity, partial rows become
+complete, any locked payload changes, or the named-book lane becomes less available than its
+last-known-good fallback.
+
 ## NFL player-props Passing Yards direction r38
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to improve player-prop prediction accuracy rather

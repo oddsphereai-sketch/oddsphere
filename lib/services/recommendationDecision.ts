@@ -236,8 +236,100 @@ function resolveMarketRead(sport: string, market: MarketInput, consensus: Market
   };
 }
 
+function selectedSideFromSplitSection(
+  pick: string | null,
+  section: MarketSplitDisplaySection,
+): MarketInput["selectedSide"] {
+  const normalizedPick = (pick ?? "").trim().toUpperCase();
+  if (!normalizedPick) return null;
+  if (normalizedPick.includes("OVER")) return "over";
+  if (normalizedPick.includes("UNDER")) return "under";
+  const candidates = section.rows
+    .filter((row): row is typeof row & { side: "home" | "away" } => row.side === "home" || row.side === "away")
+    .sort((a, b) => b.label.length - a.label.length);
+  return candidates.find((row) => normalizedPick.includes(row.label.trim().toUpperCase()))?.side ?? null;
+}
+
+/**
+ * Attach a verified complete named-book split pair to the open-card market
+ * reader without re-grading the recommendation. The writer-owned pick,
+ * probability, evaluated price, grade, lock and tracking tuple remain exact.
+ */
+export function applySharpBookSplitSectionToDecision(args: {
+  sport: string;
+  marketKey: "moneyline" | "total" | "firstInning";
+  decision: MarketDecision;
+  section: MarketSplitDisplaySection;
+}): MarketDecision {
+  const selectedSide = selectedSideFromSplitSection(args.decision.pick, args.section);
+  const market: MarketInput = {
+    key: args.marketKey,
+    pick: args.decision.pick,
+    selectedSide,
+    modelProbability: args.decision.modelProbability,
+    marketImplied: args.decision.marketImplied,
+    edgePp: args.decision.edgePp,
+    price: args.decision.price,
+    playGrade: args.decision.playGrade,
+    quickRead: args.decision.quickRead,
+    riskNote: args.decision.riskNote,
+    publicSplits: args.decision.consensusSplits?.rows ?? [],
+    marketReadV2: null,
+    marketReadV2Enabled: false,
+    lineMovementOverride: args.decision.lineMovement,
+  };
+  const resolvedMarketRead = resolveMarketRead(
+    args.sport,
+    market,
+    args.decision.consensusSplits,
+    args.section,
+  );
+  const sourceConflict = resolvedMarketRead.status === "mixed";
+  const reasonCodes = [
+    ...args.decision.reasonCodes.filter((code) =>
+      code !== "sharp_book_splits_available" &&
+      code !== "sharp_book_splits_unavailable" &&
+      code !== "source_conflict" &&
+      code !== "market_resistance" &&
+      !code.startsWith("market_read_")
+    ),
+    "sharp_book_splits_available",
+    `market_read_${resolvedMarketRead.status}`,
+    "post_decision_sharp_context_only",
+    ...(sourceConflict ? ["source_conflict"] : []),
+    ...(resolvedMarketRead.status === "resistance" || resolvedMarketRead.status === "consensus_resistance"
+      ? ["market_resistance"]
+      : []),
+  ];
+  const supportingEvidence = [
+    ...args.decision.supportingEvidence.filter((line) =>
+      line !== args.decision.resolvedMarketRead.copy && !/sharp(?:-| )book/i.test(line)
+    ),
+    "Sharp book splits reviewed.",
+    resolvedMarketRead.copy,
+  ];
+  const quickRead = resolvedMarketRead.status === "mixed"
+    ? `Mixed market signals: ${resolvedMarketRead.copy}`
+    : resolvedMarketRead.status === "resistance" || resolvedMarketRead.status === "consensus_resistance"
+      ? `Market resistance: ${resolvedMarketRead.copy}`
+      : resolvedMarketRead.copy;
+  return {
+    ...args.decision,
+    sharpBookSplits: args.section,
+    resolvedMarketRead,
+    sourceConflict,
+    // Provider overlays are context-only. Never change the writer's grade.
+    playGrade: args.decision.playGrade,
+    quickRead,
+    supportingEvidence,
+    renderedQuickReadCopy: null,
+    renderedSupportingEvidenceCopy: null,
+    reasonCodes,
+  };
+}
+
 function hasProviderLeak(value: unknown): boolean {
-  return JSON.stringify(value).match(/\b(playbook|sharpapi)\b/i) !== null;
+  return JSON.stringify(value).match(/\b(playbook|sharpapi|owls)\b/i) !== null;
 }
 
 function buildMarketDecision(sport: string, market: MarketInput, projectedScore: { away: number; home: number } | null | undefined): MarketDecision {

@@ -12,6 +12,7 @@ import {
   sanitizeRetainedSharpSplitPresentation,
 } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import {
+  alignMarketReadsToDisplayedSharpBookSplits,
   loadDailyEdgeSharpBookSplitContinuity,
   persistDailyEdgeSharpBookSplitContinuity,
   reconcileDailyEdgeSharpBookSplitAuthority,
@@ -416,6 +417,7 @@ export async function populateDailyEdgeDraftKingsFallback(
   ]);
   const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
+  alignMarketReadsToDisplayedSharpBookSplits(response);
   await persistDailyEdgeSharpBookSplitContinuity(response, sport, continuity.feed);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
@@ -441,6 +443,7 @@ export async function populateDailyEdgeStoredSplitFallback(
   const current = applySharpApiCurrentSplitOverlay(response, sharpFeed);
   const durable = applyDraftKingsNetworkSplitFallback(response, draftKingsFeed);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
+  alignMarketReadsToDisplayedSharpBookSplits(response);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
     matchedGames: Math.max(current.matchedGames, durable.matchedGames, continuity.matchedGames),

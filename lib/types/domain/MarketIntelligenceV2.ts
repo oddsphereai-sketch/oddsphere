@@ -1,7 +1,7 @@
 export type MarketIntelligenceMarketType = "moneyline" | "spread" | "total";
 export type MarketIntelligenceSelectionSide = "home" | "away" | "over" | "under";
 
-export type MarketSplitProvider = "playbook" | "sharpapi";
+export type MarketSplitProvider = "playbook" | "sharpapi" | "owls";
 export type MarketSplitSourceBook =
   | "consensus"
   | "draftkings"

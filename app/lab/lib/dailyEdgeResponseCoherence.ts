@@ -80,20 +80,20 @@ function fallbackSharpAvailability(
   if (section?.rows.length === 2 && section.rows.every((row) => row.moneyPct !== null && row.betsPct !== null)) {
     return {
       status: "complete",
-      message: "Complete two-sided SharpAPI money and ticket percentages are available.",
+      message: "Complete two-sided sharp-book money and ticket percentages are available.",
       lastUpdated: section.lastUpdated,
     };
   }
   if (section && (section.rows.length > 0 || section.signal)) {
     return {
       status: "provider_limited",
-      message: section.signal ?? "SharpAPI supplied only part of the two-sided money-and-ticket pair; missing percentages are withheld.",
+      message: section.signal ?? "The sharp-book feed supplied only part of the two-sided money-and-ticket pair; missing percentages are withheld.",
       lastUpdated: section.lastUpdated,
     };
   }
   return {
     status: "pending",
-    message: "Sharp-book split data has not arrived from SharpAPI for this market yet.",
+    message: "Sharp-book split data has not arrived for this market yet.",
     lastUpdated: null,
   };
 }

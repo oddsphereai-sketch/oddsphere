@@ -153,16 +153,36 @@ applySharpApiCurrentSplitOverlay(stale, {
 }, now);
 assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.isStale, false, "last-known-good rows stay in the established panel without new stale-state copy");
 
-const feed = {
+const feed: NonNullable<Parameters<typeof applySharpApiCurrentSplitOverlay>[1]> = {
   source: "sharpapi_current_splits",
   release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
   sport: "cfb",
   fetchedAt: "2026-09-20T20:04:00.000Z",
   rows: [complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z")],
-} as const;
+};
 assert.ok(validateSharpApiCurrentSplitFeed(feed, "cfb"));
 assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, rows: [] }, "cfb"), null, "an empty provider response cannot erase durable coverage");
 assert.equal(validateSharpApiCurrentSplitFeed({ ...feed, sport: "nfl" }, "cfb"), null, "durable coverage cannot cross sports");
+
+const owlsFeed: NonNullable<Parameters<typeof applySharpApiCurrentSplitOverlay>[1]> = {
+  source: "owls_current_splits",
+  release: "owls_current_splits_2026_10_27_r1_complete_named_book",
+  sport: "cfb",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z")],
+};
+assert.ok(validateSharpApiCurrentSplitFeed(owlsFeed, "cfb"), "Owls durable named-book feed is accepted");
+const transitionedFeed = sharpApiCurrentTest.mergeCurrentSplitFeeds(feed, owlsFeed);
+assert.equal(transitionedFeed.rows.length, 1, "provider transition never mixes incompatible event identities");
+assert.equal(transitionedFeed.source, "owls_current_splits", "Owls owns the new single-provider durable feed");
+
+const locked = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+locked.games[0]!.lockState = "locked";
+assert.deepEqual(
+  applySharpApiCurrentSplitOverlay(locked, owlsFeed, now),
+  { matchedGames: 0, populatedMarkets: 0 },
+  "Owls overlays never mutate locked member snapshots",
+);
 
 const retainedComplete = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T19:00:00.000Z");
 const partialUpdate = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:00:00.000Z");

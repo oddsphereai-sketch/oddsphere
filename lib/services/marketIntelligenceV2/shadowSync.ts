@@ -11,6 +11,13 @@ import {
 } from "../../providers/real_api/_sharpApiClient";
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
+import { OwlsInsightClient, type OwlsSport } from "../../providers/owls/owlsInsightClient";
+import {
+  normalizeOwlsSharpBookSplits,
+  selectCompleteNamedBookSplit,
+  type NormalizedOwlsSplitObservation,
+  type RawOwlsSplitsResponse,
+} from "../../providers/owls/owlsSharpBookSplits";
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
@@ -24,6 +31,7 @@ import type {
 } from "../../types/domain/MarketIntelligenceV2";
 import {
   buildPlaybookSplitObservationsV2,
+  buildOwlsSplitObservationsV2,
   buildSharpApiSplitHistoryObservationsV2,
   buildSharpApiPriceObservationV2,
   buildSharpApiSplitObservationsV2,
@@ -75,7 +83,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_shadow_capture_2026_10_16_r4_canonical_nba_team_identity";
+  "market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -369,6 +377,7 @@ export type MarketIntelligenceV2ShadowSyncResult = {
   slateDate: string;
   gamesLoaded: number;
   playbookSplitRowsFetched: number;
+  owlsSplitRowsFetched: number;
   sharpapiSplitRowsFetched: number;
   splitObservationsBuilt: number;
   priceObservationsBuilt: number;
@@ -691,6 +700,132 @@ async function collectPlaybookSplits(opts: {
   return { fetchedRows: rows.length, observations, rejected, errors: [] };
 }
 
+const OWLS_SPORT_BY_INTERNAL: Partial<Record<Sport, Exclude<OwlsSport, "soccer">>> = {
+  mlb: "mlb",
+  nba: "nba",
+  wnba: "wnba",
+  nfl: "nfl",
+  cfb: "ncaaf",
+  cbb: "ncaab",
+  nhl: "nhl",
+};
+
+function owlsEventDate(providerEventId: string): string | null {
+  const match = providerEventId.match(/-(\d{4})(\d{2})(\d{2})$/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+export function findOwlsSplitGameMatch(
+  candidates: readonly GameRef[],
+  providerEventId: string,
+): GameRef | null {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0] ?? null;
+  const eventDate = owlsEventDate(providerEventId);
+  if (!eventDate) return null;
+  const exactUtcDate = candidates.filter((game) => game.gameDate?.slice(0, 10) === eventDate);
+  return exactUtcDate.length === 1 ? exactUtcDate[0]! : null;
+}
+
+async function collectOwlsSplits(opts: {
+  sport: Sport;
+  games: readonly GameRef[];
+  apiKey: string | undefined;
+  now: Date;
+  ingestionRunId: string;
+}): Promise<{
+  fetchedRows: number;
+  observations: MarketSplitObservationV2[];
+  rejected: CanonicalObservationRejection[];
+  errors: string[];
+  details?: Record<string, unknown>;
+}> {
+  const owlsSport = OWLS_SPORT_BY_INTERNAL[opts.sport];
+  if (!owlsSport) return { fetchedRows: 0, observations: [], rejected: [], errors: [] };
+  if (!opts.apiKey) {
+    return { fetchedRows: 0, observations: [], rejected: [], errors: ["OWLS_INSIGHT_API_KEY missing; skipped Owls v2 named-book splits"] };
+  }
+
+  let response: RawOwlsSplitsResponse;
+  try {
+    response = (await new OwlsInsightClient(opts.apiKey).splits<RawOwlsSplitsResponse>(owlsSport)).body;
+  } catch (error) {
+    return {
+      fetchedRows: 0,
+      observations: [],
+      rejected: [],
+      errors: [`Owls split fetch failed: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+
+  const coverage = normalizeOwlsSharpBookSplits(response, owlsSport);
+  const gamesByKey = new Map<string, GameRef[]>();
+  for (const game of opts.games) {
+    const key = marketIntelligenceGameKey(opts.sport, game.awayName, game.homeName);
+    if (!key) continue;
+    gamesByKey.set(key, [...(gamesByKey.get(key) ?? []), game]);
+  }
+
+  const byEvent = new Map<string, NormalizedOwlsSplitObservation[]>();
+  for (const row of coverage.observations) {
+    byEvent.set(row.providerEventId, [...(byEvent.get(row.providerEventId) ?? []), row]);
+  }
+
+  const observations: MarketSplitObservationV2[] = [];
+  const rejected: CanonicalObservationRejection[] = [];
+  for (const [providerEventId, eventRows] of byEvent) {
+    const first = eventRows[0];
+    if (!first) continue;
+    const key = marketIntelligenceGameKey(opts.sport, first.awayTeam, first.homeTeam);
+    const game = key ? findOwlsSplitGameMatch(gamesByKey.get(key) ?? [], providerEventId) : null;
+    if (!game) {
+      rejected.push({
+        provider: "owls",
+        provider_event_id: providerEventId,
+        market_type: null,
+        selection_key: null,
+        reason: `unmatched or ambiguous Owls game ${first.awayTeam}@${first.homeTeam}`,
+      });
+      continue;
+    }
+
+    const selectedRows = (["moneyline", "spread", "total"] as const).flatMap((market) =>
+      selectCompleteNamedBookSplit(eventRows, {
+        providerEventId,
+        market,
+        nowMs: opts.now.getTime(),
+      }),
+    );
+    if (selectedRows.length === 0) continue;
+    const built = buildOwlsSplitObservationsV2({
+      rows: selectedRows,
+      canonicalEventId: String(game.externalId),
+      league: opts.sport,
+      fetchedAt: opts.now.toISOString(),
+      minutesToStart: minutesToStart(game.gameDate, opts.now),
+      ingestionRunId: opts.ingestionRunId,
+      canonicalMarketId: (market) => externalMarketId(game, market),
+      selectionKey: (market, side) => externalSelectionKey(game, market, side),
+    });
+    observations.push(...built.observations);
+    rejected.push(...built.rejected);
+  }
+
+  return {
+    fetchedRows: coverage.eventCount,
+    observations,
+    rejected,
+    errors: [],
+    details: {
+      feed_status: coverage.feedStatus,
+      partial_reason: coverage.partialReason,
+      advertised_books: coverage.advertisedBooks,
+      normalized_rows: coverage.observations.length,
+      provider_rejections: coverage.rejected,
+    },
+  };
+}
+
 type SharpHistoryExistingState = {
   latestByEventBook: Map<string, string>;
   existingObservationKeys: Set<string>;
@@ -882,7 +1017,12 @@ function findSharpApiCatalogGameMatch(
   return best && best.distance <= 6 * 60 * 60 * 1000 ? best.game : null;
 }
 
-async function collectSharpApiSplits(opts: {
+/**
+ * Legacy read-only/audit adapter retained for historical regression fixtures.
+ * The active shadow-sync path intentionally does not call it after the Owls
+ * production cutover.
+ */
+export async function collectLegacySharpApiSplitsForAudit(opts: {
   supabase: SupabaseClient;
   sport: Sport;
   slateDate: string;
@@ -1406,6 +1546,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   todayUtc: string;
   now?: Date;
   playbookApiKey?: string;
+  owlsApiKey?: string;
   sharpApiKey?: string;
   includeSharpApiHistory?: boolean;
   slateDateThrough?: string;
@@ -1420,6 +1561,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     slateDate: opts.slateDate,
     gamesLoaded: 0,
     playbookSplitRowsFetched: 0,
+    owlsSplitRowsFetched: 0,
     sharpapiSplitRowsFetched: 0,
     splitObservationsBuilt: 0,
     priceObservationsBuilt: 0,
@@ -1471,11 +1613,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   if (playbookGames.length !== games.length) {
     result.details.playbook_games_loaded = playbookGames.length;
   }
-  const previousSharpApiGames = opts.sport === "mlb" || opts.sport === "nba"
-    ? await loadGames(opts.supabase, opts.sport, offsetDate(opts.slateDate, -1))
-    : [];
-
-  const [playbook, sharpapi, prices] = await Promise.all([
+  const [playbook, owls, prices] = await Promise.all([
     collectPlaybookSplits({
       sport: opts.sport,
       slateDate: opts.slateDate,
@@ -1485,33 +1623,42 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       now,
       ingestionRunId,
     }),
-    collectSharpApiSplits({
-      supabase: opts.supabase,
+    collectOwlsSplits({
       sport: opts.sport,
-      slateDate: opts.slateDate,
       games,
-      previousGames: previousSharpApiGames,
-      apiKey: opts.sharpApiKey ?? process.env.SHARPAPI_KEY,
+      apiKey: opts.owlsApiKey ?? process.env.OWLS_INSIGHT_API_KEY,
       now,
       ingestionRunId,
-      includeHistory: opts.includeSharpApiHistory !== false,
-      slateDateThrough: opts.slateDateThrough,
     }),
     loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now }),
   ]);
 
-  const splitObservations = [...playbook.observations, ...sharpapi.observations];
+  // The production split cutover is Owls-only. Keep the legacy adapter and
+  // historical row readers for immutable records and focused regression tests,
+  // but never issue a new SharpAPI split request from the active collector.
+  const sharpapi = {
+    fetchedRows: 0,
+    observations: [] as MarketSplitObservationV2[],
+    rejected: [] as CanonicalObservationRejection[],
+    errors: [] as string[],
+    details: { skipped: "live_sharpapi_split_collection_retired" },
+  };
+
+  const splitObservations = [...playbook.observations, ...owls.observations, ...sharpapi.observations];
   result.playbookSplitRowsFetched = playbook.fetchedRows;
+  result.owlsSplitRowsFetched = owls.fetchedRows;
   result.sharpapiSplitRowsFetched = sharpapi.fetchedRows;
   result.splitObservationsBuilt = splitObservations.length;
   result.priceObservationsBuilt = prices.length;
-  result.rejected.push(...playbook.rejected, ...sharpapi.rejected);
-  result.errors.push(...playbook.errors, ...sharpapi.errors);
+  result.rejected.push(...playbook.rejected, ...owls.rejected, ...sharpapi.rejected);
+  result.errors.push(...playbook.errors, ...owls.errors, ...sharpapi.errors);
   result.details.providers = {
     playbook_observations: playbook.observations.length,
+    owls_observations: owls.observations.length,
     sharpapi_observations: sharpapi.observations.length,
     price_observations: prices.length,
   };
+  result.details.owls = owls.details ?? {};
   result.details.sharpapi = sharpapi.details ?? {};
 
   logger(
