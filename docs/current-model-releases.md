@@ -492,8 +492,8 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_contract_2026_10_27_r12_raw_parser_input_receipt` and
-  `nfl_market_brain_shadow_2026_10_27_r12_raw_parser_input_receipt` define an internal-only,
+- `market_brain_contract_2026_10_27_r13_schema_bound_parser_input` and
+  `nfl_market_brain_shadow_2026_10_27_r13_schema_bound_parser_input` define an internal-only,
   production-inert evidence boundary. The sole writer
   `nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar`
   consumes `nfl_sharpapi_splits_2026_10_27_r5_pagination_metadata_closed`. Research capture is
@@ -506,7 +506,9 @@ Last reviewed: 2026-10-27
   future unlocked rows. `balldontlie_nfl_regular_slate_2026_10_27_r6_raw_parser_input` and
   `football_sharp_price_capture_2026_10_27_r4_raw_parser_input` attach raw response hashes,
   returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
-  incomplete price sides before complete-pair normalization or family replacement. The tape retains
+  incomplete price sides before complete-pair normalization or family replacement. Raw parser
+  archives use the composite identity `(schema_release, parser_input_sha256)`, so identical bytes
+  interpreted under a different parser contract cannot silently reuse older provenance. The tape retains
   exact-evaluated versus
   same-family versus target-excluded provenance plus an explicit evaluated-target identity that does
   not depend on recovering an exact raw side, every exact-identity Circa/DraftKings/BetMGM split

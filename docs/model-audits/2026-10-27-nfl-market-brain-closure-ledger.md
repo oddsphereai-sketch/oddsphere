@@ -143,6 +143,10 @@ database, predictive, or production proof.
 - **MB-034:** canonical JSON now uses explicit UTF-16 code-unit order, rejects non-finite numbers,
   normalizes negative zero, and has a fixed JS golden vector. The PostgreSQL copy of the vector is in
   the disposable-database test but has not run here.
+- **MB-035:** raw parser archives now use `(schema_release, parser_input_sha256)` as their relational
+  identity, shadow source manifests retain both components, and the store test proves identical bytes
+  under two parser releases remain distinct. The PostgreSQL collision fixture is prepared but has not
+  run here, and independent closure review remains outstanding.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
   The candidate branch still truthfully carries new writer/collector identities; repository safety

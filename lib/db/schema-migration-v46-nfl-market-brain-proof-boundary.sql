@@ -69,7 +69,7 @@ $market_brain_v46_preflight$;
 -- Short-lived, content-addressed parser inputs make normalization omissions
 -- auditable without another provider request or duplicating raw rows per game.
 CREATE TABLE IF NOT EXISTS public.nfl_market_brain_raw_parser_inputs (
-  parser_input_sha256 char(64) PRIMARY KEY CHECK (parser_input_sha256 ~ '^[0-9a-f]{64}$'),
+  parser_input_sha256 char(64) NOT NULL CHECK (parser_input_sha256 ~ '^[0-9a-f]{64}$'),
   schema_release text NOT NULL,
   parser_input jsonb NOT NULL,
   parser_input_payload text NOT NULL,
@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_raw_parser_inputs (
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
   CHECK (parser_input_payload::jsonb = parser_input),
-  CHECK (encode(digest(convert_to(parser_input_payload, 'UTF8'), 'sha256'), 'hex') = parser_input_sha256)
+  CHECK (encode(digest(convert_to(parser_input_payload, 'UTF8'), 'sha256'), 'hex') = parser_input_sha256),
+  PRIMARY KEY (schema_release, parser_input_sha256)
 );
 
 CREATE OR REPLACE FUNCTION public.enforce_nfl_market_brain_raw_parser_input_cap()
@@ -92,7 +93,8 @@ BEGIN
   END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended('nfl_market_brain:raw_parser_inputs', 0));
   IF EXISTS (SELECT 1 FROM public.nfl_market_brain_raw_parser_inputs
-    WHERE parser_input_sha256 = NEW.parser_input_sha256) THEN RETURN NEW; END IF;
+    WHERE schema_release = NEW.schema_release
+      AND parser_input_sha256 = NEW.parser_input_sha256) THEN RETURN NEW; END IF;
   SELECT COALESCE(SUM(bytes), 0) INTO existing_bytes FROM public.nfl_market_brain_raw_parser_inputs;
   IF existing_bytes + NEW.bytes > 268435456 THEN
     RAISE EXCEPTION 'NFL Market Brain raw parser-input 256 MiB global cap exceeded';
@@ -345,14 +347,16 @@ BEGIN
    USING expired WHERE artifact.artifact_sha256 = expired.artifact_sha256;
   GET DIAGNOSTICS deleted_artifacts = ROW_COUNT;
   WITH expired_raw AS (
-    SELECT parser_input_sha256 FROM public.nfl_market_brain_raw_parser_inputs
+    SELECT schema_release, parser_input_sha256 FROM public.nfl_market_brain_raw_parser_inputs
      WHERE expires_at <= statement_timestamp()
-     ORDER BY expires_at, parser_input_sha256
+     ORDER BY expires_at, schema_release, parser_input_sha256
      LIMIT p_limit
      FOR UPDATE SKIP LOCKED
   )
   DELETE FROM public.nfl_market_brain_raw_parser_inputs raw
-   USING expired_raw WHERE raw.parser_input_sha256 = expired_raw.parser_input_sha256;
+   USING expired_raw
+   WHERE raw.schema_release = expired_raw.schema_release
+     AND raw.parser_input_sha256 = expired_raw.parser_input_sha256;
   RETURN QUERY SELECT deleted_shadows, deleted_artifacts;
 END;
 $$;

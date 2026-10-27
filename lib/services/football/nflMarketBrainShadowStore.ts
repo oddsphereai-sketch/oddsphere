@@ -125,7 +125,7 @@ export async function appendNflMarketBrainShadows(args: {
         Buffer.byteLength(JSON.stringify(input.payload), "utf8") !== input.bytes) {
         throw new Error("NFL Market Brain raw parser input checksum or byte count is invalid.");
       }
-      rawParserInputs.set(input.sha256, {
+      rawParserInputs.set(`${input.schema}\u0000${input.sha256}`, {
         parser_input_sha256: input.sha256,
         schema_release: input.schema,
         parser_input: input.payload,
@@ -177,7 +177,10 @@ export async function appendNflMarketBrainShadows(args: {
   if (!args.apply || rows.length === 0) return { proposed: rows.length, inserted: 0, existing: 0, hashes };
   if (rawParserInputs.size > 0) {
     let rawQuery = args.client.from("nfl_market_brain_raw_parser_inputs")
-      .upsert([...rawParserInputs.values()], { onConflict: "parser_input_sha256", ignoreDuplicates: true });
+      .upsert([...rawParserInputs.values()], {
+        onConflict: "schema_release,parser_input_sha256",
+        ignoreDuplicates: true,
+      });
     if (args.signal) rawQuery = rawQuery.abortSignal(args.signal);
     const { error: rawError } = await rawQuery;
     if (rawError) throw new Error(`NFL Market Brain raw parser-input archive failed: ${rawError.message}`);

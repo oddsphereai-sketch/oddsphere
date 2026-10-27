@@ -32,16 +32,22 @@ const payload = {
   marketBrainShadow: shadow,
   marketBrainCaptureAttemptId: "00000000-0000-4000-8000-000000000001",
   marketBrainRawParserInputs: [{
-    schema: "football_raw_price_parser_input_v1",
+    schema: "football_raw_price_parser_input_fixture_v1",
+    payload: [{ event_id: shadow.eventId, market_type: "moneyline" }],
+    sha256: "",
+    bytes: 0,
+  }, {
+    schema: "football_raw_price_parser_input_fixture_v2",
     payload: [{ event_id: shadow.eventId, market_type: "moneyline" }],
     sha256: "",
     bytes: 0,
   }],
 } as unknown as NflForwardEvidencePayload;
-(payload.marketBrainRawParserInputs![0] as { sha256: string }).sha256 =
-  createHash("sha256").update(JSON.stringify(payload.marketBrainRawParserInputs![0]!.payload)).digest("hex");
-(payload.marketBrainRawParserInputs![0] as { bytes: number }).bytes =
-  Buffer.byteLength(JSON.stringify(payload.marketBrainRawParserInputs![0]!.payload), "utf8");
+for (const input of payload.marketBrainRawParserInputs!) {
+  (input as { sha256: string }).sha256 =
+    createHash("sha256").update(JSON.stringify(input.payload)).digest("hex");
+  (input as { bytes: number }).bytes = Buffer.byteLength(JSON.stringify(input.payload), "utf8");
+}
 
 const inserted: Array<Record<string, unknown>> = [];
 const rawArchived: Array<Record<string, unknown>> = [];
@@ -49,7 +55,9 @@ let shadowUpserts = 0;
 const client = {
   from(table: string) {
     if (table === "nfl_market_brain_raw_parser_inputs") {
-      return { upsert(rows: Array<Record<string, unknown>>) {
+      return { upsert(rows: Array<Record<string, unknown>>, options: Record<string, unknown>) {
+        assert.equal(options.onConflict, "schema_release,parser_input_sha256");
+        assert.equal(options.ignoreDuplicates, true);
         rawArchived.push(...rows);
         return Promise.resolve({ error: null });
       } };
@@ -107,8 +115,11 @@ async function main() {
   assert.equal(inserted[0]?.capture_attempt_id, payload.marketBrainCaptureAttemptId);
   assert.equal(inserted[0]?.contract_release, shadow.release.startsWith("nfl_market_brain_shadow")
     ? MARKET_BRAIN_CONTRACT_RELEASE : null);
-  assert.equal(rawArchived.length, 1);
+  assert.equal(rawArchived.length, 2,
+    "identical bytes under two parser schemas must retain two unambiguous archive identities");
   assert.equal(rawArchived[0]?.parser_input_sha256, payload.marketBrainRawParserInputs![0]!.sha256);
+  assert.equal(rawArchived[1]?.parser_input_sha256, payload.marketBrainRawParserInputs![0]!.sha256);
+  assert.notEqual(rawArchived[0]?.schema_release, rawArchived[1]?.schema_release);
 
   const duplicate = await appendNflMarketBrainShadows({
     client: client as never, runId: payload.runId, payloads: [payload], apply: true,

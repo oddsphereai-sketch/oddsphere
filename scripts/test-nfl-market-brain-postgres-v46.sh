@@ -149,6 +149,15 @@ BEGIN
     RAISE EXCEPTION 'v46 finalized-window identity is absent';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.nfl_market_brain_raw_parser_inputs'::regclass
+       AND contype = 'p'
+       AND pg_get_constraintdef(oid) = 'PRIMARY KEY (schema_release, parser_input_sha256)'
+  ) THEN
+    RAISE EXCEPTION 'raw parser archive identity is not bound to schema release plus payload digest';
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM pg_constraint
      WHERE conname = 'nfl_market_brain_prediction_research_input_fk'
@@ -158,6 +167,31 @@ BEGIN
   END IF;
 END;
 $assertions$;
+
+WITH fixture AS (
+  SELECT '[{"event_id":"same-bytes"}]'::text AS payload
+)
+INSERT INTO public.nfl_market_brain_raw_parser_inputs (
+  parser_input_sha256, schema_release, parser_input, parser_input_payload, bytes
+)
+SELECT encode(digest(convert_to(payload, 'UTF8'), 'sha256'), 'hex'), schema_release,
+       payload::jsonb, payload, octet_length(payload)
+  FROM fixture
+ CROSS JOIN (VALUES ('fixture_parser_v1'), ('fixture_parser_v2')) releases(schema_release);
+
+DO $schema_collision$
+DECLARE archive_count integer;
+BEGIN
+  SELECT count(*) INTO archive_count
+    FROM public.nfl_market_brain_raw_parser_inputs
+   WHERE parser_input_sha256 = encode(
+     digest(convert_to('[{"event_id":"same-bytes"}]', 'UTF8'), 'sha256'), 'hex'
+   );
+  IF archive_count <> 2 THEN
+    RAISE EXCEPTION 'same parser bytes under two schema releases collapsed to % archive rows', archive_count;
+  END IF;
+END;
+$schema_collision$;
 
 SELECT CASE
   WHEN encode(digest(convert_to('{"Z":0,"a":2,"ä":1,"\ud800":4,"😀":3}', 'UTF8'), 'sha256'), 'hex')

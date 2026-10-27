@@ -5,6 +5,9 @@ export type FootballRawPriceSelection = "away" | "home" | "over" | "under";
 export type FootballRawPricePhase = "provider_opening" | "current";
 export type FootballRawPriceStatus = "observed" | "incomplete" | "duplicate" | "unsupported";
 
+export const FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE =
+  "football_raw_price_parser_input_2026_10_27_r2_schema_bound_key" as const;
+
 export type FootballRawPriceObservation = {
   sourceObservationId: string;
   rawRowSha256: string;
@@ -40,7 +43,8 @@ export type FootballRawPriceResponseManifest = {
   rawResponseSha256: string | null;
   /** Exact rows handed to the parser, retained only by the bounded research sidecar. */
   rawParserInput: {
-    schema: "football_raw_price_parser_input_v1";
+    /** Versioned parser contract; archive identity is this release plus sha256. */
+    schema: string;
     sha256: string;
     payload: unknown[];
     bytes: number;
@@ -103,7 +107,7 @@ export function footballRawPriceParserInput(values: unknown[]): {
     }
     return {
       input: {
-        schema: "football_raw_price_parser_input_v1",
+        schema: FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE,
         sha256: createHash("sha256").update(serialized).digest("hex"),
         payload,
         bytes,

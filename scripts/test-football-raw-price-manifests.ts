@@ -7,7 +7,10 @@ import "./test-nfl-market-brain-capture-config";
 
 import { buildBalldontlieRawPriceManifest } from "../lib/services/football/balldontlieNflPreviewSlate";
 import { buildSharpRawPriceManifest } from "../lib/services/football/sharpApiFootballSharpOdds";
-import { footballRawPriceParserInput } from "../lib/services/football/footballRawPriceManifest";
+import {
+  FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE,
+  footballRawPriceParserInput,
+} from "../lib/services/football/footballRawPriceManifest";
 
 const fetchedAt = "2026-10-26T20:00:00.000Z";
 const startsAt = "2026-10-26T21:00:00.000Z";
@@ -112,6 +115,7 @@ const archived = buildBalldontlieRawPriceManifest({
   includeRawParserInput: true,
 });
 assert.equal(archived.rawParserInput?.payload.length, 1);
+assert.equal(archived.rawParserInput?.schema, FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE);
 assert.equal(archived.rawParserInputFailureReason, null);
 
 const oversized = footballRawPriceParserInput([{ padding: "x".repeat(2 * 1024 * 1024) }]);
