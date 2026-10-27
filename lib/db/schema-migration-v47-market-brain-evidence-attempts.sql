@@ -51,6 +51,12 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
   response_sha256 text CHECK (response_sha256 IS NULL OR response_sha256 ~ '^[a-f0-9]{64}$'),
   raw_archive_sha256 text CHECK (raw_archive_sha256 IS NULL OR raw_archive_sha256 ~ '^[a-f0-9]{64}$'),
   parser_release text,
+  claim_release text NOT NULL CHECK (
+    claim_release = 'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed'
+  ),
+  claim_token uuid NOT NULL,
+  claim_mode text NOT NULL CHECK (claim_mode IN ('due', 'missed_window_reconcile')),
+  claim_sequence integer NOT NULL CHECK (claim_sequence >= 1),
   attempt_checksum text NOT NULL CHECK (attempt_checksum ~ '^[a-f0-9]{64}$'),
   attempt_payload jsonb NOT NULL,
   attempt_payload_text text NOT NULL,
@@ -92,6 +98,10 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
   CHECK (raw_rows = parsed_rows + unsupported_rows + malformed_rows),
   CHECK (parsed_rows = matched_rows + unmatched_rows + ambiguous_rows),
   CHECK (matched_rows = retained_rows + duplicate_rows + filtered_rows + write_failed_rows),
+  CHECK (
+    (claim_mode = 'missed_window_reconcile' AND outcome = 'skipped' AND reason_code = 'missed_window') OR
+    (claim_mode = 'due' AND reason_code IS DISTINCT FROM 'missed_window')
+  ),
   CHECK ((attempt_payload_text::jsonb = attempt_payload) IS TRUE),
   CHECK ((checksum_payload_text::jsonb = attempt_payload - 'checksum') IS TRUE),
   CHECK ((encode(digest(convert_to(checksum_payload_text, 'UTF8'), 'sha256'), 'hex') = attempt_checksum) IS TRUE),
@@ -109,7 +119,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger'
+  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger'
     OR cardinality(NEW.qualification_scope_keys) <>
       (SELECT count(DISTINCT scope_key) FROM unnest(NEW.qualification_scope_keys) AS scope_key)
     OR NEW.attempt_payload <> jsonb_build_object(

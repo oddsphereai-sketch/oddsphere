@@ -7,6 +7,7 @@ on:
       - "lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql"
       - "lib/db/schema-migration-v47-market-brain-evidence-attempts.sql"
       - "lib/db/schema-migration-v48-market-brain-capture-plans.sql"
+      - "lib/db/schema-migration-v49-market-brain-attempt-claims.sql"
       - "lib/services/football/**"
       - "lib/services/marketBrain/**"
       - "scripts/fixtures/nfl-market-brain-v45-installed.sql"

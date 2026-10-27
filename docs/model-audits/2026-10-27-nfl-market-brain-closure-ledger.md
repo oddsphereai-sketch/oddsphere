@@ -251,7 +251,7 @@ database, predictive, or production proof.
   every non-NFL feed remains explicitly `not_started`. This closes source-contract omission risk, not
   capture/parser/archive implementation, persisted-chain proof, or cross-sport data coverage, so both
   IDs remain open.
-- **MB-005 / MB-006 / MB-024 / MB-030 / MB-042:** evidence-attempt r3 and the forward-only v47
+- **MB-005 / MB-006 / MB-024 / MB-030 / MB-042:** evidence-attempt r4 and the forward-only v47
   candidate schema define one shared append-only receipt for every product/feed/participant/event/window.
   One request binds the canonical ordered set of all independent scopes it informs, preserving joint
   cross-market context without duplicate provider calls or arbitrary single-market ownership.
@@ -275,6 +275,15 @@ database, predictive, or production proof.
   environment JSON is not accepted as this database proof, canary selection is not yet driven by these
   rows, and due-work claiming/finalization serialization/restart/concurrency still require an independent
   runner plus real-PostgreSQL tests. These IDs remain open and v48 is not applied.
+- **MB-005 / MB-006 / MB-008 / MB-042:** attempt-claim r1 and the v49 candidate provide bounded
+  leased claiming for both currently due obligations and expired-window reconciliation. Row locks and
+  an attempt-scoped advisory transaction lock serialize claim/reclaim against receipt insertion;
+  every reassignment increments a sequence and appends immutable claim history. The receipt row binds
+  the exact active token, mode, and sequence, so a stale worker cannot finalize a newer claim. The
+  mandatory PostgreSQL CI path now installs v47–v49 twice and exercises precommit, due claim,
+  missed-window claim, exact retry, collision rejection, finalization, and immutability. This proof has
+  not run on the current host because no PostgreSQL runtime/URL is available, and no runner calls the
+  RPCs yet; the IDs remain open.
 - **MB-044:** `morning_slate` and `soccer_daily_refresh` now require the shared sport-scoped
   `prediction_pipeline` lease with bounded retry. The executable registry test resolves every primary
   and fallback authority route and proves its source-level required lease contract. Real-PostgreSQL

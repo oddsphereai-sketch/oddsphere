@@ -511,7 +511,7 @@ Last reviewed: 2026-10-27
   and all-failure cases cannot disappear from qualification denominators. Independent child scopes
   prevent one league market or prop stat family from authorizing its siblings, and typed authority
   chains distinguish capture/model, prediction-record, grade/stake, lock, member-snapshot, and reader owners.
-- `market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger` defines the shared,
+- `market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger` defines the shared,
   still-unwired attempt receipt for every active product and the canonical ordered set of qualification
   scopes informed by one source request. This preserves a joint Moneyline/Spread/Total or multi-stat
   observation instead of duplicating it or assigning it to an arbitrary isolated market. Its frozen vocabulary
@@ -533,6 +533,14 @@ Last reviewed: 2026-10-27
   makes both tables append-only, and rejects an evidence receipt that was not preplanned or differs in
   scope/source/event/phase/window identity. This remains an unwired, unapplied research contract: it
   schedules no task, claims no due work, calls no provider, and changes no prediction or model input.
+- `market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed` defines bounded, restart-safe
+  claiming for due provider work and separately for expired-window reconciliation. The v49 candidate
+  uses row locks plus an attempt-scoped transaction advisory lock, bounded 15–300 second leases, an
+  append-only claim history, and monotonically increasing claim sequences. A receipt must carry the
+  exact active relational claim token/mode/sequence; a slow stale worker cannot finalize after a newer
+  worker reclaims the obligation. Expired unexecuted obligations become explicit `missed_window`
+  receipts rather than disappearing. The migration and CI proof path are prepared, but no independent
+  runner or source adapter invokes them and nothing is deployed.
 - `market_brain_contract_2026_10_27_r20_output_artifact_attestation` and
   `nfl_market_brain_shadow_2026_10_27_r24_expected_feed_roster` define an internal-only,
   production-inert evidence boundary. The sole writer

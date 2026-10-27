@@ -6,9 +6,11 @@ Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_famil
 
 Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts`
 
-Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger`
+Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger`
 
 Capture-plan release: `market_brain_capture_plan_2026_10_27_r1_all_product_precommit`
+
+Attempt-claim release: `market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed`
 
 ## Objective
 
@@ -56,6 +58,11 @@ the first window. The plan uses canonical source/time order, rejects duplicate l
 when a caller changes their UUID, and is persisted atomically with every child obligation. A later
 attempt receipt must match that exact precommit. The v48 candidate implements this storage contract,
 but no due-work claim mechanism, independent runner, or provider adapter is connected yet.
+
+The v49 candidate adds bounded due and expired-window leases with append-only claim history. Exact
+claim token and sequence are bound to the immutable receipt row, so an expired worker cannot finalize
+after reassignment. This is still only an inert execution contract until the independent runner and
+each source adapter are wired, qualified, and explicitly enabled.
 
 Every adapter must declare and prove:
 

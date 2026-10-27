@@ -218,8 +218,22 @@ CREATE OR REPLACE FUNCTION public.serialize_market_brain_evidence_attempt_with_c
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  active_claim public.market_brain_attempt_claims%ROWTYPE;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(NEW.attempt_id::text, 0));
+  SELECT * INTO active_claim
+    FROM public.market_brain_attempt_claims
+   WHERE attempt_id = NEW.attempt_id;
+  IF NOT FOUND
+    OR active_claim.finalized_at IS NOT NULL
+    OR active_claim.claim_release IS DISTINCT FROM NEW.claim_release
+    OR active_claim.claim_token IS DISTINCT FROM NEW.claim_token
+    OR active_claim.claim_mode IS DISTINCT FROM NEW.claim_mode
+    OR active_claim.claim_sequence IS DISTINCT FROM NEW.claim_sequence
+  THEN
+    RAISE EXCEPTION 'Market Brain evidence receipt does not match the exact active claim token and sequence';
+  END IF;
   RETURN NEW;
 END;
 $$;
@@ -231,7 +245,8 @@ AS $$
 BEGIN
   UPDATE public.market_brain_attempt_claims
      SET finalized_at = NEW.server_created_at
-   WHERE attempt_id = NEW.attempt_id AND finalized_at IS NULL;
+   WHERE attempt_id = NEW.attempt_id AND claim_token = NEW.claim_token
+     AND claim_sequence = NEW.claim_sequence AND finalized_at IS NULL;
   RETURN NEW;
 END;
 $$;

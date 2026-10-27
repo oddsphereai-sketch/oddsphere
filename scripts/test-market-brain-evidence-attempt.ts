@@ -156,6 +156,8 @@ const migration = readFileSync(resolve(process.cwd(),
 assert.match(migration, /PRIMARY KEY \(release, attempt_id\)/);
 assert.match(migration, /completed_at <= server_created_at/,
   "a caller must not predeclare a successful future receipt before provider work occurs");
+assert.match(migration, /claim_token uuid NOT NULL/);
+assert.match(migration, /claim_mode = 'missed_window_reconcile'[\s\S]*reason_code = 'missed_window'/);
 assert.match(migration, /product_key text NOT NULL CHECK \(product_key IN/);
 assert.match(migration, /product_key = 'nba_player_props' AND qualification_scope_keys <@ ARRAY/);
 assert.match(migration, /count\(DISTINCT scope_key\)/,
@@ -173,7 +175,7 @@ assert.match(migration, /GRANT SELECT, INSERT .* TO service_role/);
 
 const source = readFileSync(resolve(process.cwd(),
   "lib/services/marketBrain/marketBrainEvidenceAttempt.ts"), "utf8");
-assert.match(source, /\.insert\(toRow\(args\.attempt\)\)/,
+assert.match(source, /\.insert\(toRow\(args\.attempt, args\.claim\)\)/,
   "first persistence must be a create-only insert");
 assert.doesNotMatch(source, /\.upsert\(/,
   "idempotent retries must never overwrite an earlier attempt");

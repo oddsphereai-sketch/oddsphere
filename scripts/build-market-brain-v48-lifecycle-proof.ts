@@ -11,6 +11,7 @@ import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrai
 const now = Date.now();
 const iso = (offsetMs: number) => new Date(now + offsetMs).toISOString();
 const attemptId = "40000000-0000-4000-8000-000000000001";
+const missedAttemptId = "40000000-0000-4000-8000-000000000004";
 const common = {
   product: "nba_daily_edge" as const,
   qualificationScopeKeys: ["moneyline", "spread", "total"] as const,
@@ -23,12 +24,19 @@ const common = {
   windowOpensAt: iso(2_000),
   windowClosesAt: iso(30_000),
 };
+const missedCommon = {
+  ...common,
+  feed: "sportsbook_splits",
+  participant: null,
+  plannedAt: iso(3_500),
+  windowClosesAt: iso(4_000),
+};
 const plan = createMarketBrainCapturePlan({
   planId: "40000000-0000-4000-8000-000000000002",
   createdAt: iso(0),
   horizonOpensAt: iso(2_000),
   horizonClosesAt: iso(60_000),
-  attempts: [{ attemptId, ...common }],
+  attempts: [{ attemptId, ...common }, { attemptId: missedAttemptId, ...missedCommon }],
   details: { fixture: "v48_postgresql_lifecycle" },
 });
 const collision = createMarketBrainCapturePlan({
@@ -59,6 +67,26 @@ const unplanned = createMarketBrainEvidenceAttempt({
   ...withoutReleaseAndChecksum(attempt),
   attemptId: "40000000-0000-4000-8000-000000000003",
 });
+const missedAttempt = createMarketBrainEvidenceAttempt({
+  attemptId: missedAttemptId,
+  ...missedCommon,
+  startedAt: null,
+  completedAt: iso(7_000),
+  outcome: "skipped",
+  reasonCode: "missed_window",
+  requestCount: 0,
+  expectedPages: null,
+  receivedPages: 0,
+  responseSha256: null,
+  rawArchiveSha256: null,
+  parserRelease: null,
+  accounting: {
+    rawRows: 0, parsedRows: 0, unsupportedRows: 0, malformedRows: 0,
+    matchedRows: 0, unmatchedRows: 0, ambiguousRows: 0,
+    retainedRows: 0, duplicateRows: 0, filteredRows: 0, writeFailedRows: 0,
+  },
+  details: { fixture: "v49_missed_window_reconciliation" },
+});
 
 const planArgs = (value: MarketBrainCapturePlan) => {
   const { checksum: _checksum, ...checksumPayload } = value;
@@ -72,9 +100,28 @@ const planArgs = (value: MarketBrainCapturePlan) => {
 
 process.stdout.write(`
 SELECT public.persist_market_brain_capture_plan_v1(${planArgs(plan)});
-SELECT pg_sleep(6);
+SELECT pg_sleep(8);
 -- Exact idempotent retry remains valid after the precommit horizon has opened.
 SELECT public.persist_market_brain_capture_plan_v1(${planArgs(plan)});
+
+CREATE TEMP TABLE due_claim AS
+SELECT * FROM public.claim_due_market_brain_attempts_v1(
+  'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed', 'postgres-proof-due', 10, 120
+);
+CREATE TEMP TABLE missed_claim AS
+SELECT * FROM public.claim_expired_market_brain_attempts_v1(
+  'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed', 'postgres-proof-missed', 10, 120
+);
+
+DO $claim_counts$
+BEGIN
+  IF (SELECT count(*) FROM due_claim WHERE attempt_id = ${literal(attemptId)}::uuid AND claim_mode = 'due') <> 1 OR
+     (SELECT count(*) FROM missed_claim WHERE attempt_id = ${literal(missedAttemptId)}::uuid
+       AND claim_mode = 'missed_window_reconcile') <> 1 THEN
+    RAISE EXCEPTION 'due and missed-window claim partition was not exact';
+  END IF;
+END;
+$claim_counts$;
 
 DO $collision$
 BEGIN
@@ -90,16 +137,17 @@ BEGIN
 END;
 $collision$;
 
-${attemptInsert(attempt)}
+${attemptInsert(attempt, "due_claim")}
+${attemptInsert(missedAttempt, "missed_claim")}
 
 DO $unplanned$
 BEGIN
   BEGIN
-    ${attemptInsert(unplanned)}
+    ${attemptInsert(unplanned, "due_claim")}
     RAISE EXCEPTION 'unplanned evidence attempt was accepted';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM = 'unplanned evidence attempt was accepted' OR
-       position('unplanned or differs' in SQLERRM) = 0 THEN
+       position('exact active claim' in SQLERRM) = 0 THEN
       RAISE;
     END IF;
   END;
@@ -128,9 +176,11 @@ $immutability$;
 DO $assertions$
 BEGIN
   IF (SELECT count(*) FROM public.market_brain_capture_plans) <> 1 OR
-     (SELECT count(*) FROM public.market_brain_planned_attempts) <> 1 OR
-     (SELECT count(*) FROM public.market_brain_evidence_attempts) <> 1 THEN
-    RAISE EXCEPTION 'v47/v48 lifecycle did not retain exactly one immutable plan/obligation/receipt';
+     (SELECT count(*) FROM public.market_brain_planned_attempts) <> 2 OR
+     (SELECT count(*) FROM public.market_brain_evidence_attempts) <> 2 OR
+     (SELECT count(*) FROM public.market_brain_attempt_claim_history) <> 2 OR
+     (SELECT count(*) FROM public.market_brain_attempt_claims WHERE finalized_at IS NOT NULL) <> 2 THEN
+    RAISE EXCEPTION 'v47/v49 lifecycle did not retain the exact plan/obligation/claim/receipt chain';
   END IF;
   IF has_table_privilege('service_role', 'public.market_brain_capture_plans', 'INSERT') OR
      has_table_privilege('service_role', 'public.market_brain_capture_plans', 'UPDATE') OR
@@ -143,7 +193,7 @@ END;
 $assertions$;
 `);
 
-function attemptInsert(value: MarketBrainEvidenceAttempt): string {
+function attemptInsert(value: MarketBrainEvidenceAttempt, claimTable: "due_claim" | "missed_claim"): string {
   const { checksum: _checksum, ...checksumPayload } = value;
   const a = value.accounting;
   const statement = `INSERT INTO public.market_brain_evidence_attempts (
@@ -151,7 +201,8 @@ function attemptInsert(value: MarketBrainEvidenceAttempt): string {
     phase, planned_at, window_opens_at, window_closes_at, started_at, completed_at, outcome, reason_code,
     request_count, expected_pages, received_pages, raw_rows, parsed_rows, unsupported_rows, malformed_rows,
     matched_rows, unmatched_rows, ambiguous_rows, retained_rows, duplicate_rows, filtered_rows,
-    write_failed_rows, response_sha256, raw_archive_sha256, parser_release, attempt_checksum,
+    write_failed_rows, response_sha256, raw_archive_sha256, parser_release,
+    claim_release, claim_token, claim_mode, claim_sequence, attempt_checksum,
     attempt_payload, attempt_payload_text, checksum_payload_text
   ) VALUES (
     ${literal(value.release)}, ${literal(value.attemptId)}::uuid, ${literal(value.product)},
@@ -163,6 +214,8 @@ function attemptInsert(value: MarketBrainEvidenceAttempt): string {
     ${a.rawRows}, ${a.parsedRows}, ${a.unsupportedRows}, ${a.malformedRows}, ${a.matchedRows}, ${a.unmatchedRows},
     ${a.ambiguousRows}, ${a.retainedRows}, ${a.duplicateRows}, ${a.filteredRows}, ${a.writeFailedRows},
     ${nullable(value.responseSha256)}, ${nullable(value.rawArchiveSha256)}, ${nullable(value.parserRelease)},
+    (SELECT claim_release FROM ${claimTable} LIMIT 1), (SELECT claim_token FROM ${claimTable} LIMIT 1),
+    (SELECT claim_mode FROM ${claimTable} LIMIT 1), (SELECT claim_sequence FROM ${claimTable} LIMIT 1),
     ${literal(value.checksum)}, ${literal(marketBrainCanonicalJson(value))}::jsonb,
     ${literal(marketBrainCanonicalJson(value))}, ${literal(marketBrainCanonicalJson(checksumPayload))}
   )`;

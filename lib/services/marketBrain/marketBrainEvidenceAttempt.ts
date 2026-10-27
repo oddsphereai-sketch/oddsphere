@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { MarketBrainClaimedAttempt } from "./marketBrainAttemptClaim";
 
 import { marketBrainCanonicalJson, marketBrainSha256 } from "./marketBrainCanonical";
 import {
@@ -11,7 +12,7 @@ import {
 } from "./marketBrainProductRegistry";
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_RELEASE =
-  "market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger" as const;
+  "market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger" as const;
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_OUTCOMES = [
   "success_with_rows",
@@ -144,24 +145,26 @@ export function assertMarketBrainEvidenceAttempt(
 export async function persistMarketBrainEvidenceAttempt(args: {
   client: SupabaseClient;
   attempt: MarketBrainEvidenceAttempt;
+  claim: MarketBrainClaimedAttempt;
   signal?: AbortSignal;
 }): Promise<AttestedMarketBrainEvidenceAttempt> {
   assertMarketBrainEvidenceAttempt(args.attempt);
-  let insert = args.client.from("market_brain_evidence_attempts").insert(toRow(args.attempt))
-    .select("attempt_payload,attempt_payload_text,checksum_payload_text,attempt_checksum,server_created_at");
+  assertClaimBinding(args.attempt, args.claim);
+  let insert = args.client.from("market_brain_evidence_attempts").insert(toRow(args.attempt, args.claim))
+    .select("attempt_payload,attempt_payload_text,checksum_payload_text,attempt_checksum,claim_release,claim_token,claim_mode,claim_sequence,server_created_at");
   if (args.signal) insert = insert.abortSignal(args.signal);
   const inserted = await insert.maybeSingle();
-  if (!inserted.error && inserted.data) return attest(inserted.data, args.attempt);
+  if (!inserted.error && inserted.data) return attest(inserted.data, args.attempt, args.claim);
 
   let existingQuery = args.client.from("market_brain_evidence_attempts")
-    .select("attempt_payload,attempt_payload_text,checksum_payload_text,attempt_checksum,server_created_at")
+    .select("attempt_payload,attempt_payload_text,checksum_payload_text,attempt_checksum,claim_release,claim_token,claim_mode,claim_sequence,server_created_at")
     .eq("release", args.attempt.release).eq("attempt_id", args.attempt.attemptId);
   if (args.signal) existingQuery = existingQuery.abortSignal(args.signal);
   const existing = await existingQuery.maybeSingle();
   if (existing.error || !existing.data) {
     throw new Error(`Market Brain evidence-attempt persistence failed: ${inserted.error?.message ?? existing.error?.message ?? "no row returned"}`);
   }
-  return attest(existing.data, args.attempt);
+  return attest(existing.data, args.attempt, args.claim);
 }
 
 function assertPayload(payload: MarketBrainEvidenceAttemptPayload): void {
@@ -251,7 +254,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function toRow(attempt: MarketBrainEvidenceAttempt): Record<string, unknown> {
+function toRow(attempt: MarketBrainEvidenceAttempt, claim: MarketBrainClaimedAttempt): Record<string, unknown> {
   const { checksum: _checksum, ...checksumPayload } = attempt;
   return {
     release: attempt.release, attempt_id: attempt.attemptId, product_key: attempt.product,
@@ -268,20 +271,43 @@ function toRow(attempt: MarketBrainEvidenceAttempt): Record<string, unknown> {
     filtered_rows: attempt.accounting.filteredRows, write_failed_rows: attempt.accounting.writeFailedRows,
     response_sha256: attempt.responseSha256, raw_archive_sha256: attempt.rawArchiveSha256,
     parser_release: attempt.parserRelease, attempt_checksum: attempt.checksum,
+    claim_release: claim.claimRelease, claim_token: claim.claimToken,
+    claim_mode: claim.claimMode, claim_sequence: claim.claimSequence,
     attempt_payload: attempt, attempt_payload_text: marketBrainCanonicalJson(attempt),
     checksum_payload_text: marketBrainCanonicalJson(checksumPayload),
   };
 }
 
-function attest(row: Record<string, unknown>, expected: MarketBrainEvidenceAttempt): AttestedMarketBrainEvidenceAttempt {
+function attest(row: Record<string, unknown>, expected: MarketBrainEvidenceAttempt,
+  claim: MarketBrainClaimedAttempt): AttestedMarketBrainEvidenceAttempt {
   const stored = row.attempt_payload as MarketBrainEvidenceAttempt;
   const { checksum: _checksum, ...checksumPayload } = expected;
+  const serverCreatedAt = normalizeTimestamp(row.server_created_at);
   if (row.attempt_checksum !== expected.checksum || row.attempt_payload_text !== marketBrainCanonicalJson(expected) ||
     row.checksum_payload_text !== marketBrainCanonicalJson(checksumPayload) ||
-    marketBrainCanonicalJson(stored) !== marketBrainCanonicalJson(expected) || !isTimestamp(String(row.server_created_at))) {
+    row.claim_release !== claim.claimRelease || row.claim_token !== claim.claimToken ||
+    row.claim_mode !== claim.claimMode || row.claim_sequence !== claim.claimSequence ||
+    marketBrainCanonicalJson(stored) !== marketBrainCanonicalJson(expected)) {
     throw new Error("Stored Market Brain evidence attempt differs from its immutable requested payload.");
   }
   return deepFreeze({ ...structuredClone(stored), persistenceAttestation: Object.freeze({
-    serverCreatedAt: String(row.server_created_at), checksum: String(row.attempt_checksum),
+    serverCreatedAt, checksum: String(row.attempt_checksum),
   }) });
+}
+
+function normalizeTimestamp(value: unknown): string {
+  const parsed = Date.parse(String(value));
+  if (!Number.isFinite(parsed)) throw new Error("Stored Market Brain evidence attempt has an invalid server timestamp.");
+  return new Date(parsed).toISOString();
+}
+
+function assertClaimBinding(attempt: MarketBrainEvidenceAttempt, claim: MarketBrainClaimedAttempt): void {
+  if (claim.attemptId !== attempt.attemptId ||
+    claim.claimRelease !== "market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed" ||
+    !UUID.test(claim.claimToken) || !Number.isInteger(claim.claimSequence) || claim.claimSequence < 1 ||
+    (claim.claimMode === "missed_window_reconcile" &&
+      !(attempt.outcome === "skipped" && attempt.reasonCode === "missed_window")) ||
+    (claim.claimMode === "due" && attempt.reasonCode === "missed_window")) {
+    throw new Error("Market Brain evidence attempt does not match its exact active claim.");
+  }
 }
