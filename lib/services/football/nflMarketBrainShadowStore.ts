@@ -8,6 +8,7 @@ import {
 } from "./nflMarketBrainShadow";
 import { MARKET_BRAIN_CONTRACT_RELEASE } from "@/lib/services/marketBrain/marketBrainContract";
 import {
+  assertMarketBrainCase,
   assertMarketBrainPrior,
   marketBrainPriorArtifactSha256,
   type MarketBrainMarginTotalArtifact,
@@ -37,6 +38,7 @@ type StoredShadowRow = {
   shadow_sha256: string;
   shadow_payload: string;
   prior_artifact_sha256: string | null;
+  bytes?: number;
 };
 
 export type NflMarketBrainStoredShadowCapture = {
@@ -146,8 +148,14 @@ export async function appendNflMarketBrainShadows(args: {
   const rows = args.payloads.flatMap((payload) => {
     const shadow = payload.marketBrainShadow;
     if (!shadow) return [];
+    if ("case" in shadow) assertMarketBrainCase(shadow.case);
     validateNflMarketBrainRawParserReferences(shadow, rawParserInputs);
     const shadowSha256 = hashNflMarketBrainShadow(shadow);
+    const shadowPayload = marketBrainCanonicalJson(shadow);
+    const shadowBytes = Buffer.byteLength(shadowPayload, "utf8");
+    if ("case" in shadow && shadow.bytes !== shadowBytes) {
+      throw new Error("NFL Market Brain success shadow byte count is invalid.");
+    }
     const priorArtifactSha256 = "case" in shadow ? marketBrainPriorArtifactSha256(shadow.case.prior) : null;
     if ("case" in shadow && shadow.case.prior.kind === "margin_total_distribution") {
       const { sha256: artifactSha256, ...artifactPayload } = shadow.case.prior.artifact;
@@ -174,8 +182,9 @@ export async function appendNflMarketBrainShadows(args: {
       captured_at: payload.capturedAt,
       shadow,
       shadow_sha256: shadowSha256,
-      shadow_payload: marketBrainCanonicalJson(shadow),
+      shadow_payload: shadowPayload,
       prior_artifact_sha256: priorArtifactSha256,
+      bytes: shadowBytes,
     }];
   });
   const hashes = rows.map((row) => row.shadow_sha256);
@@ -243,7 +252,7 @@ export async function readNflMarketBrainShadows(args: {
     const pageSize = from === NFL_MARKET_BRAIN_SHADOW_MAX_ROWS_PER_WEEK
       ? 1 : NFL_MARKET_BRAIN_SHADOW_PAGE_SIZE;
     let query = args.client.from("nfl_market_brain_shadow_snapshots")
-      .select("id,provider_game_id,shadow,shadow_sha256,shadow_payload,prior_artifact_sha256")
+      .select("id,provider_game_id,shadow,shadow_sha256,shadow_payload,prior_artifact_sha256,bytes")
       .eq("season", args.season).eq("week", args.week)
       .eq("shadow_release", NFL_MARKET_BRAIN_SHADOW_RELEASE)
       .eq("contract_release", MARKET_BRAIN_CONTRACT_RELEASE)
@@ -260,23 +269,7 @@ export async function readNflMarketBrainShadows(args: {
     rows.push(...page);
     if (page.length < pageSize) break;
   }
-  for (const row of rows) {
-    if (marketBrainCanonicalJson(row.shadow) !== row.shadow_payload ||
-      hashNflMarketBrainShadow(row.shadow) !== row.shadow_sha256 ||
-      marketBrainSha256(JSON.parse(row.shadow_payload)) !== row.shadow_sha256) {
-      throw new Error(`NFL Market Brain stored shadow checksum mismatch: ${row.id}`);
-    }
-    const embeddedPrior = "case" in row.shadow
-      ? row.shadow.case.prior.kind === "margin_total_distribution"
-        ? row.shadow.case.prior.artifact.sha256
-        : row.shadow.case.prior.kind === "margin_total_distribution_ref"
-        ? row.shadow.case.prior.artifactSha256
-        : null
-      : null;
-    if (embeddedPrior !== row.prior_artifact_sha256) {
-      throw new Error(`NFL Market Brain stored shadow prior reference mismatch: ${row.id}`);
-    }
-  }
+  verifyStoredRows(rows);
   const needed = [...new Set(rows.flatMap((row) => row.prior_artifact_sha256 ? [row.prior_artifact_sha256] : []))];
   const artifactMap = new Map<string, MarketBrainMarginTotalArtifact>();
   if (needed.length > 0) {
@@ -332,7 +325,7 @@ export async function readNflMarketBrainStoredShadowCaptures(args: {
     throw new Error("NFL Market Brain capture-set window is invalid.");
   }
   let query = args.client.from("nfl_market_brain_shadow_snapshots")
-    .select("id,run_id,capture_attempt_id,season,week,provider_game_id,stage,captured_at,created_at,shadow,shadow_sha256,shadow_payload,prior_artifact_sha256")
+    .select("id,run_id,capture_attempt_id,season,week,provider_game_id,stage,captured_at,created_at,shadow,shadow_sha256,shadow_payload,prior_artifact_sha256,bytes")
     .eq("provider_game_id", args.eventId)
     .eq("shadow_release", NFL_MARKET_BRAIN_SHADOW_RELEASE)
     .eq("contract_release", MARKET_BRAIN_CONTRACT_RELEASE)
@@ -376,6 +369,18 @@ function verifyStoredRows(rows: StoredShadowRow[]): void {
       hashNflMarketBrainShadow(row.shadow) !== row.shadow_sha256 ||
       marketBrainSha256(JSON.parse(row.shadow_payload)) !== row.shadow_sha256) {
       throw new Error(`NFL Market Brain stored shadow checksum mismatch: ${row.id}`);
+    }
+    const payloadBytes = Buffer.byteLength(row.shadow_payload, "utf8");
+    if (row.bytes !== payloadBytes || ("case" in row.shadow && row.shadow.bytes !== row.bytes)) {
+      throw new Error(`NFL Market Brain stored shadow byte count mismatch: ${row.id}`);
+    }
+    if ("case" in row.shadow) {
+      try {
+        assertMarketBrainCase(row.shadow.case);
+      } catch (error) {
+        throw new Error(`NFL Market Brain stored shadow case mismatch: ${row.id}: ${
+          error instanceof Error ? error.message : "unknown shape"}`);
+      }
     }
     const embeddedPrior = "case" in row.shadow
       ? row.shadow.case.prior.kind === "margin_total_distribution"

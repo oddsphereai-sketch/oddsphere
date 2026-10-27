@@ -12,6 +12,7 @@ export type FootballRawPriceObservation = {
   sourceObservationId: string;
   rawRowSha256: string;
   provider: "balldontlie" | "sharpapi";
+  sourceRelease: string;
   feed: string;
   phase: FootballRawPricePhase;
   providerGameId: string;
@@ -36,6 +37,7 @@ export type FootballRawPriceRowManifest = {
 };
 
 export type FootballRawPriceResponseManifest = {
+  release: string;
   provider: "balldontlie" | "sharpapi";
   feed: string;
   participant: string | null;
@@ -99,11 +101,26 @@ export function rawPriceSha256(value: unknown): string {
     hash.update('"');
   }
 
-  function updateJson(item: unknown, arrayElement = false): boolean {
-    if (item !== null && typeof item === "object" &&
-        typeof (item as { toJSON?: unknown }).toJSON === "function") {
-      item = (item as { toJSON(): unknown }).toJSON();
+  function prepareJsonValue(item: unknown, key: string): unknown {
+    if (item !== null && (typeof item === "object" || typeof item === "function" ||
+        typeof item === "bigint")) {
+      const toJSON = (item as { toJSON?: unknown }).toJSON;
+      if (typeof toJSON === "function") item = toJSON.call(item, key);
     }
+    if (item !== null && typeof item === "object") {
+      try { return Boolean.prototype.valueOf.call(item); } catch { /* not a boxed boolean */ }
+      try { return Number.prototype.valueOf.call(item); } catch { /* not a boxed number */ }
+      try { return String.prototype.valueOf.call(item); } catch { /* not a boxed string */ }
+      try { return BigInt.prototype.valueOf.call(item); } catch { /* not a boxed bigint */ }
+    }
+    return item;
+  }
+
+  function updateJson(item: unknown, key: string, arrayElement = false): boolean {
+    return updateJsonPrepared(prepareJsonValue(item, key), arrayElement);
+  }
+
+  function updateJsonPrepared(item: unknown, arrayElement = false): boolean {
     if (item === undefined || typeof item === "function" || typeof item === "symbol") {
       if (arrayElement) hash.update("null");
       return arrayElement;
@@ -124,7 +141,7 @@ export function rawPriceSha256(value: unknown): string {
         hash.update("[");
         for (let index = 0; index < item.length; index += 1) {
           if (index > 0) hash.update(",");
-          updateJson(item[index], true);
+          updateJson(item[index], String(index), true);
         }
         hash.update("]");
         return true;
@@ -133,12 +150,12 @@ export function rawPriceSha256(value: unknown): string {
       let wrote = false;
       for (const key in item as Record<string, unknown>) {
         if (!Object.hasOwn(item, key)) continue;
-        const child = (item as Record<string, unknown>)[key];
+        const child = prepareJsonValue((item as Record<string, unknown>)[key], key);
         if (child === undefined || typeof child === "function" || typeof child === "symbol") continue;
         if (wrote) hash.update(",");
         updateString(key);
         hash.update(":");
-        updateJson(child);
+        updateJsonPrepared(child);
         wrote = true;
       }
       hash.update("}");
@@ -148,11 +165,12 @@ export function rawPriceSha256(value: unknown): string {
     }
   }
 
-  if (!updateJson(value)) throw new TypeError("Raw price response is not JSON serializable");
+  if (!updateJson(value, "")) throw new TypeError("Raw price response is not JSON serializable");
   return hash.digest("hex");
 }
 
 export function failedFootballRawPriceManifest(args: {
+  release: string;
   provider: FootballRawPriceResponseManifest["provider"];
   feed: string;
   participant: string | null;
@@ -161,6 +179,7 @@ export function failedFootballRawPriceManifest(args: {
   reason: string;
 }): FootballRawPriceResponseManifest {
   return {
+    release: args.release,
     provider: args.provider,
     feed: args.feed,
     participant: args.participant,

@@ -248,10 +248,28 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_shadow_snapshots (
   CHECK ((((shadow ->> 'capturedAt')::timestamptz <= created_at)) IS TRUE),
   CHECK ((CASE WHEN shadow ? 'case' THEN
     jsonb_typeof(shadow -> 'bytes') = 'number' AND
+    (shadow ->> 'bytes')::integer = bytes AND
     NOT (shadow ? 'status') AND NOT (shadow ? 'productionApplied') AND
     NOT (shadow ? 'eventId') AND NOT (shadow ? 'reason') AND
     shadow #>> '{case,release}' = contract_release AND
     shadow #>> '{case,sport}' = 'nfl' AND
+    shadow #>> '{case,visibility}' = 'internal_only' AND
+    shadow #>> '{case,mode}' = 'shadow_capture' AND
+    shadow #>> '{case,temporalScope}' = 'point_in_time_snapshot' AND
+    shadow #>> '{case,captureBoundary}' IN ('raw_provider_response', 'normalized_provider_observation') AND
+    jsonb_typeof(shadow #> '{case,captureLimitations}') = 'array' AND
+    jsonb_typeof(shadow #> '{case,subject}') = 'object' AND
+    jsonb_typeof(shadow #> '{case,prior}') = 'object' AND
+    jsonb_typeof(shadow #> '{case,evaluatedTargets}') = 'object' AND
+    jsonb_typeof(shadow #> '{case,observations}') = 'array' AND
+    jsonb_typeof(shadow #> '{case,sourceManifests}') = 'array' AND
+    jsonb_typeof(shadow #> '{case,expectedInputs}') = 'array' AND
+    jsonb_typeof(shadow #> '{case,blindSpots}') = 'array' AND
+    jsonb_typeof(shadow #> '{case,accounting}') = 'object' AND
+    jsonb_typeof(shadow #> '{case,invariants}') = 'object' AND
+    (shadow #>> '{case,invariants,displayContractAuthority}')::boolean IS FALSE AND
+    (shadow #>> '{case,invariants,lockedRecordMutationAllowed}')::boolean IS FALSE AND
+    (shadow #>> '{case,invariants,productionInfluenceAllowed}')::boolean IS FALSE AND
     (shadow #>> '{case,evaluatedAt}')::timestamptz >= captured_at AND
     (shadow #>> '{case,evaluatedAt}')::timestamptz <= created_at
   ELSE

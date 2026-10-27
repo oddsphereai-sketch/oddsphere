@@ -26,14 +26,14 @@ import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAva
 import { marketBrainSha256 } from "@/lib/services/marketBrain/marketBrainCanonical";
 import type { NflForwardWeatherSnapshot } from "./nflForwardEvidence";
 import {
-  NFL_SHARP_API_SPLITS_RELEASE,
+  NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
   type NflRegularSharpMarket,
   type NflSharpApiSplitCaptureManifest,
   type NflSharpApiSplitSource,
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r16_streaming_response_hash" as const;
+  "nfl_market_brain_shadow_2026_10_27_r17_source_manifest_release_identity" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -227,6 +227,7 @@ function sharpSplitManifest(
     .map((row) => row.id);
   return {
     id: "source:sharpapi:splits:all_books",
+    release: manifest.release,
     provider: "sharpapi",
     feed: "splits",
     participant: null,
@@ -494,6 +495,7 @@ function addRawPrices(
     const eventRows = manifest.rows.filter((row) => row.providerGameId === args.game.providerGameId);
     return {
       id: `source:${manifest.provider}:${manifest.feed}:${canonical(manifest.participant)}:${manifestIndex}`,
+      release: manifest.release,
       provider: manifest.provider,
       feed: manifest.feed,
       participant: manifest.participant === null ? null : canonical(manifest.participant),
@@ -570,7 +572,7 @@ function rawPriceObservation(
       rawStatus: raw.status,
     },
     audit: {
-      sourceRelease: raw.provider === "sharpapi" ? "sharpapi_raw_response" : "balldontlie_raw_response",
+      sourceRelease: raw.sourceRelease,
       sourceObservationId: raw.sourceObservationId,
       notes: [...raw.notes],
     },
@@ -650,7 +652,7 @@ function addSharpSplits(
           exactLineMatched: null,
         },
         audit: {
-          sourceRelease: NFL_SHARP_API_SPLITS_RELEASE,
+          sourceRelease: NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
           sourceObservationId: `${split.sourceEventId ?? id}:${market}:${split.providerFetchedAt}:${split.capturedAt}:${index}`,
           notes: source.status === "duplicate" ? ["multiple exact-identity provider rows retained"] : [],
         },

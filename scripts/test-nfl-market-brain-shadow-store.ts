@@ -140,6 +140,29 @@ async function main() {
   assert.deepEqual({ proposed: dry.proposed, inserted: dry.inserted }, { proposed: 1, inserted: 0 });
   assert.equal(inserted.length, 0);
 
+  const malformedSuccess = {
+    release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
+    capturedAt: shadow.capturedAt,
+    case: {
+      release: MARKET_BRAIN_CONTRACT_RELEASE,
+      sport: "nfl",
+      eventId: shadow.eventId,
+      evaluatedAt: shadow.capturedAt,
+    },
+    bytes: 0,
+  };
+  for (let previous = -1; previous !== malformedSuccess.bytes;) {
+    previous = malformedSuccess.bytes;
+    malformedSuccess.bytes = Buffer.byteLength(JSON.stringify(malformedSuccess), "utf8");
+  }
+  await assert.rejects(() => appendNflMarketBrainShadows({
+    client: client as never,
+    runId: payload.runId,
+    payloads: [{ ...payload, marketBrainShadow: malformedSuccess } as never],
+    apply: false,
+  }), /Invalid Market Brain case/,
+  "a self-consistent but structurally incomplete success case must fail before persistence");
+
   const write = await appendNflMarketBrainShadows({
     client: client as never,
     runId: payload.runId,
@@ -151,6 +174,7 @@ async function main() {
   assert.equal(inserted[0]?.shadow, shadow);
   assert.equal(inserted[0]?.shadow_payload, marketBrainCanonicalJson(shadow));
   assert.equal(inserted[0]?.prior_artifact_sha256, null);
+  assert.equal(inserted[0]?.bytes, Buffer.byteLength(marketBrainCanonicalJson(shadow), "utf8"));
   assert.equal(inserted[0]?.capture_attempt_id, payload.marketBrainCaptureAttemptId);
   assert.equal(inserted[0]?.contract_release, shadow.release.startsWith("nfl_market_brain_shadow")
     ? MARKET_BRAIN_CONTRACT_RELEASE : null);
@@ -179,6 +203,7 @@ async function main() {
             id: "stored-row", provider_game_id: shadow.eventId, shadow: storedShadow,
             shadow_sha256: hashNflMarketBrainShadow(shadow),
             shadow_payload: marketBrainCanonicalJson(shadow), prior_artifact_sha256: null,
+            bytes: Buffer.byteLength(marketBrainCanonicalJson(shadow), "utf8"),
           }], error: null }),
         };
         return query;

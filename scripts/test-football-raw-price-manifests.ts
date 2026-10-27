@@ -27,6 +27,10 @@ for (const value of [
   { text: "quote:\" slash:\\ controls:\u0000\b\t\n\f\r", unicode: "ä😀\uD800", number: -0 },
   [null, true, false, Number.NaN, Number.POSITIVE_INFINITY, { omitted: undefined, kept: 1 }],
   { integerKeys: { 2: "two", 1: "one", z: "last" } },
+  { a: { toJSON(key: string) { return key; } } },
+  { a: { toJSON() { return undefined; } }, kept: true },
+  { number: new Number(3), string: new String("x"), boolean: new Boolean(false) },
+  Object.assign(function fixture() { return undefined; }, { toJSON(key: string) { return key; } }),
 ]) {
   assert.equal(rawPriceSha256(value),
     createHash("sha256").update(JSON.stringify(value)).digest("hex"),

@@ -29,6 +29,7 @@ DECLARE
   success_shadow_doc jsonb;
   success_shadow_text text;
   success_shadow_sha text;
+  success_contract_release text;
   capture_payload jsonb;
   capture_doc jsonb;
   capture_text text;
@@ -195,13 +196,15 @@ BEGIN
 
   SELECT payload, sha256 INTO success_shadow_text, success_shadow_sha
     FROM pg_temp.market_brain_lifecycle_fixture WHERE name = 'success_shadow';
+  SELECT payload INTO success_contract_release
+    FROM pg_temp.market_brain_lifecycle_fixture WHERE name = 'success_contract_release';
   success_shadow_doc := success_shadow_text::jsonb;
   INSERT INTO public.nfl_market_brain_shadow_snapshots (
     id, shadow_release, contract_release, run_id, capture_attempt_id, season, week,
     provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
     prior_artifact_sha256, bytes, created_at
   ) VALUES (
-    '00000000-0000-4000-8000-000000000110', 'proof-shadow-release', 'proof-contract-release',
+    '00000000-0000-4000-8000-000000000110', 'proof-shadow-release', success_contract_release,
     '00000000-0000-4000-8000-000000000111', '00000000-0000-4000-8000-000000000111',
     2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
     success_shadow_doc, success_shadow_sha, success_shadow_text, NULL,
@@ -262,7 +265,7 @@ BEGIN
       provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
       prior_artifact_sha256, bytes, created_at
     ) VALUES (
-      '00000000-0000-4000-8000-000000000211', 'proof-shadow-release', 'proof-contract-release',
+      '00000000-0000-4000-8000-000000000211', 'proof-shadow-release', success_contract_release,
       '00000000-0000-4000-8000-000000000212', '00000000-0000-4000-8000-000000000212',
       2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
       forged_doc, forged_sha, forged_payload, NULL, octet_length(forged_payload),
@@ -281,7 +284,7 @@ BEGIN
       provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
       prior_artifact_sha256, bytes, created_at
     ) VALUES (
-      '00000000-0000-4000-8000-000000000215', 'proof-shadow-release', 'proof-contract-release',
+      '00000000-0000-4000-8000-000000000215', 'proof-shadow-release', success_contract_release,
       '00000000-0000-4000-8000-000000000216', '00000000-0000-4000-8000-000000000216',
       2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
       forged_doc, forged_sha, forged_payload, NULL, octet_length(forged_payload),
@@ -292,8 +295,7 @@ BEGIN
     WHEN OTHERS THEN RAISE;
   END;
   BEGIN
-    forged_doc := jsonb_set(success_shadow_doc, '{case,evaluatedAt}',
-      to_jsonb(to_char((base_time - interval '2 minutes') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+    forged_doc := jsonb_set(success_shadow_doc, '{bytes}', '1'::jsonb);
     forged_payload := forged_doc::text;
     forged_sha := encode(digest(convert_to(forged_payload, 'UTF8'), 'sha256'), 'hex');
     INSERT INTO public.nfl_market_brain_shadow_snapshots (
@@ -301,7 +303,28 @@ BEGIN
       provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
       prior_artifact_sha256, bytes, created_at
     ) VALUES (
-      '00000000-0000-4000-8000-000000000213', 'proof-shadow-release', 'proof-contract-release',
+      '00000000-0000-4000-8000-000000000217', 'proof-shadow-release', success_contract_release,
+      '00000000-0000-4000-8000-000000000218', '00000000-0000-4000-8000-000000000218',
+      2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
+      forged_doc, forged_sha, forged_payload, NULL, octet_length(forged_payload),
+      base_time - interval '3 minutes'
+    );
+    RAISE EXCEPTION 'success shadow embedded byte mismatch was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+    WHEN OTHERS THEN RAISE;
+  END;
+  BEGIN
+    forged_doc := jsonb_set(success_shadow_doc, '{case,evaluatedAt}',
+      to_jsonb(to_char((statement_timestamp() + interval '1 hour') AT TIME ZONE 'UTC',
+        'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+    forged_payload := forged_doc::text;
+    forged_sha := encode(digest(convert_to(forged_payload, 'UTF8'), 'sha256'), 'hex');
+    INSERT INTO public.nfl_market_brain_shadow_snapshots (
+      id, shadow_release, contract_release, run_id, capture_attempt_id, season, week,
+      provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
+      prior_artifact_sha256, bytes, created_at
+    ) VALUES (
+      '00000000-0000-4000-8000-000000000213', 'proof-shadow-release', success_contract_release,
       '00000000-0000-4000-8000-000000000214', '00000000-0000-4000-8000-000000000214',
       2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
       forged_doc, forged_sha, forged_payload, NULL, octet_length(forged_payload),
@@ -495,6 +518,13 @@ BEGIN
   END IF;
   IF (SELECT count(*) FROM public.nfl_market_brain_research_outcomes WHERE event_id = '900100') <> 1 THEN
     RAISE EXCEPTION 'expected exactly one valid lifecycle outcome';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.nfl_market_brain_shadow_snapshots
+     WHERE provider_game_id = 'proof-success-event'
+       AND (shadow #>> '{case,evaluatedAt}')::timestamptz <= created_at
+  ) THEN
+    RAISE EXCEPTION 'valid success shadow receipt chronology was not persisted';
   END IF;
 END;
 $assert_lifecycle$;

@@ -159,6 +159,7 @@ const marketCase = buildMarketBrainCase({
   observations,
   sourceManifests: [{
     id: "source:fixture",
+    release: "fixture-source-manifest-r1",
     provider: "fixture",
     feed: "fixture",
     participant: null,

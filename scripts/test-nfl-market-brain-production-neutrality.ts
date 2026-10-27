@@ -2,18 +2,28 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
   BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
   fetchBalldontlieNflRegularSlate,
 } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
   fetchSharpApiNflSharpOdds,
+  FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
   FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE,
 } from "../lib/services/football/sharpApiFootballSharpOdds";
 import {
   fetchSharpApiNflSplits,
+  NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
   NFL_SHARP_API_SPLITS_RELEASE,
   type SharpApiNflSplitRow,
 } from "../lib/services/football/sharpApiNflSplits";
+import { NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE } from
+  "../lib/services/football/nflForwardEvidence";
+import { NFL_FORWARD_WRITER_RELEASE } from "../lib/services/football/nflForwardEvidenceWriter";
+import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from
+  "../lib/services/football/nflForwardMemberSnapshotStore";
+import { NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE } from
+  "../lib/services/football/nflWeekOneHeldMemberFixture";
 
 const capturedAt = "2026-09-01T12:00:00.000Z";
 const startsAt = "2026-09-10T00:20:00.000Z";
@@ -85,6 +95,18 @@ async function main(): Promise<void> {
     "football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity");
   assert.equal(NFL_SHARP_API_SPLITS_RELEASE,
     "nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity");
+  const releaseRegistry = readFileSync("docs/current-model-releases.md", "utf8");
+  for (const release of [
+    NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+    NFL_FORWARD_WRITER_RELEASE,
+    NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE,
+    NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE,
+    BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
+    FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+    NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+  ]) {
+    assert.ok(releaseRegistry.includes(release), `active release registry is missing ${release}`);
+  }
 
   const bdlOffCalls = { calls: 0 };
   const bdlOff = await fetchBalldontlieNflRegularSlate({
@@ -100,6 +122,8 @@ async function main(): Promise<void> {
   assert.equal(bdlOffCalls.calls, 3);
   assert.equal(bdlOnCalls.calls, 3, "research capture must not add provider requests");
   assert.equal(bdlOn.rawPriceResponseManifests?.current.rawParserInput, null);
+  assert.equal(bdlOn.rawPriceResponseManifests?.current.release,
+    BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE);
   assert.equal(bdlOn.rawPriceResponseManifests?.current.rawParserInputFailureReason,
     "football_raw_price_parser_input_exceeds_2_mib_research_archive_limit");
 
@@ -116,6 +140,7 @@ async function main(): Promise<void> {
   assert.equal(sharpOffCalls.calls, 2);
   assert.equal(sharpOnCalls.calls, 2, "research archival must reuse the same SharpAPI responses");
   assert.equal(sharpOn.rawPriceResponseManifests?.find((row) => row.participant === "circa")?.rawParserInput, null);
+  assert.equal(sharpOn.rawPriceResponseManifests?.[0]?.release, FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE);
 
   const splitRow: SharpApiNflSplitRow = {
     event_id: "nfl_patriots_seahawks", event_start_time: null, league: "nfl",
@@ -141,6 +166,7 @@ async function main(): Promise<void> {
     "research strictness must not alter incumbent split semantics");
   assert.equal(splitsOff.sourcesByGame, undefined);
   assert.equal(splitsOn.sourcesByGame?.[game.providerGameId]?.every((row) => row.status === "unavailable"), true);
+  assert.equal(splitsOn.captureManifest?.release, NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE);
   assert.deepEqual(splitCalls, { fetchAll: 1, fetch: 1 });
 
   const route = readFileSync("app/api/cron/nfl-forward-evidence/route.ts", "utf8");

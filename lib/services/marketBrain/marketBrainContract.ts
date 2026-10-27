@@ -1,7 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r13_schema_bound_parser_input" as const;
+  "market_brain_contract_2026_10_27_r14_source_manifest_release_identity" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -96,6 +96,7 @@ export type MarketBrainExpectedInput = {
 
 export type MarketBrainSourceManifest = {
   id: string;
+  release: string;
   provider: string;
   feed: string;
   participant: string | null;
@@ -427,6 +428,9 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
   for (const manifest of args.sourceManifests) {
     if (manifestIds.has(manifest.id)) throw new Error(`Duplicate Market Brain source manifest: ${manifest.id}`);
     manifestIds.add(manifest.id);
+    if (!manifest.release.trim()) {
+      throw new Error(`Market Brain source manifest release is required: ${manifest.id}`);
+    }
     if (!Number.isFinite(Date.parse(manifest.providerFetchedAt))) {
       throw new Error(`Invalid Market Brain source manifest fetch time: ${manifest.id}`);
     }
@@ -512,6 +516,37 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
       productionInfluenceAllowed: false,
     },
   };
+}
+
+export function assertMarketBrainCase(value: unknown): asserts value is MarketBrainCase {
+  try {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("case is not an object");
+    }
+    const candidate = value as MarketBrainCase;
+    const rebuilt = buildMarketBrainCase({
+      sport: candidate.sport,
+      eventId: candidate.eventId,
+      evaluatedAt: candidate.evaluatedAt,
+      captureBoundary: candidate.captureBoundary,
+      captureLimitations: candidate.captureLimitations,
+      subject: candidate.subject,
+      prior: candidate.prior,
+      evaluatedTargets: candidate.evaluatedTargets,
+      observations: candidate.observations,
+      sourceManifests: candidate.sourceManifests,
+      expectedInputs: candidate.expectedInputs,
+      blindSpots: candidate.blindSpots,
+      ...("incumbentComparator" in candidate
+        ? { incumbentComparator: candidate.incumbentComparator }
+        : {}),
+    });
+    if (marketBrainSha256(candidate) !== marketBrainSha256(rebuilt)) {
+      throw new Error("derived fields or contract identity diverged");
+    }
+  } catch (error) {
+    throw new Error(`Invalid Market Brain case: ${error instanceof Error ? error.message : "unknown shape"}`);
+  }
 }
 
 function cloneDistribution(distribution: MarketBrainDiscreteDistribution): MarketBrainDiscreteDistribution {

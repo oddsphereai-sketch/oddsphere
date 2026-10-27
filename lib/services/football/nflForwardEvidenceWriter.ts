@@ -38,6 +38,7 @@ import { collectNflForwardWeather } from "./nflVenueWeather";
 import {
   completeSharpApiNflSplitSet,
   fetchSharpApiNflSplits,
+  NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
   unavailableNflSharpApiSplitSources,
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
@@ -83,6 +84,7 @@ import { buildNflThreeStateMarketAuthority } from "./nflThreeStateMarketReader";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNflSharpOdds,
+  FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
   FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS,
   FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
 } from "./sharpApiFootballSharpOdds";
@@ -376,6 +378,7 @@ export async function runNflForwardEvidenceWriter(args: {
         rows: 0,
         dates: [],
         captureManifest: {
+          release: NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
           responseReceivedAt: args.apply ? new Date().toISOString() : args.now,
           rawResponseSha256: null,
           status: "failed" as const,
@@ -935,6 +938,7 @@ export async function runNflForwardEvidenceWriter(args: {
         : []),
       ...(circaAttempt.result?.rawPriceResponseManifests ?? FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.map((participant) =>
         failedFootballRawPriceManifest({
+          release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
           provider: "sharpapi",
           feed: "main_odds",
           participant,

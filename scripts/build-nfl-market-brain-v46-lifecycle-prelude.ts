@@ -1,4 +1,9 @@
 import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
+import {
+  buildMarketBrainCase,
+  MARKET_BRAIN_BLIND_SPOTS,
+  MARKET_BRAIN_CONTRACT_RELEASE,
+} from "../lib/services/marketBrain/marketBrainContract";
 
 const base = new Date(Math.floor(Date.now() / 1_000) * 1_000);
 const at = (offsetMs: number) => new Date(base.getTime() + offsetMs).toISOString();
@@ -39,17 +44,39 @@ const shadow = {
   reason: "proof-fixture",
 };
 const shadowSha = marketBrainSha256(shadow);
+const successCase = buildMarketBrainCase({
+  sport: "nfl",
+  eventId: "proof-success-event",
+  evaluatedAt: at(-4 * 60_000),
+  captureBoundary: "raw_provider_response",
+  captureLimitations: ["synthetic lifecycle proof with no provider observations"],
+  subject: {
+    kind: "two_team_game",
+    awayId: "proof-away",
+    homeId: "proof-home",
+    startsAt: at(10 * 60_000),
+  },
+  prior: {
+    kind: "unavailable",
+    release: "proof-independent-model-release",
+    reason: "synthetic lifecycle proof",
+  },
+  evaluatedTargets: {},
+  observations: [],
+  sourceManifests: [],
+  expectedInputs: [],
+  blindSpots: MARKET_BRAIN_BLIND_SPOTS,
+});
 const successShadow = {
   release: "proof-shadow-release",
   capturedAt: at(-5 * 60_000),
-  case: {
-    release: "proof-contract-release",
-    sport: "nfl",
-    eventId: "proof-success-event",
-    evaluatedAt: at(-4 * 60_000),
-  },
-  bytes: 1,
+  case: successCase,
+  bytes: 0,
 };
+for (let previous = -1; previous !== successShadow.bytes;) {
+  previous = successShadow.bytes;
+  successShadow.bytes = Buffer.byteLength(JSON.stringify(successShadow));
+}
 const successShadowSha = marketBrainSha256(successShadow);
 const capturePayload = {
   release: "proof-capture-set-release",
@@ -156,6 +183,7 @@ const fixtures: Array<[string, string, string]> = [
   ["base_time", base.toISOString(), ""],
   ["manifest", marketBrainCanonicalJson(manifestPayload), manifestSha],
   ["shadow", marketBrainCanonicalJson(shadow), shadowSha],
+  ["success_contract_release", MARKET_BRAIN_CONTRACT_RELEASE, ""],
   ["success_shadow", marketBrainCanonicalJson(successShadow), successShadowSha],
   ["capture", marketBrainCanonicalJson(capturePayload), captureSha],
   ["input", marketBrainCanonicalJson(inputPayload), inputSha],

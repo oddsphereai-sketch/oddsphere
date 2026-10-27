@@ -492,19 +492,27 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_contract_2026_10_27_r13_schema_bound_parser_input` and
-  `nfl_market_brain_shadow_2026_10_27_r16_streaming_response_hash` define an internal-only,
+- `market_brain_contract_2026_10_27_r14_source_manifest_release_identity` and
+  `nfl_market_brain_shadow_2026_10_27_r17_source_manifest_release_identity` define an internal-only,
   production-inert evidence boundary. The sole writer
   `nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar`
-  consumes `nfl_sharpapi_splits_2026_10_27_r5_pagination_metadata_closed`. Research capture is
+  runs with collector `nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar`,
+  member fixture `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation`, and
+  compact snapshot `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
+  The production provider DTOs remain
+  `nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity`,
+  `balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture`, and
+  `football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity`. Research-only split
+  receipts instead carry
+  `nfl_sharpapi_split_capture_manifest_2026_10_27_r1_pagination_metadata_closed`. Research capture is
   explicitly disabled unless both `NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED=true` and
   `NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED=true`; a one-to-four-game per-run canary cap is also
   mandatory. `NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON` must also carry every predeclared future
   event/stage attempt UUID with a nonoverlapping execution window; a missing or ambiguous current
   slot fails closed and is never replaced by the cron's execution-time run id. Merging the code does
   not begin storage. When separately enabled for a reviewed shadow canary, it stores tapes only for
-  future unlocked rows. `balldontlie_nfl_regular_slate_2026_10_27_r6_raw_parser_input` and
-  `football_sharp_price_capture_2026_10_27_r4_raw_parser_input` attach raw response hashes,
+  future unlocked rows. `balldontlie_nfl_raw_price_manifest_2026_10_27_r1_parser_input_provenance`
+  and `football_sharp_raw_price_manifest_2026_10_27_r1_parser_input_provenance` attach raw response hashes,
   returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
   incomplete price sides before complete-pair normalization or family replacement. Raw parser
   archives use `football_raw_price_parser_input_2026_10_27_r4_streaming_response_hash` and the composite
@@ -516,7 +524,8 @@ Last reviewed: 2026-10-27
   row, explicit missing/incomplete/duplicate source states, and the current-feed blind spots. Source
   reputation is distinct from event leadership; a book brand never proves who originated a move.
   It contains no candidate decision and cannot affect a prediction, probability, projection, grade,
-  stake, member display, tracking record, or lock. Existing locks are not adapted.
+  stake, member display, tracking record, or lock. These research-sidecar releases do not relabel
+  the incumbent provider contracts, and existing locks are not adapted.
   Each available target-free prior now carries the exact immutable Margin and Total PMF bytes,
   event/release/availability identity, marginal checksums, and a content-addressed artifact checksum;
   research no longer reconstructs a distribution from a stored mean. The contract and materializer

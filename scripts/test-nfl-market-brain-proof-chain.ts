@@ -67,8 +67,11 @@ async function main() {
     prior, evaluatedTargets: {}, observations: [], sourceManifests: [], expectedInputs: [], blindSpots: [],
   });
   const success = { release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
-    capturedAt: "2026-10-20T15:00:00.000Z", case: marketCase,
-    bytes: Buffer.byteLength(JSON.stringify(marketCase), "utf8") };
+    capturedAt: "2026-10-20T15:00:00.000Z", case: marketCase, bytes: 0 };
+  for (let previous = -1; previous !== success.bytes;) {
+    previous = success.bytes;
+    success.bytes = Buffer.byteLength(JSON.stringify(success), "utf8");
+  }
   const failure = { release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
     contractRelease: MARKET_BRAIN_CONTRACT_RELEASE, status: "capture_failed" as const,
     productionApplied: false as const, eventId, capturedAt: "2026-10-20T15:30:00.000Z", reason: "provider_timeout" };
@@ -119,6 +122,10 @@ async function main() {
   assert.match(migration, /jsonb_path_query_array\(capture_set -> 'membership'/);
   assert.match(migration, /reject_nfl_market_brain_late_capture/);
   assert.match(migration, /jsonb_array_length\(NEW\.capture_set -> 'expectedCaptureAttempts'\)/);
+  assert.match(migration, /jsonb_typeof\(shadow #> '\{case,subject\}'\) = 'object'/,
+    "the database boundary must reject checksum-consistent partial success cases");
+  assert.match(migration, /\{case,invariants,productionInfluenceAllowed\}.*IS FALSE/,
+    "success cases must retain their no-production-authority invariant at rest");
   assert.match(migration, /s\.created_at NOT BETWEEN NEW\.window_opens_at AND NEW\.window_closes_at/);
   assert.match(migration, /manifest\.created_at < NEW\.window_opens_at/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_research_inputs/);
@@ -151,6 +158,7 @@ function storedRow(id: string, runId: string, capturedAt: string, shadow: Record
     season: 2026, week: 8, provider_game_id: eventId, stage: "unlocked",
     captured_at: capturedAt, created_at: capturedAt, shadow,
     shadow_sha256: marketBrainSha256(shadow), shadow_payload: marketBrainCanonicalJson(shadow),
+    bytes: Buffer.byteLength(marketBrainCanonicalJson(shadow), "utf8"),
     prior_artifact_sha256: "case" in shadow &&
       (shadow.case as { prior: { kind: string; artifact?: { sha256: string } } }).prior.kind === "margin_total_distribution"
       ? (shadow.case as { prior: { artifact: { sha256: string } } }).prior.artifact.sha256 : null,

@@ -113,6 +113,17 @@ assert.equal(
   16,
   "a release transition must preserve every immutable T-60 game until its current-release replacement exists",
 );
+const currentCollectorSnapshot = buildNflWeekOneHeldMemberFixture(releaseTransitionRows).snapshot;
+const r24LockedRows = structuredClone(releaseTransitionRows);
+for (const row of r24LockedRows) {
+  (row.payload as NflForwardEvidencePayload).collectorRelease =
+    "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow" as typeof NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE;
+}
+assert.deepEqual(
+  buildNflWeekOneHeldMemberFixture(r24LockedRows).snapshot,
+  currentCollectorSnapshot,
+  "the r25 research-only sidecar release must not reinterpret r24 immutable T-60 scores, predictions, grades, or stakes",
+);
 const invalidUnlockedTransitionRows = structuredClone(releaseTransitionRows);
 invalidUnlockedTransitionRows[1]!.stage = "unlocked";
 invalidUnlockedTransitionRows[1]!.payload.stage = "unlocked";

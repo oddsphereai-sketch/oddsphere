@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
+import {
+  BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
+  type NflPreviewGame,
+} from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
   rawPriceSha256,
   type FootballRawPriceObservation,
@@ -16,6 +19,10 @@ import {
   nflMarketBrainCaptureFailure,
 } from "../lib/services/football/nflMarketBrainShadow";
 import {
+  FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+} from "../lib/services/football/sharpApiFootballSharpOdds";
+import {
+  NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
   normalizeSharpApiNflSplit,
   type NflSharpApiSplitSource,
 } from "../lib/services/football/sharpApiNflSplits";
@@ -145,6 +152,9 @@ function priceManifest(
     sourceObservationId: `${provider}-${sportsbook}-${phase}-${index}`,
     rawRowSha256: rawPriceSha256([provider, sportsbook, phase]),
     provider,
+    sourceRelease: provider === "sharpapi"
+      ? FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE
+      : BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
     feed: provider === "sharpapi" ? "main_odds" : phase === "current" ? "current_odds" : "opening_odds",
     phase,
     providerGameId: game.providerGameId,
@@ -160,6 +170,9 @@ function priceManifest(
     notes: [],
   }));
   return {
+    release: provider === "sharpapi"
+      ? FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE
+      : BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
     provider,
     feed: rows[0]!.feed,
     participant: provider === "sharpapi" ? sportsbook.toLowerCase() : null,
@@ -195,6 +208,7 @@ const rawPriceResponseManifests = [
   priceManifest("DraftKings", capturedAt, "balldontlie", "current", true),
 ];
 const sharpSplitCaptureManifest = {
+  release: NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
   responseReceivedAt: capturedAt,
   rawResponseSha256: rawPriceSha256(splitSources),
   status: "observed" as const,
@@ -272,6 +286,19 @@ assert.ok(shadow.bytes > 0);
 assert.equal(shadow.bytes, Buffer.byteLength(JSON.stringify(shadow)), "the persisted byte counter must include itself");
 assert.equal(shadow.case.captureBoundary, "raw_provider_response");
 assert.equal(shadow.case.sourceManifests.length, 5);
+assert.deepEqual(
+  [...new Set(shadow.case.sourceManifests.map((manifest) => manifest.release))].sort(),
+  [
+    BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
+    FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+    NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+  ].sort(),
+  "each research source manifest must bind its own exported sidecar release",
+);
+assert.equal(
+  shadow.case.observations.find((row) => row.source.feed === "splits")?.audit.sourceRelease,
+  NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+);
 assert.equal(shadow.case.evaluatedTargets.spread?.family, "draftkings");
 assert.equal(shadow.case.accounting.providedObservations, shadow.case.accounting.retainedObservations);
 assert.equal(shadow.case.invariants.allExpectedInputsAccounted, true);

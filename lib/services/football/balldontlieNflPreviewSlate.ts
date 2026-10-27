@@ -15,6 +15,8 @@ export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
   "balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture" as const;
 export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
   "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
+export const BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE =
+  "balldontlie_nfl_raw_price_manifest_2026_10_27_r1_parser_input_provenance" as const;
 
 export type NflPreviewTeam = {
   id: number;
@@ -585,6 +587,7 @@ export function buildBalldontlieRawPriceManifest(args: {
         sourceObservationId,
         rawRowSha256,
         provider: "balldontlie",
+        sourceRelease: BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
         feed: args.phase === "current" ? "current_odds" : "opening_odds",
         phase: args.phase,
         providerGameId,
@@ -603,6 +606,7 @@ export function buildBalldontlieRawPriceManifest(args: {
     rows.push({ rowIndex, rawRowSha256, disposition: "matched", providerGameId, sourceObservationIds });
   });
   return {
+    release: BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
     provider: "balldontlie",
     feed: args.phase === "current" ? "current_odds" : "opening_odds",
     participant: null,

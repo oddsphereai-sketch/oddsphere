@@ -17,6 +17,8 @@ import {
 
 export const FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE =
   "football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity" as const;
+export const FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE =
+  "football_sharp_raw_price_manifest_2026_10_27_r1_parser_input_provenance" as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK = 12 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_PAGE_SIZE = 200 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_TIMEOUT_MS = 20_000 as const;
@@ -158,6 +160,7 @@ async function fetchFootballSharpOdds(args: {
           includeRawParserInput: true,
         })
       : {
+          release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
           provider: "sharpapi",
           feed: "main_odds",
           participant: sportsbook,
@@ -342,6 +345,7 @@ export function buildSharpRawPriceManifest(args: {
       sourceObservationId,
       rawRowSha256,
       provider: "sharpapi",
+      sourceRelease: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
       feed: "main_odds",
       phase: "current",
       providerGameId,
@@ -359,6 +363,7 @@ export function buildSharpRawPriceManifest(args: {
     rows.push({ rowIndex, rawRowSha256, disposition: "matched", providerGameId, sourceObservationIds: [sourceObservationId] });
   });
   return {
+    release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
     provider: "sharpapi",
     feed: "main_odds",
     participant: args.sportsbook,

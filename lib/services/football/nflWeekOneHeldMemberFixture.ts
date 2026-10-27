@@ -128,6 +128,11 @@ const NFL_PAID_SCORE_PRECEDING_MEMBER_RELEASE =
 const NFL_PAID_SCORE_PRECEDING_DECISION_RELEASE =
   "nfl_v1_daily_edge_decision_2026_09_28_r24_paid_team_score" as const;
 
+const NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES = new Set<string>([
+  "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow",
+  NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+]);
+
 const NFL_PREVIOUS_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_09_27_r21_pressure_direction" as const;
 const NFL_PREVIOUS_DECISION_RELEASE =
@@ -571,7 +576,7 @@ function buildHeldGame(
     total: nflSourceSplitEvidence(payload, "total", movementRows),
     spread: nflSourceSplitEvidence(payload, "spread", movementRows),
   };
-  const projected = payload.collectorRelease === NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE
+  const projected = NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES.has(payload.collectorRelease)
     ? {
         away: roundToTenths(outcome.expectedAwayScore),
         home: roundToTenths(outcome.expectedHomeScore),
