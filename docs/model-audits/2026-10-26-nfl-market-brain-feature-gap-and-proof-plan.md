@@ -43,7 +43,7 @@ separate gates.
 | Target exclusion | Evaluated family and target-excluded consensus are separated | Every quote records its relation; the materializer re-derives the cutoff target family and excludes the exact target plus all same-family history before feature and role construction | Extend adversarial leakage tests through any future training/export path |
 | Moneyline/Spread/Total relationship | Semantic side story joins Moneyline and Spread; Total remains independently preserved | Raw observations keep market identity | Resolver must estimate one coherent joint game state while allowing winner, cover, and scoring information to disagree |
 | Availability and news | QB, injuries, weather, and player-aware forecast availability are interpreted mostly as context; report-versus-first-move timing is retained | QB/depth, injury report, and weather availability/provenance are explicit | Add state changes and their timestamps, distinguish "already in the prior" from new information, and never infer causation from ordering alone |
-| Flip/fade behavior | Categorical hand-authored stories can choose an existing expert or reflect a margin; Total changes are disabled | Frozen scenarios state acceptable confirm/recenter/flip/fade/retain/stand-down behavior | Learn action probabilities and a coherent posterior distribution; remove automatic reflection and rigid conjunctions from the candidate path |
+| Flip/fade behavior | Categorical hand-authored stories can choose an existing expert or reflect a margin; Total changes are disabled | Frozen scenarios state acceptable confirm/recenter/flip/fade/retain/stand-down behavior | Learn one coherent posterior distribution; measure factual prior/posterior/market relationships without a contradictory independent action head |
 | Output coherence | One Margin/Total result rebuilds score and downstream ML/Spread/Total probabilities | Capture layer has no output authority | Candidate must preserve this single coherent publication path; separate market heads may inform but cannot publish mutually inconsistent results |
 | Locked records | Existing locks are render-only | Shadow tape is not attached during locked reconstruction and is not read by member/tracking paths | Tests must continue proving exact stored-payload precedence after any future candidate is introduced |
 
@@ -131,7 +131,7 @@ model prior release that was available then. Produce a variable-length sequence/
 continuous no-vig, hold, number movement, price movement, lead/lag, persistence, reversal, buyback,
 key-number transition, disagreement, and cross-market coherence from that bounded tape.
 
-`nfl_market_brain_sequence_materializer_2026_10_27_r4_target_safe_inputs` implements this
+`nfl_market_brain_sequence_materializer_2026_10_27_r8_lossless_availability_timeline` implements this
 boundary without a resolver: it refuses mixed events/releases, applies Oddsphere availability time
 before feature construction, masks incomplete/unsupported rows, fails conflicting immutable
 observation identities, pairs sides only when line/time identity agrees, and derives event roles from
@@ -140,13 +140,15 @@ missingness as well as prices, so the evaluated sportsbook cannot re-enter throu
 feature. It re-verifies the exact prior artifact rather than trusting stored summary fields. Data
 absence otherwise remains a learned missingness regime.
 
-`nfl_market_brain_research_evaluator_2026_10_27_r3_target_safe_distribution_score` derives its baseline winner
+`nfl_market_brain_research_evaluator_2026_10_27_r7_manifest_bound_exact_line` derives its baseline winner
 probabilities and Margin/Total moments from that exact artifact. It accepts outcomes only after both
 the feature cutoff and game start, requires candidate training to end before the case, binds the
 candidate to the immutable sequence checksum, rejects mixed-release aggregation, and reports Brier,
 winner log loss, realized Margin/Total distribution log score, winner accuracy, Margin/Total MAE,
 corrections, and harms. The companion chronological
-manifest prevents opened development evidence from being relabeled selection or confirmation. A
+manifest prevents opened development evidence from being relabeled selection or confirmation. The
+evaluator accepts only a manifest attested by an append-only database receipt created before its
+prospective capture window; a JSON copy or caller-declared timestamp is insufficient. A
 candidate must submit complete Margin and Total distributions whose winner probabilities and moments
 exactly reconcile; an incoherent set of point estimates is rejected before scoring.
 
@@ -169,17 +171,18 @@ No eligible family may use a required signal count, fixed sportsbook weight, uni
 automatic favorite/underdog rule, automatic line reflection, one-book command, or game-specific
 exception.
 
-`nfl_market_brain_resolver_contract_2026_10_27_r1_shadow_only` now enforces this boundary and
-`nfl_market_brain_tournament_2026_10_27_r1_pre_outcome_freeze` freezes the three eligible families,
+`nfl_market_brain_resolver_contract_2026_10_27_r5_reproducible_manifest_bound` now enforces this boundary and
+`nfl_market_brain_tournament_2026_10_27_r5_reproducible_manifest_bound` freezes the three eligible families,
 complete hyperparameter grids, seven ordered ablations, rolling-origin split policy, predictive
 selection objective, and fitted-parameter ceilings before confirmation outcomes are inspected. The
 13 behavior stories advance to `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` and
-carry soft, non-one-hot action distributions. The contract rejects unfrozen hyperparameters,
+carry soft, non-one-hot expected distributions for a future fitted-model test. The production-facing
+shadow contract does not accept an independent action head. It rejects unfrozen hyperparameters,
 out-of-window training, impossible football score states, incoherent Margin/Total outputs, invalid
 probability mass, and any production authority. This is a contract/tournament freeze, not a trained
 model or evidence of predictive improvement.
 
-`nfl_market_brain_resolver_features_2026_10_27_r1_target_safe_sequence` is the only eligible trainer
+`nfl_market_brain_resolver_features_2026_10_27_r5_lossless_availability_timeline` is the only eligible trainer
 input. It exports the exact independent prior, every eligible continuous quote path, non-price
 context and split tokens, explicit eligible missingness, cross-market chronology, and source regime;
 it omits audit hashes and every evaluated-family observation or missingness state. Its payload hash
@@ -191,7 +194,7 @@ audited sequence for provenance.
 Map the selected posterior to a single Margin/Total distribution, then derive expected score,
 Moneyline, Spread, Total, and line-specific probabilities from it. Run the ordinary decision and
 grading code on that shadow distribution, retaining exact quote identity. Store the baseline and
-candidate side by side with the action distribution and source/missingness regime. Do not alter the
+candidate side by side with its factual posterior relationship and source/missingness regime. Do not alter the
 member payload.
 
 ### 5. Explanation projection

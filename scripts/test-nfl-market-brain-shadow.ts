@@ -89,9 +89,9 @@ const capture: NflForwardContextCapture = {
   },
   markets: { moneyline: market("moneyline"), spread: market("spread"), total: market("total") },
   context: {
-    rosterDepthSha256: "roster", injurySha256: null, weatherSha256: "weather",
+    rosterDepthSha256: "roster", injurySha256: "injury", weatherSha256: "weather",
     quarterbacks: { away: [null, null, "unknown", capturedAt], home: [null, null, "unknown", capturedAt] },
-    injury: [null, null, null, 0], weather: ["controlled_indoor", capturedAt, "forecast"],
+    injury: ["BALLDONTLIE", capturedAt, "current", 1], weather: ["forecast_available", capturedAt, "forecast"],
   },
   coherence: {
     priorPmfValid: true, authoritativePmfValid: true, expectedScoresMatchPmf: true,
@@ -173,16 +173,83 @@ const rawPriceResponseManifests = [
   priceManifest("Circa", capturedAt, "sharpapi", "current", true),
   priceManifest("DraftKings", capturedAt, "balldontlie", "current", true),
 ];
+const sharpSplitCaptureManifest = {
+  responseReceivedAt: capturedAt,
+  rawResponseSha256: rawPriceSha256(splitSources),
+  status: "observed" as const,
+  failureReason: null,
+  returnedRows: 2,
+  matchedRows: 2,
+  unmatchedRows: 0,
+  ambiguousRows: 0,
+  rows: ["circa", "draftkings"].map((sportsbook, rowIndex) => ({
+    rowIndex,
+    rawRowSha256: rawPriceSha256(sportsbook),
+    disposition: "matched" as const,
+    providerGameId: game.providerGameId,
+  })),
+};
+const baseShadowArgs = {
+  game, capture, independentForecast,
+  injuries: {
+    eventId: game.providerGameId,
+    awayTeam: game.away.abbreviation,
+    homeTeam: game.home.abbreviation,
+    source: "BALLDONTLIE" as const,
+    sourceLabel: "BALLDONTLIE",
+    sourceUrl: null,
+    freshnessStatus: "current" as const,
+    reportUpdatedAt: capturedAt,
+    teams: [{
+      abbreviation: game.away.abbreviation,
+      teamName: game.away.name,
+      players: [{
+        name: "Fixture Receiver",
+        status: "Questionable",
+        detail: "hamstring",
+        position: "WR",
+        reportedAt: capturedAt,
+      }],
+    }],
+  },
+  weather: {
+    venueTeam: game.home.abbreviation,
+    venueName: "Fixture Stadium",
+    roofType: "outdoor" as const,
+    status: "forecast_available" as const,
+    capturedAt,
+    forecast: {
+      forecast_for: game.scheduledStart,
+      fetched_at: capturedAt,
+      temperature_f: 49,
+      feels_like_f: 45,
+      humidity_pct: 65,
+      precipitation_mm: 1.2,
+      precipitation_probability: 0.4,
+      wind_speed_mph: 17,
+      wind_direction_degrees: 245,
+      conditions: "Rain",
+    },
+  },
+  independentForecastAvailableAt: capturedAt,
+  independentForecastProvenance: "fresh" as const,
+  retrievalCompletedAt: capturedAt,
+  knownPriorArtifactSha256: [] as string[],
+  rawPriceResponseManifests,
+  sharpSplitSources: splitSources,
+  sharpSplitCaptureManifest,
+};
 
-const shadow = buildNflMarketBrainShadow({ game, capture, independentForecast, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources });
+const shadow = buildNflMarketBrainShadow(baseShadowArgs);
 const unchangedInputs = JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources });
-buildNflMarketBrainShadow({ game, capture, independentForecast, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources });
+buildNflMarketBrainShadow(baseShadowArgs);
 assert.equal(JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
 assert.equal(shadow.case.release, MARKET_BRAIN_CONTRACT_RELEASE);
 assert.equal(shadow.case.mode, "shadow_capture");
 assert.ok(shadow.bytes > 0);
+assert.equal(shadow.bytes, Buffer.byteLength(JSON.stringify(shadow)), "the persisted byte counter must include itself");
 assert.equal(shadow.case.captureBoundary, "raw_provider_response");
-assert.equal(shadow.case.sourceManifests.length, 4);
+assert.equal(shadow.case.sourceManifests.length, 5);
 assert.equal(shadow.case.evaluatedTargets.spread?.family, "draftkings");
 assert.equal(shadow.case.accounting.providedObservations, shadow.case.accounting.retainedObservations);
 assert.equal(shadow.case.invariants.allExpectedInputsAccounted, true);
@@ -190,14 +257,39 @@ assert.equal(shadow.case.invariants.allReturnedSourceRowsAccounted, true);
 assert.equal(shadow.case.invariants.productionInfluenceAllowed, false);
 assert.equal(shadow.case.invariants.displayContractAuthority, false);
 assert.equal(shadow.case.blindSpots.length, 7);
+const injuryPlayer = shadow.case.observations.find((row) => row.source.feed === "injury_report_player");
+assert.equal(injuryPlayer?.categorical.playerName, "Fixture Receiver");
+assert.equal(injuryPlayer?.categorical.status, "Questionable");
+const weatherObservation = shadow.case.observations.find((row) => row.id === "weather:game");
+assert.equal(weatherObservation?.values.wind_speed_mph?.value, 17);
+assert.equal(weatherObservation?.categorical.conditions, "Rain");
+const unrelatedRows = Array.from({ length: 500 }, (_, index) => ({
+  rowIndex: index + 1,
+  rawRowSha256: rawPriceSha256(["unrelated", index]),
+  disposition: "matched" as const,
+  providerGameId: `other-game-${index}`,
+  sourceObservationIds: [] as string[],
+}));
+const noisyManifest = {
+  ...rawPriceResponseManifests[0]!,
+  returnedRows: rawPriceResponseManifests[0]!.returnedRows + unrelatedRows.length,
+  matchedRows: rawPriceResponseManifests[0]!.matchedRows + unrelatedRows.length,
+  rows: [...rawPriceResponseManifests[0]!.rows, ...unrelatedRows],
+};
+const noisyShadow = buildNflMarketBrainShadow({
+  ...baseShadowArgs,
+  rawPriceResponseManifests: [noisyManifest, ...rawPriceResponseManifests.slice(1)],
+});
+assert.ok(noisyShadow.bytes - shadow.bytes < 256,
+  "unrelated slate rows must be represented by digest/accounting, not copied into every game tape");
+assert.equal(noisyShadow.case.sourceManifests[0]?.omittedRows, 500);
 assert.equal(shadow.case.prior.kind, "margin_total_distribution");
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.eventId, game.providerGameId);
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.marginDistribution.values.length, 2);
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.sha256.length, 64);
 const priorArtifactSha256 = shadow.case.prior.kind === "margin_total_distribution" ? shadow.case.prior.artifact.sha256 : "";
 const referencedShadow = buildNflMarketBrainShadow({
-  game, capture, independentForecast, knownPriorArtifactSha256: [priorArtifactSha256],
-  rawPriceResponseManifests, sharpSplitSources: splitSources,
+  ...baseShadowArgs, knownPriorArtifactSha256: [priorArtifactSha256],
 });
 assert.equal(referencedShadow.case.prior.kind, "margin_total_distribution_ref");
 assert.equal(referencedShadow.case.prior.kind === "margin_total_distribution_ref" &&
@@ -207,20 +299,20 @@ assert.ok(shadow.bytes - referencedShadow.bytes > 100,
 const corruptedPrior = structuredClone(shadow.case);
 if (corruptedPrior.prior.kind === "margin_total_distribution") corruptedPrior.prior.artifact.marginDistribution.probabilities[0] = 0.4;
 assert.throws(
-  () => buildNflMarketBrainShadow({ game, capture, independentForecast: corruptedPrior.prior.kind === "margin_total_distribution" ? {
+  () => buildNflMarketBrainShadow({ ...baseShadowArgs, independentForecast: corruptedPrior.prior.kind === "margin_total_distribution" ? {
     marginDistribution: corruptedPrior.prior.artifact.marginDistribution,
     totalDistribution: corruptedPrior.prior.artifact.totalDistribution,
-  } : null, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources }),
+  } : null }),
   /distribution mass|diverged/,
   "a mutated prior PMF must fail closed instead of being reconstructed from its mean",
 );
 assert.throws(
-  () => buildNflMarketBrainShadow({ game, capture, independentForecast: null, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources }),
+  () => buildNflMarketBrainShadow({ ...baseShadowArgs, independentForecast: null }),
   /missing its exact distribution artifact/,
   "an available prior summary without exact PMF bytes must fail closed",
 );
-assert.equal(shadow.case.expectedInputs.find((row) => row.id === "availability:injury_report")?.availability, "unavailable");
-assert.equal(shadow.case.observations.find((row) => row.id === "weather:game")?.categorical.status, "controlled_indoor");
+assert.equal(shadow.case.expectedInputs.find((row) => row.id === "availability:injury_report")?.availability, "observed");
+assert.equal(shadow.case.observations.find((row) => row.id === "weather:game")?.categorical.status, "forecast_available");
 
 const split = (book: string) => shadow.case.observations.find((row) =>
   row.modality === "identified_book_split" && row.market === "moneyline" && row.source.participant === book);
@@ -244,7 +336,7 @@ const absent = shadow.case.expectedInputs.find((row) => row.id === "identified_b
 assert.deepEqual(absent && { availability: absent.availability, observations: absent.observationIds.length, reason: absent.reason },
   { availability: "unavailable", observations: 0, reason: "source_unavailable" });
 assert.deepEqual(shadow.case.expectedInputs.find((row) => row.id === "price:moneyline:sharpapi:pinnacle"), {
-  id: "price:moneyline:sharpapi:pinnacle", modality: "price_quote", provider: "sharpapi", participant: "pinnacle",
+  id: "price:moneyline:sharpapi:pinnacle", market: "moneyline", modality: "price_quote", provider: "sharpapi", participant: "pinnacle",
   expectation: "required", availability: "unavailable", observationIds: [], reason: "provider_source_unavailable",
 }, "a missing required price source must remain visible in the manifest");
 assert.ok(shadow.case.observations.every((row) => row.timing.availableAt.length > 0),

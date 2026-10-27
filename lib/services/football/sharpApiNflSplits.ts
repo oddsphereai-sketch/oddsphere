@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   SharpApiClient,
   type SharpApiRequestOptions,
@@ -5,7 +6,7 @@ import {
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
 
 export const NFL_SHARP_API_SPLITS_RELEASE =
-  "nfl_sharpapi_splits_2026_10_26_r3_all_source_manifest" as const;
+  "nfl_sharpapi_splits_2026_10_27_r4_complete_response_manifest" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -61,6 +62,27 @@ type SharpApiNflSplitMarket = {
 type DatedRows = { date: string; rows: SharpApiNflSplitRow[] };
 type SharpClient = {
   fetchAll<T>(opts: SharpApiRequestOptions & { maxPages?: number }): Promise<T[]>;
+  fetch?<T>(opts: SharpApiRequestOptions): Promise<{
+    data: T;
+    pagination?: { total?: number; count?: number; offset?: number; has_more?: boolean } | null;
+  }>;
+};
+
+export type NflSharpApiSplitCaptureManifest = {
+  responseReceivedAt: string;
+  rawResponseSha256: string | null;
+  status: "observed" | "failed";
+  failureReason: string | null;
+  returnedRows: number;
+  matchedRows: number;
+  unmatchedRows: number;
+  ambiguousRows: number;
+  rows: Array<{
+    rowIndex: number;
+    rawRowSha256: string;
+    disposition: "matched" | "unmatched" | "ambiguous";
+    providerGameId: string | null;
+  }>;
 };
 
 const TEAM_ALIASES: Record<string, string[]> = {
@@ -89,6 +111,7 @@ export async function fetchSharpApiNflSplits(args: {
   games: NflPreviewGame[];
   capturedAt: string;
   client?: SharpClient;
+  clock?: () => string;
 }): Promise<{
   release: typeof NFL_SHARP_API_SPLITS_RELEASE;
   /** Backward-compatible preferred complete set used by the incumbent reader. */
@@ -98,28 +121,78 @@ export async function fetchSharpApiNflSplits(args: {
   requests: number;
   rows: number;
   dates: string[];
+  captureManifest: NflSharpApiSplitCaptureManifest;
 }> {
   const client = args.client ?? new SharpApiClient(args.apiKey);
   const dates = Array.from(new Set(args.games.map((game) => nflLocalDate(game.scheduledStart)))).sort();
   // SharpAPI classifies NFL rows with league=nfl and sport=football. A sport=nfl
   // filter returns an empty payload. Fetch once for the whole weekly card, then
   // apply our own strict league, event-date, and team-identity guards.
-  const rows = await client.fetchAll<SharpApiNflSplitRow>({
+  const request = {
     path: "/splits",
     query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
-    // One 200-row page safely exceeds a complete football-family slate and
-    // keeps the provider budget deterministic.
-    maxPages: 1,
-  });
+  } satisfies SharpApiRequestOptions;
+  const page = client.fetch ? await client.fetch<SharpApiNflSplitRow[]>(request) : null;
+  const rows = page ? (Array.isArray(page.data) ? page.data : [])
+    : await client.fetchAll<SharpApiNflSplitRow>({ ...request, maxPages: 1 });
+  const pagination = page?.pagination;
+  const explicitlyComplete = pagination !== undefined && pagination !== null &&
+    pagination.has_more === false &&
+    typeof pagination.total === "number" &&
+    pagination.total <= (pagination.offset ?? 0) + (pagination.count ?? rows.length);
+  if (rows.length >= 200 && !explicitlyComplete) {
+    throw new Error("SharpAPI NFL split response reached its bounded page size; completeness is unproved.");
+  }
+  const receivedCandidate = args.clock?.() ?? new Date().toISOString();
+  const responseReceivedAt = Date.parse(receivedCandidate) >= Date.parse(args.capturedAt)
+    ? new Date(Date.parse(receivedCandidate)).toISOString() : new Date(Date.parse(args.capturedAt)).toISOString();
   const datedRows = dates.map((date) => ({ date, rows }));
-  const sourcesByGame = matchAllSharpApiNflSplitRows(args.games, datedRows, args.capturedAt);
+  const incumbentSourcesByGame = matchAllSharpApiNflSplitRows(args.games, datedRows, args.capturedAt);
+  const sourcesByGame = matchAllSharpApiNflSplitRows(args.games, datedRows, responseReceivedAt);
+  const captureManifest = buildSplitCaptureManifest(args.games, rows, responseReceivedAt);
   return {
     release: NFL_SHARP_API_SPLITS_RELEASE,
-    splitsByGame: selectPreferredSharpApiNflSplits(sourcesByGame),
+    // Receipt time is research chronology only. The incumbent DTO retains its
+    // exact pre-Market-Brain capture-time fallback semantics.
+    splitsByGame: selectPreferredSharpApiNflSplits(incumbentSourcesByGame),
     sourcesByGame,
     requests: 1,
     rows: rows.length,
     dates,
+    captureManifest,
+  };
+}
+
+function buildSplitCaptureManifest(
+  games: NflPreviewGame[],
+  rows: SharpApiNflSplitRow[],
+  responseReceivedAt: string,
+): NflSharpApiSplitCaptureManifest {
+  const ledger = rows.map((row, rowIndex) => {
+    const candidates = games.filter((game) => {
+      const date = nflLocalDate(game.scheduledStart);
+      return nflRow(row) && rowDateMatches(row, date) &&
+        sameNflTeam(row.home_team, game.home.abbreviation, game.home.name) &&
+        sameNflTeam(row.away_team, game.away.abbreviation, game.away.name);
+    });
+    return {
+      rowIndex,
+      rawRowSha256: digest(row),
+      disposition: candidates.length === 1 ? "matched" as const
+        : candidates.length > 1 ? "ambiguous" as const : "unmatched" as const,
+      providerGameId: candidates.length === 1 ? candidates[0]!.providerGameId : null,
+    };
+  });
+  return {
+    responseReceivedAt,
+    rawResponseSha256: digest(rows),
+    status: "observed",
+    failureReason: null,
+    returnedRows: rows.length,
+    matchedRows: ledger.filter((row) => row.disposition === "matched").length,
+    unmatchedRows: ledger.filter((row) => row.disposition === "unmatched").length,
+    ambiguousRows: ledger.filter((row) => row.disposition === "ambiguous").length,
+    rows: ledger,
   };
 }
 
@@ -260,6 +333,10 @@ function teamCodeAliases(abbreviation: string): string[] {
     case "WSH": return ["WAS"];
     default: return [];
   }
+}
+
+function digest(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 function rowDateMatches(row: SharpApiNflSplitRow, expectedDate: string): boolean {

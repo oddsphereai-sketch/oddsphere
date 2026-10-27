@@ -6,6 +6,11 @@ import {
   bindMarketBrainMarginTotalPrior,
   referenceMarketBrainMarginTotalPrior,
 } from "../lib/services/marketBrain/marketBrainContract";
+import {
+  NFL_MARKET_BRAIN_SHADOW_MAX_BYTES,
+  NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES,
+  NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES,
+} from "../lib/services/football/nflMarketBrainShadow";
 
 type Artifact = {
   artifactRelease: string;
@@ -33,6 +38,8 @@ const games = 16;
 const capturesPerWeek = 168;
 const repeatedBytes = fullBytes * games * capturesPerWeek;
 const addressedBytes = fullBytes * games + referenceBytes * games * (capturesPerWeek - 1);
+const maximumShadowBytesPerWeek = NFL_MARKET_BRAIN_SHADOW_MAX_BYTES * games * capturesPerWeek;
+const maximumShadowBytesPerRegularSeason = maximumShadowBytesPerWeek * 18;
 
 assert.ok(referenceBytes < 1024, "a repeated prior reference must remain under one KiB");
 assert.ok(referenceBytes / fullBytes < 0.05, "content addressing must remove at least 95% of repeated prior bytes");
@@ -40,6 +47,10 @@ assert.ok(addressedBytes < 2 * 1024 * 1024,
   "a 16-game, hourly seven-day slate must keep the exact-prior component under two MiB");
 assert.ok(addressedBytes / repeatedBytes < 0.05,
   "the weekly exact-prior component must remain at least 95% smaller than embedding every PMF");
+assert.ok(maximumShadowBytesPerWeek <= NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES,
+  "the per-tape hard cap must fit the explicit worst-case weekly raw-storage envelope");
+assert.ok(maximumShadowBytesPerRegularSeason <= NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES,
+  "the per-tape hard cap must fit the explicit worst-case regular-season raw-storage envelope");
 
 const shadowSource = readFileSync(path.resolve("lib/services/football/nflMarketBrainShadow.ts"), "utf8");
 assert.doesNotMatch(shadowSource, /\bfetch\s*\(|PlaybookReadBroker|fetchSharpApi|fetchBalldontlie/,
@@ -52,5 +63,7 @@ console.log(JSON.stringify({
   referenceBytes,
   repeatedPriorMiBPerWeek: Number((repeatedBytes / 1024 / 1024).toFixed(2)),
   contentAddressedPriorMiBPerWeek: Number((addressedBytes / 1024 / 1024).toFixed(2)),
+  maximumRawShadowMiBPerWeek: Number((maximumShadowBytesPerWeek / 1024 / 1024).toFixed(2)),
+  maximumRawShadowGiBPerRegularSeason: Number((maximumShadowBytesPerRegularSeason / 1024 / 1024 / 1024).toFixed(2)),
   assumptions: "16 games, 168 captures per game per week",
 }));

@@ -374,7 +374,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r78_market_brain_content_addressed_prior/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r80_market_brain_isolated_shadow/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /!existingLockedRecord[\s\S]*buildNflMarketBrainShadow/,
   "Market Brain capture must never reinterpret a pre-existing locked record");
@@ -382,6 +382,10 @@ assert.ok(writer.lastIndexOf("buildNflMarketBrainShadow({") > writer.indexOf("co
   "Market Brain capture must be downstream of the completed production payload");
 assert.match(writer, /catch \(error\) \{[\s\S]*nflMarketBrainCaptureFailure/,
   "a Market Brain capture failure must become inert audit evidence instead of holding production");
+assert.match(writer, /const authoritativePayloads = payloads\.map\(withoutMarketBrainShadow\)/,
+  "the research tape must be removed before the authoritative evidence append");
+assert.ok(writer.indexOf("appendNflMarketBrainShadows({") > writer.lastIndexOf("appendNflForwardEvidence({"),
+  "research persistence must run only after the authoritative append succeeds");
 for (const readerPath of [
   "lib/services/football/nflWeekOneHeldMemberFixture.ts",
   "lib/services/football/nflForwardMemberSnapshotStore.ts",

@@ -14,7 +14,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r78_market_brain_content_addressed_prior` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r80_market_brain_isolated_shadow` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -492,12 +492,14 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_contract_2026_10_27_r6_content_addressed_prior` and
-  `nfl_market_brain_shadow_2026_10_27_r6_content_addressed_prior` define an internal-only,
+- `market_brain_contract_2026_10_27_r7_availability_bound_evidence` and
+  `nfl_market_brain_shadow_2026_10_27_r8_isolated_rich_context` define an internal-only,
   production-inert evidence boundary. The sole writer
-  `nfl_forward_evidence_writer_2026_10_27_r78_market_brain_content_addressed_prior`
-  consumes `nfl_sharpapi_splits_2026_10_26_r3_all_source_manifest` and stores the tape prospectively
-  for future unlocked rows. `balldontlie_nfl_regular_slate_2026_10_26_r5_raw_price_manifest` and
+  `nfl_forward_evidence_writer_2026_10_27_r80_market_brain_isolated_shadow`
+  consumes `nfl_sharpapi_splits_2026_10_27_r4_complete_response_manifest`. Research capture is
+  explicitly disabled unless `NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED=true`; merging the code does
+  not begin storage. When separately enabled for a reviewed shadow canary, it stores tapes only for
+  future unlocked rows. `balldontlie_nfl_regular_slate_2026_10_26_r5_raw_price_manifest` and
   `football_sharp_price_capture_2026_10_26_r3_raw_response_manifest` attach raw response hashes,
   returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
   incomplete price sides before complete-pair normalization or family replacement. The tape retains
@@ -517,35 +519,58 @@ Last reviewed: 2026-10-27
   artifact, this removes about 97% of repeated prior bytes (approximately 40.8 MiB to 1.38 MiB per
   16-game, 168-capture week before database compression). Market Brain construction performs zero
   provider requests and reuses the writer's already-fetched odds, splits, availability, and context.
-  `nfl_market_brain_sequence_materializer_2026_10_27_r4_target_safe_inputs` replays only cases
+  Full-slate responses are represented per game by event rows plus response digest/accounting rather
+  than copied in full. Player-level injury facts and numeric weather values are retained. Each tape
+  is capped at 96 KiB, removed before the authoritative NFL evidence append, and only then written to
+  the separate append-only `nfl_market_brain_shadow_snapshots` research table; sidecar read/write
+  failures cannot roll back authoritative evidence, member, tracking, or lock work and are bounded by
+  two-second aborts before player-prop work continues. Cron health exposes every research read/write
+  error. The database enforces a 256 MiB raw weekly ceiling and records a 210-day expiry boundary.
+  `nfl_market_brain_sequence_materializer_2026_10_27_r8_lossless_availability_timeline` replays only cases
   and observations available by an explicit cutoff, excludes the exact target and its entire source
-  family before feature construction, pairs individual sides without zero-filling, derives continuous
+  family before feature construction, pairs individual sides without zero-filling, preserves unpaired
+  observed quotes as explicit uncertainty tokens, retains every capture's source-availability state,
+  derives continuous
   number/price/hold/reversal/buyback features without minimum-move quotas, excludes same-family split
   observations and expected-source missingness as well as prices, and assigns event roles
-  from chronology rather than reputation. It is also production-inert. Provider-side pagination,
+  from chronology rather than reputation. Opposing simultaneous movers are conflicted rather than
+  resolved by participant sort order. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
-  `nfl_market_brain_research_evaluator_2026_10_27_r3_target_safe_distribution_score` and
-  `nfl_market_brain_research_manifest_2026_10_27_r1_chronological` form a research-only proof
+  `nfl_market_brain_research_evaluator_2026_10_27_r7_manifest_bound_exact_line` and
+  `nfl_market_brain_research_manifest_2026_10_27_r3_capture_window_registry` form a research-only proof
   boundary: outcomes must arrive strictly after cutoff and game start, candidate predictions must
   bind the exact sequence checksum and predate the case, mixed releases and duplicate events are
-  rejected, and rolling-origin development/selection/confirmation/prospective roles cannot overlap.
-  The evaluator reports all-game Brier, winner log loss, realized Margin/Total distribution log
-  score, winner accuracy, Margin/Total MAE, corrections, and harms against the immutable target-free
-  prior. It has no decision or production authority.
+  rejected, and persisted rolling-origin development/selection/confirmation/prospective capture
+  windows cannot overlap. Each row binds its manifest, untouched/outcome registry, partition, and fold.
+  The manifest must first be inserted into the append-only
+  `nfl_market_brain_research_manifests` table; its server-created receipt must predate prospective
+  capture and mints the runtime attestation required by both evaluation and artifact binding.
+  The evaluator reports all-game Brier, winner log loss, marginal distribution scores, winner
+  accuracy, Margin/Total MAE, corrections, and harms against the immutable target-free prior. It
+  carries exact target selection/line/price/time outside trainer input, reports exact-line win/push
+  probabilities and settled units, and scores a candidate's true joint Margin/Total posterior, but does not claim joint improvement over
+  the incumbent until that incumbent publishes a coherent joint posterior. It has no decision or
+  production authority, and qualification remains false until exact-line non-regression, calibration,
+  clustered uncertainty, board-balance,
+  and release-pure economic gates are implemented.
   `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` freezes 13 nuanced follow, fade,
   resistance, reversal, outage, stale-evidence, news-sequence, and cross-market stories as non-one-hot
   action distributions without turning them into inference quotas.
-  `nfl_market_brain_resolver_contract_2026_10_27_r1_shadow_only`,
-  `nfl_market_brain_resolver_features_2026_10_27_r1_target_safe_sequence`, and
-  `nfl_market_brain_tournament_2026_10_27_r1_pre_outcome_freeze` freeze three low-capacity families,
+  `nfl_market_brain_resolver_contract_2026_10_27_r5_reproducible_manifest_bound`,
+  `nfl_market_brain_resolver_features_2026_10_27_r5_lossless_availability_timeline`, and
+  `nfl_market_brain_tournament_2026_10_27_r5_reproducible_manifest_bound` freeze three low-capacity families,
   their complete hyperparameter grids and fitted-parameter ceilings, seven ordered ablations,
-  artifact provenance, and one feasible joint NFL score-state posterior from which Margin, Total,
-  team scores, and winner probabilities must all derive. Actions cannot directly award points or
-  grades, unfrozen artifacts fail closed, and production influence remains false. No fitted resolver
+  exact basis/preprocessing/loss/calibration/coherence/optimizer/seed/serialization contracts,
+  minimum-sample and multiple-comparison controls, typed weight provenance, and one feasible joint
+  NFL score-state posterior from which Margin, Total,
+  team scores, and winner probabilities must all derive. An independent action head has been removed;
+  factual prior/posterior deltas cannot contradict the score posterior or directly award points or
+  grades. Unfrozen artifacts fail closed, and production influence remains false. No fitted resolver
   artifact or predictive qualification exists yet.
   Contract, evidence limitations, and the next research gate are frozen in
-  `docs/model-audits/2026-10-26-market-brain-foundation-predeclaration.md`.
+  `docs/model-audits/2026-10-26-market-brain-foundation-predeclaration.md` and
+  `docs/model-audits/2026-10-27-nfl-market-brain-independent-review-remediation.md`.
 
 ### Complete-signal semantic interpretation (r40)
 
@@ -556,7 +581,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_27_r78_market_brain_content_addressed_prior` /
+  `nfl_forward_evidence_writer_2026_10_27_r80_market_brain_isolated_shadow` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an

@@ -138,14 +138,16 @@ roles. The research evaluator rejects labels available at or before the case, mi
 duplicate events, and non-chronological partition manifests; it records corrections and harms
 against the exact prior baseline. Feed-side omissions, bounded
 pagination, suspension lifecycle, limits, and private order flow remain explicit blind spots.
-`nfl_market_brain_resolver_contract_2026_10_27_r1_shadow_only` freezes three low-capacity candidate
+`nfl_market_brain_resolver_contract_2026_10_27_r5_reproducible_manifest_bound` freezes three low-capacity candidate
 families, their complete hyperparameter grids, ablation order, rolling-origin selection objective,
 artifact provenance, and shadow-only authority under
-`nfl_market_brain_tournament_2026_10_27_r1_pre_outcome_freeze`. A candidate must emit one feasible
+`nfl_market_brain_tournament_2026_10_27_r5_reproducible_manifest_bound`. A candidate must emit one feasible
 joint NFL score-state distribution; Margin, Total, expected team scores, and winner probabilities are
-derived from it, while action probabilities are explanations and cannot directly assign points,
-grades, or stakes. No fitted resolver artifact exists, so gate 3 has not been passed.
-`nfl_market_brain_resolver_features_2026_10_27_r1_target_safe_sequence` is the sole eligible trainer
+derived from it. The independent action-probability head was removed because it could contradict that
+posterior; the resolver records only factual prior/posterior deltas and boundary crossings, which
+cannot directly assign points, grades, or stakes. No fitted resolver artifact exists, so gate 3 has
+not been passed.
+`nfl_market_brain_resolver_features_2026_10_27_r5_lossless_availability_timeline` is the sole eligible trainer
 boundary: it preserves the exact independent prior and all eligible continuous paths, splits,
 context, chronology, and missingness, but excludes evaluated-family prices, splits, and expected-input
 states. Target-only additions cannot change its feature payload hash.
@@ -165,19 +167,20 @@ The first NFL code slice adds:
   or same-family replacement, with response checksums, row accounting, and exact-evaluated,
   same-family, and target-excluded provenance;
 - distinct provider-observed, provider-fetched, Oddsphere-ingested, and inference-available times;
-- target-free prior, quarterback/depth, injury-report, and weather availability with references to
-  the sibling raw forward-evidence payload rather than copied display summaries;
+- target-free prior, quarterback/depth, player-level injury-report facts, and numeric weather
+  observations with their own availability-safe timestamps;
 - source reputation separated from observed event role;
 - explicit declarations that absolute handle, ticket count, bet sizes, limits, origin, suspension
   lifecycle, and private order flow are unobservable from the current feeds; and
 - no candidate decision object at all; capture has zero inference authority.
 
 The sole existing NFL writer is the capture call site, so prospective rows accumulate the evidence
-needed for honest chronological research. The whole tape has a bounded byte budget. The field is
-ignored by all production/member/tracking
-readers and is not attached when rebuilding around a pre-existing locked record. Existing NFL output
-and every lock remain unchanged. A shadow-construction error is stored as `capture_failed` and cannot
-hold or alter the production payload. The next NFL step is to persist enough prospective multi-capture
+needed for honest chronological research. Each tape has a 96 KiB hard cap and an explicit zero-new-
+provider-request budget. It is removed from the authoritative payload before the NFL evidence append
+and written afterward to an isolated append-only research table; a research read/write failure cannot
+block, roll back, or alter the authoritative append, member snapshot, tracking record, or lock. It is
+not attached when rebuilding around a pre-existing locked record. Existing NFL output and every lock
+remain unchanged. A shadow-construction error is stored as `capture_failed`. The next NFL step is to persist enough prospective multi-capture
 games, freeze a low-capacity model tournament before examining confirmation results, adapt the
 incumbent semantic reader only as a candidate/comparator against this lossless contract, and run
 inference in shadow. The companion `Rebuild Daily Edge models` work has been explicitly coordinated:

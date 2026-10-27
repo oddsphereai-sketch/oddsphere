@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 import {
   bindMarketBrainMarginTotalPrior,
@@ -7,6 +8,7 @@ import {
 } from "../lib/services/marketBrain/marketBrainContract";
 import {
   buildNflMarketBrainResearchManifest,
+  attestPersistedNflMarketBrainResearchManifest,
   evaluateNflMarketBrainResearchCase,
   summarizeNflMarketBrainResearchRun,
 } from "../lib/services/marketBrain/nflMarketBrainResearchEvaluator";
@@ -15,6 +17,83 @@ import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/n
 const cutoffAt = "2026-09-10T16:00:00.000Z";
 const startsAt = "2026-09-10T20:00:00.000Z";
 const trainedThrough = "2026-09-09T23:59:59.000Z";
+
+const researchManifestDraft = buildNflMarketBrainResearchManifest({
+  candidateRelease: "candidate-r1",
+  createdAt: "2026-08-21T01:00:00.000Z",
+  persistedAt: "2026-08-21T02:00:00.000Z",
+  storageId: "manifest-fixture-1",
+  purgeGapHours: 24,
+  partitions: [
+    { role: "development", evidenceStatus: "opened_development_only", events: [{
+      eventId: "dev", foldId: "week-1", startsAt: "2026-08-20T20:00:00.000Z",
+      firstCaptureAt: "2026-08-19T12:00:00.000Z", lastCaptureAt: "2026-08-19T16:00:00.000Z",
+      outcomeOpenedAt: "2026-08-21T00:00:00.000Z",
+    }] },
+    { role: "selection", evidenceStatus: "untouched", events: ["correction", "harm"].map((eventId) => ({
+      eventId, foldId: "week-2", startsAt, firstCaptureAt: "2026-09-10T12:00:00.000Z",
+      lastCaptureAt: cutoffAt, outcomeOpenedAt: null,
+    })) },
+    { role: "confirmation", evidenceStatus: "untouched", events: [{
+      eventId: "confirm", foldId: "week-3", startsAt: "2026-09-17T20:00:00.000Z",
+      firstCaptureAt: "2026-09-17T12:00:00.000Z", lastCaptureAt: "2026-09-17T16:00:00.000Z",
+      outcomeOpenedAt: null,
+    }] },
+    { role: "prospective_shadow", evidenceStatus: "prospective", events: [{
+      eventId: "future", foldId: "week-4", startsAt: "2026-09-24T20:00:00.000Z",
+      firstCaptureAt: "2026-09-24T12:00:00.000Z", lastCaptureAt: "2026-09-24T16:00:00.000Z",
+      outcomeOpenedAt: null,
+    }] },
+  ],
+});
+const researchManifest = attestPersistedNflMarketBrainResearchManifest({
+  manifest: researchManifestDraft,
+  stored: {
+    id: researchManifestDraft.storageId,
+    serverCreatedAt: researchManifestDraft.persistedAt,
+    manifestChecksum: researchManifestDraft.checksum,
+  },
+});
+
+function candidate(args: {
+  sequenceChecksum: string;
+  states: Array<{ margin: number; total: number; probability: number }>;
+}) {
+  const states = [...args.states].sort((a, b) => a.total - b.total || a.margin - b.margin);
+  const marginal = (key: "margin" | "total") => {
+    const mass = new Map<number, number>();
+    for (const state of states) mass.set(state[key], (mass.get(state[key]) ?? 0) + state.probability);
+    const entries = [...mass.entries()].sort((a, b) => a[0] - b[0]);
+    return { values: entries.map(([value]) => value), probabilities: entries.map(([, probability]) => probability) };
+  };
+  const marginDistribution = marginal("margin");
+  const totalDistribution = marginal("total");
+  const mean = (distribution: typeof marginDistribution) => distribution.values.reduce((sum, value, index) =>
+    sum + value * distribution.probabilities[index]!, 0);
+  const marginMean = mean(marginDistribution);
+  const totalMean = mean(totalDistribution);
+  const awayWinProbability = states.filter((state) => state.margin < 0).reduce((sum, state) => sum + state.probability, 0);
+  const homeWinProbability = states.filter((state) => state.margin > 0).reduce((sum, state) => sum + state.probability, 0);
+  const tieProbability = states.filter((state) => state.margin === 0).reduce((sum, state) => sum + state.probability, 0);
+  const posterior = {
+    schema: "nfl_market_brain_joint_score_posterior_v1",
+    states, marginDistribution, totalDistribution, marginMean, totalMean,
+    awayWinProbability, homeWinProbability, tieProbability,
+    awayScoreMean: (totalMean - marginMean) / 2,
+    homeScoreMean: (totalMean + marginMean) / 2,
+  };
+  return {
+    release: "candidate-r1", trainedThrough, inferredAt: "2026-09-10T16:01:00.000Z",
+    artifactSha256: "a".repeat(64), tournamentChecksum: "b".repeat(64),
+    family: "regularized_joint_residual" as const,
+    featureRelease: "feature-r1", featureChecksum: "c".repeat(64),
+    trainingManifestChecksum: researchManifest.checksum, weightsSha256: "e".repeat(64), fittedParameterCount: 10,
+    sequenceChecksum: args.sequenceChecksum,
+    awayWinProbability, homeWinProbability, tieProbability, marginMean, totalMean,
+    marginDistribution, totalDistribution, jointScoreStates: states,
+    jointPosteriorSha256: createHash("sha256").update(JSON.stringify(posterior)).digest("hex"),
+  };
+}
 
 function sequence(eventId: string, homeProbability: number) {
   const prior = bindMarketBrainMarginTotalPrior({
@@ -32,7 +111,12 @@ function sequence(eventId: string, homeProbability: number) {
     captureLimitations: [],
     subject: { kind: "two_team_game", awayId: "AWY", homeId: "HME", startsAt },
     prior,
-    evaluatedTargets: {},
+    evaluatedTargets: {
+      spread: { identity: "fixture-spread", family: "targetbook", selection: "home", line: -2.5,
+        price: -110, observedAt: cutoffAt },
+      total: { identity: "fixture-total", family: "targetbook", selection: "over", line: 42.5,
+        price: -110, observedAt: cutoffAt },
+    },
     observations: [],
     sourceManifests: [],
     expectedInputs: [],
@@ -59,47 +143,64 @@ assert.throws(
   "a prior reference without its immutable artifact must fail closed",
 );
 const correction = evaluateNflMarketBrainResearchCase({
+  researchManifest, partitionRole: "selection",
   sequence: correctionSequence.materialized,
-  candidate: {
-    release: "candidate-r1",
-    trainedThrough,
-    sequenceChecksum: correctionSequence.materialized.checksum,
-    awayWinProbability: 0.3,
-    homeWinProbability: 0.7,
-    tieProbability: 0,
-    marginMean: 2.2,
-    totalMean: 43,
-    marginDistribution: { values: [-2, 4], probabilities: [0.3, 0.7] },
-    totalDistribution: { values: [42, 44], probabilities: [0.5, 0.5] },
-  },
+  candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+    { margin: -2, total: 42, probability: 0.15 }, { margin: -2, total: 44, probability: 0.15 },
+    { margin: 4, total: 42, probability: 0.35 }, { margin: 4, total: 44, probability: 0.35 },
+  ] }),
   outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
 });
 assert.equal(correction.disagreement, "correction");
 assert.equal(correction.baseline.winnerCorrect, false);
 assert.equal(correction.candidate.winnerCorrect, true);
 assert.ok(correction.deltas.brierImprovement > 0);
-assert.ok(correction.deltas.marginTotalDistributionLogScoreImprovement > 0);
+assert.ok(Number.isFinite(correction.candidate.marginTotalDistributionLogScore));
+assert.equal(correction.baseline.marginTotalDistributionLogScore, null,
+  "a marginal-only independent prior must not be assigned a fabricated joint score");
+assert.equal(correction.deltas.marginTotalDistributionLogScoreImprovement, null,
+  "joint-score improvement remains unavailable until the incumbent publishes a coherent joint posterior");
 assert.ok(Math.abs(correction.deltas.marginMaeImprovement - 3.4) < 1e-9);
+assert.equal(correction.candidate.exactLines.spread?.result, "win");
+assert.equal(correction.candidate.exactLines.total?.result, "win");
 assert.equal(correction.invariants.productionInfluenceAllowed, false);
 
 const harmSequence = sequence("harm", 0.7);
 const harm = evaluateNflMarketBrainResearchCase({
+  researchManifest, partitionRole: "selection",
   sequence: harmSequence.materialized,
-  candidate: {
-    release: "candidate-r1",
-    trainedThrough,
-    sequenceChecksum: harmSequence.materialized.checksum,
-    awayWinProbability: 0.7,
-    homeWinProbability: 0.3,
-    tieProbability: 0,
-    marginMean: -0.5,
-    totalMean: 41,
-    marginDistribution: { values: [-2, 3], probabilities: [0.7, 0.3] },
-    totalDistribution: { values: [40, 42], probabilities: [0.5, 0.5] },
-  },
+  candidate: candidate({ sequenceChecksum: harmSequence.materialized.checksum, states: [
+    { margin: -2, total: 40, probability: 0.35 }, { margin: -2, total: 42, probability: 0.35 },
+    { margin: 3, total: 41, probability: 0.15 }, { margin: 3, total: 43, probability: 0.15 },
+  ] }),
   outcome: { eventId: "harm", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
 });
 assert.equal(harm.disagreement, "harm");
+
+const dependencyGood = evaluateNflMarketBrainResearchCase({
+  researchManifest, partitionRole: "selection",
+  sequence: correctionSequence.materialized,
+  candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+    { margin: -2, total: 42, probability: 0.5 },
+    { margin: 4, total: 44, probability: 0.5 },
+  ] }),
+  outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
+});
+const dependencyWrong = evaluateNflMarketBrainResearchCase({
+  researchManifest, partitionRole: "selection",
+  sequence: correctionSequence.materialized,
+  candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+    { margin: 4, total: 42, probability: 0.5 },
+    { margin: -2, total: 44, probability: 0.5 },
+  ] }),
+  outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
+});
+assert.equal(dependencyGood.candidate.marginalCompositeLogScore,
+  dependencyWrong.candidate.marginalCompositeLogScore,
+  "the dependency fixture must have identical Margin and Total marginals");
+assert.ok(dependencyWrong.candidate.marginTotalDistributionLogScore! >
+  dependencyGood.candidate.marginTotalDistributionLogScore!,
+"joint scoring must penalize a wrong Margin/Total pairing that marginal scores cannot see");
 
 const summary = summarizeNflMarketBrainResearchRun([correction, harm]);
 assert.deepEqual({ cases: summary.cases, corrections: summary.corrections, harms: summary.harms },
@@ -111,13 +212,11 @@ assert.throws(
 );
 assert.throws(
   () => evaluateNflMarketBrainResearchCase({
+    researchManifest, partitionRole: "selection",
     sequence: correctionSequence.materialized,
-    candidate: {
-      release: "candidate-r1", trainedThrough, sequenceChecksum: correctionSequence.materialized.checksum,
-      awayWinProbability: 0.3, homeWinProbability: 0.7, tieProbability: 0, marginMean: 2.2, totalMean: 43,
-      marginDistribution: { values: [-2, 4], probabilities: [0.3, 0.7] },
-      totalDistribution: { values: [42, 44], probabilities: [0.5, 0.5] },
-    },
+    candidate: candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+      { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
+    ] }),
     outcome: { eventId: "correction", finalAt: cutoffAt, awayScore: 20, homeScore: 24 },
   }),
   /strictly after cutoff/,
@@ -125,13 +224,11 @@ assert.throws(
 );
 assert.throws(
   () => evaluateNflMarketBrainResearchCase({
+    researchManifest, partitionRole: "selection",
     sequence: correctionSequence.materialized,
-    candidate: {
-      release: "candidate-r1", trainedThrough, sequenceChecksum: correctionSequence.materialized.checksum,
-      awayWinProbability: 0.3, homeWinProbability: 0.7, tieProbability: 0, marginMean: 4, totalMean: 43,
-      marginDistribution: { values: [-2, 4], probabilities: [0.3, 0.7] },
-      totalDistribution: { values: [42, 44], probabilities: [0.5, 0.5] },
-    },
+    candidate: { ...candidate({ sequenceChecksum: correctionSequence.materialized.checksum, states: [
+      { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
+    ] }), marginMean: 4 },
     outcome: { eventId: "correction", finalAt: "2026-09-11T00:00:00.000Z", awayScore: 20, homeScore: 24 },
   }),
   /incoherent with its distributions/,
@@ -148,28 +245,20 @@ assert.throws(
   "materialization must re-verify persisted prior bytes rather than trusting a stored mean",
 );
 
-const manifest = buildNflMarketBrainResearchManifest({
-  candidateRelease: "candidate-r1",
-  createdAt: "2026-10-27T12:00:00.000Z",
-  partitions: [
-    { role: "development", evidenceStatus: "opened_development_only", events: [{ eventId: "dev", startsAt: "2026-09-01T20:00:00.000Z" }] },
-    { role: "selection", evidenceStatus: "untouched", events: [{ eventId: "select", startsAt: "2026-09-08T20:00:00.000Z" }] },
-    { role: "confirmation", evidenceStatus: "untouched", events: [{ eventId: "confirm", startsAt: "2026-09-15T20:00:00.000Z" }] },
-    { role: "prospective_shadow", evidenceStatus: "prospective", events: [{ eventId: "future", startsAt: "2026-09-22T20:00:00.000Z" }] },
-  ],
-});
-assert.equal(manifest.splitMethod, "rolling_origin_no_random_split");
-assert.equal(manifest.invariants.openedEvidenceCannotQualifyAsConfirmation, true);
+assert.equal(researchManifest.splitMethod, "rolling_origin_capture_window_purged_no_random_split");
+assert.equal(researchManifest.invariants.openedEvidenceCannotQualifyAsConfirmation, true);
+const openedPartitions = structuredClone(researchManifest.partitions);
+openedPartitions[2]!.events[0]!.outcomeOpenedAt = "2026-09-18T00:00:00.000Z";
 assert.throws(
   () => buildNflMarketBrainResearchManifest({
     candidateRelease: "candidate-r1",
-    createdAt: "2026-10-27T12:00:00.000Z",
-    partitions: [
-      { role: "development", evidenceStatus: "opened_development_only", events: [{ eventId: "later", startsAt: "2026-09-20T20:00:00.000Z" }] },
-      { role: "confirmation", evidenceStatus: "untouched", events: [{ eventId: "earlier", startsAt: "2026-09-10T20:00:00.000Z" }] },
-    ],
+    createdAt: researchManifest.createdAt,
+    persistedAt: researchManifest.persistedAt,
+    storageId: "tampered-opened-confirmation",
+    purgeGapHours: 24,
+    partitions: openedPartitions,
   }),
-  /partitions|overlap|chronology/,
+  /already opened/,
 );
 
 console.log("NFL Market Brain research evaluator: exact-prior baseline, post-cutoff labels, corrections/harms, release purity, and rolling chronology passed");

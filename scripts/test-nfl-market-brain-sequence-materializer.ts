@@ -6,7 +6,10 @@ import {
   numericFeature,
   type MarketBrainObservation,
 } from "../lib/services/marketBrain/marketBrainContract";
-import { buildNflMarketBrainResolverFeatures } from "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
+import {
+  buildNflMarketBrainResolverFeatures,
+  nflMarketBrainTrainerInput,
+} from "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 
 const cutoffAt = "2026-10-26T20:00:00.000Z";
@@ -44,7 +47,14 @@ function quote(args: {
     availability: args.availability ?? "observed",
     targetRelation: args.relation ?? "target_excluded",
     values: { line: numericFeature(args.line), price: numericFeature(args.price) },
-    categorical: { selection: args.selection, phase: args.observedAt.endsWith("00:00.000Z") ? "provider_opening" : "current" },
+    categorical: {
+      selection: args.selection,
+      phase: args.observedAt.endsWith("00:00.000Z") ? "provider_opening" : "current",
+      providerEventId: "sensitive-provider-event-id",
+      rawRowSha256: "f".repeat(64),
+      playerName: "Sensitive Fixture Player",
+      detail: "free-text fixture detail",
+    },
     audit: { sourceRelease: "fixture", sourceObservationId, notes: [] },
   };
 }
@@ -99,6 +109,7 @@ const observations = [
   ...pair("draftkings", "2026-10-26T19:50:00.000Z", -3.5, -110, -110, "evaluated"),
   ...pair("fanduel", "2026-10-26T19:00:00.000Z", -3, -110, -110),
   ...pair("fanduel", "2026-10-26T19:20:00.000Z", -2.75, -111, -109),
+  ...pair("fanduel", "2026-10-26T19:30:00.000Z", -2.75, -110, -110),
   ...pair("circa", "2026-10-26T19:00:00.000Z", -3, -110, -110),
   ...pair("circa", "2026-10-26T19:40:00.000Z", -2.75, -111, -109),
   ...moneylinePair("fanduel", "2026-10-26T19:00:00.000Z", -110, -110),
@@ -117,7 +128,7 @@ const observations = [
 const independentPrior = bindMarketBrainMarginTotalPrior({
   eventId,
   release: "fixture-independent-prior-r1",
-  availableAt: cutoffAt,
+  availableAt: "2026-10-26T18:00:00.000Z",
   marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
   totalDistribution: { values: [41, 45], probabilities: [0.45, 0.55] },
 });
@@ -146,11 +157,15 @@ const marketCase = buildMarketBrainCase({
     feed: "fixture",
     participant: null,
     providerFetchedAt: cutoffAt,
+    receivedAt: cutoffAt,
     rawResponseSha256: "a".repeat(64),
     returnedRows: 1,
     matchedRows: 1,
     unmatchedRows: 0,
     ambiguousRows: 0,
+    ledgerScope: "full_response",
+    ledgerRows: 1,
+    omittedRows: 0,
     rows: [{
       rowIndex: 0,
       rawRowSha256: "b".repeat(64),
@@ -164,12 +179,12 @@ const marketCase = buildMarketBrainCase({
   }],
   expectedInputs: [
     {
-      id: "identified_book_split:spread:draftkings", modality: "identified_book_split",
+      id: "identified_book_split:spread:draftkings", market: "spread", modality: "identified_book_split",
       provider: "sharpapi", participant: "draftkings", expectation: "opportunistic",
       availability: "observed", observationIds: ["split:draftkings:target-family"], reason: null,
     },
     {
-      id: "identified_book_split:spread:circa", modality: "identified_book_split",
+      id: "identified_book_split:spread:circa", market: "spread", modality: "identified_book_split",
       provider: "sharpapi", participant: "circa", expectation: "opportunistic",
       availability: "observed", observationIds: ["split:circa:target-excluded"], reason: null,
     },
@@ -184,17 +199,24 @@ assert.equal(materialized.accounting.targetExcluded, 5,
 assert.equal(materialized.accounting.targetExcludedExpectedInputs, 1,
   "same-family source missingness must not become a backdoor target feature");
 assert.equal(materialized.accounting.afterCutoff, 2, "provider rows unavailable by cutoff must not enter features");
-assert.equal(materialized.accounting.unavailableOrUnsupported, 1, "missing data must stay explicit rather than becoming zero");
+assert.equal(materialized.accounting.unavailableOrUnsupported, 1,
+  "masked incomplete evidence remains visible to the nuanced reader instead of disappearing");
 assert.equal(materialized.quotePaths.some((path) => path.participant === "draftkings"), false);
 assert.equal(materialized.quotePaths.some((path) => path.participant === "betmgm"), false);
 
 const fanduel = materialized.quotePaths.find((path) => path.participant === "fanduel" && path.market === "spread");
 const circa = materialized.quotePaths.find((path) => path.participant === "circa" && path.market === "spread");
 assert.ok(fanduel && circa);
-assert.equal(fanduel.observedRole, "leader", "chronology, not book reputation, must determine leadership");
+assert.equal(fanduel.observedRole, "reversal", "later buyback must remain visible on a first-moving path");
+assert.equal(fanduel.wasFirstMover, true,
+  "leadership and later reversal must be composable rather than mutually exclusive labels");
 assert.equal(circa.observedRole, "follower", "a professional book that moves second must remain a follower");
+assert.equal(circa.wasFirstMover, false);
 assert.equal(fanduel.lineDelta, 0.25, "sub-half-point movement must survive without a threshold gate");
-assert.notEqual(fanduel.firstFairProbabilityDelta, 0, "small price movement must remain continuous evidence");
+assert.ok(fanduel.fairProbabilityBuybackDistance > 0,
+  "a price buyback must survive even after the line has already moved on its separate axis");
+assert.equal(fanduel.lineBuybackDistance, 0,
+  "price-only buyback must not fabricate a line retracement");
 assert.equal(circa.points.length, 2, "future-available quote pair must be removed before sequence features");
 assert.equal(materialized.crossMarket.sideRelationship, "aligned",
   "Moneyline and Spread must be coordinated in one orientation instead of interpreted in isolation");
@@ -205,9 +227,21 @@ assert.equal(materialized.checksum.length, 64);
 const resolverFeatures = buildNflMarketBrainResolverFeatures(materialized);
 assert.equal(resolverFeatures.contextTokens.some((token) => token.participant === "draftkings"), false);
 assert.equal(resolverFeatures.contextTokens.some((token) => token.participant === "circa"), true);
+assert.equal(resolverFeatures.contextTokens.some((token) =>
+  token.participant === "betmgm" && token.availability === "incomplete"), true,
+"incomplete single-sided evidence must survive as a masked token without becoming a quote path");
 assert.equal(resolverFeatures.expectedInputTokens.some((token) => token.participant === "draftkings"), false);
 assert.equal(resolverFeatures.expectedInputTokens.some((token) => token.participant === "circa"), true);
 assert.equal(resolverFeatures.invariants.productionInfluenceAllowed, false);
+assert.doesNotMatch(JSON.stringify(resolverFeatures),
+  /sensitive-provider-event-id|Sensitive Fixture Player|free-text fixture detail|f{64}/,
+  "high-cardinality provider, player, free-text, and raw-hash identities must not become trainer features");
+const trainerInput = nflMarketBrainTrainerInput(resolverFeatures);
+assert.equal(trainerInput.independentPrior.availableSecondsBeforeCutoff, 7_200);
+assert.equal(JSON.stringify(trainerInput).includes(eventId), false,
+  "event identity must remain provenance, never a trainer shortcut");
+assert.equal(JSON.stringify(trainerInput).includes(independentPrior.artifact.sha256), false,
+  "the content-addressed prior hash must remain provenance, never a trainer shortcut");
 
 const targetIdentityWithoutExactMatch = structuredClone(marketCase);
 for (const observation of targetIdentityWithoutExactMatch.observations) {
@@ -224,6 +258,61 @@ assert.notEqual(extraTargetOnly.checksum, materialized.checksum,
   "the audited sequence must still account for the extra excluded target row");
 assert.equal(buildNflMarketBrainResolverFeatures(extraTargetOnly).featurePayloadSha256, resolverFeatures.featurePayloadSha256,
   "target-only evidence changes must not change the resolver feature payload");
+
+const earlierAvailabilityCase = structuredClone(marketCase);
+earlierAvailabilityCase.evaluatedAt = "2026-10-26T19:00:00.000Z";
+earlierAvailabilityCase.observations = earlierAvailabilityCase.observations.filter((observation) =>
+  Date.parse(observation.timing.availableAt) <= Date.parse(earlierAvailabilityCase.evaluatedAt));
+earlierAvailabilityCase.sourceManifests = [];
+earlierAvailabilityCase.expectedInputs = [{
+  id: "identified_book_split:spread:circa", market: "spread", modality: "identified_book_split",
+  provider: "sharpapi", participant: "circa", expectation: "opportunistic",
+  availability: "unavailable", observationIds: [], reason: "provider_temporarily_unavailable",
+}];
+const availabilitySequence = materializeNflMarketBrainSequence({
+  cases: [earlierAvailabilityCase, marketCase], cutoffAt,
+});
+const availabilityFeatures = buildNflMarketBrainResolverFeatures(availabilitySequence);
+assert.equal(availabilityFeatures.sourceAvailability.snapshots.length, 2);
+assert.equal(availabilityFeatures.sourceAvailability.snapshots[0]?.regime, "unavailable");
+assert.equal(availabilityFeatures.sourceAvailability.snapshots[1]?.regime, "complete");
+assert.ok(availabilityFeatures.expectedInputTokens.some((token) =>
+  token.participant === "circa" && token.availability === "unavailable" &&
+  token.capturedSecondsBeforeCutoff === 3_600),
+"an earlier source outage must survive after the source later recovers");
+
+const unpairedCase = structuredClone(marketCase);
+unpairedCase.observations.push(
+  quote({ participant: "conflictbook", selection: "away", line: 3, price: -110,
+    observedAt: "2026-10-26T19:35:00.000Z" }),
+  quote({ participant: "conflictbook", selection: "away", line: 3, price: -115,
+    observedAt: "2026-10-26T19:35:00.000Z" }),
+  quote({ participant: "conflictbook", selection: "home", line: -3, price: -105,
+    observedAt: "2026-10-26T19:35:00.000Z" }),
+);
+const unpairedFeatures = buildNflMarketBrainResolverFeatures(
+  materializeNflMarketBrainSequence({ cases: [unpairedCase], cutoffAt }),
+);
+assert.equal(unpairedFeatures.quotePathTokens.some((token) => token.participant === "conflictbook"), false);
+assert.equal(unpairedFeatures.contextTokens.filter((token) =>
+  token.participant === "conflictbook" && token.quotePairStatus === "unpaired_observed_quote").length, 3,
+"conflicting same-time prices must remain visible as uncertain raw quote tokens");
+
+const skewFirst = structuredClone(marketCase);
+skewFirst.evaluatedAt = "2026-10-26T19:15:00.000Z";
+const skewObserved = quote({ participant: "clockskew", selection: "away", line: 3, price: -110,
+  observedAt: "2026-10-26T19:10:00.000Z", availableAt: "2026-10-26T19:15:00.000Z", availability: "future" });
+skewFirst.observations.push(skewObserved);
+const skewSecond = structuredClone(skewFirst);
+skewSecond.evaluatedAt = "2026-10-26T19:30:00.000Z";
+skewSecond.observations[skewSecond.observations.length - 1] = {
+  ...skewObserved,
+  availability: "observed",
+  timing: { ...skewObserved.timing, ingestedAt: "2026-10-26T19:30:00.000Z", availableAt: "2026-10-26T19:30:00.000Z" },
+};
+const skewSequence = materializeNflMarketBrainSequence({ cases: [skewFirst, skewSecond], cutoffAt });
+assert.equal(skewSequence.observations.find((row) => row.observation.source.participant === "clockskew")?.observation.availability,
+  "observed", "a later causally observed state must replace the earlier provider-clock-skew mask");
 
 const conflicting = structuredClone(marketCase);
 conflicting.observations[0]!.values.price = numericFeature(-120);

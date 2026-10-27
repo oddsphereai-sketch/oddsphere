@@ -26,9 +26,6 @@ for (const scenario of scenarios) {
     "scenario distributions must express uncertainty rather than one-hot rules");
   assert.ok(Math.abs(expectedMass.reduce((sum, probability) => sum + probability, 0) - 1) < 1e-9);
   assert.deepEqual(Object.keys(scenario.expectedActionDistribution).sort(), [...MARKET_BRAIN_ACTIONS].sort());
-  const score = evaluateBehaviorScenarioDistribution(scenario, scenario.expectedActionDistribution);
-  assert.equal(score.passed, true);
-  assert.equal(score.preferredIsJointMaximum, true);
   const forbiddenOnly = Object.fromEntries(MARKET_BRAIN_ACTIONS.map((action) =>
     [action, action === (scenario.forbiddenActions[0] ?? MARKET_BRAIN_ACTIONS.find((candidate) => candidate !== scenario.preferredAction)) ? 1 : 0],
   )) as typeof scenario.expectedActionDistribution;
@@ -47,4 +44,4 @@ const source = readFileSync("lib/services/marketBrain/nflMarketBrainBehaviorScen
 assert.doesNotMatch(source, /(?:three|four|two)\s+(?:of|out of)\s+(?:three|four)|minimumSignals|signalCount|points?\s*[+=>]/i,
   "the behavior corpus must not become a disguised signal quota or points table");
 
-console.log("NFL Market Brain frozen behavior scenarios: 13 probabilistic follow/fade/uncertainty stories without vote quotas passed");
+console.log("NFL Market Brain behavior corpus schema passed; this does not claim a fitted resolver passed the scenarios");

@@ -80,6 +80,7 @@ export async function GET(request: Request): Promise<Response> {
       sharpApiKey,
       weatherProvider,
       exactProviderCandidate: true,
+      marketBrainCaptureEnabled: process.env.NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED === "true",
     });
     let playerProps: Awaited<ReturnType<typeof runNflPlayerPropsProductionWriter>> | null = null;
     let playerPropsError: string | null = null;
@@ -126,8 +127,10 @@ export async function GET(request: Request): Promise<Response> {
       records_updated: result.inserted + (playerProps?.memberRows ?? 0),
       api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
       partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null
+        || result.marketBrainPersistenceError !== null
         || playerPropsError !== null || playerPropsCriticalHealth.length > 0,
-      error_message: [result.healthHolds.join(","), result.memberSnapshotError, playerPropsError, playerPropsCriticalHealth.join(",")]
+      error_message: [result.healthHolds.join(","), result.memberSnapshotError,
+        result.marketBrainPersistenceError, playerPropsError, playerPropsCriticalHealth.join(",")]
         .filter(Boolean).join(",") || null,
       details: {
         writer_release: result.writerRelease,
@@ -157,6 +160,11 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
+        market_brain_capture_enabled: process.env.NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED === "true",
+        market_brain_shadows_proposed: result.marketBrainShadowsProposed,
+        market_brain_shadows_inserted: result.marketBrainShadowsInserted,
+        market_brain_persistence_attempted: result.marketBrainPersistenceAttempted,
+        market_brain_persistence_error: result.marketBrainPersistenceError,
         player_props_enabled: playerPropsEnabled,
         player_props_cadence: playerPropsCadence,
         player_props_cadence_error: playerPropsCadenceError,

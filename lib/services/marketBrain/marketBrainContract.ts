@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r6_content_addressed_prior" as const;
+  "market_brain_contract_2026_10_27_r7_availability_bound_evidence" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
 export type MarketBrainModality = "model_prior" | "price_quote" | "public_split" | "identified_book_split" | "availability" | "weather" | "other_context";
 export type MarketBrainAvailability = "observed" | "incomplete" | "duplicate" | "stale" | "future" | "unavailable" | "identity_mismatch" | "unsupported";
-export type MarketBrainObservedRole = "leader" | "follower" | "resistor" | "reversal" | "static" | "unknown";
+export type MarketBrainObservedRole = "leader" | "follower" | "resistor" | "reversal" | "static" | "conflicted" | "unknown";
 export type MarketBrainSourcePrior = "professional_book" | "retail_book" | "public_aggregate" | "independent_model" | "context_provider" | "unknown";
 
 export type MarketBrainNumericFeature = { value: number | null; observed: 0 | 1 };
@@ -84,6 +84,7 @@ export type MarketBrainObservation = {
 
 export type MarketBrainExpectedInput = {
   id: string;
+  market: MarketBrainMarket;
   modality: MarketBrainModality;
   provider: string;
   participant: string | null;
@@ -99,11 +100,16 @@ export type MarketBrainSourceManifest = {
   feed: string;
   participant: string | null;
   providerFetchedAt: string;
+  /** Wall-clock receipt boundary; never earlier than the provider fetch timestamp. */
+  receivedAt: string;
   rawResponseSha256: string | null;
   returnedRows: number;
   matchedRows: number;
   unmatchedRows: number;
   ambiguousRows: number;
+  ledgerScope: "full_response" | "event_rows_with_response_digest";
+  ledgerRows: number;
+  omittedRows: number;
   rows: Array<{
     rowIndex: number;
     rawRowSha256: string;
@@ -190,12 +196,12 @@ export function bindMarketBrainMarginTotalPrior(args: {
     schema: "market_brain_margin_total_artifact_v1" as const,
     eventId: args.eventId,
     release: args.release,
+    availableAt: args.availableAt,
     marginDistribution: cloneDistribution(args.marginDistribution),
     totalDistribution: cloneDistribution(args.totalDistribution),
   };
   const artifact: MarketBrainMarginTotalArtifact = {
     ...artifactWithoutHash,
-    availableAt: args.availableAt,
     sha256: marketBrainSha256(artifactWithoutHash),
   };
   const prior = {
@@ -256,6 +262,7 @@ export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string,
     schema: artifact.schema,
     eventId: artifact.eventId,
     release: artifact.release,
+    availableAt: artifact.availableAt,
     marginDistribution: artifact.marginDistribution,
     totalDistribution: artifact.totalDistribution,
   };
@@ -331,6 +338,11 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
     if (!Number.isFinite(Date.parse(manifest.providerFetchedAt))) {
       throw new Error(`Invalid Market Brain source manifest fetch time: ${manifest.id}`);
     }
+    if (!Number.isFinite(Date.parse(manifest.receivedAt)) ||
+      Date.parse(manifest.receivedAt) < Date.parse(manifest.providerFetchedAt) ||
+      Date.parse(manifest.receivedAt) > Date.parse(args.evaluatedAt)) {
+      throw new Error(`Invalid Market Brain source manifest receipt time: ${manifest.id}`);
+    }
     if (Date.parse(manifest.providerFetchedAt) > Date.parse(args.evaluatedAt)) {
       throw new Error(`Market Brain source manifest was fetched after case evaluation: ${manifest.id}`);
     }
@@ -339,13 +351,16 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
       matchedRows: manifest.matchedRows,
       unmatchedRows: manifest.unmatchedRows,
       ambiguousRows: manifest.ambiguousRows,
+      ledgerRows: manifest.ledgerRows,
+      omittedRows: manifest.omittedRows,
     })) {
       if (!Number.isInteger(value) || value < 0) throw new Error(`Invalid Market Brain source manifest ${name}: ${manifest.id}`);
     }
     if (manifest.returnedRows !== manifest.matchedRows + manifest.unmatchedRows + manifest.ambiguousRows) {
       throw new Error(`Market Brain source manifest row accounting diverged: ${manifest.id}`);
     }
-    if (manifest.rows.length !== manifest.returnedRows) {
+    if (manifest.rows.length !== manifest.ledgerRows ||
+      manifest.returnedRows !== manifest.ledgerRows + manifest.omittedRows) {
       throw new Error(`Market Brain source manifest row ledger diverged: ${manifest.id}`);
     }
     const dispositions = {
@@ -353,8 +368,9 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
       unmatched: manifest.rows.filter((row) => row.disposition === "unmatched").length,
       ambiguous: manifest.rows.filter((row) => row.disposition === "ambiguous").length,
     };
-    if (dispositions.matched !== manifest.matchedRows || dispositions.unmatched !== manifest.unmatchedRows ||
-      dispositions.ambiguous !== manifest.ambiguousRows) {
+    if (manifest.ledgerScope === "full_response" &&
+      (dispositions.matched !== manifest.matchedRows || dispositions.unmatched !== manifest.unmatchedRows ||
+      dispositions.ambiguous !== manifest.ambiguousRows)) {
       throw new Error(`Market Brain source manifest disposition accounting diverged: ${manifest.id}`);
     }
     if (manifest.rows.some((row) => !Number.isInteger(row.rowIndex) || row.rowIndex < 0 ||

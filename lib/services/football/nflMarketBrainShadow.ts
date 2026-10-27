@@ -21,15 +21,20 @@ import type {
   FootballRawPriceResponseManifest,
 } from "./footballRawPriceManifest";
 import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
+import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
+import type { NflForwardWeatherSnapshot } from "./nflForwardEvidence";
 import {
   NFL_SHARP_API_SPLITS_RELEASE,
   type NflRegularSharpMarket,
+  type NflSharpApiSplitCaptureManifest,
   type NflSharpApiSplitSource,
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r6_content_addressed_prior" as const;
-export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 192 * 1024;
+  "nfl_market_brain_shadow_2026_10_27_r8_isolated_rich_context" as const;
+export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
+export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
+export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
 
 export type NflMarketBrainShadow = {
   release: typeof NFL_MARKET_BRAIN_SHADOW_RELEASE;
@@ -71,13 +76,21 @@ export function nflMarketBrainCaptureFailure(args: {
 export function buildNflMarketBrainShadow(args: {
   game: NflPreviewGame;
   capture: NflForwardContextCapture;
+  injuries: DailyEdgeGameAvailability | null;
+  weather: NflForwardWeatherSnapshot;
   independentForecast: {
     marginDistribution: MarketBrainDiscreteDistribution;
     totalDistribution: MarketBrainDiscreteDistribution;
   } | null;
+  /** Intrinsic availability of the independent input, retained across cache reuse. */
+  independentForecastAvailableAt: string | null;
+  independentForecastProvenance: "fresh" | "stored_cache" | "stored_after_failed_refresh" | "static_artifact" | "unavailable";
+  /** Captured after every provider promise used by this tape has settled. */
+  retrievalCompletedAt: string;
   knownPriorArtifactSha256: string[];
   rawPriceResponseManifests: FootballRawPriceResponseManifest[];
   sharpSplitSources: NflSharpApiSplitSource[];
+  sharpSplitCaptureManifest: NflSharpApiSplitCaptureManifest;
 }): NflMarketBrainShadow {
   const observations: MarketBrainObservation[] = [];
   const expectedInputs: MarketBrainExpectedInput[] = [];
@@ -106,6 +119,7 @@ export function buildNflMarketBrainShadow(args: {
         : current.length > 0 ? "incomplete" as const : "unavailable" as const;
       expectedInputs.push({
         id: `price:${market}:${sourceProvider}:${family}`,
+        market,
         modality: "price_quote",
         provider: sourceProvider,
         participant: family,
@@ -118,6 +132,7 @@ export function buildNflMarketBrainShadow(args: {
     addPublicSplit(args, market, observations, expectedInputs);
     addSharpSplits(args, market, observations, expectedInputs);
   }
+  sourceManifests.push(sharpSplitManifest(args, observations));
 
   const marketBrainCase = buildMarketBrainCase({
     sport: "nfl",
@@ -166,6 +181,40 @@ export function buildNflMarketBrainShadow(args: {
   return result;
 }
 
+function sharpSplitManifest(
+  args: Parameters<typeof buildNflMarketBrainShadow>[0],
+  observations: MarketBrainObservation[],
+): MarketBrainSourceManifest {
+  const manifest = args.sharpSplitCaptureManifest;
+  const eventRows = manifest.rows.filter((row) => row.providerGameId === args.game.providerGameId);
+  const retainedObservationIds = observations
+    .filter((row) => row.source.provider === "sharpapi" && row.source.feed === "splits")
+    .map((row) => row.id);
+  return {
+    id: "source:sharpapi:splits:all_books",
+    provider: "sharpapi",
+    feed: "splits",
+    participant: null,
+    providerFetchedAt: args.capture.capturedAt,
+    receivedAt: manifest.responseReceivedAt,
+    rawResponseSha256: manifest.rawResponseSha256,
+    returnedRows: manifest.returnedRows,
+    matchedRows: manifest.matchedRows,
+    unmatchedRows: manifest.unmatchedRows,
+    ambiguousRows: manifest.ambiguousRows,
+    ledgerScope: "event_rows_with_response_digest",
+    ledgerRows: eventRows.length,
+    omittedRows: manifest.returnedRows - eventRows.length,
+    rows: eventRows.map((row, index) => ({
+      ...row,
+      retainedObservationIds: index === 0 ? retainedObservationIds : [],
+    })),
+    retainedObservationIds,
+    status: manifest.status,
+    failureReason: manifest.failureReason,
+  };
+}
+
 function capturedPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
   if (args.capture.prior.status === "unavailable") {
     return { kind: "unavailable" as const, release: args.capture.prior.release, reason: args.capture.prior.reason };
@@ -185,7 +234,7 @@ function exactPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
   const prior = bindMarketBrainMarginTotalPrior({
     eventId: args.game.providerGameId,
     release: args.capture.prior.release,
-    availableAt: args.capture.capturedAt,
+    availableAt: requiredPriorAvailableAt(args),
     marginDistribution: args.independentForecast.marginDistribution,
     totalDistribution: args.independentForecast.totalDistribution,
   });
@@ -223,7 +272,7 @@ function addContext(
       },
     });
     expectedInputs.push({
-      id: `availability:quarterback:${side}`, modality: "availability", provider: "balldontlie", participant: side,
+      id: `availability:quarterback:${side}`, market: "other", modality: "availability", provider: "balldontlie", participant: side,
       expectation: "required", availability, observationIds: [id], reason: availability === "observed" ? null : `quarterback_${status}`,
     });
   }
@@ -237,23 +286,59 @@ function addContext(
     id: injuryId, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "availability",
     source: { provider: injurySource!, feed: "injury_report", participant: null },
     sourcePrior: "context_provider", observedRole: "unknown", observedAt: reportUpdatedAt,
-    timing: timing(reportUpdatedAt, args.capture.capturedAt, tapeIngestedAt(args)),
+    timing: timing(reportUpdatedAt, null, tapeIngestedAt(args)),
     availability: injuryAvailability, targetRelation: "not_applicable",
     values: { reportable_players: numericFeature(playerCount) },
     categorical: { freshness, rawPayloadSha256: args.capture.context.injurySha256 },
     audit: {
       sourceRelease: args.capture.release,
       sourceObservationId: `${injuryId}:${reportUpdatedAt}:${args.capture.context.injurySha256 ?? "no_hash"}`,
-      notes: ["raw injury payload remains in the sibling forward-evidence field"],
+      notes: [],
     },
   });
   expectedInputs.push({
-    id: injuryId, modality: "availability", provider: injurySource ?? "balldontlie", participant: null,
+    id: injuryId, market: "other", modality: "availability", provider: injurySource ?? "balldontlie", participant: null,
     expectation: "required", availability: injuryAvailability,
     observationIds: injuryObserved ? [injuryId] : [], reason: injuryObserved ? null : "injury_report_unavailable",
   });
+  for (const [teamIndex, team] of (args.injuries?.teams ?? []).entries()) {
+    for (const [playerIndex, player] of team.players.entries()) {
+      const observedAt = player.reportedAt ?? reportUpdatedAt;
+      const availability: MarketBrainAvailability = observedAt !== null &&
+        Date.parse(observedAt) > Date.parse(tapeIngestedAt(args)) ? "future" : injuryAvailability;
+      const playerId = `availability:injury:${canonical(team.abbreviation)}:${canonical(player.name)}:${teamIndex}:${playerIndex}`;
+      observations.push({
+        id: playerId,
+        eventId: args.game.providerGameId,
+        sport: "nfl",
+        market: "other",
+        modality: "availability",
+        source: { provider: args.injuries!.source, feed: "injury_report_player", participant: canonical(team.abbreviation) },
+        sourcePrior: "context_provider",
+        observedRole: "unknown",
+        observedAt,
+        timing: timing(observedAt, null, tapeIngestedAt(args)),
+        availability,
+        targetRelation: "not_applicable",
+        values: {},
+        categorical: {
+          team: team.abbreviation,
+          playerName: player.name,
+          status: player.status,
+          position: player.position,
+          detail: player.detail,
+        },
+        audit: {
+          sourceRelease: args.capture.release,
+          sourceObservationId: `${playerId}:${observedAt ?? "unknown"}:${player.status}`,
+          notes: [],
+        },
+      });
+    }
+  }
 
   const [weatherStatus, weatherObservedAt, weatherHash] = args.capture.context.weather;
+  const weatherFetchedAt = args.weather.forecast?.fetched_at ?? weatherObservedAt;
   const weatherAvailability: MarketBrainAvailability = weatherStatus === "provider_unavailable" ? "unavailable"
     : weatherStatus === "outside_forecast_window" || weatherStatus === "not_captured_for_unlocked" ? "unsupported"
     : "observed";
@@ -261,18 +346,33 @@ function addContext(
   if (weatherAvailability !== "unavailable") observations.push({
     id: weatherId, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "weather",
     source: { provider: "weather_provider", feed: "venue_forecast", participant: args.game.home.abbreviation },
-    sourcePrior: "context_provider", observedRole: "unknown", observedAt: weatherObservedAt,
-    timing: timing(weatherObservedAt, weatherObservedAt, tapeIngestedAt(args)),
-    availability: weatherAvailability, targetRelation: "not_applicable", values: {},
-    categorical: { status: weatherStatus, rawPayloadSha256: weatherHash },
+    sourcePrior: "context_provider", observedRole: "unknown", observedAt: weatherFetchedAt,
+    timing: timing(weatherFetchedAt, weatherFetchedAt, tapeIngestedAt(args)),
+    availability: weatherAvailability, targetRelation: "not_applicable",
+    values: {
+      temperature_f: numericFeature(args.weather.forecast?.temperature_f),
+      feels_like_f: numericFeature(args.weather.forecast?.feels_like_f),
+      humidity_pct: numericFeature(args.weather.forecast?.humidity_pct),
+      precipitation_mm: numericFeature(args.weather.forecast?.precipitation_mm),
+      precipitation_probability: numericFeature(args.weather.forecast?.precipitation_probability),
+      wind_speed_mph: numericFeature(args.weather.forecast?.wind_speed_mph),
+      wind_direction_degrees: numericFeature(args.weather.forecast?.wind_direction_degrees),
+    },
+    categorical: {
+      status: weatherStatus,
+      roofType: args.weather.roofType,
+      conditions: args.weather.forecast?.conditions ?? null,
+      forecastFor: args.weather.forecast?.forecast_for ?? null,
+      rawPayloadSha256: weatherHash,
+    },
     audit: {
       sourceRelease: args.capture.release,
-      sourceObservationId: `${weatherId}:${weatherObservedAt}:${weatherHash}`,
-      notes: ["raw weather payload remains in the sibling forward-evidence field"],
+      sourceObservationId: `${weatherId}:${weatherFetchedAt}:${weatherHash}`,
+      notes: [],
     },
   });
   expectedInputs.push({
-    id: weatherId, modality: "weather", provider: "weather_provider", participant: args.game.home.abbreviation,
+    id: weatherId, market: "other", modality: "weather", provider: "weather_provider", participant: args.game.home.abbreviation,
     expectation: weatherAvailability === "unsupported" ? "unsupported" : "required",
     availability: weatherAvailability,
     observationIds: weatherAvailability === "unavailable" ? [] : [weatherId],
@@ -306,15 +406,20 @@ function addPrior(
       margin_mean: numericFeature(prior.kind === "margin_total_distribution" || prior.kind === "margin_total_distribution_ref" ? prior.marginMean : null),
       total_mean: numericFeature(prior.kind === "margin_total_distribution" || prior.kind === "margin_total_distribution_ref" ? prior.totalMean : null),
     },
-    categorical: { targetFree: true, artifactSha256, artifactEmbedded: prior.kind === "margin_total_distribution" },
+    categorical: {
+      targetFree: true,
+      artifactSha256,
+      provenance: args.independentForecastProvenance,
+    },
     audit: {
       sourceRelease: args.capture.prior.release,
-      sourceObservationId: id,
+      sourceObservationId: `${id}:${tapeIngestedAt(args)}:${args.independentForecastProvenance}`,
       notes: [],
     },
   });
   expectedInputs.push({
     id: "model_prior:target_free",
+    market: "other",
     modality: "model_prior",
     provider: "oddsphere",
     participant: null,
@@ -338,18 +443,23 @@ function addRawPrices(
       caseIdBySourceId.set(raw.sourceObservationId, id);
       observations.push(rawPriceObservation(args, raw, id));
     }
+    const eventRows = manifest.rows.filter((row) => row.providerGameId === args.game.providerGameId);
     return {
       id: `source:${manifest.provider}:${manifest.feed}:${canonical(manifest.participant)}:${manifestIndex}`,
       provider: manifest.provider,
       feed: manifest.feed,
       participant: manifest.participant === null ? null : canonical(manifest.participant),
       providerFetchedAt: manifest.providerFetchedAt,
+      receivedAt: args.retrievalCompletedAt,
       rawResponseSha256: manifest.rawResponseSha256,
       returnedRows: manifest.returnedRows,
       matchedRows: manifest.matchedRows,
       unmatchedRows: manifest.unmatchedRows,
       ambiguousRows: manifest.ambiguousRows,
-      rows: manifest.rows.map((row) => ({
+      ledgerScope: "event_rows_with_response_digest",
+      ledgerRows: eventRows.length,
+      omittedRows: manifest.returnedRows - eventRows.length,
+      rows: eventRows.map((row) => ({
         rowIndex: row.rowIndex,
         rawRowSha256: row.rawRowSha256,
         disposition: row.disposition,
@@ -379,8 +489,6 @@ function rawPriceObservation(
     lineEqual(evaluated.line, raw.line) &&
     evaluated.price === raw.price &&
     evaluated.observedAt === raw.providerObservedAt;
-  const ageMinutes = raw.providerObservedAt === null ? null
-    : (Date.parse(args.capture.capturedAt) - Date.parse(raw.providerObservedAt)) / 60_000;
   const availability: MarketBrainAvailability = raw.providerObservedAt !== null &&
     Date.parse(raw.providerObservedAt) > Date.parse(args.capture.capturedAt)
     ? "future"
@@ -401,7 +509,6 @@ function rawPriceObservation(
     availability,
     targetRelation: exactEvaluated ? "evaluated" : sameFamily ? "same_family_as_evaluated" : "target_excluded",
     values: {
-      age_minutes: numericFeature(Number.isFinite(ageMinutes) ? ageMinutes : null),
       line: numericFeature(raw.line),
       price: numericFeature(raw.price),
     },
@@ -450,7 +557,7 @@ function addPublicSplit(
     },
   });
   expectedInputs.push({
-    id: `public_split:${market}:playbook`, modality: "public_split", provider: "playbook", participant: "aggregate",
+    id: `public_split:${market}:playbook`, market, modality: "public_split", provider: "playbook", participant: "aggregate",
     expectation: "opportunistic", availability: split ? "observed" : "unavailable",
     observationIds: split ? [id] : [], reason: split ? null : "provider_row_unavailable",
   });
@@ -501,6 +608,7 @@ function addSharpSplits(
     });
     expectedInputs.push({
       id: `identified_book_split:${market}:${source.sportsbook}`,
+      market,
       modality: "identified_book_split",
       provider: "sharpapi",
       participant: source.sportsbook,
@@ -536,7 +644,15 @@ function timing(providerObservedAt: string | null, providerFetchedAt: string | n
   return { providerObservedAt, providerFetchedAt, ingestedAt, availableAt: ingestedAt };
 }
 function tapeIngestedAt(args: Parameters<typeof buildNflMarketBrainShadow>[0]): string {
-  return [args.capture.capturedAt, ...args.rawPriceResponseManifests.map((manifest) => manifest.providerFetchedAt)]
+  return [args.capture.capturedAt, args.retrievalCompletedAt,
+    ...args.rawPriceResponseManifests.map((manifest) => manifest.providerFetchedAt)]
     .reduce((latest, value) => Date.parse(value) > Date.parse(latest) ? value : latest);
+}
+function requiredPriorAvailableAt(args: Parameters<typeof buildNflMarketBrainShadow>[0]): string {
+  const value = args.independentForecastAvailableAt;
+  if (value === null || !Number.isFinite(Date.parse(value)) || Date.parse(value) > Date.parse(tapeIngestedAt(args))) {
+    throw new Error("NFL Market Brain independent prior availability is invalid.");
+  }
+  return new Date(Date.parse(value)).toISOString();
 }
 function byteLength(value: unknown) { return Buffer.byteLength(JSON.stringify(value)); }

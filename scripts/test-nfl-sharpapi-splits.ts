@@ -162,6 +162,7 @@ async function testFetchContract(): Promise<void> {
     apiKey: "test-key",
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
+    clock: () => "2026-08-21T17:04:05Z",
     client: {
       async fetchAll<T>(options: { path: string; query?: unknown; maxPages?: number }): Promise<T[]> {
         calls.push({ path: options.path, query: options.query, maxPages: options.maxPages });
@@ -172,6 +173,9 @@ async function testFetchContract(): Promise<void> {
   assert.equal(fetched.release, NFL_SHARP_API_SPLITS_RELEASE);
   assert.equal(fetched.requests, 1);
   assert.equal(fetched.rows, 1);
+  assert.equal(fetched.captureManifest.returnedRows, 1);
+  assert.equal(fetched.captureManifest.matchedRows, 1);
+  assert.equal(fetched.captureManifest.responseReceivedAt, "2026-08-21T17:04:05.000Z");
   assert.deepEqual(calls, [{
     path: "/splits",
     query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
@@ -183,6 +187,39 @@ async function testFetchContract(): Promise<void> {
     "unavailable");
 }
 
-void testFetchContract().then(() => {
+async function testTruncationFailsClosed(): Promise<void> {
+  await assert.rejects(() => fetchSharpApiNflSplits({
+    apiKey: "test-key",
+    games: [game],
+    capturedAt: "2026-08-21T17:04:00Z",
+    clock: () => "2026-08-21T17:04:05Z",
+    client: { async fetchAll<T>(): Promise<T[]> { return Array.from({ length: 200 }, () => row) as T[]; } },
+  }), /completeness is unproved/);
+}
+
+async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
+  const rows = Array.from({ length: 200 }, (_, index) => ({
+    ...row,
+    event_id: `unmatched-${index}`,
+    away_team: "Unknown Away",
+    home_team: "Unknown Home",
+  }));
+  const fetched = await fetchSharpApiNflSplits({
+    apiKey: "test-key",
+    games: [game],
+    capturedAt: "2026-08-21T17:04:00Z",
+    clock: () => "2026-08-21T17:04:05Z",
+    client: {
+      async fetchAll<T>(): Promise<T[]> { throw new Error("direct page metadata path expected"); },
+      async fetch<T>(): Promise<{ data: T; pagination: { total: number; count: number; offset: number; has_more: boolean } }> {
+        return { data: rows as T, pagination: { total: 200, count: 200, offset: 0, has_more: false } };
+      },
+    },
+  });
+  assert.equal(fetched.captureManifest.returnedRows, 200);
+  assert.equal(fetched.captureManifest.unmatchedRows, 200);
+}
+
+void Promise.all([testFetchContract(), testTruncationFailsClosed(), testExactFullPageRequiresExplicitCompleteness()]).then(() => {
   console.log("NFL SharpAPI lossless all-source split manifest and backward-compatible selection tests passed.");
 });

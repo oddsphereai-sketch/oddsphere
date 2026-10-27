@@ -116,6 +116,10 @@ import {
   buildNflMarketBrainShadow,
   nflMarketBrainCaptureFailure,
 } from "./nflMarketBrainShadow";
+import {
+  appendNflMarketBrainShadows,
+  readNflMarketBrainPriorArtifactIndex,
+} from "./nflMarketBrainShadowStore";
 import { failedFootballRawPriceManifest } from "./footballRawPriceManifest";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
@@ -125,7 +129,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r78_market_brain_content_addressed_prior" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r80_market_brain_isolated_shadow" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -153,6 +157,10 @@ export type NflForwardWriterResult = {
   trackingRecordsProposed: number;
   trackingRecordsInserted: number;
   trackingRecordsExisting: number;
+  marketBrainShadowsProposed: number;
+  marketBrainShadowsInserted: number;
+  marketBrainPersistenceAttempted: boolean;
+  marketBrainPersistenceError: string | null;
 };
 
 type NflTrackingWriteResult = Pick<
@@ -182,6 +190,8 @@ export async function runNflForwardEvidenceWriter(args: {
   sharpSplitsFetcher?: typeof fetchSharpApiNflSplits;
   /** Explicit foundational-score gate. Locked rows retain stored payload precedence. */
   exactProviderCandidate?: boolean;
+  /** Research capture is opt-in and has no model/member/tracking authority. */
+  marketBrainCaptureEnabled?: boolean;
 }): Promise<NflForwardWriterResult> {
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
@@ -216,6 +226,13 @@ export async function runNflForwardEvidenceWriter(args: {
     });
     return emptyResult(need.reason, tracking, memberSnapshot);
   }
+
+  const marketBrainPriorArtifactRead = args.marketBrainCaptureEnabled
+    ? boundedMarketBrainPriorArtifactRead(args)
+    : Promise.resolve({
+        rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
+        error: null as string | null,
+      });
 
   const slate = await fetchBalldontlieNflRegularSlate({
     season: args.season,
@@ -300,6 +317,17 @@ export async function runNflForwardEvidenceWriter(args: {
         requests: 1,
         rows: 0,
         dates: [],
+        captureManifest: {
+          responseReceivedAt: args.apply ? new Date().toISOString() : args.now,
+          rawResponseSha256: null,
+          status: "failed" as const,
+          failureReason: "sharpapi_split_capture_failed",
+          returnedRows: 0,
+          matchedRows: 0,
+          unmatchedRows: 0,
+          ambiguousRows: 0,
+          rows: [],
+        },
       })),
     fetchSharpApiNflSharpOdds({
       apiKey: args.sharpApiKey,
@@ -343,6 +371,9 @@ export async function runNflForwardEvidenceWriter(args: {
     }));
   }
   const weatherRequests = [...weatherByGame.values()].reduce((sum, value) => sum + value.requests, 0);
+  // This is deliberately later than every provider promise used by the research tape.
+  // Dry-runs retain their injected clock so replays remain deterministic.
+  const retrievalCompletedAt = args.apply ? new Date().toISOString() : args.now;
   const paidProjectionShadows = {
     ...storedPaidProjectionShadows,
     ...(paidProjectionFetch?.byGame ?? {}),
@@ -350,6 +381,11 @@ export async function runNflForwardEvidenceWriter(args: {
   const paidProjectionRequestsMaximum = paidProjectionRefreshDue ? NFL_PAID_PROJECTION_MAX_PAGES : 0;
   const apiCallsMaximum = slate.providerRequests + rosters.requests + availabilityRequestsMaximum + paidProjectionRequestsMaximum
     + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
+  // The lightweight research index read overlaps provider collection and has a hard abort.
+  // It can never hold the production writer indefinitely.
+  const marketBrainPriorArtifactReadResult = await marketBrainPriorArtifactRead;
+  const storedMarketBrainPriorArtifacts = marketBrainPriorArtifactReadResult.rows;
+  const marketBrainReadError = marketBrainPriorArtifactReadResult.error;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
   const knownPriorArtifactsByGame = new Map<string, Set<string>>();
   for (const row of historicalExisting) {
@@ -366,6 +402,11 @@ export async function runNflForwardEvidenceWriter(args: {
         knownPriorArtifactsByGame.set(row.providerGameId, artifacts);
       }
     }
+  }
+  for (const row of storedMarketBrainPriorArtifacts) {
+    const artifacts = knownPriorArtifactsByGame.get(row.providerGameId) ?? new Set<string>();
+    artifacts.add(row.priorArtifactSha256);
+    knownPriorArtifactsByGame.set(row.providerGameId, artifacts);
   }
 
   const payloadBuildHolds: string[] = [];
@@ -843,15 +884,39 @@ export async function runNflForwardEvidenceWriter(args: {
         }))),
     ];
     let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
-    if (!existingLockedRecord) {
+    if (args.marketBrainCaptureEnabled && !existingLockedRecord) {
       try {
         marketBrainShadow = buildNflMarketBrainShadow({
           game: plan.game,
           capture: contextualEvidenceCapture,
+          injuries,
+          weather,
           independentForecast: hasTargetFreePrior ? baseOutcome : null,
+          independentForecastAvailableAt: hasTargetFreePrior
+            ? exactProviderScore
+              ? retrievalCompletedAt
+              : paidProjectionShadow
+              ? paidProjectionFetch?.byGame[plan.game.providerGameId]
+                ? retrievalCompletedAt
+                : paidProjectionShadow.fetchedAt
+              : "2026-08-23T00:00:00.000Z"
+            : null,
+          independentForecastProvenance: !hasTargetFreePrior
+            ? "unavailable"
+            : exactProviderScore
+            ? "fresh"
+            : paidProjectionShadow
+            ? paidProjectionFetch?.byGame[plan.game.providerGameId]
+              ? "fresh"
+              : paidProjectionRefreshDue && paidProjectionFetch === null
+              ? "stored_after_failed_refresh"
+              : "stored_cache"
+            : "static_artifact",
+          retrievalCompletedAt,
           knownPriorArtifactSha256: [...(knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? [])],
           rawPriceResponseManifests: marketBrainPriceManifests,
           sharpSplitSources,
+          sharpSplitCaptureManifest: sharpResult.captureManifest,
         });
         if ("case" in marketBrainShadow) {
           const sha256 = marketBrainPriorArtifactSha256(marketBrainShadow.case.prior);
@@ -879,11 +944,17 @@ export async function runNflForwardEvidenceWriter(args: {
   });
 
   args.auditPayloads?.(payloads);
-  const write = await appendNflForwardEvidence({ client: args.client, runId: args.runId, payloads, apply: args.apply });
+  const authoritativePayloads = payloads.map(withoutMarketBrainShadow);
+  const write = await appendNflForwardEvidence({
+    client: args.client,
+    runId: args.runId,
+    payloads: authoritativePayloads,
+    apply: args.apply,
+  });
   const memberSnapshot = await refreshCompactMemberSnapshot({
     client: args.client,
     existing: historicalExisting,
-    payloads,
+    payloads: authoritativePayloads,
     season: args.season,
     week: args.week,
     now: args.now,
@@ -891,9 +962,29 @@ export async function runNflForwardEvidenceWriter(args: {
   });
   const tracking = await writeOfficialTrackingFromPayloads({
     client: args.client,
-    payloads: [...currentT60Payloads(existing), ...payloads.filter((payload) => payload.stage === "t60")],
+    payloads: [...currentT60Payloads(existing), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
     apply: args.apply,
   });
+  let marketBrainWrite = { proposed: payloads.filter((payload) => payload.marketBrainShadow).length, inserted: 0 };
+  let marketBrainWriteError: string | null = null;
+  if (args.marketBrainCaptureEnabled) {
+    const writeAbort = new AbortController();
+    const writeTimeout = setTimeout(() => writeAbort.abort(), 2_000);
+    try {
+      marketBrainWrite = await appendNflMarketBrainShadows({
+        client: args.client,
+        runId: args.runId,
+        payloads,
+        apply: args.apply,
+        signal: writeAbort.signal,
+      });
+    } catch (error) {
+      // Every authoritative/member/tracking write has already completed. Research persistence is last and fail-open.
+      marketBrainWriteError = error instanceof Error ? error.message : "unknown_market_brain_shadow_append_failure";
+    } finally {
+      clearTimeout(writeTimeout);
+    }
+  }
   const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
   const quarterbackHealthReasons = payloads.flatMap((payload) => {
     const away = payload.startersAndDepth.away.starterStatus;
@@ -924,6 +1015,10 @@ export async function runNflForwardEvidenceWriter(args: {
       ...payloadBuildHolds,
     ])].sort(),
     publicationAttempted: args.apply,
+    marketBrainShadowsProposed: marketBrainWrite.proposed,
+    marketBrainShadowsInserted: marketBrainWrite.inserted,
+    marketBrainPersistenceAttempted: Boolean(args.marketBrainCaptureEnabled) && args.apply && marketBrainWrite.proposed > 0,
+    marketBrainPersistenceError: [marketBrainReadError, marketBrainWriteError].filter(Boolean).join("; ") || null,
     ...memberSnapshot,
     ...tracking,
   };
@@ -1144,6 +1239,36 @@ function stageCounts(payloads: NflForwardEvidencePayload[]): Record<"opening" | 
   };
 }
 
+function withoutMarketBrainShadow(payload: NflForwardEvidencePayload): NflForwardEvidencePayload {
+  const { marketBrainShadow: _marketBrainShadow, ...authoritative } = payload;
+  return authoritative as NflForwardEvidencePayload;
+}
+
+async function boundedMarketBrainPriorArtifactRead(args: {
+  client: SupabaseClient;
+  season: number;
+  week: number;
+}) {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 2_000);
+  try {
+    const rows = await readNflMarketBrainPriorArtifactIndex({
+      client: args.client,
+      season: args.season,
+      week: args.week,
+      signal: abort.signal,
+    });
+    return { rows, error: null as string | null };
+  } catch (error) {
+    return {
+      rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
+      error: error instanceof Error ? error.message : "unknown_market_brain_shadow_read_failure",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function emptyResult(
   reason: string,
   tracking: NflTrackingWriteResult = {
@@ -1177,6 +1302,10 @@ function emptyResult(
     apiCallsMaximum: 0,
     healthHolds: [],
     publicationAttempted: false,
+    marketBrainShadowsProposed: 0,
+    marketBrainShadowsInserted: 0,
+    marketBrainPersistenceAttempted: false,
+    marketBrainPersistenceError: null,
     ...memberSnapshot,
     ...tracking,
   };

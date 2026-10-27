@@ -85,14 +85,14 @@ export function markRawPriceDuplicates(
     for (const row of observations) {
       const key = [
         row.provider, row.feed, row.providerEventId, row.sportsbook, row.market, row.selection,
-        row.line, row.providerObservedAt,
+        row.line, row.price, row.providerObservedAt,
       ].join("|");
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return [gameId, observations.map((row) => {
       const key = [
         row.provider, row.feed, row.providerEventId, row.sportsbook, row.market, row.selection,
-        row.line, row.providerObservedAt,
+        row.line, row.price, row.providerObservedAt,
       ].join("|");
       return (counts.get(key) ?? 0) > 1
         ? { ...row, status: "duplicate" as const, notes: [...row.notes, "duplicate_provider_observation_identity"] }

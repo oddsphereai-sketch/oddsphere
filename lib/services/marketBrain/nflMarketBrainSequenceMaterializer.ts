@@ -12,7 +12,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r4_target_safe_inputs" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r8_lossless_availability_timeline" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -22,12 +22,13 @@ export type NflMarketBrainMaterializedObservation = {
   eligible: boolean;
   exclusionReasons: Array<
     "after_cutoff" | "evaluated_target" | "same_target_family" | "superseded_prior" |
-    "unavailable" | "incomplete" | "unsupported"
+    "target_composition_unknown" | "unavailable" | "incomplete" | "unsupported"
   >;
 };
 
 export type NflMarketBrainMaterializedExpectedInput = {
   input: MarketBrainExpectedInput;
+  capturedAt: string;
   eligible: boolean;
   exclusionReasons: Array<"same_target_family">;
 };
@@ -35,6 +36,8 @@ export type NflMarketBrainMaterializedExpectedInput = {
 export type NflMarketBrainQuotePoint = {
   observedAt: string;
   availableAt: string;
+  providerFetchedAt: [string | null, string | null];
+  ingestedAt: [string, string];
   phase: string;
   line: number | null;
   firstPrice: number;
@@ -49,6 +52,8 @@ export type NflMarketBrainQuotePath = {
   participant: string;
   market: FullGameMarket;
   observedRole: MarketBrainObservedRole;
+  wasFirstMover: boolean;
+  directionConflict: boolean;
   points: NflMarketBrainQuotePoint[];
   opening: NflMarketBrainQuotePoint;
   current: NflMarketBrainQuotePoint;
@@ -58,6 +63,8 @@ export type NflMarketBrainQuotePath = {
   moveCount: number;
   reversalCount: number;
   buybackDistance: number;
+  lineBuybackDistance: number;
+  fairProbabilityBuybackDistance: number;
   firstEconomicChangeAt: string | null;
   lastEconomicChangeAt: string | null;
   crossedNflKeyNumbers: number[];
@@ -80,17 +87,28 @@ export type NflMarketBrainSequence = {
   cutoffAt: string;
   prior: MarketBrainPrior;
   targetFamilyByMarket: Record<FullGameMarket, string | null>;
+  /** Target-safe scoring metadata. This is never exported to trainer input. */
+  evaluationEnvelope: MarketBrainCase["evaluatedTargets"];
   observations: NflMarketBrainMaterializedObservation[];
   expectedInputs: NflMarketBrainMaterializedExpectedInput[];
   quotePaths: NflMarketBrainQuotePath[];
   crossMarket: NflMarketBrainCrossMarket;
   sourceAvailability: {
     regime: "complete" | "degraded" | "unavailable";
-    manifests: number;
+    targetSafeExpectedInputs: number;
     failed: number;
-    returnedRows: number;
-    unmatchedRows: number;
-    ambiguousRows: number;
+    evidenceManifestChecksum: string;
+    snapshots: Array<{
+      capturedAt: string;
+      regime: "complete" | "degraded" | "unavailable";
+      targetSafeExpectedInputs: number;
+      observed: number;
+      failed: number;
+      incomplete: number;
+      duplicate: number;
+      stale: number;
+      manifestChecksum: string;
+    }>;
   };
   accounting: {
     inputCases: number;
@@ -148,12 +166,8 @@ export function materializeNflMarketBrainSequence(args: {
   const inputObservations = eligibleCases.flatMap((item) => item.observations);
   const deduplicated = deduplicate(inputObservations);
   const latestPriorAvailable = latestPrior.kind !== "unavailable";
-  const currentPriorObservations = deduplicated.filter((observation) =>
-    latestPriorAvailable && observation.modality === "model_prior" && observation.audit.sourceRelease === latestPrior.release &&
-    Date.parse(observation.timing.availableAt) <= cutoff);
-  if (currentPriorObservations.length > 1) {
-    throw new Error("NFL Market Brain materializer found multiple current prior artifacts for one cutoff.");
-  }
+  const latestPriorArtifactSha256 = latestPrior.kind === "margin_total_distribution"
+    ? latestPrior.artifact.sha256 : null;
   const observations = deduplicated.map((observation): NflMarketBrainMaterializedObservation => {
     const reasons: NflMarketBrainMaterializedObservation["exclusionReasons"] = [];
     if (Date.parse(observation.timing.availableAt) > cutoff) reasons.push("after_cutoff");
@@ -161,35 +175,45 @@ export function materializeNflMarketBrainSequence(args: {
     if (isMarketEvidence(observation) && targetFamily !== null && canonical(observation.source.participant) === canonical(targetFamily)) {
       reasons.push(observation.targetRelation === "evaluated" ? "evaluated_target" : "same_target_family");
     }
+    if (observation.modality === "public_split" && observation.targetRelation === "unknown") {
+      reasons.push("target_composition_unknown");
+    }
     if (observation.modality === "model_prior" &&
-      (!latestPriorAvailable || observation.audit.sourceRelease !== latestPrior.release)) {
+      (!latestPriorAvailable || observation.categorical.artifactSha256 !== latestPriorArtifactSha256)) {
       reasons.push("superseded_prior");
     }
-    if (["unavailable", "identity_mismatch", "stale", "future"].includes(observation.availability)) reasons.push("unavailable");
-    if (observation.availability === "incomplete") reasons.push("incomplete");
-    if (observation.availability === "unsupported") reasons.push("unsupported");
+    // Stale, incomplete, duplicate and unavailable observations remain masked
+    // evidence tokens. They are excluded from paired quote paths below, but
+    // their presence/failure timing must not disappear from the reader.
+    if (observation.availability === "future") reasons.push("unavailable");
     return { observation, eligible: reasons.length === 0, exclusionReasons: [...new Set(reasons)] };
   });
-  const targetFamilies = new Set(Object.values(targetFamilyByMarket).filter((value): value is string => value !== null).map(canonical));
-  const expectedInputs = latestCase.expectedInputs.map((input): NflMarketBrainMaterializedExpectedInput => {
-    const exclusionReasons: NflMarketBrainMaterializedExpectedInput["exclusionReasons"] =
-      input.participant !== null && targetFamilies.has(canonical(input.participant)) ? ["same_target_family"] : [];
-    return { input, eligible: exclusionReasons.length === 0, exclusionReasons };
-  });
+  const expectedInputs = eligibleCases.flatMap((marketCase) => marketCase.expectedInputs.map(
+    (input): NflMarketBrainMaterializedExpectedInput => {
+      const targetFamily = isFullGameMarket(input.market) ? targetFamilyByMarket[input.market] : null;
+      const exclusionReasons: NflMarketBrainMaterializedExpectedInput["exclusionReasons"] =
+        input.participant !== null && targetFamily !== null && canonical(input.participant) === canonical(targetFamily)
+          ? ["same_target_family"] : [];
+      return { input, capturedAt: marketCase.evaluatedAt, eligible: exclusionReasons.length === 0, exclusionReasons };
+    },
+  ));
 
   const quotePaths = buildQuotePaths(observations);
   assignObservedRoles(quotePaths);
   const crossMarket = buildCrossMarket(quotePaths);
-  const manifests = latestCase.sourceManifests;
-  const failed = manifests.filter((manifest) => manifest.status === "failed").length;
-  const observed = manifests.length - failed;
+  const manifests = eligibleCases.flatMap((marketCase) => marketCase.sourceManifests);
+  const targetSafeInputs = expectedInputs.filter((row) => row.eligible && row.input.expectation !== "unsupported");
+  const failed = targetSafeInputs.filter((row) =>
+    ["unavailable", "identity_mismatch", "future"].includes(row.input.availability)).length;
+  const observed = targetSafeInputs.filter((row) => row.input.availability === "observed").length;
+  const availabilitySnapshots = eligibleCases.map((marketCase) =>
+    availabilitySnapshot(marketCase, targetFamilyByMarket));
   const sourceAvailability = {
-    regime: (observed === 0 ? "unavailable" : failed > 0 ? "degraded" : "complete") as "complete" | "degraded" | "unavailable",
-    manifests: manifests.length,
+    regime: availabilitySnapshots.at(-1)!.regime,
+    targetSafeExpectedInputs: targetSafeInputs.length,
     failed,
-    returnedRows: manifests.reduce((sum, manifest) => sum + manifest.returnedRows, 0),
-    unmatchedRows: manifests.reduce((sum, manifest) => sum + manifest.unmatchedRows, 0),
-    ambiguousRows: manifests.reduce((sum, manifest) => sum + manifest.ambiguousRows, 0),
+    evidenceManifestChecksum: sha256(manifests),
+    snapshots: availabilitySnapshots,
   };
   const withoutChecksum = {
     release: NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE,
@@ -200,6 +224,7 @@ export function materializeNflMarketBrainSequence(args: {
     cutoffAt: new Date(cutoff).toISOString(),
     prior: latestPrior,
     targetFamilyByMarket,
+    evaluationEnvelope: structuredClone(latestCase.evaluatedTargets),
     observations,
     expectedInputs,
     quotePaths,
@@ -214,7 +239,9 @@ export function materializeNflMarketBrainSequence(args: {
       afterCutoff: observations.filter((row) => row.exclusionReasons.includes("after_cutoff")).length,
       targetExcluded: observations.filter((row) => row.exclusionReasons.includes("evaluated_target") || row.exclusionReasons.includes("same_target_family")).length,
       targetExcludedExpectedInputs: expectedInputs.filter((row) => !row.eligible).length,
-      unavailableOrUnsupported: observations.filter((row) => row.exclusionReasons.some((reason) => ["unavailable", "incomplete", "unsupported"].includes(reason))).length,
+      unavailableOrUnsupported: observations.filter((row) =>
+        ["unavailable", "identity_mismatch", "stale", "future", "incomplete", "unsupported", "duplicate"]
+          .includes(row.observation.availability)).length,
       pairedQuotePoints: quotePaths.reduce((sum, path) => sum + path.points.length, 0),
     },
     invariants: {
@@ -227,6 +254,34 @@ export function materializeNflMarketBrainSequence(args: {
     },
   };
   return { ...withoutChecksum, checksum: sha256(withoutChecksum) };
+}
+
+function availabilitySnapshot(
+  marketCase: MarketBrainCase,
+  targetFamilyByMarket: Record<FullGameMarket, string | null>,
+): NflMarketBrainSequence["sourceAvailability"]["snapshots"][number] {
+  const safe = marketCase.expectedInputs.filter((input) => {
+    if (input.expectation === "unsupported") return false;
+    const targetFamily = isFullGameMarket(input.market) ? targetFamilyByMarket[input.market] : null;
+    return input.participant === null || targetFamily === null || canonical(input.participant) !== canonical(targetFamily);
+  });
+  const count = (availability: MarketBrainExpectedInput["availability"]) =>
+    safe.filter((input) => input.availability === availability).length;
+  const observed = count("observed");
+  const failed = safe.filter((input) =>
+    ["unavailable", "identity_mismatch", "future"].includes(input.availability)).length;
+  const regime = observed === 0 ? "unavailable" : failed > 0 || observed < safe.length ? "degraded" : "complete";
+  return {
+    capturedAt: marketCase.evaluatedAt,
+    regime,
+    targetSafeExpectedInputs: safe.length,
+    observed,
+    failed,
+    incomplete: count("incomplete"),
+    duplicate: count("duplicate"),
+    stale: count("stale"),
+    manifestChecksum: sha256(marketCase.sourceManifests),
+  };
 }
 
 function isMarketEvidence(observation: MarketBrainObservation): boolean {
@@ -260,7 +315,9 @@ function buildCrossMarket(paths: NflMarketBrainQuotePath[]): NflMarketBrainCross
   const summaries = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => {
     const marketPaths = paths.filter((path) => path.market === market);
     const directions = marketPaths.map(netDirection).filter((direction) => direction !== 0);
-    const direction = marketPaths.length === 0 ? "unavailable" : directions.length === 0 ? "static" :
+    const direction = marketPaths.length === 0 ? "unavailable" :
+      marketPaths.some((path) => path.observedRole === "conflicted") ? "conflicted" :
+      directions.length === 0 ? "static" :
       new Set(directions).size > 1 ? "conflicted" : directions[0] === 1 ? "first_side" : "second_side";
     const changes = marketPaths.flatMap((path) => path.firstEconomicChangeAt ? [path.firstEconomicChangeAt] : [])
       .sort((a, b) => Date.parse(a) - Date.parse(b));
@@ -314,7 +371,12 @@ function deduplicate(observations: MarketBrainObservation[]): MarketBrainObserva
     if (sha256(immutableObservation(prior)) !== sha256(immutableObservation(observation))) {
       throw new Error(`Conflicting Market Brain observation identity: ${key}`);
     }
-    if (Date.parse(observation.timing.availableAt) < Date.parse(prior.timing.availableAt)) rows.set(key, observation);
+    if (prior.availability === "future" && observation.availability !== "future") {
+      rows.set(key, observation);
+    } else if (prior.availability === observation.availability &&
+      Date.parse(observation.timing.availableAt) < Date.parse(prior.timing.availableAt)) {
+      rows.set(key, observation);
+    }
   }
   return [...rows.values()].sort((a, b) =>
     Date.parse(a.timing.availableAt) - Date.parse(b.timing.availableAt) ||
@@ -337,21 +399,26 @@ function immutableObservation(observation: MarketBrainObservation) {
 }
 
 function buildQuotePaths(rows: NflMarketBrainMaterializedObservation[]): NflMarketBrainQuotePath[] {
-  const eligible = rows.filter((row) => row.eligible && row.observation.modality === "price_quote" &&
+  const eligible = rows.filter((row) => row.eligible && row.observation.availability === "observed" &&
+    row.observation.modality === "price_quote" &&
     isFullGameMarket(row.observation.market) && row.observation.observedAt !== null &&
     isSelection(row.observation.categorical.selection) && row.observation.values.price?.observed === 1);
   const pointGroups = new Map<string, MarketBrainObservation[]>();
   for (const { observation } of eligible) {
     const line = observation.values.line?.observed === 1 ? observation.values.line.value : null;
     const normalizedLine = observation.market === "spread" && line !== null ? Math.abs(line) : line;
-    const key = [observation.source.provider, observation.source.participant, observation.market,
+    const key = [observation.source.provider, observation.source.participant,
+      observation.categorical.providerEventId ?? "", observation.market,
       observation.observedAt, normalizedLine, observation.categorical.phase].join("|");
     pointGroups.set(key, [...(pointGroups.get(key) ?? []), observation]);
   }
   const byPath = new Map<string, NflMarketBrainQuotePoint[]>();
   for (const group of pointGroups.values()) {
-    const first = group.find((row) => row.categorical.selection === (row.market === "total" ? "over" : "away"));
-    const second = group.find((row) => row.categorical.selection === (row.market === "total" ? "under" : "home"));
+    const firstRows = group.filter((row) => row.categorical.selection === (row.market === "total" ? "over" : "away"));
+    const secondRows = group.filter((row) => row.categorical.selection === (row.market === "total" ? "under" : "home"));
+    if (firstRows.length !== 1 || secondRows.length !== 1) continue;
+    const first = firstRows[0]!;
+    const second = secondRows[0]!;
     if (!first || !second || first.market !== second.market || first.source.participant === null) continue;
     const firstPrice = first.values.price!.value;
     const secondPrice = second.values.price!.value;
@@ -368,6 +435,8 @@ function buildQuotePaths(rows: NflMarketBrainMaterializedObservation[]): NflMark
     const point: NflMarketBrainQuotePoint = {
       observedAt: first.observedAt!,
       availableAt: newest(first.timing.availableAt, second.timing.availableAt),
+      providerFetchedAt: [first.timing.providerFetchedAt, second.timing.providerFetchedAt],
+      ingestedAt: [first.timing.ingestedAt, second.timing.ingestedAt],
       phase: String(first.categorical.phase ?? "unknown"),
       line: first.market === "spread" ? secondLine : firstLine,
       firstPrice,
@@ -393,6 +462,9 @@ function buildQuotePaths(rows: NflMarketBrainMaterializedObservation[]): NflMark
       participant,
       market,
       observedRole: "unknown" as const,
+      wasFirstMover: false,
+      directionConflict: directionConflict(opening.line, current.line,
+        opening.firstFairProbability, current.firstFairProbability),
       points,
       opening,
       current,
@@ -401,11 +473,13 @@ function buildQuotePaths(rows: NflMarketBrainMaterializedObservation[]): NflMark
       holdDelta: current.hold - opening.hold,
       moveCount: directions.length,
       reversalCount: directions.slice(1).filter((direction, index) => direction !== directions[index]).length,
-      buybackDistance: buybackDistance(points),
+      buybackDistance: legacyBuybackDistance(points),
+      lineBuybackDistance: buybackDistance(points.flatMap((point) => point.line === null ? [] : [point.line])),
+      fairProbabilityBuybackDistance: buybackDistance(points.map((point) => point.firstFairProbability)),
       firstEconomicChangeAt: changeTimes[0] ?? null,
       lastEconomicChangeAt: changeTimes.at(-1) ?? null,
-      crossedNflKeyNumbers: market === "spread" ? crossedKeys(opening.line, current.line, [3, 6, 7, 10, 14]) :
-        market === "total" ? crossedKeys(opening.line, current.line, [37, 41, 44, 47, 51]) : [],
+      crossedNflKeyNumbers: market === "spread" ? crossedPathKeys(points, [3, 6, 7, 10, 14]) :
+        market === "total" ? crossedPathKeys(points, [37, 41, 44, 47, 51]) : [],
     }];
   }).sort((a, b) => a.market.localeCompare(b.market) || a.provider.localeCompare(b.provider) || a.participant.localeCompare(b.participant));
 }
@@ -414,12 +488,18 @@ function assignObservedRoles(paths: NflMarketBrainQuotePath[]) {
   for (const market of ["moneyline", "spread", "total"] as const) {
     const moving = paths.filter((path) => path.market === market && path.firstEconomicChangeAt !== null)
       .sort((a, b) => Date.parse(a.firstEconomicChangeAt!) - Date.parse(b.firstEconomicChangeAt!) || a.participant.localeCompare(b.participant));
-    const leaderDirection = moving[0] ? netDirection(moving[0]) : 0;
+    const firstMoveAt = moving[0]?.firstEconomicChangeAt ?? null;
+    const leaders = new Set(moving.filter((path) => path.firstEconomicChangeAt === firstMoveAt));
+    const leaderDirections = new Set([...leaders].map(netDirection).filter((direction) => direction !== 0));
+    const leaderDirection = leaderDirections.size === 1 ? [...leaderDirections][0]! : 0;
     for (const path of paths.filter((item) => item.market === market)) {
+      path.wasFirstMover = leaders.has(path);
       const directions = movementDirections(path.points);
       if (directions.length === 0) path.observedRole = "static";
       else if (new Set(directions).size > 1) path.observedRole = "reversal";
-      else if (path === moving[0]) path.observedRole = "leader";
+      else if (path.directionConflict || leaderDirections.size > 1) path.observedRole = "conflicted";
+      else if (path.wasFirstMover) path.observedRole = "leader";
+      else if (leaderDirection === 0 || netDirection(path) === 0) path.observedRole = "conflicted";
       else path.observedRole = netDirection(path) === leaderDirection ? "follower" : "resistor";
     }
   }
@@ -439,19 +519,32 @@ function movementDirections(points: NflMarketBrainQuotePoint[]): Array<-1 | 1> {
 function netDirection(path: NflMarketBrainQuotePath): -1 | 0 | 1 {
   const line = path.lineDelta ?? 0;
   const probability = path.firstFairProbabilityDelta;
+  if (line !== 0 && probability !== 0 && Math.sign(line) !== Math.sign(probability)) return 0;
   return Math.sign(line !== 0 ? line : probability) as -1 | 0 | 1;
 }
 
-function buybackDistance(points: NflMarketBrainQuotePoint[]): number {
-  if (points.length < 2) return 0;
-  const first = pointSignal(points[0]!);
-  const values = points.map(pointSignal);
-  const peak = values.reduce((winner, value) => Math.abs(value - first) > Math.abs(winner - first) ? value : winner, first);
-  return Math.abs(peak - values.at(-1)!);
+function directionConflict(
+  openingLine: number | null,
+  currentLine: number | null,
+  openingProbability: number,
+  currentProbability: number,
+): boolean {
+  const line = openingLine === null || currentLine === null ? 0 : currentLine - openingLine;
+  const probability = currentProbability - openingProbability;
+  return line !== 0 && probability !== 0 && Math.sign(line) !== Math.sign(probability);
 }
 
-function pointSignal(point: NflMarketBrainQuotePoint): number {
-  return point.line ?? point.firstFairProbability;
+function legacyBuybackDistance(points: NflMarketBrainQuotePoint[]): number {
+  const lineMoved = points.some((point, index) => index > 0 && point.line !== points[index - 1]!.line);
+  const values = points.map((point) => lineMoved && point.line !== null ? point.line : point.firstFairProbability);
+  return buybackDistance(values);
+}
+
+function buybackDistance(values: number[]): number {
+  if (values.length < 2) return 0;
+  const first = values[0]!;
+  const peak = values.reduce((winner, value) => Math.abs(value - first) > Math.abs(winner - first) ? value : winner, first);
+  return Math.abs(peak - values.at(-1)!);
 }
 
 function deduplicatePoints(points: NflMarketBrainQuotePoint[]): NflMarketBrainQuotePoint[] {
@@ -469,6 +562,11 @@ function crossedKeys(first: number | null, last: number | null, keys: number[]):
   const low = Math.min(Math.abs(first), Math.abs(last));
   const high = Math.max(Math.abs(first), Math.abs(last));
   return keys.filter((key) => key > low && key <= high);
+}
+
+function crossedPathKeys(points: NflMarketBrainQuotePoint[], keys: number[]): number[] {
+  return [...new Set(points.slice(1).flatMap((point, index) =>
+    crossedKeys(points[index]!.line, point.line, keys)))].sort((a, b) => a - b);
 }
 
 function economicallyEqual(first: NflMarketBrainQuotePoint, second: NflMarketBrainQuotePoint): boolean {

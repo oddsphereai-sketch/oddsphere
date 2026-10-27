@@ -452,6 +452,10 @@ export function determineNflForwardCollectionNeed(args: {
 }
 
 export function hashNflForwardEvidencePayload(payload: NflForwardAnyEvidencePayload): string {
+  // Historical rows written before sidecar isolation retain their exact full
+  // payload hash. New authoritative writes are guarded in the store and never
+  // contain the sidecar, so the same function preserves both eras without
+  // reinterpreting an immutable stored row.
   return createHash("sha256").update(stableJson(payload)).digest("hex");
 }
 
