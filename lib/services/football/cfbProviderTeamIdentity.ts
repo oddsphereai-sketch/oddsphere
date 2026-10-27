@@ -16,6 +16,7 @@ export const CFB_PROVIDER_TEAM_ALIASES: Readonly<Record<string, readonly string[
   COLO: ["Colorado"],
   CONN: ["Connecticut", "UConn"],
   CSU: ["Colorado State"],
+  DEL: ["Delaware"],
   FAU: ["Florida Atlantic"],
   FLA: ["Florida"],
   GRAM: ["Grambling", "Grambling State", "Grambling Tigers"],

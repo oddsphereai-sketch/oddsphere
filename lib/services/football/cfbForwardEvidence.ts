@@ -99,7 +99,7 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_23_r64_twelve_hour_official_availability" as const;
+  "cfb_forward_evidence_collector_2026_10_27_r65_exact_event_split_history_continuity" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility" as const;
 export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE =
