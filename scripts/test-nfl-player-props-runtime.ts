@@ -78,12 +78,12 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_27_r17_receiving_direction_correction");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_27_r35_receiving_direction_correction");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_27_r38_receiving_direction_correction");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_27_r28_receiving_direction_correction");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_27_r30_receiving_direction_correction");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_27_r34_receiving_direction_correction");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_27_r19_receptions_direction_authority");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_27_r37_receptions_direction_authority");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_27_r40_receptions_direction_authority");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_27_r30_receptions_direction_authority");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_27_r32_receptions_direction_authority");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_27_r36_receptions_direction_authority");
 assert.equal(expectedRoleArtifact.release,
   "nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
@@ -293,7 +293,7 @@ assert.ok(coherentProjection > 55, "market-calibrated probability repairs an imp
 assert.ok(coherentProjection > 70.5,
   "the single posterior median stays on the Over side of its calibrated probability");
 assert.equal(NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
-  "nfl_player_props_market_coherent_projection_2026_10_27_r4_receiving_direction_correction");
+  "nfl_player_props_market_coherent_projection_2026_10_27_r6_receptions_direction_authority");
 
 const receiverLeanThresholds = nflPlayerPropsProductionMarketLane("receptions")!.leanThresholds!;
 const unchangedBestAngleThresholds = {
@@ -329,7 +329,7 @@ assert.ok(residual > 0.5 && residual < 0.7);
 assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "receiving_yards", rawOverProbability: 0.58, marketOverProbability: 0.43,
   independentBooks: 2, incumbentFinalOverProbability: 0.54,
-}), 0.43, "receiving yards accepts a target-excluded direction correction after exact replay qualification");
+}), 0.54, "receiving yards retains its target-excluded residual posterior after consensus-line replay rejected the categorical flip");
 assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "receiving_yards", rawOverProbability: 0.58, marketOverProbability: 0.54,
   independentBooks: 2, incumbentFinalOverProbability: 0.56,
@@ -337,11 +337,15 @@ assert.equal(nflPlayerPropsDiscreteMarketArbitration({
 assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "receptions", rawOverProbability: 0.58, marketOverProbability: 0.46,
   independentBooks: 2, incumbentFinalOverProbability: 0.54,
-}), 0.54, "receptions rejects weak market disagreement without changing the incumbent posterior");
+}), 0.54, "receptions retains within-side target-excluded calibration");
 assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "receptions", rawOverProbability: 0.58, marketOverProbability: 0.44,
+  independentBooks: 2, incumbentFinalOverProbability: 0.46,
+}), 0.58, "receptions restores the stronger independent direction when calibration crosses the line");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "receptions", rawOverProbability: 0.42, marketOverProbability: 0.56,
   independentBooks: 2, incumbentFinalOverProbability: 0.54,
-}), 0.44, "receptions accepts a corroborated complete market flip");
+}), 0.42, "receptions direction authority is symmetric for independent Unders");
 assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "rushing_yards", rawOverProbability: 0.58, marketOverProbability: 0.42,
   independentBooks: 2, incumbentFinalOverProbability: 0.53,
@@ -404,12 +408,14 @@ assert.equal(sourceAwareReceptions.decisions.length, 2,
 assert.ok(sourceAwareReceptions.decisions.every((row) => (
   !row.healthHolds.includes("independent_same_line_confirmation_missing")
 )), "a same-player sharp reference from the same game supplies independent market confirmation");
-assert.notEqual(
+assert.equal(
   sourceAwareReceptions.decisions.find((row) => row.side === "over")?.finalProbability,
   oneBook.decisions.find((row) => row.side === "over")?.finalProbability,
-  "qualified cross-line receptions evidence changes the final posterior instead of being display-only",
+  "opposing cross-line evidence remains visible but cannot reverse the stronger independent receptions side",
 );
 const sourceAwareOver = sourceAwareReceptions.decisions.find((row) => row.side === "over");
+assert.notEqual(sourceAwareOver?.marketProbability, sourceAwareOver?.rawModelProbability,
+  "target-excluded receptions evidence remains available to the forecast and grade contracts");
 assert.equal(sourceAwareOver?.qualifiedReferenceEvidence?.books[0]?.sportsbook, "pinnacle");
 assert.equal(sourceAwareOver?.qualifiedReferenceEvidence?.books[0]?.sourceLine, 5.5);
 assert.equal(sourceAwareOver?.qualifiedReferenceEvidence?.books[0]?.targetLine, 4.5);

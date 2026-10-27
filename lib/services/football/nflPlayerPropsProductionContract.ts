@@ -14,11 +14,11 @@ import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 import { selectNflPlayerPropsCanonicalLines } from "./nflPlayerPropsCanonicalLine";
 
 export const NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE =
-  "nfl_player_props_member_2026_10_27_r47_receiving_direction_correction" as const;
+  "nfl_player_props_member_2026_10_27_r49_receptions_direction_authority" as const;
 export const NFL_PLAYER_PROPS_MEMBER_LIFECYCLE_RELEASE =
-  "nfl_player_props_member_lifecycle_2026_10_27_r29_receiving_direction_correction" as const;
+  "nfl_player_props_member_lifecycle_2026_10_27_r31_receptions_direction_authority" as const;
 const NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_26_r33_market_marriage" as const;
+  "nfl_player_props_decision_2026_10_27_r35_consensus_contract_repair" as const;
 export const NFL_PLAYER_PROPS_BOARD_ROLLOVER_HOUR_ET = 2 as const;
 export const NFL_PLAYER_PROPS_WRITER_LEASE_GROUP = "prediction_pipeline:nfl" as const;
 
@@ -179,7 +179,7 @@ function releaseCoherentRetainedUnlockedDecision(
 ): NflPlayerPropsRuntimeDecision | null {
   if (prior.decisionRelease === NFL_PLAYER_PROPS_DECISION_RELEASE) return prior;
   if (prior.decisionRelease !== NFL_PLAYER_PROPS_PRECEDING_DECISION_RELEASE) return null;
-  // The Receiving Yards correction advances the ordinary forecast family.
+  // The Receptions direction-authority release advances the ordinary forecast family.
   // Only the behavior-identical Anytime TD market may bridge one
   // still-fresh partial provider cycle. Ordinary rows must be freshly
   // recomputed rather than relabeled under a release that did not score them.

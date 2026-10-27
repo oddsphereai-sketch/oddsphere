@@ -2756,7 +2756,62 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
-- October 27 Receiving Yards direction correction: portable artifact / model / calibration /
+- October 27 Receptions direction authority: active portable artifact / model / calibration /
+  decision / runtime / board are
+  `nfl_player_props_runtime_2026_10_27_r19_receptions_direction_authority` /
+  `nfl_player_props_distribution_model_2026_10_27_r30_receptions_direction_authority` /
+  `nfl_player_props_distribution_calibration_2026_10_27_r32_receptions_direction_authority` /
+  `nfl_player_props_decision_2026_10_27_r36_receptions_direction_authority` /
+  `nfl_player_props_runtime_2026_10_27_r37_receptions_direction_authority` /
+  `nfl_player_props_board_2026_10_27_r40_receptions_direction_authority`. Member / lifecycle /
+  sole writer / tracking are `nfl_player_props_member_2026_10_27_r49_receptions_direction_authority` /
+  `nfl_player_props_member_lifecycle_2026_10_27_r31_receptions_direction_authority` /
+  `nfl_player_props_writer_2026_10_27_r63_receptions_direction_authority` /
+  `nfl_player_props_tracking_2026_10_27_r37_receptions_direction_authority`. For future-unlocked
+  Receptions only, the independent projection keeps directional authority while target-book-excluded
+  evidence may calibrate probability and the coherent decimal projection within that side. Exact
+  member-line Weeks 6-7 improve from 194-147 (56.9%) to 204-137 (59.8%); Brier improves 0.24653 to
+  0.24278 and projected-reception MAE improves 1.52625 to 1.50258. The mix becomes slightly more
+  Under, 143 Overs / 198 Unders, so the gain is not an Over quota. Every other market, prices,
+  grade thresholds, cadence, provider calls, member surface, writer topology, and lease are
+  unchanged. Existing locks retain exact precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-27-nfl-player-props-receptions-direction-authority-predeclaration.md`
+  and `docs/model-audits/2026-10-27-nfl-player-props-receptions-direction-authority-result.md`.
+
+- October 27 release-aware cadence: active cadence is
+  `nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh`. A stored member
+  snapshot whose release differs from the current runtime member release makes the existing sole
+  writer immediately due, rather than waiting as long as the ordinary hourly age cadence after a
+  deployment. Steady-state frequency and provider ceilings are unchanged; the writer still runs
+  only inside the shared `prediction_pipeline:nfl` lease. This changes no model math, projections,
+  grades, prices, thresholds, locks, tracking records, copy, labels, or layout, and existing locked
+  rows retain exact stored precedence.
+
+- October 27 Receiving Yards consensus-contract repair: active portable artifact / model /
+  calibration / decision / runtime / board are
+  `nfl_player_props_runtime_2026_10_27_r18_consensus_contract_repair` /
+  `nfl_player_props_distribution_model_2026_10_27_r29_consensus_contract_repair` /
+  `nfl_player_props_distribution_calibration_2026_10_27_r31_consensus_contract_repair` /
+  `nfl_player_props_decision_2026_10_27_r35_consensus_contract_repair` /
+  `nfl_player_props_runtime_2026_10_27_r36_consensus_contract_repair` /
+  `nfl_player_props_board_2026_10_27_r39_consensus_contract_repair`. Member / lifecycle /
+  sole writer / tracking are `nfl_player_props_member_2026_10_27_r48_consensus_contract_repair` /
+  `nfl_player_props_member_lifecycle_2026_10_27_r30_consensus_contract_repair` /
+  `nfl_player_props_writer_2026_10_27_r62_consensus_contract_repair` /
+  `nfl_player_props_tracking_2026_10_27_r36_consensus_contract_repair`. The repair removes only
+  r34's categorical Receiving Yards direction override for future unlocked rows because r34 was
+  selected on a book-specific line contract rather than the member consensus-line contract. On
+  exact member lines, Week 6 improves 33-28 to 36-25 and Week 7 improves 31-26 to 37-20; r34's
+  ten side changes contain one correction and nine harms. Settled actionables improve 0-1 to 4-1
+  and expand from one to five. A frozen current-board replay changes only Receiving Yards: eleven
+  exact rows, three forecast sides, one promotion, zero demotions, and actionables 1 to 2. The
+  independent point head, Receptions arbitration, every other market, thresholds, prices, cadence,
+  provider ceilings, copy, layout, public tracking, writer topology, and lease are unchanged.
+  Existing locks retain exact stored precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-27-nfl-player-props-consensus-contract-repair-predeclaration.md` and
+  `docs/model-audits/2026-10-27-nfl-player-props-consensus-contract-repair-result.md`.
+
+- October 27 Receiving Yards direction correction (superseded for future unlocked rows): portable artifact / model / calibration /
   decision / runtime / board are `nfl_player_props_runtime_2026_10_27_r17_receiving_direction_correction` /
   `nfl_player_props_distribution_model_2026_10_27_r28_receiving_direction_correction` /
   `nfl_player_props_distribution_calibration_2026_10_27_r30_receiving_direction_correction` /

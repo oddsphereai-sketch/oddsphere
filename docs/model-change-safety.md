@@ -1,5 +1,64 @@
 # Model change safety protocol
 
+## NFL player-props Receptions direction authority r36
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to repair the player-props models' apparent Under
+concentration through genuine prediction improvement, not an Over quota or a flatter board. For
+future-unlocked Receptions rows, the independent projection keeps directional authority while
+target-book-excluded market evidence may still calibrate probability and the coherent decimal
+projection within that side. All other markets, exact-price economics, grade thresholds, cadence,
+provider ceilings, member copy/layout, the sole writer, and `prediction_pipeline:nfl` lease are
+unchanged.
+
+Across 341 exact canonical member-line Week 6-7 outcomes, direction improves from 194-147 (56.9%)
+to 204-137 (59.8%), Brier improves from 0.24653 to 0.24278, and projected-reception MAE improves
+from 1.52625 to 1.50258. Week 6 improves 96-83 to 107-72; Week 7 changes 98-64 to 97-65 while
+improving probability and projection error. The mix moves from 147 Overs / 194 Unders to 143 / 198,
+proving the gain is not direction balancing. Rushing Yards remains unchanged because its market-side
+candidate improved Week 6 but regressed Week 7. Existing locks remain authoritative. Evidence and
+rollback: `docs/model-audits/2026-10-27-nfl-player-props-receptions-direction-authority-predeclaration.md`
+and `docs/model-audits/2026-10-27-nfl-player-props-receptions-direction-authority-result.md`.
+
+## NFL player-props release-aware cadence r4
+
+On 2026-10-27 production verification found that a fresh snapshot from the
+immediately preceding model release could postpone adoption of a deployed
+future-unlocked model for the ordinary age cadence. Cadence r4 makes the
+existing authoritative writer immediately due when the stored member release
+does not equal the runtime member release. It adds no writer, schedule, or
+provider call to steady state, retains the shared `prediction_pipeline:nfl`
+lease, and changes no prediction, probability, projection, grade, price,
+threshold, lock, tracking record, copy, label, or layout. Existing locked rows
+remain immutable and the production reconciliation contract still gives them
+exact precedence.
+
+## NFL player-props Receiving Yards consensus-contract repair r35
+
+On 2026-10-27 the post-release audit found that the r34 Receiving Yards
+direction correction had been selected on a book-specific line contract rather
+than the member-facing consensus-line contract. The apparent direction-balance
+improvement did not survive an exact replay of the line members actually see.
+
+For future unlocked Receiving Yards rows, r35 removes only that categorical
+market-direction override and restores the incumbent target-book-excluded
+market-specific residual posterior. The independent point head, exact-price
+economics, grade thresholds, Receptions source-aware arbitration, all other
+markets, cadence, provider limits, UI, copy, sole writer, and shared NFL lease
+remain unchanged. Existing locked records retain their stored payloads and
+release identities.
+
+On exact member consensus lines, the repaired behavior beats r34 in both
+available chronological blocks. Week 6 improves from 33-28 to 36-25 and Week 7
+improves from 31-26 to 37-20. Across the ten r34 side changes, only one was a
+correction and nine were harms. Settled actionables improve from 0-1 to 4-1 and
+expand from one to five, so this is not a board-flattening repair. The frozen
+current-board replay changes only Receiving Yards: eleven exact rows, three
+forecast sides, one actionable promotion, zero demotions, and actionables 1 to
+2. Evidence and rollback:
+`docs/model-audits/2026-10-27-nfl-player-props-consensus-contract-repair-predeclaration.md`
+and
+`docs/model-audits/2026-10-27-nfl-player-props-consensus-contract-repair-result.md`.
+
 ## NFL player-props Receiving Yards direction correction r34
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to diagnose and repair the
@@ -7,7 +66,8 @@ pervasive-looking player-prop Under skew without forcing direction quotas or
 accepting the inaccurate live model as the endpoint. The release-pure audit
 rejected a generic balance rule and isolated Receiving Yards as the NFL defect.
 
-For future unlocked Receiving Yards rows only, r34 adds that market to the
+This release is superseded for future unlocked rows by r35 above. For its
+short-lived unlocked window, r34 added Receiving Yards to the
 source-aware reference lane. A fresh target-book-excluded, transported,
 source-weighted direction may cross the independent direction; agreement or
 missing evidence preserves the preceding posterior exactly. The independent
