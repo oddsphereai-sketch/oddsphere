@@ -185,7 +185,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_27_r139_near_tie_pmf_winner_coherence" as const;
+  "cfb_forward_evidence_writer_2026_10_27_r140_full_us_fcs_price_discovery" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -746,7 +746,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       slate.currentOddsAllBooksByGame[plan.game.providerGameId] ?? [],
       sharpDisplayBooks,
       collegeFootballDataAttempt.result?.moneylineBooksByGame[plan.game.providerGameId] ?? [],
-      theOddsApiAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
+      theOddsApiAttempt.result?.displayBooksByGame[plan.game.providerGameId] ?? [],
       currentBooks,
       espnCurrentBooks,
     );
