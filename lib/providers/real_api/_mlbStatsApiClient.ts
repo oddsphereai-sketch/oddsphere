@@ -225,7 +225,22 @@ export type MlbHitterSeasonStatsRecord = {
   raw_source: "mlb_stats_api";
 };
 
-type Opts = { quiet?: boolean; signal?: AbortSignal };
+type Opts = {
+  quiet?: boolean;
+  signal?: AbortSignal;
+  /**
+   * MLB Stats defaults a game-log request to the regular season. Settlement
+   * callers must opt into postseason logs as well; pregame model callers keep
+   * the established regular-season-only default unless they deliberately
+   * version a different feature contract.
+   */
+  gameTypes?: readonly ("R" | "P")[];
+};
+
+function gameTypeQuery(opts?: Opts): string {
+  const values = [...new Set(opts?.gameTypes ?? [])];
+  return values.length > 0 ? `&gameType=${values.join(",")}` : "";
+}
 
 function log(opts: Opts | undefined, message: string): void {
   if (opts?.quiet) return;
@@ -347,7 +362,7 @@ export async function getPitcherGameLogs(
 ): Promise<PitcherGameLogRecord[] | null> {
   const url =
     `${BASE_URL}/people/${personId}/stats?stats=gameLog` +
-    `&group=pitching&season=${season}&sportId=1`;
+    `&group=pitching&season=${season}&sportId=1${gameTypeQuery(opts)}`;
 
   let res: Response;
   try {
@@ -436,7 +451,7 @@ export async function getHitterGameLogs(
 ): Promise<HitterGameLogRecord[] | null> {
   const url =
     `${BASE_URL}/people/${personId}/stats?stats=gameLog` +
-    `&group=hitting&season=${season}&sportId=1`;
+    `&group=hitting&season=${season}&sportId=1${gameTypeQuery(opts)}`;
   let res: Response;
   try {
     res = await fetch(url, { headers: HEADERS, signal: opts?.signal });

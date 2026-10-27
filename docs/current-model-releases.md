@@ -5257,6 +5257,19 @@ member board, public tracking, lock or settlement. The SELECT-only paired NFL/ML
 verification are documented in
 `docs/model-audits/2026-10-12-private-player-props-full-board-tracking.md`.
 
+The October 27 settlement continuity release is
+`mlb_props_settlement_2026_10_27_r2_postseason_game_logs`. Settlement and the
+private release-pure audit explicitly request regular-season plus postseason
+official game logs. Pregame model callers retain the established default, so
+the r44 forecast, side, grade, exact price, cadence, board, lock, copy, and
+layout remain unchanged. Previously settled or voided rows remain immutable;
+historical reconciliation is not part of this release. Evidence and rollback:
+`docs/model-audits/2026-10-27-mlb-player-props-postseason-settlement-continuity.md`.
+The paired direction-bias audit rejects a cosmetic Over/Under quota: r44's
+Under selections outperformed its Over selections, while the market-reader
+weaknesses were not chronologically stable enough for another forecast release.
+See `docs/model-audits/2026-10-27-mlb-player-props-direction-bias-audit.md`.
+
 The October 21 r44 release corrects the release-pure Best Angle / Lean ranking without changing any selected side, projection, probability, price, edge, EV, stake, provider call, writer, cadence, lock, settlement, copy, or layout. Qualified Runs Scored Under Leans at the existing `-200` Best Angle price floor or better become Best Angles; HRR Under and Pitcher Strikeouts Over Best Angles remain actionable but rerank to Lean. The rule is supported by the frozen r42 chronology and r43 forward ledger, is not a grade-count quota, and never reinterprets a locked row. Evidence and rollback are recorded in `docs/model-audits/2026-10-21-mlb-player-props-grade-ranking-r44-predeclaration.md` and its paired result. Rollback is r43 for future unlocked rows only.
 
 The September 21 r43 priced-offer retention release keeps fresh, supported pitcher offers visible when a confirmed probable starter has no recent MLB log sample. Such rows remain explicitly held by the existing Research or Data Check path with zero units. When no active scored model candidate exists, projection, probability, edge, EV, and fair odds remain null; when the established conservative pitcher scorer has an output but required member research is incomplete, the existing member-readiness gate preserves Data Check and zero units. r43 never substitutes the market for an independent model output. Hitter rows still require recent form, and every actionable pitcher row still requires the complete probability-backed model path. Snapshot validation permits a null projection only on an existing Research or Data Check hold and rejects it everywhere else. The writer, shared lease, provider budgets, exact-price selection, locks, tracking, UI copy, labels, and layout are unchanged. Evidence and rollback are recorded in `docs/model-audits/2026-09-21-mlb-props-priced-offer-retention-r43-predeclaration.md` and its paired result. Rollback is r42 without rewriting historical snapshots or locks.
