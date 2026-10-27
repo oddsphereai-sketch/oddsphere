@@ -5,7 +5,7 @@ import {
 } from "./wnbaCoreModelCalibration";
 
 export const EXPECTED_WNBA_MODEL_VERSION =
-  "wnba_v1_7_professional_market_evidence" as const;
+  "wnba_v1_8_owls_current_odds" as const;
 export const EXPECTED_WNBA_DISTRIBUTION_VERSION =
   "wnba_coherent_normal_2026_10_06_v8_independent_first_decision_crossing" as const;
 export const EXPECTED_WNBA_CALIBRATION_SCHEMA_VERSION =

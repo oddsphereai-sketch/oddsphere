@@ -318,10 +318,11 @@ Last reviewed: 2026-10-27
   until NBA-specific validation clears it. No model, probability, side, projection, grade, stake,
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
-- NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_27_r8_owls_sharp_book_prices`. The existing leased
-  refresh may store exact-date, exact-matchup Owls NBA split rows with their real source book for
-  the same bounded seven-day window used by the member schedule. The league-level endpoint is
+- Cross-sport Market Intelligence V2 shadow capture is
+  `market_intelligence_v2_shadow_capture_2026_10_27_r9_all_sport_owls_schedule`. The existing leased
+  refresh may store exact-date, exact-matchup Owls split and sharp-book price rows with their real
+  source book for MLB, WNBA, NBA, NHL, NFL, CFB, and CBB. NBA and weekly football use the same
+  bounded seven-day window as their member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
   date-plus-matchup identity are discarded. No active refresh makes a SharpAPI split request;
   retained SharpAPI rows are historical audit evidence only. Every complete fresh Circa, DraftKings,
@@ -5487,7 +5488,7 @@ board impact, and rollback gates are in
 
 ## WNBA champion
 
-- Model: `wnba_v1_7_professional_market_evidence`
+- Model: `wnba_v1_8_owls_current_odds`
 - Distribution: `wnba_coherent_normal_2026_10_06_v8_independent_first_decision_crossing`
 - Calibration schema: `wnba_core_calibration_v4_single_market_entry`
 - Grade policy: `wnba_grade_policy_v12_provenance_qualified_market_context_2026_10_09`
@@ -5498,11 +5499,11 @@ board impact, and rollback gates are in
 - Tracking writer: `lib/services/wnba/buildWnbaPredictionRecords.ts`
 - Member reader: `lib/services/wnba/buildWnbaDailyEdgeAdapted.ts`
 - Member-reader release:
-  `wnba_daily_edge_reader_2026_10_09_r2_provenance_qualified_market_context`
+  `wnba_daily_edge_reader_2026_10_27_r3_owls_current_odds`
 - Scheduled owner: `/api/cron/wnba-daily-refresh` under the WNBA-scoped shared
   `prediction_pipeline` lease
 - Operational refresh release:
-  `wnba_daily_refresh_schedule_2026_10_07_r1_readiness_gated_cadence`
+  `wnba_daily_refresh_schedule_2026_10_27_r2_owls_current_odds`
 - Supplementary availability release:
   `espn_wnba_availability_2026_10_17_r1_exact_matchup_injury_verification`;
   it requires both exact ESPN matchup groups, accepts only explicit empty arrays
@@ -5514,6 +5515,15 @@ board impact, and rollback gates are in
   incoming cycle silently retains the prior complete board. Evidence and
   rollback:
   `docs/model-audits/2026-10-07-wnba-readiness-gated-cadence-predeclaration.md`.
+
+The October 27 v1.8/r2/r3 release replaces the cancelled SharpAPI current-line
+request with one Owls WNBA `/odds` request. Only complete coherent Circa and
+Pinnacle Moneyline, Spread, and Total pairs are admitted; Playbook remains the
+market-level fallback and public-consensus authority. The 2026-10-27 current
+WNBA production slate contains zero scheduled games, so the same-input impact
+is zero side changes, promotions, demotions, or actionable-count changes.
+Existing locks remain byte-authoritative. Evidence and rollback:
+`docs/model-audits/2026-10-27-wnba-owls-current-odds-cutover.md`.
 
 The October 9 v1.7/v12/r2 candidate preserves v1.6's independent-first,
 target-book-excluded Moneyline/Spread crossing rule and its coherent score

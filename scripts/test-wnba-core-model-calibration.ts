@@ -12,7 +12,10 @@ import {
   type ModelState,
   type OddRow,
 } from "../lib/services/wnba/buildWnbaDailyEdgePreview";
-import { selectPreferredWnbaTipTime } from "../lib/services/wnba/refreshWnbaLines";
+import {
+  mapOwlsWnbaOdds,
+  selectPreferredWnbaTipTime,
+} from "../lib/services/wnba/refreshWnbaLines";
 import {
   resolveWnbaPickedMoneylineProbabilities,
   wnbaExactPriceTrackingHoldReason,
@@ -79,6 +82,46 @@ check(
   "unknown WNBA team identity fails closed",
   resolveWnbaMoneylineSide("Unknown Club", "POR", "LA") === null,
 );
+
+const owlsRows = mapOwlsWnbaOdds({
+  success: true,
+  data: {
+    wnba: [{
+      id: "wnba:Seattle Storm@New York Liberty-20261027",
+      sport: "wnba",
+      commence_time: "2026-10-27T23:00:00.000Z",
+      home_team: "New York Liberty",
+      away_team: "Seattle Storm",
+      bookmakers: [{
+        key: "circa",
+        last_update: "2026-10-27T22:55:00.000Z",
+        markets: [{
+          key: "h2h",
+          outcomes: [
+            { name: "Seattle Storm", price: 145 },
+            { name: "New York Liberty", price: -165 },
+          ],
+        }, {
+          key: "spreads",
+          outcomes: [
+            { name: "Seattle Storm", price: -110, point: 3.5 },
+            { name: "New York Liberty", price: -110, point: -3.5 },
+          ],
+        }, {
+          key: "totals",
+          outcomes: [
+            { name: "Over", price: -105, point: 164.5 },
+            { name: "Under", price: -115, point: 164.5 },
+          ],
+        }],
+      }],
+    }],
+  },
+});
+check("Owls WNBA adapter retains all six coherent Circa sides", owlsRows.length === 6);
+check("Owls WNBA adapter resolves the exact canonical team pair", owlsRows.every((row) => row.h === 1 && row.a === 9));
+check("Owls WNBA adapter preserves provider tip and current price", owlsRows.some((row) =>
+  row.market === "moneyline" && row.side === "home" && row.odds === -165 && row.startTime === "2026-10-27T23:00:00.000Z"));
 
 const disabled = buildWnbaCoreModelCalibrationAudit({
   rawProjectedAwayScore: 88,

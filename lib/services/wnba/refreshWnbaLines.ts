@@ -1,5 +1,5 @@
 /**
- * WNBA Phase 2 — Stage 1b: SharpAPI odds → DB (2026-06-23).
+ * WNBA Phase 2 — Stage 1b: Owls current sharp-book odds → DB.
  *
  * Mirrors NBA's lines path. For each scheduled WNBA game it persists per-book
  * odds into `lines` (DELETE-then-INSERT per game/market/book), appends to
@@ -9,11 +9,10 @@
  * etc.), so one outlier/alt line can never override consensus and the tracked
  * line always equals what users saw.
  *
- * Real tip time is mandatory for T-60 lock: SharpAPI `event_start_time` updates
- * `games.game_date` (BDL only gives a date). Validated odds path: cursor
- * pagination, 3 markets (moneyline/point_spread/total_points), trusted books
- * only, Fliff/Kalshi/Polymarket blocked, stale + alt-line filtered, mascot team
- * resolver, team-pair + date (±1) matching → no future-meeting mixing.
+ * Real tip time is mandatory for T-60 lock: Owls `commence_time` updates
+ * `games.game_date` (BDL only gives a date). Owls contributes only complete,
+ * coherent Circa/Pinnacle pairs; Playbook remains the market-level fallback.
+ * Team-pair + date (±1) matching prevents future-meeting mixing.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -21,10 +20,12 @@ import { WNBA_TEAMS_BY_BDL_ID } from "./wnbaTeams";
 import { addDaysToSlate, computeSlateDate, currentSlateDate } from "../../dates/slateDate";
 import { PlaybookReadBroker } from "../../providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame } from "../../providers/playbook/types";
+import { OwlsInsightClient } from "../../providers/owls/owlsInsightClient";
+import {
+  normalizeOwlsSharpBookOdds,
+  type RawOwlsOddsResponse,
+} from "../../providers/owls/owlsSharpBookOdds";
 
-const SHARP = "https://api.sharpapi.io/api/v1";
-const BLOCKED = new Set(["fliff", "kalshi", "polymarket"]);
-const SHARP_BOOKS = new Set(["circa", "betonline", "draftkings", "betmgm", "caesars", "bet365 us", "betrivers", "pinnacle"]);
 const PLAYBOOK_CONSENSUS_BOOK = "playbook_consensus";
 
 const norm = (s: string) => String(s).replace(/[^a-z]/gi, "").toLowerCase();
@@ -32,7 +33,7 @@ const amProb = (o: number) => (o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs
 const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : null);
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
-// Resolver: SharpAPI team name → BDL id (mascot = last word of franchise name).
+// Resolver: provider team name → BDL id (mascot = last word of franchise name).
 const MASCOTS: Array<[string, number]> = Object.entries(WNBA_TEAMS_BY_BDL_ID).map(([id, m]) => {
   const mascot = norm(m.name.split(" ").pop() ?? m.abbr);
   return [mascot, Number(id)];
@@ -43,43 +44,34 @@ function resolveTeam(name: string): number | null {
   return null;
 }
 
-const MKT_MAP: Record<string, string> = { moneyline: "moneyline", point_spread: "spread", total_points: "total" };
-
 type OddRow = {
   book: string; sharp: boolean; market: string; side: string;
   odds: number | null; line: number | null; startTime: string | null; h: number; a: number;
 };
 
-async function fetchSharpWnbaOdds(key: string): Promise<OddRow[]> {
-  const perMarket = await Promise.all(
-    ["moneyline", "point_spread", "total_points"].map(async (mkt) => {
-      const rows: OddRow[] = [];
-      let cursor: string | null = null;
-      for (let p = 0; p < 10; p++) {
-        const url = `${SHARP}/odds?league=wnba&market_type=${mkt}&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-        const r = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
-        if (!r.ok) break;
-        const j = (await r.json()) as { data?: Record<string, unknown>[]; pagination?: { has_more?: boolean; next_cursor?: string } };
-        for (const x of j.data ?? []) {
-          const book = String(x.sportsbook ?? "").toLowerCase();
-          if (BLOCKED.has(book) || x.is_main_line === false || x.is_stale_pregame_price === true) continue;
-          const h = resolveTeam(String(x.home_team)), a = resolveTeam(String(x.away_team));
-          if (!h || !a || h === a) continue;
-          rows.push({
-            book, sharp: SHARP_BOOKS.has(book), market: MKT_MAP[mkt]!, side: String(x.selection_type),
-            odds: x.odds_american == null ? null : Number(x.odds_american),
-            line: x.line == null ? null : Number(x.line),
-            startTime: x.event_start_time ? String(x.event_start_time) : null,
-            h, a,
-          });
-        }
-        if (!j.pagination?.has_more || !j.pagination?.next_cursor) break;
-        cursor = j.pagination.next_cursor;
-      }
-      return rows;
-    }),
-  );
-  return perMarket.flat();
+export function mapOwlsWnbaOdds(response: RawOwlsOddsResponse): OddRow[] {
+  const coverage = normalizeOwlsSharpBookOdds(response, "wnba");
+  return coverage.prices.flatMap((price) => {
+    const h = resolveTeam(price.homeTeam);
+    const a = resolveTeam(price.awayTeam);
+    if (!h || !a || h === a) return [];
+    return [{
+      book: price.sportsbook,
+      sharp: true,
+      market: price.market,
+      side: price.side,
+      odds: price.americanPrice,
+      line: price.line,
+      startTime: price.scheduledStart,
+      h,
+      a,
+    } satisfies OddRow];
+  });
+}
+
+async function fetchOwlsWnbaOdds(key: string): Promise<OddRow[]> {
+  const response = await new OwlsInsightClient(key).odds<RawOwlsOddsResponse>("wnba");
+  return mapOwlsWnbaOdds(response.body);
 }
 
 async function fetchPlaybookWnbaLineFallbacks(key: string): Promise<OddRow[]> {
@@ -141,7 +133,7 @@ export type RefreshWnbaLinesResult = {
   tipTimesUpdated: number;
   missingTipTimes: string[];
   duplicatePairs: string[];
-  /** Games whose ET slate_date is corrected from the real SharpAPI tip time. */
+  /** Games whose ET slate_date is corrected from the real Owls tip time. */
   slateRebuckets: Array<{ matchup: string; from: string; to: string }>;
   perGame: Array<{ matchup: string; books: number; ml: number; spread: number; total: number; tip: string | null }>;
   errors: string[];
@@ -150,12 +142,13 @@ export type RefreshWnbaLinesResult = {
 export async function refreshWnbaLines(opts: {
   supabase: SupabaseClient;
   apply: boolean;
+  owlsApiKey?: string;
   windowDays?: number; // how many days of scheduled games to cover (default 3)
   logger?: (m: string) => void;
 }): Promise<RefreshWnbaLinesResult> {
   const { supabase, apply, windowDays = 3, logger = () => {} } = opts;
-  const key = process.env.SHARPAPI_KEY;
-  if (!key) throw new Error("missing SHARPAPI_KEY");
+  const key = opts.owlsApiKey ?? process.env.OWLS_INSIGHT_API_KEY;
+  if (!key) throw new Error("missing OWLS_INSIGHT_API_KEY");
   const errors: string[] = [];
 
   // 1. Load scheduled WNBA games in the window + their team BDL ids.
@@ -227,7 +220,7 @@ export async function refreshWnbaLines(opts: {
     selectPreferredWnbaTipTime(playbookTipsByPair.get(pairKey(row.h, row.a)) ?? [], row.startTime) ?? row.startTime;
 
   // 2. Fetch + match odds to a game by team-pair + date (±1 day).
-  const odds = await fetchSharpWnbaOdds(key);
+  const odds = await fetchOwlsWnbaOdds(key);
   const oddsByGame = new Map<number, OddRow[]>();
   const tipByGame = new Map<number, string>();
   let unmatched = 0;
@@ -258,10 +251,10 @@ export async function refreshWnbaLines(opts: {
     if (tip && !tipByGame.has(g.id)) tipByGame.set(g.id, tip);
   }
 
-  // Playbook consensus fallback: fill only markets where SharpAPI returned no
+  // Playbook consensus fallback: fill only markets where Owls returned no
   // rows for a matched game. This fixes missing display/model lines such as a
-  // WNBA total being absent from SharpAPI while Playbook has a tier1 consensus
-  // line. It never overwrites real per-book SharpAPI rows and does not invent
+  // WNBA total being absent from Owls while Playbook has a tier1 consensus
+  // line. It never overwrites real per-book Owls rows and does not invent
   // over/under odds for totals/spreads.
   if (playbookKey) {
     try {

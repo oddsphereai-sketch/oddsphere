@@ -89,7 +89,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_shadow_capture_2026_10_27_r8_owls_sharp_book_prices";
+  "market_intelligence_v2_shadow_capture_2026_10_27_r9_all_sport_owls_schedule";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"

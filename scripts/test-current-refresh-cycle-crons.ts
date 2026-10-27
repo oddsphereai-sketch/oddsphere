@@ -129,11 +129,10 @@ assert.deepEqual(
 assert.match(source("app/api/cron/lineup-watch/route.ts"), /refreshDailyEdgeResponseSnapshot/, "lineup changes republish Daily Edge");
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /refreshDailyEdgeResponseSnapshot/, "locks republish Daily Edge");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /refreshDailyEdgeResponseSnapshot/, "split changes republish Daily Edge");
-assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /runScheduledMarketIntelligenceV2Collection/, "split refresh retries source-aware MLB splits");
-assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /sport === "mlb" \|\| sport === "nba"/, "split refresh persists NBA per-book v2 observations in audit-only mode");
-assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /slateDateThrough:\s*sport === "nba" \? addDaysToSlate\(slate, 6\) : undefined/, "NBA split capture uses the board's bounded seven-day window in the existing collector call");
-assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /includeSharpApiHistory:\s*true/, "fast split refresh recovers event-specific Sharp history every 15 minutes");
-assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /\["mlb", "wnba", "nhl", "nba"\]/, "NBA Playbook splits are collected in observe-only mode before regular-season activation");
+assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /runScheduledMarketIntelligenceV2Collection/, "split refresh runs the provenance-qualified Owls observation collector");
+assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /\["mlb", "wnba", "nhl", "nba", "nfl", "cfb", "cbb"\]/, "every supported Daily Edge sport receives scheduled Owls capture");
+assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /\["nba", "nfl", "cfb", "cbb"\]\.includes\(sport\)/, "weekly and rolling sports use the bounded seven-day capture window");
+assert.doesNotMatch(source("app/api/cron/public-splits-observations-refresh/route.ts"), /includeSharpApiHistory:\s*true/, "active split refresh does not restore SharpAPI history calls");
 assert.match(source("lib/services/marketIntelligenceV2/shadowSync.ts"), /path:\s*["']\/events["']/, "Sharp recovery discovers event IDs independently of the league split snapshot");
 assert.match(source("app/api/cron/tracking-refresh/route.ts"), /refreshTrackingResponseSnapshot/, "tracking cron republishes member Tracking");
 assert.match(source("app/api/cron/mlb-player-props-refresh/route.ts"), /refreshMlbPropsBoard/, "Player Props has one canonical board refresh");
@@ -161,7 +160,9 @@ assert.deepEqual(
   "WNBA refreshes the current slate hourly overnight and every 30 minutes in the active window",
 );
 assert.match(source("app/api/cron/wnba-daily-refresh/route.ts"), /intraday \? \[0\] : \[0, 1, 2\]/, "WNBA separates the daily future seed from current-slate volatile work");
-assert.match(source("app/api/cron/wnba-daily-refresh/route.ts"), /wnba_daily_refresh_schedule_2026_10_07_r1_readiness_gated_cadence/, "WNBA exposes its immutable readiness-gated cadence release");
+assert.match(source("app/api/cron/wnba-daily-refresh/route.ts"), /wnba_daily_refresh_schedule_2026_10_27_r2_owls_current_odds/, "WNBA exposes its Owls current-odds release");
+assert.match(source("app/api/cron/wnba-daily-refresh/route.ts"), /OWLS_INSIGHT_API_KEY/, "WNBA active refresh requires Owls rather than SharpAPI");
+assert.doesNotMatch(source("app/api/cron/wnba-daily-refresh/route.ts"), /SHARPAPI_KEY/, "WNBA active refresh no longer depends on the cancelled SharpAPI credential");
 assert.deepEqual(
   crons.filter((cron) => cron.path === "/api/cron/nba-daily-refresh").map((cron) => cron.schedule),
   ["30 11 * * *"],

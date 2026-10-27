@@ -7,7 +7,7 @@
  *
  * Runs the DB-backed loop in order:
  *   1. seedWnbaGames    → upsert teams + games (sport='wnba') for today..+2
- *   2. refreshWnbaLines → SharpAPI odds → lines / line_history / sharp_signals
+ *   2. refreshWnbaLines → Owls odds → lines / line_history / sharp_signals
  *                          + real tip times (games.game_date)
  *   3. runWnbaModel     → Elo+Platt + sharp-preferred decision → game_predictions
  *   4. buildWnbaPredictionRecords → prediction_records for tracking/audit
@@ -41,7 +41,7 @@ import {
 } from "@/lib/cron/wnbaDailyRefreshTelemetry";
 
 const WNBA_CRON_ENV = "WNBA_CRON_ENABLED";
-const WNBA_DAILY_REFRESH_RELEASE = "wnba_daily_refresh_schedule_2026_10_07_r1_readiness_gated_cadence";
+const WNBA_DAILY_REFRESH_RELEASE = "wnba_daily_refresh_schedule_2026_10_27_r2_owls_current_odds";
 export const maxDuration = 300;
 
 function slateDateOffset(days: number): string {
@@ -61,7 +61,8 @@ export async function GET(request: Request): Promise<Response> {
       assertWnbaChampionRuntime();
       // ─── Gate 2: required keys (config errors, not data conditions) ─
       if (!process.env.BALLDONTLIE_API_KEY) throw new Error("BALLDONTLIE_API_KEY missing from env");
-      if (!process.env.SHARPAPI_KEY) throw new Error("SHARPAPI_KEY missing from env");
+      const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+      if (!owlsApiKey) throw new Error("OWLS_INSIGHT_API_KEY missing from env");
 
       const log = (label: string) => (msg: string) => console.log(`[wnba-daily-refresh:${label}] ${msg}`);
       const errors: string[] = [];
@@ -100,7 +101,7 @@ export async function GET(request: Request): Promise<Response> {
       // ─── Step 2: refresh odds + tip times ──────────────────────────
       let linesWritten = 0, lineHistoryWritten = 0, sharpSignalsWritten = 0, tipTimesUpdated = 0;
       try {
-        const l = await refreshWnbaLines({ supabase, apply: true, logger: log("lines") });
+        const l = await refreshWnbaLines({ supabase, apply: true, owlsApiKey, logger: log("lines") });
         linesWritten = l.linesWritten; lineHistoryWritten = l.lineHistoryWritten;
         sharpSignalsWritten = l.sharpSignalsWritten; tipTimesUpdated = l.tipTimesUpdated;
         addStageErrors("lines", l.errors);

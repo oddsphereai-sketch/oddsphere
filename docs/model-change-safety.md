@@ -1,5 +1,24 @@
 # Model change safety protocol
 
+## Owner-directed cutover: WNBA Owls odds and scheduled all-sport capture
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to continue the full Owls
+integration after cancelling SharpAPI. WNBA future-unlocked current lines move
+from SharpAPI to complete coherent Circa/Pinnacle pairs from Owls; Playbook
+remains the fallback and public-consensus source. The model version advances to
+`wnba_v1_8_owls_current_odds`, the reader to
+`wnba_daily_edge_reader_2026_10_27_r3_owls_current_odds`, and the scheduled
+owner to `wnba_daily_refresh_schedule_2026_10_27_r2_owls_current_odds`.
+
+The shared observation-only collector advances to
+`market_intelligence_v2_shadow_capture_2026_10_27_r9_all_sport_owls_schedule`
+and now runs for MLB, WNBA, NBA, NHL, NFL, CFB, and CBB. This capture has no
+prediction, grade, stake, lock, tracking, or member-reader authority. The live
+probe returned complete Circa split observations for every active listed sport;
+the current WNBA production slate has zero games, so board impact is zero.
+Existing locked rows are never refreshed or reinterpreted. Evidence and
+rollback: `docs/model-audits/2026-10-27-wnba-owls-current-odds-cutover.md`.
+
 ## Owner-directed repair: cross-sport locked split continuity
 
 On 2026-10-27 Daniel Mengel reported that Sharp Book Splits had disappeared across NBA, NHL, CFB,
