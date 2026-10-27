@@ -29,6 +29,8 @@ export type SplitSideDisplay = {
 
 export type MarketSplitDisplaySection = {
   label: "Consensus Splits" | "DraftKings Splits" | "BetMGM Splits" | "Sharp Book Splits" | "Sharp Book Signal";
+  /** Reader-only provenance for a missing legacy field reconstructed from exact pre-lock evidence. */
+  evidenceContext?: "locked_prelock_reconstruction";
   /** Internal provenance for silent source selection; never rendered as replacement copy. */
   sourceBook?: "circa" | "draftkings" | "betmgm" | "consensus" | "draftkings_network" | null;
   /** Internal source time for silent continuity/failover; never rendered. */

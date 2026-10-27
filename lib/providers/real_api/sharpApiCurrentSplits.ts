@@ -34,6 +34,15 @@ export type SharpApiCurrentSplitOverlayResult = {
   populatedMarkets: number;
 };
 
+export type SharpApiCurrentSplitOverlayOptions = {
+  /**
+   * A locked payload stays authoritative. This opt-in may fill only a field
+   * that was never stored, from an exact-game observation no later than the
+   * immutable lock instant. It never updates the locked decision or reader.
+   */
+  reconstructMissingLockedPreLock?: boolean;
+};
+
 const LEAGUE_BY_SPORT: Record<SupportedSport, string> = {
   mlb: "mlb",
   nfl: "nfl",
@@ -192,19 +201,23 @@ export function applySharpApiCurrentSplitOverlay(
   response: DailyEdgeResponse,
   feed: SharpApiCurrentSplitFeed | null,
   nowMs = Date.now(),
+  options: SharpApiCurrentSplitOverlayOptions = {},
 ): SharpApiCurrentSplitOverlayResult {
   if (!feed || response.sport !== feed.sport) return { matchedGames: 0, populatedMarkets: 0 };
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
-    if (game.lockState === "locked") continue;
+    const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
+      ? Date.parse(game.lockedAt ?? "")
+      : null;
+    if (game.lockState === "locked" && !Number.isFinite(lockedCutoffMs)) continue;
     const candidates = feed.rows.filter((row) => rowMatchesGame(row, game, response.date, feed.sport));
     if (candidates.length === 0) continue;
     matchedGames += 1;
-    populatedMarkets += attachBestMarket(game, "moneyline", "moneyline", candidates, nowMs);
-    populatedMarkets += attachBestMarket(game, "total", "total", candidates, nowMs);
+    populatedMarkets += attachBestMarket(game, "moneyline", "moneyline", candidates, nowMs, lockedCutoffMs);
+    populatedMarkets += attachBestMarket(game, "total", "total", candidates, nowMs, lockedCutoffMs);
     if (feed.sport !== "mlb") {
-      populatedMarkets += attachBestMarket(game, "first_inning", "spread", candidates, nowMs);
+      populatedMarkets += attachBestMarket(game, "first_inning", "spread", candidates, nowMs, lockedCutoffMs);
     }
   }
   return { matchedGames, populatedMarkets };
@@ -227,6 +240,13 @@ export function sanitizeRetainedSharpSplitPresentation(response: DailyEdgeRespon
       ];
       for (const section of sections) {
         if (!section?.rows.length) continue;
+        if (section.evidenceContext === "locked_prelock_reconstruction") {
+          // This timestamp is the proof that the separately rendered field
+          // existed before the immutable lock. Never make it look live.
+          for (const row of section.rows) row.isStale = false;
+          sanitized += 1;
+          continue;
+        }
         section.lastUpdated = null;
         for (const row of section.rows) {
           row.observedAt = null;
@@ -253,9 +273,14 @@ function attachBestMarket(
   sourceMarket: SplitMarket,
   candidates: Json[],
   nowMs: number,
+  lockedCutoffMs: number | null = null,
 ): 0 | 1 {
   const market = game.markets[slot];
   if (!market) return 0;
+  if (
+    lockedCutoffMs !== null &&
+    (market.sportsbookSplits?.rows.length || market.recommendationDecision?.sharpBookSplits?.rows.length)
+  ) return 0;
   const sections = BOOK_PRIORITY.flatMap((book) => {
     const rows = dedupeBookRows(candidates.filter((row) => normalize(text(row.sportsbook) ?? "") === book));
     if (rows.length !== 1) return [];
@@ -267,16 +292,25 @@ function attachBestMarket(
   // therefore remain until the preferred book publishes a current update.
   // Money and tickets are a single display contract. Never degrade a retained
   // complete pair to a partial row merely because the partial row is newer.
-  const complete = sections.filter((section) => sectionQuality(section) === 2);
+  const complete = sections.filter((section) =>
+    sectionQuality(section) === 2 &&
+    (lockedCutoffMs === null || sectionSourceTimestamp(section) <= lockedCutoffMs)
+  );
   const eligible = complete;
   const current = eligible.filter((section) => sectionIsFreshAt(section, nowMs));
-  const selected = current[0] ?? eligible.sort((a, b) => sectionSourceTimestamp(b) - sectionSourceTimestamp(a))[0];
+  const selected = lockedCutoffMs === null
+    ? current[0] ?? eligible.sort((a, b) => sectionSourceTimestamp(b) - sectionSourceTimestamp(a))[0]
+    : eligible[0];
   if (!selected) return 0;
+
+  const selectedForDisplay = lockedCutoffMs === null
+    ? selected
+    : preLockReconstruction(selected);
 
   const existing = market.sportsbookSplits;
   let populated: 0 | 1 = 0;
-  if (!existing || shouldReplace(existing, selected)) {
-    market.sportsbookSplits = selected;
+  if (!existing || lockedCutoffMs === null && shouldReplace(existing, selectedForDisplay)) {
+    market.sportsbookSplits = selectedForDisplay;
     populated = 1;
   }
 
@@ -299,6 +333,22 @@ function attachBestMarket(
     }
   }
   return populated;
+}
+
+function preLockReconstruction(section: MarketSplitDisplaySection): MarketSplitDisplaySection {
+  const observedAtMs = sectionSourceTimestamp(section);
+  const observedAt = new Date(observedAtMs).toISOString();
+  return {
+    ...section,
+    evidenceContext: "locked_prelock_reconstruction",
+    lastUpdated: observedAt,
+    rows: section.rows.map((row) => ({
+      ...row,
+      observedAt,
+      freshnessCheckedAt: observedAt,
+      isStale: false,
+    })),
+  };
 }
 
 function selectedPublicSplitRow(

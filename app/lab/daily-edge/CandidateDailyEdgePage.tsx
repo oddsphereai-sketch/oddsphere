@@ -204,7 +204,9 @@ export default async function CandidateDailyEdgePage({
   // card when Circa is absent. Provider identity stays in the DTO for audit;
   // predictions, recommendations, grades, and member-facing copy are untouched.
   if (cfbFixture && initialCfbReaderGameId) {
-    await populateDailyEdgeStoredSplitFallback(snapshot, "cfb");
+    await populateDailyEdgeStoredSplitFallback(snapshot, "cfb", {
+      reconstructMissingLockedPreLock: true,
+    });
   } else if (!cfbFixture) {
     await populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
   }
