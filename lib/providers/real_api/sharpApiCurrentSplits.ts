@@ -2,6 +2,7 @@ import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
 import { fetchOwlsCurrentSplitRows } from "@/lib/providers/owls/owlsCurrentSplits";
+import { normalizeTeamAbbr } from "@/lib/providers/playbook/playbookTeamNormalizer";
 import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
@@ -548,6 +549,11 @@ function teamMatches(sport: SupportedSport, raw: unknown, abbreviation: string, 
   }
   if (sport === "cfb") {
     return cfbProviderTeamMatches({ observed: raw, abbreviation, expectedName: displayName });
+  }
+  if (sport === "nba" || sport === "wnba") {
+    const observed = normalizeTeamAbbr(sport, raw);
+    const expected = normalizeTeamAbbr(sport, abbreviation) ?? normalizeTeamAbbr(sport, displayName);
+    return observed !== null && expected !== null && observed === expected;
   }
   const observed = normalizeTeam(raw);
   const aliases = [abbreviation, displayName ?? ""];

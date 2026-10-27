@@ -8,6 +8,19 @@ Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
+- October 27 Owls professional-basketball identity repair advances shared member presentation to
+  `daily_edge_member_presentation_2026_10_27_r29_owls_pro_team_identity` and Market Intelligence
+  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`. The
+  initial r28/r5 Owls transition returned fresh complete Circa rows but rejected full provider team
+  names against abbreviated NBA/WNBA member identities. Future-unlocked presentation and capture
+  now use the existing canonical professional-basketball team resolver before the unchanged exact
+  sport, date, orientation, completeness, and freshness gates. Unknown and ambiguous identities
+  still fail closed. A read-only production-snapshot rehearsal populated all 12 Moneyline/Total/
+  Spread sections for the four current member games, aligned those 12 sections into the internal
+  market read, and changed zero picks, probabilities, evaluated prices, grades, stakes, locks, or
+  tracking fields. Existing locks remain exact. Evidence and rollback:
+  `docs/model-audits/2026-10-27-owls-pro-basketball-team-identity-repair.md`.
+
 - October 27 Owls sharp-book split transition advances shared member presentation to
   `daily_edge_member_presentation_2026_10_27_r28_owls_sharp_book_splits` and Market Intelligence
   capture to `market_intelligence_v2_shadow_capture_2026_10_27_r6_all_owls_named_book_splits`.
@@ -282,7 +295,7 @@ Last reviewed: 2026-10-27
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_27_r6_all_owls_named_book_splits`. The existing leased
+  `market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`. The existing leased
   refresh may store exact-date, exact-matchup Owls NBA split rows with their real source book for
   the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
@@ -303,10 +316,13 @@ Last reviewed: 2026-10-27
   canonicalizes both stored-game and provider team identities and explicitly maps the six ESPN
   abbreviation variants (`GS`, `NO`, `NY`, `SA`, `UTAH`, and `WSH`) before exact matchup comparison.
   It repairs missing opening-night DraftKings fallback rows without loosening date, league,
-  orientation, or unknown-team gates. Evidence and rollback:
+  orientation, or unknown-team gates. R6 applies that same canonical resolver to Owls full provider
+  names before the unchanged exact identity gates; r5 remains the immediate predecessor. Evidence
+  and rollback:
   `docs/model-audits/2026-10-15-nba-sharpapi-v2-capture-predeclaration.md` and
   `docs/model-audits/2026-10-15-nba-rolling-market-evidence-capture.md`, plus
-  `docs/model-audits/2026-10-16-nba-split-fallback-team-identity-result.md`.
+  `docs/model-audits/2026-10-16-nba-split-fallback-team-identity-result.md` and
+  `docs/model-audits/2026-10-27-owls-pro-basketball-team-identity-repair.md`.
 - NBA internal professional market reader is
   `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`. It consumes the
   provider-separated V2 split rows and same-sportsbook, two-sided V2 price chronology inside the

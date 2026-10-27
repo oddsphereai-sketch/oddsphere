@@ -7,6 +7,7 @@ import {
   type RawOwlsSplitsResponse,
 } from "../lib/providers/owls/owlsSharpBookSplits";
 import { mapOwlsCurrentSplitRows } from "../lib/providers/owls/owlsCurrentSplits";
+import { __TEST__ as currentSplitTest } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
 const observedAt = "2026-10-27T20:07:53.171Z";
 const fixture: RawOwlsSplitsResponse = {
@@ -151,6 +152,59 @@ assert.deepEqual(
   (onePercentRows[0]?.moneyline as { handle_pct?: unknown } | undefined)?.handle_pct,
   { away: 0.01, home: 0.99 },
   "Owls whole-number percentages must not turn 1% into 100% in the legacy overlay transport",
+);
+
+for (const [providerName, boardAbbreviation] of [
+  ["Brooklyn Nets", "BKN"],
+  ["Boston Celtics", "BOS"],
+  ["Detroit Pistons", "DET"],
+  ["New York Knicks", "NY"],
+  ["Sacramento Kings", "SAC"],
+  ["San Antonio Spurs", "SA"],
+  ["Portland Trail Blazers", "POR"],
+  ["Los Angeles Lakers", "LAL"],
+  ["Philadelphia 76ers", "PHI"],
+  ["Indiana Pacers", "IND"],
+] as const) {
+  assert.equal(
+    currentSplitTest.teamMatches("nba", providerName, boardAbbreviation, boardAbbreviation),
+    true,
+    `Owls NBA full-name identity ${providerName} must match member abbreviation ${boardAbbreviation}`,
+  );
+}
+
+assert.equal(
+  currentSplitTest.teamMatches("wnba", "New York Liberty", "NY", "NY"),
+  true,
+  "Owls WNBA full-name identity must match the canonical member abbreviation",
+);
+
+assert.equal(
+  currentSplitTest.rowMatchesGame(
+    {
+      event_id: "nba:Detroit Pistons@New York Knicks-20261028",
+      league: "nba",
+      away_team: "Detroit Pistons",
+      home_team: "New York Knicks",
+    },
+    {
+      id: "nba-401909878",
+      external_id: 401909878,
+      sport: "nba",
+      awayTeam: "DET",
+      awayTeamDisplayName: "DET",
+      homeTeam: "NY",
+      homeTeamDisplayName: "NY",
+      gameStartAt: "2026-10-28T00:00:00.000Z",
+      lockState: "open",
+      lockedAt: null,
+      markets: {},
+    } as Parameters<typeof currentSplitTest.rowMatchesGame>[1],
+    "2026-10-27",
+    "nba",
+  ),
+  true,
+  "Owls UTC-date NBA event ids must match the same ET slate game",
 );
 
 async function main(): Promise<void> {
