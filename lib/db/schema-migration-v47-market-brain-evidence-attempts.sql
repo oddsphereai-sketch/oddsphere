@@ -169,10 +169,10 @@ BEGIN
     OR (NEW.attempt_payload ->> 'windowOpensAt')::timestamptz IS DISTINCT FROM NEW.window_opens_at
     OR (NEW.attempt_payload ->> 'windowClosesAt')::timestamptz IS DISTINCT FROM NEW.window_closes_at
     OR (NEW.attempt_payload ->> 'completedAt')::timestamptz IS DISTINCT FROM NEW.completed_at
-    OR CASE
+    OR (CASE
       WHEN NEW.started_at IS NULL THEN NEW.attempt_payload -> 'startedAt' IS DISTINCT FROM 'null'::jsonb
       ELSE (NEW.attempt_payload ->> 'startedAt')::timestamptz IS DISTINCT FROM NEW.started_at
-    END
+    END)
   THEN
     RAISE EXCEPTION 'market_brain_evidence_attempts payload/column binding is invalid';
   END IF;

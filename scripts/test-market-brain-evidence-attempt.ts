@@ -183,6 +183,11 @@ assert.match(migration, /matched_rows = retained_rows \+ duplicate_rows \+ filte
 assert.match(migration, /checksum_payload_text::jsonb = attempt_payload - 'checksum'/);
 assert.match(migration, /digest\(convert_to\(checksum_payload_text, 'UTF8'\), 'sha256'\)/);
 assert.match(migration, /validate_market_brain_evidence_attempt/);
+assert.match(
+  migration,
+  /OR \(CASE\s+WHEN NEW\.started_at IS NULL[\s\S]*?END\)\s+THEN/,
+  "PL/pgSQL CASE predicates inside IF conditions must be parenthesized so the inner THEN is not parsed as the IF terminator",
+);
 assert.match(migration, /BEFORE UPDATE OR DELETE/);
 assert.match(migration, /ENABLE ROW LEVEL SECURITY/);
 assert.match(migration, /REVOKE ALL .* FROM anon, authenticated/);
