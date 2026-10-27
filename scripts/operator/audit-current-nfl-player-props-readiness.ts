@@ -23,6 +23,29 @@ const record = await readNflPlayerPropsSnapshotRecord({ client, season, week });
 if (!record) throw new Error(`NFL props snapshot is unavailable for ${season} Week ${week}.`);
 const snapshot = record.snapshot;
 const memberRows = snapshot.memberDecisions;
+const overUnderMemberRows = memberRows.filter((row) => row.side === "over" || row.side === "under");
+const memberDirectionalMix = Object.fromEntries(
+  [...new Set(overUnderMemberRows.map((row) => row.market))].sort().map((market) => {
+    const marketRows = overUnderMemberRows.filter((row) => row.market === market);
+    const actionRows = marketRows.filter((row) => row.grade === "Best Angle" || row.grade === "Lean");
+    return [market, {
+      rows: marketRows.length,
+      over: marketRows.filter((row) => row.side === "over").length,
+      under: marketRows.filter((row) => row.side === "under").length,
+      actionable: actionRows.length,
+      actionableOver: actionRows.filter((row) => row.side === "over").length,
+      actionableUnder: actionRows.filter((row) => row.side === "under").length,
+      independentOver: marketRows.filter((row) => {
+        const projection = row.decisionSupport?.projection.independent ?? row.projection;
+        return projection !== null && projection > row.line;
+      }).length,
+      independentUnder: marketRows.filter((row) => {
+        const projection = row.decisionSupport?.projection.independent ?? row.projection;
+        return projection !== null && projection < row.line;
+      }).length,
+    }];
+  }),
+);
 const memberScopes = new Map<string, typeof memberRows>();
 for (const row of memberRows) {
   const key = [row.gameId, row.playerName.toLowerCase().replace(/[^a-z0-9]/g, ""), row.team, row.market].join("|");
@@ -102,6 +125,7 @@ const report = {
       .sort()
       .map((key) => [key, rows.filter((row) => `${row.market}:${row.side}` === key && (row.grade === "Best Angle" || row.grade === "Lean")).length]),
   ),
+  memberDirectionalMix,
   byMarket,
   divergencePp: {
     p50: quantile(divergences, 0.5),
@@ -153,6 +177,7 @@ console.log(JSON.stringify(process.argv.includes("--summary") ? {
   candidateGrades: report.candidateGrades,
   candidateImpact: report.candidateImpact,
   actionableDistribution: report.actionableDistribution,
+  memberDirectionalMix: report.memberDirectionalMix,
   divergencePp: report.divergencePp,
   openingCoverage: report.openingCoverage,
   tracking: report.tracking,

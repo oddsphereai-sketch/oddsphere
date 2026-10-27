@@ -2511,6 +2511,26 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 27 Receiving Yards direction correction: portable artifact / model / calibration /
+  decision / runtime / board are `nfl_player_props_runtime_2026_10_27_r17_receiving_direction_correction` /
+  `nfl_player_props_distribution_model_2026_10_27_r28_receiving_direction_correction` /
+  `nfl_player_props_distribution_calibration_2026_10_27_r30_receiving_direction_correction` /
+  `nfl_player_props_decision_2026_10_27_r34_receiving_direction_correction` /
+  `nfl_player_props_runtime_2026_10_27_r35_receiving_direction_correction` /
+  `nfl_player_props_board_2026_10_27_r38_receiving_direction_correction`. Member / lifecycle /
+  sole writer / tracking are `nfl_player_props_member_2026_10_27_r47_receiving_direction_correction` /
+  `nfl_player_props_member_lifecycle_2026_10_27_r29_receiving_direction_correction` /
+  `nfl_player_props_writer_2026_10_27_r61_receiving_direction_correction` /
+  `nfl_player_props_tracking_2026_10_27_r35_receiving_direction_correction`. Receiving Yards alone
+  adds target-book-excluded categorical direction correction after the market-free independent
+  point head. Weeks 6-7 exact direction improves 188-154 to 196-146 and the mix moves from
+  86 Overs / 256 Unders to 132 / 210 without a quota; both chronological blocks improve. The
+  Rushing Yards analogue and broad direction balancing are rejected. No other market, provider
+  ceiling, cadence, copy, layout, public tracking, writer, or lease changes. Existing locks retain
+  exact stored precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-27-nfl-player-props-receiving-direction-predeclaration.md` and
+  `docs/model-audits/2026-10-27-nfl-player-props-receiving-direction-result.md`.
+
 - October 26 market-marriage release: portable artifact / model / calibration / decision / runtime /
   board are `nfl_player_props_runtime_2026_10_26_r16_market_marriage` /
   `nfl_player_props_distribution_model_2026_10_26_r27_market_marriage` /
