@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   bindMarketBrainMarginTotalPrior,
   buildMarketBrainCase,
+  assertMarketBrainCase,
   numericFeature,
   type MarketBrainObservation,
 } from "../lib/services/marketBrain/marketBrainContract";
@@ -38,7 +39,7 @@ function quote(args: {
     sport: "nfl",
     market,
     modality: "price_quote",
-    source: { provider: args.participant === "circa" ? "sharpapi" : "balldontlie", feed: "fixture", participant: args.participant },
+    source: { provider: "fixture", feed: "fixture", participant: args.participant },
     sourcePrior: args.participant === "circa" ? "professional_book" : "retail_book",
     observedRole: "unknown",
     observedAt: args.observedAt,
@@ -59,7 +60,7 @@ function quote(args: {
       playerName: "Sensitive Fixture Player",
       detail: "free-text fixture detail",
     },
-    audit: { sourceRelease: "fixture", sourceObservationId, notes: [] },
+    audit: { sourceRelease: "fixture-source-manifest-r1", sourceObservationId, notes: [] },
   };
 }
 
@@ -86,7 +87,7 @@ function identifiedSplit(participant: string, suffix: string): MarketBrainObserv
     sport: "nfl",
     market: "spread",
     modality: "identified_book_split",
-    source: { provider: "sharpapi", feed: "splits", participant },
+    source: { provider: "fixture", feed: "fixture", participant },
     sourcePrior: participant === "circa" ? "professional_book" : "retail_book",
     observedRole: "unknown",
     observedAt: null,
@@ -104,7 +105,7 @@ function identifiedSplit(participant: string, suffix: string): MarketBrainObserv
       first_money_minus_bets_pp: numericFeature(7),
     },
     categorical: { denominatorKnown: false, exactLineMatched: null },
-    audit: { sourceRelease: "fixture", sourceObservationId: `split:${participant}:${suffix}`, notes: [] },
+    audit: { sourceRelease: "fixture-source-manifest-r1", sourceObservationId: `split:${participant}:${suffix}`, notes: [] },
   };
 }
 
@@ -200,6 +201,16 @@ const marketCase = buildMarketBrainCase({
   ],
   blindSpots: [],
 });
+const forgedReleaseCase = structuredClone(marketCase);
+forgedReleaseCase.sourceManifests[0]!.release = "forged-source-release";
+assert.throws(() => assertMarketBrainCase(forgedReleaseCase), /release or feed diverged/,
+  "a checksum-consistent case must reject a manifest release that is not owned by its retained observations");
+const conflictingOwnerCase = structuredClone(marketCase);
+const conflictingManifest = structuredClone(conflictingOwnerCase.sourceManifests[0]!);
+conflictingManifest.id = "fixture-source-manifest-conflicting-owner";
+conflictingOwnerCase.sourceManifests.push(conflictingManifest);
+assert.throws(() => assertMarketBrainCase(conflictingOwnerCase), /claimed by conflicting manifests/,
+  "a retained observation must have exactly one source-manifest owner");
 
 const materialized = materializeNflMarketBrainSequence({ cases: [marketCase], cutoffAt });
 assert.equal(materialized.targetFamilyByMarket.spread, "draftkings");

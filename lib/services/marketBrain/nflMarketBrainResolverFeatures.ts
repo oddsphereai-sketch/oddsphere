@@ -12,7 +12,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESOLVER_FEATURE_RELEASE =
-  "nfl_market_brain_resolver_features_2026_10_27_r9_finalized_capture_input" as const;
+  "nfl_market_brain_resolver_features_2026_10_27_r10_source_evidence_release_binding" as const;
 
 const nflMarketBrainTrainerInputBrand: unique symbol = Symbol("nflMarketBrainTrainerInput");
 export type NflMarketBrainTrainerInput = Readonly<{

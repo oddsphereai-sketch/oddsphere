@@ -114,16 +114,28 @@ assert.equal(
   "a release transition must preserve every immutable T-60 game until its current-release replacement exists",
 );
 const currentCollectorSnapshot = buildNflWeekOneHeldMemberFixture(releaseTransitionRows).snapshot;
-const r24LockedRows = structuredClone(releaseTransitionRows);
-for (const row of r24LockedRows) {
-  (row.payload as NflForwardEvidencePayload).collectorRelease =
-    "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow" as typeof NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE;
+for (const collectorRelease of [
+  "nfl_forward_evidence_collector_2026_09_28_r16_injury_continuity",
+  "nfl_forward_evidence_collector_2026_10_06_r17_hourly_market_freshness",
+  "nfl_forward_evidence_collector_2026_10_08_r18_game_designation_continuity",
+  "nfl_forward_evidence_collector_2026_10_09_r19_provider_feed_continuity",
+  "nfl_forward_evidence_collector_2026_10_15_r20_personnel_evidence_eligibility",
+  "nfl_forward_evidence_collector_2026_10_15_r21_foundational_no_weight_score",
+  "nfl_forward_evidence_collector_2026_10_15_r22_personnel_coverage_repair",
+  "nfl_forward_evidence_collector_2026_10_16_r23_availability_adjusted_starter_authority",
+  "nfl_forward_evidence_collector_2026_10_19_r24_availability_arbitration_shadow",
+  "nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar",
+]) {
+  const historicalLockedRows = structuredClone(releaseTransitionRows);
+  for (const row of historicalLockedRows) {
+    (row.payload as unknown as { collectorRelease: string }).collectorRelease = collectorRelease;
+  }
+  assert.deepEqual(
+    buildNflWeekOneHeldMemberFixture(historicalLockedRows).snapshot,
+    currentCollectorSnapshot,
+    `${collectorRelease} immutable T-60 scores, predictions, recommendations, grades, and stakes must retain expected-score-tenths semantics`,
+  );
 }
-assert.deepEqual(
-  buildNflWeekOneHeldMemberFixture(r24LockedRows).snapshot,
-  currentCollectorSnapshot,
-  "the r25 research-only sidecar release must not reinterpret r24 immutable T-60 scores, predictions, grades, or stakes",
-);
 const invalidUnlockedTransitionRows = structuredClone(releaseTransitionRows);
 invalidUnlockedTransitionRows[1]!.stage = "unlocked";
 invalidUnlockedTransitionRows[1]!.payload.stage = "unlocked";

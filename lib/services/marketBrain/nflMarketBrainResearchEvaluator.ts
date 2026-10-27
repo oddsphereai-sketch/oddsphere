@@ -12,7 +12,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESEARCH_EVALUATOR_RELEASE =
-  "nfl_market_brain_research_evaluator_2026_10_27_r12_nfl_source_bound_outcome" as const;
+  "nfl_market_brain_research_evaluator_2026_10_27_r13_source_evidence_release_binding" as const;
 export const NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE =
   "nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows" as const;
 

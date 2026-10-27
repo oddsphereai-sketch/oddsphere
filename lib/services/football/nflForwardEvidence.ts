@@ -28,7 +28,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar" as const;
+  "nfl_forward_evidence_collector_2026_10_27_r26_source_evidence_release_binding" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 

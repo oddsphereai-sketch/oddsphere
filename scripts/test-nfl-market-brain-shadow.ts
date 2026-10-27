@@ -277,6 +277,14 @@ const baseShadowArgs = {
 };
 
 const shadow = buildNflMarketBrainShadow(baseShadowArgs);
+const mismatchedReleaseManifests = structuredClone(rawPriceResponseManifests);
+mismatchedReleaseManifests[0]!.observationsByGame[game.providerGameId]![0]!.sourceRelease =
+  "forged-source-release";
+assert.throws(() => buildNflMarketBrainShadow({
+  ...baseShadowArgs,
+  rawPriceResponseManifests: mismatchedReleaseManifests,
+}), /observation provenance diverged/,
+"a recomputed shadow must reject evidence whose source release diverges from its owning manifest");
 const unchangedInputs = JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources });
 buildNflMarketBrainShadow(baseShadowArgs);
 assert.equal(JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");

@@ -16,7 +16,10 @@ import {
   type MarketBrainSourceManifest,
   type MarketBrainSourcePrior,
 } from "@/lib/services/marketBrain/marketBrainContract";
-import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
+import {
+  BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE,
+  type NflPreviewGame,
+} from "./balldontlieNflPreviewSlate";
 import type {
   FootballRawPriceObservation,
   FootballRawPriceResponseManifest,
@@ -25,6 +28,7 @@ import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAvailability";
 import { marketBrainSha256 } from "@/lib/services/marketBrain/marketBrainCanonical";
 import type { NflForwardWeatherSnapshot } from "./nflForwardEvidence";
+import { FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE } from "./sharpApiFootballSharpOdds";
 import {
   NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
   type NflRegularSharpMarket,
@@ -33,7 +37,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r17_source_manifest_release_identity" as const;
+  "nfl_market_brain_shadow_2026_10_27_r18_source_evidence_release_binding" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -221,6 +225,9 @@ function sharpSplitManifest(
   observations: MarketBrainObservation[],
 ): MarketBrainSourceManifest {
   const manifest = args.sharpSplitCaptureManifest;
+  if (manifest.release !== NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE) {
+    throw new Error("NFL Market Brain split manifest release identity is invalid.");
+  }
   const eventRows = manifest.rows.filter((row) => row.providerGameId === args.game.providerGameId);
   const retainedObservationIds = observations
     .filter((row) => row.source.provider === "sharpapi" && row.source.feed === "splits")
@@ -484,9 +491,18 @@ function addRawPrices(
   observations: MarketBrainObservation[],
 ): MarketBrainSourceManifest[] {
   return args.rawPriceResponseManifests.map((manifest, manifestIndex) => {
+    const expectedRelease = manifest.provider === "sharpapi"
+      ? FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE
+      : BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE;
+    if (manifest.release !== expectedRelease) {
+      throw new Error(`NFL Market Brain ${manifest.provider} raw-price manifest release identity is invalid.`);
+    }
     const retainedObservationIds: string[] = [];
     const caseIdBySourceId = new Map<string, string>();
     for (const raw of manifest.observationsByGame[args.game.providerGameId] ?? []) {
+      if (raw.sourceRelease !== manifest.release || raw.provider !== manifest.provider || raw.feed !== manifest.feed) {
+        throw new Error("NFL Market Brain raw-price observation provenance diverged from its source manifest.");
+      }
       const id = `quote:${raw.provider}:${raw.feed}:${raw.sourceObservationId}`;
       retainedObservationIds.push(id);
       caseIdBySourceId.set(raw.sourceObservationId, id);
@@ -652,7 +668,7 @@ function addSharpSplits(
           exactLineMatched: null,
         },
         audit: {
-          sourceRelease: NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+          sourceRelease: args.sharpSplitCaptureManifest.release,
           sourceObservationId: `${split.sourceEventId ?? id}:${market}:${split.providerFetchedAt}:${split.capturedAt}:${index}`,
           notes: source.status === "duplicate" ? ["multiple exact-identity provider rows retained"] : [],
         },

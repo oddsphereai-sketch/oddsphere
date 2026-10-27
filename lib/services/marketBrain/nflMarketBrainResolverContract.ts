@@ -40,9 +40,9 @@ import {
 } from "./nflMarketBrainDeterministicTrainer";
 
 export const NFL_MARKET_BRAIN_RESOLVER_CONTRACT_RELEASE =
-  "nfl_market_brain_resolver_contract_2026_10_27_r9_attested_input_zero_market" as const;
+  "nfl_market_brain_resolver_contract_2026_10_27_r10_source_evidence_release_binding" as const;
 export const NFL_MARKET_BRAIN_TOURNAMENT_RELEASE =
-  "nfl_market_brain_tournament_2026_10_27_r9_attested_input_zero_market" as const;
+  "nfl_market_brain_tournament_2026_10_27_r10_source_evidence_release_binding" as const;
 
 export const NFL_MARKET_BRAIN_NATURAL_PARAMETER_HEADS = [
   "margin_location",
@@ -84,7 +84,7 @@ const tournamentWithoutChecksum = {
   },
   featureAblations: ["complete_joint_candidate"] as const,
   deterministicRuntime: {
-    trainerRelease: "nfl_market_brain_deterministic_trainer_2026_10_27_r4_attested_input_tournament" as const,
+    trainerRelease: "nfl_market_brain_deterministic_trainer_2026_10_27_r5_source_evidence_release_binding" as const,
     trainerInputSchema: "nfl_market_brain_trainer_input_v1" as const,
     optimizer: "deterministic_full_batch_gradient_descent_backtracking" as const,
     convergence: { maximumIterations: 500, gradientInfinityNorm: 1e-6, relativeLossTolerance: 1e-10 },

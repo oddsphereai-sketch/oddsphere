@@ -159,7 +159,10 @@ database, predictive, or production proof.
   PostgreSQL fixture has not run on this host.
 - **MB-035:** raw parser archives now use `(schema_release, parser_input_sha256)` as their relational
   identity, shadow source manifests retain both components, and the store rejects a non-null manifest
-  reference unless that exact composite archive is present in the same payload. The PostgreSQL collision
+  reference unless that exact composite archive is present in the same payload. Contract r15 additionally
+  requires each manifest-retained observation to have exactly one manifest owner and requires its provider,
+  feed, and audited source release to match that owner; duplicate ownership and checksum-consistent release
+  substitutions are rejected by focused adversarial tests. The PostgreSQL collision
   fixture is prepared but has not run here; a relational child FK and atomic write remain open under
   MB-024.
 - **MB-023:** Market Brain retention was removed from the shared production cleanup route and placed in
@@ -171,21 +174,27 @@ database, predictive, or production proof.
   verifies their digest, and the receipt trigger requires the source table label, NFL sport, final
   timestamp, scores, provider IDs, and update time to match the finalized `games` row. Correction
   precedence and adversarial PostgreSQL execution remain open.
-- **MB-033 / MB-036:** shadow r17 adds one explicit success/failure union. Both shapes bind release,
+- **MB-033 / MB-036:** shadow r18 adds one explicit success/failure union. Both shapes bind release,
   contract, event and capture time; success also binds NFL sport and requires evaluation no later than
   server receipt, while failure requires the fixed failed status, no production authority and a
   nonempty reason. Successful writes and reads now validate the complete production-built case, bind
   embedded/relational/canonical-payload byte counts, and reject a checksum-consistent but incomplete
-  case before persistence. The lifecycle fixture now uses the production case builder and includes
-  contract/event/time/byte forgeries, but most prerequisite receipt triggers still require a future
+  case before persistence. Raw-price and identified-split observations must also match their provider
+  sidecar's exported manifest release before case construction. The lifecycle fixture now uses the
+  production case builder and includes contract/event/time/byte forgeries, while focused case tests reject
+  conflicting manifest ownership and forged evidence releases, but most prerequisite receipt triggers still require a future
   no-bypass real-PostgreSQL lifecycle proof.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
-  The r24 and r25 collector releases are explicitly grouped under the same expected-score-tenths reader
+  Every collector release from r16 through r26 is explicitly grouped under the same expected-score-tenths reader
   semantics, with a golden mixed immutable-T-60 snapshot proving identical projected scores,
   predictions, recommendations, grades, and stakes. Incumbent provider releases remain unchanged;
   each research split/raw-price sidecar has its own exported and persisted release, all registered in
   `docs/current-model-releases.md`.
+  All Market Brain contract consumers whose persisted or evaluated content changed with evidence-release
+  binding received new collector, writer, shadow, capture-set, sequence, research-input, evaluator,
+  resolver, trainer, tournament, and audit release identifiers rather than silently changing semantics
+  under an existing identity.
   The candidate branch still truthfully carries new writer/collector identities; repository safety
   rejected relabeling changed orchestration as the older production releases. Full base-versus-candidate
   product/lock parity and the final release boundary therefore remain open.

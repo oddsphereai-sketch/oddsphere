@@ -374,7 +374,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r83_source_evidence_release_binding/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /!existingLockedRecord[\s\S]*buildNflMarketBrainShadow/,
   "Market Brain capture must never reinterpret a pre-existing locked record");

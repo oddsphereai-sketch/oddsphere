@@ -1,7 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r14_source_manifest_release_identity" as const;
+  "market_brain_contract_2026_10_27_r15_source_evidence_release_binding" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -425,6 +425,8 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
     if (target) assertMarketBrainEvaluatedTarget(market as MarketBrainMarket, target, args.evaluatedAt);
   }
   const manifestIds = new Set<string>();
+  const manifestOwnerByObservationId = new Map<string, string>();
+  const observationById = new Map(args.observations.map((observation) => [observation.id, observation]));
   for (const manifest of args.sourceManifests) {
     if (manifestIds.has(manifest.id)) throw new Error(`Duplicate Market Brain source manifest: ${manifest.id}`);
     manifestIds.add(manifest.id);
@@ -482,6 +484,27 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
     }
     if (manifest.retainedObservationIds.some((id) => !observationIds.has(id))) {
       throw new Error(`Market Brain source manifest ${manifest.id} references an unknown observation.`);
+    }
+    const rowObservationIds = manifest.rows.flatMap((row) => row.retainedObservationIds);
+    const rowObservationSet = new Set(rowObservationIds);
+    const retainedObservationSet = new Set(manifest.retainedObservationIds);
+    if (rowObservationSet.size !== rowObservationIds.length ||
+      retainedObservationSet.size !== manifest.retainedObservationIds.length ||
+      rowObservationSet.size !== retainedObservationSet.size ||
+      [...rowObservationSet].some((id) => !retainedObservationSet.has(id))) {
+      throw new Error(`Market Brain source manifest observation ownership diverged: ${manifest.id}`);
+    }
+    for (const id of manifest.retainedObservationIds) {
+      const observation = observationById.get(id)!;
+      const existingOwner = manifestOwnerByObservationId.get(id);
+      if (existingOwner !== undefined) {
+        throw new Error(`Market Brain observation ${id} is claimed by conflicting manifests ${existingOwner} and ${manifest.id}.`);
+      }
+      if (observation.source.provider !== manifest.provider || observation.source.feed !== manifest.feed ||
+        observation.audit.sourceRelease !== manifest.release) {
+        throw new Error(`Market Brain source manifest release or feed diverged from observation ${id}.`);
+      }
+      manifestOwnerByObservationId.set(id, manifest.id);
     }
   }
   const observations = [...args.observations].sort((a, b) =>
