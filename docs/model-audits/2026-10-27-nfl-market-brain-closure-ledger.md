@@ -284,6 +284,17 @@ database, predictive, or production proof.
   missed-window claim, exact retry, collision rejection, finalization, and immutability. This proof has
   not run on the current host because no PostgreSQL runtime/URL is available, and no runner calls the
   RPCs yet; the IDs remain open.
+- **MB-012 / MB-041 (narrow decision-envelope slice):** contract r21, shadow r25, and research-input
+  r10 freeze the incumbent action-or-pass and complete exact target-book quote pair outside trainer
+  features. Consequence r2 can consume that context only from an in-process attested research input.
+  The forward-only v50 candidate now rejects every new successful shadow without an envelope and rejects
+  every new research input whose envelope differs from the deterministic latest successful pre-cutoff
+  case in its exact finalized capture-set membership. The disposable PostgreSQL fixture includes both a
+  legitimate input and a fully canonicalized, rehashed opposing-action forgery; the pull-request workflow
+  is path-bound to the v50 migration, fixture, and generator. This closes only the caller-authored
+  decision-envelope link. MB-012 remains open for replay-derived sequence/feature/artifact attestations,
+  and MB-041 remains open for persisted evaluation/consequence receipts and restart-time recomputation.
+  No status changes until the real PostgreSQL workflow passes.
 - **MB-044:** `morning_slate` and `soccer_daily_refresh` now require the shared sport-scoped
   `prediction_pipeline` lease with bounded retry. The executable registry test resolves every primary
   and fallback authority route and proves its source-level required lease contract. Real-PostgreSQL
@@ -302,6 +313,8 @@ Verification recorded for this slice:
 - `npx tsc --noEmit --incremental false` — passed.
 - `npm run verify:model-change` — passed; its post-step explicitly reported the PostgreSQL proof
   skipped because `MARKET_BRAIN_POSTGRES_URL` was unset.
+- `npx tsx scripts/test-nfl-market-brain-decision-envelope-binding.ts` — passed; the real v50
+  accept/reject lifecycle is prepared for the PostgreSQL pull-request service and has not run locally.
 
 No migration was applied, no capture flag was enabled, and no production/member/grade/stake/lock
 authority changed.
