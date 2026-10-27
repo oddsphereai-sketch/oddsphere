@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## NFL player-props Passing Completions direction r37
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to improve player-prop prediction accuracy rather
+than balance directions cosmetically. For future-unlocked Passing Completions only, a fresh
+target-book-excluded direction may cross the independent direction when they disagree. The
+independent point projection remains market-free; agreement retains the incumbent posterior.
+
+Across 54 exact canonical member-line Week 6-7 outcomes, direction improves from 27-27 (50.0%) to
+29-25 (53.7%) and Brier improves from 0.29527 to 0.25787. Week 6 improves 15-13 to 16-12 and Week 7
+improves 12-14 to 13-13. The production-default 523-row no-write rehearsal keeps all 12 Passing
+Completions member rows, changes four projection values and two forecast sides, and produces zero
+promotions, zero demotions, and zero actionable-count change. Every other market, exact-price economics,
+grade policy, provider ceiling,
+cadence, UI, writer topology, and lease remain unchanged. Existing locks retain exact precedence.
+Evidence and rollback:
+`docs/model-audits/2026-10-27-nfl-player-props-passing-completions-direction-r37-predeclaration.md`
+and `docs/model-audits/2026-10-27-nfl-player-props-passing-completions-direction-result.md`.
+
 ## NFL player-props Receptions direction authority r36
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to repair the player-props models' apparent Under

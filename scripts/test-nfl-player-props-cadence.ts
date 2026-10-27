@@ -113,7 +113,7 @@ function snapshot(args: { generatedAt: string; lockAt: string }): Pick<NflPlayer
     ? new Date(Date.parse(args.lockAt) + 60 * 60_000).toISOString()
     : "2026-10-11T17:00:00.000Z";
   return {
-    release: "nfl_player_props_member_2026_10_27_r49_receptions_direction_authority",
+    release: "nfl_player_props_member_2026_10_27_r50_passing_completions_direction",
     generatedAt: args.generatedAt,
     board: {
       decisions: [{ state: "unlocked", scheduledStart, lockAt: args.lockAt }],
