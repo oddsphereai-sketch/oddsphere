@@ -48,7 +48,7 @@ import {
   type CfbForwardTeamQuarterbacks,
 } from "./cfbForwardEvidence";
 import { appendCfbForwardEvidence, CFB_FORWARD_MARKET_HISTORY_CONTINUITY_HOURS, readCfbForwardMarketHistory, readCfbForwardWriterEvidence, type CfbForwardEvidenceMetadata } from "./cfbForwardEvidenceStore";
-import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE, CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE, CFB_V1_DECISION_RELEASE, CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE, CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE, CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
+import { buildCfbV1DecisionBundle, CFB_T60_MAX_CAPTURE_LAG_MINUTES, CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE, CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE, CFB_V1_DECISION_RELEASE, CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE, CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE, CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE, CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE, CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE, CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE, getCfbV1ForecastForGame, type CfbV1DecisionBundle, type CfbV1Forecast, type CfbV1Market } from "./cfbV1Decision";
 import { CFB_V1_WEEKLY_RUNTIME_RELEASE, cfbV1WeeklyGameProfileCoverage, getCfbV1WeeklyForecasts } from "./cfbV1WeeklyForecast";
 import { loadCfbCurrentAdvancedState } from "./cfbCurrentAdvancedState";
 import { resolveCfbCanonicalMarketAnchor } from "./cfbMarketInformedOutcome";
@@ -67,6 +67,7 @@ import {
   CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   type CfbMarketSharpAwareForecast,
 } from "./cfbMarketSharpAwareShadow";
@@ -158,7 +159,9 @@ import {
 import {
   applyCfbFinalWinnerCoordinator,
   CFB_FINAL_WINNER_COORDINATOR_ARTIFACT_RELEASE,
+  CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE,
   CFB_FINAL_WINNER_COORDINATOR_RELEASE,
+  reconcileCfbNearTiePmfWinnerCoherence,
 } from "./cfbFinalWinnerCoordinator";
 import {
   captureBooksWithSharpBooks,
@@ -182,7 +185,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_26_r138_paid_provider_retry_cadence" as const;
+  "cfb_forward_evidence_writer_2026_10_27_r139_near_tie_pmf_winner_coherence" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -379,8 +382,10 @@ export async function runCfbForwardEvidenceWriter(args: {
   auditDisableIndependentPriceLane?: boolean;
   /** Read-only baseline replay. Rejected whenever apply=true. */
   auditDisableCompleteMarketReader?: boolean;
+  /** Read-only rollback comparison for the near-tie PMF invariant. */
+  auditDisableNearTiePmfCoherence?: boolean;
 }): Promise<CfbForwardWriterResult> {
-  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader)) {
+  if (args.apply && (args.auditWindowStartDate || args.auditForceUnlocked || args.auditForceTheOddsApi || args.auditDisableIndependentPriceLane || args.auditDisableCompleteMarketReader || args.auditDisableNearTiePmfCoherence)) {
     throw new Error("CFB audit planning overrides are forbidden when apply=true.");
   }
   const writerEvidence = await readCfbForwardWriterEvidence({ client: args.client, season: args.season, now: args.now });
@@ -988,7 +993,10 @@ export async function runCfbForwardEvidenceWriter(args: {
         total: readerTotalLine,
       },
     });
-    const forecast = marketReader.forecast;
+    const coherentMarketReader = args.auditDisableNearTiePmfCoherence
+      ? { forecast: marketReader.forecast, applied: false as const, reason: "already_coherent" as const }
+      : reconcileCfbNearTiePmfWinnerCoherence(marketReader.forecast);
+    const forecast = coherentMarketReader.forecast;
     const decisionBundle = buildCfbV1DecisionBundle({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
@@ -1015,7 +1023,7 @@ export async function runCfbForwardEvidenceWriter(args: {
     // the reader forecast authoritative while recording every would-be cross
     // so a replacement can be trained and qualified without hiding evidence.
     const finalWinnerCoordinator = applyCfbFinalWinnerCoordinator({
-      forecast: marketReader.forecast,
+      forecast,
       game: plan.game,
       completedGames: priorResults.games,
       advancedGames: advancedState.state?.games ?? [],
@@ -1136,6 +1144,7 @@ export async function runCfbForwardEvidenceWriter(args: {
         marketReaderTotalSideFlipped: marketReader.totalSideFlipped,
         finalWinnerCoordinatorRelease: CFB_FINAL_WINNER_COORDINATOR_RELEASE,
         finalWinnerCoordinatorArtifactRelease: CFB_FINAL_WINNER_COORDINATOR_ARTIFACT_RELEASE,
+        finalWinnerCoordinatorBoundaryRelease: CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE,
         finalWinnerCoordinatorApplied: false,
         finalWinnerCoordinatorWouldApply: finalWinnerCoordinator.applied,
         finalWinnerCoordinatorReason: finalWinnerCoordinator.applied
@@ -1883,9 +1892,9 @@ function isEligiblePublishedPregameRecoveryPayload(payload: CfbForwardEvidencePa
     (String(payload.schemaRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_RELEASE_WAVE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_FCS_PRICE_PREVIOUS_MEMBER_RELEASE) ||
     (String(payload.schemaRelease) === CFB_FORWARD_PRICE_PREVIOUS_EVIDENCE_SCHEMA_RELEASE && String(payload.memberRelease) === CFB_FORWARD_PRICE_PREVIOUS_MEMBER_RELEASE)) &&
-    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_COMPLETE_READER_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_GAP_FALLBACK_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_FCS_PRICE_PREVIOUS_DECISION_RELEASE) &&
     payload.decisions.publicationEnabled &&
-    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
+    (release === CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_COMPLETE_READER_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_FCS_PRICE_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PRICE_QB_PREVIOUS_PRODUCTION_RELEASE || release === CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE) &&
     Boolean(payload.decisions.marketOutlooks);
 }
 

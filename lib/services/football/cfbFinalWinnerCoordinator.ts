@@ -9,11 +9,16 @@ import type { CfbForwardMarketReaderObservation } from "./cfbForwardEvidenceCapt
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import { summarizePmf, tiltCfbMarginWithinTotals } from "./cfbMarketSharpAwareShadow";
 import type { CfbV1Forecast } from "./cfbV1Decision";
+import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 
 export const CFB_FINAL_WINNER_COORDINATOR_ARTIFACT_RELEASE =
   "cfb_final_winner_coordinator_artifact_2026_10_14_r2_correct_qb_target_excluded_smooth_net_accuracy" as const;
 export const CFB_FINAL_WINNER_COORDINATOR_RELEASE =
   "cfb_final_winner_coordinator_2026_10_14_r2_correct_qb_target_excluded_smooth_net_accuracy" as const;
+export const CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE =
+  "cfb_final_winner_coordinator_boundary_2026_10_27_r1_actual_pmf_incumbent" as const;
+export const CFB_PMF_WINNER_COHERENCE_RELEASE =
+  "cfb_pmf_winner_coherence_2026_10_27_r1_near_tie_single_pmf" as const;
 
 type NullableNumber = number | null;
 type Side = "first" | "second";
@@ -115,6 +120,7 @@ const artifact = require("./modelArtifacts/cfbFinalWinnerCoordinatorArtifact.jso
 const CURRENT_SEASON_PRIOR_GAMES = 4;
 const RECENT_PRIOR_GAMES = 1.5;
 const RECENT_WINDOW = 3;
+const WINNER_DIRECTION_EPSILON = 1e-9;
 const GLOBAL_MEANS: Record<string, number> = { margin: 0, pace: 68, drives: 12 };
 
 assertArtifact();
@@ -158,7 +164,11 @@ export function applyCfbFinalWinnerCoordinator(args: {
       reader_margin_abs: Math.abs(args.forecast.expectedMarginHome),
       both_fbs: args.game.away.fbs && args.game.home.fbs ? 1 : 0,
     };
-    const evaluation = evaluateCfbFinalWinnerCoordinator(features, args.forecast.expectedMarginHome);
+    const evaluation = evaluateCfbFinalWinnerCoordinator(
+      features,
+      args.forecast.expectedMarginHome,
+      args.forecast.homeWinProbability,
+    );
     if (!evaluation.crossesWinnerBoundary) {
       return {
         forecast: args.forecast,
@@ -204,13 +214,15 @@ export function reconcileCfbFinalWinnerPmf(
   );
   const coherent = (pmf: CfbV1Forecast["pmf"]) => {
     const summary = summarizePmf(pmf);
+    const mass = pmf.reduce((sum, cell) => sum + cell.probability, 0);
+    const awayWinProbability = mass - summary.homeWinProbability;
     const displayedHome = Math.round(summary.expectedHomePoints * 10);
     const displayedAway = Math.round(summary.expectedAwayPoints * 10);
     const representativeMargin = summary.representativeScore.home - summary.representativeScore.away;
     return homeWinner
-      ? summary.expectedMarginHome > 0 && summary.homeWinProbability > 0.5 &&
+      ? summary.expectedMarginHome > 0 && summary.homeWinProbability - awayWinProbability > WINNER_DIRECTION_EPSILON &&
         displayedHome > displayedAway && representativeMargin > 0
-      : summary.expectedMarginHome < 0 && summary.homeWinProbability < 0.5 &&
+      : summary.expectedMarginHome < 0 && awayWinProbability - summary.homeWinProbability > WINNER_DIRECTION_EPSILON &&
         displayedHome < displayedAway && representativeMargin < 0;
   };
   const initial = atMargin(requestedMargin);
@@ -230,11 +242,52 @@ export function reconcileCfbFinalWinnerPmf(
   return atMargin(resolved);
 }
 
+export function reconcileCfbNearTiePmfWinnerCoherence(forecast: CfbV1Forecast): {
+  forecast: CfbV1Forecast;
+  applied: boolean;
+  reason: "near_tie_mean_probability_direction_cross" | "already_coherent" | "outside_tolerance" | "exact_tie";
+} {
+  const marginDirection = Math.sign(forecast.expectedMarginHome);
+  const probabilityDirection = Math.sign(forecast.homeWinProbability - 0.5);
+  if (marginDirection === 0 || probabilityDirection === 0) {
+    return { forecast, applied: false, reason: "exact_tie" };
+  }
+  if (marginDirection === probabilityDirection) {
+    return { forecast, applied: false, reason: "already_coherent" };
+  }
+  if (Math.abs(forecast.expectedMarginHome) > CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS) {
+    return { forecast, applied: false, reason: "outside_tolerance" };
+  }
+  const pmf = reconcileCfbFinalWinnerPmf(
+    forecast,
+    forecast.expectedMarginHome,
+    marginDirection > 0,
+  );
+  const summary = summarizePmf(pmf);
+  return {
+    forecast: {
+      ...forecast,
+      ...summary,
+      pmf,
+      directionalAlignment: {
+        release: CFB_PMF_WINNER_COHERENCE_RELEASE,
+        target: marginDirection > 0 ? "home" : "away",
+        symmetricPoints: Math.abs(summary.expectedMarginHome - forecast.expectedMarginHome) / 2,
+        reason: "mean_probability_direction_cross",
+      },
+    },
+    applied: true,
+    reason: "near_tie_mean_probability_direction_cross",
+  };
+}
+
 export function evaluateCfbFinalWinnerCoordinator(
   features: Record<string, NullableNumber>,
   readerMarginHome: number,
+  incumbentHomeWinProbability?: number,
 ): CfbFinalWinnerCoordinatorEvaluation {
-  const baselineHomeWinProbability = sigmoid(readerMarginHome / artifact.policy.probabilityMarginScale);
+  const baselineHomeWinProbability = incumbentHomeWinProbability ??
+    sigmoid(readerMarginHome / artifact.policy.probabilityMarginScale);
   const learnedHomeWinProbability = predictLogistic(artifact.model, {
     ...features,
     reader_margin: readerMarginHome,

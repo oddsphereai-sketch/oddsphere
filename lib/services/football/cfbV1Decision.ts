@@ -16,22 +16,34 @@ export const CFB_V1_BASE_REPRESENTATIVE_SCORE_RELEASE =
 const CFB_V1_BASE_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_09_04_r9_evidence_identity_continuity" as const;
 export const CFB_V1_SCORE_ARTIFACT_RELEASE =
-  "cfb_v1_joint_score_runtime_2026_10_15_r26_full_product_coordinator_compatibility" as const;
+  "cfb_v1_joint_score_runtime_2026_10_27_r27_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_MODEL_RELEASE =
-  "cfb_v1_professional_score_model_2026_10_15_r25_full_product_coordinator_compatibility" as const;
+  "cfb_v1_professional_score_model_2026_10_27_r26_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_DISTRIBUTION_RELEASE =
-  "cfb_v1_professional_joint_distribution_2026_10_15_r23_full_product_coordinator_compatibility" as const;
+  "cfb_v1_professional_joint_distribution_2026_10_27_r24_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_PROBABILITY_RELEASE =
-  "cfb_v1_professional_joint_probability_2026_10_15_r27_full_product_coordinator_compatibility" as const;
+  "cfb_v1_professional_joint_probability_2026_10_27_r28_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
-  "cfb_v1_professional_reachable_score_2026_10_15_r23_full_product_coordinator_compatibility" as const;
+  "cfb_v1_professional_reachable_score_2026_10_27_r24_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
+  "cfb_v1_exact_price_calibration_2026_10_27_r27_near_tie_pmf_winner_coherence" as const;
+export const CFB_V1_PMF_COHERENCE_PREVIOUS_SCORE_ARTIFACT_RELEASE =
+  "cfb_v1_joint_score_runtime_2026_10_15_r26_full_product_coordinator_compatibility" as const;
+export const CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE =
+  "cfb_v1_professional_score_model_2026_10_15_r25_full_product_coordinator_compatibility" as const;
+export const CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE =
+  "cfb_v1_professional_joint_distribution_2026_10_15_r23_full_product_coordinator_compatibility" as const;
+export const CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE =
+  "cfb_v1_professional_joint_probability_2026_10_15_r27_full_product_coordinator_compatibility" as const;
+export const CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_15_r26_full_product_coordinator_compatibility" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability" as const;
 export const CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_12_r27_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_10_27_r54_near_tie_pmf_winner_coherence" as const;
+export const CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_24_r53_selective_parlay_lean_profile" as const;
 export const CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_15_r52_full_product_coordinator_compatibility" as const;
@@ -70,7 +82,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_10_24_r40_selective_parlay_lean_profile" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_10_27_r41_near_tie_pmf_winner_coherence" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;

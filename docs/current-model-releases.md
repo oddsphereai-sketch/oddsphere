@@ -888,6 +888,26 @@ Last reviewed: 2026-10-26
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 27 near-tie PMF winner-coherence release: future-unlocked CFB forecasts now reconcile
+  the rare case where the authoritative PMF's expected-margin side and winner-probability side
+  disagree inside the existing 0.5-point publication tolerance. The smallest same-PMF margin tilt
+  that makes probability, one-decimal expected score, and representative score agree preserves
+  every total-bucket mass and the total expectation. It cannot create a second reader, reactivate
+  the historically harmful r2 final-winner coordinator, or bypass exact-price economics. The
+  coordinator remains diagnostic-only; its boundary telemetry now compares against the actual
+  incumbent PMF winner probability. In all 174 settled nonsuperseded locks available from the
+  current compatibility family, the invariant occurred once and corrected one Moneyline loss with
+  zero harms. A 100-game same-input live-provider rehearsal changed no Best Angle, Lean, Watchlist,
+  No Play, Held, or actionable counts; Delaware-Western Kentucky changed from Delaware No Play with
+  a WKU-favoring expected score to a coherent WKU No Play, while its Under Lean was unchanged.
+  Runtime/model/distribution/probability/reachable-score/calibration are r27/r26/r24/r28/r24/r27;
+  decision/tuple, candidate/production reader, fixture/outcome, snapshot/reader, tracking, and sole
+  writer are r54/r41, r39/r41, r95/r81, r55/r40, r50, and r139 respectively. Evidence schema r47,
+  member r64, the sole `prediction_pipeline:cfb` lease, and all stored locks are unchanged. The
+  r53/r40 family remains the exact same-schema immutable-lock predecessor. Evidence and rollback:
+  `docs/model-audits/2026-10-27-cfb-pmf-winner-coherence-predeclaration.md` and
+  `docs/model-audits/2026-10-27-cfb-pmf-winner-coherence-result.md`.
+
 - October 26 paid-provider retry cadence: the sole CFB writer advances to
   `cfb_forward_evidence_writer_2026_10_26_r138_paid_provider_retry_cadence`.
   A completed provider cycle with an FCS price gap and zero The Odds API

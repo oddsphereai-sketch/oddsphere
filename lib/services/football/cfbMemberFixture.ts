@@ -90,6 +90,11 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
@@ -119,15 +124,15 @@ import {
 } from "./cfbV1Decision";
 import { isGameInCfbWeeklyWindow, resolveCfbVisibleWindows } from "./cfbWeeklyWindow";
 import { cfbFootballEvidenceStats } from "./footballMemberEvidence";
-import { CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
+import { CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE, CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE } from "./cfbMarketSharpAwareShadow";
 import { cfbTeamIdentity } from "./cfbTeamIdentity";
 import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMarketCoherence";
 import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_24_r94_same_schema_decision_transition" as const;
+  "cfb_v1_member_fixture_2026_10_27_r95_pmf_coherence_transition" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
-  "cfb_market_sharp_public_outcome_contract_2026_10_15_r80_full_product_coordinator_compatibility" as const;
+  "cfb_market_sharp_public_outcome_contract_2026_10_27_r81_near_tie_pmf_winner_coherence" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
   "cfb_member_game_lifecycle_2026_10_14_r3_precutoff_card_lock_recovery" as const;
 export const CFB_CONTEXT_ONLY_QUOTE_CAPTURE_SKEW_MS = 5_000 as const;
@@ -1055,11 +1060,40 @@ export function selectLatestCfbMemberEvidenceRows(
     : null;
   const parlayLeanPrevious = parlayLeanPreviousComplete ?? parlayLeanPreviousBoundary ??
     parlayLeanPreviousLockOverlay;
+  const pmfCoherencePreviousRows = rows.filter((row) =>
+    String(row.payload.decisions.decisionRelease) === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE);
+  const pmfCoherencePreviousComplete = completeRowsForRelease(
+    pmfCoherencePreviousRows,
+    CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    CFB_FORWARD_MEMBER_RELEASE,
+    CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
+  );
+  const pmfCoherencePreviousBoundary = parlayLeanPrevious
+    ? immutableBoundaryTransitionRows(
+        pmfCoherencePreviousRows,
+        now,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MEMBER_RELEASE,
+        CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
+        parlayLeanPrevious,
+      )
+    : null;
+  const pmfCoherencePreviousLockOverlay = parlayLeanPrevious
+    ? immutableLockOverlayRows(
+        pmfCoherencePreviousRows,
+        CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+        CFB_FORWARD_MEMBER_RELEASE,
+        CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
+        parlayLeanPrevious,
+      )
+    : null;
+  const pmfCoherencePrevious = pmfCoherencePreviousComplete ?? pmfCoherencePreviousBoundary ??
+    pmfCoherencePreviousLockOverlay;
   const currentDecisionRows = rows.filter((row) =>
     row.payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE);
   const current = completeRowsForRelease(currentDecisionRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const coordinatorIntegrationPreviousAuthority = parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
+  const coordinatorIntegrationPreviousAuthority = pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -1072,6 +1106,7 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (pmfCoherencePrevious) return pmfCoherencePrevious;
   if (parlayLeanPrevious) return parlayLeanPrevious;
   if (coordinatorIntegrationPrevious) return coordinatorIntegrationPrevious;
   if (finalWinnerPrevious) return finalWinnerPrevious;
@@ -1257,7 +1292,12 @@ function latestValidRowsForRelease(
   const coordinatorIntegrationPrevious = decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE;
   const finalWinnerPrevious = decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE;
   const exactPricePrevious = decisionRelease === CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE;
-  const expectedProductionRelease = coordinatorIntegrationPrevious
+  const pmfCoherencePrevious = decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE;
+  const priorCompatibilityFamily = pmfCoherencePrevious ||
+    decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE;
+  const expectedProductionRelease = priorCompatibilityFamily
+    ? CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE
+    : coordinatorIntegrationPrevious
     ? CFB_MARKET_SHARP_AWARE_COORDINATOR_INTEGRATION_PREVIOUS_PRODUCTION_RELEASE
     : finalWinnerPrevious
       ? CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE
@@ -1267,6 +1307,18 @@ function latestValidRowsForRelease(
   const expectedPolicyRelease = exactPricePrevious
     ? CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE
     : CFB_V1_GRADE_POLICY_RELEASE;
+  const expectedModelRelease = priorCompatibilityFamily
+    ? CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE
+    : CFB_V1_MODEL_RELEASE;
+  const expectedDistributionRelease = priorCompatibilityFamily
+    ? CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE
+    : CFB_V1_DISTRIBUTION_RELEASE;
+  const expectedProbabilityRelease = priorCompatibilityFamily
+    ? CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE
+    : CFB_V1_PROBABILITY_RELEASE;
+  const expectedCalibrationRelease = priorCompatibilityFamily
+    ? CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE
+    : CFB_V1_CALIBRATION_RELEASE;
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {
     if (row.payload.schemaRelease !== schemaRelease || row.payload.memberRelease !== memberRelease) continue;
@@ -1289,13 +1341,13 @@ function latestValidRowsForRelease(
     (schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE && (
       row.payload.authoritativeForecast?.release !== expectedProductionRelease ||
       !row.payload.independentForecast ||
-      row.payload.decisions.modelRelease !== CFB_V1_MODEL_RELEASE ||
+      row.payload.decisions.modelRelease !== expectedModelRelease ||
       row.payload.decisions.policyRelease !== expectedPolicyRelease ||
       row.payload.decisions.evaluatedBets.some((decision) =>
-        decision.modelRelease !== CFB_V1_MODEL_RELEASE ||
-        decision.distributionRelease !== CFB_V1_DISTRIBUTION_RELEASE ||
-        decision.probabilityRelease !== CFB_V1_PROBABILITY_RELEASE ||
-        decision.calibrationRelease !== CFB_V1_CALIBRATION_RELEASE ||
+        decision.modelRelease !== expectedModelRelease ||
+        decision.distributionRelease !== expectedDistributionRelease ||
+        decision.probabilityRelease !== expectedProbabilityRelease ||
+        decision.calibrationRelease !== expectedCalibrationRelease ||
         decision.policyRelease !== expectedPolicyRelease ||
         decision.gradeAdjustment?.release !== expectedProductionRelease
       )
