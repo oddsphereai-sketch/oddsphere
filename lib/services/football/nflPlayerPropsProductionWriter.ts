@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { NflPlayerPropMarket } from "./nflPlayerPropsContract";
 import {
   collectNflPlayerPropsObservations,
   NFL_PLAYER_PROPS_COLLECTION_LIMITS,
@@ -69,7 +70,7 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_26_r60_market_marriage" as const;
+  "nfl_player_props_writer_2026_10_27_r61_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
@@ -259,6 +260,10 @@ export async function runNflPlayerPropsProductionWriter(args: {
   sharpApiKey?: string;
   /** Optional audit telemetry; production uses the qualified release regardless. */
   auditSourceAwareMarketReading?: boolean;
+  /** Optional no-write candidate scope. Production callers omit this. */
+  auditSourceAwareQualifiedMarkets?: NflPlayerPropMarket[];
+  /** Optional no-write candidate scope. Production callers omit this. */
+  auditDiscreteMarketCorrectionMarkets?: NflPlayerPropMarket[];
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsWriterResult> {
   verifyNflPlayerPropsRuntimeParity();
@@ -367,13 +372,27 @@ export async function runNflPlayerPropsProductionWriter(args: {
     context,
     currentSeasonState: currentSeason.state,
   });
-  const incumbentBoard = buildNflPlayerPropsRuntimeBoard({ offers, features, evaluatedAt: args.now });
+  const precedingSourceAwareReferenceOffersAvailable = nflPlayerPropsSourceAwareReferenceOffersAvailable({
+    offers: effectiveReferenceOffers.filter((offer) => offer.market === "receptions"),
+    evaluatedAt: referenceEvaluatedAt,
+  });
+  const incumbentBoard = buildNflPlayerPropsRuntimeBoard({
+    offers,
+    referenceOffers: effectiveReferenceOffers,
+    features,
+    evaluatedAt: args.now,
+    auditSourceAwareMarketReading: precedingSourceAwareReferenceOffersAvailable,
+    auditSourceAwareQualifiedMarkets: ["receptions"],
+    auditIncumbentMarketArbitrationMarkets: ["receiving_yards"],
+  });
   const nextBoard = buildNflPlayerPropsRuntimeBoard({
     offers,
     referenceOffers: effectiveReferenceOffers,
     features,
     evaluatedAt: args.now,
     auditSourceAwareMarketReading: sourceAwareReferenceOffersAvailable,
+    auditSourceAwareQualifiedMarkets: args.auditSourceAwareQualifiedMarkets,
+    auditDiscreteMarketCorrectionMarkets: args.auditDiscreteMarketCorrectionMarkets,
   });
   const referenceResearchMarketEvidence = collection.referenceResearchObservations.length > 0
     ? buildNflPlayerPropsRuntimeMarketEvidence({

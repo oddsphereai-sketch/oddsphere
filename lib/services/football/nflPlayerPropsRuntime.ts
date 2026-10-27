@@ -16,21 +16,21 @@ import { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPro
 export { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_10_26_r16_market_marriage" as const;
+  "nfl_player_props_runtime_2026_10_27_r17_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_26_r34_market_marriage" as const;
+  "nfl_player_props_runtime_2026_10_27_r35_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_26_r37_market_marriage" as const;
+  "nfl_player_props_board_2026_10_27_r38_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_26_r33_market_marriage" as const;
+  "nfl_player_props_decision_2026_10_27_r34_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_10_26_r27_market_marriage" as const;
+  "nfl_player_props_distribution_model_2026_10_27_r28_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_10_26_r29_market_marriage" as const;
+  "nfl_player_props_distribution_calibration_2026_10_27_r30_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
-  "nfl_player_props_market_residual_calibration_2026_10_26_r9_target_excluded_marriage" as const;
+  "nfl_player_props_market_residual_calibration_2026_10_27_r10_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
-  "nfl_player_props_market_coherent_projection_2026_10_26_r3_target_excluded_marriage" as const;
+  "nfl_player_props_market_coherent_projection_2026_10_27_r4_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_TOUCHDOWN_SHARP_REFERENCE_ACTIONABLE = true as const;
 export const NFL_PLAYER_PROPS_QB_PASSING_PROJECTION = {
   release: "nfl_player_props_qb_passing_projection_2026_09_28_r4_joint_latent_workload",
@@ -52,11 +52,11 @@ export const NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS = 6 as const;
 export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
 export const NFL_PLAYER_PROPS_RECEPTIONS_MARKET_FLIP_MINIMUM_EDGE = 0.05 as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_MARKET_READING_RELEASE =
-  "nfl_player_props_market_reading_2026_10_26_r4_market_specific_actionability" as const;
+  "nfl_player_props_market_reading_2026_10_27_r5_receiving_direction_correction" as const;
 export const NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE =
   "nfl_player_props_decision_support_evidence_2026_10_15_r1" as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS = [
-  "receptions",
+  "receptions", "receiving_yards",
 ] as const satisfies readonly NflPlayerPropMarket[];
 
 type TreeNode = {
@@ -850,9 +850,10 @@ export function nflPlayerPropsDiscreteMarketArbitration(args: {
   incumbentFinalOverProbability: number;
 }): number {
   if (args.independentBooks <= 0) return args.rawOverProbability;
-  if (args.propMarket !== "receptions") return args.incumbentFinalOverProbability;
   const directionsDisagree = (args.rawOverProbability >= 0.5) !== (args.marketOverProbability >= 0.5);
   if (!directionsDisagree) return args.incumbentFinalOverProbability;
+  if (args.propMarket === "receiving_yards") return args.marketOverProbability;
+  if (args.propMarket !== "receptions") return args.incumbentFinalOverProbability;
   if (Math.abs(args.marketOverProbability - 0.5) >= NFL_PLAYER_PROPS_RECEPTIONS_MARKET_FLIP_MINIMUM_EDGE) {
     return args.marketOverProbability;
   }
@@ -1326,6 +1327,8 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
   auditIncumbentMarketArbitration?: boolean;
   auditSourceAwareMarketReading?: boolean;
   auditSourceAwareQualifiedMarkets?: NflPlayerPropMarket[];
+  auditDiscreteMarketCorrectionMarkets?: NflPlayerPropMarket[];
+  auditIncumbentMarketArbitrationMarkets?: NflPlayerPropMarket[];
 }): NflPlayerPropsRuntimeBoard {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL props runtime board evaluatedAt is invalid.");
@@ -1334,6 +1337,12 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     args.auditSourceAwareQualifiedMarkets ?? NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS,
   );
   const sourceAwareQualified = (market: NflPlayerPropMarket) => sourceAwareQualifiedMarkets.has(market);
+  const auditDiscreteMarketCorrectionMarkets = new Set<NflPlayerPropMarket>(
+    args.auditDiscreteMarketCorrectionMarkets ?? [],
+  );
+  const auditIncumbentMarketArbitrationMarkets = new Set<NflPlayerPropMarket>(
+    args.auditIncumbentMarketArbitrationMarkets ?? [],
+  );
   const exact = args.offers.filter((offer) => offer.gradeEligibleMarket && offer.exactPriceComplete);
   const staleOutcomeKeys = new Set<string>();
   const unavailableBenchmarkKeys = new Set<string>();
@@ -1557,8 +1566,14 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
               : policy.marketResidualWeight,
           )
         : rawOver;
+    const auditDirectionsDisagree = (rawOver >= 0.5) !== (marketOver >= 0.5);
     const finalOver = passingProjection?.evidence || args.auditIncumbentMarketArbitration === true
+        || auditIncumbentMarketArbitrationMarkets.has(offer.market)
       ? incumbentFinalOver
+      : auditDiscreteMarketCorrectionMarkets.has(offer.market)
+          && forecastIndependentBooks > 0
+          && auditDirectionsDisagree
+        ? marketOver
       : nflPlayerPropsDiscreteMarketArbitration({
           propMarket: offer.market,
           rawOverProbability: rawOver,

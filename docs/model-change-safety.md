@@ -1,5 +1,31 @@
 # Model change safety protocol
 
+## NFL player-props Receiving Yards direction correction r34
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to diagnose and repair the
+pervasive-looking player-prop Under skew without forcing direction quotas or
+accepting the inaccurate live model as the endpoint. The release-pure audit
+rejected a generic balance rule and isolated Receiving Yards as the NFL defect.
+
+For future unlocked Receiving Yards rows only, r34 adds that market to the
+source-aware reference lane. A fresh target-book-excluded, transported,
+source-weighted direction may cross the independent direction; agreement or
+missing evidence preserves the preceding posterior exactly. The independent
+point head remains market-free. Passing, Receptions, rushing, touchdowns,
+prices, lines, cadence, provider ceilings, UI, copy, and the sole NFL writer and
+lease are unchanged.
+
+Across exact canonical-main-line Weeks 6-7 r32 outcomes, direction improves
+from 188-154 to 196-146, with Week 6 improving 95-84 to 102-77 and Week 7
+improving 93-70 to 94-69. The direction mix moves from 86 Overs / 256 Unders to
+132 / 210 without a quota. A Rushing Yards analogue is rejected because its
+later block regresses. The current 14-game no-write rehearsal changes only
+Receiving Yards forecast semantics and expands rather than flattens the board.
+Existing locks retain exact stored precedence. Evidence and rollback:
+`docs/model-audits/2026-10-27-nfl-player-props-receiving-direction-predeclaration.md`
+and
+`docs/model-audits/2026-10-27-nfl-player-props-receiving-direction-result.md`.
+
 ## NBA player-props low-tenure minute routing r9/r10
 
 On 2026-10-26 Daniel Mengel rejected the rebound-family hit rates as an

@@ -260,6 +260,7 @@ async function replayExactCurrentModel(args: {
         evaluatedAt,
         auditSourceAwareMarketReading: true,
         auditSourceAwareQualifiedMarkets: args.qualifiedMarkets,
+        auditDiscreteMarketCorrectionMarkets: args.qualifiedMarkets.filter((market) => market === "receiving_yards"),
       }).decisions;
       const targetOffers = selectReplayTargetOffers(offers);
       for (const offer of targetOffers) {
@@ -577,6 +578,9 @@ function integratedSourceAwareCandidate(
     const residual = nflPlayerPropsResidualProbability(rawOver, marketOver, marketPolicy.weight);
     const candidateFinalOver = over.market === "passing_completions"
       ? incumbentFinalOver
+      : over.market === "receiving_yards"
+          && (rawOver >= 0.5) !== (marketOver >= 0.5)
+        ? marketOver
       : nflPlayerPropsDiscreteMarketArbitration({
           propMarket: over.market,
           rawOverProbability: rawOver,
