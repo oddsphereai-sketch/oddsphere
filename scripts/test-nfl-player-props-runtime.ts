@@ -78,12 +78,12 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_27_r20_passing_completions_direction");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_27_r38_passing_completions_direction");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_27_r41_passing_completions_direction");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_27_r31_passing_completions_direction");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_27_r33_passing_completions_direction");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_27_r37_passing_completions_direction");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_27_r21_passing_yards_direction");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_27_r39_passing_yards_direction");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_27_r42_passing_yards_direction");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_27_r32_passing_yards_direction");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_27_r34_passing_yards_direction");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction");
 assert.equal(expectedRoleArtifact.release,
   "nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
@@ -293,7 +293,7 @@ assert.ok(coherentProjection > 55, "market-calibrated probability repairs an imp
 assert.ok(coherentProjection > 70.5,
   "the single posterior median stays on the Over side of its calibrated probability");
 assert.equal(NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
-  "nfl_player_props_market_coherent_projection_2026_10_27_r7_passing_completions_direction");
+  "nfl_player_props_market_coherent_projection_2026_10_27_r8_passing_yards_direction");
 
 const receiverLeanThresholds = nflPlayerPropsProductionMarketLane("receptions")!.leanThresholds!;
 const unchangedBestAngleThresholds = {
@@ -338,6 +338,22 @@ assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "passing_completions", rawOverProbability: 0.44, marketOverProbability: 0.56,
   independentBooks: 0, incumbentFinalOverProbability: 0.44,
 }), 0.44, "passing completions never manufactures a correction without target-excluded evidence");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "passing_yards", rawOverProbability: 0.44, marketOverProbability: 0.511,
+  independentBooks: 2, incumbentFinalOverProbability: 0.45,
+}), 0.511, "passing yards corrects a disagreement backed by a target-book-excluded one-point market read");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "passing_yards", rawOverProbability: 0.44, marketOverProbability: 0.509,
+  independentBooks: 2, incumbentFinalOverProbability: 0.45,
+}), 0.45, "passing yards ignores a sub-one-point market toss-up rather than manufacturing a flip");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "passing_yards", rawOverProbability: 0.56, marketOverProbability: 0.58,
+  independentBooks: 2, incumbentFinalOverProbability: 0.55,
+}), 0.55, "passing yards preserves incumbent calibration when independent and market directions agree");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "passing_yards", rawOverProbability: 0.44, marketOverProbability: 0.58,
+  independentBooks: 0, incumbentFinalOverProbability: 0.44,
+}), 0.44, "passing yards never corrects without target-book-excluded evidence");
 assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "receiving_yards", rawOverProbability: 0.58, marketOverProbability: 0.43,
   independentBooks: 2, incumbentFinalOverProbability: 0.54,
@@ -726,8 +742,8 @@ const crossLinePassing = buildNflPlayerPropsRuntimeBoard({
   evaluatedAt: "2026-08-25T12:01:00.000Z",
 });
 const targetOver = crossLinePassing.decisions.find((row) => row.sportsbook === "book-a" && row.side === "over");
-assert.equal(targetOver?.grade, "No Play",
-  "cross-line market evidence cannot manufacture a Passing Yards model signal");
+assert.equal(targetOver?.grade, "Watchlist",
+  "qualified cross-line direction may correct the forecast while remaining nonactionable without same-line economics");
 assert.equal(targetOver?.passingMarketEvidence?.source, "target_book_excluded_cross_line_transport");
 assert.equal(targetOver?.modelRelease, NFL_PLAYER_PROPS_MODEL_RELEASE);
 assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEASE);
