@@ -8,6 +8,8 @@ const postgresProof = readFileSync(resolve(process.cwd(),
   "scripts/test-nfl-market-brain-postgres-v46.sh"), "utf8");
 const adversarialFixture = readFileSync(resolve(process.cwd(),
   "scripts/fixtures/nfl-market-brain-v50-decision-envelope-proof.sql"), "utf8");
+const postgresWorkflow = readFileSync(resolve(process.cwd(),
+  ".github/workflows/market-brain-postgres-proof.yml"), "utf8");
 
 assert.match(migration, /NEW\.shadow \? 'case'/,
   "every newly inserted successful shadow must freeze a decision envelope");
@@ -30,6 +32,9 @@ assert.doesNotMatch(migration, /UPDATE public\.nfl_market_brain_/,
   "the migration must not reinterpret or rewrite an existing immutable research record");
 assert.match(postgresProof, /schema-migration-v50-nfl-market-brain-decision-envelopes\.sql/);
 assert.match(postgresProof, /nfl-market-brain-v50-decision-envelope-proof\.sql/);
+assert.match(postgresWorkflow, /schema-migration-v50-nfl-market-brain-decision-envelopes\.sql/,
+  "the pull-request PostgreSQL service proof must wake for the v50 migration");
+assert.match(postgresWorkflow, /nfl-market-brain-v50-decision-envelope-proof\.sql/);
 assert.match(adversarialFixture, /v50 accepted a fully rehashed forged decision envelope/);
 assert.match(adversarialFixture, /WHERE event_id = ids\.event_id\) <> 1/,
   "the real database proof must retain the legitimate input and reject only the forgery");
