@@ -57,8 +57,10 @@ measure instability, and define uncertainty. It is not converted into a false cl
 improvement is possible. When history is insufficient for production authority, the resolver stays in
 shadow/capture mode while forward evidence accumulates.
 
-The exact target-free Margin and Total PMF bytes are now embedded in each available NFL prior with
+The exact target-free Margin and Total PMF bytes are embedded once per unique NFL event/prior with
 event/release/availability identity, marginal hashes, and one content-addressed artifact checksum.
+Later append-only captures retain the means and marginal hashes but reference those immutable bytes
+by checksum. A missing or divergent referenced artifact fails materialization closed.
 The capture contract and sequence materializer independently verify mass, means, timestamps,
 identity, and checksums. The research manifest and evaluator enforce rolling chronology, post-cutoff
 labels, sequence-checksum binding, and release-pure aggregation rather than accepting self-attested
@@ -69,6 +71,28 @@ metadata. A future resolver artifact cannot qualify even for reviewed shadow inf
 - Margin, Total, and flip-probability calibration;
 - evaluation under the actual missing-source regimes; and
 - source ablations that detect dependence on one feed or book.
+
+## Cost and storage envelope
+
+Market Brain construction is deterministic and makes zero provider requests. It consumes only the
+odds, splits, availability, prior, and context already fetched by the sole NFL writer; it creates no
+second timer, writer, lease, browser request, or paid AI call. Provider request counts and the existing
+hourly/T-60 cadence remain visible in the writer's existing `requestBudget`.
+
+The frozen Week 1 PMFs average roughly 15 KiB before database compression. Repeating them on every
+append-only hourly capture would add about 40.8 MiB per 16-game, 168-capture week, or roughly 734 MiB
+over 18 such weeks. Content-addressing reduces that prior component to about 1.38 MiB per week and
+24.9 MiB over the same illustrative season—about a 97% reduction—while preserving exact bytes. The
+automated cost-budget test requires every repeated reference to stay below 1 KiB, at least 95% smaller
+than the full artifact, and the illustrated weekly prior component to remain below 2 MiB. These are
+conservative raw-JSON estimates; actual database compression is not counted as permission to exceed
+the envelope.
+
+Every later sport or prop adapter must ship its own executable budget proof before capture is enabled:
+incremental provider requests per refresh, maximum provider credits per slate/day, bytes per case,
+duplicate-artifact savings, retention projection, and failure behavior at the cap. A candidate resolver
+is ordinary versioned model inference; it must not invoke a paid LLM or other per-pick generative API.
+Research jobs must remain bounded/offline and require an explicit cost preview before any paid data pull.
 
 Production promotion is a separate future model-change decision. It additionally requires
 release-pure outcome comparison, calibration and accuracy by market, every changed prediction and

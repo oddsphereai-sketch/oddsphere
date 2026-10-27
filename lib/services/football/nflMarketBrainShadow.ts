@@ -2,13 +2,16 @@ import {
   MARKET_BRAIN_BLIND_SPOTS,
   bindMarketBrainMarginTotalPrior,
   buildMarketBrainCase,
+  marketBrainPriorArtifactSha256,
   numericFeature,
+  referenceMarketBrainMarginTotalPrior,
   type MarketBrainAvailability,
   type MarketBrainCase,
   type MarketBrainDiscreteDistribution,
   type MarketBrainExpectedInput,
   type MarketBrainMarket,
   type MarketBrainObservation,
+  type MarketBrainPrior,
   type MarketBrainSourceManifest,
   type MarketBrainSourcePrior,
 } from "@/lib/services/marketBrain/marketBrainContract";
@@ -25,7 +28,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r5_exact_prior_artifact" as const;
+  "nfl_market_brain_shadow_2026_10_27_r6_content_addressed_prior" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 192 * 1024;
 
 export type NflMarketBrainShadow = {
@@ -72,13 +75,15 @@ export function buildNflMarketBrainShadow(args: {
     marginDistribution: MarketBrainDiscreteDistribution;
     totalDistribution: MarketBrainDiscreteDistribution;
   } | null;
+  knownPriorArtifactSha256: string[];
   rawPriceResponseManifests: FootballRawPriceResponseManifest[];
   sharpSplitSources: NflSharpApiSplitSource[];
 }): NflMarketBrainShadow {
   const observations: MarketBrainObservation[] = [];
   const expectedInputs: MarketBrainExpectedInput[] = [];
+  const prior = capturedPrior(args);
 
-  addPrior(args, observations, expectedInputs);
+  addPrior(args, prior, observations, expectedInputs);
   addContext(args, observations, expectedInputs);
   const sourceManifests = addRawPrices(args, observations);
   for (const market of ["moneyline", "spread", "total"] as const) {
@@ -129,7 +134,7 @@ export function buildNflMarketBrainShadow(args: {
       homeId: args.game.home.abbreviation,
       startsAt: args.game.scheduledStart,
     },
-    prior: capturedPrior(args),
+    prior,
     evaluatedTargets: Object.fromEntries(
       (["moneyline", "spread", "total"] as const).flatMap((market) => {
         const target = args.capture.markets[market].evaluated;
@@ -168,7 +173,10 @@ function capturedPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
   if (!args.capture.prior.outcome || !args.independentForecast) {
     throw new Error("NFL Market Brain available prior is missing its exact distribution artifact.");
   }
-  return exactPrior(args);
+  const exact = exactPrior(args);
+  return args.knownPriorArtifactSha256.includes(exact.artifact.sha256)
+    ? referenceMarketBrainMarginTotalPrior(exact)
+    : exact;
 }
 
 function exactPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
@@ -274,11 +282,13 @@ function addContext(
 
 function addPrior(
   args: Parameters<typeof buildNflMarketBrainShadow>[0],
+  prior: MarketBrainPrior,
   observations: MarketBrainObservation[],
   expectedInputs: MarketBrainExpectedInput[],
 ) {
-  const observed = args.capture.prior.status === "available" && args.capture.prior.outcome !== null;
-  const id = `prior:${args.capture.prior.release}`;
+  const artifactSha256 = marketBrainPriorArtifactSha256(prior);
+  const observed = artifactSha256 !== null;
+  const id = `prior:${args.capture.prior.release}:${artifactSha256 ?? "unavailable"}`;
   if (observed) observations.push({
     id,
     eventId: args.game.providerGameId,
@@ -288,18 +298,18 @@ function addPrior(
     source: { provider: "oddsphere", feed: args.capture.prior.release, participant: null },
     sourcePrior: "independent_model",
     observedRole: "unknown",
-    observedAt: args.capture.capturedAt,
-    timing: timing(args.capture.capturedAt, args.capture.capturedAt, tapeIngestedAt(args)),
+    observedAt: null,
+    timing: timing(null, null, tapeIngestedAt(args)),
     availability: "observed",
     targetRelation: "not_applicable",
     values: {
-      margin_mean: numericFeature(args.capture.prior.outcome!.pmf.margin.mean),
-      total_mean: numericFeature(args.capture.prior.outcome!.pmf.total.mean),
+      margin_mean: numericFeature(prior.kind === "margin_total_distribution" || prior.kind === "margin_total_distribution_ref" ? prior.marginMean : null),
+      total_mean: numericFeature(prior.kind === "margin_total_distribution" || prior.kind === "margin_total_distribution_ref" ? prior.totalMean : null),
     },
-    categorical: { targetFree: true },
+    categorical: { targetFree: true, artifactSha256, artifactEmbedded: prior.kind === "margin_total_distribution" },
     audit: {
       sourceRelease: args.capture.prior.release,
-      sourceObservationId: `${id}:${args.capture.prior.outcome!.pmf.margin.sha256}:${args.capture.prior.outcome!.pmf.total.sha256}`,
+      sourceObservationId: id,
       notes: [],
     },
   });

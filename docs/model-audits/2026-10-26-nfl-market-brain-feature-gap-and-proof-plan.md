@@ -131,14 +131,14 @@ model prior release that was available then. Produce a variable-length sequence/
 continuous no-vig, hold, number movement, price movement, lead/lag, persistence, reversal, buyback,
 key-number transition, disagreement, and cross-market coherence from that bounded tape.
 
-`nfl_market_brain_sequence_materializer_2026_10_27_r2_exact_prior_bound` implements this
+`nfl_market_brain_sequence_materializer_2026_10_27_r3_content_addressed_prior` implements this
 boundary without a resolver: it refuses mixed events/releases, applies Oddsphere availability time
 before feature construction, masks incomplete/unsupported rows, fails conflicting immutable
 observation identities, pairs sides only when line/time identity agrees, and derives event roles from
 chronology rather than brand. It re-verifies the exact prior artifact rather than trusting stored
 summary fields. Data absence otherwise remains a learned missingness regime.
 
-`nfl_market_brain_research_evaluator_2026_10_27_r1_release_pure` derives its baseline winner
+`nfl_market_brain_research_evaluator_2026_10_27_r2_content_addressed_prior` derives its baseline winner
 probabilities and Margin/Total moments from that exact artifact. It accepts outcomes only after both
 the feature cutoff and game start, requires candidate training to end before the case, binds the
 candidate to the immutable sequence checksum, rejects mixed-release aggregation, and reports Brier,
@@ -228,6 +228,9 @@ Report all games, not only bets:
   and
 - every metric by season/week, source-availability regime, source family, target book, favorite/dog,
   home/away, key-number state, and availability-news regime, subject to minimum-sample disclosure.
+- provider requests/credits, raw and stored bytes per case, content-address hit rate, projected
+  slate/season storage, and research-compute cost. A predictive gain that requires unbounded paid
+  calls, duplicate artifacts, or per-pick generative inference is not eligible.
 
 ### Acceptance
 

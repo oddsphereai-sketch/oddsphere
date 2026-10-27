@@ -174,9 +174,9 @@ const rawPriceResponseManifests = [
   priceManifest("DraftKings", capturedAt, "balldontlie", "current", true),
 ];
 
-const shadow = buildNflMarketBrainShadow({ game, capture, independentForecast, rawPriceResponseManifests, sharpSplitSources: splitSources });
+const shadow = buildNflMarketBrainShadow({ game, capture, independentForecast, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources });
 const unchangedInputs = JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources });
-buildNflMarketBrainShadow({ game, capture, independentForecast, rawPriceResponseManifests, sharpSplitSources: splitSources });
+buildNflMarketBrainShadow({ game, capture, independentForecast, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources });
 assert.equal(JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
 assert.equal(shadow.case.release, MARKET_BRAIN_CONTRACT_RELEASE);
 assert.equal(shadow.case.mode, "shadow_capture");
@@ -194,18 +194,28 @@ assert.equal(shadow.case.prior.kind, "margin_total_distribution");
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.eventId, game.providerGameId);
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.marginDistribution.values.length, 2);
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.sha256.length, 64);
+const priorArtifactSha256 = shadow.case.prior.kind === "margin_total_distribution" ? shadow.case.prior.artifact.sha256 : "";
+const referencedShadow = buildNflMarketBrainShadow({
+  game, capture, independentForecast, knownPriorArtifactSha256: [priorArtifactSha256],
+  rawPriceResponseManifests, sharpSplitSources: splitSources,
+});
+assert.equal(referencedShadow.case.prior.kind, "margin_total_distribution_ref");
+assert.equal(referencedShadow.case.prior.kind === "margin_total_distribution_ref" &&
+  referencedShadow.case.prior.artifactSha256, priorArtifactSha256);
+assert.ok(shadow.bytes - referencedShadow.bytes > 100,
+  "later captures must reference the immutable prior rather than duplicating its PMF bytes");
 const corruptedPrior = structuredClone(shadow.case);
 if (corruptedPrior.prior.kind === "margin_total_distribution") corruptedPrior.prior.artifact.marginDistribution.probabilities[0] = 0.4;
 assert.throws(
   () => buildNflMarketBrainShadow({ game, capture, independentForecast: corruptedPrior.prior.kind === "margin_total_distribution" ? {
     marginDistribution: corruptedPrior.prior.artifact.marginDistribution,
     totalDistribution: corruptedPrior.prior.artifact.totalDistribution,
-  } : null, rawPriceResponseManifests, sharpSplitSources: splitSources }),
+  } : null, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources }),
   /distribution mass|diverged/,
   "a mutated prior PMF must fail closed instead of being reconstructed from its mean",
 );
 assert.throws(
-  () => buildNflMarketBrainShadow({ game, capture, independentForecast: null, rawPriceResponseManifests, sharpSplitSources: splitSources }),
+  () => buildNflMarketBrainShadow({ game, capture, independentForecast: null, knownPriorArtifactSha256: [], rawPriceResponseManifests, sharpSplitSources: splitSources }),
   /missing its exact distribution artifact/,
   "an available prior summary without exact PMF bytes must fail closed",
 );

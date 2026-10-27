@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r5_exact_prior_artifact" as const;
+  "market_brain_contract_2026_10_27_r6_content_addressed_prior" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -41,6 +41,15 @@ export type MarketBrainPrior =
       marginDistributionSha256: string;
       totalDistributionSha256: string;
       artifact: MarketBrainMarginTotalArtifact;
+    }
+  | {
+      kind: "margin_total_distribution_ref";
+      release: string;
+      marginMean: number;
+      totalMean: number;
+      marginDistributionSha256: string;
+      totalDistributionSha256: string;
+      artifactSha256: string;
     }
   | { kind: "score_distribution"; release: string; scoreDistributionSha256: string }
   | { kind: "player_outcome_distribution"; release: string; mean: number; distributionSha256: string }
@@ -181,12 +190,12 @@ export function bindMarketBrainMarginTotalPrior(args: {
     schema: "market_brain_margin_total_artifact_v1" as const,
     eventId: args.eventId,
     release: args.release,
-    availableAt: args.availableAt,
     marginDistribution: cloneDistribution(args.marginDistribution),
     totalDistribution: cloneDistribution(args.totalDistribution),
   };
   const artifact: MarketBrainMarginTotalArtifact = {
     ...artifactWithoutHash,
+    availableAt: args.availableAt,
     sha256: marketBrainSha256(artifactWithoutHash),
   };
   const prior = {
@@ -202,8 +211,36 @@ export function bindMarketBrainMarginTotalPrior(args: {
   return prior;
 }
 
+export function referenceMarketBrainMarginTotalPrior(
+  prior: Extract<MarketBrainPrior, { kind: "margin_total_distribution" }>,
+): Extract<MarketBrainPrior, { kind: "margin_total_distribution_ref" }> {
+  return {
+    kind: "margin_total_distribution_ref",
+    release: prior.release,
+    marginMean: prior.marginMean,
+    totalMean: prior.totalMean,
+    marginDistributionSha256: prior.marginDistributionSha256,
+    totalDistributionSha256: prior.totalDistributionSha256,
+    artifactSha256: prior.artifact.sha256,
+  };
+}
+
+export function marketBrainPriorArtifactSha256(prior: MarketBrainPrior): string | null {
+  return prior.kind === "margin_total_distribution" ? prior.artifact.sha256
+    : prior.kind === "margin_total_distribution_ref" ? prior.artifactSha256 : null;
+}
+
 export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string, evaluatedAt: string): void {
   if (!prior.release.trim()) throw new Error("Market Brain prior release is required.");
+  if (prior.kind === "margin_total_distribution_ref") {
+    if (![prior.marginMean, prior.totalMean].every(Number.isFinite) ||
+      ![prior.marginDistributionSha256, prior.totalDistributionSha256, prior.artifactSha256]
+        .every((value) => /^[a-f0-9]{64}$/.test(value)) ||
+      !Number.isFinite(Date.parse(evaluatedAt))) {
+      throw new Error(`Market Brain prior artifact reference is invalid for ${eventId}.`);
+    }
+    return;
+  }
   if (prior.kind !== "margin_total_distribution") return;
   const artifact = prior.artifact;
   if (artifact.schema !== "market_brain_margin_total_artifact_v1" || artifact.eventId !== eventId ||
@@ -219,7 +256,6 @@ export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string,
     schema: artifact.schema,
     eventId: artifact.eventId,
     release: artifact.release,
-    availableAt: artifact.availableAt,
     marginDistribution: artifact.marginDistribution,
     totalDistribution: artifact.totalDistribution,
   };

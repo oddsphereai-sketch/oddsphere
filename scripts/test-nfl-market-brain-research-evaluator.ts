@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   bindMarketBrainMarginTotalPrior,
   buildMarketBrainCase,
+  referenceMarketBrainMarginTotalPrior,
 } from "../lib/services/marketBrain/marketBrainContract";
 import {
   buildNflMarketBrainResearchManifest,
@@ -41,6 +42,22 @@ function sequence(eventId: string, homeProbability: number) {
 }
 
 const correctionSequence = sequence("correction", 0.3);
+const referenceCase = structuredClone(correctionSequence.marketCase);
+referenceCase.evaluatedAt = "2026-09-10T16:30:00.000Z";
+referenceCase.prior = correctionSequence.marketCase.prior.kind === "margin_total_distribution"
+  ? referenceMarketBrainMarginTotalPrior(correctionSequence.marketCase.prior)
+  : correctionSequence.marketCase.prior;
+const referenceResolved = materializeNflMarketBrainSequence({
+  cases: [correctionSequence.marketCase, referenceCase],
+  cutoffAt: "2026-09-10T16:30:00.000Z",
+});
+assert.equal(referenceResolved.prior.kind, "margin_total_distribution",
+  "content-addressed references must resolve to the exact earlier immutable PMF");
+assert.throws(
+  () => materializeNflMarketBrainSequence({ cases: [referenceCase], cutoffAt: "2026-09-10T16:30:00.000Z" }),
+  /could not resolve/,
+  "a prior reference without its immutable artifact must fail closed",
+);
 const correction = evaluateNflMarketBrainResearchCase({
   sequence: correctionSequence.materialized,
   candidate: {

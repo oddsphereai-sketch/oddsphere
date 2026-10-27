@@ -11,7 +11,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r2_exact_prior_bound" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r3_content_addressed_prior" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -130,6 +130,7 @@ export function materializeNflMarketBrainSequence(args: {
     .sort((a, b) => Date.parse(a.evaluatedAt) - Date.parse(b.evaluatedAt));
   if (eligibleCases.length === 0) throw new Error("No NFL Market Brain case was available by the requested cutoff.");
   const latestCase = eligibleCases.at(-1)!;
+  const latestPrior = resolvePrior(latestCase.prior, eligibleCases, cutoff);
   const targetFamilyByMarket = Object.fromEntries(
     (["moneyline", "spread", "total"] as const).map((market) =>
       [market, latestCase.evaluatedTargets[market]?.family ?? null]),
@@ -137,9 +138,9 @@ export function materializeNflMarketBrainSequence(args: {
 
   const inputObservations = eligibleCases.flatMap((item) => item.observations);
   const deduplicated = deduplicate(inputObservations);
-  const latestPriorAvailable = latestCase.prior.kind !== "unavailable";
+  const latestPriorAvailable = latestPrior.kind !== "unavailable";
   const currentPriorObservations = deduplicated.filter((observation) =>
-    latestPriorAvailable && observation.modality === "model_prior" && observation.audit.sourceRelease === latestCase.prior.release &&
+    latestPriorAvailable && observation.modality === "model_prior" && observation.audit.sourceRelease === latestPrior.release &&
     Date.parse(observation.timing.availableAt) <= cutoff);
   if (currentPriorObservations.length > 1) {
     throw new Error("NFL Market Brain materializer found multiple current prior artifacts for one cutoff.");
@@ -152,7 +153,7 @@ export function materializeNflMarketBrainSequence(args: {
       reasons.push(observation.targetRelation === "evaluated" ? "evaluated_target" : "same_target_family");
     }
     if (observation.modality === "model_prior" &&
-      (!latestPriorAvailable || observation.audit.sourceRelease !== latestCase.prior.release)) {
+      (!latestPriorAvailable || observation.audit.sourceRelease !== latestPrior.release)) {
       reasons.push("superseded_prior");
     }
     if (["unavailable", "identity_mismatch", "stale", "future"].includes(observation.availability)) reasons.push("unavailable");
@@ -182,7 +183,7 @@ export function materializeNflMarketBrainSequence(args: {
     eventId,
     startsAt: latestCase.subject.startsAt,
     cutoffAt: new Date(cutoff).toISOString(),
-    prior: latestCase.prior,
+    prior: latestPrior,
     targetFamilyByMarket,
     observations,
     quotePaths,
@@ -209,6 +210,24 @@ export function materializeNflMarketBrainSequence(args: {
     },
   };
   return { ...withoutChecksum, checksum: sha256(withoutChecksum) };
+}
+
+function resolvePrior(prior: MarketBrainPrior, cases: MarketBrainCase[], cutoff: number): MarketBrainPrior {
+  if (prior.kind !== "margin_total_distribution_ref") return prior;
+  const artifactCase = cases.find((item) => Date.parse(item.evaluatedAt) <= cutoff &&
+    item.prior.kind === "margin_total_distribution" && item.prior.artifact.sha256 === prior.artifactSha256);
+  if (!artifactCase || artifactCase.prior.kind !== "margin_total_distribution") {
+    throw new Error("NFL Market Brain materializer could not resolve the content-addressed prior artifact.");
+  }
+  const artifactPrior = artifactCase.prior;
+  if (artifactPrior.release !== prior.release ||
+    artifactPrior.marginDistributionSha256 !== prior.marginDistributionSha256 ||
+    artifactPrior.totalDistributionSha256 !== prior.totalDistributionSha256 ||
+    Math.abs(artifactPrior.marginMean - prior.marginMean) > 1e-9 ||
+    Math.abs(artifactPrior.totalMean - prior.totalMean) > 1e-9) {
+    throw new Error("NFL Market Brain prior reference diverged from its content-addressed artifact.");
+  }
+  return artifactPrior;
 }
 
 function buildCrossMarket(paths: NflMarketBrainQuotePath[]): NflMarketBrainCrossMarket {

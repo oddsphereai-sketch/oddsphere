@@ -4,6 +4,7 @@ import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
+import { marketBrainPriorArtifactSha256 } from "@/lib/services/marketBrain/marketBrainContract";
 import {
   fetchBalldontlieNflSlateAvailability,
   mergeNflAvailabilityWithPrior,
@@ -124,7 +125,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r77_market_brain_exact_prior" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r78_market_brain_content_addressed_prior" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -350,11 +351,21 @@ export async function runNflForwardEvidenceWriter(args: {
   const apiCallsMaximum = slate.providerRequests + rosters.requests + availabilityRequestsMaximum + paidProjectionRequestsMaximum
     + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
+  const knownPriorArtifactsByGame = new Map<string, Set<string>>();
   for (const row of historicalExisting) {
     const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
     books.push(...row.payload.market.comparableCurrentBooks);
     books.push(...nflForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
     captureHistoryBooksByGame.set(row.providerGameId, books);
+    const shadow = row.payload.marketBrainShadow;
+    if (shadow && "case" in shadow) {
+      const sha256 = marketBrainPriorArtifactSha256(shadow.case.prior);
+      if (sha256) {
+        const artifacts = knownPriorArtifactsByGame.get(row.providerGameId) ?? new Set<string>();
+        artifacts.add(sha256);
+        knownPriorArtifactsByGame.set(row.providerGameId, artifacts);
+      }
+    }
   }
 
   const payloadBuildHolds: string[] = [];
@@ -838,9 +849,18 @@ export async function runNflForwardEvidenceWriter(args: {
           game: plan.game,
           capture: contextualEvidenceCapture,
           independentForecast: hasTargetFreePrior ? baseOutcome : null,
+          knownPriorArtifactSha256: [...(knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? [])],
           rawPriceResponseManifests: marketBrainPriceManifests,
           sharpSplitSources,
         });
+        if ("case" in marketBrainShadow) {
+          const sha256 = marketBrainPriorArtifactSha256(marketBrainShadow.case.prior);
+          if (sha256) {
+            const artifacts = knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? new Set<string>();
+            artifacts.add(sha256);
+            knownPriorArtifactsByGame.set(plan.game.providerGameId, artifacts);
+          }
+        }
       } catch (error) {
         // Shadow evidence may report its own failure, but it must never block or alter production output.
         marketBrainShadow = nflMarketBrainCaptureFailure({ eventId: plan.game.providerGameId, capturedAt, error });
