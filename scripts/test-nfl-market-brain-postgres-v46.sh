@@ -15,9 +15,12 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 legacy_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v45-installed.sql"
 expanded_v45_sql="${repo_root}/lib/db/schema-migration-v45-nfl-market-brain-shadow.sql"
 upgrade_sql="${repo_root}/lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql"
+evidence_attempt_sql="${repo_root}/lib/db/schema-migration-v47-market-brain-evidence-attempts.sql"
+capture_plan_sql="${repo_root}/lib/db/schema-migration-v48-market-brain-capture-plans.sql"
 lifecycle_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v46-lifecycle-proof.sql"
 lifecycle_prelude="$(mktemp)"
-trap 'rm -f "${lifecycle_prelude}"' EXIT
+capture_plan_prelude="$(mktemp)"
+trap 'rm -f "${lifecycle_prelude}" "${capture_plan_prelude}"' EXIT
 
 psql_run() {
   psql "${database_url}" -X -v ON_ERROR_STOP=1 "$@"
@@ -37,7 +40,7 @@ BEGIN
       FROM pg_class relation
       JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
      WHERE namespace.nspname = 'public'
-       AND relation.relname LIKE 'nfl_market_brain_%'
+       AND (relation.relname LIKE 'nfl_market_brain_%' OR relation.relname LIKE 'market_brain_%')
   ) THEN
     RAISE EXCEPTION 'PostgreSQL proof requires a clean database with no public.nfl_market_brain_* relations';
   END IF;
@@ -337,4 +340,11 @@ SELECT CASE
 END;
 SQL
 
-echo "NFL Market Brain PostgreSQL v45 -> v46 upgrade, refusal, idempotence, catalog, and hash proof passed."
+psql_run -f "${evidence_attempt_sql}"
+psql_run -f "${evidence_attempt_sql}"
+psql_run -f "${capture_plan_sql}"
+psql_run -f "${capture_plan_sql}"
+npx tsx "${repo_root}/scripts/build-market-brain-v48-lifecycle-proof.ts" >"${capture_plan_prelude}"
+psql_run -f "${capture_plan_prelude}"
+
+echo "Market Brain PostgreSQL v45 -> v48 upgrade, refusal, idempotence, lifecycle, catalog, and hash proof passed."
