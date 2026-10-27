@@ -55,6 +55,7 @@ import {
   nflPlayerPropsExpectedValue,
   nflPlayerPropsExpectedStarterPassingProjection,
   nflPlayerPropsDiscreteMarketArbitration,
+  gradeNflPlayerPropsCrossMarketCandidate,
   gradeNflPlayerPropsTouchdownCandidate,
   nflPlayerPropsMarketImpliedCenter,
   nflPlayerPropsCoherentPosteriorDistribution,
@@ -77,12 +78,12 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_15_r15_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_15_r33_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_15_r36_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_15_r26_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_15_r28_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_15_r32_independent_rushing_yards");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_26_r16_market_marriage");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_26_r34_market_marriage");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_26_r37_market_marriage");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_26_r27_market_marriage");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_26_r29_market_marriage");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_26_r33_market_marriage");
 assert.equal(expectedRoleArtifact.release,
   "nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
@@ -262,10 +263,19 @@ assert.equal(changedReceivingYards, 1,
 const receiving = nflPlayerPropsRuntimeMarketPolicy("receiving_yards");
 assert.deepEqual(receiving, { weight: 0.2, qualified: false }, "historical lane qualification remains truthful under the owner-approved forward exception");
 assert.equal(nflPlayerPropsRuntimeMarketPolicy("receptions")?.qualified, true);
-assert.deepEqual(nflPlayerPropsRuntimeMarketPolicy("passing_yards"), { weight: 1, qualified: true });
+assert.deepEqual(nflPlayerPropsRuntimeMarketPolicy("passing_yards"), { weight: 0.2, qualified: true });
 assert.deepEqual(nflPlayerPropsTouchdownPolicy(), { weight: 0.2, actionable: true, requiresSharpReference: true });
 assert.equal(nflPlayerPropsProductionMarketLane("receiving_yards")?.lean, true);
 assert.equal(nflPlayerPropsProductionMarketLane("receptions")?.lean, true);
+assert.deepEqual(nflPlayerPropsProductionMarketLane("receiving_yards")?.leanThresholds, {
+  minimumEv: 0,
+  minimumProbabilityEdge: 0,
+  minimumParticipationProbability: 0.7,
+  minimumIndependentBooks: 1,
+});
+assert.deepEqual(nflPlayerPropsProductionMarketLane("receptions")?.leanThresholds,
+  nflPlayerPropsProductionMarketLane("receiving_yards")?.leanThresholds,
+  "both independently replayed receiver lanes use the same positive-economics Lean floor");
 assert.deepEqual(nflPlayerPropsProductionMarketLane("passing_yards")?.eligibleSides, ["over", "under"]);
 assert.equal(nflPlayerPropsRawMarketDivergenceImplausible(0.98, 0.50), false, "the frozen p99 boundary itself remains eligible");
 assert.equal(nflPlayerPropsRawMarketDivergenceImplausible(0.981, 0.50), true, "only grossly implausible divergence is rejected");
@@ -283,7 +293,36 @@ assert.ok(coherentProjection > 55, "market-calibrated probability repairs an imp
 assert.ok(coherentProjection > 70.5,
   "the single posterior median stays on the Over side of its calibrated probability");
 assert.equal(NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
-  "nfl_player_props_market_coherent_projection_2026_09_03_r2_single_distribution");
+  "nfl_player_props_market_coherent_projection_2026_10_26_r3_target_excluded_marriage");
+
+const receiverLeanThresholds = nflPlayerPropsProductionMarketLane("receptions")!.leanThresholds!;
+const unchangedBestAngleThresholds = {
+  minimumEv: 0.08,
+  minimumProbabilityEdge: 0.035,
+  minimumParticipationProbability: 0.85,
+  minimumIndependentBooks: 1,
+};
+assert.equal(gradeNflPlayerPropsCrossMarketCandidate({
+  commonHolds: [], independentBooks: 1, divergenceImplausible: false, eligibleSide: true,
+  marketResidualQualified: true, bestAngleEnabled: true, leanEnabled: true, watchlistEnabled: true,
+  expectedValue: 0.001, probabilityEdge: 0.001, participationProbability: 0.7,
+  movement: "neutral", leanThresholds: receiverLeanThresholds,
+  bestAngleThresholds: unchangedBestAngleThresholds,
+}), "Lean", "positive exact-price receiver economics may promote a tested Watchlist to Lean");
+assert.equal(gradeNflPlayerPropsCrossMarketCandidate({
+  commonHolds: [], independentBooks: 1, divergenceImplausible: false, eligibleSide: true,
+  marketResidualQualified: true, bestAngleEnabled: true, leanEnabled: true, watchlistEnabled: true,
+  expectedValue: 0.20, probabilityEdge: 0.10, participationProbability: 0.95,
+  movement: "adverse", leanThresholds: receiverLeanThresholds,
+  bestAngleThresholds: unchangedBestAngleThresholds,
+}), "Watchlist", "adverse same-book movement still vetoes an actionable receiver promotion");
+assert.equal(gradeNflPlayerPropsCrossMarketCandidate({
+  commonHolds: [], independentBooks: 1, divergenceImplausible: false, eligibleSide: true,
+  marketResidualQualified: true, bestAngleEnabled: true, leanEnabled: true, watchlistEnabled: true,
+  expectedValue: 0, probabilityEdge: 0, participationProbability: 0.69,
+  movement: "neutral", leanThresholds: receiverLeanThresholds,
+  bestAngleThresholds: unchangedBestAngleThresholds,
+}), "Watchlist", "low-participation receiver rows remain nonactionable");
 
 const residual = nflPlayerPropsResidualProbability(0.7, 0.5, 0.2);
 assert.ok(residual > 0.5 && residual < 0.7);
@@ -537,6 +576,10 @@ const attemptsBoard = buildNflPlayerPropsRuntimeBoard({
 });
 assert.ok(attemptsBoard.decisions.every((row) => row.healthHolds.includes("independent_same_line_confirmation_missing")),
   "transported target-excluded workload evidence repairs the posterior without creating an unvalidated action");
+assert.ok(attemptsBoard.decisions.every((row) => row.finalProbability !== row.rawModelProbability),
+  "target-book-excluded passing evidence can correct the forecast despite a missing exact same-line grade benchmark");
+assert.ok(attemptsBoard.decisions.every((row) => row.grade === "No Play"),
+  "cross-line passing evidence cannot manufacture an actionable exact-price grade");
 assert.ok(attemptsBoard.decisions.every((row) => row.projection !== null
   && (row.projection > row.line) === (row.side === "over" ? row.finalProbability >= 0.5 : row.finalProbability < 0.5)),
 "starter workload projection and probability remain one posterior");
@@ -673,8 +716,8 @@ assert.equal(targetOver?.calibrationRelease, NFL_PLAYER_PROPS_CALIBRATION_RELEAS
 assert.equal(targetOver?.decisionRelease, NFL_PLAYER_PROPS_DECISION_RELEASE);
 assert.equal(crossLinePassing.decisions.filter((row) => ["Lean", "Best Angle"].includes(row.grade)).length, 0,
   "different-line passing evidence does not bypass the same-line action gate");
-assert.ok(crossLinePassing.decisions.every((row) => row.finalProbability === row.rawModelProbability),
-  "the target-excluded QB point head is not anchored to the same market evidence a second time");
+assert.ok(crossLinePassing.decisions.every((row) => row.finalProbability !== row.rawModelProbability),
+  "the calibrated Passing Yards posterior consumes target-book-excluded cross-line evidence exactly once");
 const touchdownOffer: NflPlayerPropsExactOffer = {
   ...baseOffer,
   offerKey: "td-dk",

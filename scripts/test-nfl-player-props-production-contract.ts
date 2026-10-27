@@ -128,10 +128,10 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_15_r45_independent_rushing_yards");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_21_r59_exact_t60_close_recovery");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_26_r46_market_marriage");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_26_r60_market_marriage");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_21_r33_exact_t60_close_recovery");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_26_r34_market_marriage");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 63, "slate/current+opening props/player identity/Sharp pagination and the isolated Pinnacle/NoVig reference lanes are explicitly bounded");
@@ -394,7 +394,7 @@ const precedingTouchdown = {
   market: "anytime_td" as const,
   side: "yes" as const,
   line: 0.5,
-  decisionRelease: "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile",
+  decisionRelease: "nfl_player_props_decision_2026_10_15_r32_independent_rushing_yards",
   modelRelease: "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   calibrationRelease: "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
 };
@@ -402,9 +402,9 @@ const precedingReceptions = {
   ...omittedGame,
   gameId: "game-preceding-receptions",
   market: "receptions" as const,
-  decisionRelease: "nfl_player_props_decision_2026_10_07_r21_market_selective_mean_quintile",
-  modelRelease: "nfl_player_props_distribution_model_2026_10_07_r16_market_selective_mean_quintile",
-  calibrationRelease: "nfl_player_props_distribution_calibration_2026_10_07_r18_market_selective_mean_quintile",
+  decisionRelease: "nfl_player_props_decision_2026_10_15_r32_independent_rushing_yards",
+  modelRelease: "nfl_player_props_distribution_model_2026_10_15_r26_independent_rushing_yards",
+  calibrationRelease: "nfl_player_props_distribution_calibration_2026_10_15_r28_independent_rushing_yards",
 };
 const precedingReleaseSnapshot = reconcileNflPlayerPropsProductionSnapshot({
   season: 2026,

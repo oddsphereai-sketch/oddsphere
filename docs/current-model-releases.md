@@ -2491,6 +2491,28 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 26 market-marriage release: portable artifact / model / calibration / decision / runtime /
+  board are `nfl_player_props_runtime_2026_10_26_r16_market_marriage` /
+  `nfl_player_props_distribution_model_2026_10_26_r27_market_marriage` /
+  `nfl_player_props_distribution_calibration_2026_10_26_r29_market_marriage` /
+  `nfl_player_props_decision_2026_10_26_r33_market_marriage` /
+  `nfl_player_props_runtime_2026_10_26_r34_market_marriage` /
+  `nfl_player_props_board_2026_10_26_r37_market_marriage`. Member / lifecycle / sole writer /
+  tracking are `nfl_player_props_member_2026_10_26_r46_market_marriage` /
+  `nfl_player_props_member_lifecycle_2026_10_26_r28_market_marriage` /
+  `nfl_player_props_writer_2026_10_26_r60_market_marriage` /
+  `nfl_player_props_tracking_2026_10_26_r34_market_marriage`. The independent point heads remain
+  unchanged. Target-book-excluded nearby-line passing evidence may correct the passing posterior,
+  while the existing exact confirmation remains mandatory for actionability. Passing Yards uses
+  the replay-qualified 0.2 independent-residual coefficient. Receptions and Receiving Yards may
+  promote a positive-EV, positive-edge, 70%-participation, non-adverse Watchlist to Lean; Best Angle
+  thresholds are unchanged. Across exact Weeks 5-7 locks, Passing Yards direction improves
+  31-27 to 34-24 with MAE 56.9 to 49.6 and Brier 0.284 to 0.253. Paired receiver promotions are
+  25-11, and the affected-market action board expands from 18 to 51 rather than flattening. No
+  writer, lease, cadence, provider-call, copy, layout, or public tracking-page change is included.
+  Existing locked rows retain exact stored precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-26-nfl-player-props-market-marriage-predeclaration.md` and
+  `docs/model-audits/2026-10-26-nfl-player-props-market-marriage-result.md`.
 - October 20 observed scheduler-jitter repair: the operational cadence advances
   to `nfl_player_props_cadence_2026_10_20_r3_observed_scheduler_jitter`.
   Post-deploy production verification found the `13:21:09.467Z` heartbeat

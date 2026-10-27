@@ -31,11 +31,6 @@ import { readNflPlayerPropsCurrentSeasonState } from "../../lib/services/footbal
 
 loadEnvConfig(process.cwd());
 
-const MARKET_BY_CODE: Record<string, NflPlayerPropMarket> = {
-  td: "anytime_td", pa: "passing_attempts", pc: "passing_completions", py: "passing_yards",
-  ry: "receiving_yards", rc: "receptions", ra: "rushing_attempts", ru: "rushing_yards",
-};
-
 type FrozenDecision = {
   gameId: string; providerPlayerId: string | null; playerName: string; team: string; opponent: string;
   scheduledStart: string; market: NflPlayerPropMarket; line: number; side: "over" | "under" | "yes";
@@ -110,7 +105,7 @@ async function main(): Promise<void> {
   const offers = exactOffers(frozen.memberDecisions, capture)
     .filter((offer) => eligible.has(offer.canonicalGameId));
   const gameIds = [...new Set(offers.map((offer) => offer.canonicalGameId))];
-  const build = (auditPrecedingRushingYardsOnly: boolean) => gameIds.flatMap((gameId) => {
+  const build = (auditPrecedingMarketMarriage: boolean) => gameIds.flatMap((gameId) => {
     const gameOffers = offers.filter((offer) => offer.canonicalGameId === gameId);
     return buildNflPlayerPropsRuntimeBoard({
       offers: gameOffers,
@@ -118,7 +113,7 @@ async function main(): Promise<void> {
       evaluatedAt: frozen.board.evaluatedAt,
       captureMarketEvidence: false,
       auditIncumbentMarketArbitration: false,
-      auditPrecedingRushingYardsOnly,
+      auditPrecedingMarketMarriage,
     }).decisions;
   }) as CandidateDecision[];
   const control = build(true);
@@ -129,7 +124,7 @@ async function main(): Promise<void> {
   const comparison = compare(control, candidate);
   const storedSnapshotComparison = compare(incumbent, candidate);
   const result = {
-    release: "nfl_player_props_current_snapshot_candidate_replay_2026_10_15_r3_independent_rushing_yards",
+    release: "nfl_player_props_current_snapshot_candidate_replay_2026_10_26_r4_market_marriage",
     readOnly: true, writes: 0, providerCalls: 0,
     sourceSnapshot: input,
     season: frozen.season, week: frozen.week, evaluatedAt: frozen.board.evaluatedAt,

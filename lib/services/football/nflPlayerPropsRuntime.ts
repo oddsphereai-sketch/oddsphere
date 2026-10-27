@@ -16,21 +16,21 @@ import { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPro
 export { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_10_15_r15_independent_rushing_yards" as const;
+  "nfl_player_props_runtime_2026_10_26_r16_market_marriage" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_15_r33_independent_rushing_yards" as const;
+  "nfl_player_props_runtime_2026_10_26_r34_market_marriage" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_15_r36_independent_rushing_yards" as const;
+  "nfl_player_props_board_2026_10_26_r37_market_marriage" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_15_r32_independent_rushing_yards" as const;
+  "nfl_player_props_decision_2026_10_26_r33_market_marriage" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_10_15_r26_independent_rushing_yards" as const;
+  "nfl_player_props_distribution_model_2026_10_26_r27_market_marriage" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_10_15_r28_independent_rushing_yards" as const;
+  "nfl_player_props_distribution_calibration_2026_10_26_r29_market_marriage" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
-  "nfl_player_props_market_residual_calibration_2026_09_03_r8_single_application" as const;
+  "nfl_player_props_market_residual_calibration_2026_10_26_r9_target_excluded_marriage" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
-  "nfl_player_props_market_coherent_projection_2026_09_03_r2_single_distribution" as const;
+  "nfl_player_props_market_coherent_projection_2026_10_26_r3_target_excluded_marriage" as const;
 export const NFL_PLAYER_PROPS_TOUCHDOWN_SHARP_REFERENCE_ACTIONABLE = true as const;
 export const NFL_PLAYER_PROPS_QB_PASSING_PROJECTION = {
   release: "nfl_player_props_qb_passing_projection_2026_09_28_r4_joint_latent_workload",
@@ -52,7 +52,7 @@ export const NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS = 6 as const;
 export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
 export const NFL_PLAYER_PROPS_RECEPTIONS_MARKET_FLIP_MINIMUM_EDGE = 0.05 as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_MARKET_READING_RELEASE =
-  "nfl_player_props_market_reading_2026_10_15_r3_reference_required" as const;
+  "nfl_player_props_market_reading_2026_10_26_r4_market_specific_actionability" as const;
 export const NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE =
   "nfl_player_props_decision_support_evidence_2026_10_15_r1" as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS = [
@@ -257,13 +257,39 @@ const expectedRolePlayerStateUpdates = Object.fromEntries(Object.entries(
 
 const artifact = {
   ...artifactCoreJson,
+  runtimeRelease: NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE,
   modelRelease: NFL_PLAYER_PROPS_MODEL_RELEASE,
   calibrationRelease: NFL_PLAYER_PROPS_CALIBRATION_RELEASE,
   decisionRelease: NFL_PLAYER_PROPS_DECISION_RELEASE,
+  marketResidualRelease: NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE,
+  decision: {
+    ...artifactCoreJson.decision,
+    marketLanes: {
+      ...artifactCoreJson.decision.marketLanes,
+      receiving_yards: {
+        ...artifactCoreJson.decision.marketLanes.receiving_yards,
+        leanThresholds: {
+          minimumEv: 0,
+          minimumProbabilityEdge: 0,
+          minimumParticipationProbability: 0.7,
+          minimumIndependentBooks: 1,
+        },
+      },
+      receptions: {
+        ...artifactCoreJson.decision.marketLanes.receptions,
+        leanThresholds: {
+          minimumEv: 0,
+          minimumProbabilityEdge: 0,
+          minimumParticipationProbability: 0.7,
+          minimumIndependentBooks: 1,
+        },
+      },
+    },
+  },
   markets: {
     passing_attempts: passingAttemptsJson,
     passing_completions: passingCompletionsJson,
-    passing_yards: passingYardsJson,
+    passing_yards: { ...passingYardsJson, marketResidualWeight: 0.2 },
     rushing_attempts: rushingAttemptsJson,
     rushing_yards: rushingYardsJson,
     receptions: receptionsJson,
@@ -349,8 +375,8 @@ const expectedRoleArtifact = expectedRoleArtifactJson as unknown as {
   teamStateUpdates: Record<string, Record<string, number | null>>;
   opponentStateUpdates: Record<string, Record<string, number | null>>;
 };
-if (artifact.runtimeRelease !== NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE) {
-  throw new Error("NFL player props runtime artifact release mismatch.");
+if (String(artifactCoreJson.runtimeRelease) !== "nfl_player_props_runtime_2026_10_15_r15_independent_rushing_yards") {
+  throw new Error("NFL player props source artifact release mismatch.");
 }
 if (jointArtifact.release !== "nfl_player_props_joint_runtime_2026_09_29_r2_full_family_matchup") {
   throw new Error("NFL player props joint runtime artifact release mismatch.");
@@ -1296,6 +1322,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
   auditPrecedingRushingYardsOnly?: boolean;
   auditPrecedingReceptionsOnly?: boolean;
   auditPrecedingReceivingYardsOnly?: boolean;
+  auditPrecedingMarketMarriage?: boolean;
   auditIncumbentMarketArbitration?: boolean;
   auditSourceAwareMarketReading?: boolean;
   auditSourceAwareQualifiedMarkets?: NflPlayerPropMarket[];
@@ -1469,14 +1496,27 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       ? (sourceAwareMarketGroups.get(crossLineMarketKey(offer)) ?? [])
           .filter((candidate) => normalizeBook(candidate.sportsbook) !== normalizeBook(offer.sportsbook))
       : [];
-    const effectiveIndependentBooks = sourceAwareMarketReading
-      ? new Set((passingWorkloadMarket ? independentPassingOffers : independentSourceAwareOffers)
-          .map((candidate) => normalizeBook(candidate.sportsbook))).size
+    // Forecast evidence and exact-price grading have distinct authority. A
+    // nearby main line from another book can inform the target-excluded
+    // passing posterior after transport, but it cannot impersonate an exact
+    // same-line price confirmation and manufacture an actionable wager.
+    const forecastIndependentBooks = args.auditPrecedingMarketMarriage === true
+      ? sourceAwareMarketReading
+        ? new Set((passingWorkloadMarket ? independentPassingOffers : independentSourceAwareOffers)
+            .map((candidate) => normalizeBook(candidate.sportsbook))).size
+        : independentBooks
+      : passingWorkloadMarket
+        ? new Set(independentPassingOffers.map((candidate) => normalizeBook(candidate.sportsbook))).size
+        : sourceAwareMarketReading
+          ? new Set(independentSourceAwareOffers.map((candidate) => normalizeBook(candidate.sportsbook))).size
+          : independentBooks;
+    const gradeIndependentBooks = sourceAwareMarketReading && !passingWorkloadMarket
+      ? forecastIndependentBooks
       : independentBooks;
-    if (effectiveIndependentBooks === 0) {
+    if (gradeIndependentBooks === 0) {
       for (const key of outcomeKeys(offer)) unavailableBenchmarkKeys.add(key);
     }
-    const decisionReasons = effectiveIndependentBooks === 0
+    const decisionReasons = gradeIndependentBooks === 0
       ? [...commonHolds, "independent_same_line_confirmation_missing"]
       : commonHolds;
     const marketOver = passingWorkloadMarket
@@ -1508,8 +1548,14 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
     // Applying the residual head again would grant the same evidence two votes.
     const incumbentFinalOver = passingProjection?.evidence
       ? rawOver
-      : independentBooks > 0
-        ? nflPlayerPropsResidualProbability(rawOver, marketOver, policy.marketResidualWeight)
+      : forecastIndependentBooks > 0
+        ? nflPlayerPropsResidualProbability(
+            rawOver,
+            marketOver,
+            args.auditPrecedingMarketMarriage === true && offer.market === "passing_yards"
+              ? 1
+              : policy.marketResidualWeight,
+          )
         : rawOver;
     const finalOver = passingProjection?.evidence || args.auditIncumbentMarketArbitration === true
       ? incumbentFinalOver
@@ -1517,7 +1563,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
           propMarket: offer.market,
           rawOverProbability: rawOver,
           marketOverProbability: marketOver,
-          independentBooks: effectiveIndependentBooks,
+          independentBooks: forecastIndependentBooks,
           incumbentFinalOverProbability: incumbentFinalOver,
         });
     if (!(finalOver > 0 && finalOver < 1)) {
@@ -1552,13 +1598,15 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
       const movement = nflPlayerPropsSameBookMovement(offer, side);
       const leanThresholds = movement === "support"
         ? artifact.decision.volumeAndYardage.movementSupportedLean
-        : lane?.leanThresholds ?? artifact.decision.volumeAndYardage.lean;
+        : args.auditPrecedingMarketMarriage === true
+          ? artifact.decision.volumeAndYardage.lean
+          : lane?.leanThresholds ?? artifact.decision.volumeAndYardage.lean;
       const bestAngleThresholds = movement === "support"
         ? artifact.decision.volumeAndYardage.movementSupportedBestAngle
         : artifact.decision.volumeAndYardage.bestAngle;
       const baseGrade = gradeNflPlayerPropsCrossMarketCandidate({
         commonHolds,
-        independentBooks: effectiveIndependentBooks,
+        independentBooks: gradeIndependentBooks,
         divergenceImplausible,
         eligibleSide,
         marketResidualQualified: policy.marketResidualQualified || artifact.decision.releaseEvidence.ownerApprovedForwardException === true,
@@ -1617,7 +1665,7 @@ export function buildNflPlayerPropsRuntimeBoard(args: {
           benchmarkProbability: market,
         } : undefined,
         qualifiedReferenceEvidence,
-        effectiveIndependentBooks === 0 && !passingProjection?.evidence ? undefined : posterior.range,
+        forecastIndependentBooks === 0 && !passingProjection?.evidence ? undefined : posterior.range,
       ));
     }
   }
