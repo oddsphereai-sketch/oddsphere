@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
     ])
   ),
   CHECK (completed_at >= planned_at),
+  CHECK (completed_at <= server_created_at),
   CHECK (started_at IS NULL OR (started_at >= window_opens_at AND started_at <= completed_at)),
   CHECK (expected_pages IS NULL OR received_pages <= expected_pages),
   CHECK (raw_rows = parsed_rows + unsupported_rows + malformed_rows),

@@ -141,6 +141,8 @@ assert.throws(() => createMarketBrainEvidenceAttempt(payload({
 const migration = readFileSync(resolve(process.cwd(),
   "lib/db/schema-migration-v47-market-brain-evidence-attempts.sql"), "utf8");
 assert.match(migration, /PRIMARY KEY \(release, attempt_id\)/);
+assert.match(migration, /completed_at <= server_created_at/,
+  "a caller must not predeclare a successful future receipt before provider work occurs");
 assert.match(migration, /product_key text NOT NULL CHECK \(product_key IN/);
 assert.match(migration, /product_key = 'nba_player_props' AND qualification_scope_keys <@ ARRAY/);
 assert.match(migration, /count\(DISTINCT scope_key\)/,
