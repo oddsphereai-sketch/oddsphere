@@ -8,6 +8,20 @@ Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
+- October 27 Owls sharp-book split transition advances shared member presentation to
+  `daily_edge_member_presentation_2026_10_27_r28_owls_sharp_book_splits` and Market Intelligence
+  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`.
+  Playbook remains the Public Consensus authority. Owls becomes the primary source-specific
+  named-book lane, with a fresh complete Circa money-plus-ticket pair preferred. The active path
+  makes no SharpAPI split request; exact-game last-known-good display continuity remains available
+  through short provider gaps. Partial, stale, malformed,
+  wrong-sport, unmatched, and ambiguous rows fail closed. The final verified section is mirrored
+  into the context-only market read for future-unlocked cards while preserving the exact writer
+  pick, probability, price, grade, stake, lock, and tracking tuple. Existing locked snapshots are
+  never overlaid. Same-input promotions, demotions, side changes, probability changes, grade
+  changes, and actionable-count changes are all zero by contract. Evidence and rollback:
+  `docs/model-audits/2026-10-27-owls-sharp-book-split-transition.md`.
+
 - October 26 NFL complete-signal semantic interpretation advances model / calibration / decision /
   grade / member to `nfl_v1_daily_edge_model_2026_10_26_r35_complete_signal_interpretation` /
   `nfl_v1_daily_edge_calibration_2026_10_26_r34_complete_signal_interpretation` /
@@ -268,11 +282,12 @@ Last reviewed: 2026-10-27
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_16_r4_canonical_nba_team_identity`. The existing leased
-  refresh may store exact-date, exact-matchup SharpAPI NBA split rows with their real source book
-  for the same bounded seven-day window used by the member schedule. The league-level endpoint is
+  `market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`. The existing leased
+  refresh may store exact-date, exact-matchup Owls NBA split rows with their real source book for
+  the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
-  date-plus-matchup identity are discarded. Current-day preseason rehearsal remains observable,
+  date-plus-matchup identity are discarded. No active refresh makes a SharpAPI split request;
+  retained SharpAPI rows are historical audit evidence only. Current-day preseason rehearsal remains observable,
   while future preseason games are excluded from the rolling capture.
   DraftKings ticket/handle observations and BetMGM ticket-only observations remain distinct; no
   row is relabeled as consensus and no missing handle is inferred. NBA provider-history calls stay

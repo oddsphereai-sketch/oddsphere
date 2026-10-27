@@ -1,12 +1,13 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
-import { SharpApiClient } from "@/lib/providers/real_api/_sharpApiClient";
+import { fetchOwlsCurrentSplitRows } from "@/lib/providers/owls/owlsCurrentSplits";
 import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
 
+const OWLS_CURRENT_SPLITS_RELEASE = "owls_current_splits_2026_10_27_r1_complete_named_book" as const;
 const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_10_12_r2_cfb_central_team_identity" as const;
 const PREVIOUS_CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_09_20_r1_durable_overlay" as const;
 const CURRENT_SPLITS_TTL_MS = 5 * 60 * 1000;
@@ -20,8 +21,8 @@ type SplitMarket = "moneyline" | "spread" | "total";
 type NamedBook = "circa" | "draftkings" | "consensus" | "betmgm";
 
 type SharpApiCurrentSplitFeed = {
-  source: "sharpapi_current_splits";
-  release: typeof CURRENT_SPLITS_RELEASE | typeof PREVIOUS_CURRENT_SPLITS_RELEASE;
+  source: "owls_current_splits" | "sharpapi_current_splits";
+  release: typeof OWLS_CURRENT_SPLITS_RELEASE | typeof CURRENT_SPLITS_RELEASE | typeof PREVIOUS_CURRENT_SPLITS_RELEASE;
   sport: SupportedSport;
   fetchedAt: string;
   rows: Json[];
@@ -78,9 +79,11 @@ const NFL_ALIASES: Record<string, readonly string[]> = {
 
 function snapshotKey(
   sport: SupportedSport,
-  release: typeof CURRENT_SPLITS_RELEASE | typeof PREVIOUS_CURRENT_SPLITS_RELEASE = CURRENT_SPLITS_RELEASE,
+  release: typeof OWLS_CURRENT_SPLITS_RELEASE | typeof CURRENT_SPLITS_RELEASE | typeof PREVIOUS_CURRENT_SPLITS_RELEASE = OWLS_CURRENT_SPLITS_RELEASE,
 ): string {
-  return `daily-edge::sharpapi-current-splits::${sport}::${release}`;
+  return release === OWLS_CURRENT_SPLITS_RELEASE
+    ? `daily-edge::named-book-current-splits::${sport}::${release}`
+    : `daily-edge::sharpapi-current-splits::${sport}::${release}`;
 }
 
 function supportedSport(sport: Sport): sport is SupportedSport {
@@ -89,8 +92,8 @@ function supportedSport(sport: Sport): sport is SupportedSport {
 
 const readCachedCurrentSplits = unstable_cache(
   async (sport: SupportedSport) => readDurableCurrentSplits(sport),
-  ["sharpapi-current-splits-durable-overlay-v1"],
-  { revalidate: 5 * 60, tags: ["sharpapi-current-splits"] },
+  ["owls-current-splits-durable-overlay-v1"],
+  { revalidate: 5 * 60, tags: ["owls-current-splits"] },
 );
 
 async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApiCurrentSplitFeed | null> {
@@ -100,31 +103,20 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
   const validatedFresh = validateSharpApiCurrentSplitFeed(fresh?.payload, sport);
   if (validatedFresh) return validatedFresh;
   const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(key);
-  const previousStored = stored ?? await readLatestLabResponseSnapshot<Record<string, unknown>>(
-    snapshotKey(sport, PREVIOUS_CURRENT_SPLITS_RELEASE),
-  );
+  const previousStored = stored;
   const validatedStored = validateSharpApiCurrentSplitFeed(previousStored?.payload, sport);
 
-  const apiKey = process.env.SHARPAPI_KEY;
-  if (apiKey) {
+  const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+  if (owlsApiKey) {
     try {
-      const rows = await new SharpApiClient(apiKey).fetchAll<Json>({
-        path: "/splits",
-        query: {
-          league: LEAGUE_BY_SPORT[sport],
-          limit: 200,
-        },
-        maxPages: 2,
-        retryRateLimitInternally: false,
-        signal: AbortSignal.timeout(CURRENT_SPLITS_TIMEOUT_MS),
-      });
-      if (rows.length > 0) {
+      const owls = await fetchOwlsCurrentSplitRows({ sport, apiKey: owlsApiKey, timeoutMs: CURRENT_SPLITS_TIMEOUT_MS });
+      if (owls.rows.length > 0) {
         const current: SharpApiCurrentSplitFeed = {
-          source: "sharpapi_current_splits",
-          release: CURRENT_SPLITS_RELEASE,
+          source: "owls_current_splits",
+          release: OWLS_CURRENT_SPLITS_RELEASE,
           sport,
-          fetchedAt: newestTimestamp(rows) ?? new Date().toISOString(),
-          rows,
+          fetchedAt: owls.fetchedAt,
+          rows: owls.rows,
         };
         const feed = mergeCurrentSplitFeeds(validatedStored, current);
         await upsertLabResponseSnapshot({
@@ -134,13 +126,13 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
           ttlMs: CURRENT_SPLITS_TTL_MS,
           staleMs: CURRENT_SPLITS_STALE_MS,
           sport,
-          source: "sharpapi_current_splits",
-          payloadVersion: CURRENT_SPLITS_RELEASE,
+          source: "owls_current_splits",
+          payloadVersion: OWLS_CURRENT_SPLITS_RELEASE,
         });
         return feed;
       }
     } catch (error) {
-      console.warn(`SharpAPI current split overlay fetch failed for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`Owls current split overlay fetch failed for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -169,8 +161,10 @@ export function validateSharpApiCurrentSplitFeed(
   if (!isRecord(value)) return null;
   const fetchedAt = timestamp(value.fetchedAt);
   if (
-    value.source !== "sharpapi_current_splits" ||
-    (value.release !== CURRENT_SPLITS_RELEASE && value.release !== PREVIOUS_CURRENT_SPLITS_RELEASE) ||
+    !(
+      (value.source === "owls_current_splits" && value.release === OWLS_CURRENT_SPLITS_RELEASE) ||
+      (value.source === "sharpapi_current_splits" && (value.release === CURRENT_SPLITS_RELEASE || value.release === PREVIOUS_CURRENT_SPLITS_RELEASE))
+    ) ||
     value.sport !== sport ||
     fetchedAt === null ||
     !Array.isArray(value.rows) ||
@@ -202,6 +196,7 @@ export function applySharpApiCurrentSplitOverlay(
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
+    if (game.lockState === "locked") continue;
     const candidates = feed.rows.filter((row) => rowMatchesGame(row, game, response.date, feed.sport));
     if (candidates.length === 0) continue;
     matchedGames += 1;
@@ -389,6 +384,12 @@ function mergeCurrentSplitFeeds(
   current: SharpApiCurrentSplitFeed,
 ): SharpApiCurrentSplitFeed {
   if (!previous) return current;
+  // Provider event identities are not interchangeable. Mixing legacy
+  // SharpAPI and Owls rows for one matchup would create two same-book event
+  // candidates and either suppress the current Circa row or risk a false
+  // doubleheader match. Cross-provider continuity is owned by the exact-game
+  // display snapshot; this feed stays single-provider.
+  if (previous.source !== current.source) return current;
   const merged = new Map<string, Json>();
   for (const row of previous.rows) merged.set(splitRowKey(row), row);
   for (const row of current.rows) {
@@ -505,7 +506,12 @@ function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sp
   if (normalize(text(row.league) ?? "") !== normalize(LEAGUE_BY_SPORT[sport])) return false;
   const dates = acceptedDates(game.gameStartAt, slateDate);
   const startAt = timestamp(row.event_start_time);
-  const eventDate = text(row.event_id)?.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
+  const rawEventId = text(row.event_id) ?? "";
+  const dashedEventDate = rawEventId.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
+  const compactEventDate = rawEventId.match(/-(\d{4})(\d{2})(\d{2})(?:$|[-_])/);
+  const eventDate = dashedEventDate ?? (compactEventDate
+    ? `${compactEventDate[1]}-${compactEventDate[2]}-${compactEventDate[3]}`
+    : null);
   if (startAt ? !dates.has(easternDate(startAt)) : !eventDate || !dates.has(eventDate)) return false;
   return teamMatches(sport, row.away_team, game.awayTeam, game.awayTeamDisplayName) &&
     teamMatches(sport, row.home_team, game.homeTeam, game.homeTeamDisplayName);
@@ -550,10 +556,6 @@ function teamMatches(sport: SupportedSport, raw: unknown, abbreviation: string, 
     const expected = normalizeTeam(alias);
     return expected.length > 0 && observed === expected;
   });
-}
-
-function newestTimestamp(rows: Json[]): string | null {
-  return rows.map((row) => timestamp(row.fetched_at)).filter((value): value is string => value !== null).sort().at(-1) ?? null;
 }
 
 function percentage(value: unknown): number | null {

@@ -636,7 +636,7 @@ function resolvePlaybookEvidence(rows: readonly SplitObservationForResolver[]): 
 
 function resolveSharpApiSourceEvidence(rows: readonly SplitObservationForResolver[]): ResolverEvidence["sharpApiSourceSpecific"] {
   const latestBySource = new Map<string, SplitObservationForResolver>();
-  for (const row of rows.filter((r) => r.provider === "sharpapi")) {
+  for (const row of rows.filter((r) => r.provider === "owls" || r.provider === "sharpapi")) {
     const prev = latestBySource.get(row.source_book);
     if (!prev || Date.parse(row.fetched_at) > Date.parse(prev.fetched_at)) {
       latestBySource.set(row.source_book, row);
