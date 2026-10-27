@@ -237,6 +237,28 @@ const currentContextCaptureFollowUp: NflForwardStoredEvidence = {
     },
   } as unknown as NflForwardEvidencePayload,
 };
+const preMarketBrainLineageFollowUp: NflForwardStoredEvidence = {
+  ...currentContextCaptureFollowUp,
+  payload: {
+    ...currentContextCaptureFollowUp.payload,
+    collectorRelease: "nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding",
+  } as unknown as NflForwardEvidencePayload,
+};
+assert.equal(
+  determineNflForwardCollectionNeed({
+    existing: [completeCurrentReleaseOpening, preMarketBrainLineageFollowUp],
+    now: beforeCadence,
+    requiredPublicRelease: {
+      memberRelease: NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+      decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
+      evaluatedBetCount: 3,
+      contextCaptureRelease: NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+      collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
+    },
+  }).reason,
+  "cadence_not_due",
+  "sidecar-only prior lineage must not force an extra production provider cycle from collector r28",
+);
 const staleCollectorReleaseFollowUp: NflForwardStoredEvidence = {
   ...currentContextCaptureFollowUp,
   payload: {
@@ -374,7 +396,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r86_independent_prior_input_lineage/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r87_attested_prior_model_paths/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /!existingLockedRecord[\s\S]*buildNflMarketBrainShadow/,
   "Market Brain capture must never reinterpret a pre-existing locked record");

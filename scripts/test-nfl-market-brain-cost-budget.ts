@@ -30,7 +30,7 @@ const full = bindMarketBrainMarginTotalPrior({
   release: artifact.artifactRelease,
   availableAt: "2026-10-27T00:00:00.000Z",
   inputLineage: fixtureMarketBrainPriorInputLineage({
-    eventId: "storage-budget-fixture", asOf: "2026-10-27T00:00:00.000Z", modelRelease: artifact.artifactRelease,
+    eventId: "storage-budget-fixture", asOf: "2026-10-27T00:00:00.000Z",
   }),
   marginDistribution: game.marginDistribution,
   totalDistribution: game.totalDistribution,

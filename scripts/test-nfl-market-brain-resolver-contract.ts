@@ -17,7 +17,8 @@ import {
   type NflMarketBrainSerializedWeights,
 } from "../lib/services/marketBrain/nflMarketBrainResolverContract";
 import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
-import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
+import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+  "./fixtures/marketBrainPriorInputLineage";
 import {
   NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE,
   readNflMarketBrainResearchInput,
@@ -42,10 +43,10 @@ const startsAt = "2026-10-20T20:00:00.000Z";
 async function main() {
 const prior = bindMarketBrainMarginTotalPrior({
   eventId: "resolver-fixture",
-  release: "independent-prior-fixture-r1",
+  release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
   availableAt: cutoffAt,
   inputLineage: fixtureMarketBrainPriorInputLineage({
-    eventId: "resolver-fixture", asOf: cutoffAt, modelRelease: "independent-prior-fixture-r1",
+    eventId: "resolver-fixture", asOf: cutoffAt,
   }),
   marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
   totalDistribution: { values: [40, 44], probabilities: [0.4, 0.6] },
@@ -80,7 +81,7 @@ async function trainingManifestFor(candidateRelease: string) {
   const developmentEvents = developmentEventsFixture();
   const manifest = buildNflMarketBrainResearchManifest({
     candidateRelease,
-    createdAt: "2026-08-21T01:00:00.000Z",
+    createdAt: "2026-09-12T01:00:00.000Z",
     storageId: `fixture-${candidateRelease}`,
     purgeGapHours: 24,
     partitions: [
@@ -124,7 +125,7 @@ const unpersistedArtifact = bindNflMarketBrainResolverArtifact({
   hyperparameters: { l2: fixtureWeights.selectedL2 },
   trainingManifest,
   trainingResult,
-  createdAt: "2026-08-21T02:15:00.000Z",
+  createdAt: "2026-09-12T02:15:00.000Z",
 });
 const artifactClient = resolverArtifactPersistenceClient(unpersistedArtifact, fixtureWeights);
 const persistedArtifact = await persistNflMarketBrainResolverArtifact({
@@ -173,7 +174,7 @@ assert.throws(
     hyperparameters: { l2: fixtureWeights.selectedL2 },
     trainingManifest: structuredClone(trainingManifest) as typeof trainingManifest,
     trainingResult,
-    createdAt: "2026-08-21T02:15:00.000Z",
+    createdAt: "2026-09-12T02:15:00.000Z",
   }),
   /append-only persistence attestation/,
   "an artifact cannot bind a copied or caller-forged manifest without the runtime database attestation",
@@ -186,7 +187,7 @@ assert.throws(
     hyperparameters: { l2: fixtureWeights.selectedL2 },
     trainingManifest,
     trainingResult: structuredClone(trainingResult),
-    createdAt: "2026-08-21T02:15:00.000Z",
+    createdAt: "2026-09-12T02:15:00.000Z",
   }),
   /deterministic trainer attestation/,
   "caller-constructed coefficients cannot be labeled as learned training output",
@@ -243,7 +244,7 @@ assert.throws(
     hyperparameters: { l2: 0.777 },
     trainingManifest,
     trainingResult,
-    createdAt: "2026-08-21T02:15:00.000Z",
+    createdAt: "2026-09-12T02:15:00.000Z",
   }),
   /weights do not bind|not in the frozen tournament/,
 );
@@ -265,13 +266,13 @@ function developmentEventsFixture() {
   return Array.from({ length: 4 }, (_, index) => ({
     eventId: `development-${index + 1}`,
     foldId: index < 2 ? "development-week-a" : "development-week-b",
-    startsAt: index < 2 ? "2026-08-13T20:00:00.000Z" : "2026-08-20T20:00:00.000Z",
-    cutoffAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
-    captureWindowOpensAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
-    captureWindowClosesAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z",
+    startsAt: index < 2 ? "2026-09-03T20:00:00.000Z" : "2026-09-10T20:00:00.000Z",
+    cutoffAt: index < 2 ? "2026-09-02T16:00:00.000Z" : "2026-09-09T16:00:00.000Z",
+    captureWindowOpensAt: index < 2 ? "2026-09-02T16:00:00.000Z" : "2026-09-09T16:00:00.000Z",
+    captureWindowClosesAt: index < 2 ? "2026-09-02T16:00:00.000Z" : "2026-09-09T16:00:00.000Z",
     expectedCaptureAttempts: [{ runId: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-      stage: "t60" as const, plannedAt: index < 2 ? "2026-08-12T16:00:00.000Z" : "2026-08-19T16:00:00.000Z" }],
-    outcomeOpenedAt: index < 2 ? "2026-08-14T00:00:00.000Z" : "2026-08-21T00:00:00.000Z",
+      stage: "t60" as const, plannedAt: index < 2 ? "2026-09-02T16:00:00.000Z" : "2026-09-09T16:00:00.000Z" }],
+    outcomeOpenedAt: index < 2 ? "2026-09-04T00:00:00.000Z" : "2026-09-11T00:00:00.000Z",
   }));
 }
 
@@ -279,10 +280,10 @@ function developmentExamples() {
   return developmentEventsFixture().map((event, index) => {
     const developmentPrior = bindMarketBrainMarginTotalPrior({
       eventId: event.eventId,
-      release: "resolver-development-prior-r1",
+      release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
       availableAt: event.cutoffAt,
       inputLineage: fixtureMarketBrainPriorInputLineage({
-        eventId: event.eventId, asOf: event.cutoffAt, modelRelease: "resolver-development-prior-r1",
+        eventId: event.eventId, asOf: event.cutoffAt,
       }),
       marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
       totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
@@ -322,7 +323,7 @@ function manifestPersistenceClient(manifest: ReturnType<typeof buildNflMarketBra
       manifest_checksum: manifest.checksum,
       manifest,
       manifest_payload: marketBrainCanonicalJson(payload),
-      created_at: "2026-08-21T02:00:00.000Z",
+      created_at: "2026-09-12T02:00:00.000Z",
     }, error: null }) }; } }; } }; },
   };
 }
@@ -367,7 +368,7 @@ function resolverArtifactPersistenceClient(
     weights_sha256: artifact.weightsSha256,
     artifact: reorderObjectKeys(artifact),
     weights: reorderObjectKeys(weights),
-    created_at: "2026-08-21T02:30:00.000Z",
+    created_at: "2026-09-12T02:30:00.000Z",
   };
   return {
     from() { return {

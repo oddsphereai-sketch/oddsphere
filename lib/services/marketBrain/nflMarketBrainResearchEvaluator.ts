@@ -8,11 +8,13 @@ import {
 import type { MarketBrainDiscreteDistribution } from "./marketBrainContract";
 import {
   NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE,
+  assertNflMarketBrainSequence,
   type NflMarketBrainSequence,
 } from "./nflMarketBrainSequenceMaterializer";
+import { assertNflMarketBrainPriorInputLineageQualified } from "./nflMarketBrainPriorLineage";
 
 export const NFL_MARKET_BRAIN_RESEARCH_EVALUATOR_RELEASE =
-  "nfl_market_brain_research_evaluator_2026_10_27_r16_independent_prior_input_lineage" as const;
+  "nfl_market_brain_research_evaluator_2026_10_27_r17_revalidated_prior_sequence" as const;
 export const NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE =
   "nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows" as const;
 
@@ -183,6 +185,8 @@ export function evaluateNflMarketBrainResearchCase(args: {
   assertNflMarketBrainAttestedResearchManifest(args.researchManifest);
   assertNflMarketBrainAttestedResearchPrediction(candidate);
   assertNflMarketBrainAttestedFinalOutcome(outcome);
+  assertNflMarketBrainSequence(sequence);
+  assertNflMarketBrainPriorInputLineageQualified(sequence.prior);
   if (candidate.trainingManifestChecksum !== args.researchManifest.checksum ||
     candidate.release !== args.researchManifest.candidateRelease) {
     throw new Error("NFL Market Brain prediction is not bound to the persisted research manifest.");

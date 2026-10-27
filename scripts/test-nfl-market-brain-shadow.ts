@@ -35,7 +35,8 @@ import {
   "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
 import { materializeNflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
-import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
+import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+  "./fixtures/marketBrainPriorInputLineage";
 
 const capturedAt = "2026-10-26T20:00:00.000Z";
 const openedAt = "2026-10-26T16:00:00.000Z";
@@ -94,7 +95,7 @@ const capture: NflForwardContextCapture = {
   capturedAt,
   releases: { evidence: "evidence", collector: "collector", member: "member", model: "model", calibration: "calibration", decision: "decision" },
   prior: {
-    status: "available", reason: "week_one_artifact_target_free", release: "target-free-prior",
+    status: "available", reason: "week_one_artifact_target_free", release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
     outcome: {
       pmf: {
         margin: { sha256: distributionHash(independentForecast.marginDistribution), support: 2, mass: 1, mean: 2.5, sd: 0.5 },
@@ -272,7 +273,7 @@ const baseShadowArgs = {
   independentForecastAvailableAt: capturedAt,
   independentForecastProvenance: "fresh" as const,
   independentPriorInputLineage: fixtureMarketBrainPriorInputLineage({
-    eventId: game.providerGameId, asOf: capturedAt, modelRelease: capture.prior.release,
+    eventId: game.providerGameId, asOf: capturedAt,
   }),
   retrievalCompletedAt: capturedAt,
   knownPriorArtifactSha256: [] as string[],

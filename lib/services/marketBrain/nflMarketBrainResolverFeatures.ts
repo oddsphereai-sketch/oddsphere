@@ -5,15 +5,16 @@ import type {
   MarketBrainNumericFeature,
   MarketBrainObservation,
 } from "./marketBrainContract";
-import { assertMarketBrainPriorInputLineageQualified } from "./marketBrainContract";
+import { assertNflMarketBrainPriorInputLineageQualified } from "./nflMarketBrainPriorLineage";
 import {
   NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE,
+  assertNflMarketBrainSequence,
   type NflMarketBrainQuotePath,
   type NflMarketBrainSequence,
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESOLVER_FEATURE_RELEASE =
-  "nfl_market_brain_resolver_features_2026_10_27_r13_independent_prior_input_lineage" as const;
+  "nfl_market_brain_resolver_features_2026_10_27_r14_attested_prior_model_paths" as const;
 
 const nflMarketBrainTrainerInputBrand: unique symbol = Symbol("nflMarketBrainTrainerInput");
 export type NflMarketBrainTrainerInput = Readonly<{
@@ -152,13 +153,14 @@ export type NflMarketBrainResolverFeatures = {
 export function buildNflMarketBrainResolverFeatures(
   sequence: NflMarketBrainSequence,
 ): NflMarketBrainResolverFeatures {
+  assertNflMarketBrainSequence(sequence);
   if (sequence.release !== NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE) {
     throw new Error("NFL Market Brain feature exporter refuses a superseded sequence release.");
   }
   if (sequence.prior.kind !== "margin_total_distribution") {
     throw new Error("NFL Market Brain feature exporter requires an exact independent Margin/Total prior.");
   }
-  assertMarketBrainPriorInputLineageQualified(sequence.prior);
+  assertNflMarketBrainPriorInputLineageQualified(sequence.prior);
   if (sequence.observations.some((row) => row.eligible &&
     (row.exclusionReasons.includes("evaluated_target") || row.exclusionReasons.includes("same_target_family")))) {
     throw new Error("NFL Market Brain feature exporter found target-family evidence marked eligible.");

@@ -1,7 +1,9 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r18_independent_prior_input_lineage" as const;
+  "market_brain_contract_2026_10_27_r19_attested_prior_model_paths" as const;
+export const MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE =
+  "market_brain_prior_model_path_policy_2026_10_27_r1" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -43,6 +45,40 @@ export type MarketBrainPriorInputLineage = {
   qualification: "eligible" | "ineligible";
   sha256: string;
 };
+
+type MarketBrainPriorModelPathPolicy = {
+  release: typeof MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE;
+  qualification: "registered_independent_path" | "unverified_path";
+};
+
+/**
+ * Contract-owned path policy. A caller cannot make an external or unknown path
+ * executable merely by describing its own inputs as market-free.
+ */
+export const MARKET_BRAIN_PRIOR_MODEL_PATH_POLICIES: Readonly<Record<
+  MarketBrainPriorInputLineage["modelPath"], MarketBrainPriorModelPathPolicy
+>> = Object.freeze({
+  nfl_exact_provider: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "registered_independent_path",
+  }),
+  nfl_week_one_static_artifact: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "registered_independent_path",
+  }),
+  external_projection: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "unverified_path",
+  }),
+  fixture: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "unverified_path",
+  }),
+  other: Object.freeze({
+    release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
+    qualification: "unverified_path",
+  }),
+});
 
 export type MarketBrainMarginTotalArtifact = {
   schema: "market_brain_margin_total_artifact_v2";
@@ -317,9 +353,8 @@ export function bindMarketBrainPriorInputLineage(args: Omit<MarketBrainPriorInpu
   const components = [...args.components]
     .map((component) => ({ ...component }))
     .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-  const qualification = args.declaredMarketInputPolicy === "market_inputs_prohibited" &&
-    components.length > 0 && components.every((component) => component.marketRelation === "excluded_by_construction")
-    ? "eligible" as const : "ineligible" as const;
+  const qualification = expectedPriorInputQualification(args.modelPath,
+    args.declaredMarketInputPolicy, components);
   const withoutHash = {
     schema: "market_brain_prior_input_lineage_v1" as const,
     ...args,
@@ -348,9 +383,8 @@ export function assertMarketBrainPriorInputLineage(
     return unique && component.release.trim().length > 0 && /^[a-f0-9]{64}$/.test(component.sha256) &&
       Number.isFinite(componentAt) && componentAt <= asOfMs && componentAt <= availableAtMs;
   });
-  const expectedQualification = lineage.declaredMarketInputPolicy === "market_inputs_prohibited" &&
-    lineage.components.length > 0 && lineage.components.every((component) =>
-      component.marketRelation === "excluded_by_construction") ? "eligible" : "ineligible";
+  const expectedQualification = expectedPriorInputQualification(lineage.modelPath,
+    lineage.declaredMarketInputPolicy, lineage.components);
   const withoutHash = {
     schema: lineage.schema,
     eventId: lineage.eventId,
@@ -379,6 +413,18 @@ export function assertMarketBrainPriorInputLineageQualified(prior: MarketBrainPr
   }
 }
 
+function expectedPriorInputQualification(
+  modelPath: MarketBrainPriorInputLineage["modelPath"],
+  declaredMarketInputPolicy: MarketBrainPriorInputLineage["declaredMarketInputPolicy"],
+  components: MarketBrainPriorInputComponent[],
+): MarketBrainPriorInputLineage["qualification"] {
+  const policy = MARKET_BRAIN_PRIOR_MODEL_PATH_POLICIES[modelPath];
+  return policy?.qualification === "registered_independent_path" &&
+    declaredMarketInputPolicy === "market_inputs_prohibited" && components.length > 0 &&
+    components.every((component) => component.marketRelation === "excluded_by_construction")
+    ? "eligible" : "ineligible";
+}
+
 export function marketBrainPriorArtifactSha256(prior: MarketBrainPrior): string | null {
   return prior.kind === "margin_total_distribution" ? prior.artifact.sha256
     : prior.kind === "margin_total_distribution_ref" ? prior.artifactSha256 : null;
@@ -399,7 +445,7 @@ export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string,
   if (prior.kind !== "margin_total_distribution") return;
   const artifact = prior.artifact;
   if (artifact.schema !== "market_brain_margin_total_artifact_v2" || artifact.eventId !== eventId ||
-    artifact.release !== prior.release) {
+    artifact.release !== prior.release || artifact.inputLineage.modelRelease !== prior.release) {
     throw new Error("Market Brain prior artifact identity diverged from its case.");
   }
   if (!Number.isFinite(Date.parse(artifact.availableAt)) || Date.parse(artifact.availableAt) > Date.parse(evaluatedAt)) {

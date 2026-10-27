@@ -174,13 +174,18 @@ database, predictive, or production proof.
 - **MB-016 / MB-021:** every new Margin/Total prior artifact now binds
   `market_brain_prior_input_lineage_v1`, including exact event/model identity, as-of time, component
   releases, availability times, content hashes, and component-level market relationship. Qualification
-  is derived: only a market-prohibited model path whose every component is explicitly excluded by
-  construction is eligible. The exact-provider path binds the compressed model artifact, exact completed-
+  is derived from a versioned contract-owned path registry: only a registered market-prohibited model
+  path whose every component is explicitly excluded by construction can be eligible. A second NFL gate
+  attests the exact model release, component IDs/categories/releases, and frozen artifact hashes. The
+  exact-provider path binds the compressed model artifact, exact completed-
   game/team-stat/play-state input, pregame context, and frozen distribution-shape artifact. The external
   weekly projection is retained as auditable but ineligible because its upstream methodology is unknown.
-  Feature export rejects unknown or market-containing lineage, and adversarial component mutation fails
-  the artifact checksum/lineage boundary. This prevents a caller-authored `targetFree` label from silently
-  qualifying a prior, but does not close incremental-value ablations or database attestation.
+  Feature export rejects unknown or market-containing lineage, `external_projection`/`other` remain
+  ineligible even when relabeled prohibited/all-excluded, and adversarial component mutation fails the
+  artifact checksum/lineage boundary. The evaluator now recomputes the complete sequence bytes and repeats
+  the NFL lineage attestation before scoring, blocking prior substitution behind a stale checksum. This
+  prevents caller-authored independence from silently qualifying a prior, but does not close incremental-
+  value ablations or database attestation.
 - **MB-003 / MB-004 / MB-038:** split sidecar r2 now observes pagination on the exact incumbent
   `fetchAll` request instead of switching request methods when research is enabled. Incomplete or unproved
   full pages preserve the authoritative split result and fail only the research manifest; the adversarial
@@ -207,13 +212,15 @@ database, predictive, or production proof.
   no-bypass real-PostgreSQL lifecycle proof.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
+  The sidecar-only lineage change retains authoritative collector r28, and a literal r28 stored slate is
+  proven to follow normal cadence with zero research-induced refresh calls.
   Every collector release from r16 through r28 is explicitly grouped under the same expected-score-tenths reader
   semantics, with a golden mixed immutable-T-60 snapshot proving identical projected scores,
   predictions, recommendations, grades, and stakes. Incumbent provider releases remain unchanged;
   each research split/raw-price sidecar has its own exported and persisted release, all registered in
   `docs/current-model-releases.md`.
   All Market Brain contract consumers whose persisted or evaluated content changed with evidence-release
-  binding received new collector, writer, shadow, capture-set, sequence, research-input, evaluator,
+  binding received new writer, shadow, capture-set, sequence, research-input, evaluator,
   resolver, trainer, tournament, and audit release identifiers rather than silently changing semantics
   under an existing identity.
   The candidate branch still truthfully carries new writer/collector identities; repository safety

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   bindMarketBrainMarginTotalPrior,
+  bindMarketBrainPriorInputLineage,
   buildMarketBrainCase,
   referenceMarketBrainMarginTotalPrior,
 } from "../lib/services/marketBrain/marketBrainContract";
@@ -16,7 +17,8 @@ import {
 import { materializeNflMarketBrainSequence, type NflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
-import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
+import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+  "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-09-10T16:00:00.000Z";
 const startsAt = "2026-09-10T20:00:00.000Z";
@@ -122,10 +124,10 @@ async function candidate(args: {
 function sequence(eventId: string, homeProbability: number) {
   const prior = bindMarketBrainMarginTotalPrior({
     eventId,
-    release: "nfl-prior-fixture-r1",
+    release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
     availableAt: cutoffAt,
     inputLineage: fixtureMarketBrainPriorInputLineage({
-      eventId, asOf: cutoffAt, modelRelease: "nfl-prior-fixture-r1",
+      eventId, asOf: cutoffAt,
     }),
     marginDistribution: { values: [-3, 3], probabilities: [1 - homeProbability, homeProbability] },
     totalDistribution: { values: [40, 44], probabilities: [0.5, 0.5] },
@@ -266,6 +268,59 @@ assert.throws(
 const postCutoffCandidate = await candidate({ sequence: correctionSequence.materialized, states: [
   { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
 ] });
+const validCorrectionOutcome = await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24);
+const substitutedPriorSequence = structuredClone(correctionSequence.materialized);
+if (substitutedPriorSequence.prior.kind !== "margin_total_distribution") throw new Error("fixture prior missing");
+substitutedPriorSequence.prior.marginMean += 0.25;
+assert.throws(
+  () => evaluateNflMarketBrainResearchCase({
+    researchManifest, partitionRole: "selection",
+    sequence: substitutedPriorSequence,
+    candidate: postCutoffCandidate,
+    outcome: validCorrectionOutcome,
+  }),
+  /sequence checksum or release is invalid/,
+  "the evaluator must recompute sequence bytes instead of trusting an unchanged stored checksum",
+);
+
+const externalPrior = bindMarketBrainMarginTotalPrior({
+  eventId: "correction",
+  release: "external-evaluator-prior-r1",
+  availableAt: cutoffAt,
+  inputLineage: bindMarketBrainPriorInputLineage({
+    eventId: "correction",
+    modelPath: "external_projection",
+    modelRelease: "external-evaluator-prior-r1",
+    asOf: cutoffAt,
+    declaredMarketInputPolicy: "unknown",
+    components: [{
+      id: "external_evaluator_projection",
+      category: "external_projection",
+      release: "external_evaluator_projection_r1",
+      availableAt: cutoffAt,
+      sha256: marketBrainSha256({ eventId: "correction", external: true }),
+      marketRelation: "unknown",
+    }],
+  }),
+  marginDistribution: { values: [-3, 3], probabilities: [0.7, 0.3] },
+  totalDistribution: { values: [40, 44], probabilities: [0.5, 0.5] },
+});
+const externalCase = structuredClone(correctionSequence.marketCase);
+externalCase.prior = externalPrior;
+const externalSequence = materializeNflMarketBrainSequence({ cases: [externalCase], cutoffAt });
+const externalCandidate = await candidate({ sequence: externalSequence, states: [
+  { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
+] });
+assert.throws(
+  () => evaluateNflMarketBrainResearchCase({
+    researchManifest, partitionRole: "selection",
+    sequence: externalSequence,
+    candidate: externalCandidate,
+    outcome: validCorrectionOutcome,
+  }),
+  /not qualified against market double counting/,
+  "an honestly ineligible external prior must fail at evaluator entry",
+);
 const cutoffOutcome = await verifiedOutcome("correction", cutoffAt, 20, 24);
 assert.throws(
   () => evaluateNflMarketBrainResearchCase({

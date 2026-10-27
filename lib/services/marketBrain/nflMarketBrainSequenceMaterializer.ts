@@ -12,9 +12,10 @@ import {
   type MarketBrainObservedRole,
   type MarketBrainPrior,
 } from "./marketBrainContract";
+import { assertNflMarketBrainPriorInputLineageQualified } from "./nflMarketBrainPriorLineage";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r17_independent_prior_input_lineage" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r18_attested_prior_model_paths" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -304,6 +305,7 @@ export function assertNflMarketBrainSequence(sequence: NflMarketBrainSequence): 
     throw new Error("NFL Market Brain sequence capture chronology is invalid.");
   }
   assertMarketBrainPrior(sequence.prior, sequence.eventId, sequence.cutoffAt);
+  assertNflMarketBrainPriorInputLineageQualified(sequence.prior);
   for (const [market, target] of Object.entries(sequence.evaluationEnvelope)) {
     if (target) assertMarketBrainEvaluatedTarget(market as MarketBrainMarket, target, sequence.cutoffAt);
   }

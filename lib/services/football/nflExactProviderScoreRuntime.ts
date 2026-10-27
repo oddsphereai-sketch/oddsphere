@@ -9,6 +9,8 @@ export const NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE =
   "nfl_exact_provider_score_artifact_2026_10_15_r11" as const;
 export const NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE =
   "nfl_exact_provider_independent_score_2026_10_15_r11" as const;
+export const NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE =
+  "nfl_exact_provider_score_context_2026_10_15_r1" as const;
 export const NFL_EXACT_PROVIDER_MARGIN_RELEASE =
   "nfl_exact_provider_margin_2026_10_15_r7" as const;
 export const NFL_EXACT_PROVIDER_TOTAL_RELEASE =

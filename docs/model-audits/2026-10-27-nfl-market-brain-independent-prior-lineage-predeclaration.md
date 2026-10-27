@@ -18,9 +18,10 @@ Every new Margin/Total prior artifact must carry a canonical, content-addressed 
 
 1. identifies the event, model path, source components, component releases, availability times, and hashes;
 2. declares each component's relationship to market information;
-3. derives qualification rather than accepting a caller-authored `targetFree` flag;
-4. qualifies only when the model path prohibits market inputs and every component is explicitly excluded
-   from market information;
+3. derives qualification from a versioned contract-owned model-path registry rather than accepting a
+   caller-authored `targetFree`, policy, or component-relationship claim;
+4. qualifies only when the registered model path prohibits market inputs, its exact release/component
+   manifest is attested, and every component is explicitly excluded from market information;
 5. marks external/unknown methodology ineligible; and
 6. remains part of the prior artifact hash and therefore of every downstream sequence, feature, research
    input, artifact, prediction, and evaluation identity.
@@ -36,9 +37,13 @@ not qualify it as proof of incremental Market Brain value.
 - a qualified exact-provider/static-artifact lineage survives capture, reference hydration, sequence, and
   feature export with identical lineage hashes;
 - changing a component hash, release, event, availability time, or market relation invalidates the prior;
+- relabeling `external_projection` or `other` as prohibited/all-excluded remains ineligible and fails the
+  complete case-to-sequence-to-feature path;
 - `unknown` or market-containing lineage builds an auditable artifact but cannot enter executable research;
 - reference hydration proves the same lineage hash as the content-addressed artifact;
+- evaluation recomputes the complete sequence checksum and repeats the registered NFL lineage attestation;
 - live/authoritative NFL payload bytes remain unchanged with Market Brain disabled;
+- a stored collector-r28 slate follows normal cadence and does not trigger a research-only provider refresh;
 - all affected semantic releases advance; existing locked member payloads retain exact precedence.
 
 This correction advances MB-016/MB-021 but does not close them. Full no-double-count closure still requires

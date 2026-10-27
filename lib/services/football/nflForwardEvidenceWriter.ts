@@ -120,6 +120,7 @@ import {
   buildNflExactProviderScoreContext,
   NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE,
   NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
+  NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE,
   NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
   type NflExactProviderScoreContext,
 } from "./nflExactProviderScoreRuntime";
@@ -143,7 +144,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r86_independent_prior_input_lineage" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r87_attested_prior_model_paths" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -1905,7 +1906,7 @@ function buildNflIndependentPriorInputLineage(args: {
         {
           id: "nfl_pregame_schedule_venue_context",
           category: "venue_context",
-          release: "nfl_exact_provider_score_context_2026_10_15_r1",
+          release: NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE,
           availableAt: args.availableAt,
           sha256: marketBrainSha256(args.exactProviderScoreContext),
           marketRelation: "excluded_by_construction",

@@ -1,12 +1,29 @@
 import assert from "node:assert/strict";
 
 import {
+  NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE,
+  NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
+  NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE,
+  NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
+} from "../lib/services/football/nflExactProviderScoreRuntime";
+import { NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE } from
+  "../lib/services/football/nflPlayerPropsCurrentSeasonState";
+import {
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
+} from "../lib/services/football/nflV1WeekOneOutcome";
+
+import {
   bindMarketBrainMarginTotalPrior,
+  bindMarketBrainPriorInputLineage,
   buildMarketBrainCase,
   assertMarketBrainCase,
   numericFeature,
   type MarketBrainObservation,
 } from "../lib/services/marketBrain/marketBrainContract";
+import { marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
+import { assertNflMarketBrainPriorInputLineageQualified } from
+  "../lib/services/marketBrain/nflMarketBrainPriorLineage";
 import {
   buildNflMarketBrainResolverFeatures,
   nflMarketBrainTrainerInput,
@@ -15,7 +32,8 @@ import {
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { buildNflMarketBrainCaseAudit } from
   "../lib/services/marketBrain/nflMarketBrainCaseAudit";
-import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
+import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+  "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-10-26T20:00:00.000Z";
 const eventId = "nfl-sequence-fixture";
@@ -136,10 +154,10 @@ const observations = [
 const manifestParticipants = [...new Set(observations.map((observation) => observation.source.participant!))];
 const independentPrior = bindMarketBrainMarginTotalPrior({
   eventId,
-  release: "fixture-independent-prior-r1",
+  release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
   availableAt: "2026-10-26T18:00:00.000Z",
   inputLineage: fixtureMarketBrainPriorInputLineage({
-    eventId, asOf: "2026-10-26T18:00:00.000Z", modelRelease: "fixture-independent-prior-r1",
+    eventId, asOf: "2026-10-26T18:00:00.000Z",
   }),
   marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
   totalDistribution: { values: [41, 45], probabilities: [0.45, 0.55] },
@@ -235,26 +253,120 @@ forgedPriorLineageCase.prior.artifact.inputLineage.components[0]!.sha256 = "f".r
 assert.throws(() => assertMarketBrainCase(forgedPriorLineageCase), /input lineage is invalid/,
   "a prior component cannot be changed without invalidating the content-addressed lineage");
 
-const unqualifiedPrior = bindMarketBrainMarginTotalPrior({
-  eventId: "unqualified-prior-fixture",
-  release: "external-prior-fixture-r1",
+const relabeledExternalPrior = bindMarketBrainMarginTotalPrior({
+  eventId: "relabeled-external-prior-fixture",
+  release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
   availableAt: "2026-10-26T18:00:00.000Z",
-  inputLineage: fixtureMarketBrainPriorInputLineage({
-    eventId: "unqualified-prior-fixture", asOf: "2026-10-26T18:00:00.000Z",
-    modelRelease: "external-prior-fixture-r1", marketPolicy: "unknown",
+  inputLineage: bindMarketBrainPriorInputLineage({
+    eventId: "relabeled-external-prior-fixture",
+    modelPath: "external_projection",
+    modelRelease: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+    asOf: "2026-10-26T18:00:00.000Z",
+    declaredMarketInputPolicy: "market_inputs_prohibited",
+    components: [{
+      id: "external_projection_relabel_attempt",
+      category: "model_artifact",
+      release: "external_projection_relabel_attempt_r1",
+      availableAt: "2026-10-26T18:00:00.000Z",
+      sha256: marketBrainSha256({ external: true, relabeled: true }),
+      marketRelation: "excluded_by_construction",
+    }],
   }),
   marginDistribution: independentPrior.artifact.marginDistribution,
   totalDistribution: independentPrior.artifact.totalDistribution,
 });
-const unqualifiedCase = buildMarketBrainCase({
-  sport: "nfl", eventId: "unqualified-prior-fixture", evaluatedAt: cutoffAt,
+const exactProviderLineage = bindMarketBrainPriorInputLineage({
+  eventId: "exact-provider-attestation-fixture",
+  modelPath: "nfl_exact_provider",
+  modelRelease: NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
+  asOf: "2026-10-26T18:00:00.000Z",
+  declaredMarketInputPolicy: "market_inputs_prohibited",
+  components: [
+    {
+      id: "nfl_discrete_score_shape", category: "model_artifact",
+      release: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+      availableAt: "2026-08-23T00:00:00.000Z", sha256: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
+      marketRelation: "excluded_by_construction",
+    },
+    {
+      id: "nfl_exact_provider_model_artifact", category: "model_artifact",
+      release: NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE,
+      availableAt: "2026-10-15T00:00:00.000Z", sha256: NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
+      marketRelation: "excluded_by_construction",
+    },
+    {
+      id: "nfl_completed_game_state", category: "team_statistics",
+      release: NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
+      availableAt: "2026-10-26T17:00:00.000Z", sha256: marketBrainSha256({ state: "fixture" }),
+      marketRelation: "excluded_by_construction",
+    },
+    {
+      id: "nfl_pregame_schedule_venue_context", category: "venue_context",
+      release: NFL_EXACT_PROVIDER_SCORE_CONTEXT_RELEASE,
+      availableAt: "2026-10-26T18:00:00.000Z", sha256: marketBrainSha256({ context: "fixture" }),
+      marketRelation: "excluded_by_construction",
+    },
+  ],
+});
+const exactProviderPrior = bindMarketBrainMarginTotalPrior({
+  eventId: "exact-provider-attestation-fixture",
+  release: NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
+  availableAt: "2026-10-26T18:00:00.000Z",
+  inputLineage: exactProviderLineage,
+  marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
+  totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
+});
+assert.doesNotThrow(() => assertNflMarketBrainPriorInputLineageQualified(exactProviderPrior),
+  "the exact registered provider/component manifest must remain executable");
+const malformedExactLineage = bindMarketBrainPriorInputLineage({
+  eventId: exactProviderLineage.eventId,
+  modelPath: exactProviderLineage.modelPath,
+  modelRelease: exactProviderLineage.modelRelease,
+  asOf: exactProviderLineage.asOf,
+  declaredMarketInputPolicy: exactProviderLineage.declaredMarketInputPolicy,
+  components: exactProviderLineage.components.map((component) => component.id === "nfl_completed_game_state"
+    ? { ...component, release: "unregistered-state-release" } : component),
+});
+const malformedExactPrior = bindMarketBrainMarginTotalPrior({
+  eventId: "exact-provider-attestation-fixture",
+  release: NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
+  availableAt: "2026-10-26T18:00:00.000Z",
+  inputLineage: malformedExactLineage,
+  marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
+  totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
+});
+assert.throws(() => assertNflMarketBrainPriorInputLineageQualified(malformedExactPrior),
+  /component attestation failed/,
+  "a checksum-consistent exact-provider relabel with an unregistered component release must fail");
+assert.equal(relabeledExternalPrior.artifact.inputLineage.qualification, "ineligible",
+  "an external path cannot self-attest by relabeling its policy and components");
+const relabeledOtherLineage = bindMarketBrainPriorInputLineage({
+  eventId: "relabeled-other-prior-fixture",
+  modelPath: "other",
+  modelRelease: "relabeled-other-prior-r1",
+  asOf: "2026-10-26T18:00:00.000Z",
+  declaredMarketInputPolicy: "market_inputs_prohibited",
+  components: [{
+    id: "other_relabel_attempt",
+    category: "other",
+    release: "other_relabel_attempt_r1",
+    availableAt: "2026-10-26T18:00:00.000Z",
+    sha256: marketBrainSha256({ other: true, relabeled: true }),
+    marketRelation: "excluded_by_construction",
+  }],
+});
+assert.equal(relabeledOtherLineage.qualification, "ineligible",
+  "an unregistered other path cannot self-attest by relabeling its policy and components");
+const relabeledExternalCase = buildMarketBrainCase({
+  sport: "nfl", eventId: "relabeled-external-prior-fixture", evaluatedAt: cutoffAt,
   captureBoundary: "normalized_provider_observation", captureLimitations: ["fixture"],
   subject: { kind: "two_team_game", awayId: "AWY", homeId: "HME", startsAt: "2026-10-27T00:00:00.000Z" },
-  prior: unqualifiedPrior, evaluatedTargets: {}, observations: [], sourceManifests: [], expectedInputs: [], blindSpots: [],
+  prior: relabeledExternalPrior, evaluatedTargets: {}, observations: [], sourceManifests: [], expectedInputs: [], blindSpots: [],
 });
-const unqualifiedSequence = materializeNflMarketBrainSequence({ cases: [unqualifiedCase], cutoffAt });
-assert.throws(() => buildNflMarketBrainResolverFeatures(unqualifiedSequence), /not qualified against market double counting/,
-  "unknown external methodology may be audited but cannot enter executable Market Brain research");
+const relabeledExternalSequence = materializeNflMarketBrainSequence({ cases: [relabeledExternalCase], cutoffAt });
+assert.throws(() => buildNflMarketBrainResolverFeatures(relabeledExternalSequence),
+  /not qualified against market double counting/,
+  "a self-consistently relabeled external projection must fail the full case-to-feature path");
 
 const materialized = materializeNflMarketBrainSequence({ cases: [marketCase], cutoffAt });
 assert.equal(materialized.targetFamilyByMarket.spread, "draftkings");
