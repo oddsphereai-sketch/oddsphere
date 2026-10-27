@@ -9,7 +9,9 @@ import { NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE } from
 import {
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
+  readNflV1WeekOneOutcomeArtifactForecast,
 } from "../football/nflV1WeekOneOutcome";
+import { marketBrainSha256 } from "./marketBrainCanonical";
 import {
   assertMarketBrainPriorInputLineageQualified,
   type MarketBrainPrior,
@@ -18,7 +20,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_PRIOR_ATTESTATION_RELEASE =
-  "nfl_market_brain_prior_attestation_2026_10_27_r1_registered_component_manifests" as const;
+  "nfl_market_brain_prior_attestation_2026_10_27_r2_output_artifact_binding" as const;
 
 type ComponentRequirement = {
   category: MarketBrainPriorInputComponent["category"];
@@ -57,25 +59,39 @@ const EXACT_PROVIDER_COMPONENTS: Readonly<Record<string, ComponentRequirement>> 
  * must match this versioned registry.
  */
 export function assertNflMarketBrainPriorInputLineageQualified(prior: MarketBrainPrior): void {
-  assertMarketBrainPriorInputLineageQualified(prior);
-  if (prior.kind !== "margin_total_distribution") return;
+  if (prior.kind !== "margin_total_distribution") {
+    assertMarketBrainPriorInputLineageQualified(prior);
+    return;
+  }
   const lineage = prior.artifact.inputLineage;
-  if (lineage.modelRelease !== prior.release ||
-    lineage.declaredMarketInputPolicy !== "market_inputs_prohibited") {
+  if (lineage.modelRelease !== prior.release) {
     throw new Error("NFL Market Brain prior lineage is not bound to its registered model release.");
   }
   if (lineage.modelPath === "nfl_exact_provider") {
-    if (prior.release !== NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE) {
+    if (prior.release !== NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE ||
+      lineage.declaredMarketInputPolicy !== "market_inputs_prohibited") {
       throw new Error("NFL Market Brain exact-provider prior release is not registered.");
     }
     assertRegisteredComponents(lineage, EXACT_PROVIDER_COMPONENTS);
-    return;
+    throw new Error(
+      "NFL Market Brain exact-provider prior requires a persisted deterministic replay receipt.",
+    );
   }
+  assertMarketBrainPriorInputLineageQualified(prior);
   if (lineage.modelPath === "nfl_week_one_static_artifact") {
-    if (prior.release !== NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE) {
+    if (prior.release !== NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE ||
+      lineage.declaredMarketInputPolicy !== "market_inputs_prohibited") {
       throw new Error("NFL Market Brain static prior release is not registered.");
     }
     assertRegisteredComponents(lineage, STATIC_COMPONENTS);
+    const frozen = readNflV1WeekOneOutcomeArtifactForecast(prior.artifact.eventId);
+    if (!frozen ||
+      prior.marginDistributionSha256 !== marketBrainSha256(frozen.marginDistribution) ||
+      prior.totalDistributionSha256 !== marketBrainSha256(frozen.totalDistribution) ||
+      marketBrainSha256(prior.artifact.marginDistribution) !== marketBrainSha256(frozen.marginDistribution) ||
+      marketBrainSha256(prior.artifact.totalDistribution) !== marketBrainSha256(frozen.totalDistribution)) {
+      throw new Error("NFL Market Brain static prior does not match its exact frozen event artifact row.");
+    }
     return;
   }
   throw new Error(`NFL Market Brain prior model path is not executable: ${lineage.modelPath}`);

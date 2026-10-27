@@ -18,7 +18,7 @@ import {
 } from "./nflMarketBrainResearchEvaluator";
 
 export const NFL_MARKET_BRAIN_CAPTURE_SET_RELEASE =
-  "nfl_market_brain_capture_set_2026_10_27_r7_attested_prior_model_paths" as const;
+  "nfl_market_brain_capture_set_2026_10_27_r8_output_artifact_attestation" as const;
 
 export type NflMarketBrainCaptureSet = {
   release: typeof NFL_MARKET_BRAIN_CAPTURE_SET_RELEASE;

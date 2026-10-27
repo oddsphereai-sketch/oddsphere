@@ -1,9 +1,9 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r19_attested_prior_model_paths" as const;
+  "market_brain_contract_2026_10_27_r20_output_artifact_attestation" as const;
 export const MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE =
-  "market_brain_prior_model_path_policy_2026_10_27_r1" as const;
+  "market_brain_prior_model_path_policy_2026_10_27_r2_output_receipt_required" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -60,7 +60,7 @@ export const MARKET_BRAIN_PRIOR_MODEL_PATH_POLICIES: Readonly<Record<
 >> = Object.freeze({
   nfl_exact_provider: Object.freeze({
     release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,
-    qualification: "registered_independent_path",
+    qualification: "unverified_path",
   }),
   nfl_week_one_static_artifact: Object.freeze({
     release: MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE,

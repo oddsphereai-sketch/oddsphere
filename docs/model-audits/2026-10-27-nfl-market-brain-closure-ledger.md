@@ -178,11 +178,15 @@ database, predictive, or production proof.
   path whose every component is explicitly excluded by construction can be eligible. A second NFL gate
   attests the exact model release, component IDs/categories/releases, and frozen artifact hashes. The
   exact-provider path binds the compressed model artifact, exact completed-
-  game/team-stat/play-state input, pregame context, and frozen distribution-shape artifact. The external
+  game/team-stat/play-state input, pregame context, and frozen distribution-shape artifact, but remains
+  executable-ineligible until a persisted deterministic replay receipt also binds those dynamic bytes to
+  its output PMFs. The static path verifies exact frozen-artifact event membership and byte-identical
+  Margin/Total distributions. The external
   weekly projection is retained as auditable but ineligible because its upstream methodology is unknown.
   Feature export rejects unknown or market-containing lineage, `external_projection`/`other` remain
-  ineligible even when relabeled prohibited/all-excluded, and adversarial component mutation fails the
-  artifact checksum/lineage boundary. The evaluator now recomputes the complete sequence bytes and repeats
+  ineligible even when relabeled prohibited/all-excluded, arbitrary PMFs cannot masquerade under the
+  registered static path, and adversarial component mutation fails the artifact checksum/lineage boundary.
+  The evaluator now recomputes the complete sequence bytes and repeats
   the NFL lineage attestation before scoring, blocking prior substitution behind a stale checksum. This
   prevents caller-authored independence from silently qualifying a prior, but does not close incremental-
   value ablations or database attestation.

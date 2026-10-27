@@ -266,6 +266,14 @@ export function hasNflV1WeekOneOutcomeForecast(providerGameId: string): boolean 
   return forecasts.has(providerGameId);
 }
 
+/** Exact frozen-artifact row lookup for provenance verification. */
+export function readNflV1WeekOneOutcomeArtifactForecast(
+  providerGameId: string,
+): NflV1WeekOneOutcomeForecast | null {
+  const forecast = forecasts.get(providerGameId);
+  return forecast ? structuredClone(forecast) : null;
+}
+
 /**
  * Re-centers the established discrete football score shapes on the paid,
  * target-free team-score projection. This is the independent weekly score

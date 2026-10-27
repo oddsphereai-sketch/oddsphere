@@ -32,11 +32,15 @@ import {
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { buildNflMarketBrainCaseAudit } from
   "../lib/services/marketBrain/nflMarketBrainCaseAudit";
-import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+import {
+  NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+  fixtureMarketBrainPriorDistributions,
+  fixtureMarketBrainPriorInputLineage,
+} from
   "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-10-26T20:00:00.000Z";
-const eventId = "nfl-sequence-fixture";
+const eventId = "1392216";
 
 function quote(args: {
   participant: string;
@@ -152,6 +156,7 @@ const observations = [
     availability: "future" }),
 ];
 const manifestParticipants = [...new Set(observations.map((observation) => observation.source.participant!))];
+const independentPriorDistributions = fixtureMarketBrainPriorDistributions(eventId);
 const independentPrior = bindMarketBrainMarginTotalPrior({
   eventId,
   release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
@@ -159,8 +164,7 @@ const independentPrior = bindMarketBrainMarginTotalPrior({
   inputLineage: fixtureMarketBrainPriorInputLineage({
     eventId, asOf: "2026-10-26T18:00:00.000Z",
   }),
-  marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
-  totalDistribution: { values: [41, 45], probabilities: [0.45, 0.55] },
+  ...independentPriorDistributions,
 });
 const marketCase = buildMarketBrainCase({
   sport: "nfl",
@@ -316,8 +320,9 @@ const exactProviderPrior = bindMarketBrainMarginTotalPrior({
   marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
   totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
 });
-assert.doesNotThrow(() => assertNflMarketBrainPriorInputLineageQualified(exactProviderPrior),
-  "the exact registered provider/component manifest must remain executable");
+assert.throws(() => assertNflMarketBrainPriorInputLineageQualified(exactProviderPrior),
+  /requires a persisted deterministic replay receipt/,
+  "a structurally registered exact-provider path must stay ineligible until its runtime replay is attested");
 const malformedExactLineage = bindMarketBrainPriorInputLineage({
   eventId: exactProviderLineage.eventId,
   modelPath: exactProviderLineage.modelPath,
@@ -338,6 +343,28 @@ const malformedExactPrior = bindMarketBrainMarginTotalPrior({
 assert.throws(() => assertNflMarketBrainPriorInputLineageQualified(malformedExactPrior),
   /component attestation failed/,
   "a checksum-consistent exact-provider relabel with an unregistered component release must fail");
+const staticMasqueradeEventId = "1392217";
+const staticMasqueradePrior = bindMarketBrainMarginTotalPrior({
+  eventId: staticMasqueradeEventId,
+  release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+  availableAt: "2026-10-26T18:00:00.000Z",
+  inputLineage: fixtureMarketBrainPriorInputLineage({
+    eventId: staticMasqueradeEventId, asOf: "2026-10-26T18:00:00.000Z",
+  }),
+  marginDistribution: { values: [-42, 42], probabilities: [0.15, 0.85] },
+  totalDistribution: { values: [21, 99], probabilities: [0.2, 0.8] },
+});
+const staticMasqueradeCase = buildMarketBrainCase({
+  sport: "nfl", eventId: staticMasqueradeEventId, evaluatedAt: cutoffAt,
+  captureBoundary: "normalized_provider_observation", captureLimitations: ["adversarial_static_masquerade"],
+  subject: { kind: "two_team_game", awayId: "SF", homeId: "LAR", startsAt: "2026-10-27T00:00:00.000Z" },
+  prior: staticMasqueradePrior, evaluatedTargets: {}, observations: [], sourceManifests: [],
+  expectedInputs: [], blindSpots: [],
+});
+const staticMasqueradeSequence = materializeNflMarketBrainSequence({ cases: [staticMasqueradeCase], cutoffAt });
+assert.throws(() => buildNflMarketBrainResolverFeatures(staticMasqueradeSequence),
+  /does not match its exact frozen event artifact row/,
+  "a caller cannot attach arbitrary PMFs to a registered frozen-artifact event");
 assert.equal(relabeledExternalPrior.artifact.inputLineage.qualification, "ineligible",
   "an external path cannot self-attest by relabeling its policy and components");
 const relabeledOtherLineage = bindMarketBrainPriorInputLineage({

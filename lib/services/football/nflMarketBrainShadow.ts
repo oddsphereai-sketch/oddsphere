@@ -38,7 +38,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r22_attested_prior_model_paths" as const;
+  "nfl_market_brain_shadow_2026_10_27_r23_output_artifact_attestation" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -302,8 +302,8 @@ function exactPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
   // The authoritative forward-context summary predates Market Brain and uses
   // its frozen JSON serialization. Verify compatibility at that boundary,
   // while the research artifact itself uses canonical content addresses.
-  if (legacyDistributionSha256(prior.artifact.marginDistribution) !== expected.pmf.margin.sha256 ||
-    legacyDistributionSha256(prior.artifact.totalDistribution) !== expected.pmf.total.sha256 ||
+  if (legacyDistributionSha256(args.independentForecast.marginDistribution) !== expected.pmf.margin.sha256 ||
+    legacyDistributionSha256(args.independentForecast.totalDistribution) !== expected.pmf.total.sha256 ||
     Math.abs(prior.marginMean - expected.pmf.margin.mean) > 1e-9 ||
     Math.abs(prior.totalMean - expected.pmf.total.mean) > 1e-9) {
     throw new Error("NFL Market Brain exact prior diverged from the captured prior summary.");

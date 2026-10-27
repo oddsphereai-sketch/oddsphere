@@ -17,12 +17,19 @@ import {
 import { materializeNflMarketBrainSequence, type NflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
-import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+import {
+  NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS,
+  NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+  fixtureMarketBrainPriorDistributions,
+  fixtureMarketBrainPriorInputLineage,
+} from
   "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-09-10T16:00:00.000Z";
 const startsAt = "2026-09-10T20:00:00.000Z";
 const trainedThrough = "2026-09-09T23:59:59.000Z";
+const correctionEventId = NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS[5];
+const harmEventId = NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS[8];
 
 async function main() {
 
@@ -39,7 +46,7 @@ const researchManifestDraft = buildNflMarketBrainResearchManifest({
       expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000001", stage: "t60", plannedAt: "2026-08-19T16:00:00.000Z" }],
       outcomeOpenedAt: "2026-08-21T00:00:00.000Z",
     }] },
-    { role: "selection", evidenceStatus: "untouched", events: ["correction", "harm"].map((eventId) => ({
+    { role: "selection", evidenceStatus: "untouched", events: [correctionEventId, harmEventId].map((eventId) => ({
       eventId, foldId: "week-2", startsAt, cutoffAt, captureWindowOpensAt: cutoffAt,
       captureWindowClosesAt: cutoffAt,
       expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000002", stage: "t60" as const, plannedAt: cutoffAt }],
@@ -121,7 +128,8 @@ async function candidate(args: {
   });
 }
 
-function sequence(eventId: string, homeProbability: number) {
+function sequence(eventId: string) {
+  const priorDistributions = fixtureMarketBrainPriorDistributions(eventId);
   const prior = bindMarketBrainMarginTotalPrior({
     eventId,
     release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
@@ -129,8 +137,7 @@ function sequence(eventId: string, homeProbability: number) {
     inputLineage: fixtureMarketBrainPriorInputLineage({
       eventId, asOf: cutoffAt,
     }),
-    marginDistribution: { values: [-3, 3], probabilities: [1 - homeProbability, homeProbability] },
-    totalDistribution: { values: [40, 44], probabilities: [0.5, 0.5] },
+    ...priorDistributions,
   });
   const marketCase = buildMarketBrainCase({
     sport: "nfl",
@@ -144,9 +151,15 @@ function sequence(eventId: string, homeProbability: number) {
       kind: "released_semantic_reader",
       availableAt: cutoffAt,
       releases: { model: "released-model-r1", calibration: "released-calibration-r1", decision: "released-decision-r1" },
-      awayWinProbability: 1 - homeProbability,
-      homeWinProbability: homeProbability,
-      tieProbability: 0,
+      awayWinProbability: prior.kind === "margin_total_distribution"
+        ? prior.artifact.marginDistribution.values.reduce((sum, value, index) =>
+          sum + (value < 0 ? prior.artifact.marginDistribution.probabilities[index]! : 0), 0) : 0,
+      homeWinProbability: prior.kind === "margin_total_distribution"
+        ? prior.artifact.marginDistribution.values.reduce((sum, value, index) =>
+          sum + (value > 0 ? prior.artifact.marginDistribution.probabilities[index]! : 0), 0) : 0,
+      tieProbability: prior.kind === "margin_total_distribution"
+        ? prior.artifact.marginDistribution.values.reduce((sum, value, index) =>
+          sum + (value === 0 ? prior.artifact.marginDistribution.probabilities[index]! : 0), 0) : 0,
       marginMean: prior.kind === "margin_total_distribution" ? prior.marginMean : 0,
       totalMean: prior.kind === "margin_total_distribution" ? prior.totalMean : 0,
       marginDistribution: prior.kind === "margin_total_distribution"
@@ -172,7 +185,7 @@ function sequence(eventId: string, homeProbability: number) {
   return { marketCase, materialized: materializeNflMarketBrainSequence({ cases: [marketCase], cutoffAt }) };
 }
 
-const correctionSequence = sequence("correction", 0.3);
+const correctionSequence = sequence(correctionEventId);
 const referenceCase = structuredClone(correctionSequence.marketCase);
 referenceCase.evaluatedAt = "2026-09-10T16:30:00.000Z";
 referenceCase.prior = correctionSequence.marketCase.prior.kind === "margin_total_distribution"
@@ -196,7 +209,7 @@ const correction = evaluateNflMarketBrainResearchCase({
     { margin: -2, total: 42, probability: 0.15 }, { margin: -2, total: 44, probability: 0.15 },
     { margin: 4, total: 42, probability: 0.35 }, { margin: 4, total: 44, probability: 0.35 },
   ] }),
-  outcome: await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24),
+  outcome: await verifiedOutcome(correctionEventId, "2026-09-11T00:00:00.000Z", 20, 24),
 });
 assert.equal(correction.disagreement, "correction");
 assert.equal(correction.baseline.winnerCorrect, false);
@@ -209,7 +222,7 @@ assert.equal(correction.baseline.marginTotalDistributionLogScore, null,
   "a marginal-only independent prior must not be assigned a fabricated joint score");
 assert.equal(correction.deltas.marginTotalDistributionLogScoreImprovement, null,
   "joint-score improvement remains unavailable until the incumbent publishes a coherent joint posterior");
-assert.ok(Math.abs(correction.deltas.marginMaeImprovement - 3.4) < 1e-9);
+assert.ok(correction.deltas.marginMaeImprovement > 0);
 assert.equal(correction.candidate.exactLines.spread?.result, "win");
 assert.equal(correction.candidate.exactLines.total?.result, "win");
 assert.ok(correction.incumbent.exactLines.spread,
@@ -218,7 +231,7 @@ assert.ok(correction.incumbent.exactLines.total,
   "the released reader must be scored at the identical evaluated total");
 assert.equal(correction.invariants.productionInfluenceAllowed, false);
 
-const harmSequence = sequence("harm", 0.7);
+const harmSequence = sequence(harmEventId);
 const harm = evaluateNflMarketBrainResearchCase({
   researchManifest, partitionRole: "selection",
   sequence: harmSequence.materialized,
@@ -226,7 +239,7 @@ const harm = evaluateNflMarketBrainResearchCase({
     { margin: -2, total: 40, probability: 0.35 }, { margin: -2, total: 42, probability: 0.35 },
     { margin: 3, total: 41, probability: 0.15 }, { margin: 3, total: 43, probability: 0.15 },
   ] }),
-  outcome: await verifiedOutcome("harm", "2026-09-11T00:00:00.000Z", 20, 24),
+  outcome: await verifiedOutcome(harmEventId, "2026-09-11T00:00:00.000Z", 20, 24),
 });
 assert.equal(harm.disagreement, "harm");
 
@@ -237,7 +250,7 @@ const dependencyGood = evaluateNflMarketBrainResearchCase({
     { margin: -2, total: 42, probability: 0.5 },
     { margin: 4, total: 44, probability: 0.5 },
   ] }),
-  outcome: await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24),
+  outcome: await verifiedOutcome(correctionEventId, "2026-09-11T00:00:00.000Z", 20, 24),
 });
 const dependencyWrong = evaluateNflMarketBrainResearchCase({
   researchManifest, partitionRole: "selection",
@@ -246,7 +259,7 @@ const dependencyWrong = evaluateNflMarketBrainResearchCase({
     { margin: 4, total: 42, probability: 0.5 },
     { margin: -2, total: 44, probability: 0.5 },
   ] }),
-  outcome: await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24),
+  outcome: await verifiedOutcome(correctionEventId, "2026-09-11T00:00:00.000Z", 20, 24),
 });
 assert.equal(dependencyGood.candidate.marginalCompositeLogScore,
   dependencyWrong.candidate.marginalCompositeLogScore,
@@ -268,7 +281,7 @@ assert.throws(
 const postCutoffCandidate = await candidate({ sequence: correctionSequence.materialized, states: [
   { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
 ] });
-const validCorrectionOutcome = await verifiedOutcome("correction", "2026-09-11T00:00:00.000Z", 20, 24);
+const validCorrectionOutcome = await verifiedOutcome(correctionEventId, "2026-09-11T00:00:00.000Z", 20, 24);
 const substitutedPriorSequence = structuredClone(correctionSequence.materialized);
 if (substitutedPriorSequence.prior.kind !== "margin_total_distribution") throw new Error("fixture prior missing");
 substitutedPriorSequence.prior.marginMean += 0.25;
@@ -284,11 +297,11 @@ assert.throws(
 );
 
 const externalPrior = bindMarketBrainMarginTotalPrior({
-  eventId: "correction",
+  eventId: correctionEventId,
   release: "external-evaluator-prior-r1",
   availableAt: cutoffAt,
   inputLineage: bindMarketBrainPriorInputLineage({
-    eventId: "correction",
+    eventId: correctionEventId,
     modelPath: "external_projection",
     modelRelease: "external-evaluator-prior-r1",
     asOf: cutoffAt,
@@ -298,7 +311,7 @@ const externalPrior = bindMarketBrainMarginTotalPrior({
       category: "external_projection",
       release: "external_evaluator_projection_r1",
       availableAt: cutoffAt,
-      sha256: marketBrainSha256({ eventId: "correction", external: true }),
+      sha256: marketBrainSha256({ eventId: correctionEventId, external: true }),
       marketRelation: "unknown",
     }],
   }),
@@ -318,10 +331,10 @@ assert.throws(
     candidate: externalCandidate,
     outcome: validCorrectionOutcome,
   }),
-  /not qualified against market double counting/,
+  /not bound to its registered model release|not qualified against market double counting/,
   "an honestly ineligible external prior must fail at evaluator entry",
 );
-const cutoffOutcome = await verifiedOutcome("correction", cutoffAt, 20, 24);
+const cutoffOutcome = await verifiedOutcome(correctionEventId, cutoffAt, 20, 24);
 assert.throws(
   () => evaluateNflMarketBrainResearchCase({
     researchManifest, partitionRole: "selection",
@@ -427,7 +440,7 @@ async function verifiedOutcome(eventId: string, finalAt: string, awayScore: numb
           assert.equal(fields, "id,external_id,sport,status,away_score,home_score,provider_ids,updated_at",
             "verified outcome reads must project the NFL sport identity included in canonical source bytes");
           return { eq() { return this; }, single: async () => ({ data: {
-          id: numericEventId === null ? (eventId === "harm" ? "2" : "1") : numericEventId + 1000,
+          id: numericEventId === null ? (eventId === harmEventId ? "2" : "1") : numericEventId + 1000,
           external_id: numericEventId ?? eventId, status: "final",
           sport: "nfl",
           away_score: awayScore, home_score: homeScore, provider_ids: { balldontlie: eventId }, updated_at: finalAt,

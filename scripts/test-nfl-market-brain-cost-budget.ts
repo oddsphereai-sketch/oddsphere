@@ -16,6 +16,7 @@ import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPrior
 type Artifact = {
   artifactRelease: string;
   games: Array<{
+    providerGameId: string;
     marginDistribution: { values: number[]; probabilities: number[] };
     totalDistribution: { values: number[]; probabilities: number[] };
   }>;
@@ -26,11 +27,11 @@ const artifact = JSON.parse(readFileSync(path.resolve(
 ), "utf8")) as Artifact;
 const game = artifact.games[0]!;
 const full = bindMarketBrainMarginTotalPrior({
-  eventId: "storage-budget-fixture",
+  eventId: game.providerGameId,
   release: artifact.artifactRelease,
   availableAt: "2026-10-27T00:00:00.000Z",
   inputLineage: fixtureMarketBrainPriorInputLineage({
-    eventId: "storage-budget-fixture", asOf: "2026-10-27T00:00:00.000Z",
+    eventId: game.providerGameId, asOf: "2026-10-27T00:00:00.000Z",
   }),
   marginDistribution: game.marginDistribution,
   totalDistribution: game.totalDistribution,

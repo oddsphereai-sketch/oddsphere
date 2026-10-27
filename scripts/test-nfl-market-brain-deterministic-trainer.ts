@@ -16,14 +16,19 @@ import { buildNflMarketBrainResolverFeatures } from
 import { materializeNflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrainCanonical";
-import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+import {
+  NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS,
+  NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+  fixtureMarketBrainPriorDistributions,
+  fixtureMarketBrainPriorInputLineage,
+} from
   "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-09-09T16:00:00.000Z";
 const startsAt = "2026-09-10T20:00:00.000Z";
 const labelAvailableAt = "2026-09-11T00:00:00.000Z";
 const developmentEvents = Array.from({ length: 8 }, (_, index) => ({
-  eventId: `development-${String(index).padStart(3, "0")}`,
+  eventId: NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS[index]!,
   foldId: index < 4 ? "development-week-a" : "development-week-b",
   startsAt: index < 4 ? "2026-09-03T20:00:00.000Z" : startsAt,
   cutoffAt: index < 4 ? "2026-09-02T16:00:00.000Z" : cutoffAt,
@@ -72,6 +77,7 @@ async function main() {
     }, error: null }) }; } }; } }; } } as never,
   });
   const examples = developmentEvents.map((event, index) => {
+    const priorDistributions = fixtureMarketBrainPriorDistributions(event.eventId);
     const prior = bindMarketBrainMarginTotalPrior({
       eventId: event.eventId,
       release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
@@ -79,8 +85,7 @@ async function main() {
       inputLineage: fixtureMarketBrainPriorInputLineage({
         eventId: event.eventId, asOf: event.cutoffAt,
       }),
-      marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
-      totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
+      ...priorDistributions,
     });
     const marketCase = buildMarketBrainCase({
       sport: "nfl", eventId: event.eventId, evaluatedAt: event.cutoffAt,

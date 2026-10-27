@@ -17,7 +17,12 @@ import {
   type NflMarketBrainSerializedWeights,
 } from "../lib/services/marketBrain/nflMarketBrainResolverContract";
 import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
-import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+import {
+  NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS,
+  NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+  fixtureMarketBrainPriorDistributions,
+  fixtureMarketBrainPriorInputLineage,
+} from
   "./fixtures/marketBrainPriorInputLineage";
 import {
   NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE,
@@ -39,21 +44,21 @@ import { trainNflMarketBrainRegularizedJointResidual } from
 
 const cutoffAt = "2026-10-20T16:00:00.000Z";
 const startsAt = "2026-10-20T20:00:00.000Z";
+const eventId = NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS[8];
 
 async function main() {
 const prior = bindMarketBrainMarginTotalPrior({
-  eventId: "resolver-fixture",
+  eventId,
   release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
   availableAt: cutoffAt,
   inputLineage: fixtureMarketBrainPriorInputLineage({
-    eventId: "resolver-fixture", asOf: cutoffAt,
+    eventId, asOf: cutoffAt,
   }),
-  marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
-  totalDistribution: { values: [40, 44], probabilities: [0.4, 0.6] },
+  ...fixtureMarketBrainPriorDistributions(eventId),
 });
 const marketCase = buildMarketBrainCase({
   sport: "nfl",
-  eventId: "resolver-fixture",
+  eventId,
   evaluatedAt: cutoffAt,
   captureBoundary: "raw_provider_response",
   captureLimitations: [],
@@ -87,7 +92,7 @@ async function trainingManifestFor(candidateRelease: string) {
     partitions: [
       { role: "development", evidenceStatus: "opened_development_only", events: developmentEvents },
       { role: "selection", evidenceStatus: "untouched", events: [{
-        eventId: "resolver-fixture", foldId: "selection-week", startsAt,
+        eventId, foldId: "selection-week", startsAt,
         cutoffAt,
         captureWindowOpensAt: "2026-10-20T12:00:00.000Z", captureWindowClosesAt: cutoffAt,
         expectedCaptureAttempts: [{ runId: "00000000-0000-4000-8000-000000000101", stage: "t60", plannedAt: cutoffAt }], outcomeOpenedAt: null,
@@ -264,7 +269,7 @@ console.log("NFL Market Brain resolver contract: reproducible executable learned
 
 function developmentEventsFixture() {
   return Array.from({ length: 4 }, (_, index) => ({
-    eventId: `development-${index + 1}`,
+    eventId: NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS[index]!,
     foldId: index < 2 ? "development-week-a" : "development-week-b",
     startsAt: index < 2 ? "2026-09-03T20:00:00.000Z" : "2026-09-10T20:00:00.000Z",
     cutoffAt: index < 2 ? "2026-09-02T16:00:00.000Z" : "2026-09-09T16:00:00.000Z",
@@ -278,6 +283,7 @@ function developmentEventsFixture() {
 
 function developmentExamples() {
   return developmentEventsFixture().map((event, index) => {
+    const priorDistributions = fixtureMarketBrainPriorDistributions(event.eventId);
     const developmentPrior = bindMarketBrainMarginTotalPrior({
       eventId: event.eventId,
       release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
@@ -285,8 +291,7 @@ function developmentExamples() {
       inputLineage: fixtureMarketBrainPriorInputLineage({
         eventId: event.eventId, asOf: event.cutoffAt,
       }),
-      marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
-      totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
+      ...priorDistributions,
     });
     const developmentCase = buildMarketBrainCase({
       sport: "nfl",

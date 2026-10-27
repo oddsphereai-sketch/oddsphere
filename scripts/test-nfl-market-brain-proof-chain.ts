@@ -6,7 +6,12 @@ import { MARKET_BRAIN_CONTRACT_RELEASE, bindMarketBrainMarginTotalPrior, buildMa
   "../lib/services/marketBrain/marketBrainContract";
 import { marketBrainCanonicalJson, marketBrainSha256 } from
   "../lib/services/marketBrain/marketBrainCanonical";
-import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+import {
+  NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS,
+  NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+  fixtureMarketBrainPriorDistributions,
+  fixtureMarketBrainPriorInputLineage,
+} from
   "./fixtures/marketBrainPriorInputLineage";
 import { finalizeNflMarketBrainCaptureSet } from
   "../lib/services/marketBrain/nflMarketBrainCaptureSet";
@@ -17,7 +22,7 @@ import {
   persistNflMarketBrainResearchManifest,
 } from "../lib/services/marketBrain/nflMarketBrainResearchEvaluator";
 
-const eventId = "proof-chain-event";
+const eventId = NFL_MARKET_BRAIN_FIXTURE_EVENT_IDS[9];
 const cutoffAt = "2026-10-20T16:00:00.000Z";
 const startsAt = "2026-10-20T20:00:00.000Z";
 const successRunId = "00000000-0000-4000-8000-000000000201";
@@ -62,8 +67,7 @@ async function main() {
     inputLineage: fixtureMarketBrainPriorInputLineage({
       eventId, asOf: "2026-10-20T15:00:00.000Z",
     }),
-    marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
-    totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
+    ...fixtureMarketBrainPriorDistributions(eventId),
   });
   const marketCase = buildMarketBrainCase({
     sport: "nfl", eventId, evaluatedAt: "2026-10-20T15:00:00.000Z",

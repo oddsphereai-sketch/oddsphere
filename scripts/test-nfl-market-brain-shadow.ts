@@ -35,13 +35,17 @@ import {
   "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
 import { materializeNflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
-import { NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE, fixtureMarketBrainPriorInputLineage } from
+import {
+  NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
+  fixtureMarketBrainPriorDistributions,
+  fixtureMarketBrainPriorInputLineage,
+} from
   "./fixtures/marketBrainPriorInputLineage";
 
 const capturedAt = "2026-10-26T20:00:00.000Z";
 const openedAt = "2026-10-26T16:00:00.000Z";
 const game: NflPreviewGame = {
-  providerGameId: "nfl-fixture",
+  providerGameId: "1392216",
   providerWeek: 8,
   season: 2026,
   scheduledStart: "2026-10-26T21:00:00.000Z",
@@ -49,10 +53,7 @@ const game: NflPreviewGame = {
   away: { id: 1, abbreviation: "NE", name: "New England Patriots" },
   home: { id: 2, abbreviation: "SEA", name: "Seattle Seahawks" },
 };
-const independentForecast = {
-  marginDistribution: { values: [2, 3], probabilities: [0.5, 0.5] },
-  totalDistribution: { values: [45, 47], probabilities: [0.5, 0.5] },
-};
+const independentForecast = fixtureMarketBrainPriorDistributions(game.providerGameId);
 const authoritativeForecast = {
   marginDistribution: {
     values: [-3, 0, 7.607142857142857],
@@ -61,6 +62,13 @@ const authoritativeForecast = {
   totalDistribution: { values: [45], probabilities: [1] },
 };
 const distributionHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const distributionStats = (distribution: typeof independentForecast.marginDistribution) => {
+  const mean = distribution.values.reduce((sum, value, index) =>
+    sum + value * distribution.probabilities[index]!, 0);
+  const variance = distribution.values.reduce((sum, value, index) =>
+    sum + (value - mean) ** 2 * distribution.probabilities[index]!, 0);
+  return { support: distribution.values.length, mass: 1, mean, sd: Math.sqrt(variance) };
+};
 
 function market(name: "moneyline" | "spread" | "total"): NflForwardContextMarket {
   const line = name === "moneyline" ? null : name === "spread" ? -3.5 : 45.5;
@@ -98,8 +106,10 @@ const capture: NflForwardContextCapture = {
     status: "available", reason: "week_one_artifact_target_free", release: NFL_MARKET_BRAIN_FIXTURE_PRIOR_RELEASE,
     outcome: {
       pmf: {
-        margin: { sha256: distributionHash(independentForecast.marginDistribution), support: 2, mass: 1, mean: 2.5, sd: 0.5 },
-        total: { sha256: distributionHash(independentForecast.totalDistribution), support: 2, mass: 1, mean: 46, sd: 1 },
+        margin: { sha256: distributionHash(independentForecast.marginDistribution),
+          ...distributionStats(independentForecast.marginDistribution) },
+        total: { sha256: distributionHash(independentForecast.totalDistribution),
+          ...distributionStats(independentForecast.totalDistribution) },
       },
       expected: [21.75, 24.25], representative: [21, 24], win: [0.43, 0.55, 0.02],
     },
@@ -348,7 +358,8 @@ assert.ok(noisyShadow.bytes - shadow.bytes < 256,
 assert.equal(noisyShadow.case.sourceManifests[0]?.omittedRows, 500);
 assert.equal(shadow.case.prior.kind, "margin_total_distribution");
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.eventId, game.providerGameId);
-assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.marginDistribution.values.length, 2);
+assert.equal(shadow.case.prior.kind === "margin_total_distribution" &&
+  shadow.case.prior.artifact.marginDistribution.values.length > 2, true);
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.sha256.length, 64);
 const priorArtifactSha256 = shadow.case.prior.kind === "margin_total_distribution" ? shadow.case.prior.artifact.sha256 : "";
 const laterCapture = structuredClone(capture);

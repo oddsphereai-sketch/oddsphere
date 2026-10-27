@@ -14,7 +14,7 @@ import {
 import { assertNflMarketBrainPriorInputLineageQualified } from "./nflMarketBrainPriorLineage";
 
 export const NFL_MARKET_BRAIN_RESEARCH_EVALUATOR_RELEASE =
-  "nfl_market_brain_research_evaluator_2026_10_27_r17_revalidated_prior_sequence" as const;
+  "nfl_market_brain_research_evaluator_2026_10_27_r18_output_artifact_attestation" as const;
 export const NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE =
   "nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows" as const;
 
