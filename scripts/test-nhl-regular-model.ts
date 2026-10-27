@@ -1053,7 +1053,7 @@ assert.match(reader, /writerVerdictsByGame/, "reader carries the price-aware wri
 assert.match(reader, /nhlVerdictFromStoredDecision/, "reader maps the writer's immutable storage token instead of recomputing the grade");
 assert.match(reader, /const displayModel: NhlModelOutput = storedPayload \? model : \{/, "stored writer and locked verdicts take precedence over the unlocked no-writer price-aware fallback");
 assert.match(reader, /NHL_REGULAR_TRANSITION_MODEL_RELEASES/, "reader preserves an already-locked prior-release tuple during deployment");
-assert.match(reader, /nhl_daily_edge_reader_2026_10_23_r17_specialized_margin_total_handoff/, "reader release records the specialized margin/Total handoff while preserving immutable NHL price mapping");
+assert.match(reader, /nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement/, "reader release records the Owls same-book movement handoff while preserving immutable NHL price mapping");
 assert.match(writer, /select\("external_id"\)/, "writer verifies exact settled-game replay identities instead of count parity");
 assert.match(reader, /select\("external_id"\)/, "reader verifies the same exact settled-game replay identities");
 assert.match(reader, /r\.locked_at !== null \|\| !replayComplete/, "reader preserves a stored transition predecessor while fresh replay evidence is incomplete");
@@ -1078,7 +1078,7 @@ assert.match(linesProvider, /fetchSharpNhlEvents/, "NHL resolves exact events be
 assert.match(linesProvider, /event_id: eventId/, "NHL odds retrieval is event-scoped instead of scanning an incomplete league slice");
 assert.match(linesProvider, /Promise\.all\(NHL_GAME_MARKETS\.map/, "all three full-game NHL market scopes are fetched directly");
 assert.doesNotMatch(linesProvider, /presentGameMarkets/, "one stray book can no longer masquerade as complete NHL market coverage");
-assert.match(linesRefresh, /incomplete SharpAPI \$\{market\} coverage/, "a refresh cannot silently call an incomplete five-game board healthy");
+assert.match(linesRefresh, /incomplete \$\{opts\.owlsApiKey \? "Owls" : "legacy SharpAPI"\} \$\{market\} coverage/, "a refresh cannot silently call an incomplete board healthy regardless of provider");
 assert.match(linesRefresh, /loadCompleteCurrentGameLines/, "NHL change detection cannot truncate at PostgREST's default row ceiling");
 assert.match(linesRefresh, /replaceCurrentGameLinesBatched/, "NHL current quotes replace legacy generations in bounded complete groups");
 assert.match(linesRefresh, /linesReverified/, "unchanged complete quotes are recorded as freshly verified without fabricating movement");

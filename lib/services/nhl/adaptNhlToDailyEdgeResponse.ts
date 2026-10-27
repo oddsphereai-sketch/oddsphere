@@ -422,6 +422,9 @@ function buildMarketEdge(opts: {
     oddsTrail: bundle.oddsTrail,
     lineTrail: bundle.lineTrail,
     opposingOddsTrail: bundle.opposingOddsTrail.stops.length > 0 ? bundle.opposingOddsTrail : null,
+    movementReferenceSportsbook: bundle.oddsTrail?.at(-1)?.sportsbook ?? null,
+    movementReferencePriceAmerican: bundle.oddsTrail?.at(-1)?.american ?? null,
+    movementReferenceObservedAt: bundle.oddsTrail?.at(-1)?.observedAt ?? null,
     modelTotal: slot === "total" && !held ? modelTotal : null,
     marketTotal: slot === "total" ? marketLine : null,
     // ML carries no line; Total + Puck Line use the `line` slot.

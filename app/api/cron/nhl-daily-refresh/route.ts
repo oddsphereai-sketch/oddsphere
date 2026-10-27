@@ -5,7 +5,7 @@
  * lines refresh once per day:
  *   1. seedNhlGames       → upserts teams + games (sport='nhl') for the
  *                            ET slate.
- *   2. refreshNhlLines    → fetches SharpAPI /odds for the slate and
+ *   2. refreshNhlLines    → fetches Owls Circa/Pinnacle odds for the slate and
  *                            writes `lines` + appends `line_history`.
  *
  * Final-score ingest + grading + tracking are NOT in this cron — those
@@ -32,8 +32,8 @@
  *
  * Scope:
  *   • Writes: teams (sport='nhl'), games (sport='nhl'), lines, line_history.
- *   • Reads:  NHL public API /v1/schedule/{date}, SharpAPI /odds, our DB.
- *   • NEVER writes any MLB / NBA row. NEVER logs SHARPAPI_KEY.
+ *   • Reads:  NHL public API /v1/schedule/{date}, Owls /odds, our DB.
+ *   • NEVER writes any MLB / NBA row. NEVER logs provider credentials.
  */
 
 import { cronHandler } from "@/lib/cron/runCron";
@@ -46,11 +46,10 @@ import { refreshNhlGoalieStats } from "@/lib/services/nhl/refreshNhlGoalieStatsS
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { supabase } from "@/lib/db/supabase";
-import { NHL_SHARP_ODDS_COLLECTOR_RELEASE } from "@/lib/providers/nhl/_sharpApiNhlClient";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_27_r14_owls_current_odds";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -83,9 +82,9 @@ export async function GET(request: Request): Promise<Response> {
         };
       }
 
-      const sharpApiKey = process.env.SHARPAPI_KEY;
-      if (!sharpApiKey) {
-        throw new Error("SHARPAPI_KEY missing from env");
+      const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+      if (!owlsApiKey) {
+        throw new Error("OWLS_INSIGHT_API_KEY missing from env");
       }
 
       const slateDate = currentSlateDate("nhl");
@@ -98,7 +97,7 @@ export async function GET(request: Request): Promise<Response> {
       let partial = false;
       const stepDetails: Record<string, unknown> = {
         refresh_release: NHL_DAILY_REFRESH_RELEASE,
-        odds_collector_release: NHL_SHARP_ODDS_COLLECTOR_RELEASE,
+        odds_collector_release: "nhl_owls_circa_pinnacle_odds_2026_10_27_r1",
         slate_date_et: slateDate,
         mode: intraday ? "intraday_market" : "daily_full",
       };
@@ -140,11 +139,11 @@ export async function GET(request: Request): Promise<Response> {
       }
       if (seedResult.errors.length > 0) partial = true;
 
-      // Step 2 — refresh SharpAPI odds for the slate.
+      // Step 2 — refresh Owls Circa/Pinnacle odds for the slate.
       console.log(`[nhl-daily-refresh] step=lines  slateDate=${slateDate}`);
       const linesResult = await refreshNhlLines({
         slateDate,
-        sharpApiKey,
+        owlsApiKey,
         dryRun: false,
         logger: stepLog("lines"),
       });

@@ -8,6 +8,19 @@ Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
+- October 27 cross-sport locked split continuity advances shared member presentation to
+  `daily_edge_member_presentation_2026_10_27_r31_cross_sport_locked_split_continuity`. The Owls
+  durable feed retains a bounded timestamped history for each exact event/book. Open cards use the
+  newest complete row; a locked card can fill only a never-stored display field from the newest
+  complete market observation no later than its immutable lock time. Existing locked evidence
+  always wins, post-lock evidence fails closed, and reconstructed sections cannot enter the locked
+  market read or change predictions, probabilities, prices, grades, stakes, or tracking. The exact
+  production-snapshot rehearsal restored 12/12 NBA and 33/33 NHL sections with zero post-lock
+  admissions. CFB restored 106 eligible sections; the documented DEL@WKU pre-lock row has an
+  idempotent post-deploy recovery because the old overwrite behavior had already removed it from
+  the live feed snapshot. Evidence and rollback:
+  `docs/model-audits/2026-10-27-cross-sport-locked-split-continuity.md`.
+
 - October 27 CFB locked-card sharp-split continuity advances shared member presentation to
   `daily_edge_member_presentation_2026_10_27_r30_cfb_locked_prelock_splits`. When a legacy locked
   CFB fixture never stored a Sharp Book Splits section, the authenticated detail reader may render
@@ -4628,12 +4641,12 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_25_r21_exchange_source_exclusion`
+- Model / prediction record: `nba_professional_unified_2026_10_27_r22_owls_current_odds`
 - Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation`
-- Market marriage: `nba_market_marriage_2026_10_25_r22_exchange_source_exclusion`
+- Market marriage: `nba_market_marriage_2026_10_27_r23_owls_current_odds`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_24_r13_steep_moneyline_best_angle_tier`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_25_r18_exchange_source_exclusion`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
@@ -4948,7 +4961,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_25_r18_exchange_source_exclusion`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.
@@ -4969,7 +4982,7 @@ game dates while schedule seeding retains its existing current/far-edge scope. T
 `prediction_pipeline:nba` lease, T-60 locking, and official-tracking start are unchanged. The opening
 October 20-22 window moves from zero analyzed member cards to 16 games / 48 prediction markets without
 rewriting any stored lock. Evidence: `docs/model-audits/2026-10-16-nba-rolling-daily-edge-activation.md`.
-- NHL refresh release: `nhl_daily_refresh_schedule_2026_10_08_r10_pregame_coverage_gate`
+- NHL refresh release: `nhl_daily_refresh_schedule_2026_10_27_r14_owls_current_odds`
 - NHL schedule: stable-input refresh once daily at `45 11 * * *`; volatile seed/line/split/prediction/snapshot refresh hourly at `18 6-10 * * *` and every 30 minutes at `18,48 0-5,12-23 * * *`; all writes fail closed unless `NHL_CRON_ENABLED=true`
 
 The October 15 NBA r4 operational release extends the existing sole writer to seed an ET-anchored seven-date schedule window. The daily full cycle seeds all seven dates; intraday cycles refresh the current date and the far edge. The same date-keyed member snapshot carries a versioned schedule-only block, rejects pre-contract cached payloads, and fails closed on a partial seed cycle. Final and canceled games leave the active schedule layer, while the matching schedule card disappears when its current-day analyzed card is available. Future and preseason requests stop before the prediction pipeline, so the schedule cannot manufacture an early pick, probability, grade, price, stake, lock, or tracking row. The r1 NBA model and market marriage are unchanged. Evidence: `docs/model-audits/2026-10-15-nba-rolling-seven-day-member-schedule.md`.
@@ -4994,10 +5007,10 @@ locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 
 ## NHL regular-season champion (active from 2026-10-23)
 
-- Model: `nhl_regular_2026_r22_specialized_margin_total_handoff`
-- Calibration: `nhl_regular_calibration_2026_r22_specialized_margin_total_handoff`
-- Decision: `nhl_regular_decision_2026_r22_specialized_margin_total_handoff`
-- Reader: `nhl_daily_edge_reader_2026_10_23_r17_specialized_margin_total_handoff`
+- Model: `nhl_regular_2026_r23_owls_current_odds`
+- Calibration: `nhl_regular_calibration_2026_r23_owls_current_odds`
+- Decision: `nhl_regular_decision_2026_r23_owls_current_odds`
+- Reader: `nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`

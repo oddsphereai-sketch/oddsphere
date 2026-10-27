@@ -60,6 +60,7 @@ function selectBook(args: {
   selectedLine: number | null;
   opposingLine: number | null;
   preferredBook: string | null;
+  preservePreferredBook?: boolean;
 }): string | null {
   const selectedBooks = new Set(args.live
     .filter((row) => rowMatches(row, args.market, args.selectedSide, args.selectedLine, true))
@@ -68,7 +69,25 @@ function selectBook(args: {
     .filter((row) => rowMatches(row, args.market, args.opposingSide, args.opposingLine, true))
     .map((row) => row.sportsbook));
   const candidates = [...selectedBooks].filter((book) => opposingBooks.has(book));
-  if (args.preferredBook && candidates.includes(args.preferredBook)) return args.preferredBook;
+  if (args.preservePreferredBook && args.preferredBook && candidates.includes(args.preferredBook)) {
+    return args.preferredBook;
+  }
+  const currentObservedAt = (book: string): number => Math.max(
+    ...args.live
+      .filter((row) => row.sportsbook === book && row.market_type === args.market)
+      .map((row) => Date.parse(row.observed_at ?? ""))
+      .filter(Number.isFinite),
+  );
+  const trackedDepth = (book: string): number => {
+    const currentMs = currentObservedAt(book);
+    const selectedTimes = new Set(args.history.filter((row) => (
+      row.sportsbook === book
+      && rowMatches(row, args.market, args.selectedSide, args.selectedLine, false)
+      && Number.isFinite(Date.parse(row.observed_at ?? ""))
+      && Date.parse(row.observed_at!) < currentMs
+    )).map((row) => row.observed_at));
+    return Math.min(3, selectedTimes.size + 1);
+  };
   return candidates.sort((left, right) => {
     const historyDepth = (book: string) => args.history.filter((row) => (
       row.sportsbook === book
@@ -76,7 +95,11 @@ function selectBook(args: {
       && (row.side === args.selectedSide || row.side === args.opposingSide)
       && row.odds_american !== null
     )).length;
-    return historyDepth(right) - historyDepth(left) || bookRank(left) - bookRank(right) || left.localeCompare(right);
+    return trackedDepth(right) - trackedDepth(left)
+      || bookRank(left) - bookRank(right)
+      || historyDepth(right) - historyDepth(left)
+      || Number(right === args.preferredBook) - Number(left === args.preferredBook)
+      || left.localeCompare(right);
   })[0] ?? null;
 }
 
@@ -149,6 +172,8 @@ export function buildNhlTwoSidedPriceTrail(args: {
   selectedLine: number | null;
   opposingLine: number | null;
   preferredBook: string | null;
+  /** Locked cards keep the exact legacy book association. */
+  preservePreferredBook?: boolean;
 }): NhlTwoSidedPriceTrail {
   const live = selectNhlFreshCurrentLineBoard(args.live);
   const history = canonicalizeNhlLineRows(args.history, {

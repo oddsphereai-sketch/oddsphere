@@ -13,6 +13,8 @@ import type { NbaMovementMarket } from "./nbaSameBookMovement";
 import type { NbaApprovedLegacyLockedEvidenceRecovery } from "./nbaLockedMemberSnapshot";
 
 const SPLIT_STALE_AFTER_MINUTES = 75;
+const MOVEMENT_CURRENT_RELATIVE_FRESH_MINUTES = 120;
+const MOVEMENT_BOOK_PRIORITY = ["circa", "pinnacle", "bookmaker"] as const;
 
 type PublicSplit = MarketEdgeDto["publicSplits"][number];
 
@@ -293,6 +295,100 @@ function compactTrail(rows: NbaReaderPriceRow[]): NbaReaderPriceRow[] {
   return compacted;
 }
 
+type NbaMovementReference = {
+  sportsbook: string;
+  selectedRows: NbaReaderPriceRow[];
+  opposingRows: NbaReaderPriceRow[];
+};
+
+function coherentPair(
+  market: NbaMovementMarket,
+  selected: NbaReaderPriceRow,
+  opposing: NbaReaderPriceRow,
+): boolean {
+  if (market === "moneyline") return selected.line === null && opposing.line === null;
+  if (selected.line === null || opposing.line === null) return false;
+  return market === "spread"
+    ? Math.abs(selected.line + opposing.line) < 0.01
+    : Math.abs(selected.line - opposing.line) < 0.01;
+}
+
+function movementBookRank(sportsbook: string): number {
+  const book = canonical(sportsbook);
+  const index = MOVEMENT_BOOK_PRIORITY.findIndex((candidate) => book.includes(candidate));
+  return index === -1 ? MOVEMENT_BOOK_PRIORITY.length : index;
+}
+
+/**
+ * Pick one complete same-book chronology for the member movement panel.
+ * A deeper real trail wins before book branding: a three-point retail trail
+ * is more informative than a current-only Circa quote. At equal depth the
+ * order is Circa, Pinnacle, Bookmaker, the evaluated book, then other books.
+ */
+export function selectNbaMovementReference(args: {
+  market: NbaMovementMarket;
+  selectedSide: NbaReaderSide;
+  preferredSportsbook: string | null;
+  rows: readonly NbaReaderPriceRow[];
+  evaluatedAt: string;
+}): NbaMovementReference | null {
+  const evaluatedMs = Date.parse(args.evaluatedAt);
+  if (!Number.isFinite(evaluatedMs)) return null;
+  const opposingSide = oppositeSide(args.selectedSide);
+  const byBookAndTime = new Map<string, Map<string, NbaReaderPriceRow[]>>();
+  for (const row of args.rows) {
+    const side = selectionSide(row.selectionKey);
+    const observedAt = observationTime(row);
+    const observedMs = Date.parse(observedAt);
+    const book = canonical(row.sportsbook);
+    if (
+      row.market !== args.market || !book || row.americanPrice === null || row.americanPrice === 0 ||
+      (side !== args.selectedSide && side !== opposingSide) ||
+      !Number.isFinite(observedMs) || observedMs > evaluatedMs
+    ) continue;
+    const byTime = byBookAndTime.get(book) ?? new Map<string, NbaReaderPriceRow[]>();
+    const atTime = byTime.get(observedAt) ?? [];
+    atTime.push(row);
+    byTime.set(observedAt, atTime);
+    byBookAndTime.set(book, byTime);
+  }
+
+  const candidates = [...byBookAndTime.entries()].flatMap(([book, byTime]) => {
+    const pairs = [...byTime.entries()].flatMap(([observedAt, rows]) => {
+      const selected = rows.find((row) => selectionSide(row.selectionKey) === args.selectedSide);
+      const opposing = rows.find((row) => selectionSide(row.selectionKey) === opposingSide);
+      return selected && opposing && coherentPair(args.market, selected, opposing)
+        ? [{ observedAt, selected, opposing }]
+        : [];
+    }).sort((left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt));
+    const current = pairs.at(-1);
+    return current ? [{
+      book,
+      sportsbook: current.selected.sportsbook,
+      selectedRows: pairs.map((pair) => pair.selected),
+      opposingRows: pairs.map((pair) => pair.opposing),
+      currentMs: Date.parse(current.observedAt),
+      displayDepth: Math.min(3, pairs.length),
+    }] : [];
+  });
+  if (candidates.length === 0) return null;
+  const freshestMs = Math.max(...candidates.map((candidate) => candidate.currentMs));
+  const freshestCandidates = candidates.filter((candidate) =>
+    freshestMs - candidate.currentMs <= MOVEMENT_CURRENT_RELATIVE_FRESH_MINUTES * 60_000);
+  const preferred = canonical(args.preferredSportsbook);
+  const selected = freshestCandidates.sort((left, right) =>
+    right.displayDepth - left.displayDepth ||
+    movementBookRank(left.book) - movementBookRank(right.book) ||
+    Number(right.book === preferred) - Number(left.book === preferred) ||
+    left.book.localeCompare(right.book)
+  )[0];
+  return selected ? {
+    sportsbook: selected.sportsbook,
+    selectedRows: selected.selectedRows,
+    opposingRows: selected.opposingRows,
+  } : null;
+}
+
 function buildTrail(args: {
   market: NbaMovementMarket;
   side: NbaReaderSide;
@@ -355,24 +451,34 @@ function memberEvidenceForMarket(args: {
 }): NbaMemberMarketEvidence {
   const intel = marketIntel(args.game, args.market);
   const selectedSide = intel.pick_side;
-  const sportsbook = intel.current_price.sportsbook;
+  const reference = selectedSide === null ? null : selectNbaMovementReference({
+    market: args.market,
+    selectedSide,
+    preferredSportsbook: intel.current_price.sportsbook,
+    rows: args.priceRows,
+    evaluatedAt: args.evaluatedAt,
+  });
+  const sportsbook = reference?.sportsbook ?? intel.current_price.sportsbook;
+  const referenceRows = reference === null
+    ? args.priceRows
+    : [...reference.selectedRows, ...reference.opposingRows];
   const selected = selectedSide === null ? [] : buildTrail({
     market: args.market,
     side: selectedSide,
     sportsbook,
-    rows: args.priceRows,
-    current: {
-      price: intel.current_price.odds_american,
-      line: intel.consensus_line,
-      observedAt: intel.current_price.fetched_at,
-    },
+    rows: referenceRows,
+    current: reference === null ? {
+        price: intel.current_price.odds_american,
+        line: intel.consensus_line,
+        observedAt: intel.current_price.fetched_at,
+      } : undefined,
   });
   const opposingSide = selectedSide === null ? null : oppositeSide(selectedSide);
   const opposing = opposingSide === null ? [] : buildTrail({
     market: args.market,
     side: opposingSide,
     sportsbook,
-    rows: args.priceRows,
+    rows: referenceRows,
   });
   const terminal = selected.at(-1) ?? null;
   const sharpBookEvidence = buildSharpBookEvidence({

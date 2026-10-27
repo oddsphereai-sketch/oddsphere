@@ -9,7 +9,7 @@
  *
  *   • argv parsing: --date YYYY-MM-DD (required), --apply
  *   • Two-key write gate: --apply + NBA_LINES_DB_WRITES_ENABLED=true
- *   • SHARPAPI_KEY read from process.env here, then passed to the
+ *   • OWLS_INSIGHT_API_KEY read from process.env here, then passed to the
  *     service. NEVER logged.
  *   • Banner + "WRITE/DRY-RUN complete: N lines written, N history
  *     snapshots appended, N errors." footer
@@ -17,7 +17,7 @@
  * Default: DRY-RUN.
  *
  * Scope (unchanged):
- *   • Reads:  SharpAPI /odds?league=nba, our `games` + `teams` tables.
+ *   • Reads:  Owls /odds for NBA, our `games` + `teams` tables.
  *   • Writes: `lines` (only NBA game rows) + `line_history` (append-only).
  *             NEVER writes any other table; NEVER touches MLB rows.
  *
@@ -48,9 +48,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const apply = readBoolFlag(argv, "--apply");
-  const sharpKey = process.env.SHARPAPI_KEY;
-  if (!sharpKey) {
-    console.error("✗ SHARPAPI_KEY missing from env");
+  const owlsKey = process.env.OWLS_INSIGHT_API_KEY;
+  if (!owlsKey) {
+    console.error("✗ OWLS_INSIGHT_API_KEY missing from env");
     process.exit(1);
   }
 
@@ -72,11 +72,11 @@ async function main(): Promise<void> {
   try {
     // CLI surface stays --date YYYY-MM-DD. The service treats the value
     // as ET slate_date (Phase 7K Fix 1): DB filter by games.slate_date,
-    // SharpAPI date(s) derived internally from matched games' UTC
-    // game_date column.
+    // Owls rows are matched to the bounded ET slate by exact canonical
+    // matchup and provider start time.
     result = await refreshNbaLines({
       slateDate: date,
-      sharpApiKey: sharpKey,
+      owlsApiKey: owlsKey,
       dryRun: !write,
       logger: (msg) => console.log(msg),
     });

@@ -6,7 +6,7 @@
  *   1. seedNbaGames           → upserts teams + games for the slate.
  *   2. refreshNbaTeamRatings  → scrapes Basketball Reference and
  *                                upserts nba_team_ratings.
- *   3. refreshNbaLines        → fetches SharpAPI /odds for bounded rolling
+ *   3. refreshNbaLines        → fetches Owls Circa/Pinnacle odds for bounded rolling
  *                                game dates, upserts `lines`, and appends
  *                                `line_history`.
  *   4. response snapshot      → computes the existing authoritative member
@@ -39,7 +39,7 @@
  *
  * Scope (unchanged from Services 1–3):
  *   • Writes: teams, games, nba_team_ratings, lines, line_history.
- *   • Reads:  ESPN scoreboard, BBR HTML, SharpAPI /odds, our DB.
+ *   • Reads:  ESPN scoreboard, BBR HTML, Owls /odds, our DB.
  *   • NEVER writes any MLB row. NEVER writes prediction_records /
  *     tracking. Snapshot publication reuses the existing NBA model and
  *     member adapter under the shared NBA prediction lease. NEVER logs keys.
@@ -68,7 +68,7 @@ import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecy
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_25_r18_exchange_source_exclusion";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -122,12 +122,10 @@ export async function GET(request: Request): Promise<Response> {
         };
       }
 
-      // ─── Gate 2: SharpAPI key for Service 3 ───────────────────────
-      // Lines refresh needs the key. Missing key → fail the run (this
-      // is a config error, not a data condition).
-      const sharpApiKey = process.env.SHARPAPI_KEY;
-      if (!sharpApiKey) {
-        throw new Error("SHARPAPI_KEY missing from env");
+      // ─── Gate 2: Owls key for the current Circa/Pinnacle board ────
+      const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+      if (!owlsApiKey) {
+        throw new Error("OWLS_INSIGHT_API_KEY missing from env");
       }
       const balldontlieApiKey = process.env.BALLDONTLIE_API_KEY;
       if (!balldontlieApiKey) {
@@ -335,7 +333,7 @@ export async function GET(request: Request): Promise<Response> {
             date: lineDate,
             result: await refreshNbaLines({
               slateDate: lineDate,
-              sharpApiKey,
+              owlsApiKey,
               dryRun: false,
               logger: stepLog(`lines:${lineDate}`),
             }),

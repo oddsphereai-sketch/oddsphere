@@ -247,8 +247,35 @@ const retainedComplete = complete("ncaaf", "circa", "Liberty Flames", "Coastal C
 const partialUpdate = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:00:00.000Z");
 partialUpdate.total.handle_pct = { over: null, under: null } as unknown as typeof partialUpdate.total.handle_pct;
 const mergedFeed = sharpApiCurrentTest.mergeCurrentSplitFeeds({ ...feed, rows: [retainedComplete] }, { ...feed, fetchedAt: "2026-09-20T20:00:00.000Z", rows: [partialUpdate] });
-assert.deepEqual(mergedFeed.rows[0]?.total, retainedComplete.total, "a newer partial provider row cannot erase the last complete market pair");
-assert.equal(mergedFeed.rows[0]?.fetched_at, partialUpdate.fetched_at, "new row identity and fetch time remain current for unaffected markets");
+const mergedCurrent = mergedFeed.rows.find((row) => row.fetched_at === partialUpdate.fetched_at);
+assert.equal(mergedFeed.rows.length, 2, "the durable feed retains both sides of a future lock cutoff");
+assert.deepEqual(mergedCurrent?.total, retainedComplete.total, "a newer partial provider row cannot erase the last complete market pair");
+assert.equal(mergedCurrent?.fetched_at, partialUpdate.fetched_at, "new row identity and fetch time remain current for unaffected markets");
+
+const postLock = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:01:00.000Z");
+postLock.moneyline.handle_pct = { away: 70, home: 30 };
+postLock.moneyline.bets_pct = { away: 60, home: 40 };
+const historicalFeed = sharpApiCurrentTest.mergeCurrentSplitFeeds(
+  { ...owlsFeed, fetchedAt: "2026-09-20T19:59:00.000Z", rows: lockedPreLockFeed.rows },
+  { ...owlsFeed, fetchedAt: "2026-09-20T20:01:00.000Z", rows: [postLock] },
+);
+const lockedFromHistory = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+lockedFromHistory.games[0]!.lockState = "locked";
+lockedFromHistory.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+assert.deepEqual(
+  applySharpApiCurrentSplitOverlay(lockedFromHistory, historicalFeed, now, { reconstructMissingLockedPreLock: true }),
+  { matchedGames: 1, populatedMarkets: 3 },
+  "a post-lock provider refresh cannot hide the newest retained pre-lock observation",
+);
+assert.equal(lockedFromHistory.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.moneyPct, 61);
+
+const openFromHistory = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+assert.deepEqual(
+  applySharpApiCurrentSplitOverlay(openFromHistory, historicalFeed, now),
+  { matchedGames: 1, populatedMarkets: 3 },
+  "an open card still uses the newest provider observation",
+);
+assert.equal(openFromHistory.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.moneyPct, 70);
 assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, null, "retained fallback adds no freshness copy");
 assert.equal(stale.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.observedAt, null, "retained fallback adds no stale timestamp label");
 assert.equal(

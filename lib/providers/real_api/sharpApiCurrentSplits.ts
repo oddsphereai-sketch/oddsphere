@@ -15,6 +15,7 @@ const CURRENT_SPLITS_TTL_MS = 5 * 60 * 1000;
 const CURRENT_SPLITS_STALE_MS = 10 * 24 * 60 * 60 * 1000;
 const CURRENT_SPLITS_TIMEOUT_MS = 4_000;
 const SOURCE_FAILOVER_GRACE_MS = 3 * 60 * 60 * 1000;
+const MAX_OBSERVATIONS_PER_EVENT_BOOK = 96;
 
 type Json = Record<string, unknown>;
 type SupportedSport = Exclude<Sport, "soccer" | "ucl">;
@@ -102,7 +103,7 @@ function supportedSport(sport: Sport): sport is SupportedSport {
 
 const readCachedCurrentSplits = unstable_cache(
   async (sport: SupportedSport) => readDurableCurrentSplits(sport),
-  ["owls-current-splits-durable-overlay-v1"],
+  ["owls-current-splits-durable-overlay-v2-prelock-history"],
   { revalidate: 5 * 60, tags: ["owls-current-splits"] },
 );
 
@@ -187,10 +188,11 @@ export function validateSharpApiCurrentSplitFeed(
 export async function populateDailyEdgeSharpApiCurrentSplits(
   response: DailyEdgeResponse,
   sport: Sport,
+  options: SharpApiCurrentSplitOverlayOptions = {},
 ): Promise<SharpApiCurrentSplitOverlayResult> {
   if (!supportedSport(sport)) return { matchedGames: 0, populatedMarkets: 0 };
   try {
-    return applySharpApiCurrentSplitOverlay(response, await readCachedCurrentSplits(sport));
+    return applySharpApiCurrentSplitOverlay(response, await readCachedCurrentSplits(sport), Date.now(), options);
   } catch (error) {
     console.warn(`SharpAPI current split overlay skipped for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
     return { matchedGames: 0, populatedMarkets: 0 };
@@ -282,7 +284,11 @@ function attachBestMarket(
     (market.sportsbookSplits?.rows.length || market.recommendationDecision?.sharpBookSplits?.rows.length)
   ) return 0;
   const sections = BOOK_PRIORITY.flatMap((book) => {
-    const rows = dedupeBookRows(candidates.filter((row) => normalize(text(row.sportsbook) ?? "") === book));
+    const rows = dedupeBookRows(
+      candidates.filter((row) => normalize(text(row.sportsbook) ?? "") === book),
+      sourceMarket,
+      lockedCutoffMs,
+    );
     if (rows.length !== 1) return [];
     const section = sectionFromRow(game, sourceMarket, book, rows[0]!);
     return section ? [section] : [];
@@ -365,17 +371,31 @@ function selectedPublicSplitRow(
   ) ?? null;
 }
 
-function dedupeBookRows(rows: Json[]): Json[] {
+function dedupeBookRows(
+  rows: Json[],
+  market: SplitMarket,
+  cutoffMs: number | null,
+): Json[] {
   const newestByEvent = new Map<string, Json>();
   for (const row of rows) {
     const eventId = text(row.event_id);
     if (!eventId) continue;
+    const observedAt = marketObservedAt(row, market);
+    if (!Number.isFinite(observedAt) || cutoffMs !== null && observedAt > cutoffMs) continue;
     const existing = newestByEvent.get(eventId);
-    if (!existing || Date.parse(timestamp(row.fetched_at) ?? "") > Date.parse(timestamp(existing.fetched_at) ?? "")) {
+    if (!existing || observedAt > marketObservedAt(existing, market)) {
       newestByEvent.set(eventId, row);
     }
   }
   return [...newestByEvent.values()];
+}
+
+function marketObservedAt(row: Json, market: SplitMarket): number {
+  return Date.parse(
+    timestamp(record(row._oddsphere_market_fetched_at)[market]) ??
+    timestamp(row.fetched_at) ??
+    "",
+  );
 }
 
 function sectionFromRow(
@@ -442,12 +462,14 @@ function mergeCurrentSplitFeeds(
   // display snapshot; this feed stays single-provider.
   if (previous.source !== current.source) return current;
   const merged = new Map<string, Json>();
-  for (const row of previous.rows) merged.set(splitRowKey(row), row);
+  for (const row of previous.rows) merged.set(splitObservationKey(row), row);
   for (const row of current.rows) {
-    const key = splitRowKey(row);
-    const prior = merged.get(key);
+    const eventBookKey = splitRowKey(row);
+    const prior = [...merged.values()]
+      .filter((candidate) => splitRowKey(candidate) === eventBookKey)
+      .sort((first, second) => rowFetchedAt(second) - rowFetchedAt(first))[0];
     if (!prior) {
-      merged.set(key, row);
+      merged.set(splitObservationKey(row), row);
       continue;
     }
     const marketFetchedAt = {
@@ -460,20 +482,40 @@ function mergeCurrentSplitFeeds(
       const previousMarket = record(prior[market]);
       if (completeMarket(currentMarket, market)) {
         next[market] = currentMarket;
-        marketFetchedAt[market] = timestamp(row.fetched_at);
+        marketFetchedAt[market] = timestamp(record(row._oddsphere_market_fetched_at)[market]) ?? timestamp(row.fetched_at);
       } else if (completeMarket(previousMarket, market)) {
         next[market] = previousMarket;
         marketFetchedAt[market] = timestamp(record(prior._oddsphere_market_fetched_at)[market]) ?? timestamp(prior.fetched_at);
       }
     }
     next._oddsphere_market_fetched_at = marketFetchedAt;
-    merged.set(key, next);
+    merged.set(splitObservationKey(next), next);
   }
-  return { ...current, rows: [...merged.values()] };
+  return { ...current, rows: trimSplitHistory([...merged.values()]) };
 }
 
 function splitRowKey(row: Json): string {
   return `${text(row.event_id) ?? ""}::${normalize(text(row.sportsbook) ?? "")}`;
+}
+
+function splitObservationKey(row: Json): string {
+  return `${splitRowKey(row)}::${timestamp(row.fetched_at) ?? ""}`;
+}
+
+function rowFetchedAt(row: Json): number {
+  return Date.parse(timestamp(row.fetched_at) ?? "");
+}
+
+function trimSplitHistory(rows: Json[]): Json[] {
+  const byEventBook = new Map<string, Json[]>();
+  for (const row of rows) {
+    const key = splitRowKey(row);
+    if (!key.startsWith("::")) byEventBook.set(key, [...(byEventBook.get(key) ?? []), row]);
+  }
+  return [...byEventBook.values()].flatMap((history) => history
+    .sort((first, second) => rowFetchedAt(second) - rowFetchedAt(first))
+    .slice(0, MAX_OBSERVATIONS_PER_EVENT_BOOK)
+    .reverse());
 }
 
 function completeMarket(value: Json, market: SplitMarket): boolean {

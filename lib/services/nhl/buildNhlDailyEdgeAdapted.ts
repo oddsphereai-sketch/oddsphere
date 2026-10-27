@@ -37,11 +37,7 @@ import {
   normalizeNhlPlayerName,
   type NhlRosterPrior,
 } from "../../automodel/nhlRosterPrior2026";
-import {
-  fetchSharpNhlOpportunities,
-  type SharpNhlOpportunity,
-} from "../../providers/nhl/_sharpApiNhlClient";
-import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
+import type { SharpNhlOpportunity } from "../../providers/nhl/_sharpApiNhlClient";
 import type { DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 import { resolvedNhlSplitsByGame, type ResolvedNhlSplitsEvent } from "./nhlResolvedSplits";
 import { loadNhlRegularStateForSlate } from "./loadNhlRegularState";
@@ -58,7 +54,7 @@ import { buildNhlRegularMarketAwareForecast } from "./nhlTargetExcludedTotalMark
 import { loadCompleteNhlLineHistory } from "./nhlLineStore";
 
 export const NHL_DAILY_EDGE_READER_RELEASE =
-  "nhl_daily_edge_reader_2026_10_23_r17_specialized_margin_total_handoff" as const;
+  "nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement" as const;
 
 type NhlStoredSnapshot = {
   model_output?: NhlModelOutput;
@@ -105,27 +101,6 @@ export function nhlVerdictFromStoredDecision(
 }
 
 /**
- * Bucket SharpAPI NHL opportunities by `"AWAY@HOME"` matchup key (normalized
- * to our DB abbreviations). Multiple opportunities per matchup are expected
- * (one per market × side × book).
- */
-function bucketOpportunitiesByMatchup(
-  opps: SharpNhlOpportunity[],
-): Map<string, SharpNhlOpportunity[]> {
-  const byKey = new Map<string, SharpNhlOpportunity[]>();
-  for (const o of opps) {
-    if (!o.home_team || !o.away_team) continue;
-    const home = normalizeNhlTeamName(o.home_team);
-    const away = normalizeNhlTeamName(o.away_team);
-    if (!home || !away) continue;
-    const key = `${away}@${home}`;
-    if (!byKey.has(key)) byKey.set(key, []);
-    byKey.get(key)!.push(o);
-  }
-  return byKey;
-}
-
-/**
  * Pick the best matching opportunity for a (market, side) tuple. Best =
  * highest ev_percentage. SharpAPI NHL market_type values: "moneyline",
  * "total_goals", "puck_line". team_side is "home"|"away" for ML and
@@ -167,18 +142,10 @@ function findOpportunityForPick(
  * abbreviations. Returns a map keyed by `"AWAY@HOME"`.
  */
 export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeResponse> {
-  // Fetch cross-book EV opportunities once. Public splits come from the
-  // persisted dual-provider resolver after the slate games are loaded.
-  let oppsByMatchup = new Map<string, SharpNhlOpportunity[]>();
-  const sharpKey = process.env.SHARPAPI_KEY;
-  if (sharpKey) {
-    try {
-      const opps = await fetchSharpNhlOpportunities(date, sharpKey);
-      oppsByMatchup = bucketOpportunitiesByMatchup(opps);
-    } catch (e) {
-      console.warn(`nhl daily-edge: opportunities fetch failed: ${(e as Error).message}`);
-    }
-  }
+  // SharpAPI is retired. Current public splits come from the persisted
+  // provider resolver, while current prices and movement come from the
+  // Owls-backed line writer. The legacy EV adapter slots remain empty.
+  const oppsByMatchup = new Map<string, SharpNhlOpportunity[]>();
 
   // Load games on this slate.
   const { data: gamesData, error: gamesErr } = await supabase
@@ -586,6 +553,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         selectedLine: null,
         opposingLine: null,
         preferredBook: mlQuote?.sportsbook || null,
+        preservePreferredBook: isLocked,
       });
       const totalTrail = buildNhlTwoSidedPriceTrail({
         live: liveTrailRows,
@@ -596,6 +564,7 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         selectedLine: marketTotalLine,
         opposingLine: marketTotalLine,
         preferredBook: totalQuote?.sportsbook || null,
+        preservePreferredBook: isLocked,
       });
       const puckLineTrail = buildNhlTwoSidedPriceTrail({
         live: liveTrailRows,
@@ -606,11 +575,12 @@ export async function buildNhlDailyEdgeAdapted(date: string): Promise<DailyEdgeR
         selectedLine: predictedPuckLine,
         opposingLine: -predictedPuckLine,
         preferredBook: puckLineQuote?.sportsbook || null,
+        preservePreferredBook: isLocked,
       });
 
       // Locked cards render only their immutable stored tuple. Live
-      // opportunities remain eligible for unlocked cards but cannot replace
-      // a lock-time price denominator or its book association.
+      // Locked cards render only their immutable stored tuple. The retired
+      // legacy opportunity lane remains empty for unlocked cards.
       const oppsForGame = isLocked ? [] : (oppsByMatchup.get(`${awayAbbr}@${homeAbbr}`) ?? []);
 
       const mlOpp = findOpportunityForPick(oppsForGame, "ml", mlPickIsHome, false);

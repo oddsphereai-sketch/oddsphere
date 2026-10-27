@@ -397,11 +397,11 @@ export async function runTrackingRefresh(
         // contract).
         const existing = await loadExistingRecordCounts(opts.supabase, sport, date);
         perDate.records_existed_before = existing.total;
-        if (date === currentSlateDate("nhl") && process.env.SHARPAPI_KEY) {
+        if (date === currentSlateDate("nhl") && process.env.OWLS_INSIGHT_API_KEY) {
           try {
             const lineRefresh = await refreshNhlLines({
               slateDate: date,
-              sharpApiKey: process.env.SHARPAPI_KEY,
+              owlsApiKey: process.env.OWLS_INSIGHT_API_KEY,
               dryRun: !opts.apply,
             });
             for (const error of lineRefresh.errors) perDate.errors.push(`nhl-lines: ${error}`);

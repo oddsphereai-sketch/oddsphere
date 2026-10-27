@@ -184,10 +184,10 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /refreshDailyEdg
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /leaseGroup:\s*"prediction_pipeline"/, "NBA snapshot publication shares the sport prediction lease");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /requireLease:\s*true/, "NBA snapshot publication requires the shared lease");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
-assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_25_r18_exchange_source_exclusion/, "NBA refresh exposes its exchange-source exclusion release");
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds/, "NBA refresh exposes its Owls current-odds release");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /season:\s*season - 1[\s\S]*skipFetchWhenRegularSeasonComplete:\s*true/, "NBA full refresh recovers an incomplete prior-season ratings pack once");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /futureWindowPartial:\s*partial && snapshotBlockers\.length === 0/, "future-window quote gaps remain visible without suppressing a complete current NBA slate");
-assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_22_r13_verified_current_board/, "NHL refresh exposes its immutable verified-current-board release");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_27_r14_owls_current_odds/, "NHL refresh exposes its Owls current-odds release");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");
 assert.ok(
