@@ -11,6 +11,7 @@ import {
   NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES,
   NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES,
 } from "../lib/services/football/nflMarketBrainShadow";
+import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
 
 type Artifact = {
   artifactRelease: string;
@@ -28,6 +29,9 @@ const full = bindMarketBrainMarginTotalPrior({
   eventId: "storage-budget-fixture",
   release: artifact.artifactRelease,
   availableAt: "2026-10-27T00:00:00.000Z",
+  inputLineage: fixtureMarketBrainPriorInputLineage({
+    eventId: "storage-budget-fixture", asOf: "2026-10-27T00:00:00.000Z", modelRelease: artifact.artifactRelease,
+  }),
   marginDistribution: game.marginDistribution,
   totalDistribution: game.totalDistribution,
 });

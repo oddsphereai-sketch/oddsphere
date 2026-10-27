@@ -15,6 +15,7 @@ import {
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { buildNflMarketBrainCaseAudit } from
   "../lib/services/marketBrain/nflMarketBrainCaseAudit";
+import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-10-26T20:00:00.000Z";
 const eventId = "nfl-sequence-fixture";
@@ -137,6 +138,9 @@ const independentPrior = bindMarketBrainMarginTotalPrior({
   eventId,
   release: "fixture-independent-prior-r1",
   availableAt: "2026-10-26T18:00:00.000Z",
+  inputLineage: fixtureMarketBrainPriorInputLineage({
+    eventId, asOf: "2026-10-26T18:00:00.000Z", modelRelease: "fixture-independent-prior-r1",
+  }),
   marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
   totalDistribution: { values: [41, 45], probabilities: [0.45, 0.55] },
 });
@@ -225,6 +229,32 @@ const broadManifestForgeryCase = structuredClone(marketCase);
 broadManifestForgeryCase.observations[0]!.source.participant = "forgedbook";
 assert.throws(() => assertMarketBrainCase(broadManifestForgeryCase), /row participant diverged/,
   "an all-books manifest must still bind each retained observation to its exact raw-row participant");
+const forgedPriorLineageCase = structuredClone(marketCase);
+if (forgedPriorLineageCase.prior.kind !== "margin_total_distribution") throw new Error("fixture prior missing");
+forgedPriorLineageCase.prior.artifact.inputLineage.components[0]!.sha256 = "f".repeat(64);
+assert.throws(() => assertMarketBrainCase(forgedPriorLineageCase), /input lineage is invalid/,
+  "a prior component cannot be changed without invalidating the content-addressed lineage");
+
+const unqualifiedPrior = bindMarketBrainMarginTotalPrior({
+  eventId: "unqualified-prior-fixture",
+  release: "external-prior-fixture-r1",
+  availableAt: "2026-10-26T18:00:00.000Z",
+  inputLineage: fixtureMarketBrainPriorInputLineage({
+    eventId: "unqualified-prior-fixture", asOf: "2026-10-26T18:00:00.000Z",
+    modelRelease: "external-prior-fixture-r1", marketPolicy: "unknown",
+  }),
+  marginDistribution: independentPrior.artifact.marginDistribution,
+  totalDistribution: independentPrior.artifact.totalDistribution,
+});
+const unqualifiedCase = buildMarketBrainCase({
+  sport: "nfl", eventId: "unqualified-prior-fixture", evaluatedAt: cutoffAt,
+  captureBoundary: "normalized_provider_observation", captureLimitations: ["fixture"],
+  subject: { kind: "two_team_game", awayId: "AWY", homeId: "HME", startsAt: "2026-10-27T00:00:00.000Z" },
+  prior: unqualifiedPrior, evaluatedTargets: {}, observations: [], sourceManifests: [], expectedInputs: [], blindSpots: [],
+});
+const unqualifiedSequence = materializeNflMarketBrainSequence({ cases: [unqualifiedCase], cutoffAt });
+assert.throws(() => buildNflMarketBrainResolverFeatures(unqualifiedSequence), /not qualified against market double counting/,
+  "unknown external methodology may be audited but cannot enter executable Market Brain research");
 
 const materialized = materializeNflMarketBrainSequence({ cases: [marketCase], cutoffAt });
 assert.equal(materialized.targetFamilyByMarket.spread, "draftkings");

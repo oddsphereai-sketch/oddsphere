@@ -17,6 +17,7 @@ import {
   type NflMarketBrainSerializedWeights,
 } from "../lib/services/marketBrain/nflMarketBrainResolverContract";
 import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
+import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
 import {
   NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE,
   readNflMarketBrainResearchInput,
@@ -43,6 +44,9 @@ const prior = bindMarketBrainMarginTotalPrior({
   eventId: "resolver-fixture",
   release: "independent-prior-fixture-r1",
   availableAt: cutoffAt,
+  inputLineage: fixtureMarketBrainPriorInputLineage({
+    eventId: "resolver-fixture", asOf: cutoffAt, modelRelease: "independent-prior-fixture-r1",
+  }),
   marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
   totalDistribution: { values: [40, 44], probabilities: [0.4, 0.6] },
 });
@@ -277,6 +281,9 @@ function developmentExamples() {
       eventId: event.eventId,
       release: "resolver-development-prior-r1",
       availableAt: event.cutoffAt,
+      inputLineage: fixtureMarketBrainPriorInputLineage({
+        eventId: event.eventId, asOf: event.cutoffAt, modelRelease: "resolver-development-prior-r1",
+      }),
       marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
       totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
     });

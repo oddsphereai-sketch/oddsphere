@@ -14,7 +14,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r16_source_row_participant_binding" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r17_independent_prior_input_lineage" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -357,6 +357,8 @@ function resolvePrior(prior: MarketBrainPrior, cases: MarketBrainCase[], cutoff:
   if (artifactPrior.release !== prior.release ||
     artifactPrior.marginDistributionSha256 !== prior.marginDistributionSha256 ||
     artifactPrior.totalDistributionSha256 !== prior.totalDistributionSha256 ||
+    artifactPrior.artifact.inputLineage.sha256 !== prior.inputLineageSha256 ||
+    artifactPrior.artifact.inputLineage.qualification !== prior.inputQualification ||
     Math.abs(artifactPrior.marginMean - prior.marginMean) > 1e-9 ||
     Math.abs(artifactPrior.totalMean - prior.totalMean) > 1e-9) {
     throw new Error("NFL Market Brain prior reference diverged from its content-addressed artifact.");

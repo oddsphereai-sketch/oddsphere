@@ -1,7 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r17_source_row_participant_binding" as const;
+  "market_brain_contract_2026_10_27_r18_independent_prior_input_lineage" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -22,11 +22,34 @@ export type MarketBrainDiscreteDistribution = {
   probabilities: number[];
 };
 
+export type MarketBrainPriorInputComponent = {
+  id: string;
+  category: "model_artifact" | "historical_results" | "team_statistics" | "play_by_play" |
+    "schedule_context" | "venue_context" | "weather_context" | "external_projection" | "other";
+  release: string;
+  availableAt: string;
+  sha256: string;
+  marketRelation: "excluded_by_construction" | "may_include_market_information" | "unknown";
+};
+
+export type MarketBrainPriorInputLineage = {
+  schema: "market_brain_prior_input_lineage_v1";
+  eventId: string;
+  modelPath: "nfl_exact_provider" | "nfl_week_one_static_artifact" | "external_projection" | "fixture" | "other";
+  modelRelease: string;
+  asOf: string;
+  declaredMarketInputPolicy: "market_inputs_prohibited" | "market_inputs_present" | "unknown";
+  components: MarketBrainPriorInputComponent[];
+  qualification: "eligible" | "ineligible";
+  sha256: string;
+};
+
 export type MarketBrainMarginTotalArtifact = {
-  schema: "market_brain_margin_total_artifact_v1";
+  schema: "market_brain_margin_total_artifact_v2";
   eventId: string;
   release: string;
   availableAt: string;
+  inputLineage: MarketBrainPriorInputLineage;
   sha256: string;
   marginDistribution: MarketBrainDiscreteDistribution;
   totalDistribution: MarketBrainDiscreteDistribution;
@@ -50,6 +73,8 @@ export type MarketBrainPrior =
       marginDistributionSha256: string;
       totalDistributionSha256: string;
       artifactSha256: string;
+      inputLineageSha256: string;
+      inputQualification: "eligible" | "ineligible";
     }
   | { kind: "score_distribution"; release: string; scoreDistributionSha256: string }
   | { kind: "player_outcome_distribution"; release: string; mean: number; distributionSha256: string }
@@ -241,14 +266,16 @@ export function bindMarketBrainMarginTotalPrior(args: {
   eventId: string;
   release: string;
   availableAt: string;
+  inputLineage: MarketBrainPriorInputLineage;
   marginDistribution: MarketBrainDiscreteDistribution;
   totalDistribution: MarketBrainDiscreteDistribution;
 }): Extract<MarketBrainPrior, { kind: "margin_total_distribution" }> {
   const artifactWithoutHash = {
-    schema: "market_brain_margin_total_artifact_v1" as const,
+    schema: "market_brain_margin_total_artifact_v2" as const,
     eventId: args.eventId,
     release: args.release,
     availableAt: args.availableAt,
+    inputLineage: structuredClone(args.inputLineage),
     marginDistribution: cloneDistribution(args.marginDistribution),
     totalDistribution: cloneDistribution(args.totalDistribution),
   };
@@ -280,7 +307,76 @@ export function referenceMarketBrainMarginTotalPrior(
     marginDistributionSha256: prior.marginDistributionSha256,
     totalDistributionSha256: prior.totalDistributionSha256,
     artifactSha256: prior.artifact.sha256,
+    inputLineageSha256: prior.artifact.inputLineage.sha256,
+    inputQualification: prior.artifact.inputLineage.qualification,
   };
+}
+
+export function bindMarketBrainPriorInputLineage(args: Omit<MarketBrainPriorInputLineage,
+  "schema" | "qualification" | "sha256">): MarketBrainPriorInputLineage {
+  const components = [...args.components]
+    .map((component) => ({ ...component }))
+    .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  const qualification = args.declaredMarketInputPolicy === "market_inputs_prohibited" &&
+    components.length > 0 && components.every((component) => component.marketRelation === "excluded_by_construction")
+    ? "eligible" as const : "ineligible" as const;
+  const withoutHash = {
+    schema: "market_brain_prior_input_lineage_v1" as const,
+    ...args,
+    components,
+    qualification,
+  };
+  const lineage = { ...withoutHash, sha256: marketBrainSha256(withoutHash) };
+  assertMarketBrainPriorInputLineage(lineage, args.eventId, args.asOf);
+  return lineage;
+}
+
+export function assertMarketBrainPriorInputLineage(
+  lineage: MarketBrainPriorInputLineage,
+  eventId: string,
+  availableAt: string,
+): void {
+  const availableAtMs = Date.parse(availableAt);
+  const asOfMs = Date.parse(lineage.asOf);
+  const componentIds = new Set<string>();
+  const componentOrderCanonical = lineage.components.every((component, index) =>
+    index === 0 || lineage.components[index - 1]!.id < component.id);
+  const validComponents = lineage.components.length > 0 && lineage.components.every((component) => {
+    const componentAt = Date.parse(component.availableAt);
+    const unique = component.id.trim().length > 0 && !componentIds.has(component.id);
+    componentIds.add(component.id);
+    return unique && component.release.trim().length > 0 && /^[a-f0-9]{64}$/.test(component.sha256) &&
+      Number.isFinite(componentAt) && componentAt <= asOfMs && componentAt <= availableAtMs;
+  });
+  const expectedQualification = lineage.declaredMarketInputPolicy === "market_inputs_prohibited" &&
+    lineage.components.length > 0 && lineage.components.every((component) =>
+      component.marketRelation === "excluded_by_construction") ? "eligible" : "ineligible";
+  const withoutHash = {
+    schema: lineage.schema,
+    eventId: lineage.eventId,
+    modelPath: lineage.modelPath,
+    modelRelease: lineage.modelRelease,
+    asOf: lineage.asOf,
+    declaredMarketInputPolicy: lineage.declaredMarketInputPolicy,
+    components: lineage.components,
+    qualification: lineage.qualification,
+  };
+  if (lineage.schema !== "market_brain_prior_input_lineage_v1" || lineage.eventId !== eventId ||
+    !lineage.modelRelease.trim() || !Number.isFinite(availableAtMs) || !Number.isFinite(asOfMs) ||
+    asOfMs > availableAtMs || !validComponents || !componentOrderCanonical ||
+    lineage.qualification !== expectedQualification ||
+    lineage.sha256 !== marketBrainSha256(withoutHash)) {
+    throw new Error("Market Brain prior input lineage is invalid or self-inconsistent.");
+  }
+}
+
+export function assertMarketBrainPriorInputLineageQualified(prior: MarketBrainPrior): void {
+  if (prior.kind !== "margin_total_distribution") {
+    throw new Error("Market Brain executable research requires an exact prior artifact.");
+  }
+  if (prior.artifact.inputLineage.qualification !== "eligible") {
+    throw new Error("Market Brain independent prior input lineage is not qualified against market double counting.");
+  }
 }
 
 export function marketBrainPriorArtifactSha256(prior: MarketBrainPrior): string | null {
@@ -292,8 +388,9 @@ export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string,
   if (!prior.release.trim()) throw new Error("Market Brain prior release is required.");
   if (prior.kind === "margin_total_distribution_ref") {
     if (![prior.marginMean, prior.totalMean].every(Number.isFinite) ||
-      ![prior.marginDistributionSha256, prior.totalDistributionSha256, prior.artifactSha256]
+      ![prior.marginDistributionSha256, prior.totalDistributionSha256, prior.artifactSha256, prior.inputLineageSha256]
         .every((value) => /^[a-f0-9]{64}$/.test(value)) ||
+      !["eligible", "ineligible"].includes(prior.inputQualification) ||
       !Number.isFinite(Date.parse(evaluatedAt))) {
       throw new Error(`Market Brain prior artifact reference is invalid for ${eventId}.`);
     }
@@ -301,7 +398,7 @@ export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string,
   }
   if (prior.kind !== "margin_total_distribution") return;
   const artifact = prior.artifact;
-  if (artifact.schema !== "market_brain_margin_total_artifact_v1" || artifact.eventId !== eventId ||
+  if (artifact.schema !== "market_brain_margin_total_artifact_v2" || artifact.eventId !== eventId ||
     artifact.release !== prior.release) {
     throw new Error("Market Brain prior artifact identity diverged from its case.");
   }
@@ -310,11 +407,13 @@ export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string,
   }
   assertDistribution(artifact.marginDistribution, "margin");
   assertDistribution(artifact.totalDistribution, "total");
+  assertMarketBrainPriorInputLineage(artifact.inputLineage, eventId, artifact.availableAt);
   const artifactWithoutHash = {
     schema: artifact.schema,
     eventId: artifact.eventId,
     release: artifact.release,
     availableAt: artifact.availableAt,
+    inputLineage: artifact.inputLineage,
     marginDistribution: artifact.marginDistribution,
     totalDistribution: artifact.totalDistribution,
   };

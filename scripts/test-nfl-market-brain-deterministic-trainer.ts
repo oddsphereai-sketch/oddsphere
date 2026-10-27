@@ -16,6 +16,7 @@ import { buildNflMarketBrainResolverFeatures } from
 import { materializeNflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrainCanonical";
+import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-08-19T16:00:00.000Z";
 const startsAt = "2026-08-20T20:00:00.000Z";
@@ -74,6 +75,9 @@ async function main() {
       eventId: event.eventId,
       release: "trainer-independent-prior-r1",
       availableAt: event.cutoffAt,
+      inputLineage: fixtureMarketBrainPriorInputLineage({
+        eventId: event.eventId, asOf: event.cutoffAt, modelRelease: "trainer-independent-prior-r1",
+      }),
       marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
       totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
     });

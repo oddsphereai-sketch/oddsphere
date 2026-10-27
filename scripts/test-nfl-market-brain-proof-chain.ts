@@ -6,6 +6,7 @@ import { MARKET_BRAIN_CONTRACT_RELEASE, bindMarketBrainMarginTotalPrior, buildMa
   "../lib/services/marketBrain/marketBrainContract";
 import { marketBrainCanonicalJson, marketBrainSha256 } from
   "../lib/services/marketBrain/marketBrainCanonical";
+import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
 import { finalizeNflMarketBrainCaptureSet } from
   "../lib/services/marketBrain/nflMarketBrainCaptureSet";
 import { materializeAndPersistNflMarketBrainResearchInput } from
@@ -57,6 +58,9 @@ async function main() {
     eventId,
     release: "proof-chain-independent-r1",
     availableAt: "2026-10-20T15:00:00.000Z",
+    inputLineage: fixtureMarketBrainPriorInputLineage({
+      eventId, asOf: "2026-10-20T15:00:00.000Z", modelRelease: "proof-chain-independent-r1",
+    }),
     marginDistribution: { values: [-3, 3], probabilities: [0.5, 0.5] },
     totalDistribution: { values: [41, 45], probabilities: [0.5, 0.5] },
   });

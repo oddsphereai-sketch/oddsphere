@@ -16,6 +16,7 @@ import {
 import { materializeNflMarketBrainSequence, type NflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { marketBrainCanonicalJson, marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
+import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
 
 const cutoffAt = "2026-09-10T16:00:00.000Z";
 const startsAt = "2026-09-10T20:00:00.000Z";
@@ -123,6 +124,9 @@ function sequence(eventId: string, homeProbability: number) {
     eventId,
     release: "nfl-prior-fixture-r1",
     availableAt: cutoffAt,
+    inputLineage: fixtureMarketBrainPriorInputLineage({
+      eventId, asOf: cutoffAt, modelRelease: "nfl-prior-fixture-r1",
+    }),
     marginDistribution: { values: [-3, 3], probabilities: [1 - homeProbability, homeProbability] },
     totalDistribution: { values: [40, 44], probabilities: [0.5, 0.5] },
   });

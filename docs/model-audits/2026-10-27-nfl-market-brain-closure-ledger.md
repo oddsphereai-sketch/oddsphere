@@ -171,6 +171,16 @@ database, predictive, or production proof.
   release substitution are rejected by focused adversarial tests. The PostgreSQL collision
   fixture is prepared but has not run here; a relational child FK and atomic write remain open under
   MB-024.
+- **MB-016 / MB-021:** every new Margin/Total prior artifact now binds
+  `market_brain_prior_input_lineage_v1`, including exact event/model identity, as-of time, component
+  releases, availability times, content hashes, and component-level market relationship. Qualification
+  is derived: only a market-prohibited model path whose every component is explicitly excluded by
+  construction is eligible. The exact-provider path binds the compressed model artifact, exact completed-
+  game/team-stat/play-state input, pregame context, and frozen distribution-shape artifact. The external
+  weekly projection is retained as auditable but ineligible because its upstream methodology is unknown.
+  Feature export rejects unknown or market-containing lineage, and adversarial component mutation fails
+  the artifact checksum/lineage boundary. This prevents a caller-authored `targetFree` label from silently
+  qualifying a prior, but does not close incremental-value ablations or database attestation.
 - **MB-003 / MB-004 / MB-038:** split sidecar r2 now observes pagination on the exact incumbent
   `fetchAll` request instead of switching request methods when research is enabled. Incomplete or unproved
   full pages preserve the authoritative split result and fail only the research manifest; the adversarial

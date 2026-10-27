@@ -14,7 +14,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r85_source_row_participant_binding` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r86_independent_prior_input_lineage` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -492,11 +492,11 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_contract_2026_10_27_r17_source_row_participant_binding` and
-  `nfl_market_brain_shadow_2026_10_27_r20_source_row_participant_binding` define an internal-only,
+- `market_brain_contract_2026_10_27_r18_independent_prior_input_lineage` and
+  `nfl_market_brain_shadow_2026_10_27_r21_independent_prior_input_lineage` define an internal-only,
   production-inert evidence boundary. The sole writer
-  `nfl_forward_evidence_writer_2026_10_27_r85_source_row_participant_binding`
-  runs with collector `nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding`,
+  `nfl_forward_evidence_writer_2026_10_27_r86_independent_prior_input_lineage`
+  runs with collector `nfl_forward_evidence_collector_2026_10_27_r29_independent_prior_input_lineage`,
   member fixture `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation`, and
   compact snapshot `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
   The production provider DTOs remain
@@ -530,10 +530,16 @@ Last reviewed: 2026-10-27
   It contains no candidate decision and cannot affect a prediction, probability, projection, grade,
   stake, member display, tracking record, or lock. These research-sidecar releases do not relabel
   the incumbent provider contracts, and existing locks are not adapted.
-  Each available target-free prior now carries the exact immutable Margin and Total PMF bytes,
+  Each available prior now carries the exact immutable Margin and Total PMF bytes,
   event/release/availability identity, marginal checksums, and a content-addressed artifact checksum;
   research no longer reconstructs a distribution from a stored mean. The contract and materializer
   independently fail closed on identity, mass, mean, timestamp, or checksum divergence.
+  The artifact also carries `market_brain_prior_input_lineage_v1`: exact model/input releases,
+  availability times, and component hashes plus each component's declared relationship to market
+  information. Qualification is derived rather than caller-authored. The exact-provider and frozen
+  Week 1 paths qualify from their frozen market-excluded contracts; the external weekly projection
+  remains auditable but ineligible because its upstream methodology is unknown. Unknown or market-
+  containing lineage cannot enter feature export, fitting, inference, or evaluation.
   The first unique prior for an event is embedded; later snapshots carry a sub-KiB content reference
   and the materializer fails closed unless the exact earlier artifact is present. On the frozen Week 1
   artifact, this removes about 97% of repeated prior bytes (approximately 40.8 MiB to 1.38 MiB per
@@ -553,9 +559,9 @@ Last reviewed: 2026-10-27
   Retention is isolated in a separate leased route that is disabled by default and intentionally
   unscheduled until schema, alerting, and capacity readiness are approved; it never shares the
   production cleanup path.
-  `nfl_market_brain_capture_set_2026_10_27_r5_source_row_participant_binding`,
-  `nfl_market_brain_sequence_materializer_2026_10_27_r16_source_row_participant_binding`, and
-  `nfl_market_brain_research_input_2026_10_27_r5_source_row_participant_binding` replay only cases
+  `nfl_market_brain_capture_set_2026_10_27_r6_independent_prior_input_lineage`,
+  `nfl_market_brain_sequence_materializer_2026_10_27_r17_independent_prior_input_lineage`, and
+  `nfl_market_brain_research_input_2026_10_27_r6_independent_prior_input_lineage` replay only cases
   and observations available by an explicit cutoff, excludes the exact target and its entire source
   family before feature construction, pairs individual sides without zero-filling, preserves unpaired
   observed quotes as explicit uncertainty tokens, retains every capture's source-availability state,
@@ -566,7 +572,7 @@ Last reviewed: 2026-10-27
   resolved by participant sort order. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
-  `nfl_market_brain_research_evaluator_2026_10_27_r15_source_row_participant_binding` and
+  `nfl_market_brain_research_evaluator_2026_10_27_r16_independent_prior_input_lineage` and
   `nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows` form a research-only proof
   boundary: outcomes must arrive strictly after cutoff and game start, candidate predictions must
   bind the exact sequence checksum and predate the case, mixed releases and duplicate events are
@@ -591,10 +597,10 @@ Last reviewed: 2026-10-27
   `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` freezes 13 nuanced follow, fade,
   resistance, reversal, outage, stale-evidence, news-sequence, and cross-market stories as non-one-hot
   action distributions without turning them into inference quotas.
-  `nfl_market_brain_resolver_contract_2026_10_27_r12_source_row_participant_binding`,
-  `nfl_market_brain_resolver_features_2026_10_27_r12_source_row_participant_binding`, and
-  `nfl_market_brain_tournament_2026_10_27_r12_source_row_participant_binding`, with trainer
-  `nfl_market_brain_deterministic_trainer_2026_10_27_r7_source_row_participant_binding`, freeze one implemented
+  `nfl_market_brain_resolver_contract_2026_10_27_r13_independent_prior_input_lineage`,
+  `nfl_market_brain_resolver_features_2026_10_27_r13_independent_prior_input_lineage`, and
+  `nfl_market_brain_tournament_2026_10_27_r13_independent_prior_input_lineage`, with trainer
+  `nfl_market_brain_deterministic_trainer_2026_10_27_r8_independent_prior_input_lineage`, freeze one implemented
   regularized residual baseline, its regularization grid and executable parameter-shape boundary,
   contextual source/direction/state basis plus preprocessing/loss/coherence/optimizer/seed/serialization contracts,
   complete development-only row membership, an executable earlier-to-later rolling tournament,
@@ -606,7 +612,7 @@ Last reviewed: 2026-10-27
   evaluated cutoff. Unfrozen artifacts fail closed, and production influence remains false. No fitted resolver
   artifact or predictive qualification exists yet. Fitting and inference use the same normalized joint
   likelihood, and five continuous heads may learn Margin/Total location, uncertainty, and dependence.
-  `nfl_market_brain_case_audit_2026_10_27_r5_source_row_participant_binding` provides a
+  `nfl_market_brain_case_audit_2026_10_27_r6_independent_prior_input_lineage` provides a
   complete normalized read-only dossier for every observation, paired and unpaired quote, split,
   outage, context row, exclusion, source manifest, consumed feature, candidate consequence, and
   postgame delta without assigning a manual verdict. Exact price-parser input rows now have a bounded
@@ -641,7 +647,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_27_r85_source_row_participant_binding` /
+  `nfl_forward_evidence_writer_2026_10_27_r86_independent_prior_input_lineage` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an

@@ -13,6 +13,7 @@ import {
   type MarketBrainMarket,
   type MarketBrainObservation,
   type MarketBrainPrior,
+  type MarketBrainPriorInputLineage,
   type MarketBrainSourceManifest,
   type MarketBrainSourcePrior,
 } from "@/lib/services/marketBrain/marketBrainContract";
@@ -37,7 +38,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r20_source_row_participant_binding" as const;
+  "nfl_market_brain_shadow_2026_10_27_r21_independent_prior_input_lineage" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -98,6 +99,8 @@ export function buildNflMarketBrainShadow(args: {
   /** Intrinsic availability of the independent input, retained across cache reuse. */
   independentForecastAvailableAt: string | null;
   independentForecastProvenance: "fresh" | "stored_cache" | "stored_after_failed_refresh" | "static_artifact" | "unavailable";
+  /** Immutable inputs that produced the independent prior; required whenever the prior is available. */
+  independentPriorInputLineage: MarketBrainPriorInputLineage | null;
   /** Captured after every provider promise used by this tape has settled. */
   retrievalCompletedAt: string;
   knownPriorArtifactSha256: string[];
@@ -274,6 +277,9 @@ function capturedPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
   if (!args.capture.prior.outcome || !args.independentForecast) {
     throw new Error("NFL Market Brain available prior is missing its exact distribution artifact.");
   }
+  if (!args.independentPriorInputLineage) {
+    throw new Error("NFL Market Brain available prior is missing immutable input lineage.");
+  }
   const exact = exactPrior(args);
   return args.knownPriorArtifactSha256.includes(exact.artifact.sha256)
     ? referenceMarketBrainMarginTotalPrior(exact)
@@ -282,11 +288,14 @@ function capturedPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
 
 function exactPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
   const expected = args.capture.prior.outcome;
-  if (!expected || !args.independentForecast) throw new Error("NFL Market Brain exact prior artifact is unavailable.");
+  if (!expected || !args.independentForecast || !args.independentPriorInputLineage) {
+    throw new Error("NFL Market Brain exact prior artifact or input lineage is unavailable.");
+  }
   const prior = bindMarketBrainMarginTotalPrior({
     eventId: args.game.providerGameId,
     release: args.capture.prior.release,
     availableAt: requiredPriorAvailableAt(args),
+    inputLineage: args.independentPriorInputLineage,
     marginDistribution: args.independentForecast.marginDistribution,
     totalDistribution: args.independentForecast.totalDistribution,
   });
@@ -451,6 +460,11 @@ function addPrior(
 ) {
   const artifactSha256 = marketBrainPriorArtifactSha256(prior);
   const observed = artifactSha256 !== null;
+  const inputLineage = prior.kind === "margin_total_distribution" ? prior.artifact.inputLineage
+    : prior.kind === "margin_total_distribution_ref" ? {
+      sha256: prior.inputLineageSha256,
+      qualification: prior.inputQualification,
+    } : null;
   const id = `prior:${args.capture.prior.release}:${artifactSha256 ?? "unavailable"}`;
   if (observed) observations.push({
     id,
@@ -470,8 +484,10 @@ function addPrior(
       total_mean: numericFeature(prior.kind === "margin_total_distribution" || prior.kind === "margin_total_distribution_ref" ? prior.totalMean : null),
     },
     categorical: {
-      targetFree: true,
+      targetFree: inputLineage?.qualification === "eligible",
       artifactSha256,
+      inputLineageSha256: inputLineage?.sha256 ?? null,
+      inputQualification: inputLineage?.qualification ?? null,
       provenance: args.independentForecastProvenance,
     },
     audit: {
@@ -481,7 +497,7 @@ function addPrior(
     },
   });
   expectedInputs.push({
-    id: "model_prior:target_free",
+    id: "model_prior:independent_input",
     market: "other",
     modality: "model_prior",
     provider: "oddsphere",
@@ -489,7 +505,8 @@ function addPrior(
     expectation: "required",
     availability: observed ? "observed" : "unavailable",
     observationIds: observed ? [id] : [],
-    reason: observed ? null : args.capture.prior.reason,
+    reason: observed ? inputLineage?.qualification === "eligible" ? null
+      : "independent_prior_input_lineage_unqualified" : args.capture.prior.reason,
   });
 }
 

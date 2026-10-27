@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import artifactJson from "../lib/services/football/modelArtifacts/nflV1WeekOneOutcome.json";
+import { marketBrainSha256 } from "../lib/services/marketBrain/marketBrainCanonical";
 import { readFileSync } from "node:fs";
 import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
@@ -18,6 +20,7 @@ import {
   nflV1WeekOneLineProbabilities,
   NFL_V1_OUTCOME_MODEL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
 } from "../lib/services/football/nflV1WeekOneOutcome";
 import { buildNflV1ActionableGradeBundle } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import {
@@ -29,6 +32,9 @@ import {
   NFL_R6_SOURCE_POINT_MODEL_RELEASE,
   type NflR6ShadowMoneylineDecision,
 } from "../lib/services/football/nflR6MoneylineShadow";
+
+assert.equal(marketBrainSha256(artifactJson), NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
+  "the independent-prior lineage hash must bind the exact frozen Week 1 artifact");
 
 const capturedAt = "2026-08-22T13:50:56.934Z";
 const weekOneSlate = [

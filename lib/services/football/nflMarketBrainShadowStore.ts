@@ -288,6 +288,10 @@ export async function readNflMarketBrainShadows(args: {
     const reference = shadow.case.prior;
     const artifact = artifactMap.get(reference.artifactSha256);
     if (!artifact) throw new Error(`NFL Market Brain prior artifact is missing: ${reference.artifactSha256}`);
+    if (artifact.inputLineage.sha256 !== reference.inputLineageSha256 ||
+      artifact.inputLineage.qualification !== reference.inputQualification) {
+      throw new Error(`NFL Market Brain prior input-lineage reference mismatch: ${reference.artifactSha256}`);
+    }
     shadow.case.prior = {
       kind: "margin_total_distribution",
       release: reference.release,
@@ -419,6 +423,10 @@ async function hydrateStoredRows(args: {
     const reference = shadow.case.prior;
     const artifact = artifactMap.get(reference.artifactSha256);
     if (!artifact) throw new Error(`NFL Market Brain prior artifact is missing: ${reference.artifactSha256}`);
+    if (artifact.inputLineage.sha256 !== reference.inputLineageSha256 ||
+      artifact.inputLineage.qualification !== reference.inputQualification) {
+      throw new Error(`NFL Market Brain prior input-lineage reference mismatch: ${reference.artifactSha256}`);
+    }
     shadow.case.prior = {
       kind: "margin_total_distribution",
       release: reference.release,

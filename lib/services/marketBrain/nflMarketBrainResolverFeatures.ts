@@ -5,6 +5,7 @@ import type {
   MarketBrainNumericFeature,
   MarketBrainObservation,
 } from "./marketBrainContract";
+import { assertMarketBrainPriorInputLineageQualified } from "./marketBrainContract";
 import {
   NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE,
   type NflMarketBrainQuotePath,
@@ -12,7 +13,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESOLVER_FEATURE_RELEASE =
-  "nfl_market_brain_resolver_features_2026_10_27_r12_source_row_participant_binding" as const;
+  "nfl_market_brain_resolver_features_2026_10_27_r13_independent_prior_input_lineage" as const;
 
 const nflMarketBrainTrainerInputBrand: unique symbol = Symbol("nflMarketBrainTrainerInput");
 export type NflMarketBrainTrainerInput = Readonly<{
@@ -108,6 +109,8 @@ export type NflMarketBrainResolverFeatures = {
   independentPrior: {
     release: string;
     artifactSha256: string;
+    inputLineageSha256: string;
+    inputQualification: "eligible";
     availableSecondsBeforeCutoff: number;
     marginMean: number;
     totalMean: number;
@@ -139,6 +142,7 @@ export type NflMarketBrainResolverFeatures = {
     evaluatedTargetFamilyAbsent: true;
     missingnessExplicit: true;
     independentPriorPreserved: true;
+    independentPriorInputLineageQualified: true;
     productionInfluenceAllowed: false;
   };
   featurePayloadSha256: string;
@@ -154,6 +158,7 @@ export function buildNflMarketBrainResolverFeatures(
   if (sequence.prior.kind !== "margin_total_distribution") {
     throw new Error("NFL Market Brain feature exporter requires an exact independent Margin/Total prior.");
   }
+  assertMarketBrainPriorInputLineageQualified(sequence.prior);
   if (sequence.observations.some((row) => row.eligible &&
     (row.exclusionReasons.includes("evaluated_target") || row.exclusionReasons.includes("same_target_family")))) {
     throw new Error("NFL Market Brain feature exporter found target-family evidence marked eligible.");
@@ -174,6 +179,8 @@ export function buildNflMarketBrainResolverFeatures(
     independentPrior: {
       release: sequence.prior.release,
       artifactSha256: sequence.prior.artifact.sha256,
+      inputLineageSha256: sequence.prior.artifact.inputLineage.sha256,
+      inputQualification: sequence.prior.artifact.inputLineage.qualification as "eligible",
       availableSecondsBeforeCutoff:
         (Date.parse(sequence.cutoffAt) - Date.parse(sequence.prior.artifact.availableAt)) / 1_000,
       marginMean: sequence.prior.marginMean,
@@ -216,6 +223,7 @@ export function buildNflMarketBrainResolverFeatures(
       evaluatedTargetFamilyAbsent: true as const,
       missingnessExplicit: true as const,
       independentPriorPreserved: true as const,
+      independentPriorInputLineageQualified: true as const,
       productionInfluenceAllowed: false as const,
     },
     featurePayloadSha256,

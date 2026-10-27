@@ -35,6 +35,7 @@ import {
   "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
 import { materializeNflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
+import { fixtureMarketBrainPriorInputLineage } from "./fixtures/marketBrainPriorInputLineage";
 
 const capturedAt = "2026-10-26T20:00:00.000Z";
 const openedAt = "2026-10-26T16:00:00.000Z";
@@ -270,6 +271,9 @@ const baseShadowArgs = {
   },
   independentForecastAvailableAt: capturedAt,
   independentForecastProvenance: "fresh" as const,
+  independentPriorInputLineage: fixtureMarketBrainPriorInputLineage({
+    eventId: game.providerGameId, asOf: capturedAt, modelRelease: capture.prior.release,
+  }),
   retrievalCompletedAt: capturedAt,
   knownPriorArtifactSha256: [] as string[],
   rawPriceResponseManifests,
@@ -378,6 +382,13 @@ const referencedShadow = buildNflMarketBrainShadow({
 assert.equal(referencedShadow.case.prior.kind, "margin_total_distribution_ref");
 assert.equal(referencedShadow.case.prior.kind === "margin_total_distribution_ref" &&
   referencedShadow.case.prior.artifactSha256, priorArtifactSha256);
+const forgedLineageReference = structuredClone(referencedShadow.case);
+if (forgedLineageReference.prior.kind !== "margin_total_distribution_ref") throw new Error("fixture reference missing");
+forgedLineageReference.prior.inputLineageSha256 = "f".repeat(64);
+assert.throws(() => materializeNflMarketBrainSequence({
+  cases: [shadow.case, forgedLineageReference], cutoffAt: capturedAt,
+}), /prior reference diverged/,
+"a prior reference cannot substitute a different input lineage for the content-addressed artifact");
 assert.ok(shadow.bytes - referencedShadow.bytes > 100,
   "later captures must reference the immutable prior rather than duplicating its PMF bytes");
 const corruptedPrior = structuredClone(shadow.case);

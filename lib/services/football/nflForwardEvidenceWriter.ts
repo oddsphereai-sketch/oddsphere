@@ -4,7 +4,11 @@ import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { PlaybookReadBroker } from "@/lib/providers/playbook/playbookReadBroker";
 import type { PlaybookLineGame, PlaybookSplitGame } from "@/lib/providers/playbook/types";
-import { marketBrainPriorArtifactSha256 } from "@/lib/services/marketBrain/marketBrainContract";
+import {
+  bindMarketBrainPriorInputLineage,
+  marketBrainPriorArtifactSha256,
+  type MarketBrainPriorInputLineage,
+} from "@/lib/services/marketBrain/marketBrainContract";
 import { marketBrainSha256 } from "@/lib/services/marketBrain/marketBrainCanonical";
 import {
   fetchBalldontlieNflSlateAvailability,
@@ -66,6 +70,7 @@ import {
   NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE,
   NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+  NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
 } from "./nflV1WeekOneOutcome";
 import {
   resolveNflTargetExcludedMarketAnchor,
@@ -105,12 +110,18 @@ import {
   readNflForwardMemberSnapshot,
   writeNflForwardMemberSnapshot,
 } from "./nflForwardMemberSnapshotStore";
-import { readNflPlayerPropsCurrentSeasonState } from "./nflPlayerPropsCurrentSeasonState";
+import {
+  readNflPlayerPropsCurrentSeasonState,
+  type NflPlayerPropsCurrentSeasonState,
+} from "./nflPlayerPropsCurrentSeasonState";
 import { buildNflWeeklyPossessionMargin } from "./nflWeeklyPossessionMargin";
 import {
   buildNflExactProviderIndependentScore,
   buildNflExactProviderScoreContext,
+  NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE,
+  NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
   NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE,
+  type NflExactProviderScoreContext,
 } from "./nflExactProviderScoreRuntime";
 import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import { buildNflMarketState } from "./nflMarketState";
@@ -132,7 +143,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r85_source_row_participant_binding" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r86_independent_prior_input_lineage" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -604,10 +615,13 @@ export async function runNflForwardEvidenceWriter(args: {
           marketHomeMargin: -current.spread.homeLine,
         })
       : null;
-    const exactProviderScore = args.exactProviderCandidate && currentSeasonState
+    const exactProviderScoreContext = args.exactProviderCandidate && currentSeasonState
+      ? buildNflExactProviderScoreContext({ game: plan.game, currentSeasonState, weather })
+      : null;
+    const exactProviderScore = exactProviderScoreContext && currentSeasonState
       ? buildNflExactProviderIndependentScore({
           currentSeasonState,
-          context: buildNflExactProviderScoreContext({ game: plan.game, currentSeasonState, weather }),
+          context: exactProviderScoreContext,
         })
       : null;
     const legacyBaseOutcome = getNflV1WeekOneOutcomeForecast({
@@ -954,6 +968,29 @@ export async function runNflForwardEvidenceWriter(args: {
       marketBrainRawParserInputs = marketBrainPriceManifests.flatMap((manifest) =>
         manifest.rawParserInput ? [manifest.rawParserInput] : []);
       try {
+        const independentForecastAvailableAt = hasTargetFreePrior
+          ? exactProviderScore
+            ? retrievalCompletedAt
+            : paidProjectionShadow
+            ? paidProjectionFetch?.byGame[plan.game.providerGameId]
+              ? retrievalCompletedAt
+              : paidProjectionShadow.fetchedAt
+            : "2026-08-23T00:00:00.000Z"
+          : null;
+        const independentPriorInputLineage = hasTargetFreePrior && independentForecastAvailableAt
+          ? buildNflIndependentPriorInputLineage({
+              eventId: plan.game.providerGameId,
+              independentRelease: exactProviderScore
+                ? NFL_EXACT_PROVIDER_SCORE_MODEL_RELEASE
+                : paidProjectionShadow
+                ? NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE
+                : NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+              availableAt: independentForecastAvailableAt,
+              exactProviderScoreContext,
+              currentSeasonState,
+              paidProjectionShadow,
+            })
+          : null;
         marketBrainShadow = buildNflMarketBrainShadow({
           game: plan.game,
           capture: contextualEvidenceCapture,
@@ -961,15 +998,7 @@ export async function runNflForwardEvidenceWriter(args: {
           weather,
           independentForecast: hasTargetFreePrior ? baseOutcome : null,
           authoritativeForecast: outcome,
-          independentForecastAvailableAt: hasTargetFreePrior
-            ? exactProviderScore
-              ? retrievalCompletedAt
-              : paidProjectionShadow
-              ? paidProjectionFetch?.byGame[plan.game.providerGameId]
-                ? retrievalCompletedAt
-                : paidProjectionShadow.fetchedAt
-              : "2026-08-23T00:00:00.000Z"
-            : null,
+          independentForecastAvailableAt,
           independentForecastProvenance: !hasTargetFreePrior
             ? "unavailable"
             : exactProviderScore
@@ -981,6 +1010,7 @@ export async function runNflForwardEvidenceWriter(args: {
               ? "stored_after_failed_refresh"
               : "stored_cache"
             : "static_artifact",
+          independentPriorInputLineage,
           retrievalCompletedAt,
           knownPriorArtifactSha256: [...(knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? [])],
           rawPriceResponseManifests: marketBrainPriceManifests,
@@ -1822,6 +1852,95 @@ function normalizeTrackedNflStatus(value: string): string {
   if (normalized === "in_progress" || normalized === "live") return "in_progress";
   if (normalized === "postponed" || normalized === "canceled" || normalized === "cancelled") return normalized;
   return "scheduled";
+}
+
+function buildNflIndependentPriorInputLineage(args: {
+  eventId: string;
+  independentRelease: string;
+  availableAt: string;
+  exactProviderScoreContext: NflExactProviderScoreContext | null;
+  currentSeasonState: NflPlayerPropsCurrentSeasonState | null;
+  paidProjectionShadow: NflPaidProjectionShadow | null;
+}): MarketBrainPriorInputLineage {
+  const shapeComponent = {
+    id: "nfl_discrete_score_shape",
+    category: "model_artifact" as const,
+    release: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
+    availableAt: "2026-08-23T00:00:00.000Z",
+    sha256: NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
+    marketRelation: "excluded_by_construction" as const,
+  };
+  if (args.exactProviderScoreContext && args.currentSeasonState) {
+    return bindMarketBrainPriorInputLineage({
+      eventId: args.eventId,
+      modelPath: "nfl_exact_provider",
+      modelRelease: args.independentRelease,
+      asOf: args.availableAt,
+      declaredMarketInputPolicy: "market_inputs_prohibited",
+      components: [
+        shapeComponent,
+        {
+          id: "nfl_exact_provider_model_artifact",
+          category: "model_artifact",
+          release: NFL_EXACT_PROVIDER_SCORE_ARTIFACT_RELEASE,
+          availableAt: "2026-10-15T00:00:00.000Z",
+          sha256: NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
+          marketRelation: "excluded_by_construction",
+        },
+        {
+          id: "nfl_completed_game_state",
+          category: "team_statistics",
+          release: args.currentSeasonState.release,
+          availableAt: args.currentSeasonState.updatedAt,
+          sha256: marketBrainSha256({
+            release: args.currentSeasonState.release,
+            season: args.currentSeasonState.season,
+            completeThroughWeek: args.currentSeasonState.completeThroughWeek,
+            games: args.currentSeasonState.games,
+            teamStats: args.currentSeasonState.teamStats,
+            playMetrics: args.currentSeasonState.playMetrics,
+          }),
+          marketRelation: "excluded_by_construction",
+        },
+        {
+          id: "nfl_pregame_schedule_venue_context",
+          category: "venue_context",
+          release: "nfl_exact_provider_score_context_2026_10_15_r1",
+          availableAt: args.availableAt,
+          sha256: marketBrainSha256(args.exactProviderScoreContext),
+          marketRelation: "excluded_by_construction",
+        },
+      ],
+    });
+  }
+  if (args.paidProjectionShadow) {
+    return bindMarketBrainPriorInputLineage({
+      eventId: args.eventId,
+      modelPath: "external_projection",
+      modelRelease: args.independentRelease,
+      asOf: args.availableAt,
+      declaredMarketInputPolicy: "unknown",
+      components: [
+        shapeComponent,
+        {
+          id: "balldontlie_weekly_projection",
+          category: "external_projection",
+          release: args.paidProjectionShadow.release,
+          availableAt: args.paidProjectionShadow.fetchedAt,
+          sha256: marketBrainSha256(args.paidProjectionShadow),
+          marketRelation: "unknown",
+        },
+      ],
+    });
+  }
+  return bindMarketBrainPriorInputLineage({
+    eventId: args.eventId,
+    modelPath: "nfl_week_one_static_artifact",
+    modelRelease: args.independentRelease,
+    asOf: args.availableAt,
+    declaredMarketInputPolicy: "market_inputs_prohibited",
+    components: [shapeComponent],
+  });
 }
 
 function normalizeTeam(value: unknown): string {
