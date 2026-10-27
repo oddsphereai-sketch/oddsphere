@@ -492,6 +492,16 @@ Last reviewed: 2026-10-27
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
+- `market_brain_product_registry_2026_10_27_r1_complete_active_product_scope` freezes the complete
+  adapter scope before any production influence: NFL, CFB, NBA, WNBA, MLB, NHL, EPL, UCL, NFL
+  Player Props, NBA Player Props, and MLB Player Props are active product rows; CBB is a separate
+  prelaunch row. Every row is explicitly non-live and requires its own sport/competition/stat-family
+  evidence roster, independent-prior lineage, chronology, settlement, training, calibration,
+  consequence, untouched qualification, writer/lease, and locked-record proof. Shared infrastructure
+  cannot transfer NFL weights, thresholds, authority, or qualification to another row. The paired
+  cross-sport predeclaration also treats request/cadence/parser/identity/storage omissions as repair
+  defects rather than provider blind spots and adds analyzability-attrition blocker MB-042 so failed
+  and all-failure cases cannot disappear from qualification denominators.
 - `market_brain_contract_2026_10_27_r20_output_artifact_attestation` and
   `nfl_market_brain_shadow_2026_10_27_r23_output_artifact_attestation` define an internal-only,
   production-inert evidence boundary. The sole writer

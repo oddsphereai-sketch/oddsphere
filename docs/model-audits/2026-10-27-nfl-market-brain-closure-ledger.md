@@ -3,8 +3,8 @@
 Status: **OPEN — exhaustive inventory reconciled; remediation not complete**
 
 Inventory freeze: 2026-10-27 exhaustive full-stack, predictive, operations/database, requirements-
-trace, failure-mode, and market-science red-team. The frozen inventory contains MB-001 through
-MB-041. New evidence must map to an existing item or
+trace, failure-mode, and market-science red-team. The reconciled inventory contains MB-001 through
+MB-042. New evidence must map to an existing item or
 be added explicitly; it may not create an untracked side list.
 
 This is the single closure ledger for the NFL Market Brain remediation. It supersedes informal
@@ -71,6 +71,7 @@ inspection.
 | MB-039 | Blocker | open | Adaptive family/feature/policy search and reuse of opened confirmation periods are not registered or multiplicity-controlled. | Append-only experiment registry and bounded search budget; confirmation is consumed after first registered evaluation; all selection stays inside nested chronological folds; null-search simulations preserve the declared false-positive rate. |
 | MB-040 | P1 | open | The one-to-four-game stratified canary has no target-population or inclusion-probability contract proving results generalize to the full product slate. | Freeze the full sampling frame, eligibility/exclusion reasons, strata, and inclusion probabilities; qualify on full-slate shadow or design-weighted estimates with subgroup and mixture-shift tests. |
 | MB-041 | Blocker | open | Evaluation, run summaries, and human audit dossiers trust caller-supplied sequence/evaluation objects rather than persisted replay-derived receipts. | Persist canonical evaluation receipts bound to attested input, prediction, deterministic outcome revision, manifest, quote, and consequence releases; summaries/dossiers reload receipts and recompute; forged/edited rows fail in PostgreSQL and after restart. |
+| MB-042 | Blocker | open | Research input drops failed attempts and rejects all-failure events, so evaluation can condition on analyzable tapes and hide missing-not-at-random capture attrition. | Define full-frame, captured-frame, and analyzable-frame estimands; materialize every planned attempt including failure/lateness; persist analyzability/no-prediction receipts; report coverage, subgroup/differential attrition, and conservative performance bounds; synthetic outcome-correlated failure must block qualification. |
 
 ## Required acceptance amendments
 
@@ -115,6 +116,13 @@ existing closure proofs:
 - **MB-037:** cost closure includes hard event/attempt/state/operation bounds, CPU, RAM, duration,
   cancellation, queue concurrency, and measured p50/p95 fit telemetry. One-over-limit fails before
   allocation and cancellation cannot persist an artifact.
+- **MB-022:** the executable product registry must enumerate NFL, CFB, NBA, WNBA, MLB, NHL, EPL,
+  UCL, NFL Player Props, NBA Player Props, and MLB Player Props. EPL/UCL and every league/stat-family
+  props program retain distinct adapter identity and qualification; no NFL authority transfers.
+  Prelaunch CBB is registered separately and cannot activate by inheriting NBA authority.
+- **MB-040 / MB-042:** qualification reports the precommitted full frame, captured frame, and
+  analyzable frame. Failed and all-failure events remain in coverage and no-prediction denominators;
+  differential or outcome-correlated attrition cannot disappear behind a complete-case score.
 
 ## Explicitly preserved findings
 
