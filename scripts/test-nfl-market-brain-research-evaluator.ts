@@ -362,6 +362,7 @@ async function verifiedOutcome(eventId: string, finalAt: string, awayScore: numb
       if (table === "games") {
         return { select() { return { eq() { return this; }, single: async () => ({ data: {
           id: eventId === "harm" ? "2" : "1", external_id: eventId, status: "final",
+          sport: "nfl",
           away_score: awayScore, home_score: homeScore, provider_ids: { balldontlie: eventId }, updated_at: finalAt,
         }, error: null }) }; } };
       }

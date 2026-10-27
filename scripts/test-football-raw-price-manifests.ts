@@ -123,4 +123,20 @@ assert.equal(oversized.input, null);
 assert.equal(oversized.failureReason,
   "football_raw_price_parser_input_exceeds_2_mib_research_archive_limit");
 
+const escapedOversized = footballRawPriceParserInput([{ padding: "\\".repeat(1024 * 1024 + 1) }]);
+assert.equal(escapedOversized.input, null,
+  "escaped strings must be rejected by serialized byte size without first allocating their JSON copy");
+assert.equal(escapedOversized.failureReason,
+  "football_raw_price_parser_input_exceeds_2_mib_research_archive_limit");
+
+let accessorCalled = false;
+const accessorRow = Object.defineProperty({}, "payload", {
+  enumerable: true,
+  get() { accessorCalled = true; return "must-not-run"; },
+});
+const accessor = footballRawPriceParserInput([accessorRow]);
+assert.equal(accessor.input, null);
+assert.equal(accessor.failureReason, "football_raw_price_parser_input_contains_accessor");
+assert.equal(accessorCalled, false, "research archival preflight must never invoke caller accessors");
+
 console.log("Football raw price manifests: response hashes, row accounting, duplicates, partial sides, and unsupported rows passed");

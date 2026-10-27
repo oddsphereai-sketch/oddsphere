@@ -6,7 +6,7 @@ export type FootballRawPricePhase = "provider_opening" | "current";
 export type FootballRawPriceStatus = "observed" | "incomplete" | "duplicate" | "unsupported";
 
 export const FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE =
-  "football_raw_price_parser_input_2026_10_27_r2_schema_bound_key" as const;
+  "football_raw_price_parser_input_2026_10_27_r3_bounded_preflight" as const;
 
 export type FootballRawPriceObservation = {
   sourceObservationId: string;
@@ -137,12 +137,52 @@ function assertBoundedRawParserJson(value: unknown, maximumBytes: number): void 
     }
   }
 
+  function addJsonStringBytes(valueToMeasure: string): void {
+    add(2); // opening and closing quotes
+    for (let index = 0; index < valueToMeasure.length; index += 1) {
+      const codeUnit = valueToMeasure.charCodeAt(index);
+      if (codeUnit === 0x22 || codeUnit === 0x5c ||
+          codeUnit === 0x08 || codeUnit === 0x09 || codeUnit === 0x0a ||
+          codeUnit === 0x0c || codeUnit === 0x0d) {
+        add(2);
+      } else if (codeUnit <= 0x1f) {
+        add(6);
+      } else if (codeUnit <= 0x7f) {
+        add(1);
+      } else if (codeUnit <= 0x7ff) {
+        add(2);
+      } else if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+        const next = valueToMeasure.charCodeAt(index + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          add(4);
+          index += 1;
+        } else {
+          add(6); // JSON.stringify escapes an unpaired surrogate as \udxxx.
+        }
+      } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+        add(6);
+      } else {
+        add(3);
+      }
+    }
+  }
+
   function visit(item: unknown, depth: number): void {
     if (depth > 64) throw new Error("football_raw_price_parser_input_exceeds_safe_json_depth");
-    if (item === null || typeof item === "string" || typeof item === "boolean" || typeof item === "number") {
-      const serialized = JSON.stringify(item);
-      if (serialized === undefined) throw new Error("football_raw_price_parser_input_contains_non_json_value");
-      add(Buffer.byteLength(serialized, "utf8"));
+    if (item === null) {
+      add(4);
+      return;
+    }
+    if (typeof item === "string") {
+      addJsonStringBytes(item);
+      return;
+    }
+    if (typeof item === "boolean") {
+      add(item ? 4 : 5);
+      return;
+    }
+    if (typeof item === "number") {
+      add(Number.isFinite(item) ? String(Object.is(item, -0) ? 0 : item).length : 4);
       return;
     }
     if (typeof item !== "object") {
@@ -160,15 +200,24 @@ function assertBoundedRawParserJson(value: unknown, maximumBytes: number): void 
         for (let index = 0; index < item.length; index += 1) {
           if (index > 0) add(1);
           if (!Object.hasOwn(item, index)) throw new Error("football_raw_price_parser_input_contains_sparse_array");
-          visit(item[index], depth + 1);
+          const descriptor = Object.getOwnPropertyDescriptor(item, String(index));
+          if (!descriptor || !("value" in descriptor)) {
+            throw new Error("football_raw_price_parser_input_contains_accessor");
+          }
+          visit(descriptor.value, depth + 1);
         }
       } else {
-        const entries = Object.entries(item);
-        for (let index = 0; index < entries.length; index += 1) {
+        const keys = Object.keys(item);
+        for (let index = 0; index < keys.length; index += 1) {
           if (index > 0) add(1);
-          const [key, child] = entries[index]!;
-          add(Buffer.byteLength(JSON.stringify(key), "utf8") + 1);
-          visit(child, depth + 1);
+          const key = keys[index]!;
+          const descriptor = Object.getOwnPropertyDescriptor(item, key);
+          if (!descriptor || !("value" in descriptor)) {
+            throw new Error("football_raw_price_parser_input_contains_accessor");
+          }
+          addJsonStringBytes(key);
+          add(1);
+          visit(descriptor.value, depth + 1);
         }
       }
     } finally {

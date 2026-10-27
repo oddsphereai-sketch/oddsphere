@@ -166,7 +166,7 @@ function priceManifest(
     providerFetchedAt: observedAt,
     rawResponseSha256: rawPriceSha256(rows),
     rawParserInput: {
-      schema: "football_raw_price_parser_input_2026_10_27_r2_schema_bound_key",
+      schema: "football_raw_price_parser_input_2026_10_27_r3_bounded_preflight",
       sha256: rawPriceSha256(rows),
       payload: rows,
       bytes: Buffer.byteLength(JSON.stringify(rows), "utf8"),

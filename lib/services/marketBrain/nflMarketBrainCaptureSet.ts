@@ -6,7 +6,11 @@ import {
 } from "@/lib/services/football/nflMarketBrainShadowStore";
 import { NFL_MARKET_BRAIN_SHADOW_RELEASE } from "@/lib/services/football/nflMarketBrainShadow";
 import { MARKET_BRAIN_CONTRACT_RELEASE } from "./marketBrainContract";
-import { marketBrainCanonicalJson, marketBrainSha256 } from "./marketBrainCanonical";
+import {
+  MARKET_BRAIN_CANONICAL_JSON_RELEASE,
+  marketBrainCanonicalJson,
+  marketBrainSha256,
+} from "./marketBrainCanonical";
 import {
   assertNflMarketBrainAttestedResearchManifest,
   type NflMarketBrainAttestedResearchManifest,
@@ -130,6 +134,7 @@ export async function finalizeNflMarketBrainCaptureSet(args: {
     checksum: marketBrainSha256(withoutChecksum),
   };
   let query = args.client.from("nfl_market_brain_capture_sets").insert({
+    canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
     capture_set_checksum: captureSet.checksum,
     capture_set_release: captureSet.release,
     event_id: captureSet.eventId,

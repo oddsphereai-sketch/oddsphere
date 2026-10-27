@@ -16,6 +16,8 @@ legacy_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v45-installed.sql"
 expanded_v45_sql="${repo_root}/lib/db/schema-migration-v45-nfl-market-brain-shadow.sql"
 upgrade_sql="${repo_root}/lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql"
 lifecycle_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v46-lifecycle-proof.sql"
+lifecycle_prelude="$(mktemp)"
+trap 'rm -f "${lifecycle_prelude}"' EXIT
 
 psql_run() {
   psql "${database_url}" -X -v ON_ERROR_STOP=1 "$@"
@@ -54,6 +56,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS public.games (
   id bigint PRIMARY KEY,
   external_id text NOT NULL,
+  sport text NOT NULL,
   status text NOT NULL,
   away_score integer,
   home_score integer,
@@ -279,7 +282,8 @@ END;
 $assertions$;
 SQL
 
-psql_run -f "${lifecycle_sql}"
+npx tsx "${repo_root}/scripts/build-nfl-market-brain-v46-lifecycle-prelude.ts" >"${lifecycle_prelude}"
+psql_run -f "${lifecycle_prelude}" -f "${lifecycle_sql}"
 
 psql_run <<'SQL'
 

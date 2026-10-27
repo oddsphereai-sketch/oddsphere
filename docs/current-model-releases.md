@@ -493,7 +493,7 @@ Last reviewed: 2026-10-27
 ### Cross-sport Market Brain foundation (shadow capture only)
 
 - `market_brain_contract_2026_10_27_r13_schema_bound_parser_input` and
-  `nfl_market_brain_shadow_2026_10_27_r13_schema_bound_parser_input` define an internal-only,
+  `nfl_market_brain_shadow_2026_10_27_r14_capture_timestamp_bound` define an internal-only,
   production-inert evidence boundary. The sole writer
   `nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar`
   consumes `nfl_sharpapi_splits_2026_10_27_r5_pagination_metadata_closed`. Research capture is
@@ -507,7 +507,8 @@ Last reviewed: 2026-10-27
   `football_sharp_price_capture_2026_10_27_r4_raw_parser_input` attach raw response hashes,
   returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
   incomplete price sides before complete-pair normalization or family replacement. Raw parser
-  archives use the composite identity `(schema_release, parser_input_sha256)`, so identical bytes
+  archives use `football_raw_price_parser_input_2026_10_27_r3_bounded_preflight` and the composite
+  identity `(schema_release, parser_input_sha256)`, so identical bytes
   interpreted under a different parser contract cannot silently reuse older provenance. The tape retains
   exact-evaluated versus
   same-family versus target-excluded provenance plus an explicit evaluated-target identity that does
@@ -536,7 +537,9 @@ Last reviewed: 2026-10-27
   two-second aborts before player-prop work continues. Cron health exposes every research read/write
   error and every per-game capture failure. The database enforces 96 KiB rows, 256 MiB weekly and
   5 GiB season ceilings, content-addressed prior/artifact ceilings, and a 210-day tape expiry boundary.
-  The scheduled cleanup route invokes the bounded purge only while the two-key canary is approved.
+  Retention is isolated in a separate leased route that is disabled by default and intentionally
+  unscheduled until schema, alerting, and capacity readiness are approved; it never shares the
+  production cleanup path.
   `nfl_market_brain_sequence_materializer_2026_10_27_r13_finalized_capture_input` replays only cases
   and observations available by an explicit cutoff, excludes the exact target and its entire source
   family before feature construction, pairs individual sides without zero-filling, preserves unpaired
@@ -548,7 +551,7 @@ Last reviewed: 2026-10-27
   resolved by participant sort order. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
-  `nfl_market_brain_research_evaluator_2026_10_27_r11_attested_tape_and_outcome` and
+  `nfl_market_brain_research_evaluator_2026_10_27_r12_nfl_source_bound_outcome` and
   `nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows` form a research-only proof
   boundary: outcomes must arrive strictly after cutoff and game start, candidate predictions must
   bind the exact sequence checksum and predate the case, mixed releases and duplicate events are

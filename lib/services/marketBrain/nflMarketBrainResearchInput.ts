@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { marketBrainCanonicalJson, marketBrainSha256 } from "./marketBrainCanonical";
+import {
+  MARKET_BRAIN_CANONICAL_JSON_RELEASE,
+  marketBrainCanonicalJson,
+  marketBrainSha256,
+} from "./marketBrainCanonical";
 import {
   assertNflMarketBrainAttestedCaptureSet,
   nflMarketBrainCaptureSetSourceCaptures,
@@ -88,6 +92,7 @@ export async function materializeAndPersistNflMarketBrainResearchInput(args: {
     checksum: marketBrainSha256(withoutChecksum),
   };
   let query = args.client.from("nfl_market_brain_research_inputs").insert({
+    canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
     research_input_checksum: researchInput.checksum,
     research_input_release: researchInput.release,
     event_id: researchInput.eventId,

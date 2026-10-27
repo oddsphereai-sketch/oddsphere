@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_prior_artifacts (
   expires_at timestamptz NOT NULL DEFAULT (now() + interval '600 days'),
   CHECK ((jsonb_typeof(prior_artifact) = 'object') IS TRUE),
   CHECK (((prior_artifact ->> 'sha256') = artifact_sha256) IS TRUE),
+  CHECK (((prior_artifact ->> 'eventId') = provider_game_id) IS TRUE),
   CHECK ((artifact_payload::jsonb = (prior_artifact - 'sha256')) IS TRUE),
   CHECK ((encode(digest(convert_to(artifact_payload, 'UTF8'), 'sha256'), 'hex') = artifact_sha256) IS TRUE),
   CHECK (octet_length(prior_artifact::text) <= 1048576)
@@ -239,6 +240,13 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_shadow_snapshots (
     ON DELETE RESTRICT,
   CHECK ((jsonb_typeof(shadow) = 'object') IS TRUE),
   CHECK (((NOT (shadow ? 'case')) OR jsonb_typeof(shadow -> 'case') = 'object') IS TRUE),
+  CHECK (((shadow ->> 'release') = shadow_release) IS TRUE),
+  CHECK ((CASE WHEN shadow ? 'case'
+    THEN shadow #>> '{case,eventId}'
+    ELSE shadow ->> 'eventId' END = provider_game_id) IS TRUE),
+  CHECK ((((shadow ->> 'capturedAt')::timestamptz = captured_at)) IS TRUE),
+  CHECK (((NOT (shadow ? 'case')) OR
+    (shadow #>> '{case,evaluatedAt}')::timestamptz >= captured_at) IS TRUE),
   CHECK ((shadow_payload::jsonb = shadow) IS TRUE),
   CHECK ((encode(digest(convert_to(shadow_payload, 'UTF8'), 'sha256'), 'hex') = shadow_sha256) IS TRUE),
   CHECK (prior_artifact_sha256 IS NOT DISTINCT FROM CASE
@@ -1096,15 +1104,17 @@ DECLARE
 BEGIN
   NEW.created_at := statement_timestamp();
   NEW.bytes := octet_length(NEW.outcome_payload);
-  SELECT id, external_id, status, away_score, home_score, provider_ids, updated_at INTO verified
+  SELECT id, external_id, sport, status, away_score, home_score, provider_ids, updated_at INTO verified
     FROM public.games WHERE id = NEW.game_id FOR SHARE;
-  IF verified.id IS NULL OR verified.external_id <> NEW.event_id OR verified.status <> 'final' OR
+  IF verified.id IS NULL OR verified.external_id <> NEW.event_id OR verified.sport <> 'nfl' OR
+     verified.status <> 'final' OR
      verified.away_score IS NULL OR verified.home_score IS NULL OR NEW.created_at < NEW.final_at THEN
     RAISE EXCEPTION 'NFL Market Brain outcome is not backed by an exact finalized games row';
   END IF;
   IF NEW.source_row_payload::jsonb IS DISTINCT FROM jsonb_build_object(
     'id', verified.id,
     'externalId', verified.external_id,
+    'sport', verified.sport,
     'status', verified.status,
     'awayScore', verified.away_score,
     'homeScore', verified.home_score,
@@ -1115,8 +1125,11 @@ BEGIN
   END IF;
   IF (NEW.outcome ->> 'awayScore')::integer IS DISTINCT FROM verified.away_score OR
      (NEW.outcome ->> 'homeScore')::integer IS DISTINCT FROM verified.home_score OR
+     NEW.outcome #>> '{source,table}' IS DISTINCT FROM 'games' OR
      NEW.outcome #> '{source,providerIds}' IS DISTINCT FROM to_jsonb(verified.provider_ids) OR
-     (NEW.outcome #>> '{source,sourceUpdatedAt}')::timestamptz IS DISTINCT FROM verified.updated_at THEN
+     (NEW.outcome #>> '{source,sourceUpdatedAt}')::timestamptz IS DISTINCT FROM verified.updated_at OR
+     (NEW.outcome ->> 'finalAt')::timestamptz IS DISTINCT FROM NEW.final_at OR
+     NEW.final_at IS DISTINCT FROM verified.updated_at THEN
     RAISE EXCEPTION 'NFL Market Brain outcome payload diverges from its finalized games row';
   END IF;
   IF NEW.bytes > 65536 THEN RAISE EXCEPTION 'NFL Market Brain outcome exceeds 64 KiB'; END IF;

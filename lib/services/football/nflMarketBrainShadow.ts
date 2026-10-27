@@ -32,13 +32,14 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r13_schema_bound_parser_input" as const;
+  "nfl_market_brain_shadow_2026_10_27_r14_capture_timestamp_bound" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
 
 export type NflMarketBrainShadow = {
   release: typeof NFL_MARKET_BRAIN_SHADOW_RELEASE;
+  capturedAt: string;
   case: MarketBrainCase;
   bytes: number;
 };
@@ -198,6 +199,7 @@ export function buildNflMarketBrainShadow(args: {
   });
   const result: NflMarketBrainShadow = {
     release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
+    capturedAt: args.capture.capturedAt,
     case: marketBrainCase,
     bytes: 0,
   };

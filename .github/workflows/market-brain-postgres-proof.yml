@@ -9,6 +9,7 @@ on:
       - "lib/services/marketBrain/**"
       - "scripts/fixtures/nfl-market-brain-v45-installed.sql"
       - "scripts/fixtures/nfl-market-brain-v46-lifecycle-proof.sql"
+      - "scripts/build-nfl-market-brain-v46-lifecycle-prelude.ts"
       - "scripts/test-nfl-market-brain-postgres-v46.sh"
       - "scripts/test-nfl-market-brain-**"
       - "package.json"
@@ -48,7 +49,5 @@ jobs:
       - run: npm ci
       - name: Prepare nonsecret test environment
         run: cp .env.example .env.local
-      - name: Execute real PostgreSQL upgrade proof
-        run: bash scripts/test-nfl-market-brain-postgres-v46.sh
-      - name: Run mandatory model-change gate with PostgreSQL available
+      - name: Run mandatory model-change gate and real PostgreSQL proof
         run: npm run verify:model-change

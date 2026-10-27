@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { marketBrainCanonicalJson, marketBrainSha256 } from "./marketBrainCanonical";
+import {
+  MARKET_BRAIN_CANONICAL_JSON_RELEASE,
+  marketBrainCanonicalJson,
+  marketBrainSha256,
+} from "./marketBrainCanonical";
 
 import type { MarketBrainDiscreteDistribution } from "./marketBrainContract";
 import {
@@ -8,7 +12,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESEARCH_EVALUATOR_RELEASE =
-  "nfl_market_brain_research_evaluator_2026_10_27_r11_attested_tape_and_outcome" as const;
+  "nfl_market_brain_research_evaluator_2026_10_27_r12_nfl_source_bound_outcome" as const;
 export const NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE =
   "nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows" as const;
 
@@ -679,6 +683,7 @@ export async function persistNflMarketBrainResearchManifest(args: {
   assertNflMarketBrainResearchManifest(args.manifest);
   const { checksum: _checksum, ...manifestPayload } = args.manifest;
   let query = args.client.from("nfl_market_brain_research_manifests").insert({
+    canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
     id: args.manifest.storageId,
     manifest_release: args.manifest.release,
     candidate_release: args.manifest.candidateRelease,
@@ -751,6 +756,7 @@ export async function persistNflMarketBrainResearchPrediction(args: {
   const predictionPayload = marketBrainCanonicalJson(prediction);
   const predictionSha256 = marketBrainSha256(prediction);
   let query = args.client.from("nfl_market_brain_research_predictions").insert({
+    canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
     prediction_sha256: predictionSha256,
     event_id: prediction.eventId,
     cutoff_at: prediction.cutoffAt,
@@ -834,6 +840,7 @@ function attestedPredictionFromStoredRow(
 type VerifiedGameRow = {
   id: string;
   external_id: string;
+  sport: string;
   status: string;
   away_score: number | null;
   home_score: number | null;
@@ -871,6 +878,7 @@ export async function persistVerifiedNflMarketBrainFinalOutcome(args: {
   const sourceRow = {
     id: game.id,
     externalId: game.external_id,
+    sport: game.sport,
     status: game.status,
     awayScore: game.away_score,
     homeScore: game.home_score,
@@ -895,6 +903,7 @@ export async function persistVerifiedNflMarketBrainFinalOutcome(args: {
     checksum: marketBrainSha256(withoutChecksum),
   };
   let outcomeQuery = args.client.from("nfl_market_brain_research_outcomes").insert({
+    canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
     outcome_checksum: outcome.checksum,
     event_id: outcome.eventId,
     game_id: outcome.source.gameRecordId,

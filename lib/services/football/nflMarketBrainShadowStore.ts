@@ -13,6 +13,7 @@ import {
   type MarketBrainMarginTotalArtifact,
 } from "@/lib/services/marketBrain/marketBrainContract";
 import {
+  MARKET_BRAIN_CANONICAL_JSON_RELEASE,
   marketBrainCanonicalJson,
   marketBrainSha256,
 } from "@/lib/services/marketBrain/marketBrainCanonical";
@@ -135,6 +136,7 @@ export async function appendNflMarketBrainShadows(args: {
   }
   const artifacts = new Map<string, {
     artifact_sha256: string;
+    canonical_release: typeof MARKET_BRAIN_CANONICAL_JSON_RELEASE;
     shadow_release: string;
     contract_release: string;
     provider_game_id: string;
@@ -151,6 +153,7 @@ export async function appendNflMarketBrainShadows(args: {
       const { sha256: artifactSha256, ...artifactPayload } = shadow.case.prior.artifact;
       artifacts.set(shadow.case.prior.artifact.sha256, {
         artifact_sha256: artifactSha256,
+        canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
         shadow_release: shadow.release,
         contract_release: shadow.case.release,
         provider_game_id: payload.game.providerGameId,
@@ -159,6 +162,7 @@ export async function appendNflMarketBrainShadows(args: {
       });
     }
     return [{
+      canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
       shadow_release: shadow.release,
       contract_release: "case" in shadow ? shadow.case.release : MARKET_BRAIN_CONTRACT_RELEASE,
       run_id: args.runId,

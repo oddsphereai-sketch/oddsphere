@@ -133,21 +133,27 @@ database, predictive, or production proof.
   v45 source. It refuses nonempty or partial legacy shapes, binds required JSON fields fail-closed to
   relational identity/count/time columns, adds one finalized-window identity, and enforces manifest →
   capture set → research input → inference → prediction receipt order. The prepared PostgreSQL fixture
-  now persists a complete manifest → capture → capture-set → research-input → artifact → prediction
-  lifecycle and rejects pre-cutoff and post-receipt inference. `scripts/test-nfl-market-brain-postgres-v46.sh` and
+  now persists a manifest → capture → capture-set → research-input → artifact → prediction → verified
+  NFL outcome lifecycle, rejects pre-cutoff and post-receipt inference, and attempts direct event,
+  release, timestamp, source-table, final-time, and sport forgeries. Its payload prelude is emitted by
+  the production canonical JavaScript serializer rather than PostgreSQL `jsonb::text`.
+  `scripts/test-nfl-market-brain-postgres-v46.sh` and
   `.github/workflows/market-brain-postgres-proof.yml` prepare PostgreSQL 16 execution of old-v45 →
   v46, refusal, second apply, RLS/catalog, and canonical-hash checks. This host has no PostgreSQL
   runtime, so the real-database command has **not** executed and these IDs are not closed.
 - **MB-003 / MB-004:** raw response archival is explicit research opt-in; a bounded JSON preflight now
-  rejects oversize/deep/non-JSON payloads before cloning the full response, and archive failures remain
+  counts string and key serialization bytes without materializing an unbounded escaped JSON copy,
+  rejects oversize/deep/non-JSON/accessor payloads before cloning the full response, and archive failures remain
   research-only. Malformed dormant config is not parsed; enabled schedules are structurally validated
   before raw archival, and selected attempt windows validate before any research database read. Focused
   foundation, writer, proof-chain, and feature-off tests pass. A separate runner and measured base-versus-
   candidate latency/RAM/exception proof remain required.
 - **MB-034:** canonical JSON now uses explicit UTF-16 code-unit order, rejects non-finite numbers,
   normalizes negative zero, rejects cycles, sparse arrays, accessors, non-JSON primitives, and non-plain
-  objects, and has a fixed JS golden vector. Canonical-hash tables persist the r3 serialization release.
-  The PostgreSQL copy of the vector and multi-Node/locale execution still have not run here.
+  objects, and has a fixed JS golden vector. Canonical-hash writers explicitly persist the r3 release,
+  and the PostgreSQL lifecycle fixture now consumes JavaScript-emitted r3 bytes. Database rejection of
+  semantically equivalent noncanonical direct inserts and multi-Node/locale execution remain open; the
+  PostgreSQL fixture has not run on this host.
 - **MB-035:** raw parser archives now use `(schema_release, parser_input_sha256)` as their relational
   identity, shadow source manifests retain both components, and the store rejects a non-null manifest
   reference unless that exact composite archive is present in the same payload. The PostgreSQL collision
@@ -158,10 +164,10 @@ database, predictive, or production proof.
   reports shadow, prior-artifact, and raw-parser deletion counts, per-class cap hits, remaining bytes,
   and the three retention horizons. Unit and route-isolation tests pass; PostgreSQL execution, scheduling
   approval, and alert integration remain outstanding.
-- **MB-025:** outcome rows now carry exact canonical source-row bytes, the database verifies their digest,
-  and the receipt trigger compares those bytes with the finalized `games` row in addition to scores,
-  provider IDs, and update time. NFL sport identity, correction precedence, and adversarial PostgreSQL
-  execution remain open.
+- **MB-025:** outcome rows now carry exact canonical source-row bytes including sport, the database
+  verifies their digest, and the receipt trigger requires the source table label, NFL sport, final
+  timestamp, scores, provider IDs, and update time to match the finalized `games` row. Correction
+  precedence and adversarial PostgreSQL execution remain open.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
   The candidate branch still truthfully carries new writer/collector identities; repository safety

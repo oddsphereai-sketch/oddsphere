@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  MARKET_BRAIN_CANONICAL_JSON_RELEASE,
   marketBrainCanonicalByteLength,
   marketBrainCanonicalJson,
   marketBrainSha256,
@@ -476,6 +477,7 @@ export async function persistNflMarketBrainResolverArtifact(args: {
   }
   const { sha256: artifactSha256, ...artifactPayload } = args.artifact;
   let query = args.client.from("nfl_market_brain_resolver_artifacts").insert({
+    canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
     artifact_sha256: artifactSha256,
     weights_sha256: args.artifact.weightsSha256,
     artifact_release: args.artifact.release,
