@@ -5265,6 +5265,10 @@ the r44 forecast, side, grade, exact price, cadence, board, lock, copy, and
 layout remain unchanged. Previously settled or voided rows remain immutable;
 historical reconciliation is not part of this release. Evidence and rollback:
 `docs/model-audits/2026-10-27-mlb-player-props-postseason-settlement-continuity.md`.
+The paired direction-bias audit rejects a cosmetic Over/Under quota: r44's
+Under selections outperformed its Over selections, while the market-reader
+weaknesses were not chronologically stable enough for another forecast release.
+See `docs/model-audits/2026-10-27-mlb-player-props-direction-bias-audit.md`.
 
 The October 21 r44 release corrects the release-pure Best Angle / Lean ranking without changing any selected side, projection, probability, price, edge, EV, stake, provider call, writer, cadence, lock, settlement, copy, or layout. Qualified Runs Scored Under Leans at the existing `-200` Best Angle price floor or better become Best Angles; HRR Under and Pitcher Strikeouts Over Best Angles remain actionable but rerank to Lean. The rule is supported by the frozen r42 chronology and r43 forward ledger, is not a grade-count quota, and never reinterprets a locked row. Evidence and rollback are recorded in `docs/model-audits/2026-10-21-mlb-player-props-grade-ranking-r44-predeclaration.md` and its paired result. Rollback is r43 for future unlocked rows only.
 
