@@ -547,14 +547,16 @@ Last reviewed: 2026-10-27
   not depend on recovering an exact raw side, every exact-identity Circa/DraftKings/BetMGM split
   row, explicit missing/incomplete/duplicate source states, and the current-feed blind spots. Source
   expectations come from
-  `market_brain_evidence_roster_2026_10_27_r2_complete_product_inventory` before any response is read: the
+  `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts` before any response is read: the
   BALLDONTLIE opening/current feeds, six approved retail participants, and Circa/Pinnacle SharpAPI
   feeds cannot disappear merely because a response omitted every row. Feed failure, missing raw
   parser input, event-market absence, and per-participant absence remain distinct. Absolute handle,
   ticket denominators, bet-size distribution, limits, move origin, suspension lifecycle, and private
-  order flow remain true provider blind spots and are never inferred. The roster registry contains
-  every active product; non-NFL rows remain explicitly `not_started` with every unresolved evidence
-  family mechanically visible rather than being mistaken for implemented coverage. Source
+  order flow remain true provider blind spots and are never inferred. The roster registry now freezes
+  expected provider feeds, evidence-family ownership, named participants or provider-catalog discovery,
+  and explicit participant exclusions for every active Daily Edge and player-props product. Non-NFL
+  capture remains explicitly `not_started`; a frozen expected-source contract is not implemented
+  coverage, and every unresolved family stays mechanically visible. Source
   reputation is distinct from event leadership; a book brand never proves who originated a move.
   It contains no candidate decision and cannot affect a prediction, probability, projection, grade,
   stake, member display, tracking record, or lock. These research-sidecar releases do not relabel

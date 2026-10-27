@@ -245,10 +245,12 @@ database, predictive, or production proof.
   family. MLB first inning is a separate qualification scope, MLB run line remains non-actionable,
   and NHL uses canonical `spread`. Each child scope has independent state/release/evaluation slots;
   typed authority chains distinguish capture/model, record, grade, stake, lock, snapshot, and reader
-  owners. Evidence roster r2 contains every active product key; only NFL price/chronology is partially
-  implemented, while every unresolved non-NFL family remains explicitly `not_started`. This closes
-  inventory omission risk, not adapter implementation, persisted-chain proof, or cross-sport data
-  coverage, so both IDs remain open.
+  owners. Evidence roster r3 freezes provider feeds and participant discovery for every active product,
+  maps every evidence family to at least one expected feed, and distinguishes explicit book allowlists
+  from provider-catalog discovery and exclusions. Only NFL price/chronology is partially implemented;
+  every non-NFL feed remains explicitly `not_started`. This closes source-contract omission risk, not
+  capture/parser/archive implementation, persisted-chain proof, or cross-sport data coverage, so both
+  IDs remain open.
 - **MB-044:** `morning_slate` and `soccer_daily_refresh` now require the shared sport-scoped
   `prediction_pipeline` lease with bounded retry. The executable registry test resolves every primary
   and fallback authority route and proves its source-level required lease contract. Real-PostgreSQL

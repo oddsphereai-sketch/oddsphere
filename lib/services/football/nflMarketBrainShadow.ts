@@ -236,7 +236,12 @@ function addExpectedPriceFeeds(
   observations: MarketBrainObservation[],
   expectedInputs: MarketBrainExpectedInput[],
 ) {
-  for (const expected of NFL_MARKET_BRAIN_EVIDENCE_ROSTER.feeds) {
+  // The all-product roster also predeclares split, availability, and weather
+  // feeds. This function owns price evidence only; modality-specific builders
+  // must consume their own expected feeds so an absent context feed cannot be
+  // mislabeled as a missing price response.
+  for (const expected of NFL_MARKET_BRAIN_EVIDENCE_ROSTER.feeds.filter((feed) =>
+    feed.evidenceFamilies.includes("two_sided_prices"))) {
     const manifests = args.rawPriceResponseManifests.filter((manifest) =>
       manifest.provider === expected.provider && manifest.feed === expected.feed &&
       canonicalNullable(manifest.participant) === canonicalNullable(expected.participant));

@@ -337,8 +337,9 @@ assert.equal(shadow.case.blindSpots.length, 7);
 assert.equal(NFL_MARKET_BRAIN_EVIDENCE_ROSTER.release, MARKET_BRAIN_EVIDENCE_ROSTER_RELEASE);
 assert.equal(
   shadow.case.expectedInputs.filter((row) => row.id.startsWith("price_feed:")).length,
-  NFL_MARKET_BRAIN_EVIDENCE_ROSTER.feeds.length * 3,
-  "every frozen expected feed must remain visible for every game market",
+  NFL_MARKET_BRAIN_EVIDENCE_ROSTER.feeds.filter((row) =>
+    row.evidenceFamilies.includes("two_sided_prices")).length * 3,
+  "every frozen expected price feed must remain visible for every game market",
 );
 const injuryPlayer = shadow.case.observations.find((row) => row.source.feed === "injury_report_player");
 assert.equal(injuryPlayer?.categorical.playerName, "Fixture Receiver");

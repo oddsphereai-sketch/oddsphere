@@ -4,6 +4,8 @@ Status: **OPEN — scope frozen; production influence remains prohibited**
 
 Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope`
 
+Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts`
+
 ## Objective
 
 Build one shared evidence, chronology, provenance, evaluation, and consequence framework while
@@ -28,6 +30,13 @@ language, not a parallel prediction target.
 CBB is separately registered as prelaunch and unqualified. It cannot become active merely by
 sharing basketball vocabulary or NBA infrastructure; it requires its own writer, lease, source
 roster, independent model, adapter, chronology, settlement, and untouched qualification.
+
+Every active product now has a frozen expected-source contract. It names each provider/feed,
+evidence families, collection phases, replay target, required versus opportunistic status, and
+either an explicit participant allowlist or a provider-catalog discovery obligation with exclusions.
+This does not claim those feeds are captured: non-NFL entries remain `not_started`, and NFL remains
+partial. A response-derived list can never replace the predeclared expected roster because doing so
+would erase absent books, failed requests, and parser omissions from the evidence denominator.
 
 Every adapter must declare and prove:
 

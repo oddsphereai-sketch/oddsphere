@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { NFL_COMPARABLE_SPORTSBOOKS } from
   "../lib/services/football/balldontlieNflPreviewSlate";
@@ -28,9 +29,18 @@ for (const product of MARKET_BRAIN_ACTIVE_PRODUCT_KEYS) {
     [...MARKET_BRAIN_PRODUCT_REGISTRY[product].expectedEvidenceFamilies].sort(),
     `${product} must account for every expected family even before its roster is implemented`,
   );
+  assert.equal(roster.contractStatus, "frozen", `${product} source contract must be frozen`);
+  assert.ok(roster.feeds.length > 0, `${product} must enumerate expected feeds before implementation`);
+  assert.ok(roster.participantRosters.length > 0,
+    `${product} must define explicit or provider-catalog participant discovery`);
+  const feedFamilies = new Set(roster.feeds.flatMap((row) => row.evidenceFamilies));
+  assert.ok(MARKET_BRAIN_PRODUCT_REGISTRY[product].expectedEvidenceFamilies.every((family) =>
+    feedFamilies.has(family)), `${product} feeds must map every evidence family`);
   if (product !== "nfl_daily_edge") {
     assert.equal(roster.coverageStatus, "not_started",
-      `${product} must remain mechanically blocked until its provider roster is implemented`);
+      `${product} implementation must remain blocked even though its source contract is frozen`);
+    assert.ok(roster.feeds.every((row) => row.captureStatus === "not_started"),
+      `${product} expected feeds must not masquerade as implemented capture`);
   }
 }
 assert.deepEqual(
@@ -40,6 +50,9 @@ assert.deepEqual(
   [...NFL_COMPARABLE_SPORTSBOOKS],
   "the evidence roster must not silently omit an approved retail sportsbook",
 );
+const shadowSource = readFileSync(new URL("../lib/services/football/nflMarketBrainShadow.ts", import.meta.url), "utf8");
+assert.match(shadowSource, /feed\.evidenceFamilies\.includes\("two_sided_prices"\)/,
+  "NFL price expected-input construction must not reinterpret context feeds as price feeds");
 assert.deepEqual(
   NFL_MARKET_BRAIN_EVIDENCE_ROSTER.priceParticipants
     .filter((row) => row.provider === "sharpapi")
@@ -54,7 +67,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   NFL_MARKET_BRAIN_EVIDENCE_ROSTER.feeds.map((row) =>
-    [row.provider, row.feed, row.participant ?? "all", row.phases.join("+")].join(":")),
+    [row.provider, row.feed, row.participant ?? "all", row.phases.join("+")].join(":"))
+    .filter((row) => /opening_odds|current_odds|main_odds/.test(row)),
   [
     "balldontlie:opening_odds:all:provider_opening",
     "balldontlie:current_odds:all:current",
@@ -63,4 +77,16 @@ assert.deepEqual(
   ],
 );
 
-console.log("Market Brain NFL expected evidence roster and canonical provider blind spots passed.");
+assert.deepEqual(
+  MARKET_BRAIN_EVIDENCE_ROSTERS.ucl_daily_edge.participantRosters[0]?.excludedParticipants,
+  ["polymarket", "kalshi"],
+  "UCL prediction markets must be explicitly excluded from sportsbook authority",
+);
+assert.deepEqual(
+  MARKET_BRAIN_EVIDENCE_ROSTERS.nfl_player_props.priceParticipants
+    .filter((row) => row.provider === "sharpapi").map((row) => row.participant),
+  ["pinnacle", "novig"],
+  "NFL props target-excluded reference participants must match the implemented collector contract",
+);
+
+console.log("Market Brain all-product expected source and participant contracts passed.");
