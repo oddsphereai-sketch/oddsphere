@@ -20,9 +20,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_26_r11_cross_season_market_heads" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_27_r12_side_accuracy_rerank" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_26_r12_cross_season_market_heads" as const;
+  "nba_player_props_forward_decision_2026_10_27_r13_side_accuracy_rerank" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -37,6 +37,7 @@ type SignalFamily =
   | "target_excluded_expected_value"
   | "model_market_conservative_expected_value"
   | "model_market_average_expected_value";
+type AccuracyRerankSignalFamily = "final_probability" | "model_market_average_probability";
 type EligibilityGate =
   | "all"
   | "established_role"
@@ -109,6 +110,12 @@ export type NbaPlayerPropsFrozenArtifact = Readonly<{
     bestAngleQualified?: boolean;
     publicQualified?: false;
     relativeBest?: Readonly<{ signalFamily: SignalFamily; threshold: number }> | null;
+    accuracyRerank?: Readonly<{
+      signalFamily: AccuracyRerankSignalFamily;
+      overBonus: number;
+      minimumAmericanPrice: number;
+      requireMarketEvidence: true;
+    }>;
   }>>>;
 }>;
 
@@ -148,6 +155,7 @@ export type NbaPlayerPropsForwardDecision = Readonly<{
     | "universal_market_relative_lean"
     | "combo_market_relative_lean"
     | "forward_only_market_relative_lean"
+    | "accuracy_side_rerank"
     | "forecast_only";
   evidenceObservedAt: string;
 }>;
@@ -337,7 +345,7 @@ export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
     };
     scored.push(applyDirectGrade(base, artifact));
   }
-  return applySlateRelativeGrades(scored, artifact).map(({ projectionStandardDeviation,
+  return applyNbaPlayerPropsAccuracyRerankForAudit(applySlateRelativeGrades(scored, artifact), artifact).map(({ projectionStandardDeviation,
     playerGamesPrior, minutesStandardDeviation10, teamBackToBack, slateDate, ...row }) => {
     void projectionStandardDeviation;
     void playerGamesPrior;
@@ -357,6 +365,63 @@ export function buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit(args: {
         : round(row.targetExcludedProbability, 6),
     };
   });
+}
+
+export function applyNbaPlayerPropsAccuracyRerankForAudit(
+  rows: readonly ScoredDecision[],
+  artifact: NbaPlayerPropsFrozenArtifact,
+): ScoredDecision[] {
+  const grades = new Map<string, NbaPlayerPropsMemberGrade>();
+  const reranked = new Set<string>();
+  for (const market of NBA_PLAYER_PROPS_FOUNDATION_MARKETS) {
+    const config = artifact.gradePolicies[market].accuracyRerank;
+    if (!config) continue;
+    for (const slateRows of groupBy(rows.filter((row) => row.market === market), (row) => row.slateDate).values()) {
+      const incumbents = slateRows.filter((row) => row.grade === "Best Angle" || row.grade === "Lean");
+      if (incumbents.length === 0) continue;
+      const targetBest = incumbents.filter((row) => row.grade === "Best Angle").length;
+      const eligible = slateRows
+        .filter((row) => row.probability >= 0.5)
+        .filter((row) => row.americanPrice >= config.minimumAmericanPrice)
+        .filter((row) => !config.requireMarketEvidence
+          || (row.targetExcludedProbability !== null && row.targetExcludedBooks >= 1))
+        .sort((left, right) => accuracyRerankSignal(right, config.signalFamily, config.overBonus)
+          - accuracyRerankSignal(left, config.signalFamily, config.overBonus)
+          || right.probability - left.probability
+          || left.scopeKey.localeCompare(right.scopeKey));
+      const eligibleKeys = new Set(eligible.map((row) => row.scopeKey));
+      const fallbackIncumbents = incumbents.filter((row) => !eligibleKeys.has(row.scopeKey));
+      const selected = [...eligible, ...fallbackIncumbents].slice(0, incumbents.length);
+      const selectedKeys = new Set(selected.map((row) => row.scopeKey));
+      for (const row of slateRows) {
+        if (selectedKeys.has(row.scopeKey)) continue;
+        if (row.grade === "Best Angle" || row.grade === "Lean") {
+          grades.set(row.scopeKey, row.probability >= 0.5 ? "Watchlist" : "No Play");
+          reranked.add(row.scopeKey);
+        }
+      }
+      selected.forEach((row, index) => {
+        grades.set(row.scopeKey, index < targetBest ? "Best Angle" : "Lean");
+        reranked.add(row.scopeKey);
+      });
+    }
+  }
+  return rows.map((row) => !reranked.has(row.scopeKey) ? row : {
+    ...row,
+    grade: grades.get(row.scopeKey)!,
+    gradePolicySource: "accuracy_side_rerank",
+  });
+}
+
+function accuracyRerankSignal(
+  row: ScoredDecision,
+  family: AccuracyRerankSignalFamily,
+  overBonus: number,
+): number {
+  const base = family === "final_probability"
+    ? row.probability
+    : (row.rawProbability + (row.targetExcludedProbability ?? row.rawProbability)) / 2;
+  return base + (row.side === "over" ? overBonus : 0);
 }
 
 function projectUnderlying(row: NbaPlayerPropFeatureRow, market: FoundationMarket, artifact: NbaPlayerPropsFrozenArtifact): number {

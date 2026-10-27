@@ -317,13 +317,13 @@ Last reviewed: 2026-10-26
   `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_26_r11_cross_season_market_heads` /
-  `nba_player_props_forward_decision_2026_10_26_r12_cross_season_market_heads` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_27_r12_side_accuracy_rerank` /
+  `nba_player_props_forward_decision_2026_10_27_r13_side_accuracy_rerank` /
   `nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
-  `nba_player_props_model_tournament_2026_10_22_r13_active_role_integrity` /
-  `nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only`.
+  `nba_player_props_model_tournament_2026_10_26_r15_cross_season_market_heads` /
+  `nba_player_props_exact_price_grade_2026_10_27_r14_side_accuracy_rerank`.
   The sole private writer is
   `nba_player_props_private_writer_2026_10_23_r7_canonical_coverage`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
@@ -391,6 +391,19 @@ Last reviewed: 2026-10-26
   and Leans increase from 41 to 43. Locked records retain stored precedence.
   Evidence and rollback:
   `docs/model-audits/2026-10-26-nba-player-props-cross-season-market-heads-result.md`.
+  The r12/r13 side-accuracy release then reranks only future-unlocked Points,
+  Assists, and Points + Assists grades using preconfirmation-selected,
+  market-specific probability signals. It preserves each slate/market's exact
+  actionable and Best Angle counts and requires target-book-excluded evidence
+  plus a price of -200 or better for every promotion. The independent
+  confirmation block improves 603-546 (52.48%) to 658-491 (57.27%) at the same
+  1,149 actions. Exact current-release stored locks improve from 15-15 to 21-9
+  at the same 30 actions, with 18 promotions paired to 18 demotions. Rebounds
+  receives no change after failing confirmation. Projections, sides,
+  probabilities, prices, market arbitration, stakes, cadence, UI, and locked
+  records are unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-27-nba-player-props-side-accuracy-rerank-predeclaration.md`
+  and `docs/model-audits/2026-10-27-nba-player-props-side-accuracy-rerank-result.md`.
   The original member launch changed zero
   stored projections, sides, probabilities, grades, prices, or locks. The r3
   frozen runtime refits selected ridge components on every legal

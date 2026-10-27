@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   buildNbaPlayerPropsForwardDecisions,
   buildNbaPlayerPropsForwardDecisionsFromArtifactForAudit,
+  applyNbaPlayerPropsAccuracyRerankForAudit,
   NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
   nbaPlayerPropsFrozenRuntimeArtifact,
   type NbaPlayerPropsFrozenArtifact,
@@ -42,13 +43,31 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_26_r11_cross_season_market_heads");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_27_r12_side_accuracy_rerank");
 assert.equal(NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
-  "nba_player_props_forward_decision_2026_10_26_r12_cross_season_market_heads");
+  "nba_player_props_forward_decision_2026_10_27_r13_side_accuracy_rerank");
 assert.equal(
   artifact.sourceGradeRelease,
-  "nba_player_props_exact_price_grade_2026_10_22_r13_rebound_recalibration_private_only",
+  "nba_player_props_exact_price_grade_2026_10_27_r14_side_accuracy_rerank",
 );
+assert.deepEqual(artifact.gradePolicies.points.accuracyRerank, {
+  signalFamily: "model_market_average_probability",
+  overBonus: -0.05,
+  minimumAmericanPrice: -200,
+  requireMarketEvidence: true,
+});
+assert.deepEqual(artifact.gradePolicies.assists.accuracyRerank, {
+  signalFamily: "final_probability",
+  overBonus: -0.025,
+  minimumAmericanPrice: -200,
+  requireMarketEvidence: true,
+});
+assert.deepEqual(artifact.gradePolicies.points_assists.accuracyRerank, {
+  signalFamily: "final_probability",
+  overBonus: 0.025,
+  minimumAmericanPrice: -200,
+  requireMarketEvidence: true,
+});
 assert.equal(artifact.gradePolicies.rebounds.kind, "slate_relative_lean");
 assert.equal(artifact.gradePolicies.rebounds.policy.signalFamily, "model_market_conservative_expected_value");
 assert.equal(artifact.gradePolicies.rebounds.policy.eligibilityGate, "established_role");
@@ -233,6 +252,28 @@ for (const decision of first) {
   assert(decision.targetExcludedReferenceBooks >= 1);
   assert(decision.probability >= 0 && decision.probability <= 1);
 }
+const pointBase = first.find((decision) => decision.market === "points")!;
+const rerankFixture = [
+  { ...pointBase, scopeKey: "points-a", slateDate: "2026-10-27", grade: "Best Angle", side: "over", rawProbability: 0.58,
+    probability: 0.58, targetExcludedProbability: 0.58 },
+  { ...pointBase, scopeKey: "points-b", slateDate: "2026-10-27", grade: "Lean", side: "under", rawProbability: 0.57,
+    probability: 0.57, targetExcludedProbability: 0.57 },
+  { ...pointBase, scopeKey: "points-c", slateDate: "2026-10-27", grade: "Watchlist", side: "under", rawProbability: 0.75,
+    probability: 0.75, targetExcludedProbability: 0.75 },
+  { ...pointBase, scopeKey: "points-d", slateDate: "2026-10-27", grade: "No Play", side: "over", rawProbability: 0.80,
+    probability: 0.80, targetExcludedProbability: 0.80 },
+].map((row) => ({ ...row, projectionStandardDeviation: 5, playerGamesPrior: 20,
+  minutesStandardDeviation10: 2, teamBackToBack: false }));
+const rerankedFixture = applyNbaPlayerPropsAccuracyRerankForAudit(rerankFixture as any, artifact);
+assert.equal(rerankedFixture.filter((row) => row.grade === "Best Angle" || row.grade === "Lean").length, 2,
+  "the accuracy rerank must preserve the exact actionable count");
+assert.equal(rerankedFixture.filter((row) => row.grade === "Best Angle").length, 1,
+  "the accuracy rerank must preserve the exact Best Angle count");
+assert.equal(rerankedFixture.find((row) => row.scopeKey === "points-d")?.grade, "Best Angle");
+assert.equal(rerankedFixture.find((row) => row.scopeKey === "points-c")?.grade, "Lean");
+assert.equal(rerankedFixture.find((row) => row.scopeKey === "points-a")?.grade, "Watchlist");
+assert(rerankedFixture.filter((row) => row.scopeKey === "points-c" || row.scopeKey === "points-d")
+  .every((row) => row.gradePolicySource === "accuracy_side_rerank"));
 const calibratedRebound = first.find((decision) => decision.market === "rebounds");
 assert.equal(calibratedRebound?.calibrationRelease, artifact.sourceGradeRelease);
 assert.equal(

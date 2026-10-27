@@ -62,6 +62,7 @@ export type NbaPlayerPropsMemberDecision = Readonly<{
     | "universal_market_relative_lean"
     | "combo_market_relative_lean"
     | "forward_only_market_relative_lean"
+    | "accuracy_side_rerank"
     | "forecast_only";
   role: readonly NbaPlayerPropsReaderMetric[];
   production: readonly NbaPlayerPropsReaderMetric[];

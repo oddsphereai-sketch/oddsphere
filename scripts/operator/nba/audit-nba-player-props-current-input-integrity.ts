@@ -106,6 +106,12 @@ async function main(): Promise<void> {
     candidates: candidates.length,
     features: features.length,
     decisions: decisions.length,
+    grades: Object.fromEntries(["Best Angle", "Lean", "Watchlist", "No Play"].map((grade) => [grade,
+      decisions.filter((row) => row.grade === grade).length])),
+    actionableDirections: {
+      over: decisions.filter((row) => (row.grade === "Best Angle" || row.grade === "Lean") && row.side === "over").length,
+      under: decisions.filter((row) => (row.grade === "Best Angle" || row.grade === "Lean") && row.side === "under").length,
+    },
     zeroIndependentProjections: decisions.filter((row) => row.independentProjection === 0).length,
     zeroFinalProjections: decisions.filter((row) => row.finalProjection === 0).length,
     zeroProjectionRows: decisions.filter((row) => row.independentProjection === 0 || row.finalProjection === 0)
