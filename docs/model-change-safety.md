@@ -36,6 +36,49 @@ Evidence and rollback:
 `docs/model-audits/2026-10-27-nfl-player-props-passing-completions-direction-r37-predeclaration.md`
 and `docs/model-audits/2026-10-27-nfl-player-props-passing-completions-direction-result.md`.
 
+## CFB paid FCS full-US price discovery r5
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to repair recurring missing CFB
+prices using the paid The Odds API fallback and to verify the remaining Daily
+Edge and player-prop products. The production audit found 56 fully priced CFB
+games and 44 FCS-only games with no Moneyline, Spread, or Total from any stored
+provider. The paid fallback was healthy and authenticated but returned zero
+events, zero credits used, and 2,985 credits remaining while requesting only a
+fixed ten-book subset.
+
+Future-unlocked r5 replaces that brittle bookmaker subset request with one
+bounded `us,us2` region request, covering the provider's complete current US
+and US2 catalog. The preceding ten normalized books retain their exact current
+model, consensus, target, and market-reader behavior. Newly discovered books
+are stored only in the existing display-price lane with
+`targetEligible=false` and `marketReadingEligible=false`; they cannot alter a
+forecast, probability, side, grade, stake, exact evaluated quote, market read,
+lock, or tracking row. A real paired quote may fill a member price map, but an
+event that no requested US book lists remains explicitly unavailable and is
+never fabricated.
+
+The request remains one slate-level call on the established hourly/T-60
+cadence. Its declared maximum rises from three to six credits per current pull
+and from 30 to 60 per historical snapshot. The two-week reserve rises from
+1,152 to 2,304 credits while the 176 ordinary / 192 total weekly request
+ceilings remain unchanged. Fallback/writer releases advance to
+`cfb_the_odds_api_fcs_fallback_2026_10_27_r5_full_us_region_discovery` and
+`cfb_forward_evidence_writer_2026_10_27_r140_full_us_fcs_price_discovery`.
+The sole writer and `prediction_pipeline:cfb` lease are unchanged. Existing
+locked payloads retain exact reader precedence.
+
+The focused fixture proves that a Bovada-only event becomes display-covered
+while remaining absent from the pre-existing model lane; the same fixture
+retains the exact prior FanDuel/BetRivers/Caesars/BetOnline model inputs.
+Promotions, demotions, actionable changes, side changes, and model-output
+changes are all zero by contract. Publication requires the full focused CFB
+suite, TypeScript, `npm run verify:model-change`, latest-main integration
+safety, protected PR checks, and live proof of real provider coverage, exact
+release identity, correct credit accounting, one writer/lease, and unchanged
+locks. Roll back r5/r140 together if a newly discovered display-only book
+enters model authority, request cost exceeds six, coverage regresses, or any
+stored lock changes.
+
 ## NFL player-props Receptions direction authority r36
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to repair the player-props models' apparent Under

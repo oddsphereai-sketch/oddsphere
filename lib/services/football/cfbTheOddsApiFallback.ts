@@ -4,12 +4,18 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_THE_ODDS_API_FALLBACK_RELEASE =
-  "cfb_the_odds_api_fcs_fallback_2026_10_20_r4_bounded_month_end_continuity" as const;
+  "cfb_the_odds_api_fcs_fallback_2026_10_27_r5_full_us_region_discovery" as const;
 export const CFB_THE_ODDS_API_SPORT_KEY = "americanfootball_ncaaf_fcs" as const;
+export const CFB_THE_ODDS_API_REGIONS = "us,us2" as const;
+// These are the previously validated books that may enter the prediction and
+// exact-price lanes. The region request deliberately discovers a wider set for
+// member price coverage, but newly discovered books remain display-only until
+// a separate release-pure reader evaluation grants them model authority.
 export const CFB_THE_ODDS_API_BOOKMAKERS =
   "fanduel,draftkings,rebet,betmgm,betrivers,williamhill_us,fanatics,espnbet,betonlineag,ballybet" as const;
-export const CFB_THE_ODDS_API_CREDITS_PER_PULL = 3 as const;
-export const CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL = 30 as const;
+const CFB_THE_ODDS_API_EXISTING_MODEL_BOOK_KEYS = new Set(CFB_THE_ODDS_API_BOOKMAKERS.split(","));
+export const CFB_THE_ODDS_API_CREDITS_PER_PULL = 6 as const;
+export const CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL = 60 as const;
 export const CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT = 176 as const;
 export const CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT = 192 as const;
 // Preserve two complete worst-case weekly budgets. The former 5,000-credit
@@ -34,7 +40,9 @@ export type CfbTheOddsApiFallbackResult = {
   creditsRemaining: number | null;
   attemptedGames: number;
   matchedGames: number;
+  displayMatchedGames: number;
   booksByGame: Record<string, NcaafBookOdds[]>;
+  displayBooksByGame: Record<string, NcaafBookOdds[]>;
   failuresByGame: Record<string, string>;
 };
 
@@ -80,7 +88,7 @@ export async function fetchCfbTheOddsApiHistoricalOpenings(args: {
     if (remainingGames.length === 0) break;
     const url = new URL(`https://api.the-odds-api.com/v4/historical/sports/${CFB_THE_ODDS_API_SPORT_KEY}/odds`);
     url.searchParams.set("apiKey", args.apiKey);
-    url.searchParams.set("bookmakers", CFB_THE_ODDS_API_BOOKMAKERS);
+    url.searchParams.set("regions", CFB_THE_ODDS_API_REGIONS);
     url.searchParams.set("markets", "h2h,spreads,totals");
     url.searchParams.set("oddsFormat", "american");
     url.searchParams.set("dateFormat", "iso");
@@ -144,7 +152,7 @@ export async function fetchCfbTheOddsApiFallback(args: {
   if (games.length === 0) throw new Error("The Odds API FCS fallback requires at least one upcoming FCS game.");
   const url = new URL(`https://api.the-odds-api.com/v4/sports/${CFB_THE_ODDS_API_SPORT_KEY}/odds`);
   url.searchParams.set("apiKey", args.apiKey);
-  url.searchParams.set("bookmakers", CFB_THE_ODDS_API_BOOKMAKERS);
+  url.searchParams.set("regions", CFB_THE_ODDS_API_REGIONS);
   url.searchParams.set("markets", "h2h,spreads,totals");
   url.searchParams.set("oddsFormat", "american");
   url.searchParams.set("dateFormat", "iso");
@@ -161,6 +169,7 @@ export async function fetchCfbTheOddsApiFallback(args: {
   if (!Array.isArray(parsed)) throw new Error("The Odds API FCS fallback response must be an array.");
   const events = parsed.map(record).filter((event) => text(event.sport_key) === CFB_THE_ODDS_API_SPORT_KEY);
   const booksByGame: Record<string, NcaafBookOdds[]> = {};
+  const displayBooksByGame: Record<string, NcaafBookOdds[]> = {};
   const failuresByGame: Record<string, string> = {};
   const claimedEventIds = new Set<string>();
   for (const game of games) {
@@ -176,12 +185,21 @@ export async function fetchCfbTheOddsApiFallback(args: {
       continue;
     }
     claimedEventIds.add(eventId);
-    const books = array(event.bookmakers).map(record).flatMap((book) => normalizeBook({ game, eventId, book }));
-    if (books.length === 0) {
+    const providerBooks = array(event.bookmakers).map(record);
+    const displayBooks = providerBooks.flatMap((book) => normalizeBook({ game, eventId, book }));
+    if (displayBooks.length === 0) {
       failuresByGame[game.providerGameId] = "complete_named_book_unavailable";
       continue;
     }
-    booksByGame[game.providerGameId] = books;
+    displayBooksByGame[game.providerGameId] = displayBooks;
+    const approvedBooks = providerBooks
+      .filter((book) => CFB_THE_ODDS_API_EXISTING_MODEL_BOOK_KEYS.has(text(book.key)?.toLowerCase() ?? ""))
+      .flatMap((book) => normalizeBook({ game, eventId, book }));
+    if (approvedBooks.length === 0) {
+      failuresByGame[game.providerGameId] = "approved_named_book_unavailable";
+      continue;
+    }
+    booksByGame[game.providerGameId] = approvedBooks;
   }
   return {
     release: CFB_THE_ODDS_API_FALLBACK_RELEASE,
@@ -190,7 +208,9 @@ export async function fetchCfbTheOddsApiFallback(args: {
     creditsRemaining,
     attemptedGames: games.length,
     matchedGames: Object.keys(booksByGame).length,
+    displayMatchedGames: Object.keys(displayBooksByGame).length,
     booksByGame,
+    displayBooksByGame,
     failuresByGame,
   };
 }
@@ -329,6 +349,18 @@ const THE_ODDS_API_BOOK_IDENTITIES: Readonly<Record<string, {
   espnbet: { sportsbook: "thescorebet", targetEligible: false, marketReadingEligible: false },
   betonlineag: { sportsbook: "betonline", targetEligible: false, marketReadingEligible: false },
   ballybet: { sportsbook: "ballybet", targetEligible: false, marketReadingEligible: false },
+  betus: { sportsbook: "betus", targetEligible: false, marketReadingEligible: false },
+  bovada: { sportsbook: "bovada", targetEligible: false, marketReadingEligible: false },
+  lowvig: { sportsbook: "lowvig", targetEligible: false, marketReadingEligible: false },
+  mybookieag: { sportsbook: "mybookie", targetEligible: false, marketReadingEligible: false },
+  betanysports: { sportsbook: "betanysports", targetEligible: false, marketReadingEligible: false },
+  betparx: { sportsbook: "betparx", targetEligible: false, marketReadingEligible: false },
+  courtside: { sportsbook: "courtside", targetEligible: false, marketReadingEligible: false },
+  fliff: { sportsbook: "fliff", targetEligible: false, marketReadingEligible: false },
+  hardrockbet: { sportsbook: "hardrockbet", targetEligible: false, marketReadingEligible: false },
+  hardrockbet_az: { sportsbook: "hardrockbet", targetEligible: false, marketReadingEligible: false },
+  hardrockbet_fl: { sportsbook: "hardrockbet", targetEligible: false, marketReadingEligible: false },
+  hardrockbet_oh: { sportsbook: "hardrockbet", targetEligible: false, marketReadingEligible: false },
 };
 
 function normalizeMoneyline(game: NcaafGame, markets: JsonRecord[]): NcaafBookOdds["moneyline"] {
