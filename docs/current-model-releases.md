@@ -2770,6 +2770,29 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 27 Passing Completions direction correction: active portable artifact / model /
+  calibration / decision / runtime / board are
+  `nfl_player_props_runtime_2026_10_27_r20_passing_completions_direction` /
+  `nfl_player_props_distribution_model_2026_10_27_r31_passing_completions_direction` /
+  `nfl_player_props_distribution_calibration_2026_10_27_r33_passing_completions_direction` /
+  `nfl_player_props_decision_2026_10_27_r37_passing_completions_direction` /
+  `nfl_player_props_runtime_2026_10_27_r38_passing_completions_direction` /
+  `nfl_player_props_board_2026_10_27_r41_passing_completions_direction`. Member / lifecycle /
+  sole writer / tracking are `nfl_player_props_member_2026_10_27_r50_passing_completions_direction` /
+  `nfl_player_props_member_lifecycle_2026_10_27_r32_passing_completions_direction` /
+  `nfl_player_props_writer_2026_10_27_r64_passing_completions_direction` /
+  `nfl_player_props_tracking_2026_10_27_r38_passing_completions_direction`. For future-unlocked
+  Passing Completions only, fresh target-book-excluded direction may correct an independent/market
+  disagreement. The independent point forecast remains market-free. Exact member-line Weeks 6-7
+  improve from 27-27 (50.0%) to 29-25 (53.7%), with Brier improving 0.29527 to 0.25787 and both
+  chronological blocks improving by one net decision. The production-default no-write rehearsal keeps
+  all 12 completion rows, changes four projection values and two forecast sides, and changes zero
+  completion grades or actionables. Every
+  other market, provider call, cadence, UI, grade policy, writer topology, and lease is unchanged.
+  Existing locks retain exact precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-27-nfl-player-props-passing-completions-direction-r37-predeclaration.md`
+  and `docs/model-audits/2026-10-27-nfl-player-props-passing-completions-direction-result.md`.
+
 - October 27 Receptions direction authority: active portable artifact / model / calibration /
   decision / runtime / board are
   `nfl_player_props_runtime_2026_10_27_r19_receptions_direction_authority` /
