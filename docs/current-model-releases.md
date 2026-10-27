@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-26
+Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
@@ -900,6 +900,23 @@ Last reviewed: 2026-10-26
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+- October 27 paid FCS full-US price discovery: the paid The Odds API fallback
+  advances to
+  `cfb_the_odds_api_fcs_fallback_2026_10_27_r5_full_us_region_discovery` and the
+  sole writer advances to
+  `cfb_forward_evidence_writer_2026_10_27_r140_full_us_fcs_price_discovery`.
+  The provider request now discovers both complete US regions (`us,us2`)
+  instead of a brittle fixed ten-book subset. The exact preceding ten-book
+  model lane is preserved; additional normalized books are display-price-only
+  and cannot affect forecasts, probabilities, picks, grades, market reading,
+  stakes, locks, or tracking. The call remains one slate-level request on the
+  existing hourly/T-60 cadence, with a six-credit maximum and a 2,304-credit
+  two-week reserve. Missing vendor events remain unavailable rather than
+  synthetic. The model/calibration/decision/fixture/snapshot/reader/tracking
+  releases, sole `prediction_pipeline:cfb` lease, and all stored locks are
+  unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-27-cfb-full-us-fcs-price-discovery.md`.
 
 - October 27 near-tie PMF winner-coherence release: future-unlocked CFB forecasts now reconcile
   the rare case where the authoritative PMF's expected-margin side and winner-probability side
