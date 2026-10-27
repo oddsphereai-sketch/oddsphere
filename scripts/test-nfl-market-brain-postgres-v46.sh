@@ -18,10 +18,13 @@ upgrade_sql="${repo_root}/lib/db/schema-migration-v46-nfl-market-brain-proof-bou
 evidence_attempt_sql="${repo_root}/lib/db/schema-migration-v47-market-brain-evidence-attempts.sql"
 capture_plan_sql="${repo_root}/lib/db/schema-migration-v48-market-brain-capture-plans.sql"
 attempt_claim_sql="${repo_root}/lib/db/schema-migration-v49-market-brain-attempt-claims.sql"
+decision_envelope_sql="${repo_root}/lib/db/schema-migration-v50-nfl-market-brain-decision-envelopes.sql"
 lifecycle_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v46-lifecycle-proof.sql"
+decision_envelope_proof_sql="${repo_root}/scripts/fixtures/nfl-market-brain-v50-decision-envelope-proof.sql"
 lifecycle_prelude="$(mktemp)"
 capture_plan_prelude="$(mktemp)"
-trap 'rm -f "${lifecycle_prelude}" "${capture_plan_prelude}"' EXIT
+decision_envelope_prelude="$(mktemp)"
+trap 'rm -f "${lifecycle_prelude}" "${capture_plan_prelude}" "${decision_envelope_prelude}"' EXIT
 
 psql_run() {
   psql "${database_url}" -X -v ON_ERROR_STOP=1 "$@"
@@ -349,5 +352,10 @@ psql_run -f "${attempt_claim_sql}"
 psql_run -f "${attempt_claim_sql}"
 npx tsx "${repo_root}/scripts/build-market-brain-v48-lifecycle-proof.ts" >"${capture_plan_prelude}"
 psql_run -f "${capture_plan_prelude}"
+npx tsx "${repo_root}/scripts/build-nfl-market-brain-v50-decision-envelope-proof.ts" \
+  >"${decision_envelope_prelude}"
+psql_run -f "${decision_envelope_sql}"
+psql_run -f "${decision_envelope_sql}"
+psql_run -f "${decision_envelope_prelude}" -f "${decision_envelope_proof_sql}"
 
-echo "Market Brain PostgreSQL v45 -> v49 upgrade, refusal, idempotence, lifecycle, catalog, and hash proof passed."
+echo "Market Brain PostgreSQL v45 -> v50 upgrade, refusal, idempotence, lifecycle, catalog, hash, and decision-envelope binding proof passed."

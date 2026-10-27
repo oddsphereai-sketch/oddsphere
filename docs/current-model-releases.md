@@ -655,7 +655,12 @@ Last reviewed: 2026-10-27
   number/price/hold/reversal/buyback features without minimum-move quotas, excludes same-family split
   observations and expected-source missingness as well as prices, and assigns event roles
   from chronology rather than reputation. Opposing simultaneous movers are conflicted rather than
-  resolved by participant sort order. It is also production-inert. Provider-side pagination,
+  resolved by participant sort order. The candidate v50 database migration additionally requires every
+  newly inserted successful shadow to contain the frozen envelope and rejects every new research input
+  unless its envelope is byte-semantically equal to the latest successful pre-cutoff case in the exact
+  finalized capture-set membership. Its disposable real-PostgreSQL fixture accepts the legitimate input
+  and must reject a fully rehashed caller-authored opposing action; the migration remains unapplied until
+  that real-PostgreSQL proof runs in the deployment environment. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
   `nfl_market_brain_research_evaluator_2026_10_27_r20_frozen_decision_envelopes` and
