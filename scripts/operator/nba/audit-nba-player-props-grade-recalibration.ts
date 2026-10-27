@@ -20,6 +20,13 @@ type SignalFamily =
   | "target_excluded_expected_value"
   | "model_market_conservative_expected_value"
   | "model_market_average_expected_value";
+type AccuracySignalFamily =
+  | "final_probability"
+  | "raw_probability"
+  | "projection_distance"
+  | "target_excluded_probability"
+  | "model_market_conservative_probability"
+  | "model_market_average_probability";
 type EligibilityGate = "all" | "established_role" | "not_back_to_back" | "established_role_not_back_to_back";
 
 type Row = Readonly<{
@@ -143,6 +150,153 @@ async function main(): Promise<void> {
     throw new Error("Grade recalibration accepts only an offline non-actionable dataset.");
   }
 
+  if (process.argv.includes("--accuracy-first-only")) {
+    const definitions = [
+      { name: "conservative_agreement_reference", signal: "model_market_conservative_probability", requireAgreement: true, requireReferenceBook: true },
+      { name: "conservative_agreement", signal: "model_market_conservative_probability", requireAgreement: true, requireReferenceBook: false },
+      { name: "average_agreement_reference", signal: "model_market_average_probability", requireAgreement: true, requireReferenceBook: true },
+      { name: "raw_agreement_reference", signal: "raw_probability", requireAgreement: true, requireReferenceBook: true },
+      { name: "projection_agreement_reference", signal: "projection_distance", requireAgreement: true, requireReferenceBook: true },
+      { name: "final_probability", signal: "final_probability", requireAgreement: false, requireReferenceBook: false },
+    ] as const satisfies readonly Readonly<{
+      name: string;
+      signal: AccuracySignalFamily;
+      requireAgreement: boolean;
+      requireReferenceBook: boolean;
+    }>[];
+    const comparisons = Object.fromEntries(definitions.map((definition) => [
+      definition.name,
+      Object.fromEntries((Object.keys(dataset.rows) as WindowName[]).map((window) => {
+        const baseline = applyArtifactPolicies(dataset.rows[window], artifact.gradePolicies);
+        const candidate = applyAccuracyFirstEqualBoardPolicy(dataset.rows[window], artifact.gradePolicies, definition);
+        return [window, compareBoards(baseline, candidate)];
+      })),
+    ]));
+    const quickReport = {
+      release: "nba_player_props_accuracy_first_equal_board_audit_2026_10_27_r1",
+      mode: "offline_research_only",
+      actionable: false,
+      sourceDatasetRelease: dataset.release,
+      sourceArtifactRelease: artifact.release,
+      immutableInputsSha256: dataset.immutableInputsSha256,
+      comparisons,
+    };
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, `${JSON.stringify(quickReport, null, 2)}\n`, "utf8");
+    process.stdout.write(`${JSON.stringify(quickReport, null, 2)}\n`);
+    return;
+  }
+
+  if (process.argv.includes("--side-calibration-only")) {
+    const signals = [
+      "final_probability",
+      "raw_probability",
+      "model_market_conservative_probability",
+      "model_market_average_probability",
+    ] as const satisfies readonly AccuracySignalFamily[];
+    const overBonuses = [-0.15, -0.10, -0.075, -0.05, -0.025, 0, 0.025, 0.05, 0.075, 0.10, 0.15] as const;
+    const baselineReliability = applyArtifactPolicies(dataset.rows.reliabilityFit, artifact.gradePolicies);
+    const baselineGrade = applyArtifactPolicies(dataset.rows.gradePolicy, artifact.gradePolicies);
+    const selectedByMarket = Object.fromEntries(MARKETS.map((market) => {
+      const reliabilitySource = dataset.rows.reliabilityFit.filter((row) => row.market === market);
+      const gradeSource = dataset.rows.gradePolicy.filter((row) => row.market === market);
+      const marketBaselineReliability = baselineReliability.filter((row) => row.market === market);
+      const marketBaselineGrade = baselineGrade.filter((row) => row.market === market);
+      const baselineReliabilityLine = summarizeSelected(
+        marketBaselineReliability.filter(actionable),
+      );
+      const baselineGradeLine = summarizeSelected(
+        marketBaselineGrade.filter(actionable),
+      );
+      const candidates = signals.flatMap((signal) => overBonuses.map((overBonus) => {
+        const definition = { signal, overBonus };
+        const reliability = applySideCalibratedEqualBoardPolicy(
+          reliabilitySource,
+          artifact.gradePolicies,
+          { [market]: definition },
+          marketBaselineReliability,
+        ).filter((row) => row.market === market && actionable(row));
+        const grade = applySideCalibratedEqualBoardPolicy(
+          gradeSource,
+          artifact.gradePolicies,
+          { [market]: definition },
+          marketBaselineGrade,
+        ).filter((row) => row.market === market && actionable(row));
+        const reliabilityLine = summarizeSelected(reliability);
+        const gradeLine = summarizeSelected(grade);
+        const baselineReliabilityHit = baselineReliabilityLine.hitRate ?? 0;
+        const baselineGradeHit = baselineGradeLine.hitRate ?? 0;
+        const reliabilityHit = reliabilityLine.hitRate ?? 0;
+        const gradeHit = gradeLine.hitRate ?? 0;
+        const qualified = reliabilityLine.records === baselineReliabilityLine.records
+          && gradeLine.records === baselineGradeLine.records
+          && reliabilityHit >= baselineReliabilityHit
+          && gradeHit >= baselineGradeHit
+          && ((reliabilityHit - baselineReliabilityHit) + (gradeHit - baselineGradeHit)) >= 0.03;
+        return {
+          definition,
+          qualified,
+          weakestHitRate: Math.min(reliabilityHit, gradeHit),
+          combinedHitRate: reliabilityHit + gradeHit,
+          reliability: reliabilityLine,
+          gradePolicy: gradeLine,
+        };
+      })).sort((left, right) => Number(right.qualified) - Number(left.qualified)
+        || right.weakestHitRate - left.weakestHitRate
+        || right.combinedHitRate - left.combinedHitRate
+        || Math.abs(left.definition.overBonus) - Math.abs(right.definition.overBonus)
+        || left.definition.signal.localeCompare(right.definition.signal));
+      return [market, {
+        baseline: { reliabilityFit: baselineReliabilityLine, gradePolicy: baselineGradeLine },
+        selected: candidates.find((candidate) => candidate.qualified) ?? null,
+        strongestTested: candidates[0] ?? null,
+        inspectedCandidates: candidates.length,
+      }];
+    }));
+    const preconfirmationDefinitions = Object.fromEntries(Object.entries(selectedByMarket).flatMap(([market, result]) => {
+      const selected = result.selected;
+      return selected ? [[market, selected.definition]] : [];
+    }));
+    const confirmationByMarket = Object.fromEntries(Object.entries(preconfirmationDefinitions).map(([market, definition]) => {
+      const source = dataset.rows.confirmation.filter((row) => row.market === market);
+      const baseline = applyArtifactPolicies(source, artifact.gradePolicies);
+      const candidate = applySideCalibratedEqualBoardPolicy(source, artifact.gradePolicies, { [market]: definition }, baseline);
+      const baselineLine = summarizeSelected(baseline.filter(actionable));
+      const candidateLine = summarizeSelected(candidate.filter(actionable));
+      return [market, {
+        baseline: baselineLine,
+        candidate: candidateLine,
+        qualified: candidateLine.records === baselineLine.records
+          && (candidateLine.hitRate ?? 0) >= (baselineLine.hitRate ?? 0),
+      }];
+    }));
+    const frozenDefinitions = Object.fromEntries(Object.entries(preconfirmationDefinitions).filter(([market]) =>
+      confirmationByMarket[market]?.qualified));
+    const comparisons = Object.fromEntries((Object.keys(dataset.rows) as WindowName[]).map((window) => {
+      const baseline = applyArtifactPolicies(dataset.rows[window], artifact.gradePolicies);
+      const candidate = applySideCalibratedEqualBoardPolicy(dataset.rows[window], artifact.gradePolicies, frozenDefinitions);
+      return [window, compareBoards(baseline, candidate)];
+    }));
+    const report = {
+      release: "nba_player_props_side_calibrated_equal_board_audit_2026_10_27_r1",
+      mode: "offline_research_only",
+      actionable: false,
+      sourceDatasetRelease: dataset.release,
+      sourceArtifactRelease: artifact.release,
+      immutableInputsSha256: dataset.immutableInputsSha256,
+      selectionUsesConfirmation: false,
+      selectedByMarket,
+      preconfirmationDefinitions,
+      confirmationByMarket,
+      frozenDefinitions,
+      comparisons,
+    };
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return;
+  }
+
   const reusePolicyReport = optionalValue("--reuse-policy-report");
   const frozenPolicies = reusePolicyReport
     ? (JSON.parse(await readFile(path.resolve(reusePolicyReport), "utf8")) as {
@@ -225,6 +379,27 @@ async function main(): Promise<void> {
     dataset.rows.confirmation,
     artifact.gradePolicies,
   );
+  const accuracyFirstDefinitions = [
+    { name: "conservative_agreement_reference", signal: "model_market_conservative_probability", requireAgreement: true, requireReferenceBook: true },
+    { name: "conservative_agreement", signal: "model_market_conservative_probability", requireAgreement: true, requireReferenceBook: false },
+    { name: "average_agreement_reference", signal: "model_market_average_probability", requireAgreement: true, requireReferenceBook: true },
+    { name: "raw_agreement_reference", signal: "raw_probability", requireAgreement: true, requireReferenceBook: true },
+    { name: "projection_agreement_reference", signal: "projection_distance", requireAgreement: true, requireReferenceBook: true },
+    { name: "final_probability", signal: "final_probability", requireAgreement: false, requireReferenceBook: false },
+  ] as const satisfies readonly Readonly<{
+    name: string;
+    signal: AccuracySignalFamily;
+    requireAgreement: boolean;
+    requireReferenceBook: boolean;
+  }>[];
+  const accuracyFirstEqualBoardCandidates = Object.fromEntries(accuracyFirstDefinitions.map((definition) => [
+    definition.name,
+    Object.fromEntries((Object.keys(dataset.rows) as WindowName[]).map((window) => {
+      const baseline = applyArtifactPolicies(dataset.rows[window], artifact.gradePolicies);
+      const candidate = applyAccuracyFirstEqualBoardPolicy(dataset.rows[window], artifact.gradePolicies, definition);
+      return [window, compareBoards(baseline, candidate)];
+    })),
+  ]));
 
   const candidateByMarket = Object.fromEntries(MARKETS.map((market) => {
     const policy = frozenPolicies[market];
@@ -320,6 +495,7 @@ async function main(): Promise<void> {
         ),
       },
     },
+    accuracyFirstEqualBoardCandidates,
     boardImpact: {
       baselineActionables: baselineCount,
       candidateActionables: candidateConfirmation.records,
@@ -351,10 +527,122 @@ async function main(): Promise<void> {
     candidate: candidateWindows.confirmation.actionable,
     focusedPolicyComparisons,
     coherentPriceCandidate: report.coherentPriceCandidate,
+    accuracyFirstEqualBoardCandidates,
     boardImpact: report.boardImpact,
     clusteredConfirmation: report.clusteredConfirmation,
     confirmationVerdict: report.confirmationVerdict,
   }, null, 2)}\n`);
+}
+
+function applyAccuracyFirstEqualBoardPolicy(
+  rows: readonly Row[],
+  policies: ArtifactGradePolicies,
+  definition: Readonly<{
+    signal: AccuracySignalFamily;
+    requireAgreement: boolean;
+    requireReferenceBook: boolean;
+  }>,
+): GradedRow[] {
+  const baseline = applyArtifactPolicies(rows, policies);
+  const baselineByScope = new Map(baseline.map((row) => [row.scopeKey, row]));
+  const baselineByMarketSlate = groupBy(
+    baseline,
+    (row) => `${row.market}|${easternDate(row.featureCutoff)}`,
+  );
+  const selected = new Set<string>();
+  const selectedBest = new Set<string>();
+  for (const market of MARKETS) {
+    const marketRows = rows.filter((row) => row.market === market);
+    for (const [slateDate, slate] of groupBy(marketRows, (row) => easternDate(row.featureCutoff))) {
+      const incumbent = (baselineByMarketSlate.get(`${market}|${slateDate}`) ?? []).filter(actionable);
+      if (incumbent.length === 0) continue;
+      const targetBest = incumbent.filter((row) => row.grade === "Best Angle").length;
+      const qualified = slate
+        .filter((row) => row.finalProbability >= 0.5)
+        .filter((row) => row.americanPrice >= -200)
+        .filter((row) => !definition.requireAgreement
+          || (row.rawFinalProbability >= 0.5 && row.targetExcludedProbability >= 0.5 && row.targetExcludedBooks >= 1))
+        .filter((row) => !definition.requireReferenceBook || row.targetExcludedReferenceBooks >= 1)
+        .sort((left, right) => accuracySignal(right, definition.signal) - accuracySignal(left, definition.signal)
+          || right.finalProbability - left.finalProbability
+          || left.scopeKey.localeCompare(right.scopeKey));
+      const qualifiedScopes = new Set(qualified.map((row) => row.scopeKey));
+      const fallbacks = incumbent
+        .filter((row) => !qualifiedScopes.has(row.scopeKey))
+        .sort((left, right) => accuracySignal(right, definition.signal) - accuracySignal(left, definition.signal)
+          || right.finalProbability - left.finalProbability
+          || left.scopeKey.localeCompare(right.scopeKey));
+      const chosen = [...qualified, ...fallbacks].slice(0, incumbent.length);
+      for (const row of chosen) selected.add(row.scopeKey);
+      for (const row of chosen.slice(0, targetBest)) selectedBest.add(row.scopeKey);
+    }
+  }
+  return rows.map((row) => {
+    const prior = baselineByScope.get(row.scopeKey)!;
+    if (!selected.has(row.scopeKey)) {
+      if (!actionable(prior)) return prior;
+      return { ...prior, grade: row.finalProbability >= 0.5 ? "Watchlist" : "No Play" };
+    }
+    return { ...prior, grade: selectedBest.has(row.scopeKey) ? "Best Angle" : "Lean" };
+  });
+}
+
+function accuracySignal(row: Row, family: AccuracySignalFamily): number {
+  if (family === "final_probability") return row.finalProbability;
+  if (family === "raw_probability") return row.rawFinalProbability;
+  if (family === "projection_distance") return Math.abs(row.finalProjection - row.line) / Math.max(0.25, row.projectionStandardDeviation);
+  if (family === "target_excluded_probability") return row.targetExcludedProbability;
+  if (family === "model_market_conservative_probability") {
+    return Math.min(row.rawFinalProbability, row.targetExcludedProbability);
+  }
+  return (row.rawFinalProbability + row.targetExcludedProbability) / 2;
+}
+
+function applySideCalibratedEqualBoardPolicy(
+  rows: readonly Row[],
+  policies: ArtifactGradePolicies,
+  definitions: Readonly<Record<string, Readonly<{ signal: AccuracySignalFamily; overBonus: number }>>>,
+  baselineOverride?: readonly GradedRow[],
+): GradedRow[] {
+  const baseline = baselineOverride ?? applyArtifactPolicies(rows, policies);
+  const baselineByScope = new Map(baseline.map((row) => [row.scopeKey, row]));
+  const baselineByMarketSlate = groupBy(
+    baseline,
+    (row) => `${row.market}|${easternDate(row.featureCutoff)}`,
+  );
+  const selected = new Set<string>();
+  const selectedBest = new Set<string>();
+  for (const [market, definition] of Object.entries(definitions)) {
+    const marketRows = rows.filter((row) => row.market === market);
+    for (const [slateDate, slate] of groupBy(marketRows, (row) => easternDate(row.featureCutoff))) {
+      const incumbent = (baselineByMarketSlate.get(`${market}|${slateDate}`) ?? []).filter(actionable);
+      if (incumbent.length === 0) continue;
+      const targetBest = incumbent.filter((row) => row.grade === "Best Angle").length;
+      const ranked = slate.filter((row) => row.finalProbability >= 0.5 && row.americanPrice >= -200
+          && row.targetExcludedBooks >= 1)
+        .sort((left, right) => {
+          const rightScore = accuracySignal(right, definition.signal)
+            + (right.finalSide === "over" ? definition.overBonus : 0);
+          const leftScore = accuracySignal(left, definition.signal)
+            + (left.finalSide === "over" ? definition.overBonus : 0);
+          return rightScore - leftScore
+            || right.finalProbability - left.finalProbability
+            || left.scopeKey.localeCompare(right.scopeKey);
+        });
+      const rankedScopes = new Set(ranked.map((row) => row.scopeKey));
+      const fallbacks = incumbent.filter((row) => !rankedScopes.has(row.scopeKey));
+      const chosen = [...ranked, ...fallbacks].slice(0, incumbent.length);
+      for (const row of chosen) selected.add(row.scopeKey);
+      for (const row of chosen.slice(0, targetBest)) selectedBest.add(row.scopeKey);
+    }
+  }
+  return baseline.map((row) => {
+    if (!definitions[row.market]) return row;
+    if (!selected.has(row.scopeKey)) {
+      return actionable(row) ? { ...row, grade: row.finalProbability >= 0.5 ? "Watchlist" : "No Play" } : row;
+    }
+    return { ...row, grade: selectedBest.has(row.scopeKey) ? "Best Angle" : "Lean" };
+  });
 }
 
 function applyPositiveEvEqualBoardPolicy(
@@ -783,10 +1071,16 @@ function unitReturn(won: boolean, price: number): number {
   return won ? (price > 0 ? price / 100 : 100 / Math.abs(price)) : -1;
 }
 
+const easternDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+});
+const easternDateCache = new Map<string, string>();
 function easternDate(iso: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date(iso));
+  const cached = easternDateCache.get(iso);
+  if (cached) return cached;
+  const formatted = easternDateFormatter.format(new Date(iso));
+  easternDateCache.set(iso, formatted);
+  return formatted;
 }
 
 function policyKey(policy: CandidatePolicy): string {
