@@ -197,8 +197,8 @@ async function loadMlbRows(client: SupabaseClient, args: Args) {
   for (let index = 0; index < players.length; index += 6) {
     await Promise.all(players.slice(index, index + 6).map(async (player) => {
       const logs = player.family === "pitcher"
-        ? await getPitcherGameLogs(player.playerId, player.season, { quiet: true })
-        : await getHitterGameLogs(player.playerId, player.season, { quiet: true });
+        ? await getPitcherGameLogs(player.playerId, player.season, { quiet: true, gameTypes: ["R", "P"] })
+        : await getHitterGameLogs(player.playerId, player.season, { quiet: true, gameTypes: ["R", "P"] });
       for (const log of logs ?? []) {
         for (const market of marketsForLog(player.family)) {
           outcomeCache.set(`${log.game_pk}|${player.playerId}|${market}`, mlbActual(market, log));

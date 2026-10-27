@@ -5,6 +5,8 @@
  * No live HTTP calls. No DB writes.
  */
 import {
+  getHitterGameLogs,
+  getPitcherGameLogs,
   searchPersonByNameDob,
   getPitcherFirstInningStats,
   parseBaseballInningsPitched,
@@ -361,6 +363,20 @@ async function main(): Promise<void> {
   check("[P8] parser '' → null", parseBaseballInningsPitched("") === null);
   check("[P9] parser null → null", parseBaseballInningsPitched(null) === null);
   check("[P10] parser number-input → null", parseBaseballInningsPitched(6.0) === null);
+
+  // Settlement must explicitly request both regular-season and postseason
+  // game logs. The model-facing default deliberately remains unchanged.
+  mockOk({ stats: [{ type: { displayName: "gameLog" }, splits: [] }] });
+  await getHitterGameLogs(802415, 2026, { quiet: true, gameTypes: ["R", "P"] });
+  check("[G1] hitter settlement URL includes regular and postseason game types", lastUrl.includes("gameType=R,P"));
+
+  mockOk({ stats: [{ type: { displayName: "gameLog" }, splits: [] }] });
+  await getPitcherGameLogs(669373, 2026, { quiet: true, gameTypes: ["R", "P"] });
+  check("[G2] pitcher settlement URL includes regular and postseason game types", lastUrl.includes("gameType=R,P"));
+
+  mockOk({ stats: [{ type: { displayName: "gameLog" }, splits: [] }] });
+  await getHitterGameLogs(802415, 2026, { quiet: true });
+  check("[G3] model-facing default game-log request remains unchanged", !lastUrl.includes("gameType="));
 
   restore();
 

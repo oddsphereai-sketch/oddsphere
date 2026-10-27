@@ -33,6 +33,8 @@ const TRACKABLE_GRADES = new Set(["BEST_ANGLE", "LEAN", "WATCHLIST"]);
 const ACTIONABLE_GRADES = new Set(["BEST_ANGLE", "LEAN"]);
 const DEFAULT_SETTLEMENT_LOOKBACK_DAYS = 4;
 const DEFAULT_MAX_PENDING_SETTLEMENTS = 500;
+export const MLB_PROPS_SETTLEMENT_RELEASE_ID =
+  "mlb_props_settlement_2026_10_27_r2_postseason_game_logs";
 
 export type MlbPropsTrackingSyncResult = {
   status: "disabled" | "completed" | "failed";
@@ -427,7 +429,12 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
       slate_date: runDate,
       provider: "mlb_stats_api",
       status: "started",
-      metadata_json: { requestedDates: dates, pendingLoaded: pending.length, internalLedger: true },
+      metadata_json: {
+        requestedDates: dates,
+        pendingLoaded: pending.length,
+        internalLedger: true,
+        settlementReleaseId: MLB_PROPS_SETTLEMENT_RELEASE_ID,
+      },
     })
     .select("id")
     .single();
@@ -458,8 +465,8 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
       const playerId = Number(playerIdRaw);
       const season = Number(seasonRaw);
       logsByKey.set(key, family === "hitter"
-        ? await getHitterGameLogs(playerId, season, { quiet: true })
-        : await getPitcherGameLogs(playerId, season, { quiet: true }));
+        ? await getHitterGameLogs(playerId, season, { quiet: true, gameTypes: ["R", "P"] })
+        : await getPitcherGameLogs(playerId, season, { quiet: true, gameTypes: ["R", "P"] }));
     });
 
     for (const entry of finalRows) {
@@ -472,9 +479,10 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
       const gameLog = logs.find((log) => log.game_pk === entry.mlb_game_pk);
       if (!gameLog) {
         const nextAttempt = entry.settlement_attempts + 1;
+        const family = entry.market_key.startsWith("batter_") ? "hitter" : "pitcher";
         if (nextAttempt < 2) {
           unresolved++;
-          await markSettlementAttempt(supabase, entry, "Final game found; pitcher log not available yet");
+          await markSettlementAttempt(supabase, entry, `Final game found; ${family} log not available yet`);
           continue;
         }
         const { error: updateError } = await supabase.from("mlb_prop_tracking_entries").update({
@@ -483,7 +491,9 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
           settled_at: new Date().toISOString(),
           settlement_provider: "mlb_stats_api",
           settlement_attempts: nextAttempt,
-          settlement_error: "Pitcher did not record a start in the final game",
+          settlement_error: family === "pitcher"
+            ? "Pitcher did not record a start in the final game"
+            : "Hitter did not record a plate appearance in the final game",
           updated_at: new Date().toISOString(),
         }).eq("id", entry.id).eq("result_status", "pending");
         if (updateError) throw updateError;
@@ -547,7 +557,14 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
       props_settled: propsSettled,
       pushes,
       unresolved,
-      metadata_json: { requestedDates: dates, pendingLoaded: pending.length, finalRows: finalRows.length, voided, internalLedger: true },
+      metadata_json: {
+        requestedDates: dates,
+        pendingLoaded: pending.length,
+        finalRows: finalRows.length,
+        voided,
+        internalLedger: true,
+        settlementReleaseId: MLB_PROPS_SETTLEMENT_RELEASE_ID,
+      },
     }).eq("id", run.id);
     if (completeError) throw completeError;
     return { runId: String(run.id), pendingLoaded: pending.length, finalRows: finalRows.length, gamesSettled: gamesSettled.size, propsSettled, pushes, voided, unresolved };
@@ -560,7 +577,13 @@ export async function settleInternalMlbProps(args: { dates?: string[] } = {}) {
       pushes,
       unresolved,
       error_message: errorMessage(settlementError),
-      metadata_json: { requestedDates: dates, pendingLoaded: pending.length, voided, internalLedger: true },
+      metadata_json: {
+        requestedDates: dates,
+        pendingLoaded: pending.length,
+        voided,
+        internalLedger: true,
+        settlementReleaseId: MLB_PROPS_SETTLEMENT_RELEASE_ID,
+      },
     }).eq("id", run.id);
     throw settlementError;
   }
