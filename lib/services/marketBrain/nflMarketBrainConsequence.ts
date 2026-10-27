@@ -88,6 +88,7 @@ type DecisionDistribution = Pick<NflMarketBrainJointPosterior,
   "marginDistribution" | "totalDistribution">;
 
 const ECONOMIC_EPSILON = 1e-12;
+const attestedConsequences = new WeakSet<object>();
 
 /**
  * Converts the one coherent score posterior into an exact, auditable shadow
@@ -259,7 +260,22 @@ export function deriveNflMarketBrainDecisionConsequence(args: {
       productionInfluenceAllowed: false as const,
     },
   };
-  return deepFreeze({ ...withoutChecksum, checksum: marketBrainSha256(withoutChecksum) });
+  const output = deepFreeze({ ...withoutChecksum, checksum: marketBrainSha256(withoutChecksum) });
+  attestedConsequences.add(output);
+  return output;
+}
+
+export function assertNflMarketBrainDecisionConsequence(
+  consequence: NflMarketBrainDecisionConsequence,
+): void {
+  const { checksum, ...payload } = consequence;
+  if (!attestedConsequences.has(consequence) ||
+    consequence.schema !== "nfl_market_brain_decision_consequence_v1" ||
+    consequence.release !== NFL_MARKET_BRAIN_CONSEQUENCE_RELEASE ||
+    consequence.mode !== "shadow_only" || consequence.invariants.productionInfluenceAllowed !== false ||
+    checksum !== marketBrainSha256(payload)) {
+    throw new Error("NFL Market Brain evaluation requires this process's verified decision consequence.");
+  }
 }
 
 function priorDistribution(sequence: NflMarketBrainSequence): DecisionDistribution {

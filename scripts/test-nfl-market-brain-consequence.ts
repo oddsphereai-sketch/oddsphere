@@ -5,6 +5,10 @@ import {
   deriveNflMarketBrainDecisionConsequence,
   type NflMarketBrainFrozenQuote,
 } from "../lib/services/marketBrain/nflMarketBrainConsequence";
+import {
+  evaluateNflMarketBrainDecisionConsequence,
+  summarizeNflMarketBrainConsequenceEvaluations,
+} from "../lib/services/marketBrain/nflMarketBrainConsequenceEvaluator";
 import type { NflMarketBrainJointPosterior } from
   "../lib/services/marketBrain/nflMarketBrainResolverContract";
 
@@ -208,8 +212,62 @@ assert.throws(() => decide({
   menu: [moneylineQuote("away", "away")],
 }), /incumbent action is absent/);
 
+const correctedLoss = evaluateNflMarketBrainDecisionConsequence({
+  consequence: flip,
+  awayScore: 24,
+  homeScore: 20,
+});
+assert.equal(correctedLoss.classification, "corrected_loss");
+assert.equal(correctedLoss.incumbent.result, "loss");
+assert.equal(correctedLoss.candidate.result, "win");
+assert.ok(correctedLoss.unitDelta > 1);
+
+const newHarm = evaluateNflMarketBrainDecisionConsequence({
+  consequence: flip,
+  awayScore: 20,
+  homeScore: 24,
+});
+assert.equal(newHarm.classification, "new_harm");
+assert.equal(newHarm.incumbent.result, "win");
+assert.equal(newHarm.candidate.result, "loss");
+
+const avoidedLoss = evaluateNflMarketBrainDecisionConsequence({
+  consequence: standDown,
+  awayScore: 24,
+  homeScore: 20,
+});
+assert.equal(avoidedLoss.classification, "demotion_avoided_loss");
+assert.equal(avoidedLoss.actionCountDelta, -1);
+
+const promotionWin = evaluateNflMarketBrainDecisionConsequence({
+  consequence: promoted,
+  awayScore: 20,
+  homeScore: 24,
+});
+assert.equal(promotionWin.classification, "promotion_win");
+assert.equal(promotionWin.actionCountDelta, 1);
+
+const summary = summarizeNflMarketBrainConsequenceEvaluations([
+  correctedLoss,
+  newHarm,
+  avoidedLoss,
+  promotionWin,
+]);
+assert.equal(summary.correctedLosses, 1);
+assert.equal(summary.newHarms, 1);
+assert.equal(summary.promotions, 1);
+assert.equal(summary.demotions, 1);
+assert.equal(summary.netActionCount, 0,
+  "the proof report must expose promotions and demotions rather than hiding a flatter board");
+assert.throws(() => evaluateNflMarketBrainDecisionConsequence({
+  consequence: structuredClone(flip),
+  awayScore: 24,
+  homeScore: 20,
+}), /verified decision consequence/,
+"caller-authored or copied decisions cannot enter exact-quote result evaluation");
+
 const source = readFileSync("lib/services/marketBrain/nflMarketBrainConsequence.ts", "utf8");
 assert.doesNotMatch(source, /minimumSignals|signalCount\s*[><=]|threeOfFour|pointsTable|sportsbookWeights?\s*:/i,
   "the consequence layer must not regress to signal quotas, points, or fixed sportsbook weights");
 
-console.log("NFL Market Brain exact-quote consequence: all six actions, no invented flip, quote-order invariance, and shadow-only authority passed");
+console.log("NFL Market Brain exact-quote consequence: all six actions, no invented flip, quote-order invariance, corrected-loss/new-harm scoring, and shadow-only authority passed");
