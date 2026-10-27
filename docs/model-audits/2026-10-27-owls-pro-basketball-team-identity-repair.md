@@ -25,8 +25,8 @@ change the existing same-book opening/prior/current price trail.
 ## Releases and immutability
 
 - Member presentation: `daily_edge_member_presentation_2026_10_27_r29_owls_pro_team_identity`
-- Market Intelligence capture: `market_intelligence_v2_shadow_capture_2026_10_27_r6_owls_pro_team_identity`
-- Immediate predecessor: r28 presentation / r5 capture
+- Market Intelligence capture: `market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`
+- Immediate predecessor: r28 presentation / r6 capture
 - Existing locked snapshots remain exact and are never overlaid.
 - Picks, probabilities, evaluated prices, grades, stakes, tracking rows, writer ownership,
   schedules, provider budgets, and sport-scoped leases are unchanged.

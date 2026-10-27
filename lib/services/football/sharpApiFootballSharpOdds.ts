@@ -6,9 +6,19 @@ import {
 import type { NcaafBookOdds, NcaafGame } from "./balldontlieNcaafSlate";
 import type { NflPreviewBookOdds, NflPreviewGame } from "./balldontlieNflPreviewSlate";
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
+import {
+  markRawPriceDuplicates,
+  footballRawPriceParserInput,
+  rawPriceSha256,
+  type FootballRawPriceObservation,
+  type FootballRawPriceResponseManifest,
+  type FootballRawPriceRowManifest,
+} from "./footballRawPriceManifest";
 
 export const FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE =
   "football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity" as const;
+export const FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE =
+  "football_sharp_raw_price_manifest_2026_10_27_r1_parser_input_provenance" as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK = 12 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_PAGE_SIZE = 200 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_TIMEOUT_MS = 20_000 as const;
@@ -32,6 +42,7 @@ export type FootballSharpOddsResult<TBook> = {
   failedBooks: SharpBook[];
   failures: Array<{ sportsbook: SharpBook; reason: string }>;
   booksByGame: Record<string, TBook[]>;
+  rawPriceResponseManifests?: FootballRawPriceResponseManifest[];
 };
 
 /**
@@ -54,8 +65,14 @@ export async function fetchSharpApiNflSharpOdds(args: {
   games: NflPreviewGame[];
   apiKey?: string;
   client?: SharpClient;
+  capturedAt?: string;
+  /** Research-only sidecar. Default false preserves the incumbent provider path. */
+  captureRawPriceManifest?: boolean;
 }): Promise<FootballSharpOddsResult<NflPreviewBookOdds>> {
-  const result = await fetchFootballSharpOdds({ league: "nfl", games: args.games, apiKey: args.apiKey, client: args.client });
+  const result = await fetchFootballSharpOdds({
+    league: "nfl", games: args.games, apiKey: args.apiKey, client: args.client, capturedAt: args.capturedAt,
+    captureRawPriceManifest: args.captureRawPriceManifest,
+  });
   return {
     ...result,
     booksByGame: Object.fromEntries(Object.entries(result.booksByGame).map(([gameId, books]) => [
@@ -69,8 +86,13 @@ export async function fetchSharpApiNcaafSharpOdds(args: {
   games: NcaafGame[];
   apiKey?: string;
   client?: SharpClient;
+  capturedAt?: string;
+  captureRawPriceManifest?: boolean;
 }): Promise<FootballSharpOddsResult<NcaafBookOdds>> {
-  const result = await fetchFootballSharpOdds({ league: "ncaaf", games: args.games, apiKey: args.apiKey, client: args.client });
+  const result = await fetchFootballSharpOdds({
+    league: "ncaaf", games: args.games, apiKey: args.apiKey, client: args.client, capturedAt: args.capturedAt,
+    captureRawPriceManifest: args.captureRawPriceManifest,
+  });
   return {
     ...result,
     booksByGame: Object.fromEntries(Object.entries(result.booksByGame).map(([gameId, books]) => [
@@ -96,12 +118,19 @@ async function fetchFootballSharpOdds(args: {
   games: FootballGame[];
   apiKey?: string;
   client?: SharpClient;
+  capturedAt?: string;
+  captureRawPriceManifest?: boolean;
 }): Promise<FootballSharpOddsResult<CapturedBook>> {
   const key = args.apiKey ?? process.env.SHARPAPI_KEY;
   if (!key && !args.client) throw new Error("SHARPAPI_KEY is required for sharp-book football price capture.");
   const client = args.client ?? new SharpApiClient(key!);
   const attempts = await Promise.allSettled(FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.map((sportsbook) =>
-    fetchBookPages({ client, league: args.league, sportsbook })));
+    fetchBookPages({
+      client,
+      league: args.league,
+      sportsbook,
+      captureResponseDigests: args.captureRawPriceManifest === true,
+    })));
   const rows = attempts.flatMap((attempt) => attempt.status === "fulfilled" ? attempt.value.rows : []);
   const failedBooks = attempts.flatMap((attempt, index) => attempt.status === "rejected"
     ? [FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS[index]!]
@@ -115,6 +144,39 @@ async function fetchFootballSharpOdds(args: {
   const requests = attempts.reduce((sum, attempt) => sum + (attempt.status === "fulfilled"
     ? attempt.value.requests
     : FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK), 0);
+  const providerFetchedAt = args.captureRawPriceManifest
+    ? args.capturedAt ?? new Date().toISOString()
+    : null;
+  const rawPriceResponseManifests = args.captureRawPriceManifest ? attempts.map((attempt, index): FootballRawPriceResponseManifest => {
+    const sportsbook = FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS[index]!;
+    return attempt.status === "fulfilled"
+      ? buildSharpRawPriceManifest({
+          rows: attempt.value.rows,
+          games: args.games,
+          league: args.league,
+          sportsbook,
+          providerFetchedAt: providerFetchedAt!,
+          rawResponseSha256: rawPriceSha256(attempt.value.pageResponseSha256s),
+          includeRawParserInput: true,
+        })
+      : {
+          release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+          provider: "sharpapi",
+          feed: "main_odds",
+          participant: sportsbook,
+          providerFetchedAt: providerFetchedAt!,
+          rawResponseSha256: null,
+          rawParserInput: null,
+          returnedRows: 0,
+          matchedRows: 0,
+          unmatchedRows: 0,
+          ambiguousRows: 0,
+          rows: [],
+          failed: true,
+          failureReason: attempt.reason instanceof Error ? attempt.reason.message : "unknown_sharp_book_capture_error",
+          observationsByGame: Object.fromEntries(args.games.map((game) => [game.providerGameId, []])),
+        };
+  }) : undefined;
 
   const booksByGame: Record<string, CapturedBook[]> = {};
   const claimedEvents = new Set<string>();
@@ -142,6 +204,7 @@ async function fetchFootballSharpOdds(args: {
     failedBooks,
     failures,
     booksByGame,
+    ...(rawPriceResponseManifests ? { rawPriceResponseManifests } : {}),
   };
 }
 
@@ -149,9 +212,11 @@ async function fetchBookPages(args: {
   client: SharpClient;
   league: "nfl" | "ncaaf";
   sportsbook: SharpBook;
-}): Promise<{ rows: Json[]; requests: number }> {
+  captureResponseDigests: boolean;
+}): Promise<{ rows: Json[]; requests: number; pageResponseSha256s: string[] }> {
   const signal = AbortSignal.timeout(FOOTBALL_SHARP_PRICE_CAPTURE_TIMEOUT_MS);
   const rows: Json[] = [];
+  const pageResponseSha256s: string[] = [];
   const fingerprints = new Set<string>();
   let offset = 0;
   let cursor: string | null = null;
@@ -173,6 +238,9 @@ async function fetchBookPages(args: {
       retryRateLimitInternally: false,
     });
     if (!Array.isArray(response.data)) throw new Error(`${args.league} ${args.sportsbook} odds returned malformed data.`);
+    if (args.captureResponseDigests) {
+      pageResponseSha256s.push(rawPriceSha256({ data: response.data, pagination: response.pagination ?? null }));
+    }
     const fingerprint = JSON.stringify(response.data);
     if (response.data.length > 0 && fingerprints.has(fingerprint)) {
       throw new Error(`${args.league} ${args.sportsbook} odds pagination repeated a prior page.`);
@@ -200,7 +268,118 @@ async function fetchBookPages(args: {
     cursor = nextCursor;
   }
   if (!complete) throw new Error(`${args.league} ${args.sportsbook} odds exceeded the bounded pagination cap.`);
-  return { rows, requests };
+  return { rows, requests, pageResponseSha256s };
+}
+
+export function buildSharpRawPriceManifest(args: {
+  rows: Json[];
+  games: FootballGame[];
+  league: "nfl" | "ncaaf";
+  sportsbook: SharpBook;
+  providerFetchedAt: string;
+  rawResponseSha256?: string;
+  includeRawParserInput?: boolean;
+}): FootballRawPriceResponseManifest {
+  const rawParserInput = args.includeRawParserInput ? footballRawPriceParserInput(args.rows) : {
+    input: null,
+    failureReason: null,
+  };
+  const observationsByGame = Object.fromEntries(
+    args.games.map((game) => [game.providerGameId, [] as FootballRawPriceObservation[]]),
+  );
+  let matchedRows = 0;
+  let unmatchedRows = 0;
+  let ambiguousRows = 0;
+  const rows: FootballRawPriceRowManifest[] = [];
+  args.rows.forEach((row, rowIndex) => {
+    const rawRowSha256 = rawPriceSha256(row);
+    if (normalize(text(row.sportsbook) ?? "") !== args.sportsbook) {
+      unmatchedRows += 1;
+      rows.push({ rowIndex, rawRowSha256, disposition: "unmatched", providerGameId: null, sourceObservationIds: [] });
+      return;
+    }
+    const matches = args.games.filter((game) => strictGameIdentity(game, row, args.league));
+    if (matches.length === 0) {
+      unmatchedRows += 1;
+      rows.push({ rowIndex, rawRowSha256, disposition: "unmatched", providerGameId: null, sourceObservationIds: [] });
+      return;
+    }
+    if (matches.length > 1) {
+      ambiguousRows += 1;
+      rows.push({ rowIndex, rawRowSha256, disposition: "ambiguous", providerGameId: null, sourceObservationIds: [] });
+      return;
+    }
+    matchedRows += 1;
+    const providerGameId = matches[0]!.providerGameId;
+    const market = marketType(row.market_type);
+    const selection = sideType(row.selection_type);
+    if (!market || !selection || !validSide(market, selection)) {
+      rows.push({ rowIndex, rawRowSha256, disposition: "matched", providerGameId, sourceObservationIds: [] });
+      return;
+    }
+    const providerEventId = identifier(row.event_id);
+    const providerObservedAt = iso(row.timestamp);
+    const price = americanPrice(row.odds_american);
+    const line = market === "moneyline" ? null : finite(row.line);
+    const unsupported = row.is_live === true || row.is_active === false ||
+      row.is_stale_pregame_price === true || row.is_player_prop === true ||
+      row.is_main_line !== true || row.is_alternate_line === true;
+    const complete = providerEventId !== null && providerObservedAt !== null && price !== null &&
+      (market === "moneyline" || line !== null);
+    const notes = [
+      providerEventId === null ? "provider_event_identity_unavailable" : null,
+      providerObservedAt === null ? "provider_observed_time_unavailable" : null,
+      price === null ? "price_unavailable" : null,
+      market !== "moneyline" && line === null ? "line_unavailable" : null,
+      row.is_live === true ? "live_market_unsupported" : null,
+      row.is_active === false ? "inactive_market_unsupported" : null,
+      row.is_stale_pregame_price === true ? "provider_marked_stale" : null,
+      row.is_player_prop === true ? "player_prop_outside_full_game_tape" : null,
+      row.is_main_line !== true ? "non_main_line" : null,
+      row.is_alternate_line === true ? "alternate_line" : null,
+    ].filter((note): note is string => note !== null);
+    const sourceObservationId = rawPriceSha256([
+      "sharpapi", args.sportsbook, rowIndex, rawRowSha256, market, selection,
+    ]).slice(0, 24);
+    observationsByGame[providerGameId]!.push({
+      sourceObservationId,
+      rawRowSha256,
+      provider: "sharpapi",
+      sourceRelease: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+      feed: "main_odds",
+      phase: "current",
+      providerGameId,
+      providerEventId,
+      sportsbook: args.sportsbook,
+      market,
+      selection,
+      line,
+      price,
+      providerObservedAt,
+      providerFetchedAt: args.providerFetchedAt,
+      status: unsupported ? "unsupported" : complete ? "observed" : "incomplete",
+      notes,
+    });
+    rows.push({ rowIndex, rawRowSha256, disposition: "matched", providerGameId, sourceObservationIds: [sourceObservationId] });
+  });
+  return {
+    release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
+    provider: "sharpapi",
+    feed: "main_odds",
+    participant: args.sportsbook,
+    providerFetchedAt: args.providerFetchedAt,
+    rawResponseSha256: args.rawResponseSha256 ?? rawPriceSha256(args.rows),
+    rawParserInput: rawParserInput.input,
+    rawParserInputFailureReason: rawParserInput.failureReason,
+    returnedRows: args.rows.length,
+    matchedRows,
+    unmatchedRows,
+    ambiguousRows,
+    rows,
+    failed: false,
+    failureReason: null,
+    observationsByGame: markRawPriceDuplicates(observationsByGame),
+  };
 }
 
 function buildBook(

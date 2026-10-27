@@ -95,6 +95,11 @@ export async function appendNflForwardEvidence(args: {
   apply: boolean;
 }): Promise<{ proposed: number; inserted: number; hashes: string[] }> {
   const rows = args.payloads.map((payload) => {
+    if (("marketBrainShadow" in payload && payload.marketBrainShadow !== undefined) ||
+      ("marketBrainCaptureAttemptId" in payload && payload.marketBrainCaptureAttemptId !== undefined) ||
+      ("marketBrainRawParserInputs" in payload && payload.marketBrainRawParserInputs !== undefined)) {
+      throw new Error("Research Market Brain sidecars are forbidden from authoritative NFL evidence writes.");
+    }
     const payloadSha256 = hashNflForwardEvidencePayload(payload);
     return {
       evidence_release: payload.schemaRelease,

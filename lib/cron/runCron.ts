@@ -36,11 +36,13 @@ import { refreshLogger } from "../services/refreshLogger";
 import { randomUUID } from "node:crypto";
 import {
   acquireCronJobLease,
-  cronJobName,
   releaseCronJobLease,
   type CronLeaseAcquireResult,
 } from "./leases";
+import { resolveCronLeaseJobName } from "./leaseIdentity";
 import { acquireCronJobLeaseWithRetry } from "./leaseRetry";
+
+export { resolveCronLeaseJobName } from "./leaseIdentity";
 
 export type CronHandlerResult = {
   records_updated?: number;
@@ -175,14 +177,6 @@ type StructuredResult = {
   api_calls_made?: number;
   details?: Record<string, unknown>;
 };
-
-export function resolveCronLeaseJobName(
-  dataSource: string,
-  sport: Sport | null,
-  leaseGroup?: string,
-): string {
-  return cronJobName(leaseGroup ?? dataSource, sport);
-}
 
 export function isWithinCronMinimumInterval(
   lastHealthy: Date | null,

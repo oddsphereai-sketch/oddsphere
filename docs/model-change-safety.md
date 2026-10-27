@@ -17,7 +17,7 @@ Locked records remain byte-for-byte authoritative and are never overlaid.
 
 Shared presentation / Market Intelligence capture advance to
 `daily_edge_member_presentation_2026_10_27_r29_owls_pro_team_identity` /
-`market_intelligence_v2_shadow_capture_2026_10_27_r6_owls_pro_team_identity`. A read-only rehearsal
+`market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`. A read-only rehearsal
 against the production NBA response plus the live Owls feed matched the four current member games,
 populated all 12 Moneyline/Total/Spread sections, aligned all 12 internal market reads, and changed
 zero writer-owned output fields. Same-input promotions, demotions, side changes, probability
@@ -42,7 +42,13 @@ overlaid.
 
 Shared presentation / Market Intelligence capture advance to
 `daily_edge_member_presentation_2026_10_27_r28_owls_sharp_book_splits` /
-`market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`. The existing sport
+`market_intelligence_v2_shadow_capture_2026_10_27_r6_all_owls_named_book_splits`. The display still
+selects one complete priority pair, while the internal canonical lane retains every complete fresh
+Circa, DraftKings, and BetMGM pair separately. NFL Market Brain shadow capture reads that stored lane
+without another Owls request under `nfl_market_brain_shadow_2026_10_27_r26_owls_named_book_evidence` /
+`nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow`. It remains production-inert and
+normalized-only until raw provider-response provenance and prospective predictive qualification are
+complete. The existing sport
 writers, schedules, provider budgets outside this one bounded slate call, and sport-scoped
 `prediction_pipeline` leases remain unchanged. Same-input promotions, demotions, side changes,
 probability changes, grade changes, and actionable-count changes are zero by contract. Roll back

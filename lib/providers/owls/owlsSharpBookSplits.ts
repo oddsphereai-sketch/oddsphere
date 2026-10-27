@@ -241,3 +241,48 @@ export function selectCompleteNamedBookSplit(
   }
   return [];
 }
+
+/**
+ * Retain every fresh, complete named-book pair for internal market reading.
+ *
+ * This is deliberately different from `selectCompleteNamedBookSplit`, which
+ * chooses one preferred pair for the member-facing display. Collapsing Circa,
+ * DraftKings, and BetMGM into that display choice would erase the cross-book
+ * agreement/conflict evidence needed by the Market Brain.
+ */
+export function selectAllCompleteNamedBookSplits(
+  observations: readonly NormalizedOwlsSplitObservation[],
+  opts: {
+    providerEventId: string;
+    market: OwlsSplitMarket;
+    nowMs?: number;
+    maxAgeMs?: number;
+  },
+): NormalizedOwlsSplitObservation[] {
+  const nowMs = opts.nowMs ?? Date.now();
+  const maxAgeMs = opts.maxAgeMs ?? 3 * 60 * 60 * 1000;
+  const expectedSides = MARKET_SIDES[opts.market];
+  const rows = observations.filter((row) => {
+    const ageMs = nowMs - Date.parse(row.observedAt);
+    return row.providerEventId === opts.providerEventId &&
+      row.market === opts.market &&
+      row.complete &&
+      ageMs >= -5 * 60 * 1000 &&
+      ageMs <= maxAgeMs;
+  });
+  const groups = new Map<string, NormalizedOwlsSplitObservation[]>();
+  for (const row of rows) {
+    const key = `${row.sourceBook}\u0000${row.observedAt}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  const priority = new Map<OwlsSplitBook, number>([
+    ["circa", 0], ["draftkings", 1], ["betmgm", 2],
+  ]);
+  return [...groups.values()]
+    .filter((pair) => pair.length === 2 && expectedSides.every((side) =>
+      pair.some((row) => row.side === side)))
+    .sort((a, b) =>
+      (priority.get(a[0]!.sourceBook) ?? 99) - (priority.get(b[0]!.sourceBook) ?? 99) ||
+      a[0]!.observedAt.localeCompare(b[0]!.observedAt))
+    .flatMap((pair) => expectedSides.map((side) => pair.find((row) => row.side === side)!));
+}

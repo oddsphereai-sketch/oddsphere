@@ -168,7 +168,14 @@ export async function GET(request: Request) {
         api_calls_made: apiCalls,
         details: stepDetails,
       };
-    }
+    },
+    {
+      leaseGroup: "prediction_pipeline",
+      requireLease: true,
+      lockMinutes: 8,
+      leaseRetryMaxWaitMs: 10_000,
+      leaseRetryIntervalMs: 1_000,
+    },
   );
 }
 

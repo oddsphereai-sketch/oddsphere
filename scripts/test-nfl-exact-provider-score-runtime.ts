@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   buildNflExactProviderIndependentScore,
   evaluateNflExactProviderModelsForParity,
   nflExactProviderParityCases,
+  NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
   NFL_EXACT_PROVIDER_RUNTIME_RELEASE,
 } from "../lib/services/football/nflExactProviderScoreRuntime";
 import {
   NFL_PLAYER_PROPS_CURRENT_SEASON_STATE_RELEASE,
   type NflPlayerPropsCurrentSeasonState,
 } from "../lib/services/football/nflPlayerPropsCurrentSeasonState";
+
+assert.equal(createHash("sha256").update(readFileSync(
+  "lib/services/football/modelArtifacts/nflExactProviderScoreR11.json.gz",
+)).digest("hex"), NFL_EXACT_PROVIDER_SCORE_ARTIFACT_SHA256,
+"the independent-prior lineage hash must bind the exact compressed model artifact bytes");
 
 for (const row of nflExactProviderParityCases()) {
   const actual = evaluateNflExactProviderModelsForParity(row.features, row.baseTotal);

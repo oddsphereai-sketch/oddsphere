@@ -10,7 +10,7 @@ Last reviewed: 2026-10-27
 
 - October 27 Owls professional-basketball identity repair advances shared member presentation to
   `daily_edge_member_presentation_2026_10_27_r29_owls_pro_team_identity` and Market Intelligence
-  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r6_owls_pro_team_identity`. The
+  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`. The
   initial r28/r5 Owls transition returned fresh complete Circa rows but rejected full provider team
   names against abbreviated NBA/WNBA member identities. Future-unlocked presentation and capture
   now use the existing canonical professional-basketball team resolver before the unchanged exact
@@ -23,7 +23,7 @@ Last reviewed: 2026-10-27
 
 - October 27 Owls sharp-book split transition advances shared member presentation to
   `daily_edge_member_presentation_2026_10_27_r28_owls_sharp_book_splits` and Market Intelligence
-  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`.
+  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r6_all_owls_named_book_splits`.
   Playbook remains the Public Consensus authority. Owls becomes the primary source-specific
   named-book lane, with a fresh complete Circa money-plus-ticket pair preferred. The active path
   makes no SharpAPI split request; exact-game last-known-good display continuity remains available
@@ -41,7 +41,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -295,12 +295,14 @@ Last reviewed: 2026-10-27
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_27_r6_owls_pro_team_identity`. The existing leased
+  `market_intelligence_v2_shadow_capture_2026_10_27_r7_owls_pro_team_identity`. The existing leased
   refresh may store exact-date, exact-matchup Owls NBA split rows with their real source book for
   the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
   date-plus-matchup identity are discarded. No active refresh makes a SharpAPI split request;
-  retained SharpAPI rows are historical audit evidence only. Current-day preseason rehearsal remains observable,
+  retained SharpAPI rows are historical audit evidence only. Every complete fresh Circa, DraftKings,
+  and BetMGM pair is retained internally even though member display still selects one priority book.
+  Current-day preseason rehearsal remains observable,
   while future preseason games are excluded from the rolling capture.
   DraftKings ticket/handle observations and BetMGM ticket-only observations remain distinct; no
   row is relabeled as consensus and no missing handle is inferred. NBA provider-history calls stay
@@ -521,6 +523,257 @@ Last reviewed: 2026-10-27
 
 ## NFL Daily Edge generalized weekly production release
 
+### Cross-sport Market Brain foundation (shadow capture only)
+
+- Shared future-unlocked `game_predictions` market-signal and grade derivation is versioned as
+  `shared_derivation_lock_guard_2026_10_27_r1_locked_record_immutability`. Both shared services now
+  exclude rows whose `locked_at` is already set and repeat `locked_at IS NULL` on the update, so a
+  lock racing between read and write wins. Update telemetry counts only rows returned by that
+  conditional write. This candidate changes no stored lock, model output, price, stake, provider
+  request, or member snapshot and remains unpublished pending the real-PostgreSQL locked/unlocked
+  companion proof required by MB-043.
+- `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope` freezes the complete
+  adapter scope before any production influence: NFL, CFB, NBA, WNBA, MLB, NHL, EPL, UCL, FIFA
+  World Cup, NFL Player Props, NBA Player Props, and MLB Player Props are active product rows; CBB is a separate
+  prelaunch row. Every row is explicitly non-live and requires its own sport/competition/stat-family
+  evidence roster, independent-prior lineage, chronology, settlement, training, calibration,
+  consequence, untouched qualification, writer/lease, and locked-record proof. Shared infrastructure
+  cannot transfer NFL weights, thresholds, authority, or qualification to another row. The paired
+  cross-sport predeclaration also treats request/cadence/parser/identity/storage omissions as repair
+  defects rather than provider blind spots and adds analyzability-attrition blocker MB-042 so failed
+  and all-failure cases cannot disappear from qualification denominators. Independent child scopes
+  prevent one league market or prop stat family from authorizing its siblings, and typed authority
+  chains distinguish capture/model, prediction-record, grade/stake, lock, member-snapshot, and reader owners.
+- `market_brain_evidence_attempt_2026_10_27_r5_claim_adapter_parser_bound_joint_scope` defines the shared,
+  still-unwired attempt receipt for every active product and the canonical ordered set of qualification
+  scopes informed by one source request. This preserves a joint Moneyline/Spread/Total or multi-stat
+  observation instead of duplicating it or assigning it to an arbitrary isolated market. Its frozen vocabulary
+  distinguishes captured rows, a genuine empty response, partial pagination/parser/identity/storage,
+  bounded failures, and explicit skipped reasons, including an expired planned window that received no
+  request. Exact accounting requires every provider row to end
+  as parsed, unsupported, or malformed; every parsed row as matched, unmatched, or ambiguous; and every
+  matched row as retained, duplicate, filtered, or write-failed. The v47 candidate table is append-only,
+  binds relational columns to exact canonical payload bytes, verifies the checksum material in PostgreSQL,
+  and permits service-role insert/select only. Applying that migration or defining this receipt does not
+  schedule a request, implement a feed adapter, enable capture, or grant predictive authority. The
+  Each receipt also carries the exact adapter and parser release precommitted for the request, including
+  failed, empty, skipped, and missed-window outcomes; runtime code cannot silently reinterpret an older
+  obligation under a newer adapter. The migration has not been applied and still requires
+  real-PostgreSQL lifecycle/concurrency proof.
+- `market_brain_capture_plan_2026_10_27_r2_adapter_parser_bound_precommit` defines the separate immutable
+  collection precommit that must exist on the database server before its first attempt window opens.
+  A bounded plan enumerates exact joint-scope source obligations in canonical chronological/source
+  order; duplicate UUIDs, duplicate logical obligations, after-the-fact plans, unregistered source
+  identities, and windows outside the frozen horizon are rejected. The v48 candidate migration writes
+  each plan and all child obligations in one transaction, permits only exact-byte idempotent retries,
+  makes both tables append-only, and rejects an evidence receipt that was not preplanned or differs in
+  scope/source/adapter/parser/event/phase/window identity. Adapter/parser releases are receipt-bound
+  without weakening physical-request deduplication: changing code identity cannot create a second paid
+  request for the same provider/feed/participant/event/window obligation. This remains an unwired,
+  unapplied research contract: it
+  schedules no task, claims no due work, calls no provider, and changes no prediction or model input.
+- `market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed` defines bounded, restart-safe
+  claiming for due provider work and separately for expired-window reconciliation. The v49 candidate
+  uses row locks plus an attempt-scoped transaction advisory lock, bounded 15–300 second leases, an
+  append-only claim history, and monotonically increasing claim sequences. A receipt must carry the
+  exact active relational claim token/mode/sequence; a slow stale worker cannot finalize after a newer
+  worker reclaims the obligation. Every claim returns the immutable adapter/parser releases alongside
+  the source identity, preventing a worker from choosing its own implementation. Expired unexecuted obligations become explicit `missed_window`
+  receipts rather than disappearing. Claims cannot issue before their exact planned timestamp and an
+  expired lease cannot finalize even if no replacement has claimed it yet. The migration and CI proof
+  path are prepared, but nothing is deployed.
+- `market_brain_capture_runner_2026_10_27_r1_shadow_only_exact_adapter` defines the production-inert
+  execution core for those obligations. It reconciles expired windows in bounded batches, claims exactly
+  one paid/due request just in time per invocation, and runs it under a bounded timeout shorter than the claim lease. It requires an exact product/scope/provider/feed/
+  phase/adapter/parser capability, records adapter absence as an explicit defect, sanitizes thrown
+  failures, and persists only through the immutable claim-bound receipt path. Plan persistence now
+  requires the same capability registry, while physical-request deduplication deliberately ignores
+  scope labels and code-release changes so they cannot cause duplicate paid calls. No route, cron,
+  source adapter, feature flag, prediction writer, grade, stake, or member reader invokes this runner.
+- `market_brain_contract_2026_10_27_r21_frozen_decision_envelopes` and
+  `nfl_market_brain_shadow_2026_10_27_r26_owls_named_book_evidence` define an internal-only,
+  production-inert evidence boundary. The sole writer
+  `nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow`
+  runs with the production-stable collector
+  `nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding`,
+  member fixture `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation`, and
+  compact snapshot `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
+  The production provider DTOs remain
+  `nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity`,
+  `balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture`, and
+  `football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity`. New NFL Market Brain split
+  evidence carries `nfl_owls_market_brain_split_evidence_2026_10_27_r1_canonical_named_books`.
+  The shadow writer reads already-persisted Owls canonical observations and makes zero additional Owls
+  provider requests. Circa, DraftKings, and BetMGM remain separate observations at their exact source
+  timestamps; the member-facing priority selector does not collapse the internal evidence. This release
+  is intentionally `normalized_only`: the exact Owls provider response archive is not yet linked, so it
+  is eligible for prospective shadow measurement but not predictive qualification. Legacy SharpAPI
+  split records retain their original provider identity and immutable historical meaning. The legacy
+  `nfl_sharpapi_split_capture_manifest_2026_10_27_r3_source_row_participant_binding` contract remains
+  readable for existing tapes and compatibility fixtures; it is not relabeled or used as Owls evidence.
+  Research capture is
+  explicitly disabled unless both `NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED=true` and
+  `NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED=true`; a one-to-four-game per-run canary cap is also
+  mandatory. `NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON` must also carry every predeclared future
+  event/stage attempt UUID with a nonoverlapping execution window; a missing or ambiguous current
+  slot fails closed and is never replaced by the cron's execution-time run id. Merging the code does
+  not begin storage. When separately enabled for a reviewed shadow canary, it stores tapes only for
+  future unlocked rows. `balldontlie_nfl_raw_price_manifest_2026_10_27_r1_parser_input_provenance`
+  and `football_sharp_raw_price_manifest_2026_10_27_r1_parser_input_provenance` attach raw response hashes,
+  returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
+  incomplete price sides before complete-pair normalization or family replacement. Raw parser
+  archives use `football_raw_price_parser_input_2026_10_27_r4_streaming_response_hash` and the composite
+  identity `(schema_release, parser_input_sha256)`, so identical bytes
+  interpreted under a different parser contract cannot silently reuse older provenance. The tape retains
+  exact-evaluated versus
+  same-family versus target-excluded provenance plus an explicit evaluated-target identity that does
+  not depend on recovering an exact raw side. The r21/r26 contract also freezes the incumbent
+  action-or-pass grade and its complete target-book two-sided quote menu, including exact line, price,
+  observation time, decision release, and settlement terms. That evaluation envelope is deliberately
+  excluded from trainer features and cannot influence the score posterior. Every retained Circa,
+  DraftKings, and BetMGM canonical pair preserves its named-book identity, while missing and stale
+  expected inputs remain explicit. Source
+  expectations come from
+  `market_brain_evidence_roster_2026_10_27_r4_owls_named_book_splits` before any response is read: the
+  BALLDONTLIE opening/current feeds, six approved retail participants, and Circa/Pinnacle SharpAPI
+  feeds cannot disappear merely because a response omitted every row. Feed failure, missing raw
+  parser input, event-market absence, and per-participant absence remain distinct. Absolute handle,
+  ticket denominators, bet-size distribution, limits, move origin, suspension lifecycle, and private
+  order flow remain true provider blind spots and are never inferred. The roster registry now freezes
+  expected provider feeds, evidence-family ownership, named participants or provider-catalog discovery,
+  and explicit participant exclusions for every active Daily Edge and player-props product. Non-NFL
+  capture remains explicitly `not_started`; a frozen expected-source contract is not implemented
+  coverage, and every unresolved family stays mechanically visible. Source
+  reputation is distinct from event leadership; a book brand never proves who originated a move.
+  It contains no candidate decision and cannot affect a prediction, probability, projection, grade,
+  stake, member display, tracking record, or lock. These research-sidecar releases do not relabel
+  the incumbent provider contracts, and existing locks are not adapted.
+  Each available prior now carries the exact immutable Margin and Total PMF bytes,
+  event/release/availability identity, marginal checksums, and a content-addressed artifact checksum;
+  research no longer reconstructs a distribution from a stored mean. The contract and materializer
+  independently fail closed on identity, mass, mean, timestamp, or checksum divergence.
+  The artifact also carries `market_brain_prior_input_lineage_v1`: exact model/input releases,
+  availability times, and component hashes plus each component's declared relationship to market
+  information. Qualification is derived from the contract-owned
+  `market_brain_prior_model_path_policy_2026_10_27_r2_output_receipt_required`, then the NFL executable gate
+  `nfl_market_brain_prior_attestation_2026_10_27_r2_output_artifact_binding` verifies the exact
+  path, model release, component IDs, categories, releases, and frozen hashes rather than trusting those
+  fields as self-attestation. The frozen Week 1 path additionally requires exact provider-event membership
+  and byte-identical stored Margin/Total PMFs. The exact-provider path remains auditable but executable-
+  ineligible until a persisted deterministic replay receipt binds its dynamic state/context inputs to its
+  output PMFs. `external_projection`, `fixture`, and `other` cannot self-declare eligibility, and the external weekly projection
+  remains auditable but ineligible because its upstream methodology is unknown. Unknown or market-
+  containing lineage cannot enter feature export, fitting, inference, or evaluation.
+  The first unique prior for an event is embedded; later snapshots carry a sub-KiB content reference
+  and the materializer fails closed unless the exact earlier artifact is present. On the frozen Week 1
+  artifact, this removes about 97% of repeated prior bytes (approximately 40.8 MiB to 1.38 MiB per
+  16-game, 168-capture week before database compression). Market Brain construction performs zero
+  provider requests and reuses the writer's already-fetched odds, splits, availability, and context.
+  Full-slate responses are represented per game by event rows plus response digest/accounting rather
+  than copied in full. Exact rows handed to each price parser are separately content-addressed once,
+  retained for 30 days under a 2 MiB per-response and 256 MiB global cap, and never copied into the
+  authoritative payload. This adds no provider request and permits parser-omission audits. Player-level
+  injury facts and numeric weather values are retained. Each tape
+  is capped at 96 KiB, removed before the authoritative NFL evidence append, and only then written to
+  the separate append-only `nfl_market_brain_shadow_snapshots` research table; sidecar read/write
+  failures cannot roll back authoritative evidence, member, tracking, or lock work and are bounded by
+  two-second aborts before player-prop work continues. Cron health exposes every research read/write
+  error and every per-game capture failure. The database enforces 96 KiB rows, 256 MiB weekly and
+  5 GiB season ceilings, content-addressed prior/artifact ceilings, and a 210-day tape expiry boundary.
+  Retention is isolated in a separate leased route that is disabled by default and intentionally
+  unscheduled until schema, alerting, and capacity readiness are approved; it never shares the
+  production cleanup path.
+  `nfl_market_brain_capture_set_2026_10_27_r9_expected_feed_roster`,
+  `nfl_market_brain_sequence_materializer_2026_10_27_r21_frozen_decision_envelopes`, and
+  `nfl_market_brain_research_input_2026_10_27_r10_frozen_decision_envelopes` replay only cases
+  and observations available by an explicit cutoff, excludes the exact target and its entire source
+  family before feature construction, pairs individual sides without zero-filling, preserves unpaired
+  observed quotes as explicit uncertainty tokens, retains every capture's source-availability state,
+  derives continuous
+  number/price/hold/reversal/buyback features without minimum-move quotas, excludes same-family split
+  observations and expected-source missingness as well as prices, and assigns event roles
+  from chronology rather than reputation. Opposing simultaneous movers are conflicted rather than
+  resolved by participant sort order. The candidate v50 database migration additionally requires every
+  newly inserted successful shadow to contain the frozen envelope and rejects every new research input
+  unless its envelope is byte-semantically equal to the latest successful pre-cutoff case in the exact
+  finalized capture-set membership. Its disposable real-PostgreSQL fixture accepts the legitimate input
+  and must reject a fully rehashed caller-authored opposing action; the migration remains unapplied until
+  that real-PostgreSQL proof runs in the deployment environment. It is also production-inert. Provider-side pagination,
+  suspension history, limits, and private order flow remain declared blind spots; predictive
+  qualification and the resolver remain unproved gates.
+  `nfl_market_brain_research_evaluator_2026_10_27_r20_frozen_decision_envelopes` and
+  `nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows` form a research-only proof
+  boundary: the evaluator recomputes the complete sequence checksum and re-runs NFL prior attestation
+  before reading any baseline; outcomes must arrive strictly after cutoff and game start, candidate predictions must
+  bind the exact sequence checksum and predate the case, mixed releases and duplicate events are
+  rejected, and persisted rolling-origin development/selection/confirmation/prospective capture
+  windows cannot overlap. Each row binds its manifest, untouched/outcome registry, partition, and fold.
+  Every candidate must also be inserted before kickoff into the append-only canonical prediction
+  ledger, binding event, cutoff, sequence, features, artifact, weights, manifest, and posterior.
+  A summary must contain the complete precommitted partition rather than a favorable subset.
+  The manifest must first be inserted into the append-only
+  `nfl_market_brain_research_manifests` table; its server-created receipt must predate selection,
+  confirmation, and prospective
+  capture and mints the runtime attestation required by both evaluation and artifact binding.
+  The evaluator reports all-game Brier, winner log loss, marginal distribution scores, winner
+  accuracy, Margin/Total MAE, corrections, and harms against both the immutable target-free prior
+  and the released semantic reader captured at the same cutoff. It
+  carries exact target selection/line/price/time outside trainer input, reports exact-line win/push
+  probabilities and settled units, and scores a candidate's true joint Margin/Total posterior, but does not claim joint improvement over
+  the incumbent until that incumbent publishes a coherent joint posterior. It has no decision or
+  production authority, and qualification remains false until exact-line non-regression, calibration,
+  clustered uncertainty, board-balance,
+  and release-pure economic gates are implemented.
+  `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` freezes 13 nuanced follow, fade,
+  resistance, reversal, outage, stale-evidence, news-sequence, and cross-market stories as non-one-hot
+  action distributions without turning them into inference quotas.
+  `nfl_market_brain_resolver_contract_2026_10_27_r17_frozen_decision_envelopes`,
+  `nfl_market_brain_resolver_features_2026_10_27_r17_frozen_decision_envelopes`, and
+  `nfl_market_brain_tournament_2026_10_27_r17_frozen_decision_envelopes`, with trainer
+  `nfl_market_brain_deterministic_trainer_2026_10_27_r12_frozen_decision_envelopes`, freeze one implemented
+  regularized residual baseline, its regularization grid and executable parameter-shape boundary,
+  contextual source/direction/state basis plus preprocessing/loss/coherence/optimizer/seed/serialization contracts,
+  complete development-only row membership, an executable earlier-to-later rolling tournament,
+  private trainer provenance, and one feasible joint
+  NFL score-state posterior from which Margin, Total,
+  team scores, and winner probabilities must all derive. An independent action head has been removed;
+  factual prior/posterior deltas cannot contradict the score posterior or directly award points or
+  grades. Exact artifact and coefficient bytes require an append-only database receipt before the
+  evaluated cutoff. Unfrozen artifacts fail closed, and production influence remains false. No fitted resolver
+  artifact or predictive qualification exists yet. Fitting and inference use the same normalized joint
+  likelihood, and five continuous heads may learn Margin/Total location, uncertainty, and dependence.
+  `nfl_market_brain_consequence_2026_10_27_r2_attested_decision_envelope` converts only that coherent
+  posterior and the capture-bound evaluation envelope into confirm, recenter, flip, fade-market,
+  retain, or stand-down consequences. It cannot accept a caller-authored price, cannot flip without an
+  exact opposing quote, and keeps quote economics downstream of the prediction. The paired evaluator
+  `nfl_market_brain_consequence_evaluator_2026_10_27_r1_pairwise_exact_quote` reports corrected losses,
+  new harms, promotions, demotions, abstentions, units, and board-count impact without production authority.
+  `nfl_market_brain_case_audit_2026_10_27_r9_expected_feed_roster` provides a
+  complete normalized read-only dossier for every observation, paired and unpaired quote, split,
+  outage, context row, exclusion, source manifest, consumed feature, candidate consequence, and
+  postgame delta without assigning a manual verdict. Exact price-parser input rows now have a bounded
+  private archive; whole HTTP envelopes and unobservable private order flow are still not claimed.
+  The October 27 real-tape re-review blockers are now closed in code: manifests predeclare planned
+  windows and deterministic run/stage attempts; a server-finalized capture-set receipt must exactly
+  equal all success/failure rows in the database and freezes the window against late insertion; exact
+  sequences/features receive a durable append-only receipt before inference; only an in-process private
+  resolver output can enter the prediction writer; evaluation labels come from an immutable receipt over
+  an exact finalized `games` row; and every candidate is scored against a same-support zero-market
+  reconstruction as well as the independent prior and released reader. The canary is selected by
+  deterministic pregame kickoff/favorite/spread/total strata rather than provider order. A read-only audit checksum-validated 107 locked
+  T-60 NFL payloads across Weeks 1–7 (106 settled), with complete current/opening/playbook/context
+  chronology but uneven identified SharpAPI coverage. The live research table currently contains zero
+  Market Brain shadow rows, so those older release-mixed payloads cannot be represented as if they
+  were this richer release-pure tape.
+  These learned coefficients are not hand-authored sportsbook weights, votes, trigger thresholds, or
+  posterior-movement caps. Artifact binding proves which trained model produced the posterior; it does
+  not force market agreement. The shared Market Brain contract covers evidence, chronology, safety,
+  and proof, while every sport and prop family retains its own adapter, prior, fitted model, and
+  qualification. This first NFL family is a testable baseline rather than a final complexity ceiling.
+  Contract, evidence limitations, and the next research gate are frozen in
+  `docs/model-audits/2026-10-26-market-brain-foundation-predeclaration.md` and
+  `docs/model-audits/2026-10-27-nfl-market-brain-independent-review-remediation.md`.
+
 ### Complete-signal semantic interpretation (r40)
 
 - Active member / model / calibration / decision / grade releases are
@@ -530,7 +783,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_26_r73_complete_signal_interpretation` /
+  `nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an
@@ -2932,6 +3185,23 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 - Launch verification: v39 was applied successfully to the primary database. Two post-migration natural leased cycles completed at `2026-08-25T22:21:14.278Z` and `2026-08-25T22:36:14.404Z`, each with 25 bounded provider calls, no error, and no premature tracking row because every decision remains unlocked. Production QA passed at 1280px desktop and 390x844 mobile, including league-pill navigation, exact counts, market filtering, URL-addressable selection, focus/scroll containment, Escape/close behavior, centered desktop reader, and full-screen mobile reader. The current Lab still labels authentication as a future phase, so there is not yet a real signed-in session boundary to test; NFL matches the same production access contract as MLB Player Props.
 - Evidence: `docs/model-audits/2026-08-25-nfl-player-props-production-candidate-r4.md` and `docs/model-audits/2026-08-25-nfl-player-props-member-parity-launch-r1.md`.
 
+## FIFA World Cup Daily Edge legacy production release
+
+- The shipped World Cup member surface remains owned by cron job `soccer_daily_refresh`, the
+  `prediction_pipeline:soccer` lease, competition identity `fifa_world_cup`, and model identifier
+  `soccer_dixon_coles_v1` exported by `lib/services/soccer/soccerAutoModelV1.ts`. Its stored writer
+  and reader continue to preserve existing locked payloads first.
+- The October 27 writer-safety repair makes `soccer_daily_refresh` require the shared
+  `prediction_pipeline:soccer` lease with bounded retry. It changes no model, probability,
+  projection, pick, grade, price, stake, lock, settlement, or stored payload.
+- The World Cup adapter is separately registered under
+  `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope`; it does not inherit EPL or
+  UCL parameters, qualification, source authority, calibration, or consequence behavior.
+- Market Brain production influence is prohibited. Before this adapter can leave `not_started`, the
+  duplicated legacy model literal in writer/reader code must be centralized into one authoritative
+  exported release path, and World Cup-specific evidence roster, replay, settlement, calibration,
+  consequence, untouched evaluation, and prospective shadow proof must pass.
+
 ## Premier League production release (active)
 
 - Runtime/model release: `epl_goals_coherent_2026_10_13_r20_coherent_total_margin_matchup`
@@ -3155,6 +3425,12 @@ No prediction, probability, projection, market side, play grade, price, stake, o
 changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
+
+- October 27 writer-safety repair: the legacy multi-sport `morning_slate` writer now requires the
+  shared `prediction_pipeline:<sport>` lease for each sport iteration, with bounded retry. This
+  prevents its prediction, signal, grade, and publish stages from overlapping the other authoritative
+  sport writers. It changes no model, probability, projection, pick, grade, price, stake, lock,
+  settlement, or stored payload.
 
 - October 19 trusted Total scope recovery advances the market input snapshot to
   `mlb_market_input_snapshot_v4_trusted_total_scope_recovery_2026_10_19`.

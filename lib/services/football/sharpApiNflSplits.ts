@@ -1,11 +1,15 @@
+import { createHash } from "node:crypto";
 import {
   SharpApiClient,
   type SharpApiRequestOptions,
+  type SharpApiResponse,
 } from "@/lib/providers/real_api/_sharpApiClient";
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
 
 export const NFL_SHARP_API_SPLITS_RELEASE =
   "nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity" as const;
+export const NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE =
+  "nfl_sharpapi_split_capture_manifest_2026_10_27_r3_source_row_participant_binding" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -42,7 +46,17 @@ export type SharpApiNflSplitRow = {
   fetched_at?: string | null;
 };
 
-const SOURCE_BOOK_PRIORITY = ["circa", "draftkings", "betmgm"] as const;
+export const NFL_SHARP_API_SPLIT_BOOKS = ["circa", "draftkings", "betmgm"] as const;
+const SOURCE_BOOK_PRIORITY = NFL_SHARP_API_SPLIT_BOOKS;
+export type NflSharpApiSplitBook = typeof NFL_SHARP_API_SPLIT_BOOKS[number];
+export type NflSharpApiSplitSourceStatus = "observed" | "incomplete" | "duplicate" | "unavailable";
+export type NflSharpApiSplitSource = {
+  sportsbook: NflSharpApiSplitBook;
+  status: NflSharpApiSplitSourceStatus;
+  matchedRows: number;
+  /** Every exact-identity row survives, including incomplete and duplicate rows. */
+  observations: NflRegularSharpSplitSet[];
+};
 
 type SharpApiNflSplitMarket = {
   bets_pct?: Record<string, number | string | null> | null;
@@ -51,7 +65,33 @@ type SharpApiNflSplitMarket = {
 
 type DatedRows = { date: string; rows: SharpApiNflSplitRow[] };
 type SharpClient = {
-  fetchAll<T>(opts: SharpApiRequestOptions & { maxPages?: number }): Promise<T[]>;
+  fetchAll<T>(opts: SharpApiRequestOptions & {
+    maxPages?: number;
+    onPage?: (response: SharpApiResponse<T[]>, pageIndex: number) => void;
+  }): Promise<T[]>;
+  fetch?<T>(opts: SharpApiRequestOptions): Promise<{
+    data: T;
+    pagination?: { total?: number; count?: number; offset?: number; has_more?: boolean } | null;
+  }>;
+};
+
+export type NflSharpApiSplitCaptureManifest = {
+  release: typeof NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE;
+  responseReceivedAt: string;
+  rawResponseSha256: string | null;
+  status: "observed" | "failed";
+  failureReason: string | null;
+  returnedRows: number;
+  matchedRows: number;
+  unmatchedRows: number;
+  ambiguousRows: number;
+  rows: Array<{
+    rowIndex: number;
+    rawRowSha256: string;
+    disposition: "matched" | "unmatched" | "ambiguous";
+    providerGameId: string | null;
+    participant: NflSharpApiSplitBook | null;
+  }>;
 };
 
 const TEAM_ALIASES: Record<string, string[]> = {
@@ -80,32 +120,109 @@ export async function fetchSharpApiNflSplits(args: {
   games: NflPreviewGame[];
   capturedAt: string;
   client?: SharpClient;
+  clock?: () => string;
+  /** Research-only lossless receipt. Default false preserves the incumbent request and matching path. */
+  captureResearchManifest?: boolean;
 }): Promise<{
   release: typeof NFL_SHARP_API_SPLITS_RELEASE;
+  /** Backward-compatible preferred complete set used by the incumbent reader. */
   splitsByGame: Record<string, NflRegularSharpSplitSet>;
+  /** Lossless source manifest for shadow research; never used by the incumbent reader. */
+  sourcesByGame?: Record<string, NflSharpApiSplitSource[]>;
   requests: number;
   rows: number;
   dates: string[];
+  captureManifest?: NflSharpApiSplitCaptureManifest;
 }> {
   const client = args.client ?? new SharpApiClient(args.apiKey);
   const dates = Array.from(new Set(args.games.map((game) => nflLocalDate(game.scheduledStart)))).sort();
   // SharpAPI classifies NFL rows with league=nfl and sport=football. A sport=nfl
   // filter returns an empty payload. Fetch once for the whole weekly card, then
   // apply our own strict league, event-date, and team-identity guards.
-  const rows = await client.fetchAll<SharpApiNflSplitRow>({
+  const request = {
     path: "/splits",
     query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
-    // One 200-row page safely exceeds a complete football-family slate and
-    // keeps the provider budget deterministic.
+  } satisfies SharpApiRequestOptions;
+  const pageReceipts: SharpApiResponse<SharpApiNflSplitRow[]>[] = [];
+  const rows = await client.fetchAll<SharpApiNflSplitRow>({
+    ...request,
     maxPages: 1,
+    ...(args.captureResearchManifest ? {
+      onPage: (response: SharpApiResponse<SharpApiNflSplitRow[]>, pageIndex: number) => {
+        if (pageIndex === 0) pageReceipts.push(response);
+      },
+    } : {}),
   });
   const datedRows = dates.map((date) => ({ date, rows }));
-  return {
+  const incumbent = {
     release: NFL_SHARP_API_SPLITS_RELEASE,
     splitsByGame: matchSharpApiNflSplitRows(args.games, datedRows, args.capturedAt),
     requests: 1,
     rows: rows.length,
     dates,
+  };
+  if (!args.captureResearchManifest) return incumbent;
+  const pagination = pageReceipts[0]?.pagination;
+  const explicitlyComplete = pagination !== undefined && pagination !== null &&
+    pagination.has_more === false &&
+    typeof pagination.total === "number" &&
+    pagination.total <= (pagination.offset ?? 0) + (pagination.count ?? rows.length);
+  const explicitlyIncomplete = pagination?.has_more === true ||
+    (typeof pagination?.total === "number" &&
+      pagination.total > (pagination.offset ?? 0) + (pagination.count ?? rows.length));
+  const receivedCandidate = args.clock?.() ?? new Date().toISOString();
+  const responseReceivedAt = Date.parse(receivedCandidate) >= Date.parse(args.capturedAt)
+    ? new Date(Date.parse(receivedCandidate)).toISOString() : new Date(Date.parse(args.capturedAt)).toISOString();
+  const incomplete = explicitlyIncomplete || (rows.length >= 200 && !explicitlyComplete);
+  const observedManifest = buildSplitCaptureManifest(args.games, rows, responseReceivedAt);
+  const captureManifest: NflSharpApiSplitCaptureManifest = incomplete ? {
+    ...observedManifest,
+    rawResponseSha256: null,
+    status: "failed",
+    failureReason: "sharpapi_split_capture_incomplete_response",
+  } : observedManifest;
+  const sourcesByGame = incomplete
+    ? Object.fromEntries(args.games.map((game) => [game.providerGameId, unavailableNflSharpApiSplitSources()]))
+    : matchAllSharpApiNflSplitRows(args.games, datedRows, responseReceivedAt);
+  return {
+    ...incumbent,
+    sourcesByGame,
+    captureManifest,
+  };
+}
+
+function buildSplitCaptureManifest(
+  games: NflPreviewGame[],
+  rows: SharpApiNflSplitRow[],
+  responseReceivedAt: string,
+): NflSharpApiSplitCaptureManifest {
+  const ledger = rows.map((row, rowIndex) => {
+    const candidates = games.filter((game) => {
+      const date = nflLocalDate(game.scheduledStart);
+      return nflRow(row) && researchRowDateMatches(row, date) &&
+        sameNflTeam(row.home_team, game.home.abbreviation, game.home.name) &&
+        sameNflTeam(row.away_team, game.away.abbreviation, game.away.name);
+    });
+    return {
+      rowIndex,
+      rawRowSha256: digest(row),
+      disposition: candidates.length === 1 ? "matched" as const
+        : candidates.length > 1 ? "ambiguous" as const : "unmatched" as const,
+      providerGameId: candidates.length === 1 ? candidates[0]!.providerGameId : null,
+      participant: NFL_SHARP_API_SPLIT_BOOKS.find((book) => book === normalize(row.sportsbook ?? "")) ?? null,
+    };
+  });
+  return {
+    release: NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+    responseReceivedAt,
+    rawResponseSha256: digest(rows),
+    status: "observed",
+    failureReason: null,
+    returnedRows: rows.length,
+    matchedRows: ledger.filter((row) => row.disposition === "matched").length,
+    unmatchedRows: ledger.filter((row) => row.disposition === "unmatched").length,
+    ambiguousRows: ledger.filter((row) => row.disposition === "ambiguous").length,
+    rows: ledger,
   };
 }
 
@@ -130,10 +247,46 @@ export function matchSharpApiNflSplitRows(
       const normalized = normalizeSharpApiNflSplit(game.providerGameId, capturedAt, rows[0]!);
       return completeSharpApiNflSplitSet(normalized) ? [normalized] : [];
     })[0] ?? null;
-    if (selected === null) continue;
-    matched[game.providerGameId] = selected;
+    if (selected !== null) matched[game.providerGameId] = selected;
   }
   return matched;
+}
+
+export function matchAllSharpApiNflSplitRows(
+  games: NflPreviewGame[],
+  datedRows: DatedRows[],
+  capturedAt: string,
+): Record<string, NflSharpApiSplitSource[]> {
+  const rowsByDate = new Map(datedRows.map((value) => [value.date, value.rows]));
+  const matched: Record<string, NflSharpApiSplitSource[]> = {};
+  for (const game of games) {
+    const date = nflLocalDate(game.scheduledStart);
+    const candidates = (rowsByDate.get(date) ?? []).filter((row) =>
+      nflRow(row) &&
+      sameNflTeam(row.home_team, game.home.abbreviation, game.home.name) &&
+      sameNflTeam(row.away_team, game.away.abbreviation, game.away.name) &&
+      researchRowDateMatches(row, date)
+    );
+    matched[game.providerGameId] = NFL_SHARP_API_SPLIT_BOOKS.map((sportsbook) => {
+      const rows = candidates.filter((row) => normalize(row.sportsbook ?? "") === sportsbook);
+      const observations = rows.map((row) => normalizeSharpApiNflSplit(game.providerGameId, capturedAt, row));
+      const status: NflSharpApiSplitSourceStatus = rows.length === 0 ? "unavailable"
+        : rows.length > 1 ? "duplicate"
+        : completeSharpApiNflSplitSet(observations[0]) ? "observed"
+        : "incomplete";
+      return { sportsbook, status, matchedRows: rows.length, observations };
+    });
+  }
+  return matched;
+}
+
+export function unavailableNflSharpApiSplitSources(): NflSharpApiSplitSource[] {
+  return NFL_SHARP_API_SPLIT_BOOKS.map((sportsbook) => ({
+    sportsbook,
+    status: "unavailable",
+    matchedRows: 0,
+    observations: [],
+  }));
 }
 
 export function normalizeSharpApiNflSplit(
@@ -217,11 +370,22 @@ function teamCodeAliases(abbreviation: string): string[] {
   }
 }
 
+function digest(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
 function rowDateMatches(row: SharpApiNflSplitRow, expectedDate: string): boolean {
   const eventStart = validTimestamp(row.event_start_time);
   if (eventStart !== null) return nflLocalDate(eventStart) === expectedDate;
   const eventIdDate = text(row.event_id)?.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
   return eventIdDate === null || eventIdDate === expectedDate;
+}
+
+function researchRowDateMatches(row: SharpApiNflSplitRow, expectedDate: string): boolean {
+  const eventStart = validTimestamp(row.event_start_time);
+  if (eventStart !== null) return nflLocalDate(eventStart) === expectedDate;
+  const eventIdDate = text(row.event_id)?.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
+  return eventIdDate !== null && eventIdDate === expectedDate;
 }
 
 function nflLocalDate(value: string): string {
