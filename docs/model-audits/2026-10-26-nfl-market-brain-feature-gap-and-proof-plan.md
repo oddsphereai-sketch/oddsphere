@@ -131,18 +131,21 @@ model prior release that was available then. Produce a variable-length sequence/
 continuous no-vig, hold, number movement, price movement, lead/lag, persistence, reversal, buyback,
 key-number transition, disagreement, and cross-market coherence from that bounded tape.
 
-`nfl_market_brain_sequence_materializer_2026_10_27_r3_content_addressed_prior` implements this
+`nfl_market_brain_sequence_materializer_2026_10_27_r4_target_safe_inputs` implements this
 boundary without a resolver: it refuses mixed events/releases, applies Oddsphere availability time
 before feature construction, masks incomplete/unsupported rows, fails conflicting immutable
 observation identities, pairs sides only when line/time identity agrees, and derives event roles from
-chronology rather than brand. It re-verifies the exact prior artifact rather than trusting stored
-summary fields. Data absence otherwise remains a learned missingness regime.
+chronology rather than brand. It removes same-family split rows and same-family expected-source
+missingness as well as prices, so the evaluated sportsbook cannot re-enter through a non-price
+feature. It re-verifies the exact prior artifact rather than trusting stored summary fields. Data
+absence otherwise remains a learned missingness regime.
 
-`nfl_market_brain_research_evaluator_2026_10_27_r2_content_addressed_prior` derives its baseline winner
+`nfl_market_brain_research_evaluator_2026_10_27_r3_target_safe_distribution_score` derives its baseline winner
 probabilities and Margin/Total moments from that exact artifact. It accepts outcomes only after both
 the feature cutoff and game start, requires candidate training to end before the case, binds the
 candidate to the immutable sequence checksum, rejects mixed-release aggregation, and reports Brier,
-log loss, winner accuracy, Margin/Total MAE, corrections, and harms. The companion chronological
+winner log loss, realized Margin/Total distribution log score, winner accuracy, Margin/Total MAE,
+corrections, and harms. The companion chronological
 manifest prevents opened development evidence from being relabeled selection or confirmation. A
 candidate must submit complete Margin and Total distributions whose winner probabilities and moments
 exactly reconcile; an incoherent set of point estimates is rejected before scoring.
@@ -165,6 +168,23 @@ the relationship between prior and posterior; they do not directly award points 
 No eligible family may use a required signal count, fixed sportsbook weight, universal market blend,
 automatic favorite/underdog rule, automatic line reflection, one-book command, or game-specific
 exception.
+
+`nfl_market_brain_resolver_contract_2026_10_27_r1_shadow_only` now enforces this boundary and
+`nfl_market_brain_tournament_2026_10_27_r1_pre_outcome_freeze` freezes the three eligible families,
+complete hyperparameter grids, seven ordered ablations, rolling-origin split policy, predictive
+selection objective, and fitted-parameter ceilings before confirmation outcomes are inspected. The
+13 behavior stories advance to `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` and
+carry soft, non-one-hot action distributions. The contract rejects unfrozen hyperparameters,
+out-of-window training, impossible football score states, incoherent Margin/Total outputs, invalid
+probability mass, and any production authority. This is a contract/tournament freeze, not a trained
+model or evidence of predictive improvement.
+
+`nfl_market_brain_resolver_features_2026_10_27_r1_target_safe_sequence` is the only eligible trainer
+input. It exports the exact independent prior, every eligible continuous quote path, non-price
+context and split tokens, explicit eligible missingness, cross-market chronology, and source regime;
+it omits audit hashes and every evaluated-family observation or missingness state. Its payload hash
+is invariant to additional excluded target-only rows, while its outer checksum still binds the full
+audited sequence for provenance.
 
 ### 4. Coherent shadow output
 
@@ -252,8 +272,9 @@ pretend a rigid rule is validated.
 3. Bind and independently verify the exact target-free prior artifact, then freeze a release-pure,
    rolling-origin evaluator that counts corrections and harms. **Complete.**
 4. Convert the 13 frozen stories into probabilistic resolver tests without inspecting confirmation
-   outcomes.
+   outcomes. **Complete at the contract level; no fitted resolver has passed them.**
 5. Freeze the low-capacity tournament and instantiate the predeclared rolling-origin evaluation manifest.
+   **Tournament complete; event partitions remain pending sufficient release-pure tape.**
 6. Run the outcome-opened 59-game ledger only as a regression/development screen.
 7. Run untouched chronological confirmation if sufficient historical tape exists; otherwise begin
    prospective shadow probation and wait for outcomes.

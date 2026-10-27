@@ -1,7 +1,10 @@
 export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIO_RELEASE =
-  "nfl_market_brain_behavior_scenarios_2026_10_26_r1" as const;
+  "nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic" as const;
 
-export type MarketBrainAction = "confirm" | "recenter" | "flip" | "fade_market" | "retain" | "stand_down";
+export const MARKET_BRAIN_ACTIONS =
+  ["confirm", "recenter", "flip", "fade_market", "retain", "stand_down"] as const;
+export type MarketBrainAction = typeof MARKET_BRAIN_ACTIONS[number];
+export type MarketBrainActionDistribution = Record<MarketBrainAction, number>;
 export type NflMarketStory =
   | "genuine_discovery" | "follow_through" | "resistance" | "reversal_buyback"
   | "retail_only_steam" | "split_price_disagreement" | "cross_market_contradiction"
@@ -17,6 +20,9 @@ export type NflMarketBrainBehaviorScenario = {
   preferredAction: MarketBrainAction;
   acceptableActions: MarketBrainAction[];
   forbiddenActions: MarketBrainAction[];
+  /** A soft, non-one-hot expectation used to test a future resolver; never an inference rule. */
+  expectedActionDistribution: MarketBrainActionDistribution;
+  maximumTotalVariation: number;
   certainty: "increase" | "decrease" | "unchanged";
   rationale: string;
 };
@@ -28,6 +34,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["professional book moves first", "independent books follow later", "move persists", "moneyline and spread agree"],
     context: ["no material availability event precedes the move", "no late reversal or buyback"],
     preferredAction: "confirm", acceptableActions: ["confirm", "recenter"], forbiddenActions: ["fade_market"], certainty: "increase",
+    expectedActionDistribution: actionMass({ confirm: 0.52, recenter: 0.29, flip: 0.05, fade_market: 0.02, retain: 0.08, stand_down: 0.04 }), maximumTotalVariation: 0.28,
     rationale: "Observed leadership, independent follow-through, persistence, and cross-market coherence support the discovered side without requiring blind copying.",
   },
   {
@@ -35,6 +42,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["professional book moves", "target-excluded market does not follow", "other books improve the opposite side", "moneyline and spread remain opposed"],
     context: ["no identity or freshness defect explains the disagreement"],
     preferredAction: "stand_down", acceptableActions: ["stand_down", "retain", "fade_market"], forbiddenActions: ["flip"], certainty: "decrease",
+    expectedActionDistribution: actionMass({ confirm: 0.04, recenter: 0.09, flip: 0.02, fade_market: 0.20, retain: 0.25, stand_down: 0.40 }), maximumTotalVariation: 0.30,
     rationale: "A respected source is evidence, but verified resistance and cross-market disagreement make automatic following unjustified.",
   },
   {
@@ -42,6 +50,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["early move away from opening", "later reversal", "market returns near opening", "late prices favor the original side"],
     context: ["chronology is same-event and same-book coherent"],
     preferredAction: "fade_market", acceptableActions: ["fade_market", "retain", "stand_down"], forbiddenActions: ["confirm"], certainty: "decrease",
+    expectedActionDistribution: actionMass({ confirm: 0.02, recenter: 0.07, flip: 0.05, fade_market: 0.44, retain: 0.25, stand_down: 0.17 }), maximumTotalVariation: 0.30,
     rationale: "The full path contradicts treating the first move as permanent information and can favor the independent forecast or no action.",
   },
   {
@@ -49,6 +58,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["retail books move together", "professional books remain static", "retail price worsens after public concentration"],
     context: ["professional feeds are fresh rather than missing"],
     preferredAction: "retain", acceptableActions: ["retain", "stand_down", "fade_market"], forbiddenActions: ["flip"], certainty: "unchanged",
+    expectedActionDistribution: actionMass({ confirm: 0.05, recenter: 0.08, flip: 0.02, fade_market: 0.17, retain: 0.45, stand_down: 0.23 }), maximumTotalVariation: 0.30,
     rationale: "Retail synchronization alone is not proof of sharp discovery when fresh professional markets resist it.",
   },
   {
@@ -56,6 +66,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["identified book reports more money than bets on one side", "that book's number and price move the other way"],
     context: ["absolute handle, ticket count, limits, and exact-line denominator are unknown"],
     preferredAction: "stand_down", acceptableActions: ["stand_down", "retain"], forbiddenActions: ["flip", "confirm"], certainty: "decrease",
+    expectedActionDistribution: actionMass({ confirm: 0.02, recenter: 0.08, flip: 0.01, fade_market: 0.09, retain: 0.31, stand_down: 0.49 }), maximumTotalVariation: 0.28,
     rationale: "Percentage splits without economic path confirmation cannot overrule price action or manufacture sharp authority.",
   },
   {
@@ -63,6 +74,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["favorite moneyline probability rises", "spread moves toward underdog", "both paths are fresh and target-excluded"],
     context: ["no key player or settlement difference explains the divergence"],
     preferredAction: "stand_down", acceptableActions: ["stand_down", "recenter"], forbiddenActions: ["flip", "confirm"], certainty: "decrease",
+    expectedActionDistribution: actionMass({ confirm: 0.02, recenter: 0.30, flip: 0.02, fade_market: 0.08, retain: 0.13, stand_down: 0.45 }), maximumTotalVariation: 0.30,
     rationale: "Winner and cover information differ; the resolver must preserve that distinction rather than forcing one directional vote.",
   },
   {
@@ -70,6 +82,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["verified quarterback status changes", "market moves after the report", "books follow with consistent timestamps"],
     context: ["independent prior has not incorporated the new availability state"],
     preferredAction: "recenter", acceptableActions: ["recenter", "flip", "stand_down"], forbiddenActions: ["fade_market"], certainty: "increase",
+    expectedActionDistribution: actionMass({ confirm: 0.05, recenter: 0.48, flip: 0.24, fade_market: 0.02, retain: 0.07, stand_down: 0.14 }), maximumTotalVariation: 0.30,
     rationale: "The sequence supports information-driven repricing, but magnitude and boundary crossing must come from the learned joint distribution.",
   },
   {
@@ -77,6 +90,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["independent forecast starts on home side", "verified quarterback downgrade arrives", "professional moneyline and spread reprice to away side", "independent books follow and hold"],
     context: ["news precedes the move", "target-excluded winner and cover states agree", "no reversal or buyback appears"],
     preferredAction: "flip", acceptableActions: ["flip", "recenter", "stand_down"], forbiddenActions: ["fade_market"], certainty: "increase",
+    expectedActionDistribution: actionMass({ confirm: 0.03, recenter: 0.26, flip: 0.50, fade_market: 0.01, retain: 0.05, stand_down: 0.15 }), maximumTotalVariation: 0.28,
     rationale: "A coherent information event can invalidate the original side; the resolver must be capable of crossing the prediction boundary when the learned posterior supports it.",
   },
   {
@@ -84,6 +98,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["identified split source unavailable", "fresh professional price books agree", "retail books follow", "total path persists"],
     context: ["missing split is explicit rather than zero", "price identities and timestamps are valid"],
     preferredAction: "confirm", acceptableActions: ["confirm", "recenter", "stand_down"], forbiddenActions: [], certainty: "increase",
+    expectedActionDistribution: actionMass({ confirm: 0.45, recenter: 0.27, flip: 0.05, fade_market: 0.04, retain: 0.08, stand_down: 0.11 }), maximumTotalVariation: 0.32,
     rationale: "A missing modality reduces information but does not veto coherent observable price discovery from the remaining sources.",
   },
   {
@@ -91,6 +106,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["old split points over", "fresh multi-book total path points under", "under move persists"],
     context: ["split age is known", "fresh prices are same-event and complete"],
     preferredAction: "confirm", acceptableActions: ["confirm", "recenter"], forbiddenActions: ["flip"], certainty: "increase",
+    expectedActionDistribution: actionMass({ confirm: 0.50, recenter: 0.31, flip: 0.02, fade_market: 0.04, retain: 0.08, stand_down: 0.05 }), maximumTotalVariation: 0.28,
     rationale: "Stale percentage evidence must not receive the same authority as the fresh economic path.",
   },
   {
@@ -98,6 +114,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["evaluated book changes price", "target-excluded books remain static", "no independent follow-through appears"],
     context: ["evaluated quote remains distinct from model evidence"],
     preferredAction: "retain", acceptableActions: ["retain", "stand_down"], forbiddenActions: ["flip", "confirm"], certainty: "unchanged",
+    expectedActionDistribution: actionMass({ confirm: 0.02, recenter: 0.08, flip: 0.01, fade_market: 0.08, retain: 0.53, stand_down: 0.28 }), maximumTotalVariation: 0.28,
     rationale: "An isolated target-book adjustment can change offered value without proving a new market state.",
   },
   {
@@ -105,6 +122,7 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["professional spread crosses a football key number", "price pressure precedes number move", "independent books follow", "new level holds"],
     context: ["no reversal or buyback", "moneyline winner direction is coherent"],
     preferredAction: "recenter", acceptableActions: ["recenter", "flip", "confirm"], forbiddenActions: ["fade_market"], certainty: "increase",
+    expectedActionDistribution: actionMass({ confirm: 0.18, recenter: 0.47, flip: 0.20, fade_market: 0.02, retain: 0.06, stand_down: 0.07 }), maximumTotalVariation: 0.30,
     rationale: "A persistent, economically confirmed key-number transition can justify a material distribution change without a fixed point award.",
   },
   {
@@ -112,6 +130,11 @@ export const NFL_MARKET_BRAIN_BEHAVIOR_SCENARIOS: NflMarketBrainBehaviorScenario
     observableStory: ["professional price feeds unavailable", "retail books disagree", "split books disagree", "target-excluded consensus is unstable"],
     context: ["missing sources are explicit", "independent prior remains available"],
     preferredAction: "stand_down", acceptableActions: ["stand_down", "retain"], forbiddenActions: ["flip", "confirm"], certainty: "decrease",
+    expectedActionDistribution: actionMass({ confirm: 0.01, recenter: 0.05, flip: 0.01, fade_market: 0.06, retain: 0.29, stand_down: 0.58 }), maximumTotalVariation: 0.25,
     rationale: "The correct response to an unidentifiable market state is uncertainty, not fabricated consensus or forced sharp alignment.",
   },
 ];
+
+function actionMass(value: MarketBrainActionDistribution): MarketBrainActionDistribution {
+  return value;
+}

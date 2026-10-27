@@ -7,7 +7,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESEARCH_EVALUATOR_RELEASE =
-  "nfl_market_brain_research_evaluator_2026_10_27_r2_content_addressed_prior" as const;
+  "nfl_market_brain_research_evaluator_2026_10_27_r3_target_safe_distribution_score" as const;
 export const NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE =
   "nfl_market_brain_research_manifest_2026_10_27_r1_chronological" as const;
 
@@ -35,6 +35,9 @@ type Winner = "away" | "home" | "tie";
 type Metrics = {
   multiclassBrier: number;
   logLoss: number;
+  marginDistributionLogLoss: number;
+  totalDistributionLogLoss: number;
+  marginTotalDistributionLogScore: number;
   marginAbsoluteError: number;
   totalAbsoluteError: number;
   winnerCorrect: boolean;
@@ -58,6 +61,7 @@ export type NflMarketBrainResearchEvaluation = {
     logLossImprovement: number;
     marginMaeImprovement: number;
     totalMaeImprovement: number;
+    marginTotalDistributionLogScoreImprovement: number;
   };
   disagreement: "correction" | "harm" | "changed_both_wrong" | "unchanged";
   invariants: {
@@ -107,6 +111,8 @@ export function evaluateNflMarketBrainResearchCase(args: {
     probabilities: baselineProbabilities,
     marginMean: sequence.prior.marginMean,
     totalMean: sequence.prior.totalMean,
+    marginDistribution: sequence.prior.artifact.marginDistribution,
+    totalDistribution: sequence.prior.artifact.totalDistribution,
     actualMargin,
     actualTotal,
     actualWinner,
@@ -115,6 +121,8 @@ export function evaluateNflMarketBrainResearchCase(args: {
     probabilities: candidateProbabilities,
     marginMean: candidate.marginMean,
     totalMean: candidate.totalMean,
+    marginDistribution: candidate.marginDistribution,
+    totalDistribution: candidate.totalDistribution,
     actualMargin,
     actualTotal,
     actualWinner,
@@ -143,6 +151,8 @@ export function evaluateNflMarketBrainResearchCase(args: {
       logLossImprovement: baseline.logLoss - evaluatedCandidate.logLoss,
       marginMaeImprovement: baseline.marginAbsoluteError - evaluatedCandidate.marginAbsoluteError,
       totalMaeImprovement: baseline.totalAbsoluteError - evaluatedCandidate.totalAbsoluteError,
+      marginTotalDistributionLogScoreImprovement:
+        baseline.marginTotalDistributionLogScore - evaluatedCandidate.marginTotalDistributionLogScore,
     },
     disagreement,
     invariants: {
@@ -179,6 +189,8 @@ export function summarizeNflMarketBrainResearchRun(rows: NflMarketBrainResearchE
     baselineBrier: average((row) => row.baseline.multiclassBrier),
     candidateLogLoss: average((row) => row.candidate.logLoss),
     baselineLogLoss: average((row) => row.baseline.logLoss),
+    candidateMarginTotalDistributionLogScore: average((row) => row.candidate.marginTotalDistributionLogScore),
+    baselineMarginTotalDistributionLogScore: average((row) => row.baseline.marginTotalDistributionLogScore),
     candidateMarginMae: average((row) => row.candidate.marginAbsoluteError),
     baselineMarginMae: average((row) => row.baseline.marginAbsoluteError),
     candidateTotalMae: average((row) => row.candidate.totalAbsoluteError),
@@ -297,6 +309,8 @@ function metrics(args: {
   probabilities: Record<Winner, number>;
   marginMean: number;
   totalMean: number;
+  marginDistribution: MarketBrainDiscreteDistribution;
+  totalDistribution: MarketBrainDiscreteDistribution;
   actualMargin: number;
   actualTotal: number;
   actualWinner: Winner;
@@ -304,14 +318,26 @@ function metrics(args: {
   if (!Number.isFinite(args.marginMean) || !Number.isFinite(args.totalMean)) {
     throw new Error("NFL Market Brain projection moments are invalid.");
   }
+  const marginDistributionLogLoss = distributionLogLoss(args.marginDistribution, args.actualMargin);
+  const totalDistributionLogLoss = distributionLogLoss(args.totalDistribution, args.actualTotal);
   return {
     multiclassBrier: (Object.keys(args.probabilities) as Winner[]).reduce((sum, key) =>
       sum + (args.probabilities[key] - Number(key === args.actualWinner)) ** 2, 0),
     logLoss: -Math.log(Math.max(args.probabilities[args.actualWinner], 1e-15)),
+    marginDistributionLogLoss,
+    totalDistributionLogLoss,
+    marginTotalDistributionLogScore: marginDistributionLogLoss + totalDistributionLogLoss,
     marginAbsoluteError: Math.abs(args.marginMean - args.actualMargin),
     totalAbsoluteError: Math.abs(args.totalMean - args.actualTotal),
     winnerCorrect: predictedWinner(args.probabilities) === args.actualWinner,
   };
+}
+
+function distributionLogLoss(distribution: MarketBrainDiscreteDistribution, actual: number): number {
+  assertResearchDistribution(distribution, "scored");
+  const probability = distribution.values.reduce((sum, value, index) =>
+    Math.abs(value - actual) <= 1e-9 ? sum + distribution.probabilities[index]! : sum, 0);
+  return -Math.log(Math.max(probability, 1e-15));
 }
 
 function assertResearchDistribution(distribution: MarketBrainDiscreteDistribution, name: string) {

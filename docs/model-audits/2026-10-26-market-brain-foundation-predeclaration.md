@@ -34,7 +34,8 @@ The Market Brain is a two-stage system:
 2. A later learned, regularized, sport/market-specific resolver consumes the variable-length masked
    evidence set or sequence. Two-team full-game markets can use a Margin + Total latent state; soccer
    three-way fixtures and player props have distinct subject/prior contracts and are not forced into
-   that shape. No resolver is present in this release.
+   that shape. This release freezes the NFL resolver contract and tournament, but contains no fitted
+   resolver artifact and grants no prediction authority.
 
 The resolver must not require three of four signals, two named books, a universal split gap, or a
 fixed market weight. Small observations remain small continuous observations. Missing Circa,
@@ -123,7 +124,11 @@ and lease, full verification, latest-main integration safety, and post-deploy pr
    behavior across enough games and source outages before proposing any production influence.
 
 This release implements gate 2, the observable portion of gate 1 available from the current feeds,
-and freezes the gate-3 input corpus as `nfl_market_brain_behavior_scenarios_2026_10_26_r1`. Raw
+and freezes the gate-3 input corpus as
+`nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic`. Every one of the 13 stories now
+contains a non-one-hot expected distribution across confirm, recenter, flip, fade-market, retain, and
+stand-down plus a bounded probabilistic comparison; these are evaluation fixtures, never points,
+signal-count requirements, or production inference rules. Raw
 BALLDONTLIE and SharpAPI response manifests now precede complete-pair normalization and family
 replacement. They retain response hashes, returned/matched/unmatched/ambiguous row accounting,
 duplicate and unsupported states, individual incomplete sides, and every recognized SharpAPI row in
@@ -132,8 +137,18 @@ verification, and whole-target-family exclusion before it derives continuous pat
 roles. The research evaluator rejects labels available at or before the case, mixed releases,
 duplicate events, and non-chronological partition manifests; it records corrections and harms
 against the exact prior baseline. Feed-side omissions, bounded
-pagination, suspension lifecycle, limits, and private order flow remain explicit blind spots. No
-resolver exists to pass gate 3 yet.
+pagination, suspension lifecycle, limits, and private order flow remain explicit blind spots.
+`nfl_market_brain_resolver_contract_2026_10_27_r1_shadow_only` freezes three low-capacity candidate
+families, their complete hyperparameter grids, ablation order, rolling-origin selection objective,
+artifact provenance, and shadow-only authority under
+`nfl_market_brain_tournament_2026_10_27_r1_pre_outcome_freeze`. A candidate must emit one feasible
+joint NFL score-state distribution; Margin, Total, expected team scores, and winner probabilities are
+derived from it, while action probabilities are explanations and cannot directly assign points,
+grades, or stakes. No fitted resolver artifact exists, so gate 3 has not been passed.
+`nfl_market_brain_resolver_features_2026_10_27_r1_target_safe_sequence` is the sole eligible trainer
+boundary: it preserves the exact independent prior and all eligible continuous paths, splits,
+context, chronology, and missingness, but excludes evaluated-family prices, splits, and expected-input
+states. Target-only additions cannot change its feature payload hash.
 Passing repository tests is not evidence that gates 3–5 have passed, and it does not authorize a
 confirm, flip, fade, grade, or stake change.
 

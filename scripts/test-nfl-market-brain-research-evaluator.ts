@@ -78,6 +78,7 @@ assert.equal(correction.disagreement, "correction");
 assert.equal(correction.baseline.winnerCorrect, false);
 assert.equal(correction.candidate.winnerCorrect, true);
 assert.ok(correction.deltas.brierImprovement > 0);
+assert.ok(correction.deltas.marginTotalDistributionLogScoreImprovement > 0);
 assert.ok(Math.abs(correction.deltas.marginMaeImprovement - 3.4) < 1e-9);
 assert.equal(correction.invariants.productionInfluenceAllowed, false);
 

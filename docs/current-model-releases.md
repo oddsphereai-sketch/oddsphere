@@ -517,23 +517,33 @@ Last reviewed: 2026-10-27
   artifact, this removes about 97% of repeated prior bytes (approximately 40.8 MiB to 1.38 MiB per
   16-game, 168-capture week before database compression). Market Brain construction performs zero
   provider requests and reuses the writer's already-fetched odds, splits, availability, and context.
-  `nfl_market_brain_sequence_materializer_2026_10_27_r3_content_addressed_prior` replays only cases
+  `nfl_market_brain_sequence_materializer_2026_10_27_r4_target_safe_inputs` replays only cases
   and observations available by an explicit cutoff, excludes the exact target and its entire source
   family before feature construction, pairs individual sides without zero-filling, derives continuous
-  number/price/hold/reversal/buyback features without minimum-move quotas, and assigns event roles
+  number/price/hold/reversal/buyback features without minimum-move quotas, excludes same-family split
+  observations and expected-source missingness as well as prices, and assigns event roles
   from chronology rather than reputation. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
-  `nfl_market_brain_research_evaluator_2026_10_27_r2_content_addressed_prior` and
+  `nfl_market_brain_research_evaluator_2026_10_27_r3_target_safe_distribution_score` and
   `nfl_market_brain_research_manifest_2026_10_27_r1_chronological` form a research-only proof
   boundary: outcomes must arrive strictly after cutoff and game start, candidate predictions must
   bind the exact sequence checksum and predate the case, mixed releases and duplicate events are
   rejected, and rolling-origin development/selection/confirmation/prospective roles cannot overlap.
-  The evaluator reports all-game Brier, log loss, winner accuracy, Margin/Total MAE, corrections,
-  and harms against the immutable target-free prior. It has no decision or production authority.
-  `nfl_market_brain_behavior_scenarios_2026_10_26_r1` freezes nuanced follow, fade, resistance,
-  reversal, outage, stale-evidence, news-sequence, and cross-market acceptance stories without
-  turning them into executable quotas; no resolver has qualified against them.
+  The evaluator reports all-game Brier, winner log loss, realized Margin/Total distribution log
+  score, winner accuracy, Margin/Total MAE, corrections, and harms against the immutable target-free
+  prior. It has no decision or production authority.
+  `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` freezes 13 nuanced follow, fade,
+  resistance, reversal, outage, stale-evidence, news-sequence, and cross-market stories as non-one-hot
+  action distributions without turning them into inference quotas.
+  `nfl_market_brain_resolver_contract_2026_10_27_r1_shadow_only`,
+  `nfl_market_brain_resolver_features_2026_10_27_r1_target_safe_sequence`, and
+  `nfl_market_brain_tournament_2026_10_27_r1_pre_outcome_freeze` freeze three low-capacity families,
+  their complete hyperparameter grids and fitted-parameter ceilings, seven ordered ablations,
+  artifact provenance, and one feasible joint NFL score-state posterior from which Margin, Total,
+  team scores, and winner probabilities must all derive. Actions cannot directly award points or
+  grades, unfrozen artifacts fail closed, and production influence remains false. No fitted resolver
+  artifact or predictive qualification exists yet.
   Contract, evidence limitations, and the next research gate are frozen in
   `docs/model-audits/2026-10-26-market-brain-foundation-predeclaration.md`.
 

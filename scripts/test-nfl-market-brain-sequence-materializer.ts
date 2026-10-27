@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 
 import {
+  bindMarketBrainMarginTotalPrior,
   buildMarketBrainCase,
   numericFeature,
   type MarketBrainObservation,
 } from "../lib/services/marketBrain/marketBrainContract";
+import { buildNflMarketBrainResolverFeatures } from "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 
 const cutoffAt = "2026-10-26T20:00:00.000Z";
@@ -63,6 +65,35 @@ function pair(participant: string, observedAt: string, homeLine: number, awayPri
   ];
 }
 
+function identifiedSplit(participant: string, suffix: string): MarketBrainObservation {
+  return {
+    id: `split:${participant}:${suffix}`,
+    eventId,
+    sport: "nfl",
+    market: "spread",
+    modality: "identified_book_split",
+    source: { provider: "sharpapi", feed: "splits", participant },
+    sourcePrior: participant === "circa" ? "professional_book" : "retail_book",
+    observedRole: "unknown",
+    observedAt: null,
+    timing: {
+      providerObservedAt: null,
+      providerFetchedAt: "2026-10-26T19:45:00.000Z",
+      ingestedAt: "2026-10-26T19:45:00.000Z",
+      availableAt: "2026-10-26T19:45:00.000Z",
+    },
+    availability: "observed",
+    targetRelation: "unknown",
+    values: {
+      first_money_pct: numericFeature(54),
+      first_bets_pct: numericFeature(47),
+      first_money_minus_bets_pp: numericFeature(7),
+    },
+    categorical: { denominatorKnown: false, exactLineMatched: null },
+    audit: { sourceRelease: "fixture", sourceObservationId: `split:${participant}:${suffix}`, notes: [] },
+  };
+}
+
 const observations = [
   ...pair("draftkings", "2026-10-26T19:00:00.000Z", -3, -110, -110, "same_family_as_evaluated"),
   ...pair("draftkings", "2026-10-26T19:50:00.000Z", -3.5, -110, -110, "evaluated"),
@@ -74,6 +105,8 @@ const observations = [
   ...moneylinePair("fanduel", "2026-10-26T19:10:00.000Z", -111, -109),
   ...moneylinePair("circa", "2026-10-26T19:00:00.000Z", -110, -110),
   ...moneylinePair("circa", "2026-10-26T19:30:00.000Z", -111, -109),
+  identifiedSplit("draftkings", "target-family"),
+  identifiedSplit("circa", "target-excluded"),
   quote({ participant: "betmgm", selection: "away", line: 3, price: null,
     observedAt: "2026-10-26T19:30:00.000Z", availability: "incomplete" }),
   quote({ participant: "circa", selection: "away", line: 3.5, price: -112,
@@ -81,6 +114,13 @@ const observations = [
   quote({ participant: "circa", selection: "home", line: -3.5, price: -108,
     observedAt: "2026-10-26T19:55:00.000Z", availableAt: "2026-10-26T20:05:00.000Z" }),
 ];
+const independentPrior = bindMarketBrainMarginTotalPrior({
+  eventId,
+  release: "fixture-independent-prior-r1",
+  availableAt: cutoffAt,
+  marginDistribution: { values: [-3, 3], probabilities: [0.55, 0.45] },
+  totalDistribution: { values: [41, 45], probabilities: [0.45, 0.55] },
+});
 const marketCase = buildMarketBrainCase({
   sport: "nfl",
   eventId,
@@ -88,7 +128,7 @@ const marketCase = buildMarketBrainCase({
   captureBoundary: "raw_provider_response",
   captureLimitations: [],
   subject: { kind: "two_team_game", awayId: "NE", homeId: "SEA", startsAt: "2026-10-26T21:00:00.000Z" },
-  prior: { kind: "unavailable", release: "fixture", reason: "fixture" },
+  prior: independentPrior,
   evaluatedTargets: {
     spread: {
       identity: "draftkings-spread-target",
@@ -122,14 +162,27 @@ const marketCase = buildMarketBrainCase({
     status: "observed",
     failureReason: null,
   }],
-  expectedInputs: [],
+  expectedInputs: [
+    {
+      id: "identified_book_split:spread:draftkings", modality: "identified_book_split",
+      provider: "sharpapi", participant: "draftkings", expectation: "opportunistic",
+      availability: "observed", observationIds: ["split:draftkings:target-family"], reason: null,
+    },
+    {
+      id: "identified_book_split:spread:circa", modality: "identified_book_split",
+      provider: "sharpapi", participant: "circa", expectation: "opportunistic",
+      availability: "observed", observationIds: ["split:circa:target-excluded"], reason: null,
+    },
+  ],
   blindSpots: [],
 });
 
 const materialized = materializeNflMarketBrainSequence({ cases: [marketCase], cutoffAt });
 assert.equal(materialized.targetFamilyByMarket.spread, "draftkings");
-assert.equal(materialized.accounting.targetExcluded, 4,
-  "the exact target and every other observation from its family must be excluded before features");
+assert.equal(materialized.accounting.targetExcluded, 5,
+  "the exact target, same-family quotes, and same-family splits must be excluded before features");
+assert.equal(materialized.accounting.targetExcludedExpectedInputs, 1,
+  "same-family source missingness must not become a backdoor target feature");
 assert.equal(materialized.accounting.afterCutoff, 2, "provider rows unavailable by cutoff must not enter features");
 assert.equal(materialized.accounting.unavailableOrUnsupported, 1, "missing data must stay explicit rather than becoming zero");
 assert.equal(materialized.quotePaths.some((path) => path.participant === "draftkings"), false);
@@ -149,6 +202,12 @@ assert.equal(materialized.crossMarket.sideLeader, "moneyline");
 assert.equal(materialized.crossMarket.sideLeadLagMinutes, 10);
 assert.equal(materialized.invariants.productionInfluenceAllowed, false);
 assert.equal(materialized.checksum.length, 64);
+const resolverFeatures = buildNflMarketBrainResolverFeatures(materialized);
+assert.equal(resolverFeatures.contextTokens.some((token) => token.participant === "draftkings"), false);
+assert.equal(resolverFeatures.contextTokens.some((token) => token.participant === "circa"), true);
+assert.equal(resolverFeatures.expectedInputTokens.some((token) => token.participant === "draftkings"), false);
+assert.equal(resolverFeatures.expectedInputTokens.some((token) => token.participant === "circa"), true);
+assert.equal(resolverFeatures.invariants.productionInfluenceAllowed, false);
 
 const targetIdentityWithoutExactMatch = structuredClone(marketCase);
 for (const observation of targetIdentityWithoutExactMatch.observations) {
@@ -157,6 +216,14 @@ for (const observation of targetIdentityWithoutExactMatch.observations) {
 const withoutExactMatch = materializeNflMarketBrainSequence({ cases: [targetIdentityWithoutExactMatch], cutoffAt });
 assert.equal(withoutExactMatch.quotePaths.some((path) => path.participant === "draftkings"), false,
   "the explicit evaluated-target manifest must exclude its whole family even when an exact raw side cannot be matched");
+
+const extraTargetOnlyCase = structuredClone(marketCase);
+extraTargetOnlyCase.observations.push(identifiedSplit("draftkings", "second-target-only-row"));
+const extraTargetOnly = materializeNflMarketBrainSequence({ cases: [extraTargetOnlyCase], cutoffAt });
+assert.notEqual(extraTargetOnly.checksum, materialized.checksum,
+  "the audited sequence must still account for the extra excluded target row");
+assert.equal(buildNflMarketBrainResolverFeatures(extraTargetOnly).featurePayloadSha256, resolverFeatures.featurePayloadSha256,
+  "target-only evidence changes must not change the resolver feature payload");
 
 const conflicting = structuredClone(marketCase);
 conflicting.observations[0]!.values.price = numericFeature(-120);

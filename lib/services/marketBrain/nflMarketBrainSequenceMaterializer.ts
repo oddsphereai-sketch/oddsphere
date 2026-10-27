@@ -4,6 +4,7 @@ import {
   MARKET_BRAIN_CONTRACT_RELEASE,
   assertMarketBrainPrior,
   type MarketBrainCase,
+  type MarketBrainExpectedInput,
   type MarketBrainMarket,
   type MarketBrainObservation,
   type MarketBrainObservedRole,
@@ -11,7 +12,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r3_content_addressed_prior" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r4_target_safe_inputs" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -23,6 +24,12 @@ export type NflMarketBrainMaterializedObservation = {
     "after_cutoff" | "evaluated_target" | "same_target_family" | "superseded_prior" |
     "unavailable" | "incomplete" | "unsupported"
   >;
+};
+
+export type NflMarketBrainMaterializedExpectedInput = {
+  input: MarketBrainExpectedInput;
+  eligible: boolean;
+  exclusionReasons: Array<"same_target_family">;
 };
 
 export type NflMarketBrainQuotePoint = {
@@ -74,6 +81,7 @@ export type NflMarketBrainSequence = {
   prior: MarketBrainPrior;
   targetFamilyByMarket: Record<FullGameMarket, string | null>;
   observations: NflMarketBrainMaterializedObservation[];
+  expectedInputs: NflMarketBrainMaterializedExpectedInput[];
   quotePaths: NflMarketBrainQuotePath[];
   crossMarket: NflMarketBrainCrossMarket;
   sourceAvailability: {
@@ -92,6 +100,7 @@ export type NflMarketBrainSequence = {
     eligibleObservations: number;
     afterCutoff: number;
     targetExcluded: number;
+    targetExcludedExpectedInputs: number;
     unavailableOrUnsupported: number;
     pairedQuotePoints: number;
   };
@@ -149,7 +158,7 @@ export function materializeNflMarketBrainSequence(args: {
     const reasons: NflMarketBrainMaterializedObservation["exclusionReasons"] = [];
     if (Date.parse(observation.timing.availableAt) > cutoff) reasons.push("after_cutoff");
     const targetFamily = isFullGameMarket(observation.market) ? targetFamilyByMarket[observation.market] : null;
-    if (observation.modality === "price_quote" && targetFamily !== null && observation.source.participant === targetFamily) {
+    if (isMarketEvidence(observation) && targetFamily !== null && canonical(observation.source.participant) === canonical(targetFamily)) {
       reasons.push(observation.targetRelation === "evaluated" ? "evaluated_target" : "same_target_family");
     }
     if (observation.modality === "model_prior" &&
@@ -160,6 +169,12 @@ export function materializeNflMarketBrainSequence(args: {
     if (observation.availability === "incomplete") reasons.push("incomplete");
     if (observation.availability === "unsupported") reasons.push("unsupported");
     return { observation, eligible: reasons.length === 0, exclusionReasons: [...new Set(reasons)] };
+  });
+  const targetFamilies = new Set(Object.values(targetFamilyByMarket).filter((value): value is string => value !== null).map(canonical));
+  const expectedInputs = latestCase.expectedInputs.map((input): NflMarketBrainMaterializedExpectedInput => {
+    const exclusionReasons: NflMarketBrainMaterializedExpectedInput["exclusionReasons"] =
+      input.participant !== null && targetFamilies.has(canonical(input.participant)) ? ["same_target_family"] : [];
+    return { input, eligible: exclusionReasons.length === 0, exclusionReasons };
   });
 
   const quotePaths = buildQuotePaths(observations);
@@ -186,6 +201,7 @@ export function materializeNflMarketBrainSequence(args: {
     prior: latestPrior,
     targetFamilyByMarket,
     observations,
+    expectedInputs,
     quotePaths,
     crossMarket,
     sourceAvailability,
@@ -197,6 +213,7 @@ export function materializeNflMarketBrainSequence(args: {
       eligibleObservations: observations.filter((row) => row.eligible).length,
       afterCutoff: observations.filter((row) => row.exclusionReasons.includes("after_cutoff")).length,
       targetExcluded: observations.filter((row) => row.exclusionReasons.includes("evaluated_target") || row.exclusionReasons.includes("same_target_family")).length,
+      targetExcludedExpectedInputs: expectedInputs.filter((row) => !row.eligible).length,
       unavailableOrUnsupported: observations.filter((row) => row.exclusionReasons.some((reason) => ["unavailable", "incomplete", "unsupported"].includes(reason))).length,
       pairedQuotePoints: quotePaths.reduce((sum, path) => sum + path.points.length, 0),
     },
@@ -210,6 +227,15 @@ export function materializeNflMarketBrainSequence(args: {
     },
   };
   return { ...withoutChecksum, checksum: sha256(withoutChecksum) };
+}
+
+function isMarketEvidence(observation: MarketBrainObservation): boolean {
+  return observation.modality === "price_quote" || observation.modality === "public_split" ||
+    observation.modality === "identified_book_split";
+}
+
+function canonical(value: string | null): string {
+  return value?.toLowerCase().replace(/[^a-z0-9]+/g, "") ?? "";
 }
 
 function resolvePrior(prior: MarketBrainPrior, cases: MarketBrainCase[], cutoff: number): MarketBrainPrior {
