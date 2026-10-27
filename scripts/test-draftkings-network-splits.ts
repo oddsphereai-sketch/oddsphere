@@ -297,6 +297,39 @@ const cfbApplied = applyDraftKingsNetworkSplitFallback(cfb, {
 });
 assert.deepEqual(cfbApplied, { matchedGames: 1, populatedMarkets: 3 }, "CFB provider school aliases must resolve without guessing across Miami teams");
 
+const lockedCfb = footballResponse("cfb", "MIA", "WAKE", "Miami Hurricanes", "Wake Forest Demon Deacons");
+lockedCfb.games[0]!.lockState = "locked";
+lockedCfb.games[0]!.lockedAt = "2026-09-17T15:02:00.000Z";
+const lockedCfbFeed: DraftKingsNetworkSplitFeed = {
+  source: "draftkings_network", sport: "NCAA Football", fetchedAt: "2026-09-17T15:01:00.000Z",
+  games: [{
+    providerEventId: "cfb-locked", awayName: "Miami FL", homeName: "Wake Forest", monthDay: "9/19",
+    markets: {
+      moneyline: footballMarket("moneyline", "Miami FL", "Wake Forest"),
+      spread: footballMarket("spread", "Miami FL -3.5", "Wake Forest +3.5"),
+      total: footballMarket("total", "Over 51.5", "Under 51.5"),
+    },
+  }],
+};
+assert.deepEqual(
+  applyDraftKingsNetworkSplitFallback(lockedCfb, lockedCfbFeed, { reconstructMissingLockedPreLock: true }),
+  { matchedGames: 1, populatedMarkets: 3 },
+  "a complete exact DraftKings fallback may reconstruct a missing field only when captured before lock",
+);
+assert.equal(lockedCfb.games[0]!.markets.moneyline.sportsbookSplits?.evidenceContext, "locked_prelock_reconstruction");
+assert.equal(lockedCfb.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, "2026-09-17T15:01:00.000Z");
+assert.equal(lockedCfb.games[0]!.markets.moneyline.recommendationDecision?.sharpBookSplits, null);
+
+const postLockCfb = footballResponse("cfb", "MIA", "WAKE", "Miami Hurricanes", "Wake Forest Demon Deacons");
+postLockCfb.games[0]!.lockState = "locked";
+postLockCfb.games[0]!.lockedAt = "2026-09-17T15:00:00.000Z";
+assert.deepEqual(
+  applyDraftKingsNetworkSplitFallback(postLockCfb, lockedCfbFeed, { reconstructMissingLockedPreLock: true }),
+  { matchedGames: 1, populatedMarkets: 0 },
+  "a DraftKings observation captured after lock remains excluded",
+);
+assert.equal(postLockCfb.games[0]!.markets.moneyline.sportsbookSplits, null);
+
 for (const [awayTeam, homeTeam, awayDisplay, homeDisplay, providerAway, providerHome] of [
   ["IU", "MICH", "Indiana Hoosiers", "Michigan Wolverines", "Indiana", "Michigan"],
   ["OU", "MSST", "Oklahoma Sooners", "Mississippi State Bulldogs", "Oklahoma", "Mississippi State"],

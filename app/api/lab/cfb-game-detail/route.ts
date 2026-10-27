@@ -42,7 +42,9 @@ export async function GET(request: NextRequest) {
   }
 
   const detailSnapshot = { ...fixture.snapshot, games: [game] };
-  await populateDailyEdgeStoredSplitFallback(detailSnapshot, "cfb");
+  await populateDailyEdgeStoredSplitFallback(detailSnapshot, "cfb", {
+    reconstructMissingLockedPreLock: true,
+  });
   const providerGameId = game.id.startsWith("cfb-") ? game.id.slice(4) : game.id;
   const availability = fixture.availability?.[game.id] ?? fixture.availability?.[providerGameId] ?? null;
   return Response.json(

@@ -10,6 +10,7 @@ import {
   readStoredSharpApiCurrentSplits,
   refreshSharpApiCurrentSplitFallback,
   sanitizeRetainedSharpSplitPresentation,
+  type SharpApiCurrentSplitOverlayOptions,
 } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import {
   alignMarketReadsToDisplayedSharpBookSplits,
@@ -375,12 +376,17 @@ export function parseDraftKingsNetworkSplitsHtml(html: string): DraftKingsNetwor
 export function applyDraftKingsNetworkSplitFallback(
   response: DailyEdgeResponse,
   feed: DraftKingsNetworkSplitFeed | null,
+  options: SharpApiCurrentSplitOverlayOptions = {},
 ): DraftKingsNetworkOverlayResult {
   if (!feed) return { matchedGames: 0, populatedMarkets: 0 };
   let matchedGames = 0;
   let populatedMarkets = 0;
   const claimedProviderEvents = new Set<string>();
   for (const game of response.games) {
+    const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
+      ? Date.parse(game.lockedAt ?? "")
+      : null;
+    if (game.lockState === "locked" && options.reconstructMissingLockedPreLock && !Number.isFinite(lockedCutoffMs)) continue;
     const matches = feed.games.filter((candidate) =>
       !claimedProviderEvents.has(candidate.providerEventId) &&
       candidate.monthDay === gameMonthDay(game, response.date) &&
@@ -391,10 +397,10 @@ export function applyDraftKingsNetworkSplitFallback(
     const match = matches[0]!;
     claimedProviderEvents.add(match.providerEventId);
     matchedGames += 1;
-    populatedMarkets += attachMarketFallback(game, "moneyline", match.markets.moneyline, feed.fetchedAt);
-    populatedMarkets += attachMarketFallback(game, "total", match.markets.total, feed.fetchedAt);
+    populatedMarkets += attachMarketFallback(game, "moneyline", match.markets.moneyline, feed.fetchedAt, lockedCutoffMs);
+    populatedMarkets += attachMarketFallback(game, "total", match.markets.total, feed.fetchedAt, lockedCutoffMs);
     if (response.sport !== "mlb" && response.sport !== "soccer" && response.sport !== "ucl") {
-      populatedMarkets += attachMarketFallback(game, "first_inning", match.markets.spread, feed.fetchedAt);
+      populatedMarkets += attachMarketFallback(game, "first_inning", match.markets.spread, feed.fetchedAt, lockedCutoffMs);
     }
   }
   return { matchedGames, populatedMarkets };
@@ -434,14 +440,15 @@ export async function populateDailyEdgeDraftKingsFallback(
 export async function populateDailyEdgeStoredSplitFallback(
   response: DailyEdgeResponse,
   sport: Sport,
+  options: SharpApiCurrentSplitOverlayOptions = {},
 ): Promise<DraftKingsNetworkOverlayResult> {
   const [continuity, sharpFeed, draftKingsFeed] = await Promise.all([
     loadDailyEdgeSharpBookSplitContinuity(response, sport),
     readStoredSharpApiCurrentSplits(sport).catch(() => null),
     readStoredDraftKingsNetworkSplits(sport).catch(() => null),
   ]);
-  const current = applySharpApiCurrentSplitOverlay(response, sharpFeed);
-  const durable = applyDraftKingsNetworkSplitFallback(response, draftKingsFeed);
+  const current = applySharpApiCurrentSplitOverlay(response, sharpFeed, Date.now(), options);
+  const durable = applyDraftKingsNetworkSplitFallback(response, draftKingsFeed, options);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
   alignMarketReadsToDisplayedSharpBookSplits(response);
   sanitizeRetainedSharpSplitPresentation(response);
@@ -456,12 +463,33 @@ function attachMarketFallback(
   slot: keyof DailyEdgeGameDto["markets"],
   source: DraftKingsNetworkSplitMarket | undefined,
   fetchedAt: string,
+  lockedCutoffMs: number | null = null,
 ): 0 | 1 {
   const market = game.markets[slot];
   if (!market || !source) return 0;
   const section = splitSection(game, source, source.observedAt ?? fetchedAt);
   if (!section) return 0;
   const existing = market.sportsbookSplits;
+  if (lockedCutoffMs !== null) {
+    if (
+      existing?.rows.length ||
+      market.recommendationDecision?.sharpBookSplits?.rows.length ||
+      sectionSourceTimestamp(section) > lockedCutoffMs
+    ) return 0;
+    const observedAt = new Date(sectionSourceTimestamp(section)).toISOString();
+    market.sportsbookSplits = {
+      ...section,
+      evidenceContext: "locked_prelock_reconstruction",
+      lastUpdated: observedAt,
+      rows: section.rows.map((row) => ({
+        ...row,
+        observedAt,
+        freshnessCheckedAt: observedAt,
+        isStale: false,
+      })),
+    };
+    return 1;
+  }
   // The display-only hierarchy is Circa (held separately in sharpBookSplits),
   // then DraftKings, then another complete approved named book. A current
   // DraftKings row already in the DTO wins by freshness; a lower-priority

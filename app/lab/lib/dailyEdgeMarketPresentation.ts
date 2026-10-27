@@ -20,7 +20,7 @@ type OperationalReasonMarket = Pick<
 >;
 
 export const DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID =
-  "daily_edge_member_presentation_2026_10_27_r29_owls_pro_team_identity";
+  "daily_edge_member_presentation_2026_10_27_r30_cfb_locked_prelock_splits";
 
 /**
  * Internal holds remain machine-visible health exceptions. The member
