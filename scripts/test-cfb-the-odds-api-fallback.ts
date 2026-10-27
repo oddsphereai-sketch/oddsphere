@@ -5,9 +5,9 @@ import { buildCfbNamedBookPriceHierarchy, retainLatestCfbNamedBookMarkets } from
 import {
   CFB_THE_ODDS_API_CREDIT_RESERVE,
   CFB_THE_ODDS_API_CREDITS_PER_PULL,
-  CFB_THE_ODDS_API_BOOKMAKERS,
   CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
   CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT,
+  CFB_THE_ODDS_API_REGIONS,
   CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT,
   fetchCfbTheOddsApiFallback,
   fetchCfbTheOddsApiHistoricalOpenings,
@@ -27,17 +27,17 @@ const response = await fetchCfbTheOddsApiFallback({
   fetchImpl: async (input) => {
     const url = new URL(String(input));
     assert.equal(url.searchParams.get("markets"), "h2h,spreads,totals");
-    assert.equal(url.searchParams.get("bookmakers"), CFB_THE_ODDS_API_BOOKMAKERS);
+    assert.equal(url.searchParams.get("regions"), CFB_THE_ODDS_API_REGIONS);
+    assert.equal(url.searchParams.get("bookmakers"), null);
     return new Response(JSON.stringify([
       event("e-liu", "LIU Sharks", "Duquesne Dukes", liu.scheduledStart, capturedAt,
         ["fanduel", "betrivers", "williamhill_us", "betonlineag"]),
-      // Reversed orientation must not match The Citadel.
-      event("e-cit-wrong", "VMI Keydets", "Citadel Bulldogs", citadel.scheduledStart),
+      event("e-cit", "Citadel Bulldogs", "VMI Keydets", citadel.scheduledStart, capturedAt, ["bovada"]),
     ]), {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "x-requests-last": "3",
+        "x-requests-last": String(CFB_THE_ODDS_API_CREDITS_PER_PULL),
         "x-requests-remaining": "491",
       },
     });
@@ -45,10 +45,15 @@ const response = await fetchCfbTheOddsApiFallback({
 });
 
 assert.equal(response.requests, 1);
-assert.equal(response.creditsUsed, 3);
+assert.equal(response.creditsUsed, 6);
 assert.equal(response.creditsRemaining, 491);
 assert.equal(response.matchedGames, 1);
-assert.equal(response.failuresByGame["g-cit"], "strict_event_not_found");
+assert.equal(response.displayMatchedGames, 2);
+assert.equal(response.failuresByGame["g-cit"], "approved_named_book_unavailable");
+assert.equal(response.booksByGame["g-cit"], undefined);
+assert.equal(response.displayBooksByGame["g-cit"]?.[0]?.sportsbook, "bovada");
+assert.equal(response.displayBooksByGame["g-cit"]?.[0]?.targetEligible, false);
+assert.equal(response.displayBooksByGame["g-cit"]?.[0]?.marketReadingEligible, false);
 const book = response.booksByGame["g-liu"]?.[0];
 assert.ok(book);
 assert.equal(book.provider, "theoddsapi");
@@ -110,7 +115,8 @@ const historical = await fetchCfbTheOddsApiHistoricalOpenings({
     const url = new URL(String(input));
     assert.match(url.pathname, /\/historical\/sports\/americanfootball_ncaaf_fcs\/odds$/);
     assert.equal(url.searchParams.get("markets"), "h2h,spreads,totals");
-    assert.equal(url.searchParams.get("bookmakers"), CFB_THE_ODDS_API_BOOKMAKERS);
+    assert.equal(url.searchParams.get("regions"), CFB_THE_ODDS_API_REGIONS);
+    assert.equal(url.searchParams.get("bookmakers"), null);
     const first = url.searchParams.get("date") === "2026-10-07T12:00:00Z";
     return new Response(JSON.stringify({
       timestamp: first ? "2026-10-07T11:55:36.000Z" : "2026-10-07T18:40:36.000Z",
@@ -128,7 +134,7 @@ const historical = await fetchCfbTheOddsApiHistoricalOpenings({
   },
 });
 assert.equal(historical.requests, 2);
-assert.equal(historical.creditsUsed, 60);
+assert.equal(historical.creditsUsed, 2 * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL);
 assert.equal(historical.creditsRemaining, 440);
 assert.equal(historical.matchedGames, 2);
 assert.equal(historical.booksByGame["g-liu"]?.[0]?.providerEventId, "e-liu-opening");
@@ -151,8 +157,8 @@ const opening = shouldFetchCfbTheOddsApiFallback({ games: [liu], existing: [], n
 assert.equal(opening.fetch, true);
 assert.equal(opening.reason, "opening_gap_seed");
 assert.equal(opening.cadenceMinutes, 60);
-assert.equal(CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT * CFB_THE_ODDS_API_CREDITS_PER_PULL, 576);
-assert.equal(CFB_THE_ODDS_API_CREDIT_RESERVE, 1_152, "reserve must preserve two full worst-case weekly budgets");
+assert.equal(CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT * CFB_THE_ODDS_API_CREDITS_PER_PULL, 1_152);
+assert.equal(CFB_THE_ODDS_API_CREDIT_RESERVE, 2_304, "reserve must preserve two full worst-case weekly budgets");
 
 const newGameSeed = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
@@ -226,7 +232,7 @@ const priorWeekAttemptsDoNotConsumeThisWeek = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
   existing: [
     ...Array.from({ length: CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT }, (_, index) =>
-      stored(new Date(Date.parse("2026-09-30T00:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * 3)),
+      stored(new Date(Date.parse("2026-09-30T00:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * CFB_THE_ODDS_API_CREDITS_PER_PULL)),
     stored("2026-10-08T11:00:00.000Z", 19_417),
   ],
   now: capturedAt,
@@ -253,7 +259,7 @@ assert.equal(reserve.fetch, false);
 assert.equal(reserve.reason, "credit_reserve");
 
 const ordinaryCappedRows = Array.from({ length: CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT }, (_, index) =>
-  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * 3));
+  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * CFB_THE_ODDS_API_CREDITS_PER_PULL));
 const ordinaryCapped = shouldFetchCfbTheOddsApiFallback({ games: [liu], existing: ordinaryCappedRows, now: capturedAt });
 assert.equal(ordinaryCapped.fetch, false);
 assert.equal(ordinaryCapped.reason, "ordinary_pull_limit_lock_reserve");
@@ -262,7 +268,7 @@ assert.equal(reservedLock.fetch, true);
 assert.equal(reservedLock.reason, "t60_lock_refresh");
 
 const cappedRows = Array.from({ length: CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT }, (_, index) =>
-  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * 3));
+  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * CFB_THE_ODDS_API_CREDITS_PER_PULL));
 const capped = shouldFetchCfbTheOddsApiFallback({ games: [liu], existing: cappedRows, now: capturedAt });
 assert.equal(capped.fetch, false);
 assert.equal(capped.reason, "weekly_pull_limit");
