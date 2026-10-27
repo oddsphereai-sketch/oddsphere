@@ -264,6 +264,16 @@ database, predictive, or production proof.
   capture runner, per-source adapters, atomic referenced artifacts, finalized-frame serialization,
   restart/retry behavior, attrition reports, and real-PostgreSQL adversarial/concurrency proof remain
   outstanding. These IDs remain open, and no migration or capture was enabled.
+- **MB-002 / MB-005 / MB-006 / MB-007 / MB-008:** capture-plan r1 and the forward-only v48
+  candidate schema separate immutable collection precommit from later modeling manifests. The server
+  receipt must predate the first bounded horizon; all child source obligations are inserted in the same
+  transaction and use canonical source/time order. UUID and logical-obligation uniqueness prevent a
+  rescheduled duplicate from hiding under a new identity. An exact stored-plan retry remains attestable
+  after the horizon opens, while a changed collision fails; evidence receipts must match their planned
+  product, joint scopes, source, participant, event, phase, and full time window. The existing
+  environment JSON is not accepted as this database proof, canary selection is not yet driven by these
+  rows, and due-work claiming/finalization serialization/restart/concurrency still require an independent
+  runner plus real-PostgreSQL tests. These IDs remain open and v48 is not applied.
 - **MB-044:** `morning_slate` and `soccer_daily_refresh` now require the shared sport-scoped
   `prediction_pipeline` lease with bounded retry. The executable registry test resolves every primary
   and fallback authority route and proves its source-level required lease contract. Real-PostgreSQL

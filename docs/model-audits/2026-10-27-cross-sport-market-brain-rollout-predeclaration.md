@@ -8,6 +8,8 @@ Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product
 
 Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger`
 
+Capture-plan release: `market_brain_capture_plan_2026_10_27_r1_all_product_precommit`
+
 ## Objective
 
 Build one shared evidence, chronology, provenance, evaluation, and consequence framework while
@@ -48,6 +50,12 @@ raw-response provenance, and exact row conservation. An insert collision is succ
 stored canonical bytes are identical; retries cannot update an earlier receipt. The v47 schema and service
 contract exist on the candidate branch, but no source adapter is wired to it and the migration is not
 applied. Therefore this contract closes neither attempt coverage nor restart/concurrency proof.
+
+Attempt obligations must first be frozen in one bounded capture plan whose database receipt predates
+the first window. The plan uses canonical source/time order, rejects duplicate logical obligations even
+when a caller changes their UUID, and is persisted atomically with every child obligation. A later
+attempt receipt must match that exact precommit. The v48 candidate implements this storage contract,
+but no due-work claim mechanism, independent runner, or provider adapter is connected yet.
 
 Every adapter must declare and prove:
 

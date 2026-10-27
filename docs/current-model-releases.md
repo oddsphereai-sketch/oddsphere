@@ -523,6 +523,15 @@ Last reviewed: 2026-10-27
   and permits service-role insert/select only. Applying that migration or defining this receipt does not
   schedule a request, implement a feed adapter, enable capture, or grant predictive authority. The
   migration has not been applied and still requires real-PostgreSQL lifecycle/concurrency proof.
+- `market_brain_capture_plan_2026_10_27_r1_all_product_precommit` defines the separate immutable
+  collection precommit that must exist on the database server before its first attempt window opens.
+  A bounded plan enumerates exact joint-scope source obligations in canonical chronological/source
+  order; duplicate UUIDs, duplicate logical obligations, after-the-fact plans, unregistered source
+  identities, and windows outside the frozen horizon are rejected. The v48 candidate migration writes
+  each plan and all child obligations in one transaction, permits only exact-byte idempotent retries,
+  makes both tables append-only, and rejects an evidence receipt that was not preplanned or differs in
+  scope/source/event/phase/window identity. This remains an unwired, unapplied research contract: it
+  schedules no task, claims no due work, calls no provider, and changes no prediction or model input.
 - `market_brain_contract_2026_10_27_r20_output_artifact_attestation` and
   `nfl_market_brain_shadow_2026_10_27_r24_expected_feed_roster` define an internal-only,
   production-inert evidence boundary. The sole writer

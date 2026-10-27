@@ -85,6 +85,9 @@ export type MarketBrainEvidenceAttemptPayload = Readonly<{
   details: Readonly<Record<string, unknown>>;
 }>;
 
+export type MarketBrainEvidenceIdentity = Pick<MarketBrainEvidenceAttemptPayload,
+  "product" | "qualificationScopeKeys" | "provider" | "feed" | "participant" | "phase">;
+
 export type MarketBrainEvidenceAttempt = MarketBrainEvidenceAttemptPayload & Readonly<{
   release: typeof MARKET_BRAIN_EVIDENCE_ATTEMPT_RELEASE;
   checksum: string;
@@ -160,22 +163,10 @@ export async function persistMarketBrainEvidenceAttempt(args: {
 }
 
 function assertPayload(payload: MarketBrainEvidenceAttemptPayload): void {
-  const registration = MARKET_BRAIN_PRODUCT_REGISTRY[payload.product];
+  assertMarketBrainEvidenceIdentity(payload);
   const roster = MARKET_BRAIN_EVIDENCE_ROSTERS[payload.product];
-  const feed = roster?.feeds.find((row) => row.provider === payload.provider && row.feed === payload.feed &&
-    row.phases.includes(payload.phase) && (row.participant === null || row.participant === payload.participant));
-  const participantRoster = roster?.participantRosters.find((row) => row.provider === payload.provider);
-  const requestedScopeSet = new Set(payload.qualificationScopeKeys);
-  const canonicalScopeKeys = registration?.qualificationScopeKeys.filter((scope) => requestedScopeSet.has(scope));
-  const participantAllowed = payload.participant === null || feed?.participant === payload.participant ||
-    participantRoster?.mode === "provider_catalog" ||
-    participantRoster?.namedParticipants.some((row) => row.participant === payload.participant);
-  if (!registration || !roster || payload.qualificationScopeKeys.length < 1 ||
-    requestedScopeSet.size !== payload.qualificationScopeKeys.length ||
-    JSON.stringify(canonicalScopeKeys) !== JSON.stringify(payload.qualificationScopeKeys) ||
-    !feed || !participantAllowed || participantRoster?.excludedParticipants.includes(payload.participant ?? "")) {
-    throw new Error("Market Brain evidence attempt is outside its frozen product/feed/participant contract.");
-  }
+  const feed = roster.feeds.find((row) => row.provider === payload.provider && row.feed === payload.feed &&
+    row.phases.includes(payload.phase) && (row.participant === null || row.participant === payload.participant))!;
   if (!UUID.test(payload.attemptId) || !isTimestamp(payload.plannedAt) || !isTimestamp(payload.windowOpensAt) ||
     !isTimestamp(payload.windowClosesAt) || !isTimestamp(payload.completedAt) ||
     Date.parse(payload.windowOpensAt) > Date.parse(payload.plannedAt) ||
@@ -201,6 +192,25 @@ function assertPayload(payload: MarketBrainEvidenceAttemptPayload): void {
     (payload.requestCount > 0 && ["success_with_rows", "success_empty", "partial"].includes(payload.outcome) &&
       payload.responseSha256 === null)) {
     throw new Error("Market Brain evidence attempt provenance is incomplete.");
+  }
+}
+
+export function assertMarketBrainEvidenceIdentity(payload: MarketBrainEvidenceIdentity): void {
+  const registration = MARKET_BRAIN_PRODUCT_REGISTRY[payload.product];
+  const roster = MARKET_BRAIN_EVIDENCE_ROSTERS[payload.product];
+  const feed = roster?.feeds.find((row) => row.provider === payload.provider && row.feed === payload.feed &&
+    row.phases.includes(payload.phase) && (row.participant === null || row.participant === payload.participant));
+  const participantRoster = roster?.participantRosters.find((row) => row.provider === payload.provider);
+  const requestedScopeSet = new Set(payload.qualificationScopeKeys);
+  const canonicalScopeKeys = registration?.qualificationScopeKeys.filter((scope) => requestedScopeSet.has(scope));
+  const participantAllowed = payload.participant === null || feed?.participant === payload.participant ||
+    participantRoster?.mode === "provider_catalog" ||
+    participantRoster?.namedParticipants.some((row) => row.participant === payload.participant);
+  if (!registration || !roster || payload.qualificationScopeKeys.length < 1 ||
+    requestedScopeSet.size !== payload.qualificationScopeKeys.length ||
+    JSON.stringify(canonicalScopeKeys) !== JSON.stringify(payload.qualificationScopeKeys) ||
+    !feed || !participantAllowed || participantRoster?.excludedParticipants.includes(payload.participant ?? "")) {
+    throw new Error("Market Brain evidence attempt is outside its frozen product/feed/participant contract.");
   }
 }
 
