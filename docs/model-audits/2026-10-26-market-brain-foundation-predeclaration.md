@@ -43,6 +43,13 @@ DraftKings, SharpAPI, or split data is an explicit mask and source-availability 
 neutral signal. Provider identity stays available to the model so a public consensus split is not
 silently treated as Circa flow.
 
+This is one shared evidence, chronology, safety, and proof architecture—not one universal fitted
+model. NFL, CFB, NBA, NHL, MLB, soccer, and player props must each own their market geometry,
+settlement semantics, independent prior, observable feeds, feature adapter, fitted parameters, and
+qualification evidence. The shared substrate prevents every sport from reinventing leakage,
+provenance, cost, storage, and lock safety; it does not force soccer into an NFL score shape or let an
+NFL coefficient decide a prop. No sport adapter inherits predictive authority from another sport.
+
 ## Internal versus member-facing evidence
 
 The complete internal evidence case may include provider identities, raw split limitations, target
@@ -138,19 +145,24 @@ roles. The research evaluator rejects labels available at or before the case, mi
 duplicate events, and non-chronological partition manifests; it records corrections and harms
 against the exact prior baseline. Feed-side omissions, bounded
 pagination, suspension lifecycle, limits, and private order flow remain explicit blind spots.
-`nfl_market_brain_resolver_contract_2026_10_27_r5_reproducible_manifest_bound` freezes three low-capacity candidate
-families, their complete hyperparameter grids, ablation order, rolling-origin selection objective,
-artifact provenance, and shadow-only authority under
-`nfl_market_brain_tournament_2026_10_27_r5_reproducible_manifest_bound`. A candidate must emit one feasible
+`nfl_market_brain_resolver_contract_2026_10_27_r7_interpretive_artifact_binding` freezes the first executable
+regularized joint-residual family, its exact feature vector and regularization grid, rolling-origin
+selection objective, artifact provenance, and shadow-only authority under
+`nfl_market_brain_tournament_2026_10_27_r7_interpretive_artifact_binding`. A candidate must emit one feasible
 joint NFL score-state distribution; Margin, Total, expected team scores, and winner probabilities are
 derived from it. The independent action-probability head was removed because it could contradict that
 posterior; the resolver records only factual prior/posterior deltas and boundary crossings, which
 cannot directly assign points, grades, or stakes. No fitted resolver artifact exists, so gate 3 has
 not been passed.
-`nfl_market_brain_resolver_features_2026_10_27_r5_lossless_availability_timeline` is the sole eligible trainer
+`nfl_market_brain_resolver_features_2026_10_27_r6_fixed_executable_vector` is the sole eligible trainer
 boundary: it preserves the exact independent prior and all eligible continuous paths, splits,
 context, chronology, and missingness, but excludes evaluated-family prices, splits, and expected-input
-states. Target-only additions cannot change its feature payload hash.
+states. Its fixed 96-value vector has a deterministic development-only fitter; target-only additions
+cannot change its feature payload hash. No fitted artifact or predictive claim exists yet.
+This first executable family is a falsifiable baseline, not a ceiling on Market Brain sophistication.
+It must earn its place against the independent model and semantic reader. A sequence-native or
+nonlinear family may replace it only through a new executable predeclaration and genuinely untouched
+evidence; architectural flexibility is not permission to retrofit confirmation outcomes.
 Passing repository tests is not evidence that gates 3–5 have passed, and it does not authorize a
 confirm, flip, fade, grade, or stake change.
 
@@ -181,7 +193,7 @@ and written afterward to an isolated append-only research table; a research read
 block, roll back, or alter the authoritative append, member snapshot, tracking record, or lock. It is
 not attached when rebuilding around a pre-existing locked record. Existing NFL output and every lock
 remain unchanged. A shadow-construction error is stored as `capture_failed`. The next NFL step is to persist enough prospective multi-capture
-games, freeze a low-capacity model tournament before examining confirmation results, adapt the
+games, freeze an executable learned-model tournament before examining confirmation results, adapt the
 incumbent semantic reader only as a candidate/comparator against this lossless contract, and run
 inference in shadow. The companion `Rebuild Daily Edge models` work has been explicitly coordinated:
 its opened 59-game result is development/regression evidence only and cannot serve as confirmation.

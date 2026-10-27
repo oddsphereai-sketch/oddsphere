@@ -6,8 +6,10 @@ import type { NflForwardEvidencePayload } from "../lib/services/football/nflForw
 import {
   appendNflMarketBrainShadows,
   hashNflMarketBrainShadow,
+  readNflMarketBrainShadows,
 } from "../lib/services/football/nflMarketBrainShadowStore";
 import { NFL_MARKET_BRAIN_SHADOW_RELEASE } from "../lib/services/football/nflMarketBrainShadow";
+import { MARKET_BRAIN_CONTRACT_RELEASE } from "../lib/services/marketBrain/marketBrainContract";
 
 const shadow = {
   release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
@@ -28,15 +30,19 @@ const payload = {
 } as unknown as NflForwardEvidencePayload;
 
 const inserted: Array<Record<string, unknown>> = [];
+let shadowUpserts = 0;
 const client = {
   from(table: string) {
     assert.equal(table, "nfl_market_brain_shadow_snapshots");
     return {
-      insert(rows: Array<Record<string, unknown>>) {
+      upsert(rows: Array<Record<string, unknown>>, options: Record<string, unknown>) {
+        assert.equal(options.ignoreDuplicates, true);
         inserted.push(...rows);
+        const duplicate = shadowUpserts > 0;
+        shadowUpserts += 1;
         return {
           abortSignal() { return this; },
-          select: async () => ({ data: rows.map((_, index) => ({ id: `row-${index}` })), error: null }),
+          select: async () => ({ data: duplicate ? [] : rows.map((_, index) => ({ id: `row-${index}` })), error: null }),
         };
       },
     };
@@ -64,7 +70,34 @@ async function main() {
   assert.equal(inserted[0]?.shadow, shadow);
   assert.equal(inserted[0]?.prior_artifact_sha256, null);
   assert.equal(inserted[0]?.contract_release, shadow.release.startsWith("nfl_market_brain_shadow")
-    ? "market_brain_contract_2026_10_27_r7_availability_bound_evidence" : null);
+    ? MARKET_BRAIN_CONTRACT_RELEASE : null);
+
+  const duplicate = await appendNflMarketBrainShadows({
+    client: client as never, runId: payload.runId, payloads: [payload], apply: true,
+  });
+  assert.deepEqual({ inserted: duplicate.inserted, existing: duplicate.existing }, { inserted: 0, existing: 1 },
+    "an idempotent retry must report an existing row rather than claiming another insert");
+
+  const storedShadow = { reason: shadow.reason, capturedAt: shadow.capturedAt, eventId: shadow.eventId,
+    productionApplied: shadow.productionApplied, status: shadow.status, release: shadow.release };
+  const readClient = {
+    from(table: string) {
+      assert.equal(table, "nfl_market_brain_shadow_snapshots");
+      return { select() {
+        const query = {
+          eq() { return this; }, gt() { return this; }, order() { return this; },
+          range: async () => ({ data: [{
+            id: "stored-row", provider_game_id: shadow.eventId, shadow: storedShadow,
+            shadow_sha256: hashNflMarketBrainShadow(shadow), prior_artifact_sha256: null,
+          }], error: null }),
+        };
+        return query;
+      } };
+    },
+  };
+  const replayed = await readNflMarketBrainShadows({ client: readClient as never, season: 2026, week: 8 });
+  assert.deepEqual(replayed, [storedShadow],
+    "the bounded reader must verify canonical JSON checksums independent of object key order");
 
   const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
   const authoritativeAppend = writer.indexOf("appendNflForwardEvidence({");
@@ -85,21 +118,31 @@ async function main() {
     "the authoritative store must fail closed if a future caller forgets to strip the research sidecar");
 
   const store = readFileSync(path.resolve("lib/services/football/nflMarketBrainShadowStore.ts"), "utf8");
-  assert.match(store, /select\("provider_game_id,prior_artifact_sha256"\)/,
+  const continuityReader = store.slice(store.indexOf("export async function readNflMarketBrainPriorArtifactIndex"),
+    store.indexOf("export async function appendNflMarketBrainShadows"));
+  assert.match(continuityReader, /select\("provider_game_id,prior_artifact_sha256"\)/,
     "the writer-side continuity read must load only the lightweight prior hash index");
-  assert.doesNotMatch(store, /select\("[^"]*shadow[^"]*"\)/,
+  assert.doesNotMatch(continuityReader, /select\("[^"]*shadow[^"]*"\)/,
     "routine writer continuity must never reread full research JSON tapes");
+  assert.match(store, /export async function readNflMarketBrainShadows/,
+    "offline research must have a bounded, checksum-verifying full-tape reader");
   assert.match(store, /\.eq\("shadow_release", NFL_MARKET_BRAIN_SHADOW_RELEASE\)/);
   assert.match(store, /\.eq\("contract_release", MARKET_BRAIN_CONTRACT_RELEASE\)/);
 
   const route = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route.ts"), "utf8");
   assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED/);
   assert.match(route, /market_brain_persistence_error: result\.marketBrainPersistenceError/);
+  assert.match(route, /result\.marketBrainCaptureFailures > 0/,
+    "a captured research failure must make cron health partial rather than appearing healthy");
+  assert.match(route, /market_brain_capture_failure_reasons: result\.marketBrainCaptureFailureReasons/);
 
   const migration = readFileSync(path.resolve("lib/db/schema-migration-v45-nfl-market-brain-shadow.sql"), "utf8");
   assert.match(migration, /bytes integer NOT NULL CHECK \(bytes > 0 AND bytes <= 98304\)/);
   assert.match(migration, /contract_release text NOT NULL/);
   assert.match(migration, /268435456/);
+  assert.match(migration, /2147483648/);
+  assert.match(migration, /digest\(convert_to\(artifact_payload/,
+    "the database must verify exact caller-supplied artifact bytes against the content address");
   assert.match(migration, /expires_at timestamptz NOT NULL/);
   assert.match(migration, /nfl_market_brain_shadow_prior_artifact/);
   assert.match(migration, /GRANT SELECT, INSERT ON TABLE public\.nfl_market_brain_shadow_snapshots TO service_role/);
@@ -110,6 +153,10 @@ async function main() {
   assert.match(migration, /GRANT SELECT, INSERT ON TABLE public\.nfl_market_brain_research_manifests TO service_role/);
   assert.doesNotMatch(migration.replace(/--[^\n]*/g, ""),
     /GRANT[^;]*(UPDATE|DELETE)[^;]*nfl_market_brain_research_manifests/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_resolver_artifacts/);
+  assert.match(migration, /digest\(convert_to\(weights_payload/,
+    "resolver coefficient bytes must be cryptographically checked inside the database");
+  assert.match(migration, /global 64 MiB cap exceeded/);
 
   console.log("NFL Market Brain isolated append-only shadow store and authoritative-write failure boundary passed");
 }

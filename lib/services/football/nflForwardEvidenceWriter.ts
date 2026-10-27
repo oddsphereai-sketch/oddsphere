@@ -129,7 +129,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r80_market_brain_isolated_shadow" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r81_market_brain_health_truthful" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -159,6 +159,9 @@ export type NflForwardWriterResult = {
   trackingRecordsExisting: number;
   marketBrainShadowsProposed: number;
   marketBrainShadowsInserted: number;
+  marketBrainShadowsExisting: number;
+  marketBrainCaptureFailures: number;
+  marketBrainCaptureFailureReasons: string[];
   marketBrainPersistenceAttempted: boolean;
   marketBrainPersistenceError: string | null;
 };
@@ -965,7 +968,11 @@ export async function runNflForwardEvidenceWriter(args: {
     payloads: [...currentT60Payloads(existing), ...authoritativePayloads.filter((payload) => payload.stage === "t60")],
     apply: args.apply,
   });
-  let marketBrainWrite = { proposed: payloads.filter((payload) => payload.marketBrainShadow).length, inserted: 0 };
+  let marketBrainWrite = {
+    proposed: payloads.filter((payload) => payload.marketBrainShadow).length,
+    inserted: 0,
+    existing: 0,
+  };
   let marketBrainWriteError: string | null = null;
   if (args.marketBrainCaptureEnabled) {
     const writeAbort = new AbortController();
@@ -986,6 +993,10 @@ export async function runNflForwardEvidenceWriter(args: {
     }
   }
   const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
+  const marketBrainCaptureFailureReasons = payloads.flatMap((payload) => {
+    const shadow = payload.marketBrainShadow;
+    return shadow && "status" in shadow && shadow.status === "capture_failed" ? [shadow.reason] : [];
+  });
   const quarterbackHealthReasons = payloads.flatMap((payload) => {
     const away = payload.startersAndDepth.away.starterStatus;
     const home = payload.startersAndDepth.home.starterStatus;
@@ -1017,6 +1028,9 @@ export async function runNflForwardEvidenceWriter(args: {
     publicationAttempted: args.apply,
     marketBrainShadowsProposed: marketBrainWrite.proposed,
     marketBrainShadowsInserted: marketBrainWrite.inserted,
+    marketBrainShadowsExisting: marketBrainWrite.existing,
+    marketBrainCaptureFailures: marketBrainCaptureFailureReasons.length,
+    marketBrainCaptureFailureReasons: [...new Set(marketBrainCaptureFailureReasons)].sort(),
     marketBrainPersistenceAttempted: Boolean(args.marketBrainCaptureEnabled) && args.apply && marketBrainWrite.proposed > 0,
     marketBrainPersistenceError: [marketBrainReadError, marketBrainWriteError].filter(Boolean).join("; ") || null,
     ...memberSnapshot,
@@ -1304,6 +1318,9 @@ function emptyResult(
     publicationAttempted: false,
     marketBrainShadowsProposed: 0,
     marketBrainShadowsInserted: 0,
+    marketBrainShadowsExisting: 0,
+    marketBrainCaptureFailures: 0,
+    marketBrainCaptureFailureReasons: [],
     marketBrainPersistenceAttempted: false,
     marketBrainPersistenceError: null,
     ...memberSnapshot,

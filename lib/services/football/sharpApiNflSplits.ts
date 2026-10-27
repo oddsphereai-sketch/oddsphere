@@ -6,7 +6,7 @@ import {
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
 
 export const NFL_SHARP_API_SPLITS_RELEASE =
-  "nfl_sharpapi_splits_2026_10_27_r4_complete_response_manifest" as const;
+  "nfl_sharpapi_splits_2026_10_27_r5_pagination_metadata_closed" as const;
 
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
@@ -140,7 +140,10 @@ export async function fetchSharpApiNflSplits(args: {
     pagination.has_more === false &&
     typeof pagination.total === "number" &&
     pagination.total <= (pagination.offset ?? 0) + (pagination.count ?? rows.length);
-  if (rows.length >= 200 && !explicitlyComplete) {
+  const explicitlyIncomplete = pagination?.has_more === true ||
+    (typeof pagination?.total === "number" &&
+      pagination.total > (pagination.offset ?? 0) + (pagination.count ?? rows.length));
+  if (explicitlyIncomplete || (rows.length >= 200 && !explicitlyComplete)) {
     throw new Error("SharpAPI NFL split response reached its bounded page size; completeness is unproved.");
   }
   const receivedCandidate = args.clock?.() ?? new Date().toISOString();

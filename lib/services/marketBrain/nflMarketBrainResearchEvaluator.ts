@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { MarketBrainDiscreteDistribution } from "./marketBrainContract";
 import {
@@ -7,9 +8,9 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESEARCH_EVALUATOR_RELEASE =
-  "nfl_market_brain_research_evaluator_2026_10_27_r7_manifest_bound_exact_line" as const;
+  "nfl_market_brain_research_evaluator_2026_10_27_r8_capture_window_bound" as const;
 export const NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE =
-  "nfl_market_brain_research_manifest_2026_10_27_r3_capture_window_registry" as const;
+  "nfl_market_brain_research_manifest_2026_10_27_r4_database_precommit_all_untouched" as const;
 
 export type NflMarketBrainResearchPrediction = {
   release: string;
@@ -17,7 +18,7 @@ export type NflMarketBrainResearchPrediction = {
   inferredAt: string;
   artifactSha256: string;
   tournamentChecksum: string;
-  family: "regularized_joint_residual" | "regularized_mixture_of_experts" | "calibrated_heads_coherent_projection";
+  family: "regularized_joint_residual";
   featureRelease: string;
   featureChecksum: string;
   trainingManifestChecksum: string;
@@ -119,6 +120,11 @@ export function evaluateNflMarketBrainResearchCase(args: {
   const manifestEvent = partition?.events.find((event) => event.eventId === sequence.eventId);
   if (!partition || !manifestEvent) {
     throw new Error("NFL Market Brain evaluated event is absent from its declared manifest partition.");
+  }
+  if (manifestEvent.startsAt !== sequence.startsAt || manifestEvent.cutoffAt !== sequence.cutoffAt ||
+    Date.parse(sequence.captureWindow.firstCapturedAt) < Date.parse(manifestEvent.firstCaptureAt) ||
+    Date.parse(sequence.captureWindow.lastCapturedAt) > Date.parse(manifestEvent.lastCaptureAt)) {
+    throw new Error("NFL Market Brain sequence does not match its precommitted event capture window.");
   }
   if (manifestEvent.outcomeOpenedAt !== null) {
     throw new Error("NFL Market Brain untouched evaluation partition contains opened outcome evidence.");
@@ -309,6 +315,7 @@ export type NflMarketBrainResearchPartition = {
     eventId: string;
     foldId: string;
     startsAt: string;
+    cutoffAt: string;
     firstCaptureAt: string;
     lastCaptureAt: string;
     /** Null means the outcome had not been opened when the manifest was persisted. */
@@ -330,16 +337,12 @@ export type NflMarketBrainAttestedResearchManifest = NflMarketBrainResearchManif
 export function buildNflMarketBrainResearchManifest(args: {
   candidateRelease: string;
   createdAt: string;
-  persistedAt: string;
   storageId: string;
   partitions: NflMarketBrainResearchPartition[];
   purgeGapHours: number;
 }) {
   const createdAt = requiredTimestamp(args.createdAt, "createdAt");
-  const persistedAt = requiredTimestamp(args.persistedAt, "persistedAt");
-  if (persistedAt < createdAt || !args.storageId.trim()) {
-    throw new Error("NFL Market Brain manifest requires an immutable persisted identity after creation.");
-  }
+  if (!args.storageId.trim()) throw new Error("NFL Market Brain manifest requires an immutable storage identity.");
   if (!Number.isFinite(args.purgeGapHours) || args.purgeGapHours <= 0) {
     throw new Error("NFL Market Brain manifest requires a positive chronological purge gap.");
   }
@@ -364,21 +367,22 @@ export function buildNflMarketBrainResearchManifest(args: {
       if (!event.foldId.trim()) throw new Error("NFL Market Brain manifest event requires a fold identity.");
       eventIds.add(event.eventId);
       const startsAt = requiredTimestamp(event.startsAt, `${partition.role}.startsAt`);
+      const cutoffAt = requiredTimestamp(event.cutoffAt, `${partition.role}.cutoffAt`);
       const firstCaptureAt = requiredTimestamp(event.firstCaptureAt, `${partition.role}.firstCaptureAt`);
       const lastCaptureAt = requiredTimestamp(event.lastCaptureAt, `${partition.role}.lastCaptureAt`);
-      if (firstCaptureAt > lastCaptureAt || lastCaptureAt >= startsAt) {
+      if (firstCaptureAt > cutoffAt || cutoffAt > lastCaptureAt || lastCaptureAt >= startsAt) {
         throw new Error("NFL Market Brain manifest capture window must be ordered and pre-kickoff.");
       }
       const outcomeOpenedAt = event.outcomeOpenedAt === null ? null
         : requiredTimestamp(event.outcomeOpenedAt, `${partition.role}.outcomeOpenedAt`);
       if (partition.role === "development") {
-        if (outcomeOpenedAt === null || outcomeOpenedAt > persistedAt) {
+        if (outcomeOpenedAt === null || outcomeOpenedAt > createdAt) {
           throw new Error("NFL Market Brain development evidence must declare an already-opened outcome.");
         }
       } else if (outcomeOpenedAt !== null) {
         throw new Error(`NFL Market Brain ${partition.role} evidence was already opened at manifest persistence.`);
       }
-      return { startsAt, firstCaptureAt, lastCaptureAt };
+      return { startsAt, cutoffAt, firstCaptureAt, lastCaptureAt };
     });
     if (times.length === 0) throw new Error(`NFL Market Brain ${partition.role} partition cannot be empty.`);
     if (Math.min(...times.map((time) => time.firstCaptureAt)) - priorCaptureMax < args.purgeGapHours * 60 * 60 * 1_000) {
@@ -391,16 +395,11 @@ export function buildNflMarketBrainResearchManifest(args: {
       ? partition.evidenceStatus === "prospective"
       : partition.evidenceStatus === "untouched";
     if (!validStatus) throw new Error(`NFL Market Brain ${partition.role} evidence status is invalid.`);
-    if (partition.role === "prospective_shadow" &&
-      Math.min(...times.map((time) => time.firstCaptureAt)) <= persistedAt) {
-      throw new Error("NFL Market Brain prospective partition was not precommitted before its games.");
-    }
   }
   const manifest = {
     release: NFL_MARKET_BRAIN_RESEARCH_MANIFEST_RELEASE,
     candidateRelease: args.candidateRelease,
     createdAt: new Date(createdAt).toISOString(),
-    persistedAt: new Date(persistedAt).toISOString(),
     storageId: args.storageId,
     splitMethod: "rolling_origin_capture_window_purged_no_random_split" as const,
     purgeGapHours: args.purgeGapHours,
@@ -424,7 +423,6 @@ export function assertNflMarketBrainResearchManifest(
   const rebuilt = buildNflMarketBrainResearchManifest({
     candidateRelease: manifest.candidateRelease,
     createdAt: manifest.createdAt,
-    persistedAt: manifest.persistedAt,
     storageId: manifest.storageId,
     purgeGapHours: manifest.purgeGapHours,
     partitions: structuredClone(manifest.partitions),
@@ -440,33 +438,34 @@ export function assertNflMarketBrainAttestedResearchManifest(
   assertNflMarketBrainResearchManifest(manifest);
   const attested = manifest as NflMarketBrainAttestedResearchManifest;
   const receipt = attested.persistenceAttestation;
-  const earliestProspectiveCapture = Math.min(...manifest.partitions
-    .filter((partition) => partition.role === "prospective_shadow")
+  const earliestUntouchedCapture = Math.min(...manifest.partitions
+    .filter((partition) => partition.role !== "development")
     .flatMap((partition) => partition.events.map((event) =>
-      requiredTimestamp(event.firstCaptureAt, "prospective.firstCaptureAt"))));
+      requiredTimestamp(event.firstCaptureAt, `${partition.role}.firstCaptureAt`))));
   if (!(persistedManifestBrand in attested) || !receipt ||
     receipt.recordId !== manifest.storageId ||
     receipt.manifestChecksum !== manifest.checksum ||
     requiredTimestamp(receipt.serverCreatedAt, "persistenceAttestation.serverCreatedAt") <
       requiredTimestamp(manifest.createdAt, "createdAt") ||
-    requiredTimestamp(receipt.serverCreatedAt, "persistenceAttestation.serverCreatedAt") >= earliestProspectiveCapture) {
+    requiredTimestamp(receipt.serverCreatedAt, "persistenceAttestation.serverCreatedAt") >= earliestUntouchedCapture) {
     throw new Error("NFL Market Brain evaluation requires an append-only persistence attestation.");
   }
 }
 
-export function attestPersistedNflMarketBrainResearchManifest(args: {
+function attestPersistedNflMarketBrainResearchManifest(args: {
   manifest: NflMarketBrainResearchManifest;
   stored: { id: string; serverCreatedAt: string; manifestChecksum: string };
 }): NflMarketBrainAttestedResearchManifest {
   assertNflMarketBrainResearchManifest(args.manifest);
   const serverCreatedAt = requiredTimestamp(args.stored.serverCreatedAt, "stored.serverCreatedAt");
-  const earliestProspectiveCapture = Math.min(...args.manifest.partitions
-    .filter((partition) => partition.role === "prospective_shadow")
-    .flatMap((partition) => partition.events.map((event) => requiredTimestamp(event.firstCaptureAt, "prospective.firstCaptureAt"))));
+  const earliestUntouchedCapture = Math.min(...args.manifest.partitions
+    .filter((partition) => partition.role !== "development")
+    .flatMap((partition) => partition.events.map((event) =>
+      requiredTimestamp(event.firstCaptureAt, `${partition.role}.firstCaptureAt`))));
   if (args.stored.id !== args.manifest.storageId ||
     args.stored.manifestChecksum !== args.manifest.checksum ||
     serverCreatedAt < requiredTimestamp(args.manifest.createdAt, "createdAt") ||
-    serverCreatedAt >= earliestProspectiveCapture) {
+    serverCreatedAt >= earliestUntouchedCapture) {
     throw new Error("NFL Market Brain research manifest does not match its append-only persistence record.");
   }
   const attested = {
@@ -481,6 +480,66 @@ export function attestPersistedNflMarketBrainResearchManifest(args: {
   const frozen = Object.freeze(attested);
   assertNflMarketBrainAttestedResearchManifest(frozen);
   return frozen;
+}
+
+type PersistedManifestRow = {
+  id: string;
+  manifest_checksum: string;
+  manifest: unknown;
+  created_at: string;
+};
+
+export async function persistNflMarketBrainResearchManifest(args: {
+  client: SupabaseClient;
+  manifest: NflMarketBrainResearchManifest;
+  signal?: AbortSignal;
+}): Promise<NflMarketBrainAttestedResearchManifest> {
+  assertNflMarketBrainResearchManifest(args.manifest);
+  let query = args.client.from("nfl_market_brain_research_manifests").insert({
+    id: args.manifest.storageId,
+    manifest_release: args.manifest.release,
+    candidate_release: args.manifest.candidateRelease,
+    manifest_checksum: args.manifest.checksum,
+    manifest: args.manifest,
+  }).select("id,manifest_checksum,manifest,created_at");
+  if (args.signal) query = query.abortSignal(args.signal);
+  const { data, error } = await query.single();
+  if (error) throw new Error(`NFL Market Brain research manifest persistence failed: ${error.message}`);
+  return attestedManifestFromStoredRow(data as PersistedManifestRow | null, args.manifest);
+}
+
+export async function readNflMarketBrainResearchManifest(args: {
+  client: SupabaseClient;
+  storageId: string;
+  checksum: string;
+  signal?: AbortSignal;
+}): Promise<NflMarketBrainAttestedResearchManifest> {
+  let query = args.client.from("nfl_market_brain_research_manifests")
+    .select("id,manifest_checksum,manifest,created_at")
+    .eq("id", args.storageId)
+    .eq("manifest_checksum", args.checksum);
+  if (args.signal) query = query.abortSignal(args.signal);
+  const { data, error } = await query.single();
+  if (error) throw new Error(`NFL Market Brain research manifest read failed: ${error.message}`);
+  return attestedManifestFromStoredRow(data as PersistedManifestRow | null);
+}
+
+function attestedManifestFromStoredRow(
+  row: PersistedManifestRow | null,
+  expected?: NflMarketBrainResearchManifest,
+): NflMarketBrainAttestedResearchManifest {
+  if (!row || typeof row.manifest !== "object" || row.manifest === null) {
+    throw new Error("NFL Market Brain research manifest persistence returned no verifiable row.");
+  }
+  const manifest = row.manifest as NflMarketBrainResearchManifest;
+  assertNflMarketBrainResearchManifest(manifest);
+  if (expected && (expected.storageId !== manifest.storageId || expected.checksum !== manifest.checksum)) {
+    throw new Error("NFL Market Brain stored research manifest differs from the submitted bytes.");
+  }
+  return attestPersistedNflMarketBrainResearchManifest({
+    manifest,
+    stored: { id: row.id, serverCreatedAt: row.created_at, manifestChecksum: row.manifest_checksum },
+  });
 }
 
 function winnerProbabilities(distribution: MarketBrainDiscreteDistribution) {
@@ -590,6 +649,12 @@ function exactLineMetrics(args: {
   for (const market of ["moneyline", "spread", "total"] as const) {
     const target = args.evaluationEnvelope[market];
     if (!target) continue;
+    if ((market === "moneyline" || market === "spread") &&
+      target.selection !== "away" && target.selection !== "home" ||
+      market === "total" && target.selection !== "over" && target.selection !== "under") {
+      throw new Error(`NFL Market Brain ${market} evaluated selection is invalid.`);
+    }
+    const selection = target.selection as "away" | "home" | "over" | "under";
     let winProbability = 0;
     let pushProbability = 0;
     let actualEdge = 0;
@@ -617,7 +682,7 @@ function exactLineMetrics(args: {
     }
     const settled = actualEdge > 0 ? "win" : actualEdge < 0 ? "loss" : "push";
     result[market] = {
-      selection: target.selection,
+      selection,
       line: target.line,
       price: target.price,
       winProbability,

@@ -220,6 +220,23 @@ async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
   assert.equal(fetched.captureManifest.unmatchedRows, 200);
 }
 
-void Promise.all([testFetchContract(), testTruncationFailsClosed(), testExactFullPageRequiresExplicitCompleteness()]).then(() => {
+async function testShortPageStillFailsWhenProviderDeclaresMore(): Promise<void> {
+  await assert.rejects(() => fetchSharpApiNflSplits({
+    apiKey: "test-key",
+    games: [game],
+    capturedAt: "2026-08-21T17:04:00Z",
+    client: {
+      async fetchAll<T>(): Promise<T[]> { throw new Error("direct page metadata path expected"); },
+      async fetch<T>(): Promise<{ data: T; pagination: { total: number; count: number; offset: number; has_more: boolean } }> {
+        return { data: Array.from({ length: 100 }, () => row) as T,
+          pagination: { total: 250, count: 100, offset: 0, has_more: true } };
+      },
+    },
+  }), /completeness is unproved/,
+  "provider-declared truncation must fail closed even when the returned page is shorter than the requested limit");
+}
+
+void Promise.all([testFetchContract(), testTruncationFailsClosed(), testExactFullPageRequiresExplicitCompleteness(),
+  testShortPageStillFailsWhenProviderDeclaresMore()]).then(() => {
   console.log("NFL SharpAPI lossless all-source split manifest and backward-compatible selection tests passed.");
 });

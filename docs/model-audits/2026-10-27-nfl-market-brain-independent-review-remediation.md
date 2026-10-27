@@ -56,21 +56,65 @@ repairs those contracts before any fitted resolver or live influence is consider
   first/last capture windows, and the opened-outcome registry. Evaluation refuses an event absent from
   its declared untouched partition, while run summaries permit different artifacts across genuine
   rolling-origin folds but reject mixed artifacts inside one fold. The manifest is appended to the
-  dedicated immutable manifest table before prospective capture; only the database receipt can mint
+  dedicated immutable manifest table before the earliest untouched capture; only the database receipt can mint
   the runtime-attested manifest accepted by the evaluator and artifact binder. A receipt recorded at
-  or after the prospective window fails closed.
+  or after selection, confirmation, or prospective capture begins fails closed.
 - The comparable frozen primary score is now Margin plus Total marginal log score. Candidate joint
   score remains an additional dependency diagnostic rather than a fabricated comparison against an
   incumbent that has no joint posterior. The evaluator also carries target-safe exact selection, line,
   price, and quote time outside trainer input and computes cover/over/push probability and settled units.
-- The tournament now freezes basis, preprocessing, loss, calibration, coherence, optimizer,
-  convergence, seed, serialization, feasible score support, multiple-comparison policy, clustered
-  uncertainty policy, minimum 400 effective games, and 12 games per fitted parameter. Serialized
-  weights must match that contract; arbitrary byte payloads are rejected.
+- The tournament now contains one implemented family rather than three prose-only families. Its exact
+  96-feature vector, development-only standardization, marginal likelihood, regularization grid,
+  deterministic optimizer, convergence rule, coherent score-state construction, seed, serialization,
+  observed sample count, and parameter ceiling are executable. A fixed games-per-parameter cutoff was
+  removed: limited history must be disclosed and reflected in uncertainty/prospective proof, not
+  silently prevent research. Additional families may enter only in a new
+  predeclared release with real trainer and inference code.
 - The resolver no longer accepts an independent confirm/recenter/flip/fade probability head that can
   disagree with its score posterior. It emits the coherent joint posterior plus factual prior/posterior
   deltas and boundary-crossing state. The action stories remain an explicitly unpassed future fitted-
   resolver test corpus, not evidence that a model already behaves correctly.
+
+## Third independent re-review closure
+
+The third outside review found that important promises were still declarative or caller-trusted. This
+revision closes those defects without enabling live influence:
+
+- Exact evaluated targets are validated for pre-cutoff time, American-price semantics, market-specific
+  selection, and line presence. Explicit `evaluated` and `same_family_as_evaluated` relations are
+  excluded even when participant text is missing or inconsistent.
+- Provider event identity is part of quote-path construction. Multiple provider event ids for one
+  provider/book/market fail closed, and every intermediate line-versus-probability conflict remains a
+  conflict token rather than disappearing into endpoint movement.
+- SharpAPI pagination fails closed whenever provider metadata declares more rows, including a short
+  page. Capture failures now make cron health partial and expose bounded failure reasons.
+- Full research tapes have a bounded checksum-verifying reader. Repeated appends are idempotent and
+  report inserted versus existing rows truthfully. Exact prior bytes are stored separately, verified
+  cryptographically by the database, protected by foreign keys, and covered by row, weekly, season,
+  artifact, and resolver-artifact storage ceilings.
+- Research partition manifests bind each event's exact cutoff and complete capture window. Only a
+  database receipt created before the earliest selection/confirmation/prospective capture can mint
+  the private runtime attestation, and that attestation can be recreated after restart only by reading
+  the exact stored row.
+- The deterministic fitter consumes the complete attested development membership, rebuilds each
+  feature object from its checksummed sequence, records an exact training-row digest, and cannot use
+  selection or confirmation labels for fitting or calibration.
+- Resolver inference no longer accepts caller-supplied score states. It reproduces one coherent NFL
+  posterior from the fixed vectorizer and exact coefficient bytes. Artifact and coefficient payloads
+  receive cryptographically checked append-only database receipts, and the receipt must predate every
+  evaluated cutoff.
+
+There are no hand-authored sportsbook weights, signal votes, movement thresholds, point awards,
+signal-count quotas, or caps on learned evidence effects. “Weight-bound” in this audit means only that
+the exact learned coefficient artifact—not caller-chosen output—must be provably responsible for a
+posterior. Finite score support and storage ceilings are computational and cost safety boundaries,
+not market interpretation rules.
+
+The single executable residual family is a transparent research baseline, not a claim that a linear
+coefficient model is the finished interpretive brain. The shared architecture preserves the complete
+sequence so later sport-specific nonlinear or sequence-native candidates can compete without changing
+the evidence contract. They must be implemented, predeclared, and tested on untouched chronology;
+they cannot be added after inspecting confirmation misses.
 
 ## Cost and request envelope
 
@@ -84,8 +128,8 @@ shadow activation must measure real p50/p95/p99 bytes and database growth before
 
 No fitted resolver artifact exists and no predictive claim is made. Before any production proposal:
 
-1. Implement the deterministic fitter exactly as frozen, then fit only the predeclared low-capacity
-   families on release-pure rolling-origin partitions with a positive capture-window purge gap.
+1. Fit the one executable predeclared family on release-pure rolling-origin partitions with a positive
+   capture-window purge gap; do not add a second family without executable code and a new precommit.
 2. Preserve untouched selection and confirmation windows, then precommit a prospective shadow window.
 3. Compare against the exact incumbent release and the now-preserved exact evaluated line/price/time
    for every case.
@@ -96,6 +140,10 @@ No fitted resolver artifact exists and no predictive claim is made. Before any p
    family, mixing releases, using post-cutoff data, or failing important source-outage regimes.
 6. Run a prospective no-authority probation and inspect every disagreement before a separate owner-
    approved production change is proposed.
+
+Before shadow capture is enabled, schedule and verify the bounded database purge function. The
+retention policy is implemented but deliberately not wired into the disabled production cron in this
+branch; capture must not be enabled with an unenforced retention lifecycle.
 
 This remediation makes the research foundation more honest and complete. It does not establish that
 following or fading any market signal improves NFL predictions, and it does not authorize going live.

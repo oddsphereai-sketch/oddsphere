@@ -10,7 +10,7 @@ document.
 
 Keep the released Daily Edge NFL reader as the production comparator. Do not add another hand-built
 rule layer to it. Finish the Market Brain tape into a lossless observation boundary, then build one
-release-pure sequence materializer and one low-capacity learned resolver behind a shadow-only gate.
+release-pure sequence materializer and one executable learned resolver behind a shadow-only gate.
 
 The current semantic reader and the new tape are complementary:
 
@@ -131,7 +131,7 @@ model prior release that was available then. Produce a variable-length sequence/
 continuous no-vig, hold, number movement, price movement, lead/lag, persistence, reversal, buyback,
 key-number transition, disagreement, and cross-market coherence from that bounded tape.
 
-`nfl_market_brain_sequence_materializer_2026_10_27_r8_lossless_availability_timeline` implements this
+`nfl_market_brain_sequence_materializer_2026_10_27_r9_identity_conflict_safe` implements this
 boundary without a resolver: it refuses mixed events/releases, applies Oddsphere availability time
 before feature construction, masks incomplete/unsupported rows, fails conflicting immutable
 observation identities, pairs sides only when line/time identity agrees, and derives event roles from
@@ -140,7 +140,7 @@ missingness as well as prices, so the evaluated sportsbook cannot re-enter throu
 feature. It re-verifies the exact prior artifact rather than trusting stored summary fields. Data
 absence otherwise remains a learned missingness regime.
 
-`nfl_market_brain_research_evaluator_2026_10_27_r7_manifest_bound_exact_line` derives its baseline winner
+`nfl_market_brain_research_evaluator_2026_10_27_r8_capture_window_bound` derives its baseline winner
 probabilities and Margin/Total moments from that exact artifact. It accepts outcomes only after both
 the feature cutoff and game start, requires candidate training to end before the case, binds the
 candidate to the immutable sequence checksum, rejects mixed-release aggregation, and reports Brier,
@@ -148,33 +148,27 @@ winner log loss, realized Margin/Total distribution log score, winner accuracy, 
 corrections, and harms. The companion chronological
 manifest prevents opened development evidence from being relabeled selection or confirmation. The
 evaluator accepts only a manifest attested by an append-only database receipt created before its
-prospective capture window; a JSON copy or caller-declared timestamp is insufficient. A
+earliest selection, confirmation, or prospective capture window; a JSON copy or caller-declared timestamp is insufficient. A
 candidate must submit complete Margin and Total distributions whose winner probabilities and moments
 exactly reconcile; an incoherent set of point estimates is rejected before scoring.
 
-### 3. Low-capacity resolver
+### 3. Executable learned resolver
 
 Freeze the candidate families and hyperparameters before inspecting a later confirmation window.
-Eligible families are deliberately small:
-
-- a regularized joint residual model over Margin and Total;
-- a regularized mixture-of-experts selector over independent, player-aware, and target-excluded
-  market-conditioned coherent distributions; and
-- calibrated winner/cover/Total heads with a deterministic projection back into one coherent joint
-  Margin/Total distribution.
-
-Each family emits probabilities over `confirm`, `recenter`, `flip`, `fade_market`, `retain`, and
-`stand_down`, plus a candidate joint outcome distribution and uncertainty. The action labels explain
-the relationship between prior and posterior; they do not directly award points or grades.
+The first eligible family is deliberately small and fully executable: a regularized joint residual
+model over Margin and Total. Earlier mixture-of-experts and calibrated-head descriptions were removed
+because prose is not an implementation. A later family requires a new predeclared release, real
+trainer/inference code, and untouched evidence. The resolver emits one coherent joint outcome
+distribution; factual prior/posterior relationships explain it but do not award points or grades.
 
 No eligible family may use a required signal count, fixed sportsbook weight, universal market blend,
 automatic favorite/underdog rule, automatic line reflection, one-book command, or game-specific
 exception.
 
-`nfl_market_brain_resolver_contract_2026_10_27_r5_reproducible_manifest_bound` now enforces this boundary and
-`nfl_market_brain_tournament_2026_10_27_r5_reproducible_manifest_bound` freezes the three eligible families,
-complete hyperparameter grids, seven ordered ablations, rolling-origin split policy, predictive
-selection objective, and fitted-parameter ceilings before confirmation outcomes are inspected. The
+`nfl_market_brain_resolver_contract_2026_10_27_r7_interpretive_artifact_binding` now enforces this boundary and
+`nfl_market_brain_tournament_2026_10_27_r7_interpretive_artifact_binding` freezes the one executable family,
+its regularization grid, rolling-origin split policy, predictive selection objective, and fitted-
+parameter ceiling before confirmation outcomes are inspected. The
 13 behavior stories advance to `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` and
 carry soft, non-one-hot expected distributions for a future fitted-model test. The production-facing
 shadow contract does not accept an independent action head. It rejects unfrozen hyperparameters,
@@ -182,12 +176,21 @@ out-of-window training, impossible football score states, incoherent Margin/Tota
 probability mass, and any production authority. This is a contract/tournament freeze, not a trained
 model or evidence of predictive improvement.
 
-`nfl_market_brain_resolver_features_2026_10_27_r5_lossless_availability_timeline` is the only eligible trainer
+`nfl_market_brain_resolver_features_2026_10_27_r6_fixed_executable_vector` is the only eligible trainer
 input. It exports the exact independent prior, every eligible continuous quote path, non-price
 context and split tokens, explicit eligible missingness, cross-market chronology, and source regime;
 it omits audit hashes and every evaluated-family observation or missingness state. Its payload hash
 is invariant to additional excluded target-only rows, while its outer checksum still binds the full
 audited sequence for provenance.
+
+The serialized object is called `weights` in the current internal schema for compatibility, but it is
+not a sportsbook scorecard or authority table. It contains outcome-learned model coefficients. The
+artifact binding proves that those exact learned parameters produced the posterior and prevents a
+caller from substituting a preferred pick. There is no coefficient clipping, posterior-movement cap,
+minimum move, agreement quota, or per-book multiplier. L2 is selected chronologically as overfit
+control; it does not declare how important a book or signal is. The current family is a transparent
+baseline, not the final sophistication ceiling: sequence-native or nonlinear families remain valid
+future candidates only when they have executable training/inference code and untouched evaluation.
 
 ### 4. Coherent shadow output
 
@@ -276,7 +279,7 @@ pretend a rigid rule is validated.
    rolling-origin evaluator that counts corrections and harms. **Complete.**
 4. Convert the 13 frozen stories into probabilistic resolver tests without inspecting confirmation
    outcomes. **Complete at the contract level; no fitted resolver has passed them.**
-5. Freeze the low-capacity tournament and instantiate the predeclared rolling-origin evaluation manifest.
+5. Freeze the executable learned-model tournament and instantiate the predeclared rolling-origin evaluation manifest.
    **Tournament complete; event partitions remain pending sufficient release-pure tape.**
 6. Run the outcome-opened 59-game ledger only as a regression/development screen.
 7. Run untouched chronological confirmation if sufficient historical tape exists; otherwise begin

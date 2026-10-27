@@ -9,6 +9,7 @@ import {
 import {
   buildNflMarketBrainResolverFeatures,
   nflMarketBrainTrainerInput,
+  vectorizeNflMarketBrainTrainerInput,
 } from "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 
@@ -25,6 +26,7 @@ function quote(args: {
   availableAt?: string;
   relation?: MarketBrainObservation["targetRelation"];
   availability?: MarketBrainObservation["availability"];
+  providerEventId?: string;
 }): MarketBrainObservation {
   const market = args.market ?? "spread";
   const sourceObservationId = [market, args.participant, args.selection, args.observedAt, args.line, args.price].join(":");
@@ -50,7 +52,7 @@ function quote(args: {
     categorical: {
       selection: args.selection,
       phase: args.observedAt.endsWith("00:00.000Z") ? "provider_opening" : "current",
-      providerEventId: "sensitive-provider-event-id",
+      providerEventId: args.providerEventId ?? "sensitive-provider-event-id",
       rawRowSha256: "f".repeat(64),
       playerName: "Sensitive Fixture Player",
       detail: "free-text fixture detail",
@@ -237,6 +239,17 @@ assert.doesNotMatch(JSON.stringify(resolverFeatures),
   /sensitive-provider-event-id|Sensitive Fixture Player|free-text fixture detail|f{64}/,
   "high-cardinality provider, player, free-text, and raw-hash identities must not become trainer features");
 const trainerInput = nflMarketBrainTrainerInput(resolverFeatures);
+const vector = vectorizeNflMarketBrainTrainerInput(trainerInput);
+assert.equal(vector.names.length, 96);
+assert.equal(new Set(vector.names).size, vector.names.length,
+  "the executable vector schema must contain every contextual feature exactly once");
+const feature = (name: string) => vector.values[vector.names.indexOf(name)]!;
+assert.ok(feature("spread_key_crossing_count_mean") > 0,
+  "key-number transitions must enter the executable vector rather than remain audit-only prose");
+assert.ok(feature("spread_professional_source_rate") > 0,
+  "professional-versus-retail context must be learnable without a fixed sportsbook weight");
+assert.ok(feature("aligned_spread_probability_delta") !== 0,
+  "cross-market state must interact with price movement instead of acting as an isolated vote");
 assert.equal(trainerInput.independentPrior.availableSecondsBeforeCutoff, 7_200);
 assert.equal(JSON.stringify(trainerInput).includes(eventId), false,
   "event identity must remain provenance, never a trainer shortcut");
@@ -258,6 +271,15 @@ assert.notEqual(extraTargetOnly.checksum, materialized.checksum,
   "the audited sequence must still account for the extra excluded target row");
 assert.equal(buildNflMarketBrainResolverFeatures(extraTargetOnly).featurePayloadSha256, resolverFeatures.featurePayloadSha256,
   "target-only evidence changes must not change the resolver feature payload");
+
+const relationProtectedCase = structuredClone(marketCase);
+const relationProtected = relationProtectedCase.observations.find((observation) =>
+  observation.source.participant === "circa" && observation.modality === "identified_book_split")!;
+relationProtected.targetRelation = "evaluated";
+const relationProtectedSequence = materializeNflMarketBrainSequence({ cases: [relationProtectedCase], cutoffAt });
+assert.equal(buildNflMarketBrainResolverFeatures(relationProtectedSequence).contextTokens.some((token) =>
+  token.participant === "circa" && token.modality === "identified_book_split"), false,
+"an explicit evaluated-target relation must be excluded even when participant text does not match the target family");
 
 const earlierAvailabilityCase = structuredClone(marketCase);
 earlierAvailabilityCase.evaluatedAt = "2026-10-26T19:00:00.000Z";
@@ -313,6 +335,34 @@ skewSecond.observations[skewSecond.observations.length - 1] = {
 const skewSequence = materializeNflMarketBrainSequence({ cases: [skewFirst, skewSecond], cutoffAt });
 assert.equal(skewSequence.observations.find((row) => row.observation.source.participant === "clockskew")?.observation.availability,
   "observed", "a later causally observed state must replace the earlier provider-clock-skew mask");
+
+const directionConflictCase = structuredClone(marketCase);
+directionConflictCase.observations.push(
+  ...pair("conflictpath", "2026-10-26T19:00:00.000Z", -3, -110, -110),
+  ...pair("conflictpath", "2026-10-26T19:20:00.000Z", -2.5, -100, -120),
+  ...pair("conflictpath", "2026-10-26T19:40:00.000Z", -2.75, -110, -110),
+);
+const conflictPath = materializeNflMarketBrainSequence({ cases: [directionConflictCase], cutoffAt })
+  .quotePaths.find((path) => path.participant === "conflictpath")!;
+assert.equal(conflictPath.directionConflictCount, 2,
+  "opposing line and probability moves at intermediate steps must remain explicit");
+assert.equal(conflictPath.observedRole, "conflicted",
+  "a path made entirely of conflicting steps must not be mislabeled static");
+
+const eventIdentityCase = structuredClone(marketCase);
+eventIdentityCase.observations.push(
+  quote({ participant: "identitybook", selection: "away", line: 3, price: -110,
+    observedAt: "2026-10-26T19:00:00.000Z", providerEventId: "event-a" }),
+  quote({ participant: "identitybook", selection: "home", line: -3, price: -110,
+    observedAt: "2026-10-26T19:00:00.000Z", providerEventId: "event-a" }),
+  quote({ participant: "identitybook", selection: "away", line: 2.5, price: -110,
+    observedAt: "2026-10-26T19:30:00.000Z", providerEventId: "event-b" }),
+  quote({ participant: "identitybook", selection: "home", line: -2.5, price: -110,
+    observedAt: "2026-10-26T19:30:00.000Z", providerEventId: "event-b" }),
+);
+assert.throws(() => materializeNflMarketBrainSequence({ cases: [eventIdentityCase], cutoffAt }),
+  /multiple provider event identities/,
+  "provider event identity changes may not silently merge two games into one quote path");
 
 const conflicting = structuredClone(marketCase);
 conflicting.observations[0]!.values.price = numericFeature(-120);

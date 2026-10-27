@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { MarketBrainDiscreteDistribution } from "./marketBrainContract";
 import {
@@ -13,23 +14,25 @@ import {
   type NflMarketBrainResearchPrediction,
 } from "./nflMarketBrainResearchEvaluator";
 import {
+  NFL_MARKET_BRAIN_ORDERED_FEATURE_NAMES,
   NFL_MARKET_BRAIN_RESOLVER_FEATURE_RELEASE,
+  buildNflMarketBrainResolverFeatures,
+  nflMarketBrainTrainerInput,
   type NflMarketBrainResolverFeatures,
+  vectorizeNflMarketBrainTrainerInput,
 } from "./nflMarketBrainResolverFeatures";
 import {
   NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE,
+  assertNflMarketBrainSequence,
   type NflMarketBrainSequence,
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESOLVER_CONTRACT_RELEASE =
-  "nfl_market_brain_resolver_contract_2026_10_27_r5_reproducible_manifest_bound" as const;
+  "nfl_market_brain_resolver_contract_2026_10_27_r7_interpretive_artifact_binding" as const;
 export const NFL_MARKET_BRAIN_TOURNAMENT_RELEASE =
-  "nfl_market_brain_tournament_2026_10_27_r5_reproducible_manifest_bound" as const;
+  "nfl_market_brain_tournament_2026_10_27_r7_interpretive_artifact_binding" as const;
 
-export type NflMarketBrainResolverFamily =
-  | "regularized_joint_residual"
-  | "regularized_mixture_of_experts"
-  | "calibrated_heads_coherent_projection";
+export type NflMarketBrainResolverFamily = "regularized_joint_residual";
 
 type HyperparameterValue = string | number | boolean;
 type ResolverFamilySpec = {
@@ -59,69 +62,34 @@ const tournamentWithoutChecksum = {
     economicMetricsAreSecondary: true as const,
     openedDevelopmentEvidenceCanQualify: false as const,
   },
-  featureAblations: [
-    "released_semantic_baseline",
-    "collapsed_preferred_split",
-    "all_source_split_manifest",
-    "continuous_price_paths",
-    "chronology_roles",
-    "availability_news_sequence",
-    "complete_joint_candidate",
-  ] as const,
+  featureAblations: ["complete_joint_candidate"] as const,
   deterministicRuntime: {
-    trainerRelease: "nfl_market_brain_deterministic_trainer_2026_10_27_r1" as const,
+    trainerRelease: "nfl_market_brain_deterministic_trainer_2026_10_27_r2_executable" as const,
     trainerInputSchema: "nfl_market_brain_trainer_input_v1" as const,
-    optimizer: "deterministic_lbfgs_fixed_order_exact_gradient" as const,
+    optimizer: "deterministic_full_batch_gradient_descent_backtracking" as const,
     convergence: { maximumIterations: 500, gradientInfinityNorm: 1e-8, relativeLossTolerance: 1e-10 },
     seed: 20261027,
     serialization: "canonical_sorted_json_float64_v1" as const,
-    standardization: "training_fold_only_mean_sd_with_missing_mask" as const,
+    standardization: "development_partition_only_mean_sd" as const,
     categoricalPolicy: "frozen_vocabulary_no_identity_hashing" as const,
     jointSupport: { minimumTotal: 0, maximumTotal: 100, minimumMargin: -70, maximumMargin: 70,
-      integerParityAndNflScoreFeasibilityRequired: true as const, minimumStateProbability: 1e-12 },
-    uncertainty: "week_clustered_block_bootstrap_2000_replicates" as const,
-    familyComparison: "holm_bonferroni_against_incumbent_alpha_0_05" as const,
-    minimumEffectiveGames: 400,
-    minimumGamesPerFittedParameter: 12,
+      integerParityAndNflScoreFeasibilityRequired: true as const },
+    priorSmoothingStandardDeviation: 1.5,
+    marginTiltScale: 12,
+    totalTiltScale: 14,
   },
   families: [
     {
       family: "regularized_joint_residual",
       purpose: "Learn a shrunken correction to the independent Margin/Total prior.",
-      hyperparameterGrid: { l2: [0.1, 1, 10], timeDecayHalfLifeDays: [30, 90], maximumInteractions: [0, 4] },
-      maximumFittedParameters: 64,
+      hyperparameterGrid: { l2: [0.1, 1, 10] },
+      maximumFittedParameters: 256,
       implementation: {
-        basis: ["frozen_continuous_main_effects", "predeclared_cross_market_interactions_maximum_four"],
-        preprocessing: "fold_only_standardization; masks remain separate binary features; no event/source hash features",
-        loss: "margin_nll_plus_total_nll_plus_l2; prior log-mass offset retained",
-        calibration: "selection-fold scalar temperature per marginal",
-        coherence: "maximum-entropy coupling on frozen feasible score support matching calibrated marginals",
-      },
-    },
-    {
-      family: "regularized_mixture_of_experts",
-      purpose: "Learn context-dependent weights over coherent prior and market-conditioned experts.",
-      hyperparameterGrid: { l2: [0.1, 1, 10], temperature: [0.75, 1, 1.25], maximumExperts: [2, 3] },
-      maximumFittedParameters: 96,
-      implementation: {
-        basis: ["prior_expert", "price_path_expert", "availability_context_expert", "linear_softmax_gate"],
-        preprocessing: "fold_only_standardization; deterministic frozen expert order; missing experts masked before softmax",
-        loss: "joint_available_case_nll_else_marginal_composite_nll_plus_l2",
-        calibration: "selection-fold shared temperature on gate logits",
-        coherence: "convex mixture of feasible expert score-state distributions",
-      },
-    },
-    {
-      family: "calibrated_heads_coherent_projection",
-      purpose: "Calibrate market heads, then project them onto one feasible NFL score-state distribution.",
-      hyperparameterGrid: { l2: [0.1, 1, 10], calibration: ["temperature", "beta"], projectionPenalty: [1, 10] },
-      maximumFittedParameters: 128,
-      implementation: {
-        basis: ["regularized_margin_head", "regularized_total_head", "winner_calibration_head"],
-        preprocessing: "fold_only_standardization; frozen basis order; no data-selected interactions",
-        loss: "margin_nll_plus_total_nll_plus_winner_brier_plus_l2",
-        calibration: "selection-fold predeclared temperature_or_beta_grid_only",
-        coherence: "deterministic_kl_projection_to_frozen_feasible_score_support",
+        basis: ["frozen_96_feature_vector", "separate_margin_and_total_exponential_tilts"],
+        preprocessing: "development_partition_only_standardization; no event/source identity features",
+        loss: "development_margin_nll_plus_total_nll_plus_l2",
+        calibration: "none; selection and confirmation outcomes never fit parameters",
+        coherence: "one normalized feasible NFL score-state posterior derived from smoothed independent prior mass",
       },
     },
   ] satisfies ResolverFamilySpec[],
@@ -162,8 +130,21 @@ export type NflMarketBrainResolverArtifact = {
   trainingManifestByteLength: number;
   weightsSha256: string;
   weightsByteLength: number;
+  featureSchemaSha256: string;
+  trainingRowsSha256: string;
   createdAt: string;
   sha256: string;
+};
+
+const persistedArtifactBrand: unique symbol = Symbol("persistedNflMarketBrainResolverArtifact");
+export type NflMarketBrainAttestedResolverArtifact = NflMarketBrainResolverArtifact & {
+  readonly persistenceAttestation: {
+    recordId: string;
+    serverCreatedAt: string;
+    artifactSha256: string;
+    weightsSha256: string;
+  };
+  readonly [persistedArtifactBrand]: true;
 };
 
 export type NflMarketBrainSerializedWeights = {
@@ -174,6 +155,12 @@ export type NflMarketBrainSerializedWeights = {
   coefficients: number[];
   preprocessing: Array<{ feature: string; mean: number; standardDeviation: number }>;
   calibrationParameters: number[];
+  featureSchemaSha256: string;
+  trainingRowsSha256: string;
+  trainingManifestChecksum: string;
+  trainedThrough: string;
+  finalLoss: number;
+  finalGradientInfinityNorm: number;
   optimizerIterations: number;
   converged: boolean;
 };
@@ -260,6 +247,11 @@ export function bindNflMarketBrainResolverArtifact(args: {
     throw new Error("NFL Market Brain artifact release diverges from its persisted research manifest.");
   }
   assertSerializedWeights(args.weights, args.family, args.fittedParameterCount);
+  if (args.weights.trainingManifestChecksum !== args.trainingManifest.checksum ||
+    canonicalTime(args.weights.trainedThrough, "weights.trainedThrough") !==
+      canonicalTime(args.trainedThrough, "trainedThrough")) {
+    throw new Error("NFL Market Brain weights do not bind the artifact training manifest and label horizon.");
+  }
   const withoutHash = {
     schema: "nfl_market_brain_resolver_artifact_v1" as const,
     release: args.release,
@@ -285,6 +277,8 @@ export function bindNflMarketBrainResolverArtifact(args: {
     trainingManifestByteLength: serializedByteLength(args.trainingManifest),
     weightsSha256: sha256(args.weights),
     weightsByteLength: serializedByteLength(args.weights),
+    featureSchemaSha256: args.weights.featureSchemaSha256,
+    trainingRowsSha256: args.weights.trainingRowsSha256,
     createdAt: canonicalTime(args.createdAt, "createdAt"),
   };
   const artifact = { ...withoutHash, sha256: sha256(withoutHash) };
@@ -295,11 +289,17 @@ export function bindNflMarketBrainResolverArtifact(args: {
 export function buildNflMarketBrainResolverShadowOutput(args: {
   sequence: NflMarketBrainSequence;
   features: NflMarketBrainResolverFeatures;
-  artifact: NflMarketBrainResolverArtifact;
+  artifact: NflMarketBrainAttestedResolverArtifact;
+  weights: NflMarketBrainSerializedWeights;
   inferredAt: string;
-  jointScoreStates: NflMarketBrainJointScoreState[];
 }): NflMarketBrainResolverShadowOutput {
-  assertNflMarketBrainResolverArtifact(args.artifact);
+  assertNflMarketBrainAttestedResolverArtifact(args.artifact);
+  assertNflMarketBrainSequence(args.sequence);
+  assertSerializedWeights(args.weights, args.artifact.family, args.artifact.fittedParameterCount);
+  if (sha256(args.weights) !== args.artifact.weightsSha256 ||
+    serializedByteLength(args.weights) !== args.artifact.weightsByteLength) {
+    throw new Error("NFL Market Brain resolver weights do not match the bound artifact bytes.");
+  }
   if (args.sequence.release !== NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE) {
     throw new Error("NFL Market Brain resolver refuses a superseded sequence release.");
   }
@@ -312,10 +312,14 @@ export function buildNflMarketBrainResolverShadowOutput(args: {
     args.features.inputSequenceRelease !== args.sequence.release) {
     throw new Error("NFL Market Brain resolver feature artifact does not bind the supplied sequence.");
   }
+  if (JSON.stringify(buildNflMarketBrainResolverFeatures(args.sequence)) !== JSON.stringify(args.features)) {
+    throw new Error("NFL Market Brain resolver features are not reproducible from the supplied sequence.");
+  }
   const trainedThrough = timestamp(args.artifact.trainedThrough, "trainedThrough");
   const cutoff = timestamp(args.sequence.cutoffAt, "featureCutoffAt");
   const starts = timestamp(args.sequence.startsAt, "startsAt");
-  if (cutoff >= starts || trainedThrough >= cutoff || trainedThrough >= starts) {
+  if (cutoff >= starts || trainedThrough >= cutoff || trainedThrough >= starts ||
+    timestamp(args.artifact.persistenceAttestation.serverCreatedAt, "artifactReceipt") >= cutoff) {
     throw new Error("NFL Market Brain resolver artifact training reaches the evaluated case.");
   }
   const inferredAt = canonicalTime(args.inferredAt, "inferredAt");
@@ -323,7 +327,7 @@ export function buildNflMarketBrainResolverShadowOutput(args: {
   if (inferred < cutoff || inferred >= starts) {
     throw new Error("NFL Market Brain inference must occur after its feature cutoff and before kickoff.");
   }
-  const posterior = bindJointPosterior(args.jointScoreStates);
+  const posterior = inferJointPosterior(args.sequence, args.features, args.weights);
   const posteriorRelationship = {
     winnerBoundaryCrossed: Math.sign(args.sequence.prior.marginMean) !== 0 &&
       Math.sign(posterior.marginMean) !== 0 &&
@@ -371,6 +375,103 @@ export function buildNflMarketBrainResolverShadowOutput(args: {
     },
   };
   return { ...withoutChecksum, checksum: sha256(withoutChecksum) };
+}
+
+type PersistedResolverArtifactRow = {
+  artifact_sha256: string;
+  weights_sha256: string;
+  artifact: unknown;
+  weights: unknown;
+  created_at: string;
+};
+
+export async function persistNflMarketBrainResolverArtifact(args: {
+  client: SupabaseClient;
+  artifact: NflMarketBrainResolverArtifact;
+  weights: NflMarketBrainSerializedWeights;
+  signal?: AbortSignal;
+}): Promise<{ artifact: NflMarketBrainAttestedResolverArtifact; weights: NflMarketBrainSerializedWeights }> {
+  assertNflMarketBrainResolverArtifact(args.artifact);
+  assertSerializedWeights(args.weights, args.artifact.family, args.artifact.fittedParameterCount);
+  if (sha256(args.weights) !== args.artifact.weightsSha256) {
+    throw new Error("NFL Market Brain artifact persistence received different coefficient bytes.");
+  }
+  const { sha256: artifactSha256, ...artifactPayload } = args.artifact;
+  let query = args.client.from("nfl_market_brain_resolver_artifacts").insert({
+    artifact_sha256: artifactSha256,
+    weights_sha256: args.artifact.weightsSha256,
+    artifact_release: args.artifact.release,
+    training_manifest_checksum: args.artifact.trainingManifestChecksum,
+    artifact: args.artifact,
+    weights: args.weights,
+    artifact_payload: JSON.stringify(artifactPayload),
+    weights_payload: JSON.stringify(args.weights),
+  }).select("artifact_sha256,weights_sha256,artifact,weights,created_at");
+  if (args.signal) query = query.abortSignal(args.signal);
+  const { data, error } = await query.single();
+  if (error) throw new Error(`NFL Market Brain resolver artifact persistence failed: ${error.message}`);
+  return attestedResolverArtifactFromRow(data as PersistedResolverArtifactRow | null,
+    { artifact: args.artifact, weights: args.weights });
+}
+
+export async function readNflMarketBrainResolverArtifact(args: {
+  client: SupabaseClient;
+  artifactSha256: string;
+  signal?: AbortSignal;
+}): Promise<{ artifact: NflMarketBrainAttestedResolverArtifact; weights: NflMarketBrainSerializedWeights }> {
+  let query = args.client.from("nfl_market_brain_resolver_artifacts")
+    .select("artifact_sha256,weights_sha256,artifact,weights,created_at")
+    .eq("artifact_sha256", args.artifactSha256);
+  if (args.signal) query = query.abortSignal(args.signal);
+  const { data, error } = await query.single();
+  if (error) throw new Error(`NFL Market Brain resolver artifact read failed: ${error.message}`);
+  return attestedResolverArtifactFromRow(data as PersistedResolverArtifactRow | null);
+}
+
+export function assertNflMarketBrainAttestedResolverArtifact(
+  artifact: NflMarketBrainResolverArtifact,
+): asserts artifact is NflMarketBrainAttestedResolverArtifact {
+  assertNflMarketBrainResolverArtifact(artifact);
+  const attested = artifact as NflMarketBrainAttestedResolverArtifact;
+  const receipt = attested.persistenceAttestation;
+  if (!(persistedArtifactBrand in attested) || !receipt || receipt.recordId !== artifact.sha256 ||
+    receipt.artifactSha256 !== artifact.sha256 || receipt.weightsSha256 !== artifact.weightsSha256 ||
+    timestamp(receipt.serverCreatedAt, "artifactReceipt") < timestamp(artifact.createdAt, "artifact.createdAt")) {
+    throw new Error("NFL Market Brain inference requires an append-only artifact persistence attestation.");
+  }
+}
+
+function attestedResolverArtifactFromRow(
+  row: PersistedResolverArtifactRow | null,
+  expected?: { artifact: NflMarketBrainResolverArtifact; weights: NflMarketBrainSerializedWeights },
+): { artifact: NflMarketBrainAttestedResolverArtifact; weights: NflMarketBrainSerializedWeights } {
+  if (!row || typeof row.artifact !== "object" || row.artifact === null ||
+    typeof row.weights !== "object" || row.weights === null) {
+    throw new Error("NFL Market Brain resolver artifact persistence returned no verifiable row.");
+  }
+  const storedArtifact = row.artifact as NflMarketBrainResolverArtifact;
+  const storedWeights = row.weights as NflMarketBrainSerializedWeights;
+  assertNflMarketBrainResolverArtifact(storedArtifact);
+  assertSerializedWeights(storedWeights, storedArtifact.family, storedArtifact.fittedParameterCount);
+  if (row.artifact_sha256 !== storedArtifact.sha256 || row.weights_sha256 !== storedArtifact.weightsSha256 ||
+    sha256(storedWeights) !== storedArtifact.weightsSha256 ||
+    expected && (expected.artifact.sha256 !== storedArtifact.sha256 ||
+      sha256(expected.weights) !== sha256(storedWeights))) {
+    throw new Error("NFL Market Brain stored resolver artifact differs from its exact submitted bytes.");
+  }
+  const attested = {
+    ...structuredClone(storedArtifact),
+    persistenceAttestation: {
+      recordId: row.artifact_sha256,
+      serverCreatedAt: canonicalTime(row.created_at, "artifactReceipt"),
+      artifactSha256: row.artifact_sha256,
+      weightsSha256: row.weights_sha256,
+    },
+  } as NflMarketBrainAttestedResolverArtifact;
+  Object.defineProperty(attested, persistedArtifactBrand, { value: true, enumerable: false });
+  Object.freeze(attested);
+  assertNflMarketBrainAttestedResolverArtifact(attested);
+  return { artifact: attested, weights: structuredClone(storedWeights) };
 }
 
 export function resolverOutputAsResearchPrediction(
@@ -447,22 +548,142 @@ function assertNflMarketBrainResolverArtifact(artifact: NflMarketBrainResolverAr
   if (!NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.featureAblations.includes(artifact.featureAblation) ||
     !Number.isInteger(artifact.fittedParameterCount) || artifact.fittedParameterCount < 0 ||
     artifact.fittedParameterCount > family.maximumFittedParameters ||
-    artifact.effectiveTrainingGames < NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime.minimumEffectiveGames ||
-    artifact.effectiveTrainingGames < artifact.fittedParameterCount *
-      NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime.minimumGamesPerFittedParameter ||
+    artifact.effectiveTrainingGames < 2 ||
     !Number.isInteger(artifact.trainingWeekClusters) || artifact.trainingWeekClusters < 2 ||
     artifact.deterministicSeed !== NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime.seed ||
     artifact.trainerRelease !== NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime.trainerRelease ||
     !isSha256(artifact.trainingManifestChecksum) || !isSha256(artifact.weightsSha256) ||
+    artifact.featureSchemaSha256 !== sha256(NFL_MARKET_BRAIN_ORDERED_FEATURE_NAMES) ||
+    !isSha256(artifact.trainingRowsSha256) ||
     !Number.isInteger(artifact.trainingManifestByteLength) || artifact.trainingManifestByteLength <= 0 ||
     !Number.isInteger(artifact.weightsByteLength) || artifact.weightsByteLength <= 0 ||
     timestamp(artifact.createdAt, "createdAt") < timestamp(artifact.trainedThrough, "trainedThrough")) {
     throw new Error("NFL Market Brain resolver artifact provenance is invalid.");
   }
-  const { sha256: artifactSha256, ...withoutHash } = artifact;
+  const { sha256: artifactSha256, persistenceAttestation: _persistenceAttestation, ...withoutHash } =
+    artifact as NflMarketBrainResolverArtifact & Partial<Pick<NflMarketBrainAttestedResolverArtifact,
+      "persistenceAttestation">>;
   if (!isSha256(artifactSha256) || sha256(withoutHash) !== artifactSha256) {
     throw new Error("NFL Market Brain resolver artifact checksum mismatch.");
   }
+}
+
+function inferJointPosterior(
+  sequence: NflMarketBrainSequence,
+  features: NflMarketBrainResolverFeatures,
+  weights: NflMarketBrainSerializedWeights,
+): NflMarketBrainJointPosterior {
+  const vector = vectorizeNflMarketBrainTrainerInput(nflMarketBrainTrainerInput(features));
+  const standardized = vector.values.map((value, index) => {
+    const preprocessing = weights.preprocessing[index]!;
+    if (preprocessing.feature !== vector.names[index]) {
+      throw new Error("NFL Market Brain resolver preprocessing order diverges from the fixed vectorizer.");
+    }
+    return (value - preprocessing.mean) / preprocessing.standardDeviation;
+  });
+  const featureCount = vector.values.length;
+  const marginTilt = dot(weights.coefficients.slice(0, featureCount), standardized);
+  const totalTilt = dot(weights.coefficients.slice(featureCount), standardized);
+  const candidates = nflMarketBrainJointLogBasis(sequence).map((state) => ({
+    ...state,
+    probability: 0,
+    logWeight: state.baseLogMass + marginTilt * state.marginTiltBasis + totalTilt * state.totalTiltBasis,
+  }));
+  const maximumLogWeight = Math.max(...candidates.map((state) => state.logWeight));
+  const normalizer = candidates.reduce((sum, state) => sum + Math.exp(state.logWeight - maximumLogWeight), 0);
+  if (!Number.isFinite(normalizer) || normalizer <= 0) {
+    throw new Error("NFL Market Brain executable resolver could not normalize its score-state posterior.");
+  }
+  return bindJointPosterior(candidates.map(({ margin, total, logWeight }) => ({
+    margin,
+    total,
+    probability: Math.exp(logWeight - maximumLogWeight) / normalizer,
+  })));
+}
+
+export type NflMarketBrainJointLogBasisState = {
+  margin: number;
+  total: number;
+  baseLogMass: number;
+  marginTiltBasis: number;
+  totalTiltBasis: number;
+};
+
+export type NflMarketBrainMarginalLogBasisState = {
+  value: number;
+  baseLogMass: number;
+  tiltBasis: number;
+};
+
+export function nflMarketBrainMarginalLogBases(sequence: NflMarketBrainSequence): {
+  margin: NflMarketBrainMarginalLogBasisState[];
+  total: NflMarketBrainMarginalLogBasisState[];
+} {
+  const prior = sequence.prior;
+  if (prior.kind !== "margin_total_distribution") {
+    throw new Error("NFL Market Brain executable resolver requires a Margin/Total prior.");
+  }
+  const runtime = NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime;
+  const build = (minimum: number, maximum: number, distribution: MarketBrainDiscreteDistribution,
+    center: number, scale: number) => Array.from({ length: maximum - minimum + 1 }, (_, index) => {
+      const value = minimum + index;
+      return {
+        value,
+        baseLogMass: logSmoothedMass(value, distribution, runtime.priorSmoothingStandardDeviation),
+        tiltBasis: (value - center) / scale,
+      };
+    });
+  return {
+    margin: build(runtime.jointSupport.minimumMargin, runtime.jointSupport.maximumMargin,
+      prior.artifact.marginDistribution, prior.marginMean, runtime.marginTiltScale),
+    total: build(runtime.jointSupport.minimumTotal, runtime.jointSupport.maximumTotal,
+      prior.artifact.totalDistribution, prior.totalMean, runtime.totalTiltScale),
+  };
+}
+
+/** Exact frozen score-state basis shared by fitting and artifact inference. */
+export function nflMarketBrainJointLogBasis(
+  sequence: NflMarketBrainSequence,
+): NflMarketBrainJointLogBasisState[] {
+  const prior = sequence.prior;
+  if (prior.kind !== "margin_total_distribution") {
+    throw new Error("NFL Market Brain executable resolver requires a Margin/Total prior.");
+  }
+  const runtime = NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime;
+  const states: NflMarketBrainJointLogBasisState[] = [];
+  for (let total = runtime.jointSupport.minimumTotal; total <= runtime.jointSupport.maximumTotal; total += 1) {
+    for (let margin = runtime.jointSupport.minimumMargin; margin <= runtime.jointSupport.maximumMargin; margin += 1) {
+      if (Math.abs(margin) > total || !feasibleNflFinalScoreState(margin, total)) continue;
+      states.push({
+        margin,
+        total,
+        baseLogMass: logSmoothedMass(margin, prior.artifact.marginDistribution,
+          runtime.priorSmoothingStandardDeviation) +
+          logSmoothedMass(total, prior.artifact.totalDistribution, runtime.priorSmoothingStandardDeviation),
+        marginTiltBasis: (margin - prior.marginMean) / runtime.marginTiltScale,
+        totalTiltBasis: (total - prior.totalMean) / runtime.totalTiltScale,
+      });
+    }
+  }
+  if (states.length === 0) throw new Error("NFL Market Brain frozen score support is empty.");
+  return states;
+}
+
+function logSmoothedMass(
+  value: number,
+  distribution: MarketBrainDiscreteDistribution,
+  standardDeviation: number,
+): number {
+  const terms = distribution.values.map((priorValue, index) =>
+    Math.log(distribution.probabilities[index]!) - ((value - priorValue) ** 2) /
+      (2 * standardDeviation ** 2));
+  const maximum = Math.max(...terms);
+  return maximum + Math.log(terms.reduce((sum, term) => sum + Math.exp(term - maximum), 0));
+}
+
+function dot(left: number[], right: number[]): number {
+  if (left.length !== right.length) throw new Error("NFL Market Brain coefficient vector has the wrong length.");
+  return left.reduce((sum, value, index) => sum + value * right[index]!, 0);
 }
 
 function bindJointPosterior(inputStates: NflMarketBrainJointScoreState[]): NflMarketBrainJointPosterior {
@@ -571,16 +792,27 @@ function assertSerializedWeights(
   if (weights.schema !== "nfl_market_brain_serialized_weights_v1" ||
     weights.trainerRelease !== NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime.trainerRelease ||
     weights.family !== family || weights.converged !== true ||
+    weights.featureSchemaSha256 !== sha256(NFL_MARKET_BRAIN_ORDERED_FEATURE_NAMES) ||
+    !isSha256(weights.trainingRowsSha256) || !isSha256(weights.trainingManifestChecksum) ||
+    !Number.isFinite(timestamp(weights.trainedThrough, "weights.trainedThrough")) ||
+    !Number.isFinite(weights.finalLoss) ||
+    !Number.isFinite(weights.finalGradientInfinityNorm) ||
+    weights.finalGradientInfinityNorm >
+      NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime.convergence.gradientInfinityNorm ||
     !Number.isInteger(weights.optimizerIterations) || weights.optimizerIterations < 1 ||
     weights.optimizerIterations > NFL_MARKET_BRAIN_FROZEN_TOURNAMENT.deterministicRuntime.convergence.maximumIterations ||
+    JSON.stringify(weights.orderedFeatureNames) !== JSON.stringify(NFL_MARKET_BRAIN_ORDERED_FEATURE_NAMES) ||
     featureNames.size !== weights.orderedFeatureNames.length ||
     preprocessingNames.size !== weights.preprocessing.length ||
+    weights.preprocessing.length !== weights.orderedFeatureNames.length ||
     weights.preprocessing.some((row) => !featureNames.has(row.feature) || !Number.isFinite(row.mean) ||
       !Number.isFinite(row.standardDeviation) || row.standardDeviation <= 0) ||
     weights.orderedFeatureNames.some((name) => !name.trim() ||
       /event|artifact|checksum|sha|player.?id|provider.?event/i.test(name)) ||
     [...weights.coefficients, ...weights.calibrationParameters].some((value) => !Number.isFinite(value)) ||
-    weights.coefficients.length + weights.calibrationParameters.length !== fittedParameterCount) {
+    weights.calibrationParameters.length !== 0 ||
+    weights.coefficients.length !== weights.orderedFeatureNames.length * 2 ||
+    weights.coefficients.length !== fittedParameterCount) {
     throw new Error("NFL Market Brain serialized weights do not match the frozen deterministic trainer contract.");
   }
 }

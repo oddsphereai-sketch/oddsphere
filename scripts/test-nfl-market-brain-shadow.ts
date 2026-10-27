@@ -20,6 +20,14 @@ import {
   type NflSharpApiSplitSource,
 } from "../lib/services/football/sharpApiNflSplits";
 import { MARKET_BRAIN_CONTRACT_RELEASE } from "../lib/services/marketBrain/marketBrainContract";
+import {
+  buildNflMarketBrainResolverFeatures,
+  nflMarketBrainTrainerInput,
+  vectorizeNflMarketBrainTrainerInput,
+} from
+  "../lib/services/marketBrain/nflMarketBrainResolverFeatures";
+import { materializeNflMarketBrainSequence } from
+  "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 
 const capturedAt = "2026-10-26T20:00:00.000Z";
 const openedAt = "2026-10-26T16:00:00.000Z";
@@ -260,7 +268,7 @@ assert.equal(shadow.case.blindSpots.length, 7);
 const injuryPlayer = shadow.case.observations.find((row) => row.source.feed === "injury_report_player");
 assert.equal(injuryPlayer?.categorical.playerName, "Fixture Receiver");
 assert.equal(injuryPlayer?.categorical.status, "Questionable");
-const weatherObservation = shadow.case.observations.find((row) => row.id === "weather:game");
+const weatherObservation = shadow.case.observations.find((row) => row.source.feed === "venue_forecast");
 assert.equal(weatherObservation?.values.wind_speed_mph?.value, 17);
 assert.equal(weatherObservation?.categorical.conditions, "Rain");
 const unrelatedRows = Array.from({ length: 500 }, (_, index) => ({
@@ -288,6 +296,32 @@ assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.ca
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.marginDistribution.values.length, 2);
 assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.sha256.length, 64);
 const priorArtifactSha256 = shadow.case.prior.kind === "margin_total_distribution" ? shadow.case.prior.artifact.sha256 : "";
+const laterCapture = structuredClone(capture);
+laterCapture.capturedAt = "2026-10-26T20:30:00.000Z";
+laterCapture.context.quarterbacks.home = ["qb-home", "Fixture Quarterback", "confirmed",
+  "2026-10-26T20:15:00.000Z"];
+const laterShadow = buildNflMarketBrainShadow({
+  ...baseShadowArgs,
+  capture: laterCapture,
+  retrievalCompletedAt: "2026-10-26T20:30:00.000Z",
+  knownPriorArtifactSha256: [priorArtifactSha256],
+  sharpSplitCaptureManifest: {
+    ...sharpSplitCaptureManifest,
+    responseReceivedAt: "2026-10-26T20:30:00.000Z",
+  },
+});
+const newsSequence = materializeNflMarketBrainSequence({
+  cases: [shadow.case, laterShadow.case], cutoffAt: "2026-10-26T20:30:00.000Z",
+});
+const newsFeatures = buildNflMarketBrainResolverFeatures(newsSequence);
+assert.equal(newsFeatures.contextTokens.filter((row) =>
+  row.feed === "depth_chart" && row.participant === "home").length, 2,
+"a quarterback status change across captures must survive as a time-versioned news sequence");
+const newsVector = vectorizeNflMarketBrainTrainerInput(nflMarketBrainTrainerInput(newsFeatures));
+assert.equal(newsVector.values[newsVector.names.indexOf("home_quarterback_observed")], 1,
+  "the latest quarterback state must enter the executable learned vector");
+assert.equal(newsVector.values[newsVector.names.indexOf("wind_speed_mph")], 17,
+  "numeric weather context must enter the executable learned vector rather than remain audit-only");
 const referencedShadow = buildNflMarketBrainShadow({
   ...baseShadowArgs, knownPriorArtifactSha256: [priorArtifactSha256],
 });
@@ -312,7 +346,8 @@ assert.throws(
   "an available prior summary without exact PMF bytes must fail closed",
 );
 assert.equal(shadow.case.expectedInputs.find((row) => row.id === "availability:injury_report")?.availability, "observed");
-assert.equal(shadow.case.observations.find((row) => row.id === "weather:game")?.categorical.status, "forecast_available");
+assert.equal(shadow.case.observations.find((row) => row.source.feed === "venue_forecast")?.categorical.status,
+  "forecast_available");
 
 const split = (book: string) => shadow.case.observations.find((row) =>
   row.modality === "identified_book_split" && row.market === "moneyline" && row.source.participant === book);

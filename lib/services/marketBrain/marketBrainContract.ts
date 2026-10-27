@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r7_availability_bound_evidence" as const;
+  "market_brain_contract_2026_10_27_r8_validated_evaluated_targets" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -125,11 +125,38 @@ export type MarketBrainSourceManifest = {
 export type MarketBrainEvaluatedTarget = {
   identity: string;
   family: string;
-  selection: "away" | "home" | "over" | "under";
+  selection: "away" | "home" | "draw" | "over" | "under" | "yes" | "no";
   line: number | null;
   price: number;
   observedAt: string;
 };
+
+export function assertMarketBrainEvaluatedTarget(
+  market: MarketBrainMarket,
+  target: MarketBrainEvaluatedTarget,
+  availableBy: string,
+): void {
+  const availableByMs = Date.parse(availableBy);
+  const observedAtMs = Date.parse(target.observedAt);
+  const validAmericanPrice = Number.isFinite(target.price) && target.price !== 0 &&
+    (target.price <= -100 || target.price >= 100);
+  const sideSelection = target.selection === "away" || target.selection === "home";
+  const totalSelection = target.selection === "over" || target.selection === "under";
+  const validLine = market === "moneyline" || market === "match_result" || market === "btts"
+    ? target.line === null
+    : market === "spread" || market === "total" || market === "player_prop" ? Number.isFinite(target.line)
+    : target.line === null || Number.isFinite(target.line);
+  const validSelection = market === "moneyline" || market === "spread" ? sideSelection
+    : market === "total" || market === "player_prop" ? totalSelection
+    : market === "match_result" ? sideSelection || target.selection === "draw"
+    : market === "btts" ? target.selection === "yes" || target.selection === "no"
+    : true;
+  if (!target.identity.trim() || !target.family.trim() || !validAmericanPrice ||
+    !Number.isFinite(observedAtMs) || !Number.isFinite(availableByMs) || observedAtMs > availableByMs ||
+    !validLine || !validSelection) {
+    throw new Error(`Invalid Market Brain evaluated target: ${market}`);
+  }
+}
 
 export type MarketBrainBlindSpot = {
   id: "absolute_handle" | "ticket_count" | "bet_size_distribution" | "book_limits" | "move_origin" | "suspension_lifecycle" | "private_order_flow";
@@ -326,10 +353,7 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
     }
   }
   for (const [market, target] of Object.entries(args.evaluatedTargets)) {
-    if (!target || !target.identity.trim() || !target.family.trim() || !Number.isFinite(target.price) ||
-      !Number.isFinite(Date.parse(target.observedAt))) {
-      throw new Error(`Invalid Market Brain evaluated target: ${market}`);
-    }
+    if (target) assertMarketBrainEvaluatedTarget(market as MarketBrainMarket, target, args.evaluatedAt);
   }
   const manifestIds = new Set<string>();
   for (const manifest of args.sourceManifests) {

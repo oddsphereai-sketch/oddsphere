@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   MARKET_BRAIN_CONTRACT_RELEASE,
   assertMarketBrainPrior,
+  assertMarketBrainEvaluatedTarget,
   type MarketBrainCase,
   type MarketBrainExpectedInput,
   type MarketBrainMarket,
@@ -12,7 +13,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_27_r8_lossless_availability_timeline" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r9_identity_conflict_safe" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -50,10 +51,15 @@ export type NflMarketBrainQuotePoint = {
 export type NflMarketBrainQuotePath = {
   provider: string;
   participant: string;
+  /** Audit-only provider event identity; stripped before trainer export. */
+  providerEventId: string;
+  sourcePrior: MarketBrainObservation["sourcePrior"];
   market: FullGameMarket;
   observedRole: MarketBrainObservedRole;
   wasFirstMover: boolean;
   directionConflict: boolean;
+  directionConflictCount: number;
+  firstDirectionConflictAt: string | null;
   points: NflMarketBrainQuotePoint[];
   opening: NflMarketBrainQuotePoint;
   current: NflMarketBrainQuotePoint;
@@ -85,6 +91,7 @@ export type NflMarketBrainSequence = {
   eventId: string;
   startsAt: string;
   cutoffAt: string;
+  captureWindow: { firstCapturedAt: string; lastCapturedAt: string };
   prior: MarketBrainPrior;
   targetFamilyByMarket: Record<FullGameMarket, string | null>;
   /** Target-safe scoring metadata. This is never exported to trainer input. */
@@ -157,6 +164,9 @@ export function materializeNflMarketBrainSequence(args: {
     .sort((a, b) => Date.parse(a.evaluatedAt) - Date.parse(b.evaluatedAt));
   if (eligibleCases.length === 0) throw new Error("No NFL Market Brain case was available by the requested cutoff.");
   const latestCase = eligibleCases.at(-1)!;
+  for (const [market, target] of Object.entries(latestCase.evaluatedTargets)) {
+    if (target) assertMarketBrainEvaluatedTarget(market as MarketBrainMarket, target, new Date(cutoff).toISOString());
+  }
   const latestPrior = resolvePrior(latestCase.prior, eligibleCases, cutoff);
   const targetFamilyByMarket = Object.fromEntries(
     (["moneyline", "spread", "total"] as const).map((market) =>
@@ -172,8 +182,13 @@ export function materializeNflMarketBrainSequence(args: {
     const reasons: NflMarketBrainMaterializedObservation["exclusionReasons"] = [];
     if (Date.parse(observation.timing.availableAt) > cutoff) reasons.push("after_cutoff");
     const targetFamily = isFullGameMarket(observation.market) ? targetFamilyByMarket[observation.market] : null;
-    if (isMarketEvidence(observation) && targetFamily !== null && canonical(observation.source.participant) === canonical(targetFamily)) {
-      reasons.push(observation.targetRelation === "evaluated" ? "evaluated_target" : "same_target_family");
+    if (isMarketEvidence(observation) && observation.targetRelation === "evaluated") {
+      reasons.push("evaluated_target");
+    } else if (isMarketEvidence(observation) && observation.targetRelation === "same_family_as_evaluated") {
+      reasons.push("same_target_family");
+    } else if (isMarketEvidence(observation) && targetFamily !== null &&
+      canonical(observation.source.participant) === canonical(targetFamily)) {
+      reasons.push("same_target_family");
     }
     if (observation.modality === "public_split" && observation.targetRelation === "unknown") {
       reasons.push("target_composition_unknown");
@@ -222,6 +237,10 @@ export function materializeNflMarketBrainSequence(args: {
     eventId,
     startsAt: latestCase.subject.startsAt,
     cutoffAt: new Date(cutoff).toISOString(),
+    captureWindow: {
+      firstCapturedAt: eligibleCases[0]!.evaluatedAt,
+      lastCapturedAt: latestCase.evaluatedAt,
+    },
     prior: latestPrior,
     targetFamilyByMarket,
     evaluationEnvelope: structuredClone(latestCase.evaluatedTargets),
@@ -254,6 +273,26 @@ export function materializeNflMarketBrainSequence(args: {
     },
   };
   return { ...withoutChecksum, checksum: sha256(withoutChecksum) };
+}
+
+export function assertNflMarketBrainSequence(sequence: NflMarketBrainSequence): void {
+  const { checksum, ...withoutChecksum } = sequence;
+  if (sequence.release !== NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE ||
+    sequence.contractRelease !== MARKET_BRAIN_CONTRACT_RELEASE || sequence.sport !== "nfl" ||
+    !/^[a-f0-9]{64}$/.test(checksum) || sha256(withoutChecksum) !== checksum) {
+    throw new Error("NFL Market Brain sequence checksum or release is invalid.");
+  }
+  const cutoff = timestampRequired(sequence.cutoffAt, "cutoffAt");
+  const starts = timestampRequired(sequence.startsAt, "startsAt");
+  const firstCapture = timestampRequired(sequence.captureWindow.firstCapturedAt, "firstCapturedAt");
+  const lastCapture = timestampRequired(sequence.captureWindow.lastCapturedAt, "lastCapturedAt");
+  if (firstCapture > lastCapture || lastCapture > cutoff || cutoff >= starts) {
+    throw new Error("NFL Market Brain sequence capture chronology is invalid.");
+  }
+  assertMarketBrainPrior(sequence.prior, sequence.eventId, sequence.cutoffAt);
+  for (const [market, target] of Object.entries(sequence.evaluationEnvelope)) {
+    if (target) assertMarketBrainEvaluatedTarget(market as MarketBrainMarket, target, sequence.cutoffAt);
+  }
 }
 
 function availabilitySnapshot(
@@ -445,26 +484,33 @@ function buildQuotePaths(rows: NflMarketBrainMaterializedObservation[]): NflMark
       hold: sum - 1,
       observationIds: [first.id, second.id],
     };
-    const pathKey = [first.source.provider, first.source.participant, first.market].join("|");
+    const providerEventId = String(first.categorical.providerEventId ?? "");
+    const pathKey = [first.source.provider, first.source.participant, providerEventId, first.market].join("|");
     byPath.set(pathKey, [...(byPath.get(pathKey) ?? []), point]);
   }
-  return [...byPath.entries()].flatMap(([key, unsorted]) => {
-    const [provider, participant, market] = key.split("|") as [string, string, FullGameMarket];
+  const paths = [...byPath.entries()].flatMap(([key, unsorted]) => {
+    const [provider, participant, providerEventId, market] = key.split("|") as [string, string, string, FullGameMarket];
     const points = deduplicatePoints(unsorted);
     if (points.length === 0) return [];
     const opening = points[0]!;
     const current = points.at(-1)!;
     const directions = movementDirections(points);
+    const conflictPoints = points.slice(1).filter((point, index) =>
+      stepDirectionConflict(points[index]!, point));
     const changeTimes = points.slice(1).flatMap((point, index) => economicallyEqual(points[index]!, point) ? [] : [point.observedAt]);
     const lineDelta = opening.line === null || current.line === null ? null : current.line - opening.line;
     return [{
       provider,
       participant,
+      providerEventId,
+      sourcePrior: groupSourcePrior(points, eligible),
       market,
       observedRole: "unknown" as const,
       wasFirstMover: false,
-      directionConflict: directionConflict(opening.line, current.line,
+      directionConflict: conflictPoints.length > 0 || directionConflict(opening.line, current.line,
         opening.firstFairProbability, current.firstFairProbability),
+      directionConflictCount: conflictPoints.length,
+      firstDirectionConflictAt: conflictPoints[0]?.observedAt ?? null,
       points,
       opening,
       current,
@@ -481,7 +527,28 @@ function buildQuotePaths(rows: NflMarketBrainMaterializedObservation[]): NflMark
       crossedNflKeyNumbers: market === "spread" ? crossedPathKeys(points, [3, 6, 7, 10, 14]) :
         market === "total" ? crossedPathKeys(points, [37, 41, 44, 47, 51]) : [],
     }];
-  }).sort((a, b) => a.market.localeCompare(b.market) || a.provider.localeCompare(b.provider) || a.participant.localeCompare(b.participant));
+  });
+  const identities = new Map<string, Set<string>>();
+  for (const path of paths) {
+    const key = [path.provider, path.participant, path.market].join("|");
+    const values = identities.get(key) ?? new Set<string>();
+    values.add(path.providerEventId);
+    identities.set(key, values);
+  }
+  const conflict = [...identities.entries()].find(([, values]) => values.size > 1);
+  if (conflict) throw new Error(`NFL Market Brain quote path contains multiple provider event identities: ${conflict[0]}`);
+  return paths.sort((a, b) => a.market.localeCompare(b.market) ||
+    a.provider.localeCompare(b.provider) || a.participant.localeCompare(b.participant));
+}
+
+function groupSourcePrior(
+  points: NflMarketBrainQuotePoint[],
+  rows: NflMarketBrainMaterializedObservation[],
+): MarketBrainObservation["sourcePrior"] {
+  const observationIds = new Set(points.flatMap((point) => point.observationIds));
+  const priors = new Set(rows.filter((row) => observationIds.has(row.observation.id))
+    .map((row) => row.observation.sourcePrior));
+  return priors.size === 1 ? [...priors][0]! : "unknown";
 }
 
 function assignObservedRoles(paths: NflMarketBrainQuotePath[]) {
@@ -495,9 +562,9 @@ function assignObservedRoles(paths: NflMarketBrainQuotePath[]) {
     for (const path of paths.filter((item) => item.market === market)) {
       path.wasFirstMover = leaders.has(path);
       const directions = movementDirections(path.points);
-      if (directions.length === 0) path.observedRole = "static";
+      if (path.directionConflict || leaderDirections.size > 1) path.observedRole = "conflicted";
+      else if (directions.length === 0) path.observedRole = "static";
       else if (new Set(directions).size > 1) path.observedRole = "reversal";
-      else if (path.directionConflict || leaderDirections.size > 1) path.observedRole = "conflicted";
       else if (path.wasFirstMover) path.observedRole = "leader";
       else if (leaderDirection === 0 || netDirection(path) === 0) path.observedRole = "conflicted";
       else path.observedRole = netDirection(path) === leaderDirection ? "follower" : "resistor";
@@ -511,9 +578,14 @@ function movementDirections(points: NflMarketBrainQuotePoint[]): Array<-1 | 1> {
     if (economicallyEqual(prior, point)) return [];
     const lineDelta = prior.line !== null && point.line !== null ? point.line - prior.line : 0;
     const probabilityDelta = point.firstFairProbability - prior.firstFairProbability;
+    if (stepDirectionConflict(prior, point)) return [];
     const direction = Math.abs(lineDelta) > 0 ? Math.sign(lineDelta) : Math.sign(probabilityDelta);
     return direction === 0 ? [] : [direction as -1 | 1];
   });
+}
+
+function stepDirectionConflict(first: NflMarketBrainQuotePoint, second: NflMarketBrainQuotePoint): boolean {
+  return directionConflict(first.line, second.line, first.firstFairProbability, second.firstFairProbability);
 }
 
 function netDirection(path: NflMarketBrainQuotePath): -1 | 0 | 1 {

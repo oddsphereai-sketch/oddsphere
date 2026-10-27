@@ -8,8 +8,8 @@ import {
 } from "../lib/services/marketBrain/marketBrainContract";
 import {
   buildNflMarketBrainResearchManifest,
-  attestPersistedNflMarketBrainResearchManifest,
   evaluateNflMarketBrainResearchCase,
+  persistNflMarketBrainResearchManifest,
   summarizeNflMarketBrainResearchRun,
 } from "../lib/services/marketBrain/nflMarketBrainResearchEvaluator";
 import { materializeNflMarketBrainSequence } from "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
@@ -18,41 +18,41 @@ const cutoffAt = "2026-09-10T16:00:00.000Z";
 const startsAt = "2026-09-10T20:00:00.000Z";
 const trainedThrough = "2026-09-09T23:59:59.000Z";
 
+async function main() {
+
 const researchManifestDraft = buildNflMarketBrainResearchManifest({
   candidateRelease: "candidate-r1",
   createdAt: "2026-08-21T01:00:00.000Z",
-  persistedAt: "2026-08-21T02:00:00.000Z",
   storageId: "manifest-fixture-1",
   purgeGapHours: 24,
   partitions: [
     { role: "development", evidenceStatus: "opened_development_only", events: [{
       eventId: "dev", foldId: "week-1", startsAt: "2026-08-20T20:00:00.000Z",
+      cutoffAt: "2026-08-19T16:00:00.000Z",
       firstCaptureAt: "2026-08-19T12:00:00.000Z", lastCaptureAt: "2026-08-19T16:00:00.000Z",
       outcomeOpenedAt: "2026-08-21T00:00:00.000Z",
     }] },
     { role: "selection", evidenceStatus: "untouched", events: ["correction", "harm"].map((eventId) => ({
-      eventId, foldId: "week-2", startsAt, firstCaptureAt: "2026-09-10T12:00:00.000Z",
+      eventId, foldId: "week-2", startsAt, cutoffAt, firstCaptureAt: "2026-09-10T12:00:00.000Z",
       lastCaptureAt: cutoffAt, outcomeOpenedAt: null,
     })) },
     { role: "confirmation", evidenceStatus: "untouched", events: [{
       eventId: "confirm", foldId: "week-3", startsAt: "2026-09-17T20:00:00.000Z",
+      cutoffAt: "2026-09-17T16:00:00.000Z",
       firstCaptureAt: "2026-09-17T12:00:00.000Z", lastCaptureAt: "2026-09-17T16:00:00.000Z",
       outcomeOpenedAt: null,
     }] },
     { role: "prospective_shadow", evidenceStatus: "prospective", events: [{
       eventId: "future", foldId: "week-4", startsAt: "2026-09-24T20:00:00.000Z",
+      cutoffAt: "2026-09-24T16:00:00.000Z",
       firstCaptureAt: "2026-09-24T12:00:00.000Z", lastCaptureAt: "2026-09-24T16:00:00.000Z",
       outcomeOpenedAt: null,
     }] },
   ],
 });
-const researchManifest = attestPersistedNflMarketBrainResearchManifest({
+const researchManifest = await persistNflMarketBrainResearchManifest({
   manifest: researchManifestDraft,
-  stored: {
-    id: researchManifestDraft.storageId,
-    serverCreatedAt: researchManifestDraft.persistedAt,
-    manifestChecksum: researchManifestDraft.checksum,
-  },
+  client: manifestPersistenceClient(researchManifestDraft, "2026-08-21T02:00:00.000Z") as never,
 });
 
 function candidate(args: {
@@ -253,7 +253,6 @@ assert.throws(
   () => buildNflMarketBrainResearchManifest({
     candidateRelease: "candidate-r1",
     createdAt: researchManifest.createdAt,
-    persistedAt: researchManifest.persistedAt,
     storageId: "tampered-opened-confirmation",
     purgeGapHours: 24,
     partitions: openedPartitions,
@@ -262,3 +261,31 @@ assert.throws(
 );
 
 console.log("NFL Market Brain research evaluator: exact-prior baseline, post-cutoff labels, corrections/harms, release purity, and rolling chronology passed");
+
+}
+
+function manifestPersistenceClient(
+  manifest: ReturnType<typeof buildNflMarketBrainResearchManifest>,
+  serverCreatedAt: string,
+) {
+  return {
+    from() {
+      return {
+        insert() {
+          return {
+            select() {
+              return { single: async () => ({ data: {
+                id: manifest.storageId,
+                manifest_checksum: manifest.checksum,
+                manifest,
+                created_at: serverCreatedAt,
+              }, error: null }) };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+void main();

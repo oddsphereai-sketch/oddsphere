@@ -31,7 +31,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r8_isolated_rich_context" as const;
+  "nfl_market_brain_shadow_2026_10_27_r9_ingest_time_identity_safe" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -173,8 +173,10 @@ export function buildNflMarketBrainShadow(args: {
     case: marketBrainCase,
     bytes: 0,
   };
-  result.bytes = byteLength(result);
-  result.bytes = byteLength(result);
+  for (let prior = -1; prior !== result.bytes;) {
+    prior = result.bytes;
+    result.bytes = byteLength(result);
+  }
   if (result.bytes > NFL_MARKET_BRAIN_SHADOW_MAX_BYTES) {
     throw new Error(`NFL Market Brain tape exceeded ${NFL_MARKET_BRAIN_SHADOW_MAX_BYTES} bytes.`);
   }
@@ -257,7 +259,7 @@ function addContext(
     const availability: MarketBrainAvailability = playerId || name
       ? status === "unknown" ? "incomplete" : "observed"
       : "unavailable";
-    const id = `availability:quarterback:${side}`;
+    const id = `availability:quarterback:${side}:${observedAt ?? tapeIngestedAt(args)}:${status}:${playerId ?? "unknown"}`;
     observations.push({
       id, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "availability",
       source: { provider: "balldontlie", feed: "depth_chart", participant: side },
@@ -281,7 +283,8 @@ function addContext(
   const injuryObserved = injurySource !== null && reportUpdatedAt !== null;
   const injuryAvailability: MarketBrainAvailability = !injuryObserved ? "unavailable"
     : freshness?.includes("stale") ? "stale" : "observed";
-  const injuryId = "availability:injury_report";
+  const injuryId = `availability:injury_report:${reportUpdatedAt ?? tapeIngestedAt(args)}:${
+    args.capture.context.injurySha256 ?? "no_hash"}`;
   if (injuryObserved) observations.push({
     id: injuryId, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "availability",
     source: { provider: injurySource!, feed: "injury_report", participant: null },
@@ -297,23 +300,26 @@ function addContext(
     },
   });
   expectedInputs.push({
-    id: injuryId, market: "other", modality: "availability", provider: injurySource ?? "balldontlie", participant: null,
+    id: "availability:injury_report", market: "other", modality: "availability", provider: injurySource ?? "balldontlie", participant: null,
     expectation: "required", availability: injuryAvailability,
     observationIds: injuryObserved ? [injuryId] : [], reason: injuryObserved ? null : "injury_report_unavailable",
   });
   for (const [teamIndex, team] of (args.injuries?.teams ?? []).entries()) {
+    const side = team.abbreviation === args.game.away.abbreviation ? "away"
+      : team.abbreviation === args.game.home.abbreviation ? "home" : "unknown";
     for (const [playerIndex, player] of team.players.entries()) {
       const observedAt = player.reportedAt ?? reportUpdatedAt;
       const availability: MarketBrainAvailability = observedAt !== null &&
         Date.parse(observedAt) > Date.parse(tapeIngestedAt(args)) ? "future" : injuryAvailability;
-      const playerId = `availability:injury:${canonical(team.abbreviation)}:${canonical(player.name)}:${teamIndex}:${playerIndex}`;
+      const playerId = `availability:injury:${canonical(team.abbreviation)}:${canonical(player.name)}:${teamIndex}:${playerIndex}:${
+        observedAt ?? tapeIngestedAt(args)}:${canonical(player.status)}`;
       observations.push({
         id: playerId,
         eventId: args.game.providerGameId,
         sport: "nfl",
         market: "other",
         modality: "availability",
-        source: { provider: args.injuries!.source, feed: "injury_report_player", participant: canonical(team.abbreviation) },
+        source: { provider: args.injuries!.source, feed: "injury_report_player", participant: side },
         sourcePrior: "context_provider",
         observedRole: "unknown",
         observedAt,
@@ -322,7 +328,7 @@ function addContext(
         targetRelation: "not_applicable",
         values: {},
         categorical: {
-          team: team.abbreviation,
+          teamSide: side,
           playerName: player.name,
           status: player.status,
           position: player.position,
@@ -342,10 +348,10 @@ function addContext(
   const weatherAvailability: MarketBrainAvailability = weatherStatus === "provider_unavailable" ? "unavailable"
     : weatherStatus === "outside_forecast_window" || weatherStatus === "not_captured_for_unlocked" ? "unsupported"
     : "observed";
-  const weatherId = "weather:game";
+  const weatherId = `weather:game:${weatherFetchedAt ?? tapeIngestedAt(args)}:${weatherHash ?? "no_hash"}`;
   if (weatherAvailability !== "unavailable") observations.push({
     id: weatherId, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "weather",
-    source: { provider: "weather_provider", feed: "venue_forecast", participant: args.game.home.abbreviation },
+    source: { provider: "weather_provider", feed: "venue_forecast", participant: "home" },
     sourcePrior: "context_provider", observedRole: "unknown", observedAt: weatherFetchedAt,
     timing: timing(weatherFetchedAt, weatherFetchedAt, tapeIngestedAt(args)),
     availability: weatherAvailability, targetRelation: "not_applicable",
@@ -372,7 +378,7 @@ function addContext(
     },
   });
   expectedInputs.push({
-    id: weatherId, market: "other", modality: "weather", provider: "weather_provider", participant: args.game.home.abbreviation,
+    id: "weather:game", market: "other", modality: "weather", provider: "weather_provider", participant: "home",
     expectation: weatherAvailability === "unsupported" ? "unsupported" : "required",
     availability: weatherAvailability,
     observationIds: weatherAvailability === "unavailable" ? [] : [weatherId],
@@ -490,7 +496,7 @@ function rawPriceObservation(
     evaluated.price === raw.price &&
     evaluated.observedAt === raw.providerObservedAt;
   const availability: MarketBrainAvailability = raw.providerObservedAt !== null &&
-    Date.parse(raw.providerObservedAt) > Date.parse(args.capture.capturedAt)
+    Date.parse(raw.providerObservedAt) > Date.parse(tapeIngestedAt(args))
     ? "future"
     : raw.status;
   const sourcePrior: MarketBrainSourcePrior = ["circa", "pinnacle", "bookmaker"].includes(participant)
