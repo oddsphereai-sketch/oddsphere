@@ -255,9 +255,12 @@ export function buildOwlsSplitObservationsV2(opts: {
 
   for (const market of Object.keys(MARKET_SIDES) as MarketIntelligenceMarketType[]) {
     const marketRows = opts.rows.filter((row) => row.market === market);
-    const books = [...new Set(marketRows.map((row) => row.sourceBook))];
-    for (const sourceBook of books) {
-      const pair = marketRows.filter((row) => row.sourceBook === sourceBook);
+    const sourceSnapshots = [...new Set(marketRows.map((row) =>
+      `${row.sourceBook}\u0000${row.observedAt}`))];
+    for (const sourceSnapshot of sourceSnapshots) {
+      const [sourceBook, observedAt] = sourceSnapshot.split("\u0000");
+      const pair = marketRows.filter((row) =>
+        row.sourceBook === sourceBook && row.observedAt === observedAt);
       const providerEventId = pair[0]?.providerEventId ?? null;
       if (
         pair.length !== 2 ||

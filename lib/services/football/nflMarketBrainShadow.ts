@@ -41,9 +41,10 @@ import {
   NFL_MARKET_BRAIN_EVIDENCE_ROSTER,
   assertMarketBrainEvidenceRoster,
 } from "../marketBrain/marketBrainEvidenceRoster";
+import type { NflOwlsMarketBrainSplitEvidence } from "./nflOwlsMarketBrainSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r25_frozen_decision_envelopes" as const;
+  "nfl_market_brain_shadow_2026_10_27_r26_owls_named_book_evidence" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -110,8 +111,11 @@ export function buildNflMarketBrainShadow(args: {
   retrievalCompletedAt: string;
   knownPriorArtifactSha256: string[];
   rawPriceResponseManifests: FootballRawPriceResponseManifest[];
-  sharpSplitSources: NflSharpApiSplitSource[];
-  sharpSplitCaptureManifest: NflSharpApiSplitCaptureManifest;
+  /** Canonical Owls evidence is preferred and never makes another provider request. */
+  identifiedSplitEvidence?: NflOwlsMarketBrainSplitEvidence;
+  /** Legacy fixture/capture compatibility; never used when Owls evidence is supplied. */
+  sharpSplitSources?: NflSharpApiSplitSource[];
+  sharpSplitCaptureManifest?: NflSharpApiSplitCaptureManifest;
 }): NflMarketBrainShadow {
   const rawParserArchiveFailure = args.rawPriceResponseManifests
     .find((manifest) => manifest.rawParserInputFailureReason)?.rawParserInputFailureReason;
@@ -159,9 +163,15 @@ export function buildNflMarketBrainShadow(args: {
       });
     }
     addPublicSplit(args, market, observations, expectedInputs);
-    addSharpSplits(args, market, observations, expectedInputs);
+    if (!args.identifiedSplitEvidence) addSharpSplits(args, market, observations, expectedInputs);
   }
-  sourceManifests.push(sharpSplitManifest(args, observations));
+  if (args.identifiedSplitEvidence) {
+    observations.push(...args.identifiedSplitEvidence.observations);
+    expectedInputs.push(...args.identifiedSplitEvidence.expectedInputs);
+    sourceManifests.push(...args.identifiedSplitEvidence.sourceManifests);
+  } else {
+    sourceManifests.push(sharpSplitManifest(args, observations));
+  }
 
   const marketBrainCase = buildMarketBrainCase({
     sport: "nfl",
@@ -334,6 +344,7 @@ function sharpSplitManifest(
   observations: MarketBrainObservation[],
 ): MarketBrainSourceManifest {
   const manifest = args.sharpSplitCaptureManifest;
+  if (!manifest) throw new Error("NFL Market Brain legacy split manifest is missing.");
   if (manifest.release !== NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE) {
     throw new Error("NFL Market Brain split manifest release identity is invalid.");
   }
@@ -777,7 +788,9 @@ function addSharpSplits(
   observations: MarketBrainObservation[],
   expectedInputs: MarketBrainExpectedInput[],
 ) {
-  for (const source of args.sharpSplitSources) {
+  const manifest = args.sharpSplitCaptureManifest;
+  if (!manifest) throw new Error("NFL Market Brain legacy split manifest is missing.");
+  for (const source of args.sharpSplitSources ?? []) {
     const ids: string[] = [];
     source.observations.forEach((set, index) => {
       const split = set[market];
@@ -808,7 +821,7 @@ function addSharpSplits(
           exactLineMatched: null,
         },
         audit: {
-          sourceRelease: args.sharpSplitCaptureManifest.release,
+          sourceRelease: manifest.release,
           sourceObservationId: `${split.sourceEventId ?? id}:${market}:${split.providerFetchedAt}:${split.capturedAt}:${index}`,
           notes: source.status === "duplicate" ? ["multiple exact-identity provider rows retained"] : [],
         },

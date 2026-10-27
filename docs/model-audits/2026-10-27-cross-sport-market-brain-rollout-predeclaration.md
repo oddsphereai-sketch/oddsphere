@@ -4,7 +4,7 @@ Status: **OPEN — scope frozen; production influence remains prohibited**
 
 Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_family_scope`
 
-Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts`
+Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r4_owls_named_book_splits`
 
 Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r5_claim_adapter_parser_bound_joint_scope`
 
@@ -79,14 +79,18 @@ none may overwrite another, be averaged into a synthetic sharp percentage, or be
 when the provider returns a partial or missing book. Price, line, split, provider-observed time,
 server-receipt time, raw-response identity, and completeness stay source-specific.
 
-The current r3 evidence roster still names SharpAPI and therefore remains a truthful record of the
-branch it was frozen against, not the intended Owls cutover. It may be replaced only after the Owls
-adapter contract is committed and can provide exact raw capture, participant-denominator accounting,
-pagination/completeness state, and replay. That change requires a new roster release and affected
-sport-adapter releases. Existing SharpAPI evidence remains immutable historical provenance and cannot
-be relabeled as Owls evidence. Market Brain must reuse the provider task's already-fetched response;
-it may not add a duplicate paid request. Until those conditions and shadow compatibility tests pass,
-the provider transition is an open blocker and grants no predictive or production authority.
+The r4 evidence roster now names the Owls canonical named-book lane for supported full-game sports.
+Market Intelligence capture r6 persists every complete fresh Circa, DraftKings, and BetMGM pair; the
+single-book display preference is not reused internally. NFL shadow r26 reads those persisted rows with
+one bounded database query and makes no duplicate Owls request. Existing SharpAPI evidence remains
+immutable historical provenance and is never relabeled as Owls evidence.
+
+The NFL bridge is deliberately `normalized_only`: the exact provider-response archive is not yet linked
+to its evidence manifest. It can support prospective shadow comparison and missing/stale/conflict
+diagnostics, but it cannot qualify predictive influence. Non-NFL sport adapters remain `not_started`,
+and player-prop provider coverage is unchanged. Raw-response replay, participant-denominator accounting,
+prospective release-pure evaluation, and sport-specific qualification therefore remain open gates rather
+than being hidden behind the provider transition.
 
 Every adapter must declare and prove:
 

@@ -135,6 +135,10 @@ import {
   appendNflMarketBrainShadows,
   readNflMarketBrainPriorArtifactIndex,
 } from "./nflMarketBrainShadowStore";
+import {
+  buildNflOwlsMarketBrainSplitEvidence,
+  readNflOwlsMarketBrainSplitEvidence,
+} from "./nflOwlsMarketBrainSplits";
 import { failedFootballRawPriceManifest } from "./footballRawPriceManifest";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
@@ -144,7 +148,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -206,6 +210,8 @@ export async function runNflForwardEvidenceWriter(args: {
   auditPayloads?: (payloads: NflForwardEvidencePayload[]) => void;
   /** Test/audit-only provider injection; production always uses the default fetcher. */
   sharpSplitsFetcher?: typeof fetchSharpApiNflSplits;
+  /** Test/audit-only canonical evidence injection; never calls Owls directly. */
+  owlsMarketBrainSplitEvidenceReader?: typeof readNflOwlsMarketBrainSplitEvidence;
   /** Explicit foundational-score gate. Locked rows retain stored payload precedence. */
   exactProviderCandidate?: boolean;
   /** Research capture is opt-in and has no model/member/tracking authority. */
@@ -314,6 +320,17 @@ export async function runNflForwardEvidenceWriter(args: {
     ? boundedMarketBrainPriorArtifactRead(args)
     : Promise.resolve({
         rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
+        error: null as string | null,
+      });
+  const marketBrainOwlsSplitRead = marketBrainCaptureEnabled
+    ? boundedMarketBrainOwlsSplitRead({
+        client: args.client,
+        games: slate.games.filter((game) => marketBrainCanaryGames.has(game.providerGameId)),
+        evaluatedAt: args.now,
+        reader: args.owlsMarketBrainSplitEvidenceReader ?? readNflOwlsMarketBrainSplitEvidence,
+      })
+    : Promise.resolve({
+        byGame: {} as Awaited<ReturnType<typeof readNflOwlsMarketBrainSplitEvidence>>,
         error: null as string | null,
       });
   if (plans.length === 0) {
@@ -461,6 +478,9 @@ export async function runNflForwardEvidenceWriter(args: {
   const marketBrainPriorArtifactReadResult = await marketBrainPriorArtifactRead;
   const storedMarketBrainPriorArtifacts = marketBrainPriorArtifactReadResult.rows;
   const marketBrainReadError = marketBrainPriorArtifactReadResult.error;
+  const marketBrainOwlsSplitReadResult = await marketBrainOwlsSplitRead;
+  const marketBrainOwlsSplitByGame = marketBrainOwlsSplitReadResult.byGame;
+  const marketBrainOwlsSplitReadError = marketBrainOwlsSplitReadResult.error;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
   const knownPriorArtifactsByGame = new Map<string, Set<string>>();
   for (const row of historicalExisting) {
@@ -1015,8 +1035,12 @@ export async function runNflForwardEvidenceWriter(args: {
           retrievalCompletedAt,
           knownPriorArtifactSha256: [...(knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? [])],
           rawPriceResponseManifests: marketBrainPriceManifests,
-          sharpSplitSources,
-          sharpSplitCaptureManifest: sharpResult.captureManifest!,
+          identifiedSplitEvidence: marketBrainOwlsSplitByGame[plan.game.providerGameId] ??
+            buildNflOwlsMarketBrainSplitEvidence({
+              gameId: plan.game.providerGameId,
+              evaluatedAt: capturedAt,
+              rows: [],
+            }),
         });
         if ("case" in marketBrainShadow) {
           const sha256 = marketBrainPriorArtifactSha256(marketBrainShadow.case.prior);
@@ -1136,7 +1160,8 @@ export async function runNflForwardEvidenceWriter(args: {
     marketBrainCaptureFailures: marketBrainCaptureFailureReasons.length,
     marketBrainCaptureFailureReasons: [...new Set(marketBrainCaptureFailureReasons)].sort(),
     marketBrainPersistenceAttempted: marketBrainCaptureEnabled && args.apply && marketBrainWrite.proposed > 0,
-    marketBrainPersistenceError: [marketBrainReadError, marketBrainWriteError].filter(Boolean).join("; ") || null,
+    marketBrainPersistenceError: [marketBrainReadError, marketBrainOwlsSplitReadError, marketBrainWriteError]
+      .filter(Boolean).join("; ") || null,
     ...memberSnapshot,
     ...tracking,
   };
@@ -1483,6 +1508,32 @@ async function boundedMarketBrainPriorArtifactRead(args: {
     return {
       rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
       error: error instanceof Error ? error.message : "unknown_market_brain_shadow_read_failure",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function boundedMarketBrainOwlsSplitRead(args: {
+  client: SupabaseClient;
+  games: NflPreviewGame[];
+  evaluatedAt: string;
+  reader: typeof readNflOwlsMarketBrainSplitEvidence;
+}) {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 2_000);
+  try {
+    const byGame = await args.reader({
+      client: args.client,
+      games: args.games,
+      evaluatedAt: args.evaluatedAt,
+      signal: abort.signal,
+    });
+    return { byGame, error: null as string | null };
+  } catch (error) {
+    return {
+      byGame: {} as Awaited<ReturnType<typeof readNflOwlsMarketBrainSplitEvidence>>,
+      error: error instanceof Error ? error.message : "unknown_nfl_owls_market_brain_split_read_failure",
     };
   } finally {
     clearTimeout(timeout);

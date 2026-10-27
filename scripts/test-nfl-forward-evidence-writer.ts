@@ -396,8 +396,14 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow/);
 assert.match(writer, /buildNflMarketBrainShadow/);
+assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
+  "the NFL shadow must consume the canonical Owls evidence lane");
+assert.match(writer, /identifiedSplitEvidence: marketBrainOwlsSplitByGame/,
+  "Owls named-book evidence must be bound to the exact shadow case");
+assert.doesNotMatch(writer, /new OwlsInsightClient/,
+  "the NFL writer must not duplicate the provider task's Owls API request");
 assert.match(writer, /!existingLockedRecord[\s\S]*buildNflMarketBrainShadow/,
   "Market Brain capture must never reinterpret a pre-existing locked record");
 assert.ok(writer.lastIndexOf("buildNflMarketBrainShadow({") > writer.indexOf("const payload: NflForwardEvidencePayload"),

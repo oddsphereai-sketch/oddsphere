@@ -244,6 +244,18 @@ const playbookRow: PlaybookSplitGame = {
         market: "moneyline", side: "home", line: null, price: -150, betsPct: 0.58, moneyPct: 0.64,
         observedAt: "2026-10-27T20:07:53.171Z", complete: true,
       },
+      {
+        provider: "owls", providerEventId: "nba:Away@Home-20261027", sport: "nba",
+        homeTeam: "Home", awayTeam: "Away", sourceBook: "draftkings", sourceType: "retail_book",
+        market: "moneyline", side: "away", line: null, price: 125, betsPct: 0.55, moneyPct: 0.45,
+        observedAt: "2026-10-27T20:08:53.171Z", complete: true,
+      },
+      {
+        provider: "owls", providerEventId: "nba:Away@Home-20261027", sport: "nba",
+        homeTeam: "Home", awayTeam: "Away", sourceBook: "draftkings", sourceType: "retail_book",
+        market: "moneyline", side: "home", line: null, price: -145, betsPct: 0.45, moneyPct: 0.55,
+        observedAt: "2026-10-27T20:08:53.171Z", complete: true,
+      },
     ],
     canonicalEventId: "game-1",
     league: "nba",
@@ -252,8 +264,9 @@ const playbookRow: PlaybookSplitGame = {
     selectionKey,
   });
   const home = result.observations.find((row) => row.selection_key.endsWith(":home"));
-  check("Owls complete Circa pair enters canonical market evidence", result.observations.length === 2 && result.rejected.length === 0);
+  check("Owls complete named-book pairs enter canonical market evidence", result.observations.length === 4 && result.rejected.length === 0);
   check("Owls canonical evidence preserves provider source time and price", home?.provider === "owls" && home.source_book === "circa" && home.market_price === -150 && home.source_timestamp_verified === true);
+  check("Owls canonical evidence retains books separately", new Set(result.observations.map((row) => row.source_book)).size === 2);
 
   const partial = buildOwlsSplitObservationsV2({
     rows: [{

@@ -76,6 +76,15 @@ assert.deepEqual(
     "sharpapi:main_odds:pinnacle:current",
   ],
 );
+for (const product of ["nfl_daily_edge", "cfb_daily_edge", "nba_daily_edge", "wnba_daily_edge",
+  "mlb_daily_edge", "nhl_daily_edge"] as const) {
+  const splitFeed = MARKET_BRAIN_EVIDENCE_ROSTERS[product].feeds.find((row) =>
+    row.evidenceFamilies.includes("identified_splits"));
+  assert.equal(splitFeed?.provider, "owls", `${product} named-book split contract must use Owls`);
+  assert.equal(splitFeed?.feed, "named_book_splits_canonical");
+  assert.equal(splitFeed?.replayMode, "normalized_only",
+    `${product} must not claim raw Owls replay before the provider archive is linked`);
+}
 
 assert.deepEqual(
   MARKET_BRAIN_EVIDENCE_ROSTERS.ucl_daily_edge.participantRosters[0]?.excludedParticipants,

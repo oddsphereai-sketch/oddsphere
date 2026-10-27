@@ -5,7 +5,7 @@ import {
 } from "./marketBrainProductRegistry";
 
 export const MARKET_BRAIN_EVIDENCE_ROSTER_RELEASE =
-  "market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts" as const;
+  "market_brain_evidence_roster_2026_10_27_r4_owls_named_book_splits" as const;
 
 export const MARKET_BRAIN_TRUE_PROVIDER_BLIND_SPOTS = Object.freeze([
   "absolute_handle", "ticket_count", "bet_size_distribution", "book_limits",
@@ -64,7 +64,7 @@ export const NFL_MARKET_BRAIN_EVIDENCE_ROSTER = contractRoster({
     expectedFeed("balldontlie", "current_odds", ["two_sided_prices", "same_book_chronology"], ["current"], "required", "raw_replayable", "partial"),
     expectedFeed("sharpapi", "main_odds", ["two_sided_prices", "same_book_chronology"], ["current"], "required", "raw_replayable", "partial", "circa"),
     expectedFeed("sharpapi", "main_odds", ["two_sided_prices", "same_book_chronology"], ["current"], "required", "raw_replayable", "partial", "pinnacle"),
-    expectedFeed("sharpapi", "sportsbook_splits", ["identified_splits"], ["current"], "required", "raw_replayable"),
+    expectedFeed("owls", "named_book_splits_canonical", ["identified_splits"], ["current"], "required", "normalized_only", "partial"),
     expectedFeed("playbook", "public_splits", ["public_splits"], ["current"], "required", "raw_replayable"),
     expectedFeed("balldontlie", "player_designations", ["availability"], ["pregame_context"], "required", "raw_replayable"),
     expectedFeed("openweather", "venue_forecast", ["weather"], ["pregame_context"], "required", "raw_replayable"),
@@ -83,7 +83,7 @@ export const MARKET_BRAIN_EVIDENCE_ROSTERS: Readonly<Record<MarketBrainActivePro
       expectedFeed("balldontlie", "ncaaf_opening_odds", ["two_sided_prices", "same_book_chronology"], ["provider_opening"], "required", "raw_replayable"),
       expectedFeed("balldontlie", "ncaaf_current_odds", ["two_sided_prices", "same_book_chronology"], ["current"], "required", "raw_replayable"),
       expectedFeed("sharpapi", "main_odds", ["two_sided_prices", "same_book_chronology"], ["current"], "required", "raw_replayable"),
-      expectedFeed("sharpapi", "sportsbook_splits", ["identified_splits"], ["current"], "required", "raw_replayable"),
+      expectedFeed("owls", "named_book_splits_canonical", ["identified_splits"], ["current"], "required", "normalized_only"),
       expectedFeed("playbook", "public_splits", ["public_splits"], ["current"], "required", "raw_replayable"),
       expectedFeed("official_conference_reports", "player_availability", ["availability"], ["pregame_context"], "required", "raw_replayable"),
       expectedFeed("espn", "injury_news", ["availability"], ["pregame_context"], "required", "raw_replayable"),
@@ -96,7 +96,7 @@ export const MARKET_BRAIN_EVIDENCE_ROSTERS: Readonly<Record<MarketBrainActivePro
     product: "nba_daily_edge",
     feeds: [
       expectedFeed("sharpapi", "main_odds", ["two_sided_prices", "same_book_chronology"], ["provider_opening", "current"], "required", "raw_replayable"),
-      expectedFeed("sharpapi", "sportsbook_splits", ["identified_splits"], ["current"], "required", "raw_replayable"),
+      expectedFeed("owls", "named_book_splits_canonical", ["identified_splits"], ["current"], "required", "normalized_only"),
       expectedFeed("playbook", "public_splits", ["public_splits"], ["current"], "required", "raw_replayable"),
       expectedFeed("espn", "scoreboard_and_injuries", ["availability", "roster_state"], ["pregame_context"], "required", "raw_replayable"),
       expectedFeed("balldontlie", "games_boxes_players", ["roster_state"], ["historical_context", "current"], "required", "raw_replayable"),
@@ -107,7 +107,7 @@ export const MARKET_BRAIN_EVIDENCE_ROSTERS: Readonly<Record<MarketBrainActivePro
     product: "wnba_daily_edge",
     feeds: [
       expectedFeed("sharpapi", "main_odds", ["two_sided_prices", "same_book_chronology"], ["provider_opening", "current"], "required", "raw_replayable"),
-      expectedFeed("sharpapi", "sportsbook_splits", ["identified_splits"], ["current"], "required", "raw_replayable"),
+      expectedFeed("owls", "named_book_splits_canonical", ["identified_splits"], ["current"], "required", "normalized_only"),
       expectedFeed("playbook", "consensus_lines", ["two_sided_prices"], ["current"], "opportunistic", "raw_replayable"),
       expectedFeed("playbook", "public_splits", ["public_splits"], ["current"], "required", "raw_replayable"),
       expectedFeed("espn", "scoreboard_and_injuries", ["availability"], ["pregame_context"], "required", "raw_replayable"),
@@ -118,7 +118,7 @@ export const MARKET_BRAIN_EVIDENCE_ROSTERS: Readonly<Record<MarketBrainActivePro
     product: "mlb_daily_edge",
     feeds: [
       expectedFeed("sharpapi", "main_odds", ["two_sided_prices", "same_book_chronology"], ["provider_opening", "current"], "required", "raw_replayable"),
-      expectedFeed("sharpapi", "sharp_signals", ["identified_splits"], ["current"], "required", "raw_replayable"),
+      expectedFeed("owls", "named_book_splits_canonical", ["identified_splits"], ["current"], "required", "normalized_only"),
       expectedFeed("playbook", "public_splits", ["public_splits"], ["current"], "required", "raw_replayable"),
       expectedFeed("playbook", "starting_pitchers_and_lineups", ["probable_pitchers", "lineups"], ["pregame_context"], "required", "raw_replayable"),
       expectedFeed("mlb_stats", "official_schedule_and_probable_pitchers", ["probable_pitchers"], ["pregame_context"], "required", "raw_replayable"),
@@ -131,7 +131,7 @@ export const MARKET_BRAIN_EVIDENCE_ROSTERS: Readonly<Record<MarketBrainActivePro
     product: "nhl_daily_edge",
     feeds: [
       expectedFeed("sharpapi", "event_odds", ["two_sided_prices", "same_book_chronology"], ["provider_opening", "current"], "required", "raw_replayable"),
-      expectedFeed("sharpapi", "sportsbook_splits", ["identified_splits"], ["current"], "required", "raw_replayable"),
+      expectedFeed("owls", "named_book_splits_canonical", ["identified_splits"], ["current"], "required", "normalized_only"),
       expectedFeed("playbook", "public_splits", ["public_splits"], ["current"], "required", "raw_replayable"),
       expectedFeed("nhl_api", "schedule_team_and_goalie_stats", ["goalie_state"], ["historical_context", "pregame_context"], "required", "raw_replayable"),
       expectedFeed("espn", "injuries_and_starting_goalie_context", ["availability", "goalie_state"], ["pregame_context"], "required", "raw_replayable"),

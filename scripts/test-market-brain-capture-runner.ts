@@ -120,9 +120,10 @@ async function main(): Promise<void> {
 
   const missed = claim({
     attemptId: "60000000-0000-4000-8000-000000000002",
-    feed: "sportsbook_splits",
-    adapterRelease: "sharpapi_sportsbook_splits_adapter_runner_test_r1",
-    parserRelease: "sharpapi_sportsbook_splits_parser_runner_test_r1",
+    provider: "owls",
+    feed: "named_book_splits_canonical",
+    adapterRelease: "owls_named_book_splits_adapter_runner_test_r1",
+    parserRelease: "owls_named_book_splits_parser_runner_test_r1",
     participant: null,
     eventId: null,
     claimToken: "60000000-0000-4000-8000-000000000012",
@@ -132,9 +133,10 @@ async function main(): Promise<void> {
   });
   const unavailable = claim({
     attemptId: "60000000-0000-4000-8000-000000000003",
-    feed: "sportsbook_splits",
-    adapterRelease: "sharpapi_sportsbook_splits_adapter_runner_test_r1",
-    parserRelease: "sharpapi_sportsbook_splits_parser_runner_test_r1",
+    provider: "owls",
+    feed: "named_book_splits_canonical",
+    adapterRelease: "owls_named_book_splits_adapter_runner_test_r1",
+    parserRelease: "owls_named_book_splits_parser_runner_test_r1",
     participant: null,
     eventId: null,
     claimToken: "60000000-0000-4000-8000-000000000013",

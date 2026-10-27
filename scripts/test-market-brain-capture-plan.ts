@@ -28,9 +28,10 @@ const firstAttempt: MarketBrainPlannedAttempt = Object.freeze({
 const secondAttempt: MarketBrainPlannedAttempt = Object.freeze({
   ...firstAttempt,
   attemptId: "20000000-0000-4000-8000-000000000002",
-  feed: "sportsbook_splits",
-  adapterRelease: "sharpapi_sportsbook_splits_adapter_test_r1",
-  parserRelease: "sharpapi_sportsbook_splits_parser_test_r1",
+  provider: "owls",
+  feed: "named_book_splits_canonical",
+  adapterRelease: "owls_named_book_splits_adapter_test_r1",
+  parserRelease: "owls_named_book_splits_parser_test_r1",
   participant: null,
 });
 const basePayload: MarketBrainCapturePlanPayload = Object.freeze({

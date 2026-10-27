@@ -10,7 +10,7 @@ Last reviewed: 2026-10-27
 
 - October 27 Owls sharp-book split transition advances shared member presentation to
   `daily_edge_member_presentation_2026_10_27_r28_owls_sharp_book_splits` and Market Intelligence
-  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`.
+  capture to `market_intelligence_v2_shadow_capture_2026_10_27_r6_all_owls_named_book_splits`.
   Playbook remains the Public Consensus authority. Owls becomes the primary source-specific
   named-book lane, with a fresh complete Circa money-plus-ticket pair preferred. The active path
   makes no SharpAPI split request; exact-game last-known-good display continuity remains available
@@ -28,7 +28,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -282,12 +282,14 @@ Last reviewed: 2026-10-27
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - NBA Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_27_r5_owls_named_book_splits`. The existing leased
+  `market_intelligence_v2_shadow_capture_2026_10_27_r6_all_owls_named_book_splits`. The existing leased
   refresh may store exact-date, exact-matchup Owls NBA split rows with their real source book for
   the same bounded seven-day window used by the member schedule. The league-level endpoint is
   called once per cycle, not once per date; rows outside the window or without an exact canonical
   date-plus-matchup identity are discarded. No active refresh makes a SharpAPI split request;
-  retained SharpAPI rows are historical audit evidence only. Current-day preseason rehearsal remains observable,
+  retained SharpAPI rows are historical audit evidence only. Every complete fresh Circa, DraftKings,
+  and BetMGM pair is retained internally even though member display still selects one priority book.
+  Current-day preseason rehearsal remains observable,
   while future preseason games are excluded from the rolling capture.
   DraftKings ticket/handle observations and BetMGM ticket-only observations remain distinct; no
   row is relabeled as consensus and no missing handle is inferred. NBA provider-history calls stay
@@ -573,9 +575,9 @@ Last reviewed: 2026-10-27
   scope labels and code-release changes so they cannot cause duplicate paid calls. No route, cron,
   source adapter, feature flag, prediction writer, grade, stake, or member reader invokes this runner.
 - `market_brain_contract_2026_10_27_r21_frozen_decision_envelopes` and
-  `nfl_market_brain_shadow_2026_10_27_r25_frozen_decision_envelopes` define an internal-only,
+  `nfl_market_brain_shadow_2026_10_27_r26_owls_named_book_evidence` define an internal-only,
   production-inert evidence boundary. The sole writer
-  `nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster`
+  `nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow`
   runs with the production-stable collector
   `nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding`,
   member fixture `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation`, and
@@ -583,12 +585,16 @@ Last reviewed: 2026-10-27
   The production provider DTOs remain
   `nfl_sharpapi_splits_2026_10_09_r2_provider_team_prefix_identity`,
   `balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture`, and
-  `football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity`. Research-only split
-  receipts instead carry
-  `nfl_sharpapi_split_capture_manifest_2026_10_27_r3_source_row_participant_binding`. Research capture is
-  derived from the exact incumbent `fetchAll` request and result. Pagination metadata is observed through
-  a read-only callback on that same request; an incomplete or unproved full page marks only the research
-  manifest failed and leaves authoritative split selection byte-equivalent to capture-off behavior.
+  `football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity`. New NFL Market Brain split
+  evidence carries `nfl_owls_market_brain_split_evidence_2026_10_27_r1_canonical_named_books`.
+  The shadow writer reads already-persisted Owls canonical observations and makes zero additional Owls
+  provider requests. Circa, DraftKings, and BetMGM remain separate observations at their exact source
+  timestamps; the member-facing priority selector does not collapse the internal evidence. This release
+  is intentionally `normalized_only`: the exact Owls provider response archive is not yet linked, so it
+  is eligible for prospective shadow measurement but not predictive qualification. Legacy SharpAPI
+  split records retain their original provider identity and immutable historical meaning. The legacy
+  `nfl_sharpapi_split_capture_manifest_2026_10_27_r3_source_row_participant_binding` contract remains
+  readable for existing tapes and compatibility fixtures; it is not relabeled or used as Owls evidence.
   Research capture is
   explicitly disabled unless both `NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED=true` and
   `NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED=true`; a one-to-four-game per-run canary cap is also
@@ -605,13 +611,14 @@ Last reviewed: 2026-10-27
   interpreted under a different parser contract cannot silently reuse older provenance. The tape retains
   exact-evaluated versus
   same-family versus target-excluded provenance plus an explicit evaluated-target identity that does
-  not depend on recovering an exact raw side. The r21/r25 contract also freezes the incumbent
+  not depend on recovering an exact raw side. The r21/r26 contract also freezes the incumbent
   action-or-pass grade and its complete target-book two-sided quote menu, including exact line, price,
   observation time, decision release, and settlement terms. That evaluation envelope is deliberately
-  excluded from trainer features and cannot influence the score posterior. Every exact-identity Circa/DraftKings/BetMGM split
-  row, explicit missing/incomplete/duplicate source states, and the current-feed blind spots. Source
+  excluded from trainer features and cannot influence the score posterior. Every retained Circa,
+  DraftKings, and BetMGM canonical pair preserves its named-book identity, while missing and stale
+  expected inputs remain explicit. Source
   expectations come from
-  `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts` before any response is read: the
+  `market_brain_evidence_roster_2026_10_27_r4_owls_named_book_splits` before any response is read: the
   BALLDONTLIE opening/current feeds, six approved retail participants, and Circa/Pinnacle SharpAPI
   feeds cannot disappear merely because a response omitted every row. Feed failure, missing raw
   parser input, event-market absence, and per-participant absence remain distinct. Absolute handle,
@@ -760,7 +767,7 @@ Last reviewed: 2026-10-27
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster` /
+  `nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an
