@@ -1,5 +1,24 @@
 # Model change safety protocol
 
+## NFL player-props Receptions direction authority r36
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to repair the player-props models' apparent Under
+concentration through genuine prediction improvement, not an Over quota or a flatter board. For
+future-unlocked Receptions rows, the independent projection keeps directional authority while
+target-book-excluded market evidence may still calibrate probability and the coherent decimal
+projection within that side. All other markets, exact-price economics, grade thresholds, cadence,
+provider ceilings, member copy/layout, the sole writer, and `prediction_pipeline:nfl` lease are
+unchanged.
+
+Across 341 exact canonical member-line Week 6-7 outcomes, direction improves from 194-147 (56.9%)
+to 204-137 (59.8%), Brier improves from 0.24653 to 0.24278, and projected-reception MAE improves
+from 1.52625 to 1.50258. Week 6 improves 96-83 to 107-72; Week 7 changes 98-64 to 97-65 while
+improving probability and projection error. The mix moves from 147 Overs / 194 Unders to 143 / 198,
+proving the gain is not direction balancing. Rushing Yards remains unchanged because its market-side
+candidate improved Week 6 but regressed Week 7. Existing locks remain authoritative. Evidence and
+rollback: `docs/model-audits/2026-10-27-nfl-player-props-receptions-direction-authority-predeclaration.md`
+and `docs/model-audits/2026-10-27-nfl-player-props-receptions-direction-authority-result.md`.
+
 ## NFL player-props release-aware cadence r4
 
 On 2026-10-27 production verification found that a fresh snapshot from the
