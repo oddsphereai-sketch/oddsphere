@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 
-Status: prospective normalized-observation tape only; raw-provider completeness is not yet proven.
+Status: prospective raw-provider tape plus release-pure sequence materializer; predictive value is not yet proven.
 No prediction, probability, projection, grade,
 stake, member display, tracking, or lock changes. The sole NFL writer release advances only to attach
 the production-inert shadow tape to future unlocked evidence rows.
@@ -95,12 +95,15 @@ and lease, full verification, latest-main integration safety, and post-deploy pr
    incumbent and actual outcomes/closing markets, inspect every disagreement, and require stable
    behavior across enough games and source outages before proposing any production influence.
 
-This release implements gate 2, the all-source split portion of gate 1, and freezes the gate-3 input
-corpus as `nfl_market_brain_behavior_scenarios_2026_10_26_r1`. Price observations now enter before
-the incumbent market-state thresholds and family replacement, but BALLDONTLIE and SharpAPI price
-adapters still normalize provider responses before this tape. Raw response hashes, unmatched and
-ambiguous row accounting, individual incomplete price sides, and the complete SharpAPI intracycle
-price sequence remain required before gate 1 can pass. No resolver exists to pass gate 3 yet.
+This release implements gate 2, the observable portion of gate 1 available from the current feeds,
+and freezes the gate-3 input corpus as `nfl_market_brain_behavior_scenarios_2026_10_26_r1`. Raw
+BALLDONTLIE and SharpAPI response manifests now precede complete-pair normalization and family
+replacement. They retain response hashes, returned/matched/unmatched/ambiguous row accounting,
+duplicate and unsupported states, individual incomplete sides, and every recognized SharpAPI row in
+the fetched pages. The release-pure materializer enforces cutoff availability and whole-target-family
+exclusion before it derives continuous paths or chronology roles. Feed-side omissions, bounded
+pagination, suspension lifecycle, limits, and private order flow remain explicit blind spots. No
+resolver exists to pass gate 3 yet.
 Passing repository tests is not evidence that gates 3–5 have passed, and it does not authorize a
 confirm, flip, fade, grade, or stake change.
 
@@ -113,8 +116,8 @@ The first NFL code slice adds:
 - a source-by-source SharpAPI manifest that keeps the incumbent preferred split unchanged while
   separately retaining every exact-identity Circa, DraftKings, and BetMGM row;
 - explicit incomplete, duplicate, unavailable, stale, future, and unsupported states;
-- provider-normalized opening/current/historical quote rows before incumbent directional thresholds
-  or same-family replacement, with explicit spread/total sign conventions and exact-evaluated,
+- raw opening/current quote selections before incumbent complete-pair filters, directional thresholds,
+  or same-family replacement, with response checksums, row accounting, and exact-evaluated,
   same-family, and target-excluded provenance;
 - distinct provider-observed, provider-fetched, Oddsphere-ingested, and inference-available times;
 - target-free prior, quarterback/depth, injury-report, and weather availability with references to
@@ -129,10 +132,9 @@ needed for honest chronological research. The whole tape has a bounded byte budg
 ignored by all production/member/tracking
 readers and is not attached when rebuilding around a pre-existing locked record. Existing NFL output
 and every lock remain unchanged. A shadow-construction error is stored as `capture_failed` and cannot
-hold or alter the production payload. The next NFL step is to add raw provider response manifests and
-partial-side price observations, then materialize release-pure sequences across point-in-time rows,
-derive leadership/following/resistance only from chronology, freeze a low-capacity model tournament
-before examining confirmation results, and run inference in shadow.
+hold or alter the production payload. The next NFL step is to persist enough prospective multi-capture
+games, bind each case to the immutable prior distribution artifact, freeze a low-capacity model
+tournament before examining confirmation results, and run inference in shadow.
 
 ## Rollback
 

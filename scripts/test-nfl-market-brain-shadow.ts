@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import type { NflPreviewBookOdds, NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
+import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
+import {
+  rawPriceSha256,
+  type FootballRawPriceObservation,
+  type FootballRawPriceResponseManifest,
+} from "../lib/services/football/footballRawPriceManifest";
 import {
   NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
   type NflForwardContextCapture,
@@ -101,38 +106,81 @@ const splitSources: NflSharpApiSplitSource[] = [
   { sportsbook: "betmgm", status: "unavailable", matchedRows: 0, observations: [] },
 ];
 
-function priceBook(sportsbook: string, observedAt: string, provider: "balldontlie" | "sharpapi", shifted = false): NflPreviewBookOdds {
+function priceManifest(
+  sportsbook: string,
+  observedAt: string,
+  provider: "balldontlie" | "sharpapi",
+  phase: "provider_opening" | "current",
+  shifted = false,
+): FootballRawPriceResponseManifest {
   const firstPrice = sportsbook === "DraftKings" ? -110 : shifted ? -108 : -105;
   const secondPrice = sportsbook === "DraftKings" ? -110 : shifted ? -112 : -115;
-  return {
-    providerGameId: game.providerGameId,
-    sportsbook,
-    observedAt,
+  const specs = [
+    ["moneyline", "away", null, firstPrice], ["moneyline", "home", null, secondPrice],
+    ["spread", "away", 3.5, firstPrice], ["spread", "home", -3.5, secondPrice],
+    ["total", "over", 45.5, firstPrice], ["total", "under", 45.5, secondPrice],
+  ] as const;
+  const rows: FootballRawPriceObservation[] = specs.map(([marketName, selection, line, priceValue], index) => ({
+    sourceObservationId: `${provider}-${sportsbook}-${phase}-${index}`,
+    rawRowSha256: rawPriceSha256([provider, sportsbook, phase]),
     provider,
-    targetEligible: provider !== "sharpapi",
-    moneyline: { awayPrice: firstPrice, homePrice: secondPrice },
-    spread: { awayLine: 3.5, awayPrice: firstPrice, homeLine: -3.5, homePrice: secondPrice },
-    total: { line: 45.5, overPrice: firstPrice, underPrice: secondPrice },
+    feed: provider === "sharpapi" ? "main_odds" : phase === "current" ? "current_odds" : "opening_odds",
+    phase,
+    providerGameId: game.providerGameId,
+    providerEventId: `${provider}-event`,
+    sportsbook,
+    market: marketName,
+    selection,
+    line,
+    price: priceValue,
+    providerObservedAt: observedAt,
+    providerFetchedAt: observedAt,
+    status: "observed",
+    notes: [],
+  }));
+  return {
+    provider,
+    feed: rows[0]!.feed,
+    participant: provider === "sharpapi" ? sportsbook.toLowerCase() : null,
+    providerFetchedAt: observedAt,
+    rawResponseSha256: rawPriceSha256(rows),
+    returnedRows: 1,
+    matchedRows: 1,
+    unmatchedRows: 0,
+    ambiguousRows: 0,
+    rows: [{
+      rowIndex: 0,
+      rawRowSha256: rawPriceSha256(rows),
+      disposition: "matched",
+      providerGameId: game.providerGameId,
+      sourceObservationIds: rows.map((row) => row.sourceObservationId),
+    }],
+    failed: false,
+    failureReason: null,
+    observationsByGame: { [game.providerGameId]: rows },
   };
 }
 
-const priceInputs = [
-  { book: priceBook("Circa", openedAt, "sharpapi"), phase: "provider_opening" as const, providerFetchedAt: openedAt, ingestedAt: openedAt, sourceRelease: "sharp-price" },
-  { book: priceBook("DraftKings", openedAt, "balldontlie"), phase: "provider_opening" as const, providerFetchedAt: openedAt, ingestedAt: openedAt, sourceRelease: "bdl-price" },
-  { book: priceBook("Circa", capturedAt, "sharpapi", true), phase: "current" as const, providerFetchedAt: capturedAt, ingestedAt: capturedAt, sourceRelease: "sharp-price" },
-  { book: priceBook("DraftKings", capturedAt, "balldontlie", true), phase: "current" as const, providerFetchedAt: capturedAt, ingestedAt: capturedAt, sourceRelease: "bdl-price" },
+const rawPriceResponseManifests = [
+  priceManifest("Circa", openedAt, "sharpapi", "provider_opening"),
+  priceManifest("DraftKings", openedAt, "balldontlie", "provider_opening"),
+  priceManifest("Circa", capturedAt, "sharpapi", "current", true),
+  priceManifest("DraftKings", capturedAt, "balldontlie", "current", true),
 ];
 
-const shadow = buildNflMarketBrainShadow({ game, capture, priceInputs, sharpSplitSources: splitSources });
-const unchangedInputs = JSON.stringify({ capture, priceInputs, splitSources });
-buildNflMarketBrainShadow({ game, capture, priceInputs, sharpSplitSources: splitSources });
-assert.equal(JSON.stringify({ capture, priceInputs, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
+const shadow = buildNflMarketBrainShadow({ game, capture, rawPriceResponseManifests, sharpSplitSources: splitSources });
+const unchangedInputs = JSON.stringify({ capture, rawPriceResponseManifests, splitSources });
+buildNflMarketBrainShadow({ game, capture, rawPriceResponseManifests, sharpSplitSources: splitSources });
+assert.equal(JSON.stringify({ capture, rawPriceResponseManifests, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
 assert.equal(shadow.case.release, MARKET_BRAIN_CONTRACT_RELEASE);
 assert.equal(shadow.case.mode, "shadow_capture");
 assert.ok(shadow.bytes > 0);
-assert.equal(shadow.case.captureBoundary, "normalized_provider_observation");
+assert.equal(shadow.case.captureBoundary, "raw_provider_response");
+assert.equal(shadow.case.sourceManifests.length, 4);
+assert.equal(shadow.case.evaluatedTargets.spread?.family, "draftkings");
 assert.equal(shadow.case.accounting.providedObservations, shadow.case.accounting.retainedObservations);
 assert.equal(shadow.case.invariants.allExpectedInputsAccounted, true);
+assert.equal(shadow.case.invariants.allReturnedSourceRowsAccounted, true);
 assert.equal(shadow.case.invariants.productionInfluenceAllowed, false);
 assert.equal(shadow.case.invariants.displayContractAuthority, false);
 assert.equal(shadow.case.blindSpots.length, 7);
@@ -153,8 +201,8 @@ for (const marketName of ["moneyline", "spread", "total"] as const) {
   const sameFamily = shadow.case.observations.filter((row) => row.market === marketName && row.modality === "price_quote" && row.targetRelation === "same_family_as_evaluated");
   const excluded = shadow.case.observations.filter((row) => row.market === marketName && row.modality === "price_quote" && row.targetRelation === "target_excluded");
   assert.equal(target.length, 1, `${marketName} must identify the exact evaluated current quote`);
-  assert.equal(sameFamily.length, 1, `${marketName} must distinguish prior same-family prices from the exact target`);
-  assert.equal(excluded.length, 2, `${marketName} must retain target-excluded opening and current quotes`);
+  assert.equal(sameFamily.length, 3, `${marketName} must distinguish every other same-family side from the exact target`);
+  assert.equal(excluded.length, 4, `${marketName} must retain both target-excluded sides at opening and current`);
 }
 
 const absent = shadow.case.expectedInputs.find((row) => row.id === "identified_book_split:moneyline:betmgm");
@@ -173,4 +221,4 @@ assert.deepEqual(nflMarketBrainCaptureFailure({ eventId: game.providerGameId, ca
   eventId: game.providerGameId, capturedAt, reason: "fixture",
 }, "shadow capture failures must remain explicit without gaining production authority");
 
-console.log("NFL Market Brain normalized-provider tape: unthresholded quotes, opposing splits, replay-safe time, explicit missingness, and no-authority gate passed");
+console.log("NFL Market Brain raw-provider tape: individual sides, response manifests, opposing splits, replay-safe time, explicit missingness, and no-authority gate passed");

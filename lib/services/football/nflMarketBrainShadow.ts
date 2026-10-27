@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import {
   MARKET_BRAIN_BLIND_SPOTS,
   buildMarketBrainCase,
@@ -9,9 +7,14 @@ import {
   type MarketBrainExpectedInput,
   type MarketBrainMarket,
   type MarketBrainObservation,
+  type MarketBrainSourceManifest,
   type MarketBrainSourcePrior,
 } from "@/lib/services/marketBrain/marketBrainContract";
-import type { NflPreviewBookOdds, NflPreviewGame } from "./balldontlieNflPreviewSlate";
+import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
+import type {
+  FootballRawPriceObservation,
+  FootballRawPriceResponseManifest,
+} from "./footballRawPriceManifest";
 import type { NflForwardContextCapture } from "./nflForwardEvidenceCapture";
 import {
   NFL_SHARP_API_SPLITS_RELEASE,
@@ -20,16 +23,8 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_26_r3_normalized_provider_tape" as const;
+  "nfl_market_brain_shadow_2026_10_26_r4_raw_provider_target_safe_tape" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 192 * 1024;
-
-export type NflMarketBrainPriceInput = {
-  book: NflPreviewBookOdds;
-  phase: "provider_opening" | "first_observed" | "historical_capture" | "current";
-  providerFetchedAt: string | null;
-  ingestedAt: string;
-  sourceRelease: string;
-};
 
 export type NflMarketBrainShadow = {
   release: typeof NFL_MARKET_BRAIN_SHADOW_RELEASE;
@@ -64,15 +59,14 @@ export function nflMarketBrainCaptureFailure(args: {
 }
 
 /**
- * Builds a point-in-time tape from provider-normalized observations before the
+ * Builds a point-in-time tape from raw provider response manifests before the
  * incumbent market-state filters. It intentionally performs no directional
  * arbitration and has no production authority.
  */
 export function buildNflMarketBrainShadow(args: {
   game: NflPreviewGame;
   capture: NflForwardContextCapture;
-  /** Provider-normalized rows before the incumbent complete-pair/family capture adapter. */
-  priceInputs: NflMarketBrainPriceInput[];
+  rawPriceResponseManifests: FootballRawPriceResponseManifest[];
   sharpSplitSources: NflSharpApiSplitSource[];
 }): NflMarketBrainShadow {
   const observations: MarketBrainObservation[] = [];
@@ -80,10 +74,12 @@ export function buildNflMarketBrainShadow(args: {
 
   addPrior(args, observations, expectedInputs);
   addContext(args, observations, expectedInputs);
+  const sourceManifests = addRawPrices(args, observations);
   for (const market of ["moneyline", "spread", "total"] as const) {
-    args.priceInputs.forEach((input, index) => addPriceInput(args, market, input, index, observations));
     const sources = unique([
-      ...args.priceInputs.map((input) => `${provider(input.book)}:${canonical(input.book.sportsbook)}`),
+      ...args.rawPriceResponseManifests.flatMap((manifest) =>
+        (manifest.observationsByGame[args.game.providerGameId] ?? []).map((row) =>
+          `${row.provider}:${canonical(row.sportsbook)}`)),
       "sharpapi:circa",
       "sharpapi:pinnacle",
     ]);
@@ -115,12 +111,11 @@ export function buildNflMarketBrainShadow(args: {
   const marketBrainCase = buildMarketBrainCase({
     sport: "nfl",
     eventId: args.game.providerGameId,
-    evaluatedAt: args.capture.capturedAt,
-    captureBoundary: "normalized_provider_observation",
+    evaluatedAt: tapeIngestedAt(args),
+    captureBoundary: "raw_provider_response",
     captureLimitations: [
-      "raw_provider_response_hash_and_unmatched_row_manifest_not_yet_attached",
-      "balldontlie_normalization_does_not_retain_individual_incomplete_price_sides",
-      "sharpapi_price_adapter_retains_latest_complete_main_line_per_book_market",
+      "provider_responses_are_bounded_to_the_rows_and_pagination_exposed_by_each_feed",
+      "provider_suspension_transitions_and_private_order_flow_are_not_exposed",
     ],
     subject: {
       kind: "two_team_game",
@@ -138,7 +133,21 @@ export function buildNflMarketBrainShadow(args: {
           totalDistributionSha256: args.capture.prior.outcome.pmf.total.sha256,
         }
       : { kind: "unavailable", release: args.capture.prior.release, reason: args.capture.prior.reason },
+    evaluatedTargets: Object.fromEntries(
+      (["moneyline", "spread", "total"] as const).flatMap((market) => {
+        const target = args.capture.markets[market].evaluated;
+        return target ? [[market, {
+          identity: target.identity,
+          family: target.family,
+          selection: target.side === "a" ? "away" : target.side === "h" ? "home" : target.side === "o" ? "over" : "under",
+          line: target.line,
+          price: target.price,
+          observedAt: target.observedAt,
+        }]] : [];
+      }),
+    ),
     observations,
+    sourceManifests,
     expectedInputs,
     blindSpots: MARKET_BRAIN_BLIND_SPOTS,
   });
@@ -170,10 +179,14 @@ function addContext(
       id, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "availability",
       source: { provider: "balldontlie", feed: "depth_chart", participant: side },
       sourcePrior: "context_provider", observedRole: "unknown", observedAt,
-      timing: timing(observedAt, observedAt, args.capture.capturedAt),
+      timing: timing(observedAt, observedAt, tapeIngestedAt(args)),
       availability, targetRelation: "not_applicable", values: {},
       categorical: { playerId, name, status },
-      audit: { sourceRelease: args.capture.release, sourceObservationId: id, notes: [] },
+      audit: {
+        sourceRelease: args.capture.release,
+        sourceObservationId: `${id}:${observedAt}:${playerId ?? "unknown"}:${status}`,
+        notes: [],
+      },
     });
     expectedInputs.push({
       id: `availability:quarterback:${side}`, modality: "availability", provider: "balldontlie", participant: side,
@@ -190,11 +203,15 @@ function addContext(
     id: injuryId, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "availability",
     source: { provider: injurySource!, feed: "injury_report", participant: null },
     sourcePrior: "context_provider", observedRole: "unknown", observedAt: reportUpdatedAt,
-    timing: timing(reportUpdatedAt, args.capture.capturedAt, args.capture.capturedAt),
+    timing: timing(reportUpdatedAt, args.capture.capturedAt, tapeIngestedAt(args)),
     availability: injuryAvailability, targetRelation: "not_applicable",
     values: { reportable_players: numericFeature(playerCount) },
     categorical: { freshness, rawPayloadSha256: args.capture.context.injurySha256 },
-    audit: { sourceRelease: args.capture.release, sourceObservationId: injuryId, notes: ["raw injury payload remains in the sibling forward-evidence field"] },
+    audit: {
+      sourceRelease: args.capture.release,
+      sourceObservationId: `${injuryId}:${reportUpdatedAt}:${args.capture.context.injurySha256 ?? "no_hash"}`,
+      notes: ["raw injury payload remains in the sibling forward-evidence field"],
+    },
   });
   expectedInputs.push({
     id: injuryId, modality: "availability", provider: injurySource ?? "balldontlie", participant: null,
@@ -211,10 +228,14 @@ function addContext(
     id: weatherId, eventId: args.game.providerGameId, sport: "nfl", market: "other", modality: "weather",
     source: { provider: "weather_provider", feed: "venue_forecast", participant: args.game.home.abbreviation },
     sourcePrior: "context_provider", observedRole: "unknown", observedAt: weatherObservedAt,
-    timing: timing(weatherObservedAt, weatherObservedAt, args.capture.capturedAt),
+    timing: timing(weatherObservedAt, weatherObservedAt, tapeIngestedAt(args)),
     availability: weatherAvailability, targetRelation: "not_applicable", values: {},
     categorical: { status: weatherStatus, rawPayloadSha256: weatherHash },
-    audit: { sourceRelease: args.capture.release, sourceObservationId: weatherId, notes: ["raw weather payload remains in the sibling forward-evidence field"] },
+    audit: {
+      sourceRelease: args.capture.release,
+      sourceObservationId: `${weatherId}:${weatherObservedAt}:${weatherHash}`,
+      notes: ["raw weather payload remains in the sibling forward-evidence field"],
+    },
   });
   expectedInputs.push({
     id: weatherId, modality: "weather", provider: "weather_provider", participant: args.game.home.abbreviation,
@@ -242,7 +263,7 @@ function addPrior(
     sourcePrior: "independent_model",
     observedRole: "unknown",
     observedAt: args.capture.capturedAt,
-    timing: timing(args.capture.capturedAt, args.capture.capturedAt, args.capture.capturedAt),
+    timing: timing(args.capture.capturedAt, args.capture.capturedAt, tapeIngestedAt(args)),
     availability: "observed",
     targetRelation: "not_applicable",
     values: {
@@ -250,7 +271,11 @@ function addPrior(
       total_mean: numericFeature(args.capture.prior.outcome!.pmf.total.mean),
     },
     categorical: { targetFree: true },
-    audit: { sourceRelease: args.capture.prior.release, sourceObservationId: id, notes: [] },
+    audit: {
+      sourceRelease: args.capture.prior.release,
+      sourceObservationId: `${id}:${args.capture.prior.outcome!.pmf.margin.sha256}:${args.capture.prior.outcome!.pmf.total.sha256}`,
+      notes: [],
+    },
   });
   expectedInputs.push({
     id: "model_prior:target_free",
@@ -264,70 +289,99 @@ function addPrior(
   });
 }
 
-function addPriceInput(
+function addRawPrices(
   args: Parameters<typeof buildNflMarketBrainShadow>[0],
-  market: NflRegularSharpMarket,
-  input: NflMarketBrainPriceInput,
-  index: number,
   observations: MarketBrainObservation[],
-) {
-  const book = input.book;
-  const participant = canonical(book.sportsbook);
-  const sourceProvider = provider(book);
-  const quote = marketQuote(book, market);
-  const providerObservedAt = book.marketObservedAt?.[market] ?? book.observedAt;
-  const ageMinutes = (Date.parse(args.capture.capturedAt) - Date.parse(providerObservedAt)) / 60_000;
-  const availability: MarketBrainAvailability = quote === null ? "incomplete"
-    : !Number.isFinite(ageMinutes) ? "incomplete"
-    : ageMinutes < 0 ? "future"
-    : ageMinutes > 120 ? "stale"
-    : "observed";
-  const evaluated = args.capture.markets[market].evaluated;
-  const sameFamily = evaluated?.family === participant;
-  const exactEvaluated = sameFamily && quote !== null && evaluated !== null &&
-    lineEqual(evaluated.line, quote.line) && evaluated.observedAt === providerObservedAt &&
-    (evaluated.side === (market === "total" ? "o" : "a") ? quote.firstPrice : quote.secondPrice) === evaluated.price;
-  const targetRelation = exactEvaluated ? "evaluated" as const
-    : sameFamily ? "same_family_as_evaluated" as const
-    : "target_excluded" as const;
+): MarketBrainSourceManifest[] {
+  return args.rawPriceResponseManifests.map((manifest, manifestIndex) => {
+    const retainedObservationIds: string[] = [];
+    const caseIdBySourceId = new Map<string, string>();
+    for (const raw of manifest.observationsByGame[args.game.providerGameId] ?? []) {
+      const id = `quote:${raw.provider}:${raw.feed}:${raw.sourceObservationId}`;
+      retainedObservationIds.push(id);
+      caseIdBySourceId.set(raw.sourceObservationId, id);
+      observations.push(rawPriceObservation(args, raw, id));
+    }
+    return {
+      id: `source:${manifest.provider}:${manifest.feed}:${canonical(manifest.participant)}:${manifestIndex}`,
+      provider: manifest.provider,
+      feed: manifest.feed,
+      participant: manifest.participant === null ? null : canonical(manifest.participant),
+      providerFetchedAt: manifest.providerFetchedAt,
+      rawResponseSha256: manifest.rawResponseSha256,
+      returnedRows: manifest.returnedRows,
+      matchedRows: manifest.matchedRows,
+      unmatchedRows: manifest.unmatchedRows,
+      ambiguousRows: manifest.ambiguousRows,
+      rows: manifest.rows.map((row) => ({
+        rowIndex: row.rowIndex,
+        rawRowSha256: row.rawRowSha256,
+        disposition: row.disposition,
+        providerGameId: row.providerGameId,
+        retainedObservationIds: row.sourceObservationIds.flatMap((sourceId) => {
+          const caseId = caseIdBySourceId.get(sourceId);
+          return caseId ? [caseId] : [];
+        }),
+      })),
+      retainedObservationIds,
+      status: manifest.failed ? "failed" : "observed",
+      failureReason: manifest.failureReason,
+    };
+  });
+}
+
+function rawPriceObservation(
+  args: Parameters<typeof buildNflMarketBrainShadow>[0],
+  raw: FootballRawPriceObservation,
+  id: string,
+): MarketBrainObservation {
+  const participant = canonical(raw.sportsbook);
+  const evaluated = args.capture.markets[raw.market].evaluated;
+  const sameFamily = evaluated !== null && evaluated.family === participant;
+  const exactEvaluated = sameFamily && evaluated !== null &&
+    evaluated.side === canonicalSide(raw.selection) &&
+    lineEqual(evaluated.line, raw.line) &&
+    evaluated.price === raw.price &&
+    evaluated.observedAt === raw.providerObservedAt;
+  const ageMinutes = raw.providerObservedAt === null ? null
+    : (Date.parse(args.capture.capturedAt) - Date.parse(raw.providerObservedAt)) / 60_000;
+  const availability: MarketBrainAvailability = raw.providerObservedAt !== null &&
+    Date.parse(raw.providerObservedAt) > Date.parse(args.capture.capturedAt)
+    ? "future"
+    : raw.status;
   const sourcePrior: MarketBrainSourcePrior = ["circa", "pinnacle", "bookmaker"].includes(participant)
     ? "professional_book" : "retail_book";
-  const id = `quote:${market}:${sourceProvider}:${participant}:${input.phase}:${providerObservedAt}:${index}`;
-  observations.push({
+  return {
     id,
     eventId: args.game.providerGameId,
     sport: "nfl",
-    market,
+    market: raw.market,
     modality: "price_quote",
-    source: { provider: sourceProvider, feed: "price", participant },
+    source: { provider: raw.provider, feed: raw.feed, participant },
     sourcePrior,
     observedRole: "unknown",
-    observedAt: providerObservedAt,
-    timing: timing(providerObservedAt, input.providerFetchedAt, input.ingestedAt),
+    observedAt: raw.providerObservedAt,
+    timing: timing(raw.providerObservedAt, raw.providerFetchedAt, tapeIngestedAt(args)),
     availability,
-    targetRelation,
+    targetRelation: exactEvaluated ? "evaluated" : sameFamily ? "same_family_as_evaluated" : "target_excluded",
     values: {
       age_minutes: numericFeature(Number.isFinite(ageMinutes) ? ageMinutes : null),
-      line: numericFeature(quote?.line),
-      first_price: numericFeature(quote?.firstPrice),
-      second_price: numericFeature(quote?.secondPrice),
+      line: numericFeature(raw.line),
+      price: numericFeature(raw.price),
     },
     categorical: {
-      phase: input.phase === "current" ? "current" : "opening_or_history",
-      phaseDetail: input.phase,
-      providerEventId: book.providerEventId ?? null,
-      targetEligible: book.targetEligible ?? sourceProvider !== "sharpapi",
-      firstSelection: market === "total" ? "over" : "away",
-      secondSelection: market === "total" ? "under" : "home",
-      lineConvention: market === "spread" ? "home_line_first_away_line_is_negation" : market === "total" ? "shared_total" : "none",
+      phase: raw.phase,
+      providerEventId: raw.providerEventId,
+      selection: raw.selection,
+      rawRowSha256: raw.rawRowSha256,
+      rawStatus: raw.status,
     },
     audit: {
-      sourceRelease: input.sourceRelease,
-      sourceObservationId: shortHash([book.providerGameId, book.providerEventId, sourceProvider, participant, market,
-        input.phase, providerObservedAt, quote]),
-      notes: quote === null ? ["normalized provider row did not retain a complete paired quote for this market"] : [],
+      sourceRelease: raw.provider === "sharpapi" ? "sharpapi_raw_response" : "balldontlie_raw_response",
+      sourceObservationId: raw.sourceObservationId,
+      notes: [...raw.notes],
     },
-  });
+  };
 }
 
 function addPublicSplit(
@@ -348,12 +402,16 @@ function addPublicSplit(
     sourcePrior: "public_aggregate",
     observedRole: "unknown",
     observedAt: null,
-    timing: timing(null, split[1], args.capture.capturedAt),
+    timing: timing(null, split[1], tapeIngestedAt(args)),
     availability: "observed",
     targetRelation: "unknown",
     values: splitValues(split[2], split[3], split[4], split[5], split[6]),
     categorical: { denominatorKnown: false, exactLineMatched: null },
-    audit: { sourceRelease: args.capture.release, sourceObservationId: id, notes: ["aggregate denominator and exact-line composition are unavailable"] },
+    audit: {
+      sourceRelease: args.capture.release,
+      sourceObservationId: `${id}:${split[1]}:${split.slice(2).join(":")}`,
+      notes: ["aggregate denominator and exact-line composition are unavailable"],
+    },
   });
   expectedInputs.push({
     id: `public_split:${market}:playbook`, modality: "public_split", provider: "playbook", participant: "aggregate",
@@ -388,7 +446,7 @@ function addSharpSplits(
         sourcePrior: source.sportsbook === "circa" ? "professional_book" : "retail_book",
         observedRole: "unknown",
         observedAt: null,
-        timing: timing(null, split.providerFetchedAt, split.capturedAt),
+        timing: timing(null, split.providerFetchedAt, tapeIngestedAt(args)),
         availability: source.status,
         targetRelation: "unknown",
         values: splitValues(null, firstMoney, firstBets, secondMoney, secondBets),
@@ -398,7 +456,11 @@ function addSharpSplits(
           denominatorKnown: false,
           exactLineMatched: null,
         },
-        audit: { sourceRelease: NFL_SHARP_API_SPLITS_RELEASE, sourceObservationId: split.sourceEventId ?? id, notes: source.status === "duplicate" ? ["multiple exact-identity provider rows retained"] : [] },
+        audit: {
+          sourceRelease: NFL_SHARP_API_SPLITS_RELEASE,
+          sourceObservationId: `${split.sourceEventId ?? id}:${market}:${split.providerFetchedAt}:${split.capturedAt}:${index}`,
+          notes: source.status === "duplicate" ? ["multiple exact-identity provider rows retained"] : [],
+        },
       });
     });
     expectedInputs.push({
@@ -427,27 +489,18 @@ function splitValues(booksUsed: number | null, firstMoney: number | null, firstB
 
 function unique<T>(values: T[]): T[] { return [...new Set(values)]; }
 
-function marketQuote(book: NflPreviewBookOdds, market: NflRegularSharpMarket) {
-  if (market === "moneyline") return book.moneyline
-    ? { line: null, firstPrice: book.moneyline.awayPrice, secondPrice: book.moneyline.homePrice }
-    : null;
-  if (market === "spread") return book.spread
-    ? { line: book.spread.homeLine, firstPrice: book.spread.awayPrice, secondPrice: book.spread.homePrice }
-    : null;
-  return book.total
-    ? { line: book.total.line, firstPrice: book.total.overPrice, secondPrice: book.total.underPrice }
-    : null;
+function canonical(value: string | null) { return value?.toLowerCase().replace(/[^a-z0-9]+/g, "") || "unknown"; }
+function canonicalSide(selection: FootballRawPriceObservation["selection"]): "a" | "h" | "o" | "u" {
+  return selection === "away" ? "a" : selection === "home" ? "h" : selection === "over" ? "o" : "u";
 }
-
-function provider(book: NflPreviewBookOdds) { return book.provider ?? "balldontlie"; }
-function canonical(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, "") || "unknown"; }
 function lineEqual(first: number | null, second: number | null) {
   return first === null || second === null ? first === second : Math.abs(first - second) < 0.001;
 }
 function timing(providerObservedAt: string | null, providerFetchedAt: string | null, ingestedAt: string) {
   return { providerObservedAt, providerFetchedAt, ingestedAt, availableAt: ingestedAt };
 }
-function shortHash(value: unknown) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+function tapeIngestedAt(args: Parameters<typeof buildNflMarketBrainShadow>[0]): string {
+  return [args.capture.capturedAt, ...args.rawPriceResponseManifests.map((manifest) => manifest.providerFetchedAt)]
+    .reduce((latest, value) => Date.parse(value) > Date.parse(latest) ? value : latest);
 }
 function byteLength(value: unknown) { return Buffer.byteLength(JSON.stringify(value)); }

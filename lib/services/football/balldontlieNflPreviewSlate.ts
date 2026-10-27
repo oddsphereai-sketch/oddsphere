@@ -1,7 +1,17 @@
+import {
+  markRawPriceDuplicates,
+  rawPriceSha256,
+  type FootballRawPriceMarket,
+  type FootballRawPriceObservation,
+  type FootballRawPriceRowManifest,
+  type FootballRawPriceResponseManifest,
+  type FootballRawPriceSelection,
+} from "./footballRawPriceManifest";
+
 export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
-  "balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture" as const;
+  "balldontlie_nfl_regular_slate_2026_10_26_r5_raw_price_manifest" as const;
 export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
   "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
 
@@ -82,6 +92,11 @@ export type NflRegularProviderSlate = Omit<NflPreviewProviderSlate, "release"> &
   currentOddsComparableBooksByGame: Record<string, NflPreviewBookOdds[]>;
   openingOddsAllBooksByGame: Record<string, NflPreviewBookOdds[]>;
   openingOddsComparableBooksByGame: Record<string, NflPreviewBookOdds[]>;
+  /** Raw row/side evidence retained before complete-pair and same-vendor selection. */
+  rawPriceResponseManifests: {
+    current: FootballRawPriceResponseManifest;
+    opening: FootballRawPriceResponseManifest;
+  };
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -259,6 +274,23 @@ export async function fetchBalldontlieNflRegularSlate(args: {
   });
   if (openingRead.nextCursor !== null) throw new Error("BALLDONTLIE regular opening odds exceeded the pagination safety budget.");
   const requestedGameIds = new Set(gameIds);
+  const fetchedAt = new Date().toISOString();
+  const rawPriceResponseManifests = {
+    current: buildBalldontlieRawPriceManifest({
+      values: currentRead.rows,
+      requestedGameIds,
+      phase: "current",
+      providerFetchedAt: fetchedAt,
+      rawResponseSha256: rawPriceSha256(currentRead.pageResponseSha256s),
+    }),
+    opening: buildBalldontlieRawPriceManifest({
+      values: openingRead.rows,
+      requestedGameIds,
+      phase: "provider_opening",
+      providerFetchedAt: fetchedAt,
+      rawResponseSha256: rawPriceSha256(openingRead.pageResponseSha256s),
+    }),
+  };
   const currentOddsAllBooksByGame = groupBooksByGame(currentRead.rows, requestedGameIds);
   const currentOddsComparableBooksByGame = comparableBooksByGame(currentOddsAllBooksByGame);
   const openingOddsAllBooksByGame = groupBooksByGame(openingRead.rows, requestedGameIds, true);
@@ -274,7 +306,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
   );
   return {
     release: BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt,
     season: args.season,
     productWeek: args.week,
     providerWeek: args.week,
@@ -285,6 +317,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     currentOddsComparableBooksByGame,
     openingOddsAllBooksByGame,
     openingOddsComparableBooksByGame,
+    rawPriceResponseManifests,
     providerRequests,
   };
 }
@@ -338,8 +371,9 @@ async function readPages(args: {
   fetchImpl: typeof fetch;
   onRequest: () => void;
   optional?: boolean;
-}): Promise<{ rows: unknown[]; nextCursor: string | null }> {
+}): Promise<{ rows: unknown[]; nextCursor: string | null; pageResponseSha256s: string[] }> {
   const rows: unknown[] = [];
+  const pageResponseSha256s: string[] = [];
   let cursor: string | null = null;
   for (let page = 0; page < args.maxPages; page += 1) {
     const url = new URL(`${BASE_URL}${args.path}`);
@@ -359,18 +393,19 @@ async function readPages(args: {
     });
     if (!response.ok) {
       if (args.optional && (response.status === 404 || response.status === 422)) {
-        return { rows: [], nextCursor: null };
+        return { rows: [], nextCursor: null, pageResponseSha256s: [rawPriceSha256({ status: response.status })] };
       }
       throw new Error(`BALLDONTLIE ${args.path} failed with HTTP ${response.status}.`);
     }
     const body = await response.json() as BdlEnvelope;
+    pageResponseSha256s.push(rawPriceSha256(body));
     if (!Array.isArray(body.data)) throw new Error(`BALLDONTLIE ${args.path} returned a malformed payload.`);
     rows.push(...body.data);
     const next = body.meta?.next_cursor;
     cursor = typeof next === "string" || typeof next === "number" ? String(next) : null;
     if (!cursor) break;
   }
-  return { rows, nextCursor: cursor };
+  return { rows, nextCursor: cursor, pageResponseSha256s };
 }
 
 function normalizeGame(value: unknown): NflPreviewGame | null {
@@ -471,6 +506,98 @@ function comparableBooksByGame(
     gameId,
     books.filter((book) => isComparableNflSportsbook(book.sportsbook)),
   ]));
+}
+
+export function buildBalldontlieRawPriceManifest(args: {
+  values: unknown[];
+  requestedGameIds: ReadonlySet<string>;
+  phase: "provider_opening" | "current";
+  providerFetchedAt: string;
+  rawResponseSha256?: string;
+}): FootballRawPriceResponseManifest {
+  const observationsByGame = Object.fromEntries(
+    [...args.requestedGameIds].map((gameId) => [gameId, [] as FootballRawPriceObservation[]]),
+  );
+  let matchedRows = 0;
+  let unmatchedRows = 0;
+  const rows: FootballRawPriceRowManifest[] = [];
+  args.values.forEach((value, rowIndex) => {
+    const row = record(value);
+    const providerGameId = stringOrNumber(row.game_id);
+    const rawRowSha256 = rawPriceSha256(value);
+    if (!providerGameId || !args.requestedGameIds.has(providerGameId)) {
+      unmatchedRows += 1;
+      rows.push({ rowIndex, rawRowSha256, disposition: "unmatched", providerGameId: null, sourceObservationIds: [] });
+      return;
+    }
+    matchedRows += 1;
+    const sportsbook = text(row.vendor);
+    const providerObservedAt = args.phase === "provider_opening"
+      ? iso(row.opened_at) ?? iso(row.updated_at)
+      : iso(row.updated_at);
+    const sourceObservationIds: string[] = [];
+    const specs: Array<{
+      market: FootballRawPriceMarket;
+      selection: FootballRawPriceSelection;
+      line: number | null;
+      price: number | null;
+    }> = [
+      { market: "moneyline", selection: "away", line: null, price: price(row.moneyline_away_odds) },
+      { market: "moneyline", selection: "home", line: null, price: price(row.moneyline_home_odds) },
+      { market: "spread", selection: "away", line: number(row.spread_away_value), price: price(row.spread_away_odds) },
+      { market: "spread", selection: "home", line: number(row.spread_home_value), price: price(row.spread_home_odds) },
+      { market: "total", selection: "over", line: number(row.total_value), price: price(row.total_over_odds) },
+      { market: "total", selection: "under", line: number(row.total_value), price: price(row.total_under_odds) },
+    ];
+    for (const spec of specs) {
+      const complete = sportsbook !== null && providerObservedAt !== null && spec.price !== null &&
+        (spec.market === "moneyline" || spec.line !== null);
+      const notes = [
+        sportsbook === null ? "sportsbook_identity_unavailable" : null,
+        providerObservedAt === null ? "provider_observed_time_unavailable" : null,
+        spec.price === null ? "price_unavailable" : null,
+        spec.market !== "moneyline" && spec.line === null ? "line_unavailable" : null,
+      ].filter((note): note is string => note !== null);
+      const sourceObservationId = rawPriceSha256([
+          "balldontlie", args.phase, rowIndex, rawRowSha256, spec.market, spec.selection,
+        ]).slice(0, 24);
+      sourceObservationIds.push(sourceObservationId);
+      observationsByGame[providerGameId]!.push({
+        sourceObservationId,
+        rawRowSha256,
+        provider: "balldontlie",
+        feed: args.phase === "current" ? "current_odds" : "opening_odds",
+        phase: args.phase,
+        providerGameId,
+        providerEventId: providerGameId,
+        sportsbook,
+        market: spec.market,
+        selection: spec.selection,
+        line: spec.line,
+        price: spec.price,
+        providerObservedAt,
+        providerFetchedAt: args.providerFetchedAt,
+        status: complete ? "observed" : "incomplete",
+        notes,
+      });
+    }
+    rows.push({ rowIndex, rawRowSha256, disposition: "matched", providerGameId, sourceObservationIds });
+  });
+  return {
+    provider: "balldontlie",
+    feed: args.phase === "current" ? "current_odds" : "opening_odds",
+    participant: null,
+    providerFetchedAt: args.providerFetchedAt,
+    rawResponseSha256: args.rawResponseSha256 ?? rawPriceSha256(args.values),
+    returnedRows: args.values.length,
+    matchedRows,
+    unmatchedRows,
+    ambiguousRows: 0,
+    rows,
+    failed: false,
+    failureReason: null,
+    observationsByGame: markRawPriceDuplicates(observationsByGame),
+  };
 }
 
 function compareOddsRows(first: NflPreviewBookOdds, second: NflPreviewBookOdds): number {

@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 
-Status: coordinated design and shadow-research plan. No production prediction, probability,
+Status: coordinated design plus raw-provider capture and release-pure materializer in shadow. No production prediction, probability,
 projection, grade, stake, member display, tracking, or locked-record behavior is authorized by this
 document.
 
@@ -30,8 +30,8 @@ separate gates.
 | Evidence or behavior | Released semantic path | Market Brain tape direction | Remaining gap before a predictive resolver |
 | --- | --- | --- | --- |
 | Independent prior | Target-free Margin/Total prior plus coherent forecast candidates | Release, Margin/Total means, and distribution checksums | Materializer must load the immutable distribution artifact, not train from a later reconstructed score |
-| Current multi-book quotes | Complete current pairs retained by family | Each normalized opening/current quote becomes a timestamped, masked observation before market-state filtering | Add raw-response manifests and individual incomplete sides; more than opening/current is needed for true intraday path shape when the provider supplies it |
-| Opening-to-current movement | Trail direction, no-vig delta, hold delta, move order, persistence, reversal, buyback, key crossings | Normalized opening/current/historical number-price pairs survive without directional judgment | Derive these features at evaluation time from only observations available then; retain continuous values below directional cutoffs |
+| Current multi-book quotes | Complete current pairs retained by family | Raw-response hashes and row accounting retain every recognized selection independently, including duplicates, incomplete sides, and unsupported rows, before market-state filtering | Forward capture must accumulate enough within-game points for true intraday path shape; provider-side rows that are never exposed remain unknowable |
+| Opening-to-current movement | Trail direction, no-vig delta, hold delta, move order, persistence, reversal, buyback, key crossings | The release-pure materializer derives continuous line, fair-price, hold, lead/lag, reversal, buyback, and key-crossing features only from points available by cutoff | Validate the transforms on prospective cases and preserve the immutable prior artifact alongside the sequence |
 | Freshness | Two-hour gate can remove a trail or split before arbitration | Fresh, stale, future, incomplete, and unavailable states are explicit | Learn behavior by missingness/freshness regime; do not encode stale or missing as neutral zero |
 | Small moves | Direction requires a 0.5 point number move or 1 percentage-point fair-probability move | Raw values survive | Keep continuous deltas and uncertainty; thresholds may be safety metadata but not admission to the resolver |
 | Named-book leadership | Circa/Pinnacle are classified as named; a named direction needs at least two aligned named movers | Book reputation is a prior and observed role begins unknown | Infer leader/follower/resistor/reversal from time order; do not let brand identity assert event leadership |
@@ -40,7 +40,7 @@ separate gates.
 | Public consensus splits | Continuous split row reaches the ledger, but directional qualification uses an 8-point money-minus-ticket gap and exact-line constraints | Public split values, books used, identity, and availability are masked observations | Preserve exact line/market ownership and denominator limitations; train with the continuous gap, never a public/sharp vote |
 | Identified-book splits | Only the preferred first complete Circa/DraftKings/BetMGM row enters the incumbent `sharpSplits` set; directional qualification uses a 10-point gap | Every exact-identity row for all three requested books survives, including incomplete, duplicate, and unavailable states | Resolve duplicates deterministically, retain book-specific disagreement, and evaluate source ablations; do not promote a source solely because its brand is Circa |
 | Missing source | Some missing candidates disappear because null rows are skipped | Every expected source has an explicit manifest row | Artifact metrics must be stratified by actual source-availability combinations |
-| Target exclusion | Evaluated family and target-excluded consensus are separated | Every quote records `evaluated`, `target_excluded`, or unknown relation | Prove the evaluated quote cannot leak into the evidence features used to predict its own value |
+| Target exclusion | Evaluated family and target-excluded consensus are separated | Every quote records its relation; the materializer re-derives the cutoff target family and excludes the exact target plus all same-family history before feature and role construction | Extend adversarial leakage tests through any future training/export path |
 | Moneyline/Spread/Total relationship | Semantic side story joins Moneyline and Spread; Total remains independently preserved | Raw observations keep market identity | Resolver must estimate one coherent joint game state while allowing winner, cover, and scoring information to disagree |
 | Availability and news | QB, injuries, weather, and player-aware forecast availability are interpreted mostly as context; report-versus-first-move timing is retained | QB/depth, injury report, and weather availability/provenance are explicit | Add state changes and their timestamps, distinguish "already in the prior" from new information, and never infer causation from ordering alone |
 | Flip/fade behavior | Categorical hand-authored stories can choose an existing expert or reflect a margin; Total changes are disabled | Frozen scenarios state acceptable confirm/recenter/flip/fade/retain/stand-down behavior | Learn action probabilities and a coherent posterior distribution; remove automatic reflection and rigid conjunctions from the candidate path |
@@ -122,7 +122,7 @@ release attribution impossible.
 
 `marketBrainShadow.case` is the only candidate input boundary. It records expected inputs,
 availability masks, raw values, source identity and prior, target relation, event identity, timestamps,
-and immutable prior identity. It has no prediction authority.
+raw-response checksums and row accounting, and immutable prior identity. It has no prediction authority.
 
 ### 2. Release-pure sequence materializer
 
@@ -131,9 +131,13 @@ model prior release that was available then. Produce a variable-length sequence/
 continuous no-vig, hold, number movement, price movement, lead/lag, persistence, reversal, buyback,
 key-number transition, disagreement, and cross-market coherence from that bounded tape.
 
-The materializer must fail the case—not silently impute—when game identity, timestamps, target
-exclusion, or prior release identity cannot be proven. Data absence otherwise remains a learned
-missingness regime.
+`nfl_market_brain_sequence_materializer_2026_10_26_r1_cutoff_target_excluded` implements this
+boundary without a resolver: it refuses mixed events/releases, applies Oddsphere availability time
+before feature construction, masks incomplete/unsupported rows, fails conflicting immutable
+observation identities, pairs sides only when line/time identity agrees, and derives event roles from
+chronology rather than brand. The next proof work must validate these transforms on prospective
+multi-capture games and bind the immutable distribution artifact—not a reconstructed mean—to each
+sequence. Data absence otherwise remains a learned missingness regime.
 
 ### 3. Low-capacity resolver
 

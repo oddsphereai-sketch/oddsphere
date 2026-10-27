@@ -14,7 +14,7 @@ Last reviewed: 2026-10-26
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation`. The sole writer / fixture /
-  snapshot advance to `nfl_forward_evidence_writer_2026_10_26_r75_market_brain_normalized_provider_tape` /
+  snapshot advance to `nfl_forward_evidence_writer_2026_10_26_r76_market_brain_raw_provider_tape` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`. Every captured signal
   receives an explicit semantic interpretation; no scalar market weight is introduced. On the opened
@@ -492,20 +492,29 @@ Last reviewed: 2026-10-26
 
 ### Cross-sport Market Brain foundation (shadow capture only)
 
-- `market_brain_contract_2026_10_26_r3_replay_safe_observation_time` and
-  `nfl_market_brain_shadow_2026_10_26_r3_normalized_provider_tape` define an internal-only,
+- `market_brain_contract_2026_10_26_r4_raw_manifests_and_target_boundary` and
+  `nfl_market_brain_shadow_2026_10_26_r4_raw_provider_target_safe_tape` define an internal-only,
   production-inert evidence boundary. The sole writer
-  `nfl_forward_evidence_writer_2026_10_26_r75_market_brain_normalized_provider_tape`
+  `nfl_forward_evidence_writer_2026_10_26_r76_market_brain_raw_provider_tape`
   consumes `nfl_sharpapi_splits_2026_10_26_r3_all_source_manifest` and stores the tape prospectively
-  for future unlocked rows. It retains provider-normalized opening/current/historical quote rows
-  before the incumbent directional thresholds and family replacement, exact-evaluated versus
-  same-family versus target-excluded provenance, every exact-identity Circa/DraftKings/BetMGM split
+  for future unlocked rows. `balldontlie_nfl_regular_slate_2026_10_26_r5_raw_price_manifest` and
+  `football_sharp_price_capture_2026_10_26_r3_raw_response_manifest` attach raw response hashes,
+  returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
+  incomplete price sides before complete-pair normalization or family replacement. The tape retains
+  exact-evaluated versus
+  same-family versus target-excluded provenance plus an explicit evaluated-target identity that does
+  not depend on recovering an exact raw side, every exact-identity Circa/DraftKings/BetMGM split
   row, explicit missing/incomplete/duplicate source states, and the current-feed blind spots. Source
   reputation is distinct from event leadership; a book brand never proves who originated a move.
   It contains no candidate decision and cannot affect a prediction, probability, projection, grade,
-  stake, member display, tracking record, or lock. Existing locks are not adapted. Raw price-response
-  hashes, unmatched/ambiguous rows, incomplete individual price sides, and full SharpAPI intracycle
-  price rows remain an explicit gate before the evidence boundary may be called lossless.
+  stake, member display, tracking record, or lock. Existing locks are not adapted.
+  `nfl_market_brain_sequence_materializer_2026_10_26_r1_cutoff_target_excluded` replays only cases
+  and observations available by an explicit cutoff, excludes the exact target and its entire source
+  family before feature construction, pairs individual sides without zero-filling, derives continuous
+  number/price/hold/reversal/buyback features without minimum-move quotas, and assigns event roles
+  from chronology rather than reputation. It is also production-inert. Provider-side pagination,
+  suspension history, limits, and private order flow remain declared blind spots; predictive
+  qualification and the resolver remain unproved gates.
   `nfl_market_brain_behavior_scenarios_2026_10_26_r1` freezes nuanced follow, fade, resistance,
   reversal, outage, stale-evidence, news-sequence, and cross-market acceptance stories without
   turning them into executable quotas; no resolver has qualified against them.
@@ -521,7 +530,7 @@ Last reviewed: 2026-10-26
   `nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation` /
   `nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation`.
 - The active sole writer / fixture / compact snapshot are
-  `nfl_forward_evidence_writer_2026_10_26_r75_market_brain_normalized_provider_tape` /
+  `nfl_forward_evidence_writer_2026_10_26_r76_market_brain_raw_provider_tape` /
   `nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation` /
   `nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation`.
 - The semantic reader preserves every captured observation in a game ledger and assigns each one an
