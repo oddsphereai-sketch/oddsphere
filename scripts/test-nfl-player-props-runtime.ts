@@ -78,12 +78,12 @@ import {
 } from "../lib/services/football/nflPlayerPropsRuntime";
 import type { NflPlayerPropsExactOffer } from "../lib/services/football/nflPlayerPropsMarketBoard";
 
-assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_27_r19_receptions_direction_authority");
-assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_27_r37_receptions_direction_authority");
-assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_27_r40_receptions_direction_authority");
-assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_27_r30_receptions_direction_authority");
-assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_27_r32_receptions_direction_authority");
-assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_27_r36_receptions_direction_authority");
+assert.equal(NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE, "nfl_player_props_runtime_2026_10_27_r20_passing_completions_direction");
+assert.equal(NFL_PLAYER_PROPS_RUNTIME_RELEASE, "nfl_player_props_runtime_2026_10_27_r38_passing_completions_direction");
+assert.equal(NFL_PLAYER_PROPS_BOARD_RELEASE, "nfl_player_props_board_2026_10_27_r41_passing_completions_direction");
+assert.equal(NFL_PLAYER_PROPS_MODEL_RELEASE, "nfl_player_props_distribution_model_2026_10_27_r31_passing_completions_direction");
+assert.equal(NFL_PLAYER_PROPS_CALIBRATION_RELEASE, "nfl_player_props_distribution_calibration_2026_10_27_r33_passing_completions_direction");
+assert.equal(NFL_PLAYER_PROPS_DECISION_RELEASE, "nfl_player_props_decision_2026_10_27_r37_passing_completions_direction");
 assert.equal(expectedRoleArtifact.release,
   "nfl_player_props_expected_role_runtime_2026_10_15_r7_independent_rushing_yards");
 assert.equal(expectedRoleArtifact.marketIndependent, true);
@@ -293,7 +293,7 @@ assert.ok(coherentProjection > 55, "market-calibrated probability repairs an imp
 assert.ok(coherentProjection > 70.5,
   "the single posterior median stays on the Over side of its calibrated probability");
 assert.equal(NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE,
-  "nfl_player_props_market_coherent_projection_2026_10_27_r6_receptions_direction_authority");
+  "nfl_player_props_market_coherent_projection_2026_10_27_r7_passing_completions_direction");
 
 const receiverLeanThresholds = nflPlayerPropsProductionMarketLane("receptions")!.leanThresholds!;
 const unchangedBestAngleThresholds = {
@@ -326,6 +326,18 @@ assert.equal(gradeNflPlayerPropsCrossMarketCandidate({
 
 const residual = nflPlayerPropsResidualProbability(0.7, 0.5, 0.2);
 assert.ok(residual > 0.5 && residual < 0.7);
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "passing_completions", rawOverProbability: 0.44, marketOverProbability: 0.56,
+  independentBooks: 2, incumbentFinalOverProbability: 0.44,
+}), 0.56, "passing completions uses the target-book-excluded direction when it corrects a disagreement");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "passing_completions", rawOverProbability: 0.56, marketOverProbability: 0.58,
+  independentBooks: 2, incumbentFinalOverProbability: 0.56,
+}), 0.56, "passing completions preserves incumbent calibration when directions agree");
+assert.equal(nflPlayerPropsDiscreteMarketArbitration({
+  propMarket: "passing_completions", rawOverProbability: 0.44, marketOverProbability: 0.56,
+  independentBooks: 0, incumbentFinalOverProbability: 0.44,
+}), 0.44, "passing completions never manufactures a correction without target-excluded evidence");
 assert.equal(nflPlayerPropsDiscreteMarketArbitration({
   propMarket: "receiving_yards", rawOverProbability: 0.58, marketOverProbability: 0.43,
   independentBooks: 2, incumbentFinalOverProbability: 0.54,

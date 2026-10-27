@@ -16,21 +16,21 @@ import { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPro
 export { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_10_27_r19_receptions_direction_authority" as const;
+  "nfl_player_props_runtime_2026_10_27_r20_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_27_r37_receptions_direction_authority" as const;
+  "nfl_player_props_runtime_2026_10_27_r38_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_27_r40_receptions_direction_authority" as const;
+  "nfl_player_props_board_2026_10_27_r41_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_27_r36_receptions_direction_authority" as const;
+  "nfl_player_props_decision_2026_10_27_r37_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_10_27_r30_receptions_direction_authority" as const;
+  "nfl_player_props_distribution_model_2026_10_27_r31_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_10_27_r32_receptions_direction_authority" as const;
+  "nfl_player_props_distribution_calibration_2026_10_27_r33_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
-  "nfl_player_props_market_residual_calibration_2026_10_27_r12_receptions_direction_authority" as const;
+  "nfl_player_props_market_residual_calibration_2026_10_27_r13_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
-  "nfl_player_props_market_coherent_projection_2026_10_27_r6_receptions_direction_authority" as const;
+  "nfl_player_props_market_coherent_projection_2026_10_27_r7_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_TOUCHDOWN_SHARP_REFERENCE_ACTIONABLE = true as const;
 export const NFL_PLAYER_PROPS_QB_PASSING_PROJECTION = {
   release: "nfl_player_props_qb_passing_projection_2026_09_28_r4_joint_latent_workload",
@@ -51,10 +51,11 @@ export const NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP = 0.025 as const;
 export const NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS = 6 as const;
 export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_MARKET_READING_RELEASE =
-  "nfl_player_props_market_reading_2026_10_27_r7_receptions_direction_authority" as const;
+  "nfl_player_props_market_reading_2026_10_27_r8_passing_completions_direction" as const;
 export const NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE =
   "nfl_player_props_decision_support_evidence_2026_10_15_r1" as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_QUALIFIED_MARKETS = [
+  "passing_completions",
   "receptions",
 ] as const satisfies readonly NflPlayerPropMarket[];
 
@@ -849,6 +850,11 @@ export function nflPlayerPropsDiscreteMarketArbitration(args: {
   incumbentFinalOverProbability: number;
 }): number {
   if (args.independentBooks <= 0) return args.rawOverProbability;
+  if (args.propMarket === "passing_completions") {
+    const directionsDisagree = (args.rawOverProbability >= 0.5)
+      !== (args.marketOverProbability >= 0.5);
+    return directionsDisagree ? args.marketOverProbability : args.incumbentFinalOverProbability;
+  }
   if (args.propMarket !== "receptions") return args.incumbentFinalOverProbability;
   const incumbentCrossedIndependent = (args.rawOverProbability >= 0.5)
     !== (args.incumbentFinalOverProbability >= 0.5);
