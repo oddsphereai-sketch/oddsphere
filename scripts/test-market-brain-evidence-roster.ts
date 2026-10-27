@@ -98,4 +98,13 @@ assert.deepEqual(
   "NFL props target-excluded reference participants must match the implemented collector contract",
 );
 
+const lifecycleProofBuilder = readFileSync(
+  new URL("./build-market-brain-v48-lifecycle-proof.ts", import.meta.url),
+  "utf8",
+);
+assert.match(lifecycleProofBuilder, /provider: "owls"[\s\S]*feed: "named_book_splits_canonical"/,
+  "the real PostgreSQL lifecycle fixture must use the frozen Owls named-book split identity");
+assert.doesNotMatch(lifecycleProofBuilder, /feed: "sportsbook_splits"/,
+  "the lifecycle fixture must not restore the retired SharpAPI split-feed identity");
+
 console.log("Market Brain all-product expected source and participant contracts passed.");

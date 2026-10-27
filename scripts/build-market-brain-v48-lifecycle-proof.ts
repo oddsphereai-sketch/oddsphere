@@ -29,9 +29,10 @@ const common = {
 };
 const missedCommon = {
   ...common,
-  feed: "sportsbook_splits",
-  adapterRelease: "sharpapi_sportsbook_splits_adapter_postgres_fixture_r1",
-  parserRelease: "sharpapi_sportsbook_splits_parser_postgres_fixture_r1",
+  provider: "owls",
+  feed: "named_book_splits_canonical",
+  adapterRelease: "owls_named_book_splits_adapter_postgres_fixture_r1",
+  parserRelease: "owls_named_book_splits_parser_postgres_fixture_r1",
   participant: null,
   plannedAt: iso(3_500),
   windowClosesAt: iso(4_000),
