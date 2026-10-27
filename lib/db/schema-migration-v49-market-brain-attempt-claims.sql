@@ -117,7 +117,7 @@ BEGIN
       planned.attempt_id, p_claim_release, gen_random_uuid(), p_claim_mode, p_worker_id, v_now,
       v_now + make_interval(secs => p_lease_seconds), 1, NULL
     )
-    ON CONFLICT (attempt_id) DO UPDATE SET
+    ON CONFLICT ON CONSTRAINT market_brain_attempt_claims_pkey DO UPDATE SET
       claim_release = EXCLUDED.claim_release,
       claim_token = EXCLUDED.claim_token,
       claim_mode = EXCLUDED.claim_mode,

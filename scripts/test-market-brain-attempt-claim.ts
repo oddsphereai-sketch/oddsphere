@@ -71,6 +71,10 @@ async function main(): Promise<void> {
   assert.match(migration, /FOR UPDATE OF planned_attempt SKIP LOCKED/);
   assert.match(migration, /pg_advisory_xact_lock\(hashtextextended\(planned\.attempt_id::text, 0\)\)/);
   assert.match(migration, /claim_sequence = public\.market_brain_attempt_claims\.claim_sequence \+ 1/);
+  assert.match(migration,
+    /ON CONFLICT ON CONSTRAINT market_brain_attempt_claims_pkey DO UPDATE SET/,
+    "the upsert must not ambiguously resolve the RETURNS TABLE attempt_id output variable");
+  assert.doesNotMatch(migration, /ON CONFLICT \(attempt_id\)/);
   assert.match(migration, /market_brain_attempt_claim_history/);
   assert.match(migration, /BEFORE UPDATE OR DELETE ON public\.market_brain_attempt_claim_history/);
   assert.match(migration, /market_brain_evidence_attempts_00_serialize_claim/);
