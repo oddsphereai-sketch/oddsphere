@@ -82,6 +82,19 @@ assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
   accounting: ZERO_ACCOUNTING,
 })));
 assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
+  attemptId: "10000000-0000-4000-8000-000000000006",
+  outcome: "skipped",
+  reasonCode: "missed_window",
+  startedAt: null,
+  requestCount: 0,
+  expectedPages: null,
+  receivedPages: 0,
+  responseSha256: null,
+  rawArchiveSha256: null,
+  parserRelease: null,
+  accounting: ZERO_ACCOUNTING,
+})), "an expired unexecuted obligation must remain visible instead of disappearing");
+assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
   attemptId: "10000000-0000-4000-8000-000000000003",
   outcome: "partial",
   reasonCode: "pagination_incomplete",

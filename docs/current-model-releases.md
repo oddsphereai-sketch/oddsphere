@@ -511,12 +511,13 @@ Last reviewed: 2026-10-27
   and all-failure cases cannot disappear from qualification denominators. Independent child scopes
   prevent one league market or prop stat family from authorizing its siblings, and typed authority
   chains distinguish capture/model, prediction-record, grade/stake, lock, member-snapshot, and reader owners.
-- `market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger` defines the shared,
+- `market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger` defines the shared,
   still-unwired attempt receipt for every active product and the canonical ordered set of qualification
   scopes informed by one source request. This preserves a joint Moneyline/Spread/Total or multi-stat
   observation instead of duplicating it or assigning it to an arbitrary isolated market. Its frozen vocabulary
   distinguishes captured rows, a genuine empty response, partial pagination/parser/identity/storage,
-  bounded failures, and explicit skipped reasons. Exact accounting requires every provider row to end
+  bounded failures, and explicit skipped reasons, including an expired planned window that received no
+  request. Exact accounting requires every provider row to end
   as parsed, unsupported, or malformed; every parsed row as matched, unmatched, or ambiguous; and every
   matched row as retained, duplicate, filtered, or write-failed. The v47 candidate table is append-only,
   binds relational columns to exact canonical payload bytes, verifies the checksum material in PostgreSQL,

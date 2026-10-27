@@ -11,7 +11,7 @@ import {
 } from "./marketBrainProductRegistry";
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_RELEASE =
-  "market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger" as const;
+  "market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger" as const;
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_OUTCOMES = [
   "success_with_rows",
@@ -40,6 +40,7 @@ export const MARKET_BRAIN_EVIDENCE_ATTEMPT_REASON_CODES = [
   "budget_suppressed",
   "capture_disabled",
   "no_active_events",
+  "missed_window",
 ] as const;
 
 export type MarketBrainEvidenceAttemptOutcome = typeof MARKET_BRAIN_EVIDENCE_ATTEMPT_OUTCOMES[number];
@@ -111,6 +112,7 @@ const FAILURE_REASONS = new Set<MarketBrainEvidenceAttemptReasonCode>([
 ]);
 const SKIPPED_REASONS = new Set<MarketBrainEvidenceAttemptReasonCode>([
   "not_due", "cadence_suppressed", "budget_suppressed", "capture_disabled", "no_active_events",
+  "missed_window",
 ]);
 
 export function createMarketBrainEvidenceAttempt(

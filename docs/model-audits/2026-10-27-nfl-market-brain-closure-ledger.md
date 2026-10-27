@@ -251,11 +251,12 @@ database, predictive, or production proof.
   every non-NFL feed remains explicitly `not_started`. This closes source-contract omission risk, not
   capture/parser/archive implementation, persisted-chain proof, or cross-sport data coverage, so both
   IDs remain open.
-- **MB-005 / MB-006 / MB-024 / MB-030 / MB-042:** evidence-attempt r2 and the forward-only v47
+- **MB-005 / MB-006 / MB-024 / MB-030 / MB-042:** evidence-attempt r3 and the forward-only v47
   candidate schema define one shared append-only receipt for every product/feed/participant/event/window.
   One request binds the canonical ordered set of all independent scopes it informs, preserving joint
   cross-market context without duplicate provider calls or arbitrary single-market ownership.
   Success-with-rows, genuine-empty, partial, failed, and skipped states have disjoint reason semantics;
+  an expired planned obligation with no request is retained explicitly as `missed_window`;
   request/page counts and raw -> parsed/unsupported/malformed -> matched/unmatched/ambiguous ->
   retained/duplicate/filtered/write-failed conservation prevent silent parser or storage loss. Canonical
   checksum material, exact payload text, relational columns, timestamps, release, and payload shape are

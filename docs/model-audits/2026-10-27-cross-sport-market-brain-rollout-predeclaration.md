@@ -6,7 +6,7 @@ Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_famil
 
 Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts`
 
-Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger`
+Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger`
 
 Capture-plan release: `market_brain_capture_plan_2026_10_27_r1_all_product_precommit`
 

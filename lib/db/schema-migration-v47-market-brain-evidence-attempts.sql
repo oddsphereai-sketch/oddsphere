@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
     'identity_incomplete', 'storage_partial', 'provider_failure',
     'authentication_failure', 'rate_limited', 'timeout', 'malformed_response',
     'parser_failure', 'storage_failure', 'cancelled', 'not_due',
-    'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events'
+    'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events', 'missed_window'
   )),
   request_count integer NOT NULL CHECK (request_count >= 0),
   expected_pages integer CHECK (expected_pages IS NULL OR expected_pages >= 0),
@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
     (outcome = 'success_empty' AND reason_code = 'provider_returned_empty' AND raw_rows = 0 AND started_at IS NOT NULL AND request_count > 0) OR
     (outcome = 'partial' AND reason_code IN ('pagination_incomplete', 'parser_partial', 'identity_incomplete', 'storage_partial') AND started_at IS NOT NULL AND request_count > 0) OR
     (outcome = 'failed' AND reason_code IN ('provider_failure', 'authentication_failure', 'rate_limited', 'timeout', 'malformed_response', 'parser_failure', 'storage_failure', 'cancelled') AND started_at IS NOT NULL AND request_count > 0) OR
-    (outcome = 'skipped' AND reason_code IN ('not_due', 'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events') AND started_at IS NULL AND request_count = 0)
+    (outcome = 'skipped' AND reason_code IN ('not_due', 'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events', 'missed_window') AND started_at IS NULL AND request_count = 0)
   )
 );
 
@@ -109,7 +109,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r2_joint_scope_ledger'
+  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r3_joint_scope_missed_window_ledger'
     OR cardinality(NEW.qualification_scope_keys) <>
       (SELECT count(DISTINCT scope_key) FROM unnest(NEW.qualification_scope_keys) AS scope_key)
     OR NEW.attempt_payload <> jsonb_build_object(
