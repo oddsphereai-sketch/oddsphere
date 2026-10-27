@@ -406,16 +406,39 @@ export async function purgeExpiredNflMarketBrainResearch(args: {
   client: SupabaseClient;
   limit?: number;
   signal?: AbortSignal;
-}): Promise<{ shadowsDeleted: number; artifactsDeleted: number }> {
+}): Promise<{
+  shadowsDeleted: number;
+  artifactsDeleted: number;
+  rawInputsDeleted: number;
+  shadowBytesRemaining: number;
+  artifactBytesRemaining: number;
+  rawInputBytesRemaining: number;
+  capped: { shadows: boolean; artifacts: boolean; rawInputs: boolean };
+}> {
   const limit = args.limit ?? 5_000;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10_000) {
+    throw new Error("NFL Market Brain purge limit must be an integer between 1 and 10000.");
+  }
   let query = args.client.rpc("purge_expired_nfl_market_brain_research", { p_limit: limit });
   if (args.signal) query = query.abortSignal(args.signal);
   const { data, error } = await query;
   if (error) throw new Error(`NFL Market Brain retention purge failed: ${error.message}`);
   const row = Array.isArray(data) ? data[0] : data;
+  const shadowsDeleted = Number(row?.shadows_deleted ?? 0);
+  const artifactsDeleted = Number(row?.artifacts_deleted ?? 0);
+  const rawInputsDeleted = Number(row?.raw_inputs_deleted ?? 0);
   return {
-    shadowsDeleted: Number(row?.shadows_deleted ?? 0),
-    artifactsDeleted: Number(row?.artifacts_deleted ?? 0),
+    shadowsDeleted,
+    artifactsDeleted,
+    rawInputsDeleted,
+    shadowBytesRemaining: Number(row?.shadow_bytes_remaining ?? 0),
+    artifactBytesRemaining: Number(row?.artifact_bytes_remaining ?? 0),
+    rawInputBytesRemaining: Number(row?.raw_input_bytes_remaining ?? 0),
+    capped: {
+      shadows: shadowsDeleted >= limit,
+      artifacts: artifactsDeleted >= limit,
+      rawInputs: rawInputsDeleted >= limit,
+    },
   };
 }
 

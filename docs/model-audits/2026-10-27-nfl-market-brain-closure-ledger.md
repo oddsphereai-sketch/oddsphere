@@ -147,6 +147,10 @@ database, predictive, or production proof.
   identity, shadow source manifests retain both components, and the store test proves identical bytes
   under two parser releases remain distinct. The PostgreSQL collision fixture is prepared but has not
   run here, and independent closure review remains outstanding.
+- **MB-023:** the existing authenticated cleanup cron now invokes Market Brain retention regardless
+  of capture flags and reports shadow, prior-artifact, and raw-parser deletion counts, per-class cap
+  hits, remaining bytes, purge errors, and the three retention horizons. Unit and route-source tests
+  pass; PostgreSQL deletion/telemetry execution and alert integration remain outstanding.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
   The candidate branch still truthfully carries new writer/collector identities; repository safety

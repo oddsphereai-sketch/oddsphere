@@ -193,6 +193,23 @@ BEGIN
 END;
 $schema_collision$;
 
+UPDATE public.nfl_market_brain_raw_parser_inputs
+   SET expires_at = statement_timestamp() - interval '1 second'
+ WHERE schema_release IN ('fixture_parser_v1', 'fixture_parser_v2');
+DO $retention_telemetry$
+DECLARE purge_result record;
+BEGIN
+  SELECT * INTO purge_result
+    FROM public.purge_expired_nfl_market_brain_research(5000);
+  IF purge_result.raw_inputs_deleted <> 2 OR
+     purge_result.shadows_deleted <> 0 OR
+     purge_result.artifacts_deleted <> 0 OR
+     purge_result.raw_input_bytes_remaining <> 0 THEN
+    RAISE EXCEPTION 'retention telemetry mismatch: %', row_to_json(purge_result);
+  END IF;
+END;
+$retention_telemetry$;
+
 SELECT CASE
   WHEN encode(digest(convert_to('{"Z":0,"a":2,"ä":1,"\ud800":4,"😀":3}', 'UTF8'), 'sha256'), 'hex')
        = '03cafa78ea77417a9c2c4c4d4c5dd1c9a2e5a556035092aad3ae6468c0709d01'

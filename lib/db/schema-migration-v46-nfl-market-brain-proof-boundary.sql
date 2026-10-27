@@ -307,8 +307,16 @@ COMMENT ON TABLE public.nfl_market_brain_shadow_snapshots IS
 COMMENT ON TABLE public.nfl_market_brain_prior_artifacts IS
   'Immutable content-addressed NFL prior artifacts retained beyond every research shadow reference.';
 
-CREATE OR REPLACE FUNCTION public.purge_expired_nfl_market_brain_research(p_limit integer DEFAULT 5000)
-RETURNS TABLE(shadows_deleted integer, artifacts_deleted integer)
+DROP FUNCTION IF EXISTS public.purge_expired_nfl_market_brain_research(integer);
+CREATE FUNCTION public.purge_expired_nfl_market_brain_research(p_limit integer DEFAULT 5000)
+RETURNS TABLE(
+  shadows_deleted integer,
+  artifacts_deleted integer,
+  raw_inputs_deleted integer,
+  shadow_bytes_remaining bigint,
+  artifact_bytes_remaining bigint,
+  raw_input_bytes_remaining bigint
+)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
@@ -316,6 +324,10 @@ AS $$
 DECLARE
   deleted_shadows integer;
   deleted_artifacts integer;
+  deleted_raw_inputs integer;
+  remaining_shadow_bytes bigint;
+  remaining_artifact_bytes bigint;
+  remaining_raw_input_bytes bigint;
 BEGIN
   IF p_limit < 1 OR p_limit > 10000 THEN
     RAISE EXCEPTION 'NFL Market Brain purge limit must be between 1 and 10000';
@@ -357,7 +369,17 @@ BEGIN
    USING expired_raw
    WHERE raw.schema_release = expired_raw.schema_release
      AND raw.parser_input_sha256 = expired_raw.parser_input_sha256;
-  RETURN QUERY SELECT deleted_shadows, deleted_artifacts;
+  GET DIAGNOSTICS deleted_raw_inputs = ROW_COUNT;
+
+  SELECT COALESCE(SUM(bytes), 0) INTO remaining_shadow_bytes
+    FROM public.nfl_market_brain_shadow_snapshots;
+  SELECT COALESCE(SUM(bytes), 0) INTO remaining_artifact_bytes
+    FROM public.nfl_market_brain_prior_artifacts;
+  SELECT COALESCE(SUM(bytes), 0) INTO remaining_raw_input_bytes
+    FROM public.nfl_market_brain_raw_parser_inputs;
+
+  RETURN QUERY SELECT deleted_shadows, deleted_artifacts, deleted_raw_inputs,
+    remaining_shadow_bytes, remaining_artifact_bytes, remaining_raw_input_bytes;
 END;
 $$;
 

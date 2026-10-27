@@ -100,13 +100,12 @@ export async function GET(request: Request): Promise<Response> {
       const odds_current_stream = await prune("odds_current_stream", "id", "observed_at", ocsCutoff);
       let nfl_market_brain_research: Awaited<ReturnType<typeof purgeExpiredNflMarketBrainResearch>> | null = null;
       let nflMarketBrainPurgeError: string | null = null;
-      if (process.env.NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED === "true" &&
-        process.env.NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED === "true") {
-        try {
-          nfl_market_brain_research = await purgeExpiredNflMarketBrainResearch({ client: supabase, limit: 5_000 });
-        } catch (error) {
-          nflMarketBrainPurgeError = error instanceof Error ? error.message : String(error);
-        }
+      // Retention is independent of capture activation. Disabling future
+      // writes must never strand already-stored research evidence indefinitely.
+      try {
+        nfl_market_brain_research = await purgeExpiredNflMarketBrainResearch({ client: supabase, limit: 5_000 });
+      } catch (error) {
+        nflMarketBrainPurgeError = error instanceof Error ? error.message : String(error);
       }
       const errors = [
         odds_events_raw.error,
@@ -125,7 +124,8 @@ export async function GET(request: Request): Promise<Response> {
           odds_current_stream.deleted,
           lab_response_snapshots.deleted,
           ...(nfl_market_brain_research
-            ? [nfl_market_brain_research.shadowsDeleted, nfl_market_brain_research.artifactsDeleted]
+            ? [nfl_market_brain_research.shadowsDeleted, nfl_market_brain_research.artifactsDeleted,
+                nfl_market_brain_research.rawInputsDeleted]
             : []),
         ].reduce((sum, value) => sum + value, 0),
         api_calls_made: 0,
@@ -137,6 +137,10 @@ export async function GET(request: Request): Promise<Response> {
             line_movements_days: LINE_MOVEMENTS_RETENTION_DAYS,
             odds_current_stream_days: ODDS_CURRENT_STREAM_RETENTION_DAYS,
             lab_response_snapshot_grace_hours: LAB_RESPONSE_SNAPSHOT_RETENTION_GRACE_HOURS,
+            nfl_market_brain_shadow_days: 210,
+            nfl_market_brain_prior_artifact_days: 600,
+            nfl_market_brain_raw_parser_input_days: 30,
+            nfl_market_brain_purge_limit_per_class: 5_000,
           },
           odds_events_raw,
           line_history,
