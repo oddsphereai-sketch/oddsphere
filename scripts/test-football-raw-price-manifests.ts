@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 
+// This provider-boundary test is already mandatory in verify:model-change;
+// keep the canonical/configuration isolation contracts on the same gate.
+import "./test-market-brain-canonical";
+import "./test-nfl-market-brain-capture-config";
+
 import { buildBalldontlieRawPriceManifest } from "../lib/services/football/balldontlieNflPreviewSlate";
 import { buildSharpRawPriceManifest } from "../lib/services/football/sharpApiFootballSharpOdds";
+import { footballRawPriceParserInput } from "../lib/services/football/footballRawPriceManifest";
 
 const fetchedAt = "2026-10-26T20:00:00.000Z";
 const startsAt = "2026-10-26T21:00:00.000Z";
@@ -46,6 +52,8 @@ assert.equal(missingHome?.price, null);
 assert.ok(missingHome?.notes.includes("price_unavailable"), "an incomplete individual side must remain explicit");
 assert.equal(bdl.rawResponseSha256?.length, 64);
 assert.equal(bdl.rows.length, bdl.returnedRows);
+assert.equal(bdl.rawParserInput, null,
+  "raw parser archival must be opt-in and absent from the shared parser path");
 assert.equal(bdl.rows.find((row) => row.disposition === "unmatched")?.rawRowSha256.length, 64,
   "even an unmatched raw row must remain individually auditable");
 const opening = buildBalldontlieRawPriceManifest({
@@ -93,5 +101,22 @@ assert.equal(sharp.observationsByGame[game.providerGameId]?.find((row) => row.se
 assert.equal(sharp.observationsByGame[game.providerGameId]?.find((row) => row.selection === "over")?.status, "unsupported");
 assert.ok(sharp.observationsByGame[game.providerGameId]?.find((row) => row.selection === "over")?.notes.includes("alternate_line"));
 assert.equal(sharp.rows.length, sharp.returnedRows);
+assert.equal(sharp.rawParserInput, null,
+  "SharpAPI parser archival must also be opt-in");
+
+const archived = buildBalldontlieRawPriceManifest({
+  values: [bdlRow],
+  requestedGameIds: new Set([game.providerGameId]),
+  phase: "current",
+  providerFetchedAt: fetchedAt,
+  includeRawParserInput: true,
+});
+assert.equal(archived.rawParserInput?.payload.length, 1);
+assert.equal(archived.rawParserInputFailureReason, null);
+
+const oversized = footballRawPriceParserInput([{ padding: "x".repeat(2 * 1024 * 1024) }]);
+assert.equal(oversized.input, null);
+assert.equal(oversized.failureReason,
+  "football_raw_price_parser_input_exceeds_2_mib_research_archive_limit");
 
 console.log("Football raw price manifests: response hashes, row accounting, duplicates, partial sides, and unsupported rows passed");

@@ -173,19 +173,23 @@ async function main() {
   assert.match(store, /\.eq\("contract_release", MARKET_BRAIN_CONTRACT_RELEASE\)/);
 
   const route = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route.ts"), "utf8");
-  assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED/);
-  assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED/,
+  const captureConfig = readFileSync(
+    path.resolve("lib/services/football/nflMarketBrainCaptureConfig.ts"), "utf8",
+  );
+  assert.match(route, /resolveNflMarketBrainCaptureConfiguration\(process\.env\)/);
+  assert.match(captureConfig, /NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED/);
+  assert.match(captureConfig, /NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED/,
     "research capture must require a second explicit canary approval");
-  assert.match(route, /NFL_MARKET_BRAIN_SHADOW_CANARY_MAX_GAMES/,
+  assert.match(captureConfig, /NFL_MARKET_BRAIN_SHADOW_CANARY_MAX_GAMES/,
     "research capture must have a bounded per-run canary surface");
-  assert.match(route, /NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON/,
+  assert.match(captureConfig, /NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON/,
     "the cron must carry manifest-predeclared attempt UUIDs rather than its future-generated run id");
   assert.match(route, /market_brain_persistence_error: result\.marketBrainPersistenceError/);
   assert.match(route, /result\.marketBrainCaptureFailures > 0/,
     "a captured research failure must make cron health partial rather than appearing healthy");
   assert.match(route, /market_brain_capture_failure_reasons: result\.marketBrainCaptureFailureReasons/);
 
-  const migration = readFileSync(path.resolve("lib/db/schema-migration-v45-nfl-market-brain-shadow.sql"), "utf8");
+  const migration = readFileSync(path.resolve("lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql"), "utf8");
   assert.match(migration, /bytes integer NOT NULL CHECK \(bytes > 0 AND bytes <= 98304\)/);
   assert.match(migration, /contract_release text NOT NULL/);
   assert.match(migration, /268435456/);

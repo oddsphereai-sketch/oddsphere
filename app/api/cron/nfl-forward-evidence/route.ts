@@ -12,6 +12,8 @@ import { runNflPlayerPropsProductionWriter } from "@/lib/services/football/nflPl
 import { planNflPlayerPropsRefresh } from "@/lib/services/football/nflPlayerPropsCadence";
 import { readNflPlayerPropsSnapshot } from "@/lib/services/football/nflPlayerPropsSnapshotStore";
 import { resolveNflForwardWeek, resolveNflOperationalWeek } from "@/lib/services/football/nflForwardWeekSelection";
+import { resolveNflMarketBrainCaptureConfiguration } from
+  "@/lib/services/football/nflMarketBrainCaptureConfig";
 
 export const maxDuration = 300;
 
@@ -68,13 +70,14 @@ export async function GET(request: Request): Promise<Response> {
     if (currentSeasonState.apiCalls > 0) {
       await writeNflPlayerPropsCurrentSeasonState({ client: supabase, state: currentSeasonState.state });
     }
-    const marketBrainCaptureEnabled = process.env.NFL_MARKET_BRAIN_SHADOW_CAPTURE_ENABLED === "true" &&
-      process.env.NFL_MARKET_BRAIN_SHADOW_CANARY_APPROVED === "true";
-    const marketBrainCaptureMaxGames = Number.parseInt(
-      process.env.NFL_MARKET_BRAIN_SHADOW_CANARY_MAX_GAMES ?? "2", 10);
-    const marketBrainCaptureAttemptSchedule = marketBrainCaptureEnabled
-      ? parseMarketBrainCaptureAttemptSchedule(requiredEnv("NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON"))
-      : undefined;
+    // Resolved after the authoritative current-season state refresh. Invalid
+    // research configuration is data, never an exception from this route.
+    const marketBrainConfiguration = resolveNflMarketBrainCaptureConfiguration(process.env);
+    const marketBrainCaptureRequested = marketBrainConfiguration.requested;
+    const marketBrainCaptureEnabled = marketBrainConfiguration.enabled;
+    const marketBrainCaptureMaxGames = marketBrainConfiguration.maximumGames;
+    const marketBrainCaptureAttemptSchedule = marketBrainConfiguration.attemptSchedule;
+    const marketBrainConfigurationError = marketBrainConfiguration.error;
     const result = await runNflForwardEvidenceWriter({
       client: supabase,
       season,
@@ -132,15 +135,32 @@ export async function GET(request: Request): Promise<Response> {
       finding === "NFL_PLAYER_PROPS_SOURCE_AWARE_REFERENCE_OFFERS_UNAVAILABLE"
       || finding === "NFL_PLAYER_PROPS_REFERENCE_OFFER_CACHE_FAILED"
       || finding === "NFL_PLAYER_PROPS_PRIVATE_TRACKING_CAPTURE_FAILED") ?? [];
+    const marketBrainDetails = marketBrainCaptureRequested || marketBrainConfigurationError !== null
+      ? {
+          market_brain_capture_requested: marketBrainCaptureRequested,
+          market_brain_capture_enabled: marketBrainCaptureEnabled,
+          market_brain_configuration_error: marketBrainConfigurationError,
+          market_brain_capture_canary_limit: marketBrainCaptureMaxGames,
+          market_brain_shadows_proposed: result.marketBrainShadowsProposed,
+          market_brain_shadows_inserted: result.marketBrainShadowsInserted,
+          market_brain_shadows_existing: result.marketBrainShadowsExisting,
+          market_brain_capture_failures: result.marketBrainCaptureFailures,
+          market_brain_capture_failure_reasons: result.marketBrainCaptureFailureReasons,
+          market_brain_persistence_attempted: result.marketBrainPersistenceAttempted,
+          market_brain_persistence_error: result.marketBrainPersistenceError,
+        }
+      : {};
     return {
       records_updated: result.inserted + (playerProps?.memberRows ?? 0),
       api_calls_made: currentSeasonState.apiCalls + result.apiCallsMaximum + (playerProps?.apiCallsMaximum ?? 0),
       partial: result.healthHolds.length > 0 || result.memberSnapshotError !== null
         || result.marketBrainPersistenceError !== null
         || result.marketBrainCaptureFailures > 0
+        || marketBrainConfigurationError !== null
         || playerPropsError !== null || playerPropsCriticalHealth.length > 0,
       error_message: [result.healthHolds.join(","), result.memberSnapshotError,
         result.marketBrainPersistenceError, ...result.marketBrainCaptureFailureReasons,
+        marketBrainConfigurationError,
         playerPropsError, playerPropsCriticalHealth.join(",")]
         .filter(Boolean).join(",") || null,
       details: {
@@ -171,15 +191,7 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
-        market_brain_capture_enabled: marketBrainCaptureEnabled,
-        market_brain_capture_canary_limit: marketBrainCaptureMaxGames,
-        market_brain_shadows_proposed: result.marketBrainShadowsProposed,
-        market_brain_shadows_inserted: result.marketBrainShadowsInserted,
-        market_brain_shadows_existing: result.marketBrainShadowsExisting,
-        market_brain_capture_failures: result.marketBrainCaptureFailures,
-        market_brain_capture_failure_reasons: result.marketBrainCaptureFailureReasons,
-        market_brain_persistence_attempted: result.marketBrainPersistenceAttempted,
-        market_brain_persistence_error: result.marketBrainPersistenceError,
+        ...marketBrainDetails,
         player_props_enabled: playerPropsEnabled,
         player_props_cadence: playerPropsCadence,
         player_props_cadence_error: playerPropsCadenceError,
@@ -196,36 +208,6 @@ export async function GET(request: Request): Promise<Response> {
     leaseRetryMaxWaitMs: 10_000,
     leaseRetryIntervalMs: 1_000,
   });
-}
-
-function parseMarketBrainCaptureAttemptSchedule(raw: string): Record<string, Array<{
-  attemptId: string;
-  windowOpensAt: string;
-  windowClosesAt: string;
-}>> {
-  let value: unknown;
-  try { value = JSON.parse(raw); } catch { throw new Error("NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON must be valid JSON."); }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("NFL_MARKET_BRAIN_CAPTURE_ATTEMPTS_JSON must be an event:stage attempt-window object.");
-  }
-  const entries = Object.entries(value);
-  const validAttempt = (attempt: unknown): attempt is { attemptId: string; windowOpensAt: string; windowClosesAt: string } => {
-    if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
-    const row = attempt as Record<string, unknown>;
-    return typeof row.attemptId === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.attemptId) &&
-      typeof row.windowOpensAt === "string" && typeof row.windowClosesAt === "string" &&
-      Number.isFinite(Date.parse(row.windowOpensAt)) && Number.isFinite(Date.parse(row.windowClosesAt)) &&
-      Date.parse(row.windowOpensAt) <= Date.parse(row.windowClosesAt);
-  };
-  if (entries.length < 1 || entries.length > 12 || entries.some(([key, attempts]) =>
-    !/^[^:]+:(opening|unlocked|t60)$/.test(key) || !Array.isArray(attempts) ||
-    attempts.length < 1 || attempts.length > 32 || attempts.some((attempt) => !validAttempt(attempt)))) {
-    throw new Error("NFL Market Brain capture schedule must contain 1-12 event:stage keys with valid UUID windows.");
-  }
-  return Object.fromEntries(entries) as Record<string, Array<{
-    attemptId: string; windowOpensAt: string; windowClosesAt: string;
-  }>>;
 }
 
 export const POST = GET;

@@ -110,13 +110,18 @@ async function main() {
   assert.equal(input.featureChecksum, input.features.checksum);
   assert.equal(input.sequence.accounting.inputCases, 1);
 
-  const migration = readFileSync("lib/db/schema-migration-v45-nfl-market-brain-shadow.sql", "utf8");
+  const migration = readFileSync("lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql", "utf8");
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_capture_sets/);
+  assert.match(migration, /refuses to replace nonempty legacy v45 tables/);
+  assert.match(migration, /UNIQUE \(\s*event_id, shadow_release, contract_release, manifest_checksum, partition_role,/);
+  assert.match(migration, /jsonb_path_query_array\(capture_set -> 'membership'/);
   assert.match(migration, /reject_nfl_market_brain_late_capture/);
   assert.match(migration, /jsonb_array_length\(NEW\.capture_set -> 'expectedCaptureAttempts'\)/);
   assert.match(migration, /s\.created_at NOT BETWEEN NEW\.window_opens_at AND NEW\.window_closes_at/);
   assert.match(migration, /manifest\.created_at < NEW\.window_opens_at/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_research_inputs/);
+  assert.match(migration, /research_input\.created_at <= \(NEW\.prediction ->> 'inferredAt'\)::timestamptz/);
+  assert.match(migration, /conrelid = 'public\.nfl_market_brain_research_predictions'::regclass/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_research_outcomes/);
 
   console.log("NFL Market Brain proof chain: predeclared attempts, DB-complete success/failure receipt, durable sequence/features, and late-row freeze passed");

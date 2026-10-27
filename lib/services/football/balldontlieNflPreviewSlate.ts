@@ -12,7 +12,7 @@ import {
 export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
-  "balldontlie_nfl_regular_slate_2026_10_27_r6_raw_parser_input" as const;
+  "balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture" as const;
 export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
   "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
 
@@ -94,7 +94,7 @@ export type NflRegularProviderSlate = Omit<NflPreviewProviderSlate, "release"> &
   openingOddsAllBooksByGame: Record<string, NflPreviewBookOdds[]>;
   openingOddsComparableBooksByGame: Record<string, NflPreviewBookOdds[]>;
   /** Raw row/side evidence retained before complete-pair and same-vendor selection. */
-  rawPriceResponseManifests: {
+  rawPriceResponseManifests?: {
     current: FootballRawPriceResponseManifest;
     opening: FootballRawPriceResponseManifest;
   };
@@ -229,6 +229,10 @@ export async function fetchBalldontlieNflRegularSlate(args: {
   week: number;
   apiKey?: string;
   fetchImpl?: typeof fetch;
+  /** Research-only sidecar. Default false preserves the incumbent provider path. */
+  captureRawPriceManifest?: boolean;
+  /** Test/replay clock; production defaults to the real receipt time. */
+  clock?: () => string;
 }): Promise<NflRegularProviderSlate> {
   const apiKey = args.apiKey ?? process.env.BALLDONTLIE_API_KEY;
   const fetchImpl = args.fetchImpl ?? fetch;
@@ -262,6 +266,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     apiKey,
     fetchImpl,
     onRequest: () => { providerRequests += 1; },
+    captureResponseDigests: args.captureRawPriceManifest === true,
   });
   if (currentRead.nextCursor !== null) throw new Error("BALLDONTLIE regular current odds exceeded the pagination safety budget.");
   const openingRead = await readPages({
@@ -272,17 +277,19 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     fetchImpl,
     onRequest: () => { providerRequests += 1; },
     optional: true,
+    captureResponseDigests: args.captureRawPriceManifest === true,
   });
   if (openingRead.nextCursor !== null) throw new Error("BALLDONTLIE regular opening odds exceeded the pagination safety budget.");
   const requestedGameIds = new Set(gameIds);
-  const fetchedAt = new Date().toISOString();
-  const rawPriceResponseManifests = {
+  const fetchedAt = args.clock?.() ?? new Date().toISOString();
+  const rawPriceResponseManifests = args.captureRawPriceManifest ? {
     current: buildBalldontlieRawPriceManifest({
       values: currentRead.rows,
       requestedGameIds,
       phase: "current",
       providerFetchedAt: fetchedAt,
       rawResponseSha256: rawPriceSha256(currentRead.pageResponseSha256s),
+      includeRawParserInput: true,
     }),
     opening: buildBalldontlieRawPriceManifest({
       values: openingRead.rows,
@@ -290,8 +297,9 @@ export async function fetchBalldontlieNflRegularSlate(args: {
       phase: "provider_opening",
       providerFetchedAt: fetchedAt,
       rawResponseSha256: rawPriceSha256(openingRead.pageResponseSha256s),
+      includeRawParserInput: true,
     }),
-  };
+  } : undefined;
   const currentOddsAllBooksByGame = groupBooksByGame(currentRead.rows, requestedGameIds);
   const currentOddsComparableBooksByGame = comparableBooksByGame(currentOddsAllBooksByGame);
   const openingOddsAllBooksByGame = groupBooksByGame(openingRead.rows, requestedGameIds, true);
@@ -318,7 +326,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     currentOddsComparableBooksByGame,
     openingOddsAllBooksByGame,
     openingOddsComparableBooksByGame,
-    rawPriceResponseManifests,
+    ...(rawPriceResponseManifests ? { rawPriceResponseManifests } : {}),
     providerRequests,
   };
 }
@@ -372,6 +380,7 @@ async function readPages(args: {
   fetchImpl: typeof fetch;
   onRequest: () => void;
   optional?: boolean;
+  captureResponseDigests?: boolean;
 }): Promise<{ rows: unknown[]; nextCursor: string | null; pageResponseSha256s: string[] }> {
   const rows: unknown[] = [];
   const pageResponseSha256s: string[] = [];
@@ -394,12 +403,16 @@ async function readPages(args: {
     });
     if (!response.ok) {
       if (args.optional && (response.status === 404 || response.status === 422)) {
-        return { rows: [], nextCursor: null, pageResponseSha256s: [rawPriceSha256({ status: response.status })] };
+        return {
+          rows: [],
+          nextCursor: null,
+          pageResponseSha256s: args.captureResponseDigests ? [rawPriceSha256({ status: response.status })] : [],
+        };
       }
       throw new Error(`BALLDONTLIE ${args.path} failed with HTTP ${response.status}.`);
     }
     const body = await response.json() as BdlEnvelope;
-    pageResponseSha256s.push(rawPriceSha256(body));
+    if (args.captureResponseDigests) pageResponseSha256s.push(rawPriceSha256(body));
     if (!Array.isArray(body.data)) throw new Error(`BALLDONTLIE ${args.path} returned a malformed payload.`);
     rows.push(...body.data);
     const next = body.meta?.next_cursor;
@@ -515,7 +528,12 @@ export function buildBalldontlieRawPriceManifest(args: {
   phase: "provider_opening" | "current";
   providerFetchedAt: string;
   rawResponseSha256?: string;
+  includeRawParserInput?: boolean;
 }): FootballRawPriceResponseManifest {
+  const rawParserInput = args.includeRawParserInput ? footballRawPriceParserInput(args.values) : {
+    input: null,
+    failureReason: null,
+  };
   const observationsByGame = Object.fromEntries(
     [...args.requestedGameIds].map((gameId) => [gameId, [] as FootballRawPriceObservation[]]),
   );
@@ -590,7 +608,8 @@ export function buildBalldontlieRawPriceManifest(args: {
     participant: null,
     providerFetchedAt: args.providerFetchedAt,
     rawResponseSha256: args.rawResponseSha256 ?? rawPriceSha256(args.values),
-    rawParserInput: footballRawPriceParserInput(args.values),
+    rawParserInput: rawParserInput.input,
+    rawParserInputFailureReason: rawParserInput.failureReason,
     returnedRows: args.values.length,
     matchedRows,
     unmatchedRows,

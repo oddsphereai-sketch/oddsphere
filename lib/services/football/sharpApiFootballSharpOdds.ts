@@ -16,7 +16,7 @@ import {
 } from "./footballRawPriceManifest";
 
 export const FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE =
-  "football_sharp_price_capture_2026_10_27_r4_raw_parser_input" as const;
+  "football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity" as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK = 12 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_PAGE_SIZE = 200 as const;
 export const FOOTBALL_SHARP_PRICE_CAPTURE_TIMEOUT_MS = 20_000 as const;
@@ -40,7 +40,7 @@ export type FootballSharpOddsResult<TBook> = {
   failedBooks: SharpBook[];
   failures: Array<{ sportsbook: SharpBook; reason: string }>;
   booksByGame: Record<string, TBook[]>;
-  rawPriceResponseManifests: FootballRawPriceResponseManifest[];
+  rawPriceResponseManifests?: FootballRawPriceResponseManifest[];
 };
 
 /**
@@ -64,9 +64,12 @@ export async function fetchSharpApiNflSharpOdds(args: {
   apiKey?: string;
   client?: SharpClient;
   capturedAt?: string;
+  /** Research-only sidecar. Default false preserves the incumbent provider path. */
+  captureRawPriceManifest?: boolean;
 }): Promise<FootballSharpOddsResult<NflPreviewBookOdds>> {
   const result = await fetchFootballSharpOdds({
     league: "nfl", games: args.games, apiKey: args.apiKey, client: args.client, capturedAt: args.capturedAt,
+    captureRawPriceManifest: args.captureRawPriceManifest,
   });
   return {
     ...result,
@@ -82,9 +85,11 @@ export async function fetchSharpApiNcaafSharpOdds(args: {
   apiKey?: string;
   client?: SharpClient;
   capturedAt?: string;
+  captureRawPriceManifest?: boolean;
 }): Promise<FootballSharpOddsResult<NcaafBookOdds>> {
   const result = await fetchFootballSharpOdds({
     league: "ncaaf", games: args.games, apiKey: args.apiKey, client: args.client, capturedAt: args.capturedAt,
+    captureRawPriceManifest: args.captureRawPriceManifest,
   });
   return {
     ...result,
@@ -112,12 +117,18 @@ async function fetchFootballSharpOdds(args: {
   apiKey?: string;
   client?: SharpClient;
   capturedAt?: string;
+  captureRawPriceManifest?: boolean;
 }): Promise<FootballSharpOddsResult<CapturedBook>> {
   const key = args.apiKey ?? process.env.SHARPAPI_KEY;
   if (!key && !args.client) throw new Error("SHARPAPI_KEY is required for sharp-book football price capture.");
   const client = args.client ?? new SharpApiClient(key!);
   const attempts = await Promise.allSettled(FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.map((sportsbook) =>
-    fetchBookPages({ client, league: args.league, sportsbook })));
+    fetchBookPages({
+      client,
+      league: args.league,
+      sportsbook,
+      captureResponseDigests: args.captureRawPriceManifest === true,
+    })));
   const rows = attempts.flatMap((attempt) => attempt.status === "fulfilled" ? attempt.value.rows : []);
   const failedBooks = attempts.flatMap((attempt, index) => attempt.status === "rejected"
     ? [FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS[index]!]
@@ -131,8 +142,10 @@ async function fetchFootballSharpOdds(args: {
   const requests = attempts.reduce((sum, attempt) => sum + (attempt.status === "fulfilled"
     ? attempt.value.requests
     : FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK), 0);
-  const providerFetchedAt = args.capturedAt ?? new Date().toISOString();
-  const rawPriceResponseManifests = attempts.map((attempt, index): FootballRawPriceResponseManifest => {
+  const providerFetchedAt = args.captureRawPriceManifest
+    ? args.capturedAt ?? new Date().toISOString()
+    : null;
+  const rawPriceResponseManifests = args.captureRawPriceManifest ? attempts.map((attempt, index): FootballRawPriceResponseManifest => {
     const sportsbook = FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS[index]!;
     return attempt.status === "fulfilled"
       ? buildSharpRawPriceManifest({
@@ -140,14 +153,15 @@ async function fetchFootballSharpOdds(args: {
           games: args.games,
           league: args.league,
           sportsbook,
-          providerFetchedAt,
+          providerFetchedAt: providerFetchedAt!,
           rawResponseSha256: rawPriceSha256(attempt.value.pageResponseSha256s),
+          includeRawParserInput: true,
         })
       : {
           provider: "sharpapi",
           feed: "main_odds",
           participant: sportsbook,
-          providerFetchedAt,
+          providerFetchedAt: providerFetchedAt!,
           rawResponseSha256: null,
           rawParserInput: null,
           returnedRows: 0,
@@ -159,7 +173,7 @@ async function fetchFootballSharpOdds(args: {
           failureReason: attempt.reason instanceof Error ? attempt.reason.message : "unknown_sharp_book_capture_error",
           observationsByGame: Object.fromEntries(args.games.map((game) => [game.providerGameId, []])),
         };
-  });
+  }) : undefined;
 
   const booksByGame: Record<string, CapturedBook[]> = {};
   const claimedEvents = new Set<string>();
@@ -187,7 +201,7 @@ async function fetchFootballSharpOdds(args: {
     failedBooks,
     failures,
     booksByGame,
-    rawPriceResponseManifests,
+    ...(rawPriceResponseManifests ? { rawPriceResponseManifests } : {}),
   };
 }
 
@@ -195,6 +209,7 @@ async function fetchBookPages(args: {
   client: SharpClient;
   league: "nfl" | "ncaaf";
   sportsbook: SharpBook;
+  captureResponseDigests: boolean;
 }): Promise<{ rows: Json[]; requests: number; pageResponseSha256s: string[] }> {
   const signal = AbortSignal.timeout(FOOTBALL_SHARP_PRICE_CAPTURE_TIMEOUT_MS);
   const rows: Json[] = [];
@@ -220,7 +235,9 @@ async function fetchBookPages(args: {
       retryRateLimitInternally: false,
     });
     if (!Array.isArray(response.data)) throw new Error(`${args.league} ${args.sportsbook} odds returned malformed data.`);
-    pageResponseSha256s.push(rawPriceSha256({ data: response.data, pagination: response.pagination ?? null }));
+    if (args.captureResponseDigests) {
+      pageResponseSha256s.push(rawPriceSha256({ data: response.data, pagination: response.pagination ?? null }));
+    }
     const fingerprint = JSON.stringify(response.data);
     if (response.data.length > 0 && fingerprints.has(fingerprint)) {
       throw new Error(`${args.league} ${args.sportsbook} odds pagination repeated a prior page.`);
@@ -258,7 +275,12 @@ export function buildSharpRawPriceManifest(args: {
   sportsbook: SharpBook;
   providerFetchedAt: string;
   rawResponseSha256?: string;
+  includeRawParserInput?: boolean;
 }): FootballRawPriceResponseManifest {
+  const rawParserInput = args.includeRawParserInput ? footballRawPriceParserInput(args.rows) : {
+    input: null,
+    failureReason: null,
+  };
   const observationsByGame = Object.fromEntries(
     args.games.map((game) => [game.providerGameId, [] as FootballRawPriceObservation[]]),
   );
@@ -342,7 +364,8 @@ export function buildSharpRawPriceManifest(args: {
     participant: args.sportsbook,
     providerFetchedAt: args.providerFetchedAt,
     rawResponseSha256: args.rawResponseSha256 ?? rawPriceSha256(args.rows),
-    rawParserInput: footballRawPriceParserInput(args.rows),
+    rawParserInput: rawParserInput.input,
+    rawParserInputFailureReason: rawParserInput.failureReason,
     returnedRows: args.rows.length,
     matchedRows,
     unmatchedRows,

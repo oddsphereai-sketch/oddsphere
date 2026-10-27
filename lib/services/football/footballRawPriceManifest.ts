@@ -45,6 +45,8 @@ export type FootballRawPriceResponseManifest = {
     payload: unknown[];
     bytes: number;
   } | null;
+  /** Research-only archive failure; never a provider/parser failure. */
+  rawParserInputFailureReason?: string | null;
   returnedRows: number;
   matchedRows: number;
   unmatchedRows: number;
@@ -85,18 +87,36 @@ export function failedFootballRawPriceManifest(args: {
   };
 }
 
-export function footballRawPriceParserInput(values: unknown[]) {
-  const payload = structuredClone(values);
-  const bytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
-  if (bytes <= 0 || bytes > 2 * 1024 * 1024) {
-    throw new Error("Football raw-price parser input exceeds the bounded 2 MiB research archive limit.");
+export function footballRawPriceParserInput(values: unknown[]): {
+  input: NonNullable<FootballRawPriceResponseManifest["rawParserInput"]> | null;
+  failureReason: string | null;
+} {
+  try {
+    const payload = structuredClone(values);
+    const serialized = JSON.stringify(payload);
+    const bytes = Buffer.byteLength(serialized, "utf8");
+    if (bytes <= 0 || bytes > 2 * 1024 * 1024) {
+      return {
+        input: null,
+        failureReason: "football_raw_price_parser_input_exceeds_2_mib_research_archive_limit",
+      };
+    }
+    return {
+      input: {
+        schema: "football_raw_price_parser_input_v1",
+        sha256: createHash("sha256").update(serialized).digest("hex"),
+        payload,
+        bytes,
+      },
+      failureReason: null,
+    };
+  } catch (error) {
+    return {
+      input: null,
+      failureReason: `football_raw_price_parser_input_archive_failed:${
+        error instanceof Error ? error.message : "unknown_error"}`.slice(0, 512),
+    };
   }
-  return {
-    schema: "football_raw_price_parser_input_v1" as const,
-    sha256: rawPriceSha256(payload),
-    payload,
-    bytes,
-  };
 }
 
 export function markRawPriceDuplicates(

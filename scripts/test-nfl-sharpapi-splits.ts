@@ -145,10 +145,17 @@ assert.deepEqual(
 );
 
 const undated = { ...row, event_id: "nfl_patriots_seahawks", event_start_time: null };
-assert.deepEqual(
-  matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [undated] }], "2026-08-21T17:01:00Z"),
-  {},
-  "a split row without a provider kickoff or date-bearing event identity must fail closed",
+assert.ok(
+  matchSharpApiNflSplitRows([game], [{ date: "2026-09-09", rows: [undated] }], "2026-08-21T17:01:00Z")[
+    game.providerGameId
+  ],
+  "the feature-off incumbent matcher must retain its deployed undated-row semantics",
+);
+assert.ok(
+  matchAllSharpApiNflSplitRows(
+    [game], [{ date: "2026-09-09", rows: [undated] }], "2026-08-21T17:01:00Z",
+  )[game.providerGameId]?.every((source) => source.status === "unavailable"),
+  "the opt-in research ledger must fail closed without provider kickoff or date-bearing event identity",
 );
 
 const crossLeague = { ...row, league: "cfl" };
@@ -170,6 +177,7 @@ async function testFetchContract(): Promise<void> {
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
     clock: () => "2026-08-21T17:04:05Z",
+    captureResearchManifest: true,
     client: {
       async fetchAll<T>(options: { path: string; query?: unknown; maxPages?: number }): Promise<T[]> {
         calls.push({ path: options.path, query: options.query, maxPages: options.maxPages });
@@ -180,17 +188,17 @@ async function testFetchContract(): Promise<void> {
   assert.equal(fetched.release, NFL_SHARP_API_SPLITS_RELEASE);
   assert.equal(fetched.requests, 1);
   assert.equal(fetched.rows, 1);
-  assert.equal(fetched.captureManifest.returnedRows, 1);
-  assert.equal(fetched.captureManifest.matchedRows, 1);
-  assert.equal(fetched.captureManifest.responseReceivedAt, "2026-08-21T17:04:05.000Z");
+  assert.equal(fetched.captureManifest?.returnedRows, 1);
+  assert.equal(fetched.captureManifest?.matchedRows, 1);
+  assert.equal(fetched.captureManifest?.responseReceivedAt, "2026-08-21T17:04:05.000Z");
   assert.deepEqual(calls, [{
     path: "/splits",
     query: { league: "nfl", sportsbook: "circa,draftkings,betmgm", limit: 200 },
     maxPages: 1,
   }]);
   assert.equal(fetched.splitsByGame[game.providerGameId]?.moneyline.sourceSportsbook, "circa");
-  assert.equal(fetched.sourcesByGame[game.providerGameId]?.length, 3);
-  assert.equal(fetched.sourcesByGame[game.providerGameId]?.find((source) => source.sportsbook === "draftkings")?.status,
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.length, 3);
+  assert.equal(fetched.sourcesByGame?.[game.providerGameId]?.find((source) => source.sportsbook === "draftkings")?.status,
     "unavailable");
 }
 
@@ -200,6 +208,7 @@ async function testTruncationFailsClosed(): Promise<void> {
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
     clock: () => "2026-08-21T17:04:05Z",
+    captureResearchManifest: true,
     client: { async fetchAll<T>(): Promise<T[]> { return Array.from({ length: 200 }, () => row) as T[]; } },
   }), /completeness is unproved/);
 }
@@ -216,6 +225,7 @@ async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
     clock: () => "2026-08-21T17:04:05Z",
+    captureResearchManifest: true,
     client: {
       async fetchAll<T>(): Promise<T[]> { throw new Error("direct page metadata path expected"); },
       async fetch<T>(): Promise<{ data: T; pagination: { total: number; count: number; offset: number; has_more: boolean } }> {
@@ -223,8 +233,8 @@ async function testExactFullPageRequiresExplicitCompleteness(): Promise<void> {
       },
     },
   });
-  assert.equal(fetched.captureManifest.returnedRows, 200);
-  assert.equal(fetched.captureManifest.unmatchedRows, 200);
+  assert.equal(fetched.captureManifest?.returnedRows, 200);
+  assert.equal(fetched.captureManifest?.unmatchedRows, 200);
 }
 
 async function testShortPageStillFailsWhenProviderDeclaresMore(): Promise<void> {
@@ -232,6 +242,7 @@ async function testShortPageStillFailsWhenProviderDeclaresMore(): Promise<void> 
     apiKey: "test-key",
     games: [game],
     capturedAt: "2026-08-21T17:04:00Z",
+    captureResearchManifest: true,
     client: {
       async fetchAll<T>(): Promise<T[]> { throw new Error("direct page metadata path expected"); },
       async fetch<T>(): Promise<{ data: T; pagination: { total: number; count: number; offset: number; has_more: boolean } }> {

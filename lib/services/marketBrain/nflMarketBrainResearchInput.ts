@@ -17,7 +17,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE =
-  "nfl_market_brain_research_input_2026_10_27_r1_durable_capture_bound" as const;
+  "nfl_market_brain_research_input_2026_10_27_r2_v46_full_json_binding" as const;
 
 export type NflMarketBrainResearchInput = {
   release: typeof NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE;
@@ -89,6 +89,7 @@ export async function materializeAndPersistNflMarketBrainResearchInput(args: {
   };
   let query = args.client.from("nfl_market_brain_research_inputs").insert({
     research_input_checksum: researchInput.checksum,
+    research_input_release: researchInput.release,
     event_id: researchInput.eventId,
     cutoff_at: researchInput.cutoffAt,
     starts_at: researchInput.startsAt,

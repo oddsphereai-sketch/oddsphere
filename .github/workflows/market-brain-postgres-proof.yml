@@ -1,0 +1,51 @@
+name: Market Brain PostgreSQL proof
+
+on:
+  pull_request:
+    paths:
+      - "lib/db/schema-migration-v45-nfl-market-brain-shadow.sql"
+      - "lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql"
+      - "lib/services/football/**"
+      - "lib/services/marketBrain/**"
+      - "scripts/fixtures/nfl-market-brain-v45-installed.sql"
+      - "scripts/test-nfl-market-brain-postgres-v46.sh"
+      - "scripts/test-nfl-market-brain-**"
+      - "package.json"
+      - ".github/workflows/market-brain-postgres-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: oddsphere_market_brain_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oddsphere_market_brain_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      MARKET_BRAIN_POSTGRES_URL: postgresql://postgres:postgres@127.0.0.1:5432/oddsphere_market_brain_test
+      MARKET_BRAIN_POSTGRES_PROOF_DISPOSABLE: YES
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Execute real PostgreSQL upgrade proof
+        run: bash scripts/test-nfl-market-brain-postgres-v46.sh
+      - name: Run mandatory model-change gate with PostgreSQL available
+        run: npm run verify:model-change

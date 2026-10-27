@@ -205,9 +205,12 @@ export async function runNflForwardEvidenceWriter(args: {
     windowClosesAt: string;
   }>>;
 }): Promise<NflForwardWriterResult> {
-  if (args.marketBrainCaptureEnabled && (!Number.isInteger(args.marketBrainCaptureMaxGames) ||
+  let marketBrainCaptureEnabled = args.marketBrainCaptureEnabled === true;
+  let marketBrainConfigurationError: string | null = null;
+  if (marketBrainCaptureEnabled && (!Number.isInteger(args.marketBrainCaptureMaxGames) ||
     args.marketBrainCaptureMaxGames! < 1 || args.marketBrainCaptureMaxGames! > 4)) {
-    throw new Error("NFL Market Brain capture requires a canary limit between one and four games.");
+    marketBrainCaptureEnabled = false;
+    marketBrainConfigurationError = "nfl_market_brain_capture_disabled_invalid_canary_limit";
   }
   // Publication and planning need the complete current release only. Loading
   // superseded large JSON releases added no current fixture authority and can
@@ -243,7 +246,7 @@ export async function runNflForwardEvidenceWriter(args: {
     return emptyResult(need.reason, tracking, memberSnapshot);
   }
 
-  const marketBrainPriorArtifactRead = args.marketBrainCaptureEnabled
+  const marketBrainPriorArtifactRead = marketBrainCaptureEnabled
     ? boundedMarketBrainPriorArtifactRead(args)
     : Promise.resolve({
         rows: [] as Awaited<ReturnType<typeof readNflMarketBrainPriorArtifactIndex>>,
@@ -254,6 +257,7 @@ export async function runNflForwardEvidenceWriter(args: {
     season: args.season,
     week: args.week,
     apiKey: args.balldontlieApiKey,
+    captureRawPriceManifest: marketBrainCaptureEnabled,
   });
   const plans = planNflForwardEvidenceCaptures({
     games: slate.games,
@@ -261,21 +265,30 @@ export async function runNflForwardEvidenceWriter(args: {
     capturedAt: args.now,
     unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
   });
-  const marketBrainCanaryGames = new Set(selectNflMarketBrainCanaryGames({
-    games: uniquePlannedGames(plans.map((plan) => plan.game)),
-    currentOddsByGame: slate.currentOddsByGame,
-    season: args.season,
-    week: args.week,
-    maximumGames: args.marketBrainCaptureMaxGames ?? 0,
-  })
-    .map((game) => game.providerGameId));
+  const marketBrainCanaryGames = new Set(marketBrainCaptureEnabled
+    ? selectNflMarketBrainCanaryGames({
+        games: uniquePlannedGames(plans.map((plan) => plan.game)),
+        currentOddsByGame: slate.currentOddsByGame,
+        season: args.season,
+        week: args.week,
+        maximumGames: args.marketBrainCaptureMaxGames!,
+      }).map((game) => game.providerGameId)
+    : []);
   const marketBrainAttemptIds = new Map<string, string>();
-  if (args.marketBrainCaptureEnabled) {
-    for (const plan of plans.filter((row) => marketBrainCanaryGames.has(row.game.providerGameId))) {
-      const key = `${plan.game.providerGameId}:${plan.stage}`;
-      marketBrainAttemptIds.set(key, resolveNflMarketBrainCaptureAttempt({
-        key, capturedAt: args.now, schedule: args.marketBrainCaptureAttemptSchedule?.[key] ?? [],
-      }));
+  if (marketBrainCaptureEnabled) {
+    try {
+      for (const plan of plans.filter((row) => marketBrainCanaryGames.has(row.game.providerGameId))) {
+        const key = `${plan.game.providerGameId}:${plan.stage}`;
+        marketBrainAttemptIds.set(key, resolveNflMarketBrainCaptureAttempt({
+          key, capturedAt: args.now, schedule: args.marketBrainCaptureAttemptSchedule?.[key] ?? [],
+        }));
+      }
+    } catch (error) {
+      marketBrainCaptureEnabled = false;
+      marketBrainCanaryGames.clear();
+      marketBrainAttemptIds.clear();
+      marketBrainConfigurationError = `nfl_market_brain_capture_disabled_attempt_schedule:${
+        error instanceof Error ? error.message : "unknown_error"}`.slice(0, 512);
     }
   }
   if (plans.length === 0) {
@@ -340,6 +353,7 @@ export async function runNflForwardEvidenceWriter(args: {
       apiKey: args.sharpApiKey,
       games: slate.games,
       capturedAt: args.now,
+      captureResearchManifest: marketBrainCaptureEnabled,
     })
       .catch(() => ({
         splitsByGame: {} as Record<string, NflRegularSharpSplitSet>,
@@ -365,6 +379,8 @@ export async function runNflForwardEvidenceWriter(args: {
     fetchSharpApiNflSharpOdds({
       apiKey: args.sharpApiKey,
       games: uniquePlannedGames(plans.map((plan) => plan.game)),
+      capturedAt: args.now,
+      captureRawPriceManifest: marketBrainCaptureEnabled,
     })
       .then((result) => ({ result, requests: result.requests }))
       .catch(() => ({
@@ -488,7 +504,7 @@ export async function runNflForwardEvidenceWriter(args: {
     const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
       ?? previous?.payload.market.sharpApiSplits
       ?? null;
-    const sharpSplitSources = sharpResult.sourcesByGame[plan.game.providerGameId]
+    const sharpSplitSources = sharpResult.sourcesByGame?.[plan.game.providerGameId]
       ?? unavailableNflSharpApiSplitSources();
     const sharpCurrentBooks = circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [];
     const contextCurrentBooks = captureBooksWithSharpBooks(
@@ -903,8 +919,9 @@ export async function runNflForwardEvidenceWriter(args: {
       authoritativeForecast: outcome,
     });
     const marketBrainPriceManifests = [
-      slate.rawPriceResponseManifests.opening,
-      slate.rawPriceResponseManifests.current,
+      ...(slate.rawPriceResponseManifests
+        ? [slate.rawPriceResponseManifests.opening, slate.rawPriceResponseManifests.current]
+        : []),
       ...(circaAttempt.result?.rawPriceResponseManifests ?? FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.map((participant) =>
         failedFootballRawPriceManifest({
           provider: "sharpapi",
@@ -917,7 +934,7 @@ export async function runNflForwardEvidenceWriter(args: {
     ];
     let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
     let marketBrainRawParserInputs: NflForwardEvidencePayload["marketBrainRawParserInputs"];
-    if (args.marketBrainCaptureEnabled && marketBrainCanaryGames.has(plan.game.providerGameId) &&
+    if (marketBrainCaptureEnabled && marketBrainCanaryGames.has(plan.game.providerGameId) &&
       !existingLockedRecord) {
       marketBrainRawParserInputs = marketBrainPriceManifests.flatMap((manifest) =>
         manifest.rawParserInput ? [manifest.rawParserInput] : []);
@@ -953,7 +970,7 @@ export async function runNflForwardEvidenceWriter(args: {
           knownPriorArtifactSha256: [...(knownPriorArtifactsByGame.get(plan.game.providerGameId) ?? [])],
           rawPriceResponseManifests: marketBrainPriceManifests,
           sharpSplitSources,
-          sharpSplitCaptureManifest: sharpResult.captureManifest,
+          sharpSplitCaptureManifest: sharpResult.captureManifest!,
         });
         if ("case" in marketBrainShadow) {
           const sha256 = marketBrainPriorArtifactSha256(marketBrainShadow.case.prior);
@@ -1012,7 +1029,7 @@ export async function runNflForwardEvidenceWriter(args: {
     existing: 0,
   };
   let marketBrainWriteError: string | null = null;
-  if (args.marketBrainCaptureEnabled) {
+  if (marketBrainCaptureEnabled) {
     const writeAbort = new AbortController();
     const writeTimeout = setTimeout(() => writeAbort.abort(), 2_000);
     try {
@@ -1031,10 +1048,13 @@ export async function runNflForwardEvidenceWriter(args: {
     }
   }
   const publishedEvaluations = payloads.flatMap((payload) => payload.decisions.evaluatedBets);
-  const marketBrainCaptureFailureReasons = payloads.flatMap((payload) => {
-    const shadow = payload.marketBrainShadow;
-    return shadow && "status" in shadow && shadow.status === "capture_failed" ? [shadow.reason] : [];
-  });
+  const marketBrainCaptureFailureReasons = [
+    ...(marketBrainConfigurationError ? [marketBrainConfigurationError] : []),
+    ...payloads.flatMap((payload) => {
+      const shadow = payload.marketBrainShadow;
+      return shadow && "status" in shadow && shadow.status === "capture_failed" ? [shadow.reason] : [];
+    }),
+  ];
   const quarterbackHealthReasons = payloads.flatMap((payload) => {
     const away = payload.startersAndDepth.away.starterStatus;
     const home = payload.startersAndDepth.home.starterStatus;
@@ -1069,7 +1089,7 @@ export async function runNflForwardEvidenceWriter(args: {
     marketBrainShadowsExisting: marketBrainWrite.existing,
     marketBrainCaptureFailures: marketBrainCaptureFailureReasons.length,
     marketBrainCaptureFailureReasons: [...new Set(marketBrainCaptureFailureReasons)].sort(),
-    marketBrainPersistenceAttempted: Boolean(args.marketBrainCaptureEnabled) && args.apply && marketBrainWrite.proposed > 0,
+    marketBrainPersistenceAttempted: marketBrainCaptureEnabled && args.apply && marketBrainWrite.proposed > 0,
     marketBrainPersistenceError: [marketBrainReadError, marketBrainWriteError].filter(Boolean).join("; ") || null,
     ...memberSnapshot,
     ...tracking,

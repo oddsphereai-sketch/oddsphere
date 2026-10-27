@@ -121,6 +121,45 @@ existing closure proofs:
   closed without increasing request volume.
 - NFL implementation does not grant authority to any other sport or player-prop model.
 
+## Remediation progress — not closure
+
+The following work is prepared on the isolated remediation branch. Every item remains `open` until
+the closure rules above are satisfied; this log prevents a green unit suite from being mistaken for
+database, predictive, or production proof.
+
+- **MB-001 / MB-010 / MB-033 / MB-036:**
+  `lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql` is a forward-only transaction
+  from the exact frozen v45 fixture. It refuses nonempty legacy tables, binds capture/research JSON
+  to relational identity/count/time columns, scopes catalog checks to the exact relation, adds one
+  finalized-window identity, and enforces manifest → capture set → research input → inference →
+  prediction receipt order. `scripts/test-nfl-market-brain-postgres-v46.sh` and
+  `.github/workflows/market-brain-postgres-proof.yml` prepare PostgreSQL 16 execution of old-v45 →
+  v46, refusal, second apply, RLS/catalog, and canonical-hash checks. This host has no PostgreSQL
+  runtime, so the real-database command has **not** executed and these IDs are not closed.
+- **MB-003 / MB-004:** raw response cloning is explicit research opt-in; a payload above the 2 MiB
+  research cap becomes a shadow failure; malformed dormant config is not parsed; requested invalid
+  config and missing/ambiguous attempts disable only research. Focused foundation, writer, proof-chain,
+  and feature-off tests pass. Complete route-side-effect parity and independent closure review remain.
+- **MB-034:** canonical JSON now uses explicit UTF-16 code-unit order, rejects non-finite numbers,
+  normalizes negative zero, and has a fixed JS golden vector. The PostgreSQL copy of the vector is in
+  the disposable-database test but has not run here.
+- **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
+  and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
+  The candidate branch still truthfully carries new writer/collector identities; repository safety
+  rejected relabeling changed orchestration as the older production releases. Full base-versus-candidate
+  product/lock parity and the final release boundary therefore remain open.
+
+Verification recorded for this slice:
+
+- `npm run test:market-brain-foundation` — passed.
+- `npx tsx scripts/test-nfl-market-brain-production-neutrality.ts` — passed.
+- `npx tsc --noEmit --incremental false` — passed.
+- `npm run verify:model-change` — passed; its post-step explicitly reported the PostgreSQL proof
+  skipped because `MARKET_BRAIN_POSTGRES_URL` was unset.
+
+No migration was applied, no capture flag was enabled, and no production/member/grade/stake/lock
+authority changed.
+
 ## Review reconciliation
 
 The exhaustive review reconciled all findings into MB-001 through MB-041. Implementation proceeds in

@@ -97,6 +97,11 @@ export function buildNflMarketBrainShadow(args: {
   sharpSplitSources: NflSharpApiSplitSource[];
   sharpSplitCaptureManifest: NflSharpApiSplitCaptureManifest;
 }): NflMarketBrainShadow {
+  const rawParserArchiveFailure = args.rawPriceResponseManifests
+    .find((manifest) => manifest.rawParserInputFailureReason)?.rawParserInputFailureReason;
+  if (rawParserArchiveFailure) {
+    throw new Error(rawParserArchiveFailure);
+  }
   const observations: MarketBrainObservation[] = [];
   const expectedInputs: MarketBrainExpectedInput[] = [];
   const prior = capturedPrior(args);

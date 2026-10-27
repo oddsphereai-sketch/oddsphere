@@ -14,7 +14,7 @@ import {
 } from "./nflMarketBrainResearchEvaluator";
 
 export const NFL_MARKET_BRAIN_CAPTURE_SET_RELEASE =
-  "nfl_market_brain_capture_set_2026_10_27_r1_db_complete_attempt_receipt" as const;
+  "nfl_market_brain_capture_set_2026_10_27_r2_v46_full_json_binding" as const;
 
 export type NflMarketBrainCaptureSet = {
   release: typeof NFL_MARKET_BRAIN_CAPTURE_SET_RELEASE;
@@ -131,15 +131,20 @@ export async function finalizeNflMarketBrainCaptureSet(args: {
   };
   let query = args.client.from("nfl_market_brain_capture_sets").insert({
     capture_set_checksum: captureSet.checksum,
+    capture_set_release: captureSet.release,
     event_id: captureSet.eventId,
     shadow_release: captureSet.shadowRelease,
     contract_release: captureSet.contractRelease,
     manifest_checksum: captureSet.manifestChecksum,
     partition_role: captureSet.partitionRole,
+    fold_id: captureSet.foldId,
     window_opens_at: captureSet.captureWindowOpensAt,
     window_closes_at: captureSet.captureWindowClosesAt,
     cutoff_at: captureSet.cutoffAt,
     starts_at: captureSet.startsAt,
+    expected_capture_attempts: captureSet.expectedCaptureAttempts.length,
+    successful_captures: captureSet.successfulCaptures,
+    failed_captures: captureSet.failedCaptures,
     capture_set: captureSet,
     capture_set_payload: marketBrainCanonicalJson(withoutChecksum),
   }).select("id,capture_set_checksum,capture_set,capture_set_payload,created_at");
