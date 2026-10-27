@@ -73,7 +73,25 @@ async function main() {
     sport: "nfl", eventId, evaluatedAt: "2026-10-20T15:00:00.000Z",
     captureBoundary: "raw_provider_response", captureLimitations: [],
     subject: { kind: "two_team_game", awayId: "AWY", homeId: "HME", startsAt },
-    prior, evaluatedTargets: {}, observations: [], sourceManifests: [], expectedInputs: [], blindSpots: [],
+    prior,
+    evaluatedTargets: {
+      moneyline: { identity: "proof-home-ml", family: "proofbook", selection: "home", line: null,
+        price: -110, observedAt: "2026-10-20T15:00:00.000Z" },
+    },
+    decisionEnvelopes: {
+      moneyline: {
+        schema: "market_brain_decision_envelope_v1", market: "moneyline",
+        incumbentDecision: { decision: "action", grade: "Lean", quoteIdentity: "proof-home-ml",
+          decisionRelease: "proof-decision-r1" },
+        quoteMenu: [
+          { identity: "proof-away-ml", family: "proofbook", selection: "away", line: null, price: -110,
+            observedAt: "2026-10-20T15:00:00.000Z", settlementTerms: "standard_full_game_including_overtime" },
+          { identity: "proof-home-ml", family: "proofbook", selection: "home", line: null, price: -110,
+            observedAt: "2026-10-20T15:00:00.000Z", settlementTerms: "standard_full_game_including_overtime" },
+        ],
+      },
+    },
+    observations: [], sourceManifests: [], expectedInputs: [], blindSpots: [],
   });
   const success = { release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
     capturedAt: "2026-10-20T15:00:00.000Z", case: marketCase, bytes: 0 };
@@ -123,6 +141,8 @@ async function main() {
   assert.equal(input.sequenceChecksum, input.sequence.checksum);
   assert.equal(input.featureChecksum, input.features.checksum);
   assert.equal(input.sequence.accounting.inputCases, 1);
+  assert.equal(input.decisionEnvelopes.moneyline?.quoteMenu.length, 2);
+  assert.equal(input.decisionEnvelopes.moneyline?.incumbentDecision.quoteIdentity, "proof-home-ml");
 
   const migration = readFileSync("lib/db/schema-migration-v46-nfl-market-brain-proof-boundary.sql", "utf8");
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_capture_sets/);
@@ -142,7 +162,7 @@ async function main() {
   assert.match(migration, /conrelid = 'public\.nfl_market_brain_research_predictions'::regclass/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.nfl_market_brain_research_outcomes/);
 
-  console.log("NFL Market Brain proof chain: predeclared attempts, DB-complete success/failure receipt, durable sequence/features, and late-row freeze passed");
+  console.log("NFL Market Brain proof chain: predeclared attempts, DB-complete success/failure receipt, durable sequence/features/decision envelope, and late-row freeze passed");
 }
 
 function manifestEvent(event: string, cutoff: string, starts: string, runId: string, outcomeOpenedAt: string | null) {

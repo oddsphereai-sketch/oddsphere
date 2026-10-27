@@ -557,8 +557,8 @@ Last reviewed: 2026-10-27
   requires the same capability registry, while physical-request deduplication deliberately ignores
   scope labels and code-release changes so they cannot cause duplicate paid calls. No route, cron,
   source adapter, feature flag, prediction writer, grade, stake, or member reader invokes this runner.
-- `market_brain_contract_2026_10_27_r20_output_artifact_attestation` and
-  `nfl_market_brain_shadow_2026_10_27_r24_expected_feed_roster` define an internal-only,
+- `market_brain_contract_2026_10_27_r21_frozen_decision_envelopes` and
+  `nfl_market_brain_shadow_2026_10_27_r25_frozen_decision_envelopes` define an internal-only,
   production-inert evidence boundary. The sole writer
   `nfl_forward_evidence_writer_2026_10_27_r89_expected_feed_roster`
   runs with the production-stable collector
@@ -590,7 +590,10 @@ Last reviewed: 2026-10-27
   interpreted under a different parser contract cannot silently reuse older provenance. The tape retains
   exact-evaluated versus
   same-family versus target-excluded provenance plus an explicit evaluated-target identity that does
-  not depend on recovering an exact raw side, every exact-identity Circa/DraftKings/BetMGM split
+  not depend on recovering an exact raw side. The r21/r25 contract also freezes the incumbent
+  action-or-pass grade and its complete target-book two-sided quote menu, including exact line, price,
+  observation time, decision release, and settlement terms. That evaluation envelope is deliberately
+  excluded from trainer features and cannot influence the score posterior. Every exact-identity Circa/DraftKings/BetMGM split
   row, explicit missing/incomplete/duplicate source states, and the current-feed blind spots. Source
   expectations come from
   `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts` before any response is read: the
@@ -643,8 +646,8 @@ Last reviewed: 2026-10-27
   unscheduled until schema, alerting, and capacity readiness are approved; it never shares the
   production cleanup path.
   `nfl_market_brain_capture_set_2026_10_27_r9_expected_feed_roster`,
-  `nfl_market_brain_sequence_materializer_2026_10_27_r20_expected_feed_roster`, and
-  `nfl_market_brain_research_input_2026_10_27_r9_expected_feed_roster` replay only cases
+  `nfl_market_brain_sequence_materializer_2026_10_27_r21_frozen_decision_envelopes`, and
+  `nfl_market_brain_research_input_2026_10_27_r10_frozen_decision_envelopes` replay only cases
   and observations available by an explicit cutoff, excludes the exact target and its entire source
   family before feature construction, pairs individual sides without zero-filling, preserves unpaired
   observed quotes as explicit uncertainty tokens, retains every capture's source-availability state,
@@ -655,7 +658,7 @@ Last reviewed: 2026-10-27
   resolved by participant sort order. It is also production-inert. Provider-side pagination,
   suspension history, limits, and private order flow remain declared blind spots; predictive
   qualification and the resolver remain unproved gates.
-  `nfl_market_brain_research_evaluator_2026_10_27_r19_expected_feed_roster` and
+  `nfl_market_brain_research_evaluator_2026_10_27_r20_frozen_decision_envelopes` and
   `nfl_market_brain_research_manifest_2026_10_27_r5_planned_attempt_windows` form a research-only proof
   boundary: the evaluator recomputes the complete sequence checksum and re-runs NFL prior attestation
   before reading any baseline; outcomes must arrive strictly after cutoff and game start, candidate predictions must
@@ -681,10 +684,10 @@ Last reviewed: 2026-10-27
   `nfl_market_brain_behavior_scenarios_2026_10_27_r2_probabilistic` freezes 13 nuanced follow, fade,
   resistance, reversal, outage, stale-evidence, news-sequence, and cross-market stories as non-one-hot
   action distributions without turning them into inference quotas.
-  `nfl_market_brain_resolver_contract_2026_10_27_r16_expected_feed_roster`,
-  `nfl_market_brain_resolver_features_2026_10_27_r16_expected_feed_roster`, and
-  `nfl_market_brain_tournament_2026_10_27_r16_expected_feed_roster`, with trainer
-  `nfl_market_brain_deterministic_trainer_2026_10_27_r11_expected_feed_roster`, freeze one implemented
+  `nfl_market_brain_resolver_contract_2026_10_27_r17_frozen_decision_envelopes`,
+  `nfl_market_brain_resolver_features_2026_10_27_r17_frozen_decision_envelopes`, and
+  `nfl_market_brain_tournament_2026_10_27_r17_frozen_decision_envelopes`, with trainer
+  `nfl_market_brain_deterministic_trainer_2026_10_27_r12_frozen_decision_envelopes`, freeze one implemented
   regularized residual baseline, its regularization grid and executable parameter-shape boundary,
   contextual source/direction/state basis plus preprocessing/loss/coherence/optimizer/seed/serialization contracts,
   complete development-only row membership, an executable earlier-to-later rolling tournament,
@@ -696,6 +699,12 @@ Last reviewed: 2026-10-27
   evaluated cutoff. Unfrozen artifacts fail closed, and production influence remains false. No fitted resolver
   artifact or predictive qualification exists yet. Fitting and inference use the same normalized joint
   likelihood, and five continuous heads may learn Margin/Total location, uncertainty, and dependence.
+  `nfl_market_brain_consequence_2026_10_27_r2_attested_decision_envelope` converts only that coherent
+  posterior and the capture-bound evaluation envelope into confirm, recenter, flip, fade-market,
+  retain, or stand-down consequences. It cannot accept a caller-authored price, cannot flip without an
+  exact opposing quote, and keeps quote economics downstream of the prediction. The paired evaluator
+  `nfl_market_brain_consequence_evaluator_2026_10_27_r1_pairwise_exact_quote` reports corrected losses,
+  new harms, promotions, demotions, abstentions, units, and board-count impact without production authority.
   `nfl_market_brain_case_audit_2026_10_27_r9_expected_feed_roster` provides a
   complete normalized read-only dossier for every observation, paired and unpaired quote, split,
   outage, context row, exclusion, source manifest, consumed feature, candidate consequence, and

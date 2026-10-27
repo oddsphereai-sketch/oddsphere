@@ -92,7 +92,17 @@ function market(name: "moneyline" | "spread" | "total"): NflForwardContextMarket
     },
     public: ["p", capturedAt, 12, 57, 43, 43, 57],
     sharp: null,
-    final: null,
+    final: {
+      market: name,
+      side: name === "total" ? "o" : "h",
+      probability: 0.57,
+      marketFairProbability: 0.52,
+      grade: name === "spread" ? "Lean" : "Watchlist",
+      edgePp: 5,
+      ev: 0.03,
+      stake: null,
+      quoteIdentity: `${name}-target`,
+    },
     coherence: { evaluatedFamilyExcluded: true, exactPairComplete: true },
     bytes: 1,
   };
@@ -328,6 +338,13 @@ assert.equal(
   NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
 );
 assert.equal(shadow.case.evaluatedTargets.spread?.family, "draftkings");
+assert.equal(shadow.case.decisionEnvelopes.spread?.quoteMenu.length, 2,
+  "the exact target-book spread pair must be frozen outside trainer evidence");
+assert.equal(shadow.case.decisionEnvelopes.spread?.incumbentDecision.decision, "action");
+assert.equal(shadow.case.decisionEnvelopes.total?.incumbentDecision.decision, "pass");
+assert.deepEqual(shadow.case.decisionEnvelopes.spread?.quoteMenu.map((quote) => quote.selection).sort(),
+  ["away", "home"]);
+assert.equal(shadow.case.decisionEnvelopes.spread?.quoteMenu.find((quote) => quote.selection === "away")?.line, 3.5);
 assert.equal(shadow.case.accounting.providedObservations, shadow.case.accounting.retainedObservations);
 assert.equal(shadow.case.invariants.allExpectedInputsAccounted, true);
 assert.equal(shadow.case.invariants.allReturnedSourceRowsAccounted, true);
@@ -391,6 +408,8 @@ const newsSequence = materializeNflMarketBrainSequence({
   cases: [shadow.case, laterShadow.case], cutoffAt: "2026-10-26T20:30:00.000Z",
 });
 const newsFeatures = buildNflMarketBrainResolverFeatures(newsSequence);
+assert.doesNotMatch(JSON.stringify(nflMarketBrainTrainerInput(newsFeatures)), /quoteMenu|incumbentDecision|evaluatedTargets/,
+  "exact evaluation quotes and incumbent decisions must remain outside the learned feature vector");
 assert.equal(newsFeatures.contextTokens.filter((row) =>
   row.feed === "depth_chart" && row.participant === "home").length, 2,
 "a quarterback status change across captures must survive as a time-versioned news sequence");

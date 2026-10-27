@@ -41,6 +41,8 @@ import { materializeNflMarketBrainSequence, type NflMarketBrainSequence } from
   "../lib/services/marketBrain/nflMarketBrainSequenceMaterializer";
 import { trainNflMarketBrainRegularizedJointResidual } from
   "../lib/services/marketBrain/nflMarketBrainDeterministicTrainer";
+import { buildNflMarketBrainDecisionConsequence } from
+  "../lib/services/marketBrain/nflMarketBrainConsequence";
 
 const cutoffAt = "2026-10-20T16:00:00.000Z";
 const startsAt = "2026-10-20T20:00:00.000Z";
@@ -64,7 +66,24 @@ const marketCase = buildMarketBrainCase({
   captureLimitations: [],
   subject: { kind: "two_team_game", awayId: "AWY", homeId: "HME", startsAt },
   prior,
-  evaluatedTargets: {},
+  evaluatedTargets: {
+    moneyline: { identity: "fixture-home-ml", family: "fixturebook", selection: "home", line: null,
+      price: -110, observedAt: cutoffAt },
+  },
+  decisionEnvelopes: {
+    moneyline: {
+      schema: "market_brain_decision_envelope_v1",
+      market: "moneyline",
+      incumbentDecision: { decision: "action", grade: "Lean", quoteIdentity: "fixture-home-ml",
+        decisionRelease: "fixture-decision-r1" },
+      quoteMenu: [
+        { identity: "fixture-home-ml", family: "fixturebook", selection: "home", line: null,
+          price: -110, observedAt: cutoffAt, settlementTerms: "standard_full_game_including_overtime" },
+        { identity: "fixture-away-ml", family: "fixturebook", selection: "away", line: null,
+          price: -110, observedAt: cutoffAt, settlementTerms: "standard_full_game_including_overtime" },
+      ],
+    },
+  },
   observations: [],
   sourceManifests: [],
   expectedInputs: [],
@@ -117,7 +136,8 @@ async function trainingManifestFor(candidateRelease: string) {
   });
 }
 const trainingManifest = await trainingManifestFor("nfl-market-brain-resolver-fixture-r1");
-const researchInput = await fixtureResearchInput(sequence, features, trainingManifest.checksum);
+const researchInput = await fixtureResearchInput(sequence, features, trainingManifest.checksum,
+  marketCase.decisionEnvelopes);
 const trainingResult = trainNflMarketBrainRegularizedJointResidual({
   manifest: trainingManifest,
   examples: developmentExamples(),
@@ -170,6 +190,22 @@ assert.ok(nflMarketBrainJointLogBasis(sequence).some((state) => state.total === 
 assert.equal(shadow.checksum.length, 64);
 assert.equal(shadow.trainingManifestChecksum.length, 64);
 assert.equal(shadow.weightsSha256.length, 64);
+const consequence = buildNflMarketBrainDecisionConsequence({
+  researchInput,
+  resolverOutput: shadow,
+  market: "moneyline",
+});
+assert.equal(consequence.decisionEnvelopeChecksum.length, 64);
+assert.equal(consequence.quoteMenu.length, 2);
+assert.deepEqual(consequence.finalPrediction, {
+  awayWinProbability: shadow.posterior.awayWinProbability,
+  homeWinProbability: shadow.posterior.homeWinProbability,
+  tieProbability: shadow.posterior.tieProbability,
+  marginMean: shadow.posterior.marginMean,
+  totalMean: shadow.posterior.totalMean,
+  awayScoreMean: shadow.posterior.awayScoreMean,
+  homeScoreMean: shadow.posterior.homeScoreMean,
+});
 
 assert.throws(
   () => bindNflMarketBrainResolverArtifact({
@@ -337,6 +373,7 @@ async function fixtureResearchInput(
   sequence: NflMarketBrainSequence,
   features: NflMarketBrainResolverFeatures,
   manifestChecksum: string,
+  decisionEnvelopes: Parameters<typeof buildMarketBrainCase>[0]["decisionEnvelopes"] = {},
 ) {
   const payload = {
     release: NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE,
@@ -348,6 +385,7 @@ async function fixtureResearchInput(
     manifestChecksum,
     sequence,
     features,
+    decisionEnvelopes,
     sequenceChecksum: sequence.checksum,
     featureChecksum: features.checksum,
   };

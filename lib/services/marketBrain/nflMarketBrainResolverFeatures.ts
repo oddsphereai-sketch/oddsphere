@@ -14,7 +14,7 @@ import {
 } from "./nflMarketBrainSequenceMaterializer";
 
 export const NFL_MARKET_BRAIN_RESOLVER_FEATURE_RELEASE =
-  "nfl_market_brain_resolver_features_2026_10_27_r16_expected_feed_roster" as const;
+  "nfl_market_brain_resolver_features_2026_10_27_r17_frozen_decision_envelopes" as const;
 
 const nflMarketBrainTrainerInputBrand: unique symbol = Symbol("nflMarketBrainTrainerInput");
 export type NflMarketBrainTrainerInput = Readonly<{

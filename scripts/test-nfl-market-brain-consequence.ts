@@ -66,7 +66,8 @@ function decide(args: {
   posteriorHome: number;
   direction: "first_side" | "second_side" | "static" | "conflicted" | "unavailable";
   menu?: NflMarketBrainFrozenQuote[];
-  incumbent?: { decision: "action"; quoteIdentity: string } | { decision: "pass"; quoteIdentity: null };
+  incumbent?: { decision: "action"; grade: string; quoteIdentity: string; decisionRelease: string | null } |
+    { decision: "pass"; grade: string; quoteIdentity: null; decisionRelease: string | null };
   availability?: "complete" | "degraded" | "unavailable";
 }) {
   return deriveNflMarketBrainDecisionConsequence({
@@ -74,7 +75,9 @@ function decide(args: {
     resolverOutputChecksum,
     market: "moneyline",
     quoteMenu: args.menu ?? [moneylineQuote("away", "away"), moneylineQuote("home", "home")],
-    incumbentDecision: args.incumbent ?? { decision: "action", quoteIdentity: "home" },
+    incumbentDecision: args.incumbent ?? {
+      decision: "action", grade: "Lean", quoteIdentity: "home", decisionRelease: "fixture-decision-r1",
+    },
     prior: distribution(args.priorHome),
     posterior: posterior(args.posteriorHome),
     marketDirection: args.direction,
@@ -114,7 +117,7 @@ const promoted = decide({
   priorHome: 0.50,
   posteriorHome: 0.60,
   direction: "second_side",
-  incumbent: { decision: "pass", quoteIdentity: null },
+  incumbent: { decision: "pass", grade: "Watchlist", quoteIdentity: null, decisionRelease: "fixture-decision-r1" },
 });
 assert.equal(promoted.action, "recenter");
 assert.equal(promoted.consequence, "promoted_from_pass");
@@ -174,7 +177,8 @@ const spread = deriveNflMarketBrainDecisionConsequence({
     { ...moneylineQuote("away-plus-3", "away"), market: "spread", line: 3 },
     { ...moneylineQuote("home-minus-3", "home"), market: "spread", line: -3 },
   ],
-  incumbentDecision: { decision: "action", quoteIdentity: "home-minus-3" },
+  incumbentDecision: { decision: "action", grade: "Lean", quoteIdentity: "home-minus-3",
+    decisionRelease: "fixture-decision-r1" },
   prior: {
     ...distribution(0.60),
     marginDistribution: { values: [-4, 0, 4], probabilities: [0.25, 0.10, 0.65] },
@@ -197,7 +201,8 @@ const total = deriveNflMarketBrainDecisionConsequence({
     { ...moneylineQuote("over-44.5", "away"), market: "total", selection: "over", line: 44.5 },
     { ...moneylineQuote("under-44.5", "home"), market: "total", selection: "under", line: 44.5 },
   ],
-  incumbentDecision: { decision: "action", quoteIdentity: "over-44.5" },
+  incumbentDecision: { decision: "action", grade: "Lean", quoteIdentity: "over-44.5",
+    decisionRelease: "fixture-decision-r1" },
   prior: { ...distribution(0.50), totalDistribution: { values: [40, 45, 50], probabilities: [0.30, 0.30, 0.40] } },
   posterior: { ...posterior(0.50), totalDistribution: { values: [40, 45, 50], probabilities: [0.20, 0.30, 0.50] } },
   marketDirection: "first_side",

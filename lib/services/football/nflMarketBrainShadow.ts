@@ -9,6 +9,7 @@ import {
   type MarketBrainAvailability,
   type MarketBrainCase,
   type MarketBrainDiscreteDistribution,
+  type MarketBrainDecisionEnvelope,
   type MarketBrainExpectedInput,
   type MarketBrainMarket,
   type MarketBrainObservation,
@@ -42,7 +43,7 @@ import {
 } from "../marketBrain/marketBrainEvidenceRoster";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r24_expected_feed_roster" as const;
+  "nfl_market_brain_shadow_2026_10_27_r25_frozen_decision_envelopes" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -209,6 +210,7 @@ export function buildNflMarketBrainShadow(args: {
         }]] : [];
       }),
     ),
+    decisionEnvelopes: nflDecisionEnvelopes(args.capture),
     observations,
     sourceManifests,
     expectedInputs,
@@ -228,6 +230,62 @@ export function buildNflMarketBrainShadow(args: {
     throw new Error(`NFL Market Brain tape exceeded ${NFL_MARKET_BRAIN_SHADOW_MAX_BYTES} bytes.`);
   }
   return result;
+}
+
+function nflDecisionEnvelopes(
+  capture: NflForwardContextCapture,
+): Partial<Record<MarketBrainMarket, MarketBrainDecisionEnvelope>> {
+  return Object.fromEntries(((["moneyline", "spread", "total"] as const).flatMap((market) => {
+    const captured = capture.markets[market];
+    const evaluated = captured.evaluated;
+    const incumbent = captured.final;
+    if (!evaluated || !incumbent) return [];
+    const family = captured.families.find((row) => row[0] === evaluated.family);
+    if (!family) throw new Error(`NFL Market Brain ${market} evaluated quote family is absent from its capture.`);
+    const [observedAt, _ageMinutes, freshness, capturedLine, firstPrice, secondPrice] = family[5];
+    if (freshness === "x") throw new Error(`NFL Market Brain ${market} quote menu is future-dated.`);
+    const selections = market === "total" ? ["over", "under"] as const : ["away", "home"] as const;
+    const lines = market === "moneyline" ? [null, null] as const
+      : market === "spread" ? [capturedLine === null ? null : -capturedLine, capturedLine] as const
+      : [capturedLine, capturedLine] as const;
+    if (market !== "moneyline" && capturedLine === null) {
+      throw new Error(`NFL Market Brain ${market} quote menu is missing its exact line.`);
+    }
+    const prices = [firstPrice, secondPrice] as const;
+    const quoteMenu = selections.map((selection, index) => ({
+      identity: selectionCode(selection) === evaluated.side ? evaluated.identity : marketBrainSha256({
+        eventId: capture.gameId, market, family: evaluated.family, selection,
+        line: lines[index], price: prices[index], observedAt,
+      }),
+      family: evaluated.family,
+      selection,
+      line: lines[index],
+      price: prices[index],
+      observedAt,
+      settlementTerms: "standard_full_game_including_overtime",
+    }));
+    const evaluatedQuote = quoteMenu.find((quote) => quote.identity === evaluated.identity);
+    if (!evaluatedQuote || incumbent.quoteIdentity !== evaluated.identity ||
+      evaluatedQuote.line !== evaluated.line || evaluatedQuote.price !== evaluated.price ||
+      evaluatedQuote.observedAt !== evaluated.observedAt) {
+      throw new Error(`NFL Market Brain ${market} frozen menu diverges from the incumbent evaluated quote.`);
+    }
+    const actionable = incumbent.grade === "Best Angle" || incumbent.grade === "Lean";
+    return [[market, {
+      schema: "market_brain_decision_envelope_v1" as const,
+      market,
+      incumbentDecision: actionable
+        ? { decision: "action" as const, grade: incumbent.grade, quoteIdentity: evaluated.identity,
+            decisionRelease: capture.releases.decision }
+        : { decision: "pass" as const, grade: incumbent.grade, quoteIdentity: null,
+            decisionRelease: capture.releases.decision },
+      quoteMenu,
+    } satisfies MarketBrainDecisionEnvelope]];
+  })));
+}
+
+function selectionCode(selection: "away" | "home" | "over" | "under") {
+  return selection === "away" ? "a" : selection === "home" ? "h" : selection === "over" ? "o" : "u";
 }
 
 function addExpectedPriceFeeds(

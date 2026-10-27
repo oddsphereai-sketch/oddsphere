@@ -19,9 +19,10 @@ import {
   materializeNflMarketBrainSequence,
   type NflMarketBrainSequence,
 } from "./nflMarketBrainSequenceMaterializer";
+import type { MarketBrainCase } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE =
-  "nfl_market_brain_research_input_2026_10_27_r9_expected_feed_roster" as const;
+  "nfl_market_brain_research_input_2026_10_27_r10_frozen_decision_envelopes" as const;
 
 export type NflMarketBrainResearchInput = {
   release: typeof NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE;
@@ -33,6 +34,8 @@ export type NflMarketBrainResearchInput = {
   manifestChecksum: string;
   sequence: NflMarketBrainSequence;
   features: NflMarketBrainResolverFeatures;
+  /** Exact evaluation-only quotes and incumbent actions; never exported to trainer features. */
+  decisionEnvelopes: MarketBrainCase["decisionEnvelopes"];
   sequenceChecksum: string;
   featureChecksum: string;
   checksum: string;
@@ -74,6 +77,7 @@ export async function materializeAndPersistNflMarketBrainResearchInput(args: {
     throw new Error("NFL Market Brain materialized sequence diverges from its finalized capture set.");
   }
   const features = buildNflMarketBrainResolverFeatures(sequence);
+  const decisionEnvelopes = latestDecisionEnvelopes(cases, args.captureSet.cutoffAt);
   const withoutChecksum = {
     release: NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE,
     eventId: sequence.eventId,
@@ -84,6 +88,7 @@ export async function materializeAndPersistNflMarketBrainResearchInput(args: {
     manifestChecksum: args.captureSet.manifestChecksum,
     sequence,
     features,
+    decisionEnvelopes,
     sequenceChecksum: sequence.checksum,
     featureChecksum: features.checksum,
   };
@@ -135,6 +140,7 @@ export function assertNflMarketBrainAttestedResearchInput(
   if (!attestedResearchInputs.has(input) || !attested.persistenceAttestation ||
     input.release !== NFL_MARKET_BRAIN_RESEARCH_INPUT_RELEASE || checksum !== marketBrainSha256(payload) ||
     input.sequenceChecksum !== input.sequence.checksum || input.featureChecksum !== input.features.checksum ||
+    !input.decisionEnvelopes ||
     input.eventId !== input.sequence.eventId || input.cutoffAt !== input.sequence.cutoffAt ||
     marketBrainCanonicalJson(buildNflMarketBrainResolverFeatures(input.sequence)) !==
       marketBrainCanonicalJson(input.features) ||
@@ -142,6 +148,14 @@ export function assertNflMarketBrainAttestedResearchInput(
     Date.parse(attested.persistenceAttestation.serverCreatedAt) >= Date.parse(input.startsAt)) {
     throw new Error("NFL Market Brain inference requires an append-only, capture-bound research input.");
   }
+}
+
+function latestDecisionEnvelopes(cases: MarketBrainCase[], cutoffAt: string) {
+  const latest = cases.filter((marketCase) => Date.parse(marketCase.evaluatedAt) <= Date.parse(cutoffAt))
+    .sort((left, right) => Date.parse(left.evaluatedAt) - Date.parse(right.evaluatedAt))
+    .at(-1);
+  if (!latest) throw new Error("NFL Market Brain decision envelope has no pre-cutoff case.");
+  return structuredClone(latest.decisionEnvelopes);
 }
 
 function attestResearchInput(

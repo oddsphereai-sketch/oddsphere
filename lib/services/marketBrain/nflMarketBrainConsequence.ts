@@ -1,6 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 import type { MarketBrainDiscreteDistribution } from "./marketBrainContract";
+import type { MarketBrainDecisionEnvelope } from "./marketBrainContract";
 import {
   assertNflMarketBrainResolverShadowOutput,
   type NflMarketBrainJointPosterior,
@@ -8,9 +9,13 @@ import {
 } from "./nflMarketBrainResolverContract";
 import type { NflMarketBrainSequence } from "./nflMarketBrainSequenceMaterializer";
 import type { MarketBrainAction } from "./nflMarketBrainBehaviorScenarios";
+import {
+  assertNflMarketBrainAttestedResearchInput,
+  type NflMarketBrainAttestedResearchInput,
+} from "./nflMarketBrainResearchInput";
 
 export const NFL_MARKET_BRAIN_CONSEQUENCE_RELEASE =
-  "nfl_market_brain_consequence_2026_10_27_r1_exact_quote_utility" as const;
+  "nfl_market_brain_consequence_2026_10_27_r2_attested_decision_envelope" as const;
 
 export type NflMarketBrainDecisionMarket = "moneyline" | "spread" | "total";
 export type NflMarketBrainDecisionSelection = "away" | "home" | "over" | "under";
@@ -27,8 +32,8 @@ export type NflMarketBrainFrozenQuote = {
 };
 
 export type NflMarketBrainIncumbentDecision =
-  | { decision: "action"; quoteIdentity: string }
-  | { decision: "pass"; quoteIdentity: null };
+  | { decision: "action"; grade: string; quoteIdentity: string; decisionRelease: string | null }
+  | { decision: "pass"; grade: string; quoteIdentity: null; decisionRelease: string | null };
 
 export type NflMarketBrainDecisionConsequence = {
   schema: "nfl_market_brain_decision_consequence_v1";
@@ -36,6 +41,7 @@ export type NflMarketBrainDecisionConsequence = {
   eventId: string;
   market: NflMarketBrainDecisionMarket;
   resolverOutputChecksum: string;
+  decisionEnvelopeChecksum: string;
   action: MarketBrainAction;
   consequence:
     | "retained_action"
@@ -96,27 +102,31 @@ const attestedConsequences = new WeakSet<object>();
  * posterior. Quote prices affect only the downstream consequence economics.
  */
 export function buildNflMarketBrainDecisionConsequence(args: {
-  sequence: NflMarketBrainSequence;
+  researchInput: NflMarketBrainAttestedResearchInput;
   resolverOutput: NflMarketBrainResolverShadowOutput;
   market: NflMarketBrainDecisionMarket;
-  quoteMenu: NflMarketBrainFrozenQuote[];
-  incumbentDecision: NflMarketBrainIncumbentDecision;
 }): NflMarketBrainDecisionConsequence {
   assertNflMarketBrainResolverShadowOutput(args.resolverOutput);
-  if (args.sequence.eventId !== args.resolverOutput.eventId ||
-    args.sequence.checksum !== args.resolverOutput.sequenceChecksum) {
+  assertNflMarketBrainAttestedResearchInput(args.researchInput);
+  const sequence = args.researchInput.sequence;
+  if (sequence.eventId !== args.resolverOutput.eventId ||
+    sequence.checksum !== args.resolverOutput.sequenceChecksum ||
+    args.researchInput.checksum !== args.resolverOutput.researchInputChecksum ||
+    args.researchInput.persistenceAttestation.recordId !== args.resolverOutput.researchInputRecordId) {
     throw new Error("NFL Market Brain consequence requires the resolver's exact source sequence.");
   }
+  const envelope = args.researchInput.decisionEnvelopes[args.market];
+  if (!envelope) throw new Error(`NFL Market Brain ${args.market} decision envelope is unavailable.`);
   return deriveNflMarketBrainDecisionConsequence({
-    eventId: args.sequence.eventId,
+    eventId: sequence.eventId,
     resolverOutputChecksum: args.resolverOutput.checksum,
     market: args.market,
-    quoteMenu: args.quoteMenu,
-    incumbentDecision: args.incumbentDecision,
-    prior: priorDistribution(args.sequence),
+    quoteMenu: nflQuoteMenu(envelope),
+    incumbentDecision: envelope.incumbentDecision,
+    prior: priorDistribution(sequence),
     posterior: args.resolverOutput.posterior,
-    marketDirection: args.sequence.crossMarket.marketDirection[args.market],
-    sourceAvailabilityRegime: args.sequence.sourceAvailability.regime,
+    marketDirection: sequence.crossMarket.marketDirection[args.market],
+    sourceAvailabilityRegime: sequence.sourceAvailability.regime,
   });
 }
 
@@ -140,6 +150,12 @@ export function deriveNflMarketBrainDecisionConsequence(args: {
   validateDistribution(args.posterior.marginDistribution, "posterior margin");
   validateDistribution(args.posterior.totalDistribution, "posterior total");
   const quoteMenu = canonicalQuoteMenu(args.market, args.quoteMenu);
+  const decisionEnvelopeChecksum = marketBrainSha256({
+    schema: "market_brain_decision_envelope_v1",
+    market: args.market,
+    incumbentDecision: args.incumbentDecision,
+    quoteMenu,
+  });
   const incumbentQuote = args.incumbentDecision.decision === "action"
     ? quoteMenu.find((quote) => quote.identity === args.incumbentDecision.quoteIdentity) ?? null
     : null;
@@ -220,6 +236,7 @@ export function deriveNflMarketBrainDecisionConsequence(args: {
     eventId: args.eventId,
     market: args.market,
     resolverOutputChecksum: args.resolverOutputChecksum,
+    decisionEnvelopeChecksum,
     action,
     consequence,
     incumbentDecision: structuredClone(args.incumbentDecision),
@@ -263,6 +280,22 @@ export function deriveNflMarketBrainDecisionConsequence(args: {
   const output = deepFreeze({ ...withoutChecksum, checksum: marketBrainSha256(withoutChecksum) });
   attestedConsequences.add(output);
   return output;
+}
+
+function nflQuoteMenu(envelope: MarketBrainDecisionEnvelope): NflMarketBrainFrozenQuote[] {
+  return envelope.quoteMenu.map((quote) => {
+    if (quote.selection !== "away" && quote.selection !== "home" &&
+      quote.selection !== "over" && quote.selection !== "under") {
+      throw new Error(`NFL Market Brain ${envelope.market} quote menu contains a non-NFL selection.`);
+    }
+    if (quote.settlementTerms !== "standard_full_game_including_overtime") {
+      throw new Error(`NFL Market Brain ${envelope.market} quote menu has incompatible settlement terms.`);
+    }
+    const selection: NflMarketBrainDecisionSelection = quote.selection;
+    return { ...structuredClone(quote), selection,
+      settlementTerms: "standard_full_game_including_overtime" as const,
+      market: envelope.market as NflMarketBrainDecisionMarket };
+  });
 }
 
 export function assertNflMarketBrainDecisionConsequence(

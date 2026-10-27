@@ -1,7 +1,7 @@
 import { marketBrainSha256 } from "./marketBrainCanonical";
 
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_27_r20_output_artifact_attestation" as const;
+  "market_brain_contract_2026_10_27_r21_frozen_decision_envelopes" as const;
 export const MARKET_BRAIN_PRIOR_MODEL_PATH_POLICY_RELEASE =
   "market_brain_prior_model_path_policy_2026_10_27_r2_output_receipt_required" as const;
 
@@ -197,6 +197,19 @@ export type MarketBrainEvaluatedTarget = {
   observedAt: string;
 };
 
+export type MarketBrainFrozenDecisionQuote = MarketBrainEvaluatedTarget & {
+  settlementTerms: string;
+};
+
+export type MarketBrainDecisionEnvelope = {
+  schema: "market_brain_decision_envelope_v1";
+  market: MarketBrainMarket;
+  incumbentDecision:
+    | { decision: "action"; grade: string; quoteIdentity: string; decisionRelease: string | null }
+    | { decision: "pass"; grade: string; quoteIdentity: null; decisionRelease: string | null };
+  quoteMenu: MarketBrainFrozenDecisionQuote[];
+};
+
 export function assertMarketBrainEvaluatedTarget(
   market: MarketBrainMarket,
   target: MarketBrainEvaluatedTarget,
@@ -262,6 +275,8 @@ export type MarketBrainCase = {
   prior: MarketBrainPrior;
   incumbentComparator?: MarketBrainIncumbentComparator | null;
   evaluatedTargets: Partial<Record<MarketBrainMarket, MarketBrainEvaluatedTarget>>;
+  /** Evaluation-only exact price menu. It is excluded from every trainer feature. */
+  decisionEnvelopes: Partial<Record<MarketBrainMarket, MarketBrainDecisionEnvelope>>;
   observations: MarketBrainObservation[];
   sourceManifests: MarketBrainSourceManifest[];
   expectedInputs: MarketBrainExpectedInput[];
@@ -475,7 +490,9 @@ export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string,
 }
 
 export function buildMarketBrainCase(args: Omit<MarketBrainCase,
-  "release" | "visibility" | "mode" | "temporalScope" | "accounting" | "invariants">): MarketBrainCase {
+  "release" | "visibility" | "mode" | "temporalScope" | "decisionEnvelopes" | "accounting" | "invariants"> & {
+    decisionEnvelopes?: MarketBrainCase["decisionEnvelopes"];
+  }): MarketBrainCase {
   if (!args.eventId.trim()) throw new Error("Market Brain eventId is required.");
   if (!Number.isFinite(Date.parse(args.evaluatedAt))) throw new Error("Market Brain evaluatedAt is invalid.");
   if (!Number.isFinite(Date.parse(args.subject.startsAt))) throw new Error("Market Brain startsAt is invalid.");
@@ -571,6 +588,9 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
   for (const [market, target] of Object.entries(args.evaluatedTargets)) {
     if (target) assertMarketBrainEvaluatedTarget(market as MarketBrainMarket, target, args.evaluatedAt);
   }
+  const decisionEnvelopes = canonicalDecisionEnvelopes(
+    args.decisionEnvelopes ?? {}, args.evaluatedTargets, args.evaluatedAt,
+  );
   const manifestIds = new Set<string>();
   const manifestOwnerByObservationId = new Map<string, string>();
   const observationById = new Map(args.observations.map((observation) => [observation.id, observation]));
@@ -676,6 +696,7 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
   return {
     release: MARKET_BRAIN_CONTRACT_RELEASE,
     ...args,
+    decisionEnvelopes,
     visibility: "internal_only",
     mode: "shadow_capture",
     temporalScope: "point_in_time_snapshot",
@@ -719,6 +740,7 @@ export function assertMarketBrainCase(value: unknown): asserts value is MarketBr
       subject: candidate.subject,
       prior: candidate.prior,
       evaluatedTargets: candidate.evaluatedTargets,
+      decisionEnvelopes: candidate.decisionEnvelopes,
       observations: candidate.observations,
       sourceManifests: candidate.sourceManifests,
       expectedInputs: candidate.expectedInputs,
@@ -733,6 +755,57 @@ export function assertMarketBrainCase(value: unknown): asserts value is MarketBr
   } catch (error) {
     throw new Error(`Invalid Market Brain case: ${error instanceof Error ? error.message : "unknown shape"}`);
   }
+}
+
+function canonicalDecisionEnvelopes(
+  envelopes: MarketBrainCase["decisionEnvelopes"],
+  evaluatedTargets: MarketBrainCase["evaluatedTargets"],
+  evaluatedAt: string,
+): MarketBrainCase["decisionEnvelopes"] {
+  return Object.fromEntries(Object.entries(envelopes).map(([marketName, envelope]) => {
+    const market = marketName as MarketBrainMarket;
+    if (!envelope || envelope.schema !== "market_brain_decision_envelope_v1" ||
+      envelope.market !== market || !envelope.incumbentDecision.grade.trim() ||
+      envelope.incumbentDecision.decisionRelease !== null &&
+        !envelope.incumbentDecision.decisionRelease.trim() ||
+      envelope.quoteMenu.length === 0 || envelope.quoteMenu.length > 64) {
+      throw new Error(`Invalid Market Brain decision envelope: ${market}`);
+    }
+    const quoteIds = new Set<string>();
+    const quoteMenu = envelope.quoteMenu.map((quote) => {
+      assertMarketBrainEvaluatedTarget(market, quote, evaluatedAt);
+      if (!quote.settlementTerms.trim() || quoteIds.has(quote.identity)) {
+        throw new Error(`Invalid or duplicate Market Brain decision quote: ${market}:${quote.identity}`);
+      }
+      quoteIds.add(quote.identity);
+      return structuredClone(quote);
+    }).sort((left, right) => compareAscii(left.identity, right.identity));
+    const incumbent = envelope.incumbentDecision;
+    if (incumbent.decision === "action" && !quoteIds.has(incumbent.quoteIdentity) ||
+      incumbent.decision === "pass" && incumbent.quoteIdentity !== null) {
+      throw new Error(`Market Brain incumbent decision is not executable: ${market}`);
+    }
+    const target = evaluatedTargets[market];
+    if (target && !quoteMenu.some((quote) => sameEvaluatedQuote(quote, target))) {
+      throw new Error(`Market Brain evaluated target is absent from its exact quote menu: ${market}`);
+    }
+    return [market, {
+      schema: "market_brain_decision_envelope_v1" as const,
+      market,
+      incumbentDecision: structuredClone(incumbent),
+      quoteMenu,
+    }];
+  }));
+}
+
+function sameEvaluatedQuote(left: MarketBrainEvaluatedTarget, right: MarketBrainEvaluatedTarget) {
+  return left.identity === right.identity && left.family === right.family &&
+    left.selection === right.selection && left.line === right.line && left.price === right.price &&
+    left.observedAt === right.observedAt;
+}
+
+function compareAscii(left: string, right: string) {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function cloneDistribution(distribution: MarketBrainDiscreteDistribution): MarketBrainDiscreteDistribution {
