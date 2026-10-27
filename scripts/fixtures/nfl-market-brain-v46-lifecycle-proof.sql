@@ -26,6 +26,9 @@ DECLARE
   shadow_doc jsonb;
   shadow_text text;
   shadow_sha text;
+  success_shadow_doc jsonb;
+  success_shadow_text text;
+  success_shadow_sha text;
   capture_payload jsonb;
   capture_doc jsonb;
   capture_text text;
@@ -190,6 +193,21 @@ BEGIN
     octet_length(artifact_text) + octet_length(weights_text), research_created);
   PERFORM set_config('session_replication_role', 'origin', true);
 
+  SELECT payload, sha256 INTO success_shadow_text, success_shadow_sha
+    FROM pg_temp.market_brain_lifecycle_fixture WHERE name = 'success_shadow';
+  success_shadow_doc := success_shadow_text::jsonb;
+  INSERT INTO public.nfl_market_brain_shadow_snapshots (
+    id, shadow_release, contract_release, run_id, capture_attempt_id, season, week,
+    provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
+    prior_artifact_sha256, bytes, created_at
+  ) VALUES (
+    '00000000-0000-4000-8000-000000000110', 'proof-shadow-release', 'proof-contract-release',
+    '00000000-0000-4000-8000-000000000111', '00000000-0000-4000-8000-000000000111',
+    2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
+    success_shadow_doc, success_shadow_sha, success_shadow_text, NULL,
+    octet_length(success_shadow_text), base_time - interval '3 minutes'
+  );
+
   prediction_doc := jsonb_build_object(
     'eventId', event_id,
     'cutoffAt', to_char(cutoff_time AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
@@ -232,6 +250,68 @@ BEGIN
        position('was not received pregame after inference' in SQLERRM) = 0 THEN RAISE; END IF;
   END;
 
+  SELECT payload INTO success_shadow_text
+    FROM pg_temp.market_brain_lifecycle_fixture WHERE name = 'success_shadow';
+  success_shadow_doc := success_shadow_text::jsonb;
+  BEGIN
+    forged_doc := jsonb_set(success_shadow_doc, '{case,release}', '"wrong-contract"'::jsonb);
+    forged_payload := forged_doc::text;
+    forged_sha := encode(digest(convert_to(forged_payload, 'UTF8'), 'sha256'), 'hex');
+    INSERT INTO public.nfl_market_brain_shadow_snapshots (
+      id, shadow_release, contract_release, run_id, capture_attempt_id, season, week,
+      provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
+      prior_artifact_sha256, bytes, created_at
+    ) VALUES (
+      '00000000-0000-4000-8000-000000000211', 'proof-shadow-release', 'proof-contract-release',
+      '00000000-0000-4000-8000-000000000212', '00000000-0000-4000-8000-000000000212',
+      2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
+      forged_doc, forged_sha, forged_payload, NULL, octet_length(forged_payload),
+      base_time - interval '3 minutes'
+    );
+    RAISE EXCEPTION 'success shadow contract mismatch was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+    WHEN OTHERS THEN RAISE;
+  END;
+  BEGIN
+    forged_doc := jsonb_set(success_shadow_doc, '{case,eventId}', '"wrong-success-event"'::jsonb);
+    forged_payload := forged_doc::text;
+    forged_sha := encode(digest(convert_to(forged_payload, 'UTF8'), 'sha256'), 'hex');
+    INSERT INTO public.nfl_market_brain_shadow_snapshots (
+      id, shadow_release, contract_release, run_id, capture_attempt_id, season, week,
+      provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
+      prior_artifact_sha256, bytes, created_at
+    ) VALUES (
+      '00000000-0000-4000-8000-000000000215', 'proof-shadow-release', 'proof-contract-release',
+      '00000000-0000-4000-8000-000000000216', '00000000-0000-4000-8000-000000000216',
+      2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
+      forged_doc, forged_sha, forged_payload, NULL, octet_length(forged_payload),
+      base_time - interval '3 minutes'
+    );
+    RAISE EXCEPTION 'success shadow event mismatch was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+    WHEN OTHERS THEN RAISE;
+  END;
+  BEGIN
+    forged_doc := jsonb_set(success_shadow_doc, '{case,evaluatedAt}',
+      to_jsonb(to_char((base_time - interval '2 minutes') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+    forged_payload := forged_doc::text;
+    forged_sha := encode(digest(convert_to(forged_payload, 'UTF8'), 'sha256'), 'hex');
+    INSERT INTO public.nfl_market_brain_shadow_snapshots (
+      id, shadow_release, contract_release, run_id, capture_attempt_id, season, week,
+      provider_game_id, stage, captured_at, shadow, shadow_sha256, shadow_payload,
+      prior_artifact_sha256, bytes, created_at
+    ) VALUES (
+      '00000000-0000-4000-8000-000000000213', 'proof-shadow-release', 'proof-contract-release',
+      '00000000-0000-4000-8000-000000000214', '00000000-0000-4000-8000-000000000214',
+      2026, 8, 'proof-success-event', 'unlocked', base_time - interval '5 minutes',
+      forged_doc, forged_sha, forged_payload, NULL, octet_length(forged_payload),
+      base_time - interval '3 minutes'
+    );
+    RAISE EXCEPTION 'post-receipt success evaluation was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+    WHEN OTHERS THEN RAISE;
+  END;
+
   BEGIN
     prediction_doc := jsonb_set(prediction_doc, '{inferredAt}',
       to_jsonb(to_char((base_time + interval '1 minute') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
@@ -259,14 +339,14 @@ BEGIN
   INSERT INTO public.games (
     id, external_id, sport, status, away_score, home_score, provider_ids, updated_at
   ) VALUES (
-    9001, 'proof-final-event', 'nfl', 'final', 17, 20,
-    '{"balldontlie":"proof-final-event"}'::jsonb, outcome_final_at
+    9001, 900100, 'nfl', 'final', 17, 20,
+    '{"balldontlie":"900100"}'::jsonb, outcome_final_at
   );
   INSERT INTO public.nfl_market_brain_research_outcomes (
     outcome_checksum, event_id, game_id, source_row_sha256, source_row_payload,
     final_at, outcome, outcome_payload, bytes
   ) VALUES (
-    outcome_sha, 'proof-final-event', 9001, outcome_source_sha, outcome_source_text,
+    outcome_sha, '900100', 9001, outcome_source_sha, outcome_source_text,
     outcome_final_at, outcome_doc, outcome_text, octet_length(outcome_text)
   );
 
@@ -278,7 +358,7 @@ BEGIN
     INSERT INTO public.nfl_market_brain_research_outcomes (
       outcome_checksum, event_id, game_id, source_row_sha256, source_row_payload,
       final_at, outcome, outcome_payload, bytes
-    ) VALUES (outcome_sha, 'proof-final-event', 9001, outcome_source_sha, outcome_source_text,
+    ) VALUES (outcome_sha, '900100', 9001, outcome_source_sha, outcome_source_text,
       outcome_final_at, outcome_doc, outcome_text, octet_length(outcome_text));
     RAISE EXCEPTION 'wrong outcome source table was accepted';
   EXCEPTION WHEN OTHERS THEN
@@ -293,7 +373,7 @@ BEGIN
     INSERT INTO public.nfl_market_brain_research_outcomes (
       outcome_checksum, event_id, game_id, source_row_sha256, source_row_payload,
       final_at, outcome, outcome_payload, bytes
-    ) VALUES (outcome_sha, 'proof-final-event', 9001, outcome_source_sha, outcome_source_text,
+    ) VALUES (outcome_sha, '900100', 9001, outcome_source_sha, outcome_source_text,
       outcome_final_at + interval '1 second', outcome_doc, outcome_text, octet_length(outcome_text));
     RAISE EXCEPTION 'mismatched final timestamp was accepted';
   EXCEPTION WHEN OTHERS THEN
@@ -304,24 +384,24 @@ BEGIN
   INSERT INTO public.games (
     id, external_id, sport, status, away_score, home_score, provider_ids, updated_at
   ) VALUES (
-    9002, 'proof-non-nfl-event', 'nba', 'final', 90, 100,
-    '{"balldontlie":"proof-non-nfl-event"}'::jsonb, outcome_final_at
+    9002, 900200, 'nba', 'final', 90, 100,
+    '{"balldontlie":"900200"}'::jsonb, outcome_final_at
   );
   forged_doc := jsonb_build_object(
-    'id', 9002, 'externalId', 'proof-non-nfl-event', 'sport', 'nba', 'status', 'final',
+    'id', 9002, 'externalId', 900200, 'sport', 'nba', 'status', 'final',
     'awayScore', 90, 'homeScore', 100,
-    'providerIds', '{"balldontlie":"proof-non-nfl-event"}'::jsonb,
+    'providerIds', '{"balldontlie":"900200"}'::jsonb,
     'updatedAt', to_char(outcome_final_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
   );
   forged_payload := forged_doc::text;
   forged_sha := encode(digest(convert_to(forged_payload, 'UTF8'), 'sha256'), 'hex');
   outcome_doc := jsonb_build_object(
-    'eventId', 'proof-non-nfl-event',
+    'eventId', '900200',
     'finalAt', to_char(outcome_final_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
     'awayScore', 90, 'homeScore', 100,
     'source', jsonb_build_object(
       'table', 'games', 'gameRecordId', '9002',
-      'providerIds', '{"balldontlie":"proof-non-nfl-event"}'::jsonb,
+      'providerIds', '{"balldontlie":"900200"}'::jsonb,
       'sourceUpdatedAt', to_char(outcome_final_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
       'sourceRowSha256', forged_sha
     )
@@ -333,7 +413,7 @@ BEGIN
     INSERT INTO public.nfl_market_brain_research_outcomes (
       outcome_checksum, event_id, game_id, source_row_sha256, source_row_payload,
       final_at, outcome, outcome_payload, bytes
-    ) VALUES (outcome_sha, 'proof-non-nfl-event', 9002, forged_sha, forged_payload,
+    ) VALUES (outcome_sha, '900200', 9002, forged_sha, forged_payload,
       outcome_final_at, outcome_doc, outcome_text, octet_length(outcome_text));
     RAISE EXCEPTION 'non-NFL outcome was accepted';
   EXCEPTION WHEN OTHERS THEN
@@ -413,7 +493,7 @@ BEGIN
   IF (SELECT count(*) FROM public.nfl_market_brain_research_predictions WHERE event_id = 'proof-event') <> 1 THEN
     RAISE EXCEPTION 'expected exactly one valid lifecycle prediction';
   END IF;
-  IF (SELECT count(*) FROM public.nfl_market_brain_research_outcomes WHERE event_id = 'proof-final-event') <> 1 THEN
+  IF (SELECT count(*) FROM public.nfl_market_brain_research_outcomes WHERE event_id = '900100') <> 1 THEN
     RAISE EXCEPTION 'expected exactly one valid lifecycle outcome';
   END IF;
 END;

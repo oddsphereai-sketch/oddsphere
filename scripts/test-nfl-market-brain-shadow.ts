@@ -166,7 +166,7 @@ function priceManifest(
     providerFetchedAt: observedAt,
     rawResponseSha256: rawPriceSha256(rows),
     rawParserInput: {
-      schema: "football_raw_price_parser_input_2026_10_27_r3_bounded_preflight",
+      schema: "football_raw_price_parser_input_2026_10_27_r4_streaming_response_hash",
       sha256: rawPriceSha256(rows),
       payload: rows,
       bytes: Buffer.byteLength(JSON.stringify(rows), "utf8"),
@@ -393,7 +393,8 @@ assert.ok(shadow.case.observations.every((row) => row.timing.availableAt.length 
 assert.ok(shadow.case.observations.every((row) => !["leader", "follower", "resistor", "reversal"].includes(row.observedRole)),
   "a single snapshot cannot invent market sequence roles");
 assert.deepEqual(nflMarketBrainCaptureFailure({ eventId: game.providerGameId, capturedAt, error: new Error("fixture") }), {
-  release: shadow.release, status: "capture_failed", productionApplied: false,
+  release: shadow.release, contractRelease: MARKET_BRAIN_CONTRACT_RELEASE,
+  status: "capture_failed", productionApplied: false,
   eventId: game.providerGameId, capturedAt, reason: "fixture",
 }, "shadow capture failures must remain explicit without gaining production authority");
 

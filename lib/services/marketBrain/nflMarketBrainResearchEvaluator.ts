@@ -838,8 +838,8 @@ function attestedPredictionFromStoredRow(
 }
 
 type VerifiedGameRow = {
-  id: string;
-  external_id: string;
+  id: number;
+  external_id: number;
   sport: string;
   status: string;
   away_score: number | null;
@@ -863,7 +863,7 @@ export async function persistVerifiedNflMarketBrainFinalOutcome(args: {
   signal?: AbortSignal;
 }): Promise<NflMarketBrainAttestedFinalOutcome> {
   let gameQuery = args.client.from("games")
-    .select("id,external_id,status,away_score,home_score,provider_ids,updated_at")
+    .select("id,external_id,sport,status,away_score,home_score,provider_ids,updated_at")
     .eq("sport", "nfl")
     .eq("external_id", args.eventId)
     .eq("status", "final");
@@ -886,13 +886,13 @@ export async function persistVerifiedNflMarketBrainFinalOutcome(args: {
     updatedAt: new Date(requiredTimestamp(game.updated_at, "games.updatedAt")).toISOString(),
   };
   const withoutChecksum = {
-    eventId: game.external_id,
+    eventId: String(game.external_id),
     finalAt: sourceRow.updatedAt,
     awayScore: game.away_score!,
     homeScore: game.home_score!,
     source: {
       table: "games" as const,
-      gameRecordId: game.id,
+      gameRecordId: String(game.id),
       providerIds: structuredClone(game.provider_ids),
       sourceUpdatedAt: sourceRow.updatedAt,
       sourceRowSha256: marketBrainSha256(sourceRow),
@@ -906,7 +906,7 @@ export async function persistVerifiedNflMarketBrainFinalOutcome(args: {
     canonical_release: MARKET_BRAIN_CANONICAL_JSON_RELEASE,
     outcome_checksum: outcome.checksum,
     event_id: outcome.eventId,
-    game_id: outcome.source.gameRecordId,
+    game_id: game.id,
     source_row_sha256: outcome.source.sourceRowSha256,
     source_row_payload: marketBrainCanonicalJson(sourceRow),
     final_at: outcome.finalAt,

@@ -6,7 +6,7 @@ export type FootballRawPricePhase = "provider_opening" | "current";
 export type FootballRawPriceStatus = "observed" | "incomplete" | "duplicate" | "unsupported";
 
 export const FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE =
-  "football_raw_price_parser_input_2026_10_27_r3_bounded_preflight" as const;
+  "football_raw_price_parser_input_2026_10_27_r4_streaming_response_hash" as const;
 
 export type FootballRawPriceObservation = {
   sourceObservationId: string;
@@ -62,7 +62,94 @@ export type FootballRawPriceResponseManifest = {
 };
 
 export function rawPriceSha256(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const hash = createHash("sha256");
+  const active = new WeakSet<object>();
+
+  function updateString(input: string): void {
+    hash.update('"');
+    let runStart = 0;
+    for (let index = 0; index < input.length; index += 1) {
+      const codeUnit = input.charCodeAt(index);
+      let escaped: string | null = null;
+      if (codeUnit === 0x22) escaped = '\\"';
+      else if (codeUnit === 0x5c) escaped = "\\\\";
+      else if (codeUnit === 0x08) escaped = "\\b";
+      else if (codeUnit === 0x09) escaped = "\\t";
+      else if (codeUnit === 0x0a) escaped = "\\n";
+      else if (codeUnit === 0x0c) escaped = "\\f";
+      else if (codeUnit === 0x0d) escaped = "\\r";
+      else if (codeUnit <= 0x1f) escaped = `\\u${codeUnit.toString(16).padStart(4, "0")}`;
+      else if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+        const next = input.charCodeAt(index + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          index += 1;
+          continue;
+        }
+        escaped = `\\u${codeUnit.toString(16)}`;
+      } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+        escaped = `\\u${codeUnit.toString(16)}`;
+      }
+      if (escaped !== null) {
+        if (runStart < index) hash.update(input.slice(runStart, index));
+        hash.update(escaped);
+        runStart = index + 1;
+      }
+    }
+    if (runStart < input.length) hash.update(input.slice(runStart));
+    hash.update('"');
+  }
+
+  function updateJson(item: unknown, arrayElement = false): boolean {
+    if (item !== null && typeof item === "object" &&
+        typeof (item as { toJSON?: unknown }).toJSON === "function") {
+      item = (item as { toJSON(): unknown }).toJSON();
+    }
+    if (item === undefined || typeof item === "function" || typeof item === "symbol") {
+      if (arrayElement) hash.update("null");
+      return arrayElement;
+    }
+    if (item === null) { hash.update("null"); return true; }
+    if (typeof item === "string") { updateString(item); return true; }
+    if (typeof item === "boolean") { hash.update(item ? "true" : "false"); return true; }
+    if (typeof item === "number") {
+      hash.update(Number.isFinite(item) ? String(Object.is(item, -0) ? 0 : item) : "null");
+      return true;
+    }
+    if (typeof item === "bigint") throw new TypeError("Do not know how to serialize a BigInt");
+    if (typeof item !== "object") throw new TypeError("Raw price response is not JSON serializable");
+    if (active.has(item)) throw new TypeError("Converting circular structure to JSON");
+    active.add(item);
+    try {
+      if (Array.isArray(item)) {
+        hash.update("[");
+        for (let index = 0; index < item.length; index += 1) {
+          if (index > 0) hash.update(",");
+          updateJson(item[index], true);
+        }
+        hash.update("]");
+        return true;
+      }
+      hash.update("{");
+      let wrote = false;
+      for (const key in item as Record<string, unknown>) {
+        if (!Object.hasOwn(item, key)) continue;
+        const child = (item as Record<string, unknown>)[key];
+        if (child === undefined || typeof child === "function" || typeof child === "symbol") continue;
+        if (wrote) hash.update(",");
+        updateString(key);
+        hash.update(":");
+        updateJson(child);
+        wrote = true;
+      }
+      hash.update("}");
+      return true;
+    } finally {
+      active.delete(item);
+    }
+  }
+
+  if (!updateJson(value)) throw new TypeError("Raw price response is not JSON serializable");
+  return hash.digest("hex");
 }
 
 export function failedFootballRawPriceManifest(args: {
@@ -207,10 +294,10 @@ function assertBoundedRawParserJson(value: unknown, maximumBytes: number): void 
           visit(descriptor.value, depth + 1);
         }
       } else {
-        const keys = Object.keys(item);
-        for (let index = 0; index < keys.length; index += 1) {
+        let index = 0;
+        for (const key in item as Record<string, unknown>) {
+          if (!Object.hasOwn(item, key)) continue;
           if (index > 0) add(1);
-          const key = keys[index]!;
           const descriptor = Object.getOwnPropertyDescriptor(item, key);
           if (!descriptor || !("value" in descriptor)) {
             throw new Error("football_raw_price_parser_input_contains_accessor");
@@ -218,6 +305,7 @@ function assertBoundedRawParserJson(value: unknown, maximumBytes: number): void 
           addJsonStringBytes(key);
           add(1);
           visit(descriptor.value, depth + 1);
+          index += 1;
         }
       }
     } finally {

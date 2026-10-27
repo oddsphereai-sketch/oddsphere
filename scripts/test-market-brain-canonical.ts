@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   MARKET_BRAIN_CANONICAL_JSON_RELEASE,
@@ -45,5 +46,18 @@ try {
 } finally {
   String.prototype.localeCompare = originalLocaleCompare;
 }
+
+const canonicalWriterSources = [
+  "lib/services/football/nflMarketBrainShadowStore.ts",
+  "lib/services/marketBrain/nflMarketBrainCaptureSet.ts",
+  "lib/services/marketBrain/nflMarketBrainResearchInput.ts",
+  "lib/services/marketBrain/nflMarketBrainResolverContract.ts",
+  "lib/services/marketBrain/nflMarketBrainResearchEvaluator.ts",
+].map((file) => readFileSync(file, "utf8")).join("\n");
+assert.equal(
+  canonicalWriterSources.match(/canonical_release:\s*MARKET_BRAIN_CANONICAL_JSON_RELEASE/g)?.length,
+  8,
+  "all eight canonical-hash writers must explicitly persist the canonical serializer release",
+);
 
 console.log("Market Brain canonical JSON UTF-16 ordering, numeric policy, and golden hash vectors passed.");

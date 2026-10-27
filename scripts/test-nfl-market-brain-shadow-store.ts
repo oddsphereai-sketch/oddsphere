@@ -20,6 +20,7 @@ import { marketBrainCanonicalJson } from "../lib/services/marketBrain/marketBrai
 
 const shadow = {
   release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
+  contractRelease: MARKET_BRAIN_CONTRACT_RELEASE,
   status: "capture_failed" as const,
   productionApplied: false as const,
   eventId: "event-1",
@@ -166,7 +167,8 @@ async function main() {
     "an idempotent retry must report an existing row rather than claiming another insert");
 
   const storedShadow = { reason: shadow.reason, capturedAt: shadow.capturedAt, eventId: shadow.eventId,
-    productionApplied: shadow.productionApplied, status: shadow.status, release: shadow.release };
+    productionApplied: shadow.productionApplied, status: shadow.status, release: shadow.release,
+    contractRelease: shadow.contractRelease };
   const readClient = {
     from(table: string) {
       assert.equal(table, "nfl_market_brain_shadow_snapshots");

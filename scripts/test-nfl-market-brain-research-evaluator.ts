@@ -273,6 +273,9 @@ assert.throws(
   /strictly after cutoff/,
   "outcomes available at or before the feature cutoff must be rejected",
 );
+const productionShapeOutcome = await verifiedOutcome("101", "2026-09-11T00:00:00.000Z", 20, 24);
+assert.equal(productionShapeOutcome.eventId, "101");
+assert.equal(productionShapeOutcome.source.gameRecordId, "1101");
 await assert.rejects(
   () => candidate({ sequence: correctionSequence.materialized, states: [
       { margin: -2, total: 42, probability: 0.3 }, { margin: 4, total: 44, probability: 0.7 },
@@ -357,17 +360,30 @@ function predictionReadClient(prediction: Record<string, unknown>) {
 
 async function verifiedOutcome(eventId: string, finalAt: string, awayScore: number, homeScore: number) {
   let storedOutcome: Record<string, unknown> | null = null;
+  const numericEventId = /^\d+$/.test(eventId) ? Number(eventId) : null;
   const client = {
     from(table: string) {
       if (table === "games") {
-        return { select() { return { eq() { return this; }, single: async () => ({ data: {
-          id: eventId === "harm" ? "2" : "1", external_id: eventId, status: "final",
+        return { select(fields: string) {
+          assert.equal(fields, "id,external_id,sport,status,away_score,home_score,provider_ids,updated_at",
+            "verified outcome reads must project the NFL sport identity included in canonical source bytes");
+          return { eq() { return this; }, single: async () => ({ data: {
+          id: numericEventId === null ? (eventId === "harm" ? "2" : "1") : numericEventId + 1000,
+          external_id: numericEventId ?? eventId, status: "final",
           sport: "nfl",
           away_score: awayScore, home_score: homeScore, provider_ids: { balldontlie: eventId }, updated_at: finalAt,
         }, error: null }) }; } };
       }
       assert.equal(table, "nfl_market_brain_research_outcomes");
-      return { insert(row: Record<string, unknown>) { storedOutcome = row.outcome as Record<string, unknown>; return {
+      return { insert(row: Record<string, unknown>) {
+        if (numericEventId !== null) {
+          const sourceRow = JSON.parse(String(row.source_row_payload)) as Record<string, unknown>;
+          assert.equal(typeof sourceRow.id, "number");
+          assert.equal(typeof sourceRow.externalId, "number");
+          assert.equal(row.game_id, numericEventId + 1000);
+          assert.equal(row.event_id, eventId);
+        }
+        storedOutcome = row.outcome as Record<string, unknown>; return {
         select() { return { single: async () => ({ data: {
           id: `outcome-${eventId}`, outcome_checksum: row.outcome_checksum,
           outcome: storedOutcome, outcome_payload: row.outcome_payload,

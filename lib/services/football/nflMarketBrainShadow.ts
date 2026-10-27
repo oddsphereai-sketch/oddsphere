@@ -1,4 +1,5 @@
 import {
+  MARKET_BRAIN_CONTRACT_RELEASE,
   MARKET_BRAIN_BLIND_SPOTS,
   bindMarketBrainMarginTotalPrior,
   buildMarketBrainCase,
@@ -32,7 +33,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_27_r14_capture_timestamp_bound" as const;
+  "nfl_market_brain_shadow_2026_10_27_r16_streaming_response_hash" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 96 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_WEEK_RAW_BYTES = 256 * 1024 * 1024;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_REGULAR_SEASON_RAW_BYTES = 5 * 1024 * 1024 * 1024;
@@ -46,6 +47,7 @@ export type NflMarketBrainShadow = {
 
 export type NflMarketBrainCaptureFailure = {
   release: typeof NFL_MARKET_BRAIN_SHADOW_RELEASE;
+  contractRelease: typeof MARKET_BRAIN_CONTRACT_RELEASE;
   status: "capture_failed";
   productionApplied: false;
   eventId: string;
@@ -62,6 +64,7 @@ export function nflMarketBrainCaptureFailure(args: {
 }): NflMarketBrainCaptureFailure {
   return {
     release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
+    contractRelease: MARKET_BRAIN_CONTRACT_RELEASE,
     status: "capture_failed",
     productionApplied: false,
     eventId: args.eventId,

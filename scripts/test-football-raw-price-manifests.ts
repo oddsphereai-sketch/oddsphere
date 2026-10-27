@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 // This provider-boundary test is already mandatory in verify:model-change;
 // keep the canonical/configuration isolation contracts on the same gate.
@@ -10,6 +11,7 @@ import { buildSharpRawPriceManifest } from "../lib/services/football/sharpApiFoo
 import {
   FOOTBALL_RAW_PRICE_PARSER_INPUT_SCHEMA_RELEASE,
   footballRawPriceParserInput,
+  rawPriceSha256,
 } from "../lib/services/football/footballRawPriceManifest";
 
 const fetchedAt = "2026-10-26T20:00:00.000Z";
@@ -20,6 +22,16 @@ const game = {
   away: { id: 1, abbreviation: "NE", name: "New England Patriots" },
   home: { id: 2, abbreviation: "SEA", name: "Seattle Seahawks" },
 };
+
+for (const value of [
+  { text: "quote:\" slash:\\ controls:\u0000\b\t\n\f\r", unicode: "ä😀\uD800", number: -0 },
+  [null, true, false, Number.NaN, Number.POSITIVE_INFINITY, { omitted: undefined, kept: 1 }],
+  { integerKeys: { 2: "two", 1: "one", z: "last" } },
+]) {
+  assert.equal(rawPriceSha256(value),
+    createHash("sha256").update(JSON.stringify(value)).digest("hex"),
+    "streaming response hashing must remain byte-identical to JSON.stringify provenance");
+}
 
 const bdlRow = {
   game_id: 101,

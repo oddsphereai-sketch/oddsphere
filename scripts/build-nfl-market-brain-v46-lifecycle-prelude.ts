@@ -31,6 +31,7 @@ const manifestPayload = {
 const manifestSha = marketBrainSha256(manifestPayload);
 const shadow = {
   release: "proof-shadow-release",
+  contractRelease: "proof-contract-release",
   status: "capture_failed",
   productionApplied: false,
   eventId,
@@ -38,6 +39,18 @@ const shadow = {
   reason: "proof-fixture",
 };
 const shadowSha = marketBrainSha256(shadow);
+const successShadow = {
+  release: "proof-shadow-release",
+  capturedAt: at(-5 * 60_000),
+  case: {
+    release: "proof-contract-release",
+    sport: "nfl",
+    eventId: "proof-success-event",
+    evaluatedAt: at(-4 * 60_000),
+  },
+  bytes: 1,
+};
+const successShadowSha = marketBrainSha256(successShadow);
 const capturePayload = {
   release: "proof-capture-set-release",
   eventId,
@@ -116,17 +129,17 @@ const prediction = {
 };
 const outcomeSource = {
   id: 9001,
-  externalId: "proof-final-event",
+  externalId: 900100,
   sport: "nfl",
   status: "final",
   awayScore: 17,
   homeScore: 20,
-  providerIds: { balldontlie: "proof-final-event" },
+  providerIds: { balldontlie: "900100" },
   updatedAt: at(-60_000),
 };
 const outcomeSourceSha = marketBrainSha256(outcomeSource);
 const outcomePayload = {
-  eventId: outcomeSource.externalId,
+  eventId: String(outcomeSource.externalId),
   finalAt: outcomeSource.updatedAt,
   awayScore: outcomeSource.awayScore,
   homeScore: outcomeSource.homeScore,
@@ -143,6 +156,7 @@ const fixtures: Array<[string, string, string]> = [
   ["base_time", base.toISOString(), ""],
   ["manifest", marketBrainCanonicalJson(manifestPayload), manifestSha],
   ["shadow", marketBrainCanonicalJson(shadow), shadowSha],
+  ["success_shadow", marketBrainCanonicalJson(successShadow), successShadowSha],
   ["capture", marketBrainCanonicalJson(capturePayload), captureSha],
   ["input", marketBrainCanonicalJson(inputPayload), inputSha],
   ["weights", marketBrainCanonicalJson(weights), weightsSha],

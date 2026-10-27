@@ -55,7 +55,7 @@ ALTER ROLE service_role BYPASSRLS;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS public.games (
   id bigint PRIMARY KEY,
-  external_id text NOT NULL,
+  external_id integer NOT NULL,
   sport text NOT NULL,
   status text NOT NULL,
   away_score integer,

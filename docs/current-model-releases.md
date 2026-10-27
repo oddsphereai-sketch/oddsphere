@@ -493,7 +493,7 @@ Last reviewed: 2026-10-27
 ### Cross-sport Market Brain foundation (shadow capture only)
 
 - `market_brain_contract_2026_10_27_r13_schema_bound_parser_input` and
-  `nfl_market_brain_shadow_2026_10_27_r14_capture_timestamp_bound` define an internal-only,
+  `nfl_market_brain_shadow_2026_10_27_r16_streaming_response_hash` define an internal-only,
   production-inert evidence boundary. The sole writer
   `nfl_forward_evidence_writer_2026_10_27_r82_stratified_canary_raw_parser_sidecar`
   consumes `nfl_sharpapi_splits_2026_10_27_r5_pagination_metadata_closed`. Research capture is
@@ -507,7 +507,7 @@ Last reviewed: 2026-10-27
   `football_sharp_price_capture_2026_10_27_r4_raw_parser_input` attach raw response hashes,
   returned/matched/unmatched/ambiguous row accounting, duplicates, unsupported rows, and individual
   incomplete price sides before complete-pair normalization or family replacement. Raw parser
-  archives use `football_raw_price_parser_input_2026_10_27_r3_bounded_preflight` and the composite
+  archives use `football_raw_price_parser_input_2026_10_27_r4_streaming_response_hash` and the composite
   identity `(schema_release, parser_input_sha256)`, so identical bytes
   interpreted under a different parser contract cannot silently reuse older provenance. The tape retains
   exact-evaluated versus

@@ -143,7 +143,9 @@ database, predictive, or production proof.
   runtime, so the real-database command has **not** executed and these IDs are not closed.
 - **MB-003 / MB-004:** raw response archival is explicit research opt-in; a bounded JSON preflight now
   counts string and key serialization bytes without materializing an unbounded escaped JSON copy,
-  rejects oversize/deep/non-JSON/accessor payloads before cloning the full response, and archive failures remain
+  and raw provider-response digests stream JSON-equivalent bytes into SHA-256 rather than first
+  materializing the whole serialized page. The preflight rejects oversize/deep/non-JSON/accessor
+  payloads before cloning the full response, and archive failures remain
   research-only. Malformed dormant config is not parsed; enabled schedules are structurally validated
   before raw archival, and selected attempt windows validate before any research database read. Focused
   foundation, writer, proof-chain, and feature-off tests pass. A separate runner and measured base-versus-
@@ -168,6 +170,12 @@ database, predictive, or production proof.
   verifies their digest, and the receipt trigger requires the source table label, NFL sport, final
   timestamp, scores, provider IDs, and update time to match the finalized `games` row. Correction
   precedence and adversarial PostgreSQL execution remain open.
+- **MB-033 / MB-036:** shadow r15 adds one explicit success/failure union. Both shapes bind release,
+  contract, event and capture time; success also binds NFL sport and requires evaluation no later than
+  server receipt, while failure requires the fixed failed status, no production authority and a
+  nonempty reason. The lifecycle fixture now includes a success-shaped row and contract/event/time
+  forgeries, but most prerequisite receipt triggers still require a future no-bypass real-PostgreSQL
+  lifecycle proof.
 - **MB-038:** feature-off provider results, split semantics, request counts, oversized-response behavior,
   and route response isolation pass `scripts/test-nfl-market-brain-production-neutrality.ts`.
   The candidate branch still truthfully carries new writer/collector identities; repository safety

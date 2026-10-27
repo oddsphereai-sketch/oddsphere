@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { NFL_MARKET_BRAIN_SHADOW_RELEASE } from "../lib/services/football/nflMarketBrainShadow";
-import { bindMarketBrainMarginTotalPrior, buildMarketBrainCase } from
+import { MARKET_BRAIN_CONTRACT_RELEASE, bindMarketBrainMarginTotalPrior, buildMarketBrainCase } from
   "../lib/services/marketBrain/marketBrainContract";
 import { marketBrainCanonicalJson, marketBrainSha256 } from
   "../lib/services/marketBrain/marketBrainCanonical";
@@ -66,9 +66,11 @@ async function main() {
     subject: { kind: "two_team_game", awayId: "AWY", homeId: "HME", startsAt },
     prior, evaluatedTargets: {}, observations: [], sourceManifests: [], expectedInputs: [], blindSpots: [],
   });
-  const success = { release: NFL_MARKET_BRAIN_SHADOW_RELEASE, case: marketCase,
+  const success = { release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
+    capturedAt: "2026-10-20T15:00:00.000Z", case: marketCase,
     bytes: Buffer.byteLength(JSON.stringify(marketCase), "utf8") };
-  const failure = { release: NFL_MARKET_BRAIN_SHADOW_RELEASE, status: "capture_failed" as const,
+  const failure = { release: NFL_MARKET_BRAIN_SHADOW_RELEASE,
+    contractRelease: MARKET_BRAIN_CONTRACT_RELEASE, status: "capture_failed" as const,
     productionApplied: false as const, eventId, capturedAt: "2026-10-20T15:30:00.000Z", reason: "provider_timeout" };
   const rows = [
     storedRow("00000000-0000-4000-8000-000000000301", successRunId, "2026-10-20T15:00:00.000Z", success),

@@ -245,8 +245,22 @@ CREATE TABLE IF NOT EXISTS public.nfl_market_brain_shadow_snapshots (
     THEN shadow #>> '{case,eventId}'
     ELSE shadow ->> 'eventId' END = provider_game_id) IS TRUE),
   CHECK ((((shadow ->> 'capturedAt')::timestamptz = captured_at)) IS TRUE),
-  CHECK (((NOT (shadow ? 'case')) OR
-    (shadow #>> '{case,evaluatedAt}')::timestamptz >= captured_at) IS TRUE),
+  CHECK ((((shadow ->> 'capturedAt')::timestamptz <= created_at)) IS TRUE),
+  CHECK ((CASE WHEN shadow ? 'case' THEN
+    jsonb_typeof(shadow -> 'bytes') = 'number' AND
+    NOT (shadow ? 'status') AND NOT (shadow ? 'productionApplied') AND
+    NOT (shadow ? 'eventId') AND NOT (shadow ? 'reason') AND
+    shadow #>> '{case,release}' = contract_release AND
+    shadow #>> '{case,sport}' = 'nfl' AND
+    (shadow #>> '{case,evaluatedAt}')::timestamptz >= captured_at AND
+    (shadow #>> '{case,evaluatedAt}')::timestamptz <= created_at
+  ELSE
+    shadow ->> 'contractRelease' = contract_release AND
+    shadow ->> 'status' = 'capture_failed' AND
+    (shadow ->> 'productionApplied')::boolean IS FALSE AND
+    length(shadow ->> 'reason') > 0 AND
+    NOT (shadow ? 'bytes')
+  END) IS TRUE),
   CHECK ((shadow_payload::jsonb = shadow) IS TRUE),
   CHECK ((encode(digest(convert_to(shadow_payload, 'UTF8'), 'sha256'), 'hex') = shadow_sha256) IS TRUE),
   CHECK (prior_artifact_sha256 IS NOT DISTINCT FROM CASE
@@ -1106,7 +1120,7 @@ BEGIN
   NEW.bytes := octet_length(NEW.outcome_payload);
   SELECT id, external_id, sport, status, away_score, home_score, provider_ids, updated_at INTO verified
     FROM public.games WHERE id = NEW.game_id FOR SHARE;
-  IF verified.id IS NULL OR verified.external_id <> NEW.event_id OR verified.sport <> 'nfl' OR
+  IF verified.id IS NULL OR verified.external_id::text <> NEW.event_id OR verified.sport <> 'nfl' OR
      verified.status <> 'final' OR
      verified.away_score IS NULL OR verified.home_score IS NULL OR NEW.created_at < NEW.final_at THEN
     RAISE EXCEPTION 'NFL Market Brain outcome is not backed by an exact finalized games row';
