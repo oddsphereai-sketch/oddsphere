@@ -9,7 +9,12 @@ import {
   mergeNflAvailabilityWithPrior,
   nflAvailabilityRequestBudgetMaximum,
 } from "./balldontlieNflAvailability";
-import { fetchBalldontlieNflRegularSlate, type NflPreviewBookOdds, type NflPreviewGame } from "./balldontlieNflPreviewSlate";
+import {
+  BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
+  fetchBalldontlieNflRegularSlate,
+  type NflPreviewBookOdds,
+  type NflPreviewGame,
+} from "./balldontlieNflPreviewSlate";
 import { fetchBalldontlieNflTeamDepthSnapshots } from "./balldontlieNflRoster";
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
@@ -77,6 +82,7 @@ import { buildNflThreeStateMarketAuthority } from "./nflThreeStateMarketReader";
 import {
   captureBooksWithSharpBooks,
   fetchSharpApiNflSharpOdds,
+  FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE,
   FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS,
   FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
 } from "./sharpApiFootballSharpOdds";
@@ -107,7 +113,11 @@ import {
 import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import { buildNflMarketState } from "./nflMarketState";
 import { applyNflFullGameEvidenceRuntime } from "./nflFullGameEvidenceRuntime";
-import { buildNflMarketBrainShadow, nflMarketBrainCaptureFailure } from "./nflMarketBrainShadow";
+import {
+  buildNflMarketBrainShadow,
+  nflMarketBrainCaptureFailure,
+  type NflMarketBrainPriceInput,
+} from "./nflMarketBrainShadow";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
@@ -116,7 +126,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_26_r74_market_brain_observable_tape" as const;
+  "nfl_forward_evidence_writer_2026_10_26_r75_market_brain_normalized_provider_tape" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -342,11 +352,26 @@ export async function runNflForwardEvidenceWriter(args: {
   const apiCallsMaximum = slate.providerRequests + rosters.requests + availabilityRequestsMaximum + paidProjectionRequestsMaximum
     + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
   const captureHistoryBooksByGame = new Map<string, NflPreviewBookOdds[]>();
+  const marketBrainHistoryPriceInputsByGame = new Map<string, NflMarketBrainPriceInput[]>();
   for (const row of historicalExisting) {
     const books = captureHistoryBooksByGame.get(row.providerGameId) ?? [];
     books.push(...row.payload.market.comparableCurrentBooks);
     books.push(...nflForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture));
     captureHistoryBooksByGame.set(row.providerGameId, books);
+    const history = marketBrainHistoryPriceInputsByGame.get(row.providerGameId) ?? [];
+    history.push(...[
+      ...row.payload.market.currentBooks,
+      ...nflForwardContextSharpHistoryBooks(row.payload.contextualEvidenceCapture),
+    ].map((book): NflMarketBrainPriceInput => ({
+      book,
+      phase: "historical_capture",
+      providerFetchedAt: row.capturedAt,
+      ingestedAt: row.capturedAt,
+      sourceRelease: book.provider === "sharpapi"
+        ? FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE
+        : BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
+    })));
+    marketBrainHistoryPriceInputsByGame.set(row.providerGameId, history);
   }
 
   const payloadBuildHolds: string[] = [];
@@ -397,9 +422,10 @@ export async function runNflForwardEvidenceWriter(args: {
       ?? null;
     const sharpSplitSources = sharpResult.sourcesByGame[plan.game.providerGameId]
       ?? unavailableNflSharpApiSplitSources();
+    const sharpCurrentBooks = circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [];
     const contextCurrentBooks = captureBooksWithSharpBooks(
       comparableCurrentBooks,
-      circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [],
+      sharpCurrentBooks,
     );
     const contextOpeningBooks = [
       ...comparableProviderOpeningBooks,
@@ -809,10 +835,46 @@ export async function runNflForwardEvidenceWriter(args: {
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
       authoritativeForecast: outcome,
     });
+    const marketBrainPriceInputs: NflMarketBrainPriceInput[] = [
+      ...(marketBrainHistoryPriceInputsByGame.get(plan.game.providerGameId) ?? []),
+      ...providerOpeningBooks.map((book): NflMarketBrainPriceInput => ({
+        book,
+        phase: "provider_opening",
+        providerFetchedAt: slate.fetchedAt,
+        ingestedAt: capturedAt,
+        sourceRelease: BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
+      })),
+      {
+        book: opening.quote,
+        phase: opening.provenance,
+        providerFetchedAt: slate.fetchedAt,
+        ingestedAt: capturedAt,
+        sourceRelease: BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
+      },
+      ...currentBooks.map((book): NflMarketBrainPriceInput => ({
+        book,
+        phase: "current",
+        providerFetchedAt: slate.fetchedAt,
+        ingestedAt: capturedAt,
+        sourceRelease: BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
+      })),
+      ...sharpCurrentBooks.map((book): NflMarketBrainPriceInput => ({
+        book,
+        phase: "current",
+        providerFetchedAt: capturedAt,
+        ingestedAt: capturedAt,
+        sourceRelease: FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE,
+      })),
+    ];
     let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
     if (!existingLockedRecord) {
       try {
-        marketBrainShadow = buildNflMarketBrainShadow({ game: plan.game, capture: contextualEvidenceCapture, sharpSplitSources });
+        marketBrainShadow = buildNflMarketBrainShadow({
+          game: plan.game,
+          capture: contextualEvidenceCapture,
+          priceInputs: marketBrainPriceInputs,
+          sharpSplitSources,
+        });
       } catch (error) {
         // Shadow evidence may report its own failure, but it must never block or alter production output.
         marketBrainShadow = nflMarketBrainCaptureFailure({ eventId: plan.game.providerGameId, capturedAt, error });

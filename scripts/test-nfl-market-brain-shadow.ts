@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
+import type { NflPreviewBookOdds, NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
   NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
   type NflForwardContextCapture,
@@ -101,14 +101,36 @@ const splitSources: NflSharpApiSplitSource[] = [
   { sportsbook: "betmgm", status: "unavailable", matchedRows: 0, observations: [] },
 ];
 
-const shadow = buildNflMarketBrainShadow({ game, capture, sharpSplitSources: splitSources });
-const unchangedInputs = JSON.stringify({ capture, splitSources });
-buildNflMarketBrainShadow({ game, capture, sharpSplitSources: splitSources });
-assert.equal(JSON.stringify({ capture, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
+function priceBook(sportsbook: string, observedAt: string, provider: "balldontlie" | "sharpapi", shifted = false): NflPreviewBookOdds {
+  const firstPrice = sportsbook === "DraftKings" ? -110 : shifted ? -108 : -105;
+  const secondPrice = sportsbook === "DraftKings" ? -110 : shifted ? -112 : -115;
+  return {
+    providerGameId: game.providerGameId,
+    sportsbook,
+    observedAt,
+    provider,
+    targetEligible: provider !== "sharpapi",
+    moneyline: { awayPrice: firstPrice, homePrice: secondPrice },
+    spread: { awayLine: 3.5, awayPrice: firstPrice, homeLine: -3.5, homePrice: secondPrice },
+    total: { line: 45.5, overPrice: firstPrice, underPrice: secondPrice },
+  };
+}
+
+const priceInputs = [
+  { book: priceBook("Circa", openedAt, "sharpapi"), phase: "provider_opening" as const, providerFetchedAt: openedAt, ingestedAt: openedAt, sourceRelease: "sharp-price" },
+  { book: priceBook("DraftKings", openedAt, "balldontlie"), phase: "provider_opening" as const, providerFetchedAt: openedAt, ingestedAt: openedAt, sourceRelease: "bdl-price" },
+  { book: priceBook("Circa", capturedAt, "sharpapi", true), phase: "current" as const, providerFetchedAt: capturedAt, ingestedAt: capturedAt, sourceRelease: "sharp-price" },
+  { book: priceBook("DraftKings", capturedAt, "balldontlie", true), phase: "current" as const, providerFetchedAt: capturedAt, ingestedAt: capturedAt, sourceRelease: "bdl-price" },
+];
+
+const shadow = buildNflMarketBrainShadow({ game, capture, priceInputs, sharpSplitSources: splitSources });
+const unchangedInputs = JSON.stringify({ capture, priceInputs, splitSources });
+buildNflMarketBrainShadow({ game, capture, priceInputs, sharpSplitSources: splitSources });
+assert.equal(JSON.stringify({ capture, priceInputs, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
 assert.equal(shadow.case.release, MARKET_BRAIN_CONTRACT_RELEASE);
 assert.equal(shadow.case.mode, "shadow_capture");
-assert.equal(shadow.decision.status, "capture_only");
-assert.equal(shadow.decision.productionApplied, false);
+assert.ok(shadow.bytes > 0);
+assert.equal(shadow.case.captureBoundary, "normalized_provider_observation");
 assert.equal(shadow.case.accounting.providedObservations, shadow.case.accounting.retainedObservations);
 assert.equal(shadow.case.invariants.allExpectedInputsAccounted, true);
 assert.equal(shadow.case.invariants.productionInfluenceAllowed, false);
@@ -128,18 +150,22 @@ assert.equal(split("circa")?.sourcePrior, "professional_book");
 
 for (const marketName of ["moneyline", "spread", "total"] as const) {
   const target = shadow.case.observations.filter((row) => row.market === marketName && row.modality === "price_quote" && row.targetRelation === "evaluated");
+  const sameFamily = shadow.case.observations.filter((row) => row.market === marketName && row.modality === "price_quote" && row.targetRelation === "same_family_as_evaluated");
   const excluded = shadow.case.observations.filter((row) => row.market === marketName && row.modality === "price_quote" && row.targetRelation === "target_excluded");
-  assert.equal(target.length, 2, `${marketName} must retain target opening and current quotes`);
+  assert.equal(target.length, 1, `${marketName} must identify the exact evaluated current quote`);
+  assert.equal(sameFamily.length, 1, `${marketName} must distinguish prior same-family prices from the exact target`);
   assert.equal(excluded.length, 2, `${marketName} must retain target-excluded opening and current quotes`);
 }
 
 const absent = shadow.case.expectedInputs.find((row) => row.id === "identified_book_split:moneyline:betmgm");
 assert.deepEqual(absent && { availability: absent.availability, observations: absent.observationIds.length, reason: absent.reason },
   { availability: "unavailable", observations: 0, reason: "source_unavailable" });
-assert.deepEqual(shadow.case.expectedInputs.find((row) => row.id === "price:moneyline:pinnacle"), {
-  id: "price:moneyline:pinnacle", modality: "price_quote", provider: "sharpapi", participant: "pinnacle",
-  expectation: "required", availability: "unavailable", observationIds: [], reason: "no_complete_quote_pair",
+assert.deepEqual(shadow.case.expectedInputs.find((row) => row.id === "price:moneyline:sharpapi:pinnacle"), {
+  id: "price:moneyline:sharpapi:pinnacle", modality: "price_quote", provider: "sharpapi", participant: "pinnacle",
+  expectation: "required", availability: "unavailable", observationIds: [], reason: "provider_source_unavailable",
 }, "a missing required price source must remain visible in the manifest");
+assert.ok(shadow.case.observations.every((row) => row.timing.availableAt.length > 0),
+  "every observation must carry a replay-safe availability time");
 assert.ok(shadow.case.observations.every((row) => !["leader", "follower", "resistor", "reversal"].includes(row.observedRole)),
   "a single snapshot cannot invent market sequence roles");
 assert.deepEqual(nflMarketBrainCaptureFailure({ eventId: game.providerGameId, capturedAt, error: new Error("fixture") }), {
@@ -147,4 +173,4 @@ assert.deepEqual(nflMarketBrainCaptureFailure({ eventId: game.providerGameId, ca
   eventId: game.providerGameId, capturedAt, reason: "fixture",
 }, "shadow capture failures must remain explicit without gaining production authority");
 
-console.log("NFL Market Brain observable tape: raw quotes, opposing splits, explicit missingness, blind spots, and no-authority gate passed");
+console.log("NFL Market Brain normalized-provider tape: unthresholded quotes, opposing splits, replay-safe time, explicit missingness, and no-authority gate passed");

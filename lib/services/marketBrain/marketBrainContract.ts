@@ -1,5 +1,5 @@
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_26_r2_observable_evidence_tape" as const;
+  "market_brain_contract_2026_10_26_r3_replay_safe_observation_time" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -32,9 +32,17 @@ export type MarketBrainObservation = {
   sourcePrior: MarketBrainSourcePrior;
   /** Derived only from observed chronology. Brand names do not imply this role. */
   observedRole: MarketBrainObservedRole;
+  /** Provider event time retained for convenient ordering. See `timing` for availability-safe replay. */
   observedAt: string | null;
+  timing: {
+    providerObservedAt: string | null;
+    providerFetchedAt: string | null;
+    ingestedAt: string;
+    /** Earliest time this row was available to Oddsphere inference. */
+    availableAt: string;
+  };
   availability: MarketBrainAvailability;
-  targetRelation: "evaluated" | "target_excluded" | "not_applicable" | "unknown";
+  targetRelation: "evaluated" | "same_family_as_evaluated" | "target_excluded" | "not_applicable" | "unknown";
   values: Record<string, MarketBrainNumericFeature>;
   categorical: Record<string, string | boolean | null>;
   audit: { sourceRelease: string; sourceObservationId: string; notes: string[] };
@@ -64,6 +72,8 @@ export type MarketBrainCase = {
   visibility: "internal_only";
   mode: "shadow_capture";
   temporalScope: "point_in_time_snapshot";
+  captureBoundary: "raw_provider_response" | "normalized_provider_observation";
+  captureLimitations: string[];
   subject: MarketBrainSubject;
   prior: MarketBrainPrior;
   observations: MarketBrainObservation[];
@@ -82,20 +92,12 @@ export type MarketBrainCase = {
     allProvidedObservationsRetained: true;
     allExpectedInputsAccounted: true;
     sourceReputationSeparatedFromObservedRole: true;
+    providerFetchIngestAvailabilityTimesSeparated: true;
     targetQuoteSeparatedFromEvidence: true;
     displayContractAuthority: false;
     lockedRecordMutationAllowed: false;
     productionInfluenceAllowed: false;
   };
-};
-
-export type MarketBrainShadowDecision = {
-  release: typeof MARKET_BRAIN_CONTRACT_RELEASE;
-  status: "capture_only";
-  productionApplied: false;
-  reason: "validated_artifact_not_supplied";
-  baseline: { kind: MarketBrainPrior["kind"]; primaryMean: number; secondaryMean: number | null };
-  candidate: null;
 };
 
 export const MARKET_BRAIN_BLIND_SPOTS: MarketBrainBlindSpot[] = [
@@ -122,6 +124,14 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
     if (observation.observedAt !== null && !Number.isFinite(Date.parse(observation.observedAt))) {
       throw new Error(`Invalid Market Brain observation time: ${observation.id}`);
     }
+    for (const [name, value] of Object.entries(observation.timing)) {
+      if (value !== null && !Number.isFinite(Date.parse(value))) {
+        throw new Error(`Invalid Market Brain ${name}: ${observation.id}`);
+      }
+    }
+    if (observation.observedAt !== observation.timing.providerObservedAt) {
+      throw new Error(`Market Brain provider observation time alias diverged: ${observation.id}`);
+    }
     for (const [name, feature] of Object.entries(observation.values)) {
       const valid = feature.observed === 0 ? feature.value === null : Number.isFinite(feature.value);
       if (!valid) throw new Error(`Invalid Market Brain feature mask: ${observation.id}:${name}`);
@@ -141,7 +151,9 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
       throw new Error(`Unsupported Market Brain input ${expected.id} has inconsistent availability.`);
     }
   }
-  const observations = [...args.observations].sort((a, b) => timestamp(a.observedAt) - timestamp(b.observedAt) || a.id.localeCompare(b.id));
+  const observations = [...args.observations].sort((a, b) =>
+    timestamp(a.timing.availableAt) - timestamp(b.timing.availableAt) ||
+    timestamp(a.observedAt) - timestamp(b.observedAt) || a.id.localeCompare(b.id));
   return {
     release: MARKET_BRAIN_CONTRACT_RELEASE,
     ...args,
@@ -162,27 +174,12 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
       allProvidedObservationsRetained: true,
       allExpectedInputsAccounted: true,
       sourceReputationSeparatedFromObservedRole: true,
+      providerFetchIngestAvailabilityTimesSeparated: true,
       targetQuoteSeparatedFromEvidence: true,
       displayContractAuthority: false,
       lockedRecordMutationAllowed: false,
       productionInfluenceAllowed: false,
     },
-  };
-}
-
-export function buildMarketBrainCaptureOnlyDecision(input: MarketBrainCase): MarketBrainShadowDecision {
-  const means = input.prior.kind === "margin_total_distribution"
-    ? [input.prior.marginMean, input.prior.totalMean] as const
-    : input.prior.kind === "player_outcome_distribution"
-      ? [input.prior.mean, null] as const
-      : [0, null] as const;
-  return {
-    release: MARKET_BRAIN_CONTRACT_RELEASE,
-    status: "capture_only",
-    productionApplied: false,
-    reason: "validated_artifact_not_supplied",
-    baseline: { kind: input.prior.kind, primaryMean: means[0], secondaryMean: means[1] },
-    candidate: null,
   };
 }
 
