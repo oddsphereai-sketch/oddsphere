@@ -7,7 +7,7 @@ import {
 } from "./marketBrainEvidenceAttempt";
 
 export const MARKET_BRAIN_CAPTURE_PLAN_RELEASE =
-  "market_brain_capture_plan_2026_10_27_r1_all_product_precommit" as const;
+  "market_brain_capture_plan_2026_10_27_r2_adapter_parser_bound_precommit" as const;
 
 export const MARKET_BRAIN_CAPTURE_PLAN_MAX_ATTEMPTS = 4_096 as const;
 
@@ -40,6 +40,10 @@ export type AttestedMarketBrainCapturePlan = MarketBrainCapturePlan & Readonly<{
   }>;
 }>;
 
+export type MarketBrainCaptureCapabilityRegistry = Readonly<{
+  assertAttemptExecutable(attempt: MarketBrainPlannedAttempt): void;
+}>;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function createMarketBrainCapturePlan(
@@ -68,9 +72,11 @@ export function assertMarketBrainCapturePlan(plan: MarketBrainCapturePlan): void
 export async function persistMarketBrainCapturePlan(args: {
   client: SupabaseClient;
   plan: MarketBrainCapturePlan;
+  capabilities: MarketBrainCaptureCapabilityRegistry;
   signal?: AbortSignal;
 }): Promise<AttestedMarketBrainCapturePlan> {
   assertMarketBrainCapturePlan(args.plan);
+  assertMarketBrainCapturePlanExecutable(args.plan, args.capabilities);
   const { checksum: _checksum, ...checksumPayload } = args.plan;
   let rpc = args.client.rpc("persist_market_brain_capture_plan_v1", {
     p_plan_payload: args.plan,
@@ -93,6 +99,14 @@ export async function persistMarketBrainCapturePlan(args: {
     throw new Error(`Market Brain capture-plan attestation failed: ${stored.error?.message ?? "no row returned"}`);
   }
   return attest(stored.data, args.plan);
+}
+
+export function assertMarketBrainCapturePlanExecutable(
+  plan: MarketBrainCapturePlan,
+  capabilities: MarketBrainCaptureCapabilityRegistry,
+): void {
+  assertMarketBrainCapturePlan(plan);
+  for (const attempt of plan.attempts) capabilities.assertAttemptExecutable(attempt);
 }
 
 function assertPayload(payload: MarketBrainCapturePlanPayload): void {
@@ -118,7 +132,6 @@ function assertPayload(payload: MarketBrainCapturePlanPayload): void {
     }
     const logicalKey = marketBrainCanonicalJson({
       product: attempt.product,
-      qualificationScopeKeys: attempt.qualificationScopeKeys,
       provider: attempt.provider,
       feed: attempt.feed,
       participant: attempt.participant,

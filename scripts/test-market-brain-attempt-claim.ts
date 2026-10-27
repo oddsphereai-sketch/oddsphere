@@ -23,6 +23,8 @@ function clientFor(mode: "due" | "missed_window_reconcile"): SupabaseClient {
         qualification_scope_keys: ["moneyline", "spread", "total"],
         provider: "sharpapi",
         feed: "main_odds",
+        adapter_release: "sharpapi_main_odds_adapter_test_r1",
+        parser_release: "sharpapi_main_odds_parser_test_r1",
         participant: "circa",
         event_id: "nba:claim-proof",
         phase: "current",
@@ -44,8 +46,7 @@ function clientFor(mode: "due" | "missed_window_reconcile"): SupabaseClient {
 }
 
 async function main(): Promise<void> {
-async function main(): Promise<void> {
-const due = await claimDueMarketBrainAttempts({
+  const due = await claimDueMarketBrainAttempts({
     client: clientFor("due"), workerId: "market-brain-test-worker",
   });
   assert.equal(due.length, 1);
@@ -77,13 +78,14 @@ const due = await claimDueMarketBrainAttempts({
   assert.match(migration, /current_claim\.lease_expires_at <= v_now/);
   assert.match(migration, /planned_attempt\.window_closes_at < v_now/,
     "expired obligations must remain independently claimable for missed-window receipts");
+  assert.match(migration, /planned_attempt\.planned_at <= v_now/,
+    "an obligation must not execute merely because its wider capture window has opened");
+  assert.match(migration, /active_claim\.lease_expires_at <= statement_timestamp\(\)/,
+    "an expired worker must not finalize even before a replacement claim is issued");
   assert.doesNotMatch(migration, /GRANT (INSERT|UPDATE|DELETE) ON public\.market_brain_attempt_claims/);
   assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.claim_due_market_brain_attempts_v1/);
 
-console.log("Market Brain leased due-work and missed-window claim contract passed.");
-}
-
-void main();
+  console.log("Market Brain leased due-work and missed-window claim contract passed.");
 }
 
 main().catch((error) => {

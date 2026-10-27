@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_attempt_claims (
   lease_expires_at timestamptz NOT NULL,
   claim_sequence integer NOT NULL CHECK (claim_sequence >= 1),
   finalized_at timestamptz,
-  CHECK (claim_release = 'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed'),
+  CHECK (claim_release = 'market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed'),
   CHECK (claimed_at < lease_expires_at),
   CHECK (finalized_at IS NULL OR finalized_at >= claimed_at)
 );
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_attempt_claim_history (
   lease_expires_at timestamptz NOT NULL,
   claim_sequence integer NOT NULL CHECK (claim_sequence >= 1),
   UNIQUE (attempt_id, claim_sequence),
-  CHECK (claim_release = 'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed'),
+  CHECK (claim_release = 'market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed'),
   CHECK (claimed_at < lease_expires_at)
 );
 
@@ -48,6 +48,8 @@ CREATE OR REPLACE FUNCTION public.claim_market_brain_attempts_internal_v1(
   qualification_scope_keys text[],
   provider text,
   feed text,
+  adapter_release text,
+  parser_release text,
   participant text,
   event_id text,
   phase text,
@@ -71,7 +73,7 @@ DECLARE
   planned public.market_brain_planned_attempts%ROWTYPE;
   claimed public.market_brain_attempt_claims%ROWTYPE;
 BEGIN
-  IF p_claim_release <> 'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed'
+  IF p_claim_release <> 'market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed'
     OR p_worker_id !~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
     OR p_limit NOT BETWEEN 1 AND 100
     OR p_lease_seconds NOT BETWEEN 15 AND 300
@@ -92,6 +94,7 @@ BEGIN
        AND (current_claim.attempt_id IS NULL OR
          (current_claim.finalized_at IS NULL AND current_claim.lease_expires_at <= v_now))
        AND ((p_claim_mode = 'due' AND planned_attempt.window_opens_at <= v_now
+             AND planned_attempt.planned_at <= v_now
              AND planned_attempt.window_closes_at >= v_now) OR
             (p_claim_mode = 'missed_window_reconcile' AND planned_attempt.window_closes_at < v_now))
      ORDER BY CASE WHEN p_claim_mode = 'due' THEN planned_attempt.planned_at ELSE planned_attempt.window_closes_at END,
@@ -138,7 +141,8 @@ BEGIN
 
     RETURN QUERY SELECT
       planned.attempt_id, planned.product_key, planned.qualification_scope_keys,
-      planned.provider, planned.feed, planned.participant, planned.event_id, planned.phase,
+      planned.provider, planned.feed, planned.adapter_release, planned.parser_release,
+      planned.participant, planned.event_id, planned.phase,
       planned.planned_at, planned.window_opens_at, planned.window_closes_at,
       claimed.claim_release, claimed.claim_token, claimed.claim_mode, claimed.claimed_by,
       claimed.claimed_at, claimed.lease_expires_at, claimed.claim_sequence;
@@ -157,6 +161,8 @@ CREATE OR REPLACE FUNCTION public.claim_due_market_brain_attempts_v1(
   qualification_scope_keys text[],
   provider text,
   feed text,
+  adapter_release text,
+  parser_release text,
   participant text,
   event_id text,
   phase text,
@@ -191,6 +197,8 @@ CREATE OR REPLACE FUNCTION public.claim_expired_market_brain_attempts_v1(
   qualification_scope_keys text[],
   provider text,
   feed text,
+  adapter_release text,
+  parser_release text,
   participant text,
   event_id text,
   phase text,
@@ -231,6 +239,7 @@ BEGIN
     OR active_claim.claim_token IS DISTINCT FROM NEW.claim_token
     OR active_claim.claim_mode IS DISTINCT FROM NEW.claim_mode
     OR active_claim.claim_sequence IS DISTINCT FROM NEW.claim_sequence
+    OR active_claim.lease_expires_at <= statement_timestamp()
   THEN
     RAISE EXCEPTION 'Market Brain evidence receipt does not match the exact active claim token and sequence';
   END IF;

@@ -30,13 +30,15 @@ const successPayload: MarketBrainEvidenceAttemptPayload = Object.freeze({
   qualificationScopeKeys: Object.freeze(["moneyline", "spread", "total"]),
   provider: "sharpapi",
   feed: "main_odds",
+  adapterRelease: "sharpapi_main_odds_adapter_test_r1",
+  parserRelease: "sharpapi_main_odds_parser_test_r1",
   participant: "circa",
   eventId: "nba:2026-10-27:bos-nyk",
   phase: "current",
   plannedAt: "2026-10-27T16:02:00.000Z",
   windowOpensAt: "2026-10-27T16:00:00.000Z",
   windowClosesAt: "2026-10-27T16:05:00.000Z",
-  startedAt: "2026-10-27T16:01:00.000Z",
+  startedAt: "2026-10-27T16:02:30.000Z",
   completedAt: "2026-10-27T16:03:00.000Z",
   outcome: "success_with_rows",
   reasonCode: null,
@@ -45,7 +47,6 @@ const successPayload: MarketBrainEvidenceAttemptPayload = Object.freeze({
   receivedPages: 1,
   responseSha256: "a".repeat(64),
   rawArchiveSha256: "b".repeat(64),
-  parserRelease: "sharpapi_main_odds_parser_test_r1",
   accounting: Object.freeze({
     ...ZERO_ACCOUNTING,
     rawRows: 4,
@@ -78,9 +79,20 @@ assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
   outcome: "success_empty",
   reasonCode: "provider_returned_empty",
   rawArchiveSha256: null,
-  parserRelease: null,
   accounting: ZERO_ACCOUNTING,
 })));
+assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
+  attemptId: "10000000-0000-4000-8000-000000000007",
+  outcome: "skipped",
+  reasonCode: "adapter_unavailable",
+  startedAt: null,
+  requestCount: 0,
+  expectedPages: null,
+  receivedPages: 0,
+  responseSha256: null,
+  rawArchiveSha256: null,
+  accounting: ZERO_ACCOUNTING,
+})), "a deployment/configuration defect must remain explicit rather than looking like absent market data");
 assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
   attemptId: "10000000-0000-4000-8000-000000000006",
   outcome: "skipped",
@@ -91,7 +103,6 @@ assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
   receivedPages: 0,
   responseSha256: null,
   rawArchiveSha256: null,
-  parserRelease: null,
   accounting: ZERO_ACCOUNTING,
 })), "an expired unexecuted obligation must remain visible instead of disappearing");
 assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
@@ -109,7 +120,6 @@ assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
   receivedPages: 0,
   responseSha256: null,
   rawArchiveSha256: null,
-  parserRelease: null,
   accounting: ZERO_ACCOUNTING,
 })));
 assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
@@ -122,7 +132,6 @@ assert.doesNotThrow(() => createMarketBrainEvidenceAttempt(payload({
   receivedPages: 0,
   responseSha256: null,
   rawArchiveSha256: null,
-  parserRelease: null,
   accounting: ZERO_ACCOUNTING,
 })));
 
@@ -131,7 +140,10 @@ for (const [name, invalid] of [
   ["duplicate scope", payload({ qualificationScopeKeys: ["moneyline", "moneyline"] })],
   ["noncanonical scope order", payload({ qualificationScopeKeys: ["spread", "moneyline"] })],
   ["feed", payload({ feed: "unknown_odds" })],
+  ["adapter release", payload({ adapterRelease: "" })],
+  ["parser release", payload({ parserRelease: "BAD RELEASE" })],
   ["phase", payload({ phase: "settlement" })],
+  ["early execution", payload({ startedAt: "2026-10-27T16:01:59.999Z" })],
   ["raw accounting", payload({ accounting: { ...successPayload.accounting, rawRows: 5 } })],
   ["parsed accounting", payload({ accounting: { ...successPayload.accounting, parsedRows: 4 } })],
   ["matched accounting", payload({ accounting: { ...successPayload.accounting, matchedRows: 3 } })],
@@ -157,6 +169,9 @@ assert.match(migration, /PRIMARY KEY \(release, attempt_id\)/);
 assert.match(migration, /completed_at <= server_created_at/,
   "a caller must not predeclare a successful future receipt before provider work occurs");
 assert.match(migration, /claim_token uuid NOT NULL/);
+assert.match(migration, /adapter_release text NOT NULL/);
+assert.match(migration, /parser_release text NOT NULL/);
+assert.match(migration, /adapter_unavailable/);
 assert.match(migration, /claim_mode = 'missed_window_reconcile'[\s\S]*reason_code = 'missed_window'/);
 assert.match(migration, /product_key text NOT NULL CHECK \(product_key IN/);
 assert.match(migration, /product_key = 'nba_player_props' AND qualification_scope_keys <@ ARRAY/);

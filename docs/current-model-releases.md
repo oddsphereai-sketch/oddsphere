@@ -511,7 +511,7 @@ Last reviewed: 2026-10-27
   and all-failure cases cannot disappear from qualification denominators. Independent child scopes
   prevent one league market or prop stat family from authorizing its siblings, and typed authority
   chains distinguish capture/model, prediction-record, grade/stake, lock, member-snapshot, and reader owners.
-- `market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger` defines the shared,
+- `market_brain_evidence_attempt_2026_10_27_r5_claim_adapter_parser_bound_joint_scope` defines the shared,
   still-unwired attempt receipt for every active product and the canonical ordered set of qualification
   scopes informed by one source request. This preserves a joint Moneyline/Spread/Total or multi-stat
   observation instead of duplicating it or assigning it to an arbitrary isolated market. Its frozen vocabulary
@@ -523,24 +523,40 @@ Last reviewed: 2026-10-27
   binds relational columns to exact canonical payload bytes, verifies the checksum material in PostgreSQL,
   and permits service-role insert/select only. Applying that migration or defining this receipt does not
   schedule a request, implement a feed adapter, enable capture, or grant predictive authority. The
-  migration has not been applied and still requires real-PostgreSQL lifecycle/concurrency proof.
-- `market_brain_capture_plan_2026_10_27_r1_all_product_precommit` defines the separate immutable
+  Each receipt also carries the exact adapter and parser release precommitted for the request, including
+  failed, empty, skipped, and missed-window outcomes; runtime code cannot silently reinterpret an older
+  obligation under a newer adapter. The migration has not been applied and still requires
+  real-PostgreSQL lifecycle/concurrency proof.
+- `market_brain_capture_plan_2026_10_27_r2_adapter_parser_bound_precommit` defines the separate immutable
   collection precommit that must exist on the database server before its first attempt window opens.
   A bounded plan enumerates exact joint-scope source obligations in canonical chronological/source
   order; duplicate UUIDs, duplicate logical obligations, after-the-fact plans, unregistered source
   identities, and windows outside the frozen horizon are rejected. The v48 candidate migration writes
   each plan and all child obligations in one transaction, permits only exact-byte idempotent retries,
   makes both tables append-only, and rejects an evidence receipt that was not preplanned or differs in
-  scope/source/event/phase/window identity. This remains an unwired, unapplied research contract: it
+  scope/source/adapter/parser/event/phase/window identity. Adapter/parser releases are receipt-bound
+  without weakening physical-request deduplication: changing code identity cannot create a second paid
+  request for the same provider/feed/participant/event/window obligation. This remains an unwired,
+  unapplied research contract: it
   schedules no task, claims no due work, calls no provider, and changes no prediction or model input.
-- `market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed` defines bounded, restart-safe
+- `market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed` defines bounded, restart-safe
   claiming for due provider work and separately for expired-window reconciliation. The v49 candidate
   uses row locks plus an attempt-scoped transaction advisory lock, bounded 15–300 second leases, an
   append-only claim history, and monotonically increasing claim sequences. A receipt must carry the
   exact active relational claim token/mode/sequence; a slow stale worker cannot finalize after a newer
-  worker reclaims the obligation. Expired unexecuted obligations become explicit `missed_window`
-  receipts rather than disappearing. The migration and CI proof path are prepared, but no independent
-  runner or source adapter invokes them and nothing is deployed.
+  worker reclaims the obligation. Every claim returns the immutable adapter/parser releases alongside
+  the source identity, preventing a worker from choosing its own implementation. Expired unexecuted obligations become explicit `missed_window`
+  receipts rather than disappearing. Claims cannot issue before their exact planned timestamp and an
+  expired lease cannot finalize even if no replacement has claimed it yet. The migration and CI proof
+  path are prepared, but nothing is deployed.
+- `market_brain_capture_runner_2026_10_27_r1_shadow_only_exact_adapter` defines the production-inert
+  execution core for those obligations. It reconciles expired windows in bounded batches, claims exactly
+  one paid/due request just in time per invocation, and runs it under a bounded timeout shorter than the claim lease. It requires an exact product/scope/provider/feed/
+  phase/adapter/parser capability, records adapter absence as an explicit defect, sanitizes thrown
+  failures, and persists only through the immutable claim-bound receipt path. Plan persistence now
+  requires the same capability registry, while physical-request deduplication deliberately ignores
+  scope labels and code-release changes so they cannot cause duplicate paid calls. No route, cron,
+  source adapter, feature flag, prediction writer, grade, stake, or member reader invokes this runner.
 - `market_brain_contract_2026_10_27_r20_output_artifact_attestation` and
   `nfl_market_brain_shadow_2026_10_27_r24_expected_feed_roster` define an internal-only,
   production-inert evidence boundary. The sole writer

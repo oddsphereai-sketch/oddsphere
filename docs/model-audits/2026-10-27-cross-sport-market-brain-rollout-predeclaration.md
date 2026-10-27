@@ -6,11 +6,13 @@ Registry release: `market_brain_product_registry_2026_10_27_r2_surface_and_famil
 
 Evidence-roster release: `market_brain_evidence_roster_2026_10_27_r3_all_product_source_contracts`
 
-Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger`
+Evidence-attempt release: `market_brain_evidence_attempt_2026_10_27_r5_claim_adapter_parser_bound_joint_scope`
 
-Capture-plan release: `market_brain_capture_plan_2026_10_27_r1_all_product_precommit`
+Capture-plan release: `market_brain_capture_plan_2026_10_27_r2_adapter_parser_bound_precommit`
 
-Attempt-claim release: `market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed`
+Attempt-claim release: `market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed`
+
+Capture-runner release: `market_brain_capture_runner_2026_10_27_r1_shadow_only_exact_adapter`
 
 ## Objective
 
@@ -47,7 +49,7 @@ would erase absent books, failed requests, and parser omissions from the evidenc
 Every planned source attempt must produce one immutable receipt under the shared attempt release,
 including skipped, failed, genuinely empty, partial, and successful attempts. The receipt binds product,
 the canonical ordered set of independent scopes informed by that request, feed, participant, event,
-planned window, request/page counts, parser and
+planned window, request/page counts, exact precommitted adapter/parser releases, and
 raw-response provenance, and exact row conservation. An insert collision is successful only when the
 stored canonical bytes are identical; retries cannot update an earlier receipt. The v47 schema and service
 contract exist on the candidate branch, but no source adapter is wired to it and the migration is not
@@ -56,13 +58,17 @@ applied. Therefore this contract closes neither attempt coverage nor restart/con
 Attempt obligations must first be frozen in one bounded capture plan whose database receipt predates
 the first window. The plan uses canonical source/time order, rejects duplicate logical obligations even
 when a caller changes their UUID, and is persisted atomically with every child obligation. A later
-attempt receipt must match that exact precommit. The v48 candidate implements this storage contract,
-but no due-work claim mechanism, independent runner, or provider adapter is connected yet.
+attempt receipt must match that exact precommit. A code-release change cannot create another physical
+request for an otherwise identical provider/feed/participant/event/window obligation. The v48 candidate implements this storage contract.
 
 The v49 candidate adds bounded due and expired-window leases with append-only claim history. Exact
-claim token and sequence are bound to the immutable receipt row, so an expired worker cannot finalize
-after reassignment. This is still only an inert execution contract until the independent runner and
-each source adapter are wired, qualified, and explicitly enabled.
+claim token, sequence, adapter release, and parser release are bound through the immutable receipt row,
+so an expired worker cannot finalize after lease expiry or reassignment. The shadow-only execution core
+now reconciles missed windows, claims one paid request just in time per invocation, enforces exact
+registered adapter/parser capabilities, bounds execution inside the lease, sanitizes failures, and
+persists claim-bound receipts. It has no route, cron, or
+registered production provider adapter, so this remains inert until each source adapter is implemented,
+qualified, and explicitly enabled.
 
 Every adapter must declare and prove:
 

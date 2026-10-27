@@ -16,6 +16,7 @@ on:
       - "scripts/build-market-brain-v48-lifecycle-proof.ts"
       - "scripts/test-nfl-market-brain-postgres-v46.sh"
       - "scripts/test-nfl-market-brain-**"
+      - "scripts/test-market-brain-**"
       - "package.json"
       - ".github/workflows/market-brain-postgres-proof.yml"
   workflow_dispatch:

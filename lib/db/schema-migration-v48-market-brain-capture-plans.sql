@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_capture_plans (
   checksum_payload_text text NOT NULL,
   server_created_at timestamptz NOT NULL DEFAULT statement_timestamp(),
   PRIMARY KEY (release, plan_id),
-  CHECK (release = 'market_brain_capture_plan_2026_10_27_r1_all_product_precommit'),
+  CHECK (release = 'market_brain_capture_plan_2026_10_27_r2_adapter_parser_bound_precommit'),
   CHECK (created_at <= horizon_opens_at AND horizon_opens_at < horizon_closes_at),
   CHECK (server_created_at <= horizon_opens_at),
   CHECK ((plan_payload_text::jsonb = plan_payload) IS TRUE),
@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS public.market_brain_planned_attempts (
   qualification_scope_keys text[] NOT NULL CHECK (cardinality(qualification_scope_keys) > 0),
   provider text NOT NULL CHECK (length(provider) > 0),
   feed text NOT NULL CHECK (length(feed) > 0),
+  adapter_release text NOT NULL CHECK (adapter_release ~ '^[a-z0-9][a-z0-9._-]{0,127}$'),
+  parser_release text NOT NULL CHECK (parser_release ~ '^[a-z0-9][a-z0-9._-]{0,127}$'),
   participant text,
   event_id text,
   phase text NOT NULL CHECK (phase IN (
@@ -53,7 +55,7 @@ CREATE INDEX IF NOT EXISTS market_brain_planned_attempts_product_due
   ON public.market_brain_planned_attempts (product_key, planned_at);
 CREATE UNIQUE INDEX IF NOT EXISTS market_brain_planned_attempts_logical_obligation
   ON public.market_brain_planned_attempts (
-    product_key, qualification_scope_keys, provider, feed, participant, event_id, phase,
+    product_key, provider, feed, participant, event_id, phase,
     planned_at, window_opens_at, window_closes_at
   ) NULLS NOT DISTINCT;
 
@@ -119,7 +121,7 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_release constant text := 'market_brain_capture_plan_2026_10_27_r1_all_product_precommit';
+  v_release constant text := 'market_brain_capture_plan_2026_10_27_r2_adapter_parser_bound_precommit';
   v_plan_id uuid;
   v_created_at timestamptz;
   v_horizon_opens_at timestamptz;
@@ -200,6 +202,8 @@ BEGIN
     v_scopes := ARRAY(SELECT jsonb_array_elements_text(v_attempt -> 'qualificationScopeKeys'));
     IF jsonb_typeof(v_attempt) IS DISTINCT FROM 'object'
       OR NOT public.market_brain_scope_keys_are_valid(v_attempt ->> 'product', v_scopes)
+      OR COALESCE(v_attempt ->> 'adapterRelease', '') !~ '^[a-z0-9][a-z0-9._-]{0,127}$'
+      OR COALESCE(v_attempt ->> 'parserRelease', '') !~ '^[a-z0-9][a-z0-9._-]{0,127}$'
       OR (v_attempt ->> 'windowOpensAt')::timestamptz > (v_attempt ->> 'plannedAt')::timestamptz
       OR (v_attempt ->> 'plannedAt')::timestamptz > (v_attempt ->> 'windowClosesAt')::timestamptz
       OR (v_attempt ->> 'windowOpensAt')::timestamptz < v_horizon_opens_at
@@ -209,11 +213,13 @@ BEGIN
     END IF;
     INSERT INTO public.market_brain_planned_attempts (
       plan_release, plan_id, attempt_ordinal, attempt_id, product_key, qualification_scope_keys,
-      provider, feed, participant, event_id, phase, planned_at, window_opens_at, window_closes_at,
+      provider, feed, adapter_release, parser_release, participant, event_id, phase,
+      planned_at, window_opens_at, window_closes_at,
       attempt_payload
     ) VALUES (
       v_release, v_plan_id, v_ordinal, (v_attempt ->> 'attemptId')::uuid,
       v_attempt ->> 'product', v_scopes, v_attempt ->> 'provider', v_attempt ->> 'feed',
+      v_attempt ->> 'adapterRelease', v_attempt ->> 'parserRelease',
       v_attempt ->> 'participant', v_attempt ->> 'eventId', v_attempt ->> 'phase',
       (v_attempt ->> 'plannedAt')::timestamptz, (v_attempt ->> 'windowOpensAt')::timestamptz,
       (v_attempt ->> 'windowClosesAt')::timestamptz, v_attempt
@@ -235,6 +241,8 @@ BEGIN
     OR planned.qualification_scope_keys IS DISTINCT FROM NEW.qualification_scope_keys
     OR planned.provider IS DISTINCT FROM NEW.provider
     OR planned.feed IS DISTINCT FROM NEW.feed
+    OR planned.adapter_release IS DISTINCT FROM NEW.adapter_release
+    OR planned.parser_release IS DISTINCT FROM NEW.parser_release
     OR planned.participant IS DISTINCT FROM NEW.participant
     OR planned.event_id IS DISTINCT FROM NEW.event_id
     OR planned.phase IS DISTINCT FROM NEW.phase

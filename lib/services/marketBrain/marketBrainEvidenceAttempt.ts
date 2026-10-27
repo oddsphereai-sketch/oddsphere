@@ -12,7 +12,7 @@ import {
 } from "./marketBrainProductRegistry";
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_RELEASE =
-  "market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger" as const;
+  "market_brain_evidence_attempt_2026_10_27_r5_claim_adapter_parser_bound_joint_scope" as const;
 
 export const MARKET_BRAIN_EVIDENCE_ATTEMPT_OUTCOMES = [
   "success_with_rows",
@@ -41,6 +41,7 @@ export const MARKET_BRAIN_EVIDENCE_ATTEMPT_REASON_CODES = [
   "budget_suppressed",
   "capture_disabled",
   "no_active_events",
+  "adapter_unavailable",
   "missed_window",
 ] as const;
 
@@ -67,6 +68,8 @@ export type MarketBrainEvidenceAttemptPayload = Readonly<{
   qualificationScopeKeys: readonly string[];
   provider: string;
   feed: string;
+  adapterRelease: string;
+  parserRelease: string;
   participant: string | null;
   eventId: string | null;
   phase: MarketBrainFeedPhase;
@@ -82,13 +85,13 @@ export type MarketBrainEvidenceAttemptPayload = Readonly<{
   receivedPages: number;
   responseSha256: string | null;
   rawArchiveSha256: string | null;
-  parserRelease: string | null;
   accounting: MarketBrainEvidenceAttemptAccounting;
   details: Readonly<Record<string, unknown>>;
 }>;
 
 export type MarketBrainEvidenceIdentity = Pick<MarketBrainEvidenceAttemptPayload,
-  "product" | "qualificationScopeKeys" | "provider" | "feed" | "participant" | "phase">;
+  "product" | "qualificationScopeKeys" | "provider" | "feed" | "adapterRelease" | "parserRelease" |
+  "participant" | "phase">;
 
 export type MarketBrainEvidenceAttempt = MarketBrainEvidenceAttemptPayload & Readonly<{
   release: typeof MARKET_BRAIN_EVIDENCE_ATTEMPT_RELEASE;
@@ -104,6 +107,7 @@ export type AttestedMarketBrainEvidenceAttempt = MarketBrainEvidenceAttempt & Re
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[a-f0-9]{64}$/;
+const RELEASE = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 const PARTIAL_REASONS = new Set<MarketBrainEvidenceAttemptReasonCode>([
   "pagination_incomplete", "parser_partial", "identity_incomplete", "storage_partial",
 ]);
@@ -113,7 +117,7 @@ const FAILURE_REASONS = new Set<MarketBrainEvidenceAttemptReasonCode>([
 ]);
 const SKIPPED_REASONS = new Set<MarketBrainEvidenceAttemptReasonCode>([
   "not_due", "cadence_suppressed", "budget_suppressed", "capture_disabled", "no_active_events",
-  "missed_window",
+  "adapter_unavailable", "missed_window",
 ]);
 
 export function createMarketBrainEvidenceAttempt(
@@ -178,7 +182,7 @@ function assertPayload(payload: MarketBrainEvidenceAttemptPayload): void {
     Date.parse(payload.plannedAt) > Date.parse(payload.windowClosesAt) ||
     Date.parse(payload.completedAt) < Date.parse(payload.plannedAt) ||
     (payload.startedAt !== null && (!isTimestamp(payload.startedAt) ||
-      Date.parse(payload.startedAt) < Date.parse(payload.windowOpensAt) ||
+      Date.parse(payload.startedAt) < Date.parse(payload.plannedAt) ||
       Date.parse(payload.startedAt) > Date.parse(payload.completedAt)))) {
     throw new Error("Market Brain evidence attempt chronology is invalid.");
   }
@@ -192,8 +196,9 @@ function assertPayload(payload: MarketBrainEvidenceAttemptPayload): void {
   assertAccounting(payload.accounting);
   if ((payload.responseSha256 !== null && !SHA256.test(payload.responseSha256)) ||
     (payload.rawArchiveSha256 !== null && !SHA256.test(payload.rawArchiveSha256)) ||
-    (payload.accounting.rawRows > 0 && (!payload.parserRelease ||
-      (feed.replayMode === "raw_replayable" && payload.rawArchiveSha256 === null))) ||
+    !RELEASE.test(payload.adapterRelease) || !RELEASE.test(payload.parserRelease) ||
+    (payload.accounting.rawRows > 0 &&
+      feed.replayMode === "raw_replayable" && payload.rawArchiveSha256 === null) ||
     (payload.requestCount > 0 && ["success_with_rows", "success_empty", "partial"].includes(payload.outcome) &&
       payload.responseSha256 === null)) {
     throw new Error("Market Brain evidence attempt provenance is incomplete.");
@@ -211,7 +216,8 @@ export function assertMarketBrainEvidenceIdentity(payload: MarketBrainEvidenceId
   const participantAllowed = payload.participant === null || feed?.participant === payload.participant ||
     participantRoster?.mode === "provider_catalog" ||
     participantRoster?.namedParticipants.some((row) => row.participant === payload.participant);
-  if (!registration || !roster || payload.qualificationScopeKeys.length < 1 ||
+  if (!registration || !roster || !RELEASE.test(payload.adapterRelease) ||
+    !RELEASE.test(payload.parserRelease) || payload.qualificationScopeKeys.length < 1 ||
     requestedScopeSet.size !== payload.qualificationScopeKeys.length ||
     JSON.stringify(canonicalScopeKeys) !== JSON.stringify(payload.qualificationScopeKeys) ||
     !feed || !participantAllowed || participantRoster?.excludedParticipants.includes(payload.participant ?? "")) {
@@ -259,6 +265,7 @@ function toRow(attempt: MarketBrainEvidenceAttempt, claim: MarketBrainClaimedAtt
   return {
     release: attempt.release, attempt_id: attempt.attemptId, product_key: attempt.product,
     qualification_scope_keys: attempt.qualificationScopeKeys, provider: attempt.provider, feed: attempt.feed,
+    adapter_release: attempt.adapterRelease, parser_release: attempt.parserRelease,
     participant: attempt.participant, event_id: attempt.eventId, phase: attempt.phase,
     planned_at: attempt.plannedAt, window_opens_at: attempt.windowOpensAt, window_closes_at: attempt.windowClosesAt,
     started_at: attempt.startedAt, completed_at: attempt.completedAt, outcome: attempt.outcome,
@@ -270,7 +277,7 @@ function toRow(attempt: MarketBrainEvidenceAttempt, claim: MarketBrainClaimedAtt
     retained_rows: attempt.accounting.retainedRows, duplicate_rows: attempt.accounting.duplicateRows,
     filtered_rows: attempt.accounting.filteredRows, write_failed_rows: attempt.accounting.writeFailedRows,
     response_sha256: attempt.responseSha256, raw_archive_sha256: attempt.rawArchiveSha256,
-    parser_release: attempt.parserRelease, attempt_checksum: attempt.checksum,
+    attempt_checksum: attempt.checksum,
     claim_release: claim.claimRelease, claim_token: claim.claimToken,
     claim_mode: claim.claimMode, claim_sequence: claim.claimSequence,
     attempt_payload: attempt, attempt_payload_text: marketBrainCanonicalJson(attempt),
@@ -303,7 +310,7 @@ function normalizeTimestamp(value: unknown): string {
 
 function assertClaimBinding(attempt: MarketBrainEvidenceAttempt, claim: MarketBrainClaimedAttempt): void {
   if (claim.attemptId !== attempt.attemptId ||
-    claim.claimRelease !== "market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed" ||
+    claim.claimRelease !== "market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed" ||
     !UUID.test(claim.claimToken) || !Number.isInteger(claim.claimSequence) || claim.claimSequence < 1 ||
     (claim.claimMode === "missed_window_reconcile" &&
       !(attempt.outcome === "skipped" && attempt.reasonCode === "missed_window")) ||

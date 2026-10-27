@@ -16,6 +16,8 @@ const firstAttempt: MarketBrainPlannedAttempt = Object.freeze({
   qualificationScopeKeys: Object.freeze(["moneyline", "spread", "total"]),
   provider: "sharpapi",
   feed: "main_odds",
+  adapterRelease: "sharpapi_main_odds_adapter_test_r1",
+  parserRelease: "sharpapi_main_odds_parser_test_r1",
   participant: "circa",
   eventId: "nba:2026-10-28:bos-nyk",
   phase: "current",
@@ -27,6 +29,8 @@ const secondAttempt: MarketBrainPlannedAttempt = Object.freeze({
   ...firstAttempt,
   attemptId: "20000000-0000-4000-8000-000000000002",
   feed: "sportsbook_splits",
+  adapterRelease: "sharpapi_sportsbook_splits_adapter_test_r1",
+  parserRelease: "sharpapi_sportsbook_splits_parser_test_r1",
   participant: null,
 });
 const basePayload: MarketBrainCapturePlanPayload = Object.freeze({
@@ -56,9 +60,14 @@ for (const [name, invalid] of [
   ["empty plan", payload({ attempts: [] })],
   ["duplicate attempt id", payload({ attempts: [firstAttempt, { ...secondAttempt, attemptId: firstAttempt.attemptId }] })],
   ["duplicate obligation", payload({ attempts: [firstAttempt, { ...firstAttempt, attemptId: secondAttempt.attemptId }] })],
+  ["duplicate physical request under narrower scopes", payload({ attempts: [firstAttempt, {
+    ...firstAttempt, attemptId: secondAttempt.attemptId, qualificationScopeKeys: ["moneyline"],
+  }] })],
   ["noncanonical order", payload({ attempts: [secondAttempt, firstAttempt] })],
   ["outside horizon", payload({ attempts: [{ ...firstAttempt, windowClosesAt: "2026-10-28T18:00:00.000Z" }] })],
   ["unknown feed", payload({ attempts: [{ ...firstAttempt, feed: "unknown" }] })],
+  ["missing adapter release", payload({ attempts: [{ ...firstAttempt, adapterRelease: "" }] })],
+  ["invalid parser release", payload({ attempts: [{ ...firstAttempt, parserRelease: "BAD RELEASE" }] })],
   ["isolated scope order", payload({ attempts: [{ ...firstAttempt, qualificationScopeKeys: ["total", "moneyline"] }] })],
 ] as const) {
   assert.throws(() => createMarketBrainCapturePlan(invalid), `must reject ${name}`);
@@ -74,6 +83,10 @@ assert.match(migration, /identity collision differs from immutable stored bytes/
 assert.match(migration, /FOREIGN KEY \(plan_release, plan_id\)/);
 assert.match(migration, /attempt_id uuid NOT NULL UNIQUE/);
 assert.match(migration, /market_brain_planned_attempts_logical_obligation/);
+assert.match(migration, /adapter_release text NOT NULL/);
+assert.match(migration, /parser_release text NOT NULL/);
+assert.match(migration, /planned\.adapter_release IS DISTINCT FROM NEW\.adapter_release/);
+assert.match(migration, /planned\.parser_release IS DISTINCT FROM NEW\.parser_release/);
 assert.match(migration, /NULLS NOT DISTINCT/,
   "null participant or event identity must not permit duplicate logical obligations across plans");
 assert.match(migration, /evidence attempt is unplanned or differs from its immutable precommit/);
@@ -88,6 +101,8 @@ assert.doesNotMatch(migration, /GRANT INSERT ON public\.market_brain_capture_pla
 const source = readFileSync(resolve(process.cwd(),
   "lib/services/marketBrain/marketBrainCapturePlan.ts"), "utf8");
 assert.match(source, /\.rpc\("persist_market_brain_capture_plan_v1"/);
+assert.match(source, /assertMarketBrainCapturePlanExecutable\(args\.plan, args\.capabilities\)/,
+  "unsupported adapter/parser contracts must fail before plan persistence");
 assert.doesNotMatch(source, /\.from\("market_brain_capture_plans"\)\.insert/);
 assert.match(source, /Stored Market Brain capture plan differs/,
   "an idempotent retry must reload and attest exact stored bytes");

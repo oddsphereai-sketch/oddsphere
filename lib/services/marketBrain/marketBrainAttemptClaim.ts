@@ -6,7 +6,7 @@ import {
 } from "./marketBrainEvidenceAttempt";
 
 export const MARKET_BRAIN_ATTEMPT_CLAIM_RELEASE =
-  "market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed" as const;
+  "market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed" as const;
 
 export type MarketBrainAttemptClaimMode = "due" | "missed_window_reconcile";
 
@@ -89,6 +89,8 @@ function mapRow(
     qualificationScopeKeys: Object.freeze(asStringArray(row.qualification_scope_keys)),
     provider: String(row.provider),
     feed: String(row.feed),
+    adapterRelease: String(row.adapter_release),
+    parserRelease: String(row.parser_release),
     participant: row.participant === null ? null : String(row.participant),
     eventId: row.event_id === null ? null : String(row.event_id),
     phase: String(row.phase) as MarketBrainClaimedAttempt["phase"],

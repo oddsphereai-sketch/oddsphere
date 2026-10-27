@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
   qualification_scope_keys text[] NOT NULL CHECK (cardinality(qualification_scope_keys) > 0),
   provider text NOT NULL,
   feed text NOT NULL,
+  adapter_release text NOT NULL CHECK (adapter_release ~ '^[a-z0-9][a-z0-9._-]{0,127}$'),
+  parser_release text NOT NULL CHECK (parser_release ~ '^[a-z0-9][a-z0-9._-]{0,127}$'),
   participant text,
   event_id text,
   phase text NOT NULL CHECK (phase IN (
@@ -32,7 +34,8 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
     'identity_incomplete', 'storage_partial', 'provider_failure',
     'authentication_failure', 'rate_limited', 'timeout', 'malformed_response',
     'parser_failure', 'storage_failure', 'cancelled', 'not_due',
-    'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events', 'missed_window'
+    'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events',
+    'adapter_unavailable', 'missed_window'
   )),
   request_count integer NOT NULL CHECK (request_count >= 0),
   expected_pages integer CHECK (expected_pages IS NULL OR expected_pages >= 0),
@@ -50,9 +53,8 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
   write_failed_rows integer NOT NULL CHECK (write_failed_rows >= 0),
   response_sha256 text CHECK (response_sha256 IS NULL OR response_sha256 ~ '^[a-f0-9]{64}$'),
   raw_archive_sha256 text CHECK (raw_archive_sha256 IS NULL OR raw_archive_sha256 ~ '^[a-f0-9]{64}$'),
-  parser_release text,
   claim_release text NOT NULL CHECK (
-    claim_release = 'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed'
+    claim_release = 'market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed'
   ),
   claim_token uuid NOT NULL,
   claim_mode text NOT NULL CHECK (claim_mode IN ('due', 'missed_window_reconcile')),
@@ -93,7 +95,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
   ),
   CHECK (completed_at >= planned_at),
   CHECK (completed_at <= server_created_at),
-  CHECK (started_at IS NULL OR (started_at >= window_opens_at AND started_at <= completed_at)),
+  CHECK (started_at IS NULL OR (started_at >= planned_at AND started_at <= completed_at)),
   CHECK (expected_pages IS NULL OR received_pages <= expected_pages),
   CHECK (raw_rows = parsed_rows + unsupported_rows + malformed_rows),
   CHECK (parsed_rows = matched_rows + unmatched_rows + ambiguous_rows),
@@ -110,7 +112,7 @@ CREATE TABLE IF NOT EXISTS public.market_brain_evidence_attempts (
     (outcome = 'success_empty' AND reason_code = 'provider_returned_empty' AND raw_rows = 0 AND started_at IS NOT NULL AND request_count > 0) OR
     (outcome = 'partial' AND reason_code IN ('pagination_incomplete', 'parser_partial', 'identity_incomplete', 'storage_partial') AND started_at IS NOT NULL AND request_count > 0) OR
     (outcome = 'failed' AND reason_code IN ('provider_failure', 'authentication_failure', 'rate_limited', 'timeout', 'malformed_response', 'parser_failure', 'storage_failure', 'cancelled') AND started_at IS NOT NULL AND request_count > 0) OR
-    (outcome = 'skipped' AND reason_code IN ('not_due', 'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events', 'missed_window') AND started_at IS NULL AND request_count = 0)
+    (outcome = 'skipped' AND reason_code IN ('not_due', 'cadence_suppressed', 'budget_suppressed', 'capture_disabled', 'no_active_events', 'adapter_unavailable', 'missed_window') AND started_at IS NULL AND request_count = 0)
   )
 );
 
@@ -119,7 +121,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r4_claim_bound_joint_scope_ledger'
+  IF NEW.release <> 'market_brain_evidence_attempt_2026_10_27_r5_claim_adapter_parser_bound_joint_scope'
     OR cardinality(NEW.qualification_scope_keys) <>
       (SELECT count(DISTINCT scope_key) FROM unnest(NEW.qualification_scope_keys) AS scope_key)
     OR NEW.attempt_payload <> jsonb_build_object(
@@ -129,6 +131,8 @@ BEGIN
       'qualificationScopeKeys', to_jsonb(NEW.qualification_scope_keys),
       'provider', NEW.provider,
       'feed', NEW.feed,
+      'adapterRelease', NEW.adapter_release,
+      'parserRelease', NEW.parser_release,
       'participant', NEW.participant,
       'eventId', NEW.event_id,
       'phase', NEW.phase,
@@ -144,7 +148,6 @@ BEGIN
       'receivedPages', NEW.received_pages,
       'responseSha256', NEW.response_sha256,
       'rawArchiveSha256', NEW.raw_archive_sha256,
-      'parserRelease', NEW.parser_release,
       'accounting', jsonb_build_object(
         'rawRows', NEW.raw_rows,
         'parsedRows', NEW.parsed_rows,

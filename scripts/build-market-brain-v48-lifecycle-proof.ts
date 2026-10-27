@@ -12,11 +12,14 @@ const now = Date.now();
 const iso = (offsetMs: number) => new Date(now + offsetMs).toISOString();
 const attemptId = "40000000-0000-4000-8000-000000000001";
 const missedAttemptId = "40000000-0000-4000-8000-000000000004";
+const expiredLeaseAttemptId = "40000000-0000-4000-8000-000000000005";
 const common = {
   product: "nba_daily_edge" as const,
   qualificationScopeKeys: ["moneyline", "spread", "total"] as const,
   provider: "sharpapi",
   feed: "main_odds",
+  adapterRelease: "sharpapi_main_odds_adapter_postgres_fixture_r1",
+  parserRelease: "sharpapi_main_odds_parser_postgres_fixture_r1",
   participant: "circa",
   eventId: "nba:postgres-proof",
   phase: "current" as const,
@@ -27,16 +30,27 @@ const common = {
 const missedCommon = {
   ...common,
   feed: "sportsbook_splits",
+  adapterRelease: "sharpapi_sportsbook_splits_adapter_postgres_fixture_r1",
+  parserRelease: "sharpapi_sportsbook_splits_parser_postgres_fixture_r1",
   participant: null,
   plannedAt: iso(3_500),
   windowClosesAt: iso(4_000),
+};
+const expiredLeaseCommon = {
+  ...common,
+  eventId: "nba:postgres-expired-lease-proof",
+  plannedAt: iso(3_250),
 };
 const plan = createMarketBrainCapturePlan({
   planId: "40000000-0000-4000-8000-000000000002",
   createdAt: iso(0),
   horizonOpensAt: iso(2_000),
   horizonClosesAt: iso(60_000),
-  attempts: [{ attemptId, ...common }, { attemptId: missedAttemptId, ...missedCommon }],
+  attempts: [
+    { attemptId, ...common },
+    { attemptId: expiredLeaseAttemptId, ...expiredLeaseCommon },
+    { attemptId: missedAttemptId, ...missedCommon },
+  ],
   details: { fixture: "v48_postgresql_lifecycle" },
 });
 const collision = createMarketBrainCapturePlan({
@@ -46,7 +60,7 @@ const collision = createMarketBrainCapturePlan({
 const attempt = createMarketBrainEvidenceAttempt({
   attemptId,
   ...common,
-  startedAt: iso(2_500),
+  startedAt: iso(3_200),
   completedAt: iso(5_000),
   outcome: "success_with_rows",
   reasonCode: null,
@@ -55,7 +69,6 @@ const attempt = createMarketBrainEvidenceAttempt({
   receivedPages: 1,
   responseSha256: "a".repeat(64),
   rawArchiveSha256: "b".repeat(64),
-  parserRelease: "sharpapi_main_odds_postgres_fixture_r1",
   accounting: {
     rawRows: 1, parsedRows: 1, unsupportedRows: 0, malformedRows: 0,
     matchedRows: 1, unmatchedRows: 0, ambiguousRows: 0,
@@ -66,6 +79,16 @@ const attempt = createMarketBrainEvidenceAttempt({
 const unplanned = createMarketBrainEvidenceAttempt({
   ...withoutReleaseAndChecksum(attempt),
   attemptId: "40000000-0000-4000-8000-000000000003",
+});
+const wrongAdapter = createMarketBrainEvidenceAttempt({
+  ...withoutReleaseAndChecksum(attempt),
+  adapterRelease: "forged_main_odds_adapter_r2",
+});
+const expiredLeaseAttempt = createMarketBrainEvidenceAttempt({
+  ...withoutReleaseAndChecksum(attempt),
+  attemptId: expiredLeaseAttemptId,
+  ...expiredLeaseCommon,
+  startedAt: iso(3_300),
 });
 const missedAttempt = createMarketBrainEvidenceAttempt({
   attemptId: missedAttemptId,
@@ -79,7 +102,6 @@ const missedAttempt = createMarketBrainEvidenceAttempt({
   receivedPages: 0,
   responseSha256: null,
   rawArchiveSha256: null,
-  parserRelease: null,
   accounting: {
     rawRows: 0, parsedRows: 0, unsupportedRows: 0, malformedRows: 0,
     matchedRows: 0, unmatchedRows: 0, ambiguousRows: 0,
@@ -106,16 +128,18 @@ SELECT public.persist_market_brain_capture_plan_v1(${planArgs(plan)});
 
 CREATE TEMP TABLE due_claim AS
 SELECT * FROM public.claim_due_market_brain_attempts_v1(
-  'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed', 'postgres-proof-due', 10, 120
+  'market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed', 'postgres-proof-due', 10, 120
 );
 CREATE TEMP TABLE missed_claim AS
 SELECT * FROM public.claim_expired_market_brain_attempts_v1(
-  'market_brain_attempt_claim_2026_10_27_r1_leased_due_and_missed', 'postgres-proof-missed', 10, 120
+  'market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed', 'postgres-proof-missed', 10, 120
 );
 
 DO $claim_counts$
 BEGIN
   IF (SELECT count(*) FROM due_claim WHERE attempt_id = ${literal(attemptId)}::uuid AND claim_mode = 'due') <> 1 OR
+     (SELECT count(*) FROM due_claim WHERE attempt_id = ${literal(expiredLeaseAttemptId)}::uuid
+       AND claim_mode = 'due') <> 1 OR
      (SELECT count(*) FROM missed_claim WHERE attempt_id = ${literal(missedAttemptId)}::uuid
        AND claim_mode = 'missed_window_reconcile') <> 1 THEN
     RAISE EXCEPTION 'due and missed-window claim partition was not exact';
@@ -136,6 +160,39 @@ BEGIN
   END;
 END;
 $collision$;
+
+DO $adapter_binding$
+BEGIN
+  BEGIN
+    ${attemptInsert(wrongAdapter, "due_claim")}
+    RAISE EXCEPTION 'adapter-mismatched evidence attempt was accepted';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'adapter-mismatched evidence attempt was accepted' OR
+       position('immutable precommit' in SQLERRM) = 0 THEN
+      RAISE;
+    END IF;
+  END;
+END;
+$adapter_binding$;
+
+UPDATE public.market_brain_attempt_claims
+   SET claimed_at = statement_timestamp() - interval '2 seconds',
+       lease_expires_at = statement_timestamp() - interval '1 second'
+ WHERE attempt_id = ${literal(expiredLeaseAttemptId)}::uuid;
+
+DO $expired_lease$
+BEGIN
+  BEGIN
+    ${attemptInsert(expiredLeaseAttempt, "due_claim")}
+    RAISE EXCEPTION 'expired claim finalized evidence';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'expired claim finalized evidence' OR
+       position('exact active claim' in SQLERRM) = 0 THEN
+      RAISE;
+    END IF;
+  END;
+END;
+$expired_lease$;
 
 ${attemptInsert(attempt, "due_claim")}
 ${attemptInsert(missedAttempt, "missed_claim")}
@@ -176,9 +233,9 @@ $immutability$;
 DO $assertions$
 BEGIN
   IF (SELECT count(*) FROM public.market_brain_capture_plans) <> 1 OR
-     (SELECT count(*) FROM public.market_brain_planned_attempts) <> 2 OR
+     (SELECT count(*) FROM public.market_brain_planned_attempts) <> 3 OR
      (SELECT count(*) FROM public.market_brain_evidence_attempts) <> 2 OR
-     (SELECT count(*) FROM public.market_brain_attempt_claim_history) <> 2 OR
+     (SELECT count(*) FROM public.market_brain_attempt_claim_history) <> 3 OR
      (SELECT count(*) FROM public.market_brain_attempt_claims WHERE finalized_at IS NOT NULL) <> 2 THEN
     RAISE EXCEPTION 'v47/v49 lifecycle did not retain the exact plan/obligation/claim/receipt chain';
   END IF;
@@ -197,25 +254,29 @@ function attemptInsert(value: MarketBrainEvidenceAttempt, claimTable: "due_claim
   const { checksum: _checksum, ...checksumPayload } = value;
   const a = value.accounting;
   const statement = `INSERT INTO public.market_brain_evidence_attempts (
-    release, attempt_id, product_key, qualification_scope_keys, provider, feed, participant, event_id,
+    release, attempt_id, product_key, qualification_scope_keys, provider, feed, adapter_release,
+    parser_release, participant, event_id,
     phase, planned_at, window_opens_at, window_closes_at, started_at, completed_at, outcome, reason_code,
     request_count, expected_pages, received_pages, raw_rows, parsed_rows, unsupported_rows, malformed_rows,
     matched_rows, unmatched_rows, ambiguous_rows, retained_rows, duplicate_rows, filtered_rows,
-    write_failed_rows, response_sha256, raw_archive_sha256, parser_release,
+    write_failed_rows, response_sha256, raw_archive_sha256,
     claim_release, claim_token, claim_mode, claim_sequence, attempt_checksum,
     attempt_payload, attempt_payload_text, checksum_payload_text
   ) VALUES (
     ${literal(value.release)}, ${literal(value.attemptId)}::uuid, ${literal(value.product)},
     ARRAY[${value.qualificationScopeKeys.map(literal).join(",")}], ${literal(value.provider)}, ${literal(value.feed)},
+    ${literal(value.adapterRelease)}, ${literal(value.parserRelease)},
     ${nullable(value.participant)}, ${nullable(value.eventId)}, ${literal(value.phase)}, ${literal(value.plannedAt)}::timestamptz,
     ${literal(value.windowOpensAt)}::timestamptz, ${literal(value.windowClosesAt)}::timestamptz,
     ${nullable(value.startedAt, "timestamptz")}, ${literal(value.completedAt)}::timestamptz, ${literal(value.outcome)},
     ${nullable(value.reasonCode)}, ${value.requestCount}, ${value.expectedPages ?? "NULL"}, ${value.receivedPages},
     ${a.rawRows}, ${a.parsedRows}, ${a.unsupportedRows}, ${a.malformedRows}, ${a.matchedRows}, ${a.unmatchedRows},
     ${a.ambiguousRows}, ${a.retainedRows}, ${a.duplicateRows}, ${a.filteredRows}, ${a.writeFailedRows},
-    ${nullable(value.responseSha256)}, ${nullable(value.rawArchiveSha256)}, ${nullable(value.parserRelease)},
-    (SELECT claim_release FROM ${claimTable} LIMIT 1), (SELECT claim_token FROM ${claimTable} LIMIT 1),
-    (SELECT claim_mode FROM ${claimTable} LIMIT 1), (SELECT claim_sequence FROM ${claimTable} LIMIT 1),
+    ${nullable(value.responseSha256)}, ${nullable(value.rawArchiveSha256)},
+    (SELECT claim_release FROM ${claimTable} WHERE attempt_id = ${literal(value.attemptId)}::uuid LIMIT 1),
+    (SELECT claim_token FROM ${claimTable} WHERE attempt_id = ${literal(value.attemptId)}::uuid LIMIT 1),
+    (SELECT claim_mode FROM ${claimTable} WHERE attempt_id = ${literal(value.attemptId)}::uuid LIMIT 1),
+    (SELECT claim_sequence FROM ${claimTable} WHERE attempt_id = ${literal(value.attemptId)}::uuid LIMIT 1),
     ${literal(value.checksum)}, ${literal(marketBrainCanonicalJson(value))}::jsonb,
     ${literal(marketBrainCanonicalJson(value))}, ${literal(marketBrainCanonicalJson(checksumPayload))}
   )`;
