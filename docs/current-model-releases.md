@@ -2524,6 +2524,29 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 27 Passing Yards direction correction: active portable artifact / model / calibration /
+  decision / runtime / board are
+  `nfl_player_props_runtime_2026_10_27_r21_passing_yards_direction` /
+  `nfl_player_props_distribution_model_2026_10_27_r32_passing_yards_direction` /
+  `nfl_player_props_distribution_calibration_2026_10_27_r34_passing_yards_direction` /
+  `nfl_player_props_decision_2026_10_27_r38_passing_yards_direction` /
+  `nfl_player_props_runtime_2026_10_27_r39_passing_yards_direction` /
+  `nfl_player_props_board_2026_10_27_r42_passing_yards_direction`. Member / lifecycle / sole writer /
+  tracking are `nfl_player_props_member_2026_10_27_r51_passing_yards_direction` /
+  `nfl_player_props_member_lifecycle_2026_10_27_r33_passing_yards_direction` /
+  `nfl_player_props_writer_2026_10_27_r65_passing_yards_direction` /
+  `nfl_player_props_tracking_2026_10_27_r39_passing_yards_direction`. For future-unlocked Passing
+  Yards only, target-book-excluded market direction at least one percentage point from 50% may
+  correct an independent/market direction disagreement. The independent point forecast remains
+  market-free. Exact canonical member-line Weeks 6-7 improve from 28-26 (51.9%) to 33-21 (61.1%):
+  five corrections, zero harms, with both chronological weeks improving. The four existing
+  actionables remain 1-3 and unchanged. The 523-row production-default Week 8 no-write rehearsal
+  retains all 12 Passing Yards side rows and changes zero Passing Yards sides or actionables at that
+  timestamp. Every other market, grade threshold, provider call, cadence, UI, writer topology, and
+  lease is unchanged. Existing locks retain exact precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-27-nfl-player-props-passing-yards-direction-predeclaration.md` and
+  `docs/model-audits/2026-10-27-nfl-player-props-passing-yards-direction-result.md`.
+
 - October 27 Passing Completions direction correction: active portable artifact / model /
   calibration / decision / runtime / board are
   `nfl_player_props_runtime_2026_10_27_r20_passing_completions_direction` /
