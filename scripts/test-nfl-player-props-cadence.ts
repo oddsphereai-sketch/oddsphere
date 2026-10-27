@@ -23,6 +23,23 @@ const hourlyDue = planNflPlayerPropsRefresh({
 });
 assert.equal(hourlyDue.reason, "hourly_refresh_due");
 
+const precedingRelease = planNflPlayerPropsRefresh({
+  now: NOW,
+  previous: {
+    ...snapshot({ generatedAt: "2026-10-07T15:59:00.000Z", lockAt: "2026-10-11T16:00:00.000Z" }),
+    release: "nfl_player_props_member_2026_10_27_r47_receiving_direction_correction",
+  },
+});
+assert.deepEqual(
+  { run: precedingRelease.run, reason: precedingRelease.reason, release: precedingRelease.release },
+  {
+    run: true,
+    reason: "release_refresh_due",
+    release: "nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh",
+  },
+  "a newly deployed model family immediately recomputes unlocked rows instead of waiting for snapshot age",
+);
+
 const schedulerJitterDue = planNflPlayerPropsRefresh({
   now: NOW,
   previous: snapshot({ generatedAt: "2026-10-07T15:00:01.494Z", lockAt: "2026-10-11T16:00:00.000Z" }),
@@ -32,7 +49,7 @@ assert.deepEqual(
   {
     run: true,
     reason: "hourly_refresh_due",
-    release: "nfl_player_props_cadence_2026_10_20_r3_observed_scheduler_jitter",
+    release: "nfl_player_props_cadence_2026_10_27_r4_release_aware_refresh",
   },
   "the observed 1.494-second scheduler lead cannot stretch an hourly refresh to 75 minutes",
 );
@@ -91,11 +108,12 @@ assert.equal(
 
 console.log("PASS NFL player props state-aware cadence preserves hourly, near-game, and lock refreshes");
 
-function snapshot(args: { generatedAt: string; lockAt: string }): Pick<NflPlayerPropsProductionSnapshot, "generatedAt" | "board"> {
+function snapshot(args: { generatedAt: string; lockAt: string }): Pick<NflPlayerPropsProductionSnapshot, "generatedAt" | "board"> & { release: string } {
   const scheduledStart = Number.isFinite(Date.parse(args.lockAt))
     ? new Date(Date.parse(args.lockAt) + 60 * 60_000).toISOString()
     : "2026-10-11T17:00:00.000Z";
   return {
+    release: "nfl_player_props_member_2026_10_27_r48_consensus_contract_repair",
     generatedAt: args.generatedAt,
     board: {
       decisions: [{ state: "unlocked", scheduledStart, lockAt: args.lockAt }],

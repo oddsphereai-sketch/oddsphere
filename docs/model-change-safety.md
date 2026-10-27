@@ -1,5 +1,18 @@
 # Model change safety protocol
 
+## NFL player-props release-aware cadence r4
+
+On 2026-10-27 production verification found that a fresh snapshot from the
+immediately preceding model release could postpone adoption of a deployed
+future-unlocked model for the ordinary age cadence. Cadence r4 makes the
+existing authoritative writer immediately due when the stored member release
+does not equal the runtime member release. It adds no writer, schedule, or
+provider call to steady state, retains the shared `prediction_pipeline:nfl`
+lease, and changes no prediction, probability, projection, grade, price,
+threshold, lock, tracking record, copy, label, or layout. Existing locked rows
+remain immutable and the production reconciliation contract still gives them
+exact precedence.
+
 ## NFL player-props Receiving Yards consensus-contract repair r35
 
 On 2026-10-27 the post-release audit found that the r34 Receiving Yards
