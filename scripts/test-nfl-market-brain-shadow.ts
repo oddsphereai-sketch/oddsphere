@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
 import {
   rawPriceSha256,
@@ -31,6 +32,11 @@ const game: NflPreviewGame = {
   away: { id: 1, abbreviation: "NE", name: "New England Patriots" },
   home: { id: 2, abbreviation: "SEA", name: "Seattle Seahawks" },
 };
+const independentForecast = {
+  marginDistribution: { values: [2, 3], probabilities: [0.5, 0.5] },
+  totalDistribution: { values: [45, 47], probabilities: [0.5, 0.5] },
+};
+const distributionHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 function market(name: "moneyline" | "spread" | "total"): NflForwardContextMarket {
   const line = name === "moneyline" ? null : name === "spread" ? -3.5 : 45.5;
@@ -68,8 +74,8 @@ const capture: NflForwardContextCapture = {
     status: "available", reason: "week_one_artifact_target_free", release: "target-free-prior",
     outcome: {
       pmf: {
-        margin: { sha256: "margin-sha", support: 20, mass: 1, mean: 2.5, sd: 10 },
-        total: { sha256: "total-sha", support: 30, mass: 1, mean: 46, sd: 9 },
+        margin: { sha256: distributionHash(independentForecast.marginDistribution), support: 2, mass: 1, mean: 2.5, sd: 0.5 },
+        total: { sha256: distributionHash(independentForecast.totalDistribution), support: 2, mass: 1, mean: 46, sd: 1 },
       },
       expected: [21.75, 24.25], representative: [21, 24], win: [0.43, 0.55, 0.02],
     },
@@ -168,10 +174,10 @@ const rawPriceResponseManifests = [
   priceManifest("DraftKings", capturedAt, "balldontlie", "current", true),
 ];
 
-const shadow = buildNflMarketBrainShadow({ game, capture, rawPriceResponseManifests, sharpSplitSources: splitSources });
-const unchangedInputs = JSON.stringify({ capture, rawPriceResponseManifests, splitSources });
-buildNflMarketBrainShadow({ game, capture, rawPriceResponseManifests, sharpSplitSources: splitSources });
-assert.equal(JSON.stringify({ capture, rawPriceResponseManifests, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
+const shadow = buildNflMarketBrainShadow({ game, capture, independentForecast, rawPriceResponseManifests, sharpSplitSources: splitSources });
+const unchangedInputs = JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources });
+buildNflMarketBrainShadow({ game, capture, independentForecast, rawPriceResponseManifests, sharpSplitSources: splitSources });
+assert.equal(JSON.stringify({ capture, independentForecast, rawPriceResponseManifests, splitSources }), unchangedInputs, "shadow capture must not mutate source evidence");
 assert.equal(shadow.case.release, MARKET_BRAIN_CONTRACT_RELEASE);
 assert.equal(shadow.case.mode, "shadow_capture");
 assert.ok(shadow.bytes > 0);
@@ -184,6 +190,25 @@ assert.equal(shadow.case.invariants.allReturnedSourceRowsAccounted, true);
 assert.equal(shadow.case.invariants.productionInfluenceAllowed, false);
 assert.equal(shadow.case.invariants.displayContractAuthority, false);
 assert.equal(shadow.case.blindSpots.length, 7);
+assert.equal(shadow.case.prior.kind, "margin_total_distribution");
+assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.eventId, game.providerGameId);
+assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.marginDistribution.values.length, 2);
+assert.equal(shadow.case.prior.kind === "margin_total_distribution" && shadow.case.prior.artifact.sha256.length, 64);
+const corruptedPrior = structuredClone(shadow.case);
+if (corruptedPrior.prior.kind === "margin_total_distribution") corruptedPrior.prior.artifact.marginDistribution.probabilities[0] = 0.4;
+assert.throws(
+  () => buildNflMarketBrainShadow({ game, capture, independentForecast: corruptedPrior.prior.kind === "margin_total_distribution" ? {
+    marginDistribution: corruptedPrior.prior.artifact.marginDistribution,
+    totalDistribution: corruptedPrior.prior.artifact.totalDistribution,
+  } : null, rawPriceResponseManifests, sharpSplitSources: splitSources }),
+  /distribution mass|diverged/,
+  "a mutated prior PMF must fail closed instead of being reconstructed from its mean",
+);
+assert.throws(
+  () => buildNflMarketBrainShadow({ game, capture, independentForecast: null, rawPriceResponseManifests, sharpSplitSources: splitSources }),
+  /missing its exact distribution artifact/,
+  "an available prior summary without exact PMF bytes must fail closed",
+);
 assert.equal(shadow.case.expectedInputs.find((row) => row.id === "availability:injury_report")?.availability, "unavailable");
 assert.equal(shadow.case.observations.find((row) => row.id === "weather:game")?.categorical.status, "controlled_indoor");
 

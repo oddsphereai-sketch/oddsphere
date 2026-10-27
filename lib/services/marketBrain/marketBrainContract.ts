@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
+
 export const MARKET_BRAIN_CONTRACT_RELEASE =
-  "market_brain_contract_2026_10_26_r4_raw_manifests_and_target_boundary" as const;
+  "market_brain_contract_2026_10_27_r5_exact_prior_artifact" as const;
 
 export type MarketBrainSport = "nfl" | "cfb" | "nba" | "wnba" | "mlb" | "nhl" | "soccer" | "other";
 export type MarketBrainMarket = "moneyline" | "spread" | "total" | "player_prop" | "match_result" | "btts" | "other";
@@ -15,8 +17,31 @@ export type MarketBrainSubject =
   | { kind: "three_way_fixture"; awayId: string; homeId: string; startsAt: string }
   | { kind: "player_market"; playerId: string; teamId: string | null; opponentId: string | null; startsAt: string; stat: string };
 
+export type MarketBrainDiscreteDistribution = {
+  values: number[];
+  probabilities: number[];
+};
+
+export type MarketBrainMarginTotalArtifact = {
+  schema: "market_brain_margin_total_artifact_v1";
+  eventId: string;
+  release: string;
+  availableAt: string;
+  sha256: string;
+  marginDistribution: MarketBrainDiscreteDistribution;
+  totalDistribution: MarketBrainDiscreteDistribution;
+};
+
 export type MarketBrainPrior =
-  | { kind: "margin_total_distribution"; release: string; marginMean: number; totalMean: number; marginDistributionSha256: string; totalDistributionSha256: string }
+  | {
+      kind: "margin_total_distribution";
+      release: string;
+      marginMean: number;
+      totalMean: number;
+      marginDistributionSha256: string;
+      totalDistributionSha256: string;
+      artifact: MarketBrainMarginTotalArtifact;
+    }
   | { kind: "score_distribution"; release: string; scoreDistributionSha256: string }
   | { kind: "player_outcome_distribution"; release: string; mean: number; distributionSha256: string }
   | { kind: "unavailable"; release: string; reason: string };
@@ -145,11 +170,76 @@ export function numericFeature(value: number | null | undefined): MarketBrainNum
   return typeof value === "number" && Number.isFinite(value) ? { value, observed: 1 } : { value: null, observed: 0 };
 }
 
+export function bindMarketBrainMarginTotalPrior(args: {
+  eventId: string;
+  release: string;
+  availableAt: string;
+  marginDistribution: MarketBrainDiscreteDistribution;
+  totalDistribution: MarketBrainDiscreteDistribution;
+}): Extract<MarketBrainPrior, { kind: "margin_total_distribution" }> {
+  const artifactWithoutHash = {
+    schema: "market_brain_margin_total_artifact_v1" as const,
+    eventId: args.eventId,
+    release: args.release,
+    availableAt: args.availableAt,
+    marginDistribution: cloneDistribution(args.marginDistribution),
+    totalDistribution: cloneDistribution(args.totalDistribution),
+  };
+  const artifact: MarketBrainMarginTotalArtifact = {
+    ...artifactWithoutHash,
+    sha256: marketBrainSha256(artifactWithoutHash),
+  };
+  const prior = {
+    kind: "margin_total_distribution" as const,
+    release: args.release,
+    marginMean: distributionMean(artifact.marginDistribution),
+    totalMean: distributionMean(artifact.totalDistribution),
+    marginDistributionSha256: marketBrainSha256(artifact.marginDistribution),
+    totalDistributionSha256: marketBrainSha256(artifact.totalDistribution),
+    artifact,
+  };
+  assertMarketBrainPrior(prior, args.eventId, args.availableAt);
+  return prior;
+}
+
+export function assertMarketBrainPrior(prior: MarketBrainPrior, eventId: string, evaluatedAt: string): void {
+  if (!prior.release.trim()) throw new Error("Market Brain prior release is required.");
+  if (prior.kind !== "margin_total_distribution") return;
+  const artifact = prior.artifact;
+  if (artifact.schema !== "market_brain_margin_total_artifact_v1" || artifact.eventId !== eventId ||
+    artifact.release !== prior.release) {
+    throw new Error("Market Brain prior artifact identity diverged from its case.");
+  }
+  if (!Number.isFinite(Date.parse(artifact.availableAt)) || Date.parse(artifact.availableAt) > Date.parse(evaluatedAt)) {
+    throw new Error("Market Brain prior artifact was unavailable at case evaluation.");
+  }
+  assertDistribution(artifact.marginDistribution, "margin");
+  assertDistribution(artifact.totalDistribution, "total");
+  const artifactWithoutHash = {
+    schema: artifact.schema,
+    eventId: artifact.eventId,
+    release: artifact.release,
+    availableAt: artifact.availableAt,
+    marginDistribution: artifact.marginDistribution,
+    totalDistribution: artifact.totalDistribution,
+  };
+  if (artifact.sha256 !== marketBrainSha256(artifactWithoutHash) ||
+    prior.marginDistributionSha256 !== marketBrainSha256(artifact.marginDistribution) ||
+    prior.totalDistributionSha256 !== marketBrainSha256(artifact.totalDistribution)) {
+    throw new Error("Market Brain prior artifact checksum mismatch.");
+  }
+  if (Math.abs(prior.marginMean - distributionMean(artifact.marginDistribution)) > 1e-9 ||
+    Math.abs(prior.totalMean - distributionMean(artifact.totalDistribution)) > 1e-9) {
+    throw new Error("Market Brain prior artifact mean mismatch.");
+  }
+}
+
 export function buildMarketBrainCase(args: Omit<MarketBrainCase,
   "release" | "visibility" | "mode" | "temporalScope" | "accounting" | "invariants">): MarketBrainCase {
   if (!args.eventId.trim()) throw new Error("Market Brain eventId is required.");
   if (!Number.isFinite(Date.parse(args.evaluatedAt))) throw new Error("Market Brain evaluatedAt is invalid.");
   if (!Number.isFinite(Date.parse(args.subject.startsAt))) throw new Error("Market Brain startsAt is invalid.");
+  assertMarketBrainPrior(args.prior, args.eventId, args.evaluatedAt);
   const observationIds = new Set<string>();
   for (const observation of args.observations) {
     if (observation.eventId !== args.eventId || observation.sport !== args.sport) {
@@ -278,6 +368,28 @@ export function buildMarketBrainCase(args: Omit<MarketBrainCase,
       productionInfluenceAllowed: false,
     },
   };
+}
+
+function cloneDistribution(distribution: MarketBrainDiscreteDistribution): MarketBrainDiscreteDistribution {
+  return { values: [...distribution.values], probabilities: [...distribution.probabilities] };
+}
+
+function assertDistribution(distribution: MarketBrainDiscreteDistribution, name: string): void {
+  if (distribution.values.length === 0 || distribution.values.length !== distribution.probabilities.length ||
+    distribution.values.some((value) => !Number.isFinite(value)) ||
+    distribution.probabilities.some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new Error(`Market Brain ${name} prior distribution is invalid.`);
+  }
+  const mass = distribution.probabilities.reduce((sum, value) => sum + value, 0);
+  if (Math.abs(mass - 1) > 1e-6) throw new Error(`Market Brain ${name} prior distribution mass is invalid.`);
+}
+
+function distributionMean(distribution: MarketBrainDiscreteDistribution): number {
+  return distribution.values.reduce((sum, value, index) => sum + value * distribution.probabilities[index]!, 0);
+}
+
+function marketBrainSha256(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 function timestamp(value: string | null): number {

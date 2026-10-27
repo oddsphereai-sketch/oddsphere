@@ -1,8 +1,8 @@
 # Oddsphere Market Brain foundation — frozen shadow predeclaration
 
-Date: 2026-10-26
+Date: 2026-10-27
 
-Status: prospective raw-provider tape plus release-pure sequence materializer; predictive value is not yet proven.
+Status: prospective raw-provider tape, exact-prior binding, and release-pure research harness; predictive value is not yet proven.
 No prediction, probability, projection, grade,
 stake, member display, tracking, or lock changes. The sole NFL writer release advances only to attach
 the production-inert shadow tape to future unlocked evidence rows.
@@ -57,9 +57,12 @@ measure instability, and define uncertainty. It is not converted into a false cl
 improvement is possible. When history is insufficient for production authority, the resolver stays in
 shadow/capture mode while forward evidence accumulates.
 
-No artifact validator is included in this capture release. A future validator must verify artifact
-bytes, checksums, metrics, and chronological partitions rather than accepting self-attested metadata.
-An artifact cannot qualify even for reviewed shadow inference unless it records:
+The exact target-free Margin and Total PMF bytes are now embedded in each available NFL prior with
+event/release/availability identity, marginal hashes, and one content-addressed artifact checksum.
+The capture contract and sequence materializer independently verify mass, means, timestamps,
+identity, and checksums. The research manifest and evaluator enforce rolling chronology, post-cutoff
+labels, sequence-checksum binding, and release-pure aggregation rather than accepting self-attested
+metadata. A future resolver artifact cannot qualify even for reviewed shadow inference unless it records:
 
 - the exact feature-contract release and immutable checksum;
 - ordered selection and later confirmation periods;
@@ -100,8 +103,11 @@ and freezes the gate-3 input corpus as `nfl_market_brain_behavior_scenarios_2026
 BALLDONTLIE and SharpAPI response manifests now precede complete-pair normalization and family
 replacement. They retain response hashes, returned/matched/unmatched/ambiguous row accounting,
 duplicate and unsupported states, individual incomplete sides, and every recognized SharpAPI row in
-the fetched pages. The release-pure materializer enforces cutoff availability and whole-target-family
-exclusion before it derives continuous paths or chronology roles. Feed-side omissions, bounded
+the fetched pages. The release-pure materializer enforces cutoff availability, exact-prior
+verification, and whole-target-family exclusion before it derives continuous paths or chronology
+roles. The research evaluator rejects labels available at or before the case, mixed releases,
+duplicate events, and non-chronological partition manifests; it records corrections and harms
+against the exact prior baseline. Feed-side omissions, bounded
 pagination, suspension lifecycle, limits, and private order flow remain explicit blind spots. No
 resolver exists to pass gate 3 yet.
 Passing repository tests is not evidence that gates 3–5 have passed, and it does not authorize a
@@ -133,8 +139,10 @@ ignored by all production/member/tracking
 readers and is not attached when rebuilding around a pre-existing locked record. Existing NFL output
 and every lock remain unchanged. A shadow-construction error is stored as `capture_failed` and cannot
 hold or alter the production payload. The next NFL step is to persist enough prospective multi-capture
-games, bind each case to the immutable prior distribution artifact, freeze a low-capacity model
-tournament before examining confirmation results, and run inference in shadow.
+games, freeze a low-capacity model tournament before examining confirmation results, adapt the
+incumbent semantic reader only as a candidate/comparator against this lossless contract, and run
+inference in shadow. The companion `Rebuild Daily Edge models` work has been explicitly coordinated:
+its opened 59-game result is development/regression evidence only and cannot serve as confirmation.
 
 ## Rollback
 

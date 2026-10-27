@@ -1,6 +1,6 @@
 # NFL Market Brain — feature gap, authoritative path, and proof plan
 
-Date: 2026-10-26
+Date: 2026-10-27
 
 Status: coordinated design plus raw-provider capture and release-pure materializer in shadow. No production prediction, probability,
 projection, grade, stake, member display, tracking, or locked-record behavior is authorized by this
@@ -29,7 +29,7 @@ separate gates.
 
 | Evidence or behavior | Released semantic path | Market Brain tape direction | Remaining gap before a predictive resolver |
 | --- | --- | --- | --- |
-| Independent prior | Target-free Margin/Total prior plus coherent forecast candidates | Release, Margin/Total means, and distribution checksums | Materializer must load the immutable distribution artifact, not train from a later reconstructed score |
+| Independent prior | Target-free Margin/Total prior plus coherent forecast candidates | Exact immutable Margin/Total PMF bytes, event/release/availability identity, marginal hashes, and content-addressed artifact checksum | Validate every persisted artifact independently; never train from a later reconstructed score |
 | Current multi-book quotes | Complete current pairs retained by family | Raw-response hashes and row accounting retain every recognized selection independently, including duplicates, incomplete sides, and unsupported rows, before market-state filtering | Forward capture must accumulate enough within-game points for true intraday path shape; provider-side rows that are never exposed remain unknowable |
 | Opening-to-current movement | Trail direction, no-vig delta, hold delta, move order, persistence, reversal, buyback, key crossings | The release-pure materializer derives continuous line, fair-price, hold, lead/lag, reversal, buyback, and key-crossing features only from points available by cutoff | Validate the transforms on prospective cases and preserve the immutable prior artifact alongside the sequence |
 | Freshness | Two-hour gate can remove a trail or split before arbitration | Fresh, stale, future, incomplete, and unavailable states are explicit | Learn behavior by missingness/freshness regime; do not encode stale or missing as neutral zero |
@@ -131,13 +131,21 @@ model prior release that was available then. Produce a variable-length sequence/
 continuous no-vig, hold, number movement, price movement, lead/lag, persistence, reversal, buyback,
 key-number transition, disagreement, and cross-market coherence from that bounded tape.
 
-`nfl_market_brain_sequence_materializer_2026_10_26_r1_cutoff_target_excluded` implements this
+`nfl_market_brain_sequence_materializer_2026_10_27_r2_exact_prior_bound` implements this
 boundary without a resolver: it refuses mixed events/releases, applies Oddsphere availability time
 before feature construction, masks incomplete/unsupported rows, fails conflicting immutable
 observation identities, pairs sides only when line/time identity agrees, and derives event roles from
-chronology rather than brand. The next proof work must validate these transforms on prospective
-multi-capture games and bind the immutable distribution artifact—not a reconstructed mean—to each
-sequence. Data absence otherwise remains a learned missingness regime.
+chronology rather than brand. It re-verifies the exact prior artifact rather than trusting stored
+summary fields. Data absence otherwise remains a learned missingness regime.
+
+`nfl_market_brain_research_evaluator_2026_10_27_r1_release_pure` derives its baseline winner
+probabilities and Margin/Total moments from that exact artifact. It accepts outcomes only after both
+the feature cutoff and game start, requires candidate training to end before the case, binds the
+candidate to the immutable sequence checksum, rejects mixed-release aggregation, and reports Brier,
+log loss, winner accuracy, Margin/Total MAE, corrections, and harms. The companion chronological
+manifest prevents opened development evidence from being relabeled selection or confirmation. A
+candidate must submit complete Margin and Total distributions whose winner probabilities and moments
+exactly reconcile; an incoherent set of point estimates is rejected before scoring.
 
 ### 3. Low-capacity resolver
 
@@ -237,16 +245,18 @@ pretend a rigid rule is validated.
 ## Implementation order
 
 1. Complete prospective lossless capture and audit source availability for at least one NFL cycle.
-2. Build and checksum the release-pure sequence materializer with leakage and target-exclusion tests.
-3. Convert the 13 frozen stories into probabilistic resolver tests without inspecting confirmation
+2. Build and checksum the release-pure sequence materializer with leakage and target-exclusion tests. **Complete.**
+3. Bind and independently verify the exact target-free prior artifact, then freeze a release-pure,
+   rolling-origin evaluator that counts corrections and harms. **Complete.**
+4. Convert the 13 frozen stories into probabilistic resolver tests without inspecting confirmation
    outcomes.
-4. Freeze the low-capacity tournament and rolling-origin evaluation manifest.
-5. Run the outcome-opened 59-game ledger only as a regression/development screen.
-6. Run untouched chronological confirmation if sufficient historical tape exists; otherwise begin
+5. Freeze the low-capacity tournament and instantiate the predeclared rolling-origin evaluation manifest.
+6. Run the outcome-opened 59-game ledger only as a regression/development screen.
+7. Run untouched chronological confirmation if sufficient historical tape exists; otherwise begin
    prospective shadow probation and wait for outcomes.
-7. Inspect every disagreement and source-regime failure. Retraining or feature changes create a new
+8. Inspect every disagreement and source-regime failure. Retraining or feature changes create a new
    release and a new future confirmation window.
-8. Only after the model-change gates pass, open a separate production proposal with release bumps,
+9. Only after the model-change gates pass, open a separate production proposal with release bumps,
    paired promotion/demotion evidence, lock tests, integration safety, and live verification.
 
 This sequence gets Oddsphere to a nuanced market reader without pretending that vocabulary,

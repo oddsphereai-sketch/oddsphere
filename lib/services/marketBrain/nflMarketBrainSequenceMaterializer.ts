@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   MARKET_BRAIN_CONTRACT_RELEASE,
+  assertMarketBrainPrior,
   type MarketBrainCase,
   type MarketBrainMarket,
   type MarketBrainObservation,
@@ -10,7 +11,7 @@ import {
 } from "./marketBrainContract";
 
 export const NFL_MARKET_BRAIN_SEQUENCE_MATERIALIZER_RELEASE =
-  "nfl_market_brain_sequence_materializer_2026_10_26_r1_cutoff_target_excluded" as const;
+  "nfl_market_brain_sequence_materializer_2026_10_27_r2_exact_prior_bound" as const;
 
 type FullGameMarket = Extract<MarketBrainMarket, "moneyline" | "spread" | "total">;
 type PriceSelection = "away" | "home" | "over" | "under";
@@ -68,6 +69,7 @@ export type NflMarketBrainSequence = {
   contractRelease: typeof MARKET_BRAIN_CONTRACT_RELEASE;
   sport: "nfl";
   eventId: string;
+  startsAt: string;
   cutoffAt: string;
   prior: MarketBrainPrior;
   targetFamilyByMarket: Record<FullGameMarket, string | null>;
@@ -114,8 +116,14 @@ export function materializeNflMarketBrainSequence(args: {
     throw new Error("NFL Market Brain materializer refuses mixed or superseded contract releases.");
   }
   if (args.cases.some((item) => item.sport !== "nfl")) throw new Error("NFL Market Brain materializer accepts NFL cases only.");
+  for (const item of args.cases) assertMarketBrainPrior(item.prior, item.eventId, item.evaluatedAt);
   const eventIds = new Set(args.cases.map((item) => item.eventId));
   if (eventIds.size !== 1) throw new Error("NFL Market Brain materializer refuses mixed events.");
+  if (args.cases.some((item) => item.subject.kind !== "two_team_game")) {
+    throw new Error("NFL Market Brain materializer requires a two-team game subject.");
+  }
+  const subjectIdentities = new Set(args.cases.map((item) => JSON.stringify(item.subject)));
+  if (subjectIdentities.size !== 1) throw new Error("NFL Market Brain materializer refuses conflicting event subjects.");
   const eventId = args.cases[0]!.eventId;
   const eligibleCases = args.cases
     .filter((item) => timestampRequired(item.evaluatedAt, "evaluatedAt") <= cutoff)
@@ -172,6 +180,7 @@ export function materializeNflMarketBrainSequence(args: {
     contractRelease: MARKET_BRAIN_CONTRACT_RELEASE,
     sport: "nfl" as const,
     eventId,
+    startsAt: latestCase.subject.startsAt,
     cutoffAt: new Date(cutoff).toISOString(),
     prior: latestCase.prior,
     targetFamilyByMarket,

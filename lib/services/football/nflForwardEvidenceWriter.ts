@@ -124,7 +124,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_26_r76_market_brain_raw_provider_tape" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r77_market_brain_exact_prior" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -837,6 +837,7 @@ export async function runNflForwardEvidenceWriter(args: {
         marketBrainShadow = buildNflMarketBrainShadow({
           game: plan.game,
           capture: contextualEvidenceCapture,
+          independentForecast: hasTargetFreePrior ? baseOutcome : null,
           rawPriceResponseManifests: marketBrainPriceManifests,
           sharpSplitSources,
         });

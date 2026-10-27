@@ -1,9 +1,11 @@
 import {
   MARKET_BRAIN_BLIND_SPOTS,
+  bindMarketBrainMarginTotalPrior,
   buildMarketBrainCase,
   numericFeature,
   type MarketBrainAvailability,
   type MarketBrainCase,
+  type MarketBrainDiscreteDistribution,
   type MarketBrainExpectedInput,
   type MarketBrainMarket,
   type MarketBrainObservation,
@@ -23,7 +25,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_BRAIN_SHADOW_RELEASE =
-  "nfl_market_brain_shadow_2026_10_26_r4_raw_provider_target_safe_tape" as const;
+  "nfl_market_brain_shadow_2026_10_27_r5_exact_prior_artifact" as const;
 export const NFL_MARKET_BRAIN_SHADOW_MAX_BYTES = 192 * 1024;
 
 export type NflMarketBrainShadow = {
@@ -66,6 +68,10 @@ export function nflMarketBrainCaptureFailure(args: {
 export function buildNflMarketBrainShadow(args: {
   game: NflPreviewGame;
   capture: NflForwardContextCapture;
+  independentForecast: {
+    marginDistribution: MarketBrainDiscreteDistribution;
+    totalDistribution: MarketBrainDiscreteDistribution;
+  } | null;
   rawPriceResponseManifests: FootballRawPriceResponseManifest[];
   sharpSplitSources: NflSharpApiSplitSource[];
 }): NflMarketBrainShadow {
@@ -123,16 +129,7 @@ export function buildNflMarketBrainShadow(args: {
       homeId: args.game.home.abbreviation,
       startsAt: args.game.scheduledStart,
     },
-    prior: args.capture.prior.status === "available" && args.capture.prior.outcome
-      ? {
-          kind: "margin_total_distribution",
-          release: args.capture.prior.release,
-          marginMean: args.capture.prior.outcome.pmf.margin.mean,
-          totalMean: args.capture.prior.outcome.pmf.total.mean,
-          marginDistributionSha256: args.capture.prior.outcome.pmf.margin.sha256,
-          totalDistributionSha256: args.capture.prior.outcome.pmf.total.sha256,
-        }
-      : { kind: "unavailable", release: args.capture.prior.release, reason: args.capture.prior.reason },
+    prior: capturedPrior(args),
     evaluatedTargets: Object.fromEntries(
       (["moneyline", "spread", "total"] as const).flatMap((market) => {
         const target = args.capture.markets[market].evaluated;
@@ -162,6 +159,35 @@ export function buildNflMarketBrainShadow(args: {
     throw new Error(`NFL Market Brain tape exceeded ${NFL_MARKET_BRAIN_SHADOW_MAX_BYTES} bytes.`);
   }
   return result;
+}
+
+function capturedPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
+  if (args.capture.prior.status === "unavailable") {
+    return { kind: "unavailable" as const, release: args.capture.prior.release, reason: args.capture.prior.reason };
+  }
+  if (!args.capture.prior.outcome || !args.independentForecast) {
+    throw new Error("NFL Market Brain available prior is missing its exact distribution artifact.");
+  }
+  return exactPrior(args);
+}
+
+function exactPrior(args: Parameters<typeof buildNflMarketBrainShadow>[0]) {
+  const expected = args.capture.prior.outcome;
+  if (!expected || !args.independentForecast) throw new Error("NFL Market Brain exact prior artifact is unavailable.");
+  const prior = bindMarketBrainMarginTotalPrior({
+    eventId: args.game.providerGameId,
+    release: args.capture.prior.release,
+    availableAt: args.capture.capturedAt,
+    marginDistribution: args.independentForecast.marginDistribution,
+    totalDistribution: args.independentForecast.totalDistribution,
+  });
+  if (prior.marginDistributionSha256 !== expected.pmf.margin.sha256 ||
+    prior.totalDistributionSha256 !== expected.pmf.total.sha256 ||
+    Math.abs(prior.marginMean - expected.pmf.margin.mean) > 1e-9 ||
+    Math.abs(prior.totalMean - expected.pmf.total.mean) > 1e-9) {
+    throw new Error("NFL Market Brain exact prior diverged from the captured prior summary.");
+  }
+  return prior;
 }
 
 function addContext(
