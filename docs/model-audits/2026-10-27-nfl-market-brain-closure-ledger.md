@@ -2,8 +2,9 @@
 
 Status: **OPEN — exhaustive inventory reconciled; remediation not complete**
 
-Inventory freeze: 2026-10-27 exhaustive full-stack, predictive, and operations/database red-team.
-The frozen inventory contains MB-001 through MB-038. New evidence must map to an existing item or
+Inventory freeze: 2026-10-27 exhaustive full-stack, predictive, operations/database, requirements-
+trace, failure-mode, and market-science red-team. The frozen inventory contains MB-001 through
+MB-041. New evidence must map to an existing item or
 be added explicitly; it may not create an untracked side list.
 
 This is the single closure ledger for the NFL Market Brain remediation. It supersedes informal
@@ -67,6 +68,49 @@ inspection.
 | MB-036 | P2 | open | Database shape lacks several full JSON/column bindings and finalized-window identities; catalog constraint checks are not scoped to schema/table. | v46 adds scoped catalog checks, one unique finalized-window identity, exact JSON-column/count bindings, and adversarial self-consistent mismatch tests. |
 | MB-037 | P2 | open | Study storage has incomplete global/lifecycle quotas and lacks cap headroom, due/missed-attempt, parser-coverage, and unfinalized-window observability. | Explicit study quota/retention policy, bounded indexes/query plans, status views/alerts, and operator metrics with boundary tests. |
 | MB-038 | Blocker | open | With capture flags off, this branch still changes shared provider parsing/split semantics and release identities, so production equivalence is unproved. | Isolate/revert research-only changes from incumbent paths; base-versus-candidate feature-off tests must be byte-identical for NFL Daily Edge, member snapshots, tracking/locks, player props, and CFB, including oversized/failing responses. |
+| MB-039 | Blocker | open | Adaptive family/feature/policy search and reuse of opened confirmation periods are not registered or multiplicity-controlled. | Append-only experiment registry and bounded search budget; confirmation is consumed after first registered evaluation; all selection stays inside nested chronological folds; null-search simulations preserve the declared false-positive rate. |
+| MB-040 | P1 | open | The one-to-four-game stratified canary has no target-population or inclusion-probability contract proving results generalize to the full product slate. | Freeze the full sampling frame, eligibility/exclusion reasons, strata, and inclusion probabilities; qualify on full-slate shadow or design-weighted estimates with subgroup and mixture-shift tests. |
+| MB-041 | Blocker | open | Evaluation, run summaries, and human audit dossiers trust caller-supplied sequence/evaluation objects rather than persisted replay-derived receipts. | Persist canonical evaluation receipts bound to attested input, prediction, deterministic outcome revision, manifest, quote, and consequence releases; summaries/dossiers reload receipts and recompute; forged/edited rows fail in PostgreSQL and after restart. |
+
+## Required acceptance amendments
+
+The final independent round found no other root-cause category, but it materially strengthened these
+existing closure proofs:
+
+- **MB-003 / MB-038:** feature-off parity includes latency, memory, timeout, exception behavior,
+  Sharp split semantics, collector release behavior, and every route side effect—not only identical
+  payload bytes.
+- **MB-004:** malformed research configuration is injected before and after current-season state
+  refresh; authoritative NFL, player-prop, member, tracking, and state-write effects must remain
+  identical.
+- **MB-009 / MB-012 / MB-036:** enforce and test the complete server chronology:
+  manifest receipt ≤ attempt/captures ≤ capture-set receipt ≤ research-input receipt ≤ inference time
+  ≤ prediction receipt < kickoff.
+- **MB-011 / MB-018:** every training label receipt and authoritative correction revision must exist
+  before each rolling validation cutoff. Fold membership/order is derived from immutable chronology;
+  a late Fold A result cannot train Fold B.
+- **MB-016 / MB-021:** every independent prior carries immutable as-of input lineage. Context already
+  incorporated into the prior cannot be counted again; unknown-lineage priors cannot qualify.
+- **MB-016 / MB-020 / MB-021:** split evidence has a source-specific measurement contract for
+  cohort/line, cadence, staleness, rounding, and denominator/handle/count uncertainty. Unknown-
+  denominator percentages are not treated as equally precise and cannot alone force a flip.
+- **MB-016 / MB-029:** preserve raw two-sided quotes and predeclare no-vig methods. Pure hold changes
+  cannot masquerade as direction; method-sensitive cases stand down.
+- **MB-018 / MB-037:** artifacts have a validity horizon, compatible source roster, drift/recalibration
+  rules, and automatic shadow fallback. Retraining/recalibration creates a new registered release.
+- **MB-019:** corrected losses and harms are classified against exact locked incumbent actions—not the
+  independent prior—and include a strictly post-inference, input-isolated closing-market/CLV process
+  diagnostic without treating the close as a training label.
+- **MB-021 / MB-029:** `leader`/`follower` is descriptive temporal order unless causal evidence exists.
+  Common-news shocks, feed delay, clock-error bands, and polling-order permutations cannot manufacture
+  a causal signal.
+- **MB-027 / MB-028:** the singular score posterior is quote-selection independent. Permuting the
+  incumbent-selected operator, quote identity, price, or menu order leaves features/posterior byte-
+  identical; only consequence economics change. Equal/near-equal probabilities use an explicit,
+  permutation-invariant uncertainty/stand-down rule.
+- **MB-037:** cost closure includes hard event/attempt/state/operation bounds, CPU, RAM, duration,
+  cancellation, queue concurrency, and measured p50/p95 fit telemetry. One-over-limit fails before
+  allocation and cancellation cannot persist an artifact.
 
 ## Explicitly preserved findings
 
@@ -79,7 +123,7 @@ inspection.
 
 ## Review reconciliation
 
-The exhaustive review reconciled all findings into MB-001 through MB-038. Implementation proceeds in
+The exhaustive review reconciled all findings into MB-001 through MB-041. Implementation proceeds in
 this dependency order:
 
 1. production neutrality and a forward, real-PostgreSQL-tested schema boundary (MB-001, MB-003,
@@ -88,8 +132,9 @@ this dependency order:
    MB-013, MB-014, MB-023, MB-024, MB-030, MB-035, MB-037);
 3. derivation and outcome integrity (MB-011, MB-012, MB-025, MB-031);
 4. model, ablation, capacity, calibration, and executable behavior correctness (MB-015–MB-018,
-   MB-020, MB-021, MB-029, MB-032);
-5. exact decision consequences and corrected-loss/new-harm evaluation (MB-019, MB-027, MB-028);
+   MB-020, MB-021, MB-029, MB-032, MB-039, MB-040);
+5. exact decision consequences and corrected-loss/new-harm evaluation (MB-019, MB-027, MB-028,
+   MB-041);
 6. documentation reconciliation and separately qualified sport/league/prop adapters (MB-022,
    MB-026).
 
