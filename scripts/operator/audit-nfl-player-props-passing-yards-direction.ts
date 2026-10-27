@@ -60,7 +60,10 @@ function main(): void {
       || row.result === "push") return [];
     const rawOver = row.prediction === "over" ? row.rawProbability : 1 - row.rawProbability;
     const marketOver = row.prediction === "over" ? row.marketProbability : 1 - row.marketProbability;
-    const finalOver = row.prediction === "over" ? row.finalProbability : 1 - row.finalProbability;
+    // The immutable tracking export stores the incumbent direction directly.
+    // Direction accuracy does not require reconstructing a missing final
+    // probability, so keep the audit release-pure and use that stored side.
+    const finalOver = row.prediction === "over" ? 1 : 0;
     return [auditRow(6, rawOver, marketOver, finalOver, row.actual > row.line, row.grade)];
   });
   const week7Rows: AuditRow[] = read<CanonicalForecast[]>(required("week7-canonical")).flatMap((row) => {
