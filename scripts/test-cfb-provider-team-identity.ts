@@ -40,6 +40,7 @@ const confirmedProviderLabels = [
   ["ASU", "Arizona State Sun Devils", "Arizona State"],
   ["CSU", "Colorado State Rams", "Colorado State"],
   ["TXST", "Texas State Bobcats", "Texas State"],
+  ["DEL", "Delaware Blue Hens", "Delaware"],
 ] as const;
 
 for (const [abbreviation, expectedName, observed] of confirmedProviderLabels) {
@@ -115,6 +116,7 @@ for (const [abbreviation, expectedName, observed] of [
   ["ARIZ", "Arizona Wildcats", "Arizona State"],
   ["COLO", "Colorado Buffaloes", "Colorado State"],
   ["TEX", "Texas Longhorns", "Texas State"],
+  ["DSU", "Delaware State Hornets", "Delaware"],
 ] as const) {
   assert.equal(
     cfbProviderTeamMatches({ abbreviation, expectedName, observed }),

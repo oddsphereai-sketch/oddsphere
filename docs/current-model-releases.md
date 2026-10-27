@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-26
+Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
@@ -887,6 +887,27 @@ Last reviewed: 2026-10-26
 - Evidence: `docs/model-audits/2026-08-28-football-cross-market-coherence-predeclaration.md`, `docs/model-audits/2026-08-28-football-cross-market-coherence-r19.md`, `docs/model-audits/2026-08-26-football-market-scoped-t60-predeclaration.md`, `docs/model-audits/2026-08-25-nfl-odds-history-reader-repair.md`, `docs/model-audits/2026-08-25-nfl-public-release-transition.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-production-r9.md`, `docs/model-audits/2026-08-25-nfl-actionable-grades-r9.md`, `docs/model-audits/2026-08-25-nfl-projected-qb-context-r11.md`, `docs/model-audits/2026-08-23-nfl-discrete-drive-joint-r10.md`, and `docs/model-audits/2026-08-23-nfl-v1-comprehensive-outcome.md`.
 
 ## CFB Daily Edge generalized weekly production release
+
+- October 27 exact-event split-history continuity advances the CFB split
+  collector / evidence collector / sole writer to
+  `cfb_sharpapi_splits_2026_10_27_r7_exact_event_history_continuity` /
+  `cfb_forward_evidence_collector_2026_10_27_r65_exact_event_split_history_continuity` /
+  `cfb_forward_evidence_writer_2026_10_27_r140_exact_event_split_history_continuity`.
+  When the current NCAAF split slate omits an unlocked game inside 36 hours,
+  the existing writer performs a bounded exact-date catalog lookup and at most
+  two sequential exact-event history reads for each of at most eight games.
+  Only complete DraftKings/Circa money-and-ticket pairs are accepted, and the
+  original source timestamp is retained. The live Delaware-Western Kentucky
+  rehearsal restores DraftKings coverage for Moneyline, Spread, and Total from
+  `2026-10-26T14:33:26.130Z`; its age keeps it outside the existing 120-minute
+  model-reader freshness gate, so current predictions, grades, stakes, and
+  actionability are unchanged. `DEL -> Delaware` is exact and
+  abbreviation-scoped; Delaware State remains rejected. Locked rows, the sole
+  `prediction_pipeline:cfb` lease, and all downstream release families are
+  unchanged. Evidence and rollback:
+  `docs/model-audits/2026-10-27-cfb-exact-event-split-history-continuity-predeclaration.md`
+  and
+  `docs/model-audits/2026-10-27-cfb-exact-event-split-history-continuity-result.md`.
 
 - October 27 near-tie PMF winner-coherence release: future-unlocked CFB forecasts now reconcile
   the rare case where the authoritative PMF's expected-margin side and winner-probability side

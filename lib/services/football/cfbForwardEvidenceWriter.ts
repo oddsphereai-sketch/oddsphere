@@ -185,7 +185,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import { refreshDailyEdgeSplitFallbackSources } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_27_r139_near_tie_pmf_winner_coherence" as const;
+  "cfb_forward_evidence_writer_2026_10_27_r140_exact_event_split_history_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
@@ -634,7 +634,7 @@ export async function runCfbForwardEvidenceWriter(args: {
       .then((result) => ({ rows: result.body.data ?? [], error: null }))
       .catch((error: unknown) => ({ rows: [] as unknown[], error: splitRequestError(error) })),
     fetchBalldontlieNcaafQuarterbacks({ teams: quarterbackTeams.map((team) => ({ id: team.id, abbreviation: team.abbreviation })), previousSeason: args.season - 1, capturedAt: args.now, apiKey: args.balldontlieApiKey }),
-    fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey })
+    fetchCfbSharpApiSplits({ games, apiKey: args.sharpApiKey, historyRecoveryNow: new Date(args.now) })
       .then((result) => ({ result, error: null }))
       .catch((error: unknown) => ({ result: null, error: splitRequestError(error) })),
     fetchSharpApiNcaafSharpOdds({ games: plannedGames, apiKey: args.sharpApiKey })
@@ -1223,9 +1223,9 @@ export async function runCfbForwardEvidenceWriter(args: {
         sportsDataIoAvailability: sportsDataIoAvailabilityAttempt.result?.requests ?? 0,
         espnReference: espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0),
         sharpApiOdds: sharpFallback.requests + circaAttempt.requests,
-        sharpApiSplits: 1,
+        sharpApiSplits: sharpSplitsAttempt.result?.requests ?? 1,
         weather: weatherRequests,
-        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + (espnInjuryNewsAttempt.result?.requests ?? 0) + (sportsDataIoAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + 4,
+        totalMaximum: slate.providerRequests + priorResults.providerRequests + quarterbacks.providerRequests + sharpFallback.requests + circaAttempt.requests + weatherRequests + espnReferenceAttempt.result.requests + (espnCurrentOddsAttempt.result?.requests ?? 0) + (collegeFootballDataAttempt.result?.requests ?? 0) + theOddsApiHistoricalOpeningAttempt.requests + theOddsApiAttempt.requests + (officialAvailabilityAttempt.result?.requests ?? 0) + (espnInjuryNewsAttempt.result?.requests ?? 0) + (sportsDataIoAvailabilityAttempt.result?.requests ?? 0) + advancedState.requests + (sharpSplitsAttempt.result?.requests ?? 1) + 3,
       },
     };
     const contextualEvidenceCapture = buildCfbForwardContextCapture({

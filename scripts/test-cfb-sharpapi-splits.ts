@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import type { SharpApiRequestOptions, SharpApiResponse } from "../lib/providers/real_api/_sharpApiClient";
 import type { NcaafGame } from "../lib/services/football/balldontlieNcaafSlate";
-import { CFB_SHARP_API_SPLITS_MAX_GAMES, fetchCfbSharpApiSplits } from "../lib/services/football/cfbSharpApiSplits";
+import {
+  CFB_SHARP_API_SPLITS_HISTORY_MAX_GAMES,
+  CFB_SHARP_API_SPLITS_MAX_GAMES,
+  fetchCfbSharpApiSplits,
+} from "../lib/services/football/cfbSharpApiSplits";
 
 const game: NcaafGame = {
   providerGameId: "457159",
@@ -24,6 +28,7 @@ async function main(): Promise<void> {
   assert.equal(client.calls[0]?.path, "/splits");
   assert.deepEqual(client.calls[0]?.query, { league: "ncaaf", sportsbook: "draftkings,circa", limit: 200 });
   assert.equal(result.requests, 1);
+  assert.equal(result.historyRecoveredGames, 0);
   assert.equal(result.matchedGames, 1);
   assert.equal(result.recordsByGame[game.providerGameId]?.length, 2);
   assert.equal(result.recordsByGame[game.providerGameId]?.[0]?.sportsbook, "circa");
@@ -77,6 +82,25 @@ async function main(): Promise<void> {
   });
   assert.equal(incomplete.recordsByGame[game.providerGameId]?.[0]?.total, null, "non-complementary market fails closed without suppressing the record");
 
+  const historyClient = new HistoryRecoveryStubClient();
+  const recovered = await fetchCfbSharpApiSplits({
+    games: [game],
+    client: historyClient,
+    historyRecoveryNow: new Date("2026-08-29T12:00:00.000Z"),
+  });
+  assert.equal(CFB_SHARP_API_SPLITS_HISTORY_MAX_GAMES, 8);
+  assert.deepEqual(historyClient.calls.map((call) => call.path), ["/splits", "/events", "/splits/history"]);
+  assert.equal(recovered.requests, 3);
+  assert.equal(recovered.historyRecoveredGames, 1);
+  assert.equal(recovered.recordsByGame[game.providerGameId]?.[0]?.sportsbook, "draftkings");
+  assert.equal(recovered.recordsByGame[game.providerGameId]?.[0]?.capturedAt, "2026-08-29T15:45:00.000Z");
+  assert.deepEqual(recovered.recordsByGame[game.providerGameId]?.[0]?.spread, {
+    awayLine: 4,
+    homeLine: -4,
+    away: { ticketsPct: 42, moneyPct: 38 },
+    home: { ticketsPct: 58, moneyPct: 62 },
+  });
+
   const fullWeek = Array.from({ length: 106 }, (_, index) => ({
     ...game,
     providerGameId: `full-week-${index}`,
@@ -108,6 +132,35 @@ class StubClient {
   }
 }
 
+class HistoryRecoveryStubClient {
+  readonly calls: SharpApiRequestOptions[] = [];
+  async fetch<T>(opts: SharpApiRequestOptions): Promise<SharpApiResponse<T>> {
+    this.calls.push(opts);
+    if (opts.path === "/splits") return { data: [] as T, pagination: null };
+    if (opts.path === "/events") {
+      return {
+        data: [{
+          id: "ncaaf_hawaiirainbowwarriors_stanfordcardinal_2026-08-29_b3",
+          away_team: "Hawai'i Rainbow Warriors",
+          home_team: "Stanford Cardinal",
+          books: ["draftkings"],
+        }] as T,
+        pagination: null,
+      };
+    }
+    if (opts.path === "/splits/history") {
+      return {
+        data: [
+          historyRow({ timestamp: Date.parse("2026-08-29T15:30:00.000Z") / 1_000 }),
+          historyRow({ timestamp: Date.parse("2026-08-29T15:45:00.000Z") / 1_000 }),
+        ] as T,
+        pagination: null,
+      };
+    }
+    throw new Error(`Unexpected SharpAPI test path ${opts.path}`);
+  }
+}
+
 function row(overrides: Record<string, unknown> = {}) {
   return {
     event_id: "ncaaf_hawaiirainbowwarriors_stanfordcardinal_2026-08-29",
@@ -134,6 +187,23 @@ function row(overrides: Record<string, unknown> = {}) {
       bets_pct: { over: 0.55, under: 0.45 },
       handle_pct: { over: 0.51, under: 0.49 },
     },
+    ...overrides,
+  };
+}
+
+function historyRow(overrides: Record<string, unknown> = {}) {
+  const current = row();
+  return {
+    book: "draftkings",
+    timestamp: Date.parse("2026-08-29T15:30:00.000Z") / 1_000,
+    moneyline: current.moneyline,
+    spread: {
+      away_line: 4,
+      home_line: -4,
+      bets_pct: { away: 0.42, home: 0.58 },
+      handle_pct: { away: 0.38, home: 0.62 },
+    },
+    total: current.total,
     ...overrides,
   };
 }
