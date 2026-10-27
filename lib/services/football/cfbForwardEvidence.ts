@@ -11,6 +11,7 @@ import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAva
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
@@ -191,6 +192,7 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
     (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE ||
       (payload.decisions.decisionRelease === CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE ||
@@ -434,6 +436,7 @@ export type CfbForwardEvidencePayload = {
     marketReaderTotalSideFlipped?: boolean;
     finalWinnerCoordinatorRelease?: string;
     finalWinnerCoordinatorArtifactRelease?: string;
+    finalWinnerCoordinatorBoundaryRelease?: string;
     finalWinnerCoordinatorApplied?: boolean;
     finalWinnerCoordinatorReason?: "winner_boundary_cross" | "same_winner_side" | "team_profile_unavailable" | "runtime_fallback" | "target_book_cycle_fallback" | "full_product_compatibility_hold";
     finalWinnerCoordinatorWouldApply?: boolean;

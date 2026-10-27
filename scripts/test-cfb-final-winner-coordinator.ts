@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import {
   buildCfbFinalWinnerCoordinatorMarketFeatures,
   CFB_FINAL_WINNER_COORDINATOR_ARTIFACT_RELEASE,
+  CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE,
   CFB_FINAL_WINNER_COORDINATOR_RELEASE,
+  CFB_PMF_WINNER_COHERENCE_RELEASE,
   evaluateCfbFinalWinnerCoordinator,
+  reconcileCfbNearTiePmfWinnerCoherence,
   reconcileCfbFinalWinnerPmf,
 } from "../lib/services/football/cfbFinalWinnerCoordinator";
 import type { NcaafBookOdds } from "../lib/services/football/balldontlieNcaafSlate";
@@ -130,6 +133,18 @@ assert.ok(Number.isFinite(evaluation.learnedHomeWinProbability));
 assert.ok(Number.isFinite(evaluation.combinedHomeWinProbability));
 assert.match(CFB_FINAL_WINNER_COORDINATOR_RELEASE, /correct_qb_target_excluded_smooth_net_accuracy/);
 assert.match(CFB_FINAL_WINNER_COORDINATOR_ARTIFACT_RELEASE, /correct_qb_target_excluded_smooth_net_accuracy/);
+assert.match(CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE, /actual_pmf_incumbent/);
+
+const actualPmfBoundary = evaluateCfbFinalWinnerCoordinator({
+  ...features,
+  both_fbs: 1,
+}, 0.2, 0.49);
+assert.equal(actualPmfBoundary.baselineHomeWinProbability, 0.49);
+assert.equal(
+  actualPmfBoundary.crossesWinnerBoundary,
+  (actualPmfBoundary.combinedHomeWinProbability > 0.5) !== false,
+  "diagnostic crossing must compare against the actual incumbent PMF side",
+);
 
 const pmf = [
   { away: 27, home: 21, probability: 0.3 },
@@ -150,4 +165,52 @@ assert.ok(coherentSummary.homeWinProbability > 0.5);
 assert.ok(Math.round(coherentSummary.expectedHomePoints * 10) > Math.round(coherentSummary.expectedAwayPoints * 10));
 assert.ok(coherentSummary.representativeScore.home > coherentSummary.representativeScore.away);
 
-console.log("CFB final-winner target exclusion, split provenance, smooth authority, and artifact tests passed.");
+const meanProbabilityCrossPmf = [
+  { away: 23, home: 22, probability: 0.63 },
+  { away: 21, home: 24, probability: 0.37 },
+];
+const meanProbabilityCrossForecast: CfbV1Forecast = {
+  providerGameId: "pmf-coherence",
+  awayTeam: "AWY",
+  homeTeam: "HME",
+  gameStartsAt: "2026-10-27T23:30:00.000Z",
+  ...summarizePmf(meanProbabilityCrossPmf),
+  pmf: meanProbabilityCrossPmf,
+};
+assert.ok(meanProbabilityCrossForecast.expectedMarginHome > 0);
+assert.ok(meanProbabilityCrossForecast.expectedMarginHome <= 0.5);
+assert.ok(meanProbabilityCrossForecast.homeWinProbability < 0.5);
+const originalMassByTotal = new Map<number, number>();
+for (const cell of meanProbabilityCrossForecast.pmf) {
+  const total = cell.home + cell.away;
+  originalMassByTotal.set(total, (originalMassByTotal.get(total) ?? 0) + cell.probability);
+}
+const reconciled = reconcileCfbNearTiePmfWinnerCoherence(meanProbabilityCrossForecast);
+assert.equal(reconciled.applied, true);
+assert.equal(reconciled.reason, "near_tie_mean_probability_direction_cross");
+assert.equal(reconciled.forecast.directionalAlignment?.release, CFB_PMF_WINNER_COHERENCE_RELEASE);
+assert.ok(reconciled.forecast.expectedMarginHome > 0);
+assert.ok(reconciled.forecast.homeWinProbability > 0.5);
+assert.ok(Math.round(reconciled.forecast.expectedHomePoints * 10) > Math.round(reconciled.forecast.expectedAwayPoints * 10));
+assert.ok(reconciled.forecast.representativeScore.home > reconciled.forecast.representativeScore.away);
+assert.ok(Math.abs(reconciled.forecast.expectedTotal - meanProbabilityCrossForecast.expectedTotal) < 1e-10);
+assert.ok(Math.abs(reconciled.forecast.pmf.reduce((sum, cell) => sum + cell.probability, 0) - 1) < 1e-10);
+for (const [total, mass] of originalMassByTotal) {
+  const reconciledMass = reconciled.forecast.pmf
+    .filter((cell) => cell.home + cell.away === total)
+    .reduce((sum, cell) => sum + cell.probability, 0);
+  assert.ok(Math.abs(reconciledMass - mass) < 1e-10, `total ${total} mass must remain unchanged`);
+}
+
+const outsideToleranceForecast = {
+  ...meanProbabilityCrossForecast,
+  expectedAwayPoints: 24,
+  expectedHomePoints: 25,
+  expectedMarginHome: 1,
+};
+const outsideTolerance = reconcileCfbNearTiePmfWinnerCoherence(outsideToleranceForecast);
+assert.equal(outsideTolerance.applied, false);
+assert.equal(outsideTolerance.reason, "outside_tolerance");
+assert.equal(outsideTolerance.forecast, outsideToleranceForecast);
+
+console.log("CFB final-winner diagnostic boundary and near-tie PMF coherence tests passed.");

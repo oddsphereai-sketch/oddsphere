@@ -42,6 +42,7 @@ async function main(): Promise<void> {
         : [];
     },
     auditForceUnlocked: process.argv.includes("--force-unlocked"),
+    auditDisableNearTiePmfCoherence: process.argv.includes("--disable-near-tie-pmf-coherence"),
   });
   console.log(JSON.stringify({
     audit: "cfb_writer_live_provider_dry_run_2026_09_26_r1",

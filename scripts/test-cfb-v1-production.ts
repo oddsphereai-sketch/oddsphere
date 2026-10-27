@@ -105,6 +105,7 @@ import {
   CFB_MARKET_SHARP_AWARE_FINAL_WINNER_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_EXACT_PRICE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_GAP_FALLBACK_PREVIOUS_PRODUCTION_RELEASE,
+  CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PREVIOUS_PRODUCTION_RELEASE,
   CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
   applyCfbMarketSharpAwareGrades,
@@ -133,6 +134,11 @@ import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE,
+  CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE,
   CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE,
   CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_DECISION_RELEASE,
@@ -790,9 +796,18 @@ const evidence: CfbForwardStoredEvidence = {
 };
 const previousDecisionPayload = structuredClone(payload) as CfbForwardEvidencePayload;
 previousDecisionPayload.decisions.decisionRelease = CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE as unknown as typeof previousDecisionPayload.decisions.decisionRelease;
+previousDecisionPayload.decisions.modelRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE as unknown as typeof previousDecisionPayload.decisions.modelRelease;
+previousDecisionPayload.authoritativeForecast!.release = CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE as unknown as NonNullable<typeof previousDecisionPayload.authoritativeForecast>["release"];
 previousDecisionPayload.decisions.evaluatedBets = previousDecisionPayload.decisions.evaluatedBets.map((decision) => {
   const legacy = { ...decision };
   legacy.decisionRelease = CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE as unknown as typeof legacy.decisionRelease;
+  legacy.modelRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE as unknown as typeof legacy.modelRelease;
+  legacy.distributionRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE as unknown as typeof legacy.distributionRelease;
+  legacy.probabilityRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE as unknown as typeof legacy.probabilityRelease;
+  legacy.calibrationRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE as unknown as typeof legacy.calibrationRelease;
+  if (legacy.gradeAdjustment) {
+    legacy.gradeAdjustment.release = CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof legacy.gradeAdjustment.release;
+  }
   delete legacy.parlayProfile;
   return legacy;
 });
@@ -877,6 +892,45 @@ assert.equal(
   sameSchemaTransitionSelection.find((row) => row.providerGameId === "same-schema-unlocked")?.id,
   "r53-same-schema-unlocked",
   "a decision-only rollout must publish the refreshed unlocked r53 row",
+);
+
+const pmfPreviousRows = sameSchemaPreviousRows.map((row) => {
+  const previous = structuredClone(row.payload) as CfbForwardEvidencePayload;
+  previous.decisions.decisionRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE as unknown as typeof previous.decisions.decisionRelease;
+  previous.decisions.evaluatedBets = previous.decisions.evaluatedBets.map((decision) => ({
+    ...decision,
+    decisionRelease: CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE as unknown as typeof decision.decisionRelease,
+  }));
+  return {
+    ...row,
+    id: `r53-${row.providerGameId}`,
+    payload: previous,
+    payloadSha256: hashCfbForwardEvidencePayload(previous),
+  } satisfies CfbForwardStoredEvidence;
+});
+const pmfCoherenceTransitionSelection = selectLatestCfbMemberEvidenceRows([
+  ...pmfPreviousRows,
+  {
+    ...evidence,
+    id: "r54-same-schema-unlocked",
+    providerGameId: "same-schema-unlocked",
+    stage: "unlocked",
+    capturedAt: sameSchemaCurrentPayload.capturedAt,
+    gameStartAt: sameSchemaCurrentPayload.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(sameSchemaCurrentPayload),
+    payload: sameSchemaCurrentPayload,
+  },
+], "2026-10-24T17:05:00.000Z");
+assert.equal(pmfCoherenceTransitionSelection.length, 2);
+assert.equal(
+  pmfCoherenceTransitionSelection.find((row) => row.providerGameId === "same-schema-locked")?.id,
+  "r53-same-schema-locked",
+  "the PMF-coherence rollout must preserve the exact locked r53 payload",
+);
+assert.equal(
+  pmfCoherenceTransitionSelection.find((row) => row.providerGameId === "same-schema-unlocked")?.id,
+  "r54-same-schema-unlocked",
+  "the PMF-coherence rollout must publish the refreshed unlocked r54 row",
 );
 
 function releaseTransitionPayload(args: {
@@ -3753,7 +3807,8 @@ assert.match(writerSource, /const need = resolveCfbForwardCollectionNeed\(\{[\s\
 assert.match(writerSource, /contextualEvidenceCapture\?\.release !== CFB_FORWARD_CONTEXT_CAPTURE_RELEASE/, "a new evidence-only capture release must seed without waiting for ordinary far-slate cadence");
 assert.match(writerSource, /need\.reason === "provider_seed_due"/, "the sole leased writer must admit the one-time paid-provider seed through its existing capture planner");
 assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
-assert.match(writerSource, /const forecast = marketReader\.forecast;/, "the complete professional market reader must remain the final full-product forecast authority");
+assert.match(writerSource, /reconcileCfbNearTiePmfWinnerCoherence\(marketReader\.forecast\)/, "the complete professional market reader may be changed only by the narrow same-PMF winner-coherence invariant");
+assert.match(writerSource, /auditDisableNearTiePmfCoherence/, "the near-tie invariant must retain a read-only same-input rollback comparator");
 assert.match(writerSource, /finalWinnerCoordinatorApplied: false/, "the incompatible final-winner coordinator must not alter future unlocked forecasts");
 assert.match(writerSource, /finalWinnerCoordinatorWouldApply: finalWinnerCoordinator\.applied/, "the held coordinator must retain explicit would-apply telemetry for retraining");
 assert.match(writerSource, /\? "full_product_compatibility_hold"/, "a would-be coordinator cross must be labeled as a full-product compatibility hold");
