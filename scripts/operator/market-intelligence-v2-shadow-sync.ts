@@ -67,7 +67,10 @@ async function main(): Promise<void> {
   } else {
     console.log();
     console.log(`games=${report.gamesLoaded}`);
-    console.log(`playbookRows=${report.playbookSplitRowsFetched} owlsRows=${report.owlsSplitRowsFetched} sharpapiRows=${report.sharpapiSplitRowsFetched}`);
+    console.log(
+      `playbookRows=${report.playbookSplitRowsFetched} owlsSplitRows=${report.owlsSplitRowsFetched} ` +
+        `owlsPriceRows=${report.owlsPriceRowsFetched} sharpapiRows=${report.sharpapiSplitRowsFetched}`,
+    );
     console.log(`splitBuilt=${report.splitObservationsBuilt} priceBuilt=${report.priceObservationsBuilt}`);
     console.log(`splitWritten=${report.splitObservationsWritten} priceWritten=${report.priceObservationsWritten}`);
     console.log(`rejected=${report.rejected.length} tableMissing=${report.skippedTableMissing}`);
