@@ -341,12 +341,16 @@ BEGIN
 END;
 $retention_telemetry$;
 
-SELECT CASE
-  WHEN encode(digest(convert_to('{"Z":0,"a":2,"ä":1,"\ud800":4,"😀":3}', 'UTF8'), 'sha256'), 'hex')
-       = '03cafa78ea77417a9c2c4c4d4c5dd1c9a2e5a556035092aad3ae6468c0709d01'
-  THEN true
-  ELSE pg_catalog.boolin('canonical PostgreSQL hash vector mismatch')
+DO $canonical_hash_vector$
+BEGIN
+  IF encode(
+       digest(convert_to('{"Z":0,"a":2,"ä":1,"\ud800":4,"😀":3}', 'UTF8'), 'sha256'),
+       'hex'
+     ) IS DISTINCT FROM '03cafa78ea77417a9c2c4c4d4c5dd1c9a2e5a556035092aad3ae6468c0709d01' THEN
+    RAISE EXCEPTION 'canonical PostgreSQL hash vector mismatch';
+  END IF;
 END;
+$canonical_hash_vector$;
 SQL
 
 psql_run -f "${evidence_attempt_sql}"
