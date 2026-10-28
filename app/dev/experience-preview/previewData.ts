@@ -65,32 +65,16 @@ export async function loadPublishedDailyEdgeSnapshot(
   date?: string,
 ): Promise<DailyEdgeResponse> {
   const requestedDate = publishedDailyEdgeDate(sport, date);
-  const snapshotKey = dailyEdgeSnapshotKey({
+  const payload = await readCachedPublishedDailyEdgePayload(
     sport,
     requestedDate,
-    allowStale: false,
-    copyPreview: false,
-  });
-  const fresh = await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "fresh");
-  const stored = fresh ?? await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
-  let selected = stored;
+    !date,
+  );
 
-  if (!selected && !date && (sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba")) {
-    const fallbackDate = previousReadyBoardDate({ sport, requestedDate });
-    if (fallbackDate) {
-      selected = await readLatestLabResponseSnapshot<DailyEdgeResponse>(dailyEdgeSnapshotKey({
-        sport,
-        requestedDate: fallbackDate,
-        allowStale: false,
-        copyPreview: false,
-      }));
-    }
-  }
-
-  if (!selected) {
+  if (!payload) {
     throw new Error(`Published Daily Edge snapshot unavailable (${sport} ${requestedDate})`);
   }
-  const storedPresentationRelease = selected.payload.memberPresentation?.releaseId;
+  const storedPresentationRelease = payload.memberPresentation?.releaseId;
   if (storedPresentationRelease && storedPresentationRelease !== DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID) {
     throw new Error(`Published Daily Edge snapshot contract is outdated (${sport} ${requestedDate})`);
   }
@@ -98,8 +82,45 @@ export async function loadPublishedDailyEdgeSnapshot(
   // envelope. Rebuild only that read-time envelope on an isolated payload;
   // the stored game, lock, projection, probability, pick, grade, and evidence
   // tuples remain untouched and authoritative.
-  return finalizeDailyEdgeResponseCoherence(structuredClone(selected.payload));
+  return finalizeDailyEdgeResponseCoherence(structuredClone(payload));
 }
+
+const readCachedPublishedDailyEdgePayload = unstable_cache(
+  async (
+    sport: Sport,
+    requestedDate: string,
+    allowPreviousReadyBoard: boolean,
+  ): Promise<DailyEdgeResponse | null> => {
+    const snapshotKey = dailyEdgeSnapshotKey({
+      sport,
+      requestedDate,
+      allowStale: false,
+      copyPreview: false,
+    });
+    const fresh = await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "fresh");
+    const stored = fresh ?? await readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, "stale");
+    let selected = stored;
+
+    if (!selected && allowPreviousReadyBoard && (sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba")) {
+      const fallbackDate = previousReadyBoardDate({ sport, requestedDate });
+      if (fallbackDate) {
+        selected = await readLatestLabResponseSnapshot<DailyEdgeResponse>(dailyEdgeSnapshotKey({
+          sport,
+          requestedDate: fallbackDate,
+          allowStale: false,
+          copyPreview: false,
+        }));
+      }
+    }
+
+    return selected?.payload ?? null;
+  },
+  ["daily-edge-published-member-payload-v1"],
+  {
+    revalidate: 15,
+    tags: ["daily-edge-published-member-payload"],
+  },
+);
 
 export const loadCachedFreshContractSnapshot = unstable_cache(
   (sport: Sport, date: string) => loadDailyEdgeSnapshot(sport, date || undefined, true),
