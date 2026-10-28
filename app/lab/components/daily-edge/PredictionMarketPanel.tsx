@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import type { PredictionMarketMatch, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
-import { predictionMarketBookTrail, predictionMarketChartSeries, predictionMarketChartDomain, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
+import { predictionMarketBookTrail, predictionMarketChartSeries, predictionMarketChartDomain, predictionMarketCurve, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 
 const cache = new Map<string, { at:number; value:PredictionMarketMatch | null; pending?:Promise<PredictionMarketMatch | null> }>();
 function load(key: string): Promise<PredictionMarketMatch | null> {
@@ -111,9 +111,9 @@ function PredictionMarketChart({row,book}:{row:PredictionMarketRow;book:Predicti
   const x=(at:number)=>first===last?right:left+(at-first)/(last-first)*(right-left);
   const y=(p:number)=>bottom-(p*100-low)/Math.max(.5,high-low)*(bottom-top);
   const maxActivity=Math.max(1,...activity.map(value=>value??0));
-  const path=points.map((point,index)=>(index===0||point[0]-points[index-1][0]>15*60_000?"M":"L")+x(point[0])+","+y(point[1])).join(" ");
-  // A step marks the actual observed price change, not an invented smooth move.
-  const bookPath=bookPoints.map((point,index)=>index===0?"M"+x(point[0])+","+y(point[1]):"H"+x(point[0])+"V"+y(point[1])).join(" ");
+  const curve=predictionMarketCurve(points,x,y,15*60_000,bottom);
+  const bookCurve=predictionMarketCurve(bookPoints,x,y);
+  const fillId=`${id}-fill`;
   const at=focus?Math.max(first,Math.min(last,focus.at)):null;
   const active=at===null?null:predictionMarketObservationAt(points,at);
   const activeBook=at===null?null:predictionMarketObservationAt(bookPoints,at);
@@ -126,11 +126,13 @@ function PredictionMarketChart({row,book}:{row:PredictionMarketRow;book:Predicti
   const earlierDay=new Date(first).toLocaleDateString()!==new Date(last).toLocaleDateString();
   return <div ref={ref} className="relative min-w-0">
     <svg width="100%" height="108" viewBox={"0 0 "+width+" 108"} role="img" aria-labelledby={id}>
-      <title id={id}>{row.team} recorded game-winner quotes. Mint: Kalshi. {book?bookTitle(book.sportsbook)+" moneyline in violet, with sportsbook margin. ":""}Price observations keep their real timestamps. Bars show actual trading activity; gaps have no recorded quote.</title>
+      <title id={id}>{row.team} recorded game-winner quotes. Mint: Kalshi. {book?bookTitle(book.sportsbook)+" moneyline in violet, with sportsbook margin. ":""}Curves connect recorded observations, not continuous price updates. Inspect for exact recorded prices and timestamps. Bars show actual trading activity; Kalshi gaps have no recorded quote.</title>
+      <defs><linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7de3c1" stopOpacity=".14"/><stop offset="1" stopColor="#7de3c1" stopOpacity="0"/></linearGradient></defs>
       {[low,(low+high)/2,high].map(tick=><g key={tick}><line x1={left} x2={right} y1={y(tick/100)} y2={y(tick/100)} stroke="rgba(255,255,255,.05)"/><text x="0" y={y(tick/100)+4} fill="#ac9dbd" fontSize="11">{tick.toFixed(tick%1?1:0)}%</text></g>)}
-      <path data-kalshi-line d={path} fill="none" stroke="#7de3c1" strokeWidth="2" strokeLinejoin="round"/>
-      {book?<path data-sportsbook-line={book.sportsbook} d={bookPath} fill="none" stroke="#b7a0f4" strokeWidth="1.6" strokeLinejoin="round"/>:null}
-      {bookPoints.map((point,index)=><circle key={point[0]} data-book-odds={point[2]} data-observed-at={point[0]} cx={x(point[0])} cy={y(point[1])} r={index===bookPoints.length-1?2.5:1.8} fill="#b7a0f4"/>)}
+      <path data-kalshi-area d={curve.area} fill={`url(#${fillId})`}/>
+      <path data-kalshi-line d={curve.line} fill="none" stroke="#7de3c1" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"/>
+      {book?<path data-sportsbook-line={book.sportsbook} d={bookCurve.line} fill="none" stroke="#b7a0f4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>:null}
+      {bookPoints.map((point,index)=><circle key={point[0]} data-book-odds={point[2]} data-observed-at={point[0]} cx={x(point[0])} cy={y(point[1])} r={index===bookPoints.length-1?2.5:index===0?1.5:0} fill="#b7a0f4"/>)}
       {points.map((point,index)=><g key={point[0]}>{activity[index]!==null?<rect x={Math.max(left,x(point[0])-2.5)} y={87-activity[index]!/maxActivity*13} width={Math.min(5,right-Math.max(left,x(point[0])-2.5))} height={activity[index]!/maxActivity*13} rx="1" fill="#7de3c1" opacity=".3"/>:null}{(index===0||index===points.length-1)?<circle cx={x(point[0])} cy={y(point[1])} r={index===points.length-1?2.5:1.5} fill="#7de3c1"/>:null}</g>)}
       <text x={left} y="103" fill="#ac9dbd" fontSize="11">{time(first,earlierDay)}</text><text x={right} y="103" textAnchor="end" fill="#ac9dbd" fontSize="11">Latest</text>
       {at!==null?<g><line x1={x(at)} x2={x(at)} y1={top} y2="89" stroke="#ffffff35"/>{active?<circle cx={x(active[0])} cy={y(active[1])} r="3" fill="#7de3c1"/>:null}{activeBook?<circle cx={x(activeBook[0])} cy={y(activeBook[1])} r="3" fill="#b7a0f4"/>:null}</g>:null}
