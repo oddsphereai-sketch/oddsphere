@@ -22,6 +22,7 @@ import {
   SharpApiRateLimitError,
 } from "../lib/providers/real_api/_sharpApiClient";
 import type { MarketSplitObservationV2 } from "../lib/types/domain/MarketIntelligenceV2";
+import { readFileSync } from "node:fs";
 
 let pass = 0;
 let fail = 0;
@@ -30,7 +31,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_10_28_r11_owls_single_axis_retention",
+    "market_intelligence_v2_capture_2026_10_28_r12_price_provider_lineage",
 );
 
 {
@@ -72,8 +73,26 @@ check(
       mapped.observations.length === 1 &&
       mapped.observations[0]?.canonical_event_id === "401909878" &&
       mapped.observations[0]?.sportsbook === "circa" &&
+      mapped.observations[0]?.provider === "owls" &&
+      mapped.observations[0]?.provider_event_id === "nba:Detroit Pistons@New York Knicks-20261028" &&
+      /^[a-f0-9]{64}$/.test(mapped.observations[0]?.raw_payload_hash ?? "") &&
       mapped.observations[0]?.selection_key.endsWith(":away") === true &&
       mapped.observations[0]?.provider_timestamp === "2026-10-27T22:17:16.758Z",
+  );
+}
+
+{
+  const migration = readFileSync(
+    "lib/db/schema-migration-v51-market-price-provider-lineage.sql",
+    "utf8",
+  );
+  check(
+    "price-provider migration preserves legacy rows without inventing provenance",
+    /ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'legacy_unattributed'/.test(migration) &&
+      /provider IN \('owls', 'canonical_lines', 'legacy_unattributed'\)/.test(migration) &&
+      /CREATE UNIQUE INDEX CONCURRENTLY/.test(migration) &&
+      /UNIQUE USING INDEX market_price_observations_v2_unique_price_provider_idx/.test(migration) &&
+      !/provider_lookup_idx/.test(migration),
   );
 }
 
