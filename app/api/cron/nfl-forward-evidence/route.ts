@@ -33,7 +33,7 @@ export async function GET(request: Request): Promise<Response> {
     }
     const balldontlieApiKey = requiredEnv("BALLDONTLIE_API_KEY");
     const playbookApiKey = requiredEnv("PLAYBOOK_API_KEY");
-    const sharpApiKey = requiredEnv("SHARPAPI_KEY");
+    const owlsApiKey = requiredEnv("OWLS_INSIGHT_API_KEY");
     const season = boundedInteger(process.env.NFL_FORWARD_SEASON ?? "2026", 2026, 2100, "NFL_FORWARD_SEASON");
     const configuredWeek = boundedInteger(process.env.NFL_FORWARD_WEEK ?? "1", 1, 18, "NFL_FORWARD_WEEK");
     const weatherProvider = process.env.OPENWEATHER_API_KEY
@@ -87,7 +87,7 @@ export async function GET(request: Request): Promise<Response> {
       apply: true,
       balldontlieApiKey,
       playbookApiKey,
-      sharpApiKey,
+      owlsApiKey,
       weatherProvider,
       exactProviderCandidate: true,
       marketBrainCaptureEnabled,
@@ -123,7 +123,6 @@ export async function GET(request: Request): Promise<Response> {
           now: cycleNow,
           apply: true,
           ballDontLieApiKey: balldontlieApiKey,
-          sharpApiKey,
         });
       } catch (error) {
         // Props retains its last complete snapshot. A provider failure must not
@@ -191,6 +190,7 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_proposed: result.trackingRecordsProposed,
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
+        owls_capture: result.owlsCapture,
         ...marketBrainDetails,
         player_props_enabled: playerPropsEnabled,
         player_props_cadence: playerPropsCadence,

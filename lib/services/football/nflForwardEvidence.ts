@@ -28,7 +28,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding" as const;
+  "nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -236,6 +236,8 @@ export type NflForwardEvidencePayload = {
     injuries: boolean;
     playbookSplits: boolean;
     sharpApiSplits: boolean;
+    /** Display/capture-only named-book coverage; absent on legacy rows. */
+    owlsSplits?: boolean;
     weather: boolean;
     healthHolds: string[];
     quarterbackHistory?: NflR6ShadowMoneylineDecision["quarterbackContext"];
@@ -249,6 +251,8 @@ export type NflForwardEvidencePayload = {
     balldontlieWeeklyProjectionsMaximum?: number;
     playbook: number;
     sharpApi: number;
+    /** Present for future rows captured after the SharpAPI retirement. */
+    owls?: number;
     weather: number;
     totalMaximum: number;
   };

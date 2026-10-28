@@ -42,10 +42,11 @@ import { collectNflForwardWeather } from "./nflVenueWeather";
 import {
   completeSharpApiNflSplitSet,
   fetchSharpApiNflSplits,
-  NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
+  nflModelSharpSplits,
   unavailableNflSharpApiSplitSources,
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
+import { fetchNflOwlsSplits } from "./nflOwlsSplits";
 import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 import {
   buildNflR6ShadowMoneylineDecision,
@@ -86,13 +87,6 @@ import {
 import { buildNflNamedMarketSequenceAuthority } from "./nflNamedMarketSequence";
 import { buildNflProfessionalMarketAuthority } from "./nflProfessionalMarketAuthority";
 import { buildNflThreeStateMarketAuthority } from "./nflThreeStateMarketReader";
-import {
-  captureBooksWithSharpBooks,
-  fetchSharpApiNflSharpOdds,
-  FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
-  FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS,
-  FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
-} from "./sharpApiFootballSharpOdds";
 import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflImmutableT60RecoveryRecords,
@@ -139,7 +133,6 @@ import {
   buildNflOwlsMarketBrainSplitEvidence,
   readNflOwlsMarketBrainSplitEvidence,
 } from "./nflOwlsMarketBrainSplits";
-import { failedFootballRawPriceManifest } from "./footballRawPriceManifest";
 import {
   fetchBalldontlieNflWeeklyProjectionShadows,
   NFL_PAID_PROJECTION_MAX_PAGES,
@@ -148,7 +141,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow" as const;
+  "nfl_forward_evidence_writer_2026_10_27_r91_owls_capture_only" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -183,6 +176,17 @@ export type NflForwardWriterResult = {
   marketBrainCaptureFailureReasons: string[];
   marketBrainPersistenceAttempted: boolean;
   marketBrainPersistenceError: string | null;
+  owlsCapture: {
+    attempted: boolean;
+    requests: number;
+    events: number;
+    rows: number;
+    matchedGames: number;
+    feedStatus: "ok" | "partial" | "unknown" | null;
+    partialReason: string | null;
+    rejected: number;
+    error: string | null;
+  };
 };
 
 type NflTrackingWriteResult = Pick<
@@ -204,12 +208,16 @@ export async function runNflForwardEvidenceWriter(args: {
   apply: boolean;
   balldontlieApiKey: string;
   playbookApiKey: string;
-  sharpApiKey: string;
+  owlsApiKey?: string;
+  /** Compatibility-only injection for historical SharpAPI fixtures; production never reads it. */
+  sharpApiKey?: string;
   weatherProvider: IWeatherProvider | null;
   /** Read-only audit hook; never persists or mutates a payload. */
   auditPayloads?: (payloads: NflForwardEvidencePayload[]) => void;
   /** Test/audit-only provider injection; production always uses the default fetcher. */
   sharpSplitsFetcher?: typeof fetchSharpApiNflSplits;
+  /** Test/audit-only Owls injection; production uses the bounded default fetcher. */
+  owlsSplitsFetcher?: typeof fetchNflOwlsSplits;
   /** Test/audit-only canonical evidence injection; never calls Owls directly. */
   owlsMarketBrainSplitEvidenceReader?: typeof readNflOwlsMarketBrainSplitEvidence;
   /** Explicit foundational-score gate. Locked rows retain stored payload precedence. */
@@ -388,48 +396,75 @@ export async function runNflForwardEvidenceWriter(args: {
     week: args.week,
     seasonType: 2,
   });
-  const [linesResult, splitsResult, sharpResult, circaAttempt, currentSeasonState, paidProjectionFetch] = await Promise.all([
-    playbook.lines("nfl").then((result) => result.body.data ?? []).catch(() => null),
-    playbook.splits("nfl").then((result) => result.body.data ?? []).catch(() => null),
-    (args.sharpSplitsFetcher ?? fetchSharpApiNflSplits)({
-      apiKey: args.sharpApiKey,
-      games: slate.games,
-      capturedAt: args.now,
-      captureResearchManifest: marketBrainCaptureEnabled,
-    })
-      .catch(() => ({
+  const namedBookSplits = args.sharpSplitsFetcher
+    ? args.sharpSplitsFetcher({
+        apiKey: args.sharpApiKey ?? "compatibility-fixture",
+        games: slate.games,
+        capturedAt: args.now,
+        captureResearchManifest: marketBrainCaptureEnabled,
+      }).then((result) => ({
+        splitsByGame: result.splitsByGame,
+        sourcesByGame: result.sourcesByGame,
+        requests: result.requests,
+        sharpApiRequests: result.requests,
+        owlsCapture: {
+          attempted: false, requests: 0, events: 0, rows: 0, matchedGames: 0,
+          feedStatus: null, partialReason: null, rejected: 0, error: null,
+        } satisfies NflForwardWriterResult["owlsCapture"],
+      })).catch(() => ({
         splitsByGame: {} as Record<string, NflRegularSharpSplitSet>,
         sourcesByGame: Object.fromEntries(slate.games.map((game) => [
           game.providerGameId,
           unavailableNflSharpApiSplitSources(),
         ])),
         requests: 1,
-        rows: 0,
-        dates: [],
-        captureManifest: {
-          release: NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE,
-          responseReceivedAt: args.apply ? new Date().toISOString() : args.now,
-          rawResponseSha256: null,
-          status: "failed" as const,
-          failureReason: "sharpapi_split_capture_failed",
-          returnedRows: 0,
-          matchedRows: 0,
-          unmatchedRows: 0,
-          ambiguousRows: 0,
-          rows: [],
-        },
-      })),
-    fetchSharpApiNflSharpOdds({
-      apiKey: args.sharpApiKey,
-      games: uniquePlannedGames(plans.map((plan) => plan.game)),
-      capturedAt: args.now,
-      captureRawPriceManifest: marketBrainCaptureEnabled,
-    })
-      .then((result) => ({ result, requests: result.requests }))
-      .catch(() => ({
-        result: null,
-        requests: FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.length * FOOTBALL_SHARP_PRICE_CAPTURE_MAX_PAGES_PER_BOOK,
-      })),
+        sharpApiRequests: 1,
+        owlsCapture: {
+          attempted: false, requests: 0, events: 0, rows: 0, matchedGames: 0,
+          feedStatus: null, partialReason: null, rejected: 0, error: null,
+        } satisfies NflForwardWriterResult["owlsCapture"],
+      }))
+    : (args.owlsSplitsFetcher ?? fetchNflOwlsSplits)({
+        apiKey: args.owlsApiKey,
+        games: slate.games,
+        capturedAt: args.now,
+      }).then((result) => ({
+        splitsByGame: result.splitsByGame,
+        sourcesByGame: Object.fromEntries(slate.games.map((game) => [
+          game.providerGameId,
+          unavailableNflSharpApiSplitSources(),
+        ])),
+        requests: result.requests,
+        sharpApiRequests: 0,
+        owlsCapture: {
+          attempted: true,
+          requests: result.requests,
+          events: result.events,
+          rows: result.rows,
+          matchedGames: result.matchedGames,
+          feedStatus: result.feedStatus,
+          partialReason: result.partialReason,
+          rejected: result.rejected.length,
+          error: null,
+        } satisfies NflForwardWriterResult["owlsCapture"],
+      })).catch((error) => ({
+        splitsByGame: {} as Record<string, NflRegularSharpSplitSet>,
+        sourcesByGame: Object.fromEntries(slate.games.map((game) => [
+          game.providerGameId,
+          unavailableNflSharpApiSplitSources(),
+        ])),
+        requests: 1,
+        sharpApiRequests: 0,
+        owlsCapture: {
+          attempted: true, requests: 1, events: 0, rows: 0, matchedGames: 0,
+          feedStatus: null, partialReason: null, rejected: 0,
+          error: error instanceof Error ? error.message : "unknown_owls_split_capture_failure",
+        } satisfies NflForwardWriterResult["owlsCapture"],
+      }));
+  const [linesResult, splitsResult, sharpResult, currentSeasonState, paidProjectionFetch] = await Promise.all([
+    playbook.lines("nfl").then((result) => result.body.data ?? []).catch(() => null),
+    playbook.splits("nfl").then((result) => result.body.data ?? []).catch(() => null),
+    namedBookSplits,
     args.week > 1
       ? readNflPlayerPropsCurrentSeasonState({ client: args.client, season: args.season })
       : Promise.resolve(null),
@@ -472,7 +507,7 @@ export async function runNflForwardEvidenceWriter(args: {
   };
   const paidProjectionRequestsMaximum = paidProjectionRefreshDue ? NFL_PAID_PROJECTION_MAX_PAGES : 0;
   const apiCallsMaximum = slate.providerRequests + rosters.requests + availabilityRequestsMaximum + paidProjectionRequestsMaximum
-    + 2 + sharpResult.requests + circaAttempt.requests + weatherRequests;
+    + 2 + sharpResult.requests + weatherRequests;
   // The lightweight research index read overlaps provider collection and has a hard abort.
   // It can never hold the production writer indefinitely.
   const marketBrainPriorArtifactReadResult = await marketBrainPriorArtifactRead;
@@ -547,16 +582,15 @@ export async function runNflForwardEvidenceWriter(args: {
     // The NFL market reader already ignores split evidence older than two
     // hours, so retention protects continuity without treating old evidence as
     // a fresh forecast input.
-    const sharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
+    const displaySharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
       ?? previous?.payload.market.sharpApiSplits
       ?? null;
-    const sharpSplitSources = sharpResult.sourcesByGame?.[plan.game.providerGameId]
-      ?? unavailableNflSharpApiSplitSources();
-    const sharpCurrentBooks = circaAttempt.result?.booksByGame[plan.game.providerGameId] ?? [];
-    const contextCurrentBooks = captureBooksWithSharpBooks(
-      comparableCurrentBooks,
-      sharpCurrentBooks,
-    );
+    // Owls is captured for named-book display continuity only in this release.
+    // The separate market-reader task retains sole authority to qualify Owls
+    // for predictions; historical SharpAPI rows keep their incumbent meaning.
+    const sharpSplits = nflModelSharpSplits(displaySharpSplits)
+      ?? latestLegacyNflSharpSplits(historicalExisting, plan.game.providerGameId);
+    const contextCurrentBooks = comparableCurrentBooks;
     const contextOpeningBooks = [
       ...comparableProviderOpeningBooks,
       ...(captureHistoryBooksByGame.get(plan.game.providerGameId) ?? []),
@@ -597,13 +631,17 @@ export async function runNflForwardEvidenceWriter(args: {
     const expectedQuarterbacks = awayDepth.expectedStartingQuarterback !== null && homeDepth.expectedStartingQuarterback !== null;
     const playbookCoverage = completePlaybookSplits(playbookSplits);
     const sharpCoverage = completeSharpApiNflSplitSet(sharpSplits ?? undefined);
+    const owlsCoverage = displaySharpSplits?.moneyline.provider === "owls" &&
+      completeSharpApiNflSplitSet(displaySharpSplits);
     const weatherCoverage = plan.stage === "unlocked" || weather.status !== "provider_unavailable";
     const collectedEvidenceHolds = [
       !rosterAndDepth ? "roster_depth_unavailable" : null,
       !expectedQuarterbacks ? "expected_quarterback_unavailable" : null,
       injuries === null ? "injury_report_unavailable" : null,
       !playbookCoverage ? "playbook_splits_unavailable" : null,
-      !sharpCoverage ? "sharpapi_splits_unavailable" : null,
+      !sharpCoverage ? owlsCoverage
+        ? "owls_splits_model_qualification_pending"
+        : "named_book_splits_unavailable" : null,
       comparableCurrentBooks.length < 2 ? "multibook_consensus_unavailable" : null,
       comparableCurrentBooks.length < 3 ? "r6_leave_one_out_consensus_unavailable" : null,
       !weatherCoverage ? "weather_unavailable" : null,
@@ -902,7 +940,7 @@ export async function runNflForwardEvidenceWriter(args: {
         operationalOpening: opening,
         playbookLine,
         playbookSplits,
-        sharpApiSplits: sharpSplits,
+        sharpApiSplits: displaySharpSplits,
       },
       startersAndDepth: { away: awayDepth, home: homeDepth },
       providerStartersAndDepth: { away: providerAwayDepth, home: providerHomeDepth },
@@ -938,7 +976,8 @@ export async function runNflForwardEvidenceWriter(args: {
         multibookConsensusReady: comparableCurrentBooks.length >= 2,
         operationalOpening: true, rosterAndDepth, expectedQuarterbacks,
         injuries: injuries !== null, playbookSplits: playbookCoverage,
-        sharpApiSplits: sharpCoverage, weather: weatherCoverage, healthHolds: holds,
+        sharpApiSplits: sharpCoverage, owlsSplits: owlsCoverage,
+        weather: weatherCoverage, healthHolds: holds,
         quarterbackHistory: shadowMoneyline.quarterbackContext,
         forecastTargetExclusion: resolved.targetExclusion,
         paidProjectionShadow: Boolean(paidProjectionShadow),
@@ -947,13 +986,17 @@ export async function runNflForwardEvidenceWriter(args: {
         balldontlieSlate: slate.providerRequests, balldontlieRoster: rosters.requests,
         balldontlieInjuriesMaximum: availabilityRequestsMaximum, playbook: 2,
         balldontlieWeeklyProjectionsMaximum: paidProjectionRequestsMaximum,
-        sharpApi: sharpResult.requests + circaAttempt.requests,
+        sharpApi: sharpResult.sharpApiRequests,
+        owls: sharpResult.owlsCapture.requests,
         weather: weatherRequests, totalMaximum: apiCallsMaximum,
       },
     };
     const hasTargetFreePrior = Boolean(exactProviderScore) || Boolean(paidProjectionShadow) || hasNflV1WeekOneOutcomeForecast(plan.game.providerGameId);
     const contextualEvidenceCapture = buildNflForwardContextCapture({
-      payload,
+      payload: {
+        ...payload,
+        market: { ...payload.market, sharpApiSplits: sharpSplits },
+      },
       captureCurrentBooks: contextCurrentBooks,
       openingBooks: contextOpeningBooks,
       independentForecast: baseOutcome,
@@ -967,21 +1010,9 @@ export async function runNflForwardEvidenceWriter(args: {
         : NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
       authoritativeForecast: outcome,
     });
-    const marketBrainPriceManifests = [
-      ...(slate.rawPriceResponseManifests
-        ? [slate.rawPriceResponseManifests.opening, slate.rawPriceResponseManifests.current]
-        : []),
-      ...(circaAttempt.result?.rawPriceResponseManifests ?? FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.map((participant) =>
-        failedFootballRawPriceManifest({
-          release: FOOTBALL_SHARP_RAW_PRICE_MANIFEST_RELEASE,
-          provider: "sharpapi",
-          feed: "main_odds",
-          participant,
-          providerFetchedAt: capturedAt,
-          gameIds: slate.games.map((game) => game.providerGameId),
-          reason: "sharpapi_price_capture_failed",
-        }))),
-    ];
+    const marketBrainPriceManifests = slate.rawPriceResponseManifests
+      ? [slate.rawPriceResponseManifests.opening, slate.rawPriceResponseManifests.current]
+      : [];
     let marketBrainShadow: NflForwardEvidencePayload["marketBrainShadow"];
     let marketBrainRawParserInputs: NflForwardEvidencePayload["marketBrainRawParserInputs"];
     if (marketBrainCaptureEnabled && marketBrainCanaryGames.has(plan.game.providerGameId) &&
@@ -1162,9 +1193,21 @@ export async function runNflForwardEvidenceWriter(args: {
     marketBrainPersistenceAttempted: marketBrainCaptureEnabled && args.apply && marketBrainWrite.proposed > 0,
     marketBrainPersistenceError: [marketBrainReadError, marketBrainOwlsSplitReadError, marketBrainWriteError]
       .filter(Boolean).join("; ") || null,
+    owlsCapture: sharpResult.owlsCapture,
     ...memberSnapshot,
     ...tracking,
   };
+}
+
+function latestLegacyNflSharpSplits(
+  existing: NflForwardStoredEvidence[],
+  providerGameId: string,
+): NflRegularSharpSplitSet | null {
+  return existing
+    .filter((row) => row.providerGameId === providerGameId)
+    .sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))
+    .map((row) => nflModelSharpSplits(row.payload.market.sharpApiSplits))
+    .find((value): value is NflRegularSharpSplitSet => value !== null) ?? null;
 }
 
 function latestStoredPaidProjectionShadows(existing: NflForwardStoredEvidence[]): Record<string, NflPaidProjectionShadow> {
@@ -1580,6 +1623,17 @@ function emptyResult(
     marketBrainCaptureFailureReasons: [],
     marketBrainPersistenceAttempted: false,
     marketBrainPersistenceError: null,
+    owlsCapture: {
+      attempted: false,
+      requests: 0,
+      events: 0,
+      rows: 0,
+      matchedGames: 0,
+      feedStatus: null,
+      partialReason: null,
+      rejected: 0,
+      error: null,
+    },
     ...memberSnapshot,
     ...tracking,
   };

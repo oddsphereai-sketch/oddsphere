@@ -1,5 +1,33 @@
 # Model change safety protocol
 
+## Owner-directed cutover: NFL Owls named-book capture
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to continue removing the
+cancelled SharpAPI subscription while keeping predictive Market Reader work in
+its separate task. The sole NFL writer now requires `OWLS_INSIGHT_API_KEY`
+instead of `SHARPAPI_KEY`, captures one strictly matched Owls league split
+response for future-unlocked member evidence, and no longer calls SharpAPI for
+NFL sharp-book prices. Scheduled Market Intelligence V2 already owns the
+observation-only Owls Circa/Pinnacle price trail; BALLDONTLIE retains the
+current retail same-book trail. The player-props writer receives no SharpAPI
+key and retains BALLDONTLIE plus its existing last-known-good behavior.
+
+Owls rows are removed before every forecast, grade, market authority, semantic
+runtime, and decision-context capture. Historical SharpAPI rows retain their
+legacy meaning and age rules, and locked payloads remain exact. Model,
+calibration, decision, grade, fixture, compact member snapshot, context,
+tracking, and lock releases remain unchanged. Writer / collector advance to
+`nfl_forward_evidence_writer_2026_10_27_r91_owls_capture_only` /
+`nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only`.
+
+The live read-only probe matched complete named-book splits for 14/14 current
+games from 14 events / 168 normalized rows with zero identity rejections. The
+zero-write writer replay proposed 14 future-unlocked payloads / 42 markets,
+inserted zero, and reported no Owls error. Its local Playbook lane was
+credential-degraded and is not a board comparison; deployed full-provider
+verification remains mandatory. Evidence and rollback:
+`docs/model-audits/2026-10-27-nfl-owls-capture-cutover.md`.
+
 ## Owner-directed cutover: CFB Owls splits and sharp-book capture
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to continue removing the

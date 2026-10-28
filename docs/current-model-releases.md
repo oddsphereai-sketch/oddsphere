@@ -8,6 +8,19 @@ Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
+- October 27 NFL Owls capture cutover advances only the sole writer / collector to
+  `nfl_forward_evidence_writer_2026_10_27_r91_owls_capture_only` /
+  `nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only`. The live route requires
+  `OWLS_INSIGHT_API_KEY`, makes one bounded exact-game Owls split request, makes no SharpAPI
+  split or sharp-price request, and passes no SharpAPI key to player props. Future-unlocked
+  member evidence may display complete Circa-first Owls rows. `nflModelSharpSplits` removes every
+  Owls row before the incumbent forecast, grades, named/professional/three-state authorities,
+  semantic runtime, and decision-context capture; historical SharpAPI rows retain legacy semantics.
+  Scheduled Market Intelligence V2 remains the observation-only Owls Circa/Pinnacle price-history
+  owner, while BALLDONTLIE supplies the retail same-book trail. All model, calibration, decision,
+  grade, fixture, compact snapshot, context, tracking, and locked-record releases remain unchanged.
+  Evidence and rollback: `docs/model-audits/2026-10-27-nfl-owls-capture-cutover.md`.
+
 - October 27 cross-sport locked split continuity advances shared member presentation to
   `daily_edge_member_presentation_2026_10_27_r31_cross_sport_locked_split_continuity`. The Owls
   durable feed retains a bounded timestamped history for each exact event/book. Open cards use the

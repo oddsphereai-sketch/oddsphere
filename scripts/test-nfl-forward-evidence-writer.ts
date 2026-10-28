@@ -241,7 +241,7 @@ const preMarketBrainLineageFollowUp: NflForwardStoredEvidence = {
   ...currentContextCaptureFollowUp,
   payload: {
     ...currentContextCaptureFollowUp.payload,
-    collectorRelease: "nfl_forward_evidence_collector_2026_10_27_r28_source_row_participant_binding",
+    collectorRelease: "nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only",
   } as unknown as NflForwardEvidencePayload,
 };
 assert.equal(
@@ -396,7 +396,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r90_owls_market_brain_shadow/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r91_owls_capture_only/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");
