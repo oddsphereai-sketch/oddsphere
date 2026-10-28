@@ -147,9 +147,6 @@ async function readDurableCurrentSplits(
         });
         return feed;
       }
-      if (options.requireProviderSuccess) {
-        throw new Error(`Owls returned zero current split rows for ${sport}`);
-      }
     } catch (error) {
       console.warn(`Owls current split overlay fetch failed for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
       if (options.requireProviderSuccess) throw error;
