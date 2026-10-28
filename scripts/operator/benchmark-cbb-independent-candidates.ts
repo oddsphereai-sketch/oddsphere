@@ -103,6 +103,10 @@ async function main() {
     limitations: "Already-opened retrospective 2025-season, eight fixed Saturdays. Opening quotes, not closing or movement. ML/spread fixture orientation corroborated but not independently selection-level verified. Hypothetical all-game picks, not actionable grades, live tracking, ROI proof or guaranteed future accuracy.",
     openingTotal635: { games: totalRows.length, markets: summarize(totalRows, "total"), scores: totalScoreMetrics },
     threeMarket353: { games: marketRows.length, markets: Object.fromEntries((["moneyline", "spread", "total"] as const).map(m => [m, summarize(marketRows, m)])) } };
+  if (includeMaturity) {
+    const retain = (row: typeof marketRows[number]) => ({ game: row.game, baseline: row.forecasts.r2, candidate: row.forecasts.r8, targets: row.targets });
+    await writeFile(`${dir}/independent-quote-loss-audit-inputs.json`, JSON.stringify({ totalRows: totalRows.map(retain), marketRows: marketRows.map(retain) }));
+  }
   await writeFile(`${dir}/independent-candidate-opening-benchmark${includeMaturity ? "-r8" : ""}.json`, JSON.stringify(report, null, 2));
   const brief = (result: ReturnType<typeof summarize>) => Object.fromEntries(Object.entries(result).map(([version, value]) => [version, { ...value, changes: value.changes.length }]));
   console.log(JSON.stringify({ total635: brief(report.openingTotal635.markets), market353: Object.fromEntries(Object.entries(report.threeMarket353.markets).map(([m, rs]) => [m, brief(rs)])) }, null, 2));
