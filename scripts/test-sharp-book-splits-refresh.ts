@@ -54,7 +54,7 @@ assert.match(route, /refreshOwlsCurrentSplitFallback/, "the capture calls Owl's 
 const capturedSports = /const SPORTS: readonly Sport\[\] = \[([^\]]+)\]/.exec(route)?.[1].match(/"([a-z]+)"/g)?.map(value => value.slice(1,-1));
 assert.deepEqual(capturedSports, ["mlb", "wnba", "nhl", "nba", "nfl", "cfb", "cbb", "soccer", "ucl"], "split leagues remain captured alongside both new soccer display feeds");
 assert.match(route, /sport === "soccer" \|\| sport === "ucl" \? Promise.resolve\(0\) : refreshOwlsCurrentSplitFallback\(sport\)/, "soccer has prediction markets, not fabricated sportsbook splits");
-assert.match(route, /sport === "cbb" \? Promise.resolve\(0\) : refreshPredictionMarketDisplayFeed/, "unsupported CBB Kalshi capture stays disabled");
+assert.match(route, /sport === "cbb" \? Promise.resolve\(\{rows:0,owlsRequests:0,warnings:\[\] as string\[\]\}\) : refreshPredictionMarketDisplayFeed/, "unsupported CBB Kalshi capture stays disabled");
 assert.match(route, /Promise.allSettled/, "prediction-market capture cannot cancel the split capture");
 assert.match(route, /if \(splitResult.status === "rejected"\) throw splitResult.reason/, "a failed split capture still reports failure");
 assert.doesNotMatch(route, /leaseGroup:\s*["']prediction_pipeline["']/, "display capture does not claim prediction authority");

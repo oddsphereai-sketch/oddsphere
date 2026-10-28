@@ -35,6 +35,7 @@ export type PredictionMarketRow = {
   /** Real five-minute candles from Kalshi; volume is per interval, not cumulative. */
   historicalCandles?: PredictionMarketPoint[];
   historicalCheckedAt?: string;
+  historicalRelease?: string;
 };
 export type PredictionMarketFeed = {
   release: typeof PREDICTION_MARKET_RELEASE;
@@ -135,6 +136,7 @@ export function isPredictionMarketFeed(value: unknown, sport: PredictionMarketSp
   return feed?.release === PREDICTION_MARKET_RELEASE && feed.sport === sport && typeof feed.fetchedAt === "string" && Array.isArray(feed.rows) && feed.rows.length <= 1200 && feed.rows.every(value => {
     const row = object(value);
     if(row?.historicalCheckedAt !== undefined && (typeof row.historicalCheckedAt !== "string" || !Number.isFinite(Date.parse(row.historicalCheckedAt))))return false;
+    if(row?.historicalRelease !== undefined && typeof row.historicalRelease!=="string")return false;
     if(row?.historicalCandles !== undefined && (!Array.isArray(row.historicalCandles) || row.historicalCandles.length>96 || !row.historicalCandles.every(point=>Array.isArray(point)&&point.length===3&&Number.isFinite(point[0])&&price(point[1])!==null&&(point[2]===null||volume(point[2])!==null))))return false;
     return row && typeof row.ticker === "string" && typeof row.eventTicker === "string" && typeof row.sideCode === "string" && typeof row.team === "string" && typeof row.gameDate === "string" && typeof row.asOf === "string" && Number.isFinite(Date.parse(row.asOf)) && price(row.probability) !== null && price(row.bid) !== null && price(row.ask) !== null && Array.isArray(row.history) && row.history.length >= 1 && row.history.length <= 100 && row.history.every(point => Array.isArray(point) && point.length === 3 && Number.isFinite(point[0]) && price(point[1]) !== null && (point[2] === null || volume(point[2]) !== null));
   });
@@ -152,7 +154,8 @@ export function mergePredictionMarketFeeds(previous: PredictionMarketFeed | null
     }
     rows.set(row.ticker, { ...row, history: [...history.values()].sort((a,b) => a[0]-b[0]).slice(-100),
       ...(prior?.historicalCandles ? {historicalCandles:prior.historicalCandles.filter(point=>point[0]>=now-8*60*60_000)} : {}),
-      ...(prior?.historicalCheckedAt ? {historicalCheckedAt:prior.historicalCheckedAt} : {}) });
+      ...(prior?.historicalCheckedAt ? {historicalCheckedAt:prior.historicalCheckedAt} : {}),
+      ...(prior?.historicalRelease ? {historicalRelease:prior.historicalRelease} : {}) });
   }
   const feed = { ...current, rows: [...rows.values()].sort((a,b) => b.asOf.localeCompare(a.asOf)).slice(0, 1200) };
   // Next's shared data cache has a response-size ceiling. Preserve current

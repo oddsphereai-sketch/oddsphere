@@ -1,5 +1,5 @@
 import type { MarketEdgeDto } from "./labTypes";
-import type { PredictionMarketMatch, PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
+import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
 export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean};
@@ -7,13 +7,13 @@ export function formatPredictionMarketOdds(value:number):string {return value>0?
 const pickLabel=(value:string|null|undefined)=>value?.replace(/\s+ML$/i,"").trim().toUpperCase().replace(/^TIE$/,"DRAW");
 
 /** Use the exact selected outcome's real single-book moneyline observations. */
-export function predictionMarketBookTrail(moneyline:MarketEdgeDto, outcomeLabel:string, now:number):PredictionMarketBookTrail|null {
+export function predictionMarketBookTrail(moneyline:MarketEdgeDto, outcomeLabel:string, now:number, targetLine:number|null=null):PredictionMarketBookTrail|null {
   const selected=pickLabel(outcomeLabel);
   const stops=selected===pickLabel(moneyline.pick)?moneyline.oddsTrail:selected===pickLabel(moneyline.opposingOddsTrail?.label)?moneyline.opposingOddsTrail?.stops:null;
   const groups=new Map<string,NonNullable<MarketEdgeDto["oddsTrail"]>>();
   for(const stop of stops??[]){
     const book=stop.sportsbook?.trim().toLowerCase(), at=Date.parse(stop.observedAt??"");
-    if(!book || ["recommendation_snapshot","locked_snapshot"].includes(book) || stop.line!==null || implied(stop.american)===null || !Number.isFinite(at) || at>now || at<now-24*60*60_000)continue;
+    if(!book || ["recommendation_snapshot","locked_snapshot"].includes(book) || stop.line!==targetLine || implied(stop.american)===null || !Number.isFinite(at) || at>now || at<now-24*60*60_000)continue;
     const group=groups.get(book)??[];group.push(stop);groups.set(book,group);
   }
   const preferred=moneyline.movementReferenceSportsbook?.trim().toLowerCase();
@@ -70,7 +70,7 @@ export function predictionMarketObservationAt<T extends readonly [number,...unkn
 }
 
 /** Historical interval volume and live cumulative deltas are never conflated. */
-export function predictionMarketChartSeries(row:PredictionMarketRow):{points:PredictionMarketPoint[];activity:Array<number|null>} {
+export function predictionMarketChartSeries(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf">):{points:PredictionMarketPoint[];activity:Array<number|null>} {
   const live=row.history.filter(point=>point[0]<=Date.parse(row.asOf));
   const firstLive=live[0]?.[0]??Date.parse(row.asOf);
   const historical=(row.historicalCandles??[]).filter(point=>point[0]<firstLive && point[0]>=Date.parse(row.asOf)-8*60*60_000);
@@ -103,7 +103,7 @@ export function predictionMarketPinnacleComparison(moneyline: MarketEdgeDto, sel
   return (selectedSide === opposite.side ? b : a) / (a+b);
 }
 
-export function selectedPredictionMarketOutcome(match: PredictionMarketMatch, pick: string | null) {
+export function selectedPredictionMarketOutcome<T extends {label:string;probability:number}>(match: {outcomes:T[]}, pick: string | null):T|undefined {
   const normalized = pick?.replace(/\s+ML$/i, "").trim().toUpperCase();
   return match.outcomes.find(row => row.label.toUpperCase() === normalized) ?? [...match.outcomes].sort((a,b) => b.probability-a.probability)[0];
 }
