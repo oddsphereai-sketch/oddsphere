@@ -27,7 +27,7 @@ import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementSto
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_23_r7_canonical_coverage" as const;
+  "nba_player_props_private_writer_2026_10_28_r8_owls_prices" as const;
 
 export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   release: typeof NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE;
@@ -51,6 +51,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   schedule: readonly NbaRollingScheduleGame[];
   ballDontLieApiKey: string;
   theOddsApiKey?: string | null;
+  owlsInsightApiKey?: string | null;
   fullRefresh: boolean;
   now?: string;
   fetchImpl?: typeof fetch;
@@ -89,6 +90,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     slateDate: args.slateDate,
     ballDontLieApiKey: args.ballDontLieApiKey,
     theOddsApiKey: args.theOddsApiKey,
+    owlsInsightApiKey: args.owlsInsightApiKey,
     includeOpenings: args.fullRefresh,
     canonicalPlayersByName,
     knownPlayerIdentitiesById: Object.fromEntries([...players.values()].map((player) => [String(player.playerId), {
@@ -113,7 +115,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if (missingScheduledGames.length > 0) {
     return {
       ...result("last_known_good_preserved"),
-      providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
+      providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
       theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
       observationsAdded: mergedMarket.added,
       observationsRefreshed: mergedMarket.refreshed,
@@ -188,7 +190,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
   if (eligibleFeatures.length < minimumCoverage || forward.length === 0 || invalidForecasts.length > 0) {
     return {
       ...result("last_known_good_preserved"),
-      providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
+      providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
       theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
       observationsAdded: mergedMarket.added,
       observationsRefreshed: mergedMarket.refreshed,
@@ -305,7 +307,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     release: NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
     publicEnabled: false,
     status: "published_private",
-    providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi,
+    providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
     theOddsApiCreditsUsed: live.theOddsApiCreditsUsed,
     observationsAdded: mergedMarket.added,
     observationsRefreshed: mergedMarket.refreshed,

@@ -20,9 +20,9 @@ import type { NbaPlayerPropFeatureRow } from "./nbaPlayerPropsPointInTimeFeature
 import type { NbaPlayerPropsMemberGrade } from "./nbaPlayerPropsProductContract";
 
 export const NBA_PLAYER_PROPS_FROZEN_RUNTIME_RELEASE =
-  "nba_player_props_frozen_runtime_artifact_2026_10_27_r12_side_accuracy_rerank" as const;
+  "nba_player_props_frozen_runtime_artifact_2026_10_28_r13_owls_sharp_market_reader" as const;
 export const NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE =
-  "nba_player_props_forward_decision_2026_10_27_r13_side_accuracy_rerank" as const;
+  "nba_player_props_forward_decision_2026_10_28_r14_owls_sharp_market_reader" as const;
 
 type FoundationMarket = (typeof NBA_PLAYER_PROPS_FOUNDATION_MARKETS)[number];
 type Component = "points" | "rebounds" | "assists" | "threes";
@@ -505,9 +505,7 @@ function resolveFinalProjection(args: {
     });
   if (exactArbitration) return exactArbitration;
   const desired = candidateSide;
-  const target = args.offer.observations
-    .filter((row) => row.side === desired)
-    .sort((left, right) => right.americanPrice - left.americanPrice)[0];
+  const target = selectEvaluatedTarget(args.offer.observations, desired);
   if (!target) return null;
   const evidence = buildNbaPlayerPropsMarketEvidence({
     target,
@@ -529,9 +527,7 @@ function resolveIndependentOnlyProjection(
   args: Parameters<typeof resolveFinalProjection>[0],
   independentSide: Side,
 ) {
-  const target = args.offer.observations
-    .filter((row) => row.side === independentSide)
-    .sort((left, right) => right.americanPrice - left.americanPrice)[0];
+  const target = selectEvaluatedTarget(args.offer.observations, independentSide);
   if (!target) return null;
   const observed = buildNbaPlayerPropsMarketEvidence({
     target,
@@ -565,9 +561,7 @@ function resolveTargetExcludedArbitration(args: {
   let side = independentSide;
   let lastBook = "";
   for (let iteration = 0; iteration < 3; iteration += 1) {
-    const target = args.offer.observations
-      .filter((row) => row.side === side)
-      .sort((left, right) => right.americanPrice - left.americanPrice)[0];
+    const target = selectEvaluatedTarget(args.offer.observations, side);
     if (!target) return null;
     const evidence = buildNbaPlayerPropsMarketEvidence({
       target,
@@ -604,6 +598,21 @@ function marketMovementOpposes(
 ): boolean {
   const opposed = side === "over" ? "toward_under" : "toward_over";
   return evidence.lineMovement === opposed || evidence.priceMovement === opposed;
+}
+
+function selectEvaluatedTarget(
+  rows: readonly NbaPlayerPropPriceObservation[],
+  side: Side,
+): NbaPlayerPropPriceObservation | undefined {
+  const offered = rows.filter((row) => row.side === side);
+  const primary = offered.filter((row) => row.provider !== "owls");
+  // Owl is a sharp/reference lane when the existing retail lane already has
+  // this listed side. It may become the evaluated quote only for a genuinely
+  // Owl-only scope, preventing an internal source upgrade from silently
+  // changing the member-facing sportsbook or price.
+  return [...(primary.length > 0 ? primary : offered)]
+    .sort((left, right) => right.americanPrice - left.americanPrice
+      || Date.parse(right.observedAt) - Date.parse(left.observedAt))[0];
 }
 
 function coherentFlippedProjection(line: number, distance: number, side: Side): number {
@@ -799,9 +808,16 @@ function numericFeature(row: NbaPlayerPropFeatureRow, key: string): number | nul
 function noVigOverForBook(rows: readonly NbaPlayerPropPriceObservation[], sportsbook: string): number | null {
   const normalized = normalizeBook(sportsbook);
   const bookRows = rows.filter((row) => normalizeBook(row.sportsbook) === normalized);
-  const over = bookRows.find((row) => row.side === "over");
-  const under = bookRows.find((row) => row.side === "under");
-  if (!over || !under) return null;
+  const complete = [...groupBy(bookRows, (row) => `${row.provider}|${row.observedAt}|${row.line}`).values()]
+    .flatMap((pairRows) => {
+      const over = pairRows.find((row) => row.side === "over");
+      const under = pairRows.find((row) => row.side === "under");
+      return over && under ? [{ over, under }] : [];
+    })
+    .sort((left, right) => Date.parse(right.over.observedAt) - Date.parse(left.over.observedAt));
+  const pair = complete[0];
+  if (!pair) return null;
+  const { over, under } = pair;
   const overImplied = implied(over.americanPrice);
   const underImplied = implied(under.americanPrice);
   return overImplied / (overImplied + underImplied);

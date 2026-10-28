@@ -46,6 +46,21 @@ const THE_ODDS_API_MARKETS: Record<string, NbaPlayerPropMarket> = {
   player_triple_double: "triple_double",
 };
 
+const OWLS_MARKETS: Record<string, NbaPlayerPropMarket> = {
+  points: "points",
+  rebounds: "rebounds",
+  assists: "assists",
+  threes_made: "threes",
+  pts_rebs_asts: "points_rebounds_assists",
+  pts_rebs: "points_rebounds",
+  pts_asts: "points_assists",
+  rebs_asts: "rebounds_assists",
+  blocks: "blocks",
+  steals: "steals",
+  double_double: "double_double",
+  triple_double: "triple_double",
+};
+
 type EventIdentity = {
   canonicalGameId: string;
   homeTeam: string;
@@ -228,6 +243,98 @@ export function normalizeTheOddsApiNbaPlayerProps(args: {
     rejectedRows,
     unknownMarkets: Object.fromEntries([...unknownMarkets.entries()].sort(([a], [b]) => a.localeCompare(b))),
   };
+}
+
+export function normalizeOwlsNbaPlayerProps(args: {
+  events: readonly unknown[];
+  fetchedAt: string;
+  canonicalGames?: Readonly<Record<string, string>>;
+  canonicalPlayers?: Readonly<Record<string, string>>;
+}): NbaPlayerPropsProviderNormalization {
+  const rows: NbaPlayerPropPriceObservation[] = [];
+  const unknownMarkets = new Map<string, number>();
+  let inputRows = 0;
+  let rejectedRows = 0;
+  for (const eventValue of args.events) {
+    const event = object(eventValue);
+    const providerEventId = id(event?.gameId);
+    const scheduledStart = string(event?.commenceTime);
+    const homeTeam = string(event?.homeTeam);
+    const awayTeam = string(event?.awayTeam);
+    const isLive = event?.isLive === true;
+    for (const bookValue of array(event?.books)) {
+      const book = object(bookValue);
+      const sportsbook = string(book?.key)?.toLowerCase() ?? null;
+      const bookObservedAt = string(book?.lastUpdate);
+      for (const propValue of array(book?.props)) {
+        inputRows += 1;
+        const prop = object(propValue);
+        const providerMarket = string(prop?.category);
+        const market = providerMarket ? OWLS_MARKETS[providerMarket] : undefined;
+        if (providerMarket && !market) unknownMarkets.set(providerMarket, (unknownMarkets.get(providerMarket) ?? 0) + 1);
+        const playerName = string(prop?.playerName);
+        const playerTeam = string(prop?.team);
+        const line = finite(prop?.line);
+        const over = american(prop?.overPrice);
+        const under = american(prop?.underPrice);
+        const observedAt = string(prop?.lastUpdate) ?? bookObservedAt;
+        const propId = id(prop?.propId) ?? [providerEventId, sportsbook, playerName, providerMarket, line].join(":");
+        if (!providerEventId || !sportsbook || !market || !providerMarket || !playerName || line === null
+          || over === null || under === null || !validTwoWayPair(over, under)
+          || !observedAt || !scheduledStart || !homeTeam || !awayTeam || isLive) {
+          rejectedRows += 1;
+          continue;
+        }
+        const base = {
+          release: NBA_PLAYER_PROPS_OBSERVATION_RELEASE,
+          provider: "owls" as const,
+          providerEventId,
+          canonicalGameId: args.canonicalGames?.[providerEventId] ?? null,
+          canonicalPlayerId: args.canonicalPlayers?.[normalizeName(playerName)] ?? null,
+          providerPlayerId: null,
+          playerName,
+          playerTeam,
+          sportsbook,
+          market,
+          providerMarket,
+          offerType: "over_under" as const,
+          line,
+          observedAt: iso(observedAt),
+          fetchedAt: iso(args.fetchedAt),
+          isOpening: false,
+          isLive: false,
+          homeTeam,
+          awayTeam,
+          scheduledStart: iso(scheduledStart),
+        };
+        rows.push(
+          { ...base, providerObservationId: `${propId}:over`, side: "over", americanPrice: over },
+          { ...base, providerObservationId: `${propId}:under`, side: "under", americanPrice: under },
+        );
+      }
+    }
+  }
+  return {
+    rows: dedupe(rows),
+    inputRows,
+    rejectedRows,
+    unknownMarkets: Object.fromEntries([...unknownMarkets.entries()].sort(([a], [b]) => a.localeCompare(b))),
+  };
+}
+
+function validTwoWayPair(overPrice: number, underPrice: number): boolean {
+  const over = impliedProbability(overPrice);
+  const under = impliedProbability(underPrice);
+  const total = over + under;
+  // Owl contains some exchange ladder contracts whose two independently
+  // quoted prices are not a complementary Over/Under market. Retain genuine
+  // sportsbook pairs while rejecting those impossible pairs before they can
+  // vote on a main line or sharp consensus.
+  return total >= 0.98 && total <= 1.20;
+}
+
+function impliedProbability(price: number): number {
+  return price < 0 ? -price / (-price + 100) : 100 / (price + 100);
 }
 
 function dedupe(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {

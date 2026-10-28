@@ -34,6 +34,33 @@ models, calibrations, decisions, locks, stakes, tracking, and member snapshots a
 provider calls and same-input board changes are both zero. Evidence and rollback:
 `docs/model-audits/2026-10-28-owls-ticket-share-capture-predeclaration.md`.
 
+## Owner-directed cutover: NBA player-props Owls market reader
+
+On 2026-10-28 Daniel Mengel directed Oddsphere to use the replacement Owls
+player-prop feed as honest sharp-book evidence and to continue improving the
+active model rather than reject changes merely because they move current picks.
+BALLDONTLIE remains the slate, identity, main-line, opening, and primary target
+authority. One bounded Owls request supplies fresh complete prop pairs for the
+internal target-excluded lane and missing scopes; The Odds API remains gap-only.
+
+Non-complementary exchange ladders, live/stale/future rows, unresolved games or
+players, and alternate Owl ladders that conflict with an existing primary main
+line fail closed before forecasting. Owls exposes no verified player-level
+splits, so none are inferred. Internal evidence separates reference books from
+retail, retains same-book movement, and adds no member copy or labels.
+
+Release-pure October 22-27 replay qualifies the Rebounds all-book market read at
+312-202 (60.70%) versus 274-240 incumbent and 265-249 independent, including
+59.78% development and 61.73% confirmation. The eight incumbent PRA market
+flips were all harms, so future unlocked PRA returns to its independent side.
+The final October 28 no-write rehearsal adds 43 scopes, removes zero primary
+rows, and changes nine supported sides. Four actionable promotions are paired
+with four actionable demotions, preserving the 24-actionable board as 18 Leans
+and six Best Angles. Locked rows retain exact precedence.
+Evidence and rollback:
+`docs/model-audits/2026-10-28-nba-player-props-owls-market-reader-predeclaration.md`
+and `docs/model-audits/2026-10-28-nba-player-props-owls-market-reader-result.md`.
+
 ## Owner-directed cutover: NFL player-props Owls prices
 
 On 2026-10-28 Daniel Mengel directed Oddsphere to replace the canceled SharpAPI

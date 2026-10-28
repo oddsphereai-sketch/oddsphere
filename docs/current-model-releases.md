@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-27
+Last reviewed: 2026-10-28
 
 ## Cross-sport confidence / execution contract
 
@@ -418,15 +418,15 @@ Last reviewed: 2026-10-27
   `NBA_PLAYER_PROPS_MEMBER_ENABLED=true`. Member requests read only the bounded
   stored candidate snapshot and make no provider calls. The current forward
   family is frozen artifact / decision / product / lifecycle
-  `nba_player_props_frozen_runtime_artifact_2026_10_27_r12_side_accuracy_rerank` /
-  `nba_player_props_forward_decision_2026_10_27_r13_side_accuracy_rerank` /
+  `nba_player_props_frozen_runtime_artifact_2026_10_28_r13_owls_sharp_market_reader` /
+  `nba_player_props_forward_decision_2026_10_28_r14_owls_sharp_market_reader` /
   `nba_player_props_product_candidate_2026_10_23_r8_canonical_coverage` /
   `nba_player_props_lifecycle_candidate_2026_10_22_r4_et_day_boundary`.
   Model/calibration behavior is release-separated as
-  `nba_player_props_model_tournament_2026_10_26_r15_cross_season_market_heads` /
-  `nba_player_props_exact_price_grade_2026_10_27_r14_side_accuracy_rerank`.
+  `nba_player_props_model_tournament_2026_10_28_r16_owls_sharp_market_reader` /
+  `nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_10_23_r7_canonical_coverage`; it
+  `nba_player_props_private_writer_2026_10_28_r8_owls_prices`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is
@@ -442,6 +442,24 @@ Last reviewed: 2026-10-27
   private snapshots, one-hour immutable locking, internal tracking, and official
   revisioned settlement. Member route/navigation are enabled while public
   tracking remains off; member-request provider fetching remains off. The
+  October 28 release adds one bounded Owls prop call to that same writer.
+  BALLDONTLIE keeps slate, player, main-line, opening, and primary target
+  authority; Owls supplies fresh complete target-book-excluded reference pairs
+  and missing scopes before the paid Odds API gap lane. Non-complementary
+  exchange ladders, stale/live/future rows, unresolved identity, and alternate
+  lines that conflict with a resolved primary main line fail closed. Player
+  splits are not inferred. Reference and retail probabilities remain separate
+  internal evidence. Across 3,627 October 22-27 locks, the selected Rebounds
+  reader improves 53.31% incumbent to 60.70%, including 59.78% development and
+  61.73% confirmation; the eight incumbent PRA market flips were all harms, so
+  future unlocked PRA returns to its independent side. The final October 28
+  no-write board gains 43 scopes, removes zero primary rows, changes nine
+  supported sides, and retains 24 actionables through four paired promotions
+  and four demotions (18 Leans and six Best Angles).
+  Evidence and rollback:
+  `docs/model-audits/2026-10-28-nba-player-props-owls-market-reader-predeclaration.md`
+  and `docs/model-audits/2026-10-28-nba-player-props-owls-market-reader-result.md`.
+  The
   r8/r9 rebound-component reader retains every independent model and grade
   policy while lowering only Rebounds and Rebounds + Assists target-book-
   excluded correction gates from four points to two and removing the movement
