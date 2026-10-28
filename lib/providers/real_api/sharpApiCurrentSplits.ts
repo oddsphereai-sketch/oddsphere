@@ -107,12 +107,17 @@ const readCachedCurrentSplits = unstable_cache(
   { revalidate: 5 * 60, tags: ["owls-current-splits"] },
 );
 
-async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApiCurrentSplitFeed | null> {
+async function readDurableCurrentSplits(
+  sport: SupportedSport,
+  options: { forceProviderFetch?: boolean; requireProviderSuccess?: boolean } = {},
+): Promise<SharpApiCurrentSplitFeed | null> {
   const { readLabResponseSnapshot, readLatestLabResponseSnapshot, upsertLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
   const key = snapshotKey(sport);
-  const fresh = await readLabResponseSnapshot<Record<string, unknown>>(key, "fresh");
-  const validatedFresh = validateSharpApiCurrentSplitFeed(fresh?.payload, sport);
-  if (validatedFresh) return validatedFresh;
+  if (!options.forceProviderFetch) {
+    const fresh = await readLabResponseSnapshot<Record<string, unknown>>(key, "fresh");
+    const validatedFresh = validateSharpApiCurrentSplitFeed(fresh?.payload, sport);
+    if (validatedFresh) return validatedFresh;
+  }
   const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(key);
   const previousStored = stored;
   const validatedStored = validateSharpApiCurrentSplitFeed(previousStored?.payload, sport);
@@ -142,9 +147,15 @@ async function readDurableCurrentSplits(sport: SupportedSport): Promise<SharpApi
         });
         return feed;
       }
+      if (options.requireProviderSuccess) {
+        throw new Error(`Owls returned zero current split rows for ${sport}`);
+      }
     } catch (error) {
       console.warn(`Owls current split overlay fetch failed for ${sport}: ${error instanceof Error ? error.message : String(error)}`);
+      if (options.requireProviderSuccess) throw error;
     }
+  } else if (options.requireProviderSuccess) {
+    throw new Error("OWLS_INSIGHT_API_KEY is not configured");
   }
 
   return validatedStored;
@@ -159,10 +170,24 @@ export async function readStoredSharpApiCurrentSplits(
   return validateSharpApiCurrentSplitFeed(stored?.payload, sport);
 }
 
-export async function refreshSharpApiCurrentSplitFallback(sport: Sport): Promise<number> {
+export async function refreshOwlsCurrentSplitFallback(sport: Sport): Promise<number> {
+  if (!supportedSport(sport)) return 0;
+  const feed = await readDurableCurrentSplits(sport, {
+    forceProviderFetch: true,
+    requireProviderSuccess: true,
+  });
+  return feed?.rows.length ?? 0;
+}
+
+export async function refreshCachedOwlsCurrentSplitFallback(sport: Sport): Promise<number> {
   if (!supportedSport(sport)) return 0;
   const feed = await readCachedCurrentSplits(sport);
   return feed?.rows.length ?? 0;
+}
+
+/** @deprecated Use the provider-accurate Owls name for new callers. */
+export async function refreshSharpApiCurrentSplitFallback(sport: Sport): Promise<number> {
+  return refreshCachedOwlsCurrentSplitFallback(sport);
 }
 
 export function validateSharpApiCurrentSplitFeed(
@@ -495,10 +520,39 @@ function trimSplitHistory(rows: Json[]): Json[] {
     const key = splitRowKey(row);
     if (!key.startsWith("::")) byEventBook.set(key, [...(byEventBook.get(key) ?? []), row]);
   }
-  return [...byEventBook.values()].flatMap((history) => history
-    .sort((first, second) => rowFetchedAt(second) - rowFetchedAt(first))
-    .slice(0, MAX_OBSERVATIONS_PER_EVENT_BOOK)
-    .reverse());
+  return [...byEventBook.values()].flatMap((history) => {
+    const newestFirst = history.sort((first, second) => rowFetchedAt(second) - rowFetchedAt(first));
+    const retained = newestFirst.slice(0, MAX_OBSERVATIONS_PER_EVENT_BOOK);
+    const retainedKeys = new Set(retained.map(splitObservationKey));
+    // A long ticket-only outage must not evict the last verified money+ticket
+    // pair. Keep at most one additional complete observation per market so a
+    // later member request can still recover the truthful last-known-good
+    // section without combining axes from different timestamps.
+    for (const market of ["moneyline", "spread", "total"] as const) {
+      const complete = newestFirst.find((row) => rowHasCompleteMarketPair(row, market));
+      if (!complete) continue;
+      const key = splitObservationKey(complete);
+      if (!retainedKeys.has(key)) {
+        retained.push(complete);
+        retainedKeys.add(key);
+      }
+    }
+    return retained.sort((first, second) => rowFetchedAt(first) - rowFetchedAt(second));
+  });
+}
+
+function rowHasCompleteMarketPair(row: Json, market: SplitMarket): boolean {
+  const source = record(row[market]);
+  const firstKey = market === "total" ? "over" : "away";
+  const secondKey = market === "total" ? "under" : "home";
+  const handle = record(source.handle_pct);
+  const bets = record(source.bets_pct);
+  const firstMoney = percentage(handle[firstKey]);
+  const secondMoney = percentage(handle[secondKey]);
+  const firstBets = percentage(bets[firstKey]);
+  const secondBets = percentage(bets[secondKey]);
+  return firstMoney !== null && secondMoney !== null && complementary(firstMoney, secondMoney) &&
+    firstBets !== null && secondBets !== null && complementary(firstBets, secondBets);
 }
 
 function shouldReplace(

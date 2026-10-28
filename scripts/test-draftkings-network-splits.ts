@@ -107,6 +107,20 @@ const paginationTest = (async () => {
     /embedded upstream HTTP 403/,
     "an HTTP-200 shell containing the provider's embedded 403 must not replace a complete cached feed",
   );
+
+  await assert.rejects(
+    fetchDraftKingsNetworkSplits({
+      sport: "nba",
+      timeoutMs: 1_000,
+      fetchImpl: async () => splitPageResponse(`
+        <div class="tb-maintenance" data-tb-surface="table">
+          <p>Betting splits are temporarily unavailable</p>
+        </div>
+      `),
+    }),
+    /upstream maintenance/,
+    "a provider maintenance shell must fail closed so it cannot replace the durable complete feed",
+  );
 })();
 
 const emptyMarket = (): MarketEdgeDto => ({

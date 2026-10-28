@@ -8,7 +8,7 @@ import {
   applySharpApiCurrentSplitOverlay,
   populateDailyEdgeSharpApiCurrentSplits,
   readStoredSharpApiCurrentSplits,
-  refreshSharpApiCurrentSplitFallback,
+  refreshCachedOwlsCurrentSplitFallback,
   sanitizeRetainedSharpSplitPresentation,
   type SharpApiCurrentSplitOverlayOptions,
 } from "@/lib/providers/real_api/sharpApiCurrentSplits";
@@ -17,6 +17,7 @@ import {
   loadDailyEdgeSharpBookSplitContinuity,
   persistDailyEdgeSharpBookSplitContinuity,
   reconcileDailyEdgeSharpBookSplitAuthority,
+  restoreCompleteSharpBookSplitDisplay,
 } from "@/lib/providers/sharpBookSplitContinuity";
 import { unstable_cache } from "next/cache";
 
@@ -163,6 +164,9 @@ export async function fetchDraftKingsNetworkSplits(args: {
     if (/Unable to fetch data from server\.\s*403/i.test(html)) {
       throw new Error(`DraftKings Network splits page ${page} embedded upstream HTTP 403`);
     }
+    if (/Betting splits are temporarily unavailable/i.test(html)) {
+      throw new Error(`DraftKings Network splits page ${page} is in upstream maintenance`);
+    }
     return {
       fetchedAt: responseDate ? new Date(responseDate).toISOString() : (args.now ?? new Date()).toISOString(),
       games: parseDraftKingsNetworkSplitsHtml(html),
@@ -266,7 +270,7 @@ export async function refreshDailyEdgeSplitFallbackSources(sport: Sport): Promis
   draftKingsGames: number;
 }> {
   const [sharpApiRows, draftKingsFeed] = await Promise.all([
-    refreshSharpApiCurrentSplitFallback(sport).catch(() => 0),
+    refreshCachedOwlsCurrentSplitFallback(sport).catch(() => 0),
     readCachedDraftKingsNetworkSplits(sport).catch(() => null),
   ]);
   return {
@@ -425,6 +429,7 @@ export async function populateDailyEdgeDraftKingsFallback(
   const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed, options);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
   alignMarketReadsToDisplayedSharpBookSplits(response);
+  restoreCompleteSharpBookSplitDisplay(response, continuity.feed);
   await persistDailyEdgeSharpBookSplitContinuity(response, sport, continuity.feed);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
@@ -452,6 +457,7 @@ export async function populateDailyEdgeStoredSplitFallback(
   const durable = applyDraftKingsNetworkSplitFallback(response, draftKingsFeed, options);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
   alignMarketReadsToDisplayedSharpBookSplits(response);
+  restoreCompleteSharpBookSplitDisplay(response, continuity.feed);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
     matchedGames: Math.max(current.matchedGames, durable.matchedGames, continuity.matchedGames),
