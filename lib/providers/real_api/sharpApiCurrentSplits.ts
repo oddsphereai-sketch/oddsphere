@@ -103,7 +103,7 @@ function supportedSport(sport: Sport): sport is SupportedSport {
 
 const readCachedCurrentSplits = unstable_cache(
   async (sport: SupportedSport) => readDurableCurrentSplits(sport),
-  ["owls-current-splits-durable-overlay-v2-prelock-history"],
+  ["owls-current-splits-durable-overlay-v3-single-axis-display"],
   { revalidate: 5 * 60, tags: ["owls-current-splits"] },
 );
 
@@ -296,13 +296,17 @@ function attachBestMarket(
   // Freshness still controls internal source selection, but it does not
   // create a member-facing stale state. A current lower-priority fallback can
   // therefore remain until the preferred book publishes a current update.
-  // Money and tickets are a single display contract. Never degrade a retained
-  // complete pair to a partial row merely because the partial row is newer.
-  const complete = sections.filter((section) =>
-    sectionQuality(section) === 2 &&
+  // Prefer a book that reports both axes, but do not erase a truthful paired
+  // ticket-only or money-only observation when that is all the provider has.
+  // The member renderer already labels a missing axis "not reported". The
+  // market-reader bridge below still requires quality 2, so a quality-1
+  // display row cannot silently become decision evidence.
+  const usable = sections.filter((section) =>
+    sectionQuality(section) > 0 &&
     (lockedCutoffMs === null || sectionSourceTimestamp(section) <= lockedCutoffMs)
   );
-  const eligible = complete;
+  const complete = usable.filter((section) => sectionQuality(section) === 2);
+  const eligible = complete.length > 0 ? complete : usable;
   const current = eligible.filter((section) => sectionIsFreshAt(section, nowMs));
   const selected = lockedCutoffMs === null
     ? current[0] ?? eligible.sort((a, b) => sectionSourceTimestamp(b) - sectionSourceTimestamp(a))[0]
@@ -315,7 +319,7 @@ function attachBestMarket(
 
   const existing = market.sportsbookSplits;
   let populated: 0 | 1 = 0;
-  if (!existing || lockedCutoffMs === null && shouldReplace(existing, selectedForDisplay)) {
+  if (!existing || lockedCutoffMs === null && shouldReplace(existing, selectedForDisplay, nowMs)) {
     market.sportsbookSplits = selectedForDisplay;
     populated = 1;
   }
@@ -415,10 +419,9 @@ function sectionFromRow(
   const secondMoney = percentage(handle[secondKey]);
   const firstBets = percentage(bets[firstKey]);
   const secondBets = percentage(bets[secondKey]);
-  if (
-    firstMoney === null || secondMoney === null || firstBets === null || secondBets === null ||
-    !complementary(firstMoney, secondMoney) || !complementary(firstBets, secondBets)
-  ) return null;
+  const moneyComplete = firstMoney !== null && secondMoney !== null && complementary(firstMoney, secondMoney);
+  const betsComplete = firstBets !== null && secondBets !== null && complementary(firstBets, secondBets);
+  if (!moneyComplete && !betsComplete) return null;
   return {
     label: BOOK_LABEL[book],
     sourceBook: book,
@@ -427,8 +430,8 @@ function sectionFromRow(
       {
         side: market === "total" ? "over" : "away",
         label: market === "total" ? "Over" : game.awayTeam,
-        moneyPct: firstMoney,
-        betsPct: firstBets,
+        moneyPct: moneyComplete ? firstMoney : null,
+        betsPct: betsComplete ? firstBets : null,
         observedAt: null,
         freshnessCheckedAt: fetchedAt,
         // The exact-game fallback remains until a verified update replaces it.
@@ -438,8 +441,8 @@ function sectionFromRow(
       {
         side: market === "total" ? "under" : "home",
         label: market === "total" ? "Under" : game.homeTeam,
-        moneyPct: secondMoney,
-        betsPct: secondBets,
+        moneyPct: moneyComplete ? secondMoney : null,
+        betsPct: betsComplete ? secondBets : null,
         observedAt: null,
         freshnessCheckedAt: fetchedAt,
         isStale: false,
@@ -464,32 +467,12 @@ function mergeCurrentSplitFeeds(
   const merged = new Map<string, Json>();
   for (const row of previous.rows) merged.set(splitObservationKey(row), row);
   for (const row of current.rows) {
-    const eventBookKey = splitRowKey(row);
-    const prior = [...merged.values()]
-      .filter((candidate) => splitRowKey(candidate) === eventBookKey)
-      .sort((first, second) => rowFetchedAt(second) - rowFetchedAt(first))[0];
-    if (!prior) {
-      merged.set(splitObservationKey(row), row);
-      continue;
-    }
-    const marketFetchedAt = {
-      ...record(prior._oddsphere_market_fetched_at),
-      ...record(row._oddsphere_market_fetched_at),
-    };
-    const next: Json = { ...prior, ...row };
-    for (const market of ["moneyline", "spread", "total"] as const) {
-      const currentMarket = record(row[market]);
-      const previousMarket = record(prior[market]);
-      if (completeMarket(currentMarket, market)) {
-        next[market] = currentMarket;
-        marketFetchedAt[market] = timestamp(record(row._oddsphere_market_fetched_at)[market]) ?? timestamp(row.fetched_at);
-      } else if (completeMarket(previousMarket, market)) {
-        next[market] = previousMarket;
-        marketFetchedAt[market] = timestamp(record(prior._oddsphere_market_fetched_at)[market]) ?? timestamp(prior.fetched_at);
-      }
-    }
-    next._oddsphere_market_fetched_at = marketFetchedAt;
-    merged.set(splitObservationKey(next), next);
+    // Keep every provider observation intact. Copying a prior handle axis into
+    // a newer ticket-only row made the resulting timestamp look current even
+    // though half of the values were old. Historical complete observations
+    // remain available separately, and the exact-game continuity layer owns
+    // the bounded last-known-good display decision.
+    merged.set(splitObservationKey(row), row);
   }
   return { ...current, rows: trimSplitHistory([...merged.values()]) };
 }
@@ -518,26 +501,17 @@ function trimSplitHistory(rows: Json[]): Json[] {
     .reverse());
 }
 
-function completeMarket(value: Json, market: SplitMarket): boolean {
-  const first = market === "total" ? "over" : "away";
-  const second = market === "total" ? "under" : "home";
-  const bets = record(value.bets_pct);
-  const handle = record(value.handle_pct);
-  const firstMoney = percentage(handle[first]);
-  const secondMoney = percentage(handle[second]);
-  const firstBets = percentage(bets[first]);
-  const secondBets = percentage(bets[second]);
-  return firstMoney !== null && secondMoney !== null && firstBets !== null && secondBets !== null &&
-    complementary(firstMoney, secondMoney) && complementary(firstBets, secondBets);
-}
-
-function shouldReplace(existing: MarketSplitDisplaySection, incoming: MarketSplitDisplaySection): boolean {
+function shouldReplace(
+  existing: MarketSplitDisplaySection,
+  incoming: MarketSplitDisplaySection,
+  nowMs = Date.now(),
+): boolean {
   const existingQuality = sectionQuality(existing);
   const incomingQuality = sectionQuality(incoming);
-  if (existingQuality !== incomingQuality) return incomingQuality > existingQuality;
-  const existingCurrent = sectionIsCurrent(existing);
-  const incomingCurrent = sectionIsCurrent(incoming);
+  const existingCurrent = sectionIsFreshAt(existing, nowMs);
+  const incomingCurrent = sectionIsFreshAt(incoming, nowMs);
   if (existingCurrent !== incomingCurrent) return incomingCurrent;
+  if (existingQuality !== incomingQuality) return incomingQuality > existingQuality;
   const priority = (label: MarketSplitDisplaySection["label"]) => {
     if (label === "Sharp Book Splits") return 0;
     if (label === "DraftKings Splits") return 1;
@@ -566,10 +540,6 @@ function sectionQuality(section: MarketSplitDisplaySection): 0 | 1 | 2 {
   const moneyComplete = money.every((value) => value !== null) && complementary(money[0]!, money[1]!);
   const betsComplete = bets.every((value) => value !== null) && complementary(bets[0]!, bets[1]!);
   return moneyComplete && betsComplete ? 2 : moneyComplete || betsComplete ? 1 : 0;
-}
-
-function sectionIsCurrent(section: MarketSplitDisplaySection): boolean {
-  return sectionIsFreshAt(section, Date.now());
 }
 
 function sectionIsFreshAt(section: MarketSplitDisplaySection, nowMs: number): boolean {

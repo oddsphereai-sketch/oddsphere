@@ -22,8 +22,8 @@ import {
 
 import { BallDontLieProvider } from "../lib/providers/real_api/BallDontLieProvider";
 import { BallDontLieSlateProvider } from "../lib/providers/real_api/BallDontLieSlateProvider";
-import { SharpAPIOddsProvider } from "../lib/providers/real_api/SharpAPIOddsProvider";
-import { SharpAPISignalProvider } from "../lib/providers/real_api/SharpAPISignalProvider";
+import { OwlsOddsProvider } from "../lib/providers/real_api/OwlsOddsProvider";
+import { OwlsSignalProvider } from "../lib/providers/real_api/OwlsSignalProvider";
 
 import { normalizeMlbTeamName } from "../lib/providers/real_api/_teamNameNormalizer";
 import { BdlClient } from "../lib/providers/real_api/_bdlClient";
@@ -60,6 +60,7 @@ function withEnv(
     "PARK_FACTOR_PROVIDER",
     "BALLDONTLIE_API_KEY",
     "SHARPAPI_KEY",
+    "OWLS_INSIGHT_API_KEY",
   ] as const;
   const saved: Record<string, string | undefined> = {};
   for (const k of KEYS) saved[k] = process.env[k];
@@ -134,31 +135,31 @@ withEnv(
 );
 
 withEnv(
-  "    ODDS_PROVIDER=real_api + key → SharpAPIOddsProvider",
+  "    ODDS_PROVIDER=real_api + key → OwlsOddsProvider",
   {
     ODDS_PROVIDER: "real_api",
-    SHARPAPI_KEY: "test-key-sharp",
+    OWLS_INSIGHT_API_KEY: "test-key-owls",
   },
   () => {
     const instance = getOddsProvider();
     check(
-      "instance is SharpAPIOddsProvider",
-      instance instanceof SharpAPIOddsProvider
+      "instance is OwlsOddsProvider",
+      instance instanceof OwlsOddsProvider
     );
   }
 );
 
 withEnv(
-  "    SHARP_SIGNAL_PROVIDER=real_api + key → SharpAPISignalProvider",
+  "    SHARP_SIGNAL_PROVIDER=real_api + key → OwlsSignalProvider",
   {
     SHARP_SIGNAL_PROVIDER: "real_api",
-    SHARPAPI_KEY: "test-key-sharp",
+    OWLS_INSIGHT_API_KEY: "test-key-owls",
   },
   () => {
     const instance = getSharpSignalProvider();
     check(
-      "instance is SharpAPISignalProvider",
-      instance instanceof SharpAPISignalProvider
+      "instance is OwlsSignalProvider",
+      instance instanceof OwlsSignalProvider
     );
   }
 );
@@ -186,20 +187,20 @@ withEnv(
 );
 
 withEnv(
-  "    ODDS_PROVIDER=real_api with NO key → throws referencing SHARPAPI_KEY",
+  "    ODDS_PROVIDER=real_api with NO key → throws referencing OWLS_INSIGHT_API_KEY",
   { ODDS_PROVIDER: "real_api" },
   () => {
-    const r = throwsWith(getOddsProvider, "SHARPAPI_KEY");
-    check("throws and message references SHARPAPI_KEY", r.threw, r.message);
+    const r = throwsWith(getOddsProvider, "OWLS_INSIGHT_API_KEY");
+    check("throws and message references OWLS_INSIGHT_API_KEY", r.threw, r.message);
   }
 );
 
 withEnv(
-  "    SHARP_SIGNAL_PROVIDER=real_api with NO key → throws referencing SHARPAPI_KEY",
+  "    SHARP_SIGNAL_PROVIDER=real_api with NO key → throws referencing OWLS_INSIGHT_API_KEY",
   { SHARP_SIGNAL_PROVIDER: "real_api" },
   () => {
-    const r = throwsWith(getSharpSignalProvider, "SHARPAPI_KEY");
-    check("throws and message references SHARPAPI_KEY", r.threw, r.message);
+    const r = throwsWith(getSharpSignalProvider, "OWLS_INSIGHT_API_KEY");
+    check("throws and message references OWLS_INSIGHT_API_KEY", r.threw, r.message);
   }
 );
 
@@ -221,11 +222,11 @@ withEnv(
 );
 
 withEnv(
-  "    SharpAPI providers are cached as singletons",
+  "    Owls providers are cached as singletons",
   {
     ODDS_PROVIDER: "real_api",
     SHARP_SIGNAL_PROVIDER: "real_api",
-    SHARPAPI_KEY: "test-key-sharp",
+    OWLS_INSIGHT_API_KEY: "test-key-owls",
   },
   () => {
     const o1 = getOddsProvider();

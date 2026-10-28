@@ -244,13 +244,17 @@ async function main(): Promise<void> {
       const coverage = normalizeOwlsSharpBookSplits(live.body, sport);
       const completeCirca = coverage.observations.filter((row) => row.sourceBook === "circa" && row.complete);
       if (coverage.eventCount > 0) {
-        assert.ok(completeCirca.length > 0, `${sport}: current/upcoming events require at least one complete Circa split pair`);
+        assert.ok(
+          coverage.observations.length > 0,
+          `${sport}: current/upcoming events require at least one honest named-book split observation`,
+        );
       }
       console.log(JSON.stringify({
         sport,
         status: coverage.feedStatus,
         events: coverage.eventCount,
         books: coverage.advertisedBooks,
+        observations: coverage.observations.length,
         completeCircaObservations: completeCirca.length,
         rejected: coverage.rejected.length,
       }));

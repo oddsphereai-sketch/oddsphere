@@ -30,15 +30,19 @@
  */
 
 import { supabase } from "../db/supabase";
-import { SharpApiClient } from "../providers/real_api/_sharpApiClient";
 import { getSlateProvider } from "../providers/factory";
-import { discoverEventsFromOpportunities } from "../providers/real_api/_opportunitiesDiscovery";
+import { OwlsInsightClient } from "../providers/owls/owlsInsightClient";
+import type { RawOwlsOddsResponse } from "../providers/owls/owlsSharpBookOdds";
+import {
+  inspectOwlsMlbOddsResponse,
+  type OwlsMlbOddsInspection,
+} from "../providers/real_api/OwlsOddsProvider";
 import {
   assessProviderModes,
   type ProviderModeReport,
 } from "./providerModeAudit";
 import {
-  assessProviderDateAlignment,
+  assessObservedProviderDateAlignment,
   type ProviderDateAlignmentReport,
 } from "./providerDateAlignment";
 import {
@@ -141,7 +145,6 @@ import {
   defaultProviderHealth,
   shouldDemoteAlignmentForGate,
   shouldSoftenAlignmentForModelGate,
-  isReconciliationHardBlock,
   type AutomationEnv,
   type PerStepKey,
   type ProviderHealth,
@@ -326,12 +329,16 @@ export type AutomationRunReport = {
    * empty lower-authority provider response.
    */
   official_scheduled_game_count: number | null;
+  owls_event_count: number | null;
+  /** @deprecated Backward-compatible alias for owls_event_count. */
   sharp_ev_count: number | null;
   reconciliation: {
     status: "ok" | "warn" | "fail_closed" | "skipped" | null;
     overlap_pct: number | null;
     matched: number | null;
     bdl_only_matchups: string[];
+    owls_only_matchups: string[];
+    /** @deprecated Backward-compatible alias for owls_only_matchups. */
     sharp_only_matchups: string[];
   };
   provider_date_alignment: {
@@ -515,25 +522,37 @@ export async function runSlateCycleAutomated(opts: {
 
   // ── P2. Provider date alignment ───────────────────────────────────────
   let alignment: ProviderDateAlignmentReport | null = null;
-  const sharpKey = env.SHARPAPI_KEY;
+  let owlsInspection: OwlsMlbOddsInspection | null = null;
+  const owlsKey = env.OWLS_INSIGHT_API_KEY;
   const t0a = Date.now();
-  if (!sharpKey) {
-    warnings.push("SHARPAPI_KEY missing — provider date alignment skipped");
+  if (!owlsKey) {
+    blockingReasons.push("OWLS_INSIGHT_API_KEY missing — provider cutover cannot run");
     steps.push({
       name: "p2_provider_date_alignment",
-      mode: "skipped",
+      mode: "failed",
       duration_ms: Date.now() - t0a,
-      reason: "SHARPAPI_KEY missing",
+      reason: "OWLS_INSIGHT_API_KEY missing",
+      error_message: "OWLS_INSIGHT_API_KEY missing",
     });
   } else {
     try {
-      const client = new SharpApiClient(sharpKey);
+      const response = await new OwlsInsightClient(owlsKey).odds<RawOwlsOddsResponse>("mlb");
+      owlsInspection = inspectOwlsMlbOddsResponse(response.body, opts.date);
       const gameIdByExternalProbe = await loadGameIdMap(opts.sport, opts.date);
       const slateSize = gameIdByExternalProbe.size > 0
         ? gameIdByExternalProbe.size
         : officialScheduledGameCount ?? 9;
-      alignment = await assessProviderDateAlignment(client, opts.sport, opts.date, {
-        slate_size: slateSize,
+      alignment = assessObservedProviderDateAlignment({
+        sport: opts.sport,
+        expectedDate: opts.date,
+        providerLabel: "Owls",
+        providerRowsTotal: owlsInspection.stats.totalRows,
+        matched: owlsInspection.stats.matchedDate,
+        wrongDate: owlsInspection.stats.wrongDate,
+        dateUnparseable: owlsInspection.stats.dateUnparseable,
+        nonMlb: owlsInspection.stats.nonMlb,
+        teamUnresolved: owlsInspection.stats.teamUnresolved,
+        slateSize,
       });
       steps.push({
         name: "p2_provider_date_alignment",
@@ -550,12 +569,12 @@ export async function runSlateCycleAutomated(opts: {
       });
       if (alignment.status === "fail_closed") {
         warnings.push(
-          `provider date alignment fail_closed: ${alignment.reason} (warning — not a hard block in V1)`
+          `Owls provider date alignment fail_closed: ${alignment.reason}`
         );
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      warnings.push(`provider date alignment failed: ${msg}`);
+      blockingReasons.push(`Owls provider date alignment failed: ${msg}`);
       steps.push({
         name: "p2_provider_date_alignment",
         mode: "failed",
@@ -569,7 +588,7 @@ export async function runSlateCycleAutomated(opts: {
   // ── P2.5. Slate reconciliation ───────────────────────────────────────
   let reconciliation: SlateReconciliationReport | null = null;
   let bdlGameCount: number | null = null;
-  let sharpEvCount: number | null = null;
+  let owlsEventCount: number | null = null;
   // R-19 Phase 4a — slate-safety gate verdicts. G1/G3 evaluate
   // immediately after P2.5 (BDL data in hand); G2 runs late, after M1.
   let g1Result: MinimumGameCountResult | null = null;
@@ -582,12 +601,13 @@ export async function runSlateCycleAutomated(opts: {
     external_id?: number | null;
   }> = [];
   const t0r = Date.now();
-  if (!sharpKey) {
+  if (!owlsInspection) {
     steps.push({
       name: "p2_5_slate_reconciliation",
-      mode: "skipped",
+      mode: "failed",
       duration_ms: Date.now() - t0r,
-      reason: "SHARPAPI_KEY missing",
+      reason: "Owls event inventory unavailable",
+      error_message: "Owls event inventory unavailable",
     });
   } else {
     try {
@@ -625,12 +645,10 @@ export async function runSlateCycleAutomated(opts: {
         }))
         .filter((p) => p.away_abbr !== "" && p.home_abbr !== "");
 
-      const client = new SharpApiClient(sharpKey);
-      const ev = await discoverEventsFromOpportunities(client, opts.sport, opts.date);
-      sharpEvCount = ev.events.length;
-      const sharpPairs = ev.events.map((e) => ({ home: e.home, away: e.away }));
+      owlsEventCount = owlsInspection.pairs.length;
+      const owlsPairs = owlsInspection.pairs;
 
-      reconciliation = reconcileBdlVsSharpEv(bdlPairs, sharpPairs);
+      reconciliation = reconcileBdlVsSharpEv(bdlPairs, owlsPairs, { providerLabel: "Owls" });
       steps.push({
         name: "p2_5_slate_reconciliation",
         mode: reconciliation.status === "fail_closed" ? "blocked" : "dry_run",
@@ -639,30 +657,15 @@ export async function runSlateCycleAutomated(opts: {
         details: {
           status: reconciliation.status,
           bdl_count: reconciliation.bdlCount,
-          sharp_ev_count: reconciliation.sharpEvCount,
+          owls_event_count: reconciliation.sharpEvCount,
           matched: reconciliation.matchedCount,
           overlap_pct: reconciliation.overlapPct,
           bdl_only: reconciliation.bdlOnlyMatchups,
-          sharp_only: reconciliation.sharpOnlyMatchups,
+          owls_only: reconciliation.sharpOnlyMatchups,
         },
       });
       if (reconciliation.status === "fail_closed") {
-        // MLB-P0: empty BDL is a true hard block; a non-empty BDL slate with
-        // low EV-opportunity overlap is just a sparse morning EV feed — soften
-        // to a warning so it doesn't slate-wide-block model + publish. Odds
-        // coverage is enforced per-game downstream (R-17 G1 + market audit).
-        if (reconciliation.bdlCount === 0) {
-          blockingReasons.push(
-            `slate reconciliation fail_closed: ${reconciliation.reason}`
-          );
-        } else {
-          warnings.push(
-            `slate reconciliation fail_closed softened — sparse SharpAPI EV ` +
-              `opportunities (BDL=${reconciliation.bdlCount} present, ` +
-              `EV=${reconciliation.sharpEvCount}); ${reconciliation.reason} ` +
-              `Model + publish proceed on odds coverage + per-game checks.`
-          );
-        }
+        blockingReasons.push(`Owls slate reconciliation fail_closed: ${reconciliation.reason}`);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -677,15 +680,9 @@ export async function runSlateCycleAutomated(opts: {
     }
   }
 
-  // MLB-P0 — reconciliation hard-blocks the data layer (and publish) ONLY when
-  // BDL itself is empty. Sparse EV-opportunity overlap on a non-empty BDL slate
-  // is a warning, not a slate-wide veto (see isReconciliationHardBlock).
-  const reconciliationBlocking =
-    reconciliation !== null &&
-    isReconciliationHardBlock({
-      status: reconciliation.status,
-      bdlCount: reconciliation.bdlCount,
-    });
+  // Owls is the actual odds input, not a sparse opportunity canary. A failed
+  // exact-slate reconciliation therefore remains a hard write block.
+  const reconciliationBlocking = reconciliation?.status === "fail_closed";
 
   // ── R-19 Phase 4a — G1. Minimum game count ───────────────────────────
   // Fires once BDL data is available. fail_closed → blocks all downstream
@@ -716,7 +713,7 @@ export async function runSlateCycleAutomated(opts: {
       name: "g1_minimum_game_count",
       mode: "skipped",
       duration_ms: Date.now() - t0g1,
-      reason: "BDL game count unavailable (P2.5 errored or SHARPAPI_KEY missing)",
+      reason: "BDL game count unavailable (P2.5 or Owls preflight failed)",
     });
   }
 
@@ -771,7 +768,7 @@ export async function runSlateCycleAutomated(opts: {
       name: "g3_in_progress_ingest",
       mode: "skipped",
       duration_ms: Date.now() - t0g3,
-      reason: "BDL game payload unavailable (P2.5 errored or SHARPAPI_KEY missing)",
+      reason: "BDL game payload unavailable (P2.5 or Owls preflight failed)",
     });
   }
 
@@ -797,9 +794,9 @@ export async function runSlateCycleAutomated(opts: {
   // and S6 first-inning refresh.
   //
   // Mapping rationale (each line = one gate → one provider signal):
-  //   • reconciliationBlocking — `/opportunities/ev`-based gate; signals
-  //     `sharpapi_ev_opportunities` only. Affects S8 sharp-signals
-  //     (which actually consume EV data) but NOT S5/S6/S7.
+  //   • reconciliationBlocking — Owls exact current-event inventory does not
+  //     match the canonical BDL slate. It blocks both Owls odds and splits,
+  //     and therefore S7, S8, and the automodel input path.
   //   • g1Blocking / g3SlateWideBlocking — BDL-based gates; signal
   //     `bdl_slate`. Affects S1/S3/S4/M2 etc., but NOT S5/S6 (which
   //     consume MLB Stats only). If BDL truly has no games today, S5/S6
@@ -815,6 +812,7 @@ export async function runSlateCycleAutomated(opts: {
   const providerHealth: ProviderHealth = defaultProviderHealth();
   if (reconciliationBlocking) {
     providerHealth.sharpapi_ev_opportunities = "fail_closed";
+    providerHealth.sharpapi_odds_lines = "fail_closed";
   }
   if (g1Blocking || g3SlateWideBlocking) {
     providerHealth.bdl_slate = "fail_closed";
@@ -1572,9 +1570,8 @@ export async function runSlateCycleAutomated(opts: {
   //   • gateBlocking  — R-17 automation gate (per-game stale lines,
   //                     missing ML/total/starter coverage)
   //   • g2Blocking    — R-19 G2 (starter coverage too low to model)
-  // Notably NOT included: reconciliationBlocking (EV-based, doesn't
-  // affect model). Provider-mode / G1 / G3 are inherited from V2 via
-  // effectiveWriteMode.automodel, no double-counting needed.
+  // Owls reconciliation is already inherited from V2 through the odds
+  // provider health flag, so it is not double-counted here.
   const m2Blocked = gateBlocking || g2Blocking;
   const m2Step = await runStep(
     "m2_automodel",
@@ -1898,16 +1895,18 @@ export async function runSlateCycleAutomated(opts: {
     },
     bdl_game_count: bdlGameCount,
     official_scheduled_game_count: officialScheduledGameCount,
-    sharp_ev_count: sharpEvCount,
+    owls_event_count: owlsEventCount,
+    sharp_ev_count: owlsEventCount,
     reconciliation: {
-      status: reconciliation?.status ?? (sharpKey ? null : "skipped"),
+      status: reconciliation?.status ?? (owlsKey ? null : "skipped"),
       overlap_pct: reconciliation?.overlapPct ?? null,
       matched: reconciliation?.matchedCount ?? null,
       bdl_only_matchups: reconciliation?.bdlOnlyMatchups ?? [],
+      owls_only_matchups: reconciliation?.sharpOnlyMatchups ?? [],
       sharp_only_matchups: reconciliation?.sharpOnlyMatchups ?? [],
     },
     provider_date_alignment: {
-      status: alignment?.status ?? (sharpKey ? null : "skipped"),
+      status: alignment?.status ?? (owlsKey ? null : "skipped"),
       matched: alignment?.matched ?? null,
       wrong_date: alignment?.wrong_date ?? null,
     },

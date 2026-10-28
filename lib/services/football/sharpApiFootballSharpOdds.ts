@@ -121,7 +121,7 @@ async function fetchFootballSharpOdds(args: {
   capturedAt?: string;
   captureRawPriceManifest?: boolean;
 }): Promise<FootballSharpOddsResult<CapturedBook>> {
-  const key = args.apiKey ?? process.env.SHARPAPI_KEY;
+  const key = args.apiKey;
   if (!key && !args.client) throw new Error("SHARPAPI_KEY is required for sharp-book football price capture.");
   const client = args.client ?? new SharpApiClient(key!);
   const attempts = await Promise.allSettled(FOOTBALL_SHARP_PRICE_CAPTURE_BOOKS.map((sportsbook) =>

@@ -70,6 +70,54 @@ export type AlignmentOpts = {
 
 const DEFAULT_THRESHOLD_RATIO = 0.85;
 
+export function assessObservedProviderDateAlignment(args: {
+  sport: Sport;
+  expectedDate: string;
+  providerLabel: string;
+  providerRowsTotal: number;
+  matched: number;
+  wrongDate: number;
+  dateUnparseable: number;
+  nonMlb: number;
+  teamUnresolved: number;
+  slateSize: number;
+  thresholdRatio?: number;
+  assessedAt?: string;
+}): ProviderDateAlignmentReport {
+  const ratio = args.thresholdRatio ?? DEFAULT_THRESHOLD_RATIO;
+  const threshold = Math.ceil(ratio * args.slateSize);
+  let status: ProviderDateAlignmentStatus;
+  let reason: string;
+  if (args.matched >= threshold) {
+    status = args.wrongDate === 0 ? "ok" : "warn";
+    reason = args.wrongDate === 0
+      ? `${args.providerLabel} aligned: ${args.matched} event(s) on ${args.expectedDate} (≥ threshold ${threshold}; slate-size basis ${args.slateSize}).`
+      : `${args.providerLabel} partially aligned: ${args.matched} event(s) on ${args.expectedDate}; ${args.wrongDate} event(s) were on another date.`;
+  } else if (args.wrongDate > args.matched) {
+    status = "fail_closed";
+    reason = `${args.providerLabel} rolled forward: ${args.wrongDate} wrong-date event(s) vs ${args.matched} on ${args.expectedDate} (need ${threshold}).`;
+  } else {
+    status = "fail_closed";
+    reason = `${args.providerLabel} date alignment below threshold: ${args.matched} event(s) on ${args.expectedDate} (need ${threshold}); ${args.wrongDate} wrong-date, ${args.dateUnparseable} date-unparseable, ${args.teamUnresolved} team-unresolved, ${args.nonMlb} non-MLB.`;
+  }
+  return {
+    sport: args.sport,
+    expected_date: args.expectedDate,
+    provider_rows_total: args.providerRowsTotal,
+    matched: args.matched,
+    wrong_date: args.wrongDate,
+    date_unparseable: args.dateUnparseable,
+    non_mlb: args.nonMlb,
+    team_unresolved: args.teamUnresolved,
+    threshold,
+    slate_size: args.slateSize,
+    threshold_ratio: ratio,
+    status,
+    reason,
+    assessed_at: args.assessedAt ?? new Date().toISOString(),
+  };
+}
+
 export async function assessProviderDateAlignment(
   client: SharpApiClient,
   sport: Sport,

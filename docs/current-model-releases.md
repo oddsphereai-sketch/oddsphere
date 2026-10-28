@@ -3515,6 +3515,24 @@ changed; only deterministic settlement of existing locked rows is affected.
 
 ## MLB champion
 
+- October 28 provider cutover advances only the market-input snapshot to
+  `mlb_market_input_snapshot_v5_owls_provider_cutover_2026_10_28`. Future
+  unlocked MLB inputs now use Owls for complete same-book current ML/spread/total
+  pairs, Pinnacle no-vig reference math, one-time true provider openings, and
+  named-book splits. The existing Playbook public consensus remains separate.
+  Exact 0%/100% or absent handle fields remain unavailable to the decision
+  layer; they are never complemented or invented. Historical locked payloads
+  and legacy `sharpapi` provenance remain immutable. No projection, probability,
+  side, grade, stake, writer, lease, cadence, tracking, or settlement rule
+  changes. The no-write October 28 rehearsal matched the sole canonical MLB
+  game exactly, preserved 1/1 ML/Total/Spread game coverage, expanded coherent
+  current rows from 10 to 42 across seven Owls books, rejected zero rows, and
+  left the three-row current board at zero actionable grades before write. The
+  paired candidate replay produced 0 actionable promotions/demotions and no
+  Moneyline change; its sole unlocked Total changed Over→Under while remaining
+  `provisional`. No locked row was used or changed.
+  Evidence and rollback: `docs/model-audits/2026-10-28-mlb-owls-provider-cutover.md`.
+
 - October 27 writer-safety repair: the legacy multi-sport `morning_slate` writer now requires the
   shared `prediction_pipeline:<sport>` lease for each sport iteration, with bounded retry. This
   prevents its prediction, signal, grade, and publish stages from overlapping the other authoritative
@@ -3585,7 +3603,7 @@ changed; only deterministic settlement of existing locked rows is affected.
 - Public calibration: `mlb_public_calibration_v38_unified_game_distribution_2026_10_16`
 - Decision release: `mlb_daily_edge_decision_2026_10_16_r92_unified_game_distribution`
 - Rule bundle: `mlb_daily_edge_rule_bundle_v77_unified_game_distribution_2026_10_16`
-- Market input snapshot: `mlb_market_input_snapshot_v4_trusted_total_scope_recovery_2026_10_19`
+- Market input snapshot: `mlb_market_input_snapshot_v5_owls_provider_cutover_2026_10_28`
 - Model-layer schema: `mlb_model_layer_versions_v21_unified_game_distribution`
 - Input eligibility: `mlb_input_eligibility_v3_official_short_slate_single_starter_continuity_2026_10_16`
 - Grade policy: `mlb_public_grade_policy_v61_unified_two_layer_total_2026_10_16`

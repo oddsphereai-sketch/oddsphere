@@ -6,7 +6,7 @@
  * STRONG/CAUTION banner on the Daily Edge card. Odds data lives on the
  * companion IOddsProvider contract so the two can be swapped independently.
  *
- * Real implementation: SharpAPIProvider (paid Pro tier) — Phase 8.
+ * Real implementation: OwlsSignalProvider.
  * Manual implementation: AdminUploadSharpSignalProvider — Phase 7.25.
  * Mock implementation: MockSharpSignalProvider (reads from JSON fixtures).
  *
