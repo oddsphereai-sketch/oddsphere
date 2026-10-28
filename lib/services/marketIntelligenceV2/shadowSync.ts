@@ -27,6 +27,7 @@ import {
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
+import { readNflForwardCollectionSlate, type MarketIntelligenceCollectionGame, type NflForwardSlateReadTelemetry } from "./nflForwardCollectionSlate";
 import type { Sport } from "../../types/domain/Sport";
 import type {
   CanonicalObservationRejection,
@@ -48,18 +49,7 @@ import {
   type RawSharpApiSplitRowV2,
 } from "./canonicalAdapters";
 
-type GameRef = {
-  id: number;
-  externalId: number;
-  slateDate: string | null;
-  gameDate: string | null;
-  homeTeamId: number;
-  awayTeamId: number;
-  homeAbbr: string;
-  awayAbbr: string;
-  homeName: string;
-  awayName: string;
-};
+type GameRef = MarketIntelligenceCollectionGame;
 
 type LineRow = {
   game_id: number;
@@ -90,7 +80,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_10_28_r12_price_provider_lineage";
+  "market_intelligence_v2_capture_2026_10_28_r17_nfl_forward_slate_contract";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -523,8 +513,10 @@ async function loadGames(
   supabase: SupabaseClient,
   sport: Sport,
   slateDate: string,
+  availableAt?: string,
+  telemetry?: NflForwardSlateReadTelemetry,
 ): Promise<GameRef[]> {
-  return loadGamesForSlateWindow(supabase, sport, slateDate, slateDate);
+  return loadGamesForSlateWindow(supabase, sport, slateDate, slateDate, availableAt, telemetry);
 }
 
 async function loadGamesForSlateWindow(
@@ -532,6 +524,8 @@ async function loadGamesForSlateWindow(
   sport: Sport,
   slateDateFrom: string,
   slateDateTo: string,
+  availableAt = new Date().toISOString(),
+  telemetry?: NflForwardSlateReadTelemetry,
 ): Promise<GameRef[]> {
   const { data: teams, error: teamsErr } = await supabase
     .from("teams")
@@ -553,7 +547,7 @@ async function loadGamesForSlateWindow(
     .lte("slate_date", slateDateTo);
   if (gamesErr) throw new Error(`games fetch failed: ${gamesErr.message}`);
 
-  return (games ?? [])
+  const canonical = (games ?? [])
     .filter((g) => typeof g.external_id === "number")
     .map((g) => {
       const homeTeamId = g.home_team_id as number;
@@ -571,6 +565,9 @@ async function loadGamesForSlateWindow(
         awayName: name.get(awayTeamId) ?? "",
       };
     });
+  return sport === "nfl" ? readNflForwardCollectionSlate({
+    client: supabase, from: slateDateFrom, through: slateDateTo, availableAt, canonical, telemetry,
+  }) : canonical;
 }
 
 async function loadPriceObservations(opts: {
@@ -579,8 +576,11 @@ async function loadPriceObservations(opts: {
   games: readonly GameRef[];
   now: Date;
 }): Promise<MarketPriceObservationV2[]> {
-  if (opts.games.length === 0) return [];
-  const gameById = new Map(opts.games.map((g) => [g.id, g]));
+  // Forward-football IDs are not generic games-table IDs. Never guess that
+  // namespace or query another sport's lines with a provider ID.
+  const canonicalGames = opts.games.filter((game) => game.id !== null);
+  if (canonicalGames.length === 0) return [];
+  const gameById = new Map(canonicalGames.map((g) => [g.id!, g]));
   const rows = await collectCompleteCountedPages<LineRow>({
     label: "lines fetch",
     loadPage: async (from, to) => {
@@ -590,7 +590,7 @@ async function loadPriceObservations(opts: {
           "id, game_id, market_type, sportsbook, side, line_value, odds_american, odds_decimal, implied_probability, fetched_at",
           { count: "exact" },
         )
-        .in("game_id", opts.games.map((g) => g.id))
+        .in("game_id", canonicalGames.map((g) => g.id!))
         .in("market_type", [...MARKET_TYPES])
         .is("player_id", null)
         .order("id", { ascending: true })
@@ -792,7 +792,9 @@ async function collectOwlsSplits(opts: {
     const first = eventRows[0];
     if (!first) continue;
     const key = marketIntelligenceGameKey(opts.sport, first.awayTeam, first.homeTeam);
-    const game = key ? findOwlsSplitGameMatch(gamesByKey.get(key) ?? [], providerEventId) : null;
+    const candidates = key ? gamesByKey.get(key) ?? [] : [];
+    const game = findOwlsSplitGameMatch(opts.sport === "nfl"
+      ? nflOwlsIdentityCandidates(candidates, providerEventId) : candidates, providerEventId);
     if (!game) {
       rejected.push({
         provider: "owls",
@@ -844,6 +846,7 @@ async function collectOwlsSplits(opts: {
 function findOwlsPriceGameMatch(
   candidates: readonly GameRef[],
   row: Pick<NormalizedOwlsSharpPrice, "providerEventId" | "scheduledStart">,
+  rejectAmbiguousTime = false,
 ): GameRef | null {
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0] ?? null;
@@ -853,9 +856,28 @@ function findOwlsPriceGameMatch(
       .filter((entry): entry is { game: GameRef; distance: number } => entry.distance !== null)
       .sort((a, b) => a.distance - b.distance);
     const best = byDistance[0] ?? null;
-    if (best && best.distance <= 6 * 60 * 60 * 1000) return best.game;
+    if (best && best.distance <= 6 * 60 * 60 * 1000 &&
+        (!rejectAmbiguousTime || byDistance.length === 1 || byDistance[1]!.distance > best.distance)) return best.game;
+    if (rejectAmbiguousTime) return null;
   }
   return findOwlsSplitGameMatch(candidates, row.providerEventId);
+}
+
+/** A lone same-team matchup is not proof of the correct football week. */
+export function nflOwlsIdentityCandidates(
+  games: readonly GameRef[], providerEventId: string, scheduledStart?: string | null,
+): GameRef[] {
+  if (scheduledStart) {
+    const start = Date.parse(scheduledStart);
+    if (!Number.isFinite(start)) return [];
+    return games.filter((game) => {
+      const gameAt = Date.parse(game.gameDate ?? "");
+      return Number.isFinite(gameAt) && Math.abs(gameAt - start) <= 6 * 60 * 60 * 1000;
+    });
+  }
+  const date = owlsEventDate(providerEventId);
+  return date ? games.filter((game) => game.gameDate &&
+    (game.gameDate.slice(0, 10) === date || game.slateDate === date)) : [];
 }
 
 export function buildOwlsSharpPriceObservations(opts: {
@@ -879,7 +901,9 @@ export function buildOwlsSharpPriceObservations(opts: {
   const rejected: CanonicalObservationRejection[] = [];
   for (const row of opts.rows) {
     const key = marketIntelligenceGameKey(opts.sport, row.awayTeam, row.homeTeam);
-    const game = key ? findOwlsPriceGameMatch(gamesByKey.get(key) ?? [], row) : null;
+    const candidates = key ? gamesByKey.get(key) ?? [] : [];
+    const game = findOwlsPriceGameMatch(opts.sport === "nfl"
+      ? nflOwlsIdentityCandidates(candidates, row.providerEventId, row.scheduledStart) : candidates, row, opts.sport === "nfl");
     if (!game) {
       rejected.push({
         provider: "owls",
@@ -1718,19 +1742,21 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     rejected: [],
     skippedTableMissing: false,
     errors: [],
-    details: opts.sport === "nba"
-      ? { capture_release: MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE }
-      : {},
+    details: { capture_release: MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE },
   };
 
+  const nflSlateRead: NflForwardSlateReadTelemetry = { dbQueries: 0, dbRows: 0, dbBytes: 0 };
   const loadedGames = opts.slateDateThrough && opts.slateDateThrough > opts.slateDate
     ? await loadGamesForSlateWindow(
         opts.supabase,
         opts.sport,
         opts.slateDate,
         opts.slateDateThrough,
+        now.toISOString(),
+        opts.sport === "nfl" ? nflSlateRead : undefined,
       )
-    : await loadGames(opts.supabase, opts.sport, opts.slateDate);
+    : await loadGames(opts.supabase, opts.sport, opts.slateDate, now.toISOString(), opts.sport === "nfl" ? nflSlateRead : undefined);
+  if (opts.sport === "nfl") result.details.forward_slate_db_read = nflSlateRead;
   // Preserve current-day preseason rehearsal, but do not let a rolling
   // forward collector gather future preseason events. Future NBA evidence is
   // restricted to the regular-season member window.
@@ -1738,10 +1764,27 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     ? selectNbaRollingMarketGames(loadedGames, opts.slateDate)
     : loadedGames;
   result.gamesLoaded = games.length;
+  if (opts.sport === "nfl") result.details.canonical_slate = {
+    source: "generic_games_plus_nfl_forward_evidence",
+    genericGames: games.filter((game) => game.id !== null).length,
+    forwardOnlyGames: games.filter((game) => game.id === null).length,
+  };
   if (games.length === 0) {
     result.details.empty_slate = true;
     return result;
   }
+  result.details.provider_request_ceiling_per_cycle = {
+    owlsOdds: opts.owlsApiKey ?? process.env.OWLS_INSIGHT_API_KEY ? 1 : 0,
+    owlsSplits: opts.owlsApiKey ?? process.env.OWLS_INSIGHT_API_KEY ? 1 : 0,
+    playbookSplits: opts.playbookApiKey ?? process.env.PLAYBOOK_API_KEY ? 1 : 0,
+    playbookLines: (opts.playbookApiKey ?? process.env.PLAYBOOK_API_KEY) &&
+      playbookSplitsReadMode(opts.slateDate, opts.todayUtc) === "current" ? 1 : 0,
+    note: "provider_only_upper_bounds_not_billed_request_counts; existing cache may reduce calls",
+  };
+  if (opts.sport === "nfl") result.details.forward_slate_db_budget = {
+    seedPageQueries: 20, latestStateQueries: 64, totalQueryCeiling: 84, timeoutMs: 10_000,
+    note: "forward_slate_reader_only_not_all_collector_database_requests",
+  };
   if (opts.slateDateThrough) {
     result.details.capture_window = {
       from: opts.slateDate,
@@ -1770,6 +1813,13 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       apiKey: opts.playbookApiKey ?? process.env.PLAYBOOK_API_KEY,
       now,
       ingestionRunId,
+    }).catch((error) => {
+      if (opts.sport !== "nfl") throw error;
+      return {
+      fetchedRows: 0, observations: [] as MarketSplitObservationV2[],
+      rejected: [] as CanonicalObservationRejection[],
+      errors: [`Playbook split collection failed: ${error instanceof Error ? error.message : String(error)}`],
+      };
     }),
     collectOwlsSplits({
       sport: opts.sport,
@@ -1785,7 +1835,13 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       now,
       ingestionRunId,
     }),
-    loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now }),
+    loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now })
+      .then((observations) => ({ observations, error: null as string | null }))
+      .catch((error) => {
+        if (opts.sport !== "nfl") throw error;
+        return { observations: [] as MarketPriceObservationV2[],
+          error: `Canonical line collection failed: ${error instanceof Error ? error.message : String(error)}` };
+      }),
   ]);
 
   // The production split cutover is Owls-only. Keep the legacy adapter and
@@ -1800,7 +1856,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   };
 
   const splitObservations = [...playbook.observations, ...owls.observations, ...sharpapi.observations];
-  const prices = [...storedPrices, ...owlsPrices.observations];
+  const prices = [...storedPrices.observations, ...owlsPrices.observations];
   result.playbookSplitRowsFetched = playbook.fetchedRows;
   result.owlsSplitRowsFetched = owls.fetchedRows;
   result.owlsPriceRowsFetched = owlsPrices.fetchedRows;
@@ -1809,11 +1865,12 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   result.priceObservationsBuilt = prices.length;
   result.rejected.push(...playbook.rejected, ...owls.rejected, ...owlsPrices.rejected, ...sharpapi.rejected);
   result.errors.push(...playbook.errors, ...owls.errors, ...owlsPrices.errors, ...sharpapi.errors);
+  if (storedPrices.error) result.errors.push(storedPrices.error);
   result.details.providers = {
     playbook_observations: playbook.observations.length,
     owls_observations: owls.observations.length,
     sharpapi_observations: sharpapi.observations.length,
-    stored_price_observations: storedPrices.length,
+    stored_price_observations: storedPrices.observations.length,
     owls_price_observations: owlsPrices.observations.length,
     price_observations: prices.length,
   };

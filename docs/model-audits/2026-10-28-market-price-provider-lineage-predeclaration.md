@@ -44,3 +44,55 @@ change.
 - Roll back the application release if a new Owl's row lacks explicit provenance or if provider-
   scoped uniqueness changes any downstream output. The new nullable lineage columns may remain;
   existing observations and locked records are never deleted or rewritten.
+
+## NFL forward-slate observation repair, October 28 follow-up
+
+Status: unpublished capture-only candidate. Starting production base:
+`6c3da56e1ef1ee5fcf5d072a53f72f6fe04001a4`; separate branch
+`codex/nfl-market-capture-repair`. This repair does not promote the offline predictive candidate.
+
+Capture `market_intelligence_v2_capture_2026_10_28_r17_nfl_forward_slate_contract` fixes a real
+handoff failure: the generic games table has no current NFL slate, while the existing immutable NFL
+forward snapshots contain 14 future games. The reader selects game metadata only, never projections,
+and resolves each ID's latest state without a start-date filter. It accepts only scheduled/pre games,
+normalizes whitespace/case, preserves provider/generic namespaces, reconciles exact team/kickoff
+bridges, and rejects ambiguous clocks, duplicate semantic IDs, and schedule conflicts. Cancellations
+and reschedules cannot resurrect an older in-window record. Forward-only games never query generic
+lines with a provider ID. Optional public-feed or canonical-line failures retain valid NFL Owl rows;
+other sports retain their existing failure behavior and identity matching.
+
+Production identity was verified independently by matching existing live cron log IDs 311422–311428,
+with exact timestamps and counts, to the local read-only database connection. No cron was invoked for
+this identity check. The live provider/display source remains separately owned. Its complete Circa
+display snapshot does not establish an internal price chronology: the verified production NFL price
+observation count was zero. Research table API reads returned 404 schema-cache errors; physical table
+absence was not established, and no production research/shadow table was created.
+
+One bounded verified-production rehearsal (`apply:false`) used exactly one Owl NFL odds GET and one
+splits GET, with Playbook intentionally skipped. It yielded 14 games, 168 price observations, and
+82 split observations; zero observations were written and zero mutation attempts occurred. The split
+response was partial/book_unavailable with BetMGM ticket-only data, not complete Circa handle data.
+Sixty unmatched prices were next-week matchups outside the capture window. This is collection proof,
+not a full-provider green rehearsal or predictive qualification. No additional provider calls are
+needed to repeat local fixture tests.
+
+Read/resource accounting: the forward slate used 15 database queries / 504 rows / 358,245 returned
+JSON bytes; the entire collector rehearsal used 17 database requests and 4,252ms. The reader enforces
+a shared ten-second deadline, 20,000 seed rows, 64 event IDs, four concurrent latest-state reads, and
+84 maximum queries. At the existing 75 scheduled cycles/day, the measured metadata payload alone is
+about 26.9 MB/day; this excludes other query traffic and database storage. Restoring the previously
+skipped provider work can add up to 150 Owl and 150 Playbook requests/day, with manual calls extra.
+These are request ceilings, not measured billed credits or a total cost estimate. No schedule,
+per-game provider loop, new writer, prediction lease, model, grade, stake, member, or lock change.
+Same-input prediction/grade/promotion/demotion/actionable deltas are contractually zero.
+
+Focused identity/status/error-isolation tests, TypeScript and lint passed before the final integration
+round. The initial full safety run exposed an obsolete football-prefetch assertion already corrected
+upstream in PR #846. Integrate that exact upstream fix and rerun the complete gate before publication;
+never skip or weaken it. The focused suite is wired into `preverify:model-change` as
+`npm run test:nfl-market-capture`.
+
+Rollback: restore the exact production r12 capture implementation. Keep every already captured row
+and every locked public record unchanged. The predictive registry remains disabled. After an approved
+merge, verify the deployed capture release, natural cron health, and new provider-lineaged NFL rows;
+a branch rehearsal alone is not live verification.

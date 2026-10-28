@@ -8,6 +8,19 @@ Last reviewed: 2026-10-28
 
 ## Cross-sport confidence / execution contract
 
+- Unpublished NFL observation-substrate repair:
+  `market_intelligence_v2_capture_2026_10_28_r17_nfl_forward_slate_contract` repairs the empty
+  generic-slate handoff using exact immutable NFL forward game metadata, without reading predictions.
+  A verified-production GET-only rehearsal covered 14 games, 168 prices, and 82 single-axis split
+  observations with two Owl requests and zero writes. Latest-state identity/status checks prevent
+  canceled or rescheduled games from being resurrected. Optional public-feed failures cannot discard
+  valid NFL Owl observations. No model, grade, stake, display, lock, writer, or schedule authority is
+  added. Existing cadence can restore up to 150 Owl and 150 Playbook reads/day; these are request
+  ceilings, not billed usage. The slate read used 15 queries / 504 rows / 358,245 returned JSON bytes;
+  its enforced ceiling is 84 queries and ten seconds. Capture remains r12 until publication and live
+  verification. Evidence and rollback:
+  `docs/model-audits/2026-10-28-market-price-provider-lineage-predeclaration.md`.
+
 - October 28 market-price provider lineage advances the observation capture release to
   `market_intelligence_v2_capture_2026_10_28_r12_price_provider_lineage`. Future Owl's price rows
   now carry explicit provider, provider-event, ingestion-run, and normalized-row hash provenance;
