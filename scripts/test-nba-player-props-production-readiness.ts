@@ -34,7 +34,11 @@ import {
 } from "../lib/services/nba/nbaPlayerPropsMarketEvidence";
 import { buildNbaPlayerPropsPointInTimeFeatures } from "../lib/services/nba/nbaPlayerPropsPointInTimeFeatures";
 import { applyResolvedPlayerIdentities } from "../lib/services/nba/nbaPlayerPropsLiveCollector";
-import { nbaPlayerPropsScheduleGameMatches } from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
+import {
+  NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
+  nbaPlayerPropsForecastIsPublishable,
+  nbaPlayerPropsScheduleGameMatches,
+} from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
 import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/nba/nbaPointInTimeFeatures";
 import { selectNbaPlayerPropsSnapshotCurrentObservations } from "./operator/nba/nba-player-props-snapshot-cycle";
 
@@ -51,6 +55,14 @@ assert.equal(
   artifact.sourceGradeRelease,
   "nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader",
 );
+assert.equal(
+  NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
+  "nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation",
+);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 0 }), false);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: Number.NaN, finalProjection: 18.8 }), false);
 assert.deepEqual(artifact.gradePolicies.points.accuracyRerank, {
   signalFamily: "model_market_average_probability",
   overBonus: -0.05,

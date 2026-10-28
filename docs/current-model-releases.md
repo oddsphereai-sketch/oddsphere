@@ -439,7 +439,7 @@ Last reviewed: 2026-10-28
   `nba_player_props_model_tournament_2026_10_28_r16_owls_sharp_market_reader` /
   `nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_10_28_r9_exact_movement_endpoint`; it
+  `nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is
@@ -459,11 +459,15 @@ Last reviewed: 2026-10-28
   revisioned settlement. Member route/navigation are enabled while public
   tracking remains off; member-request provider fetching remains off. The
   October 28 release adds one bounded Owls prop call to that same writer. The
-  r9 writer keeps the exact evaluated sportsbook, line, side, and price as the
+  r9-r10 writer keeps the exact evaluated sportsbook, line, side, and price as the
   terminal member movement point; it never stitches another provider or an
   ambiguous alternate ladder into that same-book trail. This is evidence-only:
   projections, sides, probabilities, grades, prices, actionability, and locked
-  payloads are unchanged.
+  payloads are unchanged. The r10 publication boundary excludes only newly
+  offered rows whose independent or final projection is non-finite or
+  non-positive instead of preserving an otherwise complete slate. Such rows
+  cannot enter grades or tracking; valid decisions and every prior locked row
+  continue through the existing lifecycle unchanged.
   BALLDONTLIE keeps slate, player, main-line, opening, and primary target
   authority; Owls supplies fresh complete target-book-excluded reference pairs
   and missing scopes before the paid Odds API gap lane. Non-complementary
