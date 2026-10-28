@@ -638,14 +638,17 @@ Last reviewed: 2026-10-28
   bounded failures, and explicit skipped reasons, including an expired planned window that received no
   request. Exact accounting requires every provider row to end
   as parsed, unsupported, or malformed; every parsed row as matched, unmatched, or ambiguous; and every
-  matched row as retained, duplicate, filtered, or write-failed. The v47 candidate table is append-only,
+  matched row as retained, duplicate, filtered, or write-failed. The v47 table is append-only,
   binds relational columns to exact canonical payload bytes, verifies the checksum material in PostgreSQL,
-  and permits service-role insert/select only. Applying that migration or defining this receipt does not
-  schedule a request, implement a feed adapter, enable capture, or grant predictive authority. The
-  Each receipt also carries the exact adapter and parser release precommitted for the request, including
+  and permits service-role insert/select only. The migration was applied to production on October 28,
+  2026 after the disposable PostgreSQL 16 workflow passed. The post-apply audit found the table empty,
+  RLS enabled, and its validation and immutability triggers active. Applying that migration or defining
+  this receipt does not schedule a request, implement a feed adapter, enable capture, or grant predictive
+  authority. Each receipt also carries the exact adapter and parser release precommitted for the request,
+  including
   failed, empty, skipped, and missed-window outcomes; runtime code cannot silently reinterpret an older
-  obligation under a newer adapter. The migration has not been applied and still requires
-  real-PostgreSQL lifecycle/concurrency proof.
+  obligation under a newer adapter. The schema is installed but remains unwired and has no predictive,
+  grade, stake, lock, or member authority.
 - `market_brain_capture_plan_2026_10_27_r2_adapter_parser_bound_precommit` defines the separate immutable
   collection precommit that must exist on the database server before its first attempt window opens.
   A bounded plan enumerates exact joint-scope source obligations in canonical chronological/source
@@ -655,8 +658,10 @@ Last reviewed: 2026-10-28
   makes both tables append-only, and rejects an evidence receipt that was not preplanned or differs in
   scope/source/adapter/parser/event/phase/window identity. Adapter/parser releases are receipt-bound
   without weakening physical-request deduplication: changing code identity cannot create a second paid
-  request for the same provider/feed/participant/event/window obligation. This remains an unwired,
-  unapplied research contract: it
+  request for the same provider/feed/participant/event/window obligation. The v48 migration was applied
+  to production on October 28, 2026. Its two RLS-protected tables were verified empty, its persistence
+  function was present, and the receipt table's plan-validation trigger was active. This remains an unwired
+  research contract: it
   schedules no task, claims no due work, calls no provider, and changes no prediction or model input.
 - `market_brain_attempt_claim_2026_10_27_r2_adapter_parser_bound_due_and_missed` defines bounded, restart-safe
   claiming for due provider work and separately for expired-window reconciliation. The v49 candidate
@@ -666,8 +671,11 @@ Last reviewed: 2026-10-28
   worker reclaims the obligation. Every claim returns the immutable adapter/parser releases alongside
   the source identity, preventing a worker from choosing its own implementation. Expired unexecuted obligations become explicit `missed_window`
   receipts rather than disappearing. Claims cannot issue before their exact planned timestamp and an
-  expired lease cannot finalize even if no replacement has claimed it yet. The migration and CI proof
-  path are prepared, but nothing is deployed.
+  expired lease cannot finalize even if no replacement has claimed it yet. The v49 migration was applied
+  to production on October 28, 2026 after the disposable PostgreSQL proof passed. Both RLS-protected
+  claim tables were verified empty; the due and missed-window claim functions plus receipt serialization
+  and finalization triggers were present. No capture plan, source adapter, route, cron, provider request,
+  model input, prediction, grade, stake, lock, or member behavior was enabled.
 - `market_brain_capture_runner_2026_10_27_r1_shadow_only_exact_adapter` defines the production-inert
   execution core for those obligations. It reconciles expired windows in bounded batches, claims exactly
   one paid/due request just in time per invocation, and runs it under a bounded timeout shorter than the claim lease. It requires an exact product/scope/provider/feed/
