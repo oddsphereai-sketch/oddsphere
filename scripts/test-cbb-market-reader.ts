@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { normalizeCbbOwlsCurrent, normalizeCbbOwlsHistory, cbbObservedPricePaths } from "../lib/cbb/owlsMarketEvidence";
-import { applyCbbMarketHead, buildCbbMarketReaderFeatures, CBB_MARKET_READER_FEATURES, CBB_MARKET_READER_RESEARCH_RELEASE, fitCbbJointMarketLogLoss } from "../lib/cbb/marketReaderResearch";
+import { applyCbbMarketHead, buildCbbMarketReaderFeatures, CBB_MARKET_READER_FEATURES, CBB_MARKET_READER_RESEARCH_RELEASE, CBB_MATCHUP_MARKET_RESEARCH_RELEASE, fitCbbJointMarketLogLoss } from "../lib/cbb/marketReaderResearch";
+import { CBB_EVIDENCE_MATURITY_RELEASE } from "../lib/cbb/matchupMechanismResearch";
 import { evaluateCbbMarketReaderRows } from "../lib/cbb/marketReaderEvaluation";
 import { cbbThresholdProbabilities } from "../lib/cbb/model";
 import { CBB_DEVELOPMENT_UNCERTAINTY } from "../lib/cbb/evaluation";
@@ -71,6 +72,16 @@ const train = Array.from({ length: 110 }, (_, i) => ({ ...row, game: { ...game, 
 const learned = fitCbbJointMarketLogLoss(train, 10);
 assert.equal(learned.objective, "joint_market_log_loss");
 assert.deepEqual(learned, fitCbbJointMarketLogLoss(train, 10));
+const matched = { ...head, release: CBB_MATCHUP_MARKET_RESEARCH_RELEASE, independentRelease: CBB_EVIDENCE_MATURITY_RELEASE };
+assert.throws(() => applyCbbMarketHead(row, matched), /release mismatch/);
+assert.throws(() => applyCbbMarketHead(row, { ...matched, independentRelease: undefined }), /release mismatch/);
+const matchedRow = { ...row, forecast: { ...row.forecast, release: CBB_EVIDENCE_MATURITY_RELEASE } };
+assert.equal(applyCbbMarketHead(matchedRow, matched).release, CBB_MATCHUP_MARKET_RESEARCH_RELEASE);
+assert.throws(() => fitCbbJointMarketLogLoss(train, 10, { release: CBB_MATCHUP_MARKET_RESEARCH_RELEASE, independentRelease: CBB_EVIDENCE_MATURITY_RELEASE }), /release mismatch/);
+const matchedTrain = train.map(r => ({ ...r, forecast: { ...r.forecast, release: CBB_EVIDENCE_MATURITY_RELEASE } }));
+const matchedHead = fitCbbJointMarketLogLoss(matchedTrain, 10, { release: CBB_MATCHUP_MARKET_RESEARCH_RELEASE, independentRelease: CBB_EVIDENCE_MATURITY_RELEASE });
+assert.equal(matchedHead.release, CBB_MATCHUP_MARKET_RESEARCH_RELEASE);
+assert.equal(matchedHead.independentRelease, CBB_EVIDENCE_MATURITY_RELEASE);
 const evaluated = evaluateCbbMarketReaderRows([row], head);
 assert.equal(evaluated.markets.moneyline.harms, 1);
 assert.equal(evaluated.markets.total.harms, 1);

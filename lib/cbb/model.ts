@@ -115,7 +115,7 @@ export function forecastCbbGame(state: CbbRatingState, game: {
   const margin = homeScore - awayScore, total = homeScore + awayScore;
   const zeroMass = normalCdf((0.5 - margin) / uncertainty.marginSd) - normalCdf((-0.5 - margin) / uncertainty.marginSd);
   const homeWinProbability = (1 - normalCdf((0.5 - margin) / uncertainty.marginSd)) / (1 - zeroMass);
-  return { release: CBB_MODEL_RELEASE, gameId: game.id, asOf: state.asOf, homeId: game.homeId, awayId: game.awayId,
+  return { release: state.release, gameId: game.id, asOf: state.asOf, homeId: game.homeId, awayId: game.awayId,
     homeScore, awayScore, margin, total, possessions, uncertainty,
     homeWinProbability, inputStatus: issues.length ? "incomplete" : "complete", issues };
 }

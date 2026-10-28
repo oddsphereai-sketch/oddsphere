@@ -5,6 +5,7 @@ import { solveCbbResearchRidge } from "./shotProfileResearch";
 import type { CbbScoreFeatureRow } from "./scoreResearch";
 import { predictCbbScoreTrees, trainCbbScoreTrees, type CbbScoreTrees } from "./scoreTrees";
 import type { CbbForecast, CbbQuote } from "./types";
+import { CBB_EVIDENCE_MATURITY_RELEASE } from "./matchupMechanismResearch";
 
 export const CBB_MARKET_READER_RESEARCH_RELEASE = "cbb_candidate_2026_10_28_r5_coherent_market_reader";
 export const CBB_MARKET_READER_FEATURES = ["intercept", "independent_margin", "independent_total", "independent_strength",
@@ -76,7 +77,8 @@ export function buildCbbMarketReaderFeatures(prior: CbbForecast, evidence: CbbRe
 }
 
 export type CbbMarketHead = { release: string; trainedThrough: string; trainingGameIds: number[]; mode: "ridge" | "trees";
-  margin: number[]; total: number[]; trees?: CbbScoreTrees; penalty?: number; objective?: "joint_market_log_loss" };
+  margin: number[]; total: number[]; trees?: CbbScoreTrees; penalty?: number; objective?: "joint_market_log_loss"; independentRelease?: string };
+export const CBB_MATCHUP_MARKET_RESEARCH_RELEASE = "cbb_candidate_2026_10_28_r9_joint_matchup_market";
 export function fitCbbMarketHead(rows: CbbScoreFeatureRow[], options: { penalty: number } | { rounds: number }): CbbMarketHead {
   if (rows.length < 100 || rows.some(r => r.features.length !== CBB_MARKET_READER_FEATURES.length || !r.features.every(Number.isFinite))) throw new Error("insufficient/invalid CBB reader training");
   if (new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("duplicate CBB training games");
@@ -93,7 +95,9 @@ export function fitCbbMarketHead(rows: CbbScoreFeatureRow[], options: { penalty:
 }
 export function applyCbbMarketHead(row: CbbScoreFeatureRow, head: CbbMarketHead): CbbForecast {
   if (row.forecast.gameId !== row.game.id || row.forecast.homeId !== row.game.homeId || row.forecast.awayId !== row.game.awayId) throw new Error("CBB reader exact-game prior mismatch");
-  if (head.release !== CBB_MARKET_READER_RESEARCH_RELEASE || !Number.isFinite(Date.parse(row.forecast.asOf)) || !Number.isFinite(Date.parse(head.trainedThrough)) || Date.parse(head.trainedThrough) > Date.parse(row.forecast.asOf) || head.trainingGameIds.includes(row.game.id)) throw new Error("future/in-sample CBB reader model");
+  if (![CBB_MARKET_READER_RESEARCH_RELEASE, CBB_MATCHUP_MARKET_RESEARCH_RELEASE].includes(head.release) || !Number.isFinite(Date.parse(row.forecast.asOf)) || !Number.isFinite(Date.parse(head.trainedThrough)) || Date.parse(head.trainedThrough) > Date.parse(row.forecast.asOf) || head.trainingGameIds.includes(row.game.id)) throw new Error("future/in-sample CBB reader model");
+  if ((head.release === CBB_MATCHUP_MARKET_RESEARCH_RELEASE && head.independentRelease !== CBB_EVIDENCE_MATURITY_RELEASE) ||
+    (head.independentRelease !== undefined && head.independentRelease !== row.forecast.release)) throw new Error("CBB reader independent release mismatch");
   if (row.features.length !== CBB_MARKET_READER_FEATURES.length || !row.features.every(Number.isFinite)) throw new Error("invalid CBB reader inference features");
   if (row.features[CBB_MARKET_READER_FEATURES.indexOf("reference_book_count")] === 0) return row.forecast;
   if (head.mode === "trees") {
@@ -110,7 +114,10 @@ export function applyCbbMarketHead(row: CbbScoreFeatureRow, head: CbbMarketHead)
     homeWinProbability: (1 - normalCdf((0.5 - margin) / sd)) / (1 - zero) };
 }
 
-export function fitCbbJointMarketLogLoss(rows: Array<CbbScoreFeatureRow & { targets: CbbQuote[] }>, penalty: number): CbbMarketHead {
+export function fitCbbJointMarketLogLoss(rows: Array<CbbScoreFeatureRow & { targets: CbbQuote[] }>, penalty: number,
+  options?: { release: typeof CBB_MATCHUP_MARKET_RESEARCH_RELEASE; independentRelease: string }): CbbMarketHead {
+  if (options && (options.release !== CBB_MATCHUP_MARKET_RESEARCH_RELEASE || options.independentRelease !== CBB_EVIDENCE_MATURITY_RELEASE ||
+    rows.some(r => r.forecast.release !== options.independentRelease))) throw new Error("CBB joint independent release mismatch");
   if (rows.length < 100 || !(penalty > 0) || rows.some(r => r.features.length !== CBB_MARKET_READER_FEATURES.length || !r.features.every(Number.isFinite))) throw new Error("invalid joint CBB fitting cohort");
   if (new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("duplicate joint CBB training games");
   if (rows.some(r => !Number.isFinite(Date.parse(r.game.date)) || r.targets.length !== 3 || new Set(r.targets.map(q => q.market)).size !== 3 || r.targets.some(q => q.gameId !== r.game.id))) throw new Error("invalid joint CBB exact-target identity");
@@ -149,7 +156,7 @@ export function fitCbbJointMarketLogLoss(rows: Array<CbbScoreFeatureRow & { targ
       coefficients[i] -= 0.03 * firstMoment[i] / (1 - 0.9 ** iteration) / (Math.sqrt(secondMoment[i] / (1 - 0.999 ** iteration)) + 1e-8);
     });
   }
-  return { release: CBB_MARKET_READER_RESEARCH_RELEASE, trainedThrough: new Date(Math.max(...rows.map(r => Date.parse(r.game.date) + 21600000))).toISOString(),
+  return { release: options?.release ?? CBB_MARKET_READER_RESEARCH_RELEASE, ...(options ? { independentRelease: options.independentRelease } : {}), trainedThrough: new Date(Math.max(...rows.map(r => Date.parse(r.game.date) + 21600000))).toISOString(),
     trainingGameIds: rows.map(r => r.game.id), mode: "ridge", objective: "joint_market_log_loss", penalty,
     margin: coefficients.slice(0, width), total: coefficients.slice(width) };
 }

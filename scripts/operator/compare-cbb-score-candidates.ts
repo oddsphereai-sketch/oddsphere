@@ -3,8 +3,8 @@ import { evaluateCbbRows, cbbMonthlyMetrics, type CbbEvaluationRow } from "../..
 const dir = "/private/tmp/oddsphere-cbb-data";
 async function main() {
   const version = process.argv.find(arg => arg.startsWith("--candidate="))?.split("=")[1] ?? "r2";
-  if (!["r2", "r3", "r4"].includes(version)) throw new Error("unknown private CBB comparison");
-  const baseFile = version === "r2" ? "confirmation-rows.json" : `candidate-${version === "r3" ? "r2" : "r3"}-diagnostic.json`;
+  if (!["r2", "r3", "r4", "r6", "r7", "r8"].includes(version)) throw new Error("unknown private CBB comparison");
+  const baseFile = version === "r2" ? "confirmation-rows.json" : `candidate-${version === "r4" ? "r3" : "r2"}-diagnostic.json`;
   const baseline: CbbEvaluationRow[] = JSON.parse(await readFile(`${dir}/${baseFile}`, "utf8"));
   const candidate: CbbEvaluationRow[] = JSON.parse(await readFile(`${dir}/candidate-${version}-diagnostic.json`, "utf8"));
   const byId = new Map(baseline.map(row => [row.game.id, row]));

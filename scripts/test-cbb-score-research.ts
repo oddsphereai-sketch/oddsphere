@@ -20,6 +20,7 @@ for (const key of Object.keys(r1.teams)) assert.ok(Math.abs(r1.teams[Number(key)
 const r2 = fitCbbScoreResearchState(games, { ...options, config: { ...options.config, paceRidge: 0.25 } });
 const fixture = { id: 100, date: "2024-01-02T18:00:00.000Z", homeId: 1, awayId: 2, neutral: false };
 const old = forecastCbbGame(r1, fixture, CBB_DEVELOPMENT_UNCERTAINTY), next = forecastCbbGame(r2, fixture, CBB_DEVELOPMENT_UNCERTAINTY);
+assert.equal(old.release, r1.release); assert.equal(next.release, r2.release);
 assert.ok(Math.abs(next.possessions - 80) < Math.abs(old.possessions - 80));
 const features = cbbScoreFeatures(next, r2, fixture, games);
 assert.throws(() => cbbScoreFeatures(next, r2, fixture, [{ ...games[0], date: "2024-01-02T00:00:00Z" }]), /future/);
