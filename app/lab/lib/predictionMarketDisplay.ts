@@ -37,6 +37,32 @@ export function predictionMarketChartDomain(points:ReadonlyArray<readonly [numbe
   return [Math.max(0,Math.floor((low-padding)*2)/2),Math.min(100,Math.ceil((high+padding)*2)/2)];
 }
 
+/** Display-only curves through exact observations. Controls stay inside each pair's
+ * price/time bounds: no overshoot, invented extrema, or additional quote samples.
+ * Missing Kalshi intervals remain separate paths (including their area fill). */
+export function predictionMarketCurve(
+  points:ReadonlyArray<readonly [number,number,...unknown[]]>,
+  x:(at:number)=>number,y:(probability:number)=>number,
+  maxGap=Infinity,baseline?:number,
+):{line:string;area:string} {
+  const segments:Array<Array<readonly [number,number]>>=[];
+  for(const point of points){
+    const segment=segments.at(-1),previous=segment?.at(-1);
+    if(!previous||point[0]-previous[0]>maxGap)segments.push([[point[0],point[1]]]);
+    else segment!.push([point[0],point[1]]);
+  }
+  const paths=segments.map(segment=>{
+    let line=`M${x(segment[0][0])},${y(segment[0][1])}`;
+    for(let index=1;index<segment.length;index++){
+      const a=segment[index-1],b=segment[index],dx=(x(b[0])-x(a[0]))/3;
+      line+=` C${x(a[0])+dx},${y(a[1])} ${x(b[0])-dx},${y(b[1])} ${x(b[0])},${y(b[1])}`;
+    }
+    const area=baseline===undefined||segment.length<2?"":`${line} L${x(segment.at(-1)![0])},${baseline} L${x(segment[0][0])},${baseline} Z`;
+    return {line,area};
+  });
+  return {line:paths.map(path=>path.line).join(" "),area:paths.map(path=>path.area).filter(Boolean).join(" ")};
+}
+
 /** Return a recorded observation, never a new interpolated sportsbook quote. */
 export function predictionMarketObservationAt<T extends readonly [number,...unknown[]]>(points:ReadonlyArray<T>,at:number):T|null {
   for(let index=points.length-1;index>=0;index--)if(points[index][0]<=at)return points[index];

@@ -4,7 +4,7 @@ import {
   parseOwlsPredictionMarkets, mergePredictionMarketFeeds, matchPredictionMarketGame,
   isPredictionMarketFeed, kalshiGameDate, type PredictionMarketFeed,
 } from "../lib/providers/owls/owlsPredictionMarkets";
-import { predictionMarketActivity, predictionMarketPinnacleComparison, predictionMarketBookTrail, predictionMarketChartSeries, predictionMarketChartDomain, predictionMarketObservationAt, formatPredictionMarketOdds } from "../app/lab/lib/predictionMarketDisplay";
+import { predictionMarketActivity, predictionMarketPinnacleComparison, predictionMarketBookTrail, predictionMarketChartSeries, predictionMarketChartDomain, predictionMarketCurve, predictionMarketObservationAt, formatPredictionMarketOdds } from "../app/lab/lib/predictionMarketDisplay";
 import { parseKalshiDisplayCandles, backfillKalshiDisplayHistory } from "../lib/providers/owls/kalshiDisplayHistory";
 import type { MarketEdgeDto } from "../app/lab/lib/labTypes";
 
@@ -109,6 +109,29 @@ assert.equal(predictionMarketObservationAt(minnesotaTrail.points,now-12*60*60_00
 const [chartLow,chartHigh]=predictionMarketChartDomain(minnesotaTrail.points);
 assert.ok(chartLow<=155/255*100&&chartHigh>=160/260*100);
 assert.ok(53*(160/260-155/255)*100/(chartHigh-chartLow)>10,"adaptive padding leaves this real movement visible");
+
+const curveInput=structuredClone(minnesotaTrail.points),curveBefore=JSON.stringify(curveInput);
+const smooth=predictionMarketCurve(curveInput,at=>(at-now)/60_000,p=>p*100,Infinity,100);
+assert.match(smooth.line,/ C/,"both shared series use rounded curves, not stock-monitor steps");
+assert.ok(!/[HV]/.test(smooth.line));
+assert.ok(smooth.line.endsWith(`${(curveInput.at(-1)![0]-now)/60_000},${curveInput.at(-1)![1]*100}`),"exact last recorded endpoint is retained");
+assert.equal(JSON.stringify(curveInput),curveBefore,"curve styling cannot mutate locked quotes");
+const separated=predictionMarketCurve([[0,.5],[300_000,.6],[2_000_000,.7],[2_300_000,.65]],at=>at,p=>p,900_000,1);
+assert.equal((separated.line.match(/M/g)??[]).length,2,"missing quote intervals cannot become a continuous curve");
+assert.equal((separated.area.match(/Z/g)??[]).length,2,"area fill also preserves actual quote gaps");
+assert.deepEqual(predictionMarketCurve([],Number,Number),{line:"",area:""});
+assert.deepEqual(predictionMarketCurve([[1,.5]],Number,Number),{line:"M1,0.5",area:""},"one quote never becomes fabricated movement");
+for(const pair of [[[0,.3],[100,.8]],[[0,.8],[100,.3]],[[0,.5],[100,.5]]] as const){
+  const path=predictionMarketCurve(pair,Number,Number).line;
+  const numbers=path.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/g)!.map(Number);
+  const [x0,y0,cx1,cy1,cx2,cy2,x1,y1]=numbers;
+  assert.ok(cx1>=x0&&cx2>=cx1&&x1>=cx2);
+  for(let i=0;i<=100;i++){
+    const t=i/100,u=1-t;
+    const ordinate=u*u*u*y0+3*u*u*t*cy1+3*u*t*t*cy2+t*t*t*y1;
+    assert.ok(ordinate>=Math.min(y0,y1)-1e-12&&ordinate<=Math.max(y0,y1)+1e-12,"rounded connectors cannot invent a price above/below the recorded range");
+  }
+}
 
 const ticker=feed.rows[0].ticker;
 const candleEnd=Math.floor((now-5*60_000)/300_000)*300;
