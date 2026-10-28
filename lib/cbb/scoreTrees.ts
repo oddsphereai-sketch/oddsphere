@@ -1,5 +1,6 @@
 import type { CbbScoreFeatureRow } from "./scoreResearch";
 import { normalCdf } from "./model";
+import type { CbbForecast } from "./types";
 
 type Node = { value: number } | { feature: number; threshold: number; left: Node; right: Node };
 export type CbbScoreTreeOptions = { depth: number; rounds: number; learningRate: number; minLeaf: number; bins: number };
@@ -56,15 +57,20 @@ export function trainCbbScoreTrees(rows: CbbScoreFeatureRow[], throughSeason: nu
 }
 
 export function applyCbbScoreTrees(rows: CbbScoreFeatureRow[], model: CbbScoreTrees): CbbScoreFeatureRow[] {
-  const predict = (head: CbbScoreTreeHead, x: number[]) => head.intercept + head.learningRate * head.trees.reduce((sum, tree) => sum + predictNode(tree, x), 0);
   return rows.map(row => {
     if (row.game.season <= model.fitThroughSeason) throw new Error("in-sample CBB tree evaluation");
-    const margin = row.forecast.margin + predict(model.margin, row.features), total = row.forecast.total + predict(model.total, row.features);
+    return { ...row, forecast: predictCbbScoreTrees(row.forecast, row.features, model) };
+  });
+}
+
+/** Pure arithmetic; callers separately enforce either season or exact timestamp chronology. */
+export function predictCbbScoreTrees(forecast: CbbForecast, features: number[], model: CbbScoreTrees): CbbForecast {
+    const predict = (head: CbbScoreTreeHead) => head.intercept + head.learningRate * head.trees.reduce((sum, tree) => sum + predictNode(tree, features), 0);
+    const margin = forecast.margin + predict(model.margin), total = forecast.total + predict(model.total);
     const homeScore = (total + margin) / 2, awayScore = (total - margin) / 2;
     if (homeScore <= 0 || awayScore <= 0) throw new Error("invalid CBB tree score");
-    const sd = row.forecast.uncertainty.marginSd;
+    const sd = forecast.uncertainty.marginSd;
     const zero = normalCdf((0.5 - margin) / sd) - normalCdf((-0.5 - margin) / sd);
     const homeWinProbability = (1 - normalCdf((0.5 - margin) / sd)) / (1 - zero);
-    return { ...row, forecast: { ...row.forecast, margin, total, homeScore, awayScore, homeWinProbability } };
-  });
+    return { ...forecast, margin, total, homeScore, awayScore, homeWinProbability };
 }

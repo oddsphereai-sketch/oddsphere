@@ -69,7 +69,7 @@ export function enrichCbbShotProfiles(rows: CbbScoreFeatureRow[], history: CbbTr
   });
 }
 
-function solve(x: number[][], y: number[], weights: number[], penalty: number) {
+export function solveCbbResearchRidge(x: number[][], y: number[], weights: number[], penalty: number) {
   const width = x[0].length;
   const a = Array.from({ length: width }, () => Array(width + 1).fill(0) as number[]);
   for (let k = 0; k < x.length; k++) for (let i = 0; i < width; i++) {
@@ -96,7 +96,7 @@ export function fitCbbShotHead(rows: CbbScoreFeatureRow[], throughSeason: number
   const fit = (y: number[], delta: number) => {
     let weights = y.map(() => 1), coefficients: number[] = [];
     for (let iteration = 0; iteration < (loss === "huber" ? 8 : 1); iteration++) {
-      coefficients = solve(x, y, weights, penalty);
+      coefficients = solveCbbResearchRidge(x, y, weights, penalty);
       weights = y.map((v, i) => Math.min(1, delta / Math.max(1e-9, Math.abs(v - x[i].reduce((s, f, j) => s + f * coefficients[j], 0)))));
     }
     return coefficients;
