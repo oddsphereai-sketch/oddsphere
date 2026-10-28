@@ -119,6 +119,9 @@ assert.equal(JSON.stringify(curveInput),curveBefore,"curve styling cannot mutate
 const separated=predictionMarketCurve([[0,.5],[300_000,.6],[2_000_000,.7],[2_300_000,.65]],at=>at,p=>p,900_000,1);
 assert.equal((separated.line.match(/M/g)??[]).length,2,"missing quote intervals cannot become a continuous curve");
 assert.equal((separated.area.match(/Z/g)??[]).length,2,"area fill also preserves actual quote gaps");
+const connected=predictionMarketCurve([[0,.5],[300_000,.6],[2_000_000,.7],[2_300_000,.65]],at=>at,p=>p,Infinity,1);
+assert.equal((connected.line.match(/M/g)??[]).length,1,"display can connect irregular recorded anchors without fragmenting the Kalshi curve");
+assert.equal((connected.line.match(/ C/g)??[]).length,3,"connections do not add synthetic quote anchors");
 assert.deepEqual(predictionMarketCurve([],Number,Number),{line:"",area:""});
 assert.deepEqual(predictionMarketCurve([[1,.5]],Number,Number),{line:"M1,0.5",area:""},"one quote never becomes fabricated movement");
 for(const pair of [[[0,.3],[100,.8]],[[0,.8],[100,.3]],[[0,.5],[100,.5]]] as const){
@@ -140,7 +143,8 @@ const realCandles={market_ticker:ticker,candlesticks:Array.from({length:5},(_,i)
 const parsedCandles=parseKalshiDisplayCandles(realCandles,ticker,now);
 assert.deepEqual(parsedCandles,[[candleEnd*1000,.84,12.5]],"real minute candles aggregate interval volume, not cumulative totals");
 assert.deepEqual(parseKalshiDisplayCandles(realCandles,ticker+"WRONG",now),[],"historical ticker must match exactly");
-assert.deepEqual(parseKalshiDisplayCandles({...realCandles,candlesticks:realCandles.candlesticks.slice(1)},ticker,now),[],"incomplete volume interval is not filled in");
+assert.deepEqual(parseKalshiDisplayCandles({...realCandles,candlesticks:realCandles.candlesticks.slice(1)},ticker,now),[[candleEnd*1000,.84,null]],"an incomplete activity interval does not discard a real price or invent volume");
+assert.deepEqual(parseKalshiDisplayCandles({...realCandles,candlesticks:realCandles.candlesticks.slice(0,-1)},ticker,now),[[(candleEnd-60)*1000,.84,null]],"downsampling preserves the actual observed minute, not an unobserved interval boundary");
 assert.deepEqual(parseKalshiDisplayCandles({...realCandles,candlesticks:realCandles.candlesticks.map(c=>({...c,yes_bid:{close_dollars:null},yes_ask:{close_dollars:null}}))},ticker,now),[],"synthetic/carry-forward price candles are never invented");
 const chart=predictionMarketChartSeries({...merged.rows[0],historicalCandles:parsedCandles});
 assert.equal(chart.points.length,3);assert.deepEqual(chart.activity,[12.5,null,200],"historical per-interval volume never gets subtracted from live cumulative volume");
@@ -170,7 +174,12 @@ const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPane
 assert.ok(component.includes("illustrativeSample"));assert.match(component,/game\.sport\s*!==\s*"cbb"/);
 assert.ok(component.includes("#7de3c1")&&component.includes("#b7a0f4"),"approved mint and violet chart colors are preserved");
 assert.ok(component.includes("data-book-odds")&&component.includes("activeBook[2]"),"plotted prices and cross-series readouts retain actual American odds");
-assert.ok(component.includes('game.markets.moneyline'),"total/spread/FI never become game-winner comparisons");
+assert.ok(component.includes('game.markets[marketKey]'),"the chosen reader market, not moneyline, owns the sportsbook comparison");
+assert.ok(component.includes('readerContractSelection(game,marketKey)'),"active market selection controls requests");
+assert.ok(component.includes('predictionMarketCurve(points,x,y,Infinity,bottom)'),"Kalshi uses the same connected curve treatment as the sportsbook");
+assert.equal((reader.match(/<PredictionMarketPanel game=\{game\} marketKey=\{marketKey\}/g)??[]).length,2,"both responsive surfaces pass the active market explicitly");
+const route=readFileSync("app/api/lab/prediction-market/route.ts","utf8");
+assert.ok(route.includes('selection?resolveReaderContract(contracts,gameMatch,selection):gameMatch'),"only moneyline can use the game-winner response; other kinds require their own contracts");
 assert.ok(component.includes("soccer-ucl-"),"UCL does not read EPL feed");
 const frozen=structuredClone(game);const checksum=JSON.stringify(frozen);matchPredictionMarketGame(feed,frozen,now);assert.equal(JSON.stringify(frozen),checksum,"reader identity and locked inputs are not mutated");
 const service=readFileSync("lib/services/dailyEdge/predictionMarketDisplayFeed.ts","utf8");
