@@ -460,7 +460,8 @@ assert.match(readerSource, /<div className="mt-2 space-y-2">/);
 assert.match(readerSource, /<div className="mt-3 space-y-3">/);
 assert.match(readerSource, /grid grid-cols-\[48px_1fr_38px\] items-center gap-2\.5/);
 assert.doesNotMatch(readerSource, /<DefaultSplitSummary market=\{market\} sport=\{sport\} compact=\{football\}/);
-assert.match(readerSource, /router\.prefetch\(cfbDestination\)/);
+assert.match(readerSource, /for \(const nextSport of \["nba", "cfb"\] as const\)/);
+assert.match(readerSource, /router\.prefetch\(destination\)/);
 assert.match(readerSource, /current\.pathname !== target\.pathname/);
 
 const americanImpliedPct = (american: number) => american < 0
