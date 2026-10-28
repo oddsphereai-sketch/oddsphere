@@ -50,6 +50,8 @@ async function publishedContractGames(sport:PredictionMarketSport):Promise<Daily
   if(!snapshot||!Array.isArray(snapshot.games))throw new Error(`Published ${sport} contract selection missing`);
   return snapshot.games.slice(0,250);
 }
+export const readPublishedPredictionMarketGames=unstable_cache(publishedContractGames,
+  ["prediction_market_published_identity_r1"],{revalidate:30});
 
 /** Sole capture path: existing five-minute display-feed cron, same sport lease. */
 export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarketSport): Promise<{rows:number;owlsRequests:number;warnings:string[]}> {
