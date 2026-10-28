@@ -8,9 +8,9 @@ import {
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "./nflV1ActionableGradeCandidate";
-import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "./nflForwardMemberSnapshotRelease";
 
-export { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "./nflForwardMemberSnapshotRelease";
+export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation" as const;
 const NFL_COMPLETE_SIGNAL_PREDECESSOR_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_26_r46_joint_side_market_arbitration" as const;
 const NFL_COMPLETE_SIGNAL_PREDECESSOR_FIXTURE_RELEASE =

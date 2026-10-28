@@ -14,7 +14,6 @@ import {
 } from "@/lib/config/nflDailyEdge";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
-import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotRelease";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
@@ -23,6 +22,7 @@ import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 // Keep the read bounded, but do not turn a healthy transfer into a false
 // empty-board state; unopened evidence is projected out below.
 const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000;
+const NFL_MEMBER_READER_CACHE_RELEASE = "nfl-member-reader-cache-v1";
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
   async (season: number, week: number) => {
@@ -32,8 +32,8 @@ const readCachedNflForwardMemberSnapshot = unstable_cache(
     ]);
     return readNflForwardMemberSnapshot({ client: supabase, season, week });
   },
-  [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE],
-  { revalidate: 15, tags: [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE] },
+  [NFL_MEMBER_READER_CACHE_RELEASE],
+  { revalidate: 15, tags: [NFL_MEMBER_READER_CACHE_RELEASE] },
 );
 
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
