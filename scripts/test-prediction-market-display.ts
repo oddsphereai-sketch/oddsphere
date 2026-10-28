@@ -4,7 +4,7 @@ import {
   parseOwlsPredictionMarkets, mergePredictionMarketFeeds, matchPredictionMarketGame,
   isPredictionMarketFeed, kalshiGameDate, type PredictionMarketFeed,
 } from "../lib/providers/owls/owlsPredictionMarkets";
-import { predictionMarketActivity, predictionMarketPinnacleComparison, predictionMarketBookTrail, predictionMarketChartSeries } from "../app/lab/lib/predictionMarketDisplay";
+import { predictionMarketActivity, predictionMarketPinnacleComparison, predictionMarketBookTrail, predictionMarketChartSeries, predictionMarketChartDomain, predictionMarketObservationAt, formatPredictionMarketOdds } from "../app/lab/lib/predictionMarketDisplay";
 import { parseKalshiDisplayCandles, backfillKalshiDisplayHistory } from "../lib/providers/owls/kalshiDisplayHistory";
 import type { MarketEdgeDto } from "../app/lab/lib/labTypes";
 
@@ -91,8 +91,24 @@ assert.equal(bookTrail.sportsbook,"circa");assert.equal(bookTrail.points.length,
 assert.equal(bookTrail.points[1][1],220/320,"book line is honestly labeled raw implied price including margin");
 assert.equal(predictionMarketBookTrail(bookMarket,"UTAH",now)?.points[1][1],100/290,"opposite side uses its own quotes");
 assert.equal(predictionMarketBookTrail(bookMarket,"LAL",now),null,"unproven outcome never borrows another team's line");
-assert.equal(predictionMarketBookTrail(bookMarket,"SA",now+9*60*60_000),null,"old observations stay outside the chart window");
+assert.equal(predictionMarketBookTrail(bookMarket,"SA",now+25*60*60_000),null,"observations over 24 hours old stay outside the chart window");
 assert.equal(predictionMarketBookTrail({...bookMarket,oddsTrail:bookMarket.oddsTrail?.map(row=>({...row,label:"move"}))},"SA",now),null,"history without an actual current/locked endpoint is not promoted to a current trail");
+const minnesota={...bookMarket,pick:"MIN ML",oddsTrail:[
+  {...stop(-155,"circa",now-11*60*60_000),label:"first" as const},
+  {...stop(-160,"circa",now-7*60*60_000),label:"move" as const},stop(-160,"circa",now),
+]} as MarketEdgeDto;
+const minnesotaBefore=JSON.stringify(minnesota);
+const minnesotaTrail=predictionMarketBookTrail(minnesota,"MIN",now)!;
+assert.deepEqual(minnesotaTrail.points.map(point=>point[2]),[-155,-160,-160],"Minnesota's real morning opener must not be clipped into a false flat -160 line");
+assert.equal(minnesotaTrail.points[0][0],now-11*60*60_000,"the earlier quote retains its real timestamp, not the eight-hour boundary");
+assert.ok(minnesotaTrail.points[0][1]<minnesotaTrail.points[1][1],"the -155 to -160 move changes the plotted ordinate");
+assert.equal(JSON.stringify(minnesota),minnesotaBefore,"display derivation never modifies stored/locked odds");
+assert.equal(formatPredictionMarketOdds(-155),"−155");assert.equal(formatPredictionMarketOdds(140),"+140");
+assert.equal(predictionMarketObservationAt(minnesotaTrail.points,now-10*60*60_000)?.[2],-155,"cross-series inspection exposes the actual earlier quote");
+assert.equal(predictionMarketObservationAt(minnesotaTrail.points,now-12*60*60_000),null,"inspection does not borrow a future quote");
+const [chartLow,chartHigh]=predictionMarketChartDomain(minnesotaTrail.points);
+assert.ok(chartLow<=155/255*100&&chartHigh>=160/260*100);
+assert.ok(53*(160/260-155/255)*100/(chartHigh-chartLow)>10,"adaptive padding leaves this real movement visible");
 
 const ticker=feed.rows[0].ticker;
 const candleEnd=Math.floor((now-5*60_000)/300_000)*300;
@@ -128,7 +144,9 @@ void testHistoricalCapture().then(()=>console.log("Historical backfill: exact ca
 const reader=readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx","utf8");
 assert.ok(reader.includes('variant="desktop"')&&reader.includes('variant="mobile"'));
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
-assert.ok(component.includes("illustrativeSample")&&component.includes('game.sport !== "cbb"'));
+assert.ok(component.includes("illustrativeSample"));assert.match(component,/game\.sport\s*!==\s*"cbb"/);
+assert.ok(component.includes("#7de3c1")&&component.includes("#b7a0f4"),"approved mint and violet chart colors are preserved");
+assert.ok(component.includes("data-book-odds")&&component.includes("activeBook[2]"),"plotted prices and cross-series readouts retain actual American odds");
 assert.ok(component.includes('game.markets.moneyline'),"total/spread/FI never become game-winner comparisons");
 assert.ok(component.includes("soccer-ucl-"),"UCL does not read EPL feed");
 const frozen=structuredClone(game);const checksum=JSON.stringify(frozen);matchPredictionMarketGame(feed,frozen,now);assert.equal(JSON.stringify(frozen),checksum,"reader identity and locked inputs are not mutated");
