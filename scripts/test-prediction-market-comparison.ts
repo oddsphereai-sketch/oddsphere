@@ -22,7 +22,7 @@ const checksum=JSON.stringify({row,book});
 const aligned=predictionMarketComparison(row,book);
 assert.equal(aligned.cutoff,now-2*minute);assert.equal(aligned.points.at(-1)?.[0],now-8*minute,"faster Kalshi quote waits beyond the common cutoff");
 assert.equal(aligned.bookPoints.at(-1)?.[0],now-2*minute);
-assert.equal(aligned.start,now-90*minute,"both sources share the later available start, not two unrelated chart windows");
+assert.equal(aligned.start,now-100*minute,"one shared axis retains the earliest real source observation instead of clipping it to the shorter history");
 assert.equal(aligned.points.at(-1)?.[1],.60,"headline can use the actually plotted observation, not a later hidden quote");
 const fasterBook=predictionMarketComparison({...row,asOf:new Date(now-8*minute).toISOString(),history:row.history.slice(0,2)},book);
 assert.equal(fasterBook.cutoff,now-8*minute);assert.equal(fasterBook.bookPoints.at(-1)?.[0],now-10*minute,"faster sportsbook also waits, symmetrically");
