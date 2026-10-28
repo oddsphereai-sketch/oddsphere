@@ -8,11 +8,12 @@
  *
  * Structure:
  *   1. Header (no hero metrics)
- *   2. Model and time-period selectors
- *   3. Selected category records and alternate lines
- *   4. Selected Best Angle and Lean records
- *   5. Model-specific recent results
- *   6. Collapsible methodology
+ *   2. Full cross-sport Yesterday recap
+ *   3. Model and Weekly / Monthly / Lifetime selectors
+ *   4. Selected category records and alternate lines
+ *   5. Selected Best Angle and Lean records
+ *   6. Model-specific recent results
+ *   7. Collapsible methodology
  *
  * Hard rules unchanged from earlier passes:
  *   • Toss-Up and Held are NEVER counted as wins or losses.
@@ -35,7 +36,7 @@ import { CategoryBars, type ChartMetrics } from "./components/TrackingCharts";
 
 type Metrics = ChartMetrics;
 
-type TrackingWindow = "yesterday" | "weekly" | "monthly" | "lifetime";
+type TrackingWindow = "weekly" | "monthly" | "lifetime";
 
 type DimensionRow = { label: string; metrics: Metrics };
 
@@ -247,31 +248,6 @@ function shortMarket(label: string): string { return MARKET_SHORT[label] ?? labe
 function prettySport(label: string): string { return SPORT_LABEL[label] ?? label.toUpperCase(); }
 function sportTheme(sport: string): SportTheme { return SPORT_THEME[sport] ?? DEFAULT_SPORT_THEME; }
 
-function combineMetrics(rows: Metrics[]): Metrics {
-  const combined = rows.reduce<Metrics>((total, row) => ({
-    picks: total.picks + row.picks,
-    wins: total.wins + row.wins,
-    losses: total.losses + row.losses,
-    pushes: total.pushes + row.pushes,
-    voids: total.voids + row.voids,
-    pending: total.pending + row.pending,
-    win_pct: null,
-  }), {
-    picks: 0,
-    wins: 0,
-    losses: 0,
-    pushes: 0,
-    voids: 0,
-    pending: 0,
-    win_pct: null,
-  });
-  const decided = combined.wins + combined.losses;
-  return {
-    ...combined,
-    win_pct: decided > 0 ? (combined.wins / decided) * 100 : null,
-  };
-}
-
 function groupBySport<T extends { sport: string }>(rows: T[]): Array<{ sport: string; rows: T[] }> {
   return rows.reduce<Array<{ sport: string; rows: T[] }>>((groups, row) => {
     const existing = groups.find((group) => group.sport === row.sport);
@@ -317,7 +293,7 @@ function visibleBuckets(buckets: SportMarketBucket[]): SportMarketBucket[] {
 type LifetimeRecord = {
   sport: string;
   market: string;
-  source_type: "lifetime_merged" | "lifetime_baseline" | "since_launch" | "release_separated";
+  source_type: "lifetime_merged" | "lifetime_baseline" | "since_launch" | "release_separated" | "locked_lifetime";
   /** Display text for the record column. e.g. "1719/3043" or "5-2". */
   display_record: string;
   /** Display text for the win-rate column. e.g. "56.5%" or null. */
@@ -339,26 +315,67 @@ type LifetimeRecord = {
   historical_archive?: string;
 };
 
-function buildLifetimeRecords(
+function lifetimeRecordKey(sport: string, market: string): string {
+  // UCL's legacy archive called the 1X2 market "moneyline" while the
+  // released model records it as "match_result". They are the same member
+  // category, so join the archive onto Match Result instead of rendering two
+  // contradictory rows or leaving the current record detached.
+  return `${sport}:${sport === "ucl" && market === "moneyline" ? "match_result" : market}`;
+}
+
+export function buildLifetimeRecords(
   bySportMarket: SportMarketBucket[],
   baselines: BaselineRow[],
+  lockedHistory: SportMarketBucket[] = [],
 ): LifetimeRecord[] {
   const baseIdx = new Map<string, BaselineRow>();
-  for (const b of baselines) baseIdx.set(`${b.sport}:${b.market}`, b);
+  for (const b of baselines) baseIdx.set(lifetimeRecordKey(b.sport, b.market), b);
   const liveIdx = new Map<string, SportMarketBucket>();
-  for (const b of bySportMarket) liveIdx.set(`${b.sport}:${b.market}`, b);
+  for (const b of bySportMarket) liveIdx.set(lifetimeRecordKey(b.sport, b.market), b);
+  // Calendar history is deliberately used only for UCL. Its current-release
+  // aggregate can legitimately be empty immediately after a model release,
+  // but locked public results must not disappear from Lifetime as a result.
+  // This is display-only: the exact stored wins/losses/pending values are
+  // rendered without reconstruction or mutation.
+  const lockedIdx = new Map<string, SportMarketBucket>();
+  for (const b of lockedHistory) {
+    if (b.sport === "ucl") lockedIdx.set(lifetimeRecordKey(b.sport, b.market), b);
+  }
 
-  const keys = new Set<string>([...baseIdx.keys(), ...liveIdx.keys()]);
+  const keys = new Set<string>([...baseIdx.keys(), ...liveIdx.keys(), ...lockedIdx.keys()]);
   const records: LifetimeRecord[] = [];
   for (const key of keys) {
     const [sport, market] = key.split(":");
     const base = baseIdx.get(key);
     const live = liveIdx.get(key);
+    const locked = lockedIdx.get(key);
     const liveDecided = (live?.metrics.wins ?? 0) + (live?.metrics.losses ?? 0);
     const liveWins = live?.metrics.wins ?? 0;
     const livePending = live?.metrics.pending ?? 0;
+    const lockedDecided = (locked?.metrics.wins ?? 0) + (locked?.metrics.losses ?? 0);
 
-    if (base !== undefined && liveDecided > 0 && sport === "ucl") {
+    if (sport === "ucl" && locked !== undefined && (lockedDecided > 0 || locked.metrics.pending > 0)) {
+      // UCL Lifetime is the immutable public record across released locks.
+      // Do not call it current-release accuracy and do not blend the older
+      // aggregate-only import into these exact row-level results.
+      records.push({
+        sport, market,
+        source_type: "locked_lifetime",
+        display_record: lockedDecided > 0 ? fmtRecord(locked.metrics) : `${locked.metrics.pending} pending`,
+        display_pct: lockedDecided > 0 ? fmtPct(locked.metrics) : null,
+        display_total: locked.metrics.picks,
+        pending: locked.metrics.pending,
+        pushes: locked.metrics.pushes,
+        voids: locked.metrics.voids,
+        live_decided_contribution: lockedDecided,
+        metrics: locked.metrics,
+        bestAngles: locked.bestAngles,
+        leans: locked.leans,
+        historical_archive: base !== undefined
+          ? `${base.lifetime_wins.toLocaleString()}/${base.lifetime_total.toLocaleString()} (${base.lifetime_pct.toFixed(1)}%)`
+          : undefined,
+      });
+    } else if (base !== undefined && liveDecided > 0 && sport === "ucl") {
       records.push({
         sport, market,
         source_type: "release_separated",
@@ -551,13 +568,16 @@ export default function LabTrackingPage({
   // Tracking rows, not as a "legacy" surface (which would mislead
   // members into thinking they're separate frozen reference data).
   const lifetimeRecords = useMemo(
-    () => buildLifetimeRecords(data?.bySportMarket ?? [], data?.baselines ?? []),
+    () => buildLifetimeRecords(
+      data?.bySportMarket ?? [],
+      data?.baselines ?? [],
+      data?.actionableHistory?.bySportMarket ?? [],
+    ),
     [data],
   );
   const alternateLineRows = useMemo(() => {
     const alternate = data?.alternateLinePerformance;
     if (!alternate) return [];
-    if (trackWindow === "yesterday") return [];
     if (trackWindow === "weekly") return alternate.weekly.rows;
     if (trackWindow === "monthly") return alternate.monthly.rows;
     return [...alternate.lifetime.rows, ...alternate.archives];
@@ -571,23 +591,21 @@ export default function LabTrackingPage({
   }, [data]);
   const availableModels = useMemo(() => {
     const models = new Set<string>();
-    for (const row of [...yesterdayRows, ...weekRows, ...monthRows, ...bestAngleRows]) models.add(row.sport);
+    for (const row of [...weekRows, ...monthRows, ...bestAngleRows]) models.add(row.sport);
     for (const record of lifetimeRecords) models.add(record.sport);
     return [...models].sort((left, right) => (SPORT_ORDER[left] ?? 99) - (SPORT_ORDER[right] ?? 99));
-  }, [bestAngleRows, lifetimeRecords, monthRows, weekRows, yesterdayRows]);
+  }, [bestAngleRows, lifetimeRecords, monthRows, weekRows]);
   const activeModel = availableModels.includes(selectedModel)
     ? selectedModel
     : availableModels[0] ?? selectedModel;
   const selectedWindowBuckets = useMemo(() => {
-    const rows = trackWindow === "yesterday"
-      ? yesterdayRows
-      : trackWindow === "weekly"
-        ? weekRows
-        : trackWindow === "monthly"
-          ? monthRows
-          : [];
+    const rows = trackWindow === "weekly"
+      ? weekRows
+      : trackWindow === "monthly"
+        ? monthRows
+        : [];
     return rows.filter((row) => row.sport === activeModel);
-  }, [activeModel, monthRows, trackWindow, weekRows, yesterdayRows]);
+  }, [activeModel, monthRows, trackWindow, weekRows]);
   const selectedLifetimeRecords = useMemo(
     () => lifetimeRecords.filter((record) => record.sport === activeModel),
     [activeModel, lifetimeRecords],
@@ -624,22 +642,28 @@ export default function LabTrackingPage({
   const week = data.thisWeek;
   const recent = (data.recentPicks ?? []).filter((row) => row.sport === activeModel).slice(0, 12);
   const settled = (data.recentlySettled ?? []).filter((row) => row.sport === activeModel).slice(0, 12);
-  const selectedYesterdayOverall = combineMetrics(selectedWindowBuckets.map((row) => row.metrics));
-  const readerEyebrow = trackWindow === "yesterday"
-    ? (yest?.date !== null && yest?.date !== undefined ? fmtLongDate(yest.date) : "Yesterday")
-    : trackWindow === "weekly"
-      ? (week !== undefined ? `${fmtShortDate(week.from)} → ${fmtShortDate(week.to)}` : "This week")
-      : trackWindow === "monthly"
-        ? (data.thisMonth !== undefined ? `${fmtShortDate(data.thisMonth.from)} → ${fmtShortDate(data.thisMonth.to)}` : "Last 30 days")
-        : "All-time";
+  const readerEyebrow = trackWindow === "weekly"
+    ? (week !== undefined ? `${fmtShortDate(week.from)} → ${fmtShortDate(week.to)}` : "This week")
+    : trackWindow === "monthly"
+      ? (data.thisMonth !== undefined ? `${fmtShortDate(data.thisMonth.from)} → ${fmtShortDate(data.thisMonth.to)}` : "Last 30 days")
+      : "All-time";
 
   return (
     <Shell presentation={presentation}>
       <Header lastUpdated={lastUpdated} presentation={presentation} />
 
-      {/* One reader: model first, then time period. Existing records and
-          category visuals stay intact while the page avoids rendering every
-          model and every time window at once. */}
+      {/* Yesterday remains the complete cross-sport recap. It is intentionally
+          independent from the model selector used by the longer windows. */}
+      <Section
+        eyebrow={yest?.date !== null && yest?.date !== undefined ? fmtLongDate(yest.date) : "Yesterday"}
+        title="Yesterday's results"
+      >
+        <YesterdayBoard date={yest?.date ?? null} rows={yesterdayRows} overall={yest?.overall ?? null} />
+      </Section>
+
+      {/* One reader for the longer windows: model first, then time period.
+          Existing records and category visuals stay intact while the page
+          avoids rendering every model and every window at once. */}
       <Section
         eyebrow={readerEyebrow}
         title="Tracking reader"
@@ -652,13 +676,7 @@ export default function LabTrackingPage({
           <WindowTabs active={trackWindow} onChange={setTrackWindow} />
         </div>
         <div className="mt-4">
-          {trackWindow === "yesterday" ? (
-            <YesterdayBoard
-              date={yest?.date ?? null}
-              rows={selectedWindowBuckets}
-              overall={selectedYesterdayOverall}
-            />
-          ) : trackWindow === "lifetime" ? (
+          {trackWindow === "lifetime" ? (
             <LifetimeTrackingBoard records={selectedLifetimeRecords} alternateRows={selectedAlternateLineRows} />
           ) : (
             <CategoryTrackingBoard
@@ -868,7 +886,6 @@ function WindowTabs({
   onChange: (w: TrackingWindow) => void;
 }) {
   const tabs: { key: TrackingWindow; label: string }[] = [
-    { key: "yesterday", label: "Yesterday" },
     { key: "weekly", label: "Weekly" },
     { key: "monthly", label: "Monthly" },
     { key: "lifetime", label: "Lifetime" },
@@ -925,6 +942,11 @@ function Empty({ body }: { body: string }) {
 // ─── Lifetime tracking board — shared visual, honest merged source ─────
 
 function lifetimeSourceLabel(record: LifetimeRecord): string {
+  if (record.source_type === "locked_lifetime") {
+    return record.historical_archive !== undefined
+      ? `Locked lifetime · all released locks · earlier archive ${record.historical_archive}`
+      : "Locked lifetime · all released locks";
+  }
   if (record.source_type === "release_separated") {
     return `Current release · historical archive ${record.historical_archive}`;
   }
