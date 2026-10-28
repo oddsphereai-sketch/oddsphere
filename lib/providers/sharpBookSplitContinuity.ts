@@ -202,6 +202,44 @@ export function alignMarketReadsToDisplayedSharpBookSplits(response: DailyEdgeRe
   return aligned;
 }
 
+/**
+ * Restore a previously verified complete pair for the member-facing display
+ * after the market-reader bridge has finished. A later ticket-only or
+ * money-only provider refresh must not make the other axis disappear from the
+ * board. Keeping this pass after `alignMarketReadsToDisplayedSharpBookSplits`
+ * is intentional: display continuity cannot promote an older retained row
+ * into the internal market-reader decision.
+ *
+ * Locked rows remain immutable. A missing locked field may only be rebuilt by
+ * the explicit pre-lock reconstruction path in `applySharpBookSplitContinuity`.
+ */
+export function restoreCompleteSharpBookSplitDisplay(
+  response: DailyEdgeResponse,
+  feed: SharpBookSplitContinuityFeed | null,
+): number {
+  if (!feed || feed.sport !== response.sport || feed.slateDate !== response.date) return 0;
+  let restored = 0;
+  for (const game of response.games) {
+    if (game.lockState === "locked") continue;
+    const matches = feed.games.filter((candidate) => retainedGameMatches(candidate, game));
+    if (matches.length !== 1) continue;
+    for (const marketKey of MARKET_KEYS) {
+      const retained = matches[0]!.markets[marketKey];
+      const market = game.markets[marketKey];
+      if (!retained || !market || sectionQuality(retained) !== 2) continue;
+      const displayed = market.sportsbookSplits?.rows.length
+        ? market.sportsbookSplits
+        : market.recommendationDecision?.sharpBookSplits?.rows.length
+          ? market.recommendationDecision.sharpBookSplits
+          : null;
+      if (displayed && sectionQuality(displayed) >= 2) continue;
+      market.sportsbookSplits = cloneRetainedSection(retained);
+      restored += 1;
+    }
+  }
+  return restored;
+}
+
 export async function persistDailyEdgeSharpBookSplitContinuity(
   response: DailyEdgeResponse,
   sport: Sport,

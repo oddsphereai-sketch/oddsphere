@@ -5,6 +5,7 @@ import {
   alignMarketReadsToDisplayedSharpBookSplits,
   applySharpBookSplitContinuity,
   reconcileDailyEdgeSharpBookSplitAuthority,
+  restoreCompleteSharpBookSplitDisplay,
   sectionQuality,
   __TEST__,
 } from "../lib/providers/sharpBookSplitContinuity";
@@ -220,5 +221,44 @@ assert.equal(
   null,
   "the canonical decision remains unchanged",
 );
+
+const completeDisplayRetention = response();
+completeDisplayRetention.games[0]!.markets.moneyline.sportsbookSplits = section(
+  "Sharp Book Splits",
+  "2026-09-20T20:09:00.000Z",
+  [null, null],
+  [63, 37],
+  "betmgm",
+);
+assert.equal(
+  alignMarketReadsToDisplayedSharpBookSplits(completeDisplayRetention),
+  0,
+  "the current partial row cannot enter the internal market-reader decision",
+);
+assert.equal(
+  restoreCompleteSharpBookSplitDisplay(completeDisplayRetention, retained),
+  1,
+  "a previously verified complete exact-game pair must replace a later partial display row",
+);
+assert.equal(
+  sectionQuality(completeDisplayRetention.games[0]!.markets.moneyline.sportsbookSplits!),
+  2,
+  "both money and tickets remain visible once a complete pair has been captured",
+);
+assert.equal(
+  completeDisplayRetention.games[0]!.markets.moneyline.recommendationDecision?.sharpBookSplits,
+  null,
+  "post-reader display restoration cannot alter the canonical market-reader decision",
+);
+
+const lockedDisplayRetention = response();
+lockedDisplayRetention.games[0]!.lockState = "locked";
+lockedDisplayRetention.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+assert.equal(
+  restoreCompleteSharpBookSplitDisplay(lockedDisplayRetention, retained),
+  0,
+  "display continuity cannot reconstruct or mutate a locked row",
+);
+assert.equal(lockedDisplayRetention.games[0]!.markets.moneyline.sportsbookSplits, null);
 
 console.log("Sharp-book complete and single-axis display continuity tests passed.");
