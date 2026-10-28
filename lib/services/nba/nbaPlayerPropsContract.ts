@@ -9,7 +9,7 @@
 export const NBA_PLAYER_PROPS_RESEARCH_SCHEMA_RELEASE =
   "nba_player_props_research_schema_2026_10_20_r1" as const;
 export const NBA_PLAYER_PROPS_OBSERVATION_RELEASE =
-  "nba_player_props_observation_2026_10_20_r1" as const;
+  "nba_player_props_observation_2026_10_28_r2_owls_prices" as const;
 export const NBA_PLAYER_PROPS_MODEL_RELEASE =
   "nba_player_props_model_unfit_2026_10_20_r1" as const;
 export const NBA_PLAYER_PROPS_CALIBRATION_RELEASE =
@@ -45,7 +45,7 @@ export const NBA_PLAYER_PROPS_RESEARCH_MARKETS = [
 ] as const;
 
 export type NbaPlayerPropMarket = (typeof NBA_PLAYER_PROPS_RESEARCH_MARKETS)[number];
-export type NbaPlayerPropProvider = "balldontlie" | "the_odds_api" | "sharpapi";
+export type NbaPlayerPropProvider = "balldontlie" | "the_odds_api" | "sharpapi" | "owls";
 export type NbaPlayerPropSide = "over" | "under" | "yes" | "no";
 export type NbaPlayerPropOfferType = "over_under" | "milestone";
 
@@ -178,7 +178,7 @@ export function buildNbaPlayerPropsObservationSnapshot(args: {
     gameKeys.add(key);
   }
   for (const row of args.observations) validateObservation(row);
-  const providers = ["balldontlie", "the_odds_api", "sharpapi"] as const;
+  const providers = ["balldontlie", "the_odds_api", "sharpapi", "owls"] as const;
   const providerCoverage = Object.fromEntries(providers
     .map((provider) => [provider, summarizeNbaPlayerPropsCoverage(args.observations.filter((row) => row.provider === provider))] as const)
     .filter(([, coverage]) => coverage.rows > 0)) as Partial<Record<NbaPlayerPropProvider, NbaPlayerPropsCoverage>>;

@@ -1,14 +1,16 @@
 import {
   normalizeBallDontLieNbaPlayerProps,
+  normalizeOwlsNbaPlayerProps,
   normalizeTheOddsApiNbaPlayerProps,
 } from "./nbaPlayerPropsProviders";
+import { OwlsInsightClient } from "../../providers/owls/owlsInsightClient";
 import type {
   NbaPlayerPropGameIdentity,
   NbaPlayerPropPriceObservation,
 } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE =
-  "nba_player_props_live_collector_2026_10_23_r4_current_player_identity" as const;
+  "nba_player_props_live_collector_2026_10_28_r5_owls_prices" as const;
 const BDL_BASE = "https://api.balldontlie.io";
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_SPORT = "basketball_nba";
@@ -23,13 +25,18 @@ const ODDS_MARKETS = [
   "player_rebounds_assists",
 ] as const;
 const ODDS_BOOKMAKERS = "fanduel,pinnacle,bet365,betmgm,draftkings,williamhill_us";
+const MAX_OWLS_EVENTS = 32;
+const MAX_OWLS_BOOKS_PER_EVENT = 20;
+const MAX_OWLS_PROPS_PER_BOOK = 5_000;
+const MAX_OWLS_QUOTE_AGE_MS = 6 * 60 * 60_000;
+const MAX_PROVIDER_CLOCK_SKEW_MS = 60_000;
 
 export type NbaPlayerPropsLiveCollection = Readonly<{
   release: typeof NBA_PLAYER_PROPS_LIVE_COLLECTOR_RELEASE;
   games: readonly NbaPlayerPropGameIdentity[];
   teamIdsByGame: Readonly<Record<string, Readonly<{ home: number; away: number }>>>;
   observations: readonly NbaPlayerPropPriceObservation[];
-  providerRequests: Readonly<{ balldontlie: number; theOddsApi: number }>;
+  providerRequests: Readonly<{ balldontlie: number; theOddsApi: number; owls: number }>;
   theOddsApiCreditsUsed: number;
   theOddsApiCreditsRemaining: number | null;
   findings: readonly string[];
@@ -39,6 +46,7 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
   slateDate: string;
   ballDontLieApiKey: string;
   theOddsApiKey?: string | null;
+  owlsInsightApiKey?: string | null;
   includeOpenings: boolean;
   useTheOddsApiForGameIds?: ReadonlySet<string>;
   canonicalPlayersByName?: Readonly<Record<string, string>>;
@@ -136,6 +144,51 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     }
   }
 
+  let owlsRequests = 0;
+  if (args.owlsInsightApiKey) {
+    owlsRequests = 1;
+    try {
+      const response = await new OwlsInsightClient(args.owlsInsightApiKey, { fetchImpl, timeoutMs: 20_000 })
+        .props<{ data?: unknown }>("nba");
+      const owlsEvents = array(object(response.body)?.data);
+      validateOwlsCapacity(owlsEvents);
+      const canonicalGames: Record<string, string> = {};
+      for (const eventValue of owlsEvents) {
+        const event = object(eventValue);
+        if (!event) continue;
+        const eventId = scalarId(event?.gameId);
+        if (!eventId) continue;
+        const matches = games.filter((game) => owlsEventMatches(event, game));
+        if (matches.length === 1) canonicalGames[eventId] = matches[0]!.canonicalGameId;
+        else if (matches.length > 1) findings.push(`owls_event_ambiguous:${eventId}`);
+      }
+      const normalized = normalizeOwlsNbaPlayerProps({
+        events: owlsEvents,
+        fetchedAt,
+        canonicalGames,
+        canonicalPlayers: args.canonicalPlayersByName,
+      });
+      const freshRows = normalized.rows.filter((row) => {
+        const observedAt = Date.parse(row.observedAt);
+        const fetched = Date.parse(fetchedAt);
+        return observedAt <= fetched + MAX_PROVIDER_CLOCK_SKEW_MS
+          && fetched - observedAt <= MAX_OWLS_QUOTE_AGE_MS;
+      });
+      observations.push(...freshRows.filter((row) => row.canonicalGameId !== null));
+      if (freshRows.length < normalized.rows.length) findings.push("owls_stale_or_future_prop_rows_rejected");
+      if (normalized.rows.some((row) => row.canonicalGameId === null)) findings.push("owls_prop_event_identity_unmatched");
+      if (Object.keys(normalized.unknownMarkets).length > 0) findings.push("owls_unknown_prop_markets_present");
+      if (freshRows.length === 0) findings.push("owls_player_props_empty_for_slate");
+    } catch {
+      findings.push("owls_player_props_capture_failed");
+    }
+  } else {
+    findings.push("owls_insight_api_key_missing");
+  }
+
+  // Owl is the first bounded gap-fill and sharp-reference lane. The Odds API
+  // is charged only for games that still lack corroborated prop books after
+  // Ball Don't Lie and Owl have both been considered.
   let theOddsApiRequests = 0;
   let creditsUsed = 0;
   let creditsRemaining: number | null = null;
@@ -189,11 +242,33 @@ export async function collectNbaPlayerPropsLiveMarket(args: {
     games,
     teamIdsByGame,
     observations: dedupe(observations),
-    providerRequests: { balldontlie: bdlRequests, theOddsApi: theOddsApiRequests },
+    providerRequests: { balldontlie: bdlRequests, theOddsApi: theOddsApiRequests, owls: owlsRequests },
     theOddsApiCreditsUsed: creditsUsed,
     theOddsApiCreditsRemaining: creditsRemaining,
     findings,
   };
+}
+
+function owlsEventMatches(event: Record<string, unknown>, game: NbaPlayerPropGameIdentity): boolean {
+  if (canonicalTeam(text(event.homeTeam) ?? "") !== canonicalTeam(game.homeTeam)
+    || canonicalTeam(text(event.awayTeam) ?? "") !== canonicalTeam(game.awayTeam)) return false;
+  const eventStart = Date.parse(text(event.commenceTime) ?? "");
+  const gameStart = Date.parse(game.scheduledStart);
+  return Number.isFinite(eventStart) && Number.isFinite(gameStart)
+    && Math.abs(eventStart - gameStart) <= 30 * 60_000;
+}
+
+function validateOwlsCapacity(events: readonly unknown[]): void {
+  if (events.length > MAX_OWLS_EVENTS) throw new Error(`Owls NBA props exceeded ${MAX_OWLS_EVENTS} events.`);
+  for (const eventValue of events) {
+    const books = array(object(eventValue)?.books);
+    if (books.length > MAX_OWLS_BOOKS_PER_EVENT) throw new Error("Owls NBA props exceeded the per-event book limit.");
+    for (const bookValue of books) {
+      if (array(object(bookValue)?.props).length > MAX_OWLS_PROPS_PER_BOOK) {
+        throw new Error("Owls NBA props exceeded the per-book prop limit.");
+      }
+    }
+  }
 }
 
 export function applyResolvedPlayerIdentities(

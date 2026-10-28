@@ -43,12 +43,12 @@ const frozenRuntimeSource = readFileSync(
   "utf8",
 );
 assert.equal(artifact.publicEnabled, false);
-assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_27_r12_side_accuracy_rerank");
+assert.equal(artifact.release, "nba_player_props_frozen_runtime_artifact_2026_10_28_r13_owls_sharp_market_reader");
 assert.equal(NBA_PLAYER_PROPS_FORWARD_DECISION_RELEASE,
-  "nba_player_props_forward_decision_2026_10_27_r13_side_accuracy_rerank");
+  "nba_player_props_forward_decision_2026_10_28_r14_owls_sharp_market_reader");
 assert.equal(
   artifact.sourceGradeRelease,
-  "nba_player_props_exact_price_grade_2026_10_27_r14_side_accuracy_rerank",
+  "nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader",
 );
 assert.deepEqual(artifact.gradePolicies.points.accuracyRerank, {
   signalFamily: "model_market_average_probability",
@@ -73,7 +73,7 @@ assert.equal(artifact.gradePolicies.rebounds.policy.signalFamily, "model_market_
 assert.equal(artifact.gradePolicies.rebounds.policy.eligibilityGate, "established_role");
 assert.equal(artifact.gradePolicies.rebounds.policy.maxPerSlate, 1);
 assert.equal(artifact.gradePolicies.rebounds.policy.requireReferenceBook, true);
-assert.equal(artifact.sourceTournamentRelease, "nba_player_props_model_tournament_2026_10_26_r15_cross_season_market_heads");
+assert.equal(artifact.sourceTournamentRelease, "nba_player_props_model_tournament_2026_10_28_r16_owls_sharp_market_reader");
 assert.equal(artifact.modelBundleByMarket?.points, "cross_season_r15");
 assert.equal(artifact.modelBundleByMarket?.assists, "cross_season_r15");
 assert.equal(artifact.modelBundleByMarket?.points_rebounds_assists, "cross_season_r15");
@@ -81,15 +81,17 @@ assert.equal(artifact.modelBundleByMarket?.rebounds_assists, "cross_season_r15")
 assert.equal(artifact.modelBundleByMarket?.rebounds, undefined);
 assert.equal(artifact.modelBundleByMarket?.threes, undefined);
 assert(artifact.modelBundles?.cross_season_r15, "qualified markets require their traced cross-season model bundle");
-assert.equal(artifact.selectedByMarket.rebounds, "fanduel_confirmed_2pp_disagreements");
+assert.equal(artifact.selectedByMarket.rebounds, "market_read_all_disagreements");
 assert.equal(artifact.underlyingByMarket.rebounds, "ridge_r2_minutes_regression");
-assert.equal(artifact.candidateMarketMinimumDistance.rebounds, 0.02);
+assert.equal(artifact.candidateMarketMinimumDistance.rebounds, 0);
+assert.equal(artifact.selectedByMarket.points_rebounds_assists, "ridge_r2_minutes_regression");
+assert.equal(artifact.candidateMarketMinimumDistance.points_rebounds_assists, null);
 assert.equal(artifact.selectedByMarket.threes, "structural_direct_counts");
 assert.equal(artifact.underlyingByMarket.threes, "structural_direct_counts");
 assert.equal(artifact.candidateMarketMinimumDistance.threes, null);
-assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds, 0.02);
+assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds, null);
 assert.equal(artifact.exactPriceArbitrationMinimumDistance.rebounds_assists, 0.02);
-assert.equal(artifact.exactPriceArbitrationMinimumDistance.points_rebounds_assists, 0.04);
+assert.equal(artifact.exactPriceArbitrationMinimumDistance.points_rebounds_assists, null);
 assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds, "none");
 assert.equal(artifact.exactPriceArbitrationMovementPolicy.rebounds_assists, "none");
 assert.equal(artifact.exactPriceArbitrationMovementPolicy.points_rebounds_assists, "not_opposed");
@@ -389,11 +391,65 @@ const chronological = [
 ];
 const currentOffer = selectNbaPlayerPropsCurrentCanonicalOfferSets(chronological)[0]!;
 assert.equal(currentOffer.canonicalLine, 24.5, "current selector must not let an older main line outvote the latest books");
+assert.equal(selectNbaPlayerPropsCurrentCanonicalOfferSets(
+  chronological.filter((row) => row.isOpening),
+).length, 0, "an opening-only scope must remain stored evidence without crashing or masquerading as a current offer");
+const owlsAlternateRows = observations.filter((row) => row.market === "points").flatMap((row, index) => [
+  {
+    ...row,
+    provider: "owls" as const,
+    providerObservationId: `owls-alt-${index}-a`,
+    sportsbook: index < 2 ? "pinnacle" : "novig",
+    line: 35.5,
+    observedAt: "2026-10-21T12:00:03.000Z",
+    fetchedAt: "2026-10-21T12:00:03.000Z",
+    isOpening: false,
+  },
+]);
+const primaryAnchoredOffer = selectNbaPlayerPropsCurrentCanonicalOfferSets([...chronological, ...owlsAlternateRows])[0]!;
+assert.equal(primaryAnchoredOffer.canonicalLine, 24.5,
+  "supplemental Owl sharp ladders must not replace an already resolved primary listed line");
+assert.deepEqual(primaryAnchoredOffer.allObservedLines, [24.5, 35.5],
+  "Owl alternate ladders remain retained as internal market evidence");
+const sameBookSupplement = chronological.filter((row) => row.sportsbook === "fanduel" && !row.isOpening).map((row) => ({
+  ...row,
+  provider: "owls" as const,
+  providerObservationId: `owls-same-book-${row.side}`,
+  line: 35.5,
+  observedAt: "2026-10-21T12:00:04.000Z",
+  fetchedAt: "2026-10-21T12:00:04.000Z",
+}));
+assert.equal(selectNbaPlayerPropsCurrentCanonicalOfferSets([...chronological, ...sameBookSupplement])[0]?.canonicalLine, 24.5,
+  "a fresher Owl observation for the same sportsbook must not erase the primary provider's listed-line vote");
 const target = currentOffer.observations.find((row) => row.sportsbook === "fanduel" && row.side === "over")!;
 const chronologicalEvidence = buildNbaPlayerPropsMarketEvidence({ target, observations: chronological, evaluatedAt: target.observedAt });
 assert.equal(chronologicalEvidence.openingLine, 23.5);
 assert.equal(chronologicalEvidence.currentLine, 24.5);
 assert.equal(chronologicalEvidence.targetExcludedBooks, 2, "each target-excluded sportsbook counts only its latest complete pair");
+assert.equal(chronologicalEvidence.targetExcludedReferenceBooks, 2);
+assert.equal(chronologicalEvidence.targetExcludedRetailBooks, 0);
+assert.equal(chronologicalEvidence.referenceRetailAgreement, "unverified");
+const directionalChronological = chronological.map((row) => !row.isOpening && row.sportsbook !== "fanduel"
+  ? { ...row, americanPrice: row.side === "over" ? -130 : 110 }
+  : row);
+const retailSupplement = directionalChronological
+  .filter((row) => row.sportsbook === "bet365" && !row.isOpening)
+  .map((row) => ({
+    ...row,
+    providerObservationId: `retail-${row.side}`,
+    sportsbook: "draftkings",
+  }));
+const separatedEvidence = buildNbaPlayerPropsMarketEvidence({
+  target,
+  observations: [...directionalChronological, ...retailSupplement],
+  evaluatedAt: target.observedAt,
+});
+assert.equal(separatedEvidence.targetExcludedReferenceBooks, 2,
+  "reference-book consensus must remain separate from retail corroboration");
+assert.equal(separatedEvidence.targetExcludedRetailBooks, 1);
+assert.notEqual(separatedEvidence.targetExcludedReferenceOverProbability, null);
+assert.notEqual(separatedEvidence.targetExcludedRetailOverProbability, null);
+assert.match(separatedEvidence.referenceRetailAgreement, /^agree_/);
 
 const staggeredCurrent = [
   ...observations.filter((row) => row.market === "points" && row.sportsbook !== "bet365").map((row) => ({

@@ -427,6 +427,7 @@ export async function GET(request: Request): Promise<Response> {
             schedule: rollingSchedule.games,
             ballDontLieApiKey: balldontlieApiKey,
             theOddsApiKey: process.env.THE_ODDS_API_KEY?.trim() || null,
+            owlsInsightApiKey: owlsApiKey,
             fullRefresh: !intraday,
             now: now.toISOString(),
           });

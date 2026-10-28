@@ -6,6 +6,7 @@ import {
 } from "../lib/services/nba/nbaPlayerPropsContract";
 import {
   normalizeBallDontLieNbaPlayerProps,
+  normalizeOwlsNbaPlayerProps,
   normalizeTheOddsApiNbaPlayerProps,
 } from "../lib/services/nba/nbaPlayerPropsProviders";
 import {
@@ -138,10 +139,54 @@ assert.equal(toa.rows[0]?.provider, "the_odds_api");
 assert.equal(toa.rows[0]?.playerName, "Test Player");
 assert.equal(toa.rows[0]?.canonicalPlayerId, "nba-bdl-player:246");
 
-const coverage = summarizeNbaPlayerPropsCoverage([...bdl.rows, ...toa.rows]);
-assert.equal(coverage.completeTwoWayBuckets, 2);
-assert.equal(coverage.foundationRows, 4);
-assert.deepEqual(coverage.sportsbooks, ["draftkings", "fanduel"]);
+const owls = normalizeOwlsNbaPlayerProps({
+  fetchedAt,
+  canonicalGames: { "owls-game": "nba:2026-10-20:bos-nyk" },
+  canonicalPlayers: { testplayer: "nba-bdl-player:246" },
+  events: [{
+    gameId: "owls-game",
+    commenceTime: "2026-10-21T00:00:00.000Z",
+    homeTeam: "New York Knicks",
+    awayTeam: "Boston Celtics",
+    isLive: false,
+    books: [{
+      key: "pinnacle",
+      lastUpdate: "2026-10-20T19:56:00.000Z",
+      props: [{
+        propId: "owls-prop-1",
+        category: "pts_rebs_asts",
+        playerName: "Test Player",
+        team: "BOS",
+        line: 44.5,
+        overPrice: -108,
+        underPrice: -112,
+        lastUpdate: "2026-10-20T19:57:00.000Z",
+      }, {
+        propId: "owls-invalid-exchange-pair",
+        category: "assists",
+        playerName: "Test Player",
+        team: "BOS",
+        line: 5.5,
+        overPrice: -525,
+        underPrice: -4900,
+        lastUpdate: "2026-10-20T19:57:00.000Z",
+      }],
+    }],
+  }],
+});
+assert.equal(owls.inputRows, 2);
+assert.equal(owls.rows.length, 2);
+assert.equal(owls.rejectedRows, 1, "non-complementary exchange ladder prices must not become a two-way market");
+assert.equal(owls.rows[0]?.provider, "owls");
+assert.equal(owls.rows[0]?.market, "points_rebounds_assists");
+assert.equal(owls.rows[0]?.canonicalGameId, "nba:2026-10-20:bos-nyk");
+assert.equal(owls.rows[0]?.canonicalPlayerId, "nba-bdl-player:246");
+assert.deepEqual(owls.rows.map((row) => row.side).sort(), ["over", "under"]);
+
+const coverage = summarizeNbaPlayerPropsCoverage([...bdl.rows, ...toa.rows, ...owls.rows]);
+assert.equal(coverage.completeTwoWayBuckets, 3);
+assert.equal(coverage.foundationRows, 6);
+assert.deepEqual(coverage.sportsbooks, ["draftkings", "fanduel", "pinnacle"]);
 
 const snapshot = buildNbaPlayerPropsObservationSnapshot({
   generatedAt: fetchedAt,

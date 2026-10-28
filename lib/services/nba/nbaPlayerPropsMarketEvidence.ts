@@ -1,7 +1,7 @@
 import type { NbaPlayerPropPriceObservation, NbaPlayerPropSide } from "./nbaPlayerPropsContract";
 
 export const NBA_PLAYER_PROPS_MARKET_EVIDENCE_RELEASE =
-  "nba_player_props_market_evidence_2026_10_23_r3_canonical_coverage" as const;
+  "nba_player_props_market_evidence_2026_10_28_r4_owls_reference_lane" as const;
 
 export type NbaPlayerPropsCanonicalOfferSet = {
   scopeKey: string;
@@ -23,6 +23,11 @@ export type NbaPlayerPropsMarketEvidence = {
   targetExcludedOverProbability: number | null;
   targetExcludedBooks: number;
   targetExcludedReferenceBooks: number;
+  targetExcludedReferenceOverProbability: number | null;
+  targetExcludedRetailOverProbability: number | null;
+  targetExcludedRetailBooks: number;
+  targetExcludedProbabilityRange: number | null;
+  referenceRetailAgreement: "agree_over" | "agree_under" | "disagree" | "unverified";
   openingLine: number | null;
   priorLine: number | null;
   currentLine: number;
@@ -67,19 +72,25 @@ function selectCanonicalOfferSets(
   currentOnly: boolean | "legacy",
 ): NbaPlayerPropsCanonicalOfferSet[] {
   const scopes = groupBy(rows.filter(resolvedObservation), marketScopeKey);
-  return [...scopes.entries()].map(([scopeKey, scopeRows]) => {
+  return [...scopes.entries()].flatMap(([scopeKey, scopeRows]) => {
     const selectableRows = currentOnly === "legacy"
       ? latestSnapshotByBook(scopeRows)
       : currentOnly
         ? latestCurrentPairRowsByBookLine(scopeRows)
         : scopeRows;
-    const summaries = summarizeLines(selectableRows);
+    const primaryRows = selectableRows.filter((row) => row.provider !== "owls");
+    const primarySummaries = summarizeLines(primaryRows);
+    const selectionRows = primarySummaries.some((summary) => summary.completeBooks > 0)
+      ? primaryRows
+      : selectableRows;
+    const summaries = summarizeLines(selectionRows);
+    if (summaries.length === 0) return [];
     const complete = summaries.filter((summary) => summary.completeBooks > 0);
     const corroborated = complete.filter((summary) => summary.completeBooks >= 2);
     const candidates = currentOnly !== "legacy" && corroborated.length > 0
       ? corroborated
       : complete.length > 0 ? complete : summaries;
-    const bookVotes = sportsbookLineVotes(selectableRows);
+    const bookVotes = sportsbookLineVotes(selectionRows);
     for (const vote of bookVotes) {
       const summary = summaries.find((row) => row.line === vote);
       if (summary) summary.votes += 1;
@@ -93,13 +104,13 @@ function selectCanonicalOfferSets(
       || right.latest - left.latest
       || left.line - right.line)[0]!;
     const freshest = freshestByBookSide(selectableRows.filter((row) => row.line === selected.line));
-    return {
+    return [{
       scopeKey,
       canonicalLine: selected.line,
       observations: freshest,
       completeBooks: selected.completeBooks,
-      allObservedLines: summaries.map((row) => row.line).sort((a, b) => a - b),
-    };
+      allObservedLines: summarizeLines(selectableRows).map((row) => row.line).sort((a, b) => a - b),
+    }];
   }).sort((a, b) => a.scopeKey.localeCompare(b.scopeKey));
 }
 
@@ -149,6 +160,14 @@ export function buildNbaPlayerPropsMarketEvidence(args: {
   if (!current) health.push("no_same_book_current_pair");
   if (new Set(atLine.map((row) => normalizeBook(row.sportsbook))).size < 2) health.push("single_book_line");
   const evidenceObservedAt = inScope.reduce((latest, row) => Date.parse(row.observedAt) > Date.parse(latest) ? row.observedAt : latest, args.target.observedAt);
+  const referenceProbabilities = pairProbabilities
+    .filter((row) => REFERENCE_BOOKS.has(row.book))
+    .map((row) => row.probability);
+  const retailProbabilities = pairProbabilities
+    .filter((row) => !REFERENCE_BOOKS.has(row.book))
+    .map((row) => row.probability);
+  const referenceOverProbability = median(referenceProbabilities);
+  const retailOverProbability = median(retailProbabilities);
   return {
     release: NBA_PLAYER_PROPS_MARKET_EVIDENCE_RELEASE,
     mode: "offline_research_only",
@@ -160,7 +179,12 @@ export function buildNbaPlayerPropsMarketEvidence(args: {
     targetAmericanPrice: args.target.americanPrice,
     targetExcludedOverProbability: median(pairProbabilities.map((row) => row.probability)),
     targetExcludedBooks: pairProbabilities.length,
-    targetExcludedReferenceBooks: pairProbabilities.filter((row) => REFERENCE_BOOKS.has(row.book)).length,
+    targetExcludedReferenceBooks: referenceProbabilities.length,
+    targetExcludedReferenceOverProbability: referenceOverProbability,
+    targetExcludedRetailOverProbability: retailOverProbability,
+    targetExcludedRetailBooks: retailProbabilities.length,
+    targetExcludedProbabilityRange: probabilityRange(pairProbabilities.map((row) => row.probability)),
+    referenceRetailAgreement: probabilityAgreement(referenceOverProbability, retailOverProbability),
     openingLine: opening?.line ?? null,
     priorLine: prior?.line ?? null,
     currentLine: current?.line ?? args.target.line,
@@ -190,7 +214,7 @@ function marketScopeKey(row: NbaPlayerPropPriceObservation): string {
 type Pair = { book: string; line: number; observedAt: string; over: NbaPlayerPropPriceObservation; under: NbaPlayerPropPriceObservation };
 
 function completePairs(rows: readonly NbaPlayerPropPriceObservation[]): Pair[] {
-  const groups = groupBy(rows, (row) => `${normalizeBook(row.sportsbook)}|${row.line}|${row.observedAt}`);
+  const groups = groupBy(rows, (row) => `${row.provider}|${normalizeBook(row.sportsbook)}|${row.line}|${row.observedAt}`);
   return [...groups.values()].flatMap((values) => {
     const over = values.find((row) => row.side === "over");
     const under = values.find((row) => row.side === "under");
@@ -244,7 +268,11 @@ function sportsbookLineVotes(rows: readonly NbaPlayerPropPriceObservation[]): nu
 function latestCurrentPairRowsByBookLine(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
   const output: NbaPlayerPropPriceObservation[] = [];
   const current = rows.filter((row) => !row.isOpening && !row.isLive);
-  for (const values of groupBy(current, (row) => `${normalizeBook(row.sportsbook)}|${row.line}`).values()) {
+  // Keep provider lanes separate until the canonical line is resolved. Owl may
+  // carry a fresher observation for the same named sportsbook; collapsing it
+  // with the primary provider here would erase the primary main-line vote
+  // before the supplemental-source policy can be applied.
+  for (const values of groupBy(current, (row) => `${row.provider}|${normalizeBook(row.sportsbook)}|${row.line}`).values()) {
     const pair = latestPairState(values);
     if (pair) output.push(pair.over, pair.under);
   }
@@ -263,7 +291,7 @@ function latestPairByBook(pairs: readonly Pair[]): Pair[] {
 function freshestByBookSide(rows: readonly NbaPlayerPropPriceObservation[]): NbaPlayerPropPriceObservation[] {
   const selected = new Map<string, NbaPlayerPropPriceObservation>();
   for (const row of rows) {
-    const key = `${normalizeBook(row.sportsbook)}|${row.side}`;
+    const key = `${row.provider}|${normalizeBook(row.sportsbook)}|${row.side}`;
     const previous = selected.get(key);
     if (!previous || Date.parse(row.observedAt) > Date.parse(previous.observedAt)) selected.set(key, row);
   }
@@ -283,6 +311,20 @@ function implied(price: number): number {
 
 function direction(value: number, epsilon = 0.000_001): "toward_over" | "toward_under" | "flat" {
   return value > epsilon ? "toward_over" : value < -epsilon ? "toward_under" : "flat";
+}
+
+function probabilityRange(values: readonly number[]): number | null {
+  if (values.length < 2) return null;
+  return Math.max(...values) - Math.min(...values);
+}
+
+function probabilityAgreement(
+  reference: number | null,
+  retail: number | null,
+): NbaPlayerPropsMarketEvidence["referenceRetailAgreement"] {
+  if (reference === null || retail === null || reference === 0.5 || retail === 0.5) return "unverified";
+  if ((reference > 0.5) !== (retail > 0.5)) return "disagree";
+  return reference > 0.5 ? "agree_over" : "agree_under";
 }
 
 function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
