@@ -16,7 +16,7 @@ const emptyMarket = (): MarketEdgeDto => ({
   recommendationDecision: { sharpBookSplits: null },
 } as unknown as MarketEdgeDto);
 
-const response = (sport: "cfb" | "mlb" | "nhl", awayTeam: string, homeTeam: string, awayName: string, homeName: string) => ({
+const response = (sport: "cfb" | "mlb" | "nba" | "nhl", awayTeam: string, homeTeam: string, awayName: string, homeName: string) => ({
   as_of: "2026-09-20T20:00:00.000Z",
   sport,
   date: "2026-09-20",
@@ -197,6 +197,31 @@ const owlsFeed: NonNullable<Parameters<typeof applySharpApiCurrentSplitOverlay>[
   rows: [complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z")],
 };
 assert.ok(validateSharpApiCurrentSplitFeed(owlsFeed, "cfb"), "Owls durable named-book feed is accepted");
+
+const repeatedNbaMatchup = response("nba", "MIA", "ATL", "Miami Heat", "Atlanta Hawks");
+repeatedNbaMatchup.games.push({
+  ...structuredClone(repeatedNbaMatchup.games[0]!),
+  id: "nba-2",
+  gameStartAt: "2026-09-22T23:00:00.000Z",
+});
+const repeatedNbaFeed = {
+  source: "owls_current_splits" as const,
+  release: "owls_current_splits_2026_10_27_r1_complete_named_book" as const,
+  sport: "nba" as const,
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [complete("nba", "circa", "Miami Heat", "Atlanta Hawks", "2026-09-20T20:04:00.000Z")],
+};
+assert.deepEqual(
+  applySharpApiCurrentSplitOverlay(repeatedNbaMatchup, repeatedNbaFeed, now),
+  { matchedGames: 1, populatedMarkets: 3 },
+  "an exact event date cannot populate a later repeat matchup on a rolling board",
+);
+assert.equal(
+  repeatedNbaMatchup.games[1]!.markets.moneyline.sportsbookSplits,
+  null,
+  "the later repeat matchup remains untouched",
+);
+
 const transitionedFeed = sharpApiCurrentTest.mergeCurrentSplitFeeds(feed, owlsFeed);
 assert.equal(transitionedFeed.rows.length, 1, "provider transition never mixes incompatible event identities");
 assert.equal(transitionedFeed.source, "owls_current_splits", "Owls owns the new single-provider durable feed");

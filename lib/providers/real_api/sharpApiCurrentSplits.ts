@@ -695,10 +695,15 @@ function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sp
 }
 
 function acceptedDates(gameStartAt: string | null | undefined, slateDate: string): Set<string> {
-  const dates = new Set([slateDate]);
+  const dates = new Set<string>();
   if (gameStartAt && Number.isFinite(Date.parse(gameStartAt))) {
     dates.add(gameStartAt.slice(0, 10));
     dates.add(easternDate(gameStartAt));
+  } else {
+    // Legacy rows without a scheduled start can use the board date. Games
+    // with an exact start must stay scoped to that event's UTC/Eastern dates;
+    // a rolling multi-day board may contain the same matchup more than once.
+    dates.add(slateDate);
   }
   return dates;
 }
