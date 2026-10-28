@@ -9,6 +9,8 @@ import {
   populateDailyEdgeSharpApiCurrentSplits,
   readStoredSharpApiCurrentSplits,
   refreshCachedOwlsCurrentSplitFallback,
+  restoreCompleteSharpApiCurrentSplitDisplay,
+  restoreStoredCompleteSharpApiCurrentSplitDisplay,
   sanitizeRetainedSharpSplitPresentation,
   type SharpApiCurrentSplitOverlayOptions,
 } from "@/lib/providers/real_api/sharpApiCurrentSplits";
@@ -429,12 +431,13 @@ export async function populateDailyEdgeDraftKingsFallback(
   const durable = applyDraftKingsNetworkSplitFallback(response, durableFeed, options);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
   alignMarketReadsToDisplayedSharpBookSplits(response);
+  const historical = await restoreStoredCompleteSharpApiCurrentSplitDisplay(response, sport);
   restoreCompleteSharpBookSplitDisplay(response, continuity.feed);
   await persistDailyEdgeSharpBookSplitContinuity(response, sport, continuity.feed);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
     matchedGames: Math.max(current.matchedGames, durable.matchedGames, continuity.matchedGames),
-    populatedMarkets: current.populatedMarkets + durable.populatedMarkets + continuity.populatedMarkets,
+    populatedMarkets: current.populatedMarkets + durable.populatedMarkets + continuity.populatedMarkets + historical,
   };
 }
 
@@ -457,11 +460,12 @@ export async function populateDailyEdgeStoredSplitFallback(
   const durable = applyDraftKingsNetworkSplitFallback(response, draftKingsFeed, options);
   reconcileDailyEdgeSharpBookSplitAuthority(response);
   alignMarketReadsToDisplayedSharpBookSplits(response);
+  const historical = restoreCompleteSharpApiCurrentSplitDisplay(response, sharpFeed);
   restoreCompleteSharpBookSplitDisplay(response, continuity.feed);
   sanitizeRetainedSharpSplitPresentation(response);
   return {
     matchedGames: Math.max(current.matchedGames, durable.matchedGames, continuity.matchedGames),
-    populatedMarkets: current.populatedMarkets + durable.populatedMarkets + continuity.populatedMarkets,
+    populatedMarkets: current.populatedMarkets + durable.populatedMarkets + continuity.populatedMarkets + historical,
   };
 }
 

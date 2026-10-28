@@ -4,6 +4,7 @@ import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
 import {
   applySharpApiCurrentSplitOverlay,
+  restoreCompleteSharpApiCurrentSplitDisplay,
   sanitizeRetainedSharpSplitPresentation,
   validateSharpApiCurrentSplitFeed,
   __TEST__ as sharpApiCurrentTest,
@@ -275,6 +276,39 @@ const mergedCurrent = mergedFeed.rows.find((row) => row.fetched_at === partialUp
 assert.equal(mergedFeed.rows.length, 2, "the durable feed retains both sides of a future lock cutoff");
 assert.deepEqual(mergedCurrent?.total, partialUpdate.total, "a newer single-axis observation remains timestamp-honest instead of borrowing an old handle axis");
 assert.equal(mergedCurrent?.fetched_at, partialUpdate.fetched_at, "new row identity and fetch time remain current for unaffected markets");
+
+const recoveredFromDurableHistory = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+applySharpApiCurrentSplitOverlay(recoveredFromDurableHistory, mergedFeed, Date.parse("2026-09-20T20:05:00.000Z"));
+assert.deepEqual(
+  recoveredFromDurableHistory.games[0]!.markets.total.sportsbookSplits?.rows.map((row) => [row.moneyPct, row.betsPct]),
+  [[null, 49], [null, 51]],
+  "the ordinary current overlay remains timestamp-honest and shows the latest ticket-only observation",
+);
+assert.equal(
+  restoreCompleteSharpApiCurrentSplitDisplay(recoveredFromDurableHistory, mergedFeed),
+  1,
+  "the post-reader display pass recovers the newest complete pair from durable history",
+);
+assert.deepEqual(
+  recoveredFromDurableHistory.games[0]!.markets.total.sportsbookSplits?.rows.map((row) => [row.moneyPct, row.betsPct]),
+  [[44, 49], [56, 51]],
+  "member display regains both verified axes without combining provider timestamps",
+);
+assert.equal(
+  recoveredFromDurableHistory.games[0]!.markets.total.recommendationDecision?.sharpBookSplits,
+  null,
+  "durable historical display recovery cannot enter the canonical market-reader decision",
+);
+
+const lockedHistoricalDisplay = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+lockedHistoricalDisplay.games[0]!.lockState = "locked";
+lockedHistoricalDisplay.games[0]!.lockedAt = "2026-09-20T20:00:15.000Z";
+assert.equal(
+  restoreCompleteSharpApiCurrentSplitDisplay(lockedHistoricalDisplay, mergedFeed),
+  0,
+  "durable historical display recovery cannot mutate a locked member snapshot",
+);
+assert.equal(lockedHistoricalDisplay.games[0]!.markets.total.sportsbookSplits, null);
 
 const heldComplete = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
 heldComplete.games[0]!.markets.total.sportsbookSplits = sharpApiCurrentTest.sectionFromRow(

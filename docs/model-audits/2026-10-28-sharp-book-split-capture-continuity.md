@@ -36,9 +36,11 @@ ordinary application calls.
 The history cap keeps the newest 96 observations for each exact event/book and
 may retain one older complete money-plus-ticket observation per market. It
 never combines axes from different timestamps. At the response boundary, a
-previously verified complete exact-game section may replace a later partial
-display section only after the existing market-reader bridge has finished.
-That restoration is presentation-only and cannot enter the canonical decision.
+previously verified complete exact-game section may come from either the
+slate continuity snapshot or the durable provider history and replace a later
+partial display section only after the existing market-reader bridge has
+finished. That restoration is presentation-only and cannot enter the canonical
+decision.
 
 Locked records remain immutable. Existing locked split evidence keeps exact
 precedence, and a missing locked field continues to require the established
@@ -64,7 +66,8 @@ are zero by contract.
   display.
 - Locked-row tests prove the restoration pass does not modify a locked card.
 - History tests prove 96 newer partial observations cannot evict the prior
-  timestamp-honest complete pair.
+  timestamp-honest complete pair, and that the pair is recoverable for display
+  without entering the market-reader decision.
 - DraftKings tests prove the maintenance shell fails closed and cannot replace
   the durable fallback.
 - Cron contract tests prove all seven supported leagues are scheduled every

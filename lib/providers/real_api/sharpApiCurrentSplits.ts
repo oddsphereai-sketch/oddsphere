@@ -167,6 +167,15 @@ export async function readStoredSharpApiCurrentSplits(
   return validateSharpApiCurrentSplitFeed(stored?.payload, sport);
 }
 
+export async function restoreStoredCompleteSharpApiCurrentSplitDisplay(
+  response: DailyEdgeResponse,
+  sport: Sport,
+): Promise<number> {
+  if (!supportedSport(sport)) return 0;
+  const feed = await readStoredSharpApiCurrentSplits(sport);
+  return restoreCompleteSharpApiCurrentSplitDisplay(response, feed);
+}
+
 export async function refreshOwlsCurrentSplitFallback(sport: Sport): Promise<number> {
   if (!supportedSport(sport)) return 0;
   const feed = await readDurableCurrentSplits(sport, {
@@ -245,6 +254,60 @@ export function applySharpApiCurrentSplitOverlay(
     }
   }
   return { matchedGames, populatedMarkets };
+}
+
+/**
+ * Recover the newest complete exact-game observation from the durable provider
+ * history for member display only. This runs after the market-reader bridge,
+ * so an older retained pair can never enter the canonical decision. Locked
+ * records remain owned by the explicit pre-lock reconstruction path.
+ */
+export function restoreCompleteSharpApiCurrentSplitDisplay(
+  response: DailyEdgeResponse,
+  feed: SharpApiCurrentSplitFeed | null,
+): number {
+  if (!feed || response.sport !== feed.sport) return 0;
+  let restored = 0;
+  for (const game of response.games) {
+    if (game.lockState === "locked") continue;
+    const candidates = feed.rows.filter((row) => rowMatchesGame(row, game, response.date, feed.sport));
+    if (candidates.length === 0) continue;
+    const markets: Array<[keyof DailyEdgeGameDto["markets"], SplitMarket]> = [
+      ["moneyline", "moneyline"],
+      ["total", "total"],
+    ];
+    if (feed.sport !== "mlb") markets.push(["first_inning", "spread"]);
+    for (const [slot, sourceMarket] of markets) {
+      const market = game.markets[slot];
+      if (!market) continue;
+      const displayedComplete = [
+        market.sportsbookSplits ?? null,
+        market.recommendationDecision?.sharpBookSplits ?? null,
+      ].some((section) => section !== null && sectionQuality(section) === 2);
+      if (displayedComplete) continue;
+      const section = newestCompleteSection(game, sourceMarket, candidates);
+      if (!section) continue;
+      market.sportsbookSplits = section;
+      restored += 1;
+    }
+  }
+  return restored;
+}
+
+function newestCompleteSection(
+  game: DailyEdgeGameDto,
+  market: SplitMarket,
+  candidates: Json[],
+): MarketSplitDisplaySection | null {
+  for (const book of BOOK_PRIORITY) {
+    const sections = candidates
+      .filter((row) => normalize(text(row.sportsbook) ?? "") === book)
+      .map((row) => sectionFromRow(game, market, book, row))
+      .filter((section): section is MarketSplitDisplaySection => section !== null && sectionQuality(section) === 2)
+      .sort((first, second) => sectionSourceTimestamp(second) - sectionSourceTimestamp(first));
+    if (sections[0]) return sections[0];
+  }
+  return null;
 }
 
 /**
