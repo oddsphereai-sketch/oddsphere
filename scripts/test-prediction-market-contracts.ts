@@ -86,5 +86,6 @@ assert.equal(predictionMarketBookTrail(book,"MIN -4",now,-3.5),null,"old alterna
 const service=readFileSync("lib/services/dailyEdge/predictionMarketDisplayFeed.ts","utf8");
 assert.equal((service.match(/await backfillKalshiDisplayHistory\(/g)??[]).length,1,"all kinds share the existing global history request budget");
 assert.ok(service.includes('contractsForPublishedReaders(parsed,winners,games)'));
+assert.ok(service.includes('revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0})')&&service.includes('revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0})'),"successful scheduled capture expires both member cache lanes immediately");
 assert.ok(!/game_predictions|prediction_records|prediction_pipeline|locked_at/.test(service),"display capture has no model/lock table authority");
 console.log("Prediction-market contracts: exact market/side/line, push accounting, explicit nearby context, real histories, coherent times, immutable readers and bounded collection passed.");

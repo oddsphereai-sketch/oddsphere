@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
 import {
   isPredictionMarketFeed, mergePredictionMarketFeeds, parseOwlsPredictionMarkets,
@@ -103,5 +103,9 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
       source:"owls_kalshi_display",payloadVersion:PREDICTION_MARKET_CONTRACT_RELEASE});
     if(!saved.ok)warnings.push(`${contract.kind}: display snapshot could not be stored`);
   }
+  // A successful scheduled write must not leave member requests on a prior
+  // retained receipt while a stale-while-revalidate layer catches up.
+  revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0});
+  revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0});
   return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:1+contractInputs.filter(input=>!input.skipped).length,warnings};
 }

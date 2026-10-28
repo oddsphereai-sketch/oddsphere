@@ -63,6 +63,9 @@ bounds apply separately to each kind; stale receipts retain original timestamps.
 Failures retain earlier contracts and report partial status without cancelling
 the independent sportsbook split capture. Cron accounting reports actual OWLS
 request counts on success and a labeled ceiling if capture throws.
+Successful scheduled writes explicitly expire both shared display cache tags
+using Next 16's two-argument `revalidateTag(tag, {expire:0})`; subsequent member
+reads must not stay on an older retained receipt after a fresh one was stored.
 
 All new writes target separate `lab_response_snapshots` display keys. Published
 member snapshots are SELECT-only. No stored projection, probability, pick, grade,
