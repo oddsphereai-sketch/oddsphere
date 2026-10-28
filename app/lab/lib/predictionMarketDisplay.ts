@@ -1,7 +1,9 @@
 import type { MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketMatch, PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number]>};
+/** Actual receipt timestamp, odds-implied percentage, original American price. */
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean};
+export function formatPredictionMarketOdds(value:number):string {return value>0?`+${value}`:`−${Math.abs(value)}`;}
 const pickLabel=(value:string|null|undefined)=>value?.replace(/\s+ML$/i,"").trim().toUpperCase().replace(/^TIE$/,"DRAW");
 
 /** Use the exact selected outcome's real single-book moneyline observations. */
@@ -11,7 +13,7 @@ export function predictionMarketBookTrail(moneyline:MarketEdgeDto, outcomeLabel:
   const groups=new Map<string,NonNullable<MarketEdgeDto["oddsTrail"]>>();
   for(const stop of stops??[]){
     const book=stop.sportsbook?.trim().toLowerCase(), at=Date.parse(stop.observedAt??"");
-    if(!book || ["recommendation_snapshot","locked_snapshot"].includes(book) || stop.line!==null || implied(stop.american)===null || !Number.isFinite(at) || at>now || at<now-8*60*60_000)continue;
+    if(!book || ["recommendation_snapshot","locked_snapshot"].includes(book) || stop.line!==null || implied(stop.american)===null || !Number.isFinite(at) || at>now || at<now-24*60*60_000)continue;
     const group=groups.get(book)??[];group.push(stop);groups.set(book,group);
   }
   const preferred=moneyline.movementReferenceSportsbook?.trim().toLowerCase();
@@ -19,8 +21,26 @@ export function predictionMarketBookTrail(moneyline:MarketEdgeDto, outcomeLabel:
   const group=[...groups.entries()].filter(([,rows])=>rows.some(row=>row.label==="current"||row.label==="locked"))
     .sort((a,b)=>Number(b[1].length>=2)-Number(a[1].length>=2)||rank(a[0])-rank(b[0])||b[1].length-a[1].length)[0];
   if(!group)return null;
-  const points=new Map<number,number>();for(const row of group[1])points.set(Date.parse(row.observedAt!),implied(row.american)!);
-  return {sportsbook:group[0],points:[...points].sort((a,b)=>a[0]-b[0]).slice(-100)};
+  const points=new Map<number,[number,number,number]>();for(const row of group[1]){const at=Date.parse(row.observedAt!);points.set(at,[at,implied(row.american)!,row.american]);}
+  const ordered=[...points.values()].sort((a,b)=>a[0]-b[0]);
+  // Keep the real earliest anchor even on a densely sampled book.
+  const bounded=ordered.length>100?[ordered[0],...ordered.slice(-99)]:ordered;
+  const last=bounded.at(-1)!;
+  return {sportsbook:group[0],points:bounded,locked:group[1].some(row=>Date.parse(row.observedAt!)===last[0]&&row.label==="locked")};
+}
+
+/** Shared percent axis; padding adapts to actual movement instead of hiding it. */
+export function predictionMarketChartDomain(points:ReadonlyArray<readonly [number,number,...unknown[]]>):[number,number] {
+  const values=points.map(point=>point[1]*100);
+  const low=Math.min(...values), high=Math.max(...values);
+  const padding=Math.max(.35,(high-low)*.15);
+  return [Math.max(0,Math.floor((low-padding)*2)/2),Math.min(100,Math.ceil((high+padding)*2)/2)];
+}
+
+/** Return a recorded observation, never a new interpolated sportsbook quote. */
+export function predictionMarketObservationAt<T extends readonly [number,...unknown[]]>(points:ReadonlyArray<T>,at:number):T|null {
+  for(let index=points.length-1;index>=0;index--)if(points[index][0]<=at)return points[index];
+  return null;
 }
 
 /** Historical interval volume and live cumulative deltas are never conflated. */
