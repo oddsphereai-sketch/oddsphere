@@ -20,6 +20,7 @@ import {
   encodeNbaPlayerPropsPrivatePayload,
   mergeNbaPlayerPropsMarketHistory,
   NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES,
+  NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS,
   NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
 } from "../lib/services/nba/nbaPlayerPropsPrivateStore";
 import {
@@ -33,7 +34,11 @@ import {
 } from "../lib/services/nba/nbaPlayerPropsMarketEvidence";
 import { buildNbaPlayerPropsPointInTimeFeatures } from "../lib/services/nba/nbaPlayerPropsPointInTimeFeatures";
 import { applyResolvedPlayerIdentities } from "../lib/services/nba/nbaPlayerPropsLiveCollector";
-import { nbaPlayerPropsScheduleGameMatches } from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
+import {
+  NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
+  nbaPlayerPropsForecastIsPublishable,
+  nbaPlayerPropsScheduleGameMatches,
+} from "../lib/services/nba/nbaPlayerPropsPrivateWriter";
 import type { NbaHistoricalGame, NbaHistoricalPlayerBox } from "../lib/services/nba/nbaPointInTimeFeatures";
 import { selectNbaPlayerPropsSnapshotCurrentObservations } from "./operator/nba/nba-player-props-snapshot-cycle";
 
@@ -50,6 +55,14 @@ assert.equal(
   artifact.sourceGradeRelease,
   "nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader",
 );
+assert.equal(
+  NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE,
+  "nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation",
+);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 18.8 }), true);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 0, finalProjection: 18.8 }), false);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: 18.2, finalProjection: 0 }), false);
+assert.equal(nbaPlayerPropsForecastIsPublishable({ independentProjection: Number.NaN, finalProjection: 18.8 }), false);
 assert.deepEqual(artifact.gradePolicies.points.accuracyRerank, {
   signalFamily: "model_market_average_probability",
   overBonus: -0.05,
@@ -561,8 +574,16 @@ assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
   release: "nba_player_props_private_store_2026_10_21_r4_bounded_quote_chronology",
 }, "market_history"), initialHistory.history, "the deployed r4 private payload must migrate without losing observations");
 assert.equal(decodeNbaPlayerPropsPrivatePayload({ ...envelope, checksum: "bad" }, "market_history"), null);
-assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, 96_000_000);
-assert.equal(NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE, "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity");
+assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_JSON_BYTES, 192_000_000);
+assert.equal(NBA_PLAYER_PROPS_PRIVATE_MARKET_MAX_OBSERVATIONS, 250_000);
+assert.equal(
+  NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
+  "nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity",
+);
+assert.deepEqual(decodeNbaPlayerPropsPrivatePayload({
+  ...envelope,
+  release: "nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity",
+}, "market_history"), initialHistory.history, "the deployed r5 private payload must migrate without losing observations");
 
 let boundedHistory = initialHistory.history;
 for (let index = 1; index <= 8; index += 1) {

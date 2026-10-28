@@ -439,14 +439,17 @@ Last reviewed: 2026-10-28
   `nba_player_props_model_tournament_2026_10_28_r16_owls_sharp_market_reader` /
   `nba_player_props_exact_price_grade_2026_10_28_r15_owls_sharp_market_reader`.
   The sole private writer is
-  `nba_player_props_private_writer_2026_10_28_r9_exact_movement_endpoint`; it
+  `nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation`; it
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is
-  `nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity`: the
-  deployed r3 envelope migrates in place, unchanged polling refreshes current
+  `nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity`: the
+  deployed r3-r5 envelopes migrate in place, unchanged polling refreshes current
   evidence without unbounded duplicate rows, and every quote scope retains its
   first, prior, and current distinct price states for opening/movement reading.
+  The r6 store keeps those exact semantics while raising the bounded archive
+  guards to 250,000 observations and 192 MB uncompressed; the independently
+  enforced 8 MB compressed envelope cap remains unchanged.
   It runs only when `NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED=true`, inside the
   existing `prediction_pipeline:nba` lease. It adds frozen-artifact verification,
   bounded current/opening prop capture, gap-only The Odds API fallback,
@@ -456,11 +459,15 @@ Last reviewed: 2026-10-28
   revisioned settlement. Member route/navigation are enabled while public
   tracking remains off; member-request provider fetching remains off. The
   October 28 release adds one bounded Owls prop call to that same writer. The
-  r9 writer keeps the exact evaluated sportsbook, line, side, and price as the
+  r9-r10 writer keeps the exact evaluated sportsbook, line, side, and price as the
   terminal member movement point; it never stitches another provider or an
   ambiguous alternate ladder into that same-book trail. This is evidence-only:
   projections, sides, probabilities, grades, prices, actionability, and locked
-  payloads are unchanged.
+  payloads are unchanged. The r10 publication boundary excludes only newly
+  offered rows whose independent or final projection is non-finite or
+  non-positive instead of preserving an otherwise complete slate. Such rows
+  cannot enter grades or tracking; valid decisions and every prior locked row
+  continue through the existing lifecycle unchanged.
   BALLDONTLIE keeps slate, player, main-line, opening, and primary target
   authority; Owls supplies fresh complete target-book-excluded reference pairs
   and missing scopes before the paid Odds API gap lane. Non-complementary

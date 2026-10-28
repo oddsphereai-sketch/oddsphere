@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canonicalNbaAbbreviation, fetchEspnNbaGameInjuries } from "./espnNbaInjuries";
-import { buildNbaPlayerPropsForwardDecisions } from "./nbaPlayerPropsFrozenRuntime";
+import {
+  buildNbaPlayerPropsForwardDecisions,
+  type NbaPlayerPropsForwardDecision,
+} from "./nbaPlayerPropsFrozenRuntime";
 import { advanceNbaPlayerPropsCandidateLifecycle } from "./nbaPlayerPropsLifecycle";
 import { collectNbaPlayerPropsLiveMarket } from "./nbaPlayerPropsLiveCollector";
 import {
@@ -30,7 +33,16 @@ import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementSto
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_28_r9_exact_movement_endpoint" as const;
+  "nba_player_props_private_writer_2026_10_28_r10_invalid_row_isolation" as const;
+
+export function nbaPlayerPropsForecastIsPublishable(
+  row: Pick<NbaPlayerPropsForwardDecision, "independentProjection" | "finalProjection">,
+): boolean {
+  return Number.isFinite(row.independentProjection)
+    && Number.isFinite(row.finalProjection)
+    && row.independentProjection > 0
+    && row.finalProjection > 0;
+}
 
 export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   release: typeof NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE;
@@ -184,13 +196,10 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     currentObservations: live.observations,
     evaluatedAt: now,
   });
-  const invalidForecasts = forward.filter((row) =>
-    !Number.isFinite(row.independentProjection)
-    || !Number.isFinite(row.finalProjection)
-    || row.independentProjection <= 0
-    || row.finalProjection <= 0);
+  const invalidForecasts = forward.filter((row) => !nbaPlayerPropsForecastIsPublishable(row));
+  const publishableForward = forward.filter(nbaPlayerPropsForecastIsPublishable);
   const minimumCoverage = Math.max(1, Math.floor(candidates.length * 0.80));
-  if (eligibleFeatures.length < minimumCoverage || forward.length === 0 || invalidForecasts.length > 0) {
+  if (eligibleFeatures.length < minimumCoverage || publishableForward.length === 0) {
     return {
       ...result("last_known_good_preserved"),
       providerRequests: stateRequests + live.providerRequests.balldontlie + live.providerRequests.theOddsApi + live.providerRequests.owls,
@@ -204,13 +213,12 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
         ...(eligibleFeatures.length < minimumCoverage
           ? [`feature_coverage_below_80_percent:${eligibleFeatures.length}/${candidates.length}`]
           : []),
-        ...(forward.length === 0 ? ["no_forward_decisions"] : []),
-        ...(invalidForecasts.length > 0 ? [`invalid_nonpositive_forecasts:${invalidForecasts.length}`] : []),
+        ...(publishableForward.length === 0 ? ["no_publishable_forward_decisions"] : []),
       ],
     };
   }
   const featureByScope = new Map(eligibleFeatures.map((row) => [`${row.game_id}|${row.player_id}`, row]));
-  const memberDecisions = forward.flatMap((row): NbaPlayerPropsMemberDecision[] => {
+  const memberDecisions = publishableForward.flatMap((row): NbaPlayerPropsMemberDecision[] => {
     const feature = featureByScope.get(`${row.gameId}|${row.playerId}`);
     const game = live.games.find((candidate) => Number(candidate.providerGameId) === row.gameId);
     if (!feature || !game || !row.playerName) return [];
@@ -324,6 +332,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
     locked: lifecycle.snapshot.decisions.filter((row) => row.lockedAt !== null).length,
     findings: [
       ...live.findings,
+      ...(invalidForecasts.length > 0 ? [`invalid_nonpositive_forecasts_excluded:${invalidForecasts.length}`] : []),
       ...(tracking.conflicts > 0 ? [`locked_tracking_conflicts_preserved:${tracking.conflicts}`] : []),
       ...(stateCorrections > 0 ? [`official_source_corrections_ingested:${stateCorrections}`] : []),
       ...(settlement?.corrected ? [`official_stat_corrections_recorded:${settlement.corrected}`] : []),
