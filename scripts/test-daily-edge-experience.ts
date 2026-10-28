@@ -152,10 +152,16 @@ check(
   candidateMemberPageSource.includes("const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000"),
 );
 check(
-  "published daily-sport member reads never wait on current provider split fetches",
+  "published daily-sport member reads return the writer-complete snapshot without another split overlay",
   candidateMemberPageSource.includes('const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba"') &&
-    candidateMemberPageSource.includes("publishedSnapshotOnly\n      ? populateDailyEdgeStoredSplitFallback(snapshot, sport)") &&
-    candidateMemberPageSource.includes(': populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport)'),
+    candidateMemberPageSource.includes("else if (!cfbFixture && !publishedSnapshotOnly)") &&
+    !candidateMemberPageSource.includes("publishedSnapshotOnly\n      ? populateDailyEdgeStoredSplitFallback(snapshot, sport)"),
+);
+check(
+  "published daily-sport payloads use the shared short-lived server data cache",
+  candidatePageSource.includes("const readCachedPublishedDailyEdgePayload = unstable_cache(") &&
+    candidatePageSource.includes('["daily-edge-published-member-payload-v1"]') &&
+    candidatePageSource.includes("revalidate: 15"),
 );
 check(
   "display-only split continuity overlaps the independent team-history read",
@@ -877,7 +883,7 @@ check(
     candidatePageSource.includes("readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, \"fresh\")") &&
     candidatePageSource.includes("readLabResponseSnapshot<DailyEdgeResponse>(snapshotKey, \"stale\")") &&
     candidatePageSource.includes('await import("@/app/api/lab/daily-edge/route")') &&
-    candidatePageSource.includes("finalizeDailyEdgeResponseCoherence(structuredClone(selected.payload))") &&
+    candidatePageSource.includes("finalizeDailyEdgeResponseCoherence(structuredClone(payload))") &&
     !candidatePageSource.includes('import { GET as getDailyEdge } from "@/app/api/lab/daily-edge/route"') &&
     candidateMemberPageSource.includes("loadPublishedDailyEdgeSnapshot(sport)") &&
     candidateMemberPageSource.includes('sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba"'),

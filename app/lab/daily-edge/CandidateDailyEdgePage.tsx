@@ -12,26 +12,17 @@ import {
   isNflDailyEdgeEnabled,
   isNflWeekOneEvidenceBoardEnabled,
 } from "@/lib/config/nflDailyEdge";
-import { filterWeeklyReaderSnapshot } from "@/lib/services/dailyEdge/weeklyReaderLifecycle";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { unstable_cache } from "next/cache";
-import { NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE } from "@/lib/services/football/nflForwardMemberSnapshotStore";
-import { enrichCachedNflFootballEvidence } from "@/lib/services/football/footballMemberEvidence";
-import { resolveNflForwardWeek } from "@/lib/services/football/nflForwardWeekSelection";
-import { readResilientCfbMemberFixture } from "@/lib/services/football/cfbMemberReader";
-import { projectCfbSnapshotForInitialBoard } from "@/lib/services/football/cfbMemberBoardProjection";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
-import {
-  populateDailyEdgeDraftKingsFallback,
-  populateDailyEdgeStoredSplitFallback,
-} from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
 // The canonical weekly snapshot retains every game's full reader evidence.
 // Keep the read bounded, but do not turn a healthy transfer into a false
 // empty-board state; unopened evidence is projected out below.
 const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000;
+const NFL_MEMBER_READER_CACHE_RELEASE = "nfl-member-reader-cache-v1";
 
 const readCachedNflForwardMemberSnapshot = unstable_cache(
   async (season: number, week: number) => {
@@ -41,8 +32,8 @@ const readCachedNflForwardMemberSnapshot = unstable_cache(
     ]);
     return readNflForwardMemberSnapshot({ client: supabase, season, week });
   },
-  [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE],
-  { revalidate: 15, tags: [NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE] },
+  [NFL_MEMBER_READER_CACHE_RELEASE],
+  { revalidate: 15, tags: [NFL_MEMBER_READER_CACHE_RELEASE] },
 );
 
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
@@ -98,10 +89,13 @@ export default async function CandidateDailyEdgePage({
   const cfbEnabled = cfbRequested && process.env.CFB_DAILY_EDGE_ENABLED === "true";
   const nflWeekOneEvidenceEnabled = nflEnabled && isNflWeekOneEvidenceBoardEnabled();
   const nflSeason = Number(process.env.NFL_FORWARD_SEASON ?? "2026");
-  const nflWeek = resolveNflForwardWeek({
-    season: nflSeason,
-    configuredWeek: Number(process.env.NFL_FORWARD_WEEK ?? "1"),
-  });
+  const configuredNflWeek = Number(process.env.NFL_FORWARD_WEEK ?? "1");
+  const nflWeek = nflRequested
+    ? (await import("@/lib/services/football/nflForwardWeekSelection")).resolveNflForwardWeek({
+        season: nflSeason,
+        configuredWeek: configuredNflWeek,
+      })
+    : configuredNflWeek;
   const nflFixtureRead = !nflWeekOneEvidenceEnabled
     ? { value: null, unavailable: false, reason: "ok" as const }
     : await readMemberDataWithDeadline({
@@ -109,7 +103,10 @@ export default async function CandidateDailyEdgePage({
       fallback: null,
       read: async () => {
         const fixture = await readCachedNflForwardMemberSnapshot(nflSeason, nflWeek)
-          .then((value) => value?.fixture ? enrichCachedNflFootballEvidence(value.fixture) : null)
+          .then(async (value) => value?.fixture
+            ? (await import("@/lib/services/football/footballMemberEvidence"))
+              .enrichCachedNflFootballEvidence(value.fixture)
+            : null)
           .catch(() => null);
         if (fixture) return fixture;
         return Promise.all([
@@ -138,9 +135,10 @@ export default async function CandidateDailyEdgePage({
       label: "cfb-daily-edge-fixture",
       fallback: null,
       timeoutMs: CFB_MEMBER_DATA_READ_TIMEOUT_MS,
-      read: () => readResilientCfbMemberFixture(
-        Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
-      ),
+      read: async () => (await import("@/lib/services/football/cfbMemberReader"))
+        .readResilientCfbMemberFixture(
+          Number(process.env.CFB_FORWARD_SEASON ?? "2026"),
+        ),
     });
   const cfbFixture = cfbFixtureRead.value;
   let snapshot: DailyEdgeResponse;
@@ -190,11 +188,14 @@ export default async function CandidateDailyEdgePage({
     snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
   }
   if (nflFixture) {
-    snapshot = filterWeeklyReaderSnapshot(snapshot, "nfl");
+    snapshot = (await import("@/lib/services/dailyEdge/weeklyReaderLifecycle"))
+      .filterWeeklyReaderSnapshot(snapshot, "nfl");
   } else if (cfbFixture) {
-    snapshot = filterWeeklyReaderSnapshot(snapshot, "cfb");
+    snapshot = (await import("@/lib/services/dailyEdge/weeklyReaderLifecycle"))
+      .filterWeeklyReaderSnapshot(snapshot, "cfb");
   } else if ((eplRequested && eplEnabled) || (uclRequested && uclEnabled)) {
-    snapshot = filterWeeklyReaderSnapshot(snapshot, "soccer");
+    snapshot = (await import("@/lib/services/dailyEdge/weeklyReaderLifecycle"))
+      .filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
   const initialCfbReaderGameId = cfbFixture && requestedGame && snapshot.games.some((game) => game.id === requestedGame)
     ? requestedGame
@@ -203,23 +204,25 @@ export default async function CandidateDailyEdgePage({
   // a complete DraftKings pair silently occupies the same established split
   // card when Circa is absent. Provider identity stays in the DTO for audit;
   // predictions, recommendations, grades, and member-facing copy are untouched.
-  let splitFallbackPromise: ReturnType<typeof populateDailyEdgeStoredSplitFallback> | ReturnType<typeof populateDailyEdgeDraftKingsFallback> | null = null;
+  let splitFallbackPromise: Promise<unknown> | null = null;
   if (cfbFixture && initialCfbReaderGameId) {
+    const { populateDailyEdgeStoredSplitFallback } = await import(
+      "@/lib/providers/draftkings/draftKingsNetworkSplits"
+    );
     await populateDailyEdgeStoredSplitFallback(snapshot, "cfb", {
       reconstructMissingLockedPreLock: true,
     });
-  } else if (!cfbFixture) {
-    // Published boards already ran the current provider overlay on their sole
-    // scheduled writer. Member navigation must consume only those durable
-    // rows; otherwise every sport-tab click can repeat provider I/O and spend
-    // seconds rebuilding display-only split evidence. Start the stored overlay
-    // now so it overlaps the independent recent-history read below.
-    splitFallbackPromise = publishedSnapshotOnly
-      ? populateDailyEdgeStoredSplitFallback(snapshot, sport)
-      : populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
+  } else if (!cfbFixture && !publishedSnapshotOnly) {
+    // Direct weekly and competition snapshots use only the durable rows
+    // captured by their scheduled writers. Never contact providers while a
+    // member is waiting for sport navigation to finish.
+    splitFallbackPromise = import("@/lib/providers/draftkings/draftKingsNetworkSplits")
+      .then(({ populateDailyEdgeStoredSplitFallback }) =>
+        populateDailyEdgeStoredSplitFallback(snapshot, uclRequested ? "ucl" : sport));
   }
   const cfbBoardProjection = cfbFixture
-    ? projectCfbSnapshotForInitialBoard({ snapshot, fullReaderGameId: initialCfbReaderGameId })
+    ? (await import("@/lib/services/football/cfbMemberBoardProjection"))
+      .projectCfbSnapshotForInitialBoard({ snapshot, fullReaderGameId: initialCfbReaderGameId })
     : null;
   if (cfbBoardProjection) snapshot = cfbBoardProjection.snapshot;
   // Retain the established prop identifier because shared football reader
