@@ -883,6 +883,13 @@ check(
     candidateMemberPageSource.includes('sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba"'),
 );
 check(
+  "the NBA rolling board becomes interactive before hydrating every future date",
+  candidateDailyEdgeSource.includes('const progressiveNbaBoard = sport === "nba"') &&
+    candidateDailyEdgeSource.includes("window.requestIdleCallback(revealNextDate") &&
+    candidateDailyEdgeSource.includes("const renderedGameGroups = progressiveNbaBoard") &&
+    candidateDailyEdgeSource.includes("renderedGameGroups.map"),
+);
+check(
   "an adapted-sport snapshot missing only derived presentation metadata remains a fast immutable read",
   dailyEdgeApiSource.includes("if (snapshot && !snapshot.payload.memberPresentation)") &&
     dailyEdgeApiSource.includes("buildDailyEdgeMemberPresentation(snapshot.payload)") &&
@@ -1271,10 +1278,10 @@ check(
     candidateSource.includes("function prefetchSport(next: Sport)"),
 );
 check(
-  "the larger weekly CFB payload is proactively prefetched before sport-tab intent",
-  candidateSource.includes('nextSport: "cfb"') &&
-    candidateSource.includes("router.prefetch(cfbDestination)") &&
-    candidateSource.includes('sport === "cfb"'),
+  "the larger NBA and CFB payloads are proactively prefetched before sport-tab intent",
+  candidateSource.includes('for (const nextSport of ["nba", "cfb"] as const)') &&
+    candidateSource.includes("router.prefetch(destination)") &&
+    candidateSource.includes("if (sport === nextSport) continue"),
 );
 check(
   "consensus-only markets do not render an empty sharp-book panel",
