@@ -89,7 +89,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_10_28_r10_owls_ticket_share_retention";
+  "market_intelligence_v2_capture_2026_10_28_r11_owls_single_axis_retention";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"

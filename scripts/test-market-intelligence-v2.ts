@@ -301,6 +301,28 @@ const playbookRow: PlaybookSplitGame = {
   check("Owls coherent BetMGM ticket-only pair is retained internally", ticketOnly.observations.length === 2 && ticketOnly.rejected.length === 0);
   check("Owls BetMGM ticket-only evidence never invents money share", ticketOnly.observations.every((row) =>
     row.provider === "owls" && row.source_type === "retail_ticket_share" && row.bets_pct !== null && row.money_pct === null));
+
+  const moneyOnly = buildOwlsSplitObservationsV2({
+    rows: [
+      {
+        provider: "owls", providerEventId: "nba:Away@Home-20261027", sport: "nba",
+        homeTeam: "Home", awayTeam: "Away", sourceBook: "draftkings", sourceType: "retail_book",
+        market: "moneyline", side: "away", line: null, price: null, betsPct: null, moneyPct: 0.63,
+        observedAt: "2026-10-27T20:08:53.171Z", complete: false,
+      },
+      {
+        provider: "owls", providerEventId: "nba:Away@Home-20261027", sport: "nba",
+        homeTeam: "Home", awayTeam: "Away", sourceBook: "draftkings", sourceType: "retail_book",
+        market: "moneyline", side: "home", line: null, price: null, betsPct: null, moneyPct: 0.37,
+        observedAt: "2026-10-27T20:08:53.171Z", complete: false,
+      },
+    ],
+    canonicalEventId: "game-1", league: "nba", fetchedAt: "2026-10-27T20:10:00.000Z",
+    canonicalMarketId: marketId, selectionKey,
+  });
+  check("Owls coherent named-book money-only pair is retained internally", moneyOnly.observations.length === 2 && moneyOnly.rejected.length === 0);
+  check("Owls named-book money-only evidence never invents ticket share", moneyOnly.observations.every((row) =>
+    row.provider === "owls" && row.source_type === "retail_book" && row.bets_pct === null && row.money_pct !== null));
 }
 
 {

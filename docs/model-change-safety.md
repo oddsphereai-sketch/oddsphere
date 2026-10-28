@@ -1,6 +1,6 @@
 # Model change safety protocol
 
-## Owner-directed repair: Owl's ticket-share retention
+## Owner-directed repair: Owl's single-axis split retention
 
 On 2026-10-28 Daniel Mengel directed Oddsphere to use every truthful internal Owl's split input while
 building the cross-sport Market Brain. A bounded authenticated NBA probe returned 12 events and 72
@@ -8,10 +8,12 @@ normalized BetMGM rows with valid ticket percentages, no handle percentages, and
 `partial: book_unavailable`. The r9 capture discarded those factual ticket rows because only complete
 money-plus-ticket pairs were selected for persistence.
 
-Capture release `market_intelligence_v2_capture_2026_10_28_r10_owls_ticket_share_retention` retains
-each fresh coherent BetMGM two-sided ticket pair as `retail_ticket_share` with `money_pct=NULL`.
-Incomplete, mixed-time, malformed, stale, and future pairs still fail closed. Member display still
-requires a complete money-plus-ticket pair, and ticket-only data has zero direct resolver score or
+Capture release `market_intelligence_v2_capture_2026_10_28_r11_owls_single_axis_retention` retains
+each fresh coherent named-book two-sided pair with exactly one available axis. Retail ticket-only
+rows use `retail_ticket_share` with `money_pct=NULL`; retail money-only rows use
+`retail_book` with `bets_pct=NULL`. The unpublished r10 ticket-only candidate was superseded
+before production. Incomplete, mixed-time, malformed, stale, and future pairs still fail closed.
+Member display still requires a complete money-plus-ticket pair, and single-axis data has zero direct resolver score or
 prediction/grade authority. The existing league-level request, writers, schedules, sport leases,
 models, calibrations, decisions, locks, stakes, tracking, and member snapshots are unchanged; added
 provider calls and same-input board changes are both zero. Evidence and rollback:

@@ -236,9 +236,10 @@ export function buildPlaybookSplitObservationsV2(opts: {
 }
 
 /**
- * Persist complete two-sided Owl's named-book evidence plus coherent BetMGM
- * ticket-only pairs. Ticket-only rows retain money_pct=NULL and a distinct
- * source type; they can never masquerade as verified money-and-ticket splits.
+ * Persist complete two-sided Owl's named-book evidence plus coherent
+ * single-axis pairs. The unavailable axis remains NULL and retail single-axis
+ * rows retain a distinct source type; they can never masquerade as verified
+ * money-and-ticket splits.
  */
 export function buildOwlsSplitObservationsV2(opts: {
   rows: readonly NormalizedOwlsSplitObservation[];
@@ -283,16 +284,15 @@ export function buildOwlsSplitObservationsV2(opts: {
       });
       const completeMoneyAndTickets = pair.length === 2 && pair.every((row) =>
         row.complete && row.betsPct !== null && row.moneyPct !== null);
-      const coherentBetMgmTicketOnly = pair.length === 2 && pair.every((row) =>
-        row.sourceBook === "betmgm" &&
-        row.sourceType === "retail_ticket_share" &&
-        row.betsPct !== null &&
-        row.moneyPct === null);
+      const coherentSingleAxisPair = pair.length === 2 && (
+        pair.every((row) => row.betsPct !== null && row.moneyPct === null) ||
+        pair.every((row) => row.betsPct === null && row.moneyPct !== null)
+      );
       if (
         pair.length !== 2 ||
         pair[0]?.observedAt !== pair[1]?.observedAt ||
         coherenceErrors.length > 0 ||
-        (!completeMoneyAndTickets && !coherentBetMgmTicketOnly)
+        (!completeMoneyAndTickets && !coherentSingleAxisPair)
       ) {
         rejected.push(reject("owls", {
           providerEventId,

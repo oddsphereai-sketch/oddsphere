@@ -105,10 +105,14 @@ function book(value: unknown): OwlsSplitBook | null {
 
 function sourceType(
   value: OwlsSplitBook,
-  ticketOnly: boolean,
+  hasTickets: boolean,
+  hasMoney: boolean,
 ): NormalizedOwlsSplitObservation["sourceType"] {
   if (value === "circa") return "sharp_adjacent_book";
-  if (value === "betmgm" && ticketOnly) return "retail_ticket_share";
+  if (hasTickets && !hasMoney) return "retail_ticket_share";
+  // The persisted source type describes book provenance. A money-only retail
+  // pair remains `retail_book`; betsPct=NULL is the explicit axis mask.
+  if (!hasTickets && hasMoney) return "retail_book";
   return "retail_book";
 }
 
@@ -186,6 +190,8 @@ export function normalizeOwlsSharpBookSplits(
             moneyPct,
           };
         });
+        const hasTickets = parsedRows.every((row) => row.betsPct !== null);
+        const hasMoney = parsedRows.every((row) => row.moneyPct !== null);
         const marketRows = parsedRows.map((row) => ({
           provider: "owls" as const,
           providerEventId,
@@ -193,7 +199,7 @@ export function normalizeOwlsSharpBookSplits(
           homeTeam,
           awayTeam,
           sourceBook,
-          sourceType: sourceType(sourceBook, parsedRows.every((candidate) => candidate.moneyPct === null)),
+          sourceType: sourceType(sourceBook, hasTickets, hasMoney),
           market,
           ...row,
           observedAt,
@@ -298,10 +304,10 @@ export function selectAllCompleteNamedBookSplits(
 /**
  * Retain every source-book pair that is truthful internal evidence.
  *
- * Complete money-plus-ticket pairs remain unchanged. BetMGM ticket-only pairs
- * are additionally retained as retail-ticket context with a null money share;
- * they are not eligible for the member-facing complete-pair selector above and
- * cannot be reinterpreted as money-minus-ticket divergence.
+ * Complete money-plus-ticket pairs remain unchanged. Coherent named-book pairs
+ * with exactly one available axis are additionally retained with the other
+ * axis null. They are not eligible for the member-facing complete-pair selector
+ * above and cannot be reinterpreted as money-minus-ticket divergence.
  */
 export function selectAllInternalNamedBookSplits(
   observations: readonly NormalizedOwlsSplitObservation[],
@@ -335,11 +341,9 @@ export function selectAllInternalNamedBookSplits(
       if (pair.length !== 2 || !expectedSides.every((side) =>
         pair.some((row) => row.side === side))) return false;
       if (pair.every((row) => row.complete)) return true;
-      return pair.every((row) =>
-        row.sourceBook === "betmgm" &&
-        row.sourceType === "retail_ticket_share" &&
-        row.betsPct !== null &&
-        row.moneyPct === null);
+      const ticketOnly = pair.every((row) => row.betsPct !== null && row.moneyPct === null);
+      const moneyOnly = pair.every((row) => row.betsPct === null && row.moneyPct !== null);
+      return ticketOnly || moneyOnly;
     })
     .sort((a, b) =>
       (priority.get(a[0]!.sourceBook) ?? 99) - (priority.get(b[0]!.sourceBook) ?? 99) ||

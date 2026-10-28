@@ -1,4 +1,4 @@
-# Owl's ticket-share capture predeclaration
+# Owl's single-axis split capture predeclaration
 
 Date: 2026-10-28
 
@@ -10,7 +10,7 @@ Date: 2026-10-28
 - Existing capture release:
   `market_intelligence_v2_shadow_capture_2026_10_27_r9_all_sport_owls_schedule`.
 - Candidate capture release:
-  `market_intelligence_v2_capture_2026_10_28_r10_owls_ticket_share_retention`.
+  `market_intelligence_v2_capture_2026_10_28_r11_owls_single_axis_retention`.
 - Authoritative paths, writer schedules, sport-scoped prediction leases, prediction models,
   calibrations, decisions, grades, stakes, locks, member snapshots, and readers are unchanged.
 
@@ -22,18 +22,23 @@ valid opposing ticket percentages, no handle percentages, feed status `partial`,
 capture selected only complete money-plus-ticket pairs and therefore wrote none of the BetMGM
 evidence. This silently erased a real provider observation that is useful as retail ticket context.
 
-The missing handle is not sharp money and must remain `NULL`; it must never be inferred as 50%,
-copied from tickets, or used to construct money-minus-ticket divergence. Member-facing priority
-selection must continue to require a complete two-sided money-plus-ticket pair.
+The missing axis must remain `NULL`; it must never be inferred as 50%, copied from the available
+axis, or used to construct money-minus-ticket divergence. A subsequent cross-sport provider audit
+also confirmed coherent money-only pairs. The initial unpublished r10 ticket-only candidate was
+therefore superseded by r11 before publication. Member-facing priority selection must continue to
+require a complete two-sided money-plus-ticket pair.
 
 ## Candidate behavior
 
 - Continue retaining every fresh, complete Circa, DraftKings, and BetMGM money-plus-ticket pair as
   a separate source-book observation.
-- Additionally retain a fresh, coherent two-sided BetMGM ticket-only pair with
-  `source_type=retail_ticket_share`, factual ticket percentages, and `money_pct=NULL`.
+- Additionally retain a fresh, coherent two-sided named-book pair when exactly one axis is present:
+  ticket-only retail rows use `source_type=retail_ticket_share` and `money_pct=NULL`; money-only
+  retail rows keep `source_type=retail_book` and use `bets_pct=NULL`. Circa keeps its named sharp-
+  adjacent provenance while the null field records the same missingness.
 - Reject one-sided, mixed-timestamp, malformed, non-complementary, stale, or future observations.
-- Keep ticket-only evidence out of the member split selector and give it zero direct resolver score.
+- Keep single-axis evidence out of the complete member split selector and give it zero direct
+  resolver score.
 - Reuse the already-issued league-level Owl's request; incremental provider calls are zero.
 
 ## Production-impact boundary
@@ -47,9 +52,9 @@ versioned sport/market release and release-pure chronological evidence.
 ## Verification and rollback
 
 - Focused normalizer, canonical-adapter, resolver, and all-sport sync tests must prove truthful
-  ticket-only retention and unchanged complete-pair display selection.
+  single-axis retention and unchanged complete-pair display selection.
 - `npm run verify:model-change` must pass.
-- Roll back the capture release to r9 if ticket-only rows are mislabeled, incomplete pairs reach the
+- Roll back the capture release to r9 if single-axis rows are mislabeled, incomplete pairs reach the
   member selector, provider calls increase, write volume is unbounded, or any prediction-owned field
   changes. Existing observations and locked records remain immutable.
 
