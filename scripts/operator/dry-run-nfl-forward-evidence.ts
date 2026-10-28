@@ -36,7 +36,7 @@ async function main() {
     apply: false,
     balldontlieApiKey: required("BALLDONTLIE_API_KEY"),
     playbookApiKey: required("PLAYBOOK_API_KEY"),
-    sharpApiKey: required("SHARPAPI_KEY"),
+    owlsApiKey: required("OWLS_INSIGHT_API_KEY"),
     weatherProvider: null,
   });
   console.log(JSON.stringify({ readOnly: true, writes: 0, season, week, result }, null, 2));

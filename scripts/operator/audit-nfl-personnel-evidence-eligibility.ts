@@ -67,7 +67,7 @@ async function main(): Promise<void> {
     apply: false,
     balldontlieApiKey: requiredEnv("BALLDONTLIE_API_KEY"),
     playbookApiKey: requiredEnv("PLAYBOOK_API_KEY"),
-    sharpApiKey: requiredEnv("SHARPAPI_KEY"),
+    owlsApiKey: requiredEnv("OWLS_INSIGHT_API_KEY"),
     weatherProvider: null,
     auditPayloads: (payloads) => { candidatePayloads = payloads; },
   });

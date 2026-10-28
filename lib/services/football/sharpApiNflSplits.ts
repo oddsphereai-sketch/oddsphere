@@ -14,7 +14,8 @@ export const NFL_SHARP_API_SPLIT_CAPTURE_MANIFEST_RELEASE =
 export type NflRegularSharpMarket = "moneyline" | "spread" | "total";
 
 export type NflRegularSharpSplit = {
-  provider: "sharpapi";
+  /** Older immutable records are SharpAPI; future display-only rows may be Owls. */
+  provider: "sharpapi" | "owls";
   providerGameId: string;
   sourceEventId: string | null;
   sourceSportsbook: string | null;
@@ -200,8 +201,8 @@ function buildSplitCaptureManifest(
     const candidates = games.filter((game) => {
       const date = nflLocalDate(game.scheduledStart);
       return nflRow(row) && researchRowDateMatches(row, date) &&
-        sameNflTeam(row.home_team, game.home.abbreviation, game.home.name) &&
-        sameNflTeam(row.away_team, game.away.abbreviation, game.away.name);
+        nflProviderTeamMatches(row.home_team, game.home.abbreviation, game.home.name) &&
+        nflProviderTeamMatches(row.away_team, game.away.abbreviation, game.away.name);
     });
     return {
       rowIndex,
@@ -237,8 +238,8 @@ export function matchSharpApiNflSplitRows(
     const date = nflLocalDate(game.scheduledStart);
     const candidates = (rowsByDate.get(date) ?? []).filter((row) =>
       nflRow(row) &&
-      sameNflTeam(row.home_team, game.home.abbreviation, game.home.name) &&
-      sameNflTeam(row.away_team, game.away.abbreviation, game.away.name) &&
+      nflProviderTeamMatches(row.home_team, game.home.abbreviation, game.home.name) &&
+      nflProviderTeamMatches(row.away_team, game.away.abbreviation, game.away.name) &&
       rowDateMatches(row, date)
     );
     const selected = SOURCE_BOOK_PRIORITY.flatMap((sportsbook) => {
@@ -263,8 +264,8 @@ export function matchAllSharpApiNflSplitRows(
     const date = nflLocalDate(game.scheduledStart);
     const candidates = (rowsByDate.get(date) ?? []).filter((row) =>
       nflRow(row) &&
-      sameNflTeam(row.home_team, game.home.abbreviation, game.home.name) &&
-      sameNflTeam(row.away_team, game.away.abbreviation, game.away.name) &&
+      nflProviderTeamMatches(row.home_team, game.home.abbreviation, game.home.name) &&
+      nflProviderTeamMatches(row.away_team, game.away.abbreviation, game.away.name) &&
       researchRowDateMatches(row, date)
     );
     matched[game.providerGameId] = NFL_SHARP_API_SPLIT_BOOKS.map((sportsbook) => {
@@ -348,7 +349,7 @@ function nflRow(row: SharpApiNflSplitRow): boolean {
   return sport === "nfl" && eventId.startsWith("nfl");
 }
 
-function sameNflTeam(value: unknown, abbreviation: string, displayName: string): boolean {
+export function nflProviderTeamMatches(value: unknown, abbreviation: string, displayName: string): boolean {
   if (typeof value !== "string") return false;
   const observed = normalize(value);
   const teamAliases = TEAM_ALIASES[abbreviation.toUpperCase()] ?? [];
@@ -360,6 +361,12 @@ function sameNflTeam(value: unknown, abbreviation: string, displayName: string):
     ...providerPrefixAliases.flatMap((prefix) => teamAliases.map((alias) => `${prefix} ${alias}`)),
   ];
   return aliases.some((alias) => normalize(alias) === observed);
+}
+
+/** Owls rows remain display/capture-only until the separate market-reader release qualifies them. */
+export function nflModelSharpSplits(value: NflRegularSharpSplitSet | null | undefined): NflRegularSharpSplitSet | null {
+  if (!value) return null;
+  return Object.values(value).every((row) => row.provider === "sharpapi") ? value : null;
 }
 
 function teamCodeAliases(abbreviation: string): string[] {
