@@ -17,6 +17,7 @@ const raw: RawOwlsOddsResponse = { success: true, data: [{ eventId: "ncaab:Villa
       { key: "totals", outcomes: [{ name: "Over", price: -110, point: 148.5 }, { name: "Under", price: -110, point: 148.5 }] }] }] }] };
 const parsed = normalizeCbbOwlsCurrent(fixture, raw, asOf, asOf);
 assert.equal(parsed.quotes.length, 3);
+assert.equal(normalizeCbbOwlsCurrent(fixture, { ...raw, success: false }, asOf, asOf).quotes.length, 0);
 assert.equal(parsed.quotes.find(q => q.market === "spread")!.line, -7.5);
 assert.equal(parsed.quotes.find(q => q.market === "moneyline")!.firstPrice, -300);
 assert.equal(normalizeCbbOwlsCurrent(fixture, raw, asOf, "2026-10-29T23:00:00Z").quotes.length, 0);

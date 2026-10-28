@@ -15,6 +15,7 @@ const validPair = (a: number, b: number) => {
 };
 export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResponse, fetchedAt: string, asOf: string) {
   if (![game.date, fetchedAt, asOf].every(t => Number.isFinite(Date.parse(t))) || Date.parse(asOf) >= Date.parse(game.date)) throw new Error("CBB current evidence requires valid pregame cutoff");
+  if (response.success === false) return { quotes: [] as CbbQualifiedNamedQuote[], rejected: [{ reason: "provider_reported_failure", book: null as string | null }] };
   const quotes: CbbQualifiedNamedQuote[] = [], rejected: Array<{ reason: string; book: string | null }> = [];
   const home = names(game.home_team), away = names(game.visitor_team);
   const events = Array.isArray(response.data) ? response.data : Object.values(response.data ?? {}).flatMap(v => v ?? []);
