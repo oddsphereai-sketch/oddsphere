@@ -1,11 +1,11 @@
 /**
- * Phase 6B.2e — Tracking page design reset tests.
+ * Tracking reader consolidation tests.
  *
  * Asserts the redesigned page's *structural* invariants:
  *   • No hero metric cards on top
- *   • Yesterday is the lead content section
- *   • This Week is a single chart (CategoryBars)
- *   • Best Angles is grouped by sport and model category
+ *   • One model-aware reader replaces stacked cross-sport sections
+ *   • Yesterday / Weekly / Monthly / Lifetime share one time selector
+ *   • Best Angles and Leans remain inside the selected model reader
  *   • Latest Results is the candidate's only member-facing activity feed
  *   • Method consolidates glossary + baselines +
  *     a secondary "all tracked actionable picks" footer
@@ -44,7 +44,7 @@ function check(name: string, cond: boolean, msg?: string) {
   else { console.log(`  ✗ ${name}${msg ? `\n     ${msg}` : ""}`); fail++; }
 }
 
-console.log(`\n━━━ tracking page tests (6B.2e — design reset) ━━━\n`);
+console.log(`\n━━━ tracking reader consolidation tests ━━━\n`);
 
 check(
   "Homepage current tracking converts the canonical 0..1 hit rate to a display percentage",
@@ -67,7 +67,7 @@ check(
   "Homepage alone defaults category tracking to Lifetime and orders it first",
   HOMEPAGE_CATEGORY_TRACKER.includes('["lifetime", "monthly", "weekly"]') &&
     HOMEPAGE_CATEGORY_TRACKER.includes('useState<PublicTrackingCategoryWindow["key"]>("lifetime")') &&
-    PAGE.includes('useState<"weekly" | "monthly" | "lifetime">("weekly")'),
+    PAGE.includes('useState<TrackingWindow>("weekly")'),
 );
 check(
   "Homepage category tracker shares the member CategoryBars visual",
@@ -148,10 +148,11 @@ check(
 // ── Required sections in the brief ──────────────────────────────────
 
 for (const required of [
-  "Yesterday's results",
-  "Tracking by category",
+  "Tracking reader",
+  "Model",
+  "Time period",
   "Lifetime Tracking",
-  "Best Angles by category",
+  "Best Angles &amp; Leans",
   "Recent Predictions",
   "Method",
 ]) {
@@ -168,31 +169,40 @@ check(
   /Records update after games are graded\.[\s\S]{0,140}Every sided prediction counts[\s\S]{0,140}Toss-Up and Held are not counted as wins or losses/.test(PAGE),
 );
 
-// ── Order: Yesterday → Tracking by category → Best Angles → Latest → Recent → Method
+// ── One reader leads; activity and method remain secondary ──────────
 
-check("Page order: Yesterday → Tracking by category → Best Angles → Latest → Recent → Method", (() => {
+check("Page order: Tracking reader → Latest Results → Recent Predictions → Method", (() => {
   const idx = {
-    yesterday: PAGE.indexOf('title="Yesterday\'s results"'),
-    tracking:  PAGE.indexOf('title="Tracking by category"'),
-    best:      PAGE.indexOf('title="Best Angles by category"'),
-    latest:    PAGE.indexOf('title="Latest Results"'),
-    recent:    PAGE.indexOf('title="Recent Predictions"'),
+    tracking:  PAGE.indexOf('title="Tracking reader"'),
+    latest:    PAGE.indexOf('Latest Results`}'),
+    recent:    PAGE.indexOf('Recent Predictions`}'),
     method:    PAGE.indexOf('title="Method"'),
   };
   return (
-    idx.yesterday !== -1 && idx.tracking !== -1 &&
-    idx.best !== -1 && idx.latest !== -1 && idx.recent !== -1 && idx.method !== -1 &&
-    idx.yesterday < idx.tracking &&
-    idx.tracking < idx.best &&
-    idx.best < idx.latest &&
+    idx.tracking !== -1 && idx.latest !== -1 && idx.recent !== -1 && idx.method !== -1 &&
+    idx.tracking < idx.latest &&
     idx.latest < idx.recent &&
     idx.recent < idx.method
   );
 })());
 
-// ── This Week uses the single CategoryBars chart, not multiple ──────
+// ── The selected model still uses the established CategoryBars chart ─
 
-check("Tracking by category section uses the grouped CategoryBars chart", /Tracking by category[\s\S]{0,1800}CategoryTrackingBoard/.test(PAGE) && /function CategoryTrackingBoard[\s\S]{0,4200}<CategoryBars/.test(PAGE));
+check("Tracking reader uses the grouped CategoryBars chart", /title="Tracking reader"[\s\S]{0,3200}CategoryTrackingBoard/.test(PAGE) && /function CategoryTrackingBoard[\s\S]{0,4200}<CategoryBars/.test(PAGE));
+check(
+  "Tracking reader exposes model tabs and all four time periods",
+  /function ModelTabs[\s\S]{0,1400}role="tablist"[\s\S]{0,500}models\.map/.test(PAGE) &&
+    PAGE.includes('{ key: "yesterday", label: "Yesterday" }') &&
+    PAGE.includes('{ key: "weekly", label: "Weekly" }') &&
+    PAGE.includes('{ key: "monthly", label: "Monthly" }') &&
+    PAGE.includes('{ key: "lifetime", label: "Lifetime" }'),
+);
+check(
+  "Model selection filters category, alternate-line, recommendation, and result records",
+  PAGE.includes('rows.filter((row) => row.sport === activeModel)') &&
+    PAGE.includes('alternateLineRows.filter((row) => row.sport === activeModel)') &&
+    PAGE.includes('(data.recentlySettled ?? []).filter((row) => row.sport === activeModel)'),
+);
 check("CategoryBars chart component exists", CHARTS.includes("export function CategoryBars"));
 check(
   "CategoryBars renders progress-bar rows",
@@ -302,7 +312,7 @@ check(
 );
 check(
   "Signed-in Tracking opens on the established weekly window",
-  /useState<"weekly" \| "monthly" \| "lifetime">\("weekly"\)/.test(PAGE),
+  /useState<TrackingWindow>\("weekly"\)/.test(PAGE),
 );
 check(
   "Tracking keeps the established presentation without football-specific explainer banners",
@@ -359,8 +369,8 @@ check(
   /BestAnglesBoard[\s\S]{0,2000}bestAngles[\s\S]{0,400}leans/.test(PAGE),
 );
 check(
-  "Best Angles is visible without another disclosure click",
-  /title="Best Angles by category"[\s\S]{0,120}<BestAnglesBoard/.test(PAGE),
+  "Best Angles and Leans stay visible inside the selected model reader",
+  /Best Angles &amp; Leans[\s\S]{0,500}<BestAnglesBoard rows=\{selectedRecommendationRows\}/.test(PAGE),
 );
 
 // ── MLB categories distinct ─────────────────────────────────────────
@@ -396,9 +406,8 @@ check(
   /Method[\s\S]{0,2000}<Glossary/.test(PAGE),
 );
 check(
-  "Candidate Method is an always-visible bottom reference",
-  /title="Method">[\s\S]{0,300}<Card>/.test(PAGE) &&
-    !/title="Method"[^>]*collapsible/.test(PAGE),
+  "Method is a compact collapsible bottom reference",
+  /title="Method" collapsible>[\s\S]{0,300}<Card>/.test(PAGE),
 );
 check(
   "Method section does NOT expose model versions",
@@ -496,11 +505,11 @@ check(
 );
 check(
   "Candidate hides the internal Recent Predictions activity stream",
-  /presentation === "current" \? \([\s\S]{0,160}<Section eyebrow="Latest activity" title="Recent Predictions">/.test(PAGE),
+  /presentation === "current" \? \([\s\S]{0,240}<Section eyebrow="Latest activity" title=\{`\$\{prettySport\(activeModel\)\} Recent Predictions`\}/.test(PAGE),
 );
 check(
   "Candidate keeps Latest Results as its member-facing graded feed",
-  /title="Latest Results"[\s\S]{0,500}RecentlySettledCard/.test(PAGE),
+  /title=\{`\$\{prettySport\(activeModel\)\} Latest Results`\}[\s\S]{0,700}RecentlySettledCard/.test(PAGE),
 );
 
 // ── Mobile / layout ─────────────────────────────────────────────────
@@ -665,7 +674,7 @@ check(
 );
 check(
   "Page renders Latest Results section",
-  /title="Latest Results"/.test(PAGE),
+  /title=\{`\$\{prettySport\(activeModel\)\} Latest Results`\}/.test(PAGE),
 );
 check(
   "Page caps Latest Results at ~12",

@@ -1,20 +1,18 @@
 /**
- * Phase 6B.2e — Tracking page product design reset.
+ * Tracking reader.
  *
- * The 2b → 2c → 2d sequence stacked modules on top of modules.
- * This pass throws that out and builds the page around a single
- * idea: a member should be able to scan how each category is
- * performing without their eyes hopping between disconnected
- * card grids.
+ * The page keeps the established record cards and charts, but presents
+ * one selected model and time period at a time. That prevents every sport
+ * and every window from stacking into one long page while preserving the
+ * underlying tracking contract.
  *
- * Final structure (locked in the brief):
+ * Structure:
  *   1. Header (no hero metrics)
- *   2. Yesterday — category list, not cards
- *   3. This week — single chart, category-comparison bars
- *   4. Best Angles — category list, not cards
- *   5. Recent results — stacked cards
- *   6. Method — combined glossary, baselines,
- *      tiny "all tracked actionable picks" footer
+ *   2. Model and time-period selectors
+ *   3. Selected category records and alternate lines
+ *   4. Selected Best Angle and Lean records
+ *   5. Model-specific recent results
+ *   6. Collapsible methodology
  *
  * Hard rules unchanged from earlier passes:
  *   • Toss-Up and Held are NEVER counted as wins or losses.
@@ -36,6 +34,8 @@ import { CategoryBars, type ChartMetrics } from "./components/TrackingCharts";
 // ─── Types (mirror the member API shape) ───────────────────────────────
 
 type Metrics = ChartMetrics;
+
+type TrackingWindow = "yesterday" | "weekly" | "monthly" | "lifetime";
 
 type DimensionRow = { label: string; metrics: Metrics };
 
@@ -246,6 +246,31 @@ function prettyMarket(label: string): string { return MARKET_LABEL[label] ?? lab
 function shortMarket(label: string): string { return MARKET_SHORT[label] ?? label.toUpperCase(); }
 function prettySport(label: string): string { return SPORT_LABEL[label] ?? label.toUpperCase(); }
 function sportTheme(sport: string): SportTheme { return SPORT_THEME[sport] ?? DEFAULT_SPORT_THEME; }
+
+function combineMetrics(rows: Metrics[]): Metrics {
+  const combined = rows.reduce<Metrics>((total, row) => ({
+    picks: total.picks + row.picks,
+    wins: total.wins + row.wins,
+    losses: total.losses + row.losses,
+    pushes: total.pushes + row.pushes,
+    voids: total.voids + row.voids,
+    pending: total.pending + row.pending,
+    win_pct: null,
+  }), {
+    picks: 0,
+    wins: 0,
+    losses: 0,
+    pushes: 0,
+    voids: 0,
+    pending: 0,
+    win_pct: null,
+  });
+  const decided = combined.wins + combined.losses;
+  return {
+    ...combined,
+    win_pct: decided > 0 ? (combined.wins / decided) * 100 : null,
+  };
+}
 
 function groupBySport<T extends { sport: string }>(rows: T[]): Array<{ sport: string; rows: T[] }> {
   return rows.reduce<Array<{ sport: string; rows: T[] }>>((groups, row) => {
@@ -517,7 +542,8 @@ export default function LabTrackingPage({
   const yesterdayRows = useMemo(() => visibleBuckets(data?.yesterday?.bySportMarket ?? []), [data]);
   const weekRows      = useMemo(() => visibleBuckets(data?.thisWeek?.bySportMarket ?? []),  [data]);
   const monthRows     = useMemo(() => visibleBuckets(data?.thisMonth?.bySportMarket ?? []), [data]);
-  const [trackWindow, setTrackWindow] = useState<"weekly" | "monthly" | "lifetime">("weekly");
+  const [trackWindow, setTrackWindow] = useState<TrackingWindow>("weekly");
+  const [selectedModel, setSelectedModel] = useState("mlb");
   // Lifetime Tracking: ONE record per (sport, market). Live automated
   // data takes precedence when decided > 0; otherwise the stored
   // baseline number stands in. Non-MLB sports currently always fall
@@ -531,6 +557,7 @@ export default function LabTrackingPage({
   const alternateLineRows = useMemo(() => {
     const alternate = data?.alternateLinePerformance;
     if (!alternate) return [];
+    if (trackWindow === "yesterday") return [];
     if (trackWindow === "weekly") return alternate.weekly.rows;
     if (trackWindow === "monthly") return alternate.monthly.rows;
     return [...alternate.lifetime.rows, ...alternate.archives];
@@ -542,6 +569,38 @@ export default function LabTrackingPage({
     return visibleBuckets(data?.actionableHistory?.bySportMarket ?? data?.bySportMarket ?? [])
       .filter((b) => b.bestAngles.picks > 0 || b.leans.picks > 0);
   }, [data]);
+  const availableModels = useMemo(() => {
+    const models = new Set<string>();
+    for (const row of [...yesterdayRows, ...weekRows, ...monthRows, ...bestAngleRows]) models.add(row.sport);
+    for (const record of lifetimeRecords) models.add(record.sport);
+    return [...models].sort((left, right) => (SPORT_ORDER[left] ?? 99) - (SPORT_ORDER[right] ?? 99));
+  }, [bestAngleRows, lifetimeRecords, monthRows, weekRows, yesterdayRows]);
+  const activeModel = availableModels.includes(selectedModel)
+    ? selectedModel
+    : availableModels[0] ?? selectedModel;
+  const selectedWindowBuckets = useMemo(() => {
+    const rows = trackWindow === "yesterday"
+      ? yesterdayRows
+      : trackWindow === "weekly"
+        ? weekRows
+        : trackWindow === "monthly"
+          ? monthRows
+          : [];
+    return rows.filter((row) => row.sport === activeModel);
+  }, [activeModel, monthRows, trackWindow, weekRows, yesterdayRows]);
+  const selectedLifetimeRecords = useMemo(
+    () => lifetimeRecords.filter((record) => record.sport === activeModel),
+    [activeModel, lifetimeRecords],
+  );
+  const selectedAlternateLineRows = useMemo(
+    () => alternateLineRows.filter((row) => row.sport === activeModel),
+    [activeModel, alternateLineRows],
+  );
+  const selectedRecommendationRows = useMemo(() => {
+    const rows = trackWindow === "lifetime" ? bestAngleRows : selectedWindowBuckets;
+    return rows.filter((row) =>
+      row.sport === activeModel && (row.bestAngles.picks > 0 || row.leans.picks > 0));
+  }, [activeModel, bestAngleRows, selectedWindowBuckets, trackWindow]);
 
   if (error !== null) {
     return <Shell presentation={presentation}><div className="mx-auto max-w-xl rounded-2xl border border-amber-300/20 bg-amber-300/[0.045] p-6 text-center"><p className="text-base font-black text-amber-100">Tracking is temporarily unavailable</p><p className="mt-2 text-sm leading-6 text-amber-100/70">{error}</p><button type="button" onClick={() => { setError(null); setLoadAttempt((attempt) => attempt + 1); }} className="mt-5 rounded-lg border border-amber-200/30 bg-amber-200/[0.09] px-4 py-2 text-xs font-black uppercase tracking-wider text-amber-50 transition hover:bg-amber-200/[0.15]">Retry tracking</button></div></Shell>;
@@ -563,67 +622,74 @@ export default function LabTrackingPage({
 
   const yest = data.yesterday;
   const week = data.thisWeek;
-  const recent = (data.recentPicks ?? []).slice(0, 12);
-  const settled = (data.recentlySettled ?? []).slice(0, 12);
+  const recent = (data.recentPicks ?? []).filter((row) => row.sport === activeModel).slice(0, 12);
+  const settled = (data.recentlySettled ?? []).filter((row) => row.sport === activeModel).slice(0, 12);
+  const selectedYesterdayOverall = combineMetrics(selectedWindowBuckets.map((row) => row.metrics));
+  const readerEyebrow = trackWindow === "yesterday"
+    ? (yest?.date !== null && yest?.date !== undefined ? fmtLongDate(yest.date) : "Yesterday")
+    : trackWindow === "weekly"
+      ? (week !== undefined ? `${fmtShortDate(week.from)} → ${fmtShortDate(week.to)}` : "This week")
+      : trackWindow === "monthly"
+        ? (data.thisMonth !== undefined ? `${fmtShortDate(data.thisMonth.from)} → ${fmtShortDate(data.thisMonth.to)}` : "Last 30 days")
+        : "All-time";
 
   return (
     <Shell presentation={presentation}>
       <Header lastUpdated={lastUpdated} presentation={presentation} />
 
-      {/* ── 1. YESTERDAY ─────────────────────────────────────────────── */}
+      {/* One reader: model first, then time period. Existing records and
+          category visuals stay intact while the page avoids rendering every
+          model and every time window at once. */}
       <Section
-        eyebrow={yest?.date !== null && yest?.date !== undefined ? fmtLongDate(yest.date) : "Yesterday"}
-        title="Yesterday's results"
+        eyebrow={readerEyebrow}
+        title="Tracking reader"
       >
-        <YesterdayBoard date={yest?.date ?? null} rows={yesterdayRows} overall={yest?.overall ?? null} />
-      </Section>
-
-      {/* ── 2. TRACKING BY CATEGORY (Weekly / Monthly / Lifetime) ────── */}
-      <Section
-        eyebrow={
-          trackWindow === "weekly"
-            ? (week !== undefined ? `${fmtShortDate(week.from)} → ${fmtShortDate(week.to)}` : "This week")
-            : trackWindow === "monthly"
-              ? (data.thisMonth !== undefined ? `${fmtShortDate(data.thisMonth.from)} → ${fmtShortDate(data.thisMonth.to)}` : "Last 30 days")
-              : "All-time"
-        }
-        title="Tracking by category"
-      >
-        <WindowTabs active={trackWindow} onChange={setTrackWindow} />
-        <div className="mt-3.5">
-          {trackWindow === "lifetime" ? (
-            <LifetimeTrackingBoard records={lifetimeRecords} alternateRows={alternateLineRows} />
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.018] p-3 sm:p-4">
+          <p className="mb-2 text-[9px] font-black uppercase tracking-[0.17em] text-gray-500">Model</p>
+          <ModelTabs models={availableModels} active={activeModel} onChange={setSelectedModel} />
+          <div className="my-3 border-t border-white/[0.05]" />
+          <p className="mb-2 text-[9px] font-black uppercase tracking-[0.17em] text-gray-500">Time period</p>
+          <WindowTabs active={trackWindow} onChange={setTrackWindow} />
+        </div>
+        <div className="mt-4">
+          {trackWindow === "yesterday" ? (
+            <YesterdayBoard
+              date={yest?.date ?? null}
+              rows={selectedWindowBuckets}
+              overall={selectedYesterdayOverall}
+            />
+          ) : trackWindow === "lifetime" ? (
+            <LifetimeTrackingBoard records={selectedLifetimeRecords} alternateRows={selectedAlternateLineRows} />
           ) : (
             <CategoryTrackingBoard
-              rows={(trackWindow === "weekly" ? weekRows : monthRows).map((b) => ({
+              rows={selectedWindowBuckets.map((b) => ({
                 sport: b.sport,
                 market: b.market,
                 metrics: b.metrics,
               }))}
-              alternateRows={alternateLineRows}
+              alternateRows={selectedAlternateLineRows}
               emptyBody={
                 trackWindow === "weekly"
-                  ? "Weekly category comparison appears once this week's picks have graded."
-                  : "Monthly category comparison appears once the last 30 days have graded."
+                  ? `${prettySport(activeModel)} weekly category comparison appears once this week's picks have graded.`
+                  : `${prettySport(activeModel)} monthly category comparison appears once the last 30 days have graded.`
               }
             />
           )}
         </div>
-      </Section>
-
-      {/* ── 4. BEST ANGLES ───────────────────────────────────────────── */}
-      <Section
-        eyebrow="Premium tier"
-        title="Best Angles by category"
-      >
-        <BestAnglesBoard rows={bestAngleRows} />
+        <div className="mt-4">
+          <div className="mb-2.5 flex items-baseline justify-between gap-3">
+            <h3 className="text-[13px] font-black text-gray-100">Best Angles &amp; Leans</h3>
+            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-500">{prettySport(activeModel)} · {trackWindow}</span>
+          </div>
+          <BestAnglesBoard rows={selectedRecommendationRows} />
+        </div>
       </Section>
 
       {/* ── 5. LATEST RESULTS (settled feed, ordered by graded_at) ───── */}
       <Section
         eyebrow="As they grade"
-        title="Latest Results"
-        collapsible={presentation === "candidate"}
+        title={`${prettySport(activeModel)} Latest Results`}
+        collapsible
       >
         {settled.length === 0 ? (
           <Card>
@@ -640,7 +706,7 @@ export default function LabTrackingPage({
           The broader prediction activity stream remains available only in
           the current/internal presentation. */}
       {presentation === "current" ? (
-        <Section eyebrow="Latest activity" title="Recent Predictions">
+        <Section eyebrow="Latest activity" title={`${prettySport(activeModel)} Recent Predictions`} collapsible>
           {recent.length === 0 ? (
             <Card>
               <Empty body="Recent predictions appear once the first slate has run." />
@@ -654,7 +720,7 @@ export default function LabTrackingPage({
       ) : null}
 
       {/* ── METHOD — quiet, always-visible page reference ────────────── */}
-      <Section eyebrow="How records are counted" title="Method">
+      <Section eyebrow="How records are counted" title="Method" collapsible>
         <Card>
           <Glossary />
           <MethodDivider />
@@ -750,20 +816,69 @@ function Section({ eyebrow, title, children, collapsible = false }: { eyebrow?: 
   );
 }
 
+function ModelTabs({
+  models,
+  active,
+  onChange,
+}: {
+  models: string[];
+  active: string;
+  onChange: (model: string) => void;
+}) {
+  return (
+    <div
+      className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      role="tablist"
+      aria-label="Tracking model"
+    >
+      {models.map((model) => {
+        const on = model === active;
+        const theme = sportTheme(model);
+        return (
+          <button
+            key={model}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(model)}
+            className="shrink-0 rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-[0.13em] transition-colors sm:px-3.5 sm:text-[11px]"
+            style={on ? {
+              color: theme.accent,
+              borderColor: theme.border,
+              background: theme.accentSoft,
+            } : {
+              color: "rgb(156 163 175)",
+              borderColor: "rgba(255,255,255,0.06)",
+              background: "rgba(255,255,255,0.015)",
+            }}
+          >
+            {prettySport(model)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function WindowTabs({
   active,
   onChange,
 }: {
-  active: "weekly" | "monthly" | "lifetime";
-  onChange: (w: "weekly" | "monthly" | "lifetime") => void;
+  active: TrackingWindow;
+  onChange: (w: TrackingWindow) => void;
 }) {
-  const tabs: { key: "weekly" | "monthly" | "lifetime"; label: string }[] = [
+  const tabs: { key: TrackingWindow; label: string }[] = [
+    { key: "yesterday", label: "Yesterday" },
     { key: "weekly", label: "Weekly" },
     { key: "monthly", label: "Monthly" },
     { key: "lifetime", label: "Lifetime" },
   ];
   return (
-    <div className="inline-flex items-center gap-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-1">
+    <div
+      className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-white/[0.06] bg-white/[0.02] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:inline-flex"
+      role="tablist"
+      aria-label="Tracking time period"
+    >
       {tabs.map((t) => {
         const on = t.key === active;
         return (
@@ -771,9 +886,10 @@ function WindowTabs({
             key={t.key}
             type="button"
             onClick={() => onChange(t.key)}
-            aria-pressed={on}
+            role="tab"
+            aria-selected={on}
             className={
-              "px-3 sm:px-4 py-1.5 rounded-md text-[11px] sm:text-[12px] uppercase tracking-[0.12em] font-bold transition-colors " +
+              "shrink-0 px-3 sm:px-4 py-1.5 rounded-md text-[11px] sm:text-[12px] uppercase tracking-[0.12em] font-bold transition-colors " +
               (on
                 ? "bg-indigo-500/[0.18] text-indigo-100 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]"
                 : "text-gray-400 hover:text-gray-200")
@@ -1188,7 +1304,7 @@ function BestAnglesBoard({ rows }: { rows: SportMarketBucket[] }) {
   if (rows.length === 0) {
     return (
       <Card>
-        <Empty body="Best Angles are surfaced per category once the first ones have graded. Yesterday's Best Angles are visible above as soon as games settle." />
+        <Empty body="Best Angle and Lean records appear for this model and time period once those plays have graded." />
       </Card>
     );
   }

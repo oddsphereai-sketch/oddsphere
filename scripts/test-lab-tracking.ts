@@ -50,11 +50,12 @@ async function main() {
   const trackingRouteSource = readFileSync("app/api/lab/tracking/route.ts", "utf8");
   check("CFB tracking exposes all three official markets", trackingRouteSource.includes('cfb: ["ML", "O/U", "Spread"]'));
   check("NFL and CFB settled grades bridge from the modern official record path", trackingRouteSource.includes('loadFootballGradeRows(sport)') && trackingRouteSource.includes('["nfl", "cfb"] as const'));
-  check("signed-in Tracking defaults to the weekly window", trackingPageSource.includes('useState<"weekly" | "monthly" | "lifetime">("weekly")'));
+  check("signed-in Tracking defaults to the weekly window", trackingPageSource.includes('useState<TrackingWindow>("weekly")'));
   check("CFB tracking uses the established category presentation without a custom banner", !trackingPageSource.includes("CFB full tracked record") && !trackingPageSource.includes("includes sided No Plays"));
   check(
     "candidate keeps deep tracking sections available without front-loading them",
-    trackingPageSource.includes('collapsible={presentation === "candidate"}') &&
+    trackingPageSource.includes('title={`${prettySport(activeModel)} Latest Results`}') &&
+      trackingPageSource.includes('title="Method" collapsible') &&
       trackingPageSource.includes('<details className="group mb-4'),
   );
   // ─── (1) Happy path ───────────────────────────────────────────────────────
