@@ -42,40 +42,42 @@ times: this is a conservative historical simulation, not a reconstruction of cap
 payload availability. Historical neutral-site flags are venue metadata retrieved now.
 
 The confirmation cohort was opened once for model selection purposes. A subsequent correctness
-test removed impossible zero-margin pushes; the same frozen selection and every winning side
-remained unchanged. Probability scores were regenerated after that correction. Do not call the
-corrected probability report a second pristine holdout or tune further on this opened cohort.
+test removed impossible zero-margin pushes, then an exact box-score identity check rejected
+provider stat rows whose makes/attempts/points cannot reconcile with the official final.
+The selected configuration remained unchanged. The final report below reflects both correctness
+repairs, including the smaller eligible cohort. Do not call this corrected report a second
+pristine holdout or tune further on this opened confirmation cohort.
 
 | Metric | 2025–26 confirmation |
 | --- | ---: |
-| Games | 5,734 |
-| Winner W–L | 4,022–1,712 |
-| Winner accuracy | 70.14% |
-| Always listed home team, same cohort | 63.71% |
-| Brier | 0.1908853 |
-| Log loss | 0.5604543 |
-| Mean absolute team-score error | 8.7276 points |
-| Mean absolute margin error | 9.8333 points |
-| Mean absolute Total error | 14.2831 points |
-| Ten-bin calibration gap | 2.7263 percentage points |
-| 90% margin interval coverage | 90.1291% |
-| 90% Total interval coverage | 89.5535% |
+| Games | 5,721 |
+| Winner W–L | 4,012–1,709 |
+| Winner accuracy | 70.13% |
+| Always listed home team, same cohort | 63.68% |
+| Brier | 0.1909742 |
+| Log loss | 0.5606827 |
+| Mean absolute team-score error | 8.7273 points |
+| Mean absolute margin error | 9.8388 points |
+| Mean absolute Total error | 14.2817 points |
+| Ten-bin calibration gap | 2.7904 percentage points |
+| 90% margin interval coverage | 90.1416% |
+| 90% Total interval coverage | 89.6347% |
 | Incomplete venue/history inputs (retained in results) | 66 |
 
-November: 935/1,238 = 75.53%. December: 691/958 = 72.13%. January: 1,031/1,520 =
-67.83%. February: 928/1,368 = 67.84%. March: 429/637 = 67.35%. April: 8/13 = 61.54%.
+November: 933/1,236 = 75.49%. December: 688/955 = 72.04%. January: 1,028/1,518 =
+67.72%. February: 928/1,366 = 67.94%. March: 427/633 = 67.46%. April: 8/13 = 61.54%.
 November contains more mismatched nonconference games; its accuracy is not an all-season
 expectation. The listed-home baseline is a sanity check, not a sportsbook/competitor benchmark.
 No claim of outperforming favorites, closing lines, an incumbent CBB champion or a competitor.
 
 Historical team/box cohort exclusions across four seasons: 2,097 non-D-I/unknown-conference
-games, 65 nonfinal games, 72 incomplete Four Factors, 6 invalid finals, 41 invalid possession
-pairs, 7 missing box pairs and 1 invalid overtime row. Accepted training rows: 22,840, including
+games, 65 nonfinal games, 176 incomplete or incoherent box scores, 6 invalid finals,
+7 missing box pairs and 1 invalid overtime row. Accepted training rows: 22,777, including
 261 unknown-venue rows that are excluded from fitting but remain flagged in evaluation.
 Missing input rows are never silently converted into a normal completed grade evaluation.
 
 Source dataset SHA-256:
-`18bbcc0977c972cc1f513a5779b4b59995f580dbd68e9bb09ba71f8af0d92e42`.
+`d2bde4460339e83a21e04864bc8168ec2236f25c21663288f8b2124ce4064e48`.
 The portable prior, selected configuration, uncertainty and full report are retained in
 `lib/cbb/artifacts/`. Full local raw capture and per-game confirmation rows are under
 `/private/tmp/oddsphere-cbb-data/`. No final-season averages enter an earlier forecast.

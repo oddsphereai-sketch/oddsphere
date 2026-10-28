@@ -36,6 +36,13 @@ export function buildCbbTrainingGames(games: CbbGame[], boxes: CbbBox[], venues:
     const home = boxMap.get(`${game.id}:${game.home_team.id}`);
     const away = boxMap.get(`${game.id}:${game.visitor_team.id}`);
     if (!home || !away) { reject("missing_box_pair"); continue; }
+    const coherentBox = (box: CbbBox, score: number) => {
+      const counts = [box.fgm, box.fga, box.fg3m, box.fg3a, box.ftm, box.fta, box.oreb, box.dreb, box.turnovers];
+      return counts.every(value => value !== null && Number.isInteger(value) && value >= 0) &&
+        box.fgm! <= box.fga! && box.fg3m! <= box.fgm! && box.fg3m! <= box.fg3a! &&
+        box.fg3a! <= box.fga! && box.ftm! <= box.fta! && 2 * box.fgm! + box.fg3m! + box.ftm! === score;
+    };
+    if (!coherentBox(home, game.home_score) || !coherentBox(away, game.away_score)) { reject("box_score_identity_mismatch"); continue; }
     const hPoss = estimatedPossessions(home), aPoss = estimatedPossessions(away);
     if (hPoss === null || aPoss === null || Math.abs(hPoss - aPoss) > 12) { reject("invalid_possessions"); continue; }
     const possessions = (hPoss + aPoss) / 2;

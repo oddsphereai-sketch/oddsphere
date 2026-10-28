@@ -17,7 +17,7 @@ const game: CbbGame = { id: 1, date: "2025-11-01T18:00:00.000Z", season: 2025, h
   status: "post", status_state: "final", period: 2, home_score: 76, away_score: 70,
   home_score_h1: 38, home_score_h2: 38, away_score_h1: 35, away_score_h2: 35 };
 const homeBox: CbbBox = { team: home, game, fgm: 26, fga: 60, fg3m: 8, fg3a: 24, ftm: 16, fta: 20, oreb: 8, dreb: 25, turnovers: 12 };
-const awayBox: CbbBox = { ...homeBox, team: away, fgm: 25, fg3m: 7, fta: 18, oreb: 9, turnovers: 13 };
+const awayBox: CbbBox = { ...homeBox, team: away, fgm: 25, fg3m: 7, ftm: 13, fta: 18, oreb: 9, turnovers: 13 };
 const event = { id: "espn-1", date: game.date, competitions: [{ neutralSite: true, venue: { fullName: "Rome" },
   competitors: [{ homeAway: "home", team: { displayName: home.full_name } }, { homeAway: "away", team: { displayName: away.full_name } }] }] };
 const venue = matchCbbVenue(game, [event], "2026-10-28T12:00:00Z")!;
@@ -30,7 +30,8 @@ assert.equal(data.games.length, 1); assert.equal(data.games[0].neutral, true);
 assert.equal(buildCbbTrainingGames([{ ...game, status_state: "scheduled" }], [homeBox, awayBox], [venue]).games.length, 0);
 assert.equal(buildCbbTrainingGames([game], [homeBox, { ...awayBox, fga: null }], [venue]).games.length, 0);
 const ot = { ...game, home_score: 86, away_score: 80, home_score_h2: 32, period: 3, home_ot_scores: [16], away_ot_scores: [10] };
-const otData = buildCbbTrainingGames([ot], [homeBox, awayBox], [venue]);
+assert.equal(buildCbbTrainingGames([game], [{ ...homeBox, fgm: 25 }, awayBox], [venue]).games.length, 0);
+const otData = buildCbbTrainingGames([ot], [{ ...homeBox, fgm: 31 }, { ...awayBox, fgm: 30 }], [venue]);
 assert.equal(otData.games.length, 1); assert.ok(otData.games[0].tempo < otData.games[0].possessions);
 assert.equal(otData.games[0].homeRegulation, otData.games[0].awayRegulation);
 
@@ -106,8 +107,8 @@ assert.equal(frozenCandidate.historicalDataSha256, frozenEvaluation.historicalDa
 assert.equal(frozenEvaluation.confirmation.wins + frozenEvaluation.confirmation.losses, frozenEvaluation.confirmation.games);
 const portableState = fitCbbRatings([], { season: 2026, asOf: "2026-10-28T20:00:00.000Z", config: frozenCandidate.config, prior: frozenCandidate.prior });
 const portableForecast = forecastCbbGame(portableState, { id: 10882407, date: "2026-11-01T14:30:00.000Z", homeId: 92, awayId: 11, neutral: true }, frozenCandidate.uncertainty);
-assert.ok(Math.abs(portableForecast.homeScore - 75.37181906647453) < 1e-9);
-assert.ok(Math.abs(portableForecast.awayScore - 72.1815839071886) < 1e-9);
+assert.ok(Math.abs(portableForecast.homeScore - 75.36810932159642) < 1e-9);
+assert.ok(Math.abs(portableForecast.awayScore - 72.19753550516532) < 1e-9);
 
 async function providerTests() {
   const seen: URL[] = [];
