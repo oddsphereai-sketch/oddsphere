@@ -30,7 +30,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_shadow_capture_2026_10_27_r9_all_sport_owls_schedule",
+    "market_intelligence_v2_capture_2026_10_28_r10_owls_ticket_share_retention",
 );
 
 {

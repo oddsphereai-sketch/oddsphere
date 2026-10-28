@@ -3,6 +3,7 @@ import { OwlsInsightAuthError, OwlsInsightClient } from "../lib/providers/owls/o
 import {
   normalizeOwlsSharpBookSplits,
   selectAllCompleteNamedBookSplits,
+  selectAllInternalNamedBookSplits,
   selectCompleteNamedBookSplit,
   type RawOwlsSplitsResponse,
 } from "../lib/providers/owls/owlsSharpBookSplits";
@@ -67,6 +68,9 @@ assert.equal(normalized.rejected.length, 0);
 assert.equal(normalized.observations.filter((row) => row.sourceBook === "circa").length, 6);
 assert.equal(normalized.observations.filter((row) => row.sourceBook === "circa" && row.complete).length, 6);
 assert.equal(normalized.observations.filter((row) => row.sourceBook === "betmgm" && row.complete).length, 0);
+assert.ok(normalized.observations
+  .filter((row) => row.sourceBook === "betmgm")
+  .every((row) => row.sourceType === "retail_ticket_share" && row.moneyPct === null));
 
 const selected = selectCompleteNamedBookSplit(normalized.observations, {
   providerEventId: "nba:Away@Home-20261027",
@@ -91,6 +95,24 @@ assert.equal(allNamedBooks.length, 4);
 assert.deepEqual(allNamedBooks.map((row) => row.sourceBook), [
   "circa", "circa", "draftkings", "draftkings",
 ]);
+
+const allInternalBooks = selectAllInternalNamedBookSplits([
+  ...normalized.observations,
+  ...normalized.observations
+    .filter((row) => row.sourceBook === "circa" && row.market === "moneyline")
+    .map((row) => ({ ...row, sourceBook: "draftkings" as const, sourceType: "retail_book" as const })),
+], {
+  providerEventId: "nba:Away@Home-20261027",
+  market: "moneyline",
+  nowMs: Date.parse("2026-10-27T20:10:00.000Z"),
+});
+assert.equal(allInternalBooks.length, 6);
+assert.deepEqual(allInternalBooks.map((row) => row.sourceBook), [
+  "circa", "circa", "draftkings", "draftkings", "betmgm", "betmgm",
+]);
+assert.ok(allInternalBooks
+  .filter((row) => row.sourceBook === "betmgm")
+  .every((row) => row.betsPct !== null && row.moneyPct === null));
 
 const stale = selectCompleteNamedBookSplit(normalized.observations, {
   providerEventId: "nba:Away@Home-20261027",

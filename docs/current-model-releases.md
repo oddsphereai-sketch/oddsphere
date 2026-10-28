@@ -8,6 +8,18 @@ Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
+- October 28 Owl's ticket-share retention advances the observation capture release to
+  `market_intelligence_v2_capture_2026_10_28_r10_owls_ticket_share_retention`. The existing
+  all-sport Market Intelligence V2 postlude now retains a fresh, coherent BetMGM two-sided
+  ticket-share pair even when Owl's truthfully reports no handle percentages. Those rows remain
+  `retail_ticket_share` with `money_pct=NULL`; they cannot become money-minus-ticket divergence,
+  satisfy the complete member split selector, or acquire model/grade authority. Complete Circa,
+  DraftKings, and BetMGM money-plus-ticket pairs remain separately retained. The change reuses the
+  existing league request and adds zero provider calls, writers, schedules, or leases. Predictions,
+  probabilities, scores, sides, grades, stakes, locks, tracking, and member snapshots are unchanged.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-28-owls-ticket-share-capture-predeclaration.md`.
+
 - October 27 NFL Owls capture cutover advances only the sole writer / collector to
   `nfl_forward_evidence_writer_2026_10_27_r91_owls_capture_only` /
   `nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only`. The live route requires
@@ -331,8 +343,8 @@ Last reviewed: 2026-10-27
   until NBA-specific validation clears it. No model, probability, side, projection, grade, stake,
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
-- Cross-sport Market Intelligence V2 shadow capture is
-  `market_intelligence_v2_shadow_capture_2026_10_27_r9_all_sport_owls_schedule`. The existing leased
+- Cross-sport Market Intelligence V2 capture is
+  `market_intelligence_v2_capture_2026_10_28_r10_owls_ticket_share_retention`. The existing leased
   refresh may store exact-date, exact-matchup Owls split and sharp-book price rows with their real
   source book for MLB, WNBA, NBA, NHL, NFL, CFB, and CBB. NBA and weekly football use the same
   bounded seven-day window as their member schedule. The league-level endpoint is

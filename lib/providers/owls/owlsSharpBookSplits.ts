@@ -42,7 +42,7 @@ export type NormalizedOwlsSplitObservation = {
   homeTeam: string;
   awayTeam: string;
   sourceBook: OwlsSplitBook;
-  sourceType: "sharp_adjacent_book" | "retail_book";
+  sourceType: "sharp_adjacent_book" | "retail_book" | "retail_ticket_share";
   market: OwlsSplitMarket;
   side: OwlsSplitSide;
   line: number | null;
@@ -103,8 +103,13 @@ function book(value: unknown): OwlsSplitBook | null {
   return BOOK_ALIASES[normalized] ?? null;
 }
 
-function sourceType(value: OwlsSplitBook): NormalizedOwlsSplitObservation["sourceType"] {
-  return value === "circa" ? "sharp_adjacent_book" : "retail_book";
+function sourceType(
+  value: OwlsSplitBook,
+  ticketOnly: boolean,
+): NormalizedOwlsSplitObservation["sourceType"] {
+  if (value === "circa") return "sharp_adjacent_book";
+  if (value === "betmgm" && ticketOnly) return "retail_ticket_share";
+  return "retail_book";
 }
 
 function sideFields(market: OwlsSplitMarket, side: OwlsSplitSide): {
@@ -169,28 +174,31 @@ export function normalizeOwlsSharpBookSplits(
       for (const market of Object.keys(MARKET_SIDES) as OwlsSplitMarket[]) {
         const rawMarket = rawSplit[market];
         if (!rawMarket || typeof rawMarket !== "object") continue;
-        const marketRows = MARKET_SIDES[market].map((side) => {
+        const parsedRows = MARKET_SIDES[market].map((side) => {
           const fields = sideFields(market, side);
           const betsPct = percent(rawMarket[fields.bets]);
           const moneyPct = percent(rawMarket[fields.money]);
           return {
-            provider: "owls" as const,
-            providerEventId,
-            sport: expectedSport,
-            homeTeam,
-            awayTeam,
-            sourceBook,
-            sourceType: sourceType(sourceBook),
-            market,
             side,
             line: fields.line ? number(rawMarket[fields.line]) : null,
             price: fields.price ? number(rawMarket[fields.price]) : null,
             betsPct,
             moneyPct,
-            observedAt,
-            complete: betsPct !== null && moneyPct !== null,
-          } satisfies NormalizedOwlsSplitObservation;
+          };
         });
+        const marketRows = parsedRows.map((row) => ({
+          provider: "owls" as const,
+          providerEventId,
+          sport: expectedSport,
+          homeTeam,
+          awayTeam,
+          sourceBook,
+          sourceType: sourceType(sourceBook, parsedRows.every((candidate) => candidate.moneyPct === null)),
+          market,
+          ...row,
+          observedAt,
+          complete: row.betsPct !== null && row.moneyPct !== null,
+        } satisfies NormalizedOwlsSplitObservation));
         if (
           !opposingPercentagesAreValid(marketRows[0]?.betsPct ?? null, marketRows[1]?.betsPct ?? null) ||
           !opposingPercentagesAreValid(marketRows[0]?.moneyPct ?? null, marketRows[1]?.moneyPct ?? null)
@@ -281,6 +289,58 @@ export function selectAllCompleteNamedBookSplits(
   return [...groups.values()]
     .filter((pair) => pair.length === 2 && expectedSides.every((side) =>
       pair.some((row) => row.side === side)))
+    .sort((a, b) =>
+      (priority.get(a[0]!.sourceBook) ?? 99) - (priority.get(b[0]!.sourceBook) ?? 99) ||
+      a[0]!.observedAt.localeCompare(b[0]!.observedAt))
+    .flatMap((pair) => expectedSides.map((side) => pair.find((row) => row.side === side)!));
+}
+
+/**
+ * Retain every source-book pair that is truthful internal evidence.
+ *
+ * Complete money-plus-ticket pairs remain unchanged. BetMGM ticket-only pairs
+ * are additionally retained as retail-ticket context with a null money share;
+ * they are not eligible for the member-facing complete-pair selector above and
+ * cannot be reinterpreted as money-minus-ticket divergence.
+ */
+export function selectAllInternalNamedBookSplits(
+  observations: readonly NormalizedOwlsSplitObservation[],
+  opts: {
+    providerEventId: string;
+    market: OwlsSplitMarket;
+    nowMs?: number;
+    maxAgeMs?: number;
+  },
+): NormalizedOwlsSplitObservation[] {
+  const nowMs = opts.nowMs ?? Date.now();
+  const maxAgeMs = opts.maxAgeMs ?? 3 * 60 * 60 * 1000;
+  const expectedSides = MARKET_SIDES[opts.market];
+  const rows = observations.filter((row) => {
+    const ageMs = nowMs - Date.parse(row.observedAt);
+    return row.providerEventId === opts.providerEventId &&
+      row.market === opts.market &&
+      ageMs >= -5 * 60 * 1000 &&
+      ageMs <= maxAgeMs;
+  });
+  const groups = new Map<string, NormalizedOwlsSplitObservation[]>();
+  for (const row of rows) {
+    const key = `${row.sourceBook}\u0000${row.observedAt}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  const priority = new Map<OwlsSplitBook, number>([
+    ["circa", 0], ["draftkings", 1], ["betmgm", 2],
+  ]);
+  return [...groups.values()]
+    .filter((pair) => {
+      if (pair.length !== 2 || !expectedSides.every((side) =>
+        pair.some((row) => row.side === side))) return false;
+      if (pair.every((row) => row.complete)) return true;
+      return pair.every((row) =>
+        row.sourceBook === "betmgm" &&
+        row.sourceType === "retail_ticket_share" &&
+        row.betsPct !== null &&
+        row.moneyPct === null);
+    })
     .sort((a, b) =>
       (priority.get(a[0]!.sourceBook) ?? 99) - (priority.get(b[0]!.sourceBook) ?? 99) ||
       a[0]!.observedAt.localeCompare(b[0]!.observedAt))

@@ -15,7 +15,7 @@ import { buildGameKey, type NormalizerSport } from "../../providers/playbook/pla
 import { OwlsInsightClient, type OwlsSport } from "../../providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookSplits,
-  selectAllCompleteNamedBookSplits,
+  selectAllInternalNamedBookSplits,
   type NormalizedOwlsSplitObservation,
   type RawOwlsSplitsResponse,
 } from "../../providers/owls/owlsSharpBookSplits";
@@ -89,7 +89,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_shadow_capture_2026_10_27_r9_all_sport_owls_schedule";
+  "market_intelligence_v2_capture_2026_10_28_r10_owls_ticket_share_retention";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -802,7 +802,7 @@ async function collectOwlsSplits(opts: {
     }
 
     const selectedRows = (["moneyline", "spread", "total"] as const).flatMap((market) =>
-      selectAllCompleteNamedBookSplits(eventRows, {
+      selectAllInternalNamedBookSplits(eventRows, {
         providerEventId,
         market,
         nowMs: opts.now.getTime(),
