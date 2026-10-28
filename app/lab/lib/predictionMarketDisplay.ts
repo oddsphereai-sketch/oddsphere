@@ -2,7 +2,13 @@ import type { MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean};
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string};
+export function predictionMarketComparisonBook(locked:boolean,stored:PredictionMarketBookTrail|null,live:PredictionMarketBookTrail|null):PredictionMarketBookTrail|null {
+  if(locked||stored?.locked)return stored;
+  if(!live)return stored;
+  if(stored&&stored.points.at(-1)![0]>live.points.at(-1)![0])return stored;
+  return live;
+}
 export function formatPredictionMarketOdds(value:number):string {return value>0?`+${value}`:`−${Math.abs(value)}`;}
 const pickLabel=(value:string|null|undefined)=>value?.replace(/\s+ML$/i,"").trim().toUpperCase().replace(/^TIE$/,"DRAW");
 
@@ -29,8 +35,23 @@ export function predictionMarketBookTrail(moneyline:MarketEdgeDto, outcomeLabel:
   return {sportsbook:group[0],points:bounded,locked:group[1].some(row=>Date.parse(row.observedAt!)===last[0]&&row.label==="locked")};
 }
 
+/** Prefer the selected threshold. If its stored trail is absent, preserve an
+ * actual stored same-side endpoint at its OWN line rather than hiding it.
+ * This is especially important for frozen snapshots; it is not a live repair
+ * or a reconstruction of the locked pick's price. */
+export function predictionMarketReaderBookTrail(market:MarketEdgeDto,label:string,now:number,line:number|null){
+  const exact=predictionMarketBookTrail(market,label,now,line);if(exact)return exact;
+  if(line===null)return null;
+  const selected=pickLabel(label),stops=selected===pickLabel(market.pick)?market.oddsTrail:selected===pickLabel(market.opposingOddsTrail?.label)?market.opposingOddsTrail?.stops:[];
+  const endpoints=(stops??[]).filter(s=>(s.label==="current"||s.label==="locked")&&s.line!==null&&Number.isFinite(s.line))
+    .sort((a,b)=>Date.parse(b.observedAt??"")-Date.parse(a.observedAt??""));
+  for(const endpoint of endpoints){const trail=predictionMarketBookTrail(market,label,now,endpoint.line);if(trail)return {...trail,line:endpoint.line};}
+  return null;
+}
+
 /** Shared percent axis; padding adapts to actual movement instead of hiding it. */
 export function predictionMarketChartDomain(points:ReadonlyArray<readonly [number,number,...unknown[]]>):[number,number] {
+  if(!points.length)return [0,100];
   const values=points.map(point=>point[1]*100);
   const low=Math.min(...values), high=Math.max(...values);
   const padding=Math.max(.35,(high-low)*.15);
@@ -39,7 +60,8 @@ export function predictionMarketChartDomain(points:ReadonlyArray<readonly [numbe
 
 /** Display-only curves through exact observations. Controls stay inside each pair's
  * price/time bounds: no overshoot, invented extrema, or additional quote samples.
- * Missing Kalshi intervals remain separate paths (including their area fill). */
+ * Monotone Hermite tangents are shared by both sources. Unlike independent
+ * horizontal controls at every sample, adjacent connectors share a tangent. */
 export function predictionMarketCurve(
   points:ReadonlyArray<readonly [number,number,...unknown[]]>,
   x:(at:number)=>number,y:(probability:number)=>number,
@@ -52,15 +74,50 @@ export function predictionMarketCurve(
     else segment!.push([point[0],point[1]]);
   }
   const paths=segments.map(segment=>{
+    const xs=segment.map(p=>x(p[0])),ys=segment.map(p=>y(p[1]));
+    const slopes=xs.slice(1).map((v,i)=>(ys[i+1]-ys[i])/(v-xs[i]));
+    const tangents=xs.map((_,i)=>{
+      if(i===0)return slopes[0]??0;
+      if(i===xs.length-1)return slopes.at(-1)??0;
+      const a=slopes[i-1],b=slopes[i];
+      if(!a||!b||a*b<=0)return 0;
+      const before=xs[i]-xs[i-1],after=xs[i+1]-xs[i],w1=2*after+before,w2=after+2*before;
+      return (w1+w2)/(w1/a+w2/b);
+    });
     let line=`M${x(segment[0][0])},${y(segment[0][1])}`;
     for(let index=1;index<segment.length;index++){
       const a=segment[index-1],b=segment[index],dx=(x(b[0])-x(a[0]))/3;
-      line+=` C${x(a[0])+dx},${y(a[1])} ${x(b[0])-dx},${y(b[1])} ${x(b[0])},${y(b[1])}`;
+      const low=Math.min(y(a[1]),y(b[1])),high=Math.max(y(a[1]),y(b[1]));
+      const clamp=(v:number)=>Math.max(low,Math.min(high,v));
+      line+=` C${x(a[0])+dx},${clamp(y(a[1])+dx*tangents[index-1])} ${x(b[0])-dx},${clamp(y(b[1])-dx*tangents[index])} ${x(b[0])},${y(b[1])}`;
     }
     const area=baseline===undefined||segment.length<2?"":`${line} L${x(segment.at(-1)![0])},${baseline} L${x(segment[0][0])},${baseline} Z`;
     return {line,area};
   });
   return {line:paths.map(path=>path.line).join(" "),area:paths.map(path=>path.area).filter(Boolean).join(" ")};
+}
+
+/** Both prices are compared only through their last shared observation time.
+ * Trim the faster source; never extend/re-stamp the slower source or invent a
+ * quote at the boundary. Endpoints may precede the cutoff by a sample interval. */
+export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf">,book:PredictionMarketBookTrail|null){
+  const series=predictionMarketChartSeries(row);
+  const cutoff=book?.points.length&&series.points.length?Math.min(series.points.at(-1)![0],book.points.at(-1)![0]):null;
+  const indices=series.points.flatMap((p,i)=>cutoff===null||p[0]<=cutoff?[i]:[]);
+  const points=indices.map(i=>series.points[i]),activity=indices.map(i=>series.activity[i]);
+  const bookPoints=book?.points.filter(p=>cutoff===null||p[0]<=cutoff)??[];
+  const overlap=points.length>0&&bookPoints.length>0;
+  return {points:cutoff!==null&&!overlap?series.points:points,activity:cutoff!==null&&!overlap?series.activity:activity,
+    bookPoints:overlap?bookPoints:[],cutoff:overlap?cutoff:null,pending:!!book&&!overlap,
+    start:overlap?Math.max(points[0][0],bookPoints[0][0]):series.points[0]?.[0]??Date.parse(row.asOf),
+    latestKalshi:series.points.at(-1)?.[0]??null,latestBook:book?.points.at(-1)?.[0]??null};
+}
+
+/** Keep one real preceding anchor for normal chart clipping at the common start. */
+export function predictionMarketWindowPoints<T extends readonly [number,...unknown[]]>(points:ReadonlyArray<T>,start:number):T[]{
+  const first=points.findIndex(p=>p[0]>=start);
+  if(first===-1)return points.length?[points.at(-1)!]:[];
+  return points.slice(Math.max(0,first-1));
 }
 
 /** Return a recorded observation, never a new interpolated sportsbook quote. */
