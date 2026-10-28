@@ -86,10 +86,11 @@ These are request ceilings, not measured billed credits or a total cost estimate
 per-game provider loop, new writer, prediction lease, model, grade, stake, member, or lock change.
 Same-input prediction/grade/promotion/demotion/actionable deltas are contractually zero.
 
-Focused identity/status/error-isolation tests, TypeScript and lint passed before the final integration
-round. The initial full safety run exposed an obsolete football-prefetch assertion already corrected
-upstream in PR #846. Integrate that exact upstream fix and rerun the complete gate before publication;
-never skip or weaken it. The focused suite is wired into `preverify:model-change` as
+The initial full safety run exposed an obsolete football-prefetch assertion corrected upstream in
+PR #846. The isolated capture branch integrated exact main
+`ecfd01dadcdd30bb9f2fab7994e35f580113deb4`; its full `npm run verify:model-change` then passed.
+The dedicated research PostgreSQL proof was explicitly skipped because its test URL is unset; no
+capture schema migration is introduced. The focused suite is wired into `preverify:model-change` as
 `npm run test:nfl-market-capture`.
 
 Rollback: restore the exact production r12 capture implementation. Keep every already captured row
