@@ -151,6 +151,18 @@ check(
   "CFB weekly member reads allow the measured compact-snapshot transfer window",
   candidateMemberPageSource.includes("const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000"),
 );
+check(
+  "published daily-sport member reads never wait on current provider split fetches",
+  candidateMemberPageSource.includes('const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba"') &&
+    candidateMemberPageSource.includes("publishedSnapshotOnly\n      ? populateDailyEdgeStoredSplitFallback(snapshot, sport)") &&
+    candidateMemberPageSource.includes(': populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport)'),
+);
+check(
+  "display-only split continuity overlaps the independent team-history read",
+  candidateMemberPageSource.includes("const historyReadPromise:") &&
+    candidateMemberPageSource.includes("const [historyRead] = await Promise.all([") &&
+    candidateMemberPageSource.includes("splitFallbackPromise ?? Promise.resolve(null)"),
+);
 
 check("CFB board cards leave repeated explanatory copy to the reader", candidateDailyEdgeSource.includes('sport !== "cfb" ? <p'));
 check(

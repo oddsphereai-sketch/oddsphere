@@ -79,6 +79,7 @@ export default async function CandidateDailyEdgePage({
         ? "premier_league"
         : "world_cup";
   const sport: Sport = soccerRequested ? "soccer" : sourceSport;
+  const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba";
   const eplRequested = competition === "premier_league";
   const eplEnabled = process.env.PREMIER_LEAGUE_DAILY_EDGE_ENABLED === "true";
   const uclRequested = competition === "champions_league";
@@ -175,7 +176,6 @@ export default async function CandidateDailyEdgePage({
   } else if (eplRequested || uclRequested) {
     snapshot = emptyPreviewSnapshot(sport);
   } else {
-    const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba";
     const result = await readMemberDataWithDeadline({
       label: `${sport}-daily-edge-snapshot`,
       fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
@@ -203,12 +203,20 @@ export default async function CandidateDailyEdgePage({
   // a complete DraftKings pair silently occupies the same established split
   // card when Circa is absent. Provider identity stays in the DTO for audit;
   // predictions, recommendations, grades, and member-facing copy are untouched.
+  let splitFallbackPromise: ReturnType<typeof populateDailyEdgeStoredSplitFallback> | ReturnType<typeof populateDailyEdgeDraftKingsFallback> | null = null;
   if (cfbFixture && initialCfbReaderGameId) {
     await populateDailyEdgeStoredSplitFallback(snapshot, "cfb", {
       reconstructMissingLockedPreLock: true,
     });
   } else if (!cfbFixture) {
-    await populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
+    // Published boards already ran the current provider overlay on their sole
+    // scheduled writer. Member navigation must consume only those durable
+    // rows; otherwise every sport-tab click can repeat provider I/O and spend
+    // seconds rebuilding display-only split evidence. Start the stored overlay
+    // now so it overlaps the independent recent-history read below.
+    splitFallbackPromise = publishedSnapshotOnly
+      ? populateDailyEdgeStoredSplitFallback(snapshot, sport)
+      : populateDailyEdgeDraftKingsFallback(snapshot, uclRequested ? "ucl" : sport);
   }
   const cfbBoardProjection = cfbFixture
     ? projectCfbSnapshotForInitialBoard({ snapshot, fullReaderGameId: initialCfbReaderGameId })
@@ -239,12 +247,12 @@ export default async function CandidateDailyEdgePage({
           }),
         )
       : undefined;
-  const historyRead: [
+  const historyReadPromise: Promise<[
     Awaited<ReturnType<typeof loadTeamHistory>>,
     Awaited<ReturnType<typeof loadPitcherFirstInningHistory>>,
-  ] = nflFixture || cfbFixture
-    ? [(nflFixture ?? cfbFixture)!.history, {}]
-    : (await readMemberDataWithDeadline({
+  ]> = nflFixture || cfbFixture
+    ? Promise.resolve([(nflFixture ?? cfbFixture)!.history, {}])
+    : readMemberDataWithDeadline({
         label: `${sport}-daily-edge-history`,
         fallback: [{}, {}] as [
           Awaited<ReturnType<typeof loadTeamHistory>>,
@@ -258,7 +266,11 @@ export default async function CandidateDailyEdgePage({
           ),
           loadPitcherFirstInningHistory(snapshot, sport),
         ]),
-      })).value;
+      }).then((result) => result.value);
+  const [historyRead] = await Promise.all([
+    historyReadPromise,
+    splitFallbackPromise ?? Promise.resolve(null),
+  ]);
   const [history, pitcherFirstInningHistory] = historyRead;
   const cfbFbsGameCount = cfbFixture
     ? snapshot.games.filter((game) => game.collegeFootballScope === "fbs_involved").length
