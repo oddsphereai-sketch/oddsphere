@@ -128,6 +128,16 @@ not resolve the evidence requirement.
   `f7f33a327dc12b5813853e3a618b41ebc2dc24da`. The task started this round at
   `524b646fc249abcc12a3b224e7ae2f2ca2c66592` and integrated the new main in its
   dedicated worktree, without touching the shared primary checkout.
+- Before publishing the private draft branch, main advanced to
+  `41c52c3ece7000cc820c82c878b02701ab4d89a9` (#858 chart comparison work).
+  It was integrated cleanly with no CBB overlap. The full
+  `npm run verify:model-change` suite, all seven CBB suites, both affected
+  prediction-market chart suites, TypeScript and focused ESLint passed on that
+  fresh base. The optional PostgreSQL proof was skipped because
+  `MARKET_BRAIN_POSTGRES_URL` is unset. The clean committed integration guard
+  also passed; no protection/check bypass or main merge is performed.
+- Actionable-board impact is zero: no promotions, demotions, grade/stake changes
+  or activation changes are proposed by this research-only commit.
 
 ## Reproduction
 
