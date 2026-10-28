@@ -236,9 +236,10 @@ export function buildPlaybookSplitObservationsV2(opts: {
 }
 
 /**
- * Persist only complete two-sided Owls named-book evidence. Partial ticket-only
- * rows remain available to provider diagnostics but may not enter the market
- * reader as if they were verified money-and-ticket splits.
+ * Persist complete two-sided Owl's named-book evidence plus coherent
+ * single-axis pairs. The unavailable axis remains NULL and retail single-axis
+ * rows retain a distinct source type; they can never masquerade as verified
+ * money-and-ticket splits.
  */
 export function buildOwlsSplitObservationsV2(opts: {
   rows: readonly NormalizedOwlsSplitObservation[];
@@ -262,16 +263,45 @@ export function buildOwlsSplitObservationsV2(opts: {
       const pair = marketRows.filter((row) =>
         row.sourceBook === sourceBook && row.observedAt === observedAt);
       const providerEventId = pair[0]?.providerEventId ?? null;
+      const coherenceErrors: string[] = [];
+      const expectedSides = MARKET_SIDES[market];
+      if (!expectedSides.every((side) => pair.some((row) => row.side === side))) {
+        coherenceErrors.push(`${market} missing an opposing side`);
+      }
+      validateOpposingPercentages({
+        market,
+        metric: "bets_pct",
+        a: pair.find((row) => row.side === expectedSides[0])?.betsPct ?? null,
+        b: pair.find((row) => row.side === expectedSides[1])?.betsPct ?? null,
+        errors: coherenceErrors,
+      });
+      validateOpposingPercentages({
+        market,
+        metric: "money_pct",
+        a: pair.find((row) => row.side === expectedSides[0])?.moneyPct ?? null,
+        b: pair.find((row) => row.side === expectedSides[1])?.moneyPct ?? null,
+        errors: coherenceErrors,
+      });
+      const completeMoneyAndTickets = pair.length === 2 && pair.every((row) =>
+        row.complete && row.betsPct !== null && row.moneyPct !== null);
+      const coherentSingleAxisPair = pair.length === 2 && (
+        pair.every((row) => row.betsPct !== null && row.moneyPct === null) ||
+        pair.every((row) => row.betsPct === null && row.moneyPct !== null)
+      );
       if (
         pair.length !== 2 ||
-        pair.some((row) => !row.complete || row.betsPct === null || row.moneyPct === null) ||
-        pair[0]?.observedAt !== pair[1]?.observedAt
+        pair[0]?.observedAt !== pair[1]?.observedAt ||
+        coherenceErrors.length > 0 ||
+        (!completeMoneyAndTickets && !coherentSingleAxisPair)
       ) {
         rejected.push(reject("owls", {
           providerEventId,
           market,
           selectionKey: null,
-          reason: `incomplete or mismatched Owls ${sourceBook} ${market} pair`,
+          reason: [
+            `incomplete or mismatched Owl's ${sourceBook} ${market} pair`,
+            ...coherenceErrors,
+          ].join("; "),
         }));
         continue;
       }
