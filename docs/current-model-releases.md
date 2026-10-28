@@ -443,10 +443,13 @@ Last reviewed: 2026-10-28
   canonicalizes ESPN schedule abbreviations (`GS`, `NO`, `UTAH`, `WSH`) before
   exact provider-game coverage checks, while retaining the same fail-closed
   behavior for a genuinely missing scheduled game. Its private store release is
-  `nba_player_props_private_store_2026_10_23_r5_bounded_market_history_capacity`: the
-  deployed r3 envelope migrates in place, unchanged polling refreshes current
+  `nba_player_props_private_store_2026_10_28_r6_expanded_bounded_market_history_capacity`: the
+  deployed r3-r5 envelopes migrate in place, unchanged polling refreshes current
   evidence without unbounded duplicate rows, and every quote scope retains its
   first, prior, and current distinct price states for opening/movement reading.
+  The r6 store keeps those exact semantics while raising the bounded archive
+  guards to 250,000 observations and 192 MB uncompressed; the independently
+  enforced 8 MB compressed envelope cap remains unchanged.
   It runs only when `NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED=true`, inside the
   existing `prediction_pipeline:nba` lease. It adds frozen-artifact verification,
   bounded current/opening prop capture, gap-only The Odds API fallback,
