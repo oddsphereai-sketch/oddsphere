@@ -2885,6 +2885,32 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 
 ## NFL Player Props production release
 
+- October 28 Owls current/reference price source: active provider observation is
+  `nfl_player_props_provider_observation_2026_10_28_r14_owls_reference_prices`; portable artifact /
+  model / calibration / decision / runtime / board are
+  `nfl_player_props_runtime_2026_10_28_r22_owls_reference_prices` /
+  `nfl_player_props_distribution_model_2026_10_28_r33_owls_reference_prices` /
+  `nfl_player_props_distribution_calibration_2026_10_28_r35_owls_reference_prices` /
+  `nfl_player_props_decision_2026_10_28_r39_owls_reference_prices` /
+  `nfl_player_props_runtime_2026_10_28_r40_owls_reference_prices` /
+  `nfl_player_props_board_2026_10_28_r43_owls_reference_prices`. Member / lifecycle / sole writer /
+  tracking are `nfl_player_props_member_2026_10_28_r52_owls_reference_prices` /
+  `nfl_player_props_member_lifecycle_2026_10_28_r34_owls_reference_prices` /
+  `nfl_player_props_writer_2026_10_28_r66_owls_reference_prices` /
+  `nfl_player_props_tracking_2026_10_28_r40_owls_reference_prices`. BALLDONTLIE remains the slate,
+  player-identity, retail-current, and opening source. One bounded Owls league request supplies
+  current multi-book prices and the qualified Pinnacle/NoVig target-excluded reference lane; the
+  active collector makes zero Sharp API calls. Exact team/kickoff identity, six-hour freshness,
+  complete-pair, and non-live gates fail closed. The live no-write Week 8 rehearsal collected
+  15,968 observations, 6,934 exact offers, and 382 qualified Owls reference observations. Same-input
+  release comparison changed zero of 774 rows and zero actionables (35 to 35). Against the preceding
+  live board, restored/current coverage produced 248 additions, 177 removals, 64 projection changes,
+  10 side changes, 3 promotions, zero demotions, and 14 to 35 canonical actionables. This is a
+  deliberate coverage change, not a settled-accuracy claim. Existing locks retain exact stored
+  precedence. Evidence and rollback:
+  `docs/model-audits/2026-10-28-nfl-player-props-owls-source-predeclaration.md` and
+  `docs/model-audits/2026-10-28-nfl-player-props-owls-source-result.md`.
+
 - October 27 Passing Yards direction correction: active portable artifact / model / calibration /
   decision / runtime / board are
   `nfl_player_props_runtime_2026_10_27_r21_passing_yards_direction` /

@@ -18,7 +18,7 @@ async function main(): Promise<void> {
     now,
     apply: false,
     ballDontLieApiKey: requiredEnv("BALLDONTLIE_API_KEY"),
-    sharpApiKey: process.env.SHARPAPI_KEY,
+    owlsInsightApiKey: requiredEnv("OWLS_INSIGHT_API_KEY"),
     auditSourceAwareMarketReading: argument("source-aware") === "true",
     auditSourceAwareQualifiedMarkets: markets("qualified-markets"),
     auditDiscreteMarketCorrectionMarkets: markets("discrete-market-corrections"),

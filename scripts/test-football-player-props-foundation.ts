@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { SharpApiRateLimitError } from "../lib/providers/real_api/_sharpApiClient";
 import {
   NFL_PLAYER_PROPS_DECISION_RELEASE,
   NFL_PLAYER_PROPS_PHASE_ONE_MARKETS,
@@ -11,6 +10,7 @@ import {
 import {
   canonicalNflPlayerPropMarket,
   normalizeBalldontlieNflPlayerProps,
+  normalizeOwlsNflPlayerProps,
   normalizeSharpNflPlayerProps,
 } from "../lib/services/football/nflPlayerPropsProviders";
 import {
@@ -19,7 +19,6 @@ import {
 } from "../lib/services/football/nflPlayerPropsCollector";
 
 const fetchedAt = "2026-08-20T16:00:00Z";
-const sharpLaneOrder: string[] = [];
 const games = [{
   season: 2026,
   week: 1,
@@ -37,8 +36,11 @@ assert.equal(canonicalNflPlayerPropMarket("rushing_yards"), "rushing_yards");
 assert.equal(canonicalNflPlayerPropMarket("player_total_receptions"), "receptions");
 assert.equal(canonicalNflPlayerPropMarket("player_total_rush_attempts"), "rushing_attempts");
 assert.equal(canonicalNflPlayerPropMarket("player_rushing_+_receiving_yards"), "rushing_receiving_yards");
+assert.equal(canonicalNflPlayerPropMarket("rush_rec_yards"), "rushing_receiving_yards");
+assert.equal(canonicalNflPlayerPropMarket("longest_completion"), "longest_pass");
+assert.equal(canonicalNflPlayerPropMarket("field_goals_made"), "fg_made");
 assert.equal(canonicalNflPlayerPropMarket("unknown_fun_prop"), null);
-assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_15_r13_reference_priority");
+assert.equal(NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE, "nfl_player_props_provider_observation_2026_10_28_r14_owls_reference_prices");
 assert.deepEqual(NFL_PLAYER_PROPS_PHASE_ONE_MARKETS, [
   "passing_attempts",
   "passing_completions",
@@ -160,21 +162,49 @@ assert.equal(sharp.rows.length, 1);
 assert.equal(sharp.rows[0]?.playerName, "Jalen Hurts");
 assert.equal(sharp.rows[0]?.side, "over", "Sharp selection is the side; player_name owns player identity");
 assert.equal(sharp.rows[0]?.market, "passing_yards");
-const reconciledSharp = __NFL_PLAYER_PROPS_COLLECTOR_TEST__.reconcileSharpRowsToSlate(sharp.rows, games);
+const reconciledSharp = __NFL_PLAYER_PROPS_COLLECTOR_TEST__.reconcileProviderRowsToSlate(sharp.rows, games);
 assert.equal(reconciledSharp.unmatchedRows, 0);
 assert.equal(reconciledSharp.rows[0]?.canonicalGameId, "424129");
+assert.equal(reconciledSharp.rows[0]?.provider, "sharpapi", "legacy Sharp fixtures retain truthful provenance");
+
+const owls = normalizeOwlsNflPlayerProps({
+  fetchedAt,
+  values: [{
+    gameId: "nfl:Dallas Cowboys@Philadelphia Eagles-20260910",
+    homeTeam: "Philadelphia Eagles",
+    awayTeam: "Dallas Cowboys",
+    commenceTime: "2026-09-10T00:20:00Z",
+    isLive: false,
+    books: [{
+      key: "novig",
+      lastUpdate: "2026-09-09T18:03:00Z",
+      props: [
+        { playerName: "Jalen Hurts", category: "passing_yards", line: 245.5, overPrice: -105, underPrice: -115, lastUpdate: "2026-09-09T18:03:30Z" },
+        { playerName: "Jalen Hurts", category: "first_touchdown_scorer", line: 0.5, overPrice: 900, underPrice: null, lastUpdate: "2026-09-09T18:03:30Z" },
+      ],
+    }],
+  }],
+});
+assert.equal(owls.inputRows, 2);
+assert.equal(owls.rows.length, 2, "only complete two-way Owls pairs enter the model contract");
+assert.equal(owls.rejectedRows, 1);
+assert.deepEqual(owls.rows.map((row) => row.side), ["over", "under"]);
+assert.ok(owls.rows.every((row) => row.provider === "owls" && row.sportsbook === "novig"));
+const reconciledOwls = __NFL_PLAYER_PROPS_COLLECTOR_TEST__.reconcileProviderRowsToSlate(owls.rows, games);
+assert.equal(reconciledOwls.unmatchedRows, 0);
+assert.ok(reconciledOwls.rows.every((row) => row.canonicalGameId === "424129"));
 assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.dedupeObservations([
-  reconciledSharp.rows[0]!,
-  { ...reconciledSharp.rows[0]!, fetchedAt: "2026-08-20T16:01:00Z" },
+  reconciledOwls.rows[0]!,
+  { ...reconciledOwls.rows[0]!, fetchedAt: "2026-08-20T16:01:00Z" },
 ]).length, 1, "the isolated reference lane cannot duplicate an existing provider observation");
 
-const observations = [...bdl.rows, ...opening.rows, ...reconciledSharp.rows];
+const observations = [...bdl.rows, ...opening.rows, ...reconciledOwls.rows];
 const coverage = summarizeNflPlayerPropsCoverage(observations);
-assert.equal(coverage.completeTwoWayBuckets, 1);
+assert.equal(coverage.completeTwoWayBuckets, 2);
 assert.equal(coverage.openingRows, 1);
-assert.equal(coverage.phaseOneTwoWayRows, 3);
+assert.equal(coverage.phaseOneTwoWayRows, 4);
 assert.equal(coverage.milestoneRows, 2);
-assert.deepEqual(coverage.sportsbooks, ["draftkings", "fanduel"]);
+assert.deepEqual(coverage.sportsbooks, ["draftkings", "fanduel", "novig"]);
 
 const snapshot = buildNflPlayerPropsObservationSnapshot({
   generatedAt: fetchedAt,
@@ -184,8 +214,8 @@ const snapshot = buildNflPlayerPropsObservationSnapshot({
   phase: "regular",
   games,
   observations,
-  providerRequests: { balldontlie: 3, sharpapi: 1 },
-  providerComplete: { balldontlie: true, sharpapi: true },
+  providerRequests: { balldontlie: 3, owls: 1 },
+  providerComplete: { balldontlie: true, owls: true },
 });
 assert.equal(snapshot.actionable, false);
 assert.equal(snapshot.mode, "local_observe_only");
@@ -209,12 +239,11 @@ assert.throws(
 );
 
 assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.bdlConcurrency, 3);
-assert.ok(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages <= 8);
-assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpReferencePages, 10);
-assert.deepEqual(NFL_PLAYER_PROPS_COLLECTION_LIMITS.sharpReferenceResearchBooks, [
-  { sportsbook: "pinnacle", maximumPages: 4 },
-  { sportsbook: "novig", maximumPages: 6 },
-]);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxOwlsEvents, 18);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxOwlsBooksPerEvent, 16);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxOwlsPropsPerBook, 1_000);
+assert.equal(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxOwlsQuoteAgeHours, 6);
+assert.deepEqual([...NFL_PLAYER_PROPS_COLLECTION_LIMITS.owlsReferenceResearchBooks].sort(), ["novig", "pinnacle"]);
 
 function bdlTwoWay(id: number, vendor: string, propType: string, line: number) {
   return {
@@ -262,51 +291,21 @@ assert.throws(
   /opened for game polluted-game at 65 players/,
   "one polluted game cannot consume the expanded slate budget",
 );
-assert.deepEqual(
-  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: 200 }, 0),
-  { offset: 200, cursor: null },
+assert.deepEqual(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.owlsEvents({ data: [{ gameId: "one" }] }), [{ gameId: "one" }]);
+assert.throws(() => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.owlsEvents({ data: {} }), /malformed data/);
+assert.throws(
+  () => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.validateOwlsCapacity(Array.from({ length: 19 }, () => ({}))),
+  /exceeded 18 events/,
+  "one league-level Owls response remains bounded",
 );
-assert.deepEqual(
-  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: undefined, next_cursor: "cursor-400" } as never, 400),
-  { offset: 400, cursor: "cursor-400" },
+assert.throws(
+  () => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.validateOwlsCapacity([{ books: [{ props: Array.from({ length: 1_001 }, () => ({})) }] }]),
+  /per-book prop limit/,
+  "a contaminated Owls book cannot expand memory without bound",
 );
-assert.deepEqual(
-  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: true, next_offset: undefined } as never, 400),
-  { offset: 600, cursor: null },
-  "a provider response with has_more but no continuation token advances by the bounded requested page size",
-);
-assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.nextSharpPropsPage({ has_more: false }, 400), null);
-assert.equal(
-  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.shouldStopSharpPropsPagination(new SharpApiRateLimitError({ endpoint: "/odds" })),
-  true,
-  "Sharp rate limiting stops optional pagination without waiting inside the five-minute writer",
-);
-assert.equal(
-  __NFL_PLAYER_PROPS_COLLECTOR_TEST__.shouldStopSharpPropsPagination(new Error("network failure")),
-  false,
-  "unrelated provider failures still fail closed instead of masquerading as bounded rate limiting",
-);
-void __NFL_PLAYER_PROPS_COLLECTOR_TEST__.collectSharpPropsCatalogs({
-  includeReferenceResearch: true,
-  sharp: {
-    fetch: (async (opts: { query?: Record<string, unknown> }) => {
-      const sportsbook = typeof opts.query?.sportsbook === "string" ? opts.query.sportsbook : "generic";
-      sharpLaneOrder.push(sportsbook);
-      if (sportsbook === "generic") throw new SharpApiRateLimitError({ endpoint: "/odds" });
-      return { data: [{ sportsbook }], pagination: { has_more: false } };
-    }) as never,
-  },
-}).then((prioritized) => {
-  assert.deepEqual(sharpLaneOrder, ["pinnacle", "novig", "generic"],
-    "qualified reference books consume the remaining SharpAPI quota before the generic catalog");
-  assert.equal(prioritized.referenceRows.length, 2,
-    "a later generic rate limit cannot discard already captured reference rows");
-  assert.equal(prioritized.genericRows.length, 0);
-  assert.ok(prioritized.healthFindings.includes("SHARPAPI_PROPS_RATE_LIMITED"));
-}).catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.freshAtFetch("2026-10-28T03:20:00Z", "2026-10-28T03:25:00Z"), true);
+assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.freshAtFetch("2026-10-27T20:00:00Z", "2026-10-28T03:25:00Z"), false);
+assert.equal(__NFL_PLAYER_PROPS_COLLECTOR_TEST__.freshAtFetch("2026-10-28T03:27:00Z", "2026-10-28T03:25:00Z"), false);
 assert.throws(() => __NFL_PLAYER_PROPS_COLLECTOR_TEST__.validateRequest(2026, 4, "preseason"), /1 through 3/);
 assert.equal(
   __NFL_PLAYER_PROPS_COLLECTOR_TEST__.inSlateWindow("2026-09-10T01:00:00Z", games),

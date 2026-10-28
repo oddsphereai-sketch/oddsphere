@@ -34,15 +34,18 @@ const MARKET_ALIASES: Record<string, NflPlayerPropMarket> = {
   player_rush_reception_yards: "rushing_receiving_yards",
   player_rushing_receiving_yards: "rushing_receiving_yards",
   "player_rushing_+_receiving_yards": "rushing_receiving_yards",
+  rush_rec_yards: "rushing_receiving_yards",
   player_touchdowns: "touchdowns",
   player_anytime_touchdown: "anytime_td",
   player_anytime_td: "anytime_td",
   player_first_touchdown: "first_td",
   player_first_td: "first_td",
   player_longest_pass: "longest_pass",
+  longest_completion: "longest_pass",
   player_longest_reception: "longest_reception",
   player_longest_rush: "longest_rush",
   player_field_goals_made: "fg_made",
+  field_goals_made: "fg_made",
   player_kicking_points: "kicking_points",
 };
 
@@ -181,6 +184,7 @@ function median(values: number[]): number {
     : (ordered[middle - 1]! + ordered[middle]!) / 2;
 }
 
+/** Legacy normalizer retained only for immutable research fixtures and stored provenance. */
 export function normalizeSharpNflPlayerProps(args: {
   values: unknown[];
   fetchedAt: string;
@@ -240,6 +244,78 @@ export function normalizeSharpNflPlayerProps(args: {
     });
   }
   return result(args.values.length, rows, rejectedRows, unknownMarkets);
+}
+
+export function normalizeOwlsNflPlayerProps(args: {
+  values: unknown[];
+  fetchedAt: string;
+}): NflPlayerPropsProviderNormalization {
+  const rows: NflPlayerPropPriceObservation[] = [];
+  const unknownMarkets = new Map<string, number>();
+  let rejectedRows = 0;
+  let inputRows = 0;
+  for (const value of args.values) {
+    const event = object(value);
+    const eventId = textOrNumber(event.gameId);
+    const homeTeam = text(event.homeTeam);
+    const awayTeam = text(event.awayTeam);
+    const scheduledStart = iso(event.commenceTime);
+    const isLive = event.isLive === true;
+    const books = Array.isArray(event.books) ? event.books : [];
+    for (const bookValue of books) {
+      const book = object(bookValue);
+      const sportsbook = text(book.key)?.toLowerCase() ?? null;
+      const bookObservedAt = iso(book.lastUpdate);
+      const props = Array.isArray(book.props) ? book.props : [];
+      for (const propValue of props) {
+        inputRows += 1;
+        const prop = object(propValue);
+        const marketRaw = text(prop.category);
+        const market = canonicalNflPlayerPropMarket(marketRaw);
+        if (!market) {
+          if (marketRaw) unknownMarkets.set(marketRaw, (unknownMarkets.get(marketRaw) ?? 0) + 1);
+          rejectedRows += 1;
+          continue;
+        }
+        const playerName = text(prop.playerName);
+        const line = number(prop.line);
+        const over = americanPrice(prop.overPrice);
+        const under = americanPrice(prop.underPrice);
+        const observedAt = iso(prop.lastUpdate) ?? bookObservedAt;
+        if (!eventId || !homeTeam || !awayTeam || !scheduledStart || isLive || !sportsbook
+          || !playerName || line === null || over === null || under === null || !observedAt) {
+          rejectedRows += 1;
+          continue;
+        }
+        const identity = [eventId, sportsbook, playerName, marketRaw, line].join(":");
+        const base = {
+          provider: "owls" as const,
+          providerEventId: eventId,
+          canonicalGameId: null,
+          providerPlayerId: null,
+          playerName,
+          playerTeam: null,
+          sportsbook,
+          market,
+          providerMarket: marketRaw!,
+          offerType: "over_under" as const,
+          line,
+          observedAt,
+          fetchedAt: args.fetchedAt,
+          isOpening: false,
+          isLive: false,
+          homeTeam,
+          awayTeam,
+          scheduledStart,
+        };
+        rows.push(
+          { ...base, providerObservationId: `${identity}:over`, side: "over", americanPrice: over },
+          { ...base, providerObservationId: `${identity}:under`, side: "under", americanPrice: under },
+        );
+      }
+    }
+  }
+  return result(inputRows, rows, rejectedRows, unknownMarkets);
 }
 
 function baseBdlRow(args: {

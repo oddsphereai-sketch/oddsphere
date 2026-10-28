@@ -22,7 +22,7 @@ const HOUR_MS = 60 * 60_000;
 
 export type NflPlayerPropsMarketObserverLandmark = "provider_opening" | "t24" | "t6" | "t60_lock";
 export type NflPlayerPropsMarketObserverSourceClass = "sharp" | "retail" | "unknown";
-export type NflPlayerPropsMarketObserverProvider = "balldontlie" | "sharpapi" | "unknown";
+export type NflPlayerPropsMarketObserverProvider = "balldontlie" | "owls" | "sharpapi" | "unknown";
 
 export type NflPlayerPropsMarketObserverRow = Readonly<{
   rowKey: string;
@@ -477,6 +477,7 @@ function targetSides(mask: number): readonly ("over" | "under" | "yes")[] {
 
 function providerName(book: NflPlayerPropsMarketEvidenceBook): NflPlayerPropsMarketObserverProvider {
   if (book[1] === "b") return "balldontlie";
+  if (book[1] === "o") return "owls";
   if (book[1] === "s") return "sharpapi";
   return "unknown";
 }
@@ -568,7 +569,7 @@ function isRow(value: unknown): value is NflPlayerPropsMarketObserverRow {
     && typeof value.canonicalLine === "number"
     && typeof value.observedLine === "number"
     && typeof value.sportsbook === "string"
-    && (value.provider === "balldontlie" || value.provider === "sharpapi" || value.provider === "unknown")
+    && (value.provider === "balldontlie" || value.provider === "owls" || value.provider === "sharpapi" || value.provider === "unknown")
     && (value.sourceClass === "sharp" || value.sourceClass === "retail" || value.sourceClass === "unknown")
     && Array.isArray(value.targetSides)
     && value.targetSides.every((side) => side === "over" || side === "under" || side === "yes")

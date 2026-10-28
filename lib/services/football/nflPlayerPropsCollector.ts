@@ -1,8 +1,4 @@
-import {
-  SharpApiClient,
-  SharpApiRateLimitError,
-  type SharpApiResponse,
-} from "@/lib/providers/real_api/_sharpApiClient";
+import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
 import {
   buildNflPlayerPropsObservationSnapshot,
   type NflPlayerPropGameIdentity,
@@ -12,18 +8,16 @@ import {
 } from "./nflPlayerPropsContract";
 import {
   normalizeBalldontlieNflPlayerProps,
-  normalizeSharpNflPlayerProps,
+  normalizeOwlsNflPlayerProps,
 } from "./nflPlayerPropsProviders";
 
 const BDL_BASE_URL = "https://api.balldontlie.io/nfl/v1";
 const MAX_GAMES = 18;
-const MAX_SHARP_PAGES = 8;
-const SHARP_PAGE_SIZE = 200;
-const SHARP_REFERENCE_RESEARCH_BOOKS = [
-  { sportsbook: "pinnacle", maximumPages: 4 },
-  { sportsbook: "novig", maximumPages: 6 },
-] as const;
-const MAX_SHARP_REFERENCE_PAGES = 10;
+const OWLS_REFERENCE_RESEARCH_BOOKS = new Set(["pinnacle", "novig"]);
+const MAX_OWLS_EVENTS = 18;
+const MAX_OWLS_BOOKS_PER_EVENT = 16;
+const MAX_OWLS_PROPS_PER_BOOK = 1_000;
+const MAX_OWLS_QUOTE_AGE_HOURS = 6;
 const BDL_CONCURRENCY = 3;
 const MAX_PLAYER_IDENTITIES = 768;
 const MAX_PLAYER_IDENTITIES_PER_GAME = 64;
@@ -39,7 +33,7 @@ export type NflPlayerPropsCollectionResult = {
   normalization: {
     balldontlie: ReturnType<typeof normalizeBalldontlieNflPlayerProps>;
     balldontlieOpenings: ReturnType<typeof normalizeBalldontlieNflPlayerProps>;
-    sharpapi: ReturnType<typeof normalizeSharpNflPlayerProps>;
+    owls: ReturnType<typeof normalizeOwlsNflPlayerProps>;
   };
 };
 
@@ -49,20 +43,20 @@ export async function collectNflPlayerPropsObservations(args: {
   phase: NflPlayerPropPhase;
   includeOpenings?: boolean;
   ballDontLieApiKey?: string;
-  sharpApiKey?: string;
+  owlsInsightApiKey?: string;
   includeReferenceResearch?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<NflPlayerPropsCollectionResult> {
   const fetchImpl = args.fetchImpl ?? fetch;
   const bdlKey = args.ballDontLieApiKey ?? process.env.BALLDONTLIE_API_KEY;
-  const sharpKey = args.sharpApiKey ?? process.env.SHARPAPI_KEY;
+  const owlsKey = args.owlsInsightApiKey ?? process.env.OWLS_INSIGHT_API_KEY;
   if (!bdlKey) throw new Error("BALLDONTLIE_API_KEY is required to identify the NFL props slate.");
   validateRequest(args.season, args.week, args.phase);
   const fetchedAt = new Date().toISOString();
   const providerWeek = args.phase === "preseason" ? args.week + 1 : args.week;
   const seasonType = args.phase === "preseason" ? 1 : args.phase === "regular" ? 2 : 3;
   let bdlRequests = 0;
-  let sharpRequests = 0;
+  let owlsRequests = 0;
   const healthFindings: string[] = [
     "PLAYBOOK_CONTEXT_ONLY_NO_DOCUMENTED_PLAYER_PROP_PRICE_ENDPOINT",
   ];
@@ -144,43 +138,44 @@ export async function collectNflPlayerPropsObservations(args: {
   // the cursor alone is not a health failure for this bounded lookup.
   if (bdlPlayerIds.some((id) => !identities.has(id))) healthFindings.push("BALLDONTLIE_PLAYER_IDENTITY_INCOMPLETE");
 
-  const sharpRaw: unknown[] = [];
-  const sharpReferenceRaw: unknown[] = [];
-  let sharpComplete = false;
-  if (sharpKey) {
-    const sharp = new SharpApiClient(sharpKey);
-    const sharpCatalogs = await collectSharpPropsCatalogs({
-      sharp,
-      includeReferenceResearch: args.includeReferenceResearch === true,
-    });
-    sharpRaw.push(...sharpCatalogs.genericRows);
-    sharpReferenceRaw.push(...sharpCatalogs.referenceRows);
-    sharpRequests += sharpCatalogs.requests;
-    sharpComplete = sharpCatalogs.genericComplete;
-    healthFindings.push(...sharpCatalogs.healthFindings);
+  let owlsRaw: unknown[] = [];
+  let owlsComplete = false;
+  if (owlsKey) {
+    owlsRequests = 1;
+    try {
+      const result = await new OwlsInsightClient(owlsKey, { fetchImpl, timeoutMs: 20_000 })
+        .props<{ data?: unknown }>("nfl");
+      owlsRaw = owlsEvents(result.body);
+      validateOwlsCapacity(owlsRaw);
+      owlsComplete = true;
+    } catch {
+      healthFindings.push("OWLS_PLAYER_PROPS_CAPTURE_FAILED");
+    }
   } else {
-    healthFindings.push("SHARPAPI_KEY_MISSING");
+    healthFindings.push("OWLS_INSIGHT_API_KEY_MISSING");
   }
-  const sharpAll = normalizeSharpNflPlayerProps({ values: sharpRaw, fetchedAt });
-  const sharpRowsInWindow = sharpAll.rows.filter((row) => inSlateWindow(row.scheduledStart, games));
-  const sharpReconciliation = reconcileSharpRowsToSlate(sharpRowsInWindow, games);
-  if (sharpReconciliation.unmatchedRows > 0) healthFindings.push("SHARPAPI_PROP_EVENT_IDENTITY_UNMATCHED");
-  const sharpNormalization = {
-    ...sharpAll,
-    rows: sharpReconciliation.rows,
-    rejectedRows: sharpAll.rejectedRows + sharpAll.rows.length - sharpRowsInWindow.length + sharpReconciliation.unmatchedRows,
+  const owlsAll = normalizeOwlsNflPlayerProps({ values: owlsRaw, fetchedAt });
+  const owlsFreshRows = owlsAll.rows.filter((row) => freshAtFetch(row.observedAt, fetchedAt));
+  if (owlsFreshRows.length < owlsAll.rows.length) healthFindings.push("OWLS_STALE_OR_FUTURE_PROP_ROWS_REJECTED");
+  const owlsRowsInWindow = owlsFreshRows.filter((row) => inSlateWindow(row.scheduledStart, games));
+  const owlsReconciliation = reconcileProviderRowsToSlate(owlsRowsInWindow, games);
+  if (owlsReconciliation.unmatchedRows > 0) healthFindings.push("OWLS_PROP_EVENT_IDENTITY_UNMATCHED");
+  const owlsNormalization = {
+    ...owlsAll,
+    rows: owlsReconciliation.rows,
+    rejectedRows: owlsAll.rejectedRows + owlsAll.rows.length - owlsRowsInWindow.length + owlsReconciliation.unmatchedRows,
   };
-  const sharpReferenceAll = normalizeSharpNflPlayerProps({ values: sharpReferenceRaw, fetchedAt });
-  const sharpReferenceRowsInWindow = sharpReferenceAll.rows.filter((row) => inSlateWindow(row.scheduledStart, games));
-  const sharpReferenceReconciliation = reconcileSharpRowsToSlate(sharpReferenceRowsInWindow, games);
-  if (sharpReferenceReconciliation.unmatchedRows > 0) {
-    healthFindings.push("SHARPAPI_PROP_REFERENCE_EVENT_IDENTITY_UNMATCHED");
-  }
+  const owlsReferenceRows = args.includeReferenceResearch === true
+    ? owlsReconciliation.rows.filter((row) => OWLS_REFERENCE_RESEARCH_BOOKS.has(row.sportsbook))
+    : [];
 
   if (bdlCurrent.rows.length === 0) healthFindings.push("BALLDONTLIE_PLAYER_PROPS_EMPTY");
-  if (sharpKey && sharpReconciliation.rows.length === 0) healthFindings.push("SHARPAPI_PLAYER_PROPS_EMPTY_FOR_SLATE");
+  if (owlsKey && owlsReconciliation.rows.length === 0) healthFindings.push("OWLS_PLAYER_PROPS_EMPTY_FOR_SLATE");
   if (Object.keys(bdlCurrent.unknownMarkets).length > 0) healthFindings.push("BALLDONTLIE_UNKNOWN_PROP_MARKETS_PRESENT");
-  if (Object.keys(sharpAll.unknownMarkets).length > 0) healthFindings.push("SHARPAPI_UNKNOWN_PROP_MARKETS_PRESENT");
+  if (Object.keys(owlsAll.unknownMarkets).length > 0) healthFindings.push("OWLS_UNKNOWN_PROP_MARKETS_PRESENT");
+  if (args.includeReferenceResearch === true && owlsReferenceRows.length === 0) {
+    healthFindings.push("OWLS_PROPS_REFERENCE_EMPTY");
+  }
 
   const snapshot = buildNflPlayerPropsObservationSnapshot({
     fetchedAt,
@@ -188,152 +183,54 @@ export async function collectNflPlayerPropsObservations(args: {
     week: args.week,
     phase: args.phase,
     games,
-    observations: [...bdlCurrent.rows, ...bdlOpenings.rows, ...sharpReconciliation.rows],
+    observations: [...bdlCurrent.rows, ...bdlOpenings.rows, ...owlsReconciliation.rows],
     providerRequests: {
       balldontlie: bdlRequests,
-      ...(sharpKey ? { sharpapi: sharpRequests } : {}),
+      ...(owlsKey ? { owls: owlsRequests } : {}),
     },
     providerComplete: {
       balldontlie: true,
-      ...(sharpKey ? { sharpapi: sharpComplete } : {}),
+      ...(owlsKey ? { owls: owlsComplete } : {}),
     },
     healthFindings,
   });
   return {
     snapshot,
-    referenceResearchObservations: dedupeObservations(sharpReferenceReconciliation.rows),
+    referenceResearchObservations: dedupeObservations(owlsReferenceRows),
     normalization: {
       balldontlie: bdlCurrent,
       balldontlieOpenings: bdlOpenings,
-      sharpapi: sharpNormalization,
+      owls: owlsNormalization,
     },
   };
 }
 
-type SharpPropsClient = Pick<SharpApiClient, "fetch">;
+function owlsEvents(value: unknown): unknown[] {
+  const body = object(value);
+  if (!Array.isArray(body.data)) throw new Error("Owls NFL props returned malformed data.");
+  return body.data;
+}
 
-async function collectSharpPropsCatalogs(args: {
-  sharp: SharpPropsClient;
-  includeReferenceResearch: boolean;
-}): Promise<{
-  genericRows: unknown[];
-  referenceRows: unknown[];
-  requests: number;
-  genericComplete: boolean;
-  healthFindings: string[];
-}> {
-  const genericRows: unknown[] = [];
-  const referenceRows: unknown[] = [];
-  const healthFindings: string[] = [];
-  let requests = 0;
-
-  // The qualified reference lane runs first. The shared NFL route performs
-  // other bounded SharpAPI work before props, so spending the remaining quota
-  // on an unfiltered catalog first can starve the only Pinnacle/NoVig input
-  // authorized for Receptions. BALLDONTLIE remains the complete retail board
-  // if the lower-priority generic Sharp catalog is subsequently rate limited.
-  if (args.includeReferenceResearch) {
-    for (const reference of SHARP_REFERENCE_RESEARCH_BOOKS) {
-      const { sportsbook } = reference;
-      let offset = 0;
-      let cursor: string | null = null;
-      let complete = false;
-      try {
-        for (let page = 0; page < reference.maximumPages; page += 1) {
-          const response = await args.sharp.fetch<unknown[]>({
-            path: "/odds",
-            query: {
-              league: "nfl",
-              market: "props",
-              is_live: false,
-              sportsbook,
-              is_main_line: true,
-              limit: SHARP_PAGE_SIZE,
-              ...(cursor ? { cursor } : { offset }),
-            },
-            signal: AbortSignal.timeout(20_000),
-            retryRateLimitInternally: false,
-          });
-          requests += 1;
-          if (!Array.isArray(response.data)) throw new Error(`SharpAPI ${sportsbook} NFL props returned malformed data.`);
-          referenceRows.push(...response.data);
-          const next = nextSharpPropsPage(response.pagination, offset);
-          if (response.pagination?.has_more !== true) {
-            complete = true;
-            break;
-          }
-          if (!next) break;
-          offset = next.offset;
-          cursor = next.cursor;
-        }
-      } catch (error) {
-        healthFindings.push(error instanceof SharpApiRateLimitError
-          ? `SHARPAPI_PROPS_REFERENCE_RATE_LIMITED:${sportsbook}`
-          : `SHARPAPI_PROPS_REFERENCE_CAPTURE_FAILED:${sportsbook}`);
+function validateOwlsCapacity(events: unknown[]): void {
+  if (events.length > MAX_OWLS_EVENTS) throw new Error(`Owls NFL props exceeded ${MAX_OWLS_EVENTS} events.`);
+  for (const eventValue of events) {
+    const event = object(eventValue);
+    const books = Array.isArray(event.books) ? event.books : [];
+    if (books.length > MAX_OWLS_BOOKS_PER_EVENT) throw new Error("Owls NFL props exceeded the per-event book limit.");
+    for (const bookValue of books) {
+      const props = object(bookValue).props;
+      if (Array.isArray(props) && props.length > MAX_OWLS_PROPS_PER_BOOK) {
+        throw new Error("Owls NFL props exceeded the per-book prop limit.");
       }
-      if (!complete) healthFindings.push(`SHARPAPI_PROPS_REFERENCE_INCOMPLETE:${sportsbook}`);
     }
-    if (referenceRows.length === 0) healthFindings.push("SHARPAPI_PROPS_REFERENCE_EMPTY");
   }
-
-  let offset = 0;
-  let cursor: string | null = null;
-  let genericComplete = false;
-  for (let page = 0; page < MAX_SHARP_PAGES; page += 1) {
-    let response: SharpApiResponse<unknown[]>;
-    try {
-      response = await args.sharp.fetch<unknown[]>({
-        path: "/odds",
-        query: {
-          league: "nfl",
-          market: "props",
-          is_live: false,
-          limit: SHARP_PAGE_SIZE,
-          ...(cursor ? { cursor } : { offset }),
-        },
-        signal: AbortSignal.timeout(20_000),
-        retryRateLimitInternally: false,
-      });
-    } catch (error) {
-      if (!shouldStopSharpPropsPagination(error)) throw error;
-      healthFindings.push("SHARPAPI_PROPS_RATE_LIMITED");
-      break;
-    }
-    requests += 1;
-    if (!Array.isArray(response.data)) throw new Error("SharpAPI NFL props returned malformed data.");
-    genericRows.push(...response.data);
-    const next = nextSharpPropsPage(response.pagination, offset);
-    if (response.pagination?.has_more !== true) {
-      genericComplete = true;
-      break;
-    }
-    if (!next) {
-      healthFindings.push("SHARPAPI_PROPS_CURSOR_MISSING");
-      break;
-    }
-    offset = next.offset;
-    cursor = next.cursor;
-  }
-  if (!genericComplete) healthFindings.push("SHARPAPI_PROPS_TRUNCATED_BY_PAGE_BUDGET");
-  return { genericRows, referenceRows, requests, genericComplete, healthFindings };
 }
 
-function nextSharpPropsPage(
-  pagination: SharpApiResponse<unknown[]>["pagination"],
-  currentOffset: number,
-): { offset: number; cursor: string | null } | null {
-  if (pagination?.has_more !== true) return null;
-  const withCursor = pagination as typeof pagination & { next_cursor?: unknown };
-  const cursor = text(withCursor?.next_cursor);
-  if (cursor) return { offset: currentOffset, cursor };
-  const nextOffset = pagination?.next_offset;
-  return typeof nextOffset === "number" && nextOffset > currentOffset
-    ? { offset: nextOffset, cursor: null }
-    : { offset: currentOffset + SHARP_PAGE_SIZE, cursor: null };
-}
-
-function shouldStopSharpPropsPagination(error: unknown): boolean {
-  return error instanceof SharpApiRateLimitError;
+function freshAtFetch(observedAt: string, fetchedAt: string): boolean {
+  const observed = Date.parse(observedAt);
+  const fetched = Date.parse(fetchedAt);
+  const age = fetched - observed;
+  return Number.isFinite(age) && age >= -60_000 && age <= MAX_OWLS_QUOTE_AGE_HOURS * 3_600_000;
 }
 
 function validateRequest(season: number, week: number, phase: NflPlayerPropPhase): void {
@@ -384,7 +281,7 @@ function normalizeGame(value: unknown, phase: NflPlayerPropPhase): NflPlayerProp
     : { season, week, phase, providerGameId, scheduledStart, homeTeam, awayTeam, homeTeamName, awayTeamName };
 }
 
-function reconcileSharpRowsToSlate(
+function reconcileProviderRowsToSlate(
   rows: NflPlayerPropPriceObservation[],
   games: NflPlayerPropGameIdentity[],
 ): { rows: NflPlayerPropPriceObservation[]; unmatchedRows: number } {
@@ -514,10 +411,11 @@ function iso(value: unknown): string | null {
 
 export const NFL_PLAYER_PROPS_COLLECTION_LIMITS = {
   maxGames: MAX_GAMES,
-  maxSharpPages: MAX_SHARP_PAGES,
-  maxSharpReferencePages: MAX_SHARP_REFERENCE_PAGES,
-  sharpReferenceResearchBooks: SHARP_REFERENCE_RESEARCH_BOOKS,
-  sharpPageSize: SHARP_PAGE_SIZE,
+  maxOwlsEvents: MAX_OWLS_EVENTS,
+  maxOwlsBooksPerEvent: MAX_OWLS_BOOKS_PER_EVENT,
+  maxOwlsPropsPerBook: MAX_OWLS_PROPS_PER_BOOK,
+  maxOwlsQuoteAgeHours: MAX_OWLS_QUOTE_AGE_HOURS,
+  owlsReferenceResearchBooks: [...OWLS_REFERENCE_RESEARCH_BOOKS],
   bdlConcurrency: BDL_CONCURRENCY,
   maxPlayerIdentities: MAX_PLAYER_IDENTITIES,
   maxPlayerIdentitiesPerGame: MAX_PLAYER_IDENTITIES_PER_GAME,
@@ -530,12 +428,12 @@ export const __NFL_PLAYER_PROPS_COLLECTOR_TEST__ = {
   validateRequest,
   enrichPlayerIdentities,
   normalizePlayerIdentity,
-  reconcileSharpRowsToSlate,
-  nextSharpPropsPage,
-  shouldStopSharpPropsPagination,
+  reconcileProviderRowsToSlate,
   collectBoundedPlayerIdentities,
   dedupeObservations,
-  collectSharpPropsCatalogs,
+  owlsEvents,
+  validateOwlsCapacity,
+  freshAtFetch,
 };
 
 function dedupeObservations(rows: readonly NflPlayerPropPriceObservation[]): NflPlayerPropPriceObservation[] {

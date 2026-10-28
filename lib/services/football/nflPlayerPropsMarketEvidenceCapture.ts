@@ -11,7 +11,7 @@ export const NFL_PLAYER_PROPS_MARKET_EVIDENCE_RETENTION =
   "category_hash_round_robin_v1" as const;
 
 type MarketCode = "td" | "pa" | "pc" | "py" | "ry" | "rc" | "ra" | "ru";
-type ProviderCode = "b" | "s" | "u";
+type ProviderCode = "b" | "o" | "s" | "u";
 type SourceClassCode = "s" | "r" | "u";
 type BreadthReasonCode = "c" | "1" | "i" | "t" | "m";
 type GradeCode = "b" | "l" | "w" | "n" | "h";
@@ -508,6 +508,7 @@ function decisionIdentityKey(decision: CaptureDecision): string {
 
 function providerCode(provider: string): ProviderCode {
   if (provider === "balldontlie") return "b";
+  if (provider === "owls") return "o";
   if (provider === "sharpapi") return "s";
   return "u";
 }

@@ -70,23 +70,22 @@ import {
 } from "./nflPlayerPropsReferenceOfferStore";
 
 export const NFL_PLAYER_PROPS_WRITER_RELEASE =
-  "nfl_player_props_writer_2026_10_27_r65_passing_yards_direction" as const;
+  "nfl_player_props_writer_2026_10_28_r66_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES = 60 as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS = true as const;
 export const NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM = (
   1
   + 2 * NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxGames
   + Math.ceil(NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxPlayerIdentities / NFL_PLAYER_PROPS_COLLECTION_LIMITS.playerIdentityBatchSize)
-  + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpPages
-  + NFL_PLAYER_PROPS_COLLECTION_LIMITS.maxSharpReferencePages
-) as 63;
+  + 1
+) as 46;
 export const NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM = (
   NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_GAMES_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_CURRENT_SEASON_TEAM_STATS_PAGE_MAXIMUM
   + NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE
-) as 113;
+) as 96;
 
 export type NflPlayerPropsForecastTelemetry = {
   forecastPolicy: "target_excluded_single_posterior_exact_price_downstream";
@@ -257,7 +256,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
   now: string;
   apply: boolean;
   ballDontLieApiKey: string;
-  sharpApiKey?: string;
+  owlsInsightApiKey?: string;
   /** Optional audit telemetry; production uses the qualified release regardless. */
   auditSourceAwareMarketReading?: boolean;
   /** Optional no-write candidate scope. Production callers omit this. */
@@ -286,7 +285,7 @@ export async function runNflPlayerPropsProductionWriter(args: {
     phase: "regular",
     includeOpenings: NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS,
     ballDontLieApiKey: args.ballDontLieApiKey,
-    sharpApiKey: args.sharpApiKey,
+    owlsInsightApiKey: args.owlsInsightApiKey,
     includeReferenceResearch: retainedReferenceOffers === null
       || args.auditSourceAwareMarketReading === true
       || shouldCaptureNflPlayerPropsReferenceResearch({

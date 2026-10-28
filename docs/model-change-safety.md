@@ -1,5 +1,33 @@
 # Model change safety protocol
 
+## Owner-directed cutover: NFL player-props Owls prices
+
+On 2026-10-28 Daniel Mengel directed Oddsphere to replace the canceled SharpAPI
+player-prop dependency with Owls, put the source change into production, and
+verify the model afterward. BALLDONTLIE remains the authoritative slate,
+identity, retail-current, and opening source. One bounded Owls NFL props call
+now supplies current multi-book prices and the qualified Pinnacle/NoVig
+target-book-excluded reference lane. The active collector and sole writer make
+zero SharpAPI calls; legacy Sharp provider identities remain readable only so
+stored locked evidence and historical audits keep truthful provenance.
+
+Exact team/kickoff reconciliation, complete price pairs, non-live state, and a
+six-hour timestamp gate fail closed. Existing locked rows retain byte-for-byte
+precedence. The shared `prediction_pipeline:nfl` lease and existing sole writer
+remain authoritative. Active provider/model/calibration/decision/runtime/board/
+member/lifecycle/writer/tracking releases advance together.
+
+The live Week 8 no-write rehearsal collected 15,968 observations, 6,934 exact
+offers, and 382 qualified Owls reference observations. Same-input comparison
+changed zero of 774 rows, with zero promotions, zero demotions, and 35 to 35
+actionables. Compared with the older live board, restored current coverage
+produced 248 additions, 177 removals, 10 side changes, 3 promotions, zero
+demotions, and 14 to 35 canonical actionables. This is a coverage consequence,
+not a settled-accuracy claim; forward results must be evaluated by the new
+release identifiers and locked timestamp. Evidence and rollback:
+`docs/model-audits/2026-10-28-nfl-player-props-owls-source-predeclaration.md`
+and `docs/model-audits/2026-10-28-nfl-player-props-owls-source-result.md`.
+
 ## Owner-directed cutover: NFL Owls named-book capture
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to continue removing the

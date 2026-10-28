@@ -361,7 +361,7 @@ assert.ok(writerSource.lastIndexOf("captureNflPlayerPropsMarketObserverSafely") 
   "the exact T-60 observer row must be stored and attached as close metadata before settlement");
 assert.doesNotMatch(
   readFileSync("lib/services/football/nflPlayerPropsMarketObserverStore.ts", "utf8"),
-  /fetch\(|collectNflPlayerPropsObservations|ballDontLieApiKey|sharpApiKey/,
+  /fetch\(|collectNflPlayerPropsObservations|ballDontLieApiKey|owlsInsightApiKey|sharpApiKey/,
   "the observer store cannot make provider requests",
 );
 
