@@ -51,17 +51,20 @@ including skipped, failed, genuinely empty, partial, and successful attempts. Th
 the canonical ordered set of independent scopes informed by that request, feed, participant, event,
 planned window, request/page counts, exact precommitted adapter/parser releases, and
 raw-response provenance, and exact row conservation. An insert collision is successful only when the
-stored canonical bytes are identical; retries cannot update an earlier receipt. The v47 schema and service
-contract exist on the candidate branch, but no source adapter is wired to it and the migration is not
-applied. Therefore this contract closes neither attempt coverage nor restart/concurrency proof.
+stored canonical bytes are identical; retries cannot update an earlier receipt. The v47 schema was applied
+to production on October 28, 2026 after the disposable PostgreSQL 16 proof passed. Its RLS-protected
+receipt table was verified empty with validation and immutability triggers active. No source adapter is
+wired to it, so this closes neither attempt coverage nor predictive qualification.
 
 Attempt obligations must first be frozen in one bounded capture plan whose database receipt predates
 the first window. The plan uses canonical source/time order, rejects duplicate logical obligations even
 when a caller changes their UUID, and is persisted atomically with every child obligation. A later
 attempt receipt must match that exact precommit. A code-release change cannot create another physical
-request for an otherwise identical provider/feed/participant/event/window obligation. The v48 candidate implements this storage contract.
+request for an otherwise identical provider/feed/participant/event/window obligation. The v48 migration
+was applied to production on October 28, 2026; both RLS-protected plan tables were verified empty, with
+the plan persistence function and receipt precommit trigger present.
 
-The v49 candidate adds bounded due and expired-window leases with append-only claim history. Exact
+The v49 migration adds bounded due and expired-window leases with append-only claim history. Exact
 claim token, sequence, adapter release, and parser release are bound through the immutable receipt row,
 so an expired worker cannot finalize after lease expiry or reassignment. The shadow-only execution core
 now reconciles missed windows, claims one paid request just in time per invocation, enforces exact
@@ -69,6 +72,12 @@ registered adapter/parser capabilities, bounds execution inside the lease, sanit
 persists claim-bound receipts. It has no route, cron, or
 registered production provider adapter, so this remains inert until each source adapter is implemented,
 qualified, and explicitly enabled.
+
+V49 was applied to production on October 28, 2026 after the disposable PostgreSQL proof passed. The
+post-apply audit found both RLS-protected claim tables empty, both claim RPCs present, and the exact-claim
+serialization and finalization triggers active. Across v47–v49, the audit timestamp was
+`2026-10-28 12:33:23 UTC`; all five table counts were zero. Installation created no capture plan, request,
+provider call, model input, prediction, grade, stake, lock, or member-facing change.
 
 ## Owls Insight provider-transition boundary
 

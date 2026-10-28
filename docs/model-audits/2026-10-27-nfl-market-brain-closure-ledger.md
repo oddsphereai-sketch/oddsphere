@@ -277,8 +277,10 @@ database, predictive, or production proof.
   bound at the database insert boundary; update/delete are rejected and insert retries attest exact bytes
   instead of overwriting. This is still an unwired contract: planned-attempt generation, an independent
   capture runner, per-source adapters, atomic referenced artifacts, finalized-frame serialization,
-  restart/retry behavior, attrition reports, and real-PostgreSQL adversarial/concurrency proof remain
-  outstanding. These IDs remain open, and no migration or capture was enabled.
+  restart/retry behavior and attrition reports remain outstanding. The disposable PostgreSQL 16 workflow
+  passed, and v47 was applied to production on October 28, 2026. The post-apply audit found zero receipt
+  rows, RLS enabled, and the expected validation/immutability triggers active. These IDs remain open:
+  installing empty receipt storage did not enable capture or predictive authority.
 - **MB-002 / MB-005 / MB-006 / MB-007 / MB-008:** capture-plan r1 and the forward-only v48
   candidate schema separate immutable collection precommit from later modeling manifests. The server
   receipt must predate the first bounded horizon; all child source obligations are inserted in the same
@@ -287,17 +289,20 @@ database, predictive, or production proof.
   after the horizon opens, while a changed collision fails; evidence receipts must match their planned
   product, joint scopes, source, participant, event, phase, and full time window. The existing
   environment JSON is not accepted as this database proof, canary selection is not yet driven by these
-  rows, and due-work claiming/finalization serialization/restart/concurrency still require an independent
-  runner plus real-PostgreSQL tests. These IDs remain open and v48 is not applied.
+  rows. The disposable PostgreSQL 16 workflow passed, and v48 was applied to production on October 28,
+  2026. The post-apply audit found both plan tables empty and RLS-enabled, with the plan persistence
+  function and receipt precommit trigger present. Due-work execution still requires a registered adapter
+  and an explicitly enabled runner. These IDs remain open; the installed schema is inert.
 - **MB-005 / MB-006 / MB-008 / MB-042:** attempt-claim r1 and the v49 candidate provide bounded
   leased claiming for both currently due obligations and expired-window reconciliation. Row locks and
   an attempt-scoped advisory transaction lock serialize claim/reclaim against receipt insertion;
   every reassignment increments a sequence and appends immutable claim history. The receipt row binds
   the exact active token, mode, and sequence, so a stale worker cannot finalize a newer claim. The
-  mandatory PostgreSQL CI path now installs v47–v49 twice and exercises precommit, due claim,
-  missed-window claim, exact retry, collision rejection, finalization, and immutability. This proof has
-  not run on the current host because no PostgreSQL runtime/URL is available, and no runner calls the
-  RPCs yet; the IDs remain open.
+  mandatory PostgreSQL CI path installs v47–v49 twice and exercises precommit, due claim,
+  missed-window claim, exact retry, collision rejection, finalization, and immutability. That disposable
+  PostgreSQL 16 workflow passed before deployment. V49 was applied to production on October 28, 2026;
+  both RLS-protected claim tables were verified empty, both claim RPCs were present, and exact-claim
+  serialization/finalization triggers were active. No runner calls the RPCs yet, so the IDs remain open.
 - **MB-012 / MB-041 (narrow decision-envelope slice):** contract r21, shadow r25, and research-input
   r10 freeze the incumbent action-or-pass and complete exact target-book quote pair outside trainer
   features. Consequence r2 can consume that context only from an in-process attested research input.
