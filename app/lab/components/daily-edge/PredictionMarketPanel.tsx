@@ -90,7 +90,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
     </div>
     <div className="mt-1 min-w-0 sm:mt-0"><PredictionMarketChart row={outcome} book={book} context={context}/></div>
     <div className="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-1.5 sm:border-0 sm:pt-0">
-      {book&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={book.sportsbook}><span className="font-semibold text-[#d9d1e4]">{bookName} {formatPredictionMarketOdds(firstBook[2])}{changes>0?" → "+formatPredictionMarketOdds(lastBook[2]):" · unchanged"}</span><span className="block text-[#9d92ae]">{changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No price change in shown window"} · same book</span></p>:null}
+      {book&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={book.sportsbook}><span className="font-semibold text-[#d9d1e4]">{bookName} {formatPredictionMarketOdds(firstBook[2])}{changes>0?" → "+formatPredictionMarketOdds(lastBook[2]):book.points.length===1?" · one quote":" · unchanged"}</span><span className="block text-[#9d92ae]">{book.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book</span></p>:null}
       {outcome.volume24h!==null?<p><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
       <p className="w-full text-[#9d92ae]">{retained?"Last available":"Quotes"} · Kalshi {time(Date.parse(market.asOf))}{lastBook?" · "+bookName+" "+time(lastBook[0])+(book?.locked?" locked":""):""}</p>
     </div>
