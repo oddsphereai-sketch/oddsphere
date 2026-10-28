@@ -52,6 +52,8 @@ for(const [i,values] of commands.entries()){
 const service=readFileSync("lib/services/dailyEdge/predictionMarketBookRead.ts","utf8");
 assert.doesNotMatch(service,/\.insert\(|\.upsert\(|\.update\(|\.delete\(|fetch\(|OwlsInsightClient/);
 assert.match(service,/game\.lockState===\"locked\"/);
+const feed=readFileSync("lib/services/dailyEdge/predictionMarketDisplayFeed.ts","utf8");
+assert.match(feed,/gzipSync\(JSON.stringify\(await publishedContractGames/ ,"large published boards are cached losslessly below Next's item limit");
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
 assert.match(component,/predictionMarketComparisonBook\(game.lockState===\"locked\"/);
 assert.match(component,/data-held-kalshi/);assert.match(component,/data-held-sportsbook/);

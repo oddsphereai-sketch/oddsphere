@@ -10,7 +10,7 @@ import { backfillKalshiDisplayHistory } from "@/lib/providers/owls/kalshiDisplay
 import { contractKinds, contractSeries, parseContractFeed, contractsForPublishedReaders, PREDICTION_MARKET_CONTRACT_RELEASE,
   type ContractKind, type ContractFeed } from "@/lib/providers/owls/predictionMarketContracts";
 import { supabase } from "@/lib/db/supabase";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { currentDailyEdgeBoardDate } from "@/lib/dates/slateDate";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 
@@ -50,8 +50,14 @@ async function publishedContractGames(sport:PredictionMarketSport):Promise<Daily
   if(!snapshot||!Array.isArray(snapshot.games))throw new Error(`Published ${sport} contract selection missing`);
   return snapshot.games.slice(0,250);
 }
-export const readPublishedPredictionMarketGames=unstable_cache(publishedContractGames,
-  ["prediction_market_published_identity_r1"],{revalidate:30});
+// CFB/NBA published boards can exceed Next's 2 MB data-cache item limit.
+// Cache the lossless compressed view, not an uncachable expanded DTO array.
+const publishedGamesCompressed=unstable_cache(async(sport:PredictionMarketSport)=>
+  gzipSync(JSON.stringify(await publishedContractGames(sport))).toString("base64"),
+  ["prediction_market_published_identity_r2_gzip"],{revalidate:30});
+export async function readPublishedPredictionMarketGames(sport:PredictionMarketSport):Promise<DailyEdgeGameDto[]>{
+  return JSON.parse(gunzipSync(Buffer.from(await publishedGamesCompressed(sport),"base64"),{maxOutputLength:8_000_000}).toString("utf8"));
+}
 
 /** Sole capture path: existing five-minute display-feed cron, same sport lease. */
 export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarketSport): Promise<{rows:number;owlsRequests:number;warnings:string[]}> {
