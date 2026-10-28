@@ -1,0 +1,875 @@
+{
+  "release": "cbb_candidate_2026_10_28_r1_adjusted_efficiency",
+  "generatedAt": "2026-10-28T20:04:34.742Z",
+  "productionWrites": 0,
+  "historicalDataSha256": "18bbcc0977c972cc1f513a5779b4b59995f580dbd68e9bb09ba71f8af0d92e42",
+  "selectionCriterion": "2024 log loss; team MAE tie-breaker",
+  "exclusions": {
+    "non_di_or_unknown": 2097,
+    "not_final": 65,
+    "missing_four_factors": 72,
+    "invalid_final": 6,
+    "invalid_possessions": 41,
+    "missing_box_pair": 7,
+    "invalid_overtime": 1
+  },
+  "venueCoverage": {
+    "matched": 22758,
+    "finalDiTraining": 22840,
+    "missing": 261
+  },
+  "development": {
+    "games": 5695,
+    "wins": 3931,
+    "losses": 1764,
+    "accuracy": 0.6902546093064091,
+    "alwaysHomeAccuracy": 0.6382791922739245,
+    "brier": 0.19733753434731155,
+    "logLoss": 0.57665003860602,
+    "teamScoreMae": 8.506799210490998,
+    "marginMae": 9.805665867519108,
+    "totalMae": 13.717443090653996,
+    "calibrationGap": 0.046438936987574835,
+    "margin90Coverage": 0.8906057945566286,
+    "total90Coverage": 0.8992098331870061,
+    "incompleteInputs": 66,
+    "calibration": [
+      {
+        "n": 1,
+        "probability": 0.0764326079166207,
+        "frequency": 0
+      },
+      {
+        "n": 9,
+        "probability": 0.15146003688056014,
+        "frequency": 0.1111111111111111
+      },
+      {
+        "n": 68,
+        "probability": 0.2632424767290596,
+        "frequency": 0.1323529411764706
+      },
+      {
+        "n": 236,
+        "probability": 0.35469805456965475,
+        "frequency": 0.23728813559322035
+      },
+      {
+        "n": 508,
+        "probability": 0.455462103623807,
+        "frequency": 0.38779527559055116
+      },
+      {
+        "n": 862,
+        "probability": 0.5546822320956603,
+        "frequency": 0.4779582366589327
+      },
+      {
+        "n": 1194,
+        "probability": 0.651249248877213,
+        "frequency": 0.6005025125628141
+      },
+      {
+        "n": 1258,
+        "probability": 0.7510735728188471,
+        "frequency": 0.7154213036565977
+      },
+      {
+        "n": 1175,
+        "probability": 0.848087682852276,
+        "frequency": 0.8348936170212766
+      },
+      {
+        "n": 384,
+        "probability": 0.9271746716559819,
+        "frequency": 0.9427083333333334
+      }
+    ]
+  },
+  "selection": [
+    {
+      "config": {
+        "id": "adjusted_ridge_10_carry_80",
+        "ridge": 10,
+        "priorCarry": 0.8,
+        "recencyDays": 90
+      },
+      "metrics": {
+        "games": 5725,
+        "wins": 4054,
+        "losses": 1671,
+        "accuracy": 0.7081222707423581,
+        "alwaysHomeAccuracy": 0.6429694323144105,
+        "brier": 0.19097089094112288,
+        "logLoss": 0.5614548391930874,
+        "teamScoreMae": 8.41219744837627,
+        "marginMae": 9.726010693117447,
+        "totalMae": 13.465426335093081,
+        "calibrationGap": 0.024682893410984782,
+        "margin90Coverage": 0.903231441048035,
+        "total90Coverage": 0.9051528384279476,
+        "incompleteInputs": 66,
+        "calibration": [
+          {
+            "n": 3,
+            "probability": 0.08048879065678337,
+            "frequency": 0
+          },
+          {
+            "n": 23,
+            "probability": 0.1612085132123273,
+            "frequency": 0.13043478260869565
+          },
+          {
+            "n": 122,
+            "probability": 0.25757692671110033,
+            "frequency": 0.13114754098360656
+          },
+          {
+            "n": 399,
+            "probability": 0.3563340619784069,
+            "frequency": 0.3107769423558897
+          },
+          {
+            "n": 644,
+            "probability": 0.45334397489359074,
+            "frequency": 0.41304347826086957
+          },
+          {
+            "n": 985,
+            "probability": 0.5526979799359367,
+            "frequency": 0.5360406091370559
+          },
+          {
+            "n": 1164,
+            "probability": 0.6506063233578661,
+            "frequency": 0.6701030927835051
+          },
+          {
+            "n": 1168,
+            "probability": 0.7490612627714377,
+            "frequency": 0.7457191780821918
+          },
+          {
+            "n": 917,
+            "probability": 0.8466350796612997,
+            "frequency": 0.8702290076335878
+          },
+          {
+            "n": 300,
+            "probability": 0.9294527657784863,
+            "frequency": 0.9833333333333333
+          }
+        ]
+      }
+    },
+    {
+      "config": {
+        "id": "adjusted_ridge_6_carry_45",
+        "ridge": 6,
+        "priorCarry": 0.45,
+        "recencyDays": 60
+      },
+      "metrics": {
+        "games": 5725,
+        "wins": 4043,
+        "losses": 1682,
+        "accuracy": 0.7062008733624454,
+        "alwaysHomeAccuracy": 0.6429694323144105,
+        "brier": 0.19189788633522012,
+        "logLoss": 0.5641311570352677,
+        "teamScoreMae": 8.427993048139644,
+        "marginMae": 9.780325228068808,
+        "totalMae": 13.480400210413414,
+        "calibrationGap": 0.0222798139311994,
+        "margin90Coverage": 0.8997379912663755,
+        "total90Coverage": 0.9044541484716158,
+        "incompleteInputs": 66,
+        "calibration": [
+          {
+            "n": 4,
+            "probability": 0.08133498364457524,
+            "frequency": 0
+          },
+          {
+            "n": 27,
+            "probability": 0.1689616778480803,
+            "frequency": 0.07407407407407407
+          },
+          {
+            "n": 138,
+            "probability": 0.2587183880324363,
+            "frequency": 0.15217391304347827
+          },
+          {
+            "n": 372,
+            "probability": 0.3589317264209374,
+            "frequency": 0.3010752688172043
+          },
+          {
+            "n": 663,
+            "probability": 0.45166616717272684,
+            "frequency": 0.43137254901960786
+          },
+          {
+            "n": 961,
+            "probability": 0.553471547974678,
+            "frequency": 0.5442247658688866
+          },
+          {
+            "n": 1214,
+            "probability": 0.6493361488708046,
+            "frequency": 0.6746293245469522
+          },
+          {
+            "n": 1088,
+            "probability": 0.7500351536101891,
+            "frequency": 0.7380514705882353
+          },
+          {
+            "n": 943,
+            "probability": 0.8482540948245686,
+            "frequency": 0.8632025450689289
+          },
+          {
+            "n": 315,
+            "probability": 0.9293412307167273,
+            "frequency": 0.9555555555555556
+          }
+        ]
+      }
+    },
+    {
+      "config": {
+        "id": "adjusted_ridge_14_carry_65",
+        "ridge": 14,
+        "priorCarry": 0.65,
+        "recencyDays": 90
+      },
+      "metrics": {
+        "games": 5725,
+        "wins": 4002,
+        "losses": 1723,
+        "accuracy": 0.6990393013100437,
+        "alwaysHomeAccuracy": 0.6429694323144105,
+        "brier": 0.19663233263607416,
+        "logLoss": 0.5756863717893804,
+        "teamScoreMae": 8.557644814304496,
+        "marginMae": 9.970548166587477,
+        "totalMae": 13.630066157517636,
+        "calibrationGap": 0.023953129959704975,
+        "margin90Coverage": 0.9011353711790393,
+        "total90Coverage": 0.9051528384279476,
+        "incompleteInputs": 66,
+        "calibration": [
+          {
+            "n": 0,
+            "probability": null,
+            "frequency": null
+          },
+          {
+            "n": 6,
+            "probability": 0.15636184033048936,
+            "frequency": 0
+          },
+          {
+            "n": 65,
+            "probability": 0.2657604002916214,
+            "frequency": 0.12307692307692308
+          },
+          {
+            "n": 274,
+            "probability": 0.3619669029056355,
+            "frequency": 0.2846715328467153
+          },
+          {
+            "n": 698,
+            "probability": 0.4519088817196376,
+            "frequency": 0.3939828080229226
+          },
+          {
+            "n": 1036,
+            "probability": 0.5525770334434347,
+            "frequency": 0.5376447876447876
+          },
+          {
+            "n": 1315,
+            "probability": 0.6498905325177741,
+            "frequency": 0.6524714828897339
+          },
+          {
+            "n": 1254,
+            "probability": 0.7487417998635848,
+            "frequency": 0.7511961722488039
+          },
+          {
+            "n": 935,
+            "probability": 0.8435635111005393,
+            "frequency": 0.879144385026738
+          },
+          {
+            "n": 142,
+            "probability": 0.9218444743427079,
+            "frequency": 0.9929577464788732
+          }
+        ]
+      }
+    },
+    {
+      "config": {
+        "id": "adjusted_ridge_10_carry_65",
+        "ridge": 10,
+        "priorCarry": 0.65,
+        "recencyDays": 60
+      },
+      "metrics": {
+        "games": 5725,
+        "wins": 4008,
+        "losses": 1717,
+        "accuracy": 0.7000873362445414,
+        "alwaysHomeAccuracy": 0.6429694323144105,
+        "brier": 0.19655925830787632,
+        "logLoss": 0.5757217794766187,
+        "teamScoreMae": 8.551523274675027,
+        "marginMae": 9.97356641075953,
+        "totalMae": 13.622583302705458,
+        "calibrationGap": 0.023284084850027364,
+        "margin90Coverage": 0.8988646288209607,
+        "total90Coverage": 0.9042794759825328,
+        "incompleteInputs": 66,
+        "calibration": [
+          {
+            "n": 0,
+            "probability": null,
+            "frequency": null
+          },
+          {
+            "n": 7,
+            "probability": 0.15242788350647915,
+            "frequency": 0
+          },
+          {
+            "n": 74,
+            "probability": 0.2638537765650126,
+            "frequency": 0.13513513513513514
+          },
+          {
+            "n": 288,
+            "probability": 0.36308241749709613,
+            "frequency": 0.28125
+          },
+          {
+            "n": 698,
+            "probability": 0.45334851056127334,
+            "frequency": 0.3997134670487106
+          },
+          {
+            "n": 1036,
+            "probability": 0.552824364429828,
+            "frequency": 0.5463320463320464
+          },
+          {
+            "n": 1310,
+            "probability": 0.6491279952789907,
+            "frequency": 0.6610687022900763
+          },
+          {
+            "n": 1200,
+            "probability": 0.7487977623019304,
+            "frequency": 0.7441666666666666
+          },
+          {
+            "n": 948,
+            "probability": 0.8449514927731214,
+            "frequency": 0.870253164556962
+          },
+          {
+            "n": 164,
+            "probability": 0.9219966636713622,
+            "frequency": 0.9817073170731707
+          }
+        ]
+      }
+    }
+  ],
+  "confirmation": {
+    "games": 5734,
+    "wins": 4022,
+    "losses": 1712,
+    "accuracy": 0.7014300662713638,
+    "alwaysHomeAccuracy": 0.637077084059993,
+    "brier": 0.19088529661179798,
+    "logLoss": 0.5604542600245254,
+    "teamScoreMae": 8.727604972114928,
+    "marginMae": 9.833331679631002,
+    "totalMae": 14.283078225634238,
+    "calibrationGap": 0.027262726950132966,
+    "margin90Coverage": 0.9012905476107429,
+    "total90Coverage": 0.8955354028601326,
+    "incompleteInputs": 66,
+    "calibration": [
+      {
+        "n": 3,
+        "probability": 0.09158017412910176,
+        "frequency": 0.3333333333333333
+      },
+      {
+        "n": 34,
+        "probability": 0.1611089857872088,
+        "frequency": 0.029411764705882353
+      },
+      {
+        "n": 128,
+        "probability": 0.26180062471492366,
+        "frequency": 0.15625
+      },
+      {
+        "n": 331,
+        "probability": 0.35750238008271784,
+        "frequency": 0.2719033232628399
+      },
+      {
+        "n": 655,
+        "probability": 0.4561792446044231,
+        "frequency": 0.4259541984732824
+      },
+      {
+        "n": 963,
+        "probability": 0.5512384798430758,
+        "frequency": 0.5119418483904465
+      },
+      {
+        "n": 1092,
+        "probability": 0.6510430180206332,
+        "frequency": 0.6391941391941391
+      },
+      {
+        "n": 1113,
+        "probability": 0.750695484017213,
+        "frequency": 0.7322551662174304
+      },
+      {
+        "n": 977,
+        "probability": 0.8484162613167547,
+        "frequency": 0.8587512794268168
+      },
+      {
+        "n": 438,
+        "probability": 0.9336134242493257,
+        "frequency": 0.952054794520548
+      }
+    ]
+  },
+  "confirmationMonthly": {
+    "2025-11": {
+      "games": 1238,
+      "wins": 935,
+      "losses": 303,
+      "accuracy": 0.7552504038772213,
+      "alwaysHomeAccuracy": 0.7172859450726979,
+      "brier": 0.16983309776600455,
+      "logLoss": 0.5118130241455044,
+      "teamScoreMae": 9.597549957401386,
+      "marginMae": 11.629967836506385,
+      "totalMae": 14.980293614070149,
+      "calibrationGap": 0.02917106126007193,
+      "margin90Coverage": 0.8311793214862682,
+      "total90Coverage": 0.8780290791599353,
+      "incompleteInputs": 17,
+      "calibration": [
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 5,
+          "probability": 0.144789815538021,
+          "frequency": 0
+        },
+        {
+          "n": 25,
+          "probability": 0.2641206076510018,
+          "frequency": 0.16
+        },
+        {
+          "n": 61,
+          "probability": 0.35759000001740077,
+          "frequency": 0.39344262295081966
+        },
+        {
+          "n": 82,
+          "probability": 0.450892538935419,
+          "frequency": 0.4268292682926829
+        },
+        {
+          "n": 106,
+          "probability": 0.5487855886484853,
+          "frequency": 0.5471698113207547
+        },
+        {
+          "n": 133,
+          "probability": 0.6495382204466753,
+          "frequency": 0.6691729323308271
+        },
+        {
+          "n": 211,
+          "probability": 0.7593326793901597,
+          "frequency": 0.6966824644549763
+        },
+        {
+          "n": 381,
+          "probability": 0.8529957719944987,
+          "frequency": 0.8241469816272966
+        },
+        {
+          "n": 234,
+          "probability": 0.9343305035076994,
+          "frequency": 0.9273504273504274
+        }
+      ]
+    },
+    "2025-12": {
+      "games": 958,
+      "wins": 691,
+      "losses": 267,
+      "accuracy": 0.721294363256785,
+      "alwaysHomeAccuracy": 0.6837160751565762,
+      "brier": 0.1731827384489958,
+      "logLoss": 0.5126493661765623,
+      "teamScoreMae": 8.99586420636981,
+      "marginMae": 10.676077543714227,
+      "totalMae": 14.293388982773129,
+      "calibrationGap": 0.08142571823179472,
+      "margin90Coverage": 0.8851774530271399,
+      "total90Coverage": 0.8966597077244259,
+      "incompleteInputs": 10,
+      "calibration": [
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 3,
+          "probability": 0.12982726504794714,
+          "frequency": 0
+        },
+        {
+          "n": 7,
+          "probability": 0.2726545285210834,
+          "frequency": 0.14285714285714285
+        },
+        {
+          "n": 21,
+          "probability": 0.3582289532245304,
+          "frequency": 0.14285714285714285
+        },
+        {
+          "n": 59,
+          "probability": 0.4601428724520654,
+          "frequency": 0.3898305084745763
+        },
+        {
+          "n": 96,
+          "probability": 0.5545099304603587,
+          "frequency": 0.4270833333333333
+        },
+        {
+          "n": 157,
+          "probability": 0.6531717277338605,
+          "frequency": 0.49044585987261147
+        },
+        {
+          "n": 228,
+          "probability": 0.7552963248289395,
+          "frequency": 0.6842105263157895
+        },
+        {
+          "n": 258,
+          "probability": 0.8500039502654074,
+          "frequency": 0.8837209302325582
+        },
+        {
+          "n": 129,
+          "probability": 0.9352784526515713,
+          "frequency": 0.9767441860465116
+        }
+      ]
+    },
+    "2026-01": {
+      "games": 1520,
+      "wins": 1031,
+      "losses": 489,
+      "accuracy": 0.6782894736842106,
+      "alwaysHomeAccuracy": 0.5894736842105263,
+      "brier": 0.2044592212603974,
+      "logLoss": 0.5934874691271314,
+      "teamScoreMae": 8.482382347521126,
+      "marginMae": 9.007952534346199,
+      "totalMae": 14.243268463688443,
+      "calibrationGap": 0.05065930304414703,
+      "margin90Coverage": 0.9263157894736842,
+      "total90Coverage": 0.9006578947368421,
+      "incompleteInputs": 17,
+      "calibration": [
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 7,
+          "probability": 0.1736448064039678,
+          "frequency": 0
+        },
+        {
+          "n": 24,
+          "probability": 0.2571770579135604,
+          "frequency": 0.125
+        },
+        {
+          "n": 81,
+          "probability": 0.3563133766538384,
+          "frequency": 0.19753086419753085
+        },
+        {
+          "n": 195,
+          "probability": 0.4578772305824469,
+          "frequency": 0.3435897435897436
+        },
+        {
+          "n": 283,
+          "probability": 0.5506446228721489,
+          "frequency": 0.4664310954063604
+        },
+        {
+          "n": 364,
+          "probability": 0.6535675951049478,
+          "frequency": 0.6428571428571429
+        },
+        {
+          "n": 326,
+          "probability": 0.7472809858744538,
+          "frequency": 0.7239263803680982
+        },
+        {
+          "n": 198,
+          "probability": 0.8441319890798574,
+          "frequency": 0.8434343434343434
+        },
+        {
+          "n": 42,
+          "probability": 0.9289484286688241,
+          "frequency": 0.9761904761904762
+        }
+      ]
+    },
+    "2026-02": {
+      "games": 1368,
+      "wins": 928,
+      "losses": 440,
+      "accuracy": 0.6783625730994152,
+      "alwaysHomeAccuracy": 0.5928362573099415,
+      "brier": 0.20079985414209894,
+      "logLoss": 0.5857242872137122,
+      "teamScoreMae": 8.203979768494719,
+      "marginMae": 8.872743628402416,
+      "totalMae": 13.786476744926913,
+      "calibrationGap": 0.04126153691843657,
+      "margin90Coverage": 0.9371345029239766,
+      "total90Coverage": 0.8961988304093568,
+      "incompleteInputs": 15,
+      "calibration": [
+        {
+          "n": 2,
+          "probability": 0.09051458883465982,
+          "frequency": 0.5
+        },
+        {
+          "n": 16,
+          "probability": 0.16354679275961106,
+          "frequency": 0.0625
+        },
+        {
+          "n": 61,
+          "probability": 0.2609925040036482,
+          "frequency": 0.16393442622950818
+        },
+        {
+          "n": 113,
+          "probability": 0.3576272204288633,
+          "frequency": 0.23893805309734514
+        },
+        {
+          "n": 207,
+          "probability": 0.4553498338835718,
+          "frequency": 0.4927536231884058
+        },
+        {
+          "n": 301,
+          "probability": 0.5526103756583703,
+          "frequency": 0.5382059800664452
+        },
+        {
+          "n": 281,
+          "probability": 0.6502825102802231,
+          "frequency": 0.6690391459074733
+        },
+        {
+          "n": 259,
+          "probability": 0.7455888699051297,
+          "frequency": 0.7760617760617761
+        },
+        {
+          "n": 103,
+          "probability": 0.838473462834214,
+          "frequency": 0.912621359223301
+        },
+        {
+          "n": 25,
+          "probability": 0.9280397499168839,
+          "frequency": 1
+        }
+      ]
+    },
+    "2026-03": {
+      "games": 637,
+      "wins": 429,
+      "losses": 208,
+      "accuracy": 0.673469387755102,
+      "alwaysHomeAccuracy": 0.6216640502354788,
+      "brier": 0.20380218923993507,
+      "logLoss": 0.5916328117544954,
+      "teamScoreMae": 8.333366317248283,
+      "marginMae": 9.089885151996048,
+      "totalMae": 14.05480563720315,
+      "calibrationGap": 0.042872561524228955,
+      "margin90Coverage": 0.9230769230769231,
+      "total90Coverage": 0.9136577708006279,
+      "incompleteInputs": 7,
+      "calibration": [
+        {
+          "n": 1,
+          "probability": 0.09371134471798562,
+          "frequency": 0
+        },
+        {
+          "n": 3,
+          "probability": 0.17733743831653392,
+          "frequency": 0
+        },
+        {
+          "n": 11,
+          "probability": 0.26419008531269494,
+          "frequency": 0.18181818181818182
+        },
+        {
+          "n": 52,
+          "probability": 0.3590742519373844,
+          "frequency": 0.36538461538461536
+        },
+        {
+          "n": 108,
+          "probability": 0.4565247245457704,
+          "frequency": 0.46296296296296297
+        },
+        {
+          "n": 171,
+          "probability": 0.5494962017806824,
+          "frequency": 0.5614035087719298
+        },
+        {
+          "n": 157,
+          "probability": 0.6456970770570943,
+          "frequency": 0.7006369426751592
+        },
+        {
+          "n": 89,
+          "probability": 0.7457999730149925,
+          "frequency": 0.8426966292134831
+        },
+        {
+          "n": 37,
+          "probability": 0.8407940134690274,
+          "frequency": 0.972972972972973
+        },
+        {
+          "n": 8,
+          "probability": 0.9276992320421671,
+          "frequency": 1
+        }
+      ]
+    },
+    "2026-04": {
+      "games": 13,
+      "wins": 8,
+      "losses": 5,
+      "accuracy": 0.6153846153846154,
+      "alwaysHomeAccuracy": 0.5384615384615384,
+      "brier": 0.23689545965864273,
+      "logLoss": 0.666171632472357,
+      "teamScoreMae": 9.204793655513964,
+      "marginMae": 10.652569603760131,
+      "totalMae": 15.224689485113029,
+      "calibrationGap": 0.0706383871438968,
+      "margin90Coverage": 1,
+      "total90Coverage": 0.9230769230769231,
+      "incompleteInputs": 0,
+      "calibration": [
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 3,
+          "probability": 0.3507897568121592,
+          "frequency": 0.3333333333333333
+        },
+        {
+          "n": 4,
+          "probability": 0.45691043002536685,
+          "frequency": 0.5
+        },
+        {
+          "n": 6,
+          "probability": 0.5510714195773919,
+          "frequency": 0.6666666666666666
+        },
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        },
+        {
+          "n": 0,
+          "probability": null,
+          "frequency": null
+        }
+      ]
+    }
+  },
+  "historicalPriceValidation": "unavailable; no price/units/ROI or sharp-reader improvement claimed",
+  "historicalAvailabilityValidation": "unavailable; outcome archives do not establish pregame injury or roster announcements"
+}
