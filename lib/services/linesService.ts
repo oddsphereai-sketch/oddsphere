@@ -22,7 +22,8 @@ import { mergePublicSplitsCarryForward } from "./publicSplitsCarryForward";
 import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerIdMap } from "./_idMaps";
-import { SharpAPIOddsProvider } from "../providers/real_api/SharpAPIOddsProvider";
+import { OwlsOddsProvider } from "../providers/real_api/OwlsOddsProvider";
+import { OwlsSignalProvider } from "../providers/real_api/OwlsSignalProvider";
 import { SharpApiAbortError } from "../providers/real_api/_sharpApiClient";
 import type { V2DiscoveryReport } from "../providers/real_api/SharpAPIOddsProvider";
 import type { SharpApiSlateGame } from "../providers/real_api/SharpAPIOddsProvider";
@@ -629,7 +630,7 @@ export const linesService = {
         : opts.deadlineAtMs - GAME_LINES_COMMIT_RESERVE_MS,
     );
     const odds = getOddsProvider();
-    if (!(odds instanceof SharpAPIOddsProvider)) {
+    if (!(odds instanceof OwlsOddsProvider)) {
       throw new Error(
         "linesService.refreshGameLinesV2 requires ODDS_PROVIDER=real_api. " +
           `Current odds provider is ${odds.constructor.name}.`
@@ -702,12 +703,30 @@ export const linesService = {
       });
     }
 
-    let providerResult: Awaited<ReturnType<SharpAPIOddsProvider["getGameLinesV2"]>>;
+    // True provider openings are fetched only for games that do not already
+    // have any opener in line_history. This keeps the history call bounded to
+    // one per new event instead of spending it again on every intraday poll.
+    const { data: existingOpenerRows, error: existingOpenerError } = await supabase
+      .from("line_history")
+      .select("game_id")
+      .in("game_id", slateGameIds)
+      .eq("is_opener", true)
+      .is("player_id", null);
+    if (existingOpenerError) {
+      throw new Error(`refreshGameLinesV2 opener inventory read failed: ${existingOpenerError.message}`);
+    }
+    const gamesWithOpeners = new Set((existingOpenerRows ?? []).map((row) => row.game_id as number));
+    const openingExternalIds = [...gameIdByExternal.entries()]
+      .filter(([, gameId]) => !gamesWithOpeners.has(gameId))
+      .map(([externalId]) => externalId);
+
+    let providerResult: Awaited<ReturnType<OwlsOddsProvider["getGameLinesV2"]>>;
     try {
       providerResult = await odds.getGameLinesV2(date, sport, {
         externalIdsFilter: opts?.externalIdsFilter,
         slateGames,
         signal: providerSignal,
+        openingExternalIds,
       });
     } catch (error) {
       if (error instanceof SharpApiAbortError || providerSignal?.aborted) {
@@ -719,7 +738,23 @@ export const linesService = {
       }
       throw error;
     }
-    const { records, discovery } = providerResult;
+    const { records, openingRecords, discovery } = providerResult;
+    const openingHistoryPayload: Array<Record<string, unknown>> = [];
+    for (const opening of openingRecords) {
+      const gameId = gameIdByExternal.get(opening.game_external_id);
+      if (gameId === undefined) continue;
+      openingHistoryPayload.push({
+        game_id: gameId,
+        market_type: opening.market_type,
+        player_id: null,
+        sportsbook: opening.sportsbook,
+        side: opening.side,
+        line_value: opening.line_value,
+        odds_american: opening.odds_american,
+        is_opener: true,
+        recorded_at: opening.fetched_at,
+      });
+    }
 
     // Partition provider rows by (game_id, market_type). This is the
     // unit of preservation: a market the provider didn't return for a
@@ -958,7 +993,7 @@ export const linesService = {
       );
       if (historyPayload.length > 0) {
         const flagged = await flagOpenersInHistoryPayload(
-          historyPayload as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
+          [...openingHistoryPayload, ...historyPayload] as unknown as Parameters<typeof flagOpenersInHistoryPayload>[0],
         );
         // 2026-06-22 — resilient insert. Previously a single batched insert
         // that threw on any rejection: because the `lines` insert above
@@ -1029,7 +1064,9 @@ export const linesService = {
       preserved_call_cap_count: decisions.filter(
         (d) => d.decision === "preserved_call_cap_skip"
       ).length,
-      total_history_rows_appended: dryRun ? 0 : totalHistoryRowsWritten,
+      total_history_rows_appended: dryRun ? 0 : totalHistoryRowsWritten + openingHistoryPayload.length,
+      provider_opening_rows_appended: dryRun ? 0 : openingHistoryPayload.length,
+      provider_opening_games_requested: openingExternalIds.length,
       history_insert_failed: historyInsertFailed,
       history_first_error: historyFirstError,
       history_baseline_inserted: historyBaselineInserted,
@@ -1154,6 +1191,10 @@ export const linesService = {
   ): Promise<CronHandlerResult> {
     const dryRun = opts?.dryRun === true;
     const sharp = getSharpSignalProvider();
+    const signalHistorySource = sharp instanceof OwlsSignalProvider
+      ? "owls_splits"
+      : "provider_splits";
+    const carryForwardProviderSplits = !(sharp instanceof OwlsSignalProvider);
     const gameIdByExternal = await loadGameIdMap(sport, date);
     if (opts?.externalIdsFilter !== undefined) {
       const allowed = new Set(opts.externalIdsFilter);
@@ -1234,7 +1275,9 @@ export const linesService = {
       const merged = mergePublicSplitsCarryForward(
         sport === "mlb" ? verifiedHundredSplitPct(s.public_betting_pct) : s.public_betting_pct,
         sport === "mlb" ? verifiedHundredSplitPct(s.public_money_pct) : s.public_money_pct,
-        priorPublicSplits.get(`${gameId}::${s.market_type}::${s.side}`),
+        carryForwardProviderSplits
+          ? priorPublicSplits.get(`${gameId}::${s.market_type}::${s.side}`)
+          : undefined,
       );
       const publicBetting = merged.betting;
       const publicMoney = merged.money;
@@ -1281,7 +1324,7 @@ export const linesService = {
           steam_detected: p.has_steam_move,
           reverse_line_movement: p.has_reverse_line_movement,
           recorded_at: p.computed_at,
-          source: "sharpapi_splits",
+          source: signalHistorySource,
         }));
         const { error: histErr } = await supabase
           .from("sharp_signals_history")
@@ -1400,6 +1443,10 @@ export type V2RefreshDetails = {
   preserved_unresolved_count: number;
   preserved_call_cap_count: number;
   total_history_rows_appended: number;
+  /** True Owls opening rows inserted ahead of the current observations. */
+  provider_opening_rows_appended: number;
+  /** Games with no prior opener for which Owls history was requested. */
+  provider_opening_games_requested: number;
   /** Count of line_history rows the resilient writer could not persist (0 = healthy). */
   history_insert_failed: number;
   /** First Postgres rejection message when history_insert_failed > 0 (else null). */

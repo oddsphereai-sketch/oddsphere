@@ -31,11 +31,12 @@ import { MockWeatherProvider } from "./mock/MockWeatherProvider";
 import { MockParkFactorProvider } from "./mock/MockParkFactorProvider";
 import { ManualSlateProvider } from "./manual/ManualSlateProvider";
 
-// Gate B.1 Phase 1 — real_api implementations.
+// Real API implementations.
 import { BallDontLieProvider } from "./real_api/BallDontLieProvider";
 import { BallDontLieSlateProvider } from "./real_api/BallDontLieSlateProvider";
-import { SharpAPIOddsProvider, type SharpApiGameResolver } from "./real_api/SharpAPIOddsProvider";
-import { SharpAPISignalProvider } from "./real_api/SharpAPISignalProvider";
+import type { SharpApiGameResolver } from "./real_api/SharpAPIOddsProvider";
+import { OwlsOddsProvider } from "./real_api/OwlsOddsProvider";
+import { OwlsSignalProvider } from "./real_api/OwlsSignalProvider";
 // Phase 4W — real OpenWeather provider.
 import { OpenWeatherProvider } from "./real_api/OpenWeatherProvider";
 import type { MlbTeamAbbrev } from "./real_api/_teamNameNormalizer";
@@ -77,7 +78,7 @@ function notImplemented(
 /**
  * Gate B.1 Phase 1 — read a required env var with a clear error when
  * missing. Used by the real_api branches to surface a friendly error
- * naming the env var (BALLDONTLIE_API_KEY / SHARPAPI_KEY) instead of a
+ * naming the env var (BALLDONTLIE_API_KEY / OWLS_INSIGHT_API_KEY) instead of a
  * cryptic "apiKey must be non-empty" from a downstream constructor.
  */
 function readRequiredEnv(envKey: string, providerName: string): string {
@@ -92,10 +93,10 @@ function readRequiredEnv(envKey: string, providerName: string): string {
 }
 
 /**
- * Gate B.1 Phase 1 — resolver closure that maps a SharpAPI event's natural
+ * Resolver closure that maps a provider event's natural
  * key (sport + slate_date + team abbreviations) to the BDL integer
  * external_id already stored in the `games` table. Both
- * SharpAPIOddsProvider and SharpAPISignalProvider receive an instance of
+ * Owls odds and signal providers receive an instance of
  * this resolver at construction time. Returns null when no matching game
  * is found — caller skips the event without throwing.
  *
@@ -104,7 +105,7 @@ function readRequiredEnv(envKey: string, providerName: string): string {
  * server-side join. The Supabase server-side client uses the
  * SERVICE_ROLE_KEY so RLS is bypassed.
  */
-function makeSharpApiGameResolver(): SharpApiGameResolver {
+function makeGameResolver(): SharpApiGameResolver {
   type Candidate = { external_id: number; game_date: string | null };
   const candidatesByPair = new Map<string, Promise<Candidate[]>>();
 
@@ -147,7 +148,7 @@ function makeSharpApiGameResolver(): SharpApiGameResolver {
     if (candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0]?.external_id ?? null;
 
-    // SharpAPI distinguishes doubleheaders with `_g1`, `_g2`, etc.
+    // Providers may expose doubleheaders in event order or explicit game number.
     // Candidates are already ordered by scheduled start, so route the
     // provider event to that exact game instead of assigning every event
     // for the same teams/date to whichever game happens to be upcoming.
@@ -177,9 +178,8 @@ export function getOddsProvider(): IOddsProvider {
     } else if (mode === "manual") {
       notImplemented("ODDS_PROVIDER", mode, "AdminUploadOddsProvider", "Phase 7.25");
     } else {
-      // Gate B.1 Phase 1 — SharpAPI wired.
-      const key = readRequiredEnv("SHARPAPI_KEY", "SharpAPIOddsProvider");
-      oddsInstance = new SharpAPIOddsProvider(key, makeSharpApiGameResolver());
+      const key = readRequiredEnv("OWLS_INSIGHT_API_KEY", "OwlsOddsProvider");
+      oddsInstance = new OwlsOddsProvider(key, makeGameResolver());
     }
   }
   return oddsInstance;
@@ -193,11 +193,10 @@ export function getSharpSignalProvider(): ISharpSignalProvider {
     } else if (mode === "manual") {
       notImplemented("SHARP_SIGNAL_PROVIDER", mode, "AdminUploadSharpSignalProvider", "Phase 7.25");
     } else {
-      // Gate B.1 Phase 1 — SharpAPI wired.
-      const key = readRequiredEnv("SHARPAPI_KEY", "SharpAPISignalProvider");
-      sharpSignalInstance = new SharpAPISignalProvider(
+      const key = readRequiredEnv("OWLS_INSIGHT_API_KEY", "OwlsSignalProvider");
+      sharpSignalInstance = new OwlsSignalProvider(
         key,
-        makeSharpApiGameResolver()
+        makeGameResolver()
       );
     }
   }

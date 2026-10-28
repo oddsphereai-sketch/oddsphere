@@ -1458,7 +1458,8 @@ export type V2DiscoveryPerGame = {
     | "splits_stripped"
     | "splits_discovery_fallback"
     | "schedule_direct_probe"
-    | "schedule_doubleheader_sibling";
+    | "schedule_doubleheader_sibling"
+    | "owls_exact_match";
   oddsCallStatus: V2OddsCallStatus;
   /** Combined row counts (real /odds + R-16E /splits fallback). */
   mlRows: number;
@@ -1483,7 +1484,7 @@ export type V2DiscoveryReport = {
   // carries the /opportunities/ev discovery stats (which include extra
   // counters like skippedPlayerProp / skippedAlternateLine / dedupedRows
   // / keptEvents that the pre-2B splits stats didn't have).
-  discoverySource: "opportunities_ev";
+  discoverySource: "opportunities_ev" | "owls_current_odds";
   discoveryStats: EvDiscoveryStats;
   eventsDiscovered: number;
   eventsResolvedToGame: number;

@@ -42,10 +42,13 @@ import {
   type WnbaCompleteMarketPair,
   type WnbaTargetExcludedPriceRow,
 } from "./wnbaTargetExcludedMarketDecision";
+import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
+import {
+  normalizeOwlsSharpBookOdds,
+  type RawOwlsOddsResponse,
+} from "@/lib/providers/owls/owlsSharpBookOdds";
 
 const BDL = "https://api.balldontlie.io/wnba/v1";
-const SHARP = "https://api.sharpapi.io/api/v1";
-const BLOCKED = new Set(["fliff", "kalshi", "polymarket"]);
 export const SHARP_BOOKS = new Set(["circa", "pinnacle", "bookmaker"]);
 // Margin sigma was validated on the 996-game possession/efficiency replay.
 // Total sigma is intentionally wider than the launch value: the larger
@@ -299,37 +302,39 @@ const daysBetween = (from: string | undefined, to: string) => {
   return Number.isFinite(d) ? d : 7;
 };
 
-// ── SharpAPI odds (cursor; game markets; resolve teams; pair+date; trusted consensus) ──
+// ── Owls odds (complete same-book game markets; pair+date; trusted consensus) ──
 export type OddRow = { book: string; sharp: boolean; mkt: string; selType: string; odds: number | null; line: number | null; date: string | null; observedAt?: string | null; startsAt?: string | null; h: number; a: number };
 export type WnbaPublicMarketSignals = Partial<Record<"moneyline" | "total" | "spread", Partial<Record<string, PublicMarketSignal>>>>;
 async function wnbaOdds(resolve: (s: string) => number | null): Promise<OddRow[]> {
-  const key = process.env.SHARPAPI_KEY; if (!key) throw new Error("missing SHARPAPI_KEY");
-  const evDate = (s: string) => { const m = String(s).match(/20\d\d-\d\d-\d\d/); return m ? m[0] : null; };
-  // Fetch the 3 markets in PARALLEL (pagination within a market stays
-  // sequential on its cursor).
-  const perMarket = await Promise.all(["moneyline", "point_spread", "total_points"].map(async (mkt) => {
-    const rows: OddRow[] = [];
-    let cursor: string | null = null, pages = 0;
-    while (pages < 10) {
-      const url = `${SHARP}/odds?league=wnba&market_type=${mkt}&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
-      if (!r.ok) break;
-      const j = await r.json() as { data?: Record<string, unknown>[]; pagination?: { has_more?: boolean; next_cursor?: string } };
-      for (const x of j.data ?? []) {
-        const book = String(x.sportsbook ?? "").toLowerCase();
-        if (BLOCKED.has(book) || x.is_main_line === false || x.is_stale_pregame_price === true) continue;
-        const h = resolve(String(x.home_team)), a = resolve(String(x.away_team)); if (!h || !a || h === a) continue;
-        const providerObservedAt = [x.updated_at, x.fetched_at, x.observed_at]
-          .find((value) => typeof value === "string" && Number.isFinite(Date.parse(value))) as string | undefined;
-        rows.push({ book, sharp: SHARP_BOOKS.has(book), mkt, selType: String(x.selection_type), odds: x.odds_american == null ? null : Number(x.odds_american),
-          line: x.line == null ? null : Number(x.line), date: evDate(String(x.event_id)) ?? evDate(String(x.event_start_time)), observedAt: providerObservedAt ?? null,
-          startsAt: typeof x.event_start_time === "string" ? x.event_start_time : null, h, a });
-      }
-      pages++; if (!j.pagination?.has_more || !j.pagination?.next_cursor) break; cursor = j.pagination.next_cursor;
-    }
-    return rows;
-  }));
-  return perMarket.flat();
+  const key = process.env.OWLS_INSIGHT_API_KEY;
+  if (!key) throw new Error("missing OWLS_INSIGHT_API_KEY");
+  const response = await new OwlsInsightClient(key).odds<RawOwlsOddsResponse>("wnba");
+  const coverage = normalizeOwlsSharpBookOdds(response.body, "wnba");
+  return coverage.prices.flatMap((price) => {
+    const h = resolve(price.homeTeam), a = resolve(price.awayTeam);
+    if (!h || !a || h === a) return [];
+    const date = price.scheduledStart
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(price.scheduledStart))
+      : null;
+    const mkt = price.market === "spread"
+      ? "point_spread"
+      : price.market === "total"
+        ? "total_points"
+        : "moneyline";
+    return [{
+      book: price.sportsbook,
+      sharp: SHARP_BOOKS.has(price.sportsbook),
+      mkt,
+      selType: price.side,
+      odds: price.americanPrice,
+      line: price.line,
+      date,
+      observedAt: price.observedAt,
+      startsAt: price.scheduledStart,
+      h,
+      a,
+    } satisfies OddRow];
+  });
 }
 
 const shiftDate = (d: string, n: number) => new Date(+new Date(d + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
