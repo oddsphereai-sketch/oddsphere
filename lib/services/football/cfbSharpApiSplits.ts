@@ -4,6 +4,8 @@ import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_SHARP_API_SPLITS_RELEASE =
   "cfb_sharpapi_splits_2026_10_24_r6_complete_current_school_identity" as const;
+export const CFB_OWLS_SPLITS_RELEASE =
+  "cfb_owls_splits_2026_10_27_r1_capture_only_named_books" as const;
 export const CFB_SHARP_API_SPLITS_MAX_GAMES = 128 as const;
 export const CFB_SHARP_API_SPLITS_MAX_ROWS = 200 as const;
 
@@ -18,10 +20,12 @@ export type CfbSharpApiSplitSide = {
 };
 
 export type CfbSharpApiSplitRecord = {
-  release: typeof CFB_SHARP_API_SPLITS_RELEASE;
+  release: typeof CFB_SHARP_API_SPLITS_RELEASE | typeof CFB_OWLS_SPLITS_RELEASE;
+  /** Older immutable SharpAPI rows omit this field and retain legacy semantics. */
+  provider?: "sharpapi" | "owls";
   providerGameId: string;
   providerEventId: string;
-  sportsbook: "draftkings" | "circa";
+  sportsbook: "draftkings" | "circa" | "betmgm";
   sourceSemantics: "public_recreational" | "sharp_adjacent";
   capturedAt: string;
   moneyline: { away: CfbSharpApiSplitSide; home: CfbSharpApiSplitSide } | null;
@@ -106,6 +110,7 @@ function normalizeSplitRow(game: NcaafGame, row: Json): CfbSharpApiSplitRecord |
   const book = sportsbook as "draftkings" | "circa";
   return {
     release: CFB_SHARP_API_SPLITS_RELEASE,
+    provider: "sharpapi",
     providerGameId: game.providerGameId,
     providerEventId,
     sportsbook: book,

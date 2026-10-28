@@ -8,8 +8,8 @@ import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 import type { CfbV1ExactPriceDecision, CfbV1Forecast, CfbV1Market } from "./cfbV1Decision";
 
 export const CFB_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "cfb_daily_edge_forward_context_capture_2026_09_26_r3_sharp_price_trail_continuity" as const;
-export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec3" as const;
+  "cfb_daily_edge_forward_context_capture_2026_10_27_r4_owls_price_provenance" as const;
+export const CFB_FORWARD_CONTEXT_CAPTURE_SCHEMA = "cfbfec4" as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 8 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
 export const CFB_FORWARD_CONTEXT_CAPTURE_MAX_MARKET_BYTES = 8 * 1024;
@@ -19,7 +19,7 @@ export const CFB_FORWARD_CONTEXT_CAPTURE_FRESH_MINUTES = 120 as const;
 type Market = CfbV1Market;
 type CanonicalSide = "h" | "a" | "o" | "u";
 type Freshness = "f" | "s" | "x";
-type Provider = "b" | "s";
+type Provider = "b" | "s" | "o";
 type SourceClass = "c" | "p" | "b" | "n";
 
 /** [observedAt, ageMinutes, freshness, line, away/over price, home/under price]. */
@@ -364,7 +364,7 @@ function compactPublic(value: CfbForwardPlaybookSplit | null, market: Market) {
 function compactSharp(value: CfbSharpApiSplitRecord | null, market: Market) {
   if (!value) return null;
   const semantics = value.sourceSemantics === "sharp_adjacent" ? "c" as const : "p" as const;
-  const source = ["s", value.sportsbook, semantics, value.providerEventId, value.capturedAt] as const;
+  const source = [value.provider === "owls" ? "o" : "s", value.sportsbook, semantics, value.providerEventId, value.capturedAt] as const;
   if (market === "total" && value.total) return [...source,
     value.total.over.moneyPct, value.total.over.ticketsPct,
     value.total.under.moneyPct, value.total.under.ticketsPct] as const;
@@ -446,7 +446,9 @@ function priority(book: NcaafBookOdds, evaluated: string) {
   return family === evaluated ? 0 : family === "circa" ? 1 : family === "pinnacle" ? 2 : family === "bookmaker" ? 3 : 4;
 }
 function sharpPriority(row: CfbSharpApiSplitRecord) { return row.sportsbook === "circa" ? 0 : 1; }
-function providerCode(book: NcaafBookOdds): Provider { return book.provider === "sharpapi" ? "s" : "b"; }
+function providerCode(book: NcaafBookOdds): Provider {
+  return book.provider === "owls" ? "o" : book.provider === "sharpapi" ? "s" : "b";
+}
 function sideCode(side: string, market: Market, homeTeam: string): CanonicalSide {
   if (market === "total") return side.toLowerCase().startsWith("under") ? "u" : "o";
   return side === homeTeam || side.startsWith(`${homeTeam} `) || side === "home" ? "h" : "a";
@@ -493,14 +495,14 @@ export function cfbForwardContextSharpHistoryBooks(
   for (const market of ["moneyline", "spread", "total"] as const) {
     for (const family of capture.markets[market].families) {
       const [sportsbook, provider, source, , , current] = family;
-      if (provider !== "s" || !["c", "p", "b"].includes(source)) continue;
+      if (!["s", "o"].includes(provider) || !["c", "p", "b"].includes(source)) continue;
       const [observedAt, , freshness, line, firstPrice, secondPrice] = current;
       if (freshness === "x") continue;
       books.push({
         providerGameId: capture.gameId,
         sportsbook,
         observedAt,
-        provider: "sharpapi",
+        provider: provider === "o" ? "owls" : "sharpapi",
         targetEligible: false,
         marketSelection: { [market]: "main_line" },
         marketObservedAt: { [market]: observedAt },

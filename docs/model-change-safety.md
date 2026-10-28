@@ -1,5 +1,37 @@
 # Model change safety protocol
 
+## Owner-directed cutover: CFB Owls splits and sharp-book capture
+
+On 2026-10-27 Daniel Mengel directed Oddsphere to continue removing the
+cancelled SharpAPI subscription while keeping the CFB market-reader promotion
+in its separate task. The sole CFB writer now requires `OWLS_INSIGHT_API_KEY`
+instead of `SHARPAPI_KEY`. One bounded Owls league pull captures exact-game
+Circa/BetMGM splits and complete Circa/Pinnacle prices. The former are available
+to the member evidence payload; the latter enter only the existing compact
+line-history capture.
+
+This migration grants Owls zero prediction authority: Owls split records are
+filtered before the incumbent forecast, grade, complete-reader, coordinator,
+and historical-reader inputs, while Owls price rows carry both
+`targetEligible=false` and `marketReadingEligible=false`. The model,
+calibration, decision, grade, fixture, member, tracking, and locked-record
+releases therefore remain unchanged. Only the sole writer, collector, and
+capture provenance advance to
+`cfb_forward_evidence_writer_2026_10_27_r141_owls_capture_only`,
+`cfb_forward_evidence_collector_2026_10_27_r65_owls_capture_only`, and
+`cfb_daily_edge_forward_context_capture_2026_10_27_r4_owls_price_provenance`
+(`cfbfec4`).
+
+The live zero-write exact-identity probe covered 115 canonical games from
+October 27 through November 3: Owls returned 56 odds events and 56 were matched;
+55 had Circa prices and 56 had Pinnacle prices. Owls returned 56 split events
+and 54 matched complete named-book split records. There were zero identity
+rejections. Because the Owls lane is excluded from every decision input,
+Best Angle, Lean, Watchlist, No Play, Held, and actionable counts all have a
+contractual delta of zero. Existing immutable payloads and locked records are
+read unchanged. Evidence and rollback:
+`docs/model-audits/2026-10-27-cfb-owls-capture-cutover.md`.
+
 ## Owner-directed cutover: WNBA Owls odds and scheduled all-sport capture
 
 On 2026-10-27 Daniel Mengel directed Oddsphere to continue the full Owls

@@ -152,7 +152,7 @@ export type CfbV1ExactPriceDecision = {
   edgePercentagePoints: number;
   expectedValue: number;
   evaluatedQuote: {
-    provider: "balldontlie" | "sharpapi" | "espn" | "collegefootballdata" | "theoddsapi";
+    provider: "balldontlie" | "sharpapi" | "owls" | "espn" | "collegefootballdata" | "theoddsapi";
     sportsbook: string;
     line: number | null;
     price: number;
