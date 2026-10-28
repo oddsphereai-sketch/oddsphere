@@ -4,7 +4,17 @@ type NflPlayerPropsAvailabilityTimestamps = {
 };
 
 export const NFL_PLAYER_PROPS_PRESENTATION_RELEASE =
-  "nfl_player_props_presentation_2026_10_06_r1_touchdown_opening_integrity" as const;
+  "nfl_player_props_presentation_2026_10_28_r2_reference_book_movement_continuity" as const;
+
+export type NflPlayerPropsMovementBookEvidence = {
+  sportsbook: string;
+  provider: string;
+  americanPrice: number;
+  observedAt: string;
+  openingObservedAt: string | null;
+  openingLine: number | null;
+  openingAmericanPrice: number | null;
+};
 
 export function hasComparableNflPlayerPropsOpening(args: {
   market: string;
@@ -15,6 +25,44 @@ export function hasComparableNflPlayerPropsOpening(args: {
 }): boolean {
   if (!args.openingObservedAt || args.openingAmericanPrice === null) return false;
   return args.market !== "anytime_td" || args.openingLine === args.line;
+}
+
+/**
+ * The evaluated quote remains the decision's exact price. Movement may use a
+ * different stored sportsbook only when the evaluated book has no comparable
+ * opening; this exposes retained evidence without changing the pick or grade.
+ */
+export function selectNflPlayerPropsMovementBook<T extends NflPlayerPropsMovementBookEvidence>(args: {
+  market: string;
+  line: number;
+  evaluatedSportsbook: string;
+  evaluatedProvider: string;
+  books: readonly T[];
+}): T | null {
+  const comparable = args.books.filter((book) => hasComparableNflPlayerPropsOpening({
+    market: args.market,
+    line: args.line,
+    openingObservedAt: book.openingObservedAt,
+    openingLine: book.openingLine,
+    openingAmericanPrice: book.openingAmericanPrice,
+  }));
+  const evaluated = comparable.find((book) =>
+    normalizeSportsbook(book.sportsbook) === normalizeSportsbook(args.evaluatedSportsbook)
+    && book.provider === args.evaluatedProvider);
+  if (evaluated) return evaluated;
+  return [...comparable].sort((left, right) =>
+    Number(movementChanged(right, args.line)) - Number(movementChanged(left, args.line))
+    || Date.parse(right.observedAt) - Date.parse(left.observedAt)
+    || normalizeSportsbook(left.sportsbook).localeCompare(normalizeSportsbook(right.sportsbook))
+    || left.provider.localeCompare(right.provider))[0] ?? null;
+}
+
+function movementChanged(book: NflPlayerPropsMovementBookEvidence, currentLine: number): boolean {
+  return book.openingLine !== currentLine || book.openingAmericanPrice !== book.americanPrice;
+}
+
+function normalizeSportsbook(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 export type NflPlayerPropsPredictionOutcome = "over" | "under" | "yes" | "no";

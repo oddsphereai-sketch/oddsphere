@@ -7,11 +7,11 @@ import { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "@/lib/services
 import { nflPlayerPropsCanonicalMarketScopeKey } from "@/lib/services/football/nflPlayerPropsCanonicalLine";
 import { PlayerPropReaderDialog } from "./PlayerPropReaderDialog";
 import {
-  hasComparableNflPlayerPropsOpening,
   nflPlayerPropsAvailabilityAgeLabel,
   nflPlayerPropsTouchdownPlayerKey,
   resolveNflPlayerPropsActionableForecast,
   resolveNflPlayerPropsPrediction,
+  selectNflPlayerPropsMovementBook,
   type NflPlayerPropsActionableForecast,
   selectNflPlayerPropsTouchdownScorers,
   type NflPlayerPropsPrediction,
@@ -197,14 +197,13 @@ function SideQuote({ row, prediction, selectedKey, onSelect, card = false }: { r
 
 function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
   const comparisons = [...(row.bookEvidence ?? [{ sportsbook: row.sportsbook, provider: row.provider, americanPrice: row.americanPrice, observedAt: row.observedAt, openingObservedAt: null, openingLine: null, openingAmericanPrice: null }])].sort((a, b) => b.americanPrice - a.americanPrice);
-  const selectedBook = comparisons.find((value) => normalizeBook(value.sportsbook) === normalizeBook(row.sportsbook) && value.provider === row.provider) ?? null;
-  const hasMovement = selectedBook ? hasComparableNflPlayerPropsOpening({
+  const movementBook = selectNflPlayerPropsMovementBook({
     market: row.market,
     line: row.line,
-    openingObservedAt: selectedBook.openingObservedAt,
-    openingLine: selectedBook.openingLine,
-    openingAmericanPrice: selectedBook.openingAmericanPrice,
-  }) : false;
+    evaluatedSportsbook: row.sportsbook,
+    evaluatedProvider: row.provider,
+    books: comparisons,
+  });
   const independentConfirmationMissing = row.healthHolds.includes("independent_same_line_confirmation_missing");
   return <PlayerPropReaderDialog ariaLabel={`${row.playerName} prop details`} title={row.playerName} leading={<NflTeamBadge team={row.team} size="small" />} onClose={onClose}><div className="grid min-w-0 gap-4 p-4 sm:p-6 lg:grid-cols-2">
     <div className="min-w-0 lg:col-span-2"><ReaderPanel title="Prop Summary"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm text-gray-500">{matchup(row)} · {label(row.market)} · starts {fullGameTime(row.scheduledStart)}</span>{row.state === "locked" ? <LockBadge lockedAt={row.lockAt} /> : null}</div><p className="mt-3 text-3xl font-black text-white">{selection(row)} <span className="text-emerald-300">{price(row.americanPrice)}</span></p><p className="mt-1 text-xs text-gray-500">{book(row.sportsbook)} · {provider(row.provider)} · price observed {localTime(row.observedAt)}</p></div><GradeBadge grade={row.grade} /></div>{independentConfirmationMissing ? <section className="mt-4 rounded-lg border border-sky-400/25 bg-sky-400/[0.055] p-3.5"><p className="text-[9px] font-black uppercase tracking-wider text-sky-200">Independent same-line confirmation pending</p><p className="mt-2 text-xs leading-5 text-gray-300">The projection and exact current price are complete, but another sportsbook has not posted this identical line. The read remains No Play until that confirmation exists.</p></section> : null}<AvailabilityCallout row={row} /></ReaderPanel></div>
@@ -213,7 +212,7 @@ function PropReader({ row, onClose }: { row: Row; onClose: () => void }) {
     <ReaderPanel title="Model Comparison"><DecisionSupportComparison row={row} /></ReaderPanel>
     <ReaderPanel title="Projection Context"><ForecastContext row={row} /></ReaderPanel>
     <ReaderPanel title="Available Exact Prices"><div className="overflow-hidden rounded-lg border border-gray-800">{comparisons.map((value, index) => <div key={`${value.provider}|${normalizeBook(value.sportsbook)}`} className={`flex items-center justify-between gap-3 border-b border-gray-800 px-3 py-3 last:border-b-0 ${index === 0 ? "bg-emerald-400/5" : ""}`}><span><strong className="block text-xs text-white">{book(value.sportsbook)}</strong><span className="text-[9px] text-gray-600">{provider(value.provider)} · {localTime(value.observedAt)}</span>{index === 0 ? <span className="mt-0.5 block text-[9px] font-black uppercase text-emerald-300">Best price</span> : null}</span><span className="text-right"><strong className="block text-white">{price(value.americanPrice)}</strong><span className="text-[9px] text-gray-600">{pct(impliedProbability(value.americanPrice))} implied</span></span></div>)}</div></ReaderPanel>
-    <ReaderPanel title="Same-Book Movement">{hasMovement && selectedBook ? <div className="rounded-lg border border-gray-800 bg-black/20 p-4"><div className="grid grid-cols-2 gap-3"><span><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Opening</span><strong className="mt-1 block text-lg text-white">{selectionAtLine(row, selectedBook.openingLine ?? row.line)} · {price(selectedBook.openingAmericanPrice!)}</strong><span className="block text-[10px] text-gray-500">{localTime(selectedBook.openingObservedAt!)}</span></span><span className="text-right"><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Current</span><strong className="mt-1 block text-lg text-white">{selection(row)} · {price(selectedBook.americanPrice)}</strong><span className="block text-[10px] text-gray-500">{localTime(selectedBook.observedAt)}</span></span></div><p className="mt-3 border-t border-gray-800 pt-3 text-[10px] text-gray-500">Same sportsbook and selected outcome · {book(selectedBook.sportsbook)} · {provider(selectedBook.provider)}</p></div> : <UnavailableEvidence title="Opening movement is not available yet" detail="OddSphere will show a same-sportsbook opening-to-current trail only after a genuine earlier quote is retained. No movement is fabricated." />}</ReaderPanel>
+    <ReaderPanel title="Same-Book Movement">{movementBook ? <div className="rounded-lg border border-gray-800 bg-black/20 p-4"><div className="grid grid-cols-2 gap-3"><span><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Opening</span><strong className="mt-1 block text-lg text-white">{selectionAtLine(row, movementBook.openingLine ?? row.line)} · {price(movementBook.openingAmericanPrice!)}</strong><span className="block text-[10px] text-gray-500">{localTime(movementBook.openingObservedAt!)}</span></span><span className="text-right"><span className="block text-[9px] font-black uppercase tracking-wider text-gray-600">Current</span><strong className="mt-1 block text-lg text-white">{selectionAtLine(row, row.line)} · {price(movementBook.americanPrice)}</strong><span className="block text-[10px] text-gray-500">{localTime(movementBook.observedAt)}</span></span></div><p className="mt-3 border-t border-gray-800 pt-3 text-[10px] text-gray-500">Same sportsbook and selected outcome · {book(movementBook.sportsbook)} · {provider(movementBook.provider)}</p></div> : <UnavailableEvidence title="Opening movement is not available yet" detail="OddSphere will show a same-sportsbook opening-to-current trail only after a genuine earlier quote is retained. No movement is fabricated." />}</ReaderPanel>
     <ReaderPanel title="Role & Matchup Context"><ForecastContextDetails row={row} /></ReaderPanel>
     <ReaderPanel title="What Could Change"><p className="text-sm leading-6 text-gray-200">A material price, role, roster, quarterback, injury, or opponent-context update triggers a fresh forecast and exact-price decision while this prop is unlocked. At T-60, the model, line, side, sportsbook price, and grade freeze for official tracking.</p></ReaderPanel>
     <ReaderPanel title="Decision Status"><div className="rounded-lg border border-violet-400/20 bg-violet-400/[0.05] p-4 text-xs leading-5 text-gray-400"><strong className="text-violet-200">Exact-price decision:</strong> {pct(row.finalProbability)} calibrated probability at {price(row.americanPrice)} produces {signedPct(row.expectedValue)} expected value. {independentConfirmationMissing ? "The current-book no-vig probability is context only; independent same-line confirmation is required before any actionable grade." : "The independent market is comparison evidence, not a copied forecast."}</div></ReaderPanel>
@@ -362,21 +361,23 @@ function signedPct(value: number): string { return `${value >= 0 ? "+" : ""}${(v
 function price(value: number): string { return value > 0 ? `+${value}` : String(value); }
 function impliedProbability(value: number): number { return value > 0 ? 100 / (value + 100) : Math.abs(value) / (Math.abs(value) + 100); }
 function quoteMovement(row: Row): string | null {
-  const evidence = row.bookEvidence?.find((value) => normalizeBook(value.sportsbook) === normalizeBook(row.sportsbook) && value.provider === row.provider);
-  if (!evidence || !hasComparableNflPlayerPropsOpening({
+  const evidence = selectNflPlayerPropsMovementBook({
     market: row.market,
     line: row.line,
-    openingObservedAt: evidence.openingObservedAt,
-    openingLine: evidence.openingLine,
-    openingAmericanPrice: evidence.openingAmericanPrice,
-  })) return null;
+    evaluatedSportsbook: row.sportsbook,
+    evaluatedProvider: row.provider,
+    books: row.bookEvidence ?? [],
+  });
+  if (!evidence) return null;
   const opening = evidence.openingLine !== null && evidence.openingLine !== row.line
     ? `${evidence.openingLine} ${price(evidence.openingAmericanPrice!)}`
     : price(evidence.openingAmericanPrice!);
   const current = evidence.openingLine !== null && evidence.openingLine !== row.line
-    ? `${row.line} ${price(row.americanPrice)}`
-    : price(row.americanPrice);
-  return `Open ${opening} → ${current}`;
+    ? `${row.line} ${price(evidence.americanPrice)}`
+    : price(evidence.americanPrice);
+  const isEvaluatedBook = normalizeBook(evidence.sportsbook) === normalizeBook(row.sportsbook)
+    && evidence.provider === row.provider;
+  return `${isEvaluatedBook ? "" : `${book(evidence.sportsbook)} · `}Open ${opening} → ${current}`;
 }
 function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function book(value: string): string { const labels: Record<string, string> = { draftkings: "DraftKings", fanduel: "FanDuel", novig: "NoVig", ballybet: "Bally Bet" }; return labels[value.toLowerCase()] ?? value; }
