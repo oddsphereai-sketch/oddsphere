@@ -3764,9 +3764,10 @@ await assert.rejects(
 const writerSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
 const memberSnapshotStoreSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbForwardMemberSnapshotStore.ts"), "utf8");
 const sharpOddsSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbSharpApiOdds.ts"), "utf8");
+const owlsProviderSource = readFileSync(path.join(process.cwd(), "lib/services/football/cfbOwlsProvider.ts"), "utf8");
+const cfbRouteSource = readFileSync(path.join(process.cwd(), "app/api/cron/cfb-forward-evidence/route.ts"), "utf8");
 const quarterbackCollectionIndex = writerSource.indexOf("fetchBalldontlieNcaafQuarterbacks");
-const sharpFallbackIndex = writerSource.indexOf("fetchSharpApiNcaafOddsFallback");
-const sharpSplitsIndex = writerSource.indexOf("fetchCfbSharpApiSplits({ games, apiKey");
+const owlsCaptureIndex = writerSource.indexOf("fetchCfbOwlsProvider({");
 const coherenceIndex = writerSource.indexOf("assertFootballCrossMarketCoherence({");
 const evidenceAppendIndex = writerSource.lastIndexOf("appendCfbForwardEvidence(");
 const memberSnapshotPublishIndex = writerSource.indexOf("const memberSnapshot = await refreshCompactMemberSnapshot", evidenceAppendIndex);
@@ -3806,7 +3807,7 @@ assert.ok(
 assert.match(writerSource, /const need = resolveCfbForwardCollectionNeed\(\{[\s\S]*ordinaryNeed,[\s\S]*releaseNeed: cfbForwardReleaseRefreshNeed\(existing, args\.now\),[\s\S]*\}\);/, "release refresh may outrank ordinary cadence but must pass through the immutable T-60 priority resolver");
 assert.match(writerSource, /contextualEvidenceCapture\?\.release !== CFB_FORWARD_CONTEXT_CAPTURE_RELEASE/, "a new evidence-only capture release must seed without waiting for ordinary far-slate cadence");
 assert.match(writerSource, /need\.reason === "provider_seed_due"/, "the sole leased writer must admit the one-time paid-provider seed through its existing capture planner");
-assert.ok(sharpFallbackIndex >= 0 && evidenceAppendIndex > sharpFallbackIndex, "the writer must finish bounded SharpAPI exact-event fallback before its sole evidence append");
+assert.ok(owlsCaptureIndex >= 0 && evidenceAppendIndex > owlsCaptureIndex, "the writer must finish its bounded Owls capture before its sole evidence append");
 assert.match(writerSource, /reconcileCfbNearTiePmfWinnerCoherence\(marketReader\.forecast\)/, "the complete professional market reader may be changed only by the narrow same-PMF winner-coherence invariant");
 assert.match(writerSource, /auditDisableNearTiePmfCoherence/, "the near-tie invariant must retain a read-only same-input rollback comparator");
 assert.match(writerSource, /finalWinnerCoordinatorApplied: false/, "the incompatible final-winner coordinator must not alter future unlocked forecasts");
@@ -3909,13 +3910,17 @@ await assert.rejects(
   /exhausted its hard cap/,
   "structural SharpAPI fallback failures must remain fail-closed",
 );
-assert.ok(sharpSplitsIndex >= 0 && evidenceAppendIndex > sharpSplitsIndex, "the sole writer must finish its one league-level strict split read before the all-game append");
+assert.ok(owlsCaptureIndex >= 0 && evidenceAppendIndex > owlsCaptureIndex, "the sole writer must finish its one league-level Owls read before the all-game append");
 assert.ok(coherenceIndex >= 0 && evidenceAppendIndex > coherenceIndex, "the sole CFB writer must pass coherence before its append boundary");
 assert.equal((writerSource.match(/assertFootballCrossMarketCoherence\(\{/g) ?? []).length, 1, "the CFB writer must use one shared per-payload coherence gate");
 assert.match(writerSource, /requireDecisionSideFromForecast: true/, "the CFB writer must fail closed on an exact-line PMF/decision-side contradiction");
 assert.match(writerSource, /publicScoreDirectionTolerancePoints: CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS/, "the CFB writer must apply the publication contract's narrow 0.5-point mean/median tolerance");
 assert.match(writerSource, /executionStatus: decision\.gradeAdjustment\?\.executionStatus/, "the CFB writer must pass its explicit Bet\/Shop axis into shared coherence");
-assert.equal((writerSource.match(/fetchCfbSharpApiSplits\(\{ games, apiKey/g) ?? []).length, 1, "SharpAPI splits must remain one bounded slate request rather than a per-game loop");
+assert.equal((writerSource.match(/fetchCfbOwlsProvider\(\{/g) ?? []).length, 1, "Owls must remain one bounded league-level capture rather than a per-game loop");
+assert.match(writerSource, /const modelSharpSplits = cfbModelSharpSplits\(sharpApiSplits\)/, "Owls evidence must remain outside CFB prediction and grade authority in this provider-only migration");
+assert.match(owlsProviderSource, /targetEligible: false,[\s\S]*marketReadingEligible: false/, "Owls sharp prices must be capture-only until a separate market-reader release");
+assert.match(cfbRouteSource, /owlsApiKey: requiredEnv\("OWLS_INSIGHT_API_KEY"\)/, "the production CFB writer must require Owls");
+assert.doesNotMatch(cfbRouteSource, /SHARPAPI_KEY/, "the production CFB writer route must not require the cancelled SharpAPI subscription");
 assert.match(writerSource, /buildCfbMarketSharpAwareForecast/, "the sole writer must build the bounded market\/sharp-aware authoritative PMF");
 assert.match(writerSource, /applyCfbMarketSharpAwareGrades/, "the sole writer must own balanced market\/sharp-aware grade promotion and demotion");
 assert.match(writerSource, /readCfbForwardWriterEvidence/, "the scheduled writer must use the bounded current game-stage payload reader");
@@ -4287,7 +4292,8 @@ assert.match(route, /provider_errors: result\.providerErrors/, "the CFB cron mus
 assert.match(route, /leaseGroup: "prediction_pipeline"/);
 assert.match(route, /requireLease: true/);
 assert.match(route, /runCfbForwardEvidenceWriter/);
-assert.match(route, /requiredEnv\("SHARPAPI_KEY"\)/);
+assert.match(route, /requiredEnv\("OWLS_INSIGHT_API_KEY"\)/);
+assert.doesNotMatch(route, /SHARPAPI_KEY/, "the production CFB route must not require the cancelled SharpAPI subscription");
 const writer = readFileSync(path.resolve("lib/services/football/cfbForwardEvidenceWriter.ts"), "utf8");
 assert.match(writer, /buildCfbV1DecisionBundle/);
 assert.match(writer, /publishCfbForwardDecisionBundle/);

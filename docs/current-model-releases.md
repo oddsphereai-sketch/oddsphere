@@ -1217,6 +1217,21 @@ Last reviewed: 2026-10-27
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 27 Owls provider cutover: the sole writer no longer requires or
+  calls SharpAPI. It advances to
+  `cfb_forward_evidence_writer_2026_10_27_r141_owls_capture_only`; the collector
+  advances to `cfb_forward_evidence_collector_2026_10_27_r65_owls_capture_only`,
+  and compact price provenance advances to
+  `cfb_daily_edge_forward_context_capture_2026_10_27_r4_owls_price_provenance`
+  (`cfbfec4`). Owls contributes exact-game Circa/BetMGM splits for member
+  evidence and complete Circa/Pinnacle price pairs for capture-only line
+  history. Both lanes are explicitly excluded from prediction, grade, stake,
+  and current market-reader authority; the active model/calibration/decision,
+  member, tracking, and immutable-lock releases remain unchanged. Live
+  zero-write coverage matched 56/56 Owls price events and 54/56 split events
+  across 115 canonical weekly games, with zero identity rejections. Evidence:
+  `docs/model-audits/2026-10-27-cfb-owls-capture-cutover.md`.
+
 - October 27 paid FCS full-US price discovery: the paid The Odds API fallback
   advances to
   `cfb_the_odds_api_fcs_fallback_2026_10_27_r5_full_us_region_discovery` and the

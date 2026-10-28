@@ -14,9 +14,9 @@ async function main(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const balldontlieApiKey = process.env.BALLDONTLIE_API_KEY;
-  const playbookApiKey = process.env.PLAYBOOK_API_KEY;
-  const sharpApiKey = process.env.SHARPAPI_KEY;
-  if (!url || !serviceKey || !balldontlieApiKey || !playbookApiKey || !sharpApiKey) {
+  const playbookApiKey = process.env.PLAYBOOK_API_KEY ?? "audit-provider-unavailable";
+  const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
+  if (!url || !serviceKey || !balldontlieApiKey || !owlsApiKey) {
     throw new Error("CFB dry replay requires the configured Supabase and provider credentials.");
   }
   const focusMatchups = new Set(process.argv
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
     apply: false,
     balldontlieApiKey,
     playbookApiKey,
-    sharpApiKey,
+    owlsApiKey,
     collegeFootballDataApiKey: process.env.CFBD_API_KEY ?? null,
     theOddsApiKey: process.env.THE_ODDS_API_KEY ?? null,
     sportsDataIoApiKey: process.env.SPORTSDATAIO_CFB_API_KEY ?? null,

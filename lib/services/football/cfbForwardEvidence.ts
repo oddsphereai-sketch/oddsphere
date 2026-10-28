@@ -99,7 +99,7 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_23_r64_twelve_hour_official_availability" as const;
+  "cfb_forward_evidence_collector_2026_10_27_r65_owls_capture_only" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility" as const;
 export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE =
@@ -401,6 +401,8 @@ export type CfbForwardEvidencePayload = {
     playbookSplits: CfbForwardPlaybookSplitSet | null;
     sharpApiOddsRelease: typeof CFB_SHARP_API_ODDS_RELEASE | null;
     sharpApiSplits: CfbSharpApiSplitRecord[] | null;
+    /** Explicit source for new rows; absent immutable rows retain SharpAPI semantics. */
+    sharpSplitsProvider?: "sharpapi" | "owls";
     sharpApiSplitsStatus?: "matched" | "event_not_published" | "request_failed";
     sharpApiSplitsError?: string | null;
   };
@@ -455,8 +457,9 @@ export type CfbForwardEvidencePayload = {
   coverage: {
     currentOdds: boolean;
     comparableCurrentBookCount: number;
-    currentOddsProviders: Array<"balldontlie" | "sharpapi" | "espn" | "collegefootballdata" | "theoddsapi">;
+    currentOddsProviders: Array<"balldontlie" | "sharpapi" | "owls" | "espn" | "collegefootballdata" | "theoddsapi">;
     sharpApiOddsFallback: boolean;
+    owlsSharpCapture?: boolean;
     targetExcludedConsensusReady: boolean;
     operationalOpening: boolean;
     playbookLine: boolean;
@@ -492,6 +495,7 @@ export type CfbForwardEvidencePayload = {
     espnReference?: number;
     sharpApiOdds: number;
     sharpApiSplits?: number;
+    owls?: number;
     weather?: number;
     totalMaximum: number;
   };

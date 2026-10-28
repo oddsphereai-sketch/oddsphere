@@ -16,7 +16,7 @@ export async function GET(request: Request): Promise<Response> {
       apply: true,
       balldontlieApiKey: requiredEnv("BALLDONTLIE_API_KEY"),
       playbookApiKey: requiredEnv("PLAYBOOK_API_KEY"),
-      sharpApiKey: requiredEnv("SHARPAPI_KEY"),
+      owlsApiKey: requiredEnv("OWLS_INSIGHT_API_KEY"),
       collegeFootballDataApiKey: process.env.CFBD_API_KEY?.trim() || null,
       theOddsApiKey: process.env.THE_ODDS_API_KEY?.trim() || null,
       sportsDataIoApiKey: process.env.SPORTSDATAIO_CFB_API_KEY?.trim() || null,
