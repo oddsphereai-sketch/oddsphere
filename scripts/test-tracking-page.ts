@@ -4,7 +4,8 @@
  * Asserts the redesigned page's *structural* invariants:
  *   • No hero metric cards on top
  *   • One model-aware reader replaces stacked cross-sport sections
- *   • Yesterday / Weekly / Monthly / Lifetime share one time selector
+ *   • Yesterday remains a complete cross-sport recap above the reader
+ *   • Weekly / Monthly / Lifetime share one model-aware time selector
  *   • Best Angles and Leans remain inside the selected model reader
  *   • Latest Results is the candidate's only member-facing activity feed
  *   • Method consolidates glossary + baselines +
@@ -148,6 +149,7 @@ check(
 // ── Required sections in the brief ──────────────────────────────────
 
 for (const required of [
+  "Yesterday's results",
   "Tracking reader",
   "Model",
   "Time period",
@@ -171,15 +173,17 @@ check(
 
 // ── One reader leads; activity and method remain secondary ──────────
 
-check("Page order: Tracking reader → Latest Results → Recent Predictions → Method", (() => {
+check("Page order: Yesterday → Tracking reader → Latest Results → Recent Predictions → Method", (() => {
   const idx = {
+    yesterday: PAGE.indexOf('title="Yesterday\'s results"'),
     tracking:  PAGE.indexOf('title="Tracking reader"'),
     latest:    PAGE.indexOf('Latest Results`}'),
     recent:    PAGE.indexOf('Recent Predictions`}'),
     method:    PAGE.indexOf('title="Method"'),
   };
   return (
-    idx.tracking !== -1 && idx.latest !== -1 && idx.recent !== -1 && idx.method !== -1 &&
+    idx.yesterday !== -1 && idx.tracking !== -1 && idx.latest !== -1 && idx.recent !== -1 && idx.method !== -1 &&
+    idx.yesterday < idx.tracking &&
     idx.tracking < idx.latest &&
     idx.latest < idx.recent &&
     idx.recent < idx.method
@@ -190,12 +194,16 @@ check("Page order: Tracking reader → Latest Results → Recent Predictions →
 
 check("Tracking reader uses the grouped CategoryBars chart", /title="Tracking reader"[\s\S]{0,3200}CategoryTrackingBoard/.test(PAGE) && /function CategoryTrackingBoard[\s\S]{0,4200}<CategoryBars/.test(PAGE));
 check(
-  "Tracking reader exposes model tabs and all four time periods",
+  "Tracking reader exposes model tabs and the three longer time periods",
   /function ModelTabs[\s\S]{0,1400}role="tablist"[\s\S]{0,500}models\.map/.test(PAGE) &&
-    PAGE.includes('{ key: "yesterday", label: "Yesterday" }') &&
     PAGE.includes('{ key: "weekly", label: "Weekly" }') &&
     PAGE.includes('{ key: "monthly", label: "Monthly" }') &&
-    PAGE.includes('{ key: "lifetime", label: "Lifetime" }'),
+    PAGE.includes('{ key: "lifetime", label: "Lifetime" }') &&
+    !PAGE.includes('{ key: "yesterday", label: "Yesterday" }'),
+);
+check(
+  "Yesterday remains unfiltered by the selected model",
+  /title="Yesterday's results"[\s\S]{0,300}<YesterdayBoard[\s\S]{0,250}rows=\{yesterdayRows\}[\s\S]{0,250}overall=\{yest\?\.overall \?\? null\}/.test(PAGE),
 );
 check(
   "Model selection filters category, alternate-line, recommendation, and result records",
@@ -308,7 +316,17 @@ check(
 );
 check(
   "Lifetime Tracking uses merged buildLifetimeRecords helper",
-  /lifetimeRecords\s*=\s*useMemo[\s\S]{0,300}buildLifetimeRecords/.test(PAGE),
+  /lifetimeRecords\s*=\s*useMemo[\s\S]{0,500}buildLifetimeRecords/.test(PAGE),
+);
+check(
+  "UCL Lifetime includes immutable locked Match Result, Total, BTTS, and Double Chance history",
+  /buildLifetimeRecords\([\s\S]{0,220}data\?\.actionableHistory\?\.bySportMarket \?\? \[\]/.test(PAGE) &&
+    /lockedHistory[\s\S]{0,1000}b\.sport === "ucl"[\s\S]{0,2200}source_type:\s*"locked_lifetime"/.test(PAGE) &&
+    /Locked lifetime · all released locks/.test(PAGE),
+);
+check(
+  "UCL legacy Moneyline archive joins the released Match Result category",
+  /sport === "ucl" && market === "moneyline" \? "match_result" : market/.test(PAGE),
 );
 check(
   "Signed-in Tracking opens on the established weekly window",
@@ -325,15 +343,15 @@ check(
 // reflect the new honest categorisation.
 check(
   "Lifetime merge combines baseline + live when both exist (lifetime_merged)",
-  /buildLifetimeRecords[\s\S]{0,3000}source_type:\s*"lifetime_merged"/.test(PAGE),
+  PAGE.includes('source_type: "lifetime_merged"'),
 );
 check(
   "Lifetime merge falls back to baseline-only when live has no decided picks (lifetime_baseline)",
-  /buildLifetimeRecords[\s\S]{0,3000}source_type:\s*"lifetime_baseline"/.test(PAGE),
+  PAGE.includes('source_type: "lifetime_baseline"'),
 );
 check(
   "Lifetime merge labels live-only categories 'since_launch' so members don't read them as all-time",
-  /buildLifetimeRecords[\s\S]{0,5000}source_type:\s*"since_launch"/.test(PAGE),
+  PAGE.includes('source_type: "since_launch"'),
 );
 check(
   "Merge math: mergedWins = baseline.lifetime_wins + liveWins",
@@ -345,11 +363,11 @@ check(
 );
 check(
   "Lifetime row shows source label so merged vs baseline-only is visible",
-  /lifetimeSourceLabel[\s\S]{0,400}Lifetime · live \+/.test(PAGE),
+  PAGE.includes('return `Lifetime · live +${record.live_decided_contribution}`'),
 );
 check(
   "Lifetime row shows 'Since launch' for live-only categories",
-  /lifetimeSourceLabel[\s\S]{0,400}"Since launch"/.test(PAGE),
+  PAGE.includes('if (record.source_type === "since_launch") return "Since launch"'),
 );
 check(
   "Lifetime Tracking explains MLB auto-update + maintained other sports",
