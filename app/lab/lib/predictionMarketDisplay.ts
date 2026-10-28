@@ -10,6 +10,23 @@ export function predictionMarketComparisonBook(locked:boolean,stored:PredictionM
   return live;
 }
 export function formatPredictionMarketOdds(value:number):string {return value>0?`+${value}`:`−${Math.abs(value)}`;}
+export function predictionMarketBookPricePath(points:ReadonlyArray<readonly [number,number,number]>):string {
+  const prices=points.map(p=>p[2]).filter((price,i)=>i===0||price!==points[i-1][2]);
+  const shown=prices.length<=3?prices:[prices[0],prices.at(-1)!];
+  return shown.map(formatPredictionMarketOdds).join(" → ");
+}
+/** A few real extrema anchors keep a sparse dip/return visible without dot clutter. */
+export function predictionMarketAnchorIndices(points:ReadonlyArray<readonly [number,number,...unknown[]]>):Set<number>{
+  if(!points.length)return new Set();
+  let low=0,high=0;
+  for(let i=1;i<points.length;i++){if(points[i][1]<points[low][1])low=i;if(points[i][1]>points[high][1])high=i;}
+  const lastRunStart=(value:number)=>{
+    let index=points.length-1;while(points[index][1]!==value)index--;
+    while(index>0&&points[index-1][1]===value)index--;
+    return index;
+  };
+  return new Set([0,low,high,lastRunStart(points[low][1]),lastRunStart(points[high][1]),points.length-1]);
+}
 const pickLabel=(value:string|null|undefined)=>value?.replace(/\s+ML$/i,"").trim().toUpperCase().replace(/^TIE$/,"DRAW");
 
 /** Use the exact selected outcome's real single-book moneyline observations. */
@@ -62,11 +79,11 @@ export function predictionMarketChartDomain(points:ReadonlyArray<readonly [numbe
  * price/time bounds: no overshoot, invented extrema, or additional quote samples.
  * Monotone Hermite tangents are shared by both sources. Unlike independent
  * horizontal controls at every sample, adjacent connectors share a tangent. */
-export function predictionMarketCurve(
+function predictionMarketCurveGeometry(
   points:ReadonlyArray<readonly [number,number,...unknown[]]>,
   x:(at:number)=>number,y:(probability:number)=>number,
   maxGap=Infinity,baseline?:number,
-):{line:string;area:string} {
+) {
   const segments:Array<Array<readonly [number,number]>>=[];
   for(const point of points){
     const segment=segments.at(-1),previous=segment?.at(-1);
@@ -85,16 +102,50 @@ export function predictionMarketCurve(
       return (w1+w2)/(w1/a+w2/b);
     });
     let line=`M${x(segment[0][0])},${y(segment[0][1])}`;
+    const connections:Array<{from:number;to:number;command:string;path:string}>=[];
     for(let index=1;index<segment.length;index++){
       const a=segment[index-1],b=segment[index],dx=(x(b[0])-x(a[0]))/3;
       const low=Math.min(y(a[1]),y(b[1])),high=Math.max(y(a[1]),y(b[1]));
       const clamp=(v:number)=>Math.max(low,Math.min(high,v));
-      line+=` C${x(a[0])+dx},${clamp(y(a[1])+dx*tangents[index-1])} ${x(b[0])-dx},${clamp(y(b[1])-dx*tangents[index])} ${x(b[0])},${y(b[1])}`;
+      const command=` C${x(a[0])+dx},${clamp(y(a[1])+dx*tangents[index-1])} ${x(b[0])-dx},${clamp(y(b[1])-dx*tangents[index])} ${x(b[0])},${y(b[1])}`;
+      connections.push({from:a[0],to:b[0],command,path:`M${x(a[0])},${y(a[1])}${command}`});
+      line+=command;
     }
     const area=baseline===undefined||segment.length<2?"":`${line} L${x(segment.at(-1)![0])},${baseline} L${x(segment[0][0])},${baseline} Z`;
-    return {line,area};
+    return {line,area,connections};
   });
+  return paths;
+}
+
+export function predictionMarketCurve(
+  points:ReadonlyArray<readonly [number,number,...unknown[]]>,
+  x:(at:number)=>number,y:(probability:number)=>number,
+  maxGap=Infinity,baseline?:number,
+):{line:string;area:string} {
+  const paths=predictionMarketCurveGeometry(points,x,y,maxGap,baseline);
   return {line:paths.map(path=>path.line).join(" "),area:paths.map(path=>path.area).filter(Boolean).join(" ")};
+}
+
+export const PREDICTION_MARKET_OBSERVATION_GAP_MS=15*60_000;
+/** Same exact curve geometry for both sources, but distinguish sparse connectors
+ * from sampled history. A five-hour gap is never a solid observed price trend.
+ * These visual paths add no quote, time, volume or inspection observations. */
+export function predictionMarketObservedCurve(
+  points:ReadonlyArray<readonly [number,number,...unknown[]]>,
+  x:(at:number)=>number,y:(probability:number)=>number,baseline?:number,
+  maxGap=PREDICTION_MARKET_OBSERVATION_GAP_MS,
+):{line:string;gapLine:string;area:string;hasGaps:boolean}{
+  const paths=predictionMarketCurveGeometry(points,x,y,Infinity,baseline);
+  let line="",gapLine="",previous:number|null=null;
+  for(const path of paths){
+    if(!path.connections.length)line+=path.line;
+    for(const connection of path.connections){
+      if(connection.to-connection.from>maxGap){gapLine+=(gapLine?" ":"")+connection.path;previous=null;}
+      else{line+=previous===connection.from?connection.command:(line?" ":"")+connection.path;previous=connection.to;}
+    }
+  }
+  const observed=predictionMarketCurveGeometry(points,x,y,maxGap,baseline);
+  return {line,gapLine,area:observed.map(path=>path.area).filter(Boolean).join(" "),hasGaps:gapLine.length>0};
 }
 
 /** Both prices are compared only through their last shared observation time.
@@ -109,7 +160,9 @@ export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history
   const overlap=points.length>0&&bookPoints.length>0;
   return {points:cutoff!==null&&!overlap?series.points:points,activity:cutoff!==null&&!overlap?series.activity:activity,
     bookPoints:overlap?bookPoints:[],cutoff:overlap?cutoff:null,pending:!!book&&!overlap,
-    start:overlap?Math.max(points[0][0],bookPoints[0][0]):series.points[0]?.[0]??Date.parse(row.asOf),
+    // Shared axis, not shared-start clipping: otherwise the earlier sportsbook
+    // low/high can disappear just because Kalshi begins recording later.
+    start:overlap?Math.min(points[0][0],bookPoints[0][0]):series.points[0]?.[0]??Date.parse(row.asOf),
     latestKalshi:series.points.at(-1)?.[0]??null,latestBook:book?.points.at(-1)?.[0]??null};
 }
 
