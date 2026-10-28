@@ -4,7 +4,8 @@ import {
   parseOwlsPredictionMarkets, mergePredictionMarketFeeds, matchPredictionMarketGame,
   isPredictionMarketFeed, kalshiGameDate, type PredictionMarketFeed,
 } from "../lib/providers/owls/owlsPredictionMarkets";
-import { predictionMarketActivity, predictionMarketPinnacleComparison } from "../app/lab/lib/predictionMarketDisplay";
+import { predictionMarketActivity, predictionMarketPinnacleComparison, predictionMarketBookTrail, predictionMarketChartSeries } from "../app/lab/lib/predictionMarketDisplay";
+import { parseKalshiDisplayCandles, backfillKalshiDisplayHistory } from "../lib/providers/owls/kalshiDisplayHistory";
 import type { MarketEdgeDto } from "../app/lab/lib/labTypes";
 
 const now = Date.parse("2026-10-28T19:20:00Z");
@@ -81,6 +82,48 @@ assert.equal(predictionMarketPinnacleComparison({...ml,oddsTrail:[stop(-200,"cir
 assert.equal(predictionMarketPinnacleComparison(ml,"away",now+11*60_000),null,"old sportsbook comparison rejected");
 assert.equal(predictionMarketPinnacleComparison({...ml,oddsTrail:[stop(-200,"pinnacle",now-3*60_000)]},"away",now),null,"asynchronous sides rejected");
 assert.equal(predictionMarketPinnacleComparison(ml,"away",now,true),null,"soccer cannot normalize two sides while omitting the draw");
+
+const bookMarket={...ml,pick:"SA ML",movementReferenceSportsbook:"circa",oddsTrail:[
+  {...stop(-200,"circa",now-60*60_000),label:"first" as const},stop(-220,"circa",now),stop(-230,"pinnacle",now),
+],opposingOddsTrail:{side:"home" as const,label:"UTAH",stops:[{...stop(180,"circa",now-60*60_000),label:"first" as const},stop(190,"circa",now)]}} as MarketEdgeDto;
+const bookTrail=predictionMarketBookTrail(bookMarket,"SA",now)!;
+assert.equal(bookTrail.sportsbook,"circa");assert.equal(bookTrail.points.length,2,"one book only, no Pinnacle quote spliced in");
+assert.equal(bookTrail.points[1][1],220/320,"book line is honestly labeled raw implied price including margin");
+assert.equal(predictionMarketBookTrail(bookMarket,"UTAH",now)?.points[1][1],100/290,"opposite side uses its own quotes");
+assert.equal(predictionMarketBookTrail(bookMarket,"LAL",now),null,"unproven outcome never borrows another team's line");
+assert.equal(predictionMarketBookTrail(bookMarket,"SA",now+9*60*60_000),null,"old observations stay outside the chart window");
+assert.equal(predictionMarketBookTrail({...bookMarket,oddsTrail:bookMarket.oddsTrail?.map(row=>({...row,label:"move"}))},"SA",now),null,"history without an actual current/locked endpoint is not promoted to a current trail");
+
+const ticker=feed.rows[0].ticker;
+const candleEnd=Math.floor((now-5*60_000)/300_000)*300;
+const candle=(end:number)=>({end_period_ts:end,yes_bid:{close_dollars:"0.83"},yes_ask:{close_dollars:"0.85"},volume_fp:"2.50"});
+const realCandles={market_ticker:ticker,candlesticks:Array.from({length:5},(_,i)=>candle(candleEnd-(4-i)*60))};
+const parsedCandles=parseKalshiDisplayCandles(realCandles,ticker,now);
+assert.deepEqual(parsedCandles,[[candleEnd*1000,.84,12.5]],"real minute candles aggregate interval volume, not cumulative totals");
+assert.deepEqual(parseKalshiDisplayCandles(realCandles,ticker+"WRONG",now),[],"historical ticker must match exactly");
+assert.deepEqual(parseKalshiDisplayCandles({...realCandles,candlesticks:realCandles.candlesticks.slice(1)},ticker,now),[],"incomplete volume interval is not filled in");
+assert.deepEqual(parseKalshiDisplayCandles({...realCandles,candlesticks:realCandles.candlesticks.map(c=>({...c,yes_bid:{close_dollars:null},yes_ask:{close_dollars:null}}))},ticker,now),[],"synthetic/carry-forward price candles are never invented");
+const chart=predictionMarketChartSeries({...merged.rows[0],historicalCandles:parsedCandles});
+assert.equal(chart.points.length,3);assert.deepEqual(chart.activity,[12.5,null,200],"historical per-interval volume never gets subtracted from live cumulative volume");
+assert.ok(isPredictionMarketFeed({...feed,rows:feed.rows.map(row=>({...row,historicalCandles:parsedCandles}))},"nba"));
+assert.equal(isPredictionMarketFeed({...feed,rows:feed.rows.map(row=>({...row,historicalCandles:[[now,NaN,2]]}))},"nba"),false);
+
+async function testHistoricalCapture(){
+  let requests=0;
+  const historicalFeed=await backfillKalshiDisplayHistory(feed,now,async input=>{
+    requests++;const url=new URL(String(input));assert.equal(url.origin,"https://external-api.kalshi.com");assert.equal(url.searchParams.get("period_interval"),"1");assert.equal(url.searchParams.get("include_latest_before_start"),"false");
+    return Response.json({markets:[realCandles]});
+  });
+  assert.equal(requests,1);assert.equal(historicalFeed.rows[0].historicalCandles?.length,1);
+  assert.equal(historicalFeed.rows[0].asOf,feed.rows[0].asOf,"backfill never restamps current quotes");
+  const kept=mergePredictionMarketFeeds(historicalFeed,newer,now+5*60_000);
+  assert.equal(kept.rows[0].historicalCandles?.length,1,"normal live refresh preserves historical observations");
+  await backfillKalshiDisplayHistory(historicalFeed,now+5*60_000,async()=>{throw new Error("must not refetch each member/cycle");});
+  assert.equal(requests,1);
+  const failed=await backfillKalshiDisplayHistory(feed,now,async()=>{throw new Error("outage");});
+  assert.deepEqual(failed.rows,feed.rows,"history outage does not remove current quote data");
+}
+void testHistoricalCapture().then(()=>console.log("Historical backfill: exact candles, bounded capture, honest intervals, continuity and outage isolation passed."));
 
 const reader=readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx","utf8");
 assert.ok(reader.includes('variant="desktop"')&&reader.includes('variant="mobile"'));

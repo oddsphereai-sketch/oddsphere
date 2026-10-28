@@ -6,6 +6,7 @@ import {
   type PredictionMarketFeed, type PredictionMarketSport,
 } from "@/lib/providers/owls/owlsPredictionMarkets";
 import { readLatestLabResponseSnapshot, upsertLabResponseSnapshot } from "../labResponseSnapshots";
+import { backfillKalshiDisplayHistory } from "@/lib/providers/owls/kalshiDisplayHistory";
 
 export function predictionMarketSnapshotKey(sport: PredictionMarketSport): string {
   return `daily-edge::prediction-market-display::${sport}::${PREDICTION_MARKET_RELEASE}`;
@@ -29,7 +30,8 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   ]);
   const current = parseOwlsPredictionMarkets(response.body, sport);
   if (!current) throw new Error(`Kalshi ${sport} returned an invalid or old source receipt`);
-  const feed = mergePredictionMarketFeeds(previous,current);
+  const captured = await backfillKalshiDisplayHistory(mergePredictionMarketFeeds(previous,current));
+  const feed = mergePredictionMarketFeeds(captured,{...captured,rows:[]});
   const stored = await upsertLabResponseSnapshot({ snapshotKey:predictionMarketSnapshotKey(sport),kind:"daily_edge",
     payload:feed as unknown as Record<string, unknown>,ttlMs:5*60_000,staleMs:24*60*60_000,
     sport:sport === "ucl" ? "soccer" : sport,source:"owls_kalshi_display",payloadVersion:PREDICTION_MARKET_RELEASE });
