@@ -492,6 +492,7 @@ const playbookRow: PlaybookSplitGame = {
     providerTimestamp: "2026-06-25T12:58:00.000Z",
     fetchedAt: "2026-06-25T13:00:00.000Z",
   });
+  check("legacy price adapter never invents provider provenance", price.provider === "legacy_unattributed" && price.raw_payload_hash === null);
   check("price observation keeps SharpAPI timestamp as timestamp field", price.provider_timestamp === "2026-06-25T12:58:00.000Z");
   check("price observation marks sharp book explicitly", price.sharp_book === true);
 }

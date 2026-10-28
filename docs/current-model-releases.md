@@ -8,6 +8,16 @@ Last reviewed: 2026-10-27
 
 ## Cross-sport confidence / execution contract
 
+- October 28 market-price provider lineage advances the observation capture release to
+  `market_intelligence_v2_capture_2026_10_28_r12_price_provider_lineage`. Future Owl's price rows
+  now carry explicit provider, provider-event, ingestion-run, and normalized-row hash provenance;
+  canonical `lines` rows are separately labeled. Existing rows remain `legacy_unattributed` and
+  are never retroactively claimed by Owl's or SharpAPI. Provider-scoped uniqueness prevents the
+  same named-book quote from two different sources from suppressing either observation. This adds
+  zero provider calls and has zero prediction, probability, score, side, grade, stake, lock,
+  tracking, or member authority. Evidence and rollback:
+  `docs/model-audits/2026-10-28-market-price-provider-lineage-predeclaration.md`.
+
 - October 28 Owl's single-axis retention advances the observation capture release to
   `market_intelligence_v2_capture_2026_10_28_r11_owls_single_axis_retention`. The existing
   all-sport Market Intelligence V2 postlude now retains a fresh, coherent named-book two-sided
@@ -345,7 +355,7 @@ Last reviewed: 2026-10-27
   tracking, copy, label, or layout changes. Evidence and rollback:
   `docs/model-audits/2026-10-07-nba-readiness-gated-rollover-predeclaration.md`.
 - Cross-sport Market Intelligence V2 capture is
-  `market_intelligence_v2_capture_2026_10_28_r11_owls_single_axis_retention`. The existing leased
+  `market_intelligence_v2_capture_2026_10_28_r12_price_provider_lineage`. The existing leased
   refresh may store exact-date, exact-matchup Owls split and sharp-book price rows with their real
   source book for MLB, WNBA, NBA, NHL, NFL, CFB, and CBB. NBA and weekly football use the same
   bounded seven-day window as their member schedule. The league-level endpoint is

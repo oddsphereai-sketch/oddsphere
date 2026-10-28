@@ -86,6 +86,9 @@ export type MarketSplitObservationV2 = {
 };
 
 export type MarketPriceObservationV2 = {
+  /** Truthful capture origin. Legacy rows without stored provenance are never relabeled. */
+  provider: "owls" | "canonical_lines" | "legacy_unattributed";
+  provider_event_id: string | null;
   canonical_event_id: string;
   canonical_market_id: string;
   league: string;
@@ -100,6 +103,9 @@ export type MarketPriceObservationV2 = {
   provider_timestamp: string | null;
   fetched_at: string;
   minutes_to_start: number | null;
+  ingestion_run_id: string | null;
+  /** Hash of the exact normalized provider row handed to the canonical adapter. */
+  raw_payload_hash: string | null;
 };
 
 export type CanonicalObservationRejection = {

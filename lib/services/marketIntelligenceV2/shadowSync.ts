@@ -43,6 +43,7 @@ import {
   buildSharpApiSplitObservationsV2,
   playbookLineForSelection,
   sharpApiSplitHistoryObservedAt,
+  stablePayloadHash,
   type RawSharpApiSplitHistoryRowV2,
   type RawSharpApiSplitRowV2,
 } from "./canonicalAdapters";
@@ -89,7 +90,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_10_28_r11_owls_single_axis_retention";
+  "market_intelligence_v2_capture_2026_10_28_r12_price_provider_lineage";
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -612,6 +613,7 @@ async function loadPriceObservations(opts: {
     const side = r.side as MarketIntelligenceSelectionSide | null;
     if (side !== "home" && side !== "away" && side !== "over" && side !== "under") continue;
     out.push(buildSharpApiPriceObservationV2({
+      provider: "canonical_lines",
       canonicalEventId: String(game.externalId),
       canonicalMarketId: externalMarketId(game, market),
       league: opts.sport,
@@ -626,6 +628,7 @@ async function loadPriceObservations(opts: {
       providerTimestamp: r.fetched_at,
       fetchedAt: new Date().toISOString(),
       minutesToStart: minutesToStart(game.gameDate, opts.now),
+      rawPayloadHash: null,
     }));
   }
   return out;
@@ -860,6 +863,7 @@ export function buildOwlsSharpPriceObservations(opts: {
   games: readonly GameRef[];
   rows: readonly NormalizedOwlsSharpPrice[];
   fetchedAt: Date;
+  ingestionRunId?: string;
 }): {
   observations: MarketPriceObservationV2[];
   rejected: CanonicalObservationRejection[];
@@ -887,6 +891,8 @@ export function buildOwlsSharpPriceObservations(opts: {
       continue;
     }
     observations.push(buildSharpApiPriceObservationV2({
+      provider: "owls",
+      providerEventId: row.providerEventId,
       canonicalEventId: String(game.externalId),
       canonicalMarketId: externalMarketId(game, row.market),
       league: opts.sport,
@@ -901,6 +907,8 @@ export function buildOwlsSharpPriceObservations(opts: {
       providerTimestamp: row.observedAt,
       fetchedAt: opts.fetchedAt.toISOString(),
       minutesToStart: minutesToStart(game.gameDate, opts.fetchedAt),
+      ingestionRunId: opts.ingestionRunId ?? null,
+      rawPayloadHash: stablePayloadHash(row),
     }));
   }
   return { observations, rejected };
@@ -911,6 +919,7 @@ async function collectOwlsPrices(opts: {
   games: readonly GameRef[];
   apiKey: string | undefined;
   now: Date;
+  ingestionRunId: string;
 }): Promise<{
   fetchedRows: number;
   observations: MarketPriceObservationV2[];
@@ -940,6 +949,7 @@ async function collectOwlsPrices(opts: {
     games: opts.games,
     rows: coverage.prices,
     fetchedAt: opts.now,
+    ingestionRunId: opts.ingestionRunId,
   });
   return {
     fetchedRows: coverage.matchedBookEvents,
@@ -1661,7 +1671,7 @@ export async function writeRows(opts: {
     const { error } = await opts.supabase
       .from("market_price_observations_v2")
       .upsert(opts.priceObservations, {
-        onConflict: "canonical_market_id,sportsbook,selection_key,line,american_price,provider_timestamp",
+        onConflict: "provider,canonical_market_id,sportsbook,selection_key,line,american_price,provider_timestamp",
         ignoreDuplicates: true,
       });
     if (error) {
@@ -1773,6 +1783,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       games,
       apiKey: opts.owlsApiKey ?? process.env.OWLS_INSIGHT_API_KEY,
       now,
+      ingestionRunId,
     }),
     loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now }),
   ]);

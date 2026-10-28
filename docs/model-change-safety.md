@@ -1,5 +1,20 @@
 # Model change safety protocol
 
+## Owner-directed repair: market-price provider lineage
+
+On 2026-10-28 Daniel Mengel directed Oddsphere to continue the internal Owl's Market Brain while
+keeping site/display work in its separate provider task. The existing V2 price table retained book,
+line, price, and time but not the provider that supplied the row, so provider-specific Market Brain
+interpretation could not be proven. Capture release
+`market_intelligence_v2_capture_2026_10_28_r12_price_provider_lineage` records explicit provenance
+for future Owl's and canonical-lines rows. Every pre-release row remains `legacy_unattributed`; no
+historical provider is guessed.
+
+This is capture-only groundwork with zero added calls and zero model, resolver, grade, stake, lock,
+tracking, or member authority. Raw-response receipts and predictive qualification remain separate
+blocked releases. Evidence and rollback:
+`docs/model-audits/2026-10-28-market-price-provider-lineage-predeclaration.md`.
+
 ## Owner-directed repair: Owl's single-axis split retention
 
 On 2026-10-28 Daniel Mengel directed Oddsphere to use every truthful internal Owl's split input while

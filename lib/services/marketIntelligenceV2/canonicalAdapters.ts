@@ -725,6 +725,8 @@ export function buildSharpApiBetMgmTicketObservationV2(opts: {
 }
 
 export function buildSharpApiPriceObservationV2(opts: {
+  provider?: MarketPriceObservationV2["provider"];
+  providerEventId?: string | null;
   canonicalEventId: string;
   canonicalMarketId: string;
   league: string;
@@ -739,8 +741,12 @@ export function buildSharpApiPriceObservationV2(opts: {
   providerTimestamp?: string | null;
   fetchedAt: string;
   minutesToStart?: number | null;
+  ingestionRunId?: string | null;
+  rawPayloadHash?: string | null;
 }): MarketPriceObservationV2 {
   return {
+    provider: opts.provider ?? "legacy_unattributed",
+    provider_event_id: opts.providerEventId ?? null,
     canonical_event_id: opts.canonicalEventId,
     canonical_market_id: opts.canonicalMarketId,
     league: opts.league,
@@ -755,5 +761,7 @@ export function buildSharpApiPriceObservationV2(opts: {
     provider_timestamp: opts.providerTimestamp ?? null,
     fetched_at: opts.fetchedAt,
     minutes_to_start: opts.minutesToStart ?? null,
+    ingestion_run_id: opts.ingestionRunId ?? null,
+    raw_payload_hash: opts.rawPayloadHash ?? null,
   };
 }
