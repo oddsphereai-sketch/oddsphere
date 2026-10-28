@@ -213,7 +213,7 @@ async function main() {
     mode: "read_only_zero_write",
     releases: {
       model: "epl_goals_coherent_2026_10_01_r19_draw_arbitration",
-      grade: "epl_grade_policy_2026_10_10_v25_exact_match_result_price_tiering",
+      grade: "epl_grade_policy_2026_10_28_v26_owls_the_odds_price_source",
     },
     evidence: {
       replayedSettledRows: settledRows.length,

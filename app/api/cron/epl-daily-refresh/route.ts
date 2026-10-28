@@ -7,15 +7,17 @@ import { eplProviderIdsDueForLock, reconstructVerifiedEplLockedGames } from "@/l
 import { readCurrentEplMemberSnapshot, writeCurrentEplMemberSnapshot } from "@/lib/services/epl/eplMemberSnapshotStore";
 import { evaluateEplPublicationCoverage } from "@/lib/services/epl/eplPublicationReadiness";
 import type { EplForwardEvidenceCapture } from "@/lib/services/epl/eplForwardEvidenceCapture";
+import type { CurrentSoccerProviderTelemetry } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
 
 export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
+  const providerProbe = new URL(request.url).searchParams.get("provider_probe") === "1";
   return cronHandler(request, "epl_daily_refresh", async () => {
     if (process.env.EPL_CRON_ENABLED !== "true") {
       return { records_updated: 0, details: { disabled: true, reason: "EPL_CRON_ENABLED!=true" } };
     }
-    const apply = process.env.EPL_DB_WRITES_ENABLED === "true";
+    const apply = !providerProbe && process.env.EPL_DB_WRITES_ENABLED === "true";
     const slate = await buildEplShadowSlate();
     // Both sources are merged by economic observation. The member snapshot
     // restores the latest published trail; durable history then fills any
@@ -25,10 +27,13 @@ export async function GET(request: Request): Promise<Response> {
     hydrateEplStoredPriceHistory(storedPriceHistory);
     let allBookPrices: Parameters<typeof persistEplLineHistory>[0]["allBookPrices"] = [];
     let forwardEvidence: EplForwardEvidenceCapture[] = [];
+    let providerTelemetry: CurrentSoccerProviderTelemetry | null = null;
     const response = await buildEplDailyEdgePreview(slate, {
       storedPriceHistory,
       captureAllBookPrices: (rows) => { allBookPrices = rows; },
       captureForwardEvidence: (captures) => { forwardEvidence = captures; },
+      captureProviderTelemetry: (telemetry) => { providerTelemetry = telemetry; },
+      forceCurrentProviderRefresh: providerProbe,
     });
     const seeded = await seedEplSlate({ slate, apply });
     const lineHistory = seeded.errors.length === 0
@@ -75,6 +80,7 @@ export async function GET(request: Request): Promise<Response> {
       details: {
         competition: "english_premier_league",
         apply,
+        provider_probe: providerProbe,
         round: slate.round,
         fixtures: slate.matches.length,
         price_coverage: coverage,
@@ -88,6 +94,7 @@ export async function GET(request: Request): Promise<Response> {
           incomplete_provider_ids: lockVerification.incompleteProviderIds,
         },
         forward_evidence: { proposed: forwardEvidence.length, warnings: predictions.captureWarnings },
+        current_market_provider: providerTelemetry,
         publication,
       },
     };

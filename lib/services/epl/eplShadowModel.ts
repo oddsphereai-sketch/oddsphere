@@ -7,9 +7,9 @@ import {
 import { deriveSoccerMarketProbabilities } from "@/lib/services/soccer/soccerMarketProbabilities";
 import type { BdlEplMatch, BdlEplTeamMatchStats } from "@/lib/providers/real_api/BallDontLieEplProvider";
 
-export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_10_13_r20_coherent_total_margin_matchup" as const;
+export const EPL_SHADOW_MODEL_RELEASE = "epl_goals_coherent_2026_10_28_r21_owls_the_odds_price_source" as const;
 export const EPL_BASELINE_MODEL_RELEASE = "epl_goals_coherent_2026_10_01_r19_draw_arbitration" as const;
-export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_10_10_v25_exact_match_result_price_tiering" as const;
+export const EPL_SHADOW_CALIBRATION_RELEASE = "epl_grade_policy_2026_10_28_v26_owls_the_odds_price_source" as const;
 export const EPL_DRAW_ARBITRATION_RELEASE = "epl_draw_arbitration_2026_10_01_r1" as const;
 
 export type EplMatchResultSide = "home" | "draw" | "away";

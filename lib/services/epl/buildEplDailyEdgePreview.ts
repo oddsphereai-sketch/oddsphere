@@ -1,7 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
-import { SharpApiClient } from "@/lib/providers/real_api/_sharpApiClient";
-import { SharpApiEplMarketProvider, type EplSharpFixtureMarket, type EplSharpSplitsEvent } from "@/lib/providers/real_api/SharpApiEplMarketProvider";
-import type { NormalizedSoccerOddsRecord } from "@/lib/providers/real_api/_soccerMarketNormalizer";
+import { CurrentSoccerMarketProvider, type CurrentSoccerProviderTelemetry } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
+import type { EplSharpFixtureMarket, EplSharpSplitsEvent } from "@/lib/providers/real_api/SharpApiEplMarketProvider";
+import type { NormalizedSoccerOddsRecord, ProviderSource } from "@/lib/providers/real_api/_soccerMarketNormalizer";
 import type { BdlEplOdds } from "@/lib/providers/real_api/BallDontLieEplProvider";
 import type { EplShadowSlate, EplShadowSlateMatch } from "./buildEplShadowSlate";
 import { eplTeamLogo } from "./eplTeamAssets";
@@ -19,7 +19,7 @@ const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "
 const MAX_FIXTURE_RECOVERY_LOADS = 4;
 
 type Selection = "home" | "draw" | "away" | "over" | "under" | "yes" | "no" | "home_or_draw" | "away_or_draw" | "home_or_away";
-type MarketRead = { probabilities: Partial<Record<Selection, number>>; prices: Partial<Record<Selection, number>>; sportsbook: string | null; observedAt: string | null; line: number | null; provider: "sharpapi" | "balldontlie" };
+type MarketRead = { probabilities: Partial<Record<Selection, number>>; prices: Partial<Record<Selection, number>>; sportsbook: string | null; observedAt: string | null; line: number | null; provider: ProviderSource | "balldontlie" };
 const priceHistory = new Map<string, NonNullable<MarketEdgeDto["oddsTrail"]>>();
 const earliestMarketQuotes = new Map<string, NonNullable<NonNullable<MarketEdgeDto["soccerPriceBoard"]>["rows"][number]["earliest_market_quote"]>>();
 const previewCache = new Map<string, { expiresAt: number; response: DailyEdgeResponse; allBookPrices: EplStoredPriceObservation[]; forwardEvidence: EplForwardEvidenceCapture[] }>();
@@ -58,7 +58,11 @@ export type EplPreviewBuildOptions = {
   captureAllBookPrices?: (rows: EplStoredPriceObservation[]) => void;
   storedPriceHistory?: EplStoredPriceObservation[];
   captureForwardEvidence?: (captures: EplForwardEvidenceCapture[]) => void;
-  marketProvider?: Pick<SharpApiEplMarketProvider, "loadFixture"> | null;
+  captureProviderTelemetry?: (telemetry: CurrentSoccerProviderTelemetry | null) => void;
+  /** Authenticated zero-write diagnostics only: ignore durable quote freshness
+   * so the paid supplemental endpoint can be proven before publication. */
+  forceCurrentProviderRefresh?: boolean;
+  marketProvider?: EplMarketProvider | null;
   cacheNamespace?: string;
   cacheIdentity?: string;
   skipForwardEvidence?: boolean;
@@ -79,6 +83,10 @@ export type EplPreviewBuildOptions = {
       applied: boolean;
     };
   };
+};
+
+export type EplMarketProvider = {
+  loadFixture(fixture: { home: string; away: string; kickoff: string; providerId?: number }): Promise<EplSharpFixtureMarket>;
 };
 
 export function buildEplPreviewCacheKey(slate: EplShadowSlate, options: EplPreviewBuildOptions = {}): string {
@@ -407,7 +415,7 @@ function coherentRead(rows: NormalizedSoccerOddsRecord[], market: "match_result"
       sportsbook,
       observedAt: picked.map((row) => row!.fetched_at).sort().at(-1) ?? null,
       line,
-      provider: "sharpapi",
+      provider: picked[0]!.provider,
     };
   }
   return null;
@@ -1016,16 +1024,22 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
 
 export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: EplPreviewBuildOptions = {}): Promise<DailyEdgeResponse> {
   const cacheKey = buildEplPreviewCacheKey(slate, options);
-  const cached = previewCache.get(cacheKey);
+  const cached = options.forceCurrentProviderRefresh ? undefined : previewCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     options.captureAllBookPrices?.(cached.allBookPrices);
     options.captureForwardEvidence?.(cached.forwardEvidence);
     return cached.response;
   }
-  const key = process.env.SHARPAPI_KEY;
+  const owlsKey = process.env.OWLS_INSIGHT_API_KEY;
+  const theOddsApiKey = process.env.THE_ODDS_API_KEY;
   const provider = options.marketProvider !== undefined
     ? options.marketProvider
-    : key ? new SharpApiEplMarketProvider(new SharpApiClient(key)) : null;
+    : owlsKey || theOddsApiKey ? new CurrentSoccerMarketProvider({
+        competition: "epl",
+        owlsApiKey: owlsKey,
+        theOddsApiKey,
+        storedPriceHistory: options.forceCurrentProviderRefresh ? [] : options.storedPriceHistory,
+      }) : null;
   const markets: EplSharpFixtureMarket[] = new Array(slate.matches.length);
   let nextIndex = 0;
   async function worker() {
@@ -1033,7 +1047,7 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
       const index = nextIndex++;
       const match = slate.matches[index];
       markets[index] = provider
-        ? await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff }).catch(() => ({ eventId: null, odds: [], splits: [], splitsState: "error" as const }))
+        ? await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff, providerId: match.id }).catch(() => ({ eventId: null, odds: [], splits: [], splitsState: "error" as const }))
         : { eventId: null, odds: [], splits: [], splitsState: "error" as const };
     }
   }
@@ -1042,10 +1056,9 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     : Math.max(1, Math.min(slate.matches.length, Math.floor(options.fixtureLoadConcurrency)));
   await Promise.all(Array.from({ length: fixtureLoadConcurrency }, () => worker()));
   if (provider) {
-    // Sharp occasionally returns a partial duplicate-event bucket from a
-    // serverless region even when an immediate independent request is
-    // complete. Retry only incomplete fixtures, sequentially, and cap the
-    // recovery work so an upstream outage cannot multiply paid API traffic.
+    // Retry only incomplete fixtures, sequentially, and cap the recovery work
+    // so an upstream outage cannot multiply paid API traffic. Providers with a
+    // fixture cache return the same request without a second paid call.
     const incompleteIndexes = selectEplFixtureRecoveryIndexes(
       markets,
       slate.matches.map((match) => match.status),
@@ -1053,11 +1066,12 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     );
     for (const index of incompleteIndexes) {
       const match = slate.matches[index];
-      const recovery = await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff })
+      const recovery = await provider.loadFixture({ home: match.homeTeam.short_name, away: match.awayTeam.short_name, kickoff: match.kickoff, providerId: match.id })
         .catch(() => ({ eventId: null, odds: [], splits: [], splitsState: "error" as const }));
       markets[index] = mergeRecoveredFixture(markets[index], recovery);
     }
   }
+  options.captureProviderTelemetry?.(provider instanceof CurrentSoccerMarketProvider ? provider.telemetry() : null);
   if (options.finalizeFixtureMarket) {
     for (let index = 0; index < markets.length; index += 1) {
       markets[index] = options.finalizeFixtureMarket(markets[index], slate.matches[index]!);
@@ -1102,6 +1116,8 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
     }
   }
   options.captureForwardEvidence?.(forwardEvidence);
-  previewCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, response, allBookPrices, forwardEvidence });
+  if (!options.forceCurrentProviderRefresh) {
+    previewCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, response, allBookPrices, forwardEvidence });
+  }
   return response;
 }

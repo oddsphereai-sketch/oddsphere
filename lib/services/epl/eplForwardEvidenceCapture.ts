@@ -1,5 +1,6 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import type { EplSharpFixtureMarket, EplSharpOddsRecord, EplSharpSplitsEvent } from "@/lib/providers/real_api/SharpApiEplMarketProvider";
+import type { ProviderSource } from "@/lib/providers/real_api/_soccerMarketNormalizer";
 import type { EplShadowSlate, EplShadowSlateMatch } from "./buildEplShadowSlate";
 
 export const EPL_FORWARD_EVIDENCE_CAPTURE_RELEASE = "epl_forward_evidence_capture_2026_09_02_r1" as const;
@@ -7,6 +8,8 @@ export const EPL_FORWARD_EVIDENCE_MAX_GAME_BYTES = 64 * 1024;
 export const EPL_FORWARD_EVIDENCE_MAX_MARKET_BYTES = 16 * 1024;
 export const EPL_FORWARD_EVIDENCE_MAX_VECTORS_PER_MARKET = 8;
 export const EPL_FORWARD_EVIDENCE_MAX_LANDMARKS = 6;
+
+type EplEvidenceProvider = ProviderSource | "balldontlie";
 
 const MARKET_ORDER = ["match_result", "double_chance", "total", "btts"] as const;
 const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars"] as const;
@@ -25,7 +28,7 @@ export type EplForwardStoredPriceObservation = {
   sportsbook: string | null;
   recordedAt: string;
   isOpener: boolean;
-  provider?: "balldontlie" | "sharpapi" | null;
+  provider?: EplEvidenceProvider | null;
   providerEndpoint?: string | null;
 };
 
@@ -44,7 +47,7 @@ export type EplForwardBookVector = {
   sportsbook: string;
   canonicalBook: string;
   sourceClass: SourceClass;
-  provider: "sharpapi" | "balldontlie";
+  provider: EplEvidenceProvider;
   providerEndpoint: string;
   providerEventId: string | null;
   market: EplForwardMarket;
@@ -65,7 +68,7 @@ type EplForwardMovement = {
   openingObservedAtMin: string;
   openingObservedAtMax: string;
   openingVectorSkewMs: number;
-  openingProvider: "balldontlie" | "sharpapi" | null;
+  openingProvider: EplEvidenceProvider | null;
   openingProviderEndpoint: string | null;
   openingProviderUnavailableReason: string | null;
   currentCapturedAt: string;
@@ -232,7 +235,7 @@ function vectorFromRows(market: EplForwardMarket, rows: EplSharpOddsRecord[], ca
     sportsbook: first.sportsbook!,
     canonicalBook: book,
     sourceClass: sourceClass(book),
-    provider: "sharpapi",
+    provider: first.provider,
     providerEndpoint: endpoint,
     providerEventId: eventId,
     market,
@@ -387,7 +390,7 @@ function movementsForVector(vector: EplForwardBookVector, stored: EplForwardStor
   const openingPrices = openingRows.map((row) => row!.american);
   const openingProbabilities = probabilitiesFromAmerican(vector.outcomes.map((row) => row.side), openingPrices, vector.probabilityTotal);
   const openingObservedAt = openingRows.map((row) => new Date(row!.recordedAt).toISOString()).sort();
-  const openingProviders = [...new Set(openingRows.map((row) => row!.provider).filter((value): value is "balldontlie" | "sharpapi" => Boolean(value)))];
+  const openingProviders = [...new Set(openingRows.map((row) => row!.provider).filter((value): value is EplEvidenceProvider => Boolean(value)))];
   const openingEndpoints = [...new Set(openingRows.map((row) => row!.providerEndpoint).filter((value): value is string => Boolean(value)))];
   return {
     vectorIdentity: vector.identity,

@@ -9,7 +9,7 @@ import type { BdlEplOdds } from "@/lib/providers/real_api/BallDontLieEplProvider
 import type { EplForwardBookVector } from "./eplForwardEvidenceCapture";
 
 export const EPL_COHERENT_MARKET_OUTCOME_RELEASE =
-  "epl_coherent_market_outcome_2026_09_02_r2_structural_target_exclusion" as const;
+  "epl_coherent_market_outcome_2026_10_28_r3_provider_attributed_price_vectors" as const;
 
 export const EPL_TOTAL_EVIDENCE_MAX_AGE_MS = 15 * 60_000;
 export const EPL_TOTAL_EVIDENCE_MAX_VECTOR_SKEW_MS = 60_000;

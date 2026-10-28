@@ -125,6 +125,7 @@
     "test:lean-confidence-floor": "tsx --env-file=.env.local scripts/test-lean-confidence-floor.ts",
     "test:soccer-total-actionability-gate": "tsx --env-file=.env.local scripts/test-soccer-total-actionability-gate.ts",
     "test:epl-shadow-model": "tsx scripts/test-epl-shadow-model.ts",
+    "test:soccer-current-market-provider": "tsx scripts/test-soccer-current-market-provider.ts",
     "test:epl-locked-member-snapshot": "tsx --env-file=.env.local scripts/test-epl-locked-member-snapshot.ts",
     "test:ucl-production": "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1 SUPABASE_SERVICE_ROLE_KEY=test tsx scripts/test-ucl-production.ts && NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1 SUPABASE_SERVICE_ROLE_KEY=test tsx scripts/test-ucl-db-contract.ts && NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1 SUPABASE_SERVICE_ROLE_KEY=test tsx scripts/test-admin-winner-accuracy.ts && NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1 SUPABASE_SERVICE_ROLE_KEY=test tsx scripts/test-homepage-category-tracker.ts",
     "audit:ucl-readiness": "tsx --env-file=.env.local scripts/operator/audit-ucl-readiness.ts",

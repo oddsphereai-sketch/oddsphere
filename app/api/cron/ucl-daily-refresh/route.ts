@@ -7,16 +7,18 @@ import { seedUclSlate, verifyUclRefreshAllMarketLocks, writeUclPredictionRecords
 import { UCL_COMPETITION } from "@/lib/services/ucl/uclCompetitionContext";
 import { evaluateUclPublicationCoverage, mergeVerifiedUclLocksIntoLastKnownGood, uclPriceCollapseIsRecovered } from "@/lib/services/ucl/uclPublicationReadiness";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
+import type { CurrentSoccerProviderTelemetry } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
 
 export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
+  const providerProbe = new URL(request.url).searchParams.get("provider_probe") === "1";
   return cronHandler(request, "ucl_daily_refresh", async () => {
     const flags = resolveUclFeatureFlags();
     if (!flags.refresh) {
       return { records_updated: 0, details: { disabled: true, reason: "UCL refresh gate disabled" } };
     }
-    const apply = flags.writes;
+    const apply = !providerProbe && flags.writes;
     const now = new Date();
     const slate = await buildUclSlate();
     const previousResponse = await readCurrentUclMemberSnapshot();
@@ -24,7 +26,13 @@ export async function GET(request: Request): Promise<Response> {
     const storedPriceHistory = await readUclStoredPriceHistory(slate.matches.map((match) => match.id));
     hydrateUclStoredPriceHistory(storedPriceHistory);
     let allBookPrices: UclStoredPriceObservation[] = [];
-    const response = await buildUclDailyEdgePreview(slate, { storedPriceHistory, captureAllBookPrices: (rows) => { allBookPrices = rows; } });
+    let providerTelemetry: CurrentSoccerProviderTelemetry | null = null;
+    const response = await buildUclDailyEdgePreview(slate, {
+      storedPriceHistory,
+      captureAllBookPrices: (rows) => { allBookPrices = rows; },
+      captureProviderTelemetry: (telemetry) => { providerTelemetry = telemetry; },
+      forceCurrentProviderRefresh: providerProbe,
+    });
     const coverage = evaluateUclPublicationCoverage(slate, response, previousResponse);
     // A transient price collapse blocks ordinary publication, but it must not
     // prevent a due T-60 game from freezing its prior priced DB tuple. All
@@ -49,7 +57,7 @@ export async function GET(request: Request): Promise<Response> {
     const unresolvedCoverageErrors = coverage.priceCollapse && priceCollapseRecovered ? coverage.hardErrors : coverage.errors;
     const errors = [...unresolvedCoverageErrors, ...seeded.errors, ...lineHistory.errors, ...predictions.errors,
       ...(lockVerification.incompleteProviderIds.length ? [`UCL refresh all-market lock incomplete for provider IDs ${lockVerification.incompleteProviderIds.join(",")}`] : [])];
-    const publication = flags.publication && errors.length === 0
+    const publication = apply && flags.publication && errors.length === 0
       ? await writeCurrentUclMemberSnapshot({ response: publicationResponse, matchweek: slate.round, boardDate: slate.boardDate, modelRelease: slate.modelRelease, calibrationRelease: slate.calibrationRelease })
       : { ok: false as const, skipped: true, reason: !apply ? "UCL write gate disabled" : !flags.publication ? "UCL publication gate disabled" : "pipeline_errors" };
     return {
@@ -59,12 +67,14 @@ export async function GET(request: Request): Promise<Response> {
       details: {
         competition: UCL_COMPETITION,
         apply,
+        provider_probe: providerProbe,
         matchweek: slate.round,
         fixtures: slate.matches.length,
         price_coverage: coverage,
         model_release: slate.modelRelease,
         calibration_release: slate.calibrationRelease,
         provider_history: slate.providerHealth.uclHistory,
+        current_market_provider: providerTelemetry,
         seed: seeded,
         line_history: lineHistory,
         predictions: { mode: predictions.mode, proposed: predictions.proposed.length, written: predictions.written, lockedPreserved: predictions.lockedPreserved, errors: predictions.errors },

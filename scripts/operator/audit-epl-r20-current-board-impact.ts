@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "../../app/lab/lib/labTypes";
 import { buildEplDailyEdgePreview } from "../../lib/services/epl/buildEplDailyEdgePreview";
 import { buildEplShadowSlate } from "../../lib/services/epl/buildEplShadowSlate";
+import { readEplStoredPriceHistory } from "../../lib/services/epl/eplLineHistoryStore";
 
 const SNAPSHOT_KEY = "soccer::english_premier_league::current-week";
 // Soccer DTO aliases: moneyline = Match Result, total = Total,
@@ -33,7 +34,8 @@ async function main() {
   if (error) throw error;
   const incumbent = data.payload as DailyEdgeResponse;
   const slate = await buildEplShadowSlate();
-  const candidate = await buildEplDailyEdgePreview(slate, { skipForwardEvidence: true, cacheNamespace: "epl-r20-audit", cacheIdentity: `r20-${Date.now()}` });
+  const storedPriceHistory = await readEplStoredPriceHistory(slate.matches.map((match) => match.id));
+  const candidate = await buildEplDailyEdgePreview(slate, { storedPriceHistory, skipForwardEvidence: true, cacheNamespace: "epl-r20-audit", cacheIdentity: `r20-${Date.now()}` });
   const incumbentById = new Map(incumbent.games.map((game) => [String(game.external_id), game]));
   const now = Date.now();
   const comparisons = candidate.games.flatMap((game) => {
