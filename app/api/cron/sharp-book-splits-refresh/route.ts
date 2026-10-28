@@ -13,6 +13,7 @@ import { refreshOwlsCurrentSplitFallback } from "@/lib/providers/real_api/sharpA
 import type { Sport } from "@/lib/types/domain/Sport";
 import { refreshPredictionMarketDisplayFeed } from "@/lib/services/dailyEdge/predictionMarketDisplayFeed";
 import type { PredictionMarketSport } from "@/lib/providers/owls/owlsPredictionMarkets";
+import { contractKinds } from "@/lib/providers/owls/predictionMarketContracts";
 
 export const maxDuration = 120;
 
@@ -30,18 +31,19 @@ export async function GET(request: Request): Promise<Response> {
       // Isolated display capture only. A Kalshi failure must not block splits.
       const [splitResult,predictionResult] = await Promise.allSettled([
         sport === "soccer" || sport === "ucl" ? Promise.resolve(0) : refreshOwlsCurrentSplitFallback(sport),
-        sport === "cbb" ? Promise.resolve(0) : refreshPredictionMarketDisplayFeed(sport as PredictionMarketSport),
+        sport === "cbb" ? Promise.resolve({rows:0,owlsRequests:0,warnings:[] as string[]}) : refreshPredictionMarketDisplayFeed(sport as PredictionMarketSport),
       ]);
       if (splitResult.status === "rejected") throw splitResult.reason;
       const retainedRows = splitResult.value;
-      const predictionMarketRows = predictionResult.status === "fulfilled" ? predictionResult.value : 0;
-      const predictionMarketError = predictionResult.status === "rejected" ? String(predictionResult.reason) : null;
+      const predictionMarketRows = predictionResult.status === "fulfilled" ? predictionResult.value.rows : 0;
+      const predictionMarketError = predictionResult.status === "rejected" ? String(predictionResult.reason) : predictionResult.value.warnings.join("; ")||null;
+      const predictionRequests=predictionResult.status==="fulfilled"?predictionResult.value.owlsRequests:sport==="cbb"?0:1+contractKinds(sport as PredictionMarketSport).length;
       return {
         records_updated: retainedRows + predictionMarketRows,
         partial: predictionMarketError !== null,
         error_message: predictionMarketError,
-        api_calls_made: sport === "cbb" || sport === "soccer" || sport === "ucl" ? 1 : 2,
-        details: { provider: "owls", retainedRows, predictionMarketRows, predictionMarketError },
+        api_calls_made: (sport==="soccer"||sport==="ucl"?0:1)+predictionRequests,
+        details: { provider: "owls", retainedRows, predictionMarketRows, predictionMarketError, apiCallAccounting:predictionResult.status==="fulfilled"?"OWLS requests":"OWLS request ceiling on capture error",publicHistoryBatchCeiling:3 },
       };
     },
     {

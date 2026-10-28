@@ -1,0 +1,91 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {parseOwlsPredictionMarkets,matchPredictionMarketGame,mergePredictionMarketFeeds,type PredictionMarketMatch} from "../lib/providers/owls/owlsPredictionMarkets";
+import {parseContractFeed,resolveReaderContract,readerContractSelection,contractsForPublishedReaders,pushAdjustedProbability,contractKinds,contractSeries,type ContractFeed} from "../lib/providers/owls/predictionMarketContracts";
+import {predictionMarketBookTrail,predictionMarketChartSeries} from "../app/lab/lib/predictionMarketDisplay";
+import type {DailyEdgeGameDto,MarketEdgeDto} from "../app/lab/lib/labTypes";
+
+const now=Date.parse("2026-10-28T21:00:00Z"),asOf=new Date(now).toISOString();
+const raw=(series:string,code:string,strike:number|null,p:number)=>({status:"active",market_type:"binary",event_ticker:`${series}-26OCT28GSWMIN`,ticker:`${series}-26OCT28GSWMIN-${code}`,yes_sub_title:code,
+  strike_type:strike===null?undefined:"greater",floor_strike:strike,yes_bid_dollars:String(p-.005),yes_ask_dollars:String(p+.005),volume_fp:"1000",volume_24h_fp:"100"});
+const envelope=(rows:ReturnType<typeof raw>[])=>({success:true,meta:{cacheTimestamp:asOf},data:Object.fromEntries(rows.map(row=>[row.ticker,row]))});
+const winners=parseOwlsPredictionMarkets(envelope([raw("KXNBAGAME","GSW",null,.4),raw("KXNBAGAME","MIN",null,.6)]),"nba",now)!;
+const game={id:"nba-test",sport:"nba",awayTeam:"GS",homeTeam:"MIN",gameStartAt:"2026-10-29T00:00:00Z",markets:{
+ moneyline:{pick:"MIN ML",line:null},total:{pick:"Over 227.5",line:227.5},first_inning:{pick:"MIN -4",line:-4},
+}} as DailyEdgeGameDto;
+const before=JSON.stringify(game),match=matchPredictionMarketGame(winners,{...game,sport:"nba",gameStartAt:game.gameStartAt!},now)!;
+assert.ok(match);
+const spread=parseContractFeed(envelope([raw("KXNBASPREAD","MIN4",3.5,.525),raw("KXNBASPREAD","MIN5",4.5,.48),raw("KXNBASPREAD","MIN15",14.5,.1),raw("KXNBASPREAD","GSW5",4.5,.2)]),"nba","spread",now)!;
+const selection=readerContractSelection(game,"first_inning")!;
+assert.equal(selection.kind,"spread");assert.equal(selection.label,"MIN −4");
+const adjusted=resolveReaderContract(spread,match,selection,now)!;
+assert.equal(adjusted.context?.method,"push_adjusted");
+assert.ok(Math.abs(adjusted.outcomes[0].probability-.48/(1-.525+.48))<1e-12,"MIN -4 excludes the actual four-point push, rather than averaging -3.5 and -4.5");
+assert.equal(adjusted.outcomes[0].bid,null,"derived probability must not invent an executable bid");
+assert.equal(adjusted.outcomes[0].ask,null);
+assert.equal(adjusted.outcomes[0].volume24h,200,"source volume is explicitly combined across two underlying contracts");
+assert.equal(adjusted.context?.sources.length,2);
+const exact=resolveReaderContract(spread,match,{...selection,line:-3.5,label:"MIN −3.5"},now)!;
+assert.equal(exact.context?.method,"exact");assert.equal(exact.outcomes[0].probability,.525);
+const opposite=resolveReaderContract(spread,match,{kind:"spread",side:"away",line:4,label:"GS +4"},now)!;
+assert.equal(opposite.context?.method,"push_adjusted");
+assert.ok(Math.abs(opposite.outcomes[0].probability+adjusted.outcomes[0].probability-1)<1e-12,"opposite sides at the same integer line are complementary after removing pushes");
+const halfOpposite=resolveReaderContract(spread,match,{kind:"spread",side:"away",line:4.5,label:"GS +4.5"},now)!;
+assert.ok(Math.abs(halfOpposite.outcomes[0].probability-.52)<1e-12,"plus handicap uses NO on the opponent's contract");
+const missingBracket={...spread,rows:spread.rows.filter(row=>row.strike!==4.5)};
+const nearby=resolveReaderContract(missingBracket,match,selection,now)!;
+assert.equal(nearby.context?.method,"nearby");assert.equal(nearby.context?.displayLabel,"MIN −3.5");
+assert.equal(nearby.context?.requestedLabel,"MIN −4","nearby line never takes the requested line's label");
+assert.equal(nearby.outcomes[0].probability,.525);
+const asyncRows=structuredClone(spread);asyncRows.rows[1].asOf=new Date(now-5*60_000).toISOString();
+assert.equal(resolveReaderContract(asyncRows,match,selection,now)?.context?.method,"nearby","asynchronous receipts cannot form a synthetic synchronized quote");
+assert.equal(pushAdjustedProbability(.4,.5),null,"incoherent crossed tail probabilities cannot create negative push mass");
+assert.equal(pushAdjustedProbability(1,0),null,"all-push case is not a quote");
+assert.equal(pushAdjustedProbability(.6,.5),.5/.9);
+
+const totals=parseContractFeed(envelope([raw("KXNBATOTAL","228",227.5,.495),raw("KXNBATOTAL","229",228.5,.47)]),"nba","total",now)!;
+const totalSelection=readerContractSelection(game,"total")!;
+assert.equal(resolveReaderContract(totals,match,totalSelection,now)?.context?.method,"exact");
+const under=resolveReaderContract(totals,match,{...totalSelection,side:"under",label:"Under 227.5"},now)!;
+assert.equal(under.outcomes[0].probability,.505);
+const integerOver=resolveReaderContract(totals,match,{...totalSelection,line:228,label:"Over 228"},now)!;
+assert.equal(integerOver.context?.method,"push_adjusted");assert.ok(Math.abs(integerOver.outcomes[0].probability-.47/.975)<1e-12);
+assert.equal(resolveReaderContract(totals,match,selection,now),null,"a total feed cannot stand in for a spread");
+assert.equal(resolveReaderContract(spread,{...match,eventTicker:"KXNBAGAME-26OCT29GSWMIN"},selection,now),null,"wrong day rejected");
+assert.equal(resolveReaderContract({...spread,sport:"nfl"},match,selection,now),null,"cross-sport event suffix cannot join");
+assert.equal(resolveReaderContract(spread,match,selection,now+25*3600_000),null,"retained data has a real age limit");
+assert.equal(resolveReaderContract(spread,match,selection,now+20*60_000)?.status,"retained");
+assert.equal(parseContractFeed({...envelope([]),meta:{cacheTimestamp:new Date(now-11*60_000).toISOString()}},"nba","spread",now),null);
+assert.equal(parseContractFeed(envelope([raw("KXNBA1HSPREAD","MIN5",4.5,.5)]),"nba","spread",now)?.rows.length,0,"half-game markets cannot masquerade as full-game spread");
+assert.equal(parseContractFeed(envelope([raw("KXNBASPREAD","MIN5",4,.5)]),"nba","spread",now)?.rows.length,0,"unproven settlement threshold rejected");
+assert.equal(contractSeries("ucl","btts"),"kxuclbtts");assert.deepEqual(contractKinds("mlb"),["total"]);
+const soccerGame={...game,sport:"soccer",markets:{...game.markets,first_inning:{pick:"No",line:null}}} as DailyEdgeGameDto;
+assert.equal(readerContractSelection(soccerGame,"first_inning")?.kind,"btts");
+assert.equal(readerContractSelection({...game,sport:"mlb"},"first_inning"),null,"missing first-inning feed cannot borrow moneyline");
+const btts=parseContractFeed(envelope([raw("KXEPLBTTS","BTTS",null,.6)]),"soccer","btts",now)!;
+const soccerMatch={...match,eventTicker:"KXEPLGAME-26OCT28GSWMIN"} as PredictionMarketMatch;
+const bttsNo=resolveReaderContract(btts,soccerMatch,{kind:"btts",line:null,side:"no",label:"BTTS No"},now)!;
+assert.equal(bttsNo.outcomes[0].probability,.4);assert.equal(bttsNo.context?.method,"exact");
+
+const historical=structuredClone(spread);
+for(const row of historical.rows){row.history.unshift([now-300_000,row.probability-.01,900]);row.historicalCandles=[[now-600_000,row.probability-.02,50]];}
+const historicalAdjusted=resolveReaderContract(historical,match,selection,now)!;
+assert.equal(predictionMarketChartSeries(historicalAdjusted.outcomes[0]).points.length,3,"push-adjusted graph uses real simultaneous historical observations");
+const unpaired=structuredClone(historical);unpaired.rows[1].historicalCandles=[];
+assert.equal(resolveReaderContract(unpaired,match,selection,now)!.outcomes[0].historicalCandles?.length,0,"one missing source candle is not fabricated");
+const kept=contractsForPublishedReaders(spread,winners,[game],now);
+assert.deepEqual(new Set(kept.rows.map(row=>row.strike)),new Set([3.5,4.5]),"both required push brackets retained, unrelated ladders not copied");
+const retained=mergePredictionMarketFeeds(kept,{...kept,rows:[]},now+5*60_000) as ContractFeed;
+assert.equal(retained.rows[0].asOf,asOf);assert.equal(retained.kind,"spread");
+assert.equal(JSON.stringify(game),before,"locked/member input tuple is byte-for-byte unchanged");
+const stop=(line:number,american:number,label:"first"|"current")=>({line,american,label,sportsbook:"circa",observedAt:asOf,source:"current_line" as const});
+const book={pick:"MIN -4",oddsTrail:[{...stop(-3.5,-110,"first"),observedAt:new Date(now-300_000).toISOString()},stop(-4,-115,"current")]} as MarketEdgeDto;
+assert.deepEqual(predictionMarketBookTrail(book,"MIN -4",now,-4)?.points.map(p=>p[2]),[-115],"different point lines are never plotted as price movement of one contract");
+assert.equal(predictionMarketBookTrail(book,"MIN -4",now,-3.5),null,"old alternate line without a current/locked endpoint is not current");
+
+const service=readFileSync("lib/services/dailyEdge/predictionMarketDisplayFeed.ts","utf8");
+assert.equal((service.match(/await backfillKalshiDisplayHistory\(/g)??[]).length,1,"all kinds share the existing global history request budget");
+assert.ok(service.includes('contractsForPublishedReaders(parsed,winners,games)'));
+assert.ok(service.includes('revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0})')&&service.includes('revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0})'),"successful scheduled capture expires both member cache lanes immediately");
+assert.ok(!/game_predictions|prediction_records|prediction_pipeline|locked_at/.test(service),"display capture has no model/lock table authority");
+console.log("Prediction-market contracts: exact market/side/line, push accounting, explicit nearby context, real histories, coherent times, immutable readers and bounded collection passed.");
