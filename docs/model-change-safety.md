@@ -1,5 +1,22 @@
 # Model change safety protocol
 
+## Owner-directed repair: NFL observation slate handoff
+
+Capture candidate `market_intelligence_v2_capture_2026_10_28_r17_nfl_forward_slate_contract`
+restores exact-game collection from existing immutable NFL forward metadata when the generic slate
+is absent. It never consumes a stored forecast, grants new prediction authority, creates a second
+writer, changes schedules, or alters locked records. Latest-state status/identity checks reject
+canceled, rescheduled, ambiguous, and cross-provider conflicts. Optional public-feed failure is
+isolated only for NFL, preserving valid Owl observations without changing other sports.
+
+The verified-production no-write rehearsal recovered 14 games / 168 prices / 82 single-axis splits
+with two Owl GETs. The metadata read used 15 queries and 358,245 returned JSON bytes; hard limits
+are 84 queries and ten seconds. Restored existing-cadence provider work has a ceiling of 150 Owl
+plus 150 Playbook requests/day, not a billed-usage estimate. Model/grade/promotion/demotion/board
+deltas remain zero. Full integration, required safety tests and live post-merge capture proof remain
+mandatory. Evidence and rollback:
+`docs/model-audits/2026-10-28-market-price-provider-lineage-predeclaration.md`.
+
 ## Owner-directed repair: market-price provider lineage
 
 On 2026-10-28 Daniel Mengel directed Oddsphere to continue the internal Owl's Market Brain while
