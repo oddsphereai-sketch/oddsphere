@@ -66,7 +66,7 @@ export type SoccerSelection =
   | { market: "total"; selection: TotalSelection; line: number }
   | { market: "btts"; selection: BttsSelection };
 
-export type ProviderSource = "bdl" | "sharpapi";
+export type ProviderSource = "bdl" | "sharpapi" | "owls" | "the_odds_api" | "stored_quote";
 
 /**
  * Normalized soccer-odds record emitted by the providers. Single shape so
@@ -287,7 +287,7 @@ export function validateNormalizedRecord(
     if (record.line === null || !Number.isFinite(record.line)) return null;
   }
   if (record.odds_american === null && record.odds_decimal === null) return null;
-  if (record.provider !== "bdl" && record.provider !== "sharpapi") return null;
+  if (!["bdl", "sharpapi", "owls", "the_odds_api", "stored_quote"].includes(record.provider)) return null;
   return record;
 }
 

@@ -1,6 +1,5 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
-import { SharpApiClient } from "@/lib/providers/real_api/_sharpApiClient";
-import { SharpApiUclMarketProvider } from "@/lib/providers/real_api/SharpApiUclMarketProvider";
+import { CurrentSoccerMarketProvider } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
 import {
   buildEplDailyEdgePreview,
   hydrateEplPriceHistory,
@@ -18,9 +17,17 @@ import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
-export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_10_20_r2_minimum_coherent_decimal" as const;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_10_28_r3_owls_the_odds_price_source" as const;
 
-export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions, "captureAllBookPrices" | "storedPriceHistory">;
+export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions,
+  "captureAllBookPrices"
+  | "storedPriceHistory"
+  | "captureProviderTelemetry"
+  | "forceCurrentProviderRefresh"
+  | "marketProvider"
+  | "cacheNamespace"
+  | "cacheIdentity"
+>;
 
 type UclGoalOutlookProbabilities = NonNullable<NonNullable<DailyEdgeGameDto["soccerProjection"]>["goalOutlookProbabilities"]>;
 
@@ -95,18 +102,25 @@ function stageLabel(stage: string, leg: 1 | 2 | null): string {
 }
 
 export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPreviewBuildOptions = {}): Promise<DailyEdgeResponse> {
-  const key = process.env.SHARPAPI_KEY;
-  const provider = key ? new SharpApiUclMarketProvider(new SharpApiClient(key)) : null;
+  const owlsKey = process.env.OWLS_INSIGHT_API_KEY;
+  const theOddsApiKey = process.env.THE_ODDS_API_KEY;
+  const provider = options.marketProvider !== undefined
+    ? options.marketProvider
+    : owlsKey || theOddsApiKey ? new CurrentSoccerMarketProvider({
+        competition: "ucl",
+        owlsApiKey: owlsKey,
+        theOddsApiKey,
+        storedPriceHistory: options.forceCurrentProviderRefresh ? [] : options.storedPriceHistory,
+      }) : null;
   const base = await buildEplDailyEdgePreview(slate, {
     ...options,
     marketProvider: provider,
-    cacheNamespace: "ucl",
-    cacheIdentity: `${slate.boardDate}:${slate.matches.map((match) => `${match.id}@${match.kickoff}`).join(",")}`,
+    cacheNamespace: options.cacheNamespace ?? "ucl",
+    cacheIdentity: options.cacheIdentity ?? `${slate.boardDate}:${slate.matches.map((match) => `${match.id}@${match.kickoff}`).join(",")}`,
     skipForwardEvidence: true,
-    // Sharp's UCL market endpoint can return a transient partial bucket when
-    // several fixtures fan out at once. Keep UCL fixture assembly sequential,
-    // then retry only fixtures whose four-market board is incomplete. EPL
-    // retains its existing concurrency and recovery defaults.
+    // Keep UCL fixture assembly sequential, then retry only fixtures whose
+    // four-market board is incomplete. EPL retains its existing concurrency
+    // and recovery defaults.
     fixtureLoadConcurrency: 1,
     maxFixtureRecoveryLoads: slate.matches.length,
     finalizeFixtureMarket: (fixture, match) => applyUclStoredQuoteFallback({

@@ -75,7 +75,7 @@ function storedRowsForMarket(input: {
         odds_american: row.american,
         odds_decimal: decimalFromAmerican(row.american),
         sportsbook: row.sportsbook,
-        provider: "sharpapi",
+        provider: "stored_quote",
         provider_endpoint: UCL_STORED_QUOTE_FALLBACK_ENDPOINT,
         fetched_at: row.recordedAt,
         provider_event_id: null,

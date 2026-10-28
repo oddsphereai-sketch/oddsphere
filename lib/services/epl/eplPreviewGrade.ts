@@ -1,6 +1,6 @@
 import type { Grade } from "@/lib/types/domain/Grade";
 
-export const EPL_PREVIEW_GRADE_RELEASE = "epl_grade_policy_2026_10_10_v25_exact_match_result_price_tiering" as const;
+export const EPL_PREVIEW_GRADE_RELEASE = "epl_grade_policy_2026_10_28_v26_owls_the_odds_price_source" as const;
 
 export type EplPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type EplPreviewGrade = {
