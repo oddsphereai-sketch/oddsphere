@@ -380,7 +380,7 @@ function quoteMovement(row: Row): string | null {
 }
 function normalizeBook(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function book(value: string): string { const labels: Record<string, string> = { draftkings: "DraftKings", fanduel: "FanDuel", novig: "NoVig", ballybet: "Bally Bet" }; return labels[value.toLowerCase()] ?? value; }
-function provider(value: string): string { return value === "balldontlie" ? "Ball Don’t Lie" : value === "sharpapi" ? "Sharp API" : value; }
+function provider(value: string): string { return value === "balldontlie" ? "Ball Don’t Lie" : value === "owls" ? "Owls Insight" : value === "sharpapi" ? "Sharp API" : value; }
 function gameTime(value: string | null | undefined): string { const date = value ? new Date(value) : null; return date && Number.isFinite(date.getTime()) ? date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) : "Start time pending"; }
 function fullGameTime(value: string | null | undefined): string { const date = value ? new Date(value) : null; return date && Number.isFinite(date.getTime()) ? localTime(value!) : "unavailable"; }
 function localTime(value: string): string { return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }); }

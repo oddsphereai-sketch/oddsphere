@@ -123,6 +123,7 @@ export async function GET(request: Request): Promise<Response> {
           now: cycleNow,
           apply: true,
           ballDontLieApiKey: balldontlieApiKey,
+          owlsInsightApiKey: owlsApiKey,
         });
       } catch (error) {
         // Props retains its last complete snapshot. A provider failure must not

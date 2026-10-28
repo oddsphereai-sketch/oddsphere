@@ -9,7 +9,7 @@
 export const NFL_PLAYER_PROPS_RESEARCH_SCHEMA_RELEASE =
   "nfl_player_props_research_schema_2026_08_20_r4" as const;
 export const NFL_PLAYER_PROPS_PROVIDER_SNAPSHOT_RELEASE =
-  "nfl_player_props_provider_observation_2026_10_15_r13_reference_priority" as const;
+  "nfl_player_props_provider_observation_2026_10_28_r14_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_SHADOW_MODEL_RELEASE =
   "nfl_player_props_shadow_unfit_2026_08_20_r1" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
@@ -44,7 +44,8 @@ export const NFL_PLAYER_PROPS_RESEARCH_MARKETS = [
 
 export type NflPlayerPropMarket = (typeof NFL_PLAYER_PROPS_RESEARCH_MARKETS)[number];
 export type NflPlayerPropPhase = "preseason" | "regular" | "postseason";
-export type NflPlayerPropProvider = "balldontlie" | "sharpapi";
+/** `sharpapi` remains readable for immutable legacy snapshots; active collection is BDL + Owls. */
+export type NflPlayerPropProvider = "balldontlie" | "owls" | "sharpapi";
 export type NflPlayerPropSide = "over" | "under" | "yes";
 export type NflPlayerPropOfferType = "over_under" | "milestone";
 
@@ -196,7 +197,7 @@ export function buildNflPlayerPropsObservationSnapshot(args: {
   const bdlOutsideSlate = args.observations.filter((row) => row.provider === "balldontlie" && !gameIds.has(row.providerEventId));
   if (bdlOutsideSlate.length > 0) throw new Error("NFL props BALLDONTLIE rows fall outside the requested slate.");
   const providerCoverage = Object.fromEntries(
-    (["balldontlie", "sharpapi"] as const)
+    (["balldontlie", "owls", "sharpapi"] as const)
       .map((provider) => [provider, summarizeNflPlayerPropsCoverage(args.observations.filter((row) => row.provider === provider))])
       .filter(([, coverage]) => (coverage as NflPlayerPropsCoverage).rows > 0),
   ) as Partial<Record<NflPlayerPropProvider, NflPlayerPropsCoverage>>;

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NflPlayerPropsExactOffer } from "./nflPlayerPropsMarketBoard";
 
 export const NFL_PLAYER_PROPS_REFERENCE_OFFER_STORE_RELEASE =
-  "nfl_player_props_reference_offer_store_2026_10_15_r3_snapshot_schema" as const;
+  "nfl_player_props_reference_offer_store_2026_10_28_r4_owls_source" as const;
 export const NFL_PLAYER_PROPS_REFERENCE_OFFER_MAXIMUM = 2_500 as const;
 export const NFL_PLAYER_PROPS_REFERENCE_OFFER_MAXIMUM_JSON_BYTES = 4_000_000 as const;
 

@@ -16,17 +16,17 @@ import { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPro
 export { NFL_PLAYER_PROPS_MEMBER_DECISION_SUPPORT_RELEASE } from "./nflPlayerPropsMemberDecisionSupportRelease";
 
 export const NFL_PLAYER_PROPS_PORTABLE_ARTIFACT_RELEASE =
-  "nfl_player_props_runtime_2026_10_27_r21_passing_yards_direction" as const;
+  "nfl_player_props_runtime_2026_10_28_r22_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_RUNTIME_RELEASE =
-  "nfl_player_props_runtime_2026_10_27_r39_passing_yards_direction" as const;
+  "nfl_player_props_runtime_2026_10_28_r40_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_BOARD_RELEASE =
-  "nfl_player_props_board_2026_10_27_r42_passing_yards_direction" as const;
+  "nfl_player_props_board_2026_10_28_r43_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_DECISION_RELEASE =
-  "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction" as const;
+  "nfl_player_props_decision_2026_10_28_r39_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_MODEL_RELEASE =
-  "nfl_player_props_distribution_model_2026_10_27_r32_passing_yards_direction" as const;
+  "nfl_player_props_distribution_model_2026_10_28_r33_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_CALIBRATION_RELEASE =
-  "nfl_player_props_distribution_calibration_2026_10_27_r34_passing_yards_direction" as const;
+  "nfl_player_props_distribution_calibration_2026_10_28_r35_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_PASSING_MARKET_RELEASE =
   "nfl_player_props_market_residual_calibration_2026_10_27_r14_passing_yards_direction" as const;
 export const NFL_PLAYER_PROPS_MARKET_COHERENT_PROJECTION_RELEASE =
@@ -51,7 +51,7 @@ export const NFL_PLAYER_PROPS_MATERIAL_PRICE_MOVEMENT_PP = 0.025 as const;
 export const NFL_PLAYER_PROPS_HARD_AVAILABILITY_MAX_GAME_AGE_DAYS = 6 as const;
 export const NFL_PLAYER_PROPS_MARKET_ROLE_MINIMUM_BOOKS = 2 as const;
 export const NFL_PLAYER_PROPS_SOURCE_AWARE_MARKET_READING_RELEASE =
-  "nfl_player_props_market_reading_2026_10_27_r9_passing_yards_direction" as const;
+  "nfl_player_props_market_reading_2026_10_28_r10_owls_reference_prices" as const;
 export const NFL_PLAYER_PROPS_PASSING_YARDS_MARKET_DIRECTION_MINIMUM_DISTANCE = 0.01 as const;
 export const NFL_PLAYER_PROPS_DECISION_SUPPORT_EVIDENCE_RELEASE =
   "nfl_player_props_decision_support_evidence_2026_10_15_r1" as const;

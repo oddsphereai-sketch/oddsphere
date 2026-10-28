@@ -5,7 +5,7 @@ import type { NflPlayerPropsObservationSnapshot } from "./nflPlayerPropsContract
 import type { NflPlayerPropsMarketObserverRow } from "./nflPlayerPropsMarketObserverStore";
 
 export const NFL_PLAYER_PROPS_TRACKING_RELEASE =
-  "nfl_player_props_tracking_2026_10_27_r39_passing_yards_direction" as const;
+  "nfl_player_props_tracking_2026_10_28_r40_owls_reference_prices" as const;
 
 export async function writeLockedNflPlayerPropsTracking(args: {
   client: SupabaseClient;

@@ -128,16 +128,16 @@ function boardRows(rows: NflPlayerPropsRuntimeDecision[]): NflPlayerPropsRuntime
 }
 
 const unlocked = reconcileNflPlayerPropsProductionSnapshot({ season: 2026, week: 1, evaluatedAt: "2026-08-25T12:00:00.000Z", nextBoard: board(decision) });
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_27_r51_passing_yards_direction");
-assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_27_r65_passing_yards_direction");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_CANDIDATE_RELEASE, "nfl_player_props_member_2026_10_28_r52_owls_reference_prices");
+assert.equal(NFL_PLAYER_PROPS_WRITER_RELEASE, "nfl_player_props_writer_2026_10_28_r66_owls_reference_prices");
 assert.equal(NFL_PLAYER_PROPS_REFERENCE_CAPTURE_INTERVAL_MINUTES, 60);
-assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_27_r39_passing_yards_direction");
+assert.equal(NFL_PLAYER_PROPS_TRACKING_RELEASE, "nfl_player_props_tracking_2026_10_28_r40_owls_reference_prices");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_RELEASE, "nfl_player_props_settlement_2026_08_25_r3_bounded_finality");
 assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCLUDE_OPENINGS, true, "production records same-book opening context for movement and CLV interpretation");
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 63, "slate/current+opening props/player identity/Sharp pagination and the isolated Pinnacle/NoVig reference lanes are explicitly bounded");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_COLLECTION_CALL_MAXIMUM, 46, "slate/current+opening props/player identity and the one-request Owls lane are explicitly bounded");
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_GAMES_PER_CYCLE, 18);
 assert.equal(NFL_PLAYER_PROPS_SETTLEMENT_MAX_RECORDS_PER_CYCLE, 1_000);
-assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM, 113, "collection, current-season state, settlement, and isolated reference capture have one declared incremental-call ceiling");
+assert.equal(NFL_PLAYER_PROPS_PRODUCTION_INCREMENTAL_CALL_MAXIMUM, 96, "collection, current-season state, settlement, and Owls reference capture have one declared incremental-call ceiling");
 const freshRetainedReferenceOffers = [
   { market: "receptions" as const, observedAt: "2026-10-15T12:00:00.000Z" },
 ];
@@ -402,7 +402,7 @@ const precedingTouchdown = {
   market: "anytime_td" as const,
   side: "yes" as const,
   line: 0.5,
-  decisionRelease: "nfl_player_props_decision_2026_10_27_r37_passing_completions_direction",
+  decisionRelease: "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction",
   modelRelease: "nfl_player_props_anytime_td_model_2026_08_25_r3_shared_context",
   calibrationRelease: "nfl_player_props_anytime_td_calibration_2026_08_25_r3_shared_context",
 };
@@ -410,7 +410,7 @@ const precedingReceptions = {
   ...omittedGame,
   gameId: "game-preceding-receptions",
   market: "receptions" as const,
-  decisionRelease: "nfl_player_props_decision_2026_10_27_r37_passing_completions_direction",
+  decisionRelease: "nfl_player_props_decision_2026_10_27_r38_passing_yards_direction",
   modelRelease: "nfl_player_props_distribution_model_2026_10_27_r30_receptions_direction_authority",
   calibrationRelease: "nfl_player_props_distribution_calibration_2026_10_27_r32_receptions_direction_authority",
 };

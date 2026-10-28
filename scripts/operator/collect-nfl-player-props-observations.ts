@@ -33,7 +33,7 @@ async function main(): Promise<void> {
     normalization: {
       balldontlie: withoutRows(result.normalization.balldontlie),
       balldontlieOpenings: withoutRows(result.normalization.balldontlieOpenings),
-      sharpapi: withoutRows(result.normalization.sharpapi),
+      owls: withoutRows(result.normalization.owls),
     },
     healthFindings: result.snapshot.healthFindings,
     limits: NFL_PLAYER_PROPS_COLLECTION_LIMITS,

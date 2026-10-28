@@ -45,7 +45,7 @@ async function main(): Promise<void> {
     phase: "regular",
     includeOpenings: true,
     ballDontLieApiKey: requiredEnv("BALLDONTLIE_API_KEY"),
-    sharpApiKey: process.env.SHARPAPI_KEY,
+    owlsInsightApiKey: requiredEnv("OWLS_INSIGHT_API_KEY"),
   });
   const evidence = await readNflForwardEvidence({ client, season, week });
   const context = buildNflPlayerPropsInferenceContextFromForwardEvidence({
