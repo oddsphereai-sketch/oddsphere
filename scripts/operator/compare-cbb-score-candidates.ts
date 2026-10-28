@@ -2,10 +2,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import { evaluateCbbRows, cbbMonthlyMetrics, type CbbEvaluationRow } from "../../lib/cbb/evaluation";
 const dir = "/private/tmp/oddsphere-cbb-data";
 async function main() {
-  const baseline: CbbEvaluationRow[] = JSON.parse(await readFile(`${dir}/confirmation-rows.json`, "utf8"));
-  const candidate: CbbEvaluationRow[] = JSON.parse(await readFile(`${dir}/candidate-r2-diagnostic.json`, "utf8"));
+  const version = process.argv.find(arg => arg.startsWith("--candidate="))?.split("=")[1] ?? "r2";
+  if (!["r2", "r3", "r4"].includes(version)) throw new Error("unknown private CBB comparison");
+  const baseFile = version === "r2" ? "confirmation-rows.json" : `candidate-${version === "r3" ? "r2" : "r3"}-diagnostic.json`;
+  const baseline: CbbEvaluationRow[] = JSON.parse(await readFile(`${dir}/${baseFile}`, "utf8"));
+  const candidate: CbbEvaluationRow[] = JSON.parse(await readFile(`${dir}/candidate-${version}-diagnostic.json`, "utf8"));
   const byId = new Map(baseline.map(row => [row.game.id, row]));
-  if (candidate.length !== baseline.length || candidate.some(row => !byId.has(row.game.id))) throw new Error("CBB paired cohort mismatch");
+  if (new Set(candidate.map(row => row.game.id)).size !== candidate.length || candidate.length !== baseline.length || candidate.some(row => JSON.stringify(row.game) !== JSON.stringify(byId.get(row.game.id)?.game))) throw new Error("CBB paired cohort mismatch");
   const dates = new Map<string, Array<{ margin: number; total: number; winner: number }>>();
   let corrections = 0, harms = 0;
   for (const row of candidate) {
@@ -51,7 +54,7 @@ async function main() {
       return (old.forecast.homeWinProbability >= 0.5) === winner && (row.forecast.homeWinProbability >= 0.5) !== winner;
     }).map(row => ({ gameId: row.game.id, date: row.game.date, actualMargin: row.game.homeScore - row.game.awayScore,
       oldMargin: byId.get(row.game.id)!.forecast.margin, newMargin: row.forecast.margin })) };
-  await writeFile(`${dir}/score-paired-comparison.json`, JSON.stringify(report, null, 2));
+  await writeFile(`${dir}/${version === "r2" ? "score-paired-comparison" : `score-paired-${version}`}.json`, JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ games: report.games, corrections, harms, uncertainty: report.uncertainty,
     monthly: Object.fromEntries(Object.entries(report.monthly).map(([month, value]) => [month, { n: value.candidate.games,
       marginDelta: value.candidate.marginMae - value.baseline.marginMae, totalDelta: value.candidate.totalMae - value.baseline.totalMae,

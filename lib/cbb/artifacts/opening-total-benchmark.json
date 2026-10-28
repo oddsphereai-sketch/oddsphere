@@ -1,0 +1,240 @@
+{
+  "productionWrites": 0,
+  "dates": [
+    "2026-02-07",
+    "2026-02-14",
+    "2026-02-21",
+    "2026-02-28",
+    "2026-03-07",
+    "2026-03-14",
+    "2026-03-21",
+    "2026-03-28"
+  ],
+  "booksInFixedPreference": [
+    "draftkings",
+    "fanduel",
+    "betmgm",
+    "caesars"
+  ],
+  "requests": 47,
+  "rawRows": 4619,
+  "rejected": {
+    "non_selected_book": 2454,
+    "incomplete_total_pair": 9,
+    "not_verified_pregame_opening_time": 10,
+    "unmatched_accepted_game": 30
+  },
+  "method": "Forecast rerun at exact selected named-book opening timestamp with six-hour result holdback. One book per game, fixed preference. Total is orientation invariant.",
+  "limitations": "2025 season already opened; retrospective sample, not untouched validation. Opening only, not closing prices or movement. All-game picks, not calibrated grades or a betting recommendation. Units are hypothetical one-risked replay, not live locked tracking.",
+  "summary": {
+    "games": 635,
+    "openingTotalMae": 13.529133858267716,
+    "r2": {
+      "wins": 341,
+      "losses": 294,
+      "pushes": 0,
+      "passes": 0,
+      "unitsAtOneRisked": 14.938728104329106,
+      "totalMae": 13.447404903166436
+    },
+    "r3": {
+      "wins": 329,
+      "losses": 306,
+      "pushes": 0,
+      "passes": 0,
+      "unitsAtOneRisked": -8.039677311416463,
+      "totalMae": 13.454320932614534
+    }
+  },
+  "regulation": {
+    "games": 600,
+    "openingTotalMae": 13.059166666666666,
+    "r2": {
+      "wins": 324,
+      "losses": 276,
+      "pushes": 0,
+      "passes": 0,
+      "unitsAtOneRisked": 17.504755876878615,
+      "totalMae": 12.960172545291421
+    },
+    "r3": {
+      "wins": 315,
+      "losses": 285,
+      "pushes": 0,
+      "passes": 0,
+      "unitsAtOneRisked": 0.3033701403266673,
+      "totalMae": 13.005390035411542
+    }
+  },
+  "byDate": {
+    "2026-02-07": {
+      "games": 127,
+      "openingTotalMae": 14.759842519685039,
+      "r2": {
+        "wins": 66,
+        "losses": 61,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -1.4744390070477058,
+        "totalMae": 14.71036032911185
+      },
+      "r3": {
+        "wins": 64,
+        "losses": 63,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -5.279680866637392,
+        "totalMae": 14.900101428392569
+      }
+    },
+    "2026-02-14": {
+      "games": 122,
+      "openingTotalMae": 12.967213114754099,
+      "r2": {
+        "wins": 67,
+        "losses": 55,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 5.870467862155842,
+        "totalMae": 12.656094900491725
+      },
+      "r3": {
+        "wins": 66,
+        "losses": 56,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 3.8678555743773138,
+        "totalMae": 12.57745097041665
+      }
+    },
+    "2026-02-21": {
+      "games": 124,
+      "openingTotalMae": 14.44758064516129,
+      "r2": {
+        "wins": 65,
+        "losses": 59,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 0.04484806658719542,
+        "totalMae": 14.306999734903336
+      },
+      "r3": {
+        "wins": 69,
+        "losses": 55,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 7.52355333877073,
+        "totalMae": 14.168321900468104
+      }
+    },
+    "2026-02-28": {
+      "games": 137,
+      "openingTotalMae": 12.069343065693431,
+      "r2": {
+        "wins": 76,
+        "losses": 61,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 7.744248907292387,
+        "totalMae": 11.953647480396342
+      },
+      "r3": {
+        "wins": 63,
+        "losses": 74,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -16.971145199406063,
+        "totalMae": 12.225292917856585
+      }
+    },
+    "2026-03-07": {
+      "games": 83,
+      "openingTotalMae": 15.042168674698795,
+      "r2": {
+        "wins": 41,
+        "losses": 42,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -4.980634502373636,
+        "totalMae": 15.32574471860863
+      },
+      "r3": {
+        "wins": 44,
+        "losses": 39,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 0.8993558776167483,
+        "totalMae": 14.768669010913284
+      }
+    },
+    "2026-03-14": {
+      "games": 29,
+      "openingTotalMae": 12.568965517241379,
+      "r2": {
+        "wins": 20,
+        "losses": 9,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 9.319217014869187,
+        "totalMae": 12.040463414893816
+      },
+      "r3": {
+        "wins": 15,
+        "losses": 14,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -0.31281761716544354,
+        "totalMae": 12.480799565872832
+      }
+    },
+    "2026-03-21": {
+      "games": 10,
+      "openingTotalMae": 6,
+      "r2": {
+        "wins": 5,
+        "losses": 5,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -0.4940711462450593,
+        "totalMae": 7.514817284621392
+      },
+      "r3": {
+        "wins": 7,
+        "losses": 3,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": 3.324110671936759,
+        "totalMae": 6.613594373258837
+      }
+    },
+    "2026-03-28": {
+      "games": 3,
+      "openingTotalMae": 5.5,
+      "r2": {
+        "wins": 1,
+        "losses": 2,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -1.0909090909090908,
+        "totalMae": 6.255559462842361
+      },
+      "r3": {
+        "wins": 1,
+        "losses": 2,
+        "pushes": 0,
+        "passes": 0,
+        "unitsAtOneRisked": -1.0909090909090908,
+        "totalMae": 10.372062653481956
+      }
+    }
+  },
+  "rawCapture": {
+    "file": "/private/tmp/oddsphere-cbb-data/opening-total-benchmark-raw.json",
+    "fetchedAt": "2026-10-28T21:36:06.047Z",
+    "sha256": "cb09c7615002be8929a4c13b129d453945143f893c44a067b88f18f703fe8e7b"
+  },
+  "replayRows": {
+    "file": "/private/tmp/oddsphere-cbb-data/opening-total-benchmark-report.json",
+    "sha256": "d5946ec1ebd25eb8eabcd494f96fd63bc151b38f237dbab46f9feaaa10d6d0b2"
+  }
+}
