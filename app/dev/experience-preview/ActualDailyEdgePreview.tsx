@@ -91,6 +91,7 @@ import { cfbTeamIdentity } from "@/lib/services/football/cfbTeamIdentity";
 import { exactLockedEplScoreOutlook, impliedEplMatchResultScoreOutlook } from "@/lib/services/epl/eplDerivedMarketForecast";
 import { uclTeamAsset, uclTeamLogo } from "@/lib/services/ucl/uclTeamAssets";
 import { teamPrimaryColor } from "@/app/lab/components/daily-edge/teamColors";
+import PredictionMarketPanel from "@/app/lab/components/daily-edge/PredictionMarketPanel";
 
 type DeepView = "case" | "market" | "matchup" | "trend" | "model";
 
@@ -727,11 +728,12 @@ function ReaderEvidence({ game, market, marketKey, sport, history, pitcherFirstI
     <>
       <div className={soccerLayout ? "grid items-start gap-3 border-t border-white/[0.07] bg-black/10 p-3 lg:grid-cols-[0.96fr_1.08fr_1.06fr] sm:p-4" : "grid lg:grid-cols-[1fr_1.28fr_1fr] xl:grid-cols-[1.08fr_1.34fr_1.08fr]"}>
         <QuickRead game={game} market={market} marketKey={marketKey} sport={sport} illustrativeSample={illustrativeSample} />
-        {firstInningMode ? <FirstInningIntelligence market={market} illustrativeSample={illustrativeSample} /> : <IntegratedEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} illustrativeSample={illustrativeSample} />}
+        {firstInningMode ? <div><FirstInningIntelligence market={market} illustrativeSample={illustrativeSample} /><div className="px-4 pb-4 sm:hidden"><PredictionMarketPanel game={game} variant="mobile" illustrativeSample={illustrativeSample} /></div></div> : <IntegratedEvidence game={game} market={market} marketKey={marketKey} sport={sport} availability={availability} illustrativeSample={illustrativeSample} />}
         <KeyStats game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} availability={availability} illustrativeSample={illustrativeSample} />
       </div>
       {soccerLayout ? <div className="border-t border-white/[0.07] px-4 pb-5 sm:px-5 xl:px-6"><HistoryStatSummary game={game} market={market} marketKey={marketKey} history={history} sample={sample} sport={sport} wide illustrativeSample={illustrativeSample} /></div> : null}
       {firstInningMode ? <FirstInningRecentContext game={game} history={history} pitcherHistory={pitcherFirstInningHistory[game.id] ?? null} sample={sample} pick={market.pick} illustrativeSample={illustrativeSample} /> : null}
+      <PredictionMarketPanel game={game} variant="desktop" illustrativeSample={illustrativeSample} />
     </>
   );
 }
@@ -1121,6 +1123,7 @@ function IntegratedEvidence({ game, market, marketKey, sport, availability, illu
       <div className="mt-4 space-y-3">
         {sport === "soccer" && marketKey === "moneyline" ? <SoccerDoubleChancePanel game={game} /> : null}
         <CompactMarketPulse market={market} showSplits sport={sport} illustrativeSample={illustrativeSample} />
+        <PredictionMarketPanel game={game} variant="mobile" illustrativeSample={illustrativeSample} />
         {!football && availability ? <AvailabilityContext report={availability} market={market} /> : sport === "mlb" ? <MlbAvailabilityUnavailable illustrativeSample={illustrativeSample} /> : null}
       </div>
     </div>
