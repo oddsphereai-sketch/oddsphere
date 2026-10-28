@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -268,17 +268,21 @@ export default function ActualDailyEdgePreview({
   }, []);
 
   useEffect(() => {
-    if (embeddedSample || sport === "cfb") return;
-    const cfbDestination = buildDailyEdgeSportSwitchDestination({
-      pathname,
-      currentSearch: searchParams.toString(),
-      nextSport: "cfb",
-      explicitDestinations: sportSwitchDestinations,
-      slateDate: currentSlateDate,
-    });
-    // CFB carries a weekly server payload. Warm it before intent so selecting
-    // the tab behaves like the smaller same-route sport transitions.
-    router.prefetch(cfbDestination);
+    if (embeddedSample) return;
+    // NBA and CFB carry the two largest member payloads. Warm both high-traffic
+    // destinations while the current board is already usable so a later sport
+    // selection can reuse Next's client cache instead of starting cold.
+    for (const nextSport of ["nba", "cfb"] as const) {
+      if (sport === nextSport) continue;
+      const destination = buildDailyEdgeSportSwitchDestination({
+        pathname,
+        currentSearch: searchParams.toString(),
+        nextSport,
+        explicitDestinations: sportSwitchDestinations,
+        slateDate: currentSlateDate,
+      });
+      router.prefetch(destination);
+    }
   }, [embeddedSample, pathname, router, searchParams, sport, sportSwitchDestinations]);
 
   function switchSport(next: Sport) {
@@ -2599,6 +2603,34 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
     return Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? "");
   });
   const groupedGames = dateGroupedBoard ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt ? dateKeyInTimeZone(game.gameStartAt, groupingTimeZone) : "Unscheduled")) : [["", orderedGames] as const];
+  const progressiveNbaBoard = sport === "nba" && dateGroupedBoard && filter === "all" && groupedGames.length > 1;
+  const [visibleDateGroupCount, setVisibleDateGroupCount] = useState(1);
+  useEffect(() => {
+    if (!progressiveNbaBoard || visibleDateGroupCount >= groupedGames.length) return;
+    let cancelled = false;
+    let idleHandle: number | null = null;
+    let timeoutHandle: number | null = null;
+
+    const revealNextDate = () => {
+      if (cancelled) return;
+      startTransition(() => {
+        setVisibleDateGroupCount((current) => Math.min(current + 1, groupedGames.length));
+      });
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      idleHandle = window.requestIdleCallback(revealNextDate, { timeout: 750 });
+    } else {
+      timeoutHandle = window.setTimeout(revealNextDate, 50);
+    }
+    return () => {
+      cancelled = true;
+      if (idleHandle !== null) window.cancelIdleCallback(idleHandle);
+      if (timeoutHandle !== null) window.clearTimeout(timeoutHandle);
+    };
+  }, [groupedGames.length, progressiveNbaBoard, visibleDateGroupCount]);
+  const renderedGameGroups = progressiveNbaBoard
+    ? groupedGames.slice(0, visibleDateGroupCount)
+    : groupedGames;
   const marketFilters: Array<{ key: MarketKey | null; label: string }> = [{ key: null, label: footballBoard ? "All markets" : "Best market" }, { key: "moneyline", label: "Moneyline" }, { key: "total", label: "Totals" }, { key: "first_inning", label: marketLabelFor("first_inning", sport) }];
   const countNote = focus === null
     ? "Counts show games containing at least one market with each grade; a game can appear in more than one grade."
@@ -2657,7 +2689,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
         {uclBoard ? <p className="mt-3 border-t border-white/[0.05] pt-3 text-[8px] font-semibold text-gray-600">Matches are grouped by your local calendar date. Every card also shows its localized kickoff date and time.</p> : null}
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} aria-pressed={active} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div>
       </div>
-      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6">{groupedGames.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{date === "Unscheduled" ? "Date TBD" : boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} illustrativeSample={marketingSample} />)}</div></section>; })}</div>}
+      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6" aria-busy={progressiveNbaBoard && visibleDateGroupCount < groupedGames.length}>{renderedGameGroups.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{date === "Unscheduled" ? "Date TBD" : boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} illustrativeSample={marketingSample} />)}</div></section>; })}</div>}
     </section>
   );
 }
