@@ -59,6 +59,8 @@ export type SlateReconciliationOpts = {
   okThreshold?: number;
   /** Overlap fraction below which status is `fail_closed`. Default 0.50. */
   failClosedThreshold?: number;
+  /** User-visible provider name; defaults to SharpAPI for legacy callers. */
+  providerLabel?: string;
 };
 
 const DEFAULT_OK_THRESHOLD = 0.8;
@@ -103,6 +105,7 @@ export function reconcileBdlVsSharpEv(
   const okThreshold = opts?.okThreshold ?? DEFAULT_OK_THRESHOLD;
   const failClosedThreshold =
     opts?.failClosedThreshold ?? DEFAULT_FAIL_CLOSED_THRESHOLD;
+  const providerLabel = opts?.providerLabel ?? "SharpAPI";
 
   const bdlSet = new Set<string>();
   for (const g of bdlSlate) {
@@ -141,7 +144,7 @@ export function reconcileBdlVsSharpEv(
       sharpOnlyMatchups: [],
       status: "fail_closed",
       reason:
-        "SharpAPI /opportunities/ev returned zero events — no odds source for any BDL game.",
+        `${providerLabel} returned zero events — no odds source for any BDL game.`,
     };
   }
 
@@ -163,13 +166,13 @@ export function reconcileBdlVsSharpEv(
   let reason: string;
   if (overlap >= okThreshold) {
     status = "ok";
-    reason = `BDL ${bdlCount} ↔ SharpAPI ${sharpEvCount}: ${matchedCount} matched (${overlapPct}% overlap; ≥ ${(okThreshold * 100).toFixed(0)}% required).`;
+    reason = `BDL ${bdlCount} ↔ ${providerLabel} ${sharpEvCount}: ${matchedCount} matched (${overlapPct}% overlap; ≥ ${(okThreshold * 100).toFixed(0)}% required).`;
   } else if (overlap >= failClosedThreshold) {
     status = "warn";
-    reason = `Partial coverage: ${matchedCount}/${denominator} matchups overlap (${overlapPct}%). BDL-only=${bdlOnly.size}, SharpAPI-only=${sharpOnly.size}. Apply allowed but inspect missing matchups.`;
+    reason = `Partial coverage: ${matchedCount}/${denominator} matchups overlap (${overlapPct}%). BDL-only=${bdlOnly.size}, ${providerLabel}-only=${sharpOnly.size}. Apply allowed but inspect missing matchups.`;
   } else {
     status = "fail_closed";
-    reason = `Slate reconciliation failed: only ${matchedCount}/${denominator} matchups overlap (${overlapPct}%, below ${(failClosedThreshold * 100).toFixed(0)}% hard-block threshold). BDL-only=${bdlOnly.size}, SharpAPI-only=${sharpOnly.size}. Likely cause: SharpAPI stale slate or wrong endpoint upstream.`;
+    reason = `Slate reconciliation failed: only ${matchedCount}/${denominator} matchups overlap (${overlapPct}%, below ${(failClosedThreshold * 100).toFixed(0)}% hard-block threshold). BDL-only=${bdlOnly.size}, ${providerLabel}-only=${sharpOnly.size}. Likely cause: stale slate or wrong-date provider data.`;
   }
 
   return {

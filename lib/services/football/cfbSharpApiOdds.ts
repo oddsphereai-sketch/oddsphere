@@ -148,7 +148,7 @@ export async function fetchSharpApiNcaafOddsFallback(args: {
   if (games.length > CFB_SHARP_FALLBACK_MAX_GAMES) {
     throw new Error(`CFB SharpAPI fallback cannot exceed ${CFB_SHARP_FALLBACK_MAX_GAMES} exact games per run.`);
   }
-  const key = args.apiKey ?? process.env.SHARPAPI_KEY;
+  const key = args.apiKey;
   if (!key && !args.client) throw new Error("SHARPAPI_KEY is required for CFB named-book fallback.");
   const client = args.client ?? new SharpApiClient(key!);
   const signal = AbortSignal.timeout(CFB_SHARP_FALLBACK_MAX_DURATION_MS);

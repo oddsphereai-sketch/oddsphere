@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import { marketSplitSectionIsStale } from "../app/lab/lib/dailyEdgeSplitFreshness";
 import {
@@ -130,18 +131,41 @@ assert.equal(mlb.games[0]!.markets.moneyline.sportsbookSplits?.lastUpdated, null
 assert.equal(mlb.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.observedAt, null);
 assert.equal(mlb.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.staleAfterMinutes, undefined);
 
-const incomplete = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
-const incompleteRow = complete("ncaaf", "betmgm", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z");
-incompleteRow.total.handle_pct = { over: 44 } as typeof incompleteRow.total.handle_pct;
-const incompleteResult = applySharpApiCurrentSplitOverlay(incomplete, {
+const singleAxis = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+const singleAxisRow = complete("ncaaf", "betmgm", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z");
+singleAxisRow.total.handle_pct = { over: 44 } as typeof singleAxisRow.total.handle_pct;
+const singleAxisResult = applySharpApiCurrentSplitOverlay(singleAxis, {
   source: "sharpapi_current_splits",
   release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
   sport: "cfb",
   fetchedAt: "2026-09-20T20:04:00.000Z",
-  rows: [incompleteRow],
+  rows: [singleAxisRow],
 }, now);
-assert.deepEqual(incompleteResult, { matchedGames: 1, populatedMarkets: 2 }, "partial metrics must fail closed per market");
-assert.equal(incomplete.games[0]!.markets.total.sportsbookSplits, null);
+assert.deepEqual(singleAxisResult, { matchedGames: 1, populatedMarkets: 3 }, "a complete paired ticket axis remains visible when handle is unavailable");
+assert.deepEqual(
+  singleAxis.games[0]!.markets.total.sportsbookSplits?.rows.map((row) => [row.moneyPct, row.betsPct]),
+  [[null, 49], [null, 51]],
+  "single-axis rows stay honest instead of inventing a handle split",
+);
+assert.equal(
+  singleAxis.games[0]!.markets.total.recommendationDecision?.sharpBookSplits,
+  null,
+  "single-axis display evidence never becomes market-reader decision evidence",
+);
+
+const invalidAxes = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+const invalidAxesRow = complete("ncaaf", "betmgm", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:04:00.000Z");
+invalidAxesRow.total.handle_pct = { over: 44 } as typeof invalidAxesRow.total.handle_pct;
+invalidAxesRow.total.bets_pct = { over: 49 } as typeof invalidAxesRow.total.bets_pct;
+const invalidAxesResult = applySharpApiCurrentSplitOverlay(invalidAxes, {
+  source: "sharpapi_current_splits",
+  release: "sharpapi_current_splits_2026_09_20_r1_durable_overlay",
+  sport: "cfb",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [invalidAxesRow],
+}, now);
+assert.deepEqual(invalidAxesResult, { matchedGames: 1, populatedMarkets: 2 }, "an unpaired axis still fails closed per market");
+assert.equal(invalidAxes.games[0]!.markets.total.sportsbookSplits, null);
 
 const stale = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
 applySharpApiCurrentSplitOverlay(stale, {
@@ -249,8 +273,40 @@ partialUpdate.total.handle_pct = { over: null, under: null } as unknown as typeo
 const mergedFeed = sharpApiCurrentTest.mergeCurrentSplitFeeds({ ...feed, rows: [retainedComplete] }, { ...feed, fetchedAt: "2026-09-20T20:00:00.000Z", rows: [partialUpdate] });
 const mergedCurrent = mergedFeed.rows.find((row) => row.fetched_at === partialUpdate.fetched_at);
 assert.equal(mergedFeed.rows.length, 2, "the durable feed retains both sides of a future lock cutoff");
-assert.deepEqual(mergedCurrent?.total, retainedComplete.total, "a newer partial provider row cannot erase the last complete market pair");
+assert.deepEqual(mergedCurrent?.total, partialUpdate.total, "a newer single-axis observation remains timestamp-honest instead of borrowing an old handle axis");
 assert.equal(mergedCurrent?.fetched_at, partialUpdate.fetched_at, "new row identity and fetch time remain current for unaffected markets");
+
+const heldComplete = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+heldComplete.games[0]!.markets.total.sportsbookSplits = sharpApiCurrentTest.sectionFromRow(
+  heldComplete.games[0]!,
+  "total",
+  "circa",
+  retainedComplete,
+);
+applySharpApiCurrentSplitOverlay(heldComplete, { ...feed, fetchedAt: partialUpdate.fetched_at, rows: [partialUpdate] }, now);
+assert.equal(
+  heldComplete.games[0]!.markets.total.sportsbookSplits?.rows[0]?.moneyPct,
+  44,
+  "a current complete section survives a same-window single-axis update",
+);
+
+const freshPartialAfterGap = response("cfb", "LIB", "CCU", "Liberty Flames", "Coastal Carolina Chanticleers");
+freshPartialAfterGap.games[0]!.markets.total.sportsbookSplits = sharpApiCurrentTest.sectionFromRow(
+  freshPartialAfterGap.games[0]!,
+  "total",
+  "circa",
+  retainedComplete,
+);
+applySharpApiCurrentSplitOverlay(
+  freshPartialAfterGap,
+  { ...feed, fetchedAt: partialUpdate.fetched_at, rows: [partialUpdate] },
+  Date.parse("2026-09-20T22:30:00.000Z"),
+);
+assert.deepEqual(
+  freshPartialAfterGap.games[0]!.markets.total.sportsbookSplits?.rows.map((row) => [row.moneyPct, row.betsPct]),
+  [[null, 49], [null, 51]],
+  "a fresh single-axis observation replaces an expired complete display without fabricating freshness",
+);
 
 const postLock = complete("ncaaf", "circa", "Liberty Flames", "Coastal Carolina Chanticleers", "2026-09-20T20:01:00.000Z");
 postLock.moneyline.handle_pct = { away: 70, home: 30 };
@@ -282,6 +338,18 @@ assert.equal(
   marketSplitSectionIsStale(stale.games[0]!.markets.moneyline.sportsbookSplits ?? null, Date.parse("2027-09-20T20:05:00.000Z")),
   false,
   "retained fallback never triggers member-facing stale or historical copy",
+);
+
+const shellSource = readFileSync("app/lab/components/daily-edge/DailyEdgeShell.tsx", "utf8");
+assert.match(
+  shellSource,
+  /SourceAwareMarketPulse decision=\{decision\} sharpBookDisplayOverride=\{sharpBookSplits\}/,
+  "source-aware cards must render the verified response-boundary display override",
+);
+assert.match(
+  shellSource,
+  /const sharpBookSplits = sharpBookDisplayOverride \?\? decision\.sharpBookSplits/,
+  "the display override must not mutate the canonical market decision",
 );
 
 const retainedWriterSharp = response("cfb", "PIT", "NE", "Pittsburgh Panthers", "New England College");

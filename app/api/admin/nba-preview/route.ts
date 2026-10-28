@@ -7,7 +7,7 @@
  * the admin Daily Edge preview page. Includes:
  *   • per-game snapshot + model prediction (via featureSnapshot)
  *   • lines from DB (read-only)
- *   • splits + opportunities fetched live from SharpAPI
+ *   • stored prices and provider-derived market context
  *   • per-market intelligence (consensus, no-vig, EV, splits, conflict, grade)
  *
  * Auth: same `validateAdminAuth` (email + token headers) — with a
@@ -16,7 +16,6 @@
  */
 
 import { validateAdminAuth } from "@/lib/auth/admin";
-import { publicSplitsSupported } from "@/lib/config/publicSplitsCapability";
 import { buildNbaFeatureSnapshotsWithProvenance } from "@/lib/services/nba/featureSnapshot";
 import {
   createEspnNbaGameInjuryResolver,
@@ -37,13 +36,8 @@ import {
   type NbaDailyEdgeDto,
   type NbaDailyEdgeGameDto,
 } from "@/lib/services/nba/buildNbaDailyEdgeDto";
+import { matchSplitsRow, type NbaSplitsRow } from "@/lib/services/nba/nbaSplitsClient";
 import {
-  fetchNbaSplits,
-  matchSplitsRow,
-  type NbaSplitsRow,
-} from "@/lib/services/nba/nbaSplitsClient";
-import {
-  fetchNbaOpportunities,
   matchOpportunitiesForGame,
   type NbaOpportunity,
 } from "@/lib/services/nba/nbaOpportunitiesClient";
@@ -189,22 +183,11 @@ export async function GET(request: Request): Promise<Response> {
       }
     }
 
-    // Fetch /splits and /opportunities/ev for NBA (best-effort).
-    const sharpKey = process.env.SHARPAPI_KEY;
+    // Legacy SharpAPI enrichment is retired. The production NBA writer already
+    // persists Owls current prices/splits; this preview reads those stored rows
+    // above and never makes an outbound Sharp request.
     let splits: NbaSplitsRow[] = [];
     let opportunities: NbaOpportunity[] = [];
-    if (sharpKey !== undefined && sharpKey !== "") {
-      try {
-        splits = await fetchNbaSplits(sharpKey);
-      } catch (e) {
-        console.warn(`nba-preview: /splits fetch failed: ${(e as Error).message}`);
-      }
-      try {
-        opportunities = await fetchNbaOpportunities(sharpKey);
-      } catch (e) {
-        console.warn(`nba-preview: /opportunities fetch failed: ${(e as Error).message}`);
-      }
-    }
 
     const games: NbaDailyEdgeGameDto[] = snapshots.flatMap((s) => {
       const prov = provenanceByGame.get(s.game_external_id);
@@ -239,16 +222,7 @@ export async function GET(request: Request): Promise<Response> {
       ];
     });
 
-    // Surface SharpAPI access posture explicitly so the UI can render
-    // an env-aware "public market data unavailable" panel on the
-    // deployed Vercel preview (which intentionally does NOT have
-    // SHARPAPI_KEY set) instead of looking like the data is broken.
-    const marketSignalsCapability =
-      sharpKey === undefined || sharpKey === ""
-        ? ("unavailable_no_api_key" as const)
-        : publicSplitsSupported("nba")
-        ? ("available" as const)
-        : ("unavailable_unvalidated_source" as const);
+    const marketSignalsCapability = "unavailable_unvalidated_source" as const;
 
     const body: NbaDailyEdgeDto = {
       as_of: new Date().toISOString(),
@@ -257,7 +231,7 @@ export async function GET(request: Request): Promise<Response> {
       provisional: true,
       notice:
         "INTERNAL PREVIEW — NBA v0c — PROVISIONAL, NOT MEMBER-FACING. " +
-        "Thresholds are v0 placeholders. No opener/RLM/steam (SharpAPI does not provide).",
+        "Thresholds are v0 placeholders. No verified RLM/steam signal is available in this preview.",
       injury_ingest_enabled: isInjuryIngestEnabled(),
       market_signals_capability: marketSignalsCapability,
       games,

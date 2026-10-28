@@ -6,7 +6,7 @@
  * real_api) can swap them independently — e.g. real odds feed + mock sharp
  * signals during a phased ramp.
  *
- * Real implementation: SharpAPIProvider (paid Pro tier) — Phase 8.
+ * Real implementation: OwlsOddsProvider.
  * Manual implementation: AdminUploadOddsProvider — Phase 7.25.
  * Mock implementation: MockOddsProvider (reads from JSON fixtures).
  *
@@ -28,9 +28,8 @@ import type { MarketType, Side, Sportsbook } from "../../types/domain/Lines";
  * 'first_inning_total') and player props (market_type='batter_hits' etc.).
  * For game lines, player_external_id is null.
  *
- * SharpAPI built-in fields (ev_percent / fair_odds / is_ev_positive) are
- * pre-computed against Pinnacle by the provider; consumers should NOT
- * re-derive them.
+ * Fair/EV fields are provider-normalized against Pinnacle when a coherent
+ * matching Pinnacle pair exists; consumers should not re-derive them.
  */
 export type LineRecord = {
   game_external_id: number;

@@ -39,6 +39,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Sport } from "../types/domain/Sport";
 import type { LineRecord } from "../providers/interfaces/IOddsProvider";
+import { getOddsProvider } from "../providers/factory";
 import { SharpApiClient } from "../providers/real_api/_sharpApiClient";
 import { generateMlbEventIdCandidates } from "../providers/real_api/sharpApiEventIdCandidates";
 import {
@@ -168,7 +169,7 @@ export type MarketCoverageAuditOptions = {
   date: string;
   apply: boolean;
   supabase: SupabaseClient;
-  /** Optional injected SharpAPI client (defaults to one built from SHARPAPI_KEY env). */
+  /** Legacy test-only injection. Production recovery uses the configured odds provider (Owls). */
   sharpApiClient?: SharpApiClient;
   /**
    * Maximum candidate event_ids probed per missing game. Each candidate
@@ -270,7 +271,10 @@ export async function auditMarketCoverage(
   }
 
   // 4) Build coverage rows
-  const sharpClient = opts.sharpApiClient ?? buildSharpApiClient();
+  const configuredProviderRecords = opts.sharpApiClient
+    ? null
+    : await getOddsProvider().getGameLines(date, sport);
+  const sharpClient = opts.sharpApiClient ?? null;
   const coverageRows: GameCoverageRow[] = [];
 
   let rowsInserted = 0;
@@ -304,12 +308,6 @@ export async function auditMarketCoverage(
     let recovered = false;
 
     if (needsRecovery && !blockedByNormalization && homeAbbrev !== null && awayAbbrev !== null) {
-      const candidates = generateMlbEventIdCandidates(
-        homeAbbrev,
-        awayAbbrev,
-        date,
-      ).slice(0, maxCandidates);
-
       // Probe candidates in order; first one with mapped rows wins.
       let winning: { eventId: string; result: CoverageFetchResult } | null = null;
       let candidatesProbed = 0;
@@ -318,33 +316,54 @@ export async function auditMarketCoverage(
       let wrongGameCount = 0;
       let parserDropCount = 0;
 
-      for (const eventId of candidates) {
-        candidatesProbed++;
-        let result: CoverageFetchResult;
-        try {
-          result = await fetchOddsAndMapForEventId(sharpClient, eventId, {
-            homeAbbrev,
-            awayAbbrev,
-            gameExternalId: g.external_id,
-          });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (/rate.*limit/i.test(msg)) {
-            rateLimited = true;
-          } else {
-            providerErr = true;
-          }
-          continue;
+      if (configuredProviderRecords !== null) {
+        candidatesProbed = 1;
+        const records = configuredProviderRecords.filter((row) => row.game_external_id === g.external_id);
+        if (records.length > 0) {
+          const booksMapped = [...new Set(records.map((row) => row.sportsbook))];
+          winning = {
+            eventId: "owls_current_odds",
+            result: {
+              ok: true,
+              records,
+              drops: {},
+              rawRowCount: records.length,
+              booksMapped,
+              bookQuality: aggregateBookQuality(booksMapped),
+            },
+          };
         }
-        wrongGameCount += result.drops.wrong_game_guard_rejected ?? 0;
-        parserDropCount +=
-          (result.drops.unsupported_market ?? 0) +
-          (result.drops.alternate_line_dropped ?? 0) +
-          (result.drops.unknown_book ?? 0) +
-          (result.drops.unsupported_side ?? 0);
-        if (result.ok) {
-          winning = { eventId, result };
-          break;
+      } else if (sharpClient !== null) {
+        const candidates = generateMlbEventIdCandidates(
+          homeAbbrev,
+          awayAbbrev,
+          date,
+        ).slice(0, maxCandidates);
+        for (const eventId of candidates) {
+          candidatesProbed++;
+          let result: CoverageFetchResult;
+          try {
+            result = await fetchOddsAndMapForEventId(sharpClient, eventId, {
+              homeAbbrev,
+              awayAbbrev,
+              gameExternalId: g.external_id,
+            });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (/rate.*limit/i.test(msg)) rateLimited = true;
+            else providerErr = true;
+            continue;
+          }
+          wrongGameCount += result.drops.wrong_game_guard_rejected ?? 0;
+          parserDropCount +=
+            (result.drops.unsupported_market ?? 0) +
+            (result.drops.alternate_line_dropped ?? 0) +
+            (result.drops.unknown_book ?? 0) +
+            (result.drops.unsupported_side ?? 0);
+          if (result.ok) {
+            winning = { eventId, result };
+            break;
+          }
         }
       }
 
@@ -512,16 +531,6 @@ export async function auditMarketCoverage(
 }
 
 // ─── helpers ───────────────────────────────────────────────────────
-
-function buildSharpApiClient(): SharpApiClient {
-  const key = process.env.SHARPAPI_KEY;
-  if (key === undefined || key.trim().length === 0) {
-    throw new Error(
-      "marketCoverageAudit: SHARPAPI_KEY missing from environment",
-    );
-  }
-  return new SharpApiClient(key);
-}
 
 function initialMarketCoverage(
   rows: ReadonlyArray<{ market_type: string; sportsbook: string; side: string; line_value: number | null }>,

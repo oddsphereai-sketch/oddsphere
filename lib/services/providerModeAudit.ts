@@ -17,8 +17,8 @@
  *
  * Required core providers (all must be `real_api` for apply eligibility):
  *   • SLATE_PROVIDER         → BallDontLieSlateProvider
- *   • ODDS_PROVIDER          → SharpAPIOddsProvider
- *   • SHARP_SIGNAL_PROVIDER  → SharpAPISignalProvider
+ *   • ODDS_PROVIDER          → OwlsOddsProvider
+ *   • SHARP_SIGNAL_PROVIDER  → OwlsSignalProvider
  *   • PLAYER_STATS_PROVIDER  → BallDontLieProvider (season stats / splits)
  *
  * Excluded by design:

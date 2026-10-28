@@ -79,7 +79,7 @@ export function applySharpBookSplitContinuity(
     for (const marketKey of MARKET_KEYS) {
       const retained = matches[0]!.markets[marketKey];
       const market = game.markets[marketKey];
-      if (!retained || !market || sectionQuality(retained) !== 2) continue;
+      if (!retained || !market || sectionQuality(retained) === 0) continue;
       if (lockedCutoffMs !== null) {
         if (
           market.sportsbookSplits?.rows.length ||
@@ -91,7 +91,7 @@ export function applySharpBookSplitContinuity(
         continue;
       }
       const existing = market.sportsbookSplits ?? null;
-      const selected = existing && sectionQuality(existing) === 2
+      const selected = existing && sectionQuality(existing) > 0
         ? preferredActiveSection(retained, existing, nowMs)
         : retained;
       market.sportsbookSplits = cloneRetainedSection(selected);
@@ -250,10 +250,29 @@ function mergeContinuityFeeds(
       continue;
     }
     const prior = games[index]!;
+    const latestClone = cloneRetainedGame(latestGame);
+    const markets = { ...prior.markets };
+    for (const marketKey of MARKET_KEYS) {
+      const earlierSection = markets[marketKey];
+      const laterSection = latestClone.markets[marketKey];
+      if (!laterSection) continue;
+      if (!earlierSection) {
+        markets[marketKey] = laterSection;
+        continue;
+      }
+      const earlierQuality = sectionQuality(earlierSection);
+      const laterQuality = sectionQuality(laterSection);
+      if (
+        laterQuality > earlierQuality ||
+        (laterQuality === earlierQuality && sectionTimestamp(laterSection) > sectionTimestamp(earlierSection))
+      ) {
+        markets[marketKey] = laterSection;
+      }
+    }
     games[index] = {
       ...prior,
       ...latestGame,
-      markets: { ...prior.markets, ...cloneRetainedGame(latestGame).markets },
+      markets,
     };
   }
   return { release: CONTINUITY_RELEASE, sport, slateDate, games };
@@ -278,7 +297,7 @@ function captureFeed(
     for (const marketKey of MARKET_KEYS) {
       const market = game.markets[marketKey];
       const section = displayedSection(market);
-      if (!section || sectionQuality(section) !== 2) continue;
+      if (!section || sectionQuality(section) === 0) continue;
       const normalized = cloneRetainedSection(section);
       const prior = target.markets[marketKey];
       if (!prior || sectionQuality(normalized) >= sectionQuality(prior)) {
@@ -337,11 +356,16 @@ function preferredActiveSection(
 ): MarketSplitDisplaySection {
   const retainedAt = sectionTimestamp(retained);
   const candidateAt = sectionTimestamp(candidate);
+  const retainedCurrent = sectionIsCurrent(retained, nowMs);
+  const candidateCurrent = sectionIsCurrent(candidate, nowMs);
+  if (retainedCurrent !== candidateCurrent) return candidateCurrent ? candidate : retained;
+  const retainedQuality = sectionQuality(retained);
+  const candidateQuality = sectionQuality(candidate);
+  if (retainedQuality !== candidateQuality) return candidateQuality > retainedQuality ? candidate : retained;
   if (sameSource(retained, candidate)) {
     return candidateAt > retainedAt ? candidate : retained;
   }
-  if (sectionIsCurrent(retained, nowMs)) return retained;
-  if (sectionIsCurrent(candidate, nowMs)) return candidate;
+  if (retainedCurrent) return retained;
   return candidateAt > retainedAt ? candidate : retained;
 }
 

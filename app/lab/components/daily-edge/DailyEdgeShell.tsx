@@ -2551,7 +2551,7 @@ function MarketPulse({
   const sharpAvailability = marketData.sharpBookAvailability ?? null;
   const decision = marketData.recommendationDecision;
   if (decision) {
-    return <SourceAwareMarketPulse decision={decision} />;
+    return <SourceAwareMarketPulse decision={decision} sharpBookDisplayOverride={sharpBookSplits} />;
   }
   if (splits.length === 0 && sharpBookSplits === null) {
     return (
@@ -2604,17 +2604,28 @@ function MarketPulse({
   );
 }
 
-function SourceAwareMarketPulse({ decision }: { decision: MarketDecision }) {
+function SourceAwareMarketPulse({
+  decision,
+  sharpBookDisplayOverride,
+}: {
+  decision: MarketDecision;
+  sharpBookDisplayOverride: MarketSplitDisplaySection | null;
+}) {
+  // A provider-backed display override may contain one verified paired axis
+  // while the other is unavailable. Render it truthfully, but leave the
+  // canonical decision untouched; only complete evidence is allowed into the
+  // market-reader bridge at the response boundary.
+  const sharpBookSplits = sharpBookDisplayOverride ?? decision.sharpBookSplits;
   return (
     <div className="space-y-2.5">
       <p className="text-[9.5px] uppercase tracking-[0.12em] font-semibold text-gray-300">Market Pulse</p>
       {decision.consensusSplits !== null && (
         <SplitSection section={decision.consensusSplits} />
       )}
-      {decision.sharpBookSplits !== null && (
-        <SplitSection section={decision.sharpBookSplits} />
+      {sharpBookSplits !== null && (
+        <SplitSection section={sharpBookSplits} />
       )}
-      {decision.sharpBookSplits === null ? (
+      {sharpBookSplits === null ? (
         <MarketDirectionMeter decision={decision} />
       ) : null}
     </div>

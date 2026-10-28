@@ -3,7 +3,6 @@ import {
   MLBStatsGameLogClient,
   MLBStatsAPIClient,
   MockMLBProvider,
-  SharpApiPropsClient,
 } from "./providerClients";
 import { NwsWeatherClient } from "./nwsWeatherClient";
 import { FallbackMlbWeatherClient, OpenMeteoWeatherClient } from "./openMeteoWeatherClient";
@@ -18,7 +17,6 @@ export function resolveProviderMode(requested?: string | null): MlbPropsProvider
 
 export function assertRealProviderKeys() {
   const missing = [
-    ["SHARPAPI_KEY", process.env.SHARPAPI_KEY],
     ["BALLDONTLIE_API_KEY", process.env.BALLDONTLIE_API_KEY],
     ["PLAYBOOK_API_KEY", process.env.PLAYBOOK_API_KEY],
   ].filter(([, value]) => !value);
@@ -34,9 +32,10 @@ export function buildMockPropsProvider() {
 export function buildRealProviderClients() {
   assertRealProviderKeys();
   const mlbStats = new MLBStatsAPIClient();
+  const ballDontLie = new BallDontLieMlbPropsClient();
   return {
-    odds: new SharpApiPropsClient(),
-    ballDontLie: new BallDontLieMlbPropsClient(),
+    odds: ballDontLie,
+    ballDontLie,
     playbook: {
       status: "contract_pending" as const,
       provider: "playbook" as const,

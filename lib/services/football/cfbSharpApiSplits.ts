@@ -60,7 +60,7 @@ export async function fetchCfbSharpApiSplits(args: {
   if (games.length > CFB_SHARP_API_SPLITS_MAX_GAMES) {
     throw new Error(`CFB SharpAPI splits cannot exceed ${CFB_SHARP_API_SPLITS_MAX_GAMES} exact games per run.`);
   }
-  const key = args.apiKey ?? process.env.SHARPAPI_KEY;
+  const key = args.apiKey;
   if (!key && !args.client) throw new Error("SHARPAPI_KEY is required for CFB splits.");
   const client = args.client ?? new SharpApiClient(key!);
   const response = await client.fetch<unknown[]>({

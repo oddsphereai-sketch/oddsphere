@@ -2,13 +2,20 @@ import assert from "node:assert/strict";
 import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "../lib/types/domain/RecommendationDecision";
 import {
+  alignMarketReadsToDisplayedSharpBookSplits,
   applySharpBookSplitContinuity,
   reconcileDailyEdgeSharpBookSplitAuthority,
   sectionQuality,
   __TEST__,
 } from "../lib/providers/sharpBookSplitContinuity";
 
-const section = (label: MarketSplitDisplaySection["label"], at: string | null, money = [62, 38], bets = [54, 46], sourceBook: MarketSplitDisplaySection["sourceBook"] = null): MarketSplitDisplaySection => ({
+const section = (
+  label: MarketSplitDisplaySection["label"],
+  at: string | null,
+  money: [number | null, number | null] = [62, 38],
+  bets: [number | null, number | null] = [54, 46],
+  sourceBook: MarketSplitDisplaySection["sourceBook"] = null,
+): MarketSplitDisplaySection => ({
   label,
   sourceBook,
   sourceObservedAt: at,
@@ -176,4 +183,42 @@ const emptyRebuild = response();
 const mergedFeed = __TEST__.captureFeed(emptyRebuild, "cfb", previousFeed);
 assert.equal(mergedFeed.games[0]?.markets.moneyline?.rows.length, 2, "empty rebuild cannot erase a previously displayed exact-game section");
 
-console.log("Sharp-book complete-pair continuity tests passed.");
+const partialDisplayed = response();
+partialDisplayed.games[0]!.markets.total.sportsbookSplits = section(
+  "Sharp Book Splits",
+  "2026-09-20T20:09:00.000Z",
+  [null, null],
+  [63, 37],
+  "betmgm",
+);
+assert.equal(sectionQuality(partialDisplayed.games[0]!.markets.total.sportsbookSplits!), 1);
+const partialFeed = __TEST__.captureFeed(partialDisplayed, "cfb", null);
+assert.equal(partialFeed.games[0]?.markets.total?.rows[0]?.moneyPct, null, "single-axis display continuity retains the missing axis as null");
+
+const partialRestored = response();
+assert.deepEqual(
+  applySharpBookSplitContinuity(partialRestored, partialFeed),
+  { matchedGames: 1, populatedMarkets: 1 },
+  "a truthful single-axis section survives a provider refresh gap",
+);
+assert.deepEqual(
+  partialRestored.games[0]!.markets.total.sportsbookSplits?.rows.map((row) => [row.moneyPct, row.betsPct]),
+  [[null, 63], [null, 37]],
+);
+assert.equal(
+  reconcileDailyEdgeSharpBookSplitAuthority(partialRestored),
+  1,
+  "a valid single-axis display override survives final response authority reconciliation",
+);
+assert.equal(
+  alignMarketReadsToDisplayedSharpBookSplits(partialRestored),
+  0,
+  "single-axis display continuity cannot enter the internal market-reader decision",
+);
+assert.equal(
+  partialRestored.games[0]!.markets.total.recommendationDecision?.sharpBookSplits,
+  null,
+  "the canonical decision remains unchanged",
+);
+
+console.log("Sharp-book complete and single-axis display continuity tests passed.");

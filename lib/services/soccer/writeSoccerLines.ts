@@ -281,18 +281,7 @@ function buildProviders(): {
   bdl: BallDontLieFifaProvider;
   sharp: SharpApiSoccerOddsProvider;
 } {
-  const bdlKey = process.env.BALLDONTLIE_API_KEY;
-  const sharpKey = process.env.SHARPAPI_KEY;
-  if (bdlKey === undefined || bdlKey.length === 0) {
-    throw new Error("BALLDONTLIE_API_KEY missing");
-  }
-  if (sharpKey === undefined || sharpKey.length === 0) {
-    throw new Error("SHARPAPI_KEY missing");
-  }
-  return {
-    bdl: new BallDontLieFifaProvider(new BdlFifaClient(bdlKey)),
-    sharp: new SharpApiSoccerOddsProvider(new SharpApiClient(sharpKey)),
-  };
+  throw new Error("Legacy World Cup SharpAPI writer retired; use the Owls-first EPL/UCL production pipelines.");
 }
 
 // ─── Orchestrator ───────────────────────────────────────────────────

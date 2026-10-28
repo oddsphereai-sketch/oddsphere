@@ -137,7 +137,7 @@ check(
     layers.calibration_version === "mlb_public_calibration_v38_unified_game_distribution_2026_10_16" &&
     layers.projection_core === "mlb_projection_core_v2_7_unified_total_preserve_margin_2026_10_16" &&
     layers.score_distribution === "mlb_score_distribution_factorized_margin_total_v1_2026_10_16" &&
-    layers.market_input_snapshot === "mlb_market_input_snapshot_v4_trusted_total_scope_recovery_2026_10_19" &&
+    layers.market_input_snapshot === "mlb_market_input_snapshot_v5_owls_provider_cutover_2026_10_28" &&
     layers.moneyline_probability_head === "mlb_moneyline_structural_coherence_probability_v3_2026_09_02" &&
     layers.moneyline_confidence_value_context_lean === "mlb_ml_confidence_value_context_best_angle_v1_2026_10_09" &&
     layers.moneyline_neutral_consensus_grade === "ml_sharpapi_consensus_grade_continuity_v3_exact_price_tier_2026_10_09" &&
