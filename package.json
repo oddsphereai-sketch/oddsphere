@@ -147,6 +147,7 @@
     "test:football-player-props-foundation": "tsx scripts/test-football-player-props-foundation.ts",
     "test:nba-player-props-foundation": "tsx scripts/test-nba-player-props-foundation.ts",
     "test:nba-player-props-reader": "tsx scripts/test-nba-player-props-reader-contract.ts",
+    "test:nba-player-props-movement": "tsx scripts/test-nba-player-props-movement-integrity.ts",
     "test:nba-player-props-product-preview": "tsx scripts/test-nba-player-props-product-preview.ts",
     "test:nba-player-props-lifecycle": "tsx scripts/test-nba-player-props-lifecycle.ts",
     "test:nba-player-props-production-readiness": "tsx scripts/test-nba-player-props-production-readiness.ts",

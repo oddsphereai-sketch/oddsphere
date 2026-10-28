@@ -5,6 +5,7 @@ import {
   nflPlayerPropsAvailabilityAgeLabel,
   resolveNflPlayerPropsPrediction,
   resolveNflPlayerPropsActionableForecast,
+  selectNflPlayerPropsMovementBook,
   selectNflPlayerPropsOverForecasts,
   selectNflPlayerPropsTouchdownScorers,
 } from "../app/player-props/lib/nflPlayerPropsPresentation";
@@ -21,6 +22,37 @@ assert.equal(hasComparableNflPlayerPropsOpening({
   market: "passing_yards", line: 249.5, openingObservedAt: "2026-10-06T12:00:00.000Z",
   openingLine: 247.5, openingAmericanPrice: -110,
 }), true, "ordinary prop line movement remains visible");
+const selectedMovementBook = selectNflPlayerPropsMovementBook({
+  market: "passing_yards",
+  line: 249.5,
+  evaluatedSportsbook: "fanduel",
+  evaluatedProvider: "balldontlie",
+  books: [
+    { sportsbook: "fanduel", provider: "balldontlie", americanPrice: -108, observedAt: "2026-10-28T15:00:00.000Z", openingObservedAt: null, openingLine: null, openingAmericanPrice: null },
+    { sportsbook: "pinnacle", provider: "owls", americanPrice: -112, observedAt: "2026-10-28T14:59:00.000Z", openingObservedAt: "2026-10-28T10:00:00.000Z", openingLine: 247.5, openingAmericanPrice: -110 },
+  ],
+});
+assert.equal(selectedMovementBook?.sportsbook, "pinnacle",
+  "a valid stored comparison-book trail remains visible when the evaluated-price book lacks an opening");
+const evaluatedMovementBook = selectNflPlayerPropsMovementBook({
+  market: "passing_yards",
+  line: 249.5,
+  evaluatedSportsbook: "fanduel",
+  evaluatedProvider: "balldontlie",
+  books: [
+    { sportsbook: "fanduel", provider: "balldontlie", americanPrice: -108, observedAt: "2026-10-28T15:00:00.000Z", openingObservedAt: "2026-10-28T10:00:00.000Z", openingLine: 247.5, openingAmericanPrice: -110 },
+    { sportsbook: "pinnacle", provider: "owls", americanPrice: -112, observedAt: "2026-10-28T15:01:00.000Z", openingObservedAt: "2026-10-28T10:00:00.000Z", openingLine: 247.5, openingAmericanPrice: -110 },
+  ],
+});
+assert.equal(evaluatedMovementBook?.sportsbook, "fanduel",
+  "the evaluated-price book remains the preferred trail whenever it has a comparable opening");
+assert.equal(selectNflPlayerPropsMovementBook({
+  market: "anytime_td",
+  line: 0.5,
+  evaluatedSportsbook: "fanduel",
+  evaluatedProvider: "balldontlie",
+  books: [{ sportsbook: "pinnacle", provider: "owls", americanPrice: 500, observedAt: "2026-10-28T15:00:00.000Z", openingObservedAt: "2026-10-28T10:00:00.000Z", openingLine: 1.5, openingAmericanPrice: 900 }],
+}), null, "an alternate touchdown ladder remains ineligible for movement display");
 import {
   attachNflPlayerPropsClosingPrice,
   buildNflPlayerPropsMemberSnapshot,
