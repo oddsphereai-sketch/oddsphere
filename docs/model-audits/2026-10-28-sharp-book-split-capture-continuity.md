@@ -26,10 +26,12 @@ separate Market Reader task retains ownership of predictive reader changes.
 
 The member display feed is captured for MLB, WNBA, NHL, NBA, NFL, CFB, and CBB
 every five minutes. Forced capture bypasses the request cache, retains bounded
-timestamp-honest provider observations, and reports an empty or failed Owl's
-response as a failed sport run instead of silently reporting success. At seven
-league requests per cycle, the maximum scheduled usage is 60,480 requests per
-30-day month, before ordinary application calls.
+timestamp-honest provider observations, and reports authentication, transport,
+or HTTP failures as failed sport runs instead of silently reporting success. A
+successful empty response is valid for an off-season or no-game league and
+preserves any stored last-known-good feed. At seven league requests per cycle,
+the maximum scheduled usage is 60,480 requests per 30-day month, before
+ordinary application calls.
 
 The history cap keeps the newest 96 observations for each exact event/book and
 may retain one older complete money-plus-ticket observation per market. It

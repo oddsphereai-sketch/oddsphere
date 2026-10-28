@@ -55,6 +55,11 @@ assert.match(route, /\["mlb", "wnba", "nhl", "nba", "nfl", "cfb", "cbb"\]/, "eve
 assert.doesNotMatch(route, /leaseGroup:\s*["']prediction_pipeline["']/, "display capture does not claim prediction authority");
 
 const provider = readFileSync("lib/providers/real_api/sharpApiCurrentSplits.ts", "utf8");
-assert.match(provider, /requireProviderSuccess:\s*true/, "scheduled capture reports an empty or failed Owls response instead of silently claiming success");
+assert.match(provider, /requireProviderSuccess:\s*true/, "scheduled capture reports Owl's auth or transport failures instead of silently claiming success");
+assert.doesNotMatch(
+  provider,
+  /zero current split rows/,
+  "an authenticated empty off-season slate is valid and must not fail the all-sport cron",
+);
 
 console.log("PASS Sharp Book Splits capture persists complete pairs through temporary upstream gaps");
