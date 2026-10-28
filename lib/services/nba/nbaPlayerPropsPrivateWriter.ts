@@ -8,7 +8,10 @@ import {
   readNbaPlayerPropsCurrentState,
   writeNbaPlayerPropsCurrentState,
 } from "./nbaPlayerPropsCurrentState";
-import { buildNbaPlayerPropsMarketEvidence } from "./nbaPlayerPropsMarketEvidence";
+import {
+  buildNbaPlayerPropsSameBookMovement,
+  selectNbaPlayerPropsMovementTarget,
+} from "./nbaPlayerPropsMovement";
 import {
   mergeNbaPlayerPropsMarketHistory,
   readNbaPlayerPropsMarketHistory,
@@ -27,7 +30,7 @@ import { settleNbaPlayerPropsTrackedSlates } from "./nbaPlayerPropsSettlementSto
 import type { NbaRollingScheduleGame } from "./nbaRollingSchedule";
 
 export const NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE =
-  "nba_player_props_private_writer_2026_10_28_r8_owls_prices" as const;
+  "nba_player_props_private_writer_2026_10_28_r9_exact_movement_endpoint" as const;
 
 export type NbaPlayerPropsPrivateWriterResult = Readonly<{
   release: typeof NBA_PLAYER_PROPS_PRIVATE_WRITER_RELEASE;
@@ -216,11 +219,15 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
       && observation.canonicalPlayerId === `nba-bdl-player:${row.playerId}`
       && observation.market === row.market);
     const exactObservations = scopeObservations.filter((observation) => observation.line === row.line);
-    const target = freshest(exactObservations.filter((observation) =>
-      observation.sportsbook === row.sportsbook && observation.side === row.side));
+    const target = selectNbaPlayerPropsMovementTarget({
+      observations: exactObservations,
+      sportsbook: row.sportsbook,
+      side: row.side,
+      line: row.line,
+      americanPrice: row.americanPrice,
+    });
     if (!target) return [];
-    const evidence = buildNbaPlayerPropsMarketEvidence({ target, observations: scopeObservations, evaluatedAt: target.observedAt });
-    const movement = movementFor(scopeObservations, row.sportsbook, row.side);
+    const movement = buildNbaPlayerPropsSameBookMovement({ observations: scopeObservations, target });
     const reader = buildNbaPlayerPropsReaderEvidence(feature, row.market);
     const team = feature.team_id === gameById.get(row.gameId)?.homeTeamId ? game.homeTeam : game.awayTeam;
     const opponent = team === game.homeTeam ? game.awayTeam : game.homeTeam;
@@ -261,7 +268,7 @@ export async function refreshNbaPlayerPropsPrivateCandidate(args: {
         americanPrice: observation.americanPrice,
         observedAt: observation.observedAt,
       })),
-      movement: movement && evidence.openingLine !== null ? movement : null,
+      movement,
       evaluatedAt: now,
       lockedAt: null,
     }];
@@ -347,28 +354,6 @@ async function explicitOutPlayers(
   return out;
 }
 
-function movementFor(
-  observations: readonly { sportsbook: string; side: string; line: number; americanPrice: number; observedAt: string; isOpening: boolean }[],
-  sportsbook: string,
-  side: string,
-): NbaPlayerPropsMemberDecision["movement"] {
-  const trail = observations.filter((row) => row.sportsbook === sportsbook && row.side === side)
-    .sort((a, b) => Date.parse(a.observedAt) - Date.parse(b.observedAt));
-  if (trail.length === 0) return null;
-  const opening = trail.find((row) => row.isOpening) ?? trail[0]!;
-  const current = trail.at(-1)!;
-  const prior = trail.length > 1 ? trail.at(-2)! : null;
-  return {
-    sportsbook,
-    openingLine: opening.line,
-    priorLine: prior?.line ?? null,
-    currentLine: current.line,
-    openingPrice: opening.americanPrice,
-    priorPrice: prior?.americanPrice ?? null,
-    currentPrice: current.americanPrice,
-  };
-}
-
 function recentDates(now: string, count: number): string[] {
   const timestamp = Date.parse(now);
   return Array.from({ length: count }, (_, index) =>
@@ -400,10 +385,6 @@ function playerIdFromObservation(observation: { canonicalPlayerId: string | null
   const value = observation.canonicalPlayerId?.match(/^nba-bdl-player:(\d+)$/)?.[1] ?? observation.providerPlayerId;
   const number = Number(value);
   return Number.isInteger(number) ? number : null;
-}
-
-function freshest<T extends { observedAt: string }>(rows: readonly T[]): T | null {
-  return [...rows].sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0] ?? null;
 }
 
 function freshestByBookSide<T extends { sportsbook: string; side: string; observedAt: string }>(rows: readonly T[]): T[] {
