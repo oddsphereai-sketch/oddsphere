@@ -212,6 +212,18 @@ export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history
     latestKalshi:series.points.at(-1)?.[0]??null,latestBook:book?.points.at(-1)?.[0]??null};
 }
 
+/** A new/missing Kalshi contract must not suppress real sportsbook history.
+ * This is explicitly ONE source, not a synthetic Kalshi comparison. */
+export function predictionMarketHasSharedHistory(comparison:ReturnType<typeof predictionMarketComparison>):boolean{
+  return !comparison.pending&&comparison.points.length>=2&&comparison.cutoff!==null&&comparison.start<comparison.cutoff;
+}
+export function predictionMarketBookOnlyComparison(book:PredictionMarketBookTrail|null,lockedAt?:number){
+  const ceiling=lockedAt===undefined?Infinity:Number.isFinite(lockedAt)?lockedAt:-Infinity;
+  const bookPoints=book?.points.filter(p=>Number.isFinite(p[0])&&p[0]<=ceiling)??[];
+  return {points:[] as PredictionMarketPoint[],activity:[] as Array<number|null>,bookPoints,
+    cutoff:bookPoints.at(-1)?.[0]??null,start:bookPoints[0]?.[0]??0};
+}
+
 /** Plot-only guide: carry an already observed price to the shared edges, never
  * backfill before the first receipt. Quote arrays and their timestamps are not
  * changed. Inspection uses predictionMarketObservationAt on the originals. */
