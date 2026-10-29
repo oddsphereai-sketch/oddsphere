@@ -90,11 +90,12 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const delta=history.length>=2?100*(history.at(-1)![1]-history[0][1]):null;
   const bookName=book?bookTitle(book.sportsbook):null;
   const comparedBook=book&&comparison.bookPoints.length?{...book,points:comparison.bookPoints}:null;
+  const windowBook=comparedBook&&(!frozen||archivedBook)?{...comparedBook,points:predictionMarketWindowPoints(comparedBook.points,chartStart)}:comparedBook;
   const firstBook=comparedBook?.points[0],lastBook=comparedBook?.points.at(-1);
   const kalshiOpening=outcome.openingQuote&&outcome.openingQuote.point[0]<=(comparison.cutoff??lockedAt??current.checkedAt)?outcome.openingQuote:null;
   const kalshiStart=kalshiOpening?.point??comparison.points[0];
   const bookStart=comparedBook?predictionMarketBookStart(selectedMarket,marketKey==="moneyline"?outcome.label:selectedMarket.pick??"",comparedBook,selection?.line??null,comparison.cutoff??lockedAt??current.checkedAt):null;
-  const changes=comparedBook?.points.reduce((count,point,index)=>count+Number(index>0&&point[2]!==comparedBook.points[index-1][2]),0)??0;
+  const changes=windowBook?.points.reduce((count,point,index)=>count+Number(index>0&&point[2]!==windowBook.points[index-1][2]),0)??0;
   const legend=<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#b9acc7] sm:pl-[26px]">
     <span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#7de3c1]"/>Kalshi{context?.method==="push_adjusted"?" · push-adjusted":context?.method==="nearby"?" · nearby line":""}</span>
     {book?<span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookName} {bookLabel}</span>:<span>Sportsbook quote unavailable</span>}
@@ -118,8 +119,13 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
     <div className="mt-1 min-w-0 sm:mt-0"><PredictionMarketChart row={outcome} book={book} context={context} bookLabel={bookLabel} lockedAt={lockedAt} range={range} onRangeChange={setRange}/></div>
     <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-2 sm:border-0 sm:pt-0">
       <p data-kalshi-start data-start-kind={kalshiOpening?.kind??"first_available"} data-start-at={kalshiStart[0]} className="min-w-0"><span className="font-semibold text-[#d9d1e4]">Kalshi {kalshiOpening?.kind==="opening_minute"?"opening minute":"first quoted"} · {(kalshiStart[1]*100).toFixed(1)}%</span><span className="block text-[#ac9bbd]">{time(kalshiStart[0],true)}</span><span className="block text-[#9d92ae]">{outcome.historyFrom?"History checked from market open":"Opening history pending"}{kalshiOpening?.kind==="first_available"?" · opening quote unavailable":""}</span></p>
-      {comparedBook&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={comparedBook.sportsbook} data-book-start data-start-kind={bookStart?.kind} data-start-at={bookStart?.point[0]}><span className="font-semibold text-[#d9d1e4]">{bookName} {predictionMarketBookPricePath(comparedBook.points)}{changes>0?"":comparedBook.points.length===1?" · one quote":" · unchanged"}</span>{bookStart?<><span className="block text-[#ac9bbd]">{bookStart.kind==="provider_opening"?"Provider open":"First recorded"} {formatPredictionMarketOdds(bookStart.point[2])}</span><span className="block text-[#ac9bbd]">{time(bookStart.point[0],true)}</span></>:null}{!frozen&&book?.opening&&book.opening.line!==(book.line??selection?.line??null)?<span className="block text-[#ac9bbd]">Market opened {kind==="total"?book.opening.line:formatContractLine(book.opening.line!)} · {formatPredictionMarketOdds(book.opening.point[2])} · {time(book.opening.point[0],true)}; chart is {bookLabel}</span>:null}<span className="block text-[#9d92ae]">{comparedBook.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book</span></p>:null}
-      {(!frozen||archivedBook)&&book?<BookLineHistory book={book} kind={kind}/>:null}
+      {comparedBook&&windowBook&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={comparedBook.sportsbook} data-book-start data-start-kind={bookStart?.kind} data-start-at={bookStart?.point[0]}>
+        <span className="font-semibold text-[#d9d1e4]">{bookName} {predictionMarketBookPricePath(windowBook.points,!frozen||archivedBook?4:3)}{changes>0?"":windowBook.points.length===1?" · one quote":" · unchanged"}</span>
+        {bookStart?<><span className="block text-[#ac9bbd]">{bookStart.kind==="provider_opening"?"Provider open":"First recorded"} {formatPredictionMarketOdds(bookStart.point[2])}</span><span className="block text-[#ac9bbd]">{time(bookStart.point[0],true)}</span></>:null}
+        {!frozen&&book?.opening&&book.opening.line!==(book.line??selection?.line??null)?<span className="block text-[#ac9bbd]">Market opened {kind==="total"?book.opening.line:formatContractLine(book.opening.line!)} · {formatPredictionMarketOdds(book.opening.point[2])} · {time(book.opening.point[0],true)}; chart is {bookLabel}</span>:null}
+        <span className="block text-[#9d92ae]">{windowBook.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book{!frozen||archivedBook?" · in view":""}</span>
+      </p>:null}
+      {(!frozen||archivedBook)&&book?<BookLineHistory book={book} kind={kind} start={chartStart} end={comparison.cutoff??undefined}/>:null}
       {!frozen&&outcome.volume24h!==null?<p className="col-span-2"><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
       <p className="col-span-2 text-[#9d92ae]">{current.availability==="refresh_failed"?"Refresh unavailable · retained quotes · ":""}{frozen?"Pre-lock history · through "+time(comparison.cutoff??comparison.points.at(-1)![0]):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
     </div>
@@ -137,12 +143,14 @@ export function PredictionMarketUnavailable({variant,label,status,book}:{variant
 
 /** Point movement has its OWN numeric axis. It never becomes a probability
  * quote for a different threshold in the two-source comparison above. */
-export function BookLineHistory({book,kind}:{book:PredictionMarketBookTrail;kind:string|null}){
+export function BookLineHistory({book,kind,start,end}:{book:PredictionMarketBookTrail;kind:string|null;start?:number;end?:number}){
   if(kind!=="spread"&&kind!=="total")return null;
-  const quotes=[...new Map((book.marketHistory??[]).map(p=>[p[0],p])).values()].filter((p):p is [number,number,number]=>p[2]!==null).sort((a,b)=>a[0]-b[0]),lines=quotes.map(p=>p[2]);
+  const all=[...new Map((book.marketHistory??[]).map(p=>[p[0],p])).values()].filter((p):p is [number,number,number]=>p[2]!==null&&(end===undefined||p[0]<=end)).sort((a,b)=>a[0]-b[0]);
+  const quotes=start===undefined?all:predictionMarketWindowPoints(all,start),lines=quotes.map(p=>p[2]);
   if(new Set(lines).size<2)return null;
   const first=quotes[0],last=quotes.at(-1)!,low=Math.min(...lines),high=Math.max(...lines);
-  const points=quotes.map(p=>[p[0],p[2]] as [number,number]),x=(at:number)=>4+(at-first[0])/Math.max(1,last[0]-first[0])*172,y=(line:number)=>24-(line-low)/Math.max(.01,high-low)*20;
+  const from=start??first[0],through=end??last[0];
+  const points=predictionMarketGuidePoints(quotes.map(p=>[p[0],p[2]] as [number,number]),from,through),x=(at:number)=>4+(at-from)/Math.max(1,through-from)*172,y=(line:number)=>24-(line-low)/Math.max(.01,high-low)*20;
   const lineText=(line:number)=>kind==="total"?String(line):formatContractLine(line);
   const title=quotes.filter((p,i)=>i===0||i===quotes.length-1||p[2]!==quotes[i-1][2]).map(p=>`${time(p[0],true)}: ${lineText(p[2])} at ${formatPredictionMarketOdds(p[1])}`).join("; ");
   return <div className="col-span-2 min-w-0" data-book-line-history={book.sportsbook}><p className="text-[10px] text-[#ac9bbd]">{kind==="total"?"Total":"Spread"} line {lineText(first[2])} → {lineText(last[2])}</p><svg role="img" aria-label={`${bookTitle(book.sportsbook)} same-book ${kind} line movement`} width="100%" height="24" viewBox="0 0 180 28" preserveAspectRatio="none"><title>{title}</title><path d={predictionMarketCurve(points,x,y).line} fill="none" stroke="#b7a0f4" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></div>;
@@ -183,9 +191,10 @@ export function PredictionMarketChart({row,book,context,bookLabel,lockedAt,range
     return first+Math.max(0,Math.min(1,(svgX-left)/(right-left)))*(last-first);
   };
   const earlierDay=new Date(first).toLocaleDateString()!==new Date(last).toLocaleDateString();
+  const chartTitle=`${row.team} ${context?.method==="push_adjusted"?"push-adjusted from surrounding Kalshi contracts":"recorded quotes"}. Mint: Kalshi. ${book?bookTitle(book.sportsbook)+" "+bookLabel+" in violet, with sportsbook margin. ":""}${context?.method==="nearby"?"Nearby line: not the identical sportsbook wager. ":""}Both sources share the same covered time window. Curves are bounded guides between recorded quotes, not additional observations. Boundary edges hold an already recorded value without changing its timestamp. Inspect for exact original prices and times.`;
   return <div ref={ref} className="relative min-w-0">
     <svg width="100%" height="128" viewBox={"0 0 "+width+" 128"} role="img" aria-labelledby={id} data-comparison-start={first} data-comparison-cutoff={cutoff} data-lock-boundary={lockedAt} data-chart-treatment="shared-continuous-guides">
-      <title id={id}>{row.team} {context?.method==="push_adjusted"?"push-adjusted from surrounding Kalshi contracts":"recorded quotes"}. Mint: Kalshi. {book?bookTitle(book.sportsbook)+" "+bookLabel+" in violet, with sportsbook margin. ":""}{context?.method==="nearby"?"Nearby line: not the identical sportsbook wager. ":""}Both sources share the same covered time window. Curves are bounded guides between recorded quotes, not additional observations. Boundary edges hold an already recorded value without changing its timestamp. Inspect for exact original prices and times.</title>
+      <title id={id}>{chartTitle}</title>
       <defs><linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7de3c1" stopOpacity=".12"/><stop offset="1" stopColor="#7de3c1" stopOpacity="0"/></linearGradient><linearGradient id={bookFillId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#b7a0f4" stopOpacity=".1"/><stop offset="1" stopColor="#b7a0f4" stopOpacity="0"/></linearGradient><clipPath id={clipId}><rect x={left-3} y={top-4} width={right-left+6} height={bottom-top+8}/></clipPath></defs>
       {[low,(low+high)/2,high].map(tick=><g key={tick}><line x1={left} x2={right} y1={y(tick/100)} y2={y(tick/100)} stroke="rgba(255,255,255,.05)"/><text x="0" y={y(tick/100)+4} fill="#ac9dbd" fontSize="11">{tick.toFixed(tick%1?1:0)}%</text></g>)}
       <g clipPath={`url(#${clipId})`}>
@@ -216,7 +225,13 @@ export function PredictionMarketChart({row,book,context,bookLabel,lockedAt,range
           setFocus({at:next,pinned:true});
         }}/>
     </svg>
-    <div className="flex flex-wrap items-center justify-between gap-1"><p data-quote-guide-key data-chart-window className="text-[10px] leading-tight text-[#9d92ae]">{range==="24h"?"24h view":lockedAt===undefined&&(row.historyFrom||book?.historyScope)?"Source history":"Shared chart window"} · {predictionMarketWindowDuration(first,last)}<span className="sr-only">. Each source begins at its own first quote; no earlier value is invented. Curves connect recorded quotes.</span></p>{onRangeChange&&last-start>24*60*60_000?<div role="group" aria-label="Prediction market history range" className="flex gap-1 text-[10px]"><button type="button" aria-pressed={range==="all"} onClick={()=>onRangeChange("all")} className={range==="all"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>Full history</button><button type="button" aria-pressed={range==="24h"} onClick={()=>onRangeChange("24h")} className={range==="24h"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>24h</button></div>:null}</div>
+    <div className="flex flex-wrap items-center justify-between gap-1">
+      <p data-quote-guide-key data-chart-window className="text-[10px] leading-tight text-[#9d92ae]">{range==="24h"?"24h view":"Shared chart window"} · {predictionMarketWindowDuration(first,last)}<span className="sr-only">. Both traces start and end at the same times. Original source openings are listed separately. Curves connect recorded quotes; boundary guides hold an existing quote without changing its original timestamp.</span></p>
+      {onRangeChange&&last-start>24*60*60_000?<div role="group" aria-label="Prediction market history range" className="flex gap-1 text-[10px]">
+        <button type="button" aria-pressed={range==="all"} onClick={()=>onRangeChange("all")} className={range==="all"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>Full window</button>
+        <button type="button" aria-pressed={range==="24h"} onClick={()=>onRangeChange("24h")} className={range==="24h"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>24h</button>
+      </div>:null}
+    </div>
     {focus?<div className="pointer-events-none absolute left-8 right-0 top-0 z-10 rounded border border-white/10 bg-[#211b2c] px-2 py-1 text-[10px] text-[#e5dced]">
       <p>{active?"Kalshi "+(context?.method==="push_adjusted"?"push-adjusted ":"")+(active[1]*100).toFixed(1)+"% · "+time(active[0]):"Kalshi · no earlier quote recorded"}</p>
       {book?<p>{activeBook?bookTitle(book.sportsbook)+" "+formatPredictionMarketOdds(activeBook[2])+" · "+(activeBook[1]*100).toFixed(1)+"% implied · "+time(activeBook[0]):bookTitle(book.sportsbook)+" · no earlier quote recorded"}</p>:null}
