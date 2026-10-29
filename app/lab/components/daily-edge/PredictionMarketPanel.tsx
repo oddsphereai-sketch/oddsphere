@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { readerContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
-import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
+import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookStart, predictionMarketWindowDuration, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
 
 type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null};
@@ -84,6 +84,8 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const bookName=book?bookTitle(book.sportsbook):null;
   const comparedBook=book&&comparison.bookPoints.length?{...book,points:comparison.bookPoints}:null;
   const firstBook=comparedBook?.points[0],lastBook=comparedBook?.points.at(-1);
+  const kalshiStart=comparison.points[0];
+  const bookStart=comparedBook?predictionMarketBookStart(selectedMarket,marketKey==="moneyline"?outcome.label:selectedMarket.pick??"",comparedBook,selection?.line??null,comparison.cutoff??lockedAt??receipt.checkedAt):null;
   const changes=comparedBook?.points.reduce((count,point,index)=>count+Number(index>0&&point[2]!==comparedBook.points[index-1][2]),0)??0;
   const legend=<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#b9acc7] sm:pl-[26px]">
     <span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#7de3c1]"/>Kalshi{context?.method==="push_adjusted"?" · push-adjusted":context?.method==="nearby"?" · nearby line":""}</span>
@@ -99,17 +101,18 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-1 sm:block sm:pl-[26px]">
         <strong className="text-[17px] font-bold tracking-tight text-[#e9e2f3]">{outcome.label} {(comparisonOutcome.probability*100).toFixed(1)}%</strong>
-        <span className="block text-[10px] text-[#b2cbbc]">{delta===null?"History building":(delta>0?"↑ ":delta<0?"↓ ":"↔ ")+Math.abs(delta).toFixed(1)+" percentage points · Kalshi"}</span>
+        <span className="block text-[10px] text-[#b2cbbc]">{delta===null?"History building":(delta>0?"↑ ":delta<0?"↓ ":"↔ ")+Math.abs(delta).toFixed(1)+" pp · chart window"}</span>
       </div>
       {legend}
       {context?.note?<p className="mt-1 text-[9px] leading-relaxed text-[#ac9bbd] sm:pl-[26px]">{context.note}</p>:null}
       {differentBookLine?<p className="mt-1 text-[9px] text-[#ac9bbd] sm:pl-[26px]">{game.lockState==="locked"?"Stored book line":"Book line moved"} · {bookLabel}, not {context?.requestedLabel}</p>:null}
     </div>
     <div className="mt-1 min-w-0 sm:mt-0"><PredictionMarketChart row={outcome} book={book} context={context} bookLabel={bookLabel} lockedAt={lockedAt}/></div>
-    <div className="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-1.5 sm:border-0 sm:pt-0">
-      {comparedBook&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={comparedBook.sportsbook}><span className="font-semibold text-[#d9d1e4]">{bookName} {predictionMarketBookPricePath(comparedBook.points)}{changes>0?"":comparedBook.points.length===1?" · one quote":" · unchanged"}</span><span className="block text-[#9d92ae]">{comparedBook.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book</span></p>:null}
-      {!frozen&&outcome.volume24h!==null?<p><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
-      <p className="w-full text-[#9d92ae]">{frozen?"Pre-lock history · through "+time(comparison.cutoff??comparison.points.at(-1)![0]):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
+    <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-2 sm:border-0 sm:pt-0">
+      <p data-kalshi-start data-start-kind="first_available" data-start-at={kalshiStart[0]} className="min-w-0"><span className="font-semibold text-[#d9d1e4]">Kalshi first available · {(kalshiStart[1]*100).toFixed(1)}%</span><span className="block text-[#ac9bbd]">{time(kalshiStart[0],true)}</span><span className="block text-[#9d92ae]">24h history · open unverified</span></p>
+      {comparedBook&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={comparedBook.sportsbook} data-book-start data-start-kind={bookStart?.kind} data-start-at={bookStart?.point[0]}><span className="font-semibold text-[#d9d1e4]">{bookName} {predictionMarketBookPricePath(comparedBook.points)}{changes>0?"":comparedBook.points.length===1?" · one quote":" · unchanged"}</span>{bookStart?<><span className="block text-[#ac9bbd]">{bookStart.kind==="provider_opening"?"Provider open":"First recorded"} {formatPredictionMarketOdds(bookStart.point[2])}</span><span className="block text-[#ac9bbd]">{time(bookStart.point[0],true)}</span></>:null}<span className="block text-[#9d92ae]">{comparedBook.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book</span></p>:null}
+      {!frozen&&outcome.volume24h!==null?<p className="col-span-2"><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
+      <p className="col-span-2 text-[#9d92ae]">{frozen?"Pre-lock history · through "+time(comparison.cutoff??comparison.points.at(-1)![0]):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
     </div>
   </section>;
 }
@@ -181,7 +184,7 @@ export function PredictionMarketChart({row,book,context,bookLabel,lockedAt}:{row
           setFocus({at:next,pinned:true});
         }}/>
     </svg>
-    <p data-quote-guide-key className="text-[9px] leading-tight text-[#9d92ae]">Curves connect recorded quotes</p>
+    <p data-quote-guide-key data-chart-window className="text-[10px] leading-tight text-[#9d92ae]">Shared chart window · {predictionMarketWindowDuration(first,last)}<span className="sr-only">. Not a guarantee of market-opening coverage. Curves connect recorded quotes.</span></p>
     {focus?<div className="pointer-events-none absolute left-8 right-0 top-0 z-10 rounded border border-white/10 bg-[#211b2c] px-2 py-1 text-[10px] text-[#e5dced]">
       <p>{active?"Kalshi "+(context?.method==="push_adjusted"?"push-adjusted ":"")+(active[1]*100).toFixed(1)+"% · "+time(active[0]):"Kalshi · no earlier quote recorded"}</p>
       {book?<p>{activeBook?bookTitle(book.sportsbook)+" "+formatPredictionMarketOdds(activeBook[2])+" · "+(activeBook[1]*100).toFixed(1)+"% implied · "+time(activeBook[0]):bookTitle(book.sportsbook)+" · no earlier quote recorded"}</p>:null}
