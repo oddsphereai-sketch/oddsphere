@@ -95,6 +95,14 @@ not apply a purported market correction to scores when movement, splits, and
 professional-book direction are unqualified; the final sharp-informed
 prediction-reader and the sole writer are still separate launch gates.
 
+A bounded read-only Owl's refresh at 17:32 UTC on October 29 returned the
+same four complete consumer books for Villanova–Notre Dame and one for
+High Point–Liberty. It returned no qualified Circa/Pinnacle quote for either
+game and zero split games (`partial` source status). The draft board therefore
+remains explicitly model-only where it is actionable; absence is not an
+affirmative professional-book signal. This is a point-in-time source receipt,
+not a conclusion about what will be available closer to tip-off.
+
 ## First private execution receipt
 
 The new date-bounded canonical fixture seed was rehearsed **read-only** on
