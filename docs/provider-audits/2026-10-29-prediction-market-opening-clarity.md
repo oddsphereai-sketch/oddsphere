@@ -75,3 +75,16 @@ and an explicitly labeled shared chart window from 11:00 PM to 7:00 AM.
 The earlier Kalshi starting price did not get mislabeled as the chart's left
 edge. The compact mobile two-column source-start footer fits below the graph;
 the smooth chart and sharp-split section were unchanged.
+
+The integrated production build, six chart suites, shared lock-immutability
+test, 228-case reader suite, focused ESLint and full `verify:model-change`
+suite pass. Optional local PostgreSQL proof is skipped because its URL is unset.
+Full-repository `tsc --noEmit` exposes two upstream errors introduced by #861:
+nullable odds in `scripts/operator/audit-nba-market-specific-grade-current-board.ts:54`
+and missing fair-reference fields in
+`scripts/test-nba-moneyline-direction-value-separation.ts:79`. A separate clean
+detached checkout of exact main `d15548e5` reproduces both identical errors;
+there are no additional candidate errors. The application's authoritative
+`tsconfig.build.json` check succeeds in the production build. This display-only
+PR neither changes those unrelated files nor represents the full-repo typecheck
+as green.
