@@ -1,6 +1,10 @@
 # Prediction-market source starts versus the plotted window
 
 Starting production base: `9b66451f241485591009484a8e005d205146a19d`.
+Integrated production base before publication:
+`d15548e59968d02a5f4fc9cbe72a1869b5360448` (NBA executable-market repair).
+That repair has no overlapping files; its model and locked-reader changes are
+preserved unchanged. Required checks are rerun after integration.
 
 The owner approved the smooth chart but correctly noted that its left edge did
 not prove either source's true opening price. Existing Kalshi display collection
