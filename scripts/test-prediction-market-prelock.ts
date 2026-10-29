@@ -50,7 +50,7 @@ assert.strictEqual(predictionMarketArchivedBook(stored,{...archive,line:1},now,n
 assert.strictEqual(predictionMarketArchivedBook(stored,archive,now+2*h,now+h,null),stored);
 assert.strictEqual(predictionMarketArchivedBook(stored,archive,undefined,now+h,null),stored);
 assert.equal(predictionMarketArchivedBook(null,archive,now,now+h,null),null,"missing stored evidence cannot be reconstructed");
-assert.equal(predictionMarketComparison(row,joined,now+h).start,now-72*h,"eligible future lock retains full original source start");
+assert.equal(predictionMarketComparison(row,joined,now+h).start,now-40*h,"future lock uses the full shared window while retaining the earlier source opening separately");
 assert.equal(predictionMarketComparison(row,stored,now+h).start,now-h,"legacy locked comparison is unchanged");
 assert.equal(JSON.stringify({game,winners,books}),input,"writer and reader cannot mutate member payloads");
 async function run(){

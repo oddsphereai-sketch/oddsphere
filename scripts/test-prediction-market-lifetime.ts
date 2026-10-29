@@ -70,8 +70,9 @@ async function run(){
  const unchanged=await backfillKalshiDisplayHistory(full,now+2*hour,async()=>{throw new Error("offline");});
  assert.deepEqual(unchanged.rows[0].openingQuote,full.rows[0].openingQuote);
  const cmp=predictionMarketComparison(full.rows[0],exact);
- assert.equal(cmp.start,firstMinute+60_000,"full source timeline no longer hides the earlier Kalshi start");
- assert.equal(predictionMarketGuidePoints(cmp.bookPoints,cmp.start,cmp.cutoff!)[0][0],exact.points[0][0],"no fabricated book price before its own opening");
+ assert.equal(cmp.start,exact.points[0][0],"comparison starts when both sources have an observed quote; earlier opening remains in source metadata");
+ assert.equal(full.rows[0].openingQuote?.point[0],firstMinute+60_000,"aligning the chart never discards the actual earlier source opener");
+ assert.equal(predictionMarketGuidePoints(cmp.bookPoints,cmp.start,cmp.cutoff!)[0][0],cmp.start,"book trace shares the same real covered boundary");
  const stored={sportsbook:"circa",locked:true,points:[[now-hour,.5,-100]] as [number,number,number][]};
  assert.strictEqual(predictionMarketComparisonBook(true,stored,exact),stored);
  assert.equal(predictionMarketComparisonBook(true,null,exact),null);
@@ -79,7 +80,7 @@ async function run(){
  assert.equal(JSON.stringify(game),before);
  const panel=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8"),route=readFileSync("app/api/lab/prediction-market/route.ts","utf8");
  assert.match(panel,/PredictionMarketUnavailable/);assert.match(panel,/Updates automatically when one arrives/);assert.match(panel,/\[key,enabled,kind\]/);
- assert.match(panel,/Full history/);assert.match(panel,/aria-pressed=\{range===\"24h\"\}/);
+ assert.match(panel,/Full window/);assert.match(panel,/aria-pressed=\{range===\"24h\"\}/);
  assert.match(route,/availability/);assert.doesNotMatch(route,/client\.(get|odds)|fetch\(/,"member reads cannot call upstream");
  console.log("PASS lifetime history: provider openings, exact line/side/book/event identity, market-specific availability/retry, retained opens, real timestamps, bounded request budgets and immutable locks.");
 }
