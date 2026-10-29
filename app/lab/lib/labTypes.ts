@@ -1197,6 +1197,16 @@ export type NbaRollingScheduleDto = {
   games: NbaRollingScheduleGameDto[];
 };
 
+export type CbbRollingScheduleDto = {
+  release: string;
+  anchorDate: string;
+  throughDate: string;
+  games: Array<Omit<NbaRollingScheduleGameDto, "awayTeamLogo" | "homeTeamLogo"> & {
+    awayTeamLogo: string | null;
+    homeTeamLogo: string | null;
+  }>;
+};
+
 export type DailyEdgeResponse = {
   as_of: string;
   /** Versioned member-only mapping; internal held state remains unchanged. */
@@ -1249,6 +1259,8 @@ export type DailyEdgeResponse = {
    * rows carry no projection, probability, pick, grade, price, or stake.
    */
   nbaRollingSchedule?: NbaRollingScheduleDto;
+  /** Schedule-only CBB matchups never imply a forecast, Bet grade, or lock. */
+  cbbRollingSchedule?: CbbRollingScheduleDto;
   games: DailyEdgeGameDto[];
 };
 

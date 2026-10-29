@@ -18,7 +18,7 @@ const nextDay: CbbGame = { ...game, id: 10882409, date: "2026-11-02T05:01:00.000
 assert.deepEqual(selectCbbSlateGames([nextDay, late, game], "2026-11-01", 2026).map(row => row.id),
   [game.id, late.id]);
 assert.deepEqual(cbbFixtureSeedDates("2026-10-29"),
-  ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"]);
+  ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"]);
 assert.throws(() => cbbFixtureSeedDates("2026-11-1"), /Invalid/);
 assert.throws(() => selectCbbSlateGames([game, game], "2026-11-01", 2026), /Duplicate/);
 assert.throws(() => selectCbbSlateGames([{ ...game, status_state: "unknown" }], "2026-11-01", 2026), /unknown/);

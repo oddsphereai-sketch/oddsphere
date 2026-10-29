@@ -1,5 +1,17 @@
 # Model change safety protocol
 
+## Private CBB seven-day slate presentation
+
+The October 29 CBB candidate extends fixture-only capture and read-only
+presentation from a four-day seed horizon to seven ET calendar dates. It
+groups analyzed cards by day and separates exact-identity schedule-only
+fixtures. The CBB member activation flag, prediction writer, reader authority,
+grades, stakes, lock semantics, and tracking remain unchanged and disabled;
+same-input board impact is zero promotions, zero demotions, and zero
+actionable-count change. The fixture seed and rolling-slate contract carry
+new release IDs. Evidence and remaining launch gates are documented in
+`docs/model-audits/2026-10-29-cbb-november-launch-predeclaration.md`.
+
 ## Owner-directed repair: NBA consumer history continuity
 
 On 2026-10-29 Daniel Mengel required the NBA member card to keep Circa and

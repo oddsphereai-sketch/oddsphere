@@ -2,15 +2,15 @@ import { CbbBallDontLieClient } from "../../cbb/ballDontLie";
 import { assertCbbFixtureRefreshSafe, cbbCanonicalGamePayload, cbbCanonicalStatus,
   cbbCanonicalTeamPayload, type CbbExistingFixture } from "../../cbb/canonicalFixture";
 import type { CbbGame, CbbTeam } from "../../cbb/types";
+import { cbbRollingSlateDates } from "../../cbb/rollingSlate";
 import { fetchCbbTeamIdentities } from "./fetchCbbTeamIdentities";
 import { addDaysToSlate, computeSlateDate } from "../../dates/slateDate";
 
-export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_10_29_r3_exact_espn_identity" as const;
+export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_10_29_r4_seven_day_et_window" as const;
 
-/** Include the opener three days ahead so existing collectors can observe pregame prices. */
+/** The same seven Eastern slate dates the member board will display. */
 export function cbbFixtureSeedDates(today: string): string[] {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) throw new Error("Invalid CBB seed date");
-  return Array.from({ length: 4 }, (_, offset) => addDaysToSlate(today, offset));
+  return cbbRollingSlateDates(today);
 }
 
 type SeedOptions = {

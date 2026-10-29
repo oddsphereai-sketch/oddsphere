@@ -16,6 +16,8 @@ import type { Sport } from "@/lib/types/domain/Sport";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
+import { CBB_ACTIVATION } from "@/lib/cbb/releases";
+import { currentSlateDate } from "@/lib/dates/slateDate";
 
 // The canonical weekly snapshot retains every game's full reader evidence.
 // Keep the read bounded, but do not turn a healthy transfer into a false
@@ -56,7 +58,9 @@ export default async function CandidateDailyEdgePage({
         ? "premier_league"
         : "world_cup";
   const sport: Sport = soccerRequested ? "soccer" : sourceSport;
-  const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba";
+  const cbbPublicationEnabled = sport === "cbb" && CBB_ACTIVATION.memberPublication &&
+    process.env.CBB_DAILY_EDGE_ENABLED === "true";
+  const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba" || cbbPublicationEnabled;
   const eplRequested = competition === "premier_league";
   const eplEnabled = process.env.PREMIER_LEAGUE_DAILY_EDGE_ENABLED === "true";
   const uclRequested = competition === "champions_league";
@@ -171,6 +175,21 @@ export default async function CandidateDailyEdgePage({
   if (snapshotUnavailable && snapshot.games.length === 0) {
     snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
   }
+  if (cbbPublicationEnabled && !snapshotUnavailable) {
+    const scheduleRead = await readMemberDataWithDeadline({
+      label: "cbb-seven-day-schedule",
+      fallback: null,
+      read: async () => (await import("@/lib/services/cbb/cbbRollingSchedule"))
+        .loadCbbRollingSchedule(currentSlateDate("cbb")),
+    });
+    if (scheduleRead.value) {
+      snapshot.cbbRollingSchedule = (await import("@/lib/services/cbb/cbbRollingSchedule"))
+        .excludeAnalyzedCbbScheduleGames(scheduleRead.value,
+          snapshot.games.map((game) => game.external_id));
+    } else if (scheduleRead.unavailable && snapshot.games.length === 0) {
+      snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
+    }
+  }
   if (nflFixture) {
     snapshot = (await import("@/lib/services/dailyEdge/weeklyReaderLifecycle"))
       .filterWeeklyReaderSnapshot(snapshot, "nfl");
@@ -271,10 +290,13 @@ export default async function CandidateDailyEdgePage({
     ? snapshot.games.filter((game) => game.collegeFootballScope === "fbs_involved").length
     : 0;
   const nbaRollingBoard = sport === "nba" && snapshot.games.length > 0;
+  const cbbRollingBoard = cbbPublicationEnabled &&
+    (snapshot.games.length > 0 || (snapshot.cbbRollingSchedule?.games.length ?? 0) > 0);
   const activePreviewSports: Sport[] = [
     ...(nflFixture || nflWeekOneEvidenceEnabled ? ["nfl" as const] : []),
     ...(cfbFixture || cfbEnabled ? ["cfb" as const] : []),
     ...(nbaRollingBoard ? ["nba" as const] : []),
+    ...(cbbRollingBoard ? ["cbb" as const] : []),
   ];
 
   return (
@@ -308,6 +330,14 @@ export default async function CandidateDailyEdgePage({
               asOf: snapshot.as_of,
               cadenceLabel: "hourly board · T-60 lock",
             }
+          : cbbRollingBoard
+            ? {
+                label: `CBB · Next 7 Days · ${snapshot.games.length} analyzed games · ${snapshot.cbbRollingSchedule?.games.length ?? 0} schedule-only games`,
+                previousHref: null,
+                nextHref: null,
+                asOf: snapshot.as_of,
+                cadenceLabel: "game-timed refresh · T-60 lock",
+              }
           : nflFixture
           ? {
               label: `NFL · ${nflFixture.week.label} · ${snapshot.games.length} games · ${snapshot.games.length * 3} predictions · ${"heldMemberFixtureRelease" in nflFixture ? "live predictions and exact-price Bet grades" : nflFixture.tracking.seasonPhase === "preseason" ? "preseason is excluded from official tracking" : "tracking begins only with an approved pre-kickoff lock"}`,

@@ -108,7 +108,7 @@ const candidateReaderSource = readFileSync(
   "utf8",
 );
 assert.match(candidateReaderSource, /displaySnapshot\.nbaRollingSchedule/);
-assert.match(candidateReaderSource, /NBA · Next 7 Days/);
+assert.match(candidateReaderSource, /sport === "cbb" \? "College Basketball" : "NBA"\} · Next 7 Days/);
 assert.doesNotMatch(candidateReaderSource, /Analysis opens game day/);
 
 const candidatePageSource = readFileSync(

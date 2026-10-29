@@ -7,6 +7,8 @@ import {
   DAILY_EDGE_SPORT_KEYS,
 } from "@/app/lab/lib/dailyEdgeSports";
 import ActualDailyEdgePreview from "./ActualDailyEdgePreview";
+import { currentSlateDate } from "@/lib/dates/slateDate";
+import { loadCbbRollingSchedule } from "@/lib/services/cbb/cbbRollingSchedule";
 import {
   emptyPreviewSnapshot,
   loadCachedFreshContractSnapshot,
@@ -49,6 +51,13 @@ export default async function PrivateExperiencePreviewPage({
       ? await loadCachedFreshContractSnapshot(sport, requestedDate ?? "")
       : await loadDailyEdgeSnapshot(sport, requestedDate)
     : emptyPreviewSnapshot(sport);
+  if (sport === "cbb") {
+    // Private schedule review only. This cannot enable the member board or
+    // manufacture a forecast/grade for a fixture without analysis.
+    snapshot.date = requestedDate ?? currentSlateDate("cbb");
+    snapshot.requested_date = snapshot.date;
+    snapshot.cbbRollingSchedule = await loadCbbRollingSchedule(snapshot.date);
+  }
   const [history, pitcherFirstInningHistory] = await Promise.all([
     loadTeamHistory(snapshot, sport),
     loadPitcherFirstInningHistory(snapshot, sport),

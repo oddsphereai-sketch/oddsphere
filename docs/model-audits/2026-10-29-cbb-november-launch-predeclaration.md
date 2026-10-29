@@ -12,6 +12,9 @@ results as prospective accuracy.
 
 - Production base at task start: `origin/main` commit
   `62d6764d925fdd0ef94bac2e00dc9ec9960f3b05`.
+- Before the rolling-slate work, the task branch integrated the then-latest
+  `origin/main` commit `bc66ac5a3356b34cf92ed7065bd40f2bac15571c` with no
+  overlapping files. This is not a publication or live cutover.
 - Work occurs on the dedicated `codex/cbb-nov1-launch-20261029` branch and
   worktree. The private CBB candidate branch was merged into this branch; the
   shared primary checkout and existing draft branch are untouched.
@@ -241,3 +244,30 @@ This identity repair changes zero existing predictions, prices, grades,
 actionables, stakes, or locked records. It does not itself complete the sole
 CBB prediction writer, member reader, lock persistence, or official tracking;
 those remain launch gates. The private candidate is not live.
+
+## Seven-day slate presentation — private candidate only
+
+The card-view candidate now uses a rolling seven **Eastern calendar-day**
+window from the current date, rather than a fixed football week. Each
+analyzed CBB card is grouped by its actual ET tip day in the established
+Daily Edge layout. Exact-identity scheduled fixtures that do not yet have a
+complete analyzed card are shown separately as schedule-only matchups,
+without manufactured predictions, prices, grades, or stakes. A game with an
+analyzed card is removed from the schedule-only layer by numeric external ID.
+The window handles ET midnight and daylight-saving transitions as calendar
+dates, not as a fixed number of UTC hours. Per-game refresh and T-60 lock
+authority stay with the future sole prediction writer; this UI work does not
+alter either lifecycle.
+
+Fixture-only seed coverage advances to
+`cbb_fixture_seed_2026_10_29_r4_seven_day_et_window`, and the read-only
+schedule contract is
+`cbb_rolling_slate_2026_10_29_r1_seven_et_days`. Team joins use stored CBB
+foreign keys and preserve verified logos; unresolved or duplicate identities
+abort instead of appearing under a guessed abbreviation. The private
+experience preview can read the schedule, while the member route is gated by
+both `CBB_ACTIVATION.memberPublication` and `CBB_DAILY_EDGE_ENABLED`. Both
+remain off. No live snapshot, lock, tracking, model score, market decision,
+grade, or stake changes in this candidate: zero promotions, zero demotions,
+and zero actionable-count change. The full CBB writer/reader/tracking launch
+contract above remains open.

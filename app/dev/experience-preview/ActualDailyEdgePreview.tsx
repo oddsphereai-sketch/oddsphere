@@ -8,6 +8,7 @@ import type {
   DailyEdgeGameDto,
   DailyEdgeResponse,
   MarketEdgeDto,
+  CbbRollingScheduleDto,
   NbaRollingScheduleDto,
 } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
@@ -408,8 +409,9 @@ export default function ActualDailyEdgePreview({
   }, [embeddedSample]);
 
   if (!game) {
-    const nbaRollingSchedule = sport === "nba" ? displaySnapshot.nbaRollingSchedule : undefined;
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : nbaRollingSchedule && nbaRollingSchedule.games.length > 0 ? <NbaRollingSchedule schedule={nbaRollingSchedule} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+    const basketballSchedule = sport === "nba" ? displaySnapshot.nbaRollingSchedule :
+      sport === "cbb" ? displaySnapshot.cbbRollingSchedule : undefined;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : basketballSchedule && basketballSchedule.games.length > 0 ? <BasketballRollingSchedule schedule={basketballSchedule} sport={sport === "cbb" ? "cbb" : "nba"} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const selectedGame = game;
@@ -530,10 +532,12 @@ export default function ActualDailyEdgePreview({
         </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={scopedGameIndex} total={scopedGames.length} />}
       </div>
 
-      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} groupByDay={Boolean(renderedWeeklySlate)} cfbScopeControl={cfbScopeControl} marketingSample={embeddedSample} />
+      <EdgeBoard games={scopedGames} sport={sport} activeId={game.id} activeMarket={marketKey} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} groupByDay={Boolean(renderedWeeklySlate) || sport === "cbb"} cfbScopeControl={cfbScopeControl} marketingSample={embeddedSample} />
 
       {sport === "nba" && displaySnapshot.nbaRollingSchedule?.games.length ? (
-        <NbaRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} />
+        <BasketballRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} sport="nba" />
+      ) : sport === "cbb" && displaySnapshot.cbbRollingSchedule?.games.length ? (
+        <BasketballRollingSchedule schedule={displaySnapshot.cbbRollingSchedule} sport="cbb" />
       ) : null}
 
       {mobileSheetOpen ? (
@@ -822,10 +826,10 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
 
 function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [], sportActivity = {} }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[]; sportActivity?: DailyEdgeSportActivityMap }) {
   const displaySport = soccerCompetition?.label ?? sportLabel(sport);
-  const nbaScheduleOnlyCount = sport === "nba" && snapshot.games.length === 0
-    ? snapshot.nbaRollingSchedule?.games.length ?? 0
-    : 0;
-  const displayGameCount = weeklySlate?.displayGameCount ?? (nbaScheduleOnlyCount || snapshot.games.length);
+  const nbaScheduleOnlyCount = sport === "nba" ? snapshot.nbaRollingSchedule?.games.length ?? 0 : 0;
+  const cbbScheduleOnlyCount = sport === "cbb" ? snapshot.cbbRollingSchedule?.games.length ?? 0 : 0;
+  const displayGameCount = weeklySlate?.displayGameCount ??
+    snapshot.games.length + nbaScheduleOnlyCount + cbbScheduleOnlyCount;
   const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
   const sportAvailability = previewSportAvailability(activePreviewSports, sportActivity, soccerCompetition, sport, displayGameCount > 0);
   const orderedSports = orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability)
@@ -833,7 +837,7 @@ function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample =
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {nbaScheduleOnlyCount > 0 ? "games in the next 7 days" : displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
+        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {nbaScheduleOnlyCount + cbbScheduleOnlyCount > 0 ? "games in the next 7 days" : displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={orderedSports} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density={sample ? "sample" : "default"} /></div>
@@ -2583,15 +2587,19 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
     ? oddsFilteredGames
     : oddsFilteredGames.filter((game) => scopedMarketKeys.some((market) => marketMatchesOdds(game.markets[market]) && matchesFilter(game.markets[market], filter)));
   const orderedGames = [...visibleGames].sort((a, b) => {
+    if (sport === "cbb") {
+      const timeOrder = Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? "");
+      if (Number.isFinite(timeOrder) && timeOrder !== 0) return timeOrder;
+    }
     const completedOrder = Number(a.result?.finalScore !== null) - Number(b.result?.finalScore !== null);
     if (completedOrder !== 0) return completedOrder;
     return Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? "");
   });
   const groupedGames = dateGroupedBoard ? Object.entries(Object.groupBy(orderedGames, (game) => game.gameStartAt ? dateKeyInTimeZone(game.gameStartAt, groupingTimeZone) : "Unscheduled")) : [["", orderedGames] as const];
-  const progressiveNbaBoard = sport === "nba" && dateGroupedBoard && filter === "all" && groupedGames.length > 1;
+  const progressiveBasketballBoard = (sport === "nba" || sport === "cbb") && dateGroupedBoard && filter === "all" && groupedGames.length > 1;
   const [visibleDateGroupCount, setVisibleDateGroupCount] = useState(1);
   useEffect(() => {
-    if (!progressiveNbaBoard || visibleDateGroupCount >= groupedGames.length) return;
+    if (!progressiveBasketballBoard || visibleDateGroupCount >= groupedGames.length) return;
     let cancelled = false;
     let idleHandle: number | null = null;
     let timeoutHandle: number | null = null;
@@ -2612,8 +2620,8 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
       if (idleHandle !== null) window.cancelIdleCallback(idleHandle);
       if (timeoutHandle !== null) window.clearTimeout(timeoutHandle);
     };
-  }, [groupedGames.length, progressiveNbaBoard, visibleDateGroupCount]);
-  const renderedGameGroups = progressiveNbaBoard
+  }, [groupedGames.length, progressiveBasketballBoard, visibleDateGroupCount]);
+  const renderedGameGroups = progressiveBasketballBoard
     ? groupedGames.slice(0, visibleDateGroupCount)
     : groupedGames;
   const marketFilters: Array<{ key: MarketKey | null; label: string }> = [{ key: null, label: footballBoard ? "All markets" : "Best market" }, { key: "moneyline", label: "Moneyline" }, { key: "total", label: "Totals" }, { key: "first_inning", label: marketLabelFor("first_inning", sport) }];
@@ -2648,7 +2656,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
       <div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
         {cfbScopeControl ? <div className="mb-3 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] px-3 py-2.5"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-violet-200">College football board</p><p className="mt-1 text-[8px] font-semibold text-gray-500">FBS-involved games are the member default. Every model-covered Division I forecast remains available.</p></div><div className="flex gap-1.5" role="group" aria-label="College football board scope"><button type="button" onClick={() => changeScope("fbs")} aria-pressed={cfbScopeControl.active === "fbs"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "fbs" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>FBS {cfbScopeControl.fbsCount}</button><button type="button" onClick={() => changeScope("division_i")} aria-pressed={cfbScopeControl.active === "division_i"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "division_i" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>All Division I {cfbScopeControl.divisionICount}</button></div></div><div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-3"><label htmlFor="cfb-game-search" className="sr-only">Find a college football game</label><input id="cfb-game-search" type="search" value={cfbSearch} onChange={(event) => setCfbSearch(event.target.value)} placeholder="Find a school or abbreviation" className="min-w-0 flex-1 rounded-lg border border-white/[0.09] bg-black/25 px-3 py-2 text-[11px] font-semibold text-white outline-none placeholder:text-gray-700 focus:border-violet-400/55 focus:ring-2 focus:ring-violet-400/15" />{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-2 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Clear</button> : null}<span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-gray-600">{searchedGames.length} found</span></div></div> : null}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard ? "Weekly Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}</span></div>
+          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard || sport === "cbb" ? "Weekly Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}</span></div>
           <div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div>
         </div>
         {footballBoard ? (
@@ -2674,7 +2682,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
         {uclBoard ? <p className="mt-3 border-t border-white/[0.05] pt-3 text-[8px] font-semibold text-gray-600">Matches are grouped by your local calendar date. Every card also shows its localized kickoff date and time.</p> : null}
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} aria-pressed={active} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div>
       </div>
-      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6" aria-busy={progressiveNbaBoard && visibleDateGroupCount < groupedGames.length}>{renderedGameGroups.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{date === "Unscheduled" ? "Date TBD" : boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} illustrativeSample={marketingSample} />)}</div></section>; })}</div>}
+      {orderedGames.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6" aria-busy={progressiveBasketballBoard && visibleDateGroupCount < groupedGames.length}>{renderedGameGroups.map(([date, dayGames]) => { const rows = dayGames ?? []; return <section key={date || "slate"}>{date ? <div className="mb-3 flex items-center gap-3 border-b border-white/[0.07] pb-2"><span className="rounded-lg border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-100">{date === "Unscheduled" ? "Date TBD" : boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)}</span><span className="text-[9px] font-bold text-gray-600">{rows.length} {rows.length === 1 ? "match" : "matches"}</span></div> : null}<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((game) => <BoardGameCard key={game.id} game={game} sport={sport} headlineMarket={headlineMarketFor(game)} active={activeId === game.id} activeMarket={activeId === game.id ? activeMarket : null} selectGame={selectGame} prefetchGameDetail={prefetchGameDetail} illustrativeSample={marketingSample} />)}</div></section>; })}</div>}
     </section>
   );
 }
@@ -2815,7 +2823,9 @@ function formatNbaScheduleDay(slateDate: string): string {
   }).format(new Date(timestamp));
 }
 
-function nbaScheduleStatusLabel(status: string): string {
+function basketballScheduleStatusLabel(status: string): string {
+  if (status === "STATUS_FINAL") return "Final";
+  if (status === "STATUS_CANCELED") return "Canceled";
   if (status === "STATUS_POSTPONED") return "Postponed";
   if (status === "STATUS_DELAYED") return "Delayed";
   if (
@@ -2827,8 +2837,13 @@ function nbaScheduleStatusLabel(status: string): string {
   return "Scheduled";
 }
 
-function NbaRollingSchedule({ schedule }: { schedule: NbaRollingScheduleDto }) {
-  const gamesByDate = schedule.games.reduce<Map<string, NbaRollingScheduleDto["games"]>>(
+type BasketballScheduleGame = NbaRollingScheduleDto["games"][number] | CbbRollingScheduleDto["games"][number];
+
+function BasketballRollingSchedule({ schedule, sport }: {
+  schedule: NbaRollingScheduleDto | CbbRollingScheduleDto;
+  sport: "nba" | "cbb";
+}) {
+  const gamesByDate = schedule.games.reduce<Map<string, BasketballScheduleGame[]>>(
     (groups, game) => {
       const current = groups.get(game.slateDate) ?? [];
       current.push(game);
@@ -2839,13 +2854,15 @@ function NbaRollingSchedule({ schedule }: { schedule: NbaRollingScheduleDto }) {
   );
 
   return (
-    <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.06] via-[#11101a] to-orange-400/[0.035] p-4 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.8)] sm:p-5" aria-labelledby="nba-seven-day-schedule">
+    <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.06] via-[#11101a] to-orange-400/[0.035] p-4 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.8)] sm:p-5" aria-labelledby={`${sport}-seven-day-schedule`}>
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-orange-300/80">Official schedule</p>
-          <h2 id="nba-seven-day-schedule" className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">NBA · Next 7 Days</h2>
+          <h2 id={`${sport}-seven-day-schedule`} className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">{sport === "cbb" ? "College Basketball" : "NBA"} · Next 7 Days</h2>
         </div>
-        <p className="max-w-2xl text-[11px] leading-relaxed text-gray-400 sm:text-right">These matchups could not clear the complete model-and-market coverage gate. The last coherent analyzed board remains authoritative.</p>
+        <p className="max-w-2xl text-[11px] leading-relaxed text-gray-400 sm:text-right">{sport === "cbb"
+          ? "Scheduled matchups appear here until a complete model-and-market analysis is available. Only analyzed cards carry predictions and grades."
+          : "These matchups could not clear the complete model-and-market coverage gate. The last coherent analyzed board remains authoritative."}</p>
       </div>
       <div className="space-y-5">
         {[...gamesByDate.entries()].map(([slateDate, games]) => (
@@ -2860,17 +2877,17 @@ function NbaRollingSchedule({ schedule }: { schedule: NbaRollingScheduleDto }) {
                 <article key={game.id} className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
-                      <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport="nba" />
+                      <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport={sport} />
                       <strong className="text-sm text-white">{game.awayTeam}</strong>
                       <span className="text-[9px] text-gray-700">@</span>
                       <strong className="text-sm text-white">{game.homeTeam}</strong>
-                      <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport="nba" />
+                      <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport={sport} />
                     </div>
                     <LocalTime value={game.gameStartAt} className="shrink-0 text-[10px] tabular-nums font-semibold text-gray-300" />
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
-                    <span className="text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{nbaScheduleStatusLabel(game.status)}</span>
-                    <span className="text-[8px] text-gray-500">Analysis temporarily unavailable</span>
+                    <span className="text-[8px] font-black uppercase tracking-[0.13em] text-gray-500">{basketballScheduleStatusLabel(game.status)}</span>
+                    <span className="text-[8px] text-gray-500">{sport === "cbb" ? "Schedule only · no grade" : "Analysis temporarily unavailable"}</span>
                   </div>
                 </article>
               ))}
