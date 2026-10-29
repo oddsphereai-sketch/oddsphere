@@ -106,17 +106,21 @@ const atlSpreadOffers: NbaLineRow[] = [
   { market_type: "spread", sportsbook: "circa", side: "away", line_value: 0, odds_american: -110, fetched_at: "2026-10-29T11:00:00Z" },
   { market_type: "spread", sportsbook: "pinnacle", side: "home", line_value: -1, odds_american: -106, fetched_at: "2026-10-29T11:00:00Z" },
   { market_type: "spread", sportsbook: "pinnacle", side: "away", line_value: 1, odds_american: -106, fetched_at: "2026-10-29T11:00:00Z" },
+  { market_type: "spread", sportsbook: "draftkings", side: "home", line_value: -1.5, odds_american: -105, fetched_at: "2026-10-29T11:35:00Z" },
+  { market_type: "spread", sportsbook: "draftkings", side: "away", line_value: 1.5, odds_american: -115, fetched_at: "2026-10-29T11:35:00Z" },
+  { market_type: "spread", sportsbook: "fanduel", side: "home", line_value: -1.5, odds_american: -104, fetched_at: "2026-10-29T11:35:20Z" },
+  { market_type: "spread", sportsbook: "fanduel", side: "away", line_value: 1.5, odds_american: -118, fetched_at: "2026-10-29T11:35:20Z" },
 ];
 const bestSpreadOffer = selectBestNbaExecutableOffer({
   lines: atlSpreadOffers,
   market: "spread",
   pickSide: "home",
-  acceptedBooks: ["circa", "pinnacle"],
-  consensusPickLine: 0,
-  modelProbabilityAtPickLine: (line) => line === 0 ? 0.676 : line === -1 ? 0.65 : null,
+  acceptedBooks: ["draftkings", "fanduel"],
+  consensusPickLine: -1.5,
+  modelProbabilityAtPickLine: (line) => line === -1.5 ? 0.63 : null,
 });
-assert.equal(bestSpreadOffer?.pick.sportsbook, "circa");
-assert.equal(bestSpreadOffer?.pick.line_value, 0);
+assert.equal(bestSpreadOffer?.pick.sportsbook, "fanduel");
+assert.equal(bestSpreadOffer?.pick.line_value, -1.5);
 assert.equal(formatNbaSpreadSelection("ATL", 0), "ATL PK");
 assert.equal(formatNbaSpreadSelection("ATL", -1), "ATL -1");
 
@@ -134,7 +138,7 @@ const bestTotalOffer = selectBestNbaExecutableOffer({
   consensusPickLine: 238,
   modelProbabilityAtPickLine: (line) => line === 238 ? 0.5895 : line === 238.5 ? 0.58 : null,
 });
-assert.equal(bestTotalOffer?.pick.sportsbook, "pinnacle");
-assert.equal(bestTotalOffer?.pick.line_value, 238.5);
+assert.equal(bestTotalOffer?.pick.sportsbook, "circa");
+assert.equal(bestTotalOffer?.pick.line_value, 238);
 
 console.log("NBA coherent price-reference tests passed");

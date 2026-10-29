@@ -6,7 +6,8 @@
  *   1. seedNbaGames           → upserts teams + games for the slate.
  *   2. refreshNbaTeamRatings  → scrapes Basketball Reference and
  *                                upserts nba_team_ratings.
- *   3. refreshNbaLines        → fetches Owls Circa/Pinnacle odds for bounded rolling
+ *   3. refreshNbaLines        → fetches BALLDONTLIE consumer odds and Owls
+ *                                Circa/Pinnacle evidence for bounded rolling
  *                                game dates, upserts `lines`, and appends
  *                                `line_history`.
  *   4. response snapshot      → computes the existing authoritative member
@@ -39,7 +40,7 @@
  *
  * Scope (unchanged from Services 1–3):
  *   • Writes: teams, games, nba_team_ratings, lines, line_history.
- *   • Reads:  ESPN scoreboard, BBR HTML, Owls /odds, our DB.
+ *   • Reads:  ESPN scoreboard, BBR HTML, BALLDONTLIE odds, Owls /odds, our DB.
  *   • NEVER writes any MLB row. NEVER writes prediction_records /
  *     tracking. Snapshot publication reuses the existing NBA model and
  *     member adapter under the shared NBA prediction lease. NEVER logs keys.
@@ -68,7 +69,7 @@ import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecy
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_29_r20_consumer_execution_authority";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -334,6 +335,7 @@ export async function GET(request: Request): Promise<Response> {
             result: await refreshNbaLines({
               slateDate: lineDate,
               owlsApiKey,
+              ballDontLieApiKey: balldontlieApiKey,
               dryRun: false,
               logger: stepLog(`lines:${lineDate}`),
             }),

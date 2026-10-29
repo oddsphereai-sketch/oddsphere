@@ -51,7 +51,9 @@ async function main(): Promise<void> {
       const intel = game.intelligence[slot];
       const oldGrade = incumbentGrade(game, intel);
       const candidateGrade = intel.grade;
-      const candidateEv = expectedReturn(intel.model_prob_on_pick, intel.current_price.odds_american);
+      const candidateEv = intel.model_prob_on_pick === null || intel.current_price.odds_american === null
+        ? null
+        : expectedReturn(intel.model_prob_on_pick, intel.current_price.odds_american);
       return {
         date,
         gameExternalId: game.game_external_id,

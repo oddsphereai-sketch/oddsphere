@@ -29,6 +29,8 @@ const slateDate = process.argv[2] ?? new Intl.DateTimeFormat("en-CA", {
 }).format(new Date());
 const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
 if (!owlsApiKey) throw new Error("OWLS_INSIGHT_API_KEY is required");
+const ballDontLieApiKey = process.env.BALLDONTLIE_API_KEY;
+if (!ballDontLieApiKey) throw new Error("BALLDONTLIE_API_KEY is required");
 
 function actionable(grade: string): boolean {
   return grade === "best_angle" || grade === "lean";
@@ -55,7 +57,7 @@ function lineRow(row: {
 
 async function main(): Promise<void> {
   const built = await buildNbaFeatureSnapshotsWithProvenance(slateDate);
-  const refresh = await refreshNbaLines({ slateDate, owlsApiKey, dryRun: true });
+  const refresh = await refreshNbaLines({ slateDate, owlsApiKey, ballDontLieApiKey, dryRun: true });
   const externalIds = built.snapshots.map((snapshot) => snapshot.game_external_id);
   const { data: games, error } = await supabase.from("games")
     .select("id,external_id")

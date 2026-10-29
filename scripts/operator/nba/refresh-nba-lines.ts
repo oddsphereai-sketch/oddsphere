@@ -53,6 +53,11 @@ async function main(): Promise<void> {
     console.error("✗ OWLS_INSIGHT_API_KEY missing from env");
     process.exit(1);
   }
+  const ballDontLieKey = process.env.BALLDONTLIE_API_KEY;
+  if (!ballDontLieKey) {
+    console.error("✗ BALLDONTLIE_API_KEY missing from env");
+    process.exit(1);
+  }
 
   let write = false;
   if (apply) {
@@ -77,6 +82,7 @@ async function main(): Promise<void> {
     result = await refreshNbaLines({
       slateDate: date,
       owlsApiKey: owlsKey,
+      ballDontLieApiKey: ballDontLieKey,
       dryRun: !write,
       logger: (msg) => console.log(msg),
     });
