@@ -4,6 +4,10 @@ Starting production base: `3713fcef00a54230632e22aa8ef60ad3654a7671`.
 Integrated production base: `5d192fa9a99785c739e8443c55bffb7504af9710`
 (NBA consumer execution authority and trail coherence). No overlapping files;
 the upstream model, price source and locked-reader repair remain unchanged.
+Subsequent integrated bases: `0ea6af8e66e5e4337b7b0f441e34db034dbb529c`
+(NBA consumer history) and `47fcef8e84024dd812634b52aa9dc947966d5dbb`
+(NFL navigation/member-cache invalidation). Both have no task-file overlaps;
+their full detail loading, consumer trails and cache invalidation are preserved.
 
 Scope: display-only Daily Edge prediction-market panels across the existing
 supported sports and market families. No prediction, projection, selection,
