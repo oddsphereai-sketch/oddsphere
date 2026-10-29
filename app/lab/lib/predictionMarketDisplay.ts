@@ -19,9 +19,10 @@ export function predictionMarketComparisonBook(locked:boolean,stored:PredictionM
   return live;
 }
 export function formatPredictionMarketOdds(value:number):string {return value>0?`+${value}`:`−${Math.abs(value)}`;}
-export function predictionMarketBookPricePath(points:ReadonlyArray<readonly [number,number,number]>):string {
+export function predictionMarketBookPricePath(points:ReadonlyArray<readonly [number,number,number]>,maxPrices=3):string {
   const prices=points.map(p=>p[2]).filter((price,i)=>i===0||price!==points[i-1][2]);
-  const shown=prices.length<=3?prices:[prices[0],prices.at(-1)!];
+  if(maxPrices>=4&&prices.length>maxPrices)return `${formatPredictionMarketOdds(prices[0])} → … → ${formatPredictionMarketOdds(prices.at(-1)!)}`;
+  const shown=prices.length<=maxPrices?prices:[prices[0],prices.at(-1)!];
   return shown.map(formatPredictionMarketOdds).join(" → ");
 }
 /** A few real extrema anchors keep a sparse dip/return visible without dot clutter. */
@@ -204,7 +205,10 @@ export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history
   const overlap=points.length>0&&bookPoints.length>0&&Math.max(points[0][0],bookPoints[0][0])<=cutoff!;
   return {points:cutoff!==null&&!overlap?series.points:points,activity:cutoff!==null&&!overlap?series.activity:activity,
     bookPoints:overlap?bookPoints:[],cutoff:overlap?cutoff:null,pending:!!book&&!overlap,
-    start:overlap?((lockedAt===undefined&&(row.historyFrom||book?.historyScope)||book?.historyScope==="prelock_archive")?Math.min(points[0][0],bookPoints[0][0]):Math.max(points[0][0],bookPoints[0][0])):series.points[0]?.[0]??Date.parse(row.asOf),
+    // Opening evidence remains in the source arrays/cards, but the plotted
+    // comparison starts only when BOTH sources have an actual prior quote.
+    // A union start leaves one trace stranded at the right of a multi-day axis.
+    start:overlap?Math.max(points[0][0],bookPoints[0][0]):series.points[0]?.[0]??Date.parse(row.asOf),
     latestKalshi:series.points.at(-1)?.[0]??null,latestBook:book?.points.at(-1)?.[0]??null};
 }
 

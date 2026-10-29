@@ -174,7 +174,7 @@ const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPane
 assert.ok(component.includes("illustrativeSample"));assert.match(component,/game\.sport\s*!==\s*"cbb"/);
 assert.ok(component.includes("#7de3c1")&&component.includes("#b7a0f4"),"approved mint and violet chart colors are preserved");
 assert.ok(component.includes("data-book-odds")&&component.includes("activeBook[2]"),"plotted prices and cross-series readouts retain actual American odds");
-assert.ok(component.includes('comparedBook.points.length===1?" · one quote"')&&component.includes('comparedBook.points.length===1?"History building"'),"one sportsbook observation is not evidence of an unchanged market");
+assert.ok(component.includes('windowBook.points.length===1?" · one quote"')&&component.includes('windowBook.points.length===1?"History building"'),"one sportsbook observation in view is not evidence of an unchanged market");
 assert.ok(component.includes('game.markets[marketKey]'),"the chosen reader market, not moneyline, owns the sportsbook comparison");
 assert.ok(component.includes('readerContractSelection(game,marketKey)'),"active market selection controls requests");
 assert.ok(component.includes('predictionMarketCurve(plotPoints,x,y,Infinity,bottom)')&&component.includes('predictionMarketCurve(plotBook,x,y,Infinity,bottom)'),"both sources use the identical continuous bounded guide treatment");
