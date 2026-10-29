@@ -11,10 +11,10 @@ import type {
 } from "./nbaProfessionalMarketReader";
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 import type { NbaApprovedLegacyLockedEvidenceRecovery } from "./nbaLockedMemberSnapshot";
+import { isNbaConsumerExecutionSportsbook } from "./nbaMarketSourceEligibility";
 
 const SPLIT_STALE_AFTER_MINUTES = 75;
 const MOVEMENT_CURRENT_RELATIVE_FRESH_MINUTES = 120;
-const MOVEMENT_BOOK_PRIORITY = ["circa", "pinnacle", "bookmaker"] as const;
 
 type PublicSplit = MarketEdgeDto["publicSplits"][number];
 
@@ -313,17 +313,12 @@ function coherentPair(
     : Math.abs(selected.line - opposing.line) < 0.01;
 }
 
-function movementBookRank(sportsbook: string): number {
-  const book = canonical(sportsbook);
-  const index = MOVEMENT_BOOK_PRIORITY.findIndex((candidate) => book.includes(candidate));
-  return index === -1 ? MOVEMENT_BOOK_PRIORITY.length : index;
-}
-
 /**
- * Pick one complete same-book chronology for the member movement panel.
- * A deeper real trail wins before book branding: a three-point retail trail
- * is more informative than a current-only Circa quote. At equal depth the
- * order is Circa, Pinnacle, Bookmaker, the evaluated book, then other books.
+ * Pick one complete same-book consumer chronology for the member movement
+ * panel. Circa/Pinnacle remain available to the professional reader, but the
+ * member trail must describe a line that a mainstream consumer can actually
+ * execute. Prefer the exact evaluated book when it has a fresh complete pair;
+ * otherwise use the deepest fresh consumer-book trail.
  */
 export function selectNbaMovementReference(args: {
   market: NbaMovementMarket;
@@ -343,6 +338,7 @@ export function selectNbaMovementReference(args: {
     const book = canonical(row.sportsbook);
     if (
       row.market !== args.market || !book || row.americanPrice === null || row.americanPrice === 0 ||
+      !isNbaConsumerExecutionSportsbook(row.sportsbook) ||
       (side !== args.selectedSide && side !== opposingSide) ||
       !Number.isFinite(observedMs) || observedMs > evaluatedMs
     ) continue;
@@ -377,9 +373,8 @@ export function selectNbaMovementReference(args: {
     freshestMs - candidate.currentMs <= MOVEMENT_CURRENT_RELATIVE_FRESH_MINUTES * 60_000);
   const preferred = canonical(args.preferredSportsbook);
   const selected = freshestCandidates.sort((left, right) =>
-    right.displayDepth - left.displayDepth ||
-    movementBookRank(left.book) - movementBookRank(right.book) ||
     Number(right.book === preferred) - Number(left.book === preferred) ||
+    right.displayDepth - left.displayDepth ||
     left.book.localeCompare(right.book)
   )[0];
   return selected ? {
