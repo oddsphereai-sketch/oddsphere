@@ -124,6 +124,18 @@ effect. Splits still have no CBB score or grade authority until a reader is
 qualified. The live receipt showed that Owl's repeats the Villanova–Notre Dame
 event once per book under the same event ID; the exact-event matcher accepts
 those repetitions but rejects two distinct IDs for one fixture.
+
+An independent BALLDONTLIE current-odds read at 17:50 UTC returned complete
+Caesars, Fanatics, and BetRivers rows for both opener fixtures. Those generic
+`home`/`away` price fields appear reversed against Owl's named-selection prices
+on both neutral-site matchups; there is no same-book named-selection pair in
+this pull to prove their orientation. They are therefore **additional lines
+observed**, not six newly qualified executable target rows or professional
+references. The private board continues to use exact named selections rather
+than silently flip or infer generic sides. A DraftKings Owl's event for the
+Liberty–High Point matchup also carried a start roughly two hours away from
+the matching BALLDONTLIE and ESPN 04:59 UTC tip and was correctly excluded by
+the exact-time gate.
 At 17:41 UTC, the refreshed private board had two games and six markets:
 zero Best Angles, three model-only Leans, two Watchlists, one No Play, and zero
 Holds. No Circa/Pinnacle CBB prices or split games arrived in that pull. The
