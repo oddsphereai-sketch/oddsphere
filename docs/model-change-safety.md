@@ -1,5 +1,22 @@
 # Model change safety protocol
 
+## Owner-directed repair: NBA consumer execution-line authority
+
+On 2026-10-29 Daniel Mengel rejected the r23 member-facing ATL PK because the
+sharp Circa quote was not representative of the regulated consumer market.
+Candidate r24/r25/r15 restores BALLDONTLIE GOAT's real multi-book consumer
+board as display, grade, and future-unlocked tracking authority while retaining
+Circa/Pinnacle as separate professional-reader evidence. No number is rounded
+or synthesized.
+
+The live no-write rehearsal matched three games / nine markets, 214 complete
+rows, 12 books, zero incomplete groups, and zero provider errors. Final scores
+changed zero times. Actionables move 1 to 2 through one ATL Spread promotion
+and zero demotions; one non-actionable Spread direction crosses at the real
+consumer line. Existing locks retain exact precedence. Evidence and rollback:
+`docs/model-audits/2026-10-29-nba-consumer-execution-authority-predeclaration.md`
+and `docs/model-audits/2026-10-29-nba-consumer-execution-authority-result.md`.
+
 ## Owner-directed repair: NBA executable market selection
 
 On 2026-10-29 Daniel Mengel reported that CLE at ATL showed a zero Spread and

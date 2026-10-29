@@ -7,9 +7,9 @@
  *
  * What this does:
  *   • Loads NBA games + teams for the requested date.
- *   • Fetches one current NBA board from Owls and retains only complete
- *     Circa/Pinnacle two-sided full-game markets. Slate isolation happens
- *     locally through exact home/away and start-time matching.
+ *   • Fetches the real consumer NBA board from BALLDONTLIE GOAT plus the
+ *     Circa/Pinnacle sharp board from Owls. Slate isolation happens locally
+ *     through exact home/away and start-time matching.
  *   • Matches each odds row to one of our `games` rows by team-name
  *     overlap (display_name + last-token fallback).
  *   • Normalizes market + side, builds (game_id, market_type,
@@ -39,6 +39,11 @@ import {
   type RawOwlsOddsResponse,
 } from "../../providers/owls/owlsSharpBookOdds";
 import { flagOpenersInHistoryPayload } from "../_lineHistoryOpenerHelper";
+import { fetchNbaBdlRetailOdds } from "./balldontlieNbaRetailOdds";
+import {
+  isNbaConsumerExecutionSportsbook,
+  isNbaSharpReaderSportsbook,
+} from "./nbaMarketSourceEligibility";
 
 const SHARP_API_BASE = "https://api.sharpapi.io/api/v1";
 
@@ -54,6 +59,8 @@ export type RefreshNbaLinesOptions = {
   slateDate: string;
   /** Owls is the active production source for complete Circa/Pinnacle pairs. */
   owlsApiKey?: string;
+  /** BALLDONTLIE GOAT supplies the real multi-book consumer execution board. */
+  ballDontLieApiKey?: string;
   /** Legacy operator-only fallback; active crons do not pass this. */
   sharpApiKey?: string;
   /** false = perform DB writes; true = dry-run (read-only). */
@@ -523,7 +530,8 @@ export async function refreshNbaLines(
   const teams = await loadNbaTeams();
   const teamById = new Map<number, TeamRow>(teams.map((t) => [t.id, t]));
 
-  // 3. Fetch one league-level Owls board in production. The legacy SharpAPI
+  // 3. Fetch one league-level Owls sharp board plus the date-scoped
+  // BALLDONTLIE consumer board in production. The legacy SharpAPI
   // branch remains only for focused operator compatibility while the old
   // account is retired; active cron callers pass owlsApiKey exclusively.
   // three game markets. SharpAPI does not document a date filter; its old
@@ -531,7 +539,8 @@ export async function refreshNbaLines(
   // identity plus team and start-time matching prevents future same-pair games
   // and thousands of alternate lines from exhausting global pagination.
   let oddsRows: SharpOddsRow[] = [];
-  const reconciliationGameIds = new Set<number>();
+  const sharpGameIds = new Set<number>();
+  const retailGameIds = new Set<number>();
   if (opts.owlsApiKey) {
     const response = await new OwlsInsightClient(opts.owlsApiKey).odds<RawOwlsOddsResponse>("nba");
     const coverage = normalizeOwlsSharpBookOdds(response.body, "nba");
@@ -541,7 +550,7 @@ export async function refreshNbaLines(
         ? Number.POSITIVE_INFINITY
         : Math.abs(Date.parse(row.scheduledStart) - Date.parse(game.game_date));
       if (game === null || !Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000) return [];
-      reconciliationGameIds.add(game.id);
+      sharpGameIds.add(game.id);
       return [{
         event_id: row.providerEventId,
         sportsbook: row.sportsbook,
@@ -557,15 +566,15 @@ export async function refreshNbaLines(
         is_main_line: true,
       }];
     });
-    if (reconciliationGameIds.size < games.length) {
-      errors.push(`Owls NBA event identity unavailable for ${games.length - reconciliationGameIds.size} of ${games.length} scoped game(s); unmatched games preserved.`);
+    if (sharpGameIds.size < games.length) {
+      errors.push(`Owls NBA event identity unavailable for ${games.length - sharpGameIds.size} of ${games.length} scoped game(s); unmatched games preserved.`);
     }
     log(`Owls /odds normalized rows: ${oddsRows.length}`);
   } else if (opts.sharpApiKey) {
     const events = await fetchNbaCurrentEvents(opts.sharpApiKey, log);
     const eventTargets = eventTargetsForGames(events, games, teamById);
     const eventIds = eventTargets.map((target) => target.eventId);
-    eventTargets.forEach((target) => reconciliationGameIds.add(target.gameId));
+    eventTargets.forEach((target) => sharpGameIds.add(target.gameId));
     if (eventTargets.length < games.length) {
       errors.push(`Legacy SharpAPI NBA event identity unavailable for ${games.length - eventTargets.length} of ${games.length} scoped game(s); unmatched games preserved.`);
     }
@@ -576,6 +585,53 @@ export async function refreshNbaLines(
   } else {
     throw new Error("Owls NBA odds key missing");
   }
+
+  if (opts.ballDontLieApiKey) {
+    const retail = await fetchNbaBdlRetailOdds({
+      slateDate: opts.slateDate,
+      apiKey: opts.ballDontLieApiKey,
+    });
+    const providerGameById = new Map(retail.games.map((game) => [game.providerGameId, game]));
+    const storedGameByProviderId = new Map<number, GameRow>();
+    for (const providerGame of retail.games) {
+      const storedGame = matchGame(providerGame.homeTeam, providerGame.awayTeam, games, teamById);
+      const distanceMs = storedGame === null
+        ? Number.POSITIVE_INFINITY
+        : Math.abs(Date.parse(providerGame.scheduledStart) - Date.parse(storedGame.game_date));
+      if (storedGame === null || !Number.isFinite(distanceMs) || distanceMs > 18 * 3_600_000) continue;
+      storedGameByProviderId.set(providerGame.providerGameId, storedGame);
+      retailGameIds.add(storedGame.id);
+    }
+    const retailRows = retail.quotes.flatMap((quote): SharpOddsRow[] => {
+      const providerGame = providerGameById.get(quote.providerGameId);
+      const storedGame = storedGameByProviderId.get(quote.providerGameId);
+      if (!providerGame || !storedGame) return [];
+      return [{
+        event_id: String(quote.providerGameId),
+        sportsbook: quote.sportsbook,
+        market_type: quote.market,
+        side: quote.side,
+        line: quote.line,
+        odds_american: quote.americanPrice,
+        home_team: providerGame.homeTeam,
+        away_team: providerGame.awayTeam,
+        event_start_time: providerGame.scheduledStart,
+        provider_timestamp: quote.observedAt,
+        is_main_line: true,
+      }];
+    });
+    oddsRows.push(...retailRows);
+    if (retailGameIds.size < games.length) {
+      errors.push(`BALLDONTLIE NBA retail identity unavailable for ${games.length - retailGameIds.size} of ${games.length} scoped game(s); unmatched games preserved.`);
+    }
+    log(`BALLDONTLIE /v2/odds normalized retail rows: ${retailRows.length}`);
+  } else if (opts.owlsApiKey) {
+    throw new Error("BALLDONTLIE NBA retail odds key missing");
+  }
+
+  const reconciliationGameIds = opts.ballDontLieApiKey
+    ? new Set([...sharpGameIds].filter((gameId) => retailGameIds.has(gameId)))
+    : sharpGameIds;
 
   // 4. Match + normalize + build payloads.
   let matched = 0;
@@ -692,6 +748,20 @@ export async function refreshNbaLines(
     `Executable pair gate: kept ${dedupedPayloads.length} rows; dropped ${completeBoard.incompleteGroups} incomplete sportsbook group(s)`,
   );
 
+  if (opts.ballDontLieApiKey) {
+    for (const gameId of reconciliationGameIds) {
+      for (const market of NBA_CURRENT_LINE_MARKETS) {
+        const scopeRows = dedupedPayloads.filter((row) => row.game_id === gameId && row.market_type === market);
+        if (
+          !scopeRows.some((row) => isNbaConsumerExecutionSportsbook(row.sportsbook)) ||
+          !scopeRows.some((row) => isNbaSharpReaderSportsbook(row.sportsbook))
+        ) {
+          errors.push(`Dual-source NBA scope incomplete for ${gameId}|${market}.`);
+        }
+      }
+    }
+  }
+
   // 5. Dry-run path: log a sample and exit.
   if (opts.dryRun) {
     log(`\n[dry-run] would upsert ${dedupedPayloads.length} lines row(s)`);
@@ -758,8 +828,22 @@ export async function refreshNbaLines(
         continue;
       }
 
+      if (opts.ballDontLieApiKey && proposed.length > 0) {
+        const hasConsumerExecutionPair = proposed.some((row) => isNbaConsumerExecutionSportsbook(row.sportsbook));
+        const hasSharpPair = proposed.some((row) => isNbaSharpReaderSportsbook(row.sportsbook));
+        if (!hasConsumerExecutionPair || !hasSharpPair) {
+          const msg = `  ✗ preserve ${key}: complete consumer execution and sharp-reader pairs are both required`;
+          log(msg);
+          errors.push(msg);
+          continue;
+        }
+      }
+
       if (proposed.length === 0) continue;
-      const managedBooks = opts.owlsApiKey ? ["circa", "pinnacle"] : null;
+      // A complete dual-source cycle owns the full current scope. The legacy
+      // Owls-only operator path manages only its two sharp books so it cannot
+      // erase a previously captured retail board.
+      const managedBooks = opts.ballDontLieApiKey ? null : opts.owlsApiKey ? ["circa", "pinnacle"] : null;
       const existingIds: number[] = [];
       for (let from = 0; ; from += 1000) {
         let existingQuery = supabase

@@ -4,7 +4,7 @@ import { computeLocksAt } from "../../automodel/lockState";
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_LOCKED_MEMBER_SNAPSHOT_RELEASE =
-  "nba_locked_member_snapshot_2026_10_29_r5_executable_market_selection" as const;
+  "nba_locked_member_snapshot_2026_10_29_r6_consumer_execution_authority" as const;
 
 export const NBA_APPROVED_LEGACY_LOCKED_EVIDENCE_RECOVERY_RELEASE =
   "nba_legacy_locked_evidence_recovery_2026_10_20_r1_bos_det" as const;
