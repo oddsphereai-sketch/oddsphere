@@ -66,6 +66,28 @@ tests plus `npm run verify:model-change` and integration safety, review the
 remote PR tree, then verify production release, source coverage, lock/reader
 immutability, tracking, board counts, and the next scheduled refresh.
 
+## Owner-approved provisional grades — private candidate only
+
+On October 29 the owner confirmed that November 1 must have real play grades
+even though early-season outcome validation is limited. This approves
+*developing and testing* provisional grades; it does not waive exact-price,
+identity, freshness, lock, or publication checks. The private r2 grade triage
+evaluates every available Moneyline, Spread, and Total quote at one executable
+target book, excludes that book's family from professional corroboration, and
+distinguishes unavailable, agreeing, opposing, and mixed professional evidence.
+It has no stake authority and no member writer import.
+
+The October 29 12:15 UTC immutable preview contains two November 1 ET games
+and six exact target market rows. The provisional same-input board has zero
+Best Angles, three Leans, one Watchlist, two No Plays, and zero Holds. The prior
+ungraded preview had zero actionable rows, so this is three proposed
+promotions, zero demotions, and a net +3 actionables. All three Leans are
+**model-only**, not sharp-confirmed: neither game has a qualified professional
+reference in that capture. This count demonstrates a non-flat candidate, not
+predictive validation or a final November 1 board. The opened historical
+grade audits found moneyline and total failure blocks, so they do not justify
+promoting this draft as a proven grade policy.
+
 ## First private execution receipt
 
 The new date-bounded canonical fixture seed was rehearsed **read-only** on
