@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-28
+Last reviewed: 2026-10-29
 
 ## Cross-sport confidence / execution contract
 
@@ -4792,18 +4792,18 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_27_r22_owls_current_odds`
+- Model / prediction record: `nba_professional_unified_2026_10_29_r23_executable_market_selection`
 - Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation`
-- Market marriage: `nba_market_marriage_2026_10_27_r23_owls_current_odds`
+- Market marriage: `nba_market_marriage_2026_10_29_r24_executable_market_selection`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_24_r13_steep_moneyline_best_angle_tier`
+- Grade policy: `nba_grade_policy_2026_10_29_r14_coherent_same_book_fair_fallback`
 - Line refresh: `nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_24_r6_steep_moneyline_best_angle_tier`
-- Locked member snapshot: `nba_locked_member_snapshot_2026_10_24_r4_steep_moneyline_best_angle_tier`
+- Member lock publication: `nba_member_lock_publication_2026_10_29_r7_executable_market_selection`
+- Locked member snapshot: `nba_locked_member_snapshot_2026_10_29_r5_executable_market_selection`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -4815,6 +4815,18 @@ The paired live-slate replay is recorded in
 - Schema status: additive migration v44 was applied to the primary database on
   2026-10-15; the service-role verification returned an empty, readable table
   and the October 20-21 member-pipeline smoke returned 14 coherent r2 games
+
+The October 29 r23/r24/r14 executable-market repair preserves the independent
+score, probability distribution, categorical reader, injuries, writer, lease,
+cadence, lock boundary, and tracking contract. A separate exact-line fair
+reference remains preferred, but when it is unavailable a complete two-sided
+pair at the selected sportsbook may supply the no-vig probability instead of
+misclassifying a priced market as `no_market`. Spread and Total choose the
+highest-model-EV complete offer among already accepted books; every displayed
+number remains an actual sportsbook quote and a zero spread renders as `PK`.
+Existing locked rows retain exact payload precedence. Evidence and rollback:
+`docs/model-audits/2026-10-29-nba-executable-market-selection-predeclaration.md`
+and `docs/model-audits/2026-10-29-nba-executable-market-selection-result.md`.
 
 The October 21 r15/r17/r9 grade-integrity release separates model value versus the current no-vig
 price from actual qualified market movement. Direct Moneyline movement remains observational and

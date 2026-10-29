@@ -264,6 +264,11 @@ function buildSnapshot(opts: {
       sportsbook: opts.intel.current_price.sportsbook,
       note: "Current price only — open-to-current line movement is not tracked in the NBA pipeline.",
     },
+    fair_reference: {
+      mode: opts.intel.fair_reference_mode,
+      books: opts.intel.fair_reference_books,
+      probability: opts.intel.market_no_vig_prob_pick,
+    },
     data_integrity: {
       data_quality_tier: opts.dataQualityTier,
       limited_book_coverage: opts.sources.limited_book_coverage,
