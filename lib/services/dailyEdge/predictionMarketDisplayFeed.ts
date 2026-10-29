@@ -15,6 +15,19 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { currentDailyEdgeBoardDate } from "@/lib/dates/slateDate";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { BOOK_DISPLAY_HISTORY_RELEASE, captureOwlsBookDisplayHistory, isBookDisplayFeed, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
+import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
+
+const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-prelock::${sport}::${PREDICTION_MARKET_PRELOCK_RELEASE}`;
+async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
+  const stored=await readLatestLabResponseSnapshot<Record<string,unknown>>(prelockKey(sport));
+  let p=stored?.payload;
+  if(p?.encoding==="gzip-base64"&&typeof p.payload==="string")p=JSON.parse(gunzipSync(Buffer.from(p.payload,"base64"),{maxOutputLength:64_000_000}).toString());
+  return p?.release===PREDICTION_MARKET_PRELOCK_RELEASE&&p.sport===sport&&Array.isArray(p.rows)?p as PrelockFeed:null;
+}
+const prelockCompressed=unstable_cache(async(sport:PredictionMarketSport)=>gzipSync(JSON.stringify(await prelockStored(sport))).toString("base64"),[PREDICTION_MARKET_PRELOCK_RELEASE],{revalidate:30,tags:[PREDICTION_MARKET_PRELOCK_RELEASE]});
+export async function readPredictionMarketPrelockFeed(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
+  return JSON.parse(gunzipSync(Buffer.from(await prelockCompressed(sport),"base64"),{maxOutputLength:64_000_000}).toString());
+}
 
 export const predictionMarketBookSnapshotKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-books::${sport}::${BOOK_DISPLAY_HISTORY_RELEASE}`;
 async function bookHistoryStored(sport:PredictionMarketSport):Promise<BookDisplayFeed|null>{
@@ -133,6 +146,14 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   const byTicker=new Map(captured.rows.map(row=>[row.ticker,row]));
   const withHistory={...winners,rows:winners.rows.map(row=>byTicker.get(row.ticker)??row)};
   const feed=mergePredictionMarketFeeds(withHistory,{...withHistory,rows:[]});
+  const updatedContracts=contracts.map(contract=>({...contract,rows:contract.rows.map(row=>byTicker.get(row.ticker)??row)}) as ContractFeed);
+  if(games){
+    try{
+      const prior=await prelockStored(sport),archive=capturePredictionMarketPrelock(prior,games,sport,feed,updatedContracts,bookCapture?.feed??null,Date.now());
+      const saved=await upsertLabResponseSnapshot({snapshotKey:prelockKey(sport),kind:"daily_edge",sport:sport==="ucl"?"soccer":sport,payload:{encoding:"gzip-base64",payload:gzipSync(JSON.stringify(archive)).toString("base64")},source:"prediction_market_prelock_display",payloadVersion:PREDICTION_MARKET_PRELOCK_RELEASE,ttlMs:5*60_000,staleMs:90*86_400_000});
+      if(saved.ok)revalidateTag(PREDICTION_MARKET_PRELOCK_RELEASE,{expire:0});else warnings.push("pre-lock chart receipt: store unavailable; retained");
+    }catch{warnings.push("pre-lock chart receipt: capture unavailable; retained");}
+  }
   const stored = await upsertLabResponseSnapshot({ snapshotKey:predictionMarketSnapshotKey(sport),kind:"daily_edge",
     payload:feed as unknown as Record<string, unknown>,ttlMs:5*60_000,staleMs:24*60*60_000,
     sport:sport === "ucl" ? "soccer" : sport,source:"owls_kalshi_display",payloadVersion:PREDICTION_MARKET_RELEASE });
