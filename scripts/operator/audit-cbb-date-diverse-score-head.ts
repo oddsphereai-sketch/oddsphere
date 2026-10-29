@@ -5,6 +5,7 @@ import { evaluateCbbRows } from "../../lib/cbb/evaluation";
 import { reviewCbbQuote } from "../../lib/cbb/marketEvidence";
 import { settleCbbMarket } from "../../lib/cbb/model";
 import { applyCbbMarketHead, fitCbbMarketHead } from "../../lib/cbb/marketReaderResearch";
+import { assertCbbR2ResearchCohort } from "../../lib/cbb/researchCohort";
 import type { CbbScoreFeatureRow } from "../../lib/cbb/scoreResearch";
 import type { CbbMarket, CbbQuote } from "../../lib/cbb/types";
 
@@ -16,6 +17,7 @@ const rows = files.flatMap(file => JSON.parse(readFileSync(resolve(dir, file), "
 const sourceByGame = new Map<number, string>(files.flatMap(file =>
   (JSON.parse(readFileSync(resolve(dir, file), "utf8")) as Row[]).map(row => [row.game.id, file] as const)));
 if (rows.length !== 1070 || new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("invalid CBB date-diverse score cohort");
+assertCbbR2ResearchCohort(rows);
 const early = rows.filter(r => r.game.date < "2026-02-15"),
   selection = rows.filter(r => r.game.date >= "2026-02-15" && r.game.date < "2026-03-01"),
   later = rows.filter(r => r.game.date >= "2026-03-01");

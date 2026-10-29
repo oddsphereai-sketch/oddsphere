@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cbbImpliedProbability, reviewCbbQuote } from "../../lib/cbb/marketEvidence";
 import { cbbThresholdProbabilities, normalCdf, settleCbbMarket } from "../../lib/cbb/model";
+import { assertCbbR2ResearchCohort } from "../../lib/cbb/researchCohort";
 import type { CbbForecast, CbbMarket, CbbQuote, CbbTrainingGame } from "../../lib/cbb/types";
 
 type Row = { game: CbbTrainingGame; forecast: CbbForecast; targets: CbbQuote[];
@@ -17,6 +18,7 @@ const rows = files.flatMap((file, i) => (JSON.parse(readFileSync(resolve(dir, fi
   .map(row => ({ ...row, source: (["baseline", "added", "weekdays", "saturation"] as const)[i] })));
 if (rows.length !== 1070 || new Set(rows.map(r => r.game.id)).size !== rows.length)
   throw new Error("CBB grade calibration cohort changed");
+assertCbbR2ResearchCohort(rows);
 const median = (a: number[]) => { const b = [...a].sort((x, y) => x - y), i = Math.floor(b.length / 2);
   return b.length % 2 ? b[i] : (b[i - 1] + b[i]) / 2; };
 const clamp = (p: number) => Math.max(0.001, Math.min(0.999, p));
@@ -80,7 +82,7 @@ const report: Record<string, unknown> = { scope: "private_1070_exact_opening_out
   productionWrites: 0, decision: "diagnostic_not_approved_grade_policy",
   caveat: "The early training dates and later blocks are retrospective; no untouched prospective locked record exists." };
 const baselineTrainOnly = process.argv.includes("--train=baseline-early");
-report.training = baselineTrainOnly ? "baseline_first_151_only" : "all_first_285";
+report.training = baselineTrainOnly ? "baseline_first_151_only" : "all_early_433";
 for (const market of markets) {
   const samples = rows.map(r => sample(r, market));
   const early = samples.filter(s => s.date < "2026-02-15"),

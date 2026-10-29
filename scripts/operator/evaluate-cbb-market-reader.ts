@@ -4,6 +4,7 @@ import { evaluateCbbRows } from "../../lib/cbb/evaluation";
 import { fitCbbScoreResearchState, cbbScoreFeatures, correctCbbScoreForecast, type CbbScoreFeatureRow, type CbbScoreResearchConfig, type CbbScoreCorrection } from "../../lib/cbb/scoreResearch";
 import { forecastCbbGame, settleCbbMarket } from "../../lib/cbb/model";
 import { applyCbbMarketHead, buildCbbMarketReaderFeatures, fitCbbMarketHead, CBB_MARKET_READER_RESEARCH_RELEASE, type CbbReaderQuote } from "../../lib/cbb/marketReaderResearch";
+import { assertCbbR2ResearchCohort } from "../../lib/cbb/researchCohort";
 import type { CbbBox, CbbGame, CbbOdds, CbbQuote, CbbRatingState, CbbUncertainty, CbbVenue, CbbMarket } from "../../lib/cbb/types";
 const dir = "/private/tmp/oddsphere-cbb-data";
 const cohort = process.argv.includes("--cohort=saturation") ? "saturation" :
@@ -94,6 +95,7 @@ async function main() {
     rows.push({ game, forecast, features: context.features, targets: quotes(target, capture.fetchedAt), evidence, context, orientationEventId: matches[0].eventId });
   }
   if (dateDiverse) {
+    assertCbbR2ResearchCohort(rows);
     if (new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("duplicate date-diverse CBB game");
     await writeFile(`${dir}/${cohort}-feature-rows.json`, JSON.stringify(rows));
     console.log(JSON.stringify({ cohort, eligible: rows.length, exclusions,
@@ -102,6 +104,7 @@ async function main() {
     return;
   }
   const development = rows.filter(r => r.game.date < "2026-02-15"), selection = rows.filter(r => r.game.date >= "2026-02-21" && r.game.date < "2026-03-01");
+  assertCbbR2ResearchCohort(rows);
   const later = rows.filter(r => r.game.date >= "2026-03-01");
   console.log(JSON.stringify({ eligible: rows.length, development: development.length, selection: selection.length, later: later.length, exclusions }));
   const baselineSelection = metrics(selection), candidates = [];

@@ -3,12 +3,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { evaluateCbbMarketReaderRows, type CbbMarketEvaluationRow } from "../../lib/cbb/marketReaderEvaluation";
 import { fitCbbJointMarketLogLoss } from "../../lib/cbb/marketReaderResearch";
+import { assertCbbR2ResearchCohort } from "../../lib/cbb/researchCohort";
 
 const dir = resolve(process.argv.find(arg => arg.startsWith("--data="))?.slice(7) ?? "/private/tmp/oddsphere-cbb-data");
 const files = ["market-reader-feature-rows.json", "date-diverse-feature-rows.json", "weekdays-feature-rows.json",
   "saturation-feature-rows.json"];
 const rows = files.flatMap(file => JSON.parse(readFileSync(resolve(dir, file), "utf8")) as CbbMarketEvaluationRow[]);
 if (rows.length !== 1070 || new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("invalid CBB joint cohort");
+assertCbbR2ResearchCohort(rows);
 const early = rows.filter(r => r.game.date < "2026-02-15");
 const selection = rows.filter(r => r.game.date >= "2026-02-15" && r.game.date < "2026-03-01");
 const later = rows.filter(r => r.game.date >= "2026-03-01");

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { reviewCbbQuote } from "../../lib/cbb/marketEvidence";
 import { cbbThresholdProbabilities, normalCdf, settleCbbMarket } from "../../lib/cbb/model";
+import { assertCbbR2ResearchCohort } from "../../lib/cbb/researchCohort";
 import type { CbbForecast, CbbMarket, CbbQuote, CbbTrainingGame } from "../../lib/cbb/types";
 
 type Row = { game: CbbTrainingGame; forecast: CbbForecast; targets: CbbQuote[];
@@ -15,6 +16,7 @@ const dir = resolve(process.argv.find(arg => arg.startsWith("--data="))?.slice(7
 const read = (name: string) => JSON.parse(readFileSync(resolve(dir, name), "utf8")) as Row[];
 const base = read("market-reader-feature-rows.json"), added = read("date-diverse-feature-rows.json"),
   weekdays = read("weekdays-feature-rows.json"), saturation = read("saturation-feature-rows.json");
+assertCbbR2ResearchCohort([...base, ...added, ...weekdays, ...saturation]);
 if (base.length !== 353 || added.length < 1 || weekdays.length < 1 || saturation.length < 1 ||
   new Set([...base, ...added, ...weekdays, ...saturation].map(r => r.game.id)).size !==
     base.length + added.length + weekdays.length + saturation.length)

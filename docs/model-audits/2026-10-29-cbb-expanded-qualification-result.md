@@ -20,6 +20,15 @@ grade probes and isolated a narrower score improvement worth testing further.
 
 ## Evidence and chronology
 
+Release-purity correction (October 29 continuation): the first expanded audit
+accidentally loaded the original 353-row cache with an r1 release stamp while
+the 717 new rows were r2. The original 353 rows were regenerated through the
+current r2 replay path before any r17 fit. The complete 1,070 rows now pass an
+executable exact-r2 release/identity/score-coherence assertion; a deliberately
+wrong-release fixture is rejected in tests. Recomputed aggregate W/L and
+score-head deltas below were unchanged. The earlier mixed-release run is not
+treated as qualification, even though its aggregates matched.
+
 Read-only, bounded historical BDL opening-odds capture and Owls exact-fixture
 catalog corroboration added 717 games to the prior 353-game exact-opening
 cohort: 1,070 distinct games in the already-opened 2025–26 season, each with
@@ -116,6 +125,7 @@ node --import tsx scripts/operator/audit-cbb-date-diverse-score-head.ts
 node --import tsx scripts/operator/audit-cbb-date-diverse-joint-head.ts
 node --import tsx scripts/operator/audit-cbb-grade-readiness.ts --cohort=expanded --train=baseline-early
 node --import tsx scripts/operator/audit-cbb-outcome-calibrated-grades.ts
+node --import tsx scripts/test-cbb-research-cohort.ts
 ```
 
 Verification after fresh-main integration: focused CBB prelaunch and market

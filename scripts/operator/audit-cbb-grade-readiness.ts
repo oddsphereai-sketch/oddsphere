@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cbbThresholdProbabilities, normalCdf, settleCbbMarket } from "../../lib/cbb/model";
 import { reviewCbbQuote } from "../../lib/cbb/marketEvidence";
+import { assertCbbR2ResearchCohort } from "../../lib/cbb/researchCohort";
 import type { CbbForecast, CbbQuote, CbbTrainingGame } from "../../lib/cbb/types";
 
 type Row = { game: CbbTrainingGame; forecast: CbbForecast; targets: CbbQuote[];
@@ -15,6 +16,7 @@ const files = expanded ? ["market-reader-feature-rows.json", "date-diverse-featu
   ["market-reader-feature-rows.json"];
 const rows = files.flatMap((file, i) => (JSON.parse(readFileSync(resolve(dir, file), "utf8")) as Row[])
   .map(row => ({ ...row, source: (["baseline", "date-diverse", "weekdays", "saturation"] as const)[i] })));
+assertCbbR2ResearchCohort(rows);
 const baselineTrainOnly = process.argv.includes("--train=baseline-early");
 const markets = ["moneyline", "spread", "total"] as const;
 const periods = {
