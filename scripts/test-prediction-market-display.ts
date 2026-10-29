@@ -157,12 +157,12 @@ async function testHistoricalCapture(){
     requests++;const url=new URL(String(input));assert.equal(url.origin,"https://external-api.kalshi.com");assert.equal(url.searchParams.get("period_interval"),"1");assert.equal(url.searchParams.get("include_latest_before_start"),"false");
     return Response.json({markets:[realCandles]});
   });
-  assert.equal(requests,1);assert.equal(historicalFeed.rows[0].historicalCandles?.length,1);
+  assert.equal(requests,2);assert.equal(historicalFeed.rows[0].historicalCandles?.length,2);
   assert.equal(historicalFeed.rows[0].asOf,feed.rows[0].asOf,"backfill never restamps current quotes");
   const kept=mergePredictionMarketFeeds(historicalFeed,newer,now+5*60_000);
-  assert.equal(kept.rows[0].historicalCandles?.length,1,"normal live refresh preserves historical observations");
+  assert.equal(kept.rows[0].historicalCandles?.length,2,"normal live refresh preserves historical observations, including original first-minute evidence");
   await backfillKalshiDisplayHistory(historicalFeed,now+5*60_000,async()=>{throw new Error("must not refetch each member/cycle");});
-  assert.equal(requests,1);
+  assert.equal(requests,2);
   const failed=await backfillKalshiDisplayHistory(feed,now,async()=>{throw new Error("outage");});
   assert.deepEqual(failed.rows,feed.rows,"history outage does not remove current quote data");
 }

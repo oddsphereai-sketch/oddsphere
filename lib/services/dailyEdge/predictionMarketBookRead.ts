@@ -4,6 +4,9 @@ import {selectPredictionMarketBook,type ComparisonQuote} from "./predictionMarke
 import type {DailyEdgeGameDto} from "@/app/lab/lib/labTypes";
 import {predictionMarketReaderBookTrail,predictionMarketComparisonBook} from "@/app/lab/lib/predictionMarketDisplay";
 import {readerContractSelection} from "@/lib/providers/owls/predictionMarketContracts";
+import {readPredictionMarketBookHistory} from "./predictionMarketDisplayFeed";
+import {bookDisplayTrail} from "@/lib/providers/owls/owlsBookDisplayHistory";
+import type {PredictionMarketSport} from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Bounded SELECTs of already-collected observations. No provider requests,
  * new pollers, prediction assembly, or changes to the published game DTO. */
@@ -30,7 +33,7 @@ async function readQuotes(sport:string,externalId:number,start:string,kind:strin
     .concat((stream.data??[]).map(r=>({sportsbook:r.sportsbook,market:market(r.market_type),side:r.side??"",line:r.line_value,american:r.odds_american,at:r.observed_at})));
 }
 const cachedQuotes=unstable_cache(readQuotes,["prediction_market_book_comparison_2026_10_28_r1"],{revalidate:30});
-export async function readPredictionMarketBook(game:DailyEdgeGameDto,kind:string,side:string,line:number|null){
+export async function readPredictionMarketBook(game:DailyEdgeGameDto,kind:string,side:string,line:number|null,feedSport=game.sport as PredictionMarketSport){
   // A stored locked trail always wins. This live context cannot replace it.
   if(game.lockState==="locked"||Date.parse(game.gameStartAt??"")<=Date.now())return null;
   const key=kind==="moneyline"?"moneyline":kind==="total"?"total":"first_inning",market=game.markets[key];
@@ -39,5 +42,11 @@ export async function readPredictionMarketBook(game:DailyEdgeGameDto,kind:string
     selected?.side===side?market.pick??"":market.opposingOddsTrail?.side===side?market.opposingOddsTrail.label:"";
   const published=predictionMarketReaderBookTrail(market,label,Date.now(),line);
   const rows=await cachedQuotes(game.sport,game.external_id,game.gameStartAt??"",kind,side).catch(()=>[] as ComparisonQuote[]);
-  return predictionMarketComparisonBook(false,published,selectPredictionMarketBook(rows,kind,side,line));
+  const selectedBook=predictionMarketComparisonBook(false,published,selectPredictionMarketBook(rows,kind,side,line));
+  if(!selectedBook)return null;
+  const feed=await readPredictionMarketBookHistory(feedSport).catch(()=>null);
+  const entry=feed?.rows.find(e=>e.event===game.external_id&&e.start===game.gameStartAt&&e.away===game.awayTeam&&e.home===game.homeTeam&&e.kind===kind&&e.side===side&&e.book===selectedBook.sportsbook);
+  const history=entry?bookDisplayTrail(entry,selectedBook.line===undefined?line:selectedBook.line):null;
+  if(!history)return selectedBook;
+  return {...selectedBook,opening:history.opening,historyScope:history.historyScope,points:[...new Map([...history.points,...selectedBook.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0])};
 }

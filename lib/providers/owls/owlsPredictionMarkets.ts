@@ -54,6 +54,11 @@ export type PredictionMarketRow = {
   historicalCandles?: PredictionMarketPoint[];
   historicalCheckedAt?: string;
   historicalRelease?: string;
+  /** Source market lifecycle, not the beginning of our polling window. */
+  marketOpenedAt?: string;
+  /** Completed backfill query begins at this actual market opening time. */
+  historyFrom?: string;
+  openingQuote?: { point: PredictionMarketPoint; kind: "opening_minute" | "first_available" };
 };
 export type PredictionMarketFeed = {
   release: typeof PREDICTION_MARKET_RELEASE;
@@ -138,6 +143,7 @@ export function parseOwlsPredictionMarkets(body: unknown, sport: PredictionMarke
     const totalVolume = volume(raw.volume_fp);
     rows.push({ ticker, eventTicker, sideCode, team, gameDate, bid, ask, probability,
       volume24h: volume(raw.volume_24h_fp), totalVolume, asOf,
+      ...(typeof raw.open_time==="string"&&Number.isFinite(Date.parse(raw.open_time))?{marketOpenedAt:raw.open_time}:{}),
       history: [[observed, probability, totalVolume]] });
   }
   if (new Set(rows.map(row => row.ticker)).size !== rows.length) return null;
@@ -155,25 +161,32 @@ export function isPredictionMarketFeed(value: unknown, sport: PredictionMarketSp
     const row = object(value);
     if(row?.historicalCheckedAt !== undefined && (typeof row.historicalCheckedAt !== "string" || !Number.isFinite(Date.parse(row.historicalCheckedAt))))return false;
     if(row?.historicalRelease !== undefined && typeof row.historicalRelease!=="string")return false;
-    if(row?.historicalCandles !== undefined && (!Array.isArray(row.historicalCandles) || row.historicalCandles.length>96 || !row.historicalCandles.every(point=>Array.isArray(point)&&point.length===3&&Number.isFinite(point[0])&&price(point[1])!==null&&(point[2]===null||volume(point[2])!==null))))return false;
+    if(row?.historicalCandles !== undefined && (!Array.isArray(row.historicalCandles) || row.historicalCandles.length>192 || !row.historicalCandles.every(point=>Array.isArray(point)&&point.length===3&&Number.isFinite(point[0])&&price(point[1])!==null&&(point[2]===null||volume(point[2])!==null))))return false;
+    if(row?.historyFrom!==undefined&&(typeof row.historyFrom!=="string"||!Number.isFinite(Date.parse(row.historyFrom))))return false;
+    if(row?.marketOpenedAt!==undefined&&(typeof row.marketOpenedAt!=="string"||!Number.isFinite(Date.parse(row.marketOpenedAt))))return false;
+    if(row?.openingQuote!==undefined){const q=object(row.openingQuote),p=q?.point;if(!q||!["opening_minute","first_available"].includes(String(q.kind))||!Array.isArray(p)||p.length!==3||!Number.isFinite(p[0])||price(p[1])===null)return false;}
     return row && typeof row.ticker === "string" && typeof row.eventTicker === "string" && typeof row.sideCode === "string" && typeof row.team === "string" && typeof row.gameDate === "string" && typeof row.asOf === "string" && Number.isFinite(Date.parse(row.asOf)) && price(row.probability) !== null && price(row.bid) !== null && price(row.ask) !== null && Array.isArray(row.history) && row.history.length >= 1 && row.history.length <= 100 && row.history.every(point => Array.isArray(point) && point.length === 3 && Number.isFinite(point[0]) && price(point[1]) !== null && (point[2] === null || volume(point[2]) !== null));
   });
 }
 
 /** Keep real receipts during an upstream gap; never re-stamp an old quote. */
 export function mergePredictionMarketFeeds(previous: PredictionMarketFeed | null, current: PredictionMarketFeed, now = Date.now()): PredictionMarketFeed {
-  const rows = new Map((previous?.sport === current.sport ? previous.rows : []).filter(row => now - Date.parse(row.asOf) <= 24 * 60 * 60_000).map(row => [row.ticker, row]));
+  const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(now));
+  const rows = new Map((previous?.sport === current.sport ? previous.rows : []).filter(row => now - Date.parse(row.asOf) <= 24 * 60 * 60_000 || ((row.historyFrom||row.openingQuote)&&row.gameDate>=today)).map(row => [row.ticker, row]));
   for (const row of current.rows) {
     const prior = rows.get(row.ticker);
     if (prior && Date.parse(prior.asOf) > Date.parse(row.asOf)) continue;
     const history = new Map<number, PredictionMarketPoint>();
     for (const point of [...(prior?.history ?? []), ...row.history]) {
-      if (point[0] >= now - PREDICTION_MARKET_HISTORY_WINDOW_MS && point[0] <= now + 60_000) history.set(point[0], point);
+      if (point[0] >= now - (prior?.historyFrom||row.historyFrom?366*86_400_000:PREDICTION_MARKET_HISTORY_WINDOW_MS) && point[0] <= now + 60_000) history.set(point[0], point);
     }
     rows.set(row.ticker, { ...row, history: boundPredictionMarketHistory([...history.values()],100),
-      ...(prior?.historicalCandles||row.historicalCandles ? {historicalCandles:boundPredictionMarketHistory([...(prior?.historicalCandles??[]),...(row.historicalCandles??[])].filter(point=>point[0]>=now-PREDICTION_MARKET_HISTORY_WINDOW_MS&&point[0]<=now+60_000),96)} : {}),
+      ...(prior?.historicalCandles||row.historicalCandles ? {historicalCandles:boundPredictionMarketHistory([...(prior?.historicalCandles??[]),...(row.historicalCandles??[])].filter(point=>point[0]>=now-(prior?.historyFrom||row.historyFrom?366*86_400_000:PREDICTION_MARKET_HISTORY_WINDOW_MS)&&point[0]<=now+60_000),192)} : {}),
       ...(prior?.historicalCheckedAt ? {historicalCheckedAt:prior.historicalCheckedAt} : {}),
-      ...(prior?.historicalRelease ? {historicalRelease:prior.historicalRelease} : {}) });
+      ...(prior?.historicalRelease ? {historicalRelease:prior.historicalRelease} : {}),
+      ...(prior?.historyFrom?{historyFrom:prior.historyFrom}:{}),
+      ...(prior?.openingQuote?{openingQuote:prior.openingQuote}:{}),
+      ...(prior?.marketOpenedAt&&!row.marketOpenedAt?{marketOpenedAt:prior.marketOpenedAt}:{}) });
   }
   const feed = { ...current, rows: [...rows.values()].sort((a,b) => b.asOf.localeCompare(a.asOf)).slice(0, 1200) };
   // Next's shared data cache has a response-size ceiling. Preserve current
@@ -194,7 +207,7 @@ const SOCCER_ALIASES: Record<string, string> = {
   BVB:"DOR",RBB:"BET",SBH:"SAB",VIK:"VFK",COM:"COMO",SLA:"SLP",STU:"VFB",
 };
 function clean(value: string): string { return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(fc|afc|cf)\b/g, "").replace(/[^a-z0-9]/g, ""); }
-function teamMatches(row: PredictionMarketRow, abbreviation: string, name: string | null | undefined, sport: PredictionMarketSport): boolean {
+export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideCode"|"team">, abbreviation: string, name: string | null | undefined, sport: PredictionMarketSport): boolean {
   if (sport === "cfb") return row.sideCode === abbreviation.toUpperCase() || cfbProviderTeamMatches({ observed: row.team, abbreviation, expectedName: name }) || cfbProviderTeamMatches({ observed: row.sideCode, abbreviation, expectedName: name });
   if (sport === "soccer" || sport === "ucl") {
     const providerCode = SOCCER_ALIASES[row.sideCode] ?? row.sideCode;
@@ -224,8 +237,8 @@ export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, gam
   }
   const matches: PredictionMarketMatch[] = [];
   for (const [eventTicker, rows] of groups) {
-    const away = rows.filter(row => teamMatches(row, game.awayTeam, game.awayName, game.sport));
-    const home = rows.filter(row => teamMatches(row, game.homeTeam, game.homeName, game.sport));
+    const away = rows.filter(row => predictionMarketTeamMatches(row, game.awayTeam, game.awayName, game.sport));
+    const home = rows.filter(row => predictionMarketTeamMatches(row, game.homeTeam, game.homeName, game.sport));
     const draw = rows.filter(row => /^(TIE|DRAW)$/.test(row.sideCode));
     const soccer = game.sport === "soccer" || game.sport === "ucl";
     if (away.length !== 1 || home.length !== 1 || away[0].ticker === home[0].ticker || (soccer && draw.length !== 1)) continue;

@@ -13,6 +13,19 @@ import { supabase } from "@/lib/db/supabase";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { currentDailyEdgeBoardDate } from "@/lib/dates/slateDate";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
+import { BOOK_DISPLAY_HISTORY_RELEASE, captureOwlsBookDisplayHistory, isBookDisplayFeed, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
+
+export const predictionMarketBookSnapshotKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-books::${sport}::${BOOK_DISPLAY_HISTORY_RELEASE}`;
+async function bookHistoryStored(sport:PredictionMarketSport):Promise<BookDisplayFeed|null>{
+  const stored=await readLatestLabResponseSnapshot<Record<string,unknown>>(predictionMarketBookSnapshotKey(sport));
+  let value=stored?.payload;
+  if(value?.encoding==="gzip-base64"&&typeof value.payload==="string")value=JSON.parse(gunzipSync(Buffer.from(value.payload,"base64"),{maxOutputLength:8_000_000}).toString());
+  return isBookDisplayFeed(value,sport)?value:null;
+}
+const bookHistoryCompressed=unstable_cache(async(sport:PredictionMarketSport)=>gzipSync(JSON.stringify(await bookHistoryStored(sport))).toString("base64"),[BOOK_DISPLAY_HISTORY_RELEASE],{revalidate:30,tags:[BOOK_DISPLAY_HISTORY_RELEASE]});
+export async function readPredictionMarketBookHistory(sport:PredictionMarketSport):Promise<BookDisplayFeed|null>{
+  return JSON.parse(gunzipSync(Buffer.from(await bookHistoryCompressed(sport),"base64"),{maxOutputLength:8_000_000}).toString());
+}
 
 export function predictionMarketSnapshotKey(sport: PredictionMarketSport): string {
   return `daily-edge::prediction-market-display::${sport}::${PREDICTION_MARKET_RELEASE}`;
@@ -95,7 +108,17 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   const pools=[winners,...contracts].map(feed=>[...feed.rows].sort((a,b)=>a.gameDate.localeCompare(b.gameDate)));
   const interleaved:PredictionMarketFeed["rows"]=[];
   for(let i=0;i<Math.max(0,...pools.map(rows=>rows.length));i++)for(const pool of pools)if(pool[i])interleaved.push(pool[i]);
-  const captured=await backfillKalshiDisplayHistory({...winners,rows:interleaved});
+  const [captured,bookCapture]=await Promise.all([
+    backfillKalshiDisplayHistory({...winners,rows:interleaved}),
+    games?bookHistoryStored(sport).then(previous=>captureOwlsBookDisplayHistory(previous,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}))).catch(()=>null):Promise.resolve(null),
+  ]);
+  if(bookCapture){
+    warnings.push(...bookCapture.warnings);
+    const saved=await upsertLabResponseSnapshot({snapshotKey:predictionMarketBookSnapshotKey(sport),kind:"daily_edge",sport:sport==="ucl"?"soccer":sport,
+      payload:{encoding:"gzip-base64",payload:gzipSync(JSON.stringify(bookCapture.feed)).toString("base64")},source:"owls_book_display_history",payloadVersion:BOOK_DISPLAY_HISTORY_RELEASE,ttlMs:5*60_000,staleMs:24*60*60_000});
+    if(!saved.ok)warnings.push("book history: snapshot could not be stored");
+    else revalidateTag(BOOK_DISPLAY_HISTORY_RELEASE,{expire:0});
+  }else if(games?.length)warnings.push("book history: capture unavailable; retained");
   const byTicker=new Map(captured.rows.map(row=>[row.ticker,row]));
   const withHistory={...winners,rows:winners.rows.map(row=>byTicker.get(row.ticker)??row)};
   const feed=mergePredictionMarketFeeds(withHistory,{...withHistory,rows:[]});
@@ -115,5 +138,5 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // retained receipt while a stale-while-revalidate layer catches up.
   revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0});
   revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0});
-  return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:1+contractInputs.filter(input=>!input.skipped).length,warnings};
+  return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:1+contractInputs.filter(input=>!input.skipped).length+(bookCapture?.requests??0),warnings};
 }

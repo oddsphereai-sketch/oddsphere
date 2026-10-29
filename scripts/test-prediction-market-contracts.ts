@@ -84,7 +84,7 @@ assert.deepEqual(predictionMarketBookTrail(book,"MIN -4",now,-4)?.points.map(p=>
 assert.equal(predictionMarketBookTrail(book,"MIN -4",now,-3.5),null,"old alternate line without a current/locked endpoint is not current");
 
 const service=readFileSync("lib/services/dailyEdge/predictionMarketDisplayFeed.ts","utf8");
-assert.equal((service.match(/await backfillKalshiDisplayHistory\(/g)??[]).length,1,"all kinds share the existing global history request budget");
+assert.equal((service.match(/backfillKalshiDisplayHistory\(/g)??[]).length,1,"all kinds share the existing global history request budget");
 assert.ok(service.includes('contractsForPublishedReaders(parsed,winners,games)'));
 assert.ok(service.includes('revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0})')&&service.includes('revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0})'),"successful scheduled capture expires both member cache lanes immediately");
 assert.ok(!/game_predictions|prediction_records|prediction_pipeline|locked_at/.test(service),"display capture has no model/lock table authority");

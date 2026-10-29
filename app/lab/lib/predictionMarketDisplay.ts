@@ -2,7 +2,7 @@ import type { DailyEdgeGameDto, MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string};
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history";opening?:{point:[number,number,number];line:number|null}};
 export function predictionMarketComparisonBook(locked:boolean,stored:PredictionMarketBookTrail|null,live:PredictionMarketBookTrail|null):PredictionMarketBookTrail|null {
   if(locked||stored?.locked)return stored;
   if(!live)return stored;
@@ -37,6 +37,7 @@ export type PredictionMarketBookStart={kind:"provider_opening"|"first_recorded";
 export function predictionMarketBookStart(market:MarketEdgeDto,label:string,book:PredictionMarketBookTrail,targetLine:number|null,ceiling:number):PredictionMarketBookStart|null {
   const selected=pickLabel(label),stops=selected===pickLabel(market.pick)?market.oddsTrail:selected===pickLabel(market.opposingOddsTrail?.label)?market.opposingOddsTrail?.stops:[];
   const line=book.line===undefined?targetLine:book.line;
+  if(!book.locked&&book.opening?.line===line&&book.opening.point[0]<=ceiling)return {kind:"provider_opening",point:book.opening.point};
   const eligible=(stops??[]).filter(stop=>stop.sportsbook?.trim().toLowerCase()===book.sportsbook&&stop.line===line&&implied(stop.american)!==null&&Number.isFinite(Date.parse(stop.observedAt??""))&&Date.parse(stop.observedAt!)<=ceiling);
   const openings=eligible.filter(stop=>stop.source==="provider_opening").sort((a,b)=>Date.parse(a.observedAt!)-Date.parse(b.observedAt!));
   if(openings.length){const first=openings[0];return {kind:"provider_opening",point:[Date.parse(first.observedAt!),implied(first.american)!,first.american]};}
@@ -182,7 +183,7 @@ export function predictionMarketLockBoundary(game:Pick<DailyEdgeGameDto,"lockSta
 /** Compare a shared, genuinely covered time window. Full source observations
  * remain available for original-price inspection and the book's full move
  * summary. Boundary guides are separate and never become quote receipts. */
-export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf">,book:PredictionMarketBookTrail|null,lockedAt?:number){
+export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf"|"historyFrom"|"openingQuote">,book:PredictionMarketBookTrail|null,lockedAt?:number){
   const raw=predictionMarketChartSeries(row),ceiling=lockedAt===undefined?Infinity:Number.isFinite(lockedAt)?lockedAt:-Infinity;
   const series={points:raw.points.filter(p=>p[0]<=ceiling),activity:raw.activity.filter((_,i)=>raw.points[i][0]<=ceiling)};
   const eligibleBook=book?.points.filter(p=>p[0]<=ceiling)??[];
@@ -193,7 +194,7 @@ export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history
   const overlap=points.length>0&&bookPoints.length>0&&Math.max(points[0][0],bookPoints[0][0])<=cutoff!;
   return {points:cutoff!==null&&!overlap?series.points:points,activity:cutoff!==null&&!overlap?series.activity:activity,
     bookPoints:overlap?bookPoints:[],cutoff:overlap?cutoff:null,pending:!!book&&!overlap,
-    start:overlap?Math.max(points[0][0],bookPoints[0][0]):series.points[0]?.[0]??Date.parse(row.asOf),
+    start:overlap?(lockedAt===undefined&&(row.historyFrom||book?.historyScope)?Math.min(points[0][0],bookPoints[0][0]):Math.max(points[0][0],bookPoints[0][0])):series.points[0]?.[0]??Date.parse(row.asOf),
     latestKalshi:series.points.at(-1)?.[0]??null,latestBook:book?.points.at(-1)?.[0]??null};
 }
 
@@ -224,8 +225,15 @@ export function predictionMarketObservationAt<T extends readonly [number,...unkn
 }
 
 /** Historical interval volume and live cumulative deltas are never conflated. */
-export function predictionMarketChartSeries(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf">):{points:PredictionMarketPoint[];activity:Array<number|null>} {
+export function predictionMarketChartSeries(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf"|"historyFrom"|"openingQuote">):{points:PredictionMarketPoint[];activity:Array<number|null>} {
   const live=row.history.filter(point=>point[0]<=Date.parse(row.asOf));
+  if(row.historyFrom){
+    const all=new Map<number,{point:PredictionMarketPoint;activity:number|null}>();
+    for(const point of [...(row.historicalCandles??[]),...(row.openingQuote?[row.openingQuote.point]:[])])if(point[0]<=Date.parse(row.asOf))all.set(point[0],{point,activity:point[2]});
+    const activity=predictionMarketActivity(live);live.forEach((point,i)=>all.set(point[0],{point,activity:activity[i]}));
+    const ordered=[...all.values()].sort((a,b)=>a.point[0]-b.point[0]);
+    return {points:ordered.map(p=>p.point),activity:ordered.map(p=>p.activity)};
+  }
   const firstLive=live[0]?.[0]??Date.parse(row.asOf);
   const historical=(row.historicalCandles??[]).filter(point=>point[0]<firstLive && point[0]>=Date.parse(row.asOf)-24*60*60_000);
   return {points:[...historical,...live],activity:[...historical.map(point=>point[2]),...predictionMarketActivity(live)]};
