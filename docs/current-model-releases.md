@@ -1305,6 +1305,20 @@ Last reviewed: 2026-10-29
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 29 normalized-PMF precision repair: coherence implementation advances
+  to `cfb_pmf_winner_coherence_2026_10_29_r2_normalized_probability_complement`;
+  calibration/decision/tuple to r29/r56/r43, writer to r143 and
+  fixture/snapshot/reader to r97/r57/r42 (`normalized_pmf_coherence`). The winner
+  reconciliation now uses the same unit-mass probability complement as the
+  downstream validator, eliminating a floating-point boundary failure that
+  rejected Baylor/UCF and held back the complete Owls release wave. Trained
+  model/distribution/probability r26/r24/r28, grade policy r28, all reader
+  evidence/weights, total-bucket masses and existing predictions outside that
+  numerical boundary are unchanged. No partial-release guard relaxation or
+  grade-policy relaxation. r55 and r54 stored locks remain exact; no locked
+  record is rewritten. Scope and rollback:
+  `docs/model-audits/2026-10-29-cfb-owls-handoff-precision-predeclaration.md`.
+
 - October 29 Owls grading-price ingestion repair: decision/tuple advance to
   `cfb_v1_daily_edge_decision_2026_10_29_r55_owls_grade_price_ingestion` /
   `cfb_v1_exact_price_decision_tuple_2026_10_29_r42_owls_grade_price_ingestion`,

@@ -18,7 +18,7 @@ export const CFB_FINAL_WINNER_COORDINATOR_RELEASE =
 export const CFB_FINAL_WINNER_COORDINATOR_BOUNDARY_RELEASE =
   "cfb_final_winner_coordinator_boundary_2026_10_27_r1_actual_pmf_incumbent" as const;
 export const CFB_PMF_WINNER_COHERENCE_RELEASE =
-  "cfb_pmf_winner_coherence_2026_10_27_r1_near_tie_single_pmf" as const;
+  "cfb_pmf_winner_coherence_2026_10_29_r2_normalized_probability_complement" as const;
 
 type NullableNumber = number | null;
 type Side = "first" | "second";
@@ -214,8 +214,10 @@ export function reconcileCfbFinalWinnerPmf(
   );
   const coherent = (pmf: CfbV1Forecast["pmf"]) => {
     const summary = summarizePmf(pmf);
-    const mass = pmf.reduce((sum, cell) => sum + cell.probability, 0);
-    const awayWinProbability = mass - summary.homeWinProbability;
+    // The published probability contract and downstream coherence validator use
+    // a unit-mass complement. Raw summation roundoff here can otherwise stop the
+    // bisection just BELOW their 1e-9 winner boundary and reject a valid slate.
+    const awayWinProbability = 1 - summary.homeWinProbability;
     const displayedHome = Math.round(summary.expectedHomePoints * 10);
     const displayedAway = Math.round(summary.expectedAwayPoints * 10);
     const representativeMargin = summary.representativeScore.home - summary.representativeScore.away;

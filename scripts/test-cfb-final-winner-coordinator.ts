@@ -14,6 +14,7 @@ import type { CfbForwardMarketReaderObservation } from "../lib/services/football
 import { CFB_SHARP_API_SPLITS_RELEASE } from "../lib/services/football/cfbSharpApiSplits";
 import { summarizePmf } from "../lib/services/football/cfbMarketSharpAwareShadow";
 import type { CfbV1Forecast } from "../lib/services/football/cfbV1Decision";
+import { auditFootballCrossMarketCoherence } from "../lib/services/football/footballCrossMarketCoherence";
 
 const book = (
   sportsbook: string,
@@ -212,5 +213,36 @@ const outsideTolerance = reconcileCfbNearTiePmfWinnerCoherence(outsideToleranceF
 assert.equal(outsideTolerance.applied, false);
 assert.equal(outsideTolerance.reason, "outside_tolerance");
 assert.equal(outsideTolerance.forecast, outsideToleranceForecast);
+
+// Exact production failure: a sub-unit floating sum lets the legacy bisection
+// stop below the downstream UNIT-mass complement's winner-direction boundary.
+const boundaryHomeProbability = 0.5000000004999998;
+const roundedMass = 0.9999999999999996;
+assert.ok(boundaryHomeProbability - (roundedMass - boundaryHomeProbability) > 1e-9);
+assert.ok(boundaryHomeProbability - (1 - boundaryHomeProbability) <= 1e-9);
+for (const scale of [1, roundedMass, 1.0000000000000002]) {
+  for (const reverse of [false, true]) {
+    const raw = meanProbabilityCrossPmf.map(cell => ({
+      away: reverse ? cell.home : cell.away, home: reverse ? cell.away : cell.home,
+      probability: cell.probability * scale,
+    }));
+    const input = { ...meanProbabilityCrossForecast, ...summarizePmf(raw), pmf: raw };
+    const output = reconcileCfbNearTiePmfWinnerCoherence(input).forecast;
+    const report = auditFootballCrossMarketCoherence({
+      sport: "cfb", providerGameId: input.providerGameId, awayTeam: "AWY", homeTeam: "HME",
+      forecast: { ...output, awayWinProbability: 1 - output.homeWinProbability },
+      decisions: [], unavailableMarkets: ["moneyline", "spread", "total"],
+      publicScoreDirectionTolerancePoints: 0.5,
+    });
+    assert.deepEqual(report.fatalIssues, [], "both winner directions must pass the actual downstream normalized validator");
+    assert.ok(Math.abs(output.expectedTotal - input.expectedTotal) < 1e-10);
+    for (const total of new Set(raw.map(cell => cell.home + cell.away))) {
+      const massAt = (cells: typeof raw) => cells.filter(cell => cell.home + cell.away === total).reduce((sum, cell) => sum + cell.probability, 0);
+      assert.ok(Math.abs(massAt(output.pmf) - massAt(raw)) < 1e-12, "total buckets are unchanged");
+    }
+    const coherentAgain = reconcileCfbNearTiePmfWinnerCoherence(output);
+    assert.equal(coherentAgain.forecast, output, "already coherent forecasts retain exact reference and values");
+  }
+}
 
 console.log("CFB final-winner diagnostic boundary and near-tie PMF coherence tests passed.");
