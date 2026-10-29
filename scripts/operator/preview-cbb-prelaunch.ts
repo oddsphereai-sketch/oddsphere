@@ -14,6 +14,8 @@ import { forecastCbbCandidateR2 } from "../../lib/cbb/candidateR2Runtime";
 import { cbbObservedPricePaths, normalizeCbbOwlsCurrent } from "../../lib/cbb/owlsMarketEvidence";
 import { cbbCurrentSplitEvidence } from "../../lib/cbb/owlsSplitEvidence";
 import { buildCbbProvisionalBoard } from "../../lib/cbb/provisionalBoard";
+import { advanceCbbProvisionalSnapshot } from "../../lib/cbb/provisionalLifecycle";
+import { buildCbbProvisionalReader } from "../../lib/cbb/provisionalReader";
 import { buildCbbMarketReaderFeatures, CBB_MARKET_READER_RESEARCH_RELEASE } from "../../lib/cbb/marketReaderResearch";
 import { applyCbbTotalOnlyMarketHead, chooseCbbCompleteTargetBook, CBB_TOTAL_ONLY_MARKET_RESEARCH_RELEASE,
   type CbbTotalOnlyMarketHead } from "../../lib/cbb/totalOnlyMarketResearch";
@@ -133,9 +135,16 @@ async function main() {
       applyCbbTotalOnlyMarketHead(forecast, marketContext.features, totalHead) : null;
     const finalForecast = marketOutcome?.forecast ?? forecast;
     const provisionalBoard = candidateR5 ? buildCbbProvisionalBoard(finalForecast, authoritativeQuotes) : null;
+    const readerSnapshot = provisionalBoard && Date.parse(asOf) < Date.parse(game.date) - 60 * 60_000
+      ? advanceCbbProvisionalSnapshot({ existing: null, candidate: provisionalBoard,
+        startsAt: game.date, now: asOf }) : null;
+    const reader = readerSnapshot ? buildCbbProvisionalReader({ game, locked: null,
+      unlocked: readerSnapshot, homeLogo: cardIdentities.get(game.home_team.id)?.logoUrl ?? null,
+      awayLogo: cardIdentities.get(game.visitor_team.id)?.logoUrl ?? null,
+      currentSplits: marketSplitEvidence, currentPricePaths: marketChronology }) : null;
     cards.push({ game, venue, forecast: finalForecast, roster: { home: hRoster, away: aRoster },
       marketSplitEvidence, marketChronology,
-      provisionalBoard,
+      provisionalBoard, reader,
       teamIdentity: { home: cardIdentities.get(game.home_team.id) ?? null, away: cardIdentities.get(game.visitor_team.id) ?? null },
       inputAsOf: { schedule: schedule.fetchedAt, prices: candidateR5 ? owls!.fetchedAt : current.fetchedAt,
         ...(candidateR5 ? { owls: owls!.fetchedAt } : { sharp: sharp.fetchedAt }) },
@@ -192,9 +201,10 @@ async function main() {
       const price = row.price === null ? "—" : row.price > 0 ? `+${row.price}` : String(row.price);
       return `<tr><td>${escape(row.market)}</td><td>${escape(row.targetBook ?? "—")}</td><td>${escape(pick)}</td><td>${escape(line)}</td><td>${escape(price)}</td><td>${row.probability === null ? "—" : pct(row.probability)}</td><td>${escape(row.grade)}</td><td>${escape(row.reason.replaceAll("_", " "))}; professional ${escape(row.referenceState)}</td></tr>`;
     }).join("")}</tbody></table>`;
-    const splitRows = card.marketSplitEvidence?.rows.length ?? 0;
-    const observedChanges = card.marketChronology.filter(path => path.distinctStates > 1);
-    const readerSummary = `<div class="note">Market reader: ${board.marketContext.professionalPriceReferences} fresh target-excluded professional references; ${splitRows} verified split rows; ${observedChanges.length} observed same-book price paths with a change. ${observedChanges.length ? "Movement is observed but not treated as a causal sharp-money signal." : "No verified price movement is present in this captured window."} The score remains independent because no CBB market score correction has qualified.</div>`;
+    const reader = card.reader;
+    const splitRows = reader?.markets.reduce((count, row) => count + row.splits.length, 0) ?? 0;
+    const observedChanges = reader?.markets.flatMap(row => row.pricePaths).filter(path => path.distinctStates > 1) ?? [];
+    const readerSummary = `<details><summary>Game reader · projection, grades and market evidence</summary><p>Projected score: ${reader ? `${reader.away.name} ${reader.score.away.toFixed(1)} – ${reader.home.name} ${reader.score.home.toFixed(1)}` : "Unavailable inside T-60 lock window without a stored snapshot"}. ${reader ? `Home win: ${pct(reader.score.homeWinProbability)}. Total: ${reader.score.total.toFixed(1)}. Prediction-market reader: ${reader.predictionMarketReader}.` : ""}</p><ul>${reader?.markets.map(row => `<li>${escape(row.market)}: ${escape(row.side ?? "Unavailable")} ${row.selectedLine === null ? "ML" : escape(row.selectedLine)} at ${row.price === null ? "unavailable" : escape(row.price)} · ${escape(row.grade)} (${escape(row.gradeReason.replaceAll("_", " "))}) · professional ${escape(row.professionalReferenceState)} · ${row.splits.length} both-side split rows · ${row.pricePaths.length} observed book paths</li>`).join("") ?? ""}</ul></details><div class="note">Market reader: ${board.marketContext.professionalPriceReferences} fresh target-excluded professional references; ${splitRows} verified both-side split rows; ${observedChanges.length} observed same-book price paths with a change. ${observedChanges.length ? "Movement is observed but not treated as a causal sharp-money signal." : "No verified price movement is present in this captured window."} The score remains independent because no CBB market score correction has qualified.</div>`;
     return table + readerSummary;
   });
   let gradedTableIndex = 0;

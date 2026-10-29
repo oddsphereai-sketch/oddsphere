@@ -272,3 +272,21 @@ remain off. No live snapshot, lock, tracking, model score, market decision,
 grade, or stake changes in this candidate: zero promotions, zero demotions,
 and zero actionable-count change. The full CBB writer/reader/tracking launch
 contract above remains open.
+
+## Game reader contract — private candidate only
+
+The CBB candidate now projects its exact three-market board into game-detail
+fields: canonical team names/logos, one coherent score, each selected
+side/line/price/probability/grade, both sides of verified split rows, and
+observed target-excluded same-book price paths. It does not infer sharp
+causality or let unqualified movement/splits change the prediction. The
+private offline preview includes this reader; it is not yet the authenticated
+Daily Edge reader.
+
+Locked-first tests prove a newer unlocked candidate cannot replace a stored
+locked score, pick, price, or grade. Post-lock splits and movement are omitted
+because this candidate has no persisted lock-time evidence panel; they cannot
+be attached retroactively to the public record. The sole leased writer,
+persisted immutable lock, member snapshot, official W/L/push tracking, and a
+qualified CBB prediction-market reader remain open launch gates. This
+reader-only change alters zero live actionables, stakes, or records.

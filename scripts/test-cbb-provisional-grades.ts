@@ -5,6 +5,7 @@ import { advanceCbbProvisionalSnapshot, readCbbProvisionalSnapshot,
 import { gradeCbbProvisional } from "../lib/cbb/provisionalGradePolicy";
 import { cbbCurrentSplitEvidence } from "../lib/cbb/owlsSplitEvidence";
 import { cbbObservedPricePaths, type CbbQualifiedNamedQuote } from "../lib/cbb/owlsMarketEvidence";
+import { buildCbbProvisionalReader } from "../lib/cbb/provisionalReader";
 import type { CbbForecast, CbbQuote } from "../lib/cbb/types";
 
 const asOf = "2026-11-01T12:00:00.000Z";
@@ -136,6 +137,32 @@ const laterBoard = buildCbbProvisionalBoard({ ...forecast, asOf, homeScore: 68.3
 assert.equal(readCbbProvisionalSnapshot({ locked, unlocked: { ...captured, board: laterBoard } }), locked);
 assert.equal(advanceCbbProvisionalSnapshot({ existing: locked, candidate: laterBoard,
   startsAt, now: "2026-11-01T14:00:00.000Z" }), locked);
+const reader = buildCbbProvisionalReader({ game: cbbGame, locked: null, unlocked: captured,
+  homeLogo: "https://example.com/villanova.png", awayLogo: "https://example.com/notre-dame.png",
+  currentSplits: splitEvidence, currentPricePaths: paths });
+assert.ok(reader);
+assert.equal(reader.status, "open");
+assert.equal(reader.predictionMarketReader, "unqualified");
+assert.equal(reader.home.name, "Villanova Wildcats");
+assert.equal(reader.away.name, "Notre Dame Fighting Irish");
+assert.equal(reader.markets.find(row => row.market === "spread")?.side, "Villanova Wildcats");
+assert.equal(reader.markets.find(row => row.market === "spread")?.selectedLine, -7.5);
+assert.equal(reader.markets.find(row => row.market === "moneyline")?.splits.length, 2);
+assert.deepEqual(reader.markets.find(row => row.market === "moneyline")?.splits.map(row => row.side).sort(),
+  ["Villanova Wildcats", "Notre Dame Fighting Irish"].sort());
+assert.equal(reader.markets.find(row => row.market === "spread")?.pricePaths.length, 1);
+const lockedReader = buildCbbProvisionalReader({ game: cbbGame, locked,
+  unlocked: { ...captured, board: laterBoard }, homeLogo: null, awayLogo: null,
+  currentSplits: splitEvidence, currentPricePaths: paths });
+assert.ok(lockedReader);
+assert.equal(lockedReader.status, "locked");
+assert.equal(lockedReader.score.home, board.score.home);
+assert.equal(lockedReader.marketEvidenceState, "not_stored_at_lock");
+assert.deepEqual(lockedReader.markets.map(row => [row.market, row.grade, row.price]),
+  reader.markets.map(row => [row.market, row.grade, row.price]));
+assert.ok(lockedReader.markets.every(row => row.splits.length === 0 && row.pricePaths.length === 0));
+assert.throws(() => buildCbbProvisionalReader({ game: { ...cbbGame, id: 999 },
+  locked, unlocked: null, homeLogo: null, awayLogo: null }), /identity/);
 assert.throws(() => settleLockedCbbProvisionalBoard(captured, { home: 80, away: 72 }), /unlocked/);
 const settled = settleLockedCbbProvisionalBoard(locked, { home: 80, away: 72 });
 assert.deepEqual(settled.map(row => row.outcome), ["win", "win", "loss"]);
