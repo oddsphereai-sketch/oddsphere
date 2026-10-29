@@ -8,7 +8,7 @@ import {
 import { readLatestLabResponseSnapshot, upsertLabResponseSnapshot } from "../labResponseSnapshots";
 import { backfillKalshiDisplayHistory } from "@/lib/providers/owls/kalshiDisplayHistory";
 import { contractKinds, contractSeries, parseContractFeed, contractsForPublishedReaders, PREDICTION_MARKET_CONTRACT_RELEASE,
-  resolveReaderContract, readerContractSelection, type ContractKind, type ContractFeed } from "@/lib/providers/owls/predictionMarketContracts";
+  resolveReaderContract, readerHistoryContractSelection, type ContractKind, type ContractFeed } from "@/lib/providers/owls/predictionMarketContracts";
 import {selectedPredictionMarketOutcome} from "@/app/lab/lib/predictionMarketDisplay";
 import { supabase } from "@/lib/db/supabase";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -129,7 +129,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
     const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName});
     const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
     if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
-    for(const kind of kinds){const selection=readerContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}
+    for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}
   }
   interleaved.sort((a,b)=>(priority.get(a.ticker)??10_000)-(priority.get(b.ticker)??10_000));
   const [captured,bookCapture]=await Promise.all([

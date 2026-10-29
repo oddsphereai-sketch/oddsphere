@@ -2,12 +2,12 @@
 
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
-import { readerContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
+import { readerContractSelection,readerHistoryContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
 import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookStart, predictionMarketWindowDuration, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
 import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketHasSharedHistory,predictionMarketBookLineHistory} from "@/app/lab/lib/predictionMarketDisplay";
 import {PredictionMarketSourcePins} from "@/app/lab/lib/predictionMarketSourcePins";
-import {publicMarketDisplayBook,publicMarketDisplayHistory} from "@/app/lab/lib/publicMarketDisplayTrail";
+import {publicMarketDisplayBook,publicMarketDisplayHistory,publicMarketPrelockHeldBook} from "@/app/lab/lib/publicMarketDisplayTrail";
 
 type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string;prelockCapturedAt?:number;sourcePinned?:boolean};
 const cache = new Map<string, { at:number; value:Receipt; pending?:Promise<Receipt> }>();
@@ -46,7 +46,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const [range,setRange]=useState<"all"|"24h">("all");
   const [view,setView]=useState<"movement"|"comparison">("comparison");
   const sport=game.sport==="soccer"&&(game.id.startsWith("soccer-ucl-")||game.soccerCompetitionContext?.competition==="uefa_champions_league")?"ucl":game.sport;
-  const selection=readerContractSelection(game,marketKey),kind=marketKey==="moneyline"?"moneyline":selection?.kind??null;
+  const legacySelection=readerContractSelection(game,marketKey),selection=readerHistoryContractSelection(game,marketKey),kind=marketKey==="moneyline"?"moneyline":selection?.kind??null;
   const selectedMarket=game.markets[marketKey],trackerBook=publicMarketDisplayBook(selectedMarket);
   const query=new URLSearchParams({sport,away:game.awayTeam,home:game.homeTeam,start:game.gameStartAt??"",market:kind??"unsupported",event:String(game.external_id),display:"public-tracker-v1"});
   if(trackerBook){const last=trackerBook.points.at(-1)!;query.set("book",trackerBook.sportsbook);query.set("reference",[last[0],trackerBook.line,last[2]].join(":"));}
@@ -80,7 +80,11 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const current=receipt?.key===key?receipt:null;
   const marketLabel=kind==="total"?"Total":kind==="spread"?(game.sport==="nhl"?"Puck line":"Spread"):kind==="btts"?"Both teams to score":marketKey==="first_inning"?"First inning":"Game winner";
   const checkedAt=current?.checkedAt??0,lockedAt=predictionMarketLockBoundary(game,checkedAt),frozen=lockedAt!==undefined;
-  const storedBook=current?predictionMarketReaderBookTrail(selectedMarket,selectedMarket.pick??"",frozen?lockedAt:checkedAt,selection?.line??null):null;
+  const heldArchive=frozen&&!legacySelection&&!!selection&&current?.prelockCapturedAt!==undefined&&Number.isFinite(lockedAt)&&current.prelockCapturedAt<=lockedAt!;
+  // An old locked empty pick never acquires new reader semantics. Only a
+  // genuinely captured future pre-lock receipt may activate this display.
+  if(frozen&&!legacySelection&&selection&&!heldArchive)return <PredictionMarketUnavailable variant={variant} label={marketKey==="first_inning"?"First inning":"Game winner"} kind={null} lockedAt={lockedAt} status="selection_pending" book={null}/>;
+  const storedBook=heldArchive?publicMarketPrelockHeldBook(trackerBook,current?.prelockCapturedAt,lockedAt):current?predictionMarketReaderBookTrail(selectedMarket,selectedMarket.pick??"",frozen?lockedAt:checkedAt,selection?.line??null):null;
   const legacyBook=frozen&&current?.prelockCapturedAt?predictionMarketArchivedBook(storedBook,current.book,current.prelockCapturedAt,lockedAt,selection?.line??null):predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,current?.book??null,current?.sourcePinned===true);
   const book=frozen?legacyBook:current?publicMarketDisplayHistory(trackerBook,current.book):null;
   // Legacy locked records keep their old unavailable state. New auxiliary

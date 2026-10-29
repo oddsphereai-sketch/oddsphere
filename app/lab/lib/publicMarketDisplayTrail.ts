@@ -63,3 +63,11 @@ export function publicMarketDisplayHistory(stored:PredictionMarketBookTrail|null
   points:[...new Map([...history.points.filter(p=>allowed(p[0])),...stored.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]),
   marketHistory:[...new Map([...(history.marketHistory??[]).filter(p=>allowed(p[0])),...(stored.marketHistory??[])].map(p=>[p[0]+"|"+p[2],p])).values()].sort((a,b)=>a[0]-b[0])};
 }
+
+/** A future held lock may show its EXACT stored trail only after an actual
+ * eligible pre-lock display receipt exists. Never reconstruct a legacy lock,
+ * manufacture a pick, or admit a later sportsbook observation. */
+export function publicMarketPrelockHeldBook(stored:PredictionMarketBookTrail|null,capturedAt:number|undefined,boundary:number|undefined):PredictionMarketBookTrail|null {
+ if(!stored||capturedAt===undefined||boundary===undefined||!Number.isFinite(capturedAt)||!Number.isFinite(boundary)||capturedAt>boundary||!stored.points.length||stored.points.some(p=>p[0]>boundary))return null;
+ return {...stored,locked:true};
+}
