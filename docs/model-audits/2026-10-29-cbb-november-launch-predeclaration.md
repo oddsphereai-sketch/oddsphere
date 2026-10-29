@@ -264,8 +264,9 @@ Fixture-only seed coverage advances to
 schedule contract is
 `cbb_rolling_slate_2026_10_29_r1_seven_et_days`. Team joins use stored CBB
 foreign keys and preserve verified logos; unresolved or duplicate identities
-abort instead of appearing under a guessed abbreviation. The private
-experience preview can read the schedule, while the member route is gated by
+abort instead of appearing under a guessed abbreviation. The local-only
+experience preview can read the schedule; production-mode requests for that
+CBB preview are rejected. The member route is gated by
 both `CBB_ACTIVATION.memberPublication` and `CBB_DAILY_EDGE_ENABLED`. Both
 remain off. No live snapshot, lock, tracking, model score, market decision,
 grade, or stake changes in this candidate: zero promotions, zero demotions,

@@ -56,6 +56,7 @@ const cardView = readFileSync(new URL("../app/dev/experience-preview/ActualDaily
 assert.match(memberPage, /CBB_ACTIVATION\.memberPublication &&/);
 assert.match(memberPage, /excludeAnalyzedCbbScheduleGames/);
 assert.match(privatePage, /snapshot\.cbbRollingSchedule = await loadCbbRollingSchedule/);
+assert.match(privatePage, /sport === "cbb" && process\.env\.NODE_ENV === "production"\) notFound\(\)/);
 assert.match(cardView, /sport === "cbb" \? "College Basketball" : "NBA"/);
 assert.match(cardView, /groupByDay=\{Boolean\(renderedWeeklySlate\) \|\| sport === "cbb"\}/);
 console.log("CBB rolling slate tests passed");

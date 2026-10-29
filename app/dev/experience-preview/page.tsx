@@ -40,6 +40,9 @@ export default async function PrivateExperiencePreviewPage({
   const sport = DAILY_EDGE_SPORT_KEYS.includes(requestedSport as Sport)
     ? (requestedSport as Sport)
     : "mlb";
+  // The CBB candidate has no authenticated preview entitlement yet. A
+  // production-mode preview flag alone must not expose its schedule publicly.
+  if (sport === "cbb" && process.env.NODE_ENV === "production") notFound();
   const requestedDate =
     typeof query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(query.date)
       ? query.date
