@@ -8,7 +8,7 @@ import type { CbbOdds } from "../../lib/cbb/types";
 
 const dir = resolve(process.argv.find(arg => arg.startsWith("--data="))?.slice(7) ?? "/private/tmp/oddsphere-cbb-data");
 const read = (name: string) => JSON.parse(readFileSync(resolve(dir, name), "utf8"));
-type Row = { gameId: number; date: string; asOf: string; sportsbook: string; quoteId: number; line: number;
+type Row = { gameId: number; date: string; asOf: string; sportsbook: string; quoteId: number; line: number; actual: number;
   overPrice: number; underPrice: number; r2Total: number; r2: { pick: string; result: string; units: number } };
 const rows = read("opening-total-benchmark-report.json").rows as Row[];
 const raw = read("opening-total-benchmark-raw.json").data as CbbOdds[];
@@ -49,7 +49,15 @@ const evaluation = rows.map(row => {
     }).filter((value): value is number => value !== null);
   const center = centers.length ? median(centers) : null;
   const agrees = center === null || center === row.line ? null : (center > row.line) === (pick === "over");
-  return { date: row.date.slice(0, 10), result: row.r2.result, units: row.r2.units, modelEv, referenceBooks: centers.length, agrees };
+  const referencePick = center === null || center === row.line ? null : center > row.line ? "over" : "under";
+  const referenceResult = referencePick === null || row.r2.result === "push" ? row.r2.result :
+    referencePick === pick ? row.r2.result : row.r2.result === "win" ? "loss" : "win";
+  const referencePrice = referencePick === "over" ? row.overPrice : row.underPrice;
+  const referenceUnits = referencePick === null ? null : referenceResult === "push" ? 0 :
+    referenceResult === "loss" ? -1 : referencePrice > 0 ? referencePrice / 100 : 100 / -referencePrice;
+  return { date: row.date.slice(0, 10), result: row.r2.result, units: row.r2.units, modelEv, referenceBooks: centers.length,
+    agrees, referencePick, referenceResult, referenceUnits,
+    modelTotalError: Math.abs(row.actual - row.r2Total), referenceTotalError: center === null ? null : Math.abs(row.actual - center) };
 });
 const dates = [...new Set(evaluation.map(row => row.date))].sort();
 if (dates.length !== 8) throw new Error("expanded CBB Total dates changed");
@@ -69,6 +77,25 @@ for (const [period, included] of Object.entries({ early, selection, later })) {
     all: summary(subset), highModelEv: summary(high), highEvReferenceAgrees: summary(high.filter(row => row.agrees === true)),
     highEvReferenceOpposes: summary(high.filter(row => row.agrees === false)),
     highEvNoReference: summary(high.filter(row => row.agrees === null)),
+    referenceSide: { covered: subset.filter(row => row.referencePick !== null).length,
+      pairedModel: summary(subset.filter(row => row.referencePick !== null)),
+      pairedModelTotalMae: Number((subset.filter(row => row.referencePick !== null)
+        .reduce((sum, row) => sum + row.modelTotalError, 0) / Math.max(1, subset.filter(row => row.referencePick !== null).length)).toFixed(2)),
+      referenceTotalMae: Number((subset.filter(row => row.referencePick !== null)
+        .reduce((sum, row) => sum + (row.referenceTotalError ?? 0), 0) / Math.max(1, subset.filter(row => row.referencePick !== null).length)).toFixed(2)),
+      wins: subset.filter(row => row.referencePick !== null && row.referenceResult === "win").length,
+      losses: subset.filter(row => row.referencePick !== null && row.referenceResult === "loss").length,
+      pushes: subset.filter(row => row.referencePick !== null && row.referenceResult === "push").length,
+      units: Number(subset.reduce((sum, row) => sum + (row.referenceUnits ?? 0), 0).toFixed(2)),
+      flips: subset.filter(row => row.agrees === false).length,
+      correctedFlips: subset.filter(row => row.agrees === false && row.referenceResult === "win").length,
+      harmedFlips: subset.filter(row => row.agrees === false && row.referenceResult === "loss").length,
+      byDate: Object.fromEntries([...included].map(date => [date, {
+        pairedModel: summary(subset.filter(row => row.date === date && row.referencePick !== null)),
+        reference: { bets: subset.filter(row => row.date === date && row.referencePick !== null).length,
+          wins: subset.filter(row => row.date === date && row.referenceResult === "win" && row.referencePick !== null).length,
+          losses: subset.filter(row => row.date === date && row.referenceResult === "loss" && row.referencePick !== null).length,
+          units: Number(subset.filter(row => row.date === date).reduce((sum, row) => sum + (row.referenceUnits ?? 0), 0).toFixed(2)) } }])) },
     byDate: Object.fromEntries([...included].map(date => [date, { all: summary(subset.filter(row => row.date === date)),
       highEvReferenceAgrees: summary(high.filter(row => row.date === date && row.agrees === true)) }])),
   };

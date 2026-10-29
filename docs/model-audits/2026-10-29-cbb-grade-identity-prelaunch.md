@@ -41,6 +41,22 @@ To test the board-flattening risk directly, the private audit also applies an **
 
 Next calibration work must therefore train and assess the **Lean and Best Angle lanes separately by market**, with Moneyline directional win reliability distinct from price-adjusted value; Spread/Total exact-line and market-context reliability; explicit odds bands; and forward W/L/push, units and board-count reports. A private grade candidate is not a live grade or stake. Forced one-per-market-per-day promotion is also invalid: it would create a claim of confidence that the evidence may not support.
 
+## Follow-up calibration falsification: market-side replacement versus independent side
+
+`scripts/operator/audit-cbb-market-calibration.ts` now fits one predeclared ridge-logistic residual calibrator for each market using the first 151 games (only two dates), an exact target-book opening price, and target-book-excluded reference odds where available. It freezes the coefficients before evaluating the next 162 games and later 40. This is a **private, read-only falsification test**, not a new score, flip, grade, or stake policy. The model and reference probabilities are conditional on no push; scoring omits pushes. It does not use movement, splits, or unobserved book leadership.
+
+| Market | Independent correct, next 162 / later 40 | Calibrator correct, next 162 / later 40 | Forward grade-lane failure |
+| --- | ---: | ---: | --- |
+| Moneyline | 117 / 24 | 114 / 24 | A positive-calibrated-EV Best Angle probe went 8–10, −4.07u in the next block; no Lean survived because its early top-third EV cut was zero. |
+| Spread | 96 / 26 | 75 / 21 | It flipped 67 later-selection sides, correcting 23 but harming 44. Its provisional Leans went 40–56, −19.94u. |
+| Total | 79 / 18 | 80 / 20 | Provisional Best Angles went 33–31, −0.52u, then 8–9, −1.80u. |
+
+The market-heavy calibrator is rejected. It modestly changes Total correctness but seriously damages Spread and Moneyline calibration; filling the board with its positive-EV Leans would be misleading. An independent winner is not to be replaced simply because a reference price disagrees. The same 353-game opening cohort remains retrospective and has only two training dates, so even a better-looking calibration would require stronger confirmation.
+
+One narrower Total signal merits further private testing. In the separate eight-date, 635-game Total audit, only **268** games have a strictly earlier, target-book-excluded usable reference center. On *those same 268 games*, taking that reference side instead of the r2 independent Total side changed 135–133, −10.70u to 152–116, +21.71u. The chronological split is essential: first two dates **56–62, −11.36u → 63–55, +2.06u**; next four dates **76–69, −0.03u → 89–56, +24.65u**; final two dates only **five covered games, 3–2, +0.69u → 0–5, −5.00u**. Reference Total mean absolute error on the covered games improved only marginally (13.01→12.94, 12.09→12.02, 6.50→5.81 points respectively), nowhere near the desired sub-10 full-cohort target. The same reference-side method therefore remains **unqualified**, especially for tournament games and the 367 games with no usable independent reference. It could be made score-coherent by changing Total while retaining Margin, then recomputing both team scores, but that construction has not passed a prospective test and is not applied to the preview.
+
+This is concrete progress, not a declaration that grades are impossible: Moneyline needs separate *directional* Lean reliability and price-adjusted Best Angle value; Spread should preserve the independent side until a market-conditioned replacement beats it out of time; Total has a plausible covered-game market correction that needs more non-overlapping, date-diverse verification and a coverage solution. No rule here forces a play on every market of every slate. All November 1 private preview grades remain pending.
+
 ## Verification and remaining launch gates
 
 - `node --import tsx scripts/test-cbb-team-identity.ts` covers abbreviation collision, source abbreviation mismatch, similar-mascot false match, ambiguous ESPN names, and duplicate BDL IDs.
