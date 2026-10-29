@@ -7,6 +7,21 @@ import {readerContractSelection} from "@/lib/providers/owls/predictionMarketCont
 import {readPredictionMarketBookHistory} from "./predictionMarketDisplayFeed";
 import {bookDisplayTrail,bookDisplayContext} from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type {PredictionMarketSport} from "@/lib/providers/owls/owlsPredictionMarkets";
+import {publicMarketDisplayBook,publicMarketDisplayHistory} from "@/app/lab/lib/publicMarketDisplayTrail";
+
+/** Public reader binding: reuse the tracker's published observations, not the
+ * independently ranked professional reference. This adds no source requests. */
+export async function readPublicTrackerBook(game:DailyEdgeGameDto,kind:string,side:string,line:number|null,feedSport=game.sport as PredictionMarketSport){
+ if(game.lockState==="locked"||Date.parse(game.gameStartAt??"")<=Date.now())return null;
+ const key=kind==="moneyline"?"moneyline":kind==="total"?"total":"first_inning",market=game.markets[key],selection=readerContractSelection(game,key);
+ const pick=market.pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
+ const expectedSide=selection?.side??(pick===game.awayTeam.toUpperCase()?"away":pick===game.homeTeam.toUpperCase()?"home":pick==="DRAW"||pick==="TIE"?"draw":null);
+ if(expectedSide!==side||(selection?.line??null)!==line)return null;
+ const stored=publicMarketDisplayBook(market);if(!stored)return null;
+ const feed=await readPredictionMarketBookHistory(feedSport).catch(()=>null);
+ const entry=feed?.rows.find(e=>e.event===game.external_id&&Date.parse(e.start)===Date.parse(game.gameStartAt??"")&&e.away===game.awayTeam&&e.home===game.homeTeam&&e.kind===kind&&e.side===side&&e.book===stored.sportsbook);
+ return publicMarketDisplayHistory(stored,entry?bookDisplayTrail(entry,stored.line??null,stored.points.at(-1)![0]):null);
+}
 
 /** Bounded SELECTs of already-collected observations. No provider requests,
  * new pollers, prediction assembly, or changes to the published game DTO. */

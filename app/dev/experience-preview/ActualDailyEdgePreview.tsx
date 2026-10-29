@@ -56,6 +56,7 @@ import {
   resolvePointLineMarketPulseMovement,
 } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "@/app/lab/lib/dailyEdgeCurrentOnlyMovement";
+import { publicMarketDisplayStops,publicMarketDisplayedPrice,publicMarketDisplayedSportsbook } from "@/app/lab/lib/publicMarketDisplayTrail";
 import { nflSelectedBetGrade } from "@/app/lab/lib/nflReaderPresentation";
 import { pickRelativeImpliedProbabilityDelta } from "@/app/lab/lib/lineMoveTone";
 import {
@@ -1542,35 +1543,8 @@ type CoherentMovement = {
 function resolveCoherentMovement(market: MarketEdgeDto): CoherentMovement {
   const displayedPrice = currentDisplayedPrice(market);
   const displayedBook = currentDisplayedSportsbook(market);
-  const trail = (market.oddsTrail ?? [])
-    .filter((stop) => Number.isFinite(stop.american))
-    .map((stop) =>
-      stop.label === "current" &&
-      (stop.sportsbook === "recommendation_snapshot" || !stop.sportsbook) &&
-      displayedBook !== null &&
-      displayedPrice === stop.american
-        ? { ...stop, sportsbook: displayedBook }
-        : stop
-    );
-  const groups = new Map<string, OddsTrailStop[]>();
-  for (const stop of trail) {
-    if (!stop.sportsbook || stop.sportsbook === "recommendation_snapshot" || stop.sportsbook === "locked_snapshot") continue;
-    // oddsTrail is already scoped to the displayed market and picked side.
-    // Group by book—not by point line—so a real same-book total/spread move
-    // (for example 183.5 → 176.5) remains visible instead of being split into
-    // unrelated one-point groups.
-    const key = stop.sportsbook;
-    const group = groups.get(key) ?? [];
-    group.push(stop);
-    groups.set(key, group);
-  }
-  const coherent = Array.from(groups.values())
-    // A historical same-book sequence is not a current trail unless that
-    // same book also owns the terminal current/locked endpoint. Without this
-    // guard an older `move` row can be mislabeled "Current" simply because it
-    // is the last observation available for that sportsbook.
-    .filter((group) => group.length >= 2 && group.some((stop) => stop.label === "current" || stop.label === "locked"))
-    .sort((a, b) => b.length - a.length)[0];
+  // Group by book—not by point line—through the same public helper as the chart.
+  const {trail,coherent}=publicMarketDisplayStops(market,displayedPrice,displayedBook);
   if (coherent) {
     const first = coherent[0]!;
     const terminal = coherent[coherent.length - 1]!;
@@ -3445,26 +3419,11 @@ function formatMarketProbability(market: MarketEdgeDto): string {
 }
 
 function currentDisplayedPrice(market: MarketEdgeDto): number | null {
-  if (market.currentPriceAmerican !== null && market.currentPriceAmerican !== undefined) {
-    return market.currentPriceAmerican;
-  }
-  if (market.bestAvailablePriceAmerican !== null && market.bestAvailablePriceAmerican !== undefined) {
-    return market.bestAvailablePriceAmerican;
-  }
-  if (/NRFI|under/i.test(market.pick ?? "") && market.fiMarketBoard?.nrfiAmerican != null) {
-    return market.fiMarketBoard.nrfiAmerican;
-  }
-  if (/YRFI|over/i.test(market.pick ?? "") && market.fiMarketBoard?.yrfiAmerican != null) {
-    return market.fiMarketBoard.yrfiAmerican;
-  }
-  return market.priceAmerican;
+  return publicMarketDisplayedPrice(market);
 }
 
 function currentDisplayedSportsbook(market: MarketEdgeDto): string | null {
-  if (market.currentPriceSportsbook) return market.currentPriceSportsbook;
-  if (market.bestAvailableSportsbook) return market.bestAvailableSportsbook;
-  const fiSource = market.fiMarketBoard?.source?.match(/^fi_market_ok_(.+)$/i)?.[1];
-  return fiSource?.replaceAll(" ", "_").toLowerCase() ?? null;
+  return publicMarketDisplayedSportsbook(market);
 }
 
 function formatAmerican(value: number | null): string {
