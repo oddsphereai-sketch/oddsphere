@@ -1,7 +1,7 @@
 /** Auxiliary DISPLAY receipts only. Never writes/reconstructs a member lock. */
 import type {DailyEdgeGameDto} from "@/app/lab/lib/labTypes";
 import {predictionMarketLockBoundary,selectedPredictionMarketOutcome,type PredictionMarketBookTrail} from "@/app/lab/lib/predictionMarketDisplay";
-import {readerContractSelection,resolveReaderContract,type ContractFeed,type ReaderMarketMatch} from "./predictionMarketContracts";
+import {readerHistoryContractSelection,resolveReaderContract,type ContractFeed,type ReaderMarketMatch} from "./predictionMarketContracts";
 import {matchPredictionMarketGame,type PredictionMarketFeed,type PredictionMarketSport} from "./owlsPredictionMarkets";
 import {bookDisplayTrail,type BookDisplayFeed} from "./owlsBookDisplayHistory";
 
@@ -21,7 +21,7 @@ export function capturePredictionMarketPrelock(previous:PrelockFeed|null,games:D
   if(game.lockState==="locked"||predictionMarketLockBoundary(game,now)!==undefined||Date.parse(game.gameStartAt??"")<=now)continue;
   const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName},now);
   for(const key of ["moneyline","total","first_inning"] as const){
-   const selection=readerContractSelection(game,key),pick=game.markets[key].pick??"",outcome=match?selectedPredictionMarketOutcome(match,pick):null;
+   const selection=readerHistoryContractSelection(game,key),pick=game.markets[key].pick??"",outcome=match?selectedPredictionMarketOutcome(match,pick):null;
    const label=pick.replace(/\s+ML$/i,"").trim().toUpperCase();
    const kind=key==="moneyline"?"moneyline":selection?.kind,side=selection?.side??outcome?.side??(label===game.homeTeam.toUpperCase()?"home":label===game.awayTeam.toUpperCase()?"away":label==="DRAW"?"draw":null);
    if(!kind||!side)continue;

@@ -3,7 +3,7 @@ import {supabase} from "@/lib/db/supabase";
 import {selectPredictionMarketBook,normalizePredictionMarketBookPin,type ComparisonQuote} from "./predictionMarketBookComparison";
 import type {DailyEdgeGameDto} from "@/app/lab/lib/labTypes";
 import {predictionMarketReaderBookTrail,predictionMarketComparisonBook} from "@/app/lab/lib/predictionMarketDisplay";
-import {readerContractSelection} from "@/lib/providers/owls/predictionMarketContracts";
+import {readerContractSelection,readerHistoryContractSelection} from "@/lib/providers/owls/predictionMarketContracts";
 import {readPredictionMarketBookHistory} from "./predictionMarketDisplayFeed";
 import {bookDisplayTrail,bookDisplayContext} from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type {PredictionMarketSport} from "@/lib/providers/owls/owlsPredictionMarkets";
@@ -13,7 +13,7 @@ import {publicMarketDisplayBook,publicMarketDisplayHistory} from "@/app/lab/lib/
  * independently ranked professional reference. This adds no source requests. */
 export async function readPublicTrackerBook(game:DailyEdgeGameDto,kind:string,side:string,line:number|null,feedSport=game.sport as PredictionMarketSport){
  if(game.lockState==="locked"||Date.parse(game.gameStartAt??"")<=Date.now())return null;
- const key=kind==="moneyline"?"moneyline":kind==="total"?"total":"first_inning",market=game.markets[key],selection=readerContractSelection(game,key);
+ const key=kind==="moneyline"?"moneyline":kind==="total"?"total":"first_inning",market=game.markets[key],selection=readerHistoryContractSelection(game,key);
  const pick=market.pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
  const expectedSide=selection?.side??(pick===game.awayTeam.toUpperCase()?"away":pick===game.homeTeam.toUpperCase()?"home":pick==="DRAW"||pick==="TIE"?"draw":null);
  if(expectedSide!==side||(selection?.line??null)!==line)return null;
