@@ -1,6 +1,6 @@
 import {unstable_cache} from "next/cache";
 import {supabase} from "@/lib/db/supabase";
-import {selectPredictionMarketBook,type ComparisonQuote} from "./predictionMarketBookComparison";
+import {selectPredictionMarketBook,normalizePredictionMarketBookPin,type ComparisonQuote} from "./predictionMarketBookComparison";
 import type {DailyEdgeGameDto} from "@/app/lab/lib/labTypes";
 import {predictionMarketReaderBookTrail,predictionMarketComparisonBook} from "@/app/lab/lib/predictionMarketDisplay";
 import {readerContractSelection} from "@/lib/providers/owls/predictionMarketContracts";
@@ -33,22 +33,28 @@ async function readQuotes(sport:string,externalId:number,start:string,kind:strin
     .concat((stream.data??[]).map(r=>({sportsbook:r.sportsbook,market:market(r.market_type),side:r.side??"",line:r.line_value,american:r.odds_american,at:r.observed_at})));
 }
 const cachedQuotes=unstable_cache(readQuotes,["prediction_market_book_comparison_2026_10_28_r1"],{revalidate:30});
-export async function readPredictionMarketBook(game:DailyEdgeGameDto,kind:string,side:string,line:number|null,feedSport=game.sport as PredictionMarketSport){
+export async function readPredictionMarketBook(game:DailyEdgeGameDto,kind:string,side:string,line:number|null,feedSport=game.sport as PredictionMarketSport,preferredBook?:string|null){
   // A stored locked trail always wins. This live context cannot replace it.
   if(game.lockState==="locked"||Date.parse(game.gameStartAt??"")<=Date.now())return null;
   const key=kind==="moneyline"?"moneyline":kind==="total"?"total":"first_inning",market=game.markets[key];
   const selected=readerContractSelection(game,key);
   const label=kind==="moneyline"?(side==="away"?game.awayTeam:side==="home"?game.homeTeam:"DRAW"):
     selected?.side===side?market.pick??"":market.opposingOddsTrail?.side===side?market.opposingOddsTrail.label:"";
-  const published=predictionMarketReaderBookTrail(market,label,Date.now(),line);
+  const publishedTrail=predictionMarketReaderBookTrail(market,label,Date.now(),line);
+  const published=publishedTrail?{...publishedTrail,line:publishedTrail.line===undefined?line:publishedTrail.line}:null;
   const rows=await cachedQuotes(game.sport,game.external_id,game.gameStartAt??"",kind,side).catch(()=>[] as ComparisonQuote[]);
-  const selectedBook=predictionMarketComparisonBook(false,published,selectPredictionMarketBook(rows,kind,side,line));
+  const pin=normalizePredictionMarketBookPin(preferredBook);
+  const candidate=selectPredictionMarketBook(rows,kind,side,line,Date.now(),pin);
+  // A pinned valid live source owns this display trace, not whichever other
+  // book happened to update the independently published model card last.
+  if(pin&&!candidate&&published?.sportsbook!==pin)return null;
+  const selectedBook=predictionMarketComparisonBook(false,published,candidate,!!pin);
   if(!selectedBook)return null;
   const feed=await readPredictionMarketBookHistory(feedSport).catch(()=>null);
   const entry=feed?.rows.find(e=>e.event===game.external_id&&Date.parse(e.start)===Date.parse(game.gameStartAt??"")&&e.away===game.awayTeam&&e.home===game.homeTeam&&e.kind===kind&&e.side===side&&e.book===selectedBook.sportsbook);
   const history=entry?bookDisplayTrail(entry,selectedBook.line===undefined?line:selectedBook.line):null;
   if(!entry)return selectedBook;
   const context=bookDisplayContext(entry),latest=selectedBook.points.at(-1)!;
-  const marketHistory:[number,number,number|null][]=[...(context.marketHistory??[]),[latest[0],latest[2],selectedBook.line===undefined?line:selectedBook.line]];
+  const marketHistory:[number,number,number|null][]=[...(context.marketHistory??[]),...(selectedBook.marketHistory??[]),[latest[0],latest[2],selectedBook.line===undefined?line:selectedBook.line]];
   return {...selectedBook,...context,marketHistory:[...new Map(marketHistory.map(p=>[p[0]+"|"+p[2],p])).values()].sort((a,b)=>a[0]-b[0]),points:[...new Map([...(history?.points??[]),...selectedBook.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0])};
 }

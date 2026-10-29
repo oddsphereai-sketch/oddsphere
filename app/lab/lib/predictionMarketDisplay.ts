@@ -2,7 +2,23 @@ import type { DailyEdgeGameDto, MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history"|"prelock_archive";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>};
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history"|"prelock_archive";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>;sourceChange?:{from:string;at:number}};
+
+/** Full same-book point-line history is independent of the Kalshi overlap.
+ * Conflicting thresholds at one timestamp may be alternates, not a main-line
+ * move: omit that ambiguous instant rather than picking an arbitrary number. */
+export function predictionMarketBookLineHistory(book:PredictionMarketBookTrail,ceiling=Infinity):Array<[number,number,number]>{
+ if(ceiling!==Infinity&&!Number.isFinite(ceiling))return [];
+ const quotes:Array<[number,number,number|null]>=[...(book.marketHistory??[])];
+ if(book.opening)quotes.push([book.opening.point[0],book.opening.point[2],book.opening.line]);
+ const latest=book.points.at(-1);if(latest&&book.line!==undefined)quotes.push([latest[0],latest[2],book.line]);
+ const groups=new Map<number,Map<number,[number,number,number]>>();
+ for(const [at,price,line] of quotes){
+  if(!Number.isFinite(at)||at>ceiling||!Number.isFinite(price)||Math.abs(price)<100||line===null||!Number.isFinite(line))continue;
+  const group=groups.get(at)??new Map();group.set(line,[at,price,line]);groups.set(at,group);
+ }
+ return [...groups.values()].filter(g=>g.size===1).map(g=>[...g.values()][0]).sort((a,b)=>a[0]-b[0]);
+}
 /** Only an actual pre-lock capture may supplement a FUTURE locked display.
  * Stored book, line, every stored quote and its endpoint retain precedence.
  * No stored book means no reconstruction; other books never replace it. */
@@ -12,9 +28,13 @@ export function predictionMarketArchivedBook(stored:PredictionMarketBookTrail|nu
  const points=[...new Map([...archive.points.filter(p=>p[0]<=Math.min(boundary,last)),...stored.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]);
  return {...stored,points,historyScope:"prelock_archive",...(stored.opening?{opening:stored.opening}:archive.opening&&archive.opening.point[0]<=Math.min(boundary,last)?{opening:archive.opening}:{}),marketHistory:stored.marketHistory??archive.marketHistory?.filter(p=>p[0]<=Math.min(boundary,last))};
 }
-export function predictionMarketComparisonBook(locked:boolean,stored:PredictionMarketBookTrail|null,live:PredictionMarketBookTrail|null):PredictionMarketBookTrail|null {
+export function predictionMarketComparisonBook(locked:boolean,stored:PredictionMarketBookTrail|null,live:PredictionMarketBookTrail|null,sourcePinned=false):PredictionMarketBookTrail|null {
   if(locked||stored?.locked)return stored;
   if(!live)return stored;
+  if(sourcePinned){
+    if(stored?.sportsbook===live.sportsbook&&stored.line===live.line)return {...live,points:[...new Map([...stored.points,...live.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0])};
+    return live;
+  }
   if(stored&&stored.points.at(-1)![0]>live.points.at(-1)![0])return stored;
   return live;
 }
