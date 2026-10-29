@@ -27,6 +27,7 @@ assert.equal(JSON.stringify(rows),before);
 const url="/api/lab/prediction-market?sport=nba&event=401909893&away=CLE&home=ATL&start=2026-10-30T00%3A00%3A00Z&market=spread&side=home&line=-1.5";
 const changed=url.replace("line=-1.5","line=-2");
 assert.equal(predictionMarketSourceKey(url),predictionMarketSourceKey(changed));
+assert.equal(predictionMarketSourceKey(url),predictionMarketSourceKey(url.replace("00%3A00%3A00Z","00%3A00%3A00.000Z")),"equivalent source-start timestamp formats cannot unpin a source");
 assert.notEqual(predictionMarketSourceKey(url),predictionMarketSourceKey(url.replace("side=home","side=away")));
 assert.notEqual(predictionMarketSourceKey(url),predictionMarketSourceKey(url.replace("market=spread","market=total")));
 const storage=new Map<string,string>(),getStorage=()=>({getItem:(k:string)=>storage.get(k)??null,setItem:(k:string,v:string)=>{storage.set(k,v);}});

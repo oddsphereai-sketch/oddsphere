@@ -7,7 +7,7 @@ const storageKey="oddsphere_prediction_chart_sources_v1";
  * exact event/start, market and selected side; opposing sides never share pins. */
 export function predictionMarketSourceKey(request:string):string {
  const q=new URL(request,"https://oddsphere.invalid").searchParams;
- return JSON.stringify(["sport","event","away","home","start","market","side"].map(k=>q.get(k)));
+ return JSON.stringify(["sport","event","away","home","start","market","side"].map(k=>k==="start"?Date.parse(q.get(k)??""):q.get(k)));
 }
 /** Display preference only. No quotes, credentials or locked records are stored.
  * Session storage preserves a source through reader navigation and reloads. */
