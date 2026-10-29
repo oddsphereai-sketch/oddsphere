@@ -1,0 +1,1297 @@
+{
+  "release": "cbb_candidate_2026_10_28_r5_coherent_market_reader",
+  "productionWrites": 0,
+  "status": "private_integration_only_not_promoted",
+  "scope": "conditional opening-price information, not qualified movement/splits inference",
+  "cohortStatus": "selection reused research data; later evaluation is already-opened 2025 season, not pristine",
+  "counts": {
+    "train": 151,
+    "selection": 162,
+    "later": 40
+  },
+  "sourceExclusions": {
+    "no_prior_target_excluded_spread_and_total": 228,
+    "no_complete_three_market_target": 13,
+    "fixture_orientation_not_independently_corroborated": 41,
+    "incomplete_independent_inputs": 2
+  },
+  "initialScoreHeads": [
+    {
+      "option": {
+        "penalty": 10
+      },
+      "eligible": false,
+      "deltas": {
+        "moneyline": -1,
+        "spread": -9,
+        "total": -6
+      },
+      "net": -16
+    },
+    {
+      "option": {
+        "penalty": 100
+      },
+      "eligible": false,
+      "deltas": {
+        "moneyline": -2,
+        "spread": -4,
+        "total": -1
+      },
+      "net": -7
+    },
+    {
+      "option": {
+        "penalty": 1000
+      },
+      "eligible": false,
+      "deltas": {
+        "moneyline": -1,
+        "spread": -2,
+        "total": 1
+      },
+      "net": -2
+    }
+  ],
+  "candidates": [
+    {
+      "penalty": 1,
+      "authority": "joint",
+      "eligible": false,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 118,
+          "losses": 44,
+          "accuracy": 0.7283950617283951,
+          "marginMae": 9.929288147438653,
+          "totalMae": 13.429466383651667,
+          "teamScoreMae": 8.12906637198829,
+          "brier": 0.1889792754305425,
+          "logLoss": 0.5593545318715365
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 118,
+            "losses": 44,
+            "pushes": 0,
+            "accuracy": 0.7283950617283951,
+            "corrections": 4,
+            "harms": 3,
+            "hypotheticalOneRiskedUnits": 5.68774826255318,
+            "brier": 0.1889792754305425,
+            "logLoss": 0.5593545318715365
+          },
+          "spread": {
+            "wins": 84,
+            "losses": 78,
+            "pushes": 0,
+            "accuracy": 0.5185185185185185,
+            "corrections": 11,
+            "harms": 19,
+            "hypotheticalOneRiskedUnits": -2.560131987306985,
+            "brier": 0.2413493170342661,
+            "logLoss": 0.674325396837768
+          },
+          "total": {
+            "wins": 81,
+            "losses": 81,
+            "pushes": 0,
+            "accuracy": 0.5,
+            "corrections": 7,
+            "harms": 5,
+            "hypotheticalOneRiskedUnits": -7.196227283183794,
+            "brier": 0.2563189268153289,
+            "logLoss": 0.7061431359452279
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": 1,
+        "spread": -8,
+        "total": 2
+      },
+      "net": -5
+    },
+    {
+      "penalty": 1,
+      "authority": "margin_only",
+      "eligible": false,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 118,
+          "losses": 44,
+          "accuracy": 0.7283950617283951,
+          "marginMae": 9.929288147438653,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.075638348411912,
+          "brier": 0.1889792754305425,
+          "logLoss": 0.5593545318715365
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 118,
+            "losses": 44,
+            "pushes": 0,
+            "accuracy": 0.7283950617283951,
+            "corrections": 4,
+            "harms": 3,
+            "hypotheticalOneRiskedUnits": 5.68774826255318,
+            "brier": 0.1889792754305425,
+            "logLoss": 0.5593545318715365
+          },
+          "spread": {
+            "wins": 84,
+            "losses": 78,
+            "pushes": 0,
+            "accuracy": 0.5185185185185185,
+            "corrections": 11,
+            "harms": 19,
+            "hypotheticalOneRiskedUnits": -2.560131987306985,
+            "brier": 0.2413493170342661,
+            "logLoss": 0.674325396837768
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": 1,
+        "spread": -8,
+        "total": 0
+      },
+      "net": -7
+    },
+    {
+      "penalty": 1,
+      "authority": "total_only",
+      "eligible": true,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.429466383651667,
+          "teamScoreMae": 8.099716867480486,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 81,
+            "losses": 81,
+            "pushes": 0,
+            "accuracy": 0.5,
+            "corrections": 7,
+            "harms": 5,
+            "hypotheticalOneRiskedUnits": -7.196227283183794,
+            "brier": 0.2563189268153289,
+            "logLoss": 0.7061431359452279
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 2
+      },
+      "net": 2
+    },
+    {
+      "penalty": 10,
+      "authority": "joint",
+      "eligible": false,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 116,
+          "losses": 46,
+          "accuracy": 0.7160493827160493,
+          "marginMae": 9.881852980618644,
+          "totalMae": 13.362472085835774,
+          "teamScoreMae": 8.071024899979355,
+          "brier": 0.1863531950579589,
+          "logLoss": 0.5535895697768124
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 116,
+            "losses": 46,
+            "pushes": 0,
+            "accuracy": 0.7160493827160493,
+            "corrections": 2,
+            "harms": 3,
+            "hypotheticalOneRiskedUnits": 1.9470075218124392,
+            "brier": 0.1863531950579589,
+            "logLoss": 0.5535895697768124
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 7,
+            "harms": 7,
+            "hypotheticalOneRiskedUnits": 12.634036260818942,
+            "brier": 0.23990376712042086,
+            "logLoss": 0.6715701296854635
+          },
+          "total": {
+            "wins": 81,
+            "losses": 81,
+            "pushes": 0,
+            "accuracy": 0.5,
+            "corrections": 2,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -7.196227283183798,
+            "brier": 0.2544323058237054,
+            "logLoss": 0.7022221863290615
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": -1,
+        "spread": 0,
+        "total": 2
+      },
+      "net": 1
+    },
+    {
+      "penalty": 10,
+      "authority": "margin_only",
+      "eligible": false,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 116,
+          "losses": 46,
+          "accuracy": 0.7160493827160493,
+          "marginMae": 9.881852980618644,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.060950476054675,
+          "brier": 0.1863531950579589,
+          "logLoss": 0.5535895697768124
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 116,
+            "losses": 46,
+            "pushes": 0,
+            "accuracy": 0.7160493827160493,
+            "corrections": 2,
+            "harms": 3,
+            "hypotheticalOneRiskedUnits": 1.9470075218124392,
+            "brier": 0.1863531950579589,
+            "logLoss": 0.5535895697768124
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 7,
+            "harms": 7,
+            "hypotheticalOneRiskedUnits": 12.634036260818942,
+            "brier": 0.23990376712042086,
+            "logLoss": 0.6715701296854635
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": -1,
+        "spread": 0,
+        "total": 0
+      },
+      "net": -1
+    },
+    {
+      "penalty": 10,
+      "authority": "total_only",
+      "eligible": true,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.362472085835774,
+          "teamScoreMae": 8.060561192106904,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 81,
+            "losses": 81,
+            "pushes": 0,
+            "accuracy": 0.5,
+            "corrections": 2,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -7.196227283183798,
+            "brier": 0.2544323058237054,
+            "logLoss": 0.7022221863290615
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 2
+      },
+      "net": 2
+    },
+    {
+      "penalty": 100,
+      "authority": "joint",
+      "eligible": false,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 116,
+          "losses": 46,
+          "accuracy": 0.7160493827160493,
+          "marginMae": 9.848368769139313,
+          "totalMae": 13.346834276706147,
+          "teamScoreMae": 8.052977220338633,
+          "brier": 0.18487070610399328,
+          "logLoss": 0.5502573742740987
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 116,
+            "losses": 46,
+            "pushes": 0,
+            "accuracy": 0.7160493827160493,
+            "corrections": 0,
+            "harms": 1,
+            "hypotheticalOneRiskedUnits": 2.2162667810716985,
+            "brier": 0.18487070610399328,
+            "logLoss": 0.5502573742740987
+          },
+          "spread": {
+            "wins": 93,
+            "losses": 69,
+            "pushes": 0,
+            "accuracy": 0.5740740740740741,
+            "corrections": 1,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 14.373268779712479,
+            "brier": 0.2389764079776924,
+            "logLoss": 0.6697754579282206
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.2540514593860994,
+            "logLoss": 0.7014340630832381
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": -1,
+        "spread": 1,
+        "total": 0
+      },
+      "net": 0
+    },
+    {
+      "penalty": 100,
+      "authority": "margin_only",
+      "eligible": false,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 116,
+          "losses": 46,
+          "accuracy": 0.7160493827160493,
+          "marginMae": 9.848368769139313,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.051883074010853,
+          "brier": 0.18487070610399328,
+          "logLoss": 0.5502573742740987
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 116,
+            "losses": 46,
+            "pushes": 0,
+            "accuracy": 0.7160493827160493,
+            "corrections": 0,
+            "harms": 1,
+            "hypotheticalOneRiskedUnits": 2.2162667810716985,
+            "brier": 0.18487070610399328,
+            "logLoss": 0.5502573742740987
+          },
+          "spread": {
+            "wins": 93,
+            "losses": 69,
+            "pushes": 0,
+            "accuracy": 0.5740740740740741,
+            "corrections": 1,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 14.373268779712479,
+            "brier": 0.2389764079776924,
+            "logLoss": 0.6697754579282206
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": -1,
+        "spread": 1,
+        "total": 0
+      },
+      "net": 0
+    },
+    {
+      "penalty": 100,
+      "authority": "total_only",
+      "eligible": false,
+      "rows": 162,
+      "baseline": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.34496919172892,
+          "teamScoreMae": 8.050446504037758,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.25400492472284275,
+            "logLoss": 0.7013378635322531
+          }
+        }
+      },
+      "result": {
+        "score": {
+          "games": 162,
+          "wins": 117,
+          "losses": 45,
+          "accuracy": 0.7222222222222222,
+          "marginMae": 9.842768465535928,
+          "totalMae": 13.346834276706147,
+          "teamScoreMae": 8.051540650365535,
+          "brier": 0.18462812859133204,
+          "logLoss": 0.549710242155936
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 117,
+            "losses": 45,
+            "pushes": 0,
+            "accuracy": 0.7222222222222222,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 4.216266781071699,
+            "brier": 0.18462812859133204,
+            "logLoss": 0.549710242155936
+          },
+          "spread": {
+            "wins": 92,
+            "losses": 70,
+            "pushes": 0,
+            "accuracy": 0.5679012345679012,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 12.464177870621565,
+            "brier": 0.2388301959868008,
+            "logLoss": 0.6694927037049527
+          },
+          "total": {
+            "wins": 79,
+            "losses": 83,
+            "pushes": 0,
+            "accuracy": 0.4876543209876543,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -11.057699144655674,
+            "brier": 0.2540514593860994,
+            "logLoss": 0.7014340630832381
+          }
+        }
+      },
+      "deltas": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "net": 0
+    }
+  ],
+  "selected": {
+    "penalty": 10,
+    "authority": "total_only"
+  },
+  "laterBaseline": {
+    "score": {
+      "games": 40,
+      "wins": 24,
+      "losses": 16,
+      "accuracy": 0.6,
+      "marginMae": 11.03822979264842,
+      "totalMae": 12.76528989642574,
+      "teamScoreMae": 8.776355768068093,
+      "brier": 0.20944608682777816,
+      "logLoss": 0.593698294737895
+    },
+    "markets": {
+      "moneyline": {
+        "wins": 24,
+        "losses": 16,
+        "pushes": 0,
+        "accuracy": 0.6,
+        "corrections": 0,
+        "harms": 0,
+        "hypotheticalOneRiskedUnits": -6.1425642664272555,
+        "brier": 0.20944608682777816,
+        "logLoss": 0.593698294737895
+      },
+      "spread": {
+        "wins": 28,
+        "losses": 12,
+        "pushes": 0,
+        "accuracy": 0.7,
+        "corrections": 0,
+        "harms": 0,
+        "hypotheticalOneRiskedUnits": 13.404213563434407,
+        "brier": 0.22764042140727953,
+        "logLoss": 0.6477398754963444
+      },
+      "total": {
+        "wins": 18,
+        "losses": 22,
+        "pushes": 0,
+        "accuracy": 0.45,
+        "corrections": 0,
+        "harms": 0,
+        "hypotheticalOneRiskedUnits": -5.704592508940333,
+        "brier": 0.24931936214370323,
+        "logLoss": 0.6910600402738911
+      }
+    }
+  },
+  "laterCandidate": {
+    "score": {
+      "games": 40,
+      "wins": 24,
+      "losses": 16,
+      "accuracy": 0.6,
+      "marginMae": 11.03822979264842,
+      "totalMae": 12.747824176076804,
+      "teamScoreMae": 8.764106791298325,
+      "brier": 0.20944608682777816,
+      "logLoss": 0.593698294737895
+    },
+    "markets": {
+      "moneyline": {
+        "wins": 24,
+        "losses": 16,
+        "pushes": 0,
+        "accuracy": 0.6,
+        "corrections": 0,
+        "harms": 0,
+        "hypotheticalOneRiskedUnits": -6.1425642664272555,
+        "brier": 0.20944608682777816,
+        "logLoss": 0.593698294737895
+      },
+      "spread": {
+        "wins": 28,
+        "losses": 12,
+        "pushes": 0,
+        "accuracy": 0.7,
+        "corrections": 0,
+        "harms": 0,
+        "hypotheticalOneRiskedUnits": 13.404213563434407,
+        "brier": 0.22764042140727953,
+        "logLoss": 0.6477398754963444
+      },
+      "total": {
+        "wins": 18,
+        "losses": 22,
+        "pushes": 0,
+        "accuracy": 0.45,
+        "corrections": 0,
+        "harms": 0,
+        "hypotheticalOneRiskedUnits": -5.704592508940333,
+        "brier": 0.24883995787715096,
+        "logLoss": 0.690083473660104
+      }
+    }
+  },
+  "movement": {
+    "requests": 21,
+    "totalRawRows": 80607,
+    "totalQualifiedPairs": 457,
+    "usableGames": 7,
+    "cases": [
+      {
+        "eventId": "ncaab:Illinois@UConn-20260404",
+        "gameId": 2798626,
+        "cutoff": "2026-04-04T21:09:00.000Z",
+        "rawRows": 564,
+        "pairedQuotes": 39,
+        "rejected": {
+          "unsupported_market_or_exchange": 380,
+          "unknown_UTC_capture_time": 42,
+          "post_cutoff_or_in_play": 64
+        },
+        "paths": 10,
+        "changedPaths": 4,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:Iowa@Illinois-20260328",
+        "gameId": 2798622,
+        "cutoff": "2026-03-28T21:09:00.000Z",
+        "rawRows": 11590,
+        "pairedQuotes": 72,
+        "rejected": {
+          "unsupported_market_or_exchange": 3269,
+          "unknown_UTC_capture_time": 86,
+          "post_cutoff_or_in_play": 8090,
+          "ambiguous_or_incomplete_pair": 1
+        },
+        "paths": 16,
+        "changedPaths": 10,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:Michigan St@UConn-20260328",
+        "gameId": 2798619,
+        "cutoff": "2026-03-28T00:55:00.000Z",
+        "rawRows": 7955,
+        "pairedQuotes": 0,
+        "rejected": {
+          "unsupported_market_or_exchange": 3539,
+          "unknown_UTC_capture_time": 4023,
+          "post_cutoff_or_in_play": 393
+        },
+        "paths": 0,
+        "changedPaths": 0,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:Michigan@Arizona-20260405",
+        "gameId": 2798625,
+        "cutoff": "2026-04-05T00:19:00.000Z",
+        "rawRows": 487,
+        "pairedQuotes": 53,
+        "rejected": {
+          "unknown_UTC_capture_time": 28,
+          "unsupported_market_or_exchange": 332,
+          "post_cutoff_or_in_play": 17,
+          "ambiguous_or_incomplete_pair": 4
+        },
+        "paths": 9,
+        "changedPaths": 5,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:Purdue@Arizona-20260329",
+        "gameId": 2798621,
+        "cutoff": "2026-03-28T23:59:00.000Z",
+        "rawRows": 19318,
+        "pairedQuotes": 68,
+        "rejected": {
+          "unsupported_market_or_exchange": 4037,
+          "unknown_UTC_capture_time": 74,
+          "post_cutoff_or_in_play": 15071
+        },
+        "paths": 20,
+        "changedPaths": 15,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:Tennessee@Iowa State-20260328",
+        "gameId": 2798617,
+        "cutoff": "2026-03-28T01:35:00.000Z",
+        "rawRows": 8180,
+        "pairedQuotes": 0,
+        "rejected": {
+          "unsupported_market_or_exchange": 3619,
+          "unknown_UTC_capture_time": 2800,
+          "post_cutoff_or_in_play": 1761
+        },
+        "paths": 0,
+        "changedPaths": 0,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:Tennessee@Michigan-20260329",
+        "gameId": 2798624,
+        "cutoff": "2026-03-29T17:15:00.000Z",
+        "rawRows": 23288,
+        "pairedQuotes": 126,
+        "rejected": {
+          "unsupported_market_or_exchange": 3389,
+          "unknown_UTC_capture_time": 86,
+          "post_cutoff_or_in_play": 19559,
+          "ambiguous_or_incomplete_pair": 2
+        },
+        "paths": 23,
+        "changedPaths": 19,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:UConn@Duke-20260329",
+        "gameId": 2798623,
+        "cutoff": "2026-03-29T20:05:00.000Z",
+        "rawRows": 8544,
+        "pairedQuotes": 83,
+        "rejected": {
+          "unsupported_market_or_exchange": 2204,
+          "unknown_UTC_capture_time": 88,
+          "post_cutoff_or_in_play": 6085,
+          "ambiguous_or_incomplete_pair": 1
+        },
+        "paths": 20,
+        "changedPaths": 17,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      },
+      {
+        "eventId": "ncaab:UConn@Michigan-20260407",
+        "gameId": 2798627,
+        "cutoff": "2026-04-06T23:50:00.000Z",
+        "rawRows": 681,
+        "pairedQuotes": 16,
+        "rejected": {
+          "unsupported_market_or_exchange": 276,
+          "unknown_UTC_capture_time": 17,
+          "post_cutoff_or_in_play": 356
+        },
+        "paths": 11,
+        "changedPaths": 1,
+        "qualification": "source_and_coherence_case_replay_only_no_fitted_movement_resolver"
+      }
+    ],
+    "sourceScope": "Exact named fixtures, explicit UTC capture times, pregame T-60. Post-cutoff, live, unknown clock, exchange and misattributed rows excluded. No causal leadership assumed."
+  },
+  "receipts": [
+    {
+      "file": "/private/tmp/oddsphere-cbb-data/market-reader-feature-rows.json",
+      "sha256": "32642af417df10a3371a1745b9aeeece4fcd1901d96d1e836ec2551837d24114"
+    },
+    {
+      "file": "/private/tmp/oddsphere-cbb-data/candidate-r5-joint-evaluation-rows.json",
+      "sha256": "d33dab25bf09f9cf364b8ea0fdc70e3e6c5f4a9f11ecfe06d2cfa053e3357e3e"
+    },
+    {
+      "file": "/private/tmp/oddsphere-cbb-data/market-reader-movement-cases.json",
+      "sha256": "39a35b28be5d00c58ab112f8cc7e486b718704040dba08647ce10dc894766de4"
+    },
+    {
+      "file": "/private/tmp/oddsphere-cbb-data/owls-cbb-movement-receipts.json",
+      "sha256": "4f0276d0ade237034f6c7c42b4d9edb60a5e06793bb10aee5ac74988e3e61a41"
+    }
+  ],
+  "hypotheticalUnitsWarning": "One-unit-risked retrospective replay, not actual locked grades/stakes or a promised return"
+}

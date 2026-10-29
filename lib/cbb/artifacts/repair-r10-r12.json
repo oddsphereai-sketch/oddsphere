@@ -1,0 +1,522 @@
+{
+  "status": "private_audit_only_not_promoted",
+  "defaultPreviewUnchanged": true,
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "boardCountChange": 0,
+  "startingBase": "80a0154c73cc4729f5f2603bc204ee4e6c03462f",
+  "diagnosticStatus": "2025 previously opened. These are retrospective diagnostics, not untouched proof or guaranteed future accuracy.",
+  "selection2024": {
+    "r2": {
+      "games": 5710,
+      "wins": 4113,
+      "losses": 1597,
+      "accuracy": 0.7203152364273205,
+      "marginMae": 9.242039303778343,
+      "totalMae": 12.90613655873017,
+      "teamScoreMae": 8.008022001484179,
+      "brier": 0.18140642155619266,
+      "logLoss": 0.534420518879391,
+      "margin90Coverage": 0.9050788091068301,
+      "total90Coverage": 0.9148861646234676
+    },
+    "r10Projection": {
+      "games": 5710,
+      "wins": 4111,
+      "losses": 1599,
+      "accuracy": 0.7199649737302978,
+      "marginMae": 9.246010177422441,
+      "totalMae": 12.90430929448017,
+      "teamScoreMae": 8.008357030238365,
+      "brier": 0.1815018665905673,
+      "logLoss": 0.5346945505054684,
+      "margin90Coverage": 0.9049036777583187,
+      "total90Coverage": 0.9145359019264448
+    },
+    "r10Refit": {
+      "games": 5710,
+      "wins": 4105,
+      "losses": 1605,
+      "accuracy": 0.7189141856392294,
+      "marginMae": 9.24541225536508,
+      "totalMae": 12.90446690082842,
+      "teamScoreMae": 8.008444657450296,
+      "brier": 0.1814752206057876,
+      "logLoss": 0.5346014331419637,
+      "margin90Coverage": 0.9054290718038529,
+      "total90Coverage": 0.9148861646234676
+    },
+    "selectedMeanVariant": "projection",
+    "noise": [
+      {
+        "kind": "constant",
+        "metrics": {
+          "games": 5710,
+          "wins": 4111,
+          "losses": 1599,
+          "accuracy": 0.7199649737302978,
+          "marginMae": 9.246010177422441,
+          "totalMae": 12.90430929448017,
+          "teamScoreMae": 8.008357030238365,
+          "brier": 0.18141463516046188,
+          "logLoss": 0.5342116923873985,
+          "margin90Coverage": 0.8950963222416812,
+          "total90Coverage": 0.9087565674255692
+        },
+        "gaussianScore": 6.275685173547134
+      },
+      {
+        "kind": "conditional",
+        "metrics": {
+          "games": 5710,
+          "wins": 4111,
+          "losses": 1599,
+          "accuracy": 0.7199649737302978,
+          "marginMae": 9.246010177422441,
+          "totalMae": 12.90430929448017,
+          "teamScoreMae": 8.008357030238365,
+          "brier": 0.18121153174702997,
+          "logLoss": 0.534664341319569,
+          "margin90Coverage": 0.9071803852889667,
+          "total90Coverage": 0.9126094570928196
+        },
+        "gaussianScore": 6.270103075366882
+      }
+    ],
+    "noiseKind": "constant",
+    "r12": [
+      {
+        "loss": "squared",
+        "eligible": true,
+        "metrics": {
+          "games": 5710,
+          "wins": 4112,
+          "losses": 1598,
+          "accuracy": 0.7201401050788091,
+          "marginMae": 9.143327328825364,
+          "totalMae": 12.887832903233907,
+          "teamScoreMae": 7.961514570083623,
+          "brier": 0.17990852098108712,
+          "logLoss": 0.5307583476934467,
+          "margin90Coverage": 0.9071803852889667,
+          "total90Coverage": 0.9145359019264448
+        }
+      },
+      {
+        "loss": "huber",
+        "eligible": true,
+        "metrics": {
+          "games": 5710,
+          "wins": 4125,
+          "losses": 1585,
+          "accuracy": 0.7224168126094571,
+          "marginMae": 9.147284434442858,
+          "totalMae": 12.890656505405131,
+          "teamScoreMae": 7.9671220457147935,
+          "brier": 0.17985026517582178,
+          "logLoss": 0.5306249132704426,
+          "margin90Coverage": 0.9078809106830122,
+          "total90Coverage": 0.9143607705779334
+        }
+      }
+    ],
+    "selectedR12Loss": "squared"
+  },
+  "diagnostic2025": {
+    "r2": {
+      "games": 5721,
+      "wins": 4112,
+      "losses": 1609,
+      "accuracy": 0.7187554623317601,
+      "marginMae": 9.278874638665073,
+      "totalMae": 13.637830726433894,
+      "teamScoreMae": 8.299451660646458,
+      "brier": 0.18001607871723296,
+      "logLoss": 0.5301079147091189,
+      "margin90Coverage": 0.903513371788149,
+      "total90Coverage": 0.9010662471595875
+    },
+    "r10": {
+      "games": 5721,
+      "wins": 4102,
+      "losses": 1619,
+      "accuracy": 0.717007516168502,
+      "marginMae": 9.276174352795008,
+      "totalMae": 13.639476236934454,
+      "teamScoreMae": 8.299218317623032,
+      "brier": 0.18001695129198778,
+      "logLoss": 0.5301224089824096,
+      "margin90Coverage": 0.9040377556371264,
+      "total90Coverage": 0.9008914525432616
+    },
+    "r11": {
+      "games": 5721,
+      "wins": 4102,
+      "losses": 1619,
+      "accuracy": 0.717007516168502,
+      "marginMae": 9.276174352795008,
+      "totalMae": 13.639476236934454,
+      "teamScoreMae": 8.299218317623032,
+      "brier": 0.18002628859293227,
+      "logLoss": 0.530072254298612,
+      "margin90Coverage": 0.8991435063800035,
+      "total90Coverage": 0.8928509001922741
+    },
+    "r12": {
+      "games": 5721,
+      "wins": 4126,
+      "losses": 1595,
+      "accuracy": 0.7212025869603216,
+      "marginMae": 9.222866687281755,
+      "totalMae": 13.591417573577555,
+      "teamScoreMae": 8.257681598222005,
+      "brier": 0.1786570017574461,
+      "logLoss": 0.5269407134639937,
+      "margin90Coverage": 0.9056109071840587,
+      "total90Coverage": 0.9019402202412166
+    },
+    "r10Paired": {
+      "corrections": 19,
+      "harms": 29,
+      "net": -10
+    },
+    "r12Paired": {
+      "corrections": 183,
+      "harms": 169,
+      "net": 14
+    },
+    "r12DateUncertainty": {
+      "winnerDelta95": [
+        -0.0041592394533571005,
+        0.00887797506611258
+      ],
+      "leaveOneDateOutNetRange": [
+        10,
+        19
+      ]
+    }
+  },
+  "invariants": {
+    "r10": {
+      "neutralGames": 689,
+      "maxFeatureReflectionError": 1.4432899320127035e-15,
+      "maxMarginSwapError": 1.0658141036401503e-14,
+      "maxTotalSwapError": 2.842170943040401e-14,
+      "maxProbabilitySwapError": 6.661338147750939e-16,
+      "maxScoreSwapError": 1.4210854715202004e-14,
+      "nonNeutralNumericalChanges": 0
+    },
+    "r12": {
+      "games": 689,
+      "maxMarginSwapError": 7.549516567451064e-15,
+      "maxTotalSwapError": 2.842170943040401e-14,
+      "maxProbabilitySwapError": 5.551115123125783e-16,
+      "maxScoreSwapError": 2.842170943040401e-14
+    }
+  },
+  "rollingResidualReceipts": [
+    {
+      "month": "2023-12",
+      "cutoff": "2023-12-01T00:00:00.000Z",
+      "trainingGames": 1100,
+      "residualGames": 1008,
+      "latestLabelAvailableAt": "2023-11-30T10:00:00.000Z"
+    },
+    {
+      "month": "2024-01",
+      "cutoff": "2024-01-01T00:00:00.000Z",
+      "trainingGames": 2091,
+      "residualGames": 1334,
+      "latestLabelAvailableAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "month": "2024-02",
+      "cutoff": "2024-02-01T00:00:00.000Z",
+      "trainingGames": 3440,
+      "residualGames": 1380,
+      "latestLabelAvailableAt": "2024-01-31T10:00:00.000Z"
+    },
+    {
+      "month": "2024-03",
+      "cutoff": "2024-03-01T00:00:00.000Z",
+      "trainingGames": 4821,
+      "residualGames": 843,
+      "latestLabelAvailableAt": "2024-02-29T10:00:00.000Z"
+    },
+    {
+      "month": "2024-04",
+      "cutoff": "2024-04-01T00:00:00.000Z",
+      "trainingGames": 5665,
+      "residualGames": 6,
+      "latestLabelAvailableAt": "2024-03-31T06:49:00.000Z"
+    },
+    {
+      "month": "2024-11",
+      "cutoff": "2024-11-01T00:00:00.000Z",
+      "trainingGames": 5673,
+      "residualGames": 1198,
+      "latestLabelAvailableAt": "2024-04-09T07:20:00.000Z"
+    },
+    {
+      "month": "2024-12",
+      "cutoff": "2024-12-01T00:00:00.000Z",
+      "trainingGames": 6839,
+      "residualGames": 935,
+      "latestLabelAvailableAt": "2024-12-01T00:00:00.000Z"
+    },
+    {
+      "month": "2025-01",
+      "cutoff": "2025-01-01T00:00:00.000Z",
+      "trainingGames": 7782,
+      "residualGames": 1427,
+      "latestLabelAvailableAt": "2024-12-31T23:00:00.000Z"
+    },
+    {
+      "month": "2025-02",
+      "cutoff": "2025-02-01T00:00:00.000Z",
+      "trainingGames": 9231,
+      "residualGames": 1354,
+      "latestLabelAvailableAt": "2025-01-31T10:59:00.000Z"
+    },
+    {
+      "month": "2025-03",
+      "cutoff": "2025-03-01T00:00:00.000Z",
+      "trainingGames": 10583,
+      "residualGames": 777,
+      "latestLabelAvailableAt": "2025-02-28T10:59:00.000Z"
+    },
+    {
+      "month": "2025-04",
+      "cutoff": "2025-04-01T00:00:00.000Z",
+      "trainingGames": 11362,
+      "residualGames": 19,
+      "latestLabelAvailableAt": "2025-03-31T03:05:00.000Z"
+    }
+  ],
+  "threeMarket353": {
+    "moneyline": {
+      "r2": {
+        "wins": 241,
+        "losses": 112,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "conditionalWlBrier": 0.19452046432401712,
+        "conditionalWlLogLoss": 0.5681213181056686
+      },
+      "r10": {
+        "wins": 242,
+        "losses": 111,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 1,
+        "harms": 0,
+        "net": 1,
+        "conditionalWlBrier": 0.1944680489869751,
+        "conditionalWlLogLoss": 0.5682137790052696
+      },
+      "r11": {
+        "wins": 242,
+        "losses": 111,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 1,
+        "harms": 0,
+        "net": 1,
+        "conditionalWlBrier": 0.19435513021220288,
+        "conditionalWlLogLoss": 0.5676932520204279
+      },
+      "r12": {
+        "wins": 237,
+        "losses": 116,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 9,
+        "harms": 13,
+        "net": -4,
+        "conditionalWlBrier": 0.1948382489133795,
+        "conditionalWlLogLoss": 0.5684025648531011,
+        "dateUncertainty": {
+          "dates": 7,
+          "netWinDeltaPerGame95": [
+            -0.037783375314861464,
+            0.011278195488721804
+          ],
+          "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+        }
+      }
+    },
+    "spread": {
+      "r2": {
+        "wins": 198,
+        "losses": 155,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "conditionalWlBrier": 0.2430798891868128,
+        "conditionalWlLogLoss": 0.678450477179018
+      },
+      "r10": {
+        "wins": 199,
+        "losses": 154,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 2,
+        "harms": 1,
+        "net": 1,
+        "conditionalWlBrier": 0.24303954351363893,
+        "conditionalWlLogLoss": 0.6783883968540559
+      },
+      "r11": {
+        "wins": 199,
+        "losses": 154,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 2,
+        "harms": 1,
+        "net": 1,
+        "conditionalWlBrier": 0.24299377155450003,
+        "conditionalWlLogLoss": 0.6782683895906371
+      },
+      "r12": {
+        "wins": 195,
+        "losses": 158,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 45,
+        "harms": 48,
+        "net": -3,
+        "conditionalWlBrier": 0.24506094516870316,
+        "conditionalWlLogLoss": 0.6823821810673384,
+        "dateUncertainty": {
+          "dates": 7,
+          "netWinDeltaPerGame95": [
+            -0.02786377708978328,
+            0.013888888888888888
+          ],
+          "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+        }
+      }
+    },
+    "total": {
+      "r2": {
+        "wins": 175,
+        "losses": 178,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "conditionalWlBrier": 0.2500561888187378,
+        "conditionalWlLogLoss": 0.6931859746199815
+      },
+      "r10": {
+        "wins": 175,
+        "losses": 178,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 1,
+        "harms": 1,
+        "net": 0,
+        "conditionalWlBrier": 0.2501843665967046,
+        "conditionalWlLogLoss": 0.6934507842534151
+      },
+      "r11": {
+        "wins": 175,
+        "losses": 178,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 1,
+        "harms": 1,
+        "net": 0,
+        "conditionalWlBrier": 0.25030321300841846,
+        "conditionalWlLogLoss": 0.6936944978617452
+      },
+      "r12": {
+        "wins": 186,
+        "losses": 167,
+        "pushes": 0,
+        "passes": 0,
+        "corrections": 52,
+        "harms": 41,
+        "net": 11,
+        "conditionalWlBrier": 0.24716187020006058,
+        "conditionalWlLogLoss": 0.6874112853054185,
+        "dateUncertainty": {
+          "dates": 7,
+          "netWinDeltaPerGame95": [
+            -0.02518891687657431,
+            0.08333333333333333
+          ],
+          "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+        }
+      }
+    }
+  },
+  "openingTotal635": {
+    "r2": {
+      "wins": 341,
+      "losses": 294,
+      "pushes": 0,
+      "passes": 0,
+      "corrections": 0,
+      "harms": 0,
+      "net": 0,
+      "conditionalWlBrier": 0.24781454182758503,
+      "conditionalWlLogLoss": 0.6886448174925556
+    },
+    "r10": {
+      "wins": 337,
+      "losses": 298,
+      "pushes": 0,
+      "passes": 0,
+      "corrections": 1,
+      "harms": 5,
+      "net": -4,
+      "conditionalWlBrier": 0.24784752491395276,
+      "conditionalWlLogLoss": 0.6887068817364865
+    },
+    "r11": {
+      "wins": 337,
+      "losses": 298,
+      "pushes": 0,
+      "passes": 0,
+      "corrections": 1,
+      "harms": 5,
+      "net": -4,
+      "conditionalWlBrier": 0.24792481604990424,
+      "conditionalWlLogLoss": 0.6888625978127404
+    },
+    "r12": {
+      "wins": 333,
+      "losses": 302,
+      "pushes": 0,
+      "passes": 0,
+      "corrections": 79,
+      "harms": 87,
+      "net": -8,
+      "conditionalWlBrier": 0.2494714047726297,
+      "conditionalWlLogLoss": 0.6920707515793828,
+      "dateUncertainty": {
+        "dates": 8,
+        "netWinDeltaPerGame95": [
+          -0.060240963855421686,
+          0.025735294117647058
+        ],
+        "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+      }
+    }
+  },
+  "limitations": [
+    "No production activation or grades/stakes changes",
+    "Opening prices are not sharp price-movement evidence",
+    "353 fixtures have corroborated orientation, not independent selection-level side proof",
+    "Unverified historical injuries/rosters remain unverified",
+    "Full overtime-mixture modeling remains separate",
+    "2025 quotes cannot retune a 2024-selected head"
+  ]
+}

@@ -1,0 +1,1444 @@
+{
+  "audit": "cbb_loss_census_2026_10_28_r1",
+  "status": "audit_complete_neutral_orientation_defect_found_no_model_repair",
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "predictionChanges": 0,
+  "baselineRelease": "cbb_candidate_2026_10_28_r2_score_precision",
+  "candidateRelease": "cbb_candidate_2026_10_28_r8_evidence_maturity",
+  "all": {
+    "baseline": {
+      "games": 5721,
+      "wins": 4112,
+      "losses": 1609,
+      "accuracy": 0.7187554623317602,
+      "expectedLosses": 1591.103201164537,
+      "excessLosses": 17.89679883546296,
+      "averageConfidence": 0.7218837264176655,
+      "marginMae": 9.278874638665073,
+      "totalMae": 13.637830726433894,
+      "marginBiasPredictionMinusActual": 0.1239788778397566,
+      "totalBiasPredictionMinusActual": -1.6307615757891463,
+      "brier": 0.18001607871723296,
+      "observedMarginResidualSd": 11.79417013004845,
+      "observedTotalResidualSd": 17.16688649966004,
+      "totalActualMinusForecastQuantiles5_50_95": [
+        -24.84478631856166,
+        0.8050425652091633,
+        31.27235093588635
+      ],
+      "forecastMarginSd": 11.88280850165746,
+      "forecastTotalSd": 16.993742849109985,
+      "margin90Coverage": 0.903513371788149,
+      "total90Coverage": 0.9010662471595875,
+      "incompleteInputs": 66
+    },
+    "candidate": {
+      "games": 5721,
+      "wins": 4146,
+      "losses": 1575,
+      "accuracy": 0.724698479286838,
+      "expectedLosses": 1563.8690870312962,
+      "excessLosses": 11.130912968703797,
+      "averageConfidence": 0.7266441029485575,
+      "marginMae": 9.226732088557384,
+      "totalMae": 13.570880095623266,
+      "marginBiasPredictionMinusActual": 0.4890163504077111,
+      "totalBiasPredictionMinusActual": -0.732656874124448,
+      "brier": 0.17860096124656988,
+      "observedMarginResidualSd": 11.679126515984862,
+      "observedTotalResidualSd": 17.117359130450378,
+      "totalActualMinusForecastQuantiles5_50_95": [
+        -25.63171434871711,
+        -0.14011137426126652,
+        30.250380694176783
+      ],
+      "forecastMarginSd": 11.88280850165746,
+      "forecastTotalSd": 16.993742849109985,
+      "margin90Coverage": 0.9059604964167104,
+      "total90Coverage": 0.9036881664044747,
+      "incompleteInputs": 66
+    },
+    "corrections": 177,
+    "harms": 143,
+    "netWinners": 34
+  },
+  "ledgerCounts": {
+    "both_correct": 3969,
+    "both_wrong": 1432,
+    "correction": 177,
+    "harm": 143
+  },
+  "pregameGroups": {
+    "confidence": {
+      "70-80%": {
+        "n": 1121,
+        "baselineWins": 830,
+        "baselineLosses": 291,
+        "candidateWins": 830,
+        "candidateLosses": 291,
+        "baselineExpectedLosses": 282.75050050597713,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "baselineMarginSd": 11.657427550472274,
+        "baselineTotalSd": 17.190418149259738
+      },
+      "50-60%": {
+        "n": 1427,
+        "baselineWins": 780,
+        "baselineLosses": 647,
+        "candidateWins": 815,
+        "candidateLosses": 612,
+        "baselineExpectedLosses": 643.0504628562477,
+        "corrections": 172,
+        "harms": 137,
+        "net": 35,
+        "baselineMarginSd": 11.565935180283157,
+        "baselineTotalSd": 17.638506528965234
+      },
+      "60-70%": {
+        "n": 1376,
+        "baselineWins": 866,
+        "baselineLosses": 510,
+        "candidateWins": 865,
+        "candidateLosses": 511,
+        "baselineExpectedLosses": 482.4886825829148,
+        "corrections": 5,
+        "harms": 6,
+        "net": -1,
+        "baselineMarginSd": 11.675459883661418,
+        "baselineTotalSd": 16.8837886423704
+      },
+      "80-90%": {
+        "n": 921,
+        "baselineWins": 796,
+        "baselineLosses": 125,
+        "candidateWins": 796,
+        "candidateLosses": 125,
+        "baselineExpectedLosses": 141.9101594755805,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "baselineMarginSd": 11.303145944552224,
+        "baselineTotalSd": 16.76012681606214
+      },
+      "90-100%": {
+        "n": 876,
+        "baselineWins": 840,
+        "baselineLosses": 36,
+        "candidateWins": 840,
+        "candidateLosses": 36,
+        "baselineExpectedLosses": 40.903395743823374,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "baselineMarginSd": 12.928440506378251,
+        "baselineTotalSd": 17.07046197655717
+      }
+    },
+    "projectedMargin": {
+      "6to12": {
+        "n": 1660,
+        "baselineWins": 1284,
+        "baselineLosses": 376,
+        "candidateWins": 1284,
+        "candidateLosses": 376,
+        "baselineExpectedLosses": 378.347398366679,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "baselineMarginSd": 11.549836812361074,
+        "baselineTotalSd": 17.15486685993649
+      },
+      "under3": {
+        "n": 1468,
+        "baselineWins": 803,
+        "baselineLosses": 665,
+        "candidateWins": 838,
+        "candidateLosses": 630,
+        "baselineExpectedLosses": 659.3837475303596,
+        "corrections": 172,
+        "harms": 137,
+        "net": 35,
+        "baselineMarginSd": 11.560324927793532,
+        "baselineTotalSd": 17.605162390379167
+      },
+      "3to6": {
+        "n": 1324,
+        "baselineWins": 835,
+        "baselineLosses": 489,
+        "candidateWins": 834,
+        "candidateLosses": 490,
+        "baselineExpectedLosses": 462.8463845841425,
+        "corrections": 5,
+        "harms": 6,
+        "net": -1,
+        "baselineMarginSd": 11.695575710765125,
+        "baselineTotalSd": 16.919032997927605
+      },
+      "12plus": {
+        "n": 1269,
+        "baselineWins": 1190,
+        "baselineLosses": 79,
+        "candidateWins": 1190,
+        "candidateLosses": 79,
+        "baselineExpectedLosses": 90.52567068336363,
+        "corrections": 0,
+        "harms": 0,
+        "net": 0,
+        "baselineMarginSd": 12.440646889995076,
+        "baselineTotalSd": 16.9102754475257
+      }
+    },
+    "minimumTeamGames": {
+      "0to4": {
+        "n": 1017,
+        "baselineWins": 802,
+        "baselineLosses": 215,
+        "candidateWins": 806,
+        "candidateLosses": 211,
+        "baselineExpectedLosses": 206.81615974960832,
+        "corrections": 23,
+        "harms": 19,
+        "net": 4,
+        "baselineMarginSd": 13.276457383000288,
+        "baselineTotalSd": 18.000344038952633
+      },
+      "5to14": {
+        "n": 1816,
+        "baselineWins": 1329,
+        "baselineLosses": 487,
+        "candidateWins": 1347,
+        "candidateLosses": 469,
+        "baselineExpectedLosses": 469.1883971077979,
+        "corrections": 58,
+        "harms": 40,
+        "net": 18,
+        "baselineMarginSd": 11.905561357512148,
+        "baselineTotalSd": 17.40593455452158
+      },
+      "15plus": {
+        "n": 2888,
+        "baselineWins": 1981,
+        "baselineLosses": 907,
+        "candidateWins": 1993,
+        "candidateLosses": 895,
+        "baselineExpectedLosses": 915.0986443071389,
+        "corrections": 96,
+        "harms": 84,
+        "net": 12,
+        "baselineMarginSd": 11.151124900200333,
+        "baselineTotalSd": 16.703789137781477
+      }
+    },
+    "venue": {
+      "neutral": {
+        "n": 689,
+        "baselineWins": 462,
+        "baselineLosses": 227,
+        "candidateWins": 465,
+        "candidateLosses": 224,
+        "baselineExpectedLosses": 216.25378312389202,
+        "corrections": 21,
+        "harms": 18,
+        "net": 3,
+        "baselineMarginSd": 11.685792876812682,
+        "baselineTotalSd": 16.546244515236225
+      },
+      "home": {
+        "n": 4967,
+        "baselineWins": 3608,
+        "baselineLosses": 1359,
+        "candidateWins": 3636,
+        "candidateLosses": 1331,
+        "baselineExpectedLosses": 1353.3116184034905,
+        "corrections": 148,
+        "harms": 120,
+        "net": 28,
+        "baselineMarginSd": 11.791700310191043,
+        "baselineTotalSd": 17.273655800712483
+      },
+      "unverified": {
+        "n": 65,
+        "baselineWins": 42,
+        "baselineLosses": 23,
+        "candidateWins": 45,
+        "candidateLosses": 20,
+        "baselineExpectedLosses": 21.537799637157157,
+        "corrections": 8,
+        "harms": 5,
+        "net": 3,
+        "baselineMarginSd": 12.481496062804537,
+        "baselineTotalSd": 14.75400761796497
+      }
+    },
+    "selectedVenueSide": {
+      "listed_home": {
+        "n": 4158,
+        "baselineWins": 3096,
+        "baselineLosses": 1062,
+        "candidateWins": 3110,
+        "candidateLosses": 1048,
+        "baselineExpectedLosses": 1042.755890249258,
+        "corrections": 74,
+        "harms": 60,
+        "net": 14,
+        "baselineMarginSd": 11.874566698367296,
+        "baselineTotalSd": 17.13082707690532
+      },
+      "listed_away": {
+        "n": 1563,
+        "baselineWins": 1016,
+        "baselineLosses": 547,
+        "candidateWins": 1036,
+        "candidateLosses": 527,
+        "baselineExpectedLosses": 548.3473109152858,
+        "corrections": 103,
+        "harms": 83,
+        "net": 20,
+        "baselineMarginSd": 11.576511239741942,
+        "baselineTotalSd": 17.25644977543027
+      }
+    },
+    "projectedPace": {
+      "72plus": {
+        "n": 1248,
+        "baselineWins": 924,
+        "baselineLosses": 324,
+        "candidateWins": 931,
+        "candidateLosses": 317,
+        "baselineExpectedLosses": 309.9674113518351,
+        "corrections": 38,
+        "harms": 31,
+        "net": 7,
+        "baselineMarginSd": 12.574356364345114,
+        "baselineTotalSd": 17.699199570072537
+      },
+      "under65": {
+        "n": 737,
+        "baselineWins": 502,
+        "baselineLosses": 235,
+        "candidateWins": 523,
+        "candidateLosses": 214,
+        "baselineExpectedLosses": 226.51876886448755,
+        "corrections": 35,
+        "harms": 14,
+        "net": 21,
+        "baselineMarginSd": 11.112111815889866,
+        "baselineTotalSd": 16.455403062000382
+      },
+      "65to72": {
+        "n": 3736,
+        "baselineWins": 2686,
+        "baselineLosses": 1050,
+        "candidateWins": 2692,
+        "candidateLosses": 1044,
+        "baselineExpectedLosses": 1054.6170209482214,
+        "corrections": 104,
+        "harms": 98,
+        "net": 6,
+        "baselineMarginSd": 11.654673353413758,
+        "baselineTotalSd": 17.122320536759442
+      }
+    },
+    "projectedTotal": {
+      "150plus": {
+        "n": 2195,
+        "baselineWins": 1607,
+        "baselineLosses": 588,
+        "candidateWins": 1611,
+        "candidateLosses": 584,
+        "baselineExpectedLosses": 575.5983589415532,
+        "corrections": 68,
+        "harms": 64,
+        "net": 4,
+        "baselineMarginSd": 12.303481224925745,
+        "baselineTotalSd": 17.45883389071993
+      },
+      "135to150": {
+        "n": 3135,
+        "baselineWins": 2244,
+        "baselineLosses": 891,
+        "candidateWins": 2257,
+        "candidateLosses": 878,
+        "baselineExpectedLosses": 890.0599431475317,
+        "corrections": 86,
+        "harms": 73,
+        "net": 13,
+        "baselineMarginSd": 11.521275391123945,
+        "baselineTotalSd": 17.061559683082848
+      },
+      "under135": {
+        "n": 391,
+        "baselineWins": 261,
+        "baselineLosses": 130,
+        "candidateWins": 278,
+        "candidateLosses": 113,
+        "baselineExpectedLosses": 125.44489907545847,
+        "corrections": 23,
+        "harms": 6,
+        "net": 17,
+        "baselineMarginSd": 11.004087203635349,
+        "baselineTotalSd": 16.31819669905847
+      }
+    },
+    "rest": {
+      "within2days": {
+        "n": 4306,
+        "baselineWins": 3049,
+        "baselineLosses": 1257,
+        "candidateWins": 3096,
+        "candidateLosses": 1210,
+        "baselineExpectedLosses": 1234.2571144838405,
+        "corrections": 156,
+        "harms": 109,
+        "net": 47,
+        "baselineMarginSd": 11.744848474657093,
+        "baselineTotalSd": 17.097208771816018
+      },
+      "home_2plus_days": {
+        "n": 692,
+        "baselineWins": 500,
+        "baselineLosses": 192,
+        "candidateWins": 498,
+        "candidateLosses": 194,
+        "baselineExpectedLosses": 186.72033062870292,
+        "corrections": 12,
+        "harms": 14,
+        "net": -2,
+        "baselineMarginSd": 11.800771372942142,
+        "baselineTotalSd": 17.914287727028206
+      },
+      "away_2plus_days": {
+        "n": 723,
+        "baselineWins": 563,
+        "baselineLosses": 160,
+        "candidateWins": 552,
+        "candidateLosses": 171,
+        "baselineExpectedLosses": 170.1257560519978,
+        "corrections": 9,
+        "harms": 20,
+        "net": -11,
+        "baselineMarginSd": 12.077456080433405,
+        "baselineTotalSd": 16.818999581978947
+      }
+    },
+    "month": {
+      "2025-11": {
+        "n": 1236,
+        "baselineWins": 967,
+        "baselineLosses": 269,
+        "candidateWins": 972,
+        "candidateLosses": 264,
+        "baselineExpectedLosses": 262.674018031168,
+        "corrections": 30,
+        "harms": 25,
+        "net": 5,
+        "baselineMarginSd": 13.225932544606636,
+        "baselineTotalSd": 17.828385638272106
+      },
+      "2025-12": {
+        "n": 955,
+        "baselineWins": 729,
+        "baselineLosses": 226,
+        "candidateWins": 737,
+        "candidateLosses": 218,
+        "baselineExpectedLosses": 218.37395524314636,
+        "corrections": 31,
+        "harms": 23,
+        "net": 8,
+        "baselineMarginSd": 12.137885096538163,
+        "baselineTotalSd": 16.884193312981605
+      },
+      "2026-01": {
+        "n": 1518,
+        "baselineWins": 1049,
+        "baselineLosses": 469,
+        "candidateWins": 1063,
+        "candidateLosses": 455,
+        "baselineExpectedLosses": 468.53295502601367,
+        "corrections": 52,
+        "harms": 38,
+        "net": 14,
+        "baselineMarginSd": 11.244619430645018,
+        "baselineTotalSd": 17.463126619379654
+      },
+      "2026-02": {
+        "n": 1366,
+        "baselineWins": 933,
+        "baselineLosses": 433,
+        "candidateWins": 936,
+        "candidateLosses": 430,
+        "baselineExpectedLosses": 437.5532646647294,
+        "corrections": 46,
+        "harms": 43,
+        "net": 3,
+        "baselineMarginSd": 10.969782027659173,
+        "baselineTotalSd": 16.80219392598381
+      },
+      "2026-03": {
+        "n": 633,
+        "baselineWins": 427,
+        "baselineLosses": 206,
+        "candidateWins": 430,
+        "candidateLosses": 203,
+        "baselineExpectedLosses": 199.02324122323623,
+        "corrections": 17,
+        "harms": 14,
+        "net": 3,
+        "baselineMarginSd": 11.227634326241006,
+        "baselineTotalSd": 16.243528480421617
+      },
+      "2026-04": {
+        "n": 13,
+        "baselineWins": 7,
+        "baselineLosses": 6,
+        "candidateWins": 8,
+        "candidateLosses": 5,
+        "baselineExpectedLosses": 4.945766976249592,
+        "corrections": 1,
+        "harms": 0,
+        "net": 1,
+        "baselineMarginSd": 11.521281201324502,
+        "baselineTotalSd": 17.89852970641458
+      }
+    }
+  },
+  "uncertainty": {
+    "method": "2000 fixed-seed calendar-date block resamples; not a new holdout or full team-dependence correction",
+    "dates": 148,
+    "winnerDelta95": [
+      -0.0001669727834362999,
+      0.012180267965895249
+    ],
+    "baselineExcessLossRate95": [
+      -0.0069172517994220695,
+      0.013346135997468877
+    ],
+    "candidateExcessLossRate95": [
+      -0.008702804326144665,
+      0.0123871731852859
+    ],
+    "leaveOneDateOutNetRange": [
+      28,
+      38
+    ]
+  },
+  "postgameOnlyGroups": {
+    "overtime": {
+      "n": 324,
+      "baselineWins": 183,
+      "baselineLosses": 141,
+      "candidateWins": 172,
+      "candidateLosses": 152,
+      "baselineExpectedLosses": 103.90707564545093,
+      "corrections": 7,
+      "harms": 18,
+      "net": -11,
+      "baselineMarginSd": 7.569464226851345,
+      "baselineTotalSd": 19.349954009622266
+    },
+    "regulation": {
+      "n": 5397,
+      "baselineWins": 3929,
+      "baselineLosses": 1468,
+      "candidateWins": 3974,
+      "candidateLosses": 1423,
+      "baselineExpectedLosses": 1487.1961255190863,
+      "corrections": 170,
+      "harms": 125,
+      "net": 45,
+      "baselineMarginSd": 11.99082615066992,
+      "baselineTotalSd": 16.324063902157626
+    },
+    "finalWithin3": {
+      "n": 914,
+      "baselineWins": 482,
+      "baselineLosses": 432,
+      "candidateWins": 486,
+      "candidateLosses": 428,
+      "baselineExpectedLosses": 294.1100894250843,
+      "corrections": 33,
+      "harms": 29,
+      "net": 4,
+      "baselineMarginSd": 6.794551459437923,
+      "baselineTotalSd": 18.963181031379516
+    },
+    "finalBeyond3": {
+      "n": 4807,
+      "baselineWins": 3630,
+      "baselineLosses": 1177,
+      "candidateWins": 3660,
+      "candidateLosses": 1147,
+      "baselineExpectedLosses": 1296.9931117394567,
+      "corrections": 144,
+      "harms": 114,
+      "net": 30,
+      "baselineMarginSd": 12.448281759989447,
+      "baselineTotalSd": 16.803604551269867
+    }
+  },
+  "postgameGroupingWarning": "Outcome-conditioned groups are descriptive only; selected-side probabilities are not conditional on the game later being close/overtime, so their excess losses are NOT calibration tests.",
+  "componentAccounting": {
+    "baseline": {
+      "games": 5721,
+      "actualTotalMae": 13.637830726433894,
+      "oracleActualTempoMae": 12.431568736444163,
+      "oracleActualTempoAndOtMae": 11.67092674439949,
+      "meanSignedComponents": {
+        "pace": -1.8674746197711365,
+        "remaining": 2.1096677634679986,
+        "overtime": 1.3885684320922915
+      },
+      "absoluteComponentsAreNotAdditive": true,
+      "paceDominantGames": 1911,
+      "remainingDominantGames": 3546,
+      "overtimeDominantGames": 264,
+      "warning": "Arithmetic decomposition/counterfactual, not causal attribution or an achievable performance floor. Actual tempo/OT never enter a prediction. Positive pace rescaling cannot flip an outright winner."
+    },
+    "candidate": {
+      "games": 5721,
+      "actualTotalMae": 13.570880095623266,
+      "oracleActualTempoMae": 12.28597553942986,
+      "oracleActualTempoAndOtMae": 11.556164356137714,
+      "meanSignedComponents": {
+        "pace": -1.8800382746184245,
+        "remaining": 1.224126716650576,
+        "overtime": 1.3885684320922915
+      },
+      "absoluteComponentsAreNotAdditive": true,
+      "paceDominantGames": 1918,
+      "remainingDominantGames": 3541,
+      "overtimeDominantGames": 262,
+      "warning": "Arithmetic decomposition/counterfactual, not causal attribution or an achievable performance floor. Actual tempo/OT never enter a prediction. Positive pace rescaling cannot flip an outright winner."
+    }
+  },
+  "teamSensitivity": {
+    "leaveOneTeamOutNetRange": [
+      30,
+      38
+    ],
+    "note": "Each game belongs to both participants: team counts/net gains cannot be added. Leave-one-team-out is sensitivity, not independent validation."
+  },
+  "earlierSelectionSeason": {
+    "all": {
+      "games": 5710,
+      "wins": 4113,
+      "losses": 1597,
+      "accuracy": 0.7203152364273204,
+      "expectedLosses": 1654.784647528449,
+      "excessLosses": -57.78464752844911,
+      "averageConfidence": 0.7101953331824088,
+      "marginMae": 9.242039303778343,
+      "totalMae": 12.90613655873017,
+      "marginBiasPredictionMinusActual": -0.8174256722206548,
+      "totalBiasPredictionMinusActual": -0.08757934661043576,
+      "brier": 0.18140642155619266,
+      "observedMarginResidualSd": 11.793058704593307,
+      "observedTotalResidualSd": 16.51680033509749,
+      "totalActualMinusForecastQuantiles5_50_95": [
+        -25.79604750866787,
+        -0.3892103881169078,
+        27.346314092907022
+      ],
+      "forecastMarginSd": 11.869221248882592,
+      "forecastTotalSd": 17.086790763740197,
+      "margin90Coverage": 0.9050788091068301,
+      "total90Coverage": 0.9148861646234676,
+      "incompleteInputs": 66
+    },
+    "pace": {
+      "72plus": {
+        "games": 1016,
+        "wins": 758,
+        "losses": 258,
+        "accuracy": 0.7460629921259843,
+        "expectedLosses": 263.64240588678405,
+        "excessLosses": -5.642405886784047,
+        "averageConfidence": 0.7405094430248189,
+        "marginMae": 9.752963320654152,
+        "totalMae": 14.123001113810115,
+        "marginBiasPredictionMinusActual": -0.8082075804179132,
+        "totalBiasPredictionMinusActual": -0.23089859439205612,
+        "brier": 0.16719963967493076,
+        "observedMarginResidualSd": 12.495759291125667,
+        "observedTotalResidualSd": 17.795969114977517,
+        "totalActualMinusForecastQuantiles5_50_95": [
+          -27.890015646217705,
+          -0.04920269109612718,
+          28.618301843162527
+        ],
+        "forecastMarginSd": 11.869221248883559,
+        "forecastTotalSd": 17.08679076373996,
+        "margin90Coverage": 0.8858267716535433,
+        "total90Coverage": 0.8937007874015748,
+        "incompleteInputs": 7
+      },
+      "under65": {
+        "games": 856,
+        "wins": 603,
+        "losses": 253,
+        "accuracy": 0.7044392523364487,
+        "expectedLosses": 262.60504440225554,
+        "excessLosses": -9.605044402255544,
+        "averageConfidence": 0.693218406072132,
+        "marginMae": 8.46465300907466,
+        "totalMae": 12.000836539879357,
+        "marginBiasPredictionMinusActual": -0.5269517649716249,
+        "totalBiasPredictionMinusActual": -0.9194827617512803,
+        "brier": 0.18801414931144686,
+        "observedMarginResidualSd": 10.728628451439544,
+        "observedTotalResidualSd": 15.502556153609591,
+        "totalActualMinusForecastQuantiles5_50_95": [
+          -23.17618890436688,
+          0.07608275301998901,
+          27.504942682713306
+        ],
+        "forecastMarginSd": 11.869221248883465,
+        "forecastTotalSd": 17.0867907637399,
+        "margin90Coverage": 0.9310747663551402,
+        "total90Coverage": 0.9252336448598131,
+        "incompleteInputs": 4
+      },
+      "65to72": {
+        "games": 3838,
+        "wins": 2752,
+        "losses": 1086,
+        "accuracy": 0.7170401250651381,
+        "expectedLosses": 1128.537197239414,
+        "excessLosses": -42.5371972394139,
+        "averageConfidence": 0.7059569574675836,
+        "marginMae": 9.280169545341755,
+        "totalMae": 12.785918327405252,
+        "marginBiasPredictionMinusActual": -0.8846511140853632,
+        "totalBiasPredictionMinusActual": 0.13590207056170742,
+        "brier": 0.1836935178128018,
+        "observedMarginResidualSd": 11.827146201230784,
+        "observedTotalResidualSd": 16.37739152320957,
+        "totalActualMinusForecastQuantiles5_50_95": [
+          -26.137405411916944,
+          -0.6072127428777776,
+          26.869011960868306
+        ],
+        "forecastMarginSd": 11.869221248882761,
+        "forecastTotalSd": 17.08679076373838,
+        "margin90Coverage": 0.9043772798332465,
+        "total90Coverage": 0.918186555497655,
+        "incompleteInputs": 55
+      }
+    }
+  },
+  "quoted": {
+    "threeMarket353": {
+      "moneyline": {
+        "all": {
+          "n": 353,
+          "baselineWLP": [
+            241,
+            112,
+            0
+          ],
+          "candidateWLP": [
+            240,
+            113,
+            0
+          ],
+          "corrections": 10,
+          "harms": 11,
+          "net": -1
+        },
+        "byBaselineEdge": null,
+        "byDate": {
+          "2026-02-07": {
+            "n": 74,
+            "net": 2
+          },
+          "2026-02-14": {
+            "n": 77,
+            "net": 0
+          },
+          "2026-02-21": {
+            "n": 77,
+            "net": 1
+          },
+          "2026-02-28": {
+            "n": 85,
+            "net": -3
+          },
+          "2026-03-07": {
+            "n": 29,
+            "net": -1
+          },
+          "2026-03-14": {
+            "n": 7,
+            "net": 0
+          },
+          "2026-03-21": {
+            "n": 4,
+            "net": 0
+          }
+        },
+        "uncertainty": {
+          "dates": 7,
+          "netWinDeltaPerGame95": [
+            -0.02531645569620253,
+            0.016
+          ],
+          "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+        },
+        "leaveOneDateOutNetRange": [
+          -3,
+          2
+        ]
+      },
+      "spread": {
+        "all": {
+          "n": 353,
+          "baselineWLP": [
+            198,
+            155,
+            0
+          ],
+          "candidateWLP": [
+            186,
+            167,
+            0
+          ],
+          "corrections": 51,
+          "harms": 63,
+          "net": -12
+        },
+        "byBaselineEdge": {
+          "under1": {
+            "n": 147,
+            "baselineWLP": [
+              84,
+              63,
+              0
+            ],
+            "candidateWLP": [
+              74,
+              73,
+              0
+            ],
+            "corrections": 26,
+            "harms": 36,
+            "net": -10
+          },
+          "1to3": {
+            "n": 174,
+            "baselineWLP": [
+              90,
+              84,
+              0
+            ],
+            "candidateWLP": [
+              90,
+              84,
+              0
+            ],
+            "corrections": 25,
+            "harms": 25,
+            "net": 0
+          },
+          "3to6": {
+            "n": 29,
+            "baselineWLP": [
+              21,
+              8,
+              0
+            ],
+            "candidateWLP": [
+              19,
+              10,
+              0
+            ],
+            "corrections": 0,
+            "harms": 2,
+            "net": -2
+          },
+          "6plus": {
+            "n": 3,
+            "baselineWLP": [
+              3,
+              0,
+              0
+            ],
+            "candidateWLP": [
+              3,
+              0,
+              0
+            ],
+            "corrections": 0,
+            "harms": 0,
+            "net": 0
+          }
+        },
+        "byDate": {
+          "2026-02-07": {
+            "n": 74,
+            "net": -2
+          },
+          "2026-02-14": {
+            "n": 77,
+            "net": -2
+          },
+          "2026-02-21": {
+            "n": 77,
+            "net": -4
+          },
+          "2026-02-28": {
+            "n": 85,
+            "net": -2
+          },
+          "2026-03-07": {
+            "n": 29,
+            "net": -2
+          },
+          "2026-03-14": {
+            "n": 7,
+            "net": 0
+          },
+          "2026-03-21": {
+            "n": 4,
+            "net": 0
+          }
+        },
+        "uncertainty": {
+          "dates": 7,
+          "netWinDeltaPerGame95": [
+            -0.04819277108433735,
+            -0.02364066193853428
+          ],
+          "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+        },
+        "leaveOneDateOutNetRange": [
+          -12,
+          -8
+        ]
+      },
+      "total": {
+        "all": {
+          "n": 353,
+          "baselineWLP": [
+            175,
+            178,
+            0
+          ],
+          "candidateWLP": [
+            186,
+            167,
+            0
+          ],
+          "corrections": 53,
+          "harms": 42,
+          "net": 11
+        },
+        "byBaselineEdge": {
+          "3to6": {
+            "n": 81,
+            "baselineWLP": [
+              44,
+              37,
+              0
+            ],
+            "candidateWLP": [
+              46,
+              35,
+              0
+            ],
+            "corrections": 5,
+            "harms": 3,
+            "net": 2
+          },
+          "1to3": {
+            "n": 155,
+            "baselineWLP": [
+              78,
+              77,
+              0
+            ],
+            "candidateWLP": [
+              80,
+              75,
+              0
+            ],
+            "corrections": 20,
+            "harms": 18,
+            "net": 2
+          },
+          "under1": {
+            "n": 105,
+            "baselineWLP": [
+              45,
+              60,
+              0
+            ],
+            "candidateWLP": [
+              52,
+              53,
+              0
+            ],
+            "corrections": 28,
+            "harms": 21,
+            "net": 7
+          },
+          "6plus": {
+            "n": 12,
+            "baselineWLP": [
+              8,
+              4,
+              0
+            ],
+            "candidateWLP": [
+              8,
+              4,
+              0
+            ],
+            "corrections": 0,
+            "harms": 0,
+            "net": 0
+          }
+        },
+        "byDate": {
+          "2026-02-07": {
+            "n": 74,
+            "net": 2
+          },
+          "2026-02-14": {
+            "n": 77,
+            "net": 3
+          },
+          "2026-02-21": {
+            "n": 77,
+            "net": 5
+          },
+          "2026-02-28": {
+            "n": 85,
+            "net": -5
+          },
+          "2026-03-07": {
+            "n": 29,
+            "net": 3
+          },
+          "2026-03-14": {
+            "n": 7,
+            "net": 2
+          },
+          "2026-03-21": {
+            "n": 4,
+            "net": 1
+          }
+        },
+        "uncertainty": {
+          "dates": 7,
+          "netWinDeltaPerGame95": [
+            -0.01366742596810934,
+            0.0873015873015873
+          ],
+          "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+        },
+        "leaveOneDateOutNetRange": [
+          6,
+          16
+        ]
+      }
+    },
+    "total635": {
+      "all": {
+        "n": 635,
+        "baselineWLP": [
+          341,
+          294,
+          0
+        ],
+        "candidateWLP": [
+          331,
+          304,
+          0
+        ],
+        "corrections": 82,
+        "harms": 92,
+        "net": -10
+      },
+      "byBaselineEdge": {
+        "3to6": {
+          "n": 165,
+          "baselineWLP": [
+            88,
+            77,
+            0
+          ],
+          "candidateWLP": [
+            91,
+            74,
+            0
+          ],
+          "corrections": 9,
+          "harms": 6,
+          "net": 3
+        },
+        "1to3": {
+          "n": 267,
+          "baselineWLP": [
+            145,
+            122,
+            0
+          ],
+          "candidateWLP": [
+            142,
+            125,
+            0
+          ],
+          "corrections": 41,
+          "harms": 44,
+          "net": -3
+        },
+        "under1": {
+          "n": 169,
+          "baselineWLP": [
+            86,
+            83,
+            0
+          ],
+          "candidateWLP": [
+            76,
+            93,
+            0
+          ],
+          "corrections": 32,
+          "harms": 42,
+          "net": -10
+        },
+        "6plus": {
+          "n": 34,
+          "baselineWLP": [
+            22,
+            12,
+            0
+          ],
+          "candidateWLP": [
+            22,
+            12,
+            0
+          ],
+          "corrections": 0,
+          "harms": 0,
+          "net": 0
+        }
+      },
+      "byDate": {
+        "2026-02-14": {
+          "n": 122,
+          "net": -2
+        },
+        "2026-02-07": {
+          "n": 127,
+          "net": -4
+        },
+        "2026-02-21": {
+          "n": 124,
+          "net": 5
+        },
+        "2026-02-28": {
+          "n": 137,
+          "net": -12
+        },
+        "2026-03-07": {
+          "n": 83,
+          "net": 6
+        },
+        "2026-03-14": {
+          "n": 29,
+          "net": -5
+        },
+        "2026-03-21": {
+          "n": 10,
+          "net": 2
+        },
+        "2026-03-28": {
+          "n": 3,
+          "net": 0
+        }
+      },
+      "uncertainty": {
+        "dates": 8,
+        "netWinDeltaPerGame95": [
+          -0.06064880112834979,
+          0.036
+        ],
+        "warning": "Calendar-date resampling of this small opened quote cohort; not independent validation, a causal test or removal of team/selection dependence."
+      },
+      "leaveOneDateOutNetRange": [
+        -16,
+        2
+      ]
+    }
+  },
+  "scoreHeadAttribution": {
+    "all": {
+      "games": 5721,
+      "meanMarginChange": 0.3650374725679528,
+      "meanAbsoluteMarginChange": 1.4070641818699836,
+      "families": {
+        "shared_head_reweighting": {
+          "meanMarginContribution": -0.7288709054726599,
+          "meanAbsoluteNetMarginContribution": 1.446315567840039,
+          "meanTotalContribution": -1.5476212476072941
+        },
+        "shot_profiles": {
+          "meanMarginContribution": 1.0254699048203981,
+          "meanAbsoluteNetMarginContribution": 1.473546767552406,
+          "meanTotalContribution": -0.46908696179395043
+        },
+        "basketball_mechanisms": {
+          "meanMarginContribution": 0.9094261141621376,
+          "meanAbsoluteNetMarginContribution": 1.0405587896674402,
+          "meanTotalContribution": 1.3454742233648334
+        },
+        "maturity_interactions": {
+          "meanMarginContribution": -0.8409876409419194,
+          "meanAbsoluteNetMarginContribution": 1.1501216434617478,
+          "meanTotalContribution": 1.5693386877011102
+        }
+      },
+      "topMarginContributors": [
+        {
+          "name": "absolute_margin",
+          "meanAbsoluteContribution": 0.9743685966612649
+        },
+        {
+          "name": "mechanism_margin_residual",
+          "meanAbsoluteContribution": 0.6727382661846777
+        },
+        {
+          "name": "total",
+          "meanAbsoluteContribution": 0.666507433759712
+        },
+        {
+          "name": "rebounding_matchup_difference",
+          "meanAbsoluteContribution": 0.5879772627159513
+        },
+        {
+          "name": "maturity:absolute_margin",
+          "meanAbsoluteContribution": 0.5701435030345046
+        },
+        {
+          "name": "season_two_pct_difference",
+          "meanAbsoluteContribution": 0.5669324162618319
+        }
+      ],
+      "warning": "Exact mechanical linear-head accounting, not causal feature importance. Correlated features/interactions can offset; reweighting shared inputs is part of the change."
+    },
+    "harm": {
+      "games": 143,
+      "meanMarginChange": 0.45577393198881494,
+      "meanAbsoluteMarginChange": 2.2263362009100436,
+      "families": {
+        "shared_head_reweighting": {
+          "meanMarginContribution": 0.015247023274733908,
+          "meanAbsoluteNetMarginContribution": 0.8448446693081942,
+          "meanTotalContribution": -1.5871968072896785
+        },
+        "shot_profiles": {
+          "meanMarginContribution": 0.45707852714663844,
+          "meanAbsoluteNetMarginContribution": 1.1073262389834893,
+          "meanTotalContribution": -0.6112971059686253
+        },
+        "basketball_mechanisms": {
+          "meanMarginContribution": 0.47641494284313574,
+          "meanAbsoluteNetMarginContribution": 0.923644639618669,
+          "meanTotalContribution": 1.121447812007752
+        },
+        "maturity_interactions": {
+          "meanMarginContribution": -0.49296656127569327,
+          "meanAbsoluteNetMarginContribution": 1.137350672845191,
+          "meanTotalContribution": 1.7987601255383918
+        }
+      },
+      "topMarginContributors": [
+        {
+          "name": "total",
+          "meanAbsoluteContribution": 0.7323472137061584
+        },
+        {
+          "name": "mechanism_margin_residual",
+          "meanAbsoluteContribution": 0.5521385040504102
+        },
+        {
+          "name": "rebounding_matchup_difference",
+          "meanAbsoluteContribution": 0.5240803200109316
+        },
+        {
+          "name": "close_game_density",
+          "meanAbsoluteContribution": 0.5041126597027933
+        },
+        {
+          "name": "maturity:pace",
+          "meanAbsoluteContribution": 0.4902496355290676
+        },
+        {
+          "name": "season_two_pct_difference",
+          "meanAbsoluteContribution": 0.4607753249623752
+        }
+      ],
+      "warning": "Exact mechanical linear-head accounting, not causal feature importance. Correlated features/interactions can offset; reweighting shared inputs is part of the change."
+    },
+    "correction": {
+      "games": 177,
+      "meanMarginChange": 0.557699529697822,
+      "meanAbsoluteMarginChange": 2.1548920873843436,
+      "families": {
+        "shared_head_reweighting": {
+          "meanMarginContribution": 0.1925024726709696,
+          "meanAbsoluteNetMarginContribution": 0.8702342247951164,
+          "meanTotalContribution": -1.519472695256021
+        },
+        "shot_profiles": {
+          "meanMarginContribution": 0.37399355811105606,
+          "meanAbsoluteNetMarginContribution": 1.022797715668417,
+          "meanTotalContribution": -0.5038177901195703
+        },
+        "basketball_mechanisms": {
+          "meanMarginContribution": 0.5290797720548799,
+          "meanAbsoluteNetMarginContribution": 0.9418784532581739,
+          "meanTotalContribution": 1.1268250597036635
+        },
+        "maturity_interactions": {
+          "meanMarginContribution": -0.5378762731390836,
+          "meanAbsoluteNetMarginContribution": 1.071636898238708,
+          "meanTotalContribution": 1.4271251324119216
+        }
+      },
+      "topMarginContributors": [
+        {
+          "name": "total",
+          "meanAbsoluteContribution": 0.6171964632724355
+        },
+        {
+          "name": "mechanism_margin_residual",
+          "meanAbsoluteContribution": 0.5584214988562892
+        },
+        {
+          "name": "maturity:pace",
+          "meanAbsoluteContribution": 0.5213942488990818
+        },
+        {
+          "name": "close_game_density",
+          "meanAbsoluteContribution": 0.5031072563633237
+        },
+        {
+          "name": "rebounding_matchup_difference",
+          "meanAbsoluteContribution": 0.47507178126965316
+        },
+        {
+          "name": "season_two_pct_difference",
+          "meanAbsoluteContribution": 0.45894023624211566
+        }
+      ],
+      "warning": "Exact mechanical linear-head accounting, not causal feature importance. Correlated features/interactions can offset; reweighting shared inputs is part of the change."
+    },
+    "both_wrong": {
+      "games": 1432,
+      "meanMarginChange": 0.21884414665198412,
+      "meanAbsoluteMarginChange": 1.2801149373664662,
+      "families": {
+        "shared_head_reweighting": {
+          "meanMarginContribution": -0.2642595929952605,
+          "meanAbsoluteNetMarginContribution": 1.0576633983636368,
+          "meanTotalContribution": -1.4907113788202
+        },
+        "shot_profiles": {
+          "meanMarginContribution": 0.6635184724855252,
+          "meanAbsoluteNetMarginContribution": 1.137833315624509,
+          "meanTotalContribution": -0.5050544517494319
+        },
+        "basketball_mechanisms": {
+          "meanMarginContribution": 0.6605059377927973,
+          "meanAbsoluteNetMarginContribution": 0.8287113590877706,
+          "meanTotalContribution": 1.200821984056172
+        },
+        "maturity_interactions": {
+          "meanMarginContribution": -0.8409206706310773,
+          "meanAbsoluteNetMarginContribution": 1.1585110270734433,
+          "meanTotalContribution": 1.4871852395699896
+        }
+      },
+      "topMarginContributors": [
+        {
+          "name": "total",
+          "meanAbsoluteContribution": 0.6594679665550248
+        },
+        {
+          "name": "absolute_margin",
+          "meanAbsoluteContribution": 0.6190712689649022
+        },
+        {
+          "name": "mechanism_margin_residual",
+          "meanAbsoluteContribution": 0.5747433523754973
+        },
+        {
+          "name": "rebounding_matchup_difference",
+          "meanAbsoluteContribution": 0.5234858858551925
+        },
+        {
+          "name": "maturity:pace",
+          "meanAbsoluteContribution": 0.46973326584698716
+        },
+        {
+          "name": "season_two_pct_difference",
+          "meanAbsoluteContribution": 0.45546723308459314
+        }
+      ],
+      "warning": "Exact mechanical linear-head accounting, not causal feature importance. Correlated features/interactions can offset; reweighting shared inputs is part of the change."
+    }
+  },
+  "neutralOrientation": {
+    "audit": "cbb_neutral_orientation_invariant_2026_10_28_r1",
+    "r2": {
+      "games": 689,
+      "differingMargins": 689,
+      "winnerChangesFromListingOnly": 104,
+      "meanAbsoluteMarginDiscrepancy": 2.231001588515314,
+      "medianAbsoluteMarginDiscrepancy": 2.0677324361539244,
+      "maximumAbsoluteMarginDiscrepancy": 9.0329620254569,
+      "meanTotalDiscrepancy": 0.6181234037621457,
+      "meanHomeProbabilityDiscrepancy": 0.0650942475907544
+    },
+    "r8": {
+      "games": 689,
+      "differingMargins": 689,
+      "winnerChangesFromListingOnly": 135,
+      "meanAbsoluteMarginDiscrepancy": 3.3361710328648955,
+      "medianAbsoluteMarginDiscrepancy": 3.3269380870066483,
+      "maximumAbsoluteMarginDiscrepancy": 13.782478529375014,
+      "meanTotalDiscrepancy": 1.1570317447212517,
+      "meanHomeProbabilityDiscrepancy": 0.09496071989437539
+    },
+    "method": "Original scores reproduce exactly before swapping neutral-site labels. Same state, timestamps, team statistics and heads. No outcome-conditioned orientation choice.",
+    "conclusion": "Any discrepancy is an orientation-invariance defect, not evidence that choosing the opposite orientation improves predictions. A repair requires a separately versioned and evaluated candidate; original records remain unchanged."
+  },
+  "dataIntegrity": {
+    "acceptedGames": 22777,
+    "rejected": {
+      "non_di_or_unknown": 2097,
+      "not_final": 65,
+      "box_score_identity_mismatch": 176,
+      "invalid_final": 6,
+      "missing_box_pair": 7,
+      "invalid_overtime": 1
+    },
+    "sourceMismatches": [],
+    "diagnosticGames": 5721,
+    "exactBoxPairs": 5721,
+    "incoherentScores": 0,
+    "unavailableHistoricalEvidence": [
+      "verified_pregame_injury_and_roster_receipts",
+      "qualified_movement_and_splits_for_the_353_opening_cohort"
+    ],
+    "warning": "Missing historical evidence cannot be declared healthy or assigned as the cause of an individual loss."
+  },
+  "limitations": "Quotes cover eight fixed Saturdays, not a full-season market audit. Opening-price fixture orientation is corroborated, not exact selection-level side proof. Overlapping cohorts and repeated team games are not independent samples. No confidence interval removes all variation, selection bias, omitted inputs or causal ambiguity.",
+  "followUp": "Repair neutral-site team-swap symmetry in a separately versioned candidate; assess conditional score uncertainty and small-edge crossing errors without a hard confidence gate. No improvement is claimed from this diagnosis."
+}
