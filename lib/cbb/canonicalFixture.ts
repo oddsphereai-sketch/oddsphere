@@ -1,5 +1,6 @@
 import { computeSlateDate } from "../dates/slateDate";
 import type { CbbGame, CbbTeam } from "./types";
+import type { CbbTeamIdentity } from "./teamIdentity";
 
 export type CbbCanonicalStatus =
   | "STATUS_SCHEDULED"
@@ -31,9 +32,13 @@ export function cbbCanonicalStatus(game: Pick<CbbGame, "status" | "status_state"
   throw new Error(`Unsupported CBB status ${game.status}`);
 }
 
-export function cbbCanonicalTeamPayload(team: CbbTeam) {
+export function cbbCanonicalTeamPayload(team: CbbTeam, identity?: CbbTeamIdentity) {
   if (!Number.isInteger(team.id) || team.id <= 0 || !team.full_name?.trim() ||
     !team.abbreviation?.trim()) throw new Error("Incomplete CBB team identity");
+  if (identity && (identity.bdlTeamId !== team.id || identity.bdlName !== team.full_name)) {
+    throw new Error("CBB logo evidence crossed canonical team identity");
+  }
+  const verified = identity?.status.startsWith("verified_") && identity.espnTeamId && identity.logoUrl;
   return {
     external_id: team.id,
     sport: "cbb" as const,
@@ -43,7 +48,9 @@ export function cbbCanonicalTeamPayload(team: CbbTeam) {
     short_display_name: team.college || team.full_name,
     name: team.name || team.full_name,
     location: team.college || "",
-    provider_ids: { balldontlie: { id: team.id } },
+    ...(verified ? { logo_url: identity!.logoUrl } : {}),
+    provider_ids: { balldontlie: { id: team.id },
+      ...(verified ? { espn: { id: identity!.espnTeamId } } : {}) },
   };
 }
 

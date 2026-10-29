@@ -75,7 +75,8 @@ export type EspnCbbEvent = {
   id: string; date: string;
   competitions: Array<{
     neutralSite?: boolean; timeValid?: boolean; venue?: { fullName?: string };
-    competitors: Array<{ homeAway: string; team: { displayName: string; location?: string } }>;
+    competitors: Array<{ homeAway: string; team: { id?: string; displayName: string; location?: string;
+      abbreviation?: string; logo?: string } }>;
   }>;
 };
 

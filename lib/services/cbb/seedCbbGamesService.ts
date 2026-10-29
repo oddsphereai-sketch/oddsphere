@@ -2,9 +2,10 @@ import { CbbBallDontLieClient } from "../../cbb/ballDontLie";
 import { assertCbbFixtureRefreshSafe, cbbCanonicalGamePayload, cbbCanonicalStatus,
   cbbCanonicalTeamPayload, type CbbExistingFixture } from "../../cbb/canonicalFixture";
 import type { CbbGame, CbbTeam } from "../../cbb/types";
+import { fetchCbbTeamIdentities } from "./fetchCbbTeamIdentities";
 import { addDaysToSlate, computeSlateDate } from "../../dates/slateDate";
 
-export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_10_29_r2_four_day_et_slate" as const;
+export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_10_29_r3_exact_espn_identity" as const;
 
 /** Include the opener three days ahead so existing collectors can observe pregame prices. */
 export function cbbFixtureSeedDates(today: string): string[] {
@@ -18,6 +19,7 @@ type SeedOptions = {
   apiKey: string;
   dryRun: boolean;
   client?: CbbBallDontLieClient;
+  identityFetcher?: typeof fetchCbbTeamIdentities;
 };
 
 /** Provider date matching can straddle UTC midnight; the ET date is final. */
@@ -60,14 +62,18 @@ export async function seedCbbGames(options: SeedOptions) {
       teams.set(team.id, team);
     }
   }
+  const identities = options.identityFetcher && games.length ?
+    await options.identityFetcher({ games, slateDate: options.slateDate }) : null;
+  const verifiedLogos = [...teams.values()].filter(team => identities?.get(team.id)?.logoUrl).length;
   const result = { release: CBB_FIXTURE_SEED_RELEASE, slateDate: options.slateDate,
     season: options.season, providerCalls: client.calls, games: games.length,
-    teams: teams.size, written: false };
+    teams: teams.size, verifiedLogos, identitySource: identities ? "espn_catalog_and_exact_event" : "not_requested", written: false };
   if (options.dryRun || !games.length) return result;
   const { supabase } = await import("../../db/supabase");
 
   const teamDbIds = new Map<number, number>();
-  for (const batch of chunks([...teams.values()].map(cbbCanonicalTeamPayload), 100)) {
+  for (const batch of chunks([...teams.values()].map(team =>
+    cbbCanonicalTeamPayload(team, identities?.get(team.id))), 100)) {
     const ids = batch.map(team => team.external_id);
     const before = await supabase.from("teams")
       .select("id,external_id,display_name").eq("sport", "cbb").in("external_id", ids);

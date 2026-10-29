@@ -202,3 +202,40 @@ score. Focused tests include a later opposite-side candidate, a missing
 prelock snapshot, and an exact spread push. This proves the decision logic in
 isolation; it does **not** establish a race-safe database writer, a public
 locked reader, or official tracking. Those production gates remain open.
+
+## Exact team, logo, and market-identity gate
+
+The October 29 launch identity audit compares BALLDONTLIE's numeric team/game
+IDs and full names with the ESPN catalog, exact ESPN scoreboard participants,
+tip time, roster team IDs, and Owl's named two-sided market quotes. It never
+joins on an abbreviation. The global BDL catalog has 58 duplicated nonempty
+abbreviations and two missing abbreviations, which is why abbreviation-only
+mapping would be unsafe. ESPN's catalog also omits some schools that appear
+in an exact scoreboard event; a unique, time-confirmed event can now supply
+an official ESPN ID/logo only when both full participants agree. The logo URL
+must be on ESPN's NCAA CDN **and** carry the same verified ESPN ID.
+
+The November 1 rehearsal found two games, four verified team IDs/logos, two
+exact ESPN venues/times, and complete named three-market consumer books for
+both games. All four logo URLs returned HTTP 200 with image/png content. A
+fresh, no-write production-service rehearsal also returned two games, four
+verified logos, and `written=false`. The date-bounded seed release advances to
+`cbb_fixture_seed_2026_10_29_r3_exact_espn_identity`; new CBB team rows may
+receive the verified ESPN logo and ID but a wrong-team or guessed logo cannot
+be inserted. No existing CBB team rows were present in the database at this
+check. The cron remains disabled, so no production row was changed.
+
+For November 2, five games currently have a complete exact named target book;
+all five have full verified identities and no mapping defects. The full
+182-game slate has 130 fully verified team/venue/roster identities, 52 missing
+away ESPN logos, one missing home logo, 31 unmatched ESPN venues/times, and
+177 games without a complete named target book at the audit instant. Many of
+those games are lower-division exhibitions with no posted market; they must
+not be mislabeled as a feed-name match failure or given a fabricated logo or
+price. The audit remains reproducible with
+`node --import tsx scripts/operator/audit-cbb-launch-identity.ts --date=YYYY-MM-DD`.
+
+This identity repair changes zero existing predictions, prices, grades,
+actionables, stakes, or locked records. It does not itself complete the sole
+CBB prediction writer, member reader, lock persistence, or official tracking;
+those remain launch gates. The private candidate is not live.
