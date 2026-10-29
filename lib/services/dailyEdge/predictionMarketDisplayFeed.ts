@@ -90,7 +90,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
     const selected=contractsForPublishedReaders(parsed,winners,games);
     return [mergePredictionMarketFeeds(input.previous,selected) as ContractFeed];
   });
-  // Keep the EXISTING global budget: <=60 contracts / <=3 public-history
+  // Keep the EXISTING request budget: <=18 contracts / <=3 public-history
   // batches per sport/cycle, shared fairly across all market types.
   const pools=[winners,...contracts].map(feed=>[...feed.rows].sort((a,b)=>a.gameDate.localeCompare(b.gameDate)));
   const interleaved:PredictionMarketFeed["rows"]=[];

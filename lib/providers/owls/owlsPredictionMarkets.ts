@@ -19,6 +19,24 @@ export const PREDICTION_MARKET_TARGETS = {
 export type PredictionMarketSport = keyof typeof PREDICTION_MARKET_TARGETS;
 /** [source receipt epoch milliseconds, YES bid/ask midpoint, total contracts] */
 export type PredictionMarketPoint = [number, number, number | null];
+export const PREDICTION_MARKET_HISTORY_WINDOW_MS=24*60*60_000;
+/** Select actual observations only, retaining both edges under the existing
+ * payload bounds. Never stamp a bucket boundary or synthesize a quote. */
+export function boundPredictionMarketHistory(points:PredictionMarketPoint[],limit:number):PredictionMarketPoint[]{
+  const ordered=[...new Map(points.map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]);
+  if(ordered.length<=limit)return ordered;
+  if(limit<=2)return [ordered[0],ordered.at(-1)!].slice(0,limit);
+  // Absolute time buckets keep adjacent half-point contracts on the same
+  // sampling grid. Index-based thinning can destroy their real intersections
+  // merely because one contract has one extra earlier receipt.
+  let bucketMs=5*60_000,buckets=new Map<number,PredictionMarketPoint>();
+  do{
+    buckets=new Map();for(const p of ordered)buckets.set(Math.floor(p[0]/bucketMs),p);
+    if(buckets.size<=limit-2)break;
+    bucketMs+=5*60_000;
+  }while(true);
+  return [...new Map([ordered[0],...buckets.values(),ordered.at(-1)!].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]);
+}
 export type PredictionMarketRow = {
   ticker: string;
   eventTicker: string;
@@ -150,10 +168,10 @@ export function mergePredictionMarketFeeds(previous: PredictionMarketFeed | null
     if (prior && Date.parse(prior.asOf) > Date.parse(row.asOf)) continue;
     const history = new Map<number, PredictionMarketPoint>();
     for (const point of [...(prior?.history ?? []), ...row.history]) {
-      if (point[0] >= now - 8 * 60 * 60_000 && point[0] <= now + 60_000) history.set(point[0], point);
+      if (point[0] >= now - PREDICTION_MARKET_HISTORY_WINDOW_MS && point[0] <= now + 60_000) history.set(point[0], point);
     }
-    rows.set(row.ticker, { ...row, history: [...history.values()].sort((a,b) => a[0]-b[0]).slice(-100),
-      ...(prior?.historicalCandles ? {historicalCandles:prior.historicalCandles.filter(point=>point[0]>=now-8*60*60_000)} : {}),
+    rows.set(row.ticker, { ...row, history: boundPredictionMarketHistory([...history.values()],100),
+      ...(prior?.historicalCandles||row.historicalCandles ? {historicalCandles:boundPredictionMarketHistory([...(prior?.historicalCandles??[]),...(row.historicalCandles??[])].filter(point=>point[0]>=now-PREDICTION_MARKET_HISTORY_WINDOW_MS&&point[0]<=now+60_000),96)} : {}),
       ...(prior?.historicalCheckedAt ? {historicalCheckedAt:prior.historicalCheckedAt} : {}),
       ...(prior?.historicalRelease ? {historicalRelease:prior.historicalRelease} : {}) });
   }
@@ -161,8 +179,8 @@ export function mergePredictionMarketFeeds(previous: PredictionMarketFeed | null
   // Next's shared data cache has a response-size ceiling. Preserve current
   // quotes first and bound history before a busy college slate can exceed it.
   while (JSON.stringify(feed).length > 1_500_000 && feed.rows.some(row=>row.history.length>2 || (row.historicalCandles?.length ?? 0)>2)) {
-    feed.rows=feed.rows.map(row=>({...row,history:row.history.slice(-Math.max(2,Math.ceil(row.history.length/2))),
-      ...(row.historicalCandles ? {historicalCandles:row.historicalCandles.slice(-Math.max(2,Math.ceil(row.historicalCandles.length/2)))} : {})}));
+    feed.rows=feed.rows.map(row=>({...row,history:boundPredictionMarketHistory(row.history,Math.max(2,Math.ceil(row.history.length/2))),
+      ...(row.historicalCandles ? {historicalCandles:boundPredictionMarketHistory(row.historicalCandles,Math.max(2,Math.ceil(row.historicalCandles.length/2)))} : {})}));
   }
   return feed;
 }

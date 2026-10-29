@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { readerContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
-import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketObservedCurve, predictionMarketAnchorIndices, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
+import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
 
 type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null};
@@ -70,12 +70,14 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const outcome=selectedPredictionMarketOutcome(market,selectedMarket.pick);
   if(!outcome||receipt.checkedAt-Date.parse(market.asOf)>24*60*60_000)return null;
   const retained=receipt.checkedAt-Date.parse(market.asOf)>10*60_000;
-  const storedBook=predictionMarketReaderBookTrail(selectedMarket,marketKey==="moneyline"?outcome.label:selectedMarket.pick??"",receipt.checkedAt,selection?.line??null);
-  const book=predictionMarketComparisonBook(game.lockState==="locked",storedBook,receipt.book??null);
+  const lockedAt=predictionMarketLockBoundary(game,receipt.checkedAt),frozen=lockedAt!==undefined;
+  const storedBook=predictionMarketReaderBookTrail(selectedMarket,marketKey==="moneyline"?outcome.label:selectedMarket.pick??"",frozen?lockedAt:receipt.checkedAt,selection?.line??null);
+  const book=predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,receipt.book??null);
   const context=market.context;
   const differentBookLine=!!book&&book.line!==undefined&&book.line!==(selection?.line??null);
   const bookLabel=differentBookLine?(kind==="total"?`${selection?.side==="under"?"Under":"Over"} ${book!.line}`:`${selection?.side==="away"?game.awayTeam:game.homeTeam} ${formatContractLine(book!.line!)}`):context?.requestedLabel??"moneyline";
-  const comparison=predictionMarketComparison(outcome,book);
+  const comparison=predictionMarketComparison(outcome,book,lockedAt);
+  if(!comparison.points.length)return null;
   const history=comparison.start===comparison.cutoff?comparison.points.slice(-1):predictionMarketWindowPoints(comparison.points,comparison.start);
   const comparisonOutcome={...outcome,probability:history.at(-1)?.[1]??outcome.probability};
   const delta=history.length>=2?100*(history.at(-1)![1]-history[0][1]):null;
@@ -84,8 +86,8 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const firstBook=comparedBook?.points[0],lastBook=comparedBook?.points.at(-1);
   const changes=comparedBook?.points.reduce((count,point,index)=>count+Number(index>0&&point[2]!==comparedBook.points[index-1][2]),0)??0;
   const legend=<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#b9acc7] sm:pl-[26px]">
-    <span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#7de3c1]"/>Kalshi{context?.method==="push_adjusted"?" · push-adjusted":context?.method==="nearby"?" · nearby line":""}{comparison.points[0][0]-comparison.start>15*60_000?" · from "+time(comparison.points[0][0]):""}</span>
-    {book?<span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookName} {bookLabel}{firstBook&&firstBook[0]-comparison.start>15*60_000?" · from "+time(firstBook[0]):""}</span>:<span>Sportsbook quote unavailable</span>}
+    <span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#7de3c1]"/>Kalshi{context?.method==="push_adjusted"?" · push-adjusted":context?.method==="nearby"?" · nearby line":""}</span>
+    {book?<span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookName} {bookLabel}</span>:<span>Sportsbook quote unavailable</span>}
   </div>;
   return <section aria-label={`Prediction market · ${context?.kind??"game winner"}`} data-prediction-market={variant} data-prediction-market-kind={context?.kind??"moneyline"} data-contract-method={context?.method??"exact"}
     className={variant==="mobile"?"sm:hidden rounded-lg border border-white/[0.07] bg-[#0d0b13] p-3":"hidden sm:grid grid-cols-[minmax(170px,.9fr)_minmax(0,1.7fr)_minmax(150px,.85fr)] items-center gap-x-5 border-y border-white/[0.07] bg-[#0d0b13] px-5 py-3"}>
@@ -103,16 +105,16 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
       {context?.note?<p className="mt-1 text-[9px] leading-relaxed text-[#ac9bbd] sm:pl-[26px]">{context.note}</p>:null}
       {differentBookLine?<p className="mt-1 text-[9px] text-[#ac9bbd] sm:pl-[26px]">{game.lockState==="locked"?"Stored book line":"Book line moved"} · {bookLabel}, not {context?.requestedLabel}</p>:null}
     </div>
-    <div className="mt-1 min-w-0 sm:mt-0"><PredictionMarketChart row={outcome} book={book} context={context} bookLabel={bookLabel}/></div>
+    <div className="mt-1 min-w-0 sm:mt-0"><PredictionMarketChart row={outcome} book={book} context={context} bookLabel={bookLabel} lockedAt={lockedAt}/></div>
     <div className="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-1.5 sm:border-0 sm:pt-0">
       {comparedBook&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={comparedBook.sportsbook}><span className="font-semibold text-[#d9d1e4]">{bookName} {predictionMarketBookPricePath(comparedBook.points)}{changes>0?"":comparedBook.points.length===1?" · one quote":" · unchanged"}</span><span className="block text-[#9d92ae]">{comparedBook.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book</span></p>:null}
-      {outcome.volume24h!==null?<p><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
-      <p className="w-full text-[#9d92ae]">{comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(game.lockState==="locked"||book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
+      {!frozen&&outcome.volume24h!==null?<p><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
+      <p className="w-full text-[#9d92ae]">{frozen?"Pre-lock history · through "+time(comparison.cutoff??comparison.points.at(-1)![0]):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
     </div>
   </section>;
 }
 
-function PredictionMarketChart({row,book,context,bookLabel}:{row:ReaderOutcome;book:PredictionMarketBookTrail|null;context:ReaderMarketMatch["context"];bookLabel:string}) {
+export function PredictionMarketChart({row,book,context,bookLabel,lockedAt}:{row:ReaderOutcome;book:PredictionMarketBookTrail|null;context:ReaderMarketMatch["context"];bookLabel:string;lockedAt?:number}) {
   const ref=useRef<HTMLDivElement>(null);
   const [width,setWidth]=useState(300);
   const [focus,setFocus]=useState<{at:number;pinned:boolean}|null>(null);
@@ -122,23 +124,20 @@ function PredictionMarketChart({row,book,context,bookLabel}:{row:ReaderOutcome;b
     const observer=new ResizeObserver(entries=>setWidth(Math.max(120,entries[0].contentRect.width)));
     observer.observe(element);return()=>observer.disconnect();
   },[]);
-  const {points,activity,bookPoints,cutoff,start}=predictionMarketComparison(row,book);
+  const {points,activity,bookPoints,cutoff,start}=predictionMarketComparison(row,book,lockedAt);
   const allPoints=[...points,...bookPoints];
   const first=start,last=cutoff??Math.max(...allPoints.map(point=>point[0]));
-  const plotPoints=first===last?points.slice(-1):predictionMarketWindowPoints(points,first);
-  const plotBook=first===last?bookPoints.slice(-1):predictionMarketWindowPoints(bookPoints,first);
+  const plotPoints=predictionMarketGuidePoints(points,first,last);
+  const plotBook=predictionMarketGuidePoints(bookPoints,first,last);
   const [low,high]=predictionMarketChartDomain([...plotPoints,...plotBook]);
-  const left=36,right=width-8,top=8,bottom=61;
+  const left=36,right=Math.max(left+10,width-40),top=10,bottom=96;
   const x=(at:number)=>first===last?right:left+(at-first)/(last-first)*(right-left);
   const y=(p:number)=>bottom-(p*100-low)/Math.max(.5,high-low)*(bottom-top);
-  const maxActivity=Math.max(1,...activity.map(value=>value??0));
-  // Like the sportsbook curve, connect the recorded anchors without creating
-  // intermediate quotes. Inspection always returns the original observation.
-  const curve=predictionMarketObservedCurve(plotPoints,x,y,bottom);
-  const bookCurve=predictionMarketObservedCurve(plotBook,x,y);
-  const anchors=predictionMarketAnchorIndices(points),bookAnchors=predictionMarketAnchorIndices(bookPoints);
-  const hasGaps=curve.hasGaps||bookCurve.hasGaps;
-  const fillId=`${id}-fill`,clipId=`${id}-clip`;
+  // Both sources share one continuous bounded guide treatment. Guide edges
+  // are display-only; inspection below always uses the original observations.
+  const curve=predictionMarketCurve(plotPoints,x,y,Infinity,bottom);
+  const bookCurve=predictionMarketCurve(plotBook,x,y,Infinity,bottom);
+  const fillId=`${id}-fill`,bookFillId=`${id}-book-fill`,clipId=`${id}-clip`;
   const at=focus?Math.max(first,Math.min(last,focus.at)):null;
   const active=at===null?null:predictionMarketObservationAt(points,at);
   const activeBook=at===null?null:predictionMarketObservationAt(bookPoints,at);
@@ -150,26 +149,25 @@ function PredictionMarketChart({row,book,context,bookLabel}:{row:ReaderOutcome;b
   };
   const earlierDay=new Date(first).toLocaleDateString()!==new Date(last).toLocaleDateString();
   return <div ref={ref} className="relative min-w-0">
-    <svg width="100%" height="108" viewBox={"0 0 "+width+" 108"} role="img" aria-labelledby={id} data-comparison-cutoff={cutoff}>
-      <title id={id}>{row.team} {context?.method==="push_adjusted"?"push-adjusted from surrounding Kalshi contracts":"recorded quotes"}. Mint: Kalshi. {book?bookTitle(book.sportsbook)+" "+bookLabel+" in violet, with sportsbook margin. ":""}{context?.method==="nearby"?"Nearby line: not the identical sportsbook wager. ":""}Both sources use the same time axis and comparison cutoff. Dots are recorded quotes. Dashed connectors cross gaps over 15 minutes; they do not show an observed price path. Missing earlier history stays blank. Inspect for original prices and timestamps. Bars show actual trading activity only where recorded.</title>
-      <defs><linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7de3c1" stopOpacity=".14"/><stop offset="1" stopColor="#7de3c1" stopOpacity="0"/></linearGradient><clipPath id={clipId}><rect x={left-3} y={top-4} width={right-left+6} height="84"/></clipPath></defs>
+    <svg width="100%" height="128" viewBox={"0 0 "+width+" 128"} role="img" aria-labelledby={id} data-comparison-start={first} data-comparison-cutoff={cutoff} data-lock-boundary={lockedAt} data-chart-treatment="shared-continuous-guides">
+      <title id={id}>{row.team} {context?.method==="push_adjusted"?"push-adjusted from surrounding Kalshi contracts":"recorded quotes"}. Mint: Kalshi. {book?bookTitle(book.sportsbook)+" "+bookLabel+" in violet, with sportsbook margin. ":""}{context?.method==="nearby"?"Nearby line: not the identical sportsbook wager. ":""}Both sources share the same covered time window. Curves are bounded guides between recorded quotes, not additional observations. Boundary edges hold an already recorded value without changing its timestamp. Inspect for exact original prices and times.</title>
+      <defs><linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7de3c1" stopOpacity=".12"/><stop offset="1" stopColor="#7de3c1" stopOpacity="0"/></linearGradient><linearGradient id={bookFillId} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#b7a0f4" stopOpacity=".1"/><stop offset="1" stopColor="#b7a0f4" stopOpacity="0"/></linearGradient><clipPath id={clipId}><rect x={left-3} y={top-4} width={right-left+6} height={bottom-top+8}/></clipPath></defs>
       {[low,(low+high)/2,high].map(tick=><g key={tick}><line x1={left} x2={right} y1={y(tick/100)} y2={y(tick/100)} stroke="rgba(255,255,255,.05)"/><text x="0" y={y(tick/100)+4} fill="#ac9dbd" fontSize="11">{tick.toFixed(tick%1?1:0)}%</text></g>)}
       <g clipPath={`url(#${clipId})`}>
+      <path data-sportsbook-area d={bookCurve.area} fill={`url(#${bookFillId})`}/>
       <path data-kalshi-area d={curve.area} fill={`url(#${fillId})`}/>
       <path data-kalshi-line d={curve.line} fill="none" stroke="#7de3c1" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"/>
-      {curve.hasGaps?<path data-kalshi-gaps d={curve.gapLine} fill="none" stroke="#7de3c1" strokeWidth="1.5" strokeOpacity=".65" strokeDasharray="3 4"/>:null}
-      {bookPoints.length?<path data-sportsbook-line={book!.sportsbook} d={bookCurve.line} fill="none" stroke="#b7a0f4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>:null}
-      {bookCurve.hasGaps?<path data-sportsbook-gaps={book!.sportsbook} d={bookCurve.gapLine} fill="none" stroke="#b7a0f4" strokeWidth="1.5" strokeOpacity=".65" strokeDasharray="3 4"/>:null}
-      {/* A short held-price tail aligns the display horizon, not source times.
-          It is dashed and never added to source samples or quote inspection. */}
-      {cutoff!==null&&points.at(-1)![0]<cutoff?<line data-held-kalshi x1={x(points.at(-1)![0])} x2={x(cutoff)} y1={y(points.at(-1)![1])} y2={y(points.at(-1)![1])} stroke="#7de3c1" strokeWidth="2" strokeDasharray="2 3"/>:null}
-      {cutoff!==null&&bookPoints.at(-1)![0]<cutoff?<line data-held-sportsbook x1={x(bookPoints.at(-1)![0])} x2={x(cutoff)} y1={y(bookPoints.at(-1)![1])} y2={y(bookPoints.at(-1)![1])} stroke="#b7a0f4" strokeWidth="2" strokeDasharray="2 3"/>:null}
-      {bookPoints.map((point,index)=><g key={point[0]}><circle data-book-odds={point[2]} data-observed-at={point[0]} cx={x(point[0])} cy={y(point[1])} r={bookAnchors.has(index)?2.5:0} fill="#b7a0f4"/>{bookAnchors.has(index)&&index>0&&index<bookPoints.length-1?<text data-book-turning-price x={x(point[0])} y={Math.min(71,y(point[1])+13)} textAnchor="middle" fill="#c9b8f6" fontSize="9">{formatPredictionMarketOdds(point[2])}</text>:null}</g>)}
-      {points.map((point,index)=><g key={point[0]}>{activity[index]!==null&&point[0]>=first?<rect x={Math.max(left,x(point[0])-2.5)} y={87-activity[index]!/maxActivity*13} width={Math.min(5,right-Math.max(left,x(point[0])-2.5))} height={activity[index]!/maxActivity*13} rx="1" fill="#7de3c1" opacity=".3"/>:null}{anchors.has(index)?<circle cx={x(point[0])} cy={y(point[1])} r="2.5" fill="#7de3c1"/>:null}</g>)}
+      {bookPoints.length?<path data-sportsbook-line={book!.sportsbook} d={bookCurve.line} fill="none" stroke="#b7a0f4" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"/>:null}
+      {/* Original receipts remain inspectable, distinct from the boundary guides. */}
+      {bookPoints.filter(point=>point[0]>=first).map(point=><circle key={point[0]} data-book-odds={point[2]} data-observed-at={point[0]} cx={x(point[0])} cy={y(point[1])} r="0" fill="#b7a0f4"/>)}
+      {plotPoints.at(-1)?<circle data-kalshi-end cx={right} cy={y(plotPoints.at(-1)![1])} r="2.8" fill="#7de3c1"/>:null}
+      {plotBook.at(-1)?<circle data-sportsbook-end cx={right} cy={y(plotBook.at(-1)![1])} r="2.8" fill="#b7a0f4"/>:null}
       </g>
-      <text x={left} y="103" fill="#ac9dbd" fontSize="11">{time(first,earlierDay)}</text><text x={right} y="103" textAnchor="end" fill="#ac9dbd" fontSize="11">{time(last)}</text>
-      {at!==null?<g clipPath={`url(#${clipId})`}><line x1={x(at)} x2={x(at)} y1={top} y2="89" stroke="#ffffff35"/>{active?<circle cx={x(active[0])} cy={y(active[1])} r="3" fill="#7de3c1"/>:null}{activeBook?<circle cx={x(activeBook[0])} cy={y(activeBook[1])} r="3" fill="#b7a0f4"/>:null}</g>:null}
-      <rect x={left} y={top} width={right-left} height="82" fill="transparent" tabIndex={0} role="button" aria-label="Inspect recorded Kalshi and sportsbook quotes. Tap to pin; arrow keys inspect observations."
+      {plotBook.at(-1)?<text x={right+7} y={y(plotBook.at(-1)![1])+4} fill="#d8ccec" fontSize="10">{(plotBook.at(-1)![1]*100).toFixed(1)}%</text>:null}
+      {plotPoints.at(-1)&&(!plotBook.length||Math.abs(y(plotPoints.at(-1)![1])-y(plotBook.at(-1)![1]))>=13)?<text x={right+7} y={y(plotPoints.at(-1)![1])+4} fill="#d8e9e3" fontSize="10">{(plotPoints.at(-1)![1]*100).toFixed(1)}%</text>:null}
+      <text x={left} y="120" fill="#ac9dbd" fontSize="10">{time(first,earlierDay)}</text><text x={right} y="120" textAnchor="end" fill="#ac9dbd" fontSize="10">{time(last)}</text>
+      {at!==null?<g clipPath={`url(#${clipId})`}><line x1={x(at)} x2={x(at)} y1={top} y2={bottom} stroke="#ffffff35"/>{active?<circle cx={x(active[0])} cy={y(active[1])} r="3" fill="#7de3c1"/>:null}{activeBook?<circle cx={x(activeBook[0])} cy={y(activeBook[1])} r="3" fill="#b7a0f4"/>:null}</g>:null}
+      <rect x={left} y={top} width={right-left} height={bottom-top} fill="transparent" tabIndex={0} role="button" aria-label="Inspect recorded Kalshi and sportsbook quotes. Tap to pin; arrow keys inspect observations."
         onPointerMove={event=>{if(!focus?.pinned)setFocus({at:cursorAt(event),pinned:false});}}
         onPointerDown={event=>setFocus({at:cursorAt(event),pinned:!focus?.pinned})}
         onPointerLeave={()=>{if(!focus?.pinned)setFocus(null);}}
@@ -178,18 +176,19 @@ function PredictionMarketChart({row,book,context,bookLabel}:{row:ReaderOutcome;b
           if(event.key==="Escape"){setFocus(null);return;}
           if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;
           event.preventDefault();
-          const times=[...new Set(allPoints.map(point=>point[0]))].sort((a,b)=>a-b);
+          const times=[...new Set(allPoints.map(point=>point[0]).filter(t=>t>=first&&t<=last))].sort((a,b)=>a-b);
           const next=event.key==="Home"?first:event.key==="End"?last:event.key==="ArrowLeft"?[...times].reverse().find(t=>t<(at??last))??first:times.find(t=>t>(at??first))??last;
           setFocus({at:next,pinned:true});
         }}/>
     </svg>
-    {hasGaps?<p data-quote-gap-key className="text-[9px] leading-tight text-[#9d92ae]">Dots: recorded quotes · dashed: gaps between observations</p>:null}
+    <p data-quote-guide-key className="text-[9px] leading-tight text-[#9d92ae]">Curves connect recorded quotes</p>
     {focus?<div className="pointer-events-none absolute left-8 right-0 top-0 z-10 rounded border border-white/10 bg-[#211b2c] px-2 py-1 text-[10px] text-[#e5dced]">
       <p>{active?"Kalshi "+(context?.method==="push_adjusted"?"push-adjusted ":"")+(active[1]*100).toFixed(1)+"% · "+time(active[0]):"Kalshi · no earlier quote recorded"}</p>
       {book?<p>{activeBook?bookTitle(book.sportsbook)+" "+formatPredictionMarketOdds(activeBook[2])+" · "+(activeBook[1]*100).toFixed(1)+"% implied · "+time(activeBook[0]):bookTitle(book.sportsbook)+" · no earlier quote recorded"}</p>:null}
       {activeIndex>=0&&activity[activeIndex]!==null?<p>{compact(activity[activeIndex]!)} contracts · recorded interval</p>:null}
       {context?.method==="push_adjusted"?<p>Push excluded using the surrounding half-point contracts; not a directly traded quote.</p>:context?.method==="nearby"?<p>Kalshi {context.displayLabel} · sportsbook {context.requestedLabel}</p>:null}
-      {cutoff!==null?<p>Compared through {time(cutoff)} · dashed tail holds the last observed quote.</p>:null}
+      <p>Recorded values and original times. Curves are visual guides between quotes.</p>
+      {lockedAt!==undefined?<p>Pre-lock history · no quotes after {time(lockedAt)}.</p>:null}
     </div>:null}
   </div>;
 }

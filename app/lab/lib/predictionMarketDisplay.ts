@@ -1,4 +1,4 @@
-import type { MarketEdgeDto } from "./labTypes";
+import type { DailyEdgeGameDto, MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
@@ -148,22 +148,44 @@ export function predictionMarketObservedCurve(
   return {line,gapLine,area:observed.map(path=>path.area).filter(Boolean).join(" "),hasGaps:gapLine.length>0};
 }
 
-/** Both prices are compared only through their last shared observation time.
- * Trim the faster source; never extend/re-stamp the slower source or invent a
- * quote at the boundary. Endpoints may precede the cutoff by a sample interval. */
-export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf">,book:PredictionMarketBookTrail|null){
-  const series=predictionMarketChartSeries(row);
-  const cutoff=book?.points.length&&series.points.length?Math.min(series.points.at(-1)![0],book.points.at(-1)![0]):null;
+/** undefined: unlocked; finite: immutable reader boundary; NaN: locked but
+ * unprovable boundary, so no post-lock context may be presented as pre-lock. */
+export function predictionMarketLockBoundary(game:Pick<DailyEdgeGameDto,"lockState"|"lockedAt"|"gameStartAt">,now:number):number|undefined {
+  const locked=Date.parse(game.lockedAt??""),start=Date.parse(game.gameStartAt??"");
+  if(Number.isFinite(locked)&&locked<=now)return Math.min(locked,Number.isFinite(start)?start:locked);
+  if(Number.isFinite(start)&&start<=now)return start;
+  return game.lockState==="locked"?NaN:undefined;
+}
+
+/** Compare a shared, genuinely covered time window. Full source observations
+ * remain available for original-price inspection and the book's full move
+ * summary. Boundary guides are separate and never become quote receipts. */
+export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf">,book:PredictionMarketBookTrail|null,lockedAt?:number){
+  const raw=predictionMarketChartSeries(row),ceiling=lockedAt===undefined?Infinity:Number.isFinite(lockedAt)?lockedAt:-Infinity;
+  const series={points:raw.points.filter(p=>p[0]<=ceiling),activity:raw.activity.filter((_,i)=>raw.points[i][0]<=ceiling)};
+  const eligibleBook=book?.points.filter(p=>p[0]<=ceiling)??[];
+  const cutoff=eligibleBook.length&&series.points.length?Math.min(series.points.at(-1)![0],eligibleBook.at(-1)![0]):null;
   const indices=series.points.flatMap((p,i)=>cutoff===null||p[0]<=cutoff?[i]:[]);
   const points=indices.map(i=>series.points[i]),activity=indices.map(i=>series.activity[i]);
-  const bookPoints=book?.points.filter(p=>cutoff===null||p[0]<=cutoff)??[];
-  const overlap=points.length>0&&bookPoints.length>0;
+  const bookPoints=eligibleBook.filter(p=>cutoff===null||p[0]<=cutoff);
+  const overlap=points.length>0&&bookPoints.length>0&&Math.max(points[0][0],bookPoints[0][0])<=cutoff!;
   return {points:cutoff!==null&&!overlap?series.points:points,activity:cutoff!==null&&!overlap?series.activity:activity,
     bookPoints:overlap?bookPoints:[],cutoff:overlap?cutoff:null,pending:!!book&&!overlap,
-    // Shared axis, not shared-start clipping: otherwise the earlier sportsbook
-    // low/high can disappear just because Kalshi begins recording later.
-    start:overlap?Math.min(points[0][0],bookPoints[0][0]):series.points[0]?.[0]??Date.parse(row.asOf),
+    start:overlap?Math.max(points[0][0],bookPoints[0][0]):series.points[0]?.[0]??Date.parse(row.asOf),
     latestKalshi:series.points.at(-1)?.[0]??null,latestBook:book?.points.at(-1)?.[0]??null};
+}
+
+/** Plot-only guide: carry an already observed price to the shared edges, never
+ * backfill before the first receipt. Quote arrays and their timestamps are not
+ * changed. Inspection uses predictionMarketObservationAt on the originals. */
+export function predictionMarketGuidePoints(points:ReadonlyArray<readonly [number,number,...unknown[]]>,start:number,end:number):Array<[number,number]>{
+  if(!points.length||end<start)return [];
+  const previous=predictionMarketObservationAt(points,start);
+  const result:Array<[number,number]>=previous?[[start,previous[1]]]:[];
+  for(const p of points)if(p[0]>start&&p[0]<=end)result.push([p[0],p[1]]);
+  const last=result.at(-1);if(last&&last[0]<end)result.push([end,last[1]]);
+  // Keep the start/end of flat runs, not hundreds of artificial flat tangents.
+  return result.filter((p,i)=>i===0||i===result.length-1||p[1]!==result[i-1][1]||p[1]!==result[i+1][1]);
 }
 
 /** Keep one real preceding anchor for normal chart clipping at the common start. */
@@ -183,7 +205,7 @@ export function predictionMarketObservationAt<T extends readonly [number,...unkn
 export function predictionMarketChartSeries(row:Pick<PredictionMarketRow,"history"|"historicalCandles"|"asOf">):{points:PredictionMarketPoint[];activity:Array<number|null>} {
   const live=row.history.filter(point=>point[0]<=Date.parse(row.asOf));
   const firstLive=live[0]?.[0]??Date.parse(row.asOf);
-  const historical=(row.historicalCandles??[]).filter(point=>point[0]<firstLive && point[0]>=Date.parse(row.asOf)-8*60*60_000);
+  const historical=(row.historicalCandles??[]).filter(point=>point[0]<firstLive && point[0]>=Date.parse(row.asOf)-24*60*60_000);
   return {points:[...historical,...live],activity:[...historical.map(point=>point[2]),...predictionMarketActivity(live)]};
 }
 
