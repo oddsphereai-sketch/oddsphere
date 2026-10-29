@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { fetchCfbOwlsProvider, mapCfbOwlsProvider } from "../lib/services/football/cfbOwlsProvider";
+import { cfbOwlsGradeMarketBooks, fetchCfbOwlsProvider, mapCfbOwlsProvider } from "../lib/services/football/cfbOwlsProvider";
+import type { RawOwlsOddsEvent } from "../lib/providers/owls/owlsSharpBookOdds";
 import { cfbModelSharpSplits } from "../lib/services/football/cfbForwardEvidenceWriter";
 import {
   CFB_OWLS_SPLITS_RELEASE,
@@ -83,6 +84,43 @@ assert.ok(result.booksByGame[game.providerGameId]?.every((book) =>
   book.provider === "owls" && book.targetEligible === false && book.marketReadingEligible === false));
 assert.equal(result.booksByGame[game.providerGameId]?.[0]?.spread?.homeLine, -3.5);
 assert.equal(result.booksByGame[game.providerGameId]?.[0]?.total?.line, 51.5);
+
+const eventForBook = (key: string): RawOwlsOddsEvent => ({
+  id: "1638273243", sport: "ncaaf", commence_time: game.scheduledStart,
+  away_team: game.away.name, home_team: game.home.name,
+  bookmakers: [{ key, last_update: "2026-10-28T22:40:00Z", markets: [
+    { key: "spreads", outcomes: [{ name: game.away.name, point: 3.5, price: -110 }, { name: game.home.name, point: -3.5, price: -110 }] },
+  ] }],
+});
+const twelveBooks = ["fanduel", "betr", "betmgm", "circa", "stations", "wynn", "pinnacle", "draftkings", "caesars", "southpoint", "novig", "bovada"];
+const rawEvents = twelveBooks.map(eventForBook);
+const gradeFixture = (events: RawOwlsOddsEvent[]) => mapCfbOwlsProvider({ games: [game], odds: { data: events }, splits: { data: [] } });
+const gradeResult = gradeFixture([...rawEvents, eventForBook("circa")]);
+const gradingBooks = gradeResult.gradeBooksByGame[game.providerGameId]!;
+assert.equal(gradingBooks.length, 11, "event-per-book rows merge without overwrite; identical duplicates and exchange excluded");
+assert.equal(gradingBooks.filter(book => book.targetEligible).length, 4, "new reference books cannot become execution targets");
+assert.ok(gradingBooks.every(book => book.marketReadingEligible === false));
+assert.equal(gradeResult.booksByGame[game.providerGameId]?.some(book => book.sportsbook === "draftkings"), false,
+  "additional retail books must not leak into sharp capture/model history");
+const mismatch = eventForBook("circa");
+mismatch.commence_time = "2026-10-29T03:30:00Z";
+assert.equal(gradeFixture([mismatch]).gradeBooksByGame[game.providerGameId]?.length, 0, "same date is insufficient when kickoff differs");
+assert.equal(gradeFixture([{ ...eventForBook("circa"), sport: "nba" }]).gradeBooksByGame[game.providerGameId]?.length, 0);
+assert.equal(gradeFixture([{ ...eventForBook("circa"), home_team: "Troy Trojans" }]).gradeBooksByGame[game.providerGameId]?.length, 0);
+const conflicting = eventForBook("circa");
+conflicting.bookmakers![0]!.markets![0]!.outcomes![0]!.price = -115;
+assert.equal(gradeFixture([eventForBook("circa"), conflicting]).gradeBooksByGame[game.providerGameId]?.length, 0,
+  "conflicting same-clock observations cannot be collapsed into a synthetic pair");
+for (const price of [-10, 10000]) {
+  const bad = eventForBook("circa");
+  bad.bookmakers![0]!.markets![0]!.outcomes![0]!.price = price;
+  assert.equal(gradeFixture([bad]).gradeBooksByGame[game.providerGameId]?.length, 0);
+}
+const selected = cfbOwlsGradeMarketBooks({ primary: [{ ...gradingBooks[0]!, provider: "balldontlie" }],
+  supplemental: gradingBooks, providerGameId: game.providerGameId, market: "spread",
+  evaluatedAt: "2026-10-28T22:50:00Z", gameStartsAt: game.scheduledStart });
+assert.equal(selected.filter(book => book.sportsbook === gradingBooks[0]!.sportsbook).length, 1);
+assert.equal(selected.find(book => book.sportsbook === gradingBooks[0]!.sportsbook)?.provider, "balldontlie");
 
 const owlsSplits = result.splitRecordsByGame[game.providerGameId] ?? [];
 assert.deepEqual(owlsSplits.map((row) => row.sportsbook), ["betmgm", "circa"]);

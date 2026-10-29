@@ -1,7 +1,8 @@
 import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookOdds,
-  type NormalizedOwlsSharpPrice,
+  normalizeOwlsNamedBookOdds,
+  type NormalizedOwlsNamedPrice,
   type RawOwlsOddsResponse,
 } from "@/lib/providers/owls/owlsSharpBookOdds";
 import {
@@ -18,7 +19,15 @@ import {
 } from "./cfbSharpApiSplits";
 
 export const CFB_OWLS_PROVIDER_RELEASE =
-  "cfb_owls_provider_2026_10_27_r1_capture_only_prices_and_splits" as const;
+  "cfb_owls_provider_2026_10_29_r2_grade_price_ingestion" as const;
+
+// Conventional named books only. Exchanges (Novig/SX/Kalshi) never cast votes.
+export const CFB_OWLS_GRADE_BOOKS = [
+  "fanduel", "draftkings", "caesars", "betmgm", "fanatics", "betrivers",
+  "circa", "pinnacle", "betr", "stations", "wynn", "southpoint", "bovada",
+  "betonline", "ballybet", "thescorebet", "bet365",
+] as const;
+const EXECUTION_BOOKS = new Set<string>(["fanduel", "draftkings", "caesars", "betmgm", "fanatics", "betrivers"]);
 
 export type CfbOwlsProviderResult = {
   release: typeof CFB_OWLS_PROVIDER_RELEASE;
@@ -28,6 +37,8 @@ export type CfbOwlsProviderResult = {
   matchedOddsGames: number;
   matchedSplitGames: number;
   booksByGame: Record<string, NcaafBookOdds[]>;
+  /** Grade-only input: never feed into the model, reader, or opening history. */
+  gradeBooksByGame: Record<string, NcaafBookOdds[]>;
   splitRecordsByGame: Record<string, CfbSharpApiSplitRecord[]>;
   rejected: string[];
 };
@@ -54,12 +65,15 @@ export function mapCfbOwlsProvider(args: {
   splits: RawOwlsSplitsResponse;
 }): CfbOwlsProviderResult {
   const odds = normalizeOwlsSharpBookOdds(args.odds, "ncaaf");
+  const gradeOdds = normalizeOwlsNamedBookOdds(args.odds, "ncaaf", CFB_OWLS_GRADE_BOOKS);
   const splits = normalizeOwlsSharpBookSplits(args.splits, "ncaaf");
   const rejected = [
     ...odds.rejected.map((row) => `odds ${row.providerEventId ?? "unknown"}: ${row.reason}`),
+    ...gradeOdds.rejected.map((row) => `grade odds ${row.providerEventId ?? "unknown"} ${row.sportsbook ?? "unknown"}: ${row.reason}`),
     ...splits.rejected.map((reason) => `splits: ${reason}`),
   ];
   const booksByGame = Object.fromEntries(args.games.map((game) => [game.providerGameId, [] as NcaafBookOdds[]]));
+  const gradeBooksByGame = Object.fromEntries(args.games.map((game) => [game.providerGameId, [] as NcaafBookOdds[]]));
   const splitRecordsByGame = Object.fromEntries(args.games.map((game) => [game.providerGameId, [] as CfbSharpApiSplitRecord[]]));
 
   const pricesByEvent = groupBy(odds.prices, (row) => row.providerEventId);
@@ -75,6 +89,42 @@ export function mapCfbOwlsProvider(args: {
       continue;
     }
     booksByGame[game.providerGameId] = buildBooks(game, providerEventId, prices);
+  }
+
+  const gradeEventsByGame = new Map<string, Array<{ eventId: string; prices: NormalizedOwlsNamedPrice[] }>>();
+  for (const [eventId, prices] of groupBy(gradeOdds.prices, row => row.providerEventId)) {
+    const matches = prices.map(row => matchGame(args.games, {
+      providerEventId: eventId, homeTeam: row.homeTeam, awayTeam: row.awayTeam, scheduledStart: row.scheduledStart,
+    }));
+    const game = matches[0];
+    if (!game || matches.some((matched, index) => matched?.providerGameId !== game.providerGameId ||
+      !prices[index]!.scheduledStart ||
+      Math.abs(Date.parse(prices[index]!.scheduledStart!) - Date.parse(game.scheduledStart)) > 5 * 60_000)) {
+      rejected.push(`grade odds ${eventId}: ambiguous identity or kickoff mismatch`);
+      continue;
+    }
+    gradeEventsByGame.set(game.providerGameId, [...(gradeEventsByGame.get(game.providerGameId) ?? []), { eventId, prices }]);
+  }
+  for (const [gameId, events] of gradeEventsByGame) {
+    if (events.length !== 1) {
+      rejected.push(`grade odds ${gameId}: multiple provider events for canonical game`);
+      continue;
+    }
+    const event = events[0]!;
+    const pairs = [...groupBy(event.prices, row => `${row.sportsbook}:${row.market}`).values()].flatMap(rows => {
+      const latest = rows.map(row => row.observedAt).sort().at(-1);
+      // Repeated event-per-book rows are common. Deduplicate identical observations,
+      // reject conflicting pairs at the same source timestamp rather than vote twice.
+      const pair = [...new Map(rows.filter(row => row.observedAt === latest)
+        .map(row => [JSON.stringify([row.side, row.line, row.americanPrice]), row])).values()];
+      const hold = pair.reduce((sum, row) => sum + 1 / row.decimalPrice, 0);
+      const valid = pair.length === 2 && pair.every(row => Math.abs(row.americanPrice) >= 100 &&
+        (row.market !== "total" || (row.line !== null && row.line > 0))) && hold >= 1 && hold <= 1.2;
+      if (!valid) rejected.push(`grade odds ${event.eventId} ${rows[0]!.sportsbook}: invalid or conflicting ${rows[0]!.market} pair`);
+      return valid ? pair : [];
+    });
+    gradeBooksByGame[gameId] = buildBooks(args.games.find(game => game.providerGameId === gameId)!, event.eventId, pairs)
+      .map(book => ({ ...book, targetEligible: EXECUTION_BOOKS.has(book.sportsbook) }));
   }
 
   const splitsByEvent = groupBy(splits.observations, (row) => row.providerEventId);
@@ -100,6 +150,7 @@ export function mapCfbOwlsProvider(args: {
     matchedOddsGames: Object.values(booksByGame).filter((rows) => rows.length > 0).length,
     matchedSplitGames: Object.values(splitRecordsByGame).filter((rows) => rows.length > 0).length,
     booksByGame,
+    gradeBooksByGame,
     splitRecordsByGame,
     rejected,
   };
@@ -108,7 +159,7 @@ export function mapCfbOwlsProvider(args: {
 function buildBooks(
   game: NcaafGame,
   providerEventId: string,
-  prices: NormalizedOwlsSharpPrice[],
+  prices: NormalizedOwlsNamedPrice[],
 ): NcaafBookOdds[] {
   return [...new Set(prices.map((row) => row.sportsbook))].flatMap((sportsbook) => {
     const rows = prices.filter((row) => row.sportsbook === sportsbook);
@@ -122,7 +173,7 @@ function buildBooks(
     }));
     const observedAt = Object.values(marketObservedAt).sort().at(-1);
     if (!observedAt) return [];
-    const bySide = (rowsForMarket: NormalizedOwlsSharpPrice[], side: string) =>
+    const bySide = (rowsForMarket: NormalizedOwlsNamedPrice[], side: string) =>
       rowsForMarket.find((row) => row.side === side);
     const homeMl = bySide(moneyline, "home");
     const awayMl = bySide(moneyline, "away");
@@ -154,6 +205,29 @@ function buildBooks(
       } : null,
     } satisfies NcaafBookOdds];
   }).sort((a, b) => a.sportsbook.localeCompare(b.sportsbook));
+}
+
+/** Per-market, same-book primary precedence; never splice provider provenance. */
+export function cfbOwlsGradeMarketBooks(args: {
+  primary: NcaafBookOdds[];
+  supplemental: NcaafBookOdds[];
+  providerGameId: string;
+  market: "moneyline" | "spread" | "total";
+  evaluatedAt: string;
+  gameStartsAt: string;
+}): NcaafBookOdds[] {
+  const evaluation = Date.parse(args.evaluatedAt);
+  const kickoff = Date.parse(args.gameStartsAt);
+  if (!Number.isFinite(evaluation) || !Number.isFinite(kickoff) || evaluation >= kickoff) return [];
+  const selected = new Map<string, NcaafBookOdds>();
+  for (const book of [...args.primary, ...args.supplemental]) {
+    const key = book.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const observed = Date.parse(book.marketObservedAt?.[args.market] ?? book.observedAt);
+    if (book.providerGameId !== args.providerGameId || !book[args.market] || !key || selected.has(key) ||
+      !Number.isFinite(observed) || observed > evaluation || observed >= kickoff || evaluation - observed > 60 * 60_000) continue;
+    selected.set(key, book);
+  }
+  return [...selected.values()];
 }
 
 function buildSplitRecords(

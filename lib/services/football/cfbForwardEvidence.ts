@@ -11,6 +11,7 @@ import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAva
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
@@ -99,7 +100,7 @@ export const CFB_FORWARD_LEGACY_EVIDENCE_SCHEMA_RELEASE =
 export const CFB_FORWARD_INITIAL_EVIDENCE_SCHEMA_RELEASE =
   "cfb_forward_evidence_snapshot_2026_08_25_r1" as const;
 export const CFB_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "cfb_forward_evidence_collector_2026_10_27_r65_owls_capture_only" as const;
+  "cfb_forward_evidence_collector_2026_10_29_r66_owls_grade_price_ingestion" as const;
 export const CFB_FORWARD_MEMBER_RELEASE =
   "cfb_v1_member_release_2026_10_15_r64_full_product_coordinator_compatibility" as const;
 export const CFB_FORWARD_COORDINATOR_INTEGRATION_PREVIOUS_MEMBER_RELEASE =
@@ -192,6 +193,7 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
     (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE ||
@@ -282,7 +284,7 @@ export function isCfbPublishedLateT60RecoveryPayload(payload: CfbForwardEvidence
   const heldMarkets = new Set(payload.decisions.heldMarkets.map((market) => market.market));
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
-    payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE) &&
     payload.stage === "t60" &&
     payload.captureTiming === "on_time" &&
     lag !== null && Number.isFinite(lag) && lag > CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
@@ -389,6 +391,8 @@ export type CfbForwardEvidencePayload = {
   t60LagMinutes: number | null;
   game: NcaafGame;
   market: {
+    /** Separate from forecast/reader price inputs, including on future refreshes. */
+    supplementalGradingBooks?: NcaafBookOdds[];
     current: NcaafBookOdds | null;
     currentBooks: NcaafBookOdds[];
     /** All verified named-book display observations, including one-sided offers excluded from grading. */
