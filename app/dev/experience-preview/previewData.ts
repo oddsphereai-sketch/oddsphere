@@ -11,6 +11,8 @@ import {
   previousReadyBoardDate,
 } from "@/lib/dates/slateDate";
 import {
+  DAILY_EDGE_PUBLISHED_MEMBER_CACHE_RELEASE,
+  DAILY_EDGE_PUBLISHED_MEMBER_CACHE_TAG,
   dailyEdgeSnapshotKey,
   readLabResponseSnapshot,
   readLatestLabResponseSnapshot,
@@ -115,10 +117,10 @@ const readCachedPublishedDailyEdgePayload = unstable_cache(
 
     return selected?.payload ?? null;
   },
-  ["daily-edge-published-member-payload-v1"],
+  [DAILY_EDGE_PUBLISHED_MEMBER_CACHE_RELEASE],
   {
     revalidate: 15,
-    tags: ["daily-edge-published-member-payload"],
+    tags: [DAILY_EDGE_PUBLISHED_MEMBER_CACHE_TAG],
   },
 );
 

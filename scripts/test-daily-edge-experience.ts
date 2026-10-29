@@ -116,6 +116,14 @@ const sportActivityRouteSource = readFileSync(
   "app/api/lab/daily-edge-sport-activity/route.ts",
   "utf8",
 );
+const labResponseSnapshotsSource = readFileSync(
+  "lib/services/labResponseSnapshots.ts",
+  "utf8",
+);
+const labResponseSnapshotWriterSource = readFileSync(
+  "lib/services/labResponseSnapshotWriter.ts",
+  "utf8",
+);
 
 let passed = 0;
 let failed = 0;
@@ -160,7 +168,10 @@ check(
 check(
   "published daily-sport payloads use the shared short-lived server data cache",
   candidatePageSource.includes("const readCachedPublishedDailyEdgePayload = unstable_cache(") &&
-    candidatePageSource.includes('["daily-edge-published-member-payload-v1"]') &&
+    candidatePageSource.includes("DAILY_EDGE_PUBLISHED_MEMBER_CACHE_RELEASE") &&
+    labResponseSnapshotsSource.includes("daily-edge-published-member-payload-v2-publication-invalidation") &&
+    labResponseSnapshotWriterSource.includes("expirePublishedDailyEdgeMemberCache") &&
+    labResponseSnapshotWriterSource.includes("revalidateTag(DAILY_EDGE_PUBLISHED_MEMBER_CACHE_TAG, { expire: 0 })") &&
     candidatePageSource.includes("revalidate: 15"),
 );
 check(
@@ -1284,8 +1295,8 @@ check(
     candidateSource.includes("function prefetchSport(next: Sport)"),
 );
 check(
-  "the larger NBA and CFB payloads are proactively prefetched before sport-tab intent",
-  candidateSource.includes('for (const nextSport of ["nba", "cfb"] as const)') &&
+  "the high-traffic NFL, NBA and CFB payloads are proactively prefetched before sport-tab intent",
+  candidateSource.includes('for (const nextSport of ["nfl", "nba", "cfb"] as const)') &&
     candidateSource.includes("router.prefetch(destination)") &&
     candidateSource.includes("if (sport === nextSport) continue"),
 );

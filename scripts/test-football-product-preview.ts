@@ -33,6 +33,7 @@ import {
 
 const pageSource = readFileSync("app/dev/football-preview/page.tsx", "utf8");
 const memberPageSource = readFileSync("app/lab/daily-edge/CandidateDailyEdgePage.tsx", "utf8");
+const nflMemberReaderSource = readFileSync("lib/services/football/nflMemberReader.ts", "utf8");
 const fixtureSource = readFileSync("app/dev/football-preview/footballPreviewFixture.ts", "utf8");
 const readerSource = readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx", "utf8");
 const localSlateSource = readFileSync("lib/services/football/nflLocalShadowSlate.ts", "utf8");
@@ -47,7 +48,8 @@ assert.match(readerSource, /retainedFootballReader\?\.snapshot \?\? snapshot/, "
 
 assert.match(pageSource, /process\.env\.NODE_ENV === "production"/);
 assert.match(pageSource, /readCurrentNflWeekOneHeldMemberFixture/);
-assert.match(memberPageSource, /enrichCachedNflFootballEvidence/, "cached NFL member snapshots must receive the same presentation-only evidence contract");
+assert.match(memberPageSource, /readCachedNflMemberFixture/, "the member page must use the shared compact NFL reader");
+assert.match(nflMemberReaderSource, /enrichCachedNflFootballEvidence/, "cached NFL member snapshots must receive the same presentation-only evidence contract when older payloads require it");
 assert.match(pageSource, /No fallback or fabricated slate is shown/);
 assert.match(pageSource, /activePreviewSports=\{\["nfl"\]\}/);
 assert.match(pageSource, /same append-only evidence used by the member candidate/);
@@ -460,7 +462,7 @@ assert.match(readerSource, /<div className="mt-2 space-y-2">/);
 assert.match(readerSource, /<div className="mt-3 space-y-3">/);
 assert.match(readerSource, /grid grid-cols-\[48px_1fr_38px\] items-center gap-2\.5/);
 assert.doesNotMatch(readerSource, /<DefaultSplitSummary market=\{market\} sport=\{sport\} compact=\{football\}/);
-assert.match(readerSource, /for \(const nextSport of \["nba", "cfb"\] as const\)/);
+assert.match(readerSource, /for \(const nextSport of \["nfl", "nba", "cfb"\] as const\)/);
 assert.match(readerSource, /router\.prefetch\(destination\)/);
 assert.match(readerSource, /current\.pathname !== target\.pathname/);
 

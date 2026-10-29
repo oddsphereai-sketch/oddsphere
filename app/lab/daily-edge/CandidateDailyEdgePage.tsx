@@ -13,7 +13,6 @@ import {
   isNflWeekOneEvidenceBoardEnabled,
 } from "@/lib/config/nflDailyEdge";
 import type { Sport } from "@/lib/types/domain/Sport";
-import { unstable_cache } from "next/cache";
 import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
@@ -22,19 +21,6 @@ import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 // Keep the read bounded, but do not turn a healthy transfer into a false
 // empty-board state; unopened evidence is projected out below.
 const CFB_MEMBER_DATA_READ_TIMEOUT_MS = 20_000;
-const NFL_MEMBER_READER_CACHE_RELEASE = "nfl-member-reader-cache-v1";
-
-const readCachedNflForwardMemberSnapshot = unstable_cache(
-  async (season: number, week: number) => {
-    const [{ supabase }, { readNflForwardMemberSnapshot }] = await Promise.all([
-      import("@/lib/db/supabase"),
-      import("@/lib/services/football/nflForwardMemberSnapshotStore"),
-    ]);
-    return readNflForwardMemberSnapshot({ client: supabase, season, week });
-  },
-  [NFL_MEMBER_READER_CACHE_RELEASE],
-  { revalidate: 15, tags: [NFL_MEMBER_READER_CACHE_RELEASE] },
-);
 
 const MEMBER_SPORT_SWITCH_DESTINATIONS: Partial<Record<Sport, string>> = {
   mlb: "/lab/daily-edge?sport=mlb",
@@ -102,11 +88,9 @@ export default async function CandidateDailyEdgePage({
       label: "nfl-daily-edge-fixture",
       fallback: null,
       read: async () => {
-        const fixture = await readCachedNflForwardMemberSnapshot(nflSeason, nflWeek)
-          .then(async (value) => value?.fixture
-            ? (await import("@/lib/services/football/footballMemberEvidence"))
-              .enrichCachedNflFootballEvidence(value.fixture)
-            : null)
+        const fixture = await import("@/lib/services/football/nflMemberReader")
+          .then(({ readCachedNflMemberFixture }) =>
+            readCachedNflMemberFixture(nflSeason, nflWeek))
           .catch(() => null);
         if (fixture) return fixture;
         return Promise.all([
@@ -200,6 +184,9 @@ export default async function CandidateDailyEdgePage({
   const initialCfbReaderGameId = cfbFixture && requestedGame && snapshot.games.some((game) => game.id === requestedGame)
     ? requestedGame
     : null;
+  const initialNflReaderGameId = nflFixture && requestedGame && snapshot.games.some((game) => game.id === requestedGame)
+    ? requestedGame
+    : null;
   // Display-only source hierarchy: current Circa remains authoritative, while
   // a complete DraftKings pair silently occupies the same established split
   // card when Circa is absent. Provider identity stays in the DTO for audit;
@@ -225,6 +212,11 @@ export default async function CandidateDailyEdgePage({
       .projectCfbSnapshotForInitialBoard({ snapshot, fullReaderGameId: initialCfbReaderGameId })
     : null;
   if (cfbBoardProjection) snapshot = cfbBoardProjection.snapshot;
+  const nflBoardProjection = nflFixture
+    ? (await import("@/lib/services/football/nflMemberBoardProjection"))
+      .projectNflSnapshotForInitialBoard({ snapshot, fullReaderGameId: initialNflReaderGameId })
+    : null;
+  if (nflBoardProjection) snapshot = nflBoardProjection.snapshot;
   // Retain the established prop identifier because shared football reader
   // regression tests treat it as part of the page contract. CFB uses the same
   // existing availability surface when its fixture is active.
@@ -295,6 +287,7 @@ export default async function CandidateDailyEdgePage({
         pitcherFirstInningHistory={pitcherFirstInningHistory}
         initialAvailability={visibleNflAvailability}
         deferredCfbGameIds={cfbBoardProjection?.deferredGameIds}
+        deferredNflGameIds={nflBoardProjection?.deferredGameIds}
         sport={sport}
         freshContractRead={false}
         reviewMode={false}
