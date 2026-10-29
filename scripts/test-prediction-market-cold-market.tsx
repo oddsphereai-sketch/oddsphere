@@ -8,7 +8,7 @@ import type {ReaderOutcome} from "../lib/providers/owls/predictionMarketContract
 
 const now=Date.parse("2026-10-29T14:00:00Z"),m=60_000;
 const book:PredictionMarketBookTrail={sportsbook:"pinnacle",line:237.5,locked:false,points:[[now-600*m,110/210,-110],[now-200*m,105/205,-105],[now-60*m,110/210,-110]],historyScope:"provider_history",opening:{point:[now-600*m,110/210,-110],line:237.5}};
-const cold={team:"Under 237.5",label:"Under 237.5",asOf:new Date(now).toISOString(),probability:.505,history:[[now-10*m,.505,0]],historicalCandles:[],historyFrom:new Date(now-11*m).toISOString()} as ReaderOutcome;
+const cold:ReaderOutcome={ticker:"KXNBATOTAL-26OCT29CLEATL-238",eventTicker:"KXNBATOTAL-26OCT29CLEATL",sideCode:"YES",gameDate:"2026-10-29",team:"Under 237.5",label:"Under 237.5",bid:.50,ask:.51,volume24h:null,totalVolume:null,asOf:new Date(now).toISOString(),probability:.505,history:[[now-10*m,.505,0]],historicalCandles:[],historyFrom:new Date(now-11*m).toISOString()};
 const before=JSON.stringify({book,cold});
 assert.equal(predictionMarketHasSharedHistory(predictionMarketComparison(cold,book)),false,"new Kalshi quote later than the last book quote cannot form a comparison");
 const standalone=predictionMarketBookOnlyComparison(book);
