@@ -1,6 +1,7 @@
 import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 import {
+  DAILY_EDGE_PUBLISHED_MEMBER_CACHE_TAG,
   dailyEdgeSnapshotKey,
   readLatestLabResponseSnapshot,
   trackingFoundationSnapshotKey,
@@ -42,6 +43,18 @@ type SnapshotWriteResult = {
   lockedGames?: number;
   changedGames?: number;
 };
+
+async function expirePublishedDailyEdgeMemberCache(): Promise<void> {
+  try {
+    const { revalidateTag } = await import("next/cache");
+    revalidateTag(DAILY_EDGE_PUBLISHED_MEMBER_CACHE_TAG, { expire: 0 });
+  } catch (error) {
+    // Operator scripts reuse this writer outside a Next request context. The
+    // database publication remains authoritative there; live Vercel routes
+    // must fail the cycle if their member-cache invalidation ever fails.
+    if (process.env.VERCEL === "1" || process.env.NEXT_RUNTIME) throw error;
+  }
+}
 
 /**
  * Publish authoritative NBA lock metadata without recomputing the rolling
@@ -123,6 +136,7 @@ export async function refreshNbaPublishedLockMetadata(input: {
     if (!write.ok) {
       return { ok: false, snapshotKey, error: write.error, lockedGames: patched.lockedGames, changedGames: patched.changedGames };
     }
+    await expirePublishedDailyEdgeMemberCache();
     return {
       ok: true,
       snapshotKey,
@@ -197,6 +211,7 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
     });
 
     if (!write.ok) return { ok: false, snapshotKey, games: body.games?.length ?? 0, error: write.error };
+    await expirePublishedDailyEdgeMemberCache();
     return {
       ok: true,
       snapshotKey,

@@ -710,12 +710,16 @@ const comparableBooks = __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__.comparableBooksBy
 assert.deepEqual(comparableBooks[game.providerGameId]?.map((row: NflPreviewBookOdds) => row.sportsbook), ["FanDuel", "DraftKings"]);
 
 const candidatePage = readFileSync(path.resolve("app/lab/daily-edge/CandidateDailyEdgePage.tsx"), "utf8");
+const nflMemberReader = readFileSync(path.resolve("lib/services/football/nflMemberReader.ts"), "utf8");
 assert.match(candidatePage, /isNflWeekOneEvidenceBoardEnabled/);
 assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
-assert.match(candidatePage, /readCachedNflForwardMemberSnapshot/);
-assert.match(candidatePage, /readNflForwardMemberSnapshot/);
-assert.match(candidatePage, /revalidate: 15/);
+assert.match(candidatePage, /readCachedNflMemberFixture/);
+assert.match(nflMemberReader, /readNflForwardMemberSnapshot/);
+assert.match(nflMemberReader, /revalidate: 15/);
+assert.match(nflMemberReader, /nflFixtureAlreadyHasModelEvidence/);
 assert.match(candidatePage, /initialAvailability=\{visibleNflAvailability\}/);
+assert.match(candidatePage, /projectNflSnapshotForInitialBoard/);
+assert.match(candidatePage, /deferredNflGameIds=\{nflBoardProjection\?\.deferredGameIds\}/);
 assert.match(candidatePage, /game\.id\.startsWith\("cfb-"\) \? game\.id\.slice\(4\) : game\.id/);
 assert.match(candidatePage, /cfbFixture\.availability\?\.\[providerGameId\]/);
 assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
