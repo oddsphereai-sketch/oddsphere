@@ -1,7 +1,7 @@
 import { readPredictionMarketDisplayFeed, readPredictionMarketContractFeed, readPublishedPredictionMarketGames,readPredictionMarketPrelockFeed } from "@/lib/services/dailyEdge/predictionMarketDisplayFeed";
 import {readPredictionMarketPrelock} from "@/lib/providers/owls/predictionMarketPrelock";
 import {predictionMarketLockBoundary} from "@/app/lab/lib/predictionMarketDisplay";
-import {readPredictionMarketBook} from "@/lib/services/dailyEdge/predictionMarketBookRead";
+import {readPredictionMarketBook,readPublicTrackerBook} from "@/lib/services/dailyEdge/predictionMarketBookRead";
 import { matchPredictionMarketGame, PREDICTION_MARKET_TARGETS, type PredictionMarketSport } from "@/lib/providers/owls/owlsPredictionMarkets";
 import { resolveReaderContract, formatContractLine, type ContractKind, type ContractSelection } from "@/lib/providers/owls/predictionMarketContracts";
 
@@ -42,7 +42,8 @@ export async function GET(request: Request): Promise<Response> {
     if(archive)return Response.json({market:archive.market,book:archive.book,prelockCapturedAt:archive.capturedAt,availability:archive.market?"available":"contract_unavailable"},{headers:{"Cache-Control":"private, max-age=30"}});
   }
   const preferredBook=query.get("book");
-  const book=game&&side?await readPredictionMarketBook(game,kind,side,selection?.line??null,sport as PredictionMarketSport,preferredBook).catch(()=>null):null;
+  const publicTracker=query.get("display")==="public-tracker-v1";
+  const book=game&&side?await (publicTracker?readPublicTrackerBook(game,kind,side,selection?.line??null,sport as PredictionMarketSport):readPredictionMarketBook(game,kind,side,selection?.line??null,sport as PredictionMarketSport,preferredBook)).catch(()=>null):null;
   const availability=market?"available":!feed?"feed_unavailable":!gameMatch?"event_unavailable":selection&&!contracts?"market_feed_unavailable":"contract_unavailable";
   return Response.json({market,book,availability}, {headers:{"Cache-Control":"private, max-age=30, stale-while-revalidate=30"}});
 }
