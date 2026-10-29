@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";
 import { gradeCbbProvisional } from "../lib/cbb/provisionalGradePolicy";
 import { cbbCurrentSplitEvidence } from "../lib/cbb/owlsSplitEvidence";
+import { cbbObservedPricePaths, type CbbQualifiedNamedQuote } from "../lib/cbb/owlsMarketEvidence";
 import type { CbbForecast, CbbQuote } from "../lib/cbb/types";
 
 const asOf = "2026-11-01T12:00:00.000Z";
@@ -105,4 +106,13 @@ assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
 assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
   data: [{ ...providerSplitGame, splits: [{ ...providerSplitGame.splits[0], as_of: "2026-11-01T09:00:00.000Z" }] }] },
 "2026-11-01T11:55:00.000Z", asOf).rows.length, 0);
+const pathQuote: CbbQualifiedNamedQuote = { ...sharp, provider: "owls", orientationVerified: true };
+const paths = cbbObservedPricePaths([pathQuote,
+  { ...pathQuote, providerObservedAt: "2026-11-01T11:57:00.000Z", line: -8.5 },
+  { ...pathQuote, sportsbook: "fanduel" }], "fanduel");
+assert.equal(paths.length, 1);
+assert.equal(paths[0].book, "pinnacle");
+assert.equal(paths[0].distinctStates, 2);
+assert.equal(paths[0].trueOpeningKnown, false);
+assert.equal(paths[0].causalLeadership, "unknown");
 console.log("CBB provisional exact-quote grade tests passed");

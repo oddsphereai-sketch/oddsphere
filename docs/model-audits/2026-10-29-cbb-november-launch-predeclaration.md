@@ -136,6 +136,15 @@ than silently flip or infer generic sides. A DraftKings Owl's event for the
 Liberty–High Point matchup also carried a start roughly two hours away from
 the matching BALLDONTLIE and ESPN 04:59 UTC tip and was correctly excluded by
 the exact-time gate.
+
+Repeated private pulls now preserve immutable, hash-checked receipts and
+reconstruct the actual observed same-book, same-market price path with the
+evaluated target family excluded. The 17:51 UTC rehearsal joined three pulls
+for Villanova–Notre Dame; each qualified non-target book/market had three
+observations but one distinct price state, so **no movement was observed**.
+The Liberty–High Point path had no non-target named-book observations after
+the exact-time gate. Neither path is labeled a true opening, sharp-money cause,
+or validated score-correction signal.
 At 17:41 UTC, the refreshed private board had two games and six markets:
 zero Best Angles, three model-only Leans, two Watchlists, one No Play, and zero
 Holds. No Circa/Pinnacle CBB prices or split games arrived in that pull. The

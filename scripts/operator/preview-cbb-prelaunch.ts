@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { matchCbbVenue, type EspnCbbEvent } from "../../lib/cbb/dataset";
 import { fitCbbRatings, forecastCbbGame, cbbThresholdProbabilities } from "../../lib/cbb/model";
@@ -11,7 +11,7 @@ import { cbbPriceObservations, cbbSameBookMovement, normalizeCbbOdds, reviewCbbQ
 import { bindCbbQuoteOrientation, normalizeCbbNamedBookOdds, type CbbNamedOddsRow } from "../../lib/cbb/namedBookOdds";
 import type { CbbGame, CbbOdds, CbbPlayer, CbbPlayerSeason, CbbVenue } from "../../lib/cbb/types";
 import { forecastCbbCandidateR2 } from "../../lib/cbb/candidateR2Runtime";
-import { normalizeCbbOwlsCurrent } from "../../lib/cbb/owlsMarketEvidence";
+import { cbbObservedPricePaths, normalizeCbbOwlsCurrent } from "../../lib/cbb/owlsMarketEvidence";
 import { cbbCurrentSplitEvidence } from "../../lib/cbb/owlsSplitEvidence";
 import { buildCbbProvisionalBoard } from "../../lib/cbb/provisionalBoard";
 import { buildCbbMarketReaderFeatures, CBB_MARKET_READER_RESEARCH_RELEASE } from "../../lib/cbb/marketReaderResearch";
@@ -58,6 +58,20 @@ async function freshMarketReceipt() {
   return { odds: { fetchedAt, body: odds.body }, splits: splits.body,
     receipt: { path: receiptPath, sha256Prefix: digest, fetchedAt } };
 }
+async function recentMarketReceipts() {
+  const names = (await readdir(dir)).filter(name => /^owls-cbb-private-\d+-[0-9a-f]{16}\.json$/.test(name))
+    .sort().reverse().slice(0, 8);
+  return Promise.all(names.map(async name => {
+    const serialized = await readFile(resolve(dir, name), "utf8");
+    const expected = name.match(/-([0-9a-f]{16})\.json$/)?.[1];
+    if (createHash("sha256").update(serialized).digest("hex").slice(0, 16) !== expected) {
+      throw new Error("CBB private market receipt integrity failed");
+    }
+    const row = JSON.parse(serialized) as { fetchedAt: string; odds: RawOwlsOddsResponse };
+    if (!Number.isFinite(Date.parse(row.fetchedAt)) || !row.odds?.data) throw new Error("Invalid CBB private market receipt");
+    return row;
+  }));
+}
 async function main() {
   const artifact = await read<Parameters<typeof fitCbbRatings>[1] & { uncertainty: Parameters<typeof forecastCbbGame>[2]; prior: NonNullable<Parameters<typeof fitCbbRatings>[1]["prior"]> }>("candidate-artifact.json");
   let report = await read<{ confirmation: { wins: number; losses: number; accuracy: number; teamScoreMae: number; marginMae: number; totalMae: number } }>("evaluation-report.json");
@@ -72,6 +86,7 @@ async function main() {
   const current = await read<{ fetchedAt: string; data: CbbOdds[] }>("odds-current.json");
   const sharp = await read<{ fetchedAt: string; data: CbbNamedOddsRow[] }>("sharp-event-odds.json").catch(() => ({ fetchedAt: new Date().toISOString(), data: [] }));
   const freshMarket = refreshMarket ? await freshMarketReceipt() : null;
+  const pathReceipts = freshMarket ? await recentMarketReceipts() : [];
   const owls = candidateR5 ? freshMarket?.odds ?? await read<{ fetchedAt: string; body: RawOwlsOddsResponse }>("owls-cbb-current.json") : null;
   const readerExperiment = candidateR5 ? await read<Record<string, unknown>>("market-reader-joint-objective-report.json") : null;
   const totalHead = candidateR17 ? await read<CbbTotalOnlyMarketHead>("candidate-r17-total-only-head.json") : null;
@@ -106,12 +121,14 @@ async function main() {
     const displayedQuotes = candidateR17 ? authoritativeQuotes.filter(quote => quote.sportsbook === targetBook) : authoritativeQuotes;
     const marketContext = candidateR5 ? buildCbbMarketReaderFeatures(forecast, authoritativeQuotes.map(quote => ({ quote,
       orientation: "named_selections_verified", availability: "observed_live" })), targetBook, { archiveReplay: false }) : null;
+    const marketChronology = freshMarket ? cbbObservedPricePaths(pathReceipts.flatMap(receipt =>
+      normalizeCbbOwlsCurrent(game, receipt.odds, receipt.fetchedAt, asOf).quotes), targetBook) : [];
     const marketOutcome = totalHead && marketContext && targetBook !== "unavailable" ?
       applyCbbTotalOnlyMarketHead(forecast, marketContext.features, totalHead) : null;
     const finalForecast = marketOutcome?.forecast ?? forecast;
     const provisionalBoard = candidateR5 ? buildCbbProvisionalBoard(finalForecast, authoritativeQuotes) : null;
     cards.push({ game, venue, forecast: finalForecast, roster: { home: hRoster, away: aRoster },
-      marketSplitEvidence,
+      marketSplitEvidence, marketChronology,
       provisionalBoard,
       teamIdentity: { home: identities.get(game.home_team.id) ?? null, away: identities.get(game.visitor_team.id) ?? null },
       inputAsOf: { schedule: schedule.fetchedAt, prices: candidateR5 ? owls!.fetchedAt : current.fetchedAt,
