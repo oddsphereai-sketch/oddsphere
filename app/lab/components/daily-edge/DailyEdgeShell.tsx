@@ -661,7 +661,7 @@ function TeamBadge({ abbr, logo, size }: { abbr: string; logo: string | null; si
   const shellSport = useShellSport();
   const [errored, setErrored] = useState(false);
   const isSoccer = shellSport === "soccer" || shellSport === "ucl";
-  const usesSportOwnedLogo = isSoccer || shellSport === "cfb";
+  const usesSportOwnedLogo = isSoccer || shellSport === "cfb" || shellSport === "cbb";
   const sportOwnedLogo = logo ?? (shellSport === "cfb" ? cfbTeamIdentity(abbr)?.logoUrl ?? null : null);
   const src = usesSportOwnedLogo ? (sportOwnedLogo ?? "") : espnLogoUrl(abbr, shellSport);
   const filter = LOGO_FILTER[abbr];

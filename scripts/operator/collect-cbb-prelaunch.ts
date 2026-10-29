@@ -32,6 +32,16 @@ async function cached<T>(name: string, load: () => Promise<T[]>): Promise<T[]> {
 async function main() {
   await mkdir(directory, { recursive: true });
   await cached("teams.json", () => client.teams());
+  if (args.includes("--identity")) await cached("espn-teams.json", async () => {
+    const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams?limit=500", {
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`ESPN CBB teams: HTTP ${response.status}`);
+    const body = await response.json();
+    const teams = body.sports?.[0]?.leagues?.[0]?.teams?.map((row: { team: unknown }) => row.team);
+    if (!Array.isArray(teams) || teams.length < 300) throw new Error("ESPN CBB team catalog incomplete");
+    return teams;
+  });
   for (const season of seasons) {
     const games = await cached(`games-${season}.json`, () => client.games(season));
     if (season < 2026) {
