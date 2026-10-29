@@ -109,6 +109,7 @@ import {
 } from "./nbaMemberMarketEvidence";
 import { buildNbaSpreadReaderStats } from "./nbaSpreadReaderStats";
 import { isNbaAuthoritativeSportsbook } from "./nbaMarketSourceEligibility";
+import { loadNbaConsumerMemberLineHistory } from "./nbaConsumerMemberLineHistory";
 
 const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
 
@@ -268,6 +269,10 @@ export async function buildNbaDailyEdgePipeline(
   const dbIdToExt = new Map<number, number>(
     (gameRows ?? []).map((g: { id: number; external_id: number }) => [g.id, g.external_id]),
   );
+  const consumerMemberHistory = await loadNbaConsumerMemberLineHistory({
+    client: supabase,
+    externalIdByDbId: dbIdToExt,
+  });
 
   // Bulk-pull lines for all games on the slate.
   const linesByExtId = new Map<number, NbaLineRow[]>();
@@ -718,7 +723,13 @@ export async function buildNbaDailyEdgePipeline(
     } else if (!lockedExternalIds.has(ext)) {
       memberEvidenceByGame.set(ext, buildNbaMemberGameEvidence({
         game: g,
-        priceRows: readerPriceRowsByGame.get(ext) ?? [],
+        // Display-only consumer chronology is deliberately merged here, after
+        // the model and professional reader have finished. It cannot alter a
+        // forecast, pick, grade, stake, or immutable locked payload.
+        priceRows: [
+          ...(readerPriceRowsByGame.get(ext) ?? []),
+          ...(consumerMemberHistory.rowsByExternalGameId.get(ext) ?? []),
+        ],
         splitRows: readerSplitRowsByGame.get(ext) ?? [],
         evaluatedAt: readerEvaluatedAt,
       }));

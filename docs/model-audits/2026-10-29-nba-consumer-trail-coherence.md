@@ -1,7 +1,7 @@
 # NBA consumer movement-trail coherence
 
 Date: 2026-10-29  
-Status: candidate passed; production verification pending
+Status: production verified at `5d192fa9a99785c739e8443c55bffb7504af9710`
 
 ## Owner requirement
 
@@ -49,6 +49,17 @@ FanDuel; the member movement trail now remains on FanDuel rather than exposing
 Circa's internal PK. The full model-change suite, focused reader tests, locked
 snapshot precedence, T-60 lifecycle, TypeScript, and source-eligibility gates
 passed before publication.
+
+## Production verification
+
+PR #864 merged as `5d192fa9a99785c739e8443c55bffb7504af9710` and the Vercel production
+deployment completed successfully. The authenticated NBA refresh wrote 214 of
+214 matched price rows across three games and nine scopes with zero incomplete
+groups or current-date errors. The published CLE-ATL card showed ATL -1.5
+-104 at FanDuel with FanDuel as the member movement reference; Circa remained
+available only as separately sourced sharp evidence. The subsequent r8/r10
+consumer-history follow-up restores the full real consumer chronology without
+changing that source boundary.
 
 ## Rollback
 
