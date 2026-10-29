@@ -1305,6 +1305,22 @@ Last reviewed: 2026-10-29
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 29 owner-approved exact-price blocker correction: calibration/policy/
+  decision/tuple advance to r28/r29/r55/r42, sole writer to r142, member fixture
+  to r96, and snapshot/reader to r56/r41 (`paired_price_context`). The incumbent
+  three-book-priced market selections and all forecast-seeding decisions remain
+  unchanged. Otherwise ungraded markets may use one fresh exact-line comparison
+  book or the real target's complete paired-price context; target-only context
+  has an explicit source and zero independent books, not synthetic consensus.
+  The existing exact-price/push EV, confidence, price-tier, resistance,
+  verified-QB and anchorless caps still govern the full grade ladder. Forecast
+  model/runtime/distribution/probability, market-reader production release,
+  evidence schema r47, member r64, tracking identity, sole
+  `prediction_pipeline:cfb` lease and all stored locks are unchanged. Exact r54
+  locks retain r27 calibration/r28 policy rather than being relabeled. Scope,
+  owner authorization, verification and rollback:
+  `docs/model-audits/2026-10-29-cfb-exact-price-blocker-predeclaration.md`.
+
 - October 27 Owls provider cutover: the sole writer no longer requires or
   calls SharpAPI. It advances to
   `cfb_forward_evidence_writer_2026_10_27_r141_owls_capture_only`; the collector

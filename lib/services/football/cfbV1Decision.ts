@@ -26,6 +26,8 @@ export const CFB_V1_PROBABILITY_RELEASE =
 export const CFB_V1_REPRESENTATIVE_SCORE_RELEASE =
   "cfb_v1_professional_reachable_score_2026_10_27_r24_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_CALIBRATION_RELEASE =
+  "cfb_v1_exact_price_calibration_2026_10_29_r28_paired_price_context" as const;
+export const CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_27_r27_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_PMF_COHERENCE_PREVIOUS_SCORE_ARTIFACT_RELEASE =
   "cfb_v1_joint_score_runtime_2026_10_15_r26_full_product_coordinator_compatibility" as const;
@@ -38,10 +40,14 @@ export const CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE =
 export const CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE =
   "cfb_v1_exact_price_calibration_2026_10_15_r26_full_product_coordinator_compatibility" as const;
 export const CFB_V1_GRADE_POLICY_RELEASE =
+  "cfb_v1_composite_grade_policy_2026_10_29_r29_paired_price_context" as const;
+export const CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_13_r28_exact_price_actionability" as const;
 export const CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE =
   "cfb_v1_composite_grade_policy_2026_10_12_r27_provider_team_identity_consensus_authority_split_specialization" as const;
 export const CFB_V1_DECISION_RELEASE =
+  "cfb_v1_daily_edge_decision_2026_10_29_r55_paired_price_context" as const;
+export const CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_27_r54_near_tie_pmf_winner_coherence" as const;
 export const CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_10_24_r53_selective_parlay_lean_profile" as const;
@@ -82,7 +88,7 @@ export const CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE =
 const CFB_V1_POLICY_SOURCE_DECISION_RELEASE =
   "cfb_v1_daily_edge_decision_2026_09_04_r28_evidence_identity_continuity" as const;
 export const CFB_V1_DECISION_SCHEMA_RELEASE =
-  "cfb_v1_exact_price_decision_tuple_2026_10_27_r41_near_tie_pmf_winner_coherence" as const;
+  "cfb_v1_exact_price_decision_tuple_2026_10_29_r42_paired_price_context" as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MIN_EXCLUSIVE = 0.53 as const;
 export const CFB_SPREAD_COUNTER_SIGNAL_MAX_INCLUSIVE = 0.55 as const;
 export const CFB_T60_TARGET_MINUTES = 60 as const;
@@ -99,6 +105,7 @@ export type CfbV1UnavailableReasonCode =
   | "named_target_quote_unavailable"
   | "market_context_line_unavailable"
   | "target_excluded_same_line_consensus_insufficient"
+  | "paired_target_price_context_unavailable"
   | "quote_timestamp_invalid"
   | "quote_observed_after_evaluation"
   | "evaluation_not_pregame"
@@ -160,7 +167,7 @@ export type CfbV1ExactPriceDecision = {
     marketSelection: "main_line" | "coherent_paired_alternate";
   };
   consensus: {
-    source: "target_excluded_same_line_named_books";
+    source: "target_excluded_same_line_named_books" | "target_paired_price_context";
     books: string[];
     fairProbability: number;
   };
@@ -330,6 +337,8 @@ export function buildCfbV1DecisionBundle(args: {
   contextLines?: CfbV1ContextLines;
   calibrationContract?: CfbV1CalibrationContract;
   fixedEvaluatedSportsbookByMarket?: Partial<Record<CfbV1Market, string>>;
+  /** Forecast seeding and exact same-input rollback audits retain the old lane. */
+  priceContextPolicy?: "paired_price_fallback" | "legacy_three_book_consensus";
 }): CfbV1DecisionBundle {
   const forecast = args.forecast ?? getCfbV1Forecast(args.providerGameId);
   if (forecast.providerGameId !== args.providerGameId) throw new Error("CFB decision forecast/game identity mismatch.");
@@ -383,13 +392,18 @@ function selectMarket(args: {
   contextLines?: CfbV1ContextLines;
   calibrationContract?: CfbV1CalibrationContract;
   fixedEvaluatedSportsbookByMarket?: Partial<Record<CfbV1Market, string>>;
+  priceContextPolicy?: "paired_price_fallback" | "legacy_three_book_consensus";
 }): CfbV1ExactPriceDecision | null {
   const policy = gradeArtifact.policies[args.market];
   const fixedSportsbook = args.fixedEvaluatedSportsbookByMarket?.[args.market];
-  const candidates = args.comparableCurrentBooks
+  const targets = args.comparableCurrentBooks
     .filter((target) => target.targetEligible !== false)
-    .filter((target) => !fixedSportsbook || normalizeBook(target.sportsbook) === normalizeBook(fixedSportsbook))
-    .flatMap((target) => evaluateTarget({ ...args, target, policy }));
+    .filter((target) => !fixedSportsbook || normalizeBook(target.sportsbook) === normalizeBook(fixedSportsbook));
+  // Do not re-shop or change any market the incumbent could already grade.
+  const incumbent = targets.flatMap((target) => evaluateTarget({ ...args, target, policy }));
+  const candidates = incumbent.length || args.priceContextPolicy === "legacy_three_book_consensus"
+    ? incumbent
+    : targets.flatMap((target) => evaluateTarget({ ...args, target, policy, allowPairedContext: true }));
   return candidates.sort((first, second) =>
     gradeRank(second.grade) - gradeRank(first.grade) ||
     second.expectedValue - first.expectedValue ||
@@ -414,6 +428,7 @@ function evaluateTarget(args: {
   calibrationContract?: CfbV1CalibrationContract;
   target: NcaafBookOdds;
   policy: Policy;
+  allowPairedContext?: boolean;
 }): CfbV1ExactPriceDecision[] {
   const targetMarket = args.target[args.market];
   if (!targetMarket || Date.parse(args.target.observedAt) >= Date.parse(args.gameStartsAt)) return [];
@@ -426,6 +441,7 @@ function evaluateTarget(args: {
   if (homeSpread === undefined || homeSpread === null || totalLine === undefined || totalLine === null) return [];
   const lineProbabilities = cfbV1LineProbabilities({ forecast: args.forecast, homeSpread, totalLine });
   const calibrationContract = args.calibrationContract ?? "authoritative_pmf_identity";
+  if (args.allowPairedContext && calibrationContract === "legacy_independent_artifact") return [];
   const selection = cfbV1CalibratedSelection({
     probabilities: lineProbabilities,
     market: args.market,
@@ -436,7 +452,9 @@ function evaluateTarget(args: {
   return sides.flatMap((side) => {
     const quote = targetQuote(args.target, args.market, side);
     if (!quote) return [];
-    const consensus = targetExcludedConsensus(args.comparableCurrentBooks, args.target, args.market, side, quote.line);
+    const consensus = args.allowPairedContext
+      ? pairedPriceContext({ books: args.comparableCurrentBooks, target: args.target, market: args.market, side, line: quote.line, providerGameId: args.providerGameId, evaluatedAt: args.evaluatedAt ?? quote.observedAt })
+      : targetExcludedConsensus(args.comparableCurrentBooks, args.target, args.market, side, quote.line);
     if (!consensus) return [];
     const independentProbability = independentSideProbability(lineProbabilities, args.market, side);
     const pushProbability = args.market === "spread" ? lineProbabilities.spread.push : args.market === "total" ? lineProbabilities.total.push : 0;
@@ -628,6 +646,47 @@ function targetExcludedConsensus(
   };
 }
 
+/** Real same-threshold paired prices, not a synthetic independent consensus. */
+function pairedPriceContext(args: {
+  books: NcaafBookOdds[]; target: NcaafBookOdds; market: CfbV1Market;
+  side: "home" | "away" | "over" | "under"; line: number | null;
+  providerGameId: string; evaluatedAt: string;
+}): CfbV1ExactPriceDecision["consensus"] | null {
+  const evaluation = Date.parse(args.evaluatedAt);
+  if (!Number.isFinite(evaluation) || args.target.provider === "owls") return null;
+  const values = new Map<string, { sportsbook: string; fair: number; fingerprint: string }>();
+  const conflicting = new Set<string>();
+  let targetValidated = false;
+  for (const book of args.books) {
+    if (book.provider === "owls" || book.providerGameId !== args.providerGameId) continue;
+    const selected = targetQuote(book, args.market, args.side);
+    const opposing = targetQuote(book, args.market, opposingSide(args.side));
+    if (!selected || !opposing || selected.marketSelection !== "main_line" || opposing.marketSelection !== "main_line" || selected.line !== args.line) continue;
+    if (args.market === "spread" ? opposing.line !== -args.line! : opposing.line !== args.line) continue;
+    const observed = Date.parse(selected.observedAt);
+    if (!Number.isFinite(observed) || observed > evaluation || evaluation - observed > 60 * 60_000) continue;
+    if (![selected.price, opposing.price].every(price => Number.isFinite(price) && Math.abs(price) >= 100)) continue;
+    if (args.line !== null && !Number.isFinite(args.line)) continue;
+    if (args.market === "total" && (args.line === null || args.line <= 0)) continue;
+    const hold = implied(selected.price) + implied(opposing.price);
+    if (hold < 1 || hold > 1.2) continue;
+    const key = normalizeBook(book.sportsbook);
+    if (!key) continue;
+    const value = { sportsbook: book.sportsbook, fair: twoSidedFair(selected.price, opposing.price), fingerprint: JSON.stringify([selected.price, opposing.price, selected.observedAt]) };
+    if (book === args.target) targetValidated = true;
+    if (values.has(key) && values.get(key)!.fingerprint !== value.fingerprint) conflicting.add(key);
+    else values.set(key, value);
+  }
+  const targetKey = normalizeBook(args.target.sportsbook);
+  const target = conflicting.has(targetKey) ? null : values.get(targetKey);
+  if (!target || !targetValidated) return null;
+  const others = [...values].filter(([key]) => key !== targetKey && !conflicting.has(key)).map(([, value]) => value);
+  return others.length ? {
+    source: "target_excluded_same_line_named_books", books: others.map(value => value.sportsbook).sort(),
+    fairProbability: others.reduce((sum, value) => sum + value.fair, 0) / others.length,
+  } : { source: "target_paired_price_context", books: [], fairProbability: target.fair };
+}
+
 function targetQuote(book: NcaafBookOdds, market: CfbV1Market, side: "home" | "away" | "over" | "under"): { line: number | null; price: number; observedAt: string; marketSelection: "main_line" | "coherent_paired_alternate" } | null {
   const marketSelection = book.marketSelection?.[market] ?? "main_line";
   const observedAt = book.marketObservedAt?.[market] ?? book.observedAt;
@@ -705,6 +764,7 @@ function unavailableReasonCodes(args: {
   lockedAt?: string | null;
   contextLines?: CfbV1ContextLines;
   calibrationContract?: CfbV1CalibrationContract;
+  priceContextPolicy?: "paired_price_fallback" | "legacy_three_book_consensus";
 }): CfbV1UnavailableReasonCode[] {
   const reasons = new Set<CfbV1UnavailableReasonCode>();
   const targets = args.comparableCurrentBooks.filter((book) => book.targetEligible !== false);
@@ -748,7 +808,9 @@ function unavailableReasonCodes(args: {
       continue;
     }
     if (!targetExcludedConsensus(args.comparableCurrentBooks, target, args.market, side, quote.line)) {
-      reasons.add("target_excluded_same_line_consensus_insufficient");
+      reasons.add(args.priceContextPolicy === "legacy_three_book_consensus"
+        ? "target_excluded_same_line_consensus_insufficient"
+        : "paired_target_price_context_unavailable");
     }
   }
 

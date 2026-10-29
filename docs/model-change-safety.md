@@ -1,5 +1,33 @@
 # Model change safety protocol
 
+## Owner-approved correctness exception: CFB exact-price comparison-count blocker r55
+
+On 2026-10-29 Daniel Mengel explicitly directed publication of the narrow
+comparison-count correction without a large historical testing project.
+Insufficient identical-line sportsbooks must not itself block grading an
+otherwise valid CFB offer. This exception is limited to
+`docs/model-audits/2026-10-29-cfb-exact-price-blocker-predeclaration.md`.
+It does not claim improved held-out returns or authorize threshold tuning.
+
+The incumbent priced markets retain their exact selections. Only otherwise
+ungraded markets may use a fresh complete exact-game opposing pair with one
+other identical-line book or, absent that, explicitly attributed target-paired
+price context with zero independent comparison books. No synthetic consensus
+or permanent Watchlist ceiling is introduced. Forecast seeding remains on the
+incumbent policy, preserving the authoritative score/PMF and market reader.
+Exact-price/push EV, confidence, price-tier, resistance, health, verified-QB
+and anchorless actionability checks remain. The existing sole writer and
+`prediction_pipeline:cfb` lease remain authoritative; all stored locks retain
+their exact legacy fields and releases.
+
+The affected calibration/policy/decision/tuple and writer/member-cache
+identifiers must advance. Publication still requires a zero-write same-input
+sole-runtime board comparison with every promotion/demotion reported,
+lock writer/reader precedence tests, focused CFB tests, full model-change
+verification, current-main integration safety, protected PR checks and live
+release/coverage/reader/cron proof. No extended historical tournament is
+required for this owner-approved correction.
+
 ## Owner-directed repair: NBA consumer history continuity
 
 On 2026-10-29 Daniel Mengel required the NBA member card to keep Circa and
