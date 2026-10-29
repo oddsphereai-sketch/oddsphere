@@ -40,6 +40,11 @@ assert.equal(JSON.stringify(stored),original);assert.equal(joined.sportsbook,sto
 for(const p of stored.points)assert.strictEqual(joined.points.find(x=>x[0]===p[0]),p,"every stored price/time wins by reference, including conflicts");
 assert.ok(joined.points.every(p=>p[0]<=now+h));assert.equal(joined.points[0][0],now-40*h);
 assert.equal(predictionMarketBookStart(game.markets.moneyline,"ATL",joined,null,now+h)?.kind,"provider_opening");
+const lockedMarket={...game.markets.moneyline,oddsTrail:[{label:"open" as const,sportsbook:"circa",line:null,american:-115,observedAt:iso(now-42*h),source:"provider_opening" as const}]};
+assert.equal(predictionMarketBookStart(lockedMarket,"ATL",joined,null,now+h)?.point[2],-115,"provider opening already stored in the lock outranks conflicting auxiliary opening metadata");
+const storedOpening={point:[now-42*h,115/215,-115] as [number,number,number],line:null},storedHistory:[[number,number,number|null]]=[[now-42*h,-115,null]];
+const withOpening=predictionMarketArchivedBook({...stored,opening:storedOpening,marketHistory:storedHistory},archive,now,now+h,null)!;
+assert.strictEqual(withOpening.opening,storedOpening);assert.strictEqual(withOpening.marketHistory,storedHistory,"existing evidence metadata cannot be replaced by the auxiliary archive");
 assert.strictEqual(predictionMarketArchivedBook(stored,{...archive,sportsbook:"pinnacle"},now,now+h,null),stored);
 assert.strictEqual(predictionMarketArchivedBook(stored,{...archive,line:1},now,now+h,null),stored);
 assert.strictEqual(predictionMarketArchivedBook(stored,archive,now+2*h,now+h,null),stored);
