@@ -1187,9 +1187,9 @@ function applyPublishedDecision(
     ? `${selectedLabel} clears the validated NFL market-led value policy at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, with positive expected value at the displayed value-model probability.`
     : isWatchlist
       ? `${selectedLabel} is inside the validated NFL monitoring lane at ${formatAmerican(decision.evaluatedQuote.price)} from ${decision.evaluatedQuote.sportsbook}, but it does not clear the exact-price Lean policy. Monitor only.`
-    : marketName === "moneyline"
-      ? `${selectedLabel} is the football outcome forecast side, but this probability is not authorized as an exact-price moneyline betting edge.`
-      : `${selectedLabel} is the separately calibrated ${marketName} forecast side, but this probability is not authorized as an exact-price betting edge.`;
+    : decision.expectedValue <= 0
+      ? `The model favors ${selectedLabel}, but the odds at ${formatAmerican(decision.evaluatedQuote.price)} do not offer enough value for a bet.`
+      : `The model favors ${selectedLabel}, but the overall evidence is not strong enough to recommend a bet at ${formatAmerican(decision.evaluatedQuote.price)}.`;
   return {
     ...base,
     pick: selectedLabel,
