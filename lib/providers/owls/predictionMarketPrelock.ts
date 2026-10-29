@@ -19,7 +19,7 @@ export function capturePredictionMarketPrelock(previous:PrelockFeed|null,games:D
  const rows=new Map((previous?.rows??[]).filter(r=>Date.parse(r.start)>now-90*86_400_000).map(r=>[identity(r),r]));
  for(const game of games){
   if(game.lockState==="locked"||predictionMarketLockBoundary(game,now)!==undefined||Date.parse(game.gameStartAt??"")<=now)continue;
-  const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName},now);
+  const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege},now);
   for(const key of ["moneyline","total","first_inning"] as const){
    const selection=readerHistoryContractSelection(game,key),pick=game.markets[key].pick??"",outcome=match?selectedPredictionMarketOutcome(match,pick):null;
    const label=pick.replace(/\s+ML$/i,"").trim().toUpperCase();

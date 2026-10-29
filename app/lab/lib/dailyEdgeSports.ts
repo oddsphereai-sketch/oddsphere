@@ -1,4 +1,5 @@
 import type { Sport } from "@/lib/types/domain/Sport";
+import { CBB_ACTIVATION } from "@/lib/cbb/releases";
 
 export type DailyEdgeSportDefinition = {
   key: Sport;
@@ -46,7 +47,8 @@ export const DAILY_EDGE_SPORTS: readonly DailyEdgeSportDefinition[] = [
   { key: "mlb", label: "MLB", navigationTier: "core", memberAvailable: true, inSeason: true },
   { key: "soccer", label: "Soccer", navigationTier: "core", memberAvailable: true, inSeason: true },
   { key: "wnba", label: "WNBA", navigationTier: "specialist", memberAvailable: true, inSeason: true },
-  { key: "cbb", label: "CBB", navigationTier: "flagship", navigationActivation: "active_board", memberAvailable: false },
+  { key: "cbb", label: "CBB", navigationTier: "flagship", navigationActivation: "active_board",
+    memberAvailable: CBB_ACTIVATION.memberPublication, inSeason: true },
   { key: "ucl", label: "UCL", navigationTier: "planned", memberAvailable: false, inSeason: false },
 ] as const;
 

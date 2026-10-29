@@ -80,6 +80,18 @@ export class CbbBallDontLieClient {
       return rows;
     });
   }
+  boxesForGameIds(gameIds: readonly number[], season: number) {
+    if (!gameIds.length || gameIds.length > 25 || gameIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+      throw new Error("CBB team-stat capture requires 1–25 exact game IDs");
+    }
+    const allowed = new Set(gameIds);
+    return this.all<CbbBox>("team_stats", { game_ids: gameIds }, row => `${row.game.id}:${row.team.id}`).then(rows => {
+      if (rows.some(row => row.game.season !== season || !allowed.has(row.game.id))) {
+        throw new Error("CBB team-stat exact-game filter was not honored");
+      }
+      return rows;
+    });
+  }
   activePlayers() { return this.all<CbbPlayer>("players/active", {}, row => String(row.id)); }
   playerSeasons(season: number) {
     return this.all<CbbPlayerSeason>("player_season_stats", { season }, row => `${row.player.id}:${row.team.id}:${row.season}`).then(rows => {

@@ -172,6 +172,16 @@ export default async function CandidateDailyEdgePage({
     snapshot = result.value;
     snapshotUnavailable = result.unavailable;
   }
+  if (cbbPublicationEnabled && snapshot.games.length > 0 && !snapshotUnavailable) {
+    const lockedRead = await readMemberDataWithDeadline({
+      label: "cbb-locked-member-precedence",
+      fallback: emptyPreviewSnapshot(sport, "temporarily_unavailable"),
+      read: async () => (await import("@/lib/services/cbb/cbbMemberReader"))
+        .overlayCbbLockedMemberGames(snapshot),
+    });
+    snapshot = lockedRead.value;
+    snapshotUnavailable = lockedRead.unavailable;
+  }
   if (snapshotUnavailable && snapshot.games.length === 0) {
     snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
   }
@@ -336,7 +346,7 @@ export default async function CandidateDailyEdgePage({
                 previousHref: null,
                 nextHref: null,
                 asOf: snapshot.as_of,
-                cadenceLabel: "game-timed refresh · T-60 lock",
+                cadenceLabel: "15-minute board refresh · T-60 lock",
               }
           : nflFixture
           ? {

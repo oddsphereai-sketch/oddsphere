@@ -12,10 +12,11 @@ import { contractKinds, contractSeries, parseContractFeed, contractsForPublished
 import {selectedPredictionMarketOutcome} from "@/app/lab/lib/predictionMarketDisplay";
 import { supabase } from "@/lib/db/supabase";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { currentDailyEdgeBoardDate } from "@/lib/dates/slateDate";
+import { currentDailyEdgeBoardDate, currentSlateDate } from "@/lib/dates/slateDate";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { BOOK_DISPLAY_HISTORY_RELEASE, captureOwlsBookDisplayHistory, isBookDisplayFeed, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
+import { fetchCbbKalshiMarkets } from "@/lib/providers/kalshi/cbbMarkets";
 
 const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-prelock::${sport}::${PREDICTION_MARKET_PRELOCK_RELEASE}`;
 async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
@@ -69,7 +70,7 @@ async function publishedContractGames(sport:PredictionMarketSport):Promise<Daily
   const query=supabase.from("lab_response_snapshots").select("payload");
   const result=sport==="nfl"||sport==="cfb"
     ?await query.like("snapshot_key",`${sport}::daily-edge::${sport==="nfl"?process.env.NFL_FORWARD_SEASON??new Date().getUTCFullYear():process.env.CFB_FORWARD_SEASON??new Date().getUTCFullYear()}::%`).order("generated_at",{ascending:false}).limit(1).maybeSingle()
-    :await query.eq("snapshot_key",sport==="soccer"?"soccer::english_premier_league::current-week":sport==="ucl"?"soccer::uefa_champions_league::current-week":`${sport}::${currentDailyEdgeBoardDate(sport)}::current-only::live-copy`).maybeSingle();
+    :await query.eq("snapshot_key",sport==="soccer"?"soccer::english_premier_league::current-week":sport==="ucl"?"soccer::uefa_champions_league::current-week":`${sport}::${sport==="cbb"?currentSlateDate("cbb"):currentDailyEdgeBoardDate(sport)}::current-only::live-copy`).maybeSingle();
   if(result.error)throw new Error(`Published ${sport} contract selection unavailable`);
   let payload=result.data?.payload;
   if(payload?.encoding==="gzip-base64")payload=JSON.parse(gunzipSync(Buffer.from(payload.payload,"base64"),{maxOutputLength:8_000_000}).toString("utf8"));
@@ -93,26 +94,38 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   const target = PREDICTION_MARKET_TARGETS[sport];
   const client=new OwlsInsightClient(key,{timeoutMs:5000}),kinds=contractKinds(sport);
   const gamesRead=publishedContractGames(sport).catch(()=>null);
-  const [previous,response,games,contractInputs] = await Promise.all([
+  const [previous,response,games] = await Promise.all([
     readStored(sport),
-    client.get<unknown>(`/api/v2/kalshi/${target.sport}`, {league:target.series}),
+    sport === "cbb" ? fetchCbbKalshiMarkets(target.series.toUpperCase()) : client.get<unknown>(`/api/v2/kalshi/${target.sport}`, {league:target.series}),
     gamesRead,
-    Promise.all(kinds.map(async kind=>{
-      const [previous,games]=await Promise.all([readContractStored(sport,kind),gamesRead]);
-      const skipped=games===null||games.length===0;
-      return {kind,previous,skipped,response:skipped?null:await client.get<unknown>(`/api/v2/kalshi/${target.sport}`,{league:contractSeries(sport,kind)}).catch(()=>null)};
-    })),
   ]);
-  const current = parseOwlsPredictionMarkets(response.body, sport);
+  const current = parseOwlsPredictionMarkets("body" in response ? response.body : response, sport);
   if (!current) throw new Error(`Kalshi ${sport} returned an invalid or old source receipt`);
   const winners=mergePredictionMarketFeeds(previous,current);
+  const contractInputs=await Promise.all(kinds.map(async kind=>{
+    const previous=await readContractStored(sport,kind);
+    const skipped=games===null||games.length===0;
+    if(skipped)return {kind,previous,skipped,response:null};
+    const series=contractSeries(sport,kind).toUpperCase();
+    const eventTickers=sport==="cbb"?[...new Set(games.flatMap(game=>{
+      const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,
+        awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege,
+        gameStartAt:game.gameStartAt??""});
+      return match?[`${series}-${match.eventTicker.slice(match.eventTicker.indexOf("-")+1)}`]:[];
+    }))]:[];
+    // Read only events attached to the published CBB board. The generic
+    // alternate-line series can exceed thousands of unrelated contracts.
+    const receipt=await (sport==="cbb"?fetchCbbKalshiMarkets(series,eventTickers.length<=6?{eventTickers}:{maxPages:10}):
+      client.get<unknown>(`/api/v2/kalshi/${target.sport}`,{league:contractSeries(sport,kind)})).catch(()=>null);
+    return {kind,previous,skipped,response:receipt};
+  }));
   const warnings:string[]=[];
   const contracts=contractInputs.flatMap(input=>{
     if(input.skipped){
       if(games===null)warnings.push(`${input.kind}: published selection unavailable; retained`);
       return input.previous?[input.previous]:[];
     }
-    const parsed=input.response?parseContractFeed(input.response.body,sport,input.kind):null;
+    const parsed=input.response?parseContractFeed("body" in input.response?input.response.body:input.response,sport,input.kind):null;
     if(!parsed||games===null){warnings.push(`${input.kind}: source receipt unavailable; retained`);return input.previous?[input.previous]:[];}
     const selected=contractsForPublishedReaders(parsed,winners,games);
     return [mergePredictionMarketFeeds(input.previous,selected) as ContractFeed];
@@ -126,7 +139,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // not the first arbitrary YES ticker or a distant alternate on the feed.
   const priority=new Map<string,number>();
   for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
-    const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName});
+    const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege});
     const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
     if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
     for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}
@@ -134,7 +147,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   interleaved.sort((a,b)=>(priority.get(a.ticker)??10_000)-(priority.get(b.ticker)??10_000));
   const [captured,bookCapture]=await Promise.all([
     backfillKalshiDisplayHistory({...winners,rows:interleaved}),
-    games?bookHistoryStored(sport).then(previous=>captureOwlsBookDisplayHistory(previous,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}),Date.now(),response.rateLimit.remainingMonth)).catch(()=>null):Promise.resolve(null),
+    games?bookHistoryStored(sport).then(previous=>captureOwlsBookDisplayHistory(previous,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}),Date.now(),"rateLimit" in response?response.rateLimit.remainingMonth:null)).catch(()=>null):Promise.resolve(null),
   ]);
   if(bookCapture){
     warnings.push(...bookCapture.warnings);
@@ -156,20 +169,20 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   }
   const stored = await upsertLabResponseSnapshot({ snapshotKey:predictionMarketSnapshotKey(sport),kind:"daily_edge",
     payload:feed as unknown as Record<string, unknown>,ttlMs:5*60_000,staleMs:24*60*60_000,
-    sport:sport === "ucl" ? "soccer" : sport,source:"owls_kalshi_display",payloadVersion:PREDICTION_MARKET_RELEASE });
+    sport:sport === "ucl" ? "soccer" : sport,source:sport==="cbb"?"kalshi_direct_display":"owls_kalshi_display",payloadVersion:PREDICTION_MARKET_RELEASE });
   if (!stored.ok) throw new Error(`Kalshi display receipt could not be stored: ${stored.error}`);
   for(const contract of contracts){
     const withHistory={...contract,rows:contract.rows.map(row=>byTicker.get(row.ticker)??row)};
     const updated=mergePredictionMarketFeeds(withHistory,{...withHistory,rows:[]}) as ContractFeed;
     const saved=await upsertLabResponseSnapshot({snapshotKey:predictionMarketContractSnapshotKey(sport,contract.kind),kind:"daily_edge",
       payload:updated as unknown as Record<string,unknown>,ttlMs:5*60_000,staleMs:24*60*60_000,sport:sport==="ucl"?"soccer":sport,
-      source:"owls_kalshi_display",payloadVersion:PREDICTION_MARKET_CONTRACT_RELEASE});
+      source:sport==="cbb"?"kalshi_direct_display":"owls_kalshi_display",payloadVersion:PREDICTION_MARKET_CONTRACT_RELEASE});
     if(!saved.ok)warnings.push(`${contract.kind}: display snapshot could not be stored`);
   }
   // A successful scheduled write must not leave member requests on a prior
   // retained receipt while a stale-while-revalidate layer catches up.
   revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0});
   revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0});
-  return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:1+contractInputs.filter(input=>!input.skipped).length+(bookCapture?.requests??0),warnings,
+  return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:("requests" in response?response.requests:1)+contractInputs.reduce((sum,input)=>sum+(input.response?("requests" in input.response?input.response.requests:1):0),0)+(bookCapture?.requests??0),warnings,
     historyCoverage:{kalshiFromOpen:captured.rows.filter(r=>r.historyFrom).length,kalshiPending:captured.rows.filter(r=>!r.historyFrom).length,bookHistoryEntries:bookCapture?.feed.rows.length??0,bookProviderOpenings:bookCapture?.feed.rows.filter(r=>r.opening).length??0}};
 }

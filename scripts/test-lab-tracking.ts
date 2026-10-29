@@ -49,7 +49,7 @@ async function main() {
   const trackingPageSource = readFileSync("app/lab/tracking/TrackingClient.tsx", "utf8");
   const trackingRouteSource = readFileSync("app/api/lab/tracking/route.ts", "utf8");
   check("CFB tracking exposes all three official markets", trackingRouteSource.includes('cfb: ["ML", "O/U", "Spread"]'));
-  check("NFL and CFB settled grades bridge from the modern official record path", trackingRouteSource.includes('loadFootballGradeRows(sport)') && trackingRouteSource.includes('["nfl", "cfb"] as const'));
+  check("NFL, CFB and CBB settled grades bridge from the modern official record path", trackingRouteSource.includes('loadLockedGradeRows(sport)') && trackingRouteSource.includes('["nfl", "cfb", "cbb"] as const'));
   check("signed-in Tracking defaults to the weekly window", trackingPageSource.includes('useState<TrackingWindow>("weekly")'));
   check("CFB tracking uses the established category presentation without a custom banner", !trackingPageSource.includes("CFB full tracked record") && !trackingPageSource.includes("includes sided No Plays"));
   check(
@@ -176,8 +176,9 @@ async function main() {
   // ─── (7) Tallies matrix ──────────────────────────────────────────────────
   section("Tallies matrix");
 
-  // Expected count from the current 9-sport registry = 26.
-  check(`tally count = 26 across all 9 sports`, body.tallies.length === 26, `got: ${body.tallies.length}`);
+  // The current nine-sport registry exposes 29 market categories, including
+  // CBB's separate spread row rather than silently omitting that market.
+  check(`tally count = 29 across all 9 sports`, body.tallies.length === 29, `got: ${body.tallies.length}`);
 
   // MLB has 5 markets and they should all be present with non-zero lifetime.
   const mlbTallies = body.tallies.filter((t) => t.sport === "mlb");

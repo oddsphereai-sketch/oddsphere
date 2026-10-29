@@ -3,7 +3,7 @@ import { CBB_CANDIDATES, cbbThresholdProbabilities, fitCbbRatings, forecastCbbGa
 import { CBB_DEVELOPMENT_UNCERTAINTY } from "../lib/cbb/evaluation";
 import { cbbScoreFeatures, correctCbbScoreForecast, fitCbbScoreCorrection, fitCbbScoreResearchState, type CbbScoreFeatureRow } from "../lib/cbb/scoreResearch";
 import { trainCbbScoreTrees, applyCbbScoreTrees } from "../lib/cbb/scoreTrees";
-import { forecastCbbCandidateR2 } from "../lib/cbb/candidateR2Runtime";
+import { forecastCbbCandidateR2, forecastCbbCandidateR2Batch } from "../lib/cbb/candidateR2Runtime";
 import type { CbbTrainingGame } from "../lib/cbb/types";
 import paired from "../lib/cbb/artifacts/paired-r2.json";
 
@@ -42,6 +42,7 @@ const error = (rs: CbbScoreFeatureRow[]) => rs.reduce((sum, row) => sum + Math.a
 assert.ok(error(treeScores) < error(evaluation));
 const liveFixture = { id: 10882407, date: "2026-11-01T14:30:00.000Z", season: 2026, homeId: 92, awayId: 11, neutral: true };
 const a = forecastCbbCandidateR2(liveFixture, "2026-10-28T20:00:00.000Z").forecast;
+assert.deepEqual(forecastCbbCandidateR2Batch([liveFixture],"2026-10-28T20:00:00.000Z")[0].forecast,a);
 const b = forecastCbbCandidateR2(liveFixture, "2026-10-28T20:00:00.000Z").forecast;
 assert.deepEqual(a, b);
 assert.ok(Math.abs(cbbThresholdProbabilities(a, "spread", 0).first - a.homeWinProbability) < 1e-10);

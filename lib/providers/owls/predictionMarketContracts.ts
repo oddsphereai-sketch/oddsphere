@@ -160,7 +160,7 @@ export function resolveReaderContract(feed:ContractFeed|null,gameMatch:Predictio
   }
   if(!outcome)return null;
   const asOf=new Date(Math.min(...sources.map(row=>Date.parse(row.asOf)))).toISOString();
-  return {eventTicker:event,source:"Kalshi via OWLS",asOf,status:now-Date.parse(asOf)<=10*60_000?"current":"retained",outcomes:[outcome],
+  return {eventTicker:event,source:gameMatch.source,asOf,status:now-Date.parse(asOf)<=10*60_000?"current":"retained",outcomes:[outcome],
     context:{kind:selection.kind,requestedLabel:selection.label,displayLabel,method,note,sources:sources.map(row=>({ticker:row.ticker,label:row.team,asOf:row.asOf,probability:row.probability}))}};
 }
 
@@ -170,7 +170,7 @@ export function contractsForPublishedReaders(feed:ContractFeed,winners:Predictio
   const wanted=new Set<string>();
   for(const game of games){
     const selection=readerHistoryContractSelection(game,feed.kind==="total"?"total":"first_inning");if(!selection||selection.kind!==feed.kind)continue;
-    const match=matchPredictionMarketGame(winners,{sport:feed.sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt??"",awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName},now);
+    const match=matchPredictionMarketGame(winners,{sport:feed.sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt??"",awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege},now);
     const resolved=resolveReaderContract(feed,match,selection,now);
     resolved?.context?.sources.forEach(row=>wanted.add(row.ticker));
   }

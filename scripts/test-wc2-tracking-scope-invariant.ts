@@ -151,10 +151,10 @@ test("NHL regular-season launch tracks moneyline, total, and puck line", () => {
   );
 });
 
-test("UCL launches the shared four soccer markets while CBB remains empty", () => {
+test("UCL and CBB retain their separate official market registries", () => {
   const ucl = [...OFFICIAL_TRACKING_MARKETS.ucl].sort();
   assert(JSON.stringify(ucl) === JSON.stringify(["btts", "double_chance", "match_result", "total"]), `UCL drifted: ${ucl.join(",")}`);
-  assert(OFFICIAL_TRACKING_MARKETS.cbb.length === 0, "cbb should be empty");
+  assert(OFFICIAL_TRACKING_MARKETS.cbb.join(",") === "moneyline,total,spread", "cbb should track three markets");
 });
 
 test("CFB launch registry carries moneyline, total, and spread", () => {

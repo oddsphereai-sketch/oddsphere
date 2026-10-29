@@ -1,5 +1,21 @@
 # Model change safety protocol
 
+## Private CBB full member-path candidate — October 29
+
+This branch adds a proposed CBB seven-day member writer, reader, T-60 lock,
+three-market tracking mirror, exact named-book split display, and the official
+Kalshi CBB game/spread/total panel. `CBB_ACTIVATION` remains prelaunch and no
+production prediction, grade, stake, or lock changes. The score head stays
+`cbb_candidate_2026_10_28_r2_score_precision` and the grade rule stays
+`cbb_candidate_2026_10_29_r4_observed_quote_freshness`; the board adapter and
+publisher have new identifiers in `docs/current-model-releases.md`.
+On the fresh October 29 source receipt, the prior provisional policy and this
+exact-input candidate both have four Leans, one Watchlist, one No Play, zero
+Best Angles and zero Holds across two November 1 games: zero promotions, zero
+demotions, zero net actionables. Technical readiness, current-main integration,
+and owner launch approval remain separate gates. See
+`docs/model-audits/2026-10-29-cbb-november-launch-predeclaration.md`.
+
 ## Private CBB seven-day slate presentation
 
 The October 29 CBB candidate extends fixture-only capture and read-only

@@ -6,6 +6,7 @@ import { gradeCbbProvisional } from "../lib/cbb/provisionalGradePolicy";
 import { cbbCurrentSplitEvidence } from "../lib/cbb/owlsSplitEvidence";
 import { cbbObservedPricePaths, type CbbQualifiedNamedQuote } from "../lib/cbb/owlsMarketEvidence";
 import { buildCbbProvisionalReader } from "../lib/cbb/provisionalReader";
+import { adaptCbbProvisionalGame, cbbDailyEdgeResponse } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import type { CbbForecast, CbbQuote } from "../lib/cbb/types";
 
 const asOf = "2026-11-01T12:00:00.000Z";
@@ -158,6 +159,21 @@ assert.ok(lockedReader);
 assert.equal(lockedReader.status, "locked");
 assert.equal(lockedReader.score.home, board.score.home);
 assert.equal(lockedReader.marketEvidenceState, "not_stored_at_lock");
+const member=adaptCbbProvisionalGame({game:cbbGame,snapshot:captured,homeLogo:"https://example.com/home.png",
+  awayLogo:"https://example.com/away.png",now:"2026-11-01T12:05:00.000Z",splitEvidence});
+assert.equal(member.sport,"cbb");assert.equal(member.cbbAwayCollege,"Notre Dame");
+assert.equal(member.cbbHomeCollege,"Villanova");assert.equal(member.markets.first_inning.verdict.label,"Best Angle");
+assert.equal(member.projected.home,board.score.home);assert.equal(member.markets.total.modelTotal,board.score.total);
+assert.equal(member.markets.first_inning.line,-7.5);assert.equal(member.markets.first_inning.pick,"VILL -7.5");
+assert.equal(member.markets.moneyline.sportsbookSplits?.rows.length,2);
+assert.equal(member.markets.moneyline.sportsbookSplits?.sourceBook,"circa");
+assert.ok(member.markets.moneyline.marketFairProb !== null);
+assert.equal(member.markets.moneyline.oddsTrail?.[0].sportsbook,"fanduel");
+assert.equal(cbbDailyEdgeResponse("2026-11-01",[member],asOf).games.length,1);
+const frozenMember=adaptCbbProvisionalGame({game:{...cbbGame,status:"post",status_state:"final",home_score:80,away_score:72},
+  snapshot:locked,homeLogo:null,awayLogo:null,now:"2026-11-02T01:00:00Z"});
+assert.equal(frozenMember.lockState,"locked");assert.equal(frozenMember.result?.markets.first_inning.pickResult,"win");
+assert.equal(frozenMember.projected.home,member.projected.home,"final must not reproject the lock");
 assert.deepEqual(lockedReader.markets.map(row => [row.market, row.grade, row.price]),
   reader.markets.map(row => [row.market, row.grade, row.price]));
 assert.ok(lockedReader.markets.every(row => row.splits.length === 0 && row.pricePaths.length === 0));

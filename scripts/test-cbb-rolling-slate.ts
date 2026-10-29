@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { cbbRollingSlateDates, cbbRollingSlateGames } from "../lib/cbb/rollingSlate";
 import { buildCbbRollingSchedule, excludeAnalyzedCbbScheduleGames } from "../lib/services/cbb/cbbRollingSchedule";
+import { cbbFixtureRefreshDates } from "../lib/services/cbb/seedCbbGamesService";
 import type { CbbGame, CbbTeam } from "../lib/cbb/types";
 
 const home: CbbTeam = { id: 92, conference_id: 1, name: "Wildcats",
@@ -17,6 +18,10 @@ assert.deepEqual(cbbRollingSlateDates("2026-11-01"), [
   "2026-11-05", "2026-11-06", "2026-11-07",
 ]);
 assert.throws(() => cbbRollingSlateDates("2026-11-1"), /Invalid/);
+assert.deepEqual(cbbFixtureRefreshDates("2026-11-02"), [
+  "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04",
+  "2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08",
+]);
 const rows = cbbRollingSlateGames([
   game(3, "2026-11-02T04:59:00Z"), // 11:59 PM ET, November 1.
   game(2, "2026-11-01T14:30:00Z"),

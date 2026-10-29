@@ -845,6 +845,8 @@ export type DailyEdgeGameDto = {
   awayTeam: string;
   /** Full member-facing team name when a sport provides one. */
   awayTeamDisplayName?: string | null;
+  /** CBB-only verified institutional name for exact prediction-market joins. */
+  cbbAwayCollege?: string | null;
   /** CDN URL for the away team logo (5F.3). Null for sports without logos populated yet. */
   awayTeamLogo: string | null;
   /** Sport-owned presentation color. Does not affect any prediction or grade. */
@@ -852,6 +854,8 @@ export type DailyEdgeGameDto = {
   homeTeam: string;
   /** Full member-facing team name when a sport provides one. */
   homeTeamDisplayName?: string | null;
+  /** CBB-only verified institutional name for exact prediction-market joins. */
+  cbbHomeCollege?: string | null;
   /** CDN URL for the home team logo. Null when unavailable — UI falls back to abbreviation alone. */
   homeTeamLogo: string | null;
   /** Sport-owned presentation color. Does not affect any prediction or grade. */

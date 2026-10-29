@@ -4,6 +4,7 @@ import { normalizeNhlTeamName } from "../nhl/_teamNameNormalizer";
 import { normalizeTeamAbbr } from "../playbook/playbookTeamNormalizer";
 import { cfbProviderTeamMatches } from "../../services/football/cfbProviderTeamIdentity";
 import { uclTeamAsset } from "../../services/ucl/uclTeamAssets";
+import { canonicalCbbTeamName } from "../../cbb/dataset";
 
 export const PREDICTION_MARKET_RELEASE = "owls_kalshi_display_2026_10_28_r1";
 export const PREDICTION_MARKET_TARGETS = {
@@ -11,6 +12,7 @@ export const PREDICTION_MARKET_TARGETS = {
   nhl: { sport: "nhl", series: "kxnhlgame" },
   nfl: { sport: "nfl", series: "kxnflgame" },
   cfb: { sport: "ncaaf", series: "kxncaafgame" },
+  cbb: { sport: "ncaab", series: "kxncaambgame" },
   mlb: { sport: "mlb", series: "kxmlbgame" },
   wnba: { sport: "wnba", series: "kxwnbagame" },
   soccer: { sport: "soccer", series: "kxeplgame" },
@@ -73,10 +75,13 @@ export type PredictionMarketGameIdentity = {
   homeTeam: string;
   awayName?: string | null;
   homeName?: string | null;
+  /** Exact BALLDONTLIE institution names; CBB abbreviations are not unique. */
+  awayCollege?: string | null;
+  homeCollege?: string | null;
 };
 export type PredictionMarketMatch = {
   eventTicker: string;
-  source: "Kalshi via OWLS";
+  source: "Kalshi via OWLS" | "Kalshi direct";
   status: "current" | "retained";
   asOf: string;
   outcomes: Array<PredictionMarketRow & { side: "away" | "home" | "draw"; label: string }>;
@@ -207,7 +212,14 @@ const SOCCER_ALIASES: Record<string, string> = {
   BVB:"DOR",RBB:"BET",SBH:"SAB",VIK:"VFK",COM:"COMO",SLA:"SLP",STU:"VFB",
 };
 function clean(value: string): string { return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(fc|afc|cf)\b/g, "").replace(/[^a-z0-9]/g, ""); }
-export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideCode"|"team">, abbreviation: string, name: string | null | undefined, sport: PredictionMarketSport): boolean {
+export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideCode"|"team">, abbreviation: string, name: string | null | undefined, sport: PredictionMarketSport, college?: string | null): boolean {
+  if (sport === "cbb") {
+    // A code such as MIA or USC may mean several schools. Require the named
+    // contract to agree with an exact institutional or full-team identity.
+    const observed = canonicalCbbTeamName(row.team);
+    return Boolean(observed) && [name, college].some(expected => expected &&
+      canonicalCbbTeamName(expected) === observed);
+  }
   if (sport === "cfb") return row.sideCode === abbreviation.toUpperCase() || cfbProviderTeamMatches({ observed: row.team, abbreviation, expectedName: name }) || cfbProviderTeamMatches({ observed: row.sideCode, abbreviation, expectedName: name });
   if (sport === "soccer" || sport === "ucl") {
     const providerCode = SOCCER_ALIASES[row.sideCode] ?? row.sideCode;
@@ -237,8 +249,8 @@ export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, gam
   }
   const matches: PredictionMarketMatch[] = [];
   for (const [eventTicker, rows] of groups) {
-    const away = rows.filter(row => predictionMarketTeamMatches(row, game.awayTeam, game.awayName, game.sport));
-    const home = rows.filter(row => predictionMarketTeamMatches(row, game.homeTeam, game.homeName, game.sport));
+    const away = rows.filter(row => predictionMarketTeamMatches(row, game.awayTeam, game.awayName, game.sport, game.awayCollege));
+    const home = rows.filter(row => predictionMarketTeamMatches(row, game.homeTeam, game.homeName, game.sport, game.homeCollege));
     const draw = rows.filter(row => /^(TIE|DRAW)$/.test(row.sideCode));
     const soccer = game.sport === "soccer" || game.sport === "ucl";
     if (away.length !== 1 || home.length !== 1 || away[0].ticker === home[0].ticker || (soccer && draw.length !== 1)) continue;
@@ -249,7 +261,7 @@ export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, gam
     const sum = selected.reduce((total,row) => total + row.probability, 0);
     if (sum < .85 || sum > 1.15) continue;
     const asOf = new Date(Math.min(...stamps)).toISOString();
-    matches.push({ eventTicker, source:"Kalshi via OWLS", status:now - Math.min(...stamps) <= 10 * 60_000 ? "current" : "retained", asOf,
+    matches.push({ eventTicker, source:game.sport==="cbb"?"Kalshi direct":"Kalshi via OWLS", status:now - Math.min(...stamps) <= 10 * 60_000 ? "current" : "retained", asOf,
       outcomes:[{...away[0],side:"away",label:game.awayTeam},{...home[0],side:"home",label:game.homeTeam},...(soccer ? [{...draw[0],side:"draw" as const,label:"Draw"}] : [])] });
   }
   return matches.length === 1 ? matches[0] : null;

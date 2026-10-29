@@ -162,6 +162,11 @@ export async function loadTeamHistory(
   sport: Sport,
   requestedCompetition?: SoccerHistoryCompetition,
 ): Promise<PreviewHistoryByTeam> {
+  // BALLDONTLIE CBB contains duplicate abbreviations. The generic history
+  // reader joins on abbreviation and could put another school's stats on a
+  // CBB card. CBB model inputs stay exact numeric team IDs; no display
+  // history is attached until an ID-scoped reader exists.
+  if (sport === "cbb") return {};
   const abbreviations = Array.from(
     new Set(snapshot.games.flatMap((game) => [game.awayTeam, game.homeTeam])),
   ).sort();

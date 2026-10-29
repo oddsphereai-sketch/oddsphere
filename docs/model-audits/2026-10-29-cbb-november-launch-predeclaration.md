@@ -290,3 +290,45 @@ be attached retroactively to the public record. The sole leased writer,
 persisted immutable lock, member snapshot, official W/L/push tracking, and a
 qualified CBB prediction-market reader remain open launch gates. This
 reader-only change alters zero live actionables, stakes, or records.
+
+## October 29 full private member-path candidate
+
+The later candidate closes the implementation gates left open in the earlier
+sections. A single `prediction_pipeline:cbb` leased cron owns current-season
+training, exact-identity seven-day publication, T-60 frozen game records,
+locked-only three-market official tracking, and W/L/push settlement. The member
+page reads the published snapshot and overlays each immutable locked game
+before showing it. No user request reruns the model or reprices a lock. The
+daily fixture refresh includes the prior ET slate so late final scores reach
+canonical games and the next-day tracking grader; the forward member board
+still contains only the current seven ET dates. Missing prelock evidence fails
+closed rather than creating a post-start public pick.
+
+The college-basketball Kalshi panel is enabled in the same bottom-of-reader
+desktop/mobile position as the other sports. It uses official Kalshi CBB game,
+spread, and total series, exact named institutions and selected contract sides,
+and the existing five-minute display-feed writer; the prediction market does
+not gain unsupported score or grade authority. Historical price paths are
+only charted when actual same-book observations exist.
+
+At 21:55 UTC, the fresh immutable Nov. 1 private source receipt contained two
+games, four exact team identities and verified ESPN logos, six complete named
+consumer-book markets, four Leans, one Watchlist, one No Play, zero Best Angles,
+and zero operational Holds. Against the ungraded CBB baseline this is four
+provisional actionable promotions and zero demotions. Compared with the prior
+21:18 UTC r4 capture of three Leans, two Watchlists, and one No Play, one
+Spread row moved from Watchlist to Lean as its source quote changed; that is
+not a retrospective accuracy claim. Neither opener game had qualified
+Pinnacle/Circa corroboration or game-matched split data at the latest read.
+The score remains the independent coherent projection; the member reader
+must not call these grades sharp-confirmed or imply a validated market flip.
+No production CBB prediction, grade, lock, stake, or Kalshi snapshot has been
+written by this rehearsal.
+
+Focused CBB launch tests, source-identity audit, TypeScript, legacy and modern
+tracking integration tests, and `npm run verify:model-change` passed locally.
+The optional Market Brain PostgreSQL proof was skipped because its separate
+test URL was not configured; it does not exercise CBB. The full production
+build, clean-commit integration-safety check, PR checks, owner-approved
+activation, and live verification remain publication steps. CBB activation
+flags and environment gates remain off while the owner reviews the candidate.

@@ -84,7 +84,8 @@ check("CFB moneyline officially tracked", isOfficiallyTrackedMarket("cfb", "mone
 check("CFB total officially tracked", isOfficiallyTrackedMarket("cfb", "total") === true);
 check("CFB spread officially tracked", isOfficiallyTrackedMarket("cfb", "spread") === true);
 check("UCL tracks the four regulation soccer markets", JSON.stringify(getOfficialTrackingMarkets("ucl")) === JSON.stringify(["match_result", "total", "btts", "double_chance"]));
-check("CBB has empty official tracking registry", getOfficialTrackingMarkets("cbb").length === 0);
+check("CBB tracks moneyline, total, and spread from the November opener",
+  getOfficialTrackingMarkets("cbb").join(",") === "moneyline,total,spread");
 
 // Soccer (WC-1) — match_result/total/btts officially tracked; moneyline
 // deliberately NOT (draw is a first-class outcome, not collapsible to 2-way).

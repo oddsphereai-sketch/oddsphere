@@ -57,9 +57,8 @@ import type { TrackedMarketV17 } from "../types/domain/Tracking";
  * `prediction_records` row + `prediction_grades` row for these markets
  * is the intended pipeline. They show up on the public tracking page.
  *
- * Empty arrays for sports that have NOT YET been launched as tracked
- * categories (CBB). Adding a market to an empty array
- * is a product launch decision.
+ * Adding a market is a deliberate product launch decision. CBB's three
+ * standard markets are bounded to immutable locks from November 1, 2026.
  */
 export const OFFICIAL_TRACKING_MARKETS: Readonly<
   Record<Sport, ReadonlyArray<TrackedMarketV17>>
@@ -73,7 +72,7 @@ export const OFFICIAL_TRACKING_MARKETS: Readonly<
   // excluded independently by the football tracking lifecycle and the
   // future-dated public tracking boundary.
   nfl: ["moneyline", "total", "spread"],
-  cbb: [],
+  cbb: ["moneyline", "total", "spread"],
   // CFB launches forward-only with its independent joint-score model and
   // exact-price decision tuples across all three standard football markets.
   cfb: ["moneyline", "total", "spread"],

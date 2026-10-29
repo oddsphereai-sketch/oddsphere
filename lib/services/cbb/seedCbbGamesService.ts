@@ -13,6 +13,12 @@ export function cbbFixtureSeedDates(today: string): string[] {
   return cbbRollingSlateDates(today);
 }
 
+/** The prior ET slate is included only for canonical result catch-up; the
+ * member board still displays the seven forward ET dates. */
+export function cbbFixtureRefreshDates(today: string): string[] {
+  return [addDaysToSlate(today, -1), ...cbbFixtureSeedDates(today)];
+}
+
 type SeedOptions = {
   slateDate: string;
   season: number;
@@ -121,6 +127,26 @@ export async function seedCbbGames(options: SeedOptions) {
       .select("game_id").eq("sport", "cbb").in("game_id", batch).not("locked_at", "is", null);
     if (error) throw new Error(`CBB locked fixture lookup failed: ${error.message}`);
     for (const row of data ?? []) lockedDbIds.add(Number(row.game_id));
+  }
+  // CBB's member lock lives in its single-writer snapshot, not in the
+  // legacy prediction_records table. The fixture seeder must honor it too.
+  for (const batch of chunks(externalIds, 100)) {
+    const keys = batch.map(id => `cbb::member-game::${id}`);
+    const { data, error } = await supabase.from("lab_response_snapshots")
+      .select("snapshot_key,payload").in("snapshot_key", keys);
+    if (error) throw new Error(`CBB member lock lookup failed: ${error.message}`);
+    for (const row of data ?? []) {
+      const externalId = Number(String(row.snapshot_key).split("::").at(-1));
+      const payload = row.payload as { snapshot?: { gameId?: number; lockedAt?: string | null } } | null;
+      if (!Number.isSafeInteger(externalId) || payload?.snapshot?.gameId !== externalId) {
+        throw new Error("CBB member lock receipt has inconsistent identity");
+      }
+      if (payload.snapshot.lockedAt) {
+        const prior = existingById.get(externalId);
+        if (!prior) throw new Error(`CBB locked member game ${externalId} has no canonical fixture`);
+        lockedDbIds.add(prior.id);
+      }
+    }
   }
   const payloads = games.map(game => {
     const homeDbId = teamDbIds.get(game.home_team.id), awayDbId = teamDbIds.get(game.visitor_team.id);

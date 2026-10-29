@@ -61,7 +61,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   if(game.homeTeamDisplayName)query.set("homeName",game.homeTeamDisplayName);
   const key="/api/lab/prediction-market?"+query;
   const coveredCompetition=game.sport!=="soccer"||game.id.startsWith("soccer-epl-")||game.id.startsWith("soccer-ucl-")||["english_premier_league","uefa_champions_league"].includes(game.soccerCompetitionContext?.competition??"");
-  const enabled=!illustrativeSample&&!!game.gameStartAt&&game.sport!=="cbb"&&coveredCompetition;
+  const enabled=!illustrativeSample&&!!game.gameStartAt&&coveredCompetition;
   useEffect(()=>{
     if(!enabled||kind===null)return;
     let active=true;

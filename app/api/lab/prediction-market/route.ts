@@ -26,17 +26,21 @@ export async function GET(request: Request): Promise<Response> {
     selection={kind:kind as ContractKind,line:kind==="btts"?null:line,side:side as ContractSelection["side"],
       label:kind==="btts"?`BTTS ${side==="yes"?"Yes":"No"}`:kind==="total"?`${side==="over"?"Over":"Under"} ${line}`:`${side==="away"?awayTeam:homeTeam} ${formatContractLine(line!)}`};
   }
+  const event=Number(query.get("event")),requestedSide=query.get("side");
+  const published=Number.isSafeInteger(event)&&event>0?await readPublishedPredictionMarketGames(sport as PredictionMarketSport).catch(()=>[]):[];
+  const game=published.find(g=>g.external_id===event&&g.awayTeam===awayTeam&&g.homeTeam===homeTeam&&Date.parse(g.gameStartAt??"")===Date.parse(gameStartAt));
+  // A college abbreviation or caller-supplied name cannot establish identity.
+  // The published institution pair is the only authority for a CBB join.
+  if(sport==="cbb"&&!game)return Response.json({market:null,book:null,availability:"event_unavailable"},{headers:{"Cache-Control":"private, max-age=30"}});
   const [feed,contracts]=await Promise.all([
     readPredictionMarketDisplayFeed(sport as PredictionMarketSport).catch(()=>null),
     selection?readPredictionMarketContractFeed(sport as PredictionMarketSport,selection.kind).catch(()=>null):Promise.resolve(null),
   ]);
   const gameMatch = matchPredictionMarketGame(feed, {sport:sport as PredictionMarketSport,awayTeam,homeTeam,gameStartAt,
-    awayName:query.get("awayName")?.slice(0,100),homeName:query.get("homeName")?.slice(0,100)});
+    awayName:game?.awayTeamDisplayName??query.get("awayName")?.slice(0,100),homeName:game?.homeTeamDisplayName??query.get("homeName")?.slice(0,100),
+    awayCollege:game?.cbbAwayCollege,homeCollege:game?.cbbHomeCollege});
   const market=selection?resolveReaderContract(contracts,gameMatch,selection):gameMatch;
-  const event=Number(query.get("event")),requestedSide=query.get("side");
   const side=selection?.side??(["away","home","draw"].includes(requestedSide??"")?requestedSide:gameMatch?.outcomes.slice().sort((a,b)=>b.probability-a.probability)[0]?.side);
-  const published=Number.isSafeInteger(event)&&event>0?await readPublishedPredictionMarketGames(sport as PredictionMarketSport).catch(()=>[]):[];
-  const game=published.find(g=>g.external_id===event&&g.awayTeam===awayTeam&&g.homeTeam===homeTeam&&Date.parse(g.gameStartAt??"")===Date.parse(gameStartAt));
   if(game&&side&&predictionMarketLockBoundary(game,Date.now())!==undefined){
     const archive=readPredictionMarketPrelock(await readPredictionMarketPrelockFeed(sport as PredictionMarketSport).catch(()=>null),game,kind,side,selection?.line??null);
     if(archive)return Response.json({market:archive.market,book:archive.book,prelockCapturedAt:archive.capturedAt,availability:archive.market?"available":"contract_unavailable"},{headers:{"Cache-Control":"private, max-age=30"}});

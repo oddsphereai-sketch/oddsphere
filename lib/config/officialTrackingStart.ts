@@ -21,6 +21,7 @@ export const OFFICIAL_TRACKING_START: Partial<Record<Sport, string>> = {
   nfl: "2026-09-09", // NFL Week 1 opener in the ET slate convention; preseason is permanently excluded
   cfb: "2026-08-29", // CFB opening-week launch — forward-only, no historical backfill
   nhl: "2026-09-29", // NHL regular-season launch — excludes Finals and 2026 preseason records
+  cbb: "2026-11-01", // CBB public record begins with the first immutable November lock
 };
 
 /**
@@ -28,7 +29,7 @@ export const OFFICIAL_TRACKING_START: Partial<Record<Sport, string>> = {
  * existing launch handling, but may still have an explicit closed exclusion
  * window below (NBA offseason/preseason).
  */
-const BOUNDARIED_SPORTS = new Set<Sport>(["wnba", "nfl", "cfb", "nhl"]);
+const BOUNDARIED_SPORTS = new Set<Sport>(["wnba", "nfl", "cfb", "nhl", "cbb"]);
 
 /**
  * Closed periods that must not enter public tracking even though the sport has

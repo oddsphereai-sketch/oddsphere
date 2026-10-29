@@ -174,6 +174,7 @@ import type { MarketDecision, MarketSplitDisplaySection } from "@/lib/types/doma
 import { populateDailyEdgeDraftKingsFallback } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 import { NBA_ROLLING_SCHEDULE_RELEASE } from "@/lib/services/nba/nbaRollingSchedule";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
+import { CBB_ACTIVATION } from "@/lib/cbb/releases";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -6727,6 +6728,31 @@ export async function GET(request: Request) {
       : sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba"
         ? currentDailyEdgeBoardDate(sport)
         : currentSlateDate(sport);
+
+  // CBB is a published-snapshot-only sport. A member request must never run
+  // the model, request odds, or synthesize a late pregame lock.
+  if (sport === "cbb") {
+    const empty: DailyEdgeResponse = { as_of: new Date().toISOString(), sport,
+      date: requestedDate, requested_date: requestedDate, fallback_used: false,
+      slateState: "no_data", slate_status: null, last_slate_update_at: null, games: [] };
+    if (!CBB_ACTIVATION.memberPublication || process.env.CBB_DAILY_EDGE_ENABLED !== "true") {
+      return Response.json(empty, { headers: DAILY_EDGE_NO_STORE_HEADERS });
+    }
+    const { dailyEdgeSnapshotKey, readLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
+    const key = dailyEdgeSnapshotKey({ sport, requestedDate, allowStale: false, copyPreview: false });
+    const stored = await readLabResponseSnapshot<DailyEdgeResponse>(key, "fresh")
+      ?? await readLabResponseSnapshot<DailyEdgeResponse>(key, "stale");
+    if (!stored || stored.payload.sport !== "cbb" || stored.payload.date !== requestedDate) {
+      return Response.json(empty, { status: 503, headers: { "Cache-Control": "no-store" } });
+    }
+    const { overlayCbbLockedMemberGames } = await import("@/lib/services/cbb/cbbMemberReader");
+    const payload = await overlayCbbLockedMemberGames(stored.payload).catch(() => null);
+    if (!payload) return Response.json(empty, { status: 503, headers: { "Cache-Control": "no-store" } });
+    return Response.json(payload, { headers: {
+      "Cache-Control": "private, max-age=30, stale-while-revalidate=300",
+      "X-Oddsphere-Response-Source": stored.cacheState,
+    } });
+  }
 
   // Schedule-only visibility applies to the current/future rolling window,
   // never to a cached historical preseason rehearsal. Preserve the original

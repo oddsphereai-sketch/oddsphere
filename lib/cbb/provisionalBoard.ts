@@ -1,9 +1,9 @@
-import { reviewCbbQuote } from "./marketEvidence";
+import { cbbImpliedProbability, reviewCbbQuote } from "./marketEvidence";
 import { gradeCbbProvisional } from "./provisionalGradePolicy";
 import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_10_29_r2_explicit_unqualified_reader" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_10_29_r3_exact_quote_reader_fields" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Candidate-only single-game projection. No DB, member, stake, or lock authority. */
@@ -21,7 +21,8 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
     const target = quotes.find(quote => quote.sportsbook === targetBook && quote.market === market);
     if (!target) return { market, targetBook, grade: "Held" as const,
       reason: "no_complete_three_market_target_book", selection: null, line: null,
-      price: null, probability: null, pushProbability: null, expectedValue: null,
+      price: null, probability: null, marketFairProbability: null, quoteObservedAt: null,
+      pushProbability: null, expectedValue: null,
       professionalReferences: 0, referenceState: "unavailable" as const };
     const review = reviewCbbQuote(forecast, target);
     const grade = gradeCbbProvisional({ target, references: quotes.filter(quote => quote !== target),
@@ -29,8 +30,12 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
     if (grade.selection !== null && grade.selection !== review.selection) {
       throw new Error("CBB grade and score side disagree");
     }
+    const firstImplied=cbbImpliedProbability(target.firstPrice),secondImplied=cbbImpliedProbability(target.secondPrice);
+    const marketFairProbability=grade.selection===null?null:
+      (grade.selection==="first"?firstImplied:secondImplied)/(firstImplied+secondImplied);
     return { market, targetBook, grade: grade.grade, reason: grade.reason,
       selection: grade.selection, line: target.line, price: grade.price,
+      marketFairProbability,quoteObservedAt:target.providerObservedAt,
       probability: grade.selection === null ? null : review.probability,
       pushProbability: grade.selection === null ? null : review.pushProbability,
       expectedValue: grade.expectedValue, professionalReferences: grade.professionalReferences,
