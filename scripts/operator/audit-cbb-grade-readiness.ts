@@ -100,6 +100,13 @@ for (const market of markets) {
       highEvNoReference: summarize(high.filter(row => row.referenceAgreement === "unavailable_or_tied")),
       steepFavoriteHighEv: summarize(high.filter(row => row.price <= -250)),
       highestModelConfidenceThird: summarize(rankedConfidence.slice(2 * third)),
+      ...(market === "moneyline" ? { fixedEarlyHighConfidenceByPriceBand: Object.fromEntries([
+        ["steeperThanMinus350", (price: number) => price < -350],
+        ["minus350ToMinus200", (price: number) => price >= -350 && price < -200],
+        ["minus200ToMinus100", (price: number) => price >= -200 && price <= -100],
+        ["plusMoney", (price: number) => price >= 100],
+      ].map(([band, included]) => [band, summarize(samples.filter(row => row.confidence >= earlyHighConfidenceCut &&
+        (included as (price: number) => boolean)(row.price)))])) } : {}),
       positiveEvPriceNoSteeperThanMinus250: summarize(samples.filter(row => row.ev > 0 && row.price >= -250)),
       fixedEarlyEvCutAll: summarize(forwardHigh),
       fixedEarlyEvCutMarketAgrees: summarize(forwardHigh.filter(row => row.referenceAgreement === "agrees")),
