@@ -166,3 +166,29 @@ passed focused tests. The route has a once-daily schedule but remains
 `CBB_CRON_ENABLED` gated off until deployed and explicitly enabled. This closes
 a fixture-mapping implementation gap, **not** the
 market-reader, grade, member-snapshot, lock, or tracking gates.
+
+## October 29 owner direction and private reader/grade parity
+
+The owner explicitly approved proceeding toward a November 1 graded CBB Daily
+Edge with provisional grades, while asking that the remaining reader and
+product path be completed. This satisfies the direction/approval proof, not the
+publication gate. The private HTML preview previously still said "Pending
+calibration" despite its adjacent JSON containing six provisional grade rows.
+The private preview now renders the same selected executable book, line, price,
+model probability, grade, and professional-reference state as the JSON for
+each of Moneyline, Spread, and Total. It also identifies whether exact split
+rows or observed same-book price changes are present, without granting those
+observations unvalidated score-correction authority.
+
+At 18:20 UTC, a new read-only Owl's NCAAB odds/splits pull returned two exact
+November 1 games. The preview's six target markets were three Leans, two
+Watchlists, one No Play, zero Best Angles, and zero Holds. All three Leans
+remain model-only. The provider returned no CBB split games, no qualified
+Pinnacle/Circa target-excluded references for these two fixtures, and no
+observed price changes in the retained non-target same-book paths. The
+read-only pull created one immutable local receipt and made zero production
+writes. The offline preview now uses the latest hash-checked receipt, rather
+than an older static market file; an explicit refresh failure still aborts.
+No CBB score, grade, or stake was published by this change. The single writer,
+locked member precedence, official W/L/push tracking, and member snapshot
+parity remain required before activating the CBB model.
