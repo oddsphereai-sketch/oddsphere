@@ -4802,8 +4802,8 @@ The paired live-slate replay is recorded in
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_29_r8_consumer_execution_authority`
-- Locked member snapshot: `nba_locked_member_snapshot_2026_10_29_r6_consumer_execution_authority`
+- Member lock publication: `nba_member_lock_publication_2026_10_29_r9_consumer_trail_coherence`
+- Locked member snapshot: `nba_locked_member_snapshot_2026_10_29_r7_consumer_trail_coherence`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -4838,6 +4838,19 @@ consumer number, promoted ATL -1.5 -104 to Best Angle, and caused zero
 demotions. Existing locks retain exact stored precedence. Evidence and
 rollback: `docs/model-audits/2026-10-29-nba-consumer-execution-authority-predeclaration.md`
 and `docs/model-audits/2026-10-29-nba-consumer-execution-authority-result.md`.
+
+The October 29 r7/r9 consumer-trail coherence follow-up keeps the r24/r25/r15
+forecast, market-reader, and grade releases unchanged. Future unlocked member
+cards now build their displayed price and line movement from the same real
+consumer execution sportsbook that owns the evaluated quote, or from the
+deepest fresh consumer chronology when that book is unavailable. Circa,
+Pinnacle, and Bookmaker remain eligible professional-reader inputs and Circa
+may still own the separately labeled sharp-split panel, but a sharp PK cannot
+appear as the public movement history for a retail -1 or -1.5 selection.
+Existing locked cards retain exact stored payload precedence. Scores, sides,
+probabilities, prices, grades, promotions, demotions, actionables, and stakes
+change zero times. Evidence and rollback:
+`docs/model-audits/2026-10-29-nba-consumer-trail-coherence.md`.
 
 The October 21 r15/r17/r9 grade-integrity release separates model value versus the current no-vig
 price from actual qualified market movement. Direct Moneyline movement remains observational and

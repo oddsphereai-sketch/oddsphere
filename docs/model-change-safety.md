@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## Owner-directed repair: NBA consumer movement-trail coherence
+
+On 2026-10-29 Daniel Mengel confirmed that Circa and Pinnacle should remain
+internal sharp-reader evidence while the member product must display the real
+regulated consumer line. The r7/r9 locked-snapshot/publication follow-up makes
+the member odds and line trail use the evaluated consumer sportsbook, or the
+deepest fresh consumer chronology when that exact book is unavailable. A
+Circa PK can still inform the professional reader and separately labeled sharp
+splits, but cannot appear as the public movement history for an ATL -1/-1.5
+selection.
+
+This is a display-evidence boundary only. The r24 model, r25 market marriage,
+r15 grade policy, selected exact price, forecast, probability, pick, grade,
+stake, writer, lease, cadence, and provider inputs are unchanged. Same-input
+board impact is zero promotions, zero demotions, and zero actionable-count
+change. Existing locked member payloads retain exact precedence. Evidence and
+rollback: `docs/model-audits/2026-10-29-nba-consumer-trail-coherence.md`.
+
 ## Owner-directed repair: NBA consumer execution-line authority
 
 On 2026-10-29 Daniel Mengel rejected the r23 member-facing ATL PK because the
