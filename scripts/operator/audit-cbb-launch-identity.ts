@@ -9,6 +9,7 @@ import { chooseCbbCompleteTargetBook } from "../../lib/cbb/totalOnlyMarketResear
 import { selectCbbSlateGames } from "../../lib/services/cbb/seedCbbGamesService";
 import type { RawOwlsOddsResponse } from "../../lib/providers/owls/owlsSharpBookOdds";
 import type { CbbGame, CbbPlayer, CbbTeam } from "../../lib/cbb/types";
+import candidate from "../../lib/cbb/artifacts/candidate-r2.json";
 
 const args = process.argv.slice(2);
 if (args.some(arg => /^(--write|--publish|--activate)/.test(arg))) throw new Error("CBB identity audit is read-only");
@@ -51,6 +52,11 @@ async function main() {
       if (!catalogTeam || catalogTeam.full_name !== team.full_name) defects.push(`${side}_bdl_catalog_identity`);
       if (!identity?.status.startsWith("verified_") || !identity.logoUrl) defects.push(`${side}_espn_logo_identity`);
       if (!rosterTeamIds.has(team.id)) defects.push(`${side}_active_roster_id_absent`);
+      const prior = candidate.prior.teams[String(team.id) as keyof typeof candidate.prior.teams];
+      if (!prior || !Number.isFinite(prior.offense) || !Number.isFinite(prior.defense) ||
+        !Number.isFinite(prior.pace) || !Number.isInteger(prior.games) || prior.games < 1) {
+        defects.push(`${side}_independent_prior_stat_id_absent`);
+      }
     }
     if (!venue?.timeConfirmed) defects.push("espn_event_time_or_venue_identity");
     if (!targetBook) defects.push("complete_named_market_target_unavailable");
@@ -70,12 +76,14 @@ async function main() {
     collisions.set(team.abbreviation, [...(collisions.get(team.abbreviation) ?? []), team.id]);
   }
   const report = { date, asOf, games: rows.length, identitiesVerified: rows.filter(row => row.defects.every(defect =>
-    !defect.includes("identity") && !defect.includes("roster"))).length,
+    !defect.includes("identity") && !defect.includes("roster") && !defect.includes("prior_stat"))).length,
     exactNamedTargetGames: rows.filter(row => row.targetBook !== null).length,
+    exactNamedTargetGamesFullyMapped: rows.filter(row => row.targetBook !== null && row.defects.length === 0).length,
     missingAbbreviationTeamIds,
     globalAbbreviationCollisions: [...collisions].filter(([, ids]) => ids.length > 1)
       .map(([abbreviation, ids]) => ({ abbreviation, teamIds: ids })), rows,
     productionWrites: 0 };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  if (report.exactNamedTargetGamesFullyMapped !== report.exactNamedTargetGames) process.exitCode = 1;
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "CBB identity audit failed"); process.exitCode = 1; });

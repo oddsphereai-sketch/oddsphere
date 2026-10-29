@@ -207,7 +207,8 @@ locked reader, or official tracking. Those production gates remain open.
 
 The October 29 launch identity audit compares BALLDONTLIE's numeric team/game
 IDs and full names with the ESPN catalog, exact ESPN scoreboard participants,
-tip time, roster team IDs, and Owl's named two-sided market quotes. It never
+tip time, roster team IDs, numeric independent-prior stat IDs, and Owl's named
+two-sided market quotes. It never
 joins on an abbreviation. The global BDL catalog has 58 duplicated nonempty
 abbreviations and two missing abbreviations, which is why abbreviation-only
 mapping would be unsafe. ESPN's catalog also omits some schools that appear
@@ -227,8 +228,9 @@ check. The cron remains disabled, so no production row was changed.
 
 For November 2, five games currently have a complete exact named target book;
 all five have full verified identities and no mapping defects. The full
-182-game slate has 130 fully verified team/venue/roster identities, 52 missing
-away ESPN logos, one missing home logo, 31 unmatched ESPN venues/times, and
+182-game slate has 118 fully verified team/venue/roster/stat identities, 52 missing
+away ESPN logos, one missing home logo, 64 absent away independent priors,
+one absent home independent prior, 31 unmatched ESPN venues/times, and
 177 games without a complete named target book at the audit instant. Many of
 those games are lower-division exhibitions with no posted market; they must
 not be mislabeled as a feed-name match failure or given a fabricated logo or
