@@ -87,6 +87,13 @@ Odds API key is not configured. The necessary earlier-season actual-line
 selection set is therefore absent from the configured evidence. The opened
 2025 quotes cannot be reused as a clean model-selection season.
 
+[College Basketball Data's historical Lines API](https://api.collegebasketballdata.com/api/lines)
+documents opening spreads and Totals back to 2013 and variable Moneyline
+coverage. It requires a bearer key that is not configured here. Its documented
+line fields also have no per-quote observation timestamp, so even with access
+we would first have to establish when each opening price was available relative
+to the forecast cutoff. No CBBD calls or account changes were made.
+
 ## Decision and remaining gap
 
 No trial improves the wider Total decisions while preserving the existing
