@@ -394,6 +394,7 @@ export function selectBestNbaExecutableOffer(opts: {
   consensusPickLine: number | null;
   modelProbabilityAtPickLine: (pickLine: number) => number | null;
 }): NbaExecutableOffer | null {
+  if (opts.consensusPickLine === null) return null;
   const otherSide = opts.pickSide === "home" ? "away"
     : opts.pickSide === "away" ? "home"
     : opts.pickSide === "over" ? "under" : "over";
@@ -403,6 +404,7 @@ export function selectBestNbaExecutableOffer(opts: {
     if (
       pick.market_type !== opts.market || pick.side !== opts.pickSide ||
       pick.line_value === null || pick.odds_american === null ||
+      Math.abs(pick.line_value - opts.consensusPickLine) >= 0.01 ||
       !accepted.has(pick.sportsbook.trim().toLowerCase())
     ) continue;
     const expectedOtherLine = opts.market === "spread" ? -pick.line_value : pick.line_value;
@@ -426,11 +428,6 @@ export function selectBestNbaExecutableOffer(opts: {
   return candidates.sort((left, right) => {
     const ev = right.expectedReturn - left.expectedReturn;
     if (Math.abs(ev) > 1e-12) return ev;
-    const center = opts.consensusPickLine;
-    if (center !== null) {
-      const distance = Math.abs(left.pick.line_value! - center) - Math.abs(right.pick.line_value! - center);
-      if (Math.abs(distance) > 1e-12) return distance;
-    }
     const freshness = Date.parse(right.pick.fetched_at ?? "") - Date.parse(left.pick.fetched_at ?? "");
     if (Number.isFinite(freshness) && freshness !== 0) return freshness;
     return left.pick.sportsbook.localeCompare(right.pick.sportsbook);

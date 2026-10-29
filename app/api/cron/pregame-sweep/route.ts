@@ -646,9 +646,12 @@ export async function GET(request: Request) {
       if (partition.entering_lock.length > 0 && sport === "nba") {
         const owlsApiKey = process.env.OWLS_INSIGHT_API_KEY;
         if (!owlsApiKey) throw new Error("OWLS_INSIGHT_API_KEY missing from NBA T-60 refresh");
+        const ballDontLieApiKey = process.env.BALLDONTLIE_API_KEY;
+        if (!ballDontLieApiKey) throw new Error("BALLDONTLIE_API_KEY missing from NBA T-60 refresh");
         nbaPreLockLines = await refreshNbaLines({
           slateDate: date,
           owlsApiKey,
+          ballDontLieApiKey,
           dryRun: false,
           externalIdsFilter: partition.entering_lock.map((game) => game.external_id),
         });

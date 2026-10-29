@@ -1,4 +1,7 @@
-import { isNbaAuthoritativeSportsbook } from "./nbaMarketSourceEligibility";
+import {
+  isNbaAuthoritativeSportsbook,
+  isNbaConsumerExecutionSportsbook,
+} from "./nbaMarketSourceEligibility";
 
 export const NBA_CURRENT_LINE_RELATIVE_FRESH_MINUTES = 120 as const;
 
@@ -59,4 +62,24 @@ export function selectNbaCurrentLineBoard<T extends NbaCurrentLineBoardRow>(
     if (!Number.isFinite(anchorMs)) return false;
     return observedMs(row) >= anchorMs - maxRelativeAgeMinutes * 60_000;
   });
+}
+
+/**
+ * Member execution is a real, broadly available consumer sportsbook quote.
+ * Circa/Pinnacle stay in the separate professional reader evidence lane. When
+ * consumer books disagree around pick'em, a non-zero offered line takes
+ * precedence; a zero is never converted into a synthetic -1 or -1.5.
+ */
+export function selectNbaConsumerExecutionBoard<T extends NbaCurrentLineBoardRow & { line_value?: number | null }>(
+  rows: readonly T[],
+): T[] {
+  const consumer = rows.filter((row) => isNbaConsumerExecutionSportsbook(row.sportsbook));
+  const hasNonZeroSpread = consumer.some((row) =>
+    row.market_type.trim().toLowerCase() === "spread" &&
+    typeof row.line_value === "number" && Math.abs(row.line_value) >= 0.01
+  );
+  return consumer.filter((row) => !(
+    hasNonZeroSpread && row.market_type.trim().toLowerCase() === "spread" &&
+    typeof row.line_value === "number" && Math.abs(row.line_value) < 0.01
+  ));
 }

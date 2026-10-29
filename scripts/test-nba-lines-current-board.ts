@@ -6,6 +6,7 @@ import {
   fetchNbaCurrentEvents,
   fetchNbaCurrentOddsBoard,
 } from "../lib/services/nba/refreshNbaLinesService";
+import { selectNbaConsumerExecutionBoard } from "../lib/services/nba/nbaCurrentLineBoard";
 
 const requested: string[] = [];
 const pages = new Map<string, number>();
@@ -115,12 +116,27 @@ async function main(): Promise<void> {
   assert.deepEqual(pairGate.rows.map((row) => row.sportsbook), ["complete", "complete"]);
   assert.equal(pairGate.incompleteGroups, 2);
 
+  const consumerBoard = selectNbaConsumerExecutionBoard([
+    { market_type: "spread", sportsbook: "circa", side: "home", line_value: 0, fetched_at: "2026-10-29T11:35:00Z" },
+    { market_type: "spread", sportsbook: "pinnacle", side: "home", line_value: -1, fetched_at: "2026-10-29T11:35:00Z" },
+    { market_type: "spread", sportsbook: "draftkings", side: "home", line_value: -1.5, fetched_at: "2026-10-29T11:35:00Z" },
+    { market_type: "spread", sportsbook: "fanduel", side: "home", line_value: -1.5, fetched_at: "2026-10-29T11:35:00Z" },
+    { market_type: "spread", sportsbook: "betrivers", side: "home", line_value: 0, fetched_at: "2026-10-29T11:35:00Z" },
+  ]);
+  assert.deepEqual(
+    consumerBoard.map((row) => row.sportsbook),
+    ["draftkings", "fanduel"],
+    "sharp-book PK and consumer zeroes must not own a live member execution line when real non-zero consumer quotes exist",
+  );
+
   const refreshSource = readFileSync(
     new URL("../lib/services/nba/refreshNbaLinesService.ts", import.meta.url),
     "utf8",
   );
   assert.match(refreshSource, /provider HTTP failure aborts|throw new Error\(message\)/);
   assert.match(refreshSource, /selectCompleteExecutableBookPairs/);
+  assert.match(refreshSource, /BALLDONTLIE NBA retail odds key missing/);
+  assert.match(refreshSource, /complete consumer execution and sharp-reader pairs are both required/);
   assert.match(refreshSource, /const existingIds: number\[\] = \[\]/);
   assert.ok(
     refreshSource.indexOf('.from("lines").insert(proposed)') < refreshSource.indexOf('.from("lines").delete().in("id", ids)'),
