@@ -63,6 +63,37 @@ assert.equal(missing.evaluatedBets.length, 0);
 assert.equal(missing.heldMarkets.length, 3);
 assert.equal(missing.heldMarkets.every((market) => market.reasonCodes?.includes("target_excluded_same_line_consensus_insufficient")), true);
 
+const recoveryArgs = { providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU",
+  gameStartsAt: "2026-08-29T16:00:00Z", evaluatedAt: "2026-08-25T16:00:00Z", forecast,
+  comparableCurrentBooks: books.slice(0, 2) };
+const owlsReference = { ...books[2]!, sportsbook: "circa", provider: "owls" as const,
+  targetEligible: false, marketReadingEligible: false };
+const recovered = buildCfbV1DecisionBundle({ ...recoveryArgs, supplementalGradingBooks: [owlsReference] });
+assert.equal(recovered.evaluatedBets.length, 3, "a third distinct same-line book fills the ingestion gap without changing policy");
+assert.deepEqual(recovered.forecast, missing.forecast, "supplemental grade prices never alter the PMF");
+assert.ok(recovered.evaluatedBets.every(row => row.consensus.books.length >= 2));
+assert.ok(recovered.evaluatedBets.every(row => row.evaluatedQuote.sportsbook !== "circa"));
+for (const invalid of [
+  { ...owlsReference, sportsbook: "Fan Duel" }, // duplicate retail source, not another vote
+  { ...owlsReference, observedAt: "2026-08-25T14:00:00Z" },
+  { ...owlsReference, observedAt: "2026-08-25T16:00:01Z" },
+  { ...owlsReference, providerGameId: "wrong-event" },
+]) {
+  assert.equal(buildCfbV1DecisionBundle({ ...recoveryArgs, supplementalGradingBooks: [invalid] }).evaluatedBets.length, 0);
+}
+const incumbentWithOwls = buildCfbV1DecisionBundle({ ...recoveryArgs, comparableCurrentBooks: books,
+  supplementalGradingBooks: [{ ...owlsReference, sportsbook: "pinnacle" }] });
+const incumbentWithoutOwls = buildCfbV1DecisionBundle({ ...recoveryArgs, comparableCurrentBooks: books });
+assert.deepEqual(incumbentWithOwls, incumbentWithoutOwls, "existing evaluated markets retain exact decisions and economics");
+const missingPrimary = books.slice(0, 2).map(row => ({ ...row, spread: null }));
+const retailOwls = books.map(row => ({ ...row, provider: "owls" as const, marketReadingEligible: false }));
+const filledMarket = buildCfbV1DecisionBundle({ ...recoveryArgs, comparableCurrentBooks: missingPrimary,
+  supplementalGradingBooks: retailOwls });
+assert.equal(filledMarket.evaluatedBets.find(row => row.market === "spread")?.evaluatedQuote.provider, "owls",
+  "a missing approved retail market may use a real paired Owls execution quote with correct provenance");
+assert.equal(buildCfbV1DecisionBundle({ ...recoveryArgs, healthHolds: ["injury_unverified"],
+  supplementalGradingBooks: retailOwls }).evaluatedBets.length, 0, "ingestion never bypasses global health holds");
+
 const futureMoneylineBooks = books.map((value) => ({
   ...value,
   marketObservedAt: {

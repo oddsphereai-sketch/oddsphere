@@ -43,14 +43,14 @@ export type RawOwlsOddsResponse = {
   meta?: Record<string, unknown> | null;
 };
 
-export type NormalizedOwlsSharpPrice = {
+export type NormalizedOwlsNamedPrice<Book extends string = string> = {
   sport: OwlsSport;
   providerEventId: string;
   providerNumericEventId: string | null;
   scheduledStart: string | null;
   homeTeam: string;
   awayTeam: string;
-  sportsbook: OwlsSharpOddsBook;
+  sportsbook: Book;
   observedAt: string;
   market: MarketIntelligenceMarketType;
   side: MarketIntelligenceSelectionSide;
@@ -59,6 +59,8 @@ export type NormalizedOwlsSharpPrice = {
   decimalPrice: number;
   noVigProbability: number;
 };
+
+export type NormalizedOwlsSharpPrice = NormalizedOwlsNamedPrice<OwlsSharpOddsBook>;
 
 export type OwlsSharpOddsCoverage = {
   eventsReturned: number;
@@ -121,11 +123,6 @@ function eventRows(response: RawOwlsOddsResponse): RawOwlsOddsEvent[] {
   return Object.values(response.data).flatMap((rows) => Array.isArray(rows) ? rows : []);
 }
 
-function book(value: unknown): OwlsSharpOddsBook | null {
-  const key = normalized(value);
-  return OWLS_SHARP_ODDS_BOOKS.find((candidate) => candidate === key) ?? null;
-}
-
 /**
  * Converts Owls' Odds-API-compatible current feed into complete two-sided
  * Circa/Pinnacle observations. A malformed or one-sided market is rejected as
@@ -135,8 +132,17 @@ export function normalizeOwlsSharpBookOdds(
   response: RawOwlsOddsResponse,
   expectedSport: OwlsSport,
 ): OwlsSharpOddsCoverage {
+  return normalizeOwlsNamedBookOdds(response, expectedSport, OWLS_SHARP_ODDS_BOOKS);
+}
+
+/** Explicit caller-owned book roster; the sharp-only wrapper stays unchanged. */
+export function normalizeOwlsNamedBookOdds<Book extends string>(
+  response: RawOwlsOddsResponse,
+  expectedSport: OwlsSport,
+  allowedBooks: readonly Book[],
+): Omit<OwlsSharpOddsCoverage, "prices"> & { prices: NormalizedOwlsNamedPrice<Book>[] } {
   const rows = eventRows(response);
-  const prices: NormalizedOwlsSharpPrice[] = [];
+  const prices: NormalizedOwlsNamedPrice<Book>[] = [];
   const rejected: OwlsSharpOddsCoverage["rejected"] = [];
   let matchedBookEvents = 0;
 
@@ -155,7 +161,7 @@ export function normalizeOwlsSharpBookOdds(
     }
 
     for (const bookmaker of event.bookmakers ?? []) {
-      const sportsbook = book(bookmaker.key ?? bookmaker.title);
+      const sportsbook = allowedBooks.find(candidate => normalized(candidate) === normalized(bookmaker.key ?? bookmaker.title));
       if (!sportsbook) continue;
       const observedAt = iso(bookmaker.last_update);
       if (!observedAt) {

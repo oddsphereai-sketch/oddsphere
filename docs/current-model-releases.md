@@ -1305,6 +1305,24 @@ Last reviewed: 2026-10-29
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 29 Owls grading-price ingestion repair: decision/tuple advance to
+  `cfb_v1_daily_edge_decision_2026_10_29_r55_owls_grade_price_ingestion` /
+  `cfb_v1_exact_price_decision_tuple_2026_10_29_r42_owls_grade_price_ingestion`,
+  calibration to r28, writer/collector to r142/r66, Owls adapter to r2,
+  fixture/snapshot/reader to r96/r56/r41 (all `owls_grade_price_ingestion`).
+  The current r28 grade policy still requires two OTHER named books at the
+  identical line. Additional complete conventional-book pairs from the existing
+  Owls odds response fill held-market grading gaps only; already evaluated
+  markets are preserved. Six execution books remain unchanged; additional
+  books are comparison-only. Freshness, exact teams/kickoff, primary-provider
+  precedence and same-book deduplication are enforced. No exchange votes,
+  new provider calls, forecast/market-reader price authority, grading threshold
+  relaxation, second writer or lease change. The immediate r54/r41/r27 legacy
+  decision/tuple/calibration payload retains exact immutable lock precedence.
+  Model/distribution/probability remain r26/r24/r28; forecast reader remains r41.
+  Draft PR #877's independent grading-policy relaxation is NOT included.
+  Scope and rollback: `docs/model-audits/2026-10-29-cfb-owls-grade-ingestion-predeclaration.md`.
+
 - October 27 Owls provider cutover: the sole writer no longer requires or
   calls SharpAPI. It advances to
   `cfb_forward_evidence_writer_2026_10_27_r141_owls_capture_only`; the collector
