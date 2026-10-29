@@ -177,7 +177,7 @@ assert.ok(component.includes("data-book-odds")&&component.includes("activeBook[2
 assert.ok(component.includes('comparedBook.points.length===1?" · one quote"')&&component.includes('comparedBook.points.length===1?"History building"'),"one sportsbook observation is not evidence of an unchanged market");
 assert.ok(component.includes('game.markets[marketKey]'),"the chosen reader market, not moneyline, owns the sportsbook comparison");
 assert.ok(component.includes('readerContractSelection(game,marketKey)'),"active market selection controls requests");
-assert.ok(component.includes('predictionMarketCurve(plotPoints,x,y,Infinity,bottom)'),"Kalshi uses the same connected curve treatment as the sportsbook");
+assert.ok(component.includes('predictionMarketObservedCurve(plotPoints,x,y,bottom)')&&component.includes('predictionMarketObservedCurve(plotBook,x,y)'),"both sources use the identical observed-curve and gap treatment");
 assert.equal((reader.match(/<PredictionMarketPanel game=\{game\} marketKey=\{marketKey\}/g)??[]).length,2,"both responsive surfaces pass the active market explicitly");
 const route=readFileSync("app/api/lab/prediction-market/route.ts","utf8");
 assert.ok(route.includes('selection?resolveReaderContract(contracts,gameMatch,selection):gameMatch'),"only moneyline can use the game-winner response; other kinds require their own contracts");
