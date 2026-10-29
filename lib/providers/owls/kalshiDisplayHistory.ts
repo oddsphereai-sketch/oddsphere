@@ -36,8 +36,8 @@ export function parseKalshiDisplayCandles(value: unknown, ticker: string, asOf: 
 /** Existing display cron only. Public history, no API credentials, no trading calls. */
 export async function backfillKalshiDisplayHistory(feed: PredictionMarketFeed, now=Date.now(), fetchImpl:typeof fetch=fetch): Promise<PredictionMarketFeed> {
   const eligible=feed.rows.filter(row=>now>=Date.parse(row.asOf)&&now-Date.parse(row.asOf)<PREDICTION_MARKET_HISTORY_WINDOW_MS && (row.historicalRelease!==KALSHI_DISPLAY_HISTORY_RELEASE || !row.historicalCheckedAt || now-Date.parse(row.historicalCheckedAt)>60*60_000))
-    .sort((a,b)=>Number(a.historicalRelease===KALSHI_DISPLAY_HISTORY_RELEASE)-Number(b.historicalRelease===KALSHI_DISPLAY_HISTORY_RELEASE)||
-      Date.parse(a.historicalCheckedAt??"1970-01-01")-Date.parse(b.historicalCheckedAt??"1970-01-01")||a.gameDate.localeCompare(b.gameDate));
+    .sort((a,b)=>Number(a.historicalRelease===KALSHI_DISPLAY_HISTORY_RELEASE)-Number(b.historicalRelease===KALSHI_DISPLAY_HISTORY_RELEASE)||a.gameDate.localeCompare(b.gameDate)||
+      (a.historicalRelease===KALSHI_DISPLAY_HISTORY_RELEASE?Date.parse(a.historicalCheckedAt??"1970-01-01")-Date.parse(b.historicalCheckedAt??"1970-01-01"):0));
   const updated=new Map<string,Partial<PredictionMarketFeed["rows"][number]>>();let requests=0;
   const get=async(ticker:string,start:number,end:number,period:number)=>{
     if(requests>=3)return null;requests++;

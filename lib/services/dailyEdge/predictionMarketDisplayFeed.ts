@@ -1,14 +1,15 @@
 import { unstable_cache, revalidateTag } from "next/cache";
 import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
 import {
-  isPredictionMarketFeed, mergePredictionMarketFeeds, parseOwlsPredictionMarkets,
+  isPredictionMarketFeed, mergePredictionMarketFeeds, parseOwlsPredictionMarkets, matchPredictionMarketGame,
   PREDICTION_MARKET_RELEASE, PREDICTION_MARKET_TARGETS,
   type PredictionMarketFeed, type PredictionMarketSport,
 } from "@/lib/providers/owls/owlsPredictionMarkets";
 import { readLatestLabResponseSnapshot, upsertLabResponseSnapshot } from "../labResponseSnapshots";
 import { backfillKalshiDisplayHistory } from "@/lib/providers/owls/kalshiDisplayHistory";
 import { contractKinds, contractSeries, parseContractFeed, contractsForPublishedReaders, PREDICTION_MARKET_CONTRACT_RELEASE,
-  type ContractKind, type ContractFeed } from "@/lib/providers/owls/predictionMarketContracts";
+  resolveReaderContract, readerContractSelection, type ContractKind, type ContractFeed } from "@/lib/providers/owls/predictionMarketContracts";
+import {selectedPredictionMarketOutcome} from "@/app/lab/lib/predictionMarketDisplay";
 import { supabase } from "@/lib/db/supabase";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { currentDailyEdgeBoardDate } from "@/lib/dates/slateDate";
@@ -108,6 +109,16 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   const pools=[winners,...contracts].map(feed=>[...feed.rows].sort((a,b)=>a.gameDate.localeCompare(b.gameDate)));
   const interleaved:PredictionMarketFeed["rows"]=[];
   for(let i=0;i<Math.max(0,...pools.map(rows=>rows.length));i++)for(const pool of pools)if(pool[i])interleaved.push(pool[i]);
+  // Warm the actual selected markets of the nearest unlocked games first,
+  // not the first arbitrary YES ticker or a distant alternate on the feed.
+  const priority=new Map<string,number>();
+  for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
+    const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName});
+    const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
+    if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
+    for(const kind of kinds){const selection=readerContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}
+  }
+  interleaved.sort((a,b)=>(priority.get(a.ticker)??10_000)-(priority.get(b.ticker)??10_000));
   const [captured,bookCapture]=await Promise.all([
     backfillKalshiDisplayHistory({...winners,rows:interleaved}),
     games?bookHistoryStored(sport).then(previous=>captureOwlsBookDisplayHistory(previous,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}),Date.now(),response.rateLimit.remainingMonth)).catch(()=>null):Promise.resolve(null),
