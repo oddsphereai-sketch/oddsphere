@@ -41,7 +41,8 @@ export async function GET(request: Request): Promise<Response> {
     const archive=readPredictionMarketPrelock(await readPredictionMarketPrelockFeed(sport as PredictionMarketSport).catch(()=>null),game,kind,side,selection?.line??null);
     if(archive)return Response.json({market:archive.market,book:archive.book,prelockCapturedAt:archive.capturedAt,availability:archive.market?"available":"contract_unavailable"},{headers:{"Cache-Control":"private, max-age=30"}});
   }
-  const book=game&&side?await readPredictionMarketBook(game,kind,side,selection?.line??null,sport as PredictionMarketSport).catch(()=>null):null;
+  const preferredBook=query.get("book");
+  const book=game&&side?await readPredictionMarketBook(game,kind,side,selection?.line??null,sport as PredictionMarketSport,preferredBook).catch(()=>null):null;
   const availability=market?"available":!feed?"feed_unavailable":!gameMatch?"event_unavailable":selection&&!contracts?"market_feed_unavailable":"contract_unavailable";
   return Response.json({market,book,availability}, {headers:{"Cache-Control":"private, max-age=30, stale-while-revalidate=30"}});
 }
