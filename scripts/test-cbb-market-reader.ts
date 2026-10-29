@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { normalizeCbbOwlsCurrent, normalizeCbbOwlsHistory, cbbObservedPricePaths } from "../lib/cbb/owlsMarketEvidence";
-import { applyCbbMarketHead, buildCbbMarketReaderFeatures, CBB_MARKET_READER_FEATURES, CBB_MARKET_READER_RESEARCH_RELEASE, CBB_MATCHUP_MARKET_RESEARCH_RELEASE, fitCbbJointMarketLogLoss } from "../lib/cbb/marketReaderResearch";
+import { applyCbbMarketHead, buildCbbMarketReaderFeatures, cbbExactMarketCenter, CBB_MARKET_READER_FEATURES,
+  CBB_MARKET_READER_RESEARCH_RELEASE, CBB_EXACT_CENTER_RESEARCH_RELEASE, CBB_MATCHUP_MARKET_RESEARCH_RELEASE,
+  fitCbbJointMarketLogLoss, fitCbbMarketHead } from "../lib/cbb/marketReaderResearch";
 import { CBB_EVIDENCE_MATURITY_RELEASE } from "../lib/cbb/matchupMechanismResearch";
 import { evaluateCbbMarketReaderRows } from "../lib/cbb/marketReaderEvaluation";
 import { cbbThresholdProbabilities } from "../lib/cbb/model";
@@ -49,18 +51,28 @@ const archived = evidence.map(r => ({ ...r, quote: { ...r.quote, phase: "opening
 assert.equal(buildCbbMarketReaderFeatures(forecast, archived, "draftkings", { archiveReplay: false }).retained.length, 0);
 assert.equal(buildCbbMarketReaderFeatures(forecast, archived, "draftkings", { archiveReplay: true }).retained.length, 3);
 assert.deepEqual(buildCbbMarketReaderFeatures(forecast, [...evidence, ...evidence], "draftkings", { archiveReplay: false }).features, feature.features);
+const evenSpread = { ...parsed.quotes.find(q => q.market === "spread")!, line: 0.5, firstPrice: -113, secondPrice: -113 };
+const exactSpreadCenter = cbbExactMarketCenter(forecast, evenSpread, 0.5);
+assert.ok(Math.abs(exactSpreadCenter) < 1e-6, "no-tie conditioned +0.5 Spread should center on zero");
+const integerTotal = { ...parsed.quotes.find(q => q.market === "total")!, line: 150, firstPrice: -120, secondPrice: 100 };
+const totalFair = (120 / 220) / (120 / 220 + 100 / 200);
+const exactTotal = cbbExactMarketCenter(forecast, integerTotal, totalFair);
+const totalProb = cbbThresholdProbabilities({ ...forecast, total: exactTotal }, "total", 150);
+assert.ok(Math.abs(totalProb.first / (totalProb.first + totalProb.second) - totalFair) < 1e-7);
 const game: CbbTrainingGame = { id: 100, date: fixture.date, season: 2026, homeId: 1, awayId: 2, homeScore: 75, awayScore: 70,
   homeRegulation: 75, awayRegulation: 70, overtime: false, possessions: 70, tempo: 70, neutral: true,
   homeFactors: { efg: 0.5, turnoverRate: 0.18, offensiveReboundRate: 0.28, freeThrowRate: 0.3 },
   awayFactors: { efg: 0.5, turnoverRate: 0.18, offensiveReboundRate: 0.28, freeThrowRate: 0.3 } };
 const row = { game, forecast, features: feature.features, targets: parsed.quotes as CbbQuote[] };
 const head = { release: CBB_MARKET_READER_RESEARCH_RELEASE, trainedThrough: "2026-03-01T00:00:00Z", trainingGameIds: [], mode: "ridge" as const,
-  margin: feature.features.map((_, i) => i === 0 ? -15 : 0), total: feature.features.map((_, i) => i === 0 ? 8 : 0) };
+  independentRelease: "test", margin: feature.features.map((_, i) => i === 0 ? -15 : 0), total: feature.features.map((_, i) => i === 0 ? 8 : 0) };
 const result = applyCbbMarketHead(row, head);
 assert.equal(result.margin, -10); assert.equal(result.total, 153); assert.ok(result.homeWinProbability < 0.5, "supported learned winner crossing is not artificially blocked");
 assert.equal(result.homeScore + result.awayScore, result.total); assert.equal(result.homeScore - result.awayScore, result.margin);
 assert.ok(Math.abs(cbbThresholdProbabilities(result, "spread", 0).first - result.homeWinProbability) < 1e-10);
 assert.deepEqual(result, applyCbbMarketHead(row, JSON.parse(JSON.stringify(head))));
+assert.throws(() => applyCbbMarketHead(row, { ...head, release: CBB_EXACT_CENTER_RESEARCH_RELEASE,
+  independentRelease: undefined }), /release mismatch/);
 assert.throws(() => applyCbbMarketHead(row, { ...head, trainedThrough: "2026-12-01T00:00:00Z" }), /future/);
 assert.throws(() => applyCbbMarketHead(row, { ...head, trainingGameIds: [100] }), /in-sample/);
 assert.throws(() => applyCbbMarketHead({ ...row, forecast: { ...forecast, gameId: 101 } }, head), /exact-game/);
@@ -69,6 +81,9 @@ const totalOnly = { ...head, margin: head.margin.map(() => 0) }, shifted = apply
 assert.equal(shifted.margin, forecast.margin); assert.equal(shifted.homeScore - forecast.homeScore, shifted.awayScore - forecast.awayScore);
 assert.deepEqual(applyCbbMarketHead({ ...row, features: row.features.map((v, i) => i === CBB_MARKET_READER_FEATURES.indexOf("reference_book_count") ? 0 : v) }, head), forecast);
 const train = Array.from({ length: 110 }, (_, i) => ({ ...row, game: { ...game, id: 1000 + i, date: "2026-02-01T12:00:00Z" }, forecast: { ...forecast, gameId: 1000 + i, asOf: "2026-02-01T00:00:00Z" }, targets: row.targets.map(q => ({ ...q, gameId: 1000 + i })) }));
+assert.equal(fitCbbMarketHead(train, { penalty: 10, release: CBB_EXACT_CENTER_RESEARCH_RELEASE }).independentRelease, "test");
+assert.throws(() => fitCbbMarketHead(train.map((r, i) => i === 0 ? { ...r, forecast: { ...r.forecast, release: "other" } } : r),
+  { penalty: 10, release: CBB_EXACT_CENTER_RESEARCH_RELEASE }), /mixed/);
 const learned = fitCbbJointMarketLogLoss(train, 10);
 assert.equal(learned.objective, "joint_market_log_loss");
 assert.deepEqual(learned, fitCbbJointMarketLogLoss(train, 10));
@@ -85,4 +100,9 @@ assert.equal(matchedHead.independentRelease, CBB_EVIDENCE_MATURITY_RELEASE);
 const evaluated = evaluateCbbMarketReaderRows([row], head);
 assert.equal(evaluated.markets.moneyline.harms, 1);
 assert.equal(evaluated.markets.total.harms, 1);
+const boundaryForecast = { ...forecast, margin: -0.25, homeScore: 72.375, awayScore: 72.625, homeWinProbability: 0.49 };
+const boundaryRow = { ...row, forecast: boundaryForecast,
+  targets: row.targets.map(q => q.market === "spread" ? { ...q, line: 0.5 } : q) };
+assert.equal(evaluateCbbMarketReaderRows([boundaryRow]).markets.spread.losses, 1,
+  "research evaluation must use the same discrete/no-tie side as quote review");
 console.log("CBB market reader: source names/orientation, UTC/T-60 exclusion, no fabricated paths, target-family exclusion, receipt policy, chronological learned heads, deterministic fitting, coherent flips and exact-line W/L/P passed.");

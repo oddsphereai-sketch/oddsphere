@@ -8,6 +8,7 @@ import type { CbbForecast, CbbQuote } from "./types";
 import { CBB_EVIDENCE_MATURITY_RELEASE } from "./matchupMechanismResearch";
 
 export const CBB_MARKET_READER_RESEARCH_RELEASE = "cbb_candidate_2026_10_28_r5_coherent_market_reader";
+export const CBB_EXACT_CENTER_RESEARCH_RELEASE = "cbb_candidate_2026_10_29_r18_exact_price_centers";
 export const CBB_MARKET_READER_FEATURES = ["intercept", "independent_margin", "independent_total", "independent_strength",
   "spread_disagreement", "moneyline_disagreement", "total_disagreement", "ml_spread_disagreement",
   "spread_dispersion", "total_dispersion", "ml_available", "spread_available", "total_available", "reference_book_count",
@@ -22,8 +23,40 @@ export function cbbInverseNormal(p: number) {
   for (let i = 0; i < 50; i++) { const mid = (low + high) / 2; if (normalCdf(mid) < p) low = mid; else high = mid; }
   return (low + high) / 2;
 }
+/** Invert the same discrete/no-tie decision distribution used at the target quote. */
+export function cbbExactMarketCenter(prior: CbbForecast, quote: CbbQuote, fairFirst: number) {
+  if (!(fairFirst > 0 && fairFirst < 1)) throw new Error("invalid CBB fair probability");
+  if (quote.market !== "moneyline" && (quote.line === null || !Number.isFinite(quote.line))) {
+    throw new Error("CBB exact center requires line");
+  }
+  const sd = quote.market === "total" ? prior.uncertainty.totalSd : prior.uncertainty.marginSd;
+  if (!(sd > 0)) throw new Error("CBB exact center requires uncertainty");
+  const approximate = (quote.market === "moneyline" ? 0 : quote.market === "spread" ? -quote.line! : quote.line!) +
+    sd * cbbInverseNormal(fairFirst);
+  const probability = (center: number) => {
+    if (quote.market === "moneyline") {
+      const zero = normalCdf((0.5 - center) / sd) - normalCdf((-0.5 - center) / sd);
+      return (1 - normalCdf((0.5 - center) / sd)) / (1 - zero);
+    }
+    const forecast = quote.market === "total" ? { ...prior, total: center } : { ...prior, margin: center };
+    const conditional = cbbThresholdProbabilities(forecast, quote.market, quote.line);
+    return conditional.first / (conditional.first + conditional.second);
+  };
+  let low = approximate - 20 * sd, high = approximate + 20 * sd;
+  if (!(probability(low) <= fairFirst && probability(high) >= fairFirst)) throw new Error("CBB exact center not bracketed");
+  for (let i = 0; i < 70; i++) {
+    const mid = (low + high) / 2;
+    if (probability(mid) < fairFirst) low = mid; else high = mid;
+  }
+  const center = (low + high) / 2;
+  if (!Number.isFinite(center) || Math.abs(probability(center) - fairFirst) > 1e-7) {
+    throw new Error("CBB exact center failed round trip");
+  }
+  return center;
+}
 /** Price level is observed; unknown movement/splits/leadership are not synthesized. */
-export function buildCbbMarketReaderFeatures(prior: CbbForecast, evidence: CbbReaderQuote[], targetBook: string, options: { archiveReplay: boolean }) {
+export function buildCbbMarketReaderFeatures(prior: CbbForecast, evidence: CbbReaderQuote[], targetBook: string,
+  options: { archiveReplay: boolean; centerMethod?: "exact" }) {
   const asOf = Date.parse(prior.asOf);
   if (!Number.isFinite(asOf)) throw new Error("invalid CBB reader cutoff");
   const rejected: Array<{ book: string; market: string; reason: string }> = [];
@@ -58,7 +91,8 @@ export function buildCbbMarketReaderFeatures(prior: CbbForecast, evidence: CbbRe
     const q = latest[0].quote;
     const p = cbbImpliedProbability(q.firstPrice) / (cbbImpliedProbability(q.firstPrice) + cbbImpliedProbability(q.secondPrice));
     const sd = q.market === "total" ? prior.uncertainty.totalSd : prior.uncertainty.marginSd;
-    const value = (q.market === "moneyline" ? 0 : q.market === "spread" ? -q.line! : q.line!) + sd * cbbInverseNormal(p);
+    const value = options.centerMethod === "exact" ? cbbExactMarketCenter(prior, q, p) :
+      (q.market === "moneyline" ? 0 : q.market === "spread" ? -q.line! : q.line!) + sd * cbbInverseNormal(p);
     centers[q.market].push(value); retained.push(latest[0]);
   }
   const m = centers.moneyline.length ? median(centers.moneyline) : prior.margin;
@@ -79,11 +113,17 @@ export function buildCbbMarketReaderFeatures(prior: CbbForecast, evidence: CbbRe
 export type CbbMarketHead = { release: string; trainedThrough: string; trainingGameIds: number[]; mode: "ridge" | "trees";
   margin: number[]; total: number[]; trees?: CbbScoreTrees; penalty?: number; objective?: "joint_market_log_loss"; independentRelease?: string };
 export const CBB_MATCHUP_MARKET_RESEARCH_RELEASE = "cbb_candidate_2026_10_28_r9_joint_matchup_market";
-export function fitCbbMarketHead(rows: CbbScoreFeatureRow[], options: { penalty: number } | { rounds: number }): CbbMarketHead {
+export function fitCbbMarketHead(rows: CbbScoreFeatureRow[], options: ({ penalty: number } | { rounds: number }) &
+  { release?: typeof CBB_EXACT_CENTER_RESEARCH_RELEASE }): CbbMarketHead {
   if (rows.length < 100 || rows.some(r => r.features.length !== CBB_MARKET_READER_FEATURES.length || !r.features.every(Number.isFinite))) throw new Error("insufficient/invalid CBB reader training");
   if (new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("duplicate CBB training games");
+  if (options.release && rows.some(r => r.forecast.release !== rows[0].forecast.release)) {
+    throw new Error("mixed CBB reader independent releases");
+  }
   const trainedThrough = new Date(Math.max(...rows.map(r => Date.parse(r.game.date) + 21600000))).toISOString();
-  const base = { release: CBB_MARKET_READER_RESEARCH_RELEASE, trainedThrough, trainingGameIds: rows.map(r => r.game.id), margin: [], total: [] };
+  const base = { release: options.release ?? CBB_MARKET_READER_RESEARCH_RELEASE,
+    ...(options.release ? { independentRelease: rows[0].forecast.release } : {}),
+    trainedThrough, trainingGameIds: rows.map(r => r.game.id), margin: [], total: [] };
   if ("rounds" in options) {
     const trees = trainCbbScoreTrees(rows, Math.max(...rows.map(r => r.game.season)), { depth: 2, rounds: options.rounds, learningRate: 0.05, minLeaf: 50, bins: 16 });
     return { ...base, mode: "trees", trees };
@@ -95,9 +135,12 @@ export function fitCbbMarketHead(rows: CbbScoreFeatureRow[], options: { penalty:
 }
 export function applyCbbMarketHead(row: CbbScoreFeatureRow, head: CbbMarketHead): CbbForecast {
   if (row.forecast.gameId !== row.game.id || row.forecast.homeId !== row.game.homeId || row.forecast.awayId !== row.game.awayId) throw new Error("CBB reader exact-game prior mismatch");
-  if (![CBB_MARKET_READER_RESEARCH_RELEASE, CBB_MATCHUP_MARKET_RESEARCH_RELEASE].includes(head.release) || !Number.isFinite(Date.parse(row.forecast.asOf)) || !Number.isFinite(Date.parse(head.trainedThrough)) || Date.parse(head.trainedThrough) > Date.parse(row.forecast.asOf) || head.trainingGameIds.includes(row.game.id)) throw new Error("future/in-sample CBB reader model");
+  if (![CBB_MARKET_READER_RESEARCH_RELEASE, CBB_MATCHUP_MARKET_RESEARCH_RELEASE, CBB_EXACT_CENTER_RESEARCH_RELEASE].includes(head.release) || !Number.isFinite(Date.parse(row.forecast.asOf)) || !Number.isFinite(Date.parse(head.trainedThrough)) || Date.parse(head.trainedThrough) > Date.parse(row.forecast.asOf) || head.trainingGameIds.includes(row.game.id)) throw new Error("future/in-sample CBB reader model");
   if ((head.release === CBB_MATCHUP_MARKET_RESEARCH_RELEASE && head.independentRelease !== CBB_EVIDENCE_MATURITY_RELEASE) ||
-    (head.independentRelease !== undefined && head.independentRelease !== row.forecast.release)) throw new Error("CBB reader independent release mismatch");
+    (head.release === CBB_EXACT_CENTER_RESEARCH_RELEASE && !head.independentRelease) ||
+    (head.independentRelease !== undefined && head.independentRelease !== row.forecast.release)) {
+    throw new Error("CBB reader independent release mismatch");
+  }
   if (row.features.length !== CBB_MARKET_READER_FEATURES.length || !row.features.every(Number.isFinite)) throw new Error("invalid CBB reader inference features");
   if (row.features[CBB_MARKET_READER_FEATURES.indexOf("reference_book_count")] === 0) return row.forecast;
   if (head.mode === "trees") {
@@ -156,7 +199,8 @@ export function fitCbbJointMarketLogLoss(rows: Array<CbbScoreFeatureRow & { targ
       coefficients[i] -= 0.03 * firstMoment[i] / (1 - 0.9 ** iteration) / (Math.sqrt(secondMoment[i] / (1 - 0.999 ** iteration)) + 1e-8);
     });
   }
-  return { release: options?.release ?? CBB_MARKET_READER_RESEARCH_RELEASE, ...(options ? { independentRelease: options.independentRelease } : {}), trainedThrough: new Date(Math.max(...rows.map(r => Date.parse(r.game.date) + 21600000))).toISOString(),
+  return { release: options?.release ?? CBB_MARKET_READER_RESEARCH_RELEASE, ...(options ? { independentRelease: options.independentRelease } : {}),
+    trainedThrough: new Date(Math.max(...rows.map(r => Date.parse(r.game.date) + 21600000))).toISOString(),
     trainingGameIds: rows.map(r => r.game.id), mode: "ridge", objective: "joint_market_log_loss", penalty,
     margin: coefficients.slice(0, width), total: coefficients.slice(width) };
 }
