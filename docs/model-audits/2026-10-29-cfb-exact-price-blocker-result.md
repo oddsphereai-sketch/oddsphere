@@ -35,15 +35,15 @@ member copy, split panel, chart or layout change is introduced.
 
 ## Same-input sole-runtime rehearsal
 
-At `2026-10-29T20:32:15.596Z`, one provider bundle and one authoritative full PMF
+At `2026-10-29T20:44:22.071Z`, one provider bundle and one authoritative full PMF
 per game supplied both policies in the existing writer with `apply:false`.
 
 | Measure | Incumbent | Correction |
 | --- | ---: | ---: |
 | Upcoming games compared | 96 | 96 |
 | Best Angle | 17 | 17 |
-| Lean | 26 | 26 |
-| Watchlist | 96 | 96 |
+| Lean | 27 | 27 |
+| Watchlist | 95 | 95 |
 | No Play | 17 | 17 |
 | Internally held | 132 | 132 |
 
@@ -52,6 +52,14 @@ prices, EV, edge and price context. Forecast changes: zero. Promotions: zero;
 demotions: zero; net actionable change: zero. This particular provider capture
 had no qualifying comparison-only recovery. It is not represented as proof of
 a recovered live JMU Lean or future profitability.
+
+In this capture Caesars had moved to −19.5, joining DraftKings/Fanatics. JMU's
+spread therefore already graded Watchlist at Caesars −19.5 / −106 under the
+incumbent rule, and the correction preserved that selection. The earlier
+stored −18.5 example is not misrepresented as today's deployed recommendation.
+An earlier 20:32 rehearsal likewise preserved all 156 evaluated markets with
+zero forecast changes or demotions; its normal provider refresh had one fewer
+Lean and one more Watchlist.
 
 Targeted regression tests separately reproduce the JMU-shaped −18.5 / −110
 zero-comparator case through the actual production decision and market-aware
@@ -83,7 +91,8 @@ evidence module. No extended historical tournament or threshold tuning ran.
 
 Production main advanced during work to `86c99a4303af9bc5e5dcd0ecec9fecb2315a7743`
 (NFL No Play explanation only). Its two changed files do not overlap this
-repair; the new base must be integrated and affected tests rerun before push.
+repair; the new base was integrated without conflict and both the complete CFB
+and full model-change suites, TypeScript and scoped lint passed again.
 Main protection was verified: `current-main-ancestor` is required, strict
 up-to-date checking and administrator enforcement are enabled, force pushes
 are disabled.
