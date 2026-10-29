@@ -2,7 +2,16 @@ import type { DailyEdgeGameDto, MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>};
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history"|"prelock_archive";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>};
+/** Only an actual pre-lock capture may supplement a FUTURE locked display.
+ * Stored book, line, every stored quote and its endpoint retain precedence.
+ * No stored book means no reconstruction; other books never replace it. */
+export function predictionMarketArchivedBook(stored:PredictionMarketBookTrail|null,archive:PredictionMarketBookTrail|null,capturedAt:number|undefined,boundary:number|undefined,line:number|null):PredictionMarketBookTrail|null{
+ if(!stored||!archive||capturedAt===undefined||boundary===undefined||!Number.isFinite(boundary)||capturedAt>boundary||stored.sportsbook!==archive.sportsbook||(stored.line??line)!==(archive.line??line))return stored;
+ const last=stored.points.at(-1)?.[0];if(last===undefined)return stored;
+ const points=[...new Map([...archive.points.filter(p=>p[0]<=Math.min(boundary,last)),...stored.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]);
+ return {...stored,points,historyScope:"prelock_archive",...(archive.opening&&archive.opening.point[0]<=Math.min(boundary,last)?{opening:archive.opening}:{}),marketHistory:archive.marketHistory?.filter(p=>p[0]<=Math.min(boundary,last))};
+}
 export function predictionMarketComparisonBook(locked:boolean,stored:PredictionMarketBookTrail|null,live:PredictionMarketBookTrail|null):PredictionMarketBookTrail|null {
   if(locked||stored?.locked)return stored;
   if(!live)return stored;
@@ -37,7 +46,7 @@ export type PredictionMarketBookStart={kind:"provider_opening"|"first_recorded";
 export function predictionMarketBookStart(market:MarketEdgeDto,label:string,book:PredictionMarketBookTrail,targetLine:number|null,ceiling:number):PredictionMarketBookStart|null {
   const selected=pickLabel(label),stops=selected===pickLabel(market.pick)?market.oddsTrail:selected===pickLabel(market.opposingOddsTrail?.label)?market.opposingOddsTrail?.stops:[];
   const line=book.line===undefined?targetLine:book.line;
-  if(!book.locked&&book.opening?.line===line&&book.opening.point[0]<=ceiling)return {kind:"provider_opening",point:book.opening.point};
+  if((!book.locked||book.historyScope==="prelock_archive")&&book.opening?.line===line&&book.opening.point[0]<=ceiling)return {kind:"provider_opening",point:book.opening.point};
   const eligible=(stops??[]).filter(stop=>stop.sportsbook?.trim().toLowerCase()===book.sportsbook&&stop.line===line&&implied(stop.american)!==null&&Number.isFinite(Date.parse(stop.observedAt??""))&&Date.parse(stop.observedAt!)<=ceiling);
   const openings=eligible.filter(stop=>stop.source==="provider_opening").sort((a,b)=>Date.parse(a.observedAt!)-Date.parse(b.observedAt!));
   if(openings.length){const first=openings[0];return {kind:"provider_opening",point:[Date.parse(first.observedAt!),implied(first.american)!,first.american]};}
@@ -194,7 +203,7 @@ export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history
   const overlap=points.length>0&&bookPoints.length>0&&Math.max(points[0][0],bookPoints[0][0])<=cutoff!;
   return {points:cutoff!==null&&!overlap?series.points:points,activity:cutoff!==null&&!overlap?series.activity:activity,
     bookPoints:overlap?bookPoints:[],cutoff:overlap?cutoff:null,pending:!!book&&!overlap,
-    start:overlap?(lockedAt===undefined&&(row.historyFrom||book?.historyScope)?Math.min(points[0][0],bookPoints[0][0]):Math.max(points[0][0],bookPoints[0][0])):series.points[0]?.[0]??Date.parse(row.asOf),
+    start:overlap?((lockedAt===undefined&&(row.historyFrom||book?.historyScope)||book?.historyScope==="prelock_archive")?Math.min(points[0][0],bookPoints[0][0]):Math.max(points[0][0],bookPoints[0][0])):series.points[0]?.[0]??Date.parse(row.asOf),
     latestKalshi:series.points.at(-1)?.[0]??null,latestBook:book?.points.at(-1)?.[0]??null};
 }
 

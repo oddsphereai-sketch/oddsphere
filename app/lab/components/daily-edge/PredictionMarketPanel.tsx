@@ -5,8 +5,9 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { readerContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
 import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookStart, predictionMarketWindowDuration, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
+import {predictionMarketArchivedBook} from "@/app/lab/lib/predictionMarketDisplay";
 
-type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string};
+type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string;prelockCapturedAt?:number};
 const cache = new Map<string, { at:number; value:Receipt; pending?:Promise<Receipt> }>();
 function load(key: string): Promise<Receipt> {
   const stored = cache.get(key);
@@ -38,7 +39,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const [range,setRange]=useState<"all"|"24h">("all");
   const sport=game.sport==="soccer"&&(game.id.startsWith("soccer-ucl-")||game.soccerCompetitionContext?.competition==="uefa_champions_league")?"ucl":game.sport;
   const selection=readerContractSelection(game,marketKey),kind=marketKey==="moneyline"?"moneyline":selection?.kind??null;
-  const query=new URLSearchParams({sport,away:game.awayTeam,home:game.homeTeam,start:game.gameStartAt??"",market:kind??"unsupported",event:String(game.external_id),display:"opening-history-v2"});
+  const query=new URLSearchParams({sport,away:game.awayTeam,home:game.homeTeam,start:game.gameStartAt??"",market:kind??"unsupported",event:String(game.external_id),display:"opening-history-v3-prelock"});
   if(selection){query.set("side",selection.side);if(selection.line!==null)query.set("line",String(selection.line));}
   else if(kind==="moneyline"){
     const pick=game.markets.moneyline.pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
@@ -72,11 +73,12 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const market=current.market;
   const selectedMarket=game.markets[marketKey];
   const outcome=selectedPredictionMarketOutcome(market,selectedMarket.pick);
-  if(!outcome||current.checkedAt-Date.parse(market.asOf)>24*60*60_000)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} status="feed_unavailable" book={current.book}/>;
+  if(!outcome||(!current.prelockCapturedAt&&current.checkedAt-Date.parse(market.asOf)>24*60*60_000))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} status="feed_unavailable" book={current.book}/>;
   const retained=current.checkedAt-Date.parse(market.asOf)>10*60_000;
   const lockedAt=predictionMarketLockBoundary(game,current.checkedAt),frozen=lockedAt!==undefined;
   const storedBook=predictionMarketReaderBookTrail(selectedMarket,marketKey==="moneyline"?outcome.label:selectedMarket.pick??"",frozen?lockedAt:current.checkedAt,selection?.line??null);
-  const book=predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,current.book??null);
+  const book=frozen&&current.prelockCapturedAt?predictionMarketArchivedBook(storedBook,current.book,current.prelockCapturedAt,lockedAt,selection?.line??null):predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,current.book??null);
+  const archivedBook=book?.historyScope==="prelock_archive";
   const context=market.context;
   const differentBookLine=!!book&&book.line!==undefined&&book.line!==(selection?.line??null);
   const bookLabel=differentBookLine?(kind==="total"?`${selection?.side==="under"?"Under":"Over"} ${book!.line}`:`${selection?.side==="away"?game.awayTeam:game.homeTeam} ${formatContractLine(book!.line!)}`):context?.requestedLabel??"moneyline";
@@ -117,7 +119,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
     <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-2 sm:border-0 sm:pt-0">
       <p data-kalshi-start data-start-kind={kalshiOpening?.kind??"first_available"} data-start-at={kalshiStart[0]} className="min-w-0"><span className="font-semibold text-[#d9d1e4]">Kalshi {kalshiOpening?.kind==="opening_minute"?"opening minute":"first quoted"} · {(kalshiStart[1]*100).toFixed(1)}%</span><span className="block text-[#ac9bbd]">{time(kalshiStart[0],true)}</span><span className="block text-[#9d92ae]">{outcome.historyFrom?"History checked from market open":"Opening history pending"}{kalshiOpening?.kind==="first_available"?" · opening quote unavailable":""}</span></p>
       {comparedBook&&firstBook&&lastBook?<p className="min-w-0" data-book-movement={comparedBook.sportsbook} data-book-start data-start-kind={bookStart?.kind} data-start-at={bookStart?.point[0]}><span className="font-semibold text-[#d9d1e4]">{bookName} {predictionMarketBookPricePath(comparedBook.points)}{changes>0?"":comparedBook.points.length===1?" · one quote":" · unchanged"}</span>{bookStart?<><span className="block text-[#ac9bbd]">{bookStart.kind==="provider_opening"?"Provider open":"First recorded"} {formatPredictionMarketOdds(bookStart.point[2])}</span><span className="block text-[#ac9bbd]">{time(bookStart.point[0],true)}</span></>:null}{!frozen&&book?.opening&&book.opening.line!==(book.line??selection?.line??null)?<span className="block text-[#ac9bbd]">Market opened {kind==="total"?book.opening.line:formatContractLine(book.opening.line!)} · {formatPredictionMarketOdds(book.opening.point[2])} · {time(book.opening.point[0],true)}; chart is {bookLabel}</span>:null}<span className="block text-[#9d92ae]">{comparedBook.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book</span></p>:null}
-      {!frozen&&book?<BookLineHistory book={book} kind={kind}/>:null}
+      {(!frozen||archivedBook)&&book?<BookLineHistory book={book} kind={kind}/>:null}
       {!frozen&&outcome.volume24h!==null?<p className="col-span-2"><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
       <p className="col-span-2 text-[#9d92ae]">{current.availability==="refresh_failed"?"Refresh unavailable · retained quotes · ":""}{frozen?"Pre-lock history · through "+time(comparison.cutoff??comparison.points.at(-1)![0]):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
     </div>

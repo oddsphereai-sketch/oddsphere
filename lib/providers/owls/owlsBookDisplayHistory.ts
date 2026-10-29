@@ -101,7 +101,11 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
       const rank=(book:string)=>book==="circa"?0:book==="pinnacle"?1:2+bookPriorityRank(book);
       const books=(event.bookmakers??[]).filter(b=>b.key&&!isBlockedSportsbook(b.key)&&Number.isFinite(bookPriorityRank(b.key))&&b.markets?.some(m=>m.key===marketKey(kind))&&Number.isFinite(Date.parse(b.last_update??"")))
         .sort((a,b)=>Number(now-Date.parse(a.last_update!)>600_000)-Number(now-Date.parse(b.last_update!)>600_000)||rank(a.key!)-rank(b.key!));
-      if(books[0]?.key)targets.push({event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side,book:books[0].key});
+      const market=game.markets[key],reference=market.movementReferenceSportsbook?.trim().toLowerCase()??market.oddsTrail?.filter(s=>s.label==="current"&&s.sportsbook).sort((a,b)=>Date.parse(b.observedAt??"")-Date.parse(a.observedAt??""))[0]?.sportsbook?.trim().toLowerCase();
+      // The public reader may legitimately choose a fresher fallback. Retain
+      // that exact published book's opening too, not only a sharp-book open
+      // that cannot be spliced into its trace. Same existing daily/cycle cap.
+      for(const book of new Set([books[0]?.key,books.find(b=>b.key===reference)?.key]))if(book)targets.push({event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side,book});
     }
   }
   const pending=targets.filter(t=>!rows.has(identity(t))||now-Date.parse(rows.get(identity(t))!.checkedAt)>24*60*60_000)
