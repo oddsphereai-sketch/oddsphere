@@ -76,7 +76,10 @@ import {
 } from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
 import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
-import { selectNbaCurrentLineBoard } from "./nbaCurrentLineBoard";
+import {
+  selectNbaConsumerExecutionBoard,
+  selectNbaCurrentLineBoard,
+} from "./nbaCurrentLineBoard";
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "../../../app/lab/lib/labTypes";
 import { currentDailyEdgeBoardDate } from "../../dates/slateDate";
 import {
@@ -178,6 +181,8 @@ export async function buildNbaDailyEdgePipeline(
     rosterRegimeRosterOverride?: NbaLiveRosterSnapshot;
     /** Read-only same-input audit hook for the superseded score path without roster-regime correction. */
     retainLegacyRosterRegime?: boolean;
+    /** Read-only same-input audit hook for a proposed complete current-line board. */
+    currentLinesOverrideByExternalId?: ReadonlyMap<number, readonly NbaLineRow[]>;
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
@@ -266,7 +271,15 @@ export async function buildNbaDailyEdgePipeline(
 
   // Bulk-pull lines for all games on the slate.
   const linesByExtId = new Map<number, NbaLineRow[]>();
-  if ((gameRows ?? []).length > 0) {
+  if (options.currentLinesOverrideByExternalId) {
+    for (const externalId of gameExternalIds) {
+      const rows = options.currentLinesOverrideByExternalId.get(externalId) ?? [];
+      linesByExtId.set(
+        externalId,
+        selectNbaConsumerExecutionBoard(selectNbaCurrentLineBoard(rows)),
+      );
+    }
+  } else if ((gameRows ?? []).length > 0) {
     const dbIds = (gameRows ?? []).map((g) => g.id);
     const lineRows = await loadCompleteCurrentGameLines({
       client: supabase,
@@ -290,7 +303,10 @@ export async function buildNbaDailyEdgePipeline(
       linesByExtId.set(ext, arr);
     }
     for (const [externalId, rows] of linesByExtId) {
-      linesByExtId.set(externalId, selectNbaCurrentLineBoard(rows));
+      linesByExtId.set(
+        externalId,
+        selectNbaConsumerExecutionBoard(selectNbaCurrentLineBoard(rows)),
+      );
     }
   }
 

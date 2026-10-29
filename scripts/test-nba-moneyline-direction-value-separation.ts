@@ -87,6 +87,8 @@ function intelligence(
     per_book_other_side: [],
     market_implied_prob_pick: 0.8349,
     market_no_vig_prob_pick: 0.8205,
+    fair_reference_mode: "target_excluded",
+    fair_reference_books: ["pinnacle"],
     opp_fair_probability_pick: null,
     opp_ev_percentage_pick: null,
     opp_market_width: null,

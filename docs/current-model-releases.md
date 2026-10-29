@@ -4792,18 +4792,18 @@ The paired live-slate replay is recorded in
 
 ## NBA regular-season champion (member board active from 2026-10-16; official tracking from 2026-10-20)
 
-- Model / prediction record: `nba_professional_unified_2026_10_29_r23_executable_market_selection`
+- Model / prediction record: `nba_professional_unified_2026_10_29_r24_consumer_execution_authority`
 - Roster-regime residual: `nba_roster_regime_residual_2026_10_22_r2_symmetric_winner_confirmation`
-- Market marriage: `nba_market_marriage_2026_10_29_r24_executable_market_selection`
+- Market marriage: `nba_market_marriage_2026_10_29_r25_consumer_execution_authority`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
-- Grade policy: `nba_grade_policy_2026_10_29_r14_coherent_same_book_fair_fallback`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds`
+- Grade policy: `nba_grade_policy_2026_10_29_r15_consumer_execution_authority`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_29_r20_consumer_execution_authority`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_29_r7_executable_market_selection`
-- Locked member snapshot: `nba_locked_member_snapshot_2026_10_29_r5_executable_market_selection`
+- Member lock publication: `nba_member_lock_publication_2026_10_29_r9_consumer_trail_coherence`
+- Locked member snapshot: `nba_locked_member_snapshot_2026_10_29_r7_consumer_trail_coherence`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
@@ -4827,6 +4827,30 @@ number remains an actual sportsbook quote and a zero spread renders as `PK`.
 Existing locked rows retain exact payload precedence. Evidence and rollback:
 `docs/model-audits/2026-10-29-nba-executable-market-selection-predeclaration.md`
 and `docs/model-audits/2026-10-29-nba-executable-market-selection-result.md`.
+
+The October 29 r24/r25/r15 consumer-execution follow-up supersedes r23's
+member-facing sharp-book selection. BALLDONTLIE GOAT's real regulated retail
+cohort owns the displayed line, exact-price grade, and future unlocked lock;
+Circa/Pinnacle remain separate professional-reader evidence. A provider quote
+is never rounded or converted. The same-input three-game rehearsal retained
+every final score, changed one non-actionable Spread direction at the actual
+consumer number, promoted ATL -1.5 -104 to Best Angle, and caused zero
+demotions. Existing locks retain exact stored precedence. Evidence and
+rollback: `docs/model-audits/2026-10-29-nba-consumer-execution-authority-predeclaration.md`
+and `docs/model-audits/2026-10-29-nba-consumer-execution-authority-result.md`.
+
+The October 29 r7/r9 consumer-trail coherence follow-up keeps the r24/r25/r15
+forecast, market-reader, and grade releases unchanged. Future unlocked member
+cards now build their displayed price and line movement from the same real
+consumer execution sportsbook that owns the evaluated quote, or from the
+deepest fresh consumer chronology when that book is unavailable. Circa,
+Pinnacle, and Bookmaker remain eligible professional-reader inputs and Circa
+may still own the separately labeled sharp-split panel, but a sharp PK cannot
+appear as the public movement history for a retail -1 or -1.5 selection.
+Existing locked cards retain exact stored payload precedence. Scores, sides,
+probabilities, prices, grades, promotions, demotions, actionables, and stakes
+change zero times. Evidence and rollback:
+`docs/model-audits/2026-10-29-nba-consumer-trail-coherence.md`.
 
 The October 21 r15/r17/r9 grade-integrity release separates model value versus the current no-vig
 price from actual qualified market movement. Direct Moneyline movement remains observational and
@@ -5124,7 +5148,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_27_r19_owls_current_odds`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_29_r20_consumer_execution_authority`
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.

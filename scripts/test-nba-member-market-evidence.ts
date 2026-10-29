@@ -152,11 +152,28 @@ const circaDepthWins = buildNbaMemberGameEvidence({
 });
 assert.equal(
   circaDepthWins.spread.movementReferenceSportsbook,
-  "circa",
-  "Circa must win when it has the same complete three-point depth",
+  "fanduel",
+  "Circa remains internal reader evidence and cannot own the member execution trail",
 );
 assert.equal(new Set(circaDepthWins.spread.oddsTrail.map((stop) => stop.sportsbook)).size, 1);
 assert.equal(new Set(circaDepthWins.spread.opposingOddsTrail?.stops.map((stop) => stop.sportsbook)).size, 1);
+
+const sharpPickemRows = [
+  price("spread", "away", "circa", -110, 0, "2026-10-16T17:57:00Z"),
+  price("spread", "home", "circa", -110, 0, "2026-10-16T17:57:00Z"),
+];
+const retailExecutionOverSharpPickem = buildNbaMemberGameEvidence({
+  game,
+  priceRows: [...priceRows, ...sharpPickemRows],
+  splitRows,
+  evaluatedAt,
+});
+assert.equal(retailExecutionOverSharpPickem.spread.movementReferenceSportsbook, "fanduel");
+assert.deepEqual(
+  retailExecutionOverSharpPickem.spread.lineTrail.map((stop) => stop.line),
+  [5.5, 5.5, 5.5],
+  "a sharp pick'em remains internal evidence and cannot leak into the member execution trail",
+);
 
 const stale = buildNbaMemberGameEvidence({
   game,
