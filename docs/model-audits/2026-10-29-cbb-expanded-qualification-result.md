@@ -117,3 +117,11 @@ node --import tsx scripts/operator/audit-cbb-date-diverse-joint-head.ts
 node --import tsx scripts/operator/audit-cbb-grade-readiness.ts --cohort=expanded --train=baseline-early
 node --import tsx scripts/operator/audit-cbb-outcome-calibrated-grades.ts
 ```
+
+Verification after fresh-main integration: focused CBB prelaunch and market
+reader tests, the CFB production contract (including the CBB sport-owned-logo
+assertion), TypeScript, focused ESLint, and `npm run verify:model-change` pass.
+The optional Market Brain PostgreSQL proof was skipped by the repository's
+script because `MARKET_BRAIN_POSTGRES_URL` is unset locally. The integration
+safety check passed on the clean committed branch; no production deployment
+or live behavior claim follows from these private tests.
