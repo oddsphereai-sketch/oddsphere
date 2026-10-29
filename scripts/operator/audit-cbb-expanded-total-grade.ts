@@ -1,0 +1,76 @@
+/** Private, opened-season Total grade discrimination test. No pick, grade, stake or publication writer. */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { cbbImpliedProbability } from "../../lib/cbb/marketEvidence";
+import { cbbInverseNormal } from "../../lib/cbb/marketReaderResearch";
+import { normalCdf } from "../../lib/cbb/model";
+import type { CbbOdds } from "../../lib/cbb/types";
+
+const dir = resolve(process.argv.find(arg => arg.startsWith("--data="))?.slice(7) ?? "/private/tmp/oddsphere-cbb-data");
+const read = (name: string) => JSON.parse(readFileSync(resolve(dir, name), "utf8"));
+type Row = { gameId: number; date: string; asOf: string; sportsbook: string; quoteId: number; line: number;
+  overPrice: number; underPrice: number; r2Total: number; r2: { pick: string; result: string; units: number } };
+const rows = read("opening-total-benchmark-report.json").rows as Row[];
+const raw = read("opening-total-benchmark-raw.json").data as CbbOdds[];
+const sd = Number(read("candidate-r2-artifact.json").uncertainty.totalSd);
+if (rows.length !== 635 || !(sd > 0)) throw new Error("expanded CBB Total cohort or uncertainty changed");
+const byQuoteId = new Map(raw.map(quote => [quote.id, quote]));
+const references = new Set(["draftkings", "fanduel", "betmgm", "caesars", "pinnacle", "circa", "bet365", "bovada", "betrivers", "espnbet"]);
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+const probabilities = (center: number, line: number) => {
+  const upper = Number.isInteger(line) ? line + 0.5 : Math.ceil(line) - 0.5;
+  const lower = Number.isInteger(line) ? line - 0.5 : upper;
+  return { over: 1 - normalCdf((upper - center) / sd), under: normalCdf((lower - center) / sd) };
+};
+const evaluation = rows.map(row => {
+  const target = byQuoteId.get(row.quoteId);
+  if (!target || target.game_id !== row.gameId || target.vendor !== row.sportsbook || target.opened_at !== row.asOf ||
+    Number(target.total_value) !== row.line || target.total_over_odds !== row.overPrice || target.total_under_odds !== row.underPrice)
+    throw new Error(`expanded CBB Total target identity mismatch ${row.gameId}`);
+  const pick = row.r2.pick;
+  if (!(["over", "under"].includes(pick))) throw new Error(`unsupported expanded CBB Total pick ${row.gameId}`);
+  const price = pick === "over" ? row.overPrice : row.underPrice;
+  const p = probabilities(row.r2Total, row.line);
+  const modelEv = (pick === "over" ? p.over : p.under) * (price > 0 ? price / 100 : 100 / -price) - (pick === "over" ? p.under : p.over);
+  const centers = raw.filter(quote => quote.game_id === row.gameId && quote.vendor !== row.sportsbook && references.has(quote.vendor) &&
+    Number.isFinite(Date.parse(quote.opened_at ?? "")) && Date.parse(quote.opened_at!) <= Date.parse(row.asOf) &&
+    Date.parse(row.asOf) - Date.parse(quote.opened_at!) <= 48 * 3600000 &&
+    quote.total_value !== null && Number.isFinite(Number(quote.total_value)) &&
+    typeof quote.total_over_odds === "number" && typeof quote.total_under_odds === "number" &&
+    Math.abs(quote.total_over_odds) >= 100 && Math.abs(quote.total_under_odds) >= 100)
+    .map(quote => {
+      const first = cbbImpliedProbability(quote.total_over_odds!);
+      const second = cbbImpliedProbability(quote.total_under_odds!);
+      if (first + second < 0.98 || first + second > 1.3) return null;
+      return Number(quote.total_value) + sd * cbbInverseNormal(first / (first + second));
+    }).filter((value): value is number => value !== null);
+  const center = centers.length ? median(centers) : null;
+  const agrees = center === null || center === row.line ? null : (center > row.line) === (pick === "over");
+  return { date: row.date.slice(0, 10), result: row.r2.result, units: row.r2.units, modelEv, referenceBooks: centers.length, agrees };
+});
+const dates = [...new Set(evaluation.map(row => row.date))].sort();
+if (dates.length !== 8) throw new Error("expanded CBB Total dates changed");
+const early = new Set(dates.slice(0, 2)), selection = new Set(dates.slice(2, 6)), later = new Set(dates.slice(6));
+const earlyEv = evaluation.filter(row => early.has(row.date)).map(row => row.modelEv).sort((a, b) => a - b);
+const cut = Math.max(0, earlyEv[Math.floor(earlyEv.length * 2 / 3)]);
+const summary = (items: typeof evaluation) => ({ bets: items.length, wins: items.filter(row => row.result === "win").length,
+  losses: items.filter(row => row.result === "loss").length, pushes: items.filter(row => row.result === "push").length,
+  units: Number(items.reduce((sum, row) => sum + row.units, 0).toFixed(2)),
+  gameDaysWithPick: new Set(items.map(row => row.date)).size });
+const report: Record<string, unknown> = { scope: "private_opened_2025_total_only_archived_opening_quotes", productionWrites: 0,
+  decision: "diagnostic_only_no_grade_policy_approved", dates, earlyDistributionCut: Number(cut.toFixed(4)), periods: {} };
+for (const [period, included] of Object.entries({ early, selection, later })) {
+  const subset = evaluation.filter(row => included.has(row.date));
+  const high = subset.filter(row => row.modelEv >= cut);
+  (report.periods as Record<string, unknown>)[period] = {
+    all: summary(subset), highModelEv: summary(high), highEvReferenceAgrees: summary(high.filter(row => row.agrees === true)),
+    highEvReferenceOpposes: summary(high.filter(row => row.agrees === false)),
+    highEvNoReference: summary(high.filter(row => row.agrees === null)),
+    byDate: Object.fromEntries([...included].map(date => [date, { all: summary(subset.filter(row => row.date === date)),
+      highEvReferenceAgrees: summary(high.filter(row => row.date === date && row.agrees === true)) }])),
+  };
+}
+console.log(JSON.stringify(report, null, 2));

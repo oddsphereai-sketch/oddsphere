@@ -31,7 +31,15 @@ async function main() {
     try {
       let capture: { fetchedAt: string; body: unknown };
       try { if (process.argv.includes("--refresh-current") && ["owls-cbb-current", "owls-cbb-splits"].includes(name)) throw new Error("explicit refresh");
-        capture = JSON.parse(await readFile(file, "utf8")); } catch {
+        capture = JSON.parse(await readFile(file, "utf8"));
+        // Current-board research must not silently reuse yesterday's market snapshot.
+        if (process.argv.includes("--current") && ["owls-cbb-current", "owls-cbb-splits"].includes(name)) {
+          const age = Date.now() - Date.parse(capture.fetchedAt);
+          if (!Number.isFinite(age) || age < 0 || age > 15 * 60_000 ||
+            (capture.body as { meta?: { freshness?: { stale?: boolean } } })?.meta?.freshness?.stale === true)
+            throw new Error("stale current CBB market cache");
+        }
+      } catch {
         const response = await client.get<unknown>(path, query);
         capture = { fetchedAt: new Date().toISOString(), body: response.body };
         const serialized = JSON.stringify({ ...capture, path, query, rateLimit: response.rateLimit });
