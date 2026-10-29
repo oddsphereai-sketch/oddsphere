@@ -1,5 +1,26 @@
 # Model change safety protocol
 
+## Owner-directed repair: NBA executable market selection
+
+On 2026-10-29 Daniel Mengel reported that CLE at ATL showed a zero Spread and
+automatic No Plays across Moneyline, Spread, and Total despite fresh complete
+Circa and Pinnacle pairs. Candidate r23/r24/r14 keeps target-book-excluded
+fair probability as the first choice, but permits the selected sportsbook's
+complete exact-line no-vig pair when no independent exact-line pair exists.
+Spread and Total select the highest-model-EV complete quote among books already
+accepted by the incumbent consensus filter, and pick'em renders as `PK`.
+
+No book or handicap is crossed, no number is invented, and missing opposite
+prices still fail closed. The score model, reader direction authority, injury
+inputs, writer, lease, cadence, lock boundary, stakes, and tracking remain
+unchanged. Existing locked rows retain exact stored precedence. Candidate
+gates, board-impact requirements, and rollback are recorded in
+`docs/model-audits/2026-10-29-nba-executable-market-selection-predeclaration.md`.
+The exact same-input board comparison promotes ATL Moneyline from No Market to
+Lean, converts three other false No Markets to non-actionable Watchlists, and
+causes zero actionable demotions. Results are recorded in
+`docs/model-audits/2026-10-29-nba-executable-market-selection-result.md`.
+
 ## Owner-directed repair: NFL observation slate handoff
 
 Capture candidate `market_intelligence_v2_capture_2026_10_28_r17_nfl_forward_slate_contract`

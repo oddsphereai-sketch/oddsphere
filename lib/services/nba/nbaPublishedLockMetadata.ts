@@ -2,7 +2,7 @@ import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { computeLocksAt } from "@/lib/automodel/lockState";
 
 export const NBA_MEMBER_LOCK_PUBLICATION_RELEASE =
-  "nba_member_lock_publication_2026_10_24_r6_steep_moneyline_best_angle_tier";
+  "nba_member_lock_publication_2026_10_29_r7_executable_market_selection";
 
 export type NbaPublishedLockRow = {
   game_id: number;
