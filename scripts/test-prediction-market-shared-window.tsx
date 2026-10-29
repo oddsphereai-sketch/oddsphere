@@ -50,10 +50,12 @@ assert.equal(predictionMarketBookPricePath([...actualBook,[4,108/208,-108]],4),"
 assert.equal(longBook.opening.point[2],-160,"actual older opener still shown separately, never relabeled as chart start");
 const pointBook={...book,line:47,marketHistory:[[now-40*h,-110,48],[now-12*h,-110,47],[now-4*h,-110,46.5],[now-h,-110,47],[now,-110,49]] as [number,number,number|null][]};
 const small=renderToStaticMarkup(<BookLineHistory book={pointBook} kind="total" start={now-10*h} end={now-h}/>);
-assert.match(small,/47 → 47/);assert.doesNotMatch(small,/>Total line (?:48|49)/);
+assert.match(small,/48 → 49/);assert.match(small,/data-book-history-window="full"/,"unlocked point-line history keeps the full same-book timeline outside the comparison window");
+const lockedSmall=renderToStaticMarkup(<BookLineHistory book={pointBook} kind="total" frozen start={now-10*h} end={now-h}/>);
+assert.match(lockedSmall,/47 → 47/);assert.doesNotMatch(lockedSmall,/>Total line (?:48|49)/,"legacy frozen point-line view keeps its exact window");
 assert.equal(JSON.stringify({row,book}),original,"alignment never mutates source values or timestamps");
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
 assert.match(component,/predictionMarketBookPricePath\(windowBook.points,/);
 assert.match(component,/start=\{chartStart\} end=\{comparison.cutoff\?\?undefined\}/);
 assert.match(component,/Full window/);assert.match(component,/Original source openings are listed separately/);
-console.log("PASS shared window: both rendered SVG paths have identical time/pixel starts and ends, symmetric current/lock cutoff, exact quotes and openings retained, matching in-view sportsbook summary and point-line sparkline.");
+console.log("PASS shared window: aligned rendered price paths, symmetric cutoff, exact quote/opening retention, matching in-view price summary, independent full unlocked line history and unchanged legacy frozen sparkline.");

@@ -3,7 +3,11 @@ import {bookPriorityRank} from "@/lib/config/bookPriority";
 import {isBlockedSportsbook} from "@/lib/config/blockedSportsbooks";
 import type {PredictionMarketBookTrail} from "@/app/lab/lib/predictionMarketDisplay";
 export type ComparisonQuote={sportsbook:string;market:string;side:string;line:number|null;american:number|null;at:string};
-export function selectPredictionMarketBook(quotes:ComparisonQuote[],market:string,side:string,line:number|null,now=Date.now()):PredictionMarketBookTrail|null {
+export const PREDICTION_MARKET_BOOK_PIN_MAX_AGE_MS=15*60_000;
+export function normalizePredictionMarketBookPin(value:string|null|undefined):string|null {
+ const book=value?.trim().toLowerCase();return book&&!isBlockedSportsbook(book)&&Number.isFinite(bookPriorityRank(book))&&!["locked_snapshot","recommendation_snapshot","splits_consensus"].includes(book)?book:null;
+}
+export function selectPredictionMarketBook(quotes:ComparisonQuote[],market:string,side:string,line:number|null,now=Date.now(),preferredBook?:string|null):PredictionMarketBookTrail|null {
   const groups=new Map<string,ComparisonQuote[]>();
   for(const row of quotes){
     const book=row.sportsbook.trim().toLowerCase(),at=Date.parse(row.at);
@@ -21,10 +25,14 @@ export function selectPredictionMarketBook(quotes:ComparisonQuote[],market:strin
     const points=new Map<number,[number,number,number]>();
     for(const row of [...rows].reverse())if(row.line===chosen.line){const p=row.american!>0?100/(100+row.american!):-row.american!/(100-row.american!);points.set(Date.parse(row.at),[Date.parse(row.at),p,row.american!]);}
     const ordered=[...points.values()].sort((a,b)=>a[0]-b[0]);
-    return {sportsbook,line:chosen.line,points:ordered.length>100?[ordered[0],...ordered.slice(-99)]:ordered,locked:false,latest:Date.parse(latest.at)};
+    return {sportsbook,line:chosen.line,points:ordered.length>100?[ordered[0],...ordered.slice(-99)]:ordered,marketHistory:rows.map(r=>[Date.parse(r.at),r.american!,r.line] as [number,number,number|null]),locked:false,latest:Date.parse(latest.at)};
   });
   const rank=(book:string)=>book==="circa"?0:book==="pinnacle"?1:2+bookPriorityRank(book);
   candidates.sort((a,b)=>Number(now-a.latest>600_000)-Number(now-b.latest>600_000)||rank(a.sportsbook)-rank(b.sportsbook)||b.latest-a.latest);
-  const chosen=candidates[0];if(!chosen)return null;
+  const pinned=candidates.find(c=>c.sportsbook===preferredBook?.trim().toLowerCase());
+  // Do not oscillate when two books' five-minute receipts arrive separately.
+  // An old pin yields only to an actually fresh, newer same-market/side book.
+  const freshFallback=pinned?candidates.find(c=>c.latest>pinned.latest&&now-c.latest<=600_000):undefined;
+  const chosen=pinned&&(now-pinned.latest<=PREDICTION_MARKET_BOOK_PIN_MAX_AGE_MS||!freshFallback)?pinned:freshFallback??candidates[0];if(!chosen)return null;
   const {latest:_,...trail}=chosen;void _;return trail;
 }

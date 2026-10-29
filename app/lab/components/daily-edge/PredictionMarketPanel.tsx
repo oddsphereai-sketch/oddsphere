@@ -5,20 +5,26 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { readerContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
 import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookStart, predictionMarketWindowDuration, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
-import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketHasSharedHistory} from "@/app/lab/lib/predictionMarketDisplay";
+import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketHasSharedHistory,predictionMarketBookLineHistory} from "@/app/lab/lib/predictionMarketDisplay";
+import {PredictionMarketSourcePins} from "@/app/lab/lib/predictionMarketSourcePins";
 
-type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string;prelockCapturedAt?:number};
+type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string;prelockCapturedAt?:number;sourcePinned?:boolean};
 const cache = new Map<string, { at:number; value:Receipt; pending?:Promise<Receipt> }>();
+const sourcePins=new PredictionMarketSourcePins(()=>typeof window==="undefined"?undefined:window.sessionStorage);
 function load(key: string): Promise<Receipt> {
   const stored = cache.get(key);
   if (stored?.pending) return stored.pending;
   if (stored && Date.now()-stored.at < 30_000) return Promise.resolve(stored.value);
-  const pending = fetch(key, {signal:AbortSignal.timeout(8000)})
+  const pending = fetch(sourcePins.request(key), {signal:AbortSignal.timeout(8000)})
     .then(async response => {
       if (!response.ok) throw new Error("Prediction market read unavailable");
       return await response.json() as Receipt;
     })
-    .then(value => { cache.set(key,{at:Date.now(),value}); return value; })
+    .then(value => {
+      const at=Date.now(),book=value.book??stored?.value.book??null;
+      const pinned=value.prelockCapturedAt?value:{...value,book:sourcePins.accept(key,book,at),sourcePinned:!!book};
+      cache.set(key,{at,value:pinned});return pinned;
+    })
     .catch(error => { if (stored) cache.set(key,{...stored,pending:undefined}); else cache.delete(key); throw error; });
   if (cache.size > 100) cache.delete(cache.keys().next().value!);
   cache.set(key,{at:stored?.at ?? 0,value:stored?.value ?? {market:null,book:null},pending});
@@ -72,7 +78,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const selectedMarket=game.markets[marketKey];
   const checkedAt=current?.checkedAt??0,lockedAt=predictionMarketLockBoundary(game,checkedAt),frozen=lockedAt!==undefined;
   const storedBook=current?predictionMarketReaderBookTrail(selectedMarket,selectedMarket.pick??"",frozen?lockedAt:checkedAt,selection?.line??null):null;
-  const book=frozen&&current?.prelockCapturedAt?predictionMarketArchivedBook(storedBook,current.book,current.prelockCapturedAt,lockedAt,selection?.line??null):predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,current?.book??null);
+  const book=frozen&&current?.prelockCapturedAt?predictionMarketArchivedBook(storedBook,current.book,current.prelockCapturedAt,lockedAt,selection?.line??null):predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,current?.book??null,current?.sourcePinned===true);
   // Legacy locked records keep their old unavailable state. New auxiliary
   // history can only come from the existing exact pre-lock receipt guard.
   const fallbackBook=frozen&&!current?.prelockCapturedAt?null:book;
@@ -129,7 +135,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
         {!frozen&&book?.opening&&book.opening.line!==(book.line??selection?.line??null)?<span className="block text-[#ac9bbd]">Market opened {kind==="total"?book.opening.line:formatContractLine(book.opening.line!)} · {formatPredictionMarketOdds(book.opening.point[2])} · {time(book.opening.point[0],true)}; chart is {bookLabel}</span>:null}
         <span className="block text-[#9d92ae]">{windowBook.points.length===1?"History building":changes>0?changes+" recorded "+(changes===1?"move":"moves"):"No recorded price change"} · same book{!frozen||archivedBook?" · in view":""}</span>
       </p>:null}
-      {(!frozen||archivedBook)&&book?<BookLineHistory book={book} kind={kind} start={chartStart} end={comparison.cutoff??undefined}/>:null}
+      {(!frozen||archivedBook)&&book?<BookLineHistory book={book} kind={kind} start={chartStart} end={comparison.cutoff??undefined} frozen={frozen}/>:null}
       {!frozen&&outcome.volume24h!==null?<p className="col-span-2"><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
       <p className="col-span-2 text-[#9d92ae]">{current.availability==="refresh_failed"?"Refresh unavailable · retained quotes · ":""}{frozen?"Pre-lock history · through "+time(comparison.cutoff??comparison.points.at(-1)![0]):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
     </div>
@@ -154,7 +160,7 @@ export function PredictionMarketUnavailable({variant,label,status,book,kind,lock
       <div className="mt-2 min-w-0 sm:mt-0"><PredictionMarketChart row={null} book={safeBook} context={undefined} bookLabel={bookLabel} lockedAt={lockedAt} range={range} onRangeChange={setRange}/></div>
       <div className="mt-2 space-y-2 text-[10px] text-[#ac9bbd] sm:mt-0"><p className="font-semibold text-[#d9d1e4]">{bookTitle(safeBook.sportsbook)} {predictionMarketBookPricePath(windowBook,4)}</p>
         {safeOpening?<p>Provider open {safeOpening.line===null?"":safeOpening.line+" · "}{formatPredictionMarketOdds(safeOpening.point[2])}<span className="block">{time(safeOpening.point[0],true)}</span></p>:null}
-        <BookLineHistory book={safeBook} kind={kind??(/^(Over|Under) /.test(label)?"total":"spread")} start={start} end={history.cutoff!}/>
+        <BookLineHistory book={safeBook} kind={kind??(/^(Over|Under) /.test(label)?"total":"spread")} start={start} end={history.cutoff!} frozen={lockedAt!==undefined}/>
         <p>{lockedAt===undefined?"Sportsbook through ":"Pre-lock sportsbook through "}{time(last[0])}{safeBook.points.length===1?" · one quote recorded":""}</p>
       </div>
     </section>;
@@ -167,7 +173,44 @@ export function PredictionMarketUnavailable({variant,label,status,book,kind,lock
 
 /** Point movement has its OWN numeric axis. It never becomes a probability
  * quote for a different threshold in the two-source comparison above. */
-export function BookLineHistory({book,kind,start,end}:{book:PredictionMarketBookTrail;kind:string|null;start?:number;end?:number}){
+export function BookLineHistory({book,kind,start,end,frozen=false}:{book:PredictionMarketBookTrail;kind:string|null;start?:number;end?:number;frozen?:boolean}){
+ if(kind!=="spread"&&kind!=="total")return null;
+ // Existing locked readers retain the exact legacy plotting/window semantics.
+ if(frozen||book.locked)return <LegacyBookLineHistory book={book} kind={kind} start={start} end={end}/>;
+ return <FullBookLineHistory key={book.sportsbook} book={book} kind={kind}/>;
+}
+/** An independent full-history strip: never clipped to a newer Kalshi market,
+ * never joined to another book, and never placed on a probability axis. */
+function FullBookLineHistory({book,kind}:{book:PredictionMarketBookTrail;kind:string}){
+ const [at,setAt]=useState<number|null>(null),id=useId();
+ const quotes=predictionMarketBookLineHistory(book);
+ if(!quotes.length)return null;
+ const first=quotes[0],last=quotes.at(-1)!,lines=quotes.map(p=>p[2]),low=Math.min(...lines),high=Math.max(...lines);
+ const lineText=(line:number)=>kind==="total"?String(line):formatContractLine(line);
+ const x=(t:number)=>first[0]===last[0]?286:8+(t-first[0])/Math.max(1,last[0]-first[0])*278,y=(v:number)=>high===low?20:34-(v-low)/Math.max(.01,high-low)*28;
+ const points=quotes.map(p=>[p[0],p[2]] as [number,number]),curve=predictionMarketCurve(points,x,y);
+ const changes=quotes.reduce((n,p,i)=>n+Number(i>0&&p[2]!==quotes[i-1][2]),0);
+ const open=book.opening&&book.opening.point[0]===first[0]&&book.opening.line===first[2];
+ const active=at===null?null:predictionMarketObservationAt(quotes,at);
+ const summary=quotes.filter((p,i)=>i===0||i===quotes.length-1||p[2]!==quotes[i-1][2]).map(p=>`${time(p[0],true)}: ${lineText(p[2])} at ${formatPredictionMarketOdds(p[1])}`).join("; ");
+ return <div className="relative col-span-2 min-w-0 border-t border-white/[0.05] pt-2" data-book-line-history={book.sportsbook} data-book-history-window="full" data-book-history-start={first[0]} data-book-history-end={last[0]}>
+  <div className="flex flex-wrap justify-between gap-x-2 text-[10px]"><span className="text-[#ac9bbd]">{bookTitle(book.sportsbook)} {kind==="total"?"total":"spread"} history</span><strong className="font-semibold text-[#d9d1e4]">{lineText(first[2])} → {lineText(last[2])}</strong></div>
+  <svg role="img" aria-labelledby={id} width="100%" height="42" viewBox="0 0 294 40" preserveAspectRatio="none"><title id={id}>{summary+". Full same-book line history; curves guide between recorded observations."}</title>
+   <path data-full-line-history d={curve.line} fill="none" stroke="#b7a0f4" strokeWidth="1.7" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"/>
+   <circle cx={x(last[0])} cy={y(last[2])} r="2.5" fill="#b7a0f4"/>
+   {active?<circle cx={x(active[0])} cy={y(active[2])} r="3" fill="#e0d6fa"/>:null}
+   <rect x="0" y="0" width="294" height="40" fill="transparent" tabIndex={0} role="button" aria-label={`Inspect ${bookTitle(book.sportsbook)} full line history. Arrow keys inspect exact line, price and time.`}
+    onPointerMove={e=>{const r=e.currentTarget.getBoundingClientRect();setAt(first[0]+Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*(last[0]-first[0]));}}
+    onPointerDown={e=>{const r=e.currentTarget.getBoundingClientRect();setAt(first[0]+Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*(last[0]-first[0]));}}
+    onPointerLeave={()=>setAt(null)} onBlur={()=>setAt(null)}
+    onKeyDown={e=>{if(e.key==="Escape"){setAt(null);return;}if(!["Home","End","ArrowLeft","ArrowRight"].includes(e.key))return;e.preventDefault();setAt(e.key==="Home"?first[0]:e.key==="End"?last[0]:e.key==="ArrowLeft"?[...quotes].reverse().find(p=>p[0]<(at??last[0]))?.[0]??first[0]:quotes.find(p=>p[0]>(at??first[0]))?.[0]??last[0]);}}/>
+  </svg>
+  <div className="flex justify-between gap-2 text-[9px] text-[#9d92ae]"><span>{open?"Provider open":"First recorded"} · {time(first[0],true)}</span><span>Latest · {time(last[0])}</span></div>
+  <p className="mt-1 text-[9px] text-[#9d92ae]">{quotes.length===1?"One recorded quote":changes?changes+" line "+(changes===1?"change":"changes"):"No recorded line change"} · full available history</p>
+  {active?<p role="status" className="mt-1 text-[10px] text-[#d9d1e4]">{lineText(active[2])} at {formatPredictionMarketOdds(active[1])} · {time(active[0],true)}</p>:null}
+ </div>;
+}
+function LegacyBookLineHistory({book,kind,start,end}:{book:PredictionMarketBookTrail;kind:string|null;start?:number;end?:number}){
   if(kind!=="spread"&&kind!=="total")return null;
   const all=[...new Map((book.marketHistory??[]).map(p=>[p[0],p])).values()].filter((p):p is [number,number,number]=>p[2]!==null&&(end===undefined||p[0]<=end)).sort((a,b)=>a[0]-b[0]);
   const quotes=start===undefined?all:predictionMarketWindowPoints(all,start),lines=quotes.map(p=>p[2]);
