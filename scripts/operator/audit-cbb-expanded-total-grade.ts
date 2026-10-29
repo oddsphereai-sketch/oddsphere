@@ -35,7 +35,7 @@ const evaluation = rows.map(row => {
   const price = pick === "over" ? row.overPrice : row.underPrice;
   const p = probabilities(row.r2Total, row.line);
   const modelEv = (pick === "over" ? p.over : p.under) * (price > 0 ? price / 100 : 100 / -price) - (pick === "over" ? p.under : p.over);
-  const centers = raw.filter(quote => quote.game_id === row.gameId && quote.vendor !== row.sportsbook && references.has(quote.vendor) &&
+  const referenceRows = raw.filter(quote => quote.game_id === row.gameId && quote.vendor !== row.sportsbook && references.has(quote.vendor) &&
     Number.isFinite(Date.parse(quote.opened_at ?? "")) && Date.parse(quote.opened_at!) <= Date.parse(row.asOf) &&
     Date.parse(row.asOf) - Date.parse(quote.opened_at!) <= 48 * 3600000 &&
     quote.total_value !== null && Number.isFinite(Number(quote.total_value)) &&
@@ -45,8 +45,9 @@ const evaluation = rows.map(row => {
       const first = cbbImpliedProbability(quote.total_over_odds!);
       const second = cbbImpliedProbability(quote.total_under_odds!);
       if (first + second < 0.98 || first + second > 1.3) return null;
-      return Number(quote.total_value) + sd * cbbInverseNormal(first / (first + second));
-    }).filter((value): value is number => value !== null);
+      return { vendor: quote.vendor, center: Number(quote.total_value) + sd * cbbInverseNormal(first / (first + second)) };
+    }).filter((value): value is { vendor: string; center: number } => value !== null);
+  const centers = referenceRows.map(item => item.center);
   const center = centers.length ? median(centers) : null;
   const agrees = center === null || center === row.line ? null : (center > row.line) === (pick === "over");
   const referencePick = center === null || center === row.line ? null : center > row.line ? "over" : "under";
@@ -55,8 +56,9 @@ const evaluation = rows.map(row => {
   const referencePrice = referencePick === "over" ? row.overPrice : row.underPrice;
   const referenceUnits = referencePick === null ? null : referenceResult === "push" ? 0 :
     referenceResult === "loss" ? -1 : referencePrice > 0 ? referencePrice / 100 : 100 / -referencePrice;
-  return { date: row.date.slice(0, 10), result: row.r2.result, units: row.r2.units, modelEv, referenceBooks: centers.length,
-    agrees, referencePick, referenceResult, referenceUnits,
+  return { gameId: row.gameId, date: row.date.slice(0, 10), result: row.r2.result, units: row.r2.units, modelEv, referenceBooks: centers.length,
+    agrees, referencePick, referenceResult, referenceUnits, singleReferenceBook: referenceRows.length === 1 ? referenceRows[0].vendor : null,
+    modelPick: pick, actual: row.actual, targetLine: row.line, modelTotal: row.r2Total, referenceCenter: center,
     modelTotalError: Math.abs(row.actual - row.r2Total), referenceTotalError: center === null ? null : Math.abs(row.actual - center) };
 });
 const dates = [...new Set(evaluation.map(row => row.date))].sort();
@@ -90,6 +92,27 @@ for (const [period, included] of Object.entries({ early, selection, later })) {
       flips: subset.filter(row => row.agrees === false).length,
       correctedFlips: subset.filter(row => row.agrees === false && row.referenceResult === "win").length,
       harmedFlips: subset.filter(row => row.agrees === false && row.referenceResult === "loss").length,
+      corroboration: Object.fromEntries(["oneBook", "twoOrMoreBooks"].map((name, index) => {
+        const items = subset.filter(row => row.referencePick !== null && (index === 0 ? row.referenceBooks === 1 : row.referenceBooks >= 2));
+        return [name, { model: summary(items), reference: { bets: items.length,
+          wins: items.filter(row => row.referenceResult === "win").length,
+          losses: items.filter(row => row.referenceResult === "loss").length,
+          units: Number(items.reduce((sum, row) => sum + (row.referenceUnits ?? 0), 0).toFixed(2)) },
+          flips: items.filter(row => row.agrees === false).length,
+          correctedFlips: items.filter(row => row.agrees === false && row.referenceResult === "win").length,
+          harmedFlips: items.filter(row => row.agrees === false && row.referenceResult === "loss").length }];
+      })),
+      singleBookByProvider: Object.fromEntries([...new Set(subset.map(row => row.singleReferenceBook).filter((book): book is string => book !== null))]
+        .map(book => { const items = subset.filter(row => row.singleReferenceBook === book);
+          return [book, { model: summary(items), reference: { bets: items.length,
+            wins: items.filter(row => row.referenceResult === "win").length,
+            losses: items.filter(row => row.referenceResult === "loss").length,
+            units: Number(items.reduce((sum, row) => sum + (row.referenceUnits ?? 0), 0).toFixed(2)) } }]; })),
+      ...(period === "later" ? { cases: subset.filter(row => row.referencePick !== null).map(row => ({
+        gameId: row.gameId, date: row.date, actual: row.actual, targetLine: row.targetLine,
+        modelTotal: Number(row.modelTotal.toFixed(2)), modelPick: row.modelPick,
+        referenceCenter: Number(row.referenceCenter!.toFixed(2)), referencePick: row.referencePick,
+        referenceBooks: row.referenceBooks, modelResult: row.result, referenceResult: row.referenceResult })) } : {}),
       byDate: Object.fromEntries([...included].map(date => [date, {
         pairedModel: summary(subset.filter(row => row.date === date && row.referencePick !== null)),
         reference: { bets: subset.filter(row => row.date === date && row.referencePick !== null).length,
