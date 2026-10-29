@@ -6,7 +6,8 @@ import {matchPredictionMarketGame,type PredictionMarketFeed,type PredictionMarke
 import {bookDisplayTrail,type BookDisplayFeed} from "./owlsBookDisplayHistory";
 
 export const PREDICTION_MARKET_PRELOCK_RELEASE="prediction_market_prelock_display_2026_10_29_r1";
-export type PrelockReceipt={event:number;start:string;away:string;home:string;key:"moneyline"|"total"|"first_inning";pick:string;kind:string;side:string;line:number|null;capturedAt:number;market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null};
+type PrelockFrame={event:number;start:string;away:string;home:string;key:"moneyline"|"total"|"first_inning";pick:string;kind:string;side:string;line:number|null;capturedAt:number;market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null};
+export type PrelockReceipt=PrelockFrame&{checkpoints?:PrelockFrame[]};
 export type PrelockFeed={release:typeof PREDICTION_MARKET_PRELOCK_RELEASE;sport:PredictionMarketSport;rows:PrelockReceipt[]};
 const identity=(r:Pick<PrelockReceipt,"event"|"start"|"key"|"pick"|"side"|"line">)=>JSON.stringify([r.event,Date.parse(r.start),r.key,r.pick,r.side,r.line]);
 
@@ -33,7 +34,14 @@ export function capturePredictionMarketPrelock(previous:PrelockFeed|null,games:D
    const next:PrelockReceipt={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,key,pick,kind,side,line,capturedAt:now,market,book};
    const prior=rows.get(identity(next));
    // A transient missing source cannot erase a coherent pre-lock receipt.
-   rows.set(identity(next),{...next,market:market??prior?.market??null,book:book??prior?.book??null});
+   const frame=(r:PrelockReceipt):PrelockFrame=>{const {checkpoints:_,...value}=r;return value;};
+   // Lock publication can lag its real timestamp. Preserve the first actual
+   // receipt plus two recent checkpoints so stale unlocked publication cannot
+   // overwrite the only provably pre-lock context. Never guess a T-60 lock.
+   const priorFrames=prior?[...(prior.checkpoints??[]),frame(prior)]:[];
+   const checkpoints=[...new Map(priorFrames.map(r=>[r.capturedAt,r])).values()].sort((a,b)=>a.capturedAt-b.capturedAt);
+   const retained=checkpoints.length>3?[checkpoints[0],...checkpoints.slice(-2)]:checkpoints;
+   rows.set(identity(next),{...next,market:market??prior?.market??null,book:book??prior?.book??null,...(retained.length?{checkpoints:retained}:{})});
   }
  }
  return {release:PREDICTION_MARKET_PRELOCK_RELEASE,sport,rows:[...rows.values()].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start)).slice(0,450)};
@@ -46,5 +54,5 @@ export function readPredictionMarketPrelock(feed:PrelockFeed|null,game:DailyEdge
  const row=feed?.rows.find(r=>r.event===game.external_id&&Date.parse(r.start)===Date.parse(game.gameStartAt??"")&&r.away===game.awayTeam&&r.home===game.homeTeam&&r.key===key&&r.kind===kind&&r.side===side&&r.line===line&&r.pick===(game.markets[key].pick??""));
  // It must actually have been captured before the authoritative boundary,
  // not retrospectively downloaded prices with old source timestamps.
- return row&&row.capturedAt<=boundary?row:null;
+ return row?[row,...(row.checkpoints??[])].filter(r=>r.capturedAt<=boundary).sort((a,b)=>b.capturedAt-a.capturedAt)[0]??null:null;
 }

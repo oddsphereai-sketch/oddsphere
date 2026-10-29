@@ -26,6 +26,13 @@ assert.equal(readPredictionMarketPrelock(feed,{...locked,markets:{...locked.mark
 assert.equal(readPredictionMarketPrelock(feed,{...locked,external_id:2},"moneyline","home",null,now+2*h),null);
 assert.equal(readPredictionMarketPrelock(feed,locked,"total","over",238,now+2*h),null);
 assert.equal(readPredictionMarketPrelock(feed,{...locked,lockedAt:null,gameStartAt:iso(now+12*h)},"moneyline","home",null,now+2*h),null,"unprovable locked boundary cannot leak live context");
+let lagged=feed;
+for(let i=1;i<=20;i++)lagged=capturePredictionMarketPrelock(lagged,[game],"nba",winners,[],books,now+i*10*60_000);
+assert.equal(lagged.rows[0].checkpoints?.length,3,"receipt history is bounded even during a long publication lag");
+assert.equal(readPredictionMarketPrelock(lagged,locked,"moneyline","home",null,now+4*h)?.capturedAt,now,"a delayed lock publication cannot overwrite the first actual pre-lock receipt");
+const recent=capturePredictionMarketPrelock(feed,[game],"nba",winners,[],books,now+30*60_000);
+const justLate=capturePredictionMarketPrelock(recent,[game],"nba",winners,[],books,now+70*60_000);
+assert.equal(readPredictionMarketPrelock(justLate,locked,"moneyline","home",null,now+2*h)?.capturedAt,now+30*60_000,"normal lock propagation uses the newest eligible checkpoint, never the later receipt");
 const stored:PredictionMarketBookTrail={sportsbook:"circa",locked:true,points:[[now-h,110/210,-110],[now,108/208,-108],[now+h,105/205,-105]]};
 const archive={...feed.rows[0].book!,points:[...feed.rows[0].book!.points,[now+h, .9,-900],[now+2*h,.91,-1000]] as [number,number,number][]};
 const original=JSON.stringify(stored),joined=predictionMarketArchivedBook(stored,archive,now,now+h,null)!;

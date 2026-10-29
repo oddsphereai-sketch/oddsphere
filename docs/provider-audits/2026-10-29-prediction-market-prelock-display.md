@@ -35,6 +35,11 @@ This is display context, not historical model-availability attestation.
 Limitations: no time machine for old locked charts; no promise of contracts
 where a provider has not listed one. A stored locked book different from the
 captured display book remains the original book, even if that limits history.
+The first actual receipt and two recent checkpoints survive delayed lock
+publication. Readers select the newest checkpoint captured before the real
+lock; a long publication outage can fall back to that older first receipt,
+not fabricate terminal quotes. Storage is bounded to 450 selection identities,
+four frames each, with lossless compression and a 64 MB decompression guard.
 The chart stops at the latest common actual observations before lock, rather
 than inventing a quote at the lock instant. Selection changes require their
 own pre-lock receipt. The normal five-minute cadence bounds terminal latency.

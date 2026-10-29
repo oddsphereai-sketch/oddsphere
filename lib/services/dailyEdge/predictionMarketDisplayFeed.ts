@@ -21,12 +21,12 @@ const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-p
 async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
   const stored=await readLatestLabResponseSnapshot<Record<string,unknown>>(prelockKey(sport));
   let p=stored?.payload;
-  if(p?.encoding==="gzip-base64"&&typeof p.payload==="string")p=JSON.parse(gunzipSync(Buffer.from(p.payload,"base64"),{maxOutputLength:16_000_000}).toString());
+  if(p?.encoding==="gzip-base64"&&typeof p.payload==="string")p=JSON.parse(gunzipSync(Buffer.from(p.payload,"base64"),{maxOutputLength:64_000_000}).toString());
   return p?.release===PREDICTION_MARKET_PRELOCK_RELEASE&&p.sport===sport&&Array.isArray(p.rows)?p as PrelockFeed:null;
 }
 const prelockCompressed=unstable_cache(async(sport:PredictionMarketSport)=>gzipSync(JSON.stringify(await prelockStored(sport))).toString("base64"),[PREDICTION_MARKET_PRELOCK_RELEASE],{revalidate:30,tags:[PREDICTION_MARKET_PRELOCK_RELEASE]});
 export async function readPredictionMarketPrelockFeed(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
-  return JSON.parse(gunzipSync(Buffer.from(await prelockCompressed(sport),"base64"),{maxOutputLength:16_000_000}).toString());
+  return JSON.parse(gunzipSync(Buffer.from(await prelockCompressed(sport),"base64"),{maxOutputLength:64_000_000}).toString());
 }
 
 export const predictionMarketBookSnapshotKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-books::${sport}::${BOOK_DISPLAY_HISTORY_RELEASE}`;
