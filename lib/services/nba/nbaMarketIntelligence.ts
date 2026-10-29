@@ -147,6 +147,10 @@ export type MarketIntelligence = {
   market_implied_prob_pick: number | null;
   /** No-vig (de-vigged) probability on the pick side. */
   market_no_vig_prob_pick: number | null;
+  /** How the exact-line no-vig reference was constructed. */
+  fair_reference_mode: NbaFairReference["mode"];
+  /** Books used in that no-vig reference. */
+  fair_reference_books: string[];
   /** Fair probability from SharpAPI opportunities (sharp-book cross-ref). */
   opp_fair_probability_pick: number | null;
   /** EV % from opportunities row (null when no matching opportunity). */
@@ -320,6 +324,119 @@ export function coherentNoVigReference(opts: {
   return { probability, books: probabilities.map((row) => row.book).sort() };
 }
 
+export type NbaFairReference = {
+  probability: number | null;
+  books: string[];
+  mode: "target_excluded" | "selected_book_fallback" | "unavailable";
+};
+
+/**
+ * Prefer a target-book-excluded fair reference. When the board has only one
+ * complete pair at the exact executable line, fall back to that selected
+ * book's coherent two-sided no-vig pair instead of falsely classifying the
+ * entire market as unavailable. The fallback never crosses books or lines.
+ */
+export function resolveNbaFairReference(opts: {
+  lines: ReadonlyArray<NbaLineRow>;
+  market: "moneyline" | "spread" | "total";
+  pickSide: "home" | "away" | "over" | "under";
+  pickLine: number | null;
+  selectedSportsbook: string | null;
+}): NbaFairReference {
+  const targetExcluded = coherentNoVigReference({
+    lines: opts.lines,
+    market: opts.market,
+    pickSide: opts.pickSide,
+    pickLine: opts.pickLine,
+    excludedSportsbooks: opts.selectedSportsbook === null ? [] : [opts.selectedSportsbook],
+  });
+  if (targetExcluded.probability !== null) {
+    return { ...targetExcluded, mode: "target_excluded" };
+  }
+  if (opts.selectedSportsbook === null) {
+    return { probability: null, books: [], mode: "unavailable" };
+  }
+  const selectedBook = opts.selectedSportsbook.trim().toLowerCase();
+  const selectedBookReference = coherentNoVigReference({
+    lines: opts.lines.filter((line) => line.sportsbook.trim().toLowerCase() === selectedBook),
+    market: opts.market,
+    pickSide: opts.pickSide,
+    pickLine: opts.pickLine,
+  });
+  return selectedBookReference.probability === null
+    ? { probability: null, books: [], mode: "unavailable" }
+    : { ...selectedBookReference, mode: "selected_book_fallback" };
+}
+
+function expectedReturn(probability: number, american: number): number {
+  const profit = american > 0 ? american / 100 : 100 / Math.abs(american);
+  return probability * profit - (1 - probability);
+}
+
+export function formatNbaSpreadSelection(teamAbbreviation: string, line: number | null): string {
+  if (line === null) return `${teamAbbreviation} (line tbd)`;
+  if (line === 0) return `${teamAbbreviation} PK`;
+  return `${teamAbbreviation} ${line > 0 ? "+" : ""}${line}`;
+}
+
+export type NbaExecutableOffer = {
+  pick: NbaLineRow;
+  other: NbaLineRow;
+  modelProbability: number;
+  expectedReturn: number;
+};
+
+export function selectBestNbaExecutableOffer(opts: {
+  lines: ReadonlyArray<NbaLineRow>;
+  market: "spread" | "total";
+  pickSide: "home" | "away" | "over" | "under";
+  acceptedBooks: ReadonlyArray<string>;
+  consensusPickLine: number | null;
+  modelProbabilityAtPickLine: (pickLine: number) => number | null;
+}): NbaExecutableOffer | null {
+  const otherSide = opts.pickSide === "home" ? "away"
+    : opts.pickSide === "away" ? "home"
+    : opts.pickSide === "over" ? "under" : "over";
+  const accepted = new Set(opts.acceptedBooks.map((book) => book.trim().toLowerCase()));
+  const candidates: NbaExecutableOffer[] = [];
+  for (const pick of opts.lines) {
+    if (
+      pick.market_type !== opts.market || pick.side !== opts.pickSide ||
+      pick.line_value === null || pick.odds_american === null ||
+      !accepted.has(pick.sportsbook.trim().toLowerCase())
+    ) continue;
+    const expectedOtherLine = opts.market === "spread" ? -pick.line_value : pick.line_value;
+    const other = opts.lines.find((row) => (
+      row.market_type === opts.market &&
+      row.sportsbook === pick.sportsbook &&
+      row.side === otherSide &&
+      row.line_value !== null && Math.abs(row.line_value - expectedOtherLine) < 0.01 &&
+      row.odds_american !== null
+    ));
+    if (!other) continue;
+    const modelProbability = opts.modelProbabilityAtPickLine(pick.line_value);
+    if (modelProbability === null || !Number.isFinite(modelProbability)) continue;
+    candidates.push({
+      pick,
+      other,
+      modelProbability,
+      expectedReturn: expectedReturn(modelProbability, pick.odds_american),
+    });
+  }
+  return candidates.sort((left, right) => {
+    const ev = right.expectedReturn - left.expectedReturn;
+    if (Math.abs(ev) > 1e-12) return ev;
+    const center = opts.consensusPickLine;
+    if (center !== null) {
+      const distance = Math.abs(left.pick.line_value! - center) - Math.abs(right.pick.line_value! - center);
+      if (Math.abs(distance) > 1e-12) return distance;
+    }
+    const freshness = Date.parse(right.pick.fetched_at ?? "") - Date.parse(left.pick.fetched_at ?? "");
+    if (Number.isFinite(freshness) && freshness !== 0) return freshness;
+    return left.pick.sportsbook.localeCompare(right.pick.sportsbook);
+  })[0] ?? null;
+}
+
 function earliestFetchedAt(lines: NbaLineRow[]): string | null {
   let earliest: string | null = null;
   for (const l of lines) {
@@ -452,13 +569,14 @@ function buildMl(
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
 
-  const noVigPick = coherentNoVigReference({
+  const fairReference = resolveNbaFairReference({
     lines,
     market: "moneyline",
     pickSide,
     pickLine: null,
-    excludedSportsbooks: pickBest.row ? [pickBest.row.sportsbook] : [],
-  }).probability;
+    selectedSportsbook: pickBest.row?.sportsbook ?? null,
+  });
+  const noVigPick = fairReference.probability;
 
   const exact = exactLineProbability({ prediction, spreadHome: null, total: null });
   const modelHomeProb = exact?.mlHome ?? (
@@ -539,6 +657,8 @@ function buildMl(
     per_book_other_side: otherBest.perBook,
     market_implied_prob_pick: americanToImpliedProb(pickOdds),
     market_no_vig_prob_pick: noVigPick,
+    fair_reference_mode: fairReference.mode,
+    fair_reference_books: fairReference.books,
     opp_fair_probability_pick: opp?.fair_probability ?? null,
     opp_ev_percentage_pick: opp?.ev_percentage ?? null,
     opp_market_width: opp?.market_width ?? null,
@@ -573,28 +693,54 @@ function buildSpread(
   opps: NbaOpportunity[],
   enforcePositiveModelEv: boolean,
 ): MarketIntelligence {
-  const lineHomeFromMarket = consensus.spreadHome;
-  const exact = exactLineProbability({ prediction, spreadHome: lineHomeFromMarket, total: null });
-  const pickSide: "home" | "away" = exact?.spreadHome === null || exact?.spreadHome === undefined
+  const consensusLineHome = consensus.spreadHome;
+  const consensusExact = exactLineProbability({ prediction, spreadHome: consensusLineHome, total: null });
+  const pickSide: "home" | "away" = consensusExact?.spreadHome === null || consensusExact?.spreadHome === undefined
     ? prediction.predicted_spread_side
-    : exact.spreadHome >= 0.5 ? "home" : "away";
-  const pickTargetLine = lineHomeFromMarket === null
+    : consensusExact.spreadHome >= 0.5 ? "home" : "away";
+  const consensusPickLine = consensusLineHome === null
     ? null
-    : pickSide === "home" ? lineHomeFromMarket : -lineHomeFromMarket;
-  const pickBest = bestPriceFor(lines, "spread", pickSide, pickTargetLine);
+    : pickSide === "home" ? consensusLineHome : -consensusLineHome;
+  const executableOffer = selectBestNbaExecutableOffer({
+    lines,
+    market: "spread",
+    pickSide,
+    acceptedBooks: consensus.spreadAcceptedBooks,
+    consensusPickLine,
+    modelProbabilityAtPickLine: (pickLine) => {
+      const homeLine = pickSide === "home" ? pickLine : -pickLine;
+      const probability = exactLineProbability({ prediction, spreadHome: homeLine, total: null })?.spreadHome;
+      if (probability === null || probability === undefined) return null;
+      return pickSide === "home" ? probability : 1 - probability;
+    },
+  });
+  const pickLine = executableOffer?.pick.line_value ?? consensusPickLine;
+  const lineHomeFromMarket = pickLine === null
+    ? null
+    : pickSide === "home" ? pickLine : -pickLine;
+  const exact = exactLineProbability({ prediction, spreadHome: lineHomeFromMarket, total: null });
+  const pickCandidates = bestPriceFor(lines, "spread", pickSide, pickLine);
+  const pickBest = {
+    row: executableOffer?.pick ?? pickCandidates.row,
+    perBook: pickCandidates.perBook,
+  };
   const otherSide = pickSide === "home" ? "away" : "home";
-  const otherBest = bestPriceFor(lines, "spread", otherSide, pickTargetLine === null ? null : -pickTargetLine);
+  const otherCandidates = bestPriceFor(lines, "spread", otherSide, pickLine === null ? null : -pickLine);
+  const otherBest = {
+    row: executableOffer?.other ?? otherCandidates.row,
+    perBook: otherCandidates.perBook,
+  };
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
-  const pickLine = pickTargetLine;
 
-  const noVigPick = coherentNoVigReference({
+  const fairReference = resolveNbaFairReference({
     lines,
     market: "spread",
     pickSide,
     pickLine,
-    excludedSportsbooks: pickBest.row ? [pickBest.row.sportsbook] : [],
-  }).probability;
+    selectedSportsbook: pickBest.row?.sportsbook ?? null,
+  });
+  const noVigPick = fairReference.probability;
 
   const modelProb = exact?.spreadHome === null || exact?.spreadHome === undefined
     ? prediction.spread_confidence / 100
@@ -672,10 +818,7 @@ function buildSpread(
   const sideLineDisplay = pickLine;
   const pickAbbr =
     pickSide === "home" ? snapshot.home_team.abbreviation : snapshot.away_team.abbreviation;
-  const pickLabel =
-    sideLineDisplay !== null
-      ? `${pickAbbr} ${sideLineDisplay > 0 ? "+" : ""}${sideLineDisplay}`
-      : `${pickAbbr} (line tbd)`;
+  const pickLabel = formatNbaSpreadSelection(pickAbbr, sideLineDisplay);
 
   return {
     market: "spread",
@@ -696,6 +839,8 @@ function buildSpread(
     per_book_other_side: otherBest.perBook,
     market_implied_prob_pick: americanToImpliedProb(pickOdds),
     market_no_vig_prob_pick: noVigPick,
+    fair_reference_mode: fairReference.mode,
+    fair_reference_books: fairReference.books,
     opp_fair_probability_pick: opp?.fair_probability ?? null,
     opp_ev_percentage_pick: opp?.ev_percentage ?? null,
     opp_market_width: opp?.market_width ?? null,
@@ -729,23 +874,46 @@ function buildTotal(
   opps: NbaOpportunity[],
   enforcePositiveModelEv: boolean,
 ): MarketIntelligence {
-  const line = consensus.totalLine;
-  const exact = exactLineProbability({ prediction, spreadHome: null, total: line });
-  const pickSide: "over" | "under" = exact?.totalOver === null || exact?.totalOver === undefined
+  const consensusLine = consensus.totalLine;
+  const consensusExact = exactLineProbability({ prediction, spreadHome: null, total: consensusLine });
+  const pickSide: "over" | "under" = consensusExact?.totalOver === null || consensusExact?.totalOver === undefined
     ? prediction.predicted_total_side
-    : exact.totalOver >= 0.5 ? "over" : "under";
-  const pickBest = bestPriceFor(lines, "total", pickSide, line);
+    : consensusExact.totalOver >= 0.5 ? "over" : "under";
+  const executableOffer = selectBestNbaExecutableOffer({
+    lines,
+    market: "total",
+    pickSide,
+    acceptedBooks: consensus.totalAcceptedBooks,
+    consensusPickLine: consensusLine,
+    modelProbabilityAtPickLine: (pickLine) => {
+      const probability = exactLineProbability({ prediction, spreadHome: null, total: pickLine })?.totalOver;
+      if (probability === null || probability === undefined) return null;
+      return pickSide === "over" ? probability : 1 - probability;
+    },
+  });
+  const line = executableOffer?.pick.line_value ?? consensusLine;
+  const exact = exactLineProbability({ prediction, spreadHome: null, total: line });
+  const pickCandidates = bestPriceFor(lines, "total", pickSide, line);
+  const pickBest = {
+    row: executableOffer?.pick ?? pickCandidates.row,
+    perBook: pickCandidates.perBook,
+  };
   const otherSide = pickSide === "over" ? "under" : "over";
-  const otherBest = bestPriceFor(lines, "total", otherSide, line);
+  const otherCandidates = bestPriceFor(lines, "total", otherSide, line);
+  const otherBest = {
+    row: executableOffer?.other ?? otherCandidates.row,
+    perBook: otherCandidates.perBook,
+  };
   const pickOdds = pickBest.row?.odds_american ?? null;
   const otherOdds = otherBest.row?.odds_american ?? null;
-  const noVigPick = coherentNoVigReference({
+  const fairReference = resolveNbaFairReference({
     lines,
     market: "total",
     pickSide,
     pickLine: line,
-    excludedSportsbooks: pickBest.row ? [pickBest.row.sportsbook] : [],
-  }).probability;
+    selectedSportsbook: pickBest.row?.sportsbook ?? null,
+  });
+  const noVigPick = fairReference.probability;
 
   const modelProb = exact?.totalOver === null || exact?.totalOver === undefined
     ? prediction.total_confidence / 100
@@ -824,6 +992,8 @@ function buildTotal(
     per_book_other_side: otherBest.perBook,
     market_implied_prob_pick: americanToImpliedProb(pickOdds),
     market_no_vig_prob_pick: noVigPick,
+    fair_reference_mode: fairReference.mode,
+    fair_reference_books: fairReference.books,
     opp_fair_probability_pick: opp?.fair_probability ?? null,
     opp_ev_percentage_pick: opp?.ev_percentage ?? null,
     opp_market_width: opp?.market_width ?? null,

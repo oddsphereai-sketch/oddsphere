@@ -405,6 +405,7 @@ function buildTotalRow(
 }
 
 function formatSpread(n: number): string {
+  if (n === 0) return "PK";
   return n > 0 ? `+${n}` : `${n}`;
 }
 

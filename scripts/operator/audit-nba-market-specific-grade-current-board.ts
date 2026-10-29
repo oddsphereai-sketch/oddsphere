@@ -51,7 +51,7 @@ async function main(): Promise<void> {
       const intel = game.intelligence[slot];
       const oldGrade = incumbentGrade(game, intel);
       const candidateGrade = intel.grade;
-      const candidateEv = expectedReturn(intel.effective_confidence / 100, intel.current_price.odds_american);
+      const candidateEv = expectedReturn(intel.model_prob_on_pick, intel.current_price.odds_american);
       return {
         date,
         gameExternalId: game.game_external_id,
@@ -59,6 +59,9 @@ async function main(): Promise<void> {
         market: intel.market,
         pick: intel.pick_label,
         selectedPrice: intel.current_price.odds_american,
+        selectedSportsbook: intel.current_price.sportsbook,
+        fairReferenceMode: intel.fair_reference_mode,
+        fairReferenceBooks: intel.fair_reference_books,
         rawModelProbability: intel.model_prob_on_pick,
         effectiveProbability: intel.effective_confidence / 100,
         independentEdgePoints: intel.market === "moneyline" ? null : intel.edge_points,
