@@ -90,6 +90,9 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE,
+  CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE,
@@ -130,7 +133,7 @@ import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMark
 import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_27_r95_pmf_coherence_transition" as const;
+  "cfb_v1_member_fixture_2026_10_29_r96_paired_price_context" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_27_r81_near_tie_pmf_winner_coherence" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
@@ -1093,7 +1096,11 @@ export function selectLatestCfbMemberEvidenceRows(
     row.payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE);
   const current = completeRowsForRelease(currentDecisionRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_DECISION_RELEASE);
   if (current) return current;
-  const coordinatorIntegrationPreviousAuthority = pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
+  const priceContextPreviousRows = rows.filter(row => String(row.payload.decisions.decisionRelease) === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE);
+  const previousAuthority = pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ?? exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
+  const priceContextPrevious = completeRowsForRelease(priceContextPreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE) ??
+    (previousAuthority ? immutableBoundaryTransitionRows(priceContextPreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE, previousAuthority) : null);
+  const coordinatorIntegrationPreviousAuthority = priceContextPrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -1106,6 +1113,7 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (priceContextPrevious) return priceContextPrevious;
   if (pmfCoherencePrevious) return pmfCoherencePrevious;
   if (parlayLeanPrevious) return parlayLeanPrevious;
   if (coordinatorIntegrationPrevious) return coordinatorIntegrationPrevious;
@@ -1306,7 +1314,7 @@ function latestValidRowsForRelease(
         : CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE;
   const expectedPolicyRelease = exactPricePrevious
     ? CFB_V1_EXACT_PRICE_ACTIONABILITY_PREVIOUS_GRADE_POLICY_RELEASE
-    : CFB_V1_GRADE_POLICY_RELEASE;
+    : decisionRelease === CFB_V1_DECISION_RELEASE ? CFB_V1_GRADE_POLICY_RELEASE : CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE;
   const expectedModelRelease = priorCompatibilityFamily
     ? CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE
     : CFB_V1_MODEL_RELEASE;
@@ -1318,7 +1326,7 @@ function latestValidRowsForRelease(
     : CFB_V1_PROBABILITY_RELEASE;
   const expectedCalibrationRelease = priorCompatibilityFamily
     ? CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE
-    : CFB_V1_CALIBRATION_RELEASE;
+    : decisionRelease === CFB_V1_DECISION_RELEASE ? CFB_V1_CALIBRATION_RELEASE : CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE;
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {
     if (row.payload.schemaRelease !== schemaRelease || row.payload.memberRelease !== memberRelease) continue;

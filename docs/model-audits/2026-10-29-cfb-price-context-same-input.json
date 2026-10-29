@@ -1,0 +1,217 @@
+{
+  "audit": "cfb_price_context_same_runtime_rollout_2026_10_29_r1",
+  "now": "2026-10-29T20:44:22.071Z",
+  "apply": false,
+  "writes": 0,
+  "games": 96,
+  "before": {
+    "Best Angle": 17,
+    "Lean": 27,
+    "Watchlist": 95,
+    "No Play": 17,
+    "Held": 132
+  },
+  "after": {
+    "Best Angle": 17,
+    "Lean": 27,
+    "Watchlist": 95,
+    "No Play": 17,
+    "Held": 132
+  },
+  "forecastChanges": 0,
+  "preservedExistingMarkets": 156,
+  "promotions": 0,
+  "demotions": 0,
+  "netActionables": 0,
+  "recoveries": [],
+  "focus": {
+    "capturedAt": "2026-10-29T20:44:22.071Z",
+    "held": [],
+    "prices": [
+      {
+        "providerGameId": "458441",
+        "sportsbook": "betmgm",
+        "observedAt": "2026-10-29T20:40:03.578Z",
+        "spread": {
+          "homeLine": -19,
+          "homePrice": -110,
+          "awayLine": 19,
+          "awayPrice": -108
+        }
+      },
+      {
+        "providerGameId": "458441",
+        "sportsbook": "betrivers",
+        "observedAt": "2026-10-29T20:40:03.578Z",
+        "spread": {
+          "homeLine": -20,
+          "homePrice": -112,
+          "awayLine": 20,
+          "awayPrice": -112
+        }
+      },
+      {
+        "providerGameId": "458441",
+        "sportsbook": "caesars",
+        "observedAt": "2026-10-29T20:40:03.578Z",
+        "spread": {
+          "homeLine": -19.5,
+          "homePrice": -106,
+          "awayLine": 19.5,
+          "awayPrice": -114
+        }
+      },
+      {
+        "providerGameId": "458441",
+        "sportsbook": "draftkings",
+        "observedAt": "2026-10-29T20:40:03.578Z",
+        "spread": {
+          "homeLine": -19.5,
+          "homePrice": -110,
+          "awayLine": 19.5,
+          "awayPrice": -110
+        }
+      },
+      {
+        "providerGameId": "458441",
+        "sportsbook": "fanatics",
+        "observedAt": "2026-10-29T20:40:03.578Z",
+        "spread": {
+          "homeLine": -19.5,
+          "homePrice": -110,
+          "awayLine": 19.5,
+          "awayPrice": -110
+        }
+      },
+      {
+        "providerGameId": "458441",
+        "sportsbook": "fanduel",
+        "observedAt": "2026-10-29T20:40:03.578Z",
+        "spread": {
+          "homeLine": -18.5,
+          "homePrice": -110,
+          "awayLine": 18.5,
+          "awayPrice": -110
+        }
+      }
+    ],
+    "decisions": [
+      {
+        "market": "moneyline",
+        "grade": "Watchlist",
+        "quote": {
+          "provider": "balldontlie",
+          "sportsbook": "betmgm",
+          "line": null,
+          "price": -1100,
+          "observedAt": "2026-10-29T20:40:03.578Z",
+          "marketSelection": "main_line"
+        },
+        "context": {
+          "source": "target_excluded_same_line_named_books",
+          "books": [
+            "betrivers",
+            "caesars",
+            "circa",
+            "draftkings",
+            "fanatics",
+            "fanduel"
+          ],
+          "fairProbability": 0.8909632991372064
+        }
+      },
+      {
+        "market": "spread",
+        "grade": "Watchlist",
+        "quote": {
+          "provider": "balldontlie",
+          "sportsbook": "caesars",
+          "line": -19.5,
+          "price": -106,
+          "observedAt": "2026-10-29T20:40:03.578Z",
+          "marketSelection": "main_line"
+        },
+        "context": {
+          "source": "target_excluded_same_line_named_books",
+          "books": [
+            "draftkings",
+            "fanatics"
+          ],
+          "fairProbability": 0.5
+        }
+      },
+      {
+        "market": "total",
+        "grade": "Lean",
+        "quote": {
+          "provider": "balldontlie",
+          "sportsbook": "caesars",
+          "line": 51,
+          "price": -109,
+          "observedAt": "2026-10-29T20:40:03.578Z",
+          "marketSelection": "main_line"
+        },
+        "context": {
+          "source": "target_excluded_same_line_named_books",
+          "books": [
+            "circa",
+            "fanatics"
+          ],
+          "fairProbability": 0.5
+        }
+      }
+    ]
+  },
+  "writerResult": {
+    "writerRelease": "cfb_forward_evidence_writer_2026_10_29_r142_paired_price_context",
+    "collected": true,
+    "collectionReason": "release_refresh_due",
+    "proposed": 96,
+    "inserted": 0,
+    "games": 100,
+    "stages": {
+      "opening": 0,
+      "unlocked": 96,
+      "t60": 0
+    },
+    "publishedEvaluations": 156,
+    "publishedBestAngles": 17,
+    "publishedLeans": 27,
+    "publishedWatchlists": 95,
+    "publishedNoPlays": 17,
+    "heldMarkets": 132,
+    "apiCallsMaximum": 90,
+    "healthHolds": [
+      "authoritative_market_anchor_unavailable",
+      "espn_reference_line_deferred",
+      "playbook_lines_request_failed",
+      "playbook_splits_request_failed"
+    ],
+    "providerErrors": {
+      "playbookLines": "Playbook auth failed (HTTP 401) on /v1/lines",
+      "playbookSplits": "Playbook auth failed (HTTP 401) on /v1/splits",
+      "playbookInjuries": null,
+      "sharpApiSplits": null,
+      "owlsCapture": null,
+      "espnInjuryNews": null,
+      "sportsDataIoAvailability": null
+    },
+    "captureFailures": [],
+    "publicationAttempted": true,
+    "memberSnapshotAttempted": false,
+    "memberSnapshotUpdated": false,
+    "memberSnapshotKey": null,
+    "memberSnapshotError": null,
+    "trackingAttempted": false,
+    "trackingRecordsProposed": 597,
+    "trackingRecordsInserted": 0,
+    "trackingRecordsExisting": 0,
+    "trackingError": null,
+    "trackingProviderRequests": 0
+  },
+  "limitations": [
+    "Same-input current-board correctness rehearsal, not historical profitability qualification.",
+    "Explicit owner-approved count-gate exception; all other production grade caps remain.",
+    "Missing local Playbook credential may produce a provider error; retained stored evidence is reported by the sole writer."
+  ]
+}

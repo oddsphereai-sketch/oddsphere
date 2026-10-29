@@ -134,6 +134,9 @@ import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE,
+  CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE,
@@ -796,6 +799,7 @@ const evidence: CfbForwardStoredEvidence = {
 };
 const previousDecisionPayload = structuredClone(payload) as CfbForwardEvidencePayload;
 previousDecisionPayload.decisions.decisionRelease = CFB_V1_PARLAY_LEAN_PREVIOUS_DECISION_RELEASE as unknown as typeof previousDecisionPayload.decisions.decisionRelease;
+previousDecisionPayload.decisions.policyRelease = CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof previousDecisionPayload.decisions.policyRelease;
 previousDecisionPayload.decisions.modelRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_MODEL_RELEASE as unknown as typeof previousDecisionPayload.decisions.modelRelease;
 previousDecisionPayload.authoritativeForecast!.release = CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE as unknown as NonNullable<typeof previousDecisionPayload.authoritativeForecast>["release"];
 previousDecisionPayload.decisions.evaluatedBets = previousDecisionPayload.decisions.evaluatedBets.map((decision) => {
@@ -805,6 +809,7 @@ previousDecisionPayload.decisions.evaluatedBets = previousDecisionPayload.decisi
   legacy.distributionRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_DISTRIBUTION_RELEASE as unknown as typeof legacy.distributionRelease;
   legacy.probabilityRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_PROBABILITY_RELEASE as unknown as typeof legacy.probabilityRelease;
   legacy.calibrationRelease = CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE as unknown as typeof legacy.calibrationRelease;
+  legacy.policyRelease = CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof legacy.policyRelease;
   if (legacy.gradeAdjustment) {
     legacy.gradeAdjustment.release = CFB_MARKET_SHARP_AWARE_PMF_COHERENCE_PREVIOUS_PRODUCTION_RELEASE as unknown as typeof legacy.gradeAdjustment.release;
   }
@@ -977,8 +982,44 @@ function releaseTransitionPayload(args: {
     next.independentForecast.gameStartsAt = args.gameStartsAt;
   }
   if (next.authoritativeForecast) next.authoritativeForecast.release = args.forecastRelease;
+  if (args.decisionRelease !== CFB_V1_DECISION_RELEASE) {
+    next.decisions.policyRelease = CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof next.decisions.policyRelease;
+    next.decisions.evaluatedBets = next.decisions.evaluatedBets.map(decision => ({
+      ...decision, policyRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof decision.policyRelease,
+      calibrationRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE as typeof decision.calibrationRelease,
+    }));
+  }
   return next;
 }
+
+// Pin the immediately preceding production release, rather than rebuilding its
+// locks with current policy/calibration identifiers after the version bump.
+const priceContextPreviousRows = sameSchemaPreviousRows.map(row => {
+  const old = releaseTransitionPayload({
+    providerGameId: row.providerGameId, gameStartsAt: row.gameStartAt,
+    capturedAt: row.capturedAt, stage: row.stage === "t60" ? "t60" : "unlocked",
+    schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, memberRelease: CFB_FORWARD_MEMBER_RELEASE,
+    decisionRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE,
+    forecastRelease: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+  });
+  old.decisions.evaluatedBets = old.decisions.evaluatedBets.map(decision => ({
+    ...decision, schemaRelease: "cfb_v1_exact_price_decision_tuple_2026_10_27_r41_near_tie_pmf_winner_coherence" as typeof decision.schemaRelease,
+  }));
+  return { ...row, id: `r54-${row.providerGameId}`, payload: old, payloadSha256: hashCfbForwardEvidencePayload(old) };
+});
+const oldLock = priceContextPreviousRows.find(row => row.stage === "t60")!;
+const oldLockBytes = JSON.stringify(oldLock);
+const priceContextTransition = selectLatestCfbMemberEvidenceRows([
+  ...priceContextPreviousRows,
+  { ...evidence, id: "r55-same-schema-unlocked", providerGameId: "same-schema-unlocked", stage: "unlocked",
+    capturedAt: sameSchemaCurrentPayload.capturedAt, gameStartAt: sameSchemaCurrentPayload.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(sameSchemaCurrentPayload), payload: sameSchemaCurrentPayload },
+], "2026-10-24T17:05:00Z");
+assert.deepEqual(priceContextTransition.find(row => row.providerGameId === oldLock.providerGameId), oldLock, "r55 reader retains exact r54 lock precedence");
+assert.equal(JSON.stringify(oldLock), oldLockBytes, "release transition cannot mutate a stored r54 record");
+assert.deepEqual(cfbLockPlanningEvidence([oldLock]), [oldLock], "writer lock planning keeps the exact r54 lock and prevents a replacement capture");
+assert.equal(priceContextTransition.find(row => row.providerGameId === "same-schema-unlocked")?.id, "r55-same-schema-unlocked");
+assert.equal(cfbForwardReleaseRefreshNeed([oldLock], new Date(Date.parse(oldLock.gameStartAt) + 60_000).toISOString()), null, "release refresh must not schedule a completed old locked row for rewriting");
 
 const transitionLockedGameId = "release-transition-locked";
 const transitionUnlockedGameId = "release-transition-unlocked";
@@ -1242,11 +1283,12 @@ const previousFinalWinnerPayload: CfbForwardEvidencePayload = {
   decisions: {
     ...structuredClone(previousExactPricePayload.decisions),
     decisionRelease: CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE as unknown as typeof evidence.payload.decisions.decisionRelease,
-    policyRelease: evidence.payload.decisions.policyRelease,
+    policyRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof evidence.payload.decisions.policyRelease,
     evaluatedBets: previousExactPricePayload.decisions.evaluatedBets.map((decision) => ({
       ...decision,
       decisionRelease: CFB_V1_FINAL_WINNER_PREVIOUS_DECISION_RELEASE as unknown as typeof decision.decisionRelease,
-      policyRelease: evidence.payload.decisions.policyRelease,
+      policyRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof decision.policyRelease,
+      calibrationRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE as typeof decision.calibrationRelease,
       ...(decision.gradeAdjustment ? {
         gradeAdjustment: {
           ...decision.gradeAdjustment,
@@ -1633,10 +1675,13 @@ r28UnlockedPayloadRecord.cutoffAt = null;
 r28UnlockedPayloadRecord.t60LagMinutes = null;
 const r28UnlockedDecisions = r28UnlockedPayloadRecord.decisions as Record<string, unknown>;
 r28UnlockedDecisions.decisionRelease = CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE;
+r28UnlockedDecisions.policyRelease = CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE;
 r28UnlockedDecisions.trackingEnabled = false;
 r28UnlockedDecisions.evaluatedBets = (r28UnlockedDecisions.evaluatedBets as Array<Record<string, unknown>>).map((decision) => ({
   ...decision,
   decisionRelease: CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
+  policyRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE,
+  calibrationRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE,
   stage: "unlocked",
   evaluatedAt: publicationTransitionCapturedAt,
   lockedAt: null,
@@ -1698,9 +1743,12 @@ const r28LockedPayload = {
   decisions: {
     ...payload.decisions,
     decisionRelease: CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
+    policyRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE,
     evaluatedBets: payload.decisions.evaluatedBets.map((decision) => ({
       ...decision,
       decisionRelease: CFB_V1_GRADE_PREVIOUS_DECISION_RELEASE,
+      policyRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE,
+      calibrationRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE,
     })),
   },
 } as unknown as CfbForwardEvidencePayload;
@@ -2483,6 +2531,7 @@ assert.equal(outlierSpreadMember.currentPriceAmerican, null, "a -24.5 display li
 assert.equal(outlierSpreadMember.oddsTrail?.length, 0, "an outlier display line must not enter the movement panel");
 
 const thinBookBundle = buildCfbV1DecisionBundle({
+  priceContextPolicy: "legacy_three_book_consensus",
   providerGameId: game.providerGameId,
   awayTeam: game.away.abbreviation,
   homeTeam: game.home.abbreviation,
@@ -2492,7 +2541,7 @@ const thinBookBundle = buildCfbV1DecisionBundle({
   contextLines: { homeSpread: -7.5, totalLine: 47.5 },
   evaluatedAt: observedAt,
 });
-assert.equal(thinBookBundle.evaluatedBets.length, 0, "one target book cannot become its own grading benchmark");
+assert.equal(thinBookBundle.evaluatedBets.length, 0, "the explicit legacy rollback policy retains its original comparison requirement");
 const thinBookPayload: CfbForwardEvidencePayload = {
   ...heldPayload,
   market: {
