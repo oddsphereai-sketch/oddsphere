@@ -4,7 +4,13 @@ import { assertCbbFixtureRefreshSafe, cbbCanonicalGamePayload, cbbCanonicalStatu
 import type { CbbGame, CbbTeam } from "../../cbb/types";
 import { addDaysToSlate, computeSlateDate } from "../../dates/slateDate";
 
-export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_10_29_r1_exact_id_et_slate" as const;
+export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_10_29_r2_four_day_et_slate" as const;
+
+/** Include the opener three days ahead so existing collectors can observe pregame prices. */
+export function cbbFixtureSeedDates(today: string): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) throw new Error("Invalid CBB seed date");
+  return Array.from({ length: 4 }, (_, offset) => addDaysToSlate(today, offset));
+}
 
 type SeedOptions = {
   slateDate: string;

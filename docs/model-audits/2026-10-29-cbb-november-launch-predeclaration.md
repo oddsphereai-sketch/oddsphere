@@ -71,7 +71,11 @@ immutability, tracking, board counts, and the next scheduled refresh.
 The new date-bounded canonical fixture seed was rehearsed **read-only** on
 October 29 against the paid BALLDONTLIE NCAAB games endpoint for November 1.
 One provider request returned two ET-slate games and four distinct teams;
-`written=false`. The exact-ID/ET-date mapper and lock-identity guard passed
-focused tests. The route is `CBB_CRON_ENABLED` gated and is not scheduled for
-publication. This closes a fixture-mapping implementation gap, **not** the
+`written=false`. November 2 returned 182 ET-slate games and 364 teams in two
+bounded requests; `written=false`. The seed horizon now covers today through
+three days ahead so the November 1 opener is eligible for existing pregame
+collectors before game day. The exact-ID/ET-date mapper and lock-identity guard
+passed focused tests. The route has a once-daily schedule but remains
+`CBB_CRON_ENABLED` gated off until deployed and explicitly enabled. This closes
+a fixture-mapping implementation gap, **not** the
 market-reader, grade, member-snapshot, lock, or tracking gates.

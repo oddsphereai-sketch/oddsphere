@@ -4,8 +4,8 @@
  * unavailable until the complete CBB release is qualified together.
  */
 import { cronHandler } from "@/lib/cron/runCron";
-import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
-import { CBB_FIXTURE_SEED_RELEASE, seedCbbGames } from "@/lib/services/cbb/seedCbbGamesService";
+import { currentSlateDate } from "@/lib/dates/slateDate";
+import { CBB_FIXTURE_SEED_RELEASE, cbbFixtureSeedDates, seedCbbGames } from "@/lib/services/cbb/seedCbbGamesService";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request): Promise<Response> {
     const now = new Date();
     const today = currentSlateDate("cbb", now);
     const season = now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
-    const dates = [today, addDaysToSlate(today, 1)];
+    const dates = cbbFixtureSeedDates(today);
     const seeded = [];
     for (const slateDate of dates) {
       seeded.push(await seedCbbGames({ slateDate, season, apiKey, dryRun: false }));

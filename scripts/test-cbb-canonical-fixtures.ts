@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CbbBallDontLieClient } from "../lib/cbb/ballDontLie";
 import { assertCbbFixtureRefreshSafe, cbbCanonicalGamePayload,
   cbbCanonicalStatus, cbbCanonicalTeamPayload } from "../lib/cbb/canonicalFixture";
-import { selectCbbSlateGames } from "../lib/services/cbb/seedCbbGamesService";
+import { cbbFixtureSeedDates, selectCbbSlateGames } from "../lib/services/cbb/seedCbbGamesService";
 import type { CbbGame, CbbTeam } from "../lib/cbb/types";
 
 const home: CbbTeam = { id: 92, conference_id: 7, name: "Wildcats",
@@ -17,6 +17,9 @@ const nextDay: CbbGame = { ...game, id: 10882409, date: "2026-11-02T05:01:00.000
 
 assert.deepEqual(selectCbbSlateGames([nextDay, late, game], "2026-11-01", 2026).map(row => row.id),
   [game.id, late.id]);
+assert.deepEqual(cbbFixtureSeedDates("2026-10-29"),
+  ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"]);
+assert.throws(() => cbbFixtureSeedDates("2026-11-1"), /Invalid/);
 assert.throws(() => selectCbbSlateGames([game, game], "2026-11-01", 2026), /Duplicate/);
 assert.throws(() => selectCbbSlateGames([{ ...game, status_state: "unknown" }], "2026-11-01", 2026), /unknown/);
 assert.throws(() => selectCbbSlateGames([{ ...game, season: 2025 }], "2026-11-01", 2026), /foreign season/);
