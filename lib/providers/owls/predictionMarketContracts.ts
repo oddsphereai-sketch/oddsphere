@@ -62,7 +62,8 @@ export function parseContractFeed(value:unknown,sport:PredictionMarketSport,kind
     if(kind==="spread"&&suffix!==sideCode+String(Math.ceil(strike!)))continue;
     const p=(bid+ask)/2,totalVolume=count(raw.volume_fp);
     rows.push({ticker,eventTicker,sideCode,team:String(raw.yes_sub_title??raw.title??kind).slice(0,100),gameDate,bid,ask,probability:p,
-      volume24h:count(raw.volume_24h_fp),totalVolume,asOf,history:[[at,p,totalVolume]],contractKind:kind,strike});
+      volume24h:count(raw.volume_24h_fp),totalVolume,asOf,history:[[at,p,totalVolume]],contractKind:kind,strike,
+      ...(typeof raw.open_time==="string"&&Number.isFinite(Date.parse(raw.open_time))?{marketOpenedAt:raw.open_time}:{})});
   }
   if(new Set(rows.map(row=>row.ticker)).size!==rows.length)return null;
   return {release:PREDICTION_MARKET_RELEASE,sport,fetchedAt:new Date(now).toISOString(),kind,contractRelease:PREDICTION_MARKET_CONTRACT_RELEASE,rows};
@@ -89,14 +90,18 @@ function adjustedRow(a:ContractRow,b:ContractRow,invert:boolean,label:string):Re
   if(a.asOf!==b.asOf)return null;
   const p=pushAdjustedProbability(a.probability,b.probability,invert);if(p===null)return null;
   const history=combinedPoints(a.history,b.history,invert);if(!history.length)return null;
+  const opening=a.openingQuote&&b.openingQuote&&a.openingQuote.point[0]===b.openingQuote.point[0]?combinedPoints([a.openingQuote.point],[b.openingQuote.point],invert)[0]:undefined;
   return {...a,ticker:`derived:${a.ticker}|${b.ticker}`,team:label,label,bid:null,ask:null,probability:p,
     volume24h:sum(a.volume24h,b.volume24h),totalVolume:sum(a.totalVolume,b.totalVolume),history,
-    historicalCandles:combinedPoints(a.historicalCandles??[],b.historicalCandles??[],invert)};
+    historicalCandles:combinedPoints(a.historicalCandles??[],b.historicalCandles??[],invert),
+    historyFrom:a.historyFrom&&b.historyFrom?new Date(Math.max(Date.parse(a.historyFrom),Date.parse(b.historyFrom))).toISOString():undefined,
+    openingQuote:opening?{point:opening,kind:a.openingQuote!.kind==="opening_minute"&&b.openingQuote!.kind==="opening_minute"?"opening_minute":"first_available"}:undefined};
 }
 function selectedRow(row:ContractRow,invert:boolean,label:string):ReaderOutcome {
   const flip=(points:PredictionMarketPoint[])=>points.map(point=>[point[0],1-point[1],point[2]] as PredictionMarketPoint);
   return {...row,team:label,label,...(invert?{bid:1-row.ask,ask:1-row.bid,probability:1-row.probability,
-    history:flip(row.history),historicalCandles:flip(row.historicalCandles??[])}:{})};
+    history:flip(row.history),historicalCandles:flip(row.historicalCandles??[]),
+    openingQuote:row.openingQuote?{...row.openingQuote,point:flip([row.openingQuote.point])[0]}:undefined}:{})};
 }
 
 /** Same exact dated matchup, market, direction and threshold. If the exact

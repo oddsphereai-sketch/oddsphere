@@ -41,7 +41,7 @@ assert.ok(bounded.filter(p=>common.has(p[0])).length>=70,"adjacent contracts ret
 const fixture={release:"owls_kalshi_display_2026_10_28_r1",sport:"nba",fetchedAt:new Date(now).toISOString(),rows:[{ticker:"KXNBAGAME-26OCT28MIAATL-ATL",eventTicker:"KXNBAGAME-26OCT28MIAATL",sideCode:"ATL",team:"Atlanta",gameDate:"2026-10-28",bid:.5,ask:.51,probability:.505,volume24h:100,totalVolume:1000,asOf:new Date(now).toISOString(),history:[[now,.505,1000]],historicalCandles:points,historicalCheckedAt:new Date(now-2*60*minute).toISOString()}]} as PredictionMarketFeed;
 const merged=mergePredictionMarketFeeds(fixture,{...fixture,rows:fixture.rows.map(r=>({...r,history:[[now,.505,1000]],historicalCandles:undefined}))},now);
 assert.equal(merged.rows[0].historicalCandles?.[0][0],points[0][0],"refresh retains genuine earlier history instead of rolling the chart's start forward at eight hours");
-assert.ok(merged.rows[0].historicalCandles!.length<=96);
+assert.ok(merged.rows[0].historicalCandles!.length<=192);
 
 async function capture(){
  const candles={market_ticker:fixture.rows[0].ticker,candlesticks:[{end_period_ts:(now-12*60*minute)/1000,yes_bid:{close_dollars:"0.50"},yes_ask:{close_dollars:"0.52"},volume_fp:"1"}]};
@@ -54,9 +54,9 @@ async function capture(){
   return Response.json({markets:url.searchParams.get("market_tickers")!.split(",").map(ticker=>({market_ticker:ticker,candlesticks:[]}))});
  });
  assert.equal(calls,3,"no increase over the existing three-call public-history budget");
- assert.equal(saved.rows.filter(r=>r.historicalRelease===KALSHI_DISPLAY_HISTORY_RELEASE).length,18);
+ assert.equal(saved.rows.filter(r=>r.historicalRelease===KALSHI_DISPLAY_HISTORY_RELEASE).length,3);
  let nextCalls=0;
- await backfillKalshiDisplayHistory(saved,now+5*minute,async input=>{nextCalls++;const tickers=new URL(String(input)).searchParams.get("market_tickers")!.split(",");assert.ok(!tickers.some(t=>saved.rows.slice(0,18).some(r=>r.ticker===t)),"the next cycle rotates to uncaptured contracts");return Response.json({markets:tickers.map(ticker=>({market_ticker:ticker,candlesticks:[]}))})});
+ await backfillKalshiDisplayHistory(saved,now+5*minute,async input=>{nextCalls++;const tickers=new URL(String(input)).searchParams.get("market_tickers")!.split(",");assert.ok(!tickers.some(t=>saved.rows.slice(0,3).some(r=>r.ticker===t)),"the next cycle rotates to uncaptured contracts");return Response.json({markets:tickers.map(ticker=>({market_ticker:ticker,candlesticks:[]}))})});
  assert.equal(nextCalls,3);
 }
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");

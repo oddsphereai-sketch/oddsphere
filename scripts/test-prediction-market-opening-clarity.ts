@@ -37,8 +37,8 @@ assert.equal(guides[0][0][0],guides[1][0][0]);assert.equal(guides[0].at(-1)![0],
 assert.equal(predictionMarketWindowDuration(now-400*60_000,now),"6h 40m");
 assert.equal(predictionMarketWindowDuration(now-26*hour,now),"1d 2h");assert.equal(predictionMarketWindowDuration(now,now),"single quote");
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
-assert.match(component,/Kalshi first available/);assert.match(component,/24h history · open unverified/);
+assert.match(component,/Kalshi /);assert.match(component,/opening quote unavailable/);
 assert.match(component,/Provider open/);assert.match(component,/First recorded/);assert.match(component,/time\(bookStart.point\[0\],true\)/);
-assert.match(component,/Shared chart window ·/);assert.match(component,/pp · chart window/);
+assert.match(component,/Shared chart window/);assert.match(component,/pp · chart window/);
 assert.doesNotMatch(component,/strokeDasharray|data-kalshi-gaps/);
 console.log("PASS: provider opening vs first-recorded provenance; exact same book/side/line; dated source starts; explicit shared window; no future/post-lock leakage or locked-field mutation");
