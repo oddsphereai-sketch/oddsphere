@@ -1,5 +1,25 @@
 # Model change safety protocol
 
+## Owner-directed repair: NBA consumer history continuity
+
+On 2026-10-29 Daniel Mengel required the NBA member card to keep Circa and
+Pinnacle inside the sharp reader while showing the actual mainstream consumer
+line and its real movement history. The r8/r10 locked-snapshot/publication
+follow-up fully paginates the append-only consumer `line_history` chronology
+and merges it only into future-unlocked member evidence. FanDuel, DraftKings,
+BetMGM, Caesars, Fanatics, BetRivers, bet365, and Hard Rock observations may
+therefore populate the public same-book trail; Circa/Pinnacle remain separate
+internal reader and sharp-split inputs.
+
+No observation, opening line, or movement is synthesized. Existing locked
+payloads retain exact precedence, including the approved legacy recovery path.
+The r24 model, r25 market marriage, r15 grade policy, selected exact price,
+forecast, probability, pick, grade, stake, writer, lease, cadence, provider
+inputs, and internal reader chronology are unchanged. Same-input board impact
+must remain zero promotions, zero demotions, zero side changes, zero score
+changes, and zero actionable-count change. Evidence and rollback:
+`docs/model-audits/2026-10-29-nba-consumer-history-continuity.md`.
+
 ## Owner-directed repair: NBA consumer movement-trail coherence
 
 On 2026-10-29 Daniel Mengel confirmed that Circa and Pinnacle should remain

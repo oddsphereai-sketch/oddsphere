@@ -34,6 +34,10 @@ const reader = readFileSync(
   new URL("../app/lab/components/daily-edge/DailyEdgeShell.tsx", import.meta.url),
   "utf8",
 );
+const consumerHistory = readFileSync(
+  new URL("../lib/services/nba/nbaConsumerMemberLineHistory.ts", import.meta.url),
+  "utf8",
+);
 
 for (const required of [
   "loadNbaProfessionalCurrentState",
@@ -60,6 +64,15 @@ assert.doesNotMatch(
 );
 assert.match(pipeline, /splitHighWaterRead[\s\S]*\.gt\("id", lastSplitId\)[\s\S]*\.lte\("id", splitHighWaterId\)/);
 assert.match(pipeline, /priceHighWaterRead[\s\S]*\.gt\("id", lastPriceId\)[\s\S]*\.lte\("id", priceHighWaterId\)/);
+assert.match(pipeline, /loadNbaConsumerMemberLineHistory/);
+assert.match(
+  pipeline,
+  /priceRows:\s*\[[\s\S]*readerPriceRowsByGame[\s\S]*consumerMemberHistory\.rowsByExternalGameId/,
+  "unlocked member evidence must merge consumer history after the professional reader",
+);
+assert.match(consumerHistory, /\.from\("line_history"\)/);
+assert.match(consumerHistory, /\.gt\("id", lastId\)[\s\S]*\.lte\("id", highWaterId\)/);
+assert.match(consumerHistory, /isNbaConsumerExecutionSportsbook/);
 assert.match(
   featureSnapshot,
   /loadCompleteCurrentGameLines\([\s\S]*context:\s*"buildNbaFeatureSnapshots"/,
