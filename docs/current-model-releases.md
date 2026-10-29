@@ -4802,8 +4802,8 @@ The paired live-slate replay is recorded in
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
 - Lock coherence: `nba_lock_coherence_2026_10_15_r2_unified_score_tuple`
-- Member lock publication: `nba_member_lock_publication_2026_10_29_r9_consumer_trail_coherence`
-- Locked member snapshot: `nba_locked_member_snapshot_2026_10_29_r7_consumer_trail_coherence`
+- Member lock publication: `nba_member_lock_publication_2026_10_29_r10_consumer_history_continuity`
+- Locked member snapshot: `nba_locked_member_snapshot_2026_10_29_r8_consumer_history_continuity`
 - Tracking publication: `tracking_refresh_publication_2026_10_20_r3_cfb_collision_avoidance`
 - Official markets: moneyline, spread, and total prospectively from October 20;
   no historical Spread rows are backfilled
