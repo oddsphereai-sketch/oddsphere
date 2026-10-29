@@ -1,6 +1,7 @@
 import { solveCbbResearchRidge } from "./shotProfileResearch";
-import { cbbRepairScore, CBB_NEUTRAL_REPAIR_RELEASE } from "./neutralRepairResearch";
+import { cbbRepairScore, CBB_NEUTRAL_REPAIR_RELEASE, type CbbRepairRow } from "./neutralRepairResearch";
 import type { CbbScoreFeatureRow } from "./scoreResearch";
+import type { CbbForecast } from "./types";
 
 export const CBB_RESIDUAL_STAT_RELEASE = "cbb_candidate_2026_10_28_r12_residual_stats";
 const odd = new Set([1, 4, 5, 7, 8, 9, 10, 15, 19,
@@ -9,6 +10,16 @@ const dot = (a: number[], b: number[]) => a.reduce((s, v, i) => s + v * b[i], 0)
 type OffsetSide = { regressions: number[][]; coefficients: number[] };
 export type CbbResidualStatHead = { release: typeof CBB_RESIDUAL_STAT_RELEASE; trainedThrough: string;
   trainingGameIds: number[]; loss: "squared" | "huber"; margin: OffsetSide; total: OffsetSide };
+/** Same R12 preparation used by research replay; no quote or current outcome enters it. */
+export function prepareCbbResidualStatInput(row: CbbRepairRow, forecast: CbbForecast): CbbScoreFeatureRow {
+  if (forecast.gameId !== row.game.id || forecast.asOf !== row.forecast.asOf || forecast.homeId !== row.game.homeId || forecast.awayId !== row.game.awayId ||
+    forecast.release !== CBB_NEUTRAL_REPAIR_RELEASE || row.features.length !== 19) throw new Error("CBB offset input identity mismatch");
+  const features = [...row.features]; features[1] = forecast.margin / 10; features[2] = (forecast.total - 140) / 20;
+  features[4] = forecast.margin * Math.abs(forecast.margin) / 400;
+  features[15] = row.historyKnown ? features[15] + (row.forecast.margin - forecast.margin) / 20 : 0;
+  features[16] = row.historyKnown ? features[16] + (row.forecast.total - forecast.total) / 20 : 0;
+  return { game: row.game, forecast, features };
+}
 export function cbbResidualStatDesign(row: CbbScoreFeatureRow, market: "margin" | "total") {
   if (row.features.length !== 69 || !row.features.every(Number.isFinite)) throw new Error("invalid CBB residual-stat features");
   return row.game.neutral === true ? row.features.map((v, i) => odd.has(i) === (market === "margin") ? v : 0) : row.features;
