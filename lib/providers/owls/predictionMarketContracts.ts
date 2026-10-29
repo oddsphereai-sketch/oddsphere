@@ -41,6 +41,27 @@ export function readerContractSelection(game:DailyEdgeGameDto,marketKey:keyof Da
   return side?{kind:"spread",line,side,label:`${side==="away"?game.awayTeam:game.homeTeam} ${formatContractLine(line)}`}:null;
 }
 
+/** History is not a Bet grade. A published, explicitly named forecast can
+ * supply direction when the actionable pick is empty. Use the real displayed
+ * sportsbook threshold, never the forecast's probability at a different line.
+ * Frozen callers may REQUEST an actual pre-lock receipt with this identity;
+ * without one they must retain the legacy locked-reader selection above. */
+export function readerHistoryContractSelection(game:DailyEdgeGameDto,marketKey:keyof DailyEdgeGameDto["markets"]):ContractSelection|null {
+  const selected=readerContractSelection(game,marketKey);if(selected)return selected;
+  const market=game.markets[marketKey],forecast=market.marketPrediction;
+  if(market.pick?.trim()||forecast?.status!=="available"||!forecast.label||marketKey==="moneyline"||game.sport==="mlb")return null;
+  const label=forecast.label.trim().replace(/[−–]/g,"-"),line=market.line;
+  if(line===null||!Number.isFinite(line)||Math.abs(line)>500)return null;
+  if(marketKey==="total"){
+    const side=/^over\s+\d+(?:\.\d+)?$/i.test(label)?"over":/^under\s+\d+(?:\.\d+)?$/i.test(label)?"under":null;
+    return side&&line>0?{kind:"total",line,side,label:`${side==="over"?"Over":"Under"} ${line}`}:null;
+  }
+  if(game.sport==="soccer"||game.sport==="ucl")return null;
+  const named=/^(.+?)\s+([+-]?\d+(?:\.\d+)?|PK)$/i.exec(label);
+  const side=named?.[1].toUpperCase()===game.awayTeam.toUpperCase()?"away":named?.[1].toUpperCase()===game.homeTeam.toUpperCase()?"home":null;
+  return side?{kind:"spread",line,side,label:`${side==="away"?game.awayTeam:game.homeTeam} ${formatContractLine(line)}`}:null;
+}
+
 /** Strictly whitelisted full-game series only; half/quarter/props never bleed in. */
 export function parseContractFeed(value:unknown,sport:PredictionMarketSport,kind:ContractKind,now=Date.now()):ContractFeed|null {
   const body=object(value),meta=object(body?.meta),data=object(body?.data);
@@ -148,7 +169,7 @@ export function resolveReaderContract(feed:ContractFeed|null,gameMatch:Predictio
 export function contractsForPublishedReaders(feed:ContractFeed,winners:PredictionMarketFeed,games:DailyEdgeGameDto[],now=Date.now()):ContractFeed {
   const wanted=new Set<string>();
   for(const game of games){
-    const selection=readerContractSelection(game,feed.kind==="total"?"total":"first_inning");if(!selection||selection.kind!==feed.kind)continue;
+    const selection=readerHistoryContractSelection(game,feed.kind==="total"?"total":"first_inning");if(!selection||selection.kind!==feed.kind)continue;
     const match=matchPredictionMarketGame(winners,{sport:feed.sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt??"",awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName},now);
     const resolved=resolveReaderContract(feed,match,selection,now);
     resolved?.context?.sources.forEach(row=>wanted.add(row.ticker));
