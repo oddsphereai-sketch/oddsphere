@@ -4,7 +4,7 @@ import { buildCbbTrainingGames, estimatedPossessions, matchCbbVenue } from "../l
 import { CBB_CANDIDATES, cbbThresholdProbabilities, fitCbbRatings, forecastCbbGame, settleCbbMarket } from "../lib/cbb/model";
 import { CBB_DEVELOPMENT_UNCERTAINTY } from "../lib/cbb/evaluation";
 import { cbbPriceObservations, cbbSameBookMovement, normalizeCbbOdds, reviewCbbQuote } from "../lib/cbb/marketEvidence";
-import { buildCbbRosterContext } from "../lib/cbb/rosterContext";
+import { buildCbbObservedRosterContext, buildCbbRosterContext, buildCbbRosterContextAt, cbbPlayedMinutes } from "../lib/cbb/rosterContext";
 import { CBB_ACTIVATION } from "../lib/cbb/releases";
 import { bindCbbQuoteOrientation, normalizeCbbNamedBookOdds, type CbbNamedOddsRow } from "../lib/cbb/namedBookOdds";
 import frozenCandidate from "../lib/cbb/artifacts/candidate-r1.json";
@@ -99,6 +99,21 @@ assert.equal(bindCbbQuoteOrientation({ ...reversed, sportsbook: "caesars" }, nam
 const player = { id: 20, first_name: "Transfer", last_name: "Player", team: home };
 const historicalPlayer: CbbPlayerSeason = { player, team: away, season: 2024, games_played: 30, min: 30, pts: 500, fga: 350, fgm: 180, fg3m: 30, fta: 140, ftm: 110, turnover: 30 };
 assert.equal(buildCbbRosterContext(92, [player], [historicalPlayer], 2024).incomingTransfers.length, 1);
+const rosterReceipt = { fetchedAt: "2025-10-31T10:00:00Z", data: [player] };
+const priorReceipt = { fetchedAt: "2025-10-31T09:00:00Z", data: [historicalPlayer] };
+assert.equal(buildCbbRosterContextAt(92, rosterReceipt, priorReceipt, 2024, "2025-10-31T11:00:00Z").incomingTransfers.length, 1);
+assert.throws(() => buildCbbRosterContextAt(92, rosterReceipt, priorReceipt, 2024, "2025-10-31T09:30:00Z"), /after pregame/);
+assert.throws(() => buildCbbRosterContextAt(92, rosterReceipt, { ...priorReceipt, data: [{ ...historicalPlayer, season: 2025 }] }, 2024, "2025-10-31T11:00:00Z"), /mixes seasons/);
+const appearances = [
+  { player, team: home, game: { id: 10, date: "2025-11-01T18:00:00Z", season: 2025 }, min: 20 },
+  { player, team: away, game: { id: 11, date: "2025-11-03T18:00:00Z", season: 2025 }, min: 20 },
+];
+assert.equal(buildCbbObservedRosterContext(92, appearances, [historicalPlayer], 2025, "2025-11-01T20:00:00Z").currentPlayers, 0);
+assert.equal(buildCbbObservedRosterContext(92, appearances, [historicalPlayer], 2025, "2025-11-02T01:00:00Z").currentPlayers, 1);
+assert.equal(buildCbbObservedRosterContext(92, appearances, [historicalPlayer], 2025, "2025-11-04T01:00:00Z").currentPlayers, 0);
+assert.equal(cbbPlayedMinutes("12:30"), 12.5);
+assert.equal(cbbPlayedMinutes(null), 0);
+assert.equal(buildCbbObservedRosterContext(92, [{ ...appearances[0], min: null }], [historicalPlayer], 2025, "2025-11-02T01:00:00Z").currentPlayers, 0);
 assert.deepEqual(CBB_ACTIVATION, { status: "prelaunch", memberPublication: false, predictionWrites: false, stakes: false });
 assert.equal(frozenCandidate.release, frozenEvaluation.release);
 assert.equal(frozenCandidate.selectedThroughSeason, 2024);
@@ -121,6 +136,9 @@ async function providerTests() {
   await assert.rejects(() => loop.teams(), /pagination/);
   const wrongSeason = new CbbBallDontLieClient("test-secret", { fetch: (async () => Response.json({ data: [{ ...game, season: 2026 }] })) as typeof fetch });
   await assert.rejects(() => wrongSeason.games(2025), /season/);
+  const playerClient = new CbbBallDontLieClient("test-secret", { fetch: (async () => Response.json({ data: appearances })) as typeof fetch });
+  assert.equal((await playerClient.playerGames([10, 11], 2025)).length, 2);
+  await assert.rejects(() => playerClient.playerGames([10], 2025), /filter/);
   const auth = new CbbBallDontLieClient("test-secret", { fetch: (async () => new Response("test-secret", { status: 401 })) as typeof fetch });
   await assert.rejects(() => auth.teams(), error => !String(error).includes("test-secret") && String(error).includes("401"));
 }

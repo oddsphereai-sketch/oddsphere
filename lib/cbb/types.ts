@@ -28,6 +28,12 @@ export type CbbPlayerSeason = {
   fg3m: number | null; fta: number | null; ftm: number | null; turnover: number | null;
 };
 
+export type CbbPlayerGame = {
+  player: Pick<CbbPlayer, "id" | "first_name" | "last_name">;
+  team: CbbTeam; game: Pick<CbbGame, "id" | "date" | "season">;
+  min: number | string | null;
+};
+
 export type CbbOdds = {
   id: number; game_id: number; vendor: string;
   moneyline_home_odds: number | null; moneyline_away_odds: number | null;

@@ -47,7 +47,9 @@ async function main() {
     if (season < 2026) {
       await cached(`boxes-${season}.json`, () => client.boxes(season));
       // Top-level row.team is the historical team; nested player.team is current and cannot be used as historical roster identity.
-      if (season === 2025) await cached(`players-${season}.json`, () => client.playerSeasons(season));
+      if (season === 2025 || args.includes("--historical-player-seasons")) {
+        await cached(`players-${season}.json`, () => client.playerSeasons(season));
+      }
     }
     if (args.includes("--venues")) await cached(`venues-${season}.json`, async () => {
       const byDate = new Map<string, CbbGame[]>();
@@ -84,7 +86,32 @@ async function main() {
     });
   }
   if (seasons.includes(2026)) {
-    await cached("active-players.json", () => client.activePlayers());
+    if (args.includes("--refresh-roster")) {
+      const receiptDir = resolve(directory, "roster-receipts");
+      await mkdir(receiptDir, { recursive: true });
+      const archive = async (body: { fetchedAt: string; data: unknown[] }) => {
+        if (!Number.isFinite(Date.parse(body.fetchedAt)) || !Array.isArray(body.data) || body.data.length < 10000) {
+          throw new Error("invalid CBB active-roster receipt");
+        }
+        const name = `active-players-${body.fetchedAt.replace(/[:.]/g, "-")}.json`;
+        const path = resolve(receiptDir, name);
+        try {
+          const existing = await readFile(path, "utf8");
+          if (existing !== JSON.stringify(body)) throw new Error("conflicting CBB roster receipt");
+        } catch (error) {
+          if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+          await writeFile(path, JSON.stringify(body), { flag: "wx" });
+        }
+      };
+      try { await archive(JSON.parse(await readFile(resolve(directory, "active-players.json"), "utf8"))); }
+      catch (error) { if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error; }
+      const refreshed = { fetchedAt: new Date().toISOString(), data: await client.activePlayers() };
+      await archive(refreshed);
+      await writeFile(resolve(directory, "active-players.json"), JSON.stringify(refreshed));
+      manifest.push({ file: "active-players.json", fetchedAt: refreshed.fetchedAt, rows: refreshed.data.length,
+        sha256: createHash("sha256").update(JSON.stringify(refreshed.data)).digest("hex") });
+      console.log(`active-players.json: ${refreshed.data.length} refreshed rows; ${client.calls} paid requests this run`);
+    } else await cached("active-players.json", () => client.activePlayers());
     const dates = ["2026-11-01", "2026-11-02"];
     for (const phase of ["opening", "current"] as const) await cached(`odds-${phase}.json`, () => client.odds(dates, phase));
   }

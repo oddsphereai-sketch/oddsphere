@@ -5,7 +5,7 @@ import { fitCbbRatings, forecastCbbGame, cbbThresholdProbabilities } from "../..
 import { CBB_ACTIVATION, CBB_MODEL_RELEASE } from "../../lib/cbb/releases";
 import { CBB_SCORE_RESEARCH_RELEASE } from "../../lib/cbb/scoreResearch";
 import { cbbLaunchReadiness } from "../../lib/cbb/readiness";
-import { buildCbbRosterContext } from "../../lib/cbb/rosterContext";
+import { buildCbbRosterContextAt } from "../../lib/cbb/rosterContext";
 import { cbbPriceObservations, cbbSameBookMovement, normalizeCbbOdds, reviewCbbQuote } from "../../lib/cbb/marketEvidence";
 import { bindCbbQuoteOrientation, normalizeCbbNamedBookOdds, type CbbNamedOddsRow } from "../../lib/cbb/namedBookOdds";
 import type { CbbGame, CbbOdds, CbbPlayer, CbbPlayerSeason, CbbVenue } from "../../lib/cbb/types";
@@ -36,8 +36,8 @@ async function main() {
   const bdlTeams = await read<{ data: CbbGame["home_team"][] }>("teams.json");
   const espnTeams = await read<{ data: EspnCbbTeam[] }>("espn-teams.json").catch(() => null);
   const identities = resolveCbbTeamIdentities(bdlTeams.data, espnTeams?.data ?? []);
-  const roster = await read<{ data: CbbPlayer[] }>("active-players.json");
-  const previousPlayers = await read<{ data: CbbPlayerSeason[] }>("players-2025.json");
+  const roster = await read<{ fetchedAt: string; data: CbbPlayer[] }>("active-players.json");
+  const previousPlayers = await read<{ fetchedAt: string; data: CbbPlayerSeason[] }>("players-2025.json");
   const opening = await read<{ fetchedAt: string; data: CbbOdds[] }>("odds-opening.json");
   const current = await read<{ fetchedAt: string; data: CbbOdds[] }>("odds-current.json");
   const sharp = await read<{ fetchedAt: string; data: CbbNamedOddsRow[] }>("sharp-event-odds.json").catch(() => ({ fetchedAt: new Date().toISOString(), data: [] }));
@@ -56,8 +56,8 @@ async function main() {
       homeId: game.home_team.id, awayId: game.visitor_team.id, neutral: venue?.neutral ?? null }, asOf) : null;
     const forecast = r2?.forecast ?? forecastCbbGame(state, { id: game.id, date: game.date, homeId: game.home_team.id,
       awayId: game.visitor_team.id, neutral: venue?.neutral ?? null }, artifact.uncertainty);
-    const hRoster = buildCbbRosterContext(game.home_team.id, roster.data, previousPlayers.data, 2025);
-    const aRoster = buildCbbRosterContext(game.visitor_team.id, roster.data, previousPlayers.data, 2025);
+    const hRoster = buildCbbRosterContextAt(game.home_team.id, roster, previousPlayers, 2025, asOf);
+    const aRoster = buildCbbRosterContextAt(game.visitor_team.id, roster, previousPlayers, 2025, asOf);
     const named = normalizeCbbNamedBookOdds(game, sharp.data, sharp.fetchedAt, asOf);
     const owlsNamed = owls ? normalizeCbbOwlsCurrent(game, owls.body, owls.fetchedAt, asOf) : null;
     const bdlCurrent = normalizeCbbOdds(current.data.filter(row => row.game_id === game.id), {

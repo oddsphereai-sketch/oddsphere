@@ -1,4 +1,4 @@
-import type { CbbBox, CbbGame, CbbOdds, CbbPlayer, CbbPlayerSeason, CbbTeam } from "./types";
+import type { CbbBox, CbbGame, CbbOdds, CbbPlayer, CbbPlayerGame, CbbPlayerSeason, CbbTeam } from "./types";
 
 type Query = Record<string, string | number | readonly (string | number)[] | undefined>;
 type Page<T> = { data: T[]; meta?: { next_cursor?: number | string | null } };
@@ -73,6 +73,18 @@ export class CbbBallDontLieClient {
   playerSeasons(season: number) {
     return this.all<CbbPlayerSeason>("player_season_stats", { season }, row => `${row.player.id}:${row.team.id}:${row.season}`).then(rows => {
       if (rows.some(row => row.season !== season)) throw new Error("CBB player season filter was not honored");
+      return rows;
+    });
+  }
+  playerGames(gameIds: readonly number[], season: number) {
+    if (!gameIds.length || gameIds.length > 10 || gameIds.some(id => !Number.isInteger(id) || id <= 0)) {
+      throw new Error("CBB player-game capture requires 1–10 exact games");
+    }
+    const ids = new Set(gameIds);
+    return this.all<CbbPlayerGame>("player_stats", { game_ids: gameIds }, row => `${row.game.id}:${row.team.id}:${row.player.id}`).then(rows => {
+      if (rows.some(row => !ids.has(row.game.id) || row.game.season !== season)) {
+        throw new Error("CBB player-game filter was not honored");
+      }
       return rows;
     });
   }
