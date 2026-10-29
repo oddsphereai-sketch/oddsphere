@@ -24,6 +24,8 @@ export class PredictionMarketSourcePins {
   }catch{/* Storage is optional, including private browsing. */}
  }
  request(key:string):string {
+  // The public tracker is authoritative when it supplies an explicit book.
+  if(new URL(key,"https://oddsphere.invalid").searchParams.has("book"))return key;
   this.read();const pin=this.pins.get(predictionMarketSourceKey(key));if(!pin)return key;
   const q=new URLSearchParams(key.split("?")[1]);q.set("book",pin.book);return key.split("?")[0]+"?"+q;
  }

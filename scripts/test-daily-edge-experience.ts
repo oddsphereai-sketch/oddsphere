@@ -1453,9 +1453,8 @@ check(
 );
 check(
   "different primary and tracked-book prices are labeled instead of mixed",
-  candidateSource.includes("displayedBook !== null") &&
-    candidateSource.includes("displayedPrice === stop.american") &&
-    candidateSource.includes(".filter((group) => group.length >= 2 && group.some"),
+  candidateSource.includes("publicMarketDisplayStops(market,displayedPrice,displayedBook)") &&
+    readFileSync("app/lab/lib/publicMarketDisplayTrail.ts","utf8").includes('group.some(stop=>stop.label==="current"||stop.label==="locked")'),
 );
 check(
   "soccer movement rows stay on one sportsbook without a secondary cross-book capture",
