@@ -2,7 +2,7 @@ import type { DailyEdgeGameDto, MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history";opening?:{point:[number,number,number];line:number|null}};
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>};
 export function predictionMarketComparisonBook(locked:boolean,stored:PredictionMarketBookTrail|null,live:PredictionMarketBookTrail|null):PredictionMarketBookTrail|null {
   if(locked||stored?.locked)return stored;
   if(!live)return stored;

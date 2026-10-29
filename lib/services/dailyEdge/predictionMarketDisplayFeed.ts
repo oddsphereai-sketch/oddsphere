@@ -73,7 +73,7 @@ export async function readPublishedPredictionMarketGames(sport:PredictionMarketS
 }
 
 /** Sole capture path: existing five-minute display-feed cron, same sport lease. */
-export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarketSport): Promise<{rows:number;owlsRequests:number;warnings:string[]}> {
+export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarketSport): Promise<{rows:number;owlsRequests:number;warnings:string[];historyCoverage?:Record<string,number>}> {
   const key = process.env.OWLS_INSIGHT_API_KEY;
   if (!key) throw new Error("OWLS_INSIGHT_API_KEY is not configured");
   const target = PREDICTION_MARKET_TARGETS[sport];
@@ -103,14 +103,14 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
     const selected=contractsForPublishedReaders(parsed,winners,games);
     return [mergePredictionMarketFeeds(input.previous,selected) as ContractFeed];
   });
-  // Keep the EXISTING request budget: <=18 contracts / <=3 public-history
-  // batches per sport/cycle, shared fairly across all market types.
+  // Keep the existing <=3 public-history requests per sport/cycle, shared
+  // across market types; longer lifetime queries rotate fewer contracts.
   const pools=[winners,...contracts].map(feed=>[...feed.rows].sort((a,b)=>a.gameDate.localeCompare(b.gameDate)));
   const interleaved:PredictionMarketFeed["rows"]=[];
   for(let i=0;i<Math.max(0,...pools.map(rows=>rows.length));i++)for(const pool of pools)if(pool[i])interleaved.push(pool[i]);
   const [captured,bookCapture]=await Promise.all([
     backfillKalshiDisplayHistory({...winners,rows:interleaved}),
-    games?bookHistoryStored(sport).then(previous=>captureOwlsBookDisplayHistory(previous,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}))).catch(()=>null):Promise.resolve(null),
+    games?bookHistoryStored(sport).then(previous=>captureOwlsBookDisplayHistory(previous,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}),Date.now(),response.rateLimit.remainingMonth)).catch(()=>null):Promise.resolve(null),
   ]);
   if(bookCapture){
     warnings.push(...bookCapture.warnings);
@@ -138,5 +138,6 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // retained receipt while a stale-while-revalidate layer catches up.
   revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0});
   revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0});
-  return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:1+contractInputs.filter(input=>!input.skipped).length+(bookCapture?.requests??0),warnings};
+  return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:1+contractInputs.filter(input=>!input.skipped).length+(bookCapture?.requests??0),warnings,
+    historyCoverage:{kalshiFromOpen:captured.rows.filter(r=>r.historyFrom).length,kalshiPending:captured.rows.filter(r=>!r.historyFrom).length,bookHistoryEntries:bookCapture?.feed.rows.length??0,bookProviderOpenings:bookCapture?.feed.rows.filter(r=>r.opening).length??0}};
 }

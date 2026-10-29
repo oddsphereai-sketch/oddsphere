@@ -43,7 +43,8 @@ export async function GET(request: Request): Promise<Response> {
         partial: predictionMarketError !== null,
         error_message: predictionMarketError,
         api_calls_made: (sport==="soccer"||sport==="ucl"?0:1)+predictionRequests,
-        details: { provider: "owls", retainedRows, predictionMarketRows, predictionMarketError, apiCallAccounting:predictionResult.status==="fulfilled"?"OWLS requests":"OWLS request ceiling on capture error",publicHistoryBatchCeiling:3,bookHistoryRequestCeiling:3,bookDiscoveryRequestCeiling:1 },
+        details: { provider: "owls", retainedRows, predictionMarketRows, predictionMarketError, apiCallAccounting:predictionResult.status==="fulfilled"?"OWLS requests":"OWLS request ceiling on capture error",publicHistoryBatchCeiling:3,bookHistoryRequestCeiling:3,bookDiscoveryRequestCeiling:1,
+          historyCoverage:predictionResult.status==="fulfilled"&&"historyCoverage"in predictionResult.value?predictionResult.value.historyCoverage:null },
       };
     },
     {

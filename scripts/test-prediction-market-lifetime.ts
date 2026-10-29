@@ -44,6 +44,10 @@ async function run(){
  assert.equal(JSON.stringify(game),before,"the scheduled display writer cannot mutate the member DTO");
  const noGames=await captureOwlsBookDisplayHistory(captured.feed,[{...game,lockState:"locked"}],"nba",client,now+60_000);
  assert.equal(noGames.requests,0,"locked boards cannot cause new opening fetches or reconstruction");
+ const reserved=await captureOwlsBookDisplayHistory(null,[game],"nba",client,now,50_000);
+ assert.equal(reserved.requests,0,"optional backfill cannot consume the essential provider reserve");
+ const capped=await captureOwlsBookDisplayHistory({...captured.feed,budget:{day:iso(now).slice(0,10),history:48,discovery:12}},[game],"nba",client,now+3*hour);
+ assert.equal(capped.requests,0,"persisted daily budgets bound both discovery and backfill even across cron invocations");
  const outage=new OwlsInsightClient("fixture-only",{fetchImpl:async()=>{throw new Error("offline");}});
  const retained=await captureOwlsBookDisplayHistory(captured.feed,[game],"nba",outage,now+2*hour);
  assert.deepEqual(retained.feed.rows[0].opening,captured.feed.rows[0].opening,"outage never deletes retained opener");
@@ -75,6 +79,7 @@ async function run(){
  assert.equal(JSON.stringify(game),before);
  const panel=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8"),route=readFileSync("app/api/lab/prediction-market/route.ts","utf8");
  assert.match(panel,/PredictionMarketUnavailable/);assert.match(panel,/Updates automatically when one arrives/);assert.match(panel,/\[key,enabled,kind\]/);
+ assert.match(panel,/Full history/);assert.match(panel,/aria-pressed=\{range===\"24h\"\}/);
  assert.match(route,/availability/);assert.doesNotMatch(route,/client\.(get|odds)|fetch\(/,"member reads cannot call upstream");
  console.log("PASS lifetime history: provider openings, exact line/side/book/event identity, market-specific availability/retry, retained opens, real timestamps, bounded request budgets and immutable locks.");
 }

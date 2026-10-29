@@ -5,7 +5,7 @@ import type {DailyEdgeGameDto} from "@/app/lab/lib/labTypes";
 import {predictionMarketReaderBookTrail,predictionMarketComparisonBook} from "@/app/lab/lib/predictionMarketDisplay";
 import {readerContractSelection} from "@/lib/providers/owls/predictionMarketContracts";
 import {readPredictionMarketBookHistory} from "./predictionMarketDisplayFeed";
-import {bookDisplayTrail} from "@/lib/providers/owls/owlsBookDisplayHistory";
+import {bookDisplayTrail,bookDisplayContext} from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type {PredictionMarketSport} from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Bounded SELECTs of already-collected observations. No provider requests,
@@ -45,8 +45,10 @@ export async function readPredictionMarketBook(game:DailyEdgeGameDto,kind:string
   const selectedBook=predictionMarketComparisonBook(false,published,selectPredictionMarketBook(rows,kind,side,line));
   if(!selectedBook)return null;
   const feed=await readPredictionMarketBookHistory(feedSport).catch(()=>null);
-  const entry=feed?.rows.find(e=>e.event===game.external_id&&e.start===game.gameStartAt&&e.away===game.awayTeam&&e.home===game.homeTeam&&e.kind===kind&&e.side===side&&e.book===selectedBook.sportsbook);
+  const entry=feed?.rows.find(e=>e.event===game.external_id&&Date.parse(e.start)===Date.parse(game.gameStartAt??"")&&e.away===game.awayTeam&&e.home===game.homeTeam&&e.kind===kind&&e.side===side&&e.book===selectedBook.sportsbook);
   const history=entry?bookDisplayTrail(entry,selectedBook.line===undefined?line:selectedBook.line):null;
-  if(!history)return selectedBook;
-  return {...selectedBook,opening:history.opening,historyScope:history.historyScope,points:[...new Map([...history.points,...selectedBook.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0])};
+  if(!entry)return selectedBook;
+  const context=bookDisplayContext(entry),latest=selectedBook.points.at(-1)!;
+  const marketHistory:[number,number,number|null][]=[...(context.marketHistory??[]),[latest[0],latest[2],selectedBook.line===undefined?line:selectedBook.line]];
+  return {...selectedBook,...context,marketHistory:[...new Map(marketHistory.map(p=>[p[0]+"|"+p[2],p])).values()].sort((a,b)=>a[0]-b[0]),points:[...new Map([...(history?.points??[]),...selectedBook.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0])};
 }

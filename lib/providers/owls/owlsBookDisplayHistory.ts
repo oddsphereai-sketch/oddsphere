@@ -12,12 +12,12 @@ import {nflProviderTeamMatches} from "@/lib/services/football/sharpApiNflSplits"
 export const BOOK_DISPLAY_HISTORY_RELEASE="owls_book_display_history_2026_10_29_r1";
 type Quote=[number,number,number|null]; // original epoch, American price, point line
 export type BookDisplayEntry={event:number;start:string;away:string;home:string;kind:string;side:string;book:string;providerEventId:string;checkedAt:string;opening:Quote|null;quotes:Quote[]};
-export type BookDisplayFeed={release:typeof BOOK_DISPLAY_HISTORY_RELEASE;sport:PredictionMarketSport;fetchedAt:string;eventsAt:string;events:RawOwlsOddsEvent[];rows:BookDisplayEntry[]};
+export type BookDisplayFeed={release:typeof BOOK_DISPLAY_HISTORY_RELEASE;sport:PredictionMarketSport;fetchedAt:string;eventsAt:string;events:RawOwlsOddsEvent[];rows:BookDisplayEntry[];budget?:{day:string;history:number;discovery:number}};
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:null;
 const number=(v:unknown):number|null=>v===null||v===undefined||v===""||typeof v==="boolean"||!Number.isFinite(Number(v))?null:Number(v);
 const implied=(a:number)=>a>0?100/(100+a):-a/(100-a);
 const marketKey=(kind:string)=>kind==="moneyline"?"h2h":kind==="spread"?"spreads":kind==="total"?"totals":"btts";
-const identity=(e:Pick<BookDisplayEntry,"event"|"start"|"kind"|"side"|"book">)=>[e.event,e.start,e.kind,e.side,e.book].join("|");
+const identity=(e:Pick<BookDisplayEntry,"event"|"start"|"kind"|"side"|"book">)=>[e.event,Date.parse(e.start),e.kind,e.side,e.book].join("|");
 
 export function matchOwlsDisplayEvent(events:RawOwlsOddsEvent[],game:DailyEdgeGameDto,sport:PredictionMarketSport):RawOwlsOddsEvent|null{
   const matchesTeam=(name:string,abbreviation:string,displayName:string|null|undefined)=>sport==="nfl"?nflProviderTeamMatches(name,abbreviation,displayName??abbreviation):predictionMarketTeamMatches({sideCode:name,team:name},abbreviation,displayName,sport);
@@ -55,7 +55,10 @@ function boundBookQuotes(quotes:Quote[]):Quote[]{
 export function bookDisplayTrail(entry:BookDisplayEntry,line:number|null,ceiling=Date.now()):PredictionMarketBookTrail|null{
   const points=entry.quotes.filter(q=>q[2]===line&&q[0]<=ceiling).map(q=>[q[0],implied(q[1]),q[1]] as [number,number,number]);
   if(!points.length)return null;
-  return {sportsbook:entry.book,line,points,locked:false,historyScope:"provider_history",
+  return {sportsbook:entry.book,line,points,locked:false,...bookDisplayContext(entry,ceiling)};
+}
+export function bookDisplayContext(entry:BookDisplayEntry,ceiling=Date.now()):Pick<PredictionMarketBookTrail,"historyScope"|"opening"|"marketHistory">{
+  return {historyScope:"provider_history",marketHistory:entry.quotes.filter(q=>q[0]<=ceiling),
     ...(entry.opening&&entry.opening[0]<=ceiling?{opening:{point:[entry.opening[0],implied(entry.opening[1]),entry.opening[1]],line:entry.opening[2]}}:{})};
 }
 export function isBookDisplayFeed(value:unknown,sport:PredictionMarketSport):value is BookDisplayFeed{
@@ -64,14 +67,18 @@ export function isBookDisplayFeed(value:unknown,sport:PredictionMarketSport):val
   });
 }
 
-/** <=1 cached discovery + <=3 history requests/sport/cycle. Completed history
- * is reused for an hour; new book/side identities are collected first. */
-export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|null,games:DailyEdgeGameDto[],sport:PredictionMarketSport,client:OwlsInsightClient,now=Date.now()):Promise<{feed:BookDisplayFeed;requests:number;warnings:string[]}>{
+/** <=1 cached discovery + <=3 history requests/sport/cycle; <=12 discovery and
+ * <=48 history requests/sport/day. Openers persist; current quotes already
+ * come from the canonical tape, so full history need only refresh daily. */
+export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|null,games:DailyEdgeGameDto[],sport:PredictionMarketSport,client:OwlsInsightClient,now=Date.now(),remainingMonth:number|null=null):Promise<{feed:BookDisplayFeed;requests:number;warnings:string[]}>{
   const active=games.filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>now&&Date.parse(g.gameStartAt??"")<now+8*86_400_000);
   let events=previous?.events??[],eventsAt=previous?.eventsAt??"1970-01-01",requests=0;const warnings:string[]=[];
-  if(active.length&&(!events.length||now-Date.parse(eventsAt)>60*60_000)){
+  const day=new Date(now).toISOString().slice(0,10),budget=previous?.budget?.day===day?{...previous.budget}:{day,history:0,discovery:0};
+  const reserve=()=>remainingMonth!==null&&remainingMonth<=50_000;
+  if(active.length&&(!events.length||now-Date.parse(eventsAt)>2*60*60_000)&&budget.discovery<12&&!reserve()){
+    budget.discovery++;
     requests++;
-    try{const result=await client.odds<RawOwlsOddsResponse>((sport==="cfb"?"ncaaf":sport==="ucl"?"soccer":sport) as OwlsSport);const data=result.body.data;
+    try{const result=await client.odds<RawOwlsOddsResponse>((sport==="cfb"?"ncaaf":sport==="ucl"?"soccer":sport) as OwlsSport);remainingMonth=result.rateLimit.remainingMonth??remainingMonth;const data=result.body.data;
       if(result.body.success===true&&data){
         const grouped=new Map<string,RawOwlsOddsEvent>();
         for(const e of Array.isArray(data)?data:Object.values(data).flatMap(v=>Array.isArray(v)?v:[]))if(typeof e.eventId==="string"){
@@ -97,16 +104,19 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
       if(books[0]?.key)targets.push({event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side,book:books[0].key});
     }
   }
-  const pending=targets.filter(t=>!rows.has(identity(t))||now-Date.parse(rows.get(identity(t))!.checkedAt)>60*60_000)
-    .sort((a,b)=>Number(rows.has(identity(a)))-Number(rows.has(identity(b)))||Date.parse(rows.get(identity(a))?.checkedAt??"1970-01-01")-Date.parse(rows.get(identity(b))?.checkedAt??"1970-01-01")||a.start.localeCompare(b.start)).slice(0,3);
-  for(const target of pending){
+  const pending=targets.filter(t=>!rows.has(identity(t))||now-Date.parse(rows.get(identity(t))!.checkedAt)>24*60*60_000)
+    .sort((a,b)=>Number(rows.has(identity(a)))-Number(rows.has(identity(b)))||Date.parse(rows.get(identity(a))?.checkedAt??"1970-01-01")-Date.parse(rows.get(identity(b))?.checkedAt??"1970-01-01")||a.start.localeCompare(b.start));
+  if(pending.length&&(reserve()||budget.history>=48))warnings.push("book history: bounded backfill deferred to protect provider allowance; retained quotes remain available");
+  for(const target of pending.slice(0,Math.min(3,Math.max(0,48-budget.history)))){
+    if(reserve())break;budget.history++;
     requests++;
     try{
       const result=await client.get<unknown>("/api/odds/history",{eventId:target.providerEventId,book:target.book,market:marketKey(target.kind),side:target.side});
+      remainingMonth=result.rateLimit.remainingMonth??remainingMonth;
       const parsed=parseOwlsBookDisplayHistory(result.body,target,now),old=rows.get(identity(target));
-      if(parsed)rows.set(identity(target),{...parsed,opening:old?.opening??parsed.opening,quotes:boundBookQuotes([...(old?.quotes??[]),...parsed.quotes])});
+      if(parsed){rows.set(identity(target),{...parsed,opening:old?.opening??parsed.opening,quotes:boundBookQuotes([...(old?.quotes??[]),...parsed.quotes])});if(!old?.opening&&!parsed.opening)warnings.push(`book history: ${target.event}/${target.kind} opener unavailable`);}
       else warnings.push(`book history: ${target.event}/${target.kind} unavailable; retained`);
     }catch{warnings.push(`book history: ${target.event}/${target.kind} request failed; retained`);}
   }
-  return {feed:{release:BOOK_DISPLAY_HISTORY_RELEASE,sport,fetchedAt:new Date(now).toISOString(),eventsAt,events,rows:[...rows.values()].sort((a,b)=>a.start.localeCompare(b.start)).slice(0,450)},requests,warnings};
+  return {feed:{release:BOOK_DISPLAY_HISTORY_RELEASE,sport,fetchedAt:new Date(now).toISOString(),eventsAt,events,budget,rows:[...rows.values()].sort((a,b)=>a.start.localeCompare(b.start)).slice(0,450)},requests,warnings};
 }
