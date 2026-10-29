@@ -103,6 +103,35 @@ remains explicitly model-only where it is actionable; absence is not an
 affirmative professional-book signal. This is a point-in-time source receipt,
 not a conclusion about what will be available closer to tip-off.
 
+The private preview now supports `--candidate=r5 --refresh-market`: one bounded
+odds GET and one splits GET produce an immutable local source receipt before
+the same invocation evaluates the CBB reader and all six provisional market
+rows. It never substitutes an old cache after a refresh failure and has no
+production writer. The grade policy advances to r4 so both target and reference
+quotes must have a genuinely fresh bookmaker observation, not just a fresh
+HTTP receipt. A deterministic transition test proves that newly arrived,
+fresh target-excluded Pinnacle evidence changes the Spread corroboration state
+from `unavailable` to `agrees`, while the score remains unchanged under the
+still-unqualified prediction reader; stale professional evidence is rejected.
+The same private pull now attaches exact-event Owl's split evidence when it
+exists: provider event ID is tied to the independently verified teams and tip
+time, reversed home/away naming is reconciled, and each complete or truthful
+single-axis pair retains named book, market, side, clock, and money-minus-ticket
+difference when both axes exist. The current zero-row split response therefore
+stays unavailable; a synthetic arrival test proves a +40-point money/ticket
+divergence maps to the correct canonical team without inventing a prediction
+effect. Splits still have no CBB score or grade authority until a reader is
+qualified. The live receipt showed that Owl's repeats the Villanova–Notre Dame
+event once per book under the same event ID; the exact-event matcher accepts
+those repetitions but rejects two distinct IDs for one fixture.
+At 17:41 UTC, the refreshed private board had two games and six markets:
+zero Best Angles, three model-only Leans, two Watchlists, one No Play, and zero
+Holds. No Circa/Pinnacle CBB prices or split games arrived in that pull. The
+prior capture's actionable count was three, so r4 causes zero promotions,
+zero demotions, and zero net board change on this live-source rehearsal. This
+is ingestion and provisional-grade plumbing, not proof of a market-driven
+accuracy improvement or authorization to publish.
+
 ## First private execution receipt
 
 The new date-bounded canonical fixture seed was rehearsed **read-only** on

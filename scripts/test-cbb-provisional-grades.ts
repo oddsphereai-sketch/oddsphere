@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";
 import { gradeCbbProvisional } from "../lib/cbb/provisionalGradePolicy";
+import { cbbCurrentSplitEvidence } from "../lib/cbb/owlsSplitEvidence";
 import type { CbbForecast, CbbQuote } from "../lib/cbb/types";
 
 const asOf = "2026-11-01T12:00:00.000Z";
@@ -45,6 +46,10 @@ assert.equal(gradeCbbProvisional({ ...input, references: [{ ...sharp, sportsbook
   .referenceState, "unavailable");
 assert.equal(gradeCbbProvisional({ ...input, target: { ...target, fetchedAt: "2026-11-01T09:00:00.000Z" } })
   .grade, "Held");
+assert.equal(gradeCbbProvisional({ ...input, target: { ...target, providerObservedAt: "2026-11-01T09:00:00.000Z" } })
+  .grade, "Held");
+assert.equal(gradeCbbProvisional({ ...input, references: [{ ...sharp, providerObservedAt: "2026-11-01T09:00:00.000Z" }] })
+  .referenceState, "unavailable");
 assert.equal(gradeCbbProvisional({ ...input, forecast: { ...forecast, inputStatus: "incomplete" } })
   .grade, "Held");
 assert.throws(() => gradeCbbProvisional({ ...input, forecast: { ...forecast, gameId: 9 } }), /identity/);
@@ -53,6 +58,10 @@ const moneyline: CbbQuote = { ...target, market: "moneyline", line: null,
 const total: CbbQuote = { ...target, market: "total", line: 148.5,
   firstPrice: -110, secondPrice: -110 };
 const board = buildCbbProvisionalBoard(forecast, [moneyline, target, total, sharp]);
+const beforeProfessionalArrival = buildCbbProvisionalBoard(forecast, [moneyline, target, total]);
+assert.equal(beforeProfessionalArrival.rows.find(row => row.market === "spread")?.referenceState, "unavailable");
+assert.equal(board.rows.find(row => row.market === "spread")?.referenceState, "agrees");
+assert.deepEqual(board.score, beforeProfessionalArrival.score);
 assert.equal(board.rows.length, 3);
 assert.deepEqual(board.rows.map(row => row.market), ["moneyline", "spread", "total"]);
 assert.equal(board.rows.find(row => row.market === "spread")?.grade, "Best Angle");
@@ -61,4 +70,39 @@ assert.ok(Math.abs(board.score.home + board.score.away - board.score.total) < 1e
 assert.ok(Math.abs(board.score.home - board.score.away - board.score.margin) < 1e-8);
 assert.throws(() => buildCbbProvisionalBoard({ ...forecast, total: forecast.total + 1 }, [moneyline, target, total]), /coherent/);
 assert.throws(() => buildCbbProvisionalBoard(forecast, [{ ...target, gameId: 9 }]), /cross-game/);
+const cbbGame = { id: forecast.gameId, date: "2026-11-01T14:30:00.000Z", season: 2026,
+  status: "pre", period: 0, home_score: 0, away_score: 0,
+  home_team: { id: forecast.homeId, full_name: "Villanova Wildcats", college: "Villanova",
+    name: "Wildcats", abbreviation: "VILL", conference_id: 1 },
+  visitor_team: { id: forecast.awayId, full_name: "Notre Dame Fighting Irish", college: "Notre Dame",
+    name: "Fighting Irish", abbreviation: "ND", conference_id: 2 } };
+const providerOdds = { success: true, data: [{ id: "provider-7", sport: "ncaab",
+  home_team: "Notre Dame", away_team: "Villanova", commence_time: cbbGame.date }] };
+const providerSplitGame = { event_id: "provider-7", home_team: "Notre Dame", away_team: "Villanova",
+  splits: [{ book: "circa", as_of: "2026-11-01T11:50:00.000Z",
+    moneyline: { home_bets_pct: 20, away_bets_pct: 80, home_handle_pct: 60, away_handle_pct: 40 },
+    spread: { home_bets_pct: 30, away_bets_pct: 70, home_line: 7.5, away_line: -7.5 } }] };
+const providerSplits = { sport: "ncaab", data: [providerSplitGame], meta: { status: "partial" } };
+const splitEvidence = cbbCurrentSplitEvidence(cbbGame, providerOdds, providerSplits,
+  "2026-11-01T11:55:00.000Z", asOf);
+assert.equal(splitEvidence.eventId, "provider-7");
+assert.equal(splitEvidence.rows.length, 4);
+assert.equal(cbbCurrentSplitEvidence(cbbGame, { ...providerOdds, data: [...providerOdds.data, providerOdds.data[0]] },
+  providerSplits, "2026-11-01T11:55:00.000Z", asOf).rows.length, 4);
+assert.equal(cbbCurrentSplitEvidence(cbbGame, { ...providerOdds, data: [...providerOdds.data,
+  { ...providerOdds.data[0], id: "different-event" }] }, providerSplits,
+"2026-11-01T11:55:00.000Z", asOf).reason, "ambiguous_odds_event");
+assert.deepEqual(splitEvidence.rows.find(row => row.market === "moneyline" && row.selection === "second"), {
+  market: "moneyline", sourceBook: "circa", observedAt: "2026-11-01T11:50:00.000Z",
+  selection: "second", ticketsPct: 0.2, moneyPct: 0.6, moneyMinusTicketsPoints: 40 });
+assert.equal(splitEvidence.rows.find(row => row.market === "spread" && row.selection === "second")?.moneyMinusTicketsPoints, null);
+assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
+  data: [{ ...providerSplitGame, event_id: "other" }] }, "2026-11-01T11:55:00.000Z", asOf).reason,
+"event_split_unavailable");
+assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
+  data: [{ ...providerSplitGame, home_team: "Duke" }] }, "2026-11-01T11:55:00.000Z", asOf).reason,
+"split_participant_mismatch");
+assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
+  data: [{ ...providerSplitGame, splits: [{ ...providerSplitGame.splits[0], as_of: "2026-11-01T09:00:00.000Z" }] }] },
+"2026-11-01T11:55:00.000Z", asOf).rows.length, 0);
 console.log("CBB provisional exact-quote grade tests passed");

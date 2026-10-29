@@ -3,7 +3,7 @@ import { cbbExactMarketCenter } from "./marketReaderResearch";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
 /** Candidate only: not imported by a member reader or prediction writer. */
-export const CBB_PROVISIONAL_GRADE_RELEASE = "cbb_candidate_2026_10_29_r3_ambiguous_reference_rejection" as const;
+export const CBB_PROVISIONAL_GRADE_RELEASE = "cbb_candidate_2026_10_29_r4_observed_quote_freshness" as const;
 
 export type CbbProvisionalGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play" | "Held";
 export type CbbGradeEvidence = {
@@ -23,6 +23,7 @@ function validQuote(quote: CbbQuote, forecast: CbbForecast, asOfMs: number): boo
   if (quote.gameId !== forecast.gameId || quote.phase !== "current" ||
     !Number.isFinite(observed) || !Number.isFinite(fetched) ||
     observed > fetched || fetched > asOfMs || asOfMs - fetched > 60 * 60_000 ||
+    asOfMs - observed > 60 * 60_000 ||
     quote.market !== "moneyline" && (quote.line === null || !Number.isFinite(quote.line))) return false;
   try {
     const hold = cbbImpliedProbability(quote.firstPrice) + cbbImpliedProbability(quote.secondPrice);

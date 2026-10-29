@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { matchCbbVenue, type EspnCbbEvent } from "../../lib/cbb/dataset";
@@ -11,11 +12,15 @@ import { bindCbbQuoteOrientation, normalizeCbbNamedBookOdds, type CbbNamedOddsRo
 import type { CbbGame, CbbOdds, CbbPlayer, CbbPlayerSeason, CbbVenue } from "../../lib/cbb/types";
 import { forecastCbbCandidateR2 } from "../../lib/cbb/candidateR2Runtime";
 import { normalizeCbbOwlsCurrent } from "../../lib/cbb/owlsMarketEvidence";
+import { cbbCurrentSplitEvidence } from "../../lib/cbb/owlsSplitEvidence";
+import { buildCbbProvisionalBoard } from "../../lib/cbb/provisionalBoard";
 import { buildCbbMarketReaderFeatures, CBB_MARKET_READER_RESEARCH_RELEASE } from "../../lib/cbb/marketReaderResearch";
 import { applyCbbTotalOnlyMarketHead, chooseCbbCompleteTargetBook, CBB_TOTAL_ONLY_MARKET_RESEARCH_RELEASE,
   type CbbTotalOnlyMarketHead } from "../../lib/cbb/totalOnlyMarketResearch";
 import { resolveCbbTeamIdentities, type EspnCbbTeam } from "../../lib/cbb/teamIdentity";
 import type { RawOwlsOddsResponse } from "../../lib/providers/owls/owlsSharpBookOdds";
+import type { RawOwlsSplitsResponse } from "../../lib/providers/owls/owlsSharpBookSplits";
+import { OwlsInsightClient } from "../../lib/providers/owls/owlsInsightClient";
 
 const args = process.argv.slice(2);
 if (args.some(arg => /^(--write|--publish|--activate)/.test(arg))) throw new Error("CBB preview cannot publish");
@@ -24,10 +29,35 @@ const date = args.find(arg => arg.startsWith("--date="))?.slice(7) ?? "2026-11-0
 const candidateR17 = args.includes("--candidate=r17");
 const candidateR5 = args.includes("--candidate=r5") || candidateR17;
 const candidateR2 = args.includes("--candidate=r2") || candidateR5;
+const refreshMarket = args.includes("--refresh-market");
+if (refreshMarket && !candidateR5) throw new Error("Fresh CBB market evidence requires a market candidate");
 const read = async <T>(name: string): Promise<T> => JSON.parse(await readFile(resolve(dir, name), "utf8"));
 const etDay = (value: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
 const escape = (value: unknown) => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+async function freshMarketReceipt() {
+  const client = new OwlsInsightClient(process.env.OWLS_INSIGHT_API_KEY ?? "");
+  const [odds, splits] = await Promise.all([
+    client.odds<RawOwlsOddsResponse>("ncaab"),
+    client.splits<RawOwlsSplitsResponse>("ncaab"),
+  ]);
+  if (odds.body.success === false || !odds.body.data ||
+    (typeof splits.body.sport === "string" && splits.body.sport !== "ncaab") ||
+    !Array.isArray(splits.body.data)) {
+    throw new Error("CBB market provider reported failure; stale cache cannot replace this pull");
+  }
+  const fetchedAt = new Date().toISOString();
+  const receipt = { fetchedAt, odds: odds.body, splits: splits.body, productionWrites: 0 };
+  const serialized = JSON.stringify(receipt);
+  if (process.env.OWLS_INSIGHT_API_KEY && serialized.includes(process.env.OWLS_INSIGHT_API_KEY)) {
+    throw new Error("CBB market receipt echoed credential");
+  }
+  const digest = createHash("sha256").update(serialized).digest("hex").slice(0, 16);
+  const receiptPath = resolve(dir, `owls-cbb-private-${Date.parse(fetchedAt)}-${digest}.json`);
+  await writeFile(receiptPath, serialized, { flag: "wx" });
+  return { odds: { fetchedAt, body: odds.body }, splits: splits.body,
+    receipt: { path: receiptPath, sha256Prefix: digest, fetchedAt } };
+}
 async function main() {
   const artifact = await read<Parameters<typeof fitCbbRatings>[1] & { uncertainty: Parameters<typeof forecastCbbGame>[2]; prior: NonNullable<Parameters<typeof fitCbbRatings>[1]["prior"]> }>("candidate-artifact.json");
   let report = await read<{ confirmation: { wins: number; losses: number; accuracy: number; teamScoreMae: number; marginMae: number; totalMae: number } }>("evaluation-report.json");
@@ -41,7 +71,8 @@ async function main() {
   const opening = await read<{ fetchedAt: string; data: CbbOdds[] }>("odds-opening.json");
   const current = await read<{ fetchedAt: string; data: CbbOdds[] }>("odds-current.json");
   const sharp = await read<{ fetchedAt: string; data: CbbNamedOddsRow[] }>("sharp-event-odds.json").catch(() => ({ fetchedAt: new Date().toISOString(), data: [] }));
-  const owls = candidateR5 ? await read<{ fetchedAt: string; body: RawOwlsOddsResponse }>("owls-cbb-current.json") : null;
+  const freshMarket = refreshMarket ? await freshMarketReceipt() : null;
+  const owls = candidateR5 ? freshMarket?.odds ?? await read<{ fetchedAt: string; body: RawOwlsOddsResponse }>("owls-cbb-current.json") : null;
   const readerExperiment = candidateR5 ? await read<Record<string, unknown>>("market-reader-joint-objective-report.json") : null;
   const totalHead = candidateR17 ? await read<CbbTotalOnlyMarketHead>("candidate-r17-total-only-head.json") : null;
   const venues = await read<{ data: CbbVenue[] }>("venues-2026.json");
@@ -60,6 +91,8 @@ async function main() {
     const aRoster = buildCbbRosterContextAt(game.visitor_team.id, roster, previousPlayers, 2025, asOf);
     const named = normalizeCbbNamedBookOdds(game, sharp.data, sharp.fetchedAt, asOf);
     const owlsNamed = owls ? normalizeCbbOwlsCurrent(game, owls.body, owls.fetchedAt, asOf) : null;
+    const marketSplitEvidence = freshMarket ? cbbCurrentSplitEvidence(game, freshMarket.odds.body,
+      freshMarket.splits, freshMarket.odds.fetchedAt, asOf) : null;
     const bdlCurrent = normalizeCbbOdds(current.data.filter(row => row.game_id === game.id), {
       gameId: game.id, startsAt: game.date, asOf, fetchedAt: current.fetchedAt, phase: "current",
     });
@@ -76,7 +109,10 @@ async function main() {
     const marketOutcome = totalHead && marketContext && targetBook !== "unavailable" ?
       applyCbbTotalOnlyMarketHead(forecast, marketContext.features, totalHead) : null;
     const finalForecast = marketOutcome?.forecast ?? forecast;
+    const provisionalBoard = candidateR5 ? buildCbbProvisionalBoard(finalForecast, authoritativeQuotes) : null;
     cards.push({ game, venue, forecast: finalForecast, roster: { home: hRoster, away: aRoster },
+      marketSplitEvidence,
+      provisionalBoard,
       teamIdentity: { home: identities.get(game.home_team.id) ?? null, away: identities.get(game.visitor_team.id) ?? null },
       inputAsOf: { schedule: schedule.fetchedAt, prices: candidateR5 ? owls!.fetchedAt : current.fetchedAt,
         ...(candidateR5 ? { owls: owls!.fetchedAt } : { sharp: sharp.fetchedAt }) },
@@ -106,7 +142,10 @@ async function main() {
   const readiness = { ...cbbLaunchReadiness({ independent_confirmation: { passed: true, evidence: candidateR2
     ? "score-improvement-report.json: 2024 selection, opened 2025 paired diagnostic" : "evaluation-report.json: chronological 2025 confirmation" } }), release };
   const outputName = candidateR17 ? `preview-total-only-${date}` : candidateR5 ? `preview-market-${date}` : `preview-${date}`;
-  const payload = { generatedAt: asOf, date, release, candidate: candidateR17 ? "r17_total_only_private" : candidateR5 ? "r5_integration_audit" : candidateR2 ? "r2" : "r1", activation: CBB_ACTIVATION, readiness, readerExperiment, cards };
+  const payload = { generatedAt: asOf, date, release, candidate: candidateR17 ? "r17_total_only_private" : candidateR5 ? "r5_integration_audit" : candidateR2 ? "r2" : "r1", activation: CBB_ACTIVATION, readiness, readerExperiment,
+    marketSource: freshMarket ? { receipt: freshMarket.receipt, oddsBooksReturned: freshMarket.odds.body.meta?.booksReturned ?? [],
+      splitStatus: freshMarket.splits.meta?.status ?? "unknown", splitGames: freshMarket.splits.data?.length ?? 0 } : null,
+    cards };
   await writeFile(resolve(dir, `${outputName}.json`), JSON.stringify(payload, null, 2));
   const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OddsSphere CBB • Private candidate</title><style>
   *{box-sizing:border-box}body{margin:0;background:#0b111a;color:#e5eaf1;font:15px/1.5 system-ui,sans-serif}main{max-width:1120px;margin:auto;padding:40px 24px}h1{font-size:32px;margin:8px 0}.muted{color:#a2aec0}.tag{color:#64d8c6;font-size:12px;text-transform:uppercase;letter-spacing:1.5px}.summary{display:flex;gap:16px;flex-wrap:wrap;margin:26px 0}.stat,article{background:#131d2a;border:1px solid #293649;border-radius:14px;padding:20px}.stat{min-width:170px}.stat strong{display:block;font-size:25px}article{margin:22px 0}.teams{display:flex;justify-content:space-between;gap:12px}.teams h2{font-size:22px;margin:0}.score{font-size:32px;font-weight:700;white-space:nowrap}.metrics{display:flex;gap:26px;flex-wrap:wrap;margin:16px 0}.metrics span{color:#a2aec0}.metrics b{color:#e5eaf1;margin-left:8px}table{border-collapse:collapse;width:100%;margin-top:20px}td,th{text-align:left;border-bottom:1px solid #293649;padding:10px 8px}th{color:#a2aec0;font-size:12px}details{margin-top:18px}ul{padding-left:20px}.note{padding:14px 18px;border-left:3px solid #64d8c6;background:#15232c;margin:24px 0}a{color:#64d8c6}@media(max-width:600px){main{padding:24px 14px}.teams{display:block}.score{margin-top:10px}td,th{padding:8px 3px;font-size:12px}.stat{min-width:140px;flex:1}}
