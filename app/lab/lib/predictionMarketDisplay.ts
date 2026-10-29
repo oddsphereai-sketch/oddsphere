@@ -29,6 +29,28 @@ export function predictionMarketAnchorIndices(points:ReadonlyArray<readonly [num
 }
 const pickLabel=(value:string|null|undefined)=>value?.replace(/\s+ML$/i,"").trim().toUpperCase().replace(/^TIE$/,"DRAW");
 
+export type PredictionMarketBookStart={kind:"provider_opening"|"first_recorded";point:[number,number,number]};
+/** Opening provenance is not implied by the left edge of a rolling chart.
+ * Only an explicit same-book, same-side, same-line provider opening may carry
+ * that label. Earlier stored evidence can be described without inserting it
+ * into the shared recent-window chart or changing a locked member payload. */
+export function predictionMarketBookStart(market:MarketEdgeDto,label:string,book:PredictionMarketBookTrail,targetLine:number|null,ceiling:number):PredictionMarketBookStart|null {
+  const selected=pickLabel(label),stops=selected===pickLabel(market.pick)?market.oddsTrail:selected===pickLabel(market.opposingOddsTrail?.label)?market.opposingOddsTrail?.stops:[];
+  const line=book.line===undefined?targetLine:book.line;
+  const eligible=(stops??[]).filter(stop=>stop.sportsbook?.trim().toLowerCase()===book.sportsbook&&stop.line===line&&implied(stop.american)!==null&&Number.isFinite(Date.parse(stop.observedAt??""))&&Date.parse(stop.observedAt!)<=ceiling);
+  const openings=eligible.filter(stop=>stop.source==="provider_opening").sort((a,b)=>Date.parse(a.observedAt!)-Date.parse(b.observedAt!));
+  if(openings.length){const first=openings[0];return {kind:"provider_opening",point:[Date.parse(first.observedAt!),implied(first.american)!,first.american]};}
+  const recorded:Array<[number,number,number]>=[...eligible.map(stop=>[Date.parse(stop.observedAt!),implied(stop.american)!,stop.american] as [number,number,number]),...book.points.filter(p=>p[0]<=ceiling)].sort((a,b)=>a[0]-b[0]);
+  return recorded.length?{kind:"first_recorded",point:recorded[0]}:null;
+}
+
+export function predictionMarketWindowDuration(start:number,end:number):string {
+  const minutes=Math.max(0,Math.round((end-start)/60_000));
+  if(!minutes)return "single quote";
+  const days=Math.floor(minutes/1440),hours=Math.floor(minutes%1440/60),remaining=minutes%60;
+  return [days?days+"d":null,hours?hours+"h":null,remaining?remaining+"m":null].filter(Boolean).join(" ");
+}
+
 /** Use the exact selected outcome's real single-book moneyline observations. */
 export function predictionMarketBookTrail(moneyline:MarketEdgeDto, outcomeLabel:string, now:number, targetLine:number|null=null):PredictionMarketBookTrail|null {
   const selected=pickLabel(outcomeLabel);
