@@ -63,6 +63,17 @@ export class CbbBallDontLieClient {
       return rows;
     });
   }
+  /** Date-bounded slate capture; callers still verify the ET slate date. */
+  gamesForDates(dates: readonly string[], season: number) {
+    if (!Number.isInteger(season) || dates.length < 1 || dates.length > 7 ||
+      dates.some(date => !/^\d{4}-\d{2}-\d{2}$/.test(date)) || new Set(dates).size !== dates.length) {
+      throw new Error("CBB game capture requires 1–7 distinct YYYY-MM-DD dates and a season");
+    }
+    return this.all<CbbGame>("games", { dates, seasons: [season] }, row => String(row.id)).then(rows => {
+      if (rows.some(row => row.season !== season)) throw new Error("CBB game date/season filter was not honored");
+      return rows;
+    });
+  }
   boxes(season: number) {
     return this.all<CbbBox>("team_stats", { seasons: [season] }, row => `${row.game.id}:${row.team.id}`).then(rows => {
       if (rows.some(row => row.game.season !== season)) throw new Error("CBB box season filter was not honored");
