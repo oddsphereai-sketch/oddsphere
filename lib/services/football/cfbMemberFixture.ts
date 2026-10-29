@@ -90,6 +90,8 @@ import {
   CFB_V1_BASE_PROBABILITY_RELEASE,
   CFB_V1_BASE_SCORE_ARTIFACT_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_NORMALIZED_PMF_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE,
   CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE,
@@ -132,7 +134,7 @@ import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMark
 import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_29_r96_owls_grade_price_ingestion" as const;
+  "cfb_v1_member_fixture_2026_10_29_r97_normalized_pmf_coherence" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_27_r81_near_tie_pmf_winner_coherence" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
@@ -1099,7 +1101,10 @@ export function selectLatestCfbMemberEvidenceRows(
   const previousAuthority = pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ?? exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const owlsGradePrevious = completeRowsForRelease(owlsGradePreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE) ??
     (previousAuthority ? immutableBoundaryTransitionRows(owlsGradePreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE, previousAuthority) : null);
-  const coordinatorIntegrationPreviousAuthority = owlsGradePrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
+  const normalizedPmfPreviousRows = rows.filter(row => String(row.payload.decisions.decisionRelease) === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE);
+  const normalizedPmfPrevious = completeRowsForRelease(normalizedPmfPreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE) ??
+    (owlsGradePrevious ? immutableBoundaryTransitionRows(normalizedPmfPreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE, owlsGradePrevious) : null);
+  const coordinatorIntegrationPreviousAuthority = normalizedPmfPrevious ?? owlsGradePrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
     ? immutableBoundaryTransitionRows(
@@ -1112,6 +1117,7 @@ export function selectLatestCfbMemberEvidenceRows(
       )
     : null;
   if (immutableBoundaryTransition) return immutableBoundaryTransition;
+  if (normalizedPmfPrevious) return normalizedPmfPrevious;
   if (owlsGradePrevious) return owlsGradePrevious;
   if (pmfCoherencePrevious) return pmfCoherencePrevious;
   if (parlayLeanPrevious) return parlayLeanPrevious;
@@ -1325,6 +1331,7 @@ function latestValidRowsForRelease(
     : CFB_V1_PROBABILITY_RELEASE;
   const expectedCalibrationRelease = priorCompatibilityFamily
     ? CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE
+    : decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE ? CFB_V1_NORMALIZED_PMF_PREVIOUS_CALIBRATION_RELEASE
     : decisionRelease === CFB_V1_DECISION_RELEASE ? CFB_V1_CALIBRATION_RELEASE : CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE;
   const latest = new Map<string, CfbForwardStoredEvidence>();
   for (const row of rows) {

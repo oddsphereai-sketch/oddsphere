@@ -134,6 +134,8 @@ import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_NORMALIZED_PMF_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE,
   CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PMF_COHERENCE_PREVIOUS_CALIBRATION_RELEASE,
@@ -982,7 +984,8 @@ function releaseTransitionPayload(args: {
   if (args.decisionRelease !== CFB_V1_DECISION_RELEASE) {
     next.decisions.evaluatedBets = next.decisions.evaluatedBets.map(decision => ({
       ...decision,
-      calibrationRelease: CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE as typeof decision.calibrationRelease,
+      calibrationRelease: (args.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE
+        ? CFB_V1_NORMALIZED_PMF_PREVIOUS_CALIBRATION_RELEASE : CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE) as typeof decision.calibrationRelease,
     }));
   }
   return next;
@@ -1016,6 +1019,27 @@ assert.equal(JSON.stringify(oldLock), oldLockBytes, "release transition cannot m
 assert.deepEqual(cfbLockPlanningEvidence([oldLock]), [oldLock], "writer lock planning keeps the exact r54 lock and prevents a replacement capture");
 assert.equal(owlsGradeTransition.find(row => row.providerGameId === "same-schema-unlocked")?.id, "r55-same-schema-unlocked");
 assert.equal(cfbForwardReleaseRefreshNeed([oldLock], new Date(Date.parse(oldLock.gameStartAt) + 60_000).toISOString()), null, "release refresh must not schedule a completed old locked row for rewriting");
+
+const normalizedPreviousRows = sameSchemaPreviousRows.map(row => {
+  const previous = releaseTransitionPayload({ providerGameId: row.providerGameId, gameStartsAt: row.gameStartAt,
+    capturedAt: row.capturedAt, stage: row.stage === "t60" ? "t60" : "unlocked",
+    schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, memberRelease: CFB_FORWARD_MEMBER_RELEASE,
+    decisionRelease: CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE, forecastRelease: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE });
+  previous.decisions.evaluatedBets = previous.decisions.evaluatedBets.map(decision => ({ ...decision,
+    schemaRelease: "cfb_v1_exact_price_decision_tuple_2026_10_29_r42_owls_grade_price_ingestion" as typeof decision.schemaRelease }));
+  return { ...row, id: `r55-${row.providerGameId}`, payload: previous, payloadSha256: hashCfbForwardEvidencePayload(previous) };
+});
+const normalizedOldLock = normalizedPreviousRows.find(row => row.stage === "t60")!;
+const normalizedOldBytes = JSON.stringify(normalizedOldLock);
+const normalizedTransition = selectLatestCfbMemberEvidenceRows([...normalizedPreviousRows,
+  { ...evidence, id: "r56-same-schema-unlocked", providerGameId: "same-schema-unlocked", stage: "unlocked",
+    capturedAt: sameSchemaCurrentPayload.capturedAt, gameStartAt: sameSchemaCurrentPayload.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(sameSchemaCurrentPayload), payload: sameSchemaCurrentPayload },
+], "2026-10-24T17:05:00Z");
+assert.deepEqual(normalizedTransition.find(row => row.providerGameId === normalizedOldLock.providerGameId), normalizedOldLock);
+assert.deepEqual(cfbLockPlanningEvidence([normalizedOldLock]), [normalizedOldLock]);
+assert.equal(JSON.stringify(normalizedOldLock), normalizedOldBytes);
+assert.equal(normalizedTransition.find(row => row.providerGameId === "same-schema-unlocked")?.id, "r56-same-schema-unlocked");
 
 const transitionLockedGameId = "release-transition-locked";
 const transitionUnlockedGameId = "release-transition-unlocked";
