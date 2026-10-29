@@ -6,6 +6,10 @@ import { forecastCbbGame, settleCbbMarket } from "../../lib/cbb/model";
 import { applyCbbMarketHead, buildCbbMarketReaderFeatures, fitCbbMarketHead, CBB_MARKET_READER_RESEARCH_RELEASE, type CbbReaderQuote } from "../../lib/cbb/marketReaderResearch";
 import type { CbbBox, CbbGame, CbbOdds, CbbQuote, CbbRatingState, CbbUncertainty, CbbVenue, CbbMarket } from "../../lib/cbb/types";
 const dir = "/private/tmp/oddsphere-cbb-data";
+const cohort = process.argv.includes("--cohort=saturation") ? "saturation" :
+  process.argv.includes("--cohort=weekdays") ? "weekdays" :
+  process.argv.includes("--cohort=date-diverse") ? "date-diverse" : "baseline";
+const dateDiverse = cohort !== "baseline";
 const read = async <T>(file: string): Promise<T> => JSON.parse(await readFile(`${dir}/${file}`, "utf8"));
 type Catalog = { eventId: string; homeTeam: string; awayTeam: string; homeTeamId?: string; awayTeamId?: string; commenceTime?: string; gameDate: string };
 type Row = CbbScoreFeatureRow & { targets: CbbQuote[]; evidence: CbbReaderQuote[]; context: ReturnType<typeof buildCbbMarketReaderFeatures>; orientationEventId: string };
@@ -42,22 +46,27 @@ function metrics(rows: Row[], model?: ReturnType<typeof fitCbbMarketHead>) {
   return { score: evaluateCbbRows(evaluated), markets };
 }
 async function main() {
-  const capture = await read<{ fetchedAt: string; dates: string[]; data: CbbOdds[] }>("opening-total-benchmark-raw.json");
-  const catalog: Catalog[] = [];
-  for (const date of capture.dates) catalog.push(...(await read<{ data: Catalog[] }>(`owls-cbb-catalog-${date}.json`)).data);
+  const capture = await read<{ fetchedAt: string; dates: string[]; data: CbbOdds[] }>(
+    cohort === "saturation" ? "saturation-opening-raw.json" : cohort === "weekdays" ? "weekday-opening-raw.json" :
+      dateDiverse ? "date-diverse-opening-raw.json" : "opening-total-benchmark-raw.json");
   const games: CbbGame[] = [], boxes: CbbBox[] = [], venues: CbbVenue[] = [];
   for (const season of [2022, 2023, 2024, 2025]) {
     games.push(...(await read<{ data: CbbGame[] }>(`games-${season}.json`)).data);
     boxes.push(...(await read<{ data: CbbBox[] }>(`boxes-${season}.json`)).data);
     venues.push(...(await read<{ data: CbbVenue[] }>(`venues-${season}.json`)).data);
   }
+  const rawGameById = new Map(games.map(g => [g.id, g]));
+  const catalogDates = dateDiverse ? [...new Set(capture.data.map(o => rawGameById.get(o.game_id)?.date.slice(0, 10))
+    .filter((date): date is string => Boolean(date)))].sort() : capture.dates;
+  const catalog: Catalog[] = [];
+  for (const date of catalogDates) catalog.push(...(await read<{ data: Catalog[] }>(`owls-cbb-catalog-${date}.json`)).data);
   const history = buildCbbTrainingGames(games, boxes, venues).games, rawGames = new Map(games.map(g => [g.id, g]));
   const artifact = await read<{ config: CbbScoreResearchConfig; uncertainty: CbbUncertainty; correction: CbbScoreCorrection }>("candidate-r2-artifact.json");
   let prior: CbbRatingState | undefined;
   for (const season of [2022, 2023, 2024]) prior = fitCbbScoreResearchState(history, { season, asOf: `${season + 1}-07-01T00:00:00Z`, config: artifact.config, prior });
   const exclusions: Record<string, number> = {}, reject = (why: string) => { exclusions[why] = (exclusions[why] ?? 0) + 1; };
   const rows: Row[] = [];
-  for (const game of history.filter(g => g.season === 2025 && capture.dates.includes(g.date.slice(0, 10)))) {
+  for (const game of history.filter(g => g.season === 2025 && catalogDates.includes(g.date.slice(0, 10)))) {
     const g = rawGames.get(game.id)!;
     const h = [g.home_team.full_name, g.home_team.college].filter(Boolean).map(v => canonicalCbbTeamName(v!));
     const a = [g.visitor_team.full_name, g.visitor_team.college].filter(Boolean).map(v => canonicalCbbTeamName(v!));
@@ -83,6 +92,14 @@ async function main() {
     if (!context.retained.length || !context.centers.spread.length || !context.centers.total.length) { reject("no_prior_target_excluded_spread_and_total"); continue; }
     if (forecast.inputStatus !== "complete") { reject("incomplete_independent_inputs"); continue; }
     rows.push({ game, forecast, features: context.features, targets: quotes(target, capture.fetchedAt), evidence, context, orientationEventId: matches[0].eventId });
+  }
+  if (dateDiverse) {
+    if (new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("duplicate date-diverse CBB game");
+    await writeFile(`${dir}/${cohort}-feature-rows.json`, JSON.stringify(rows));
+    console.log(JSON.stringify({ cohort, eligible: rows.length, exclusions,
+      dates: Object.fromEntries([...new Set(rows.map(r => r.game.date.slice(0, 10)))].sort().map(date =>
+        [date, rows.filter(r => r.game.date.startsWith(date)).length])), productionWrites: 0 }));
+    return;
   }
   const development = rows.filter(r => r.game.date < "2026-02-15"), selection = rows.filter(r => r.game.date >= "2026-02-21" && r.game.date < "2026-03-01");
   const later = rows.filter(r => r.game.date >= "2026-03-01");
