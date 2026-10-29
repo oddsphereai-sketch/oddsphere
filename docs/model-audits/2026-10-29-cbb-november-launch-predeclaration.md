@@ -192,3 +192,13 @@ than an older static market file; an explicit refresh failure still aborts.
 No CBB score, grade, or stake was published by this change. The single writer,
 locked member precedence, official W/L/push tracking, and member snapshot
 parity remain required before activating the CBB model.
+
+The private candidate also has a pure T-60 lifecycle contract: it captures a
+complete three-market board before cutoff, refuses to create a backdated pick
+after cutoff, freezes the exact stored card at lock, gives that locked payload
+reader precedence over a changed unlocked card, and settles its stored
+Moneyline/Spread/Total selections as win, loss, or push from an integer final
+score. Focused tests include a later opposite-side candidate, a missing
+prelock snapshot, and an exact spread push. This proves the decision logic in
+isolation; it does **not** establish a race-safe database writer, a public
+locked reader, or official tracking. Those production gates remain open.

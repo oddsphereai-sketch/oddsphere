@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";
+import { advanceCbbProvisionalSnapshot, readCbbProvisionalSnapshot,
+  settleLockedCbbProvisionalBoard } from "../lib/cbb/provisionalLifecycle";
 import { gradeCbbProvisional } from "../lib/cbb/provisionalGradePolicy";
 import { cbbCurrentSplitEvidence } from "../lib/cbb/owlsSplitEvidence";
 import { cbbObservedPricePaths, type CbbQualifiedNamedQuote } from "../lib/cbb/owlsMarketEvidence";
@@ -115,4 +117,33 @@ assert.equal(paths[0].book, "pinnacle");
 assert.equal(paths[0].distinctStates, 2);
 assert.equal(paths[0].trueOpeningKnown, false);
 assert.equal(paths[0].causalLeadership, "unknown");
+const startsAt = "2026-11-01T14:30:00.000Z";
+const captured = advanceCbbProvisionalSnapshot({ existing: null, candidate: board,
+  startsAt, now: "2026-11-01T12:01:00.000Z" });
+const storedBytes = JSON.stringify(captured);
+assert.equal(captured.lockedAt, null);
+assert.throws(() => advanceCbbProvisionalSnapshot({ existing: null, candidate: board,
+  startsAt, now: "2026-11-01T13:31:00.000Z" }), /T-60/);
+assert.throws(() => advanceCbbProvisionalSnapshot({ existing: captured,
+  candidate: { ...board, gameId: 99 }, startsAt, now: "2026-11-01T12:10:00.000Z" }), /identity/);
+const locked = advanceCbbProvisionalSnapshot({ existing: captured, candidate: null,
+  startsAt, now: "2026-11-01T13:30:00.000Z" });
+assert.equal(JSON.stringify(captured), storedBytes);
+assert.equal(locked.board, captured.board);
+assert.equal(locked.lockedAt, "2026-11-01T13:30:00.000Z");
+const laterBoard = buildCbbProvisionalBoard({ ...forecast, asOf, homeScore: 68.3, awayScore: 78.5,
+  margin: -10.2, homeWinProbability: 0.19 }, [moneyline, target, total]);
+assert.equal(readCbbProvisionalSnapshot({ locked, unlocked: { ...captured, board: laterBoard } }), locked);
+assert.equal(advanceCbbProvisionalSnapshot({ existing: locked, candidate: laterBoard,
+  startsAt, now: "2026-11-01T14:00:00.000Z" }), locked);
+assert.throws(() => settleLockedCbbProvisionalBoard(captured, { home: 80, away: 72 }), /unlocked/);
+const settled = settleLockedCbbProvisionalBoard(locked, { home: 80, away: 72 });
+assert.deepEqual(settled.map(row => row.outcome), ["win", "win", "loss"]);
+const pushBoard = buildCbbProvisionalBoard(forecast, [moneyline, { ...target, line: -8 }, total]);
+const pushCaptured = advanceCbbProvisionalSnapshot({ existing: null, candidate: pushBoard,
+  startsAt, now: "2026-11-01T12:01:00.000Z" });
+const pushLocked = advanceCbbProvisionalSnapshot({ existing: pushCaptured, candidate: null,
+  startsAt, now: "2026-11-01T13:30:00.000Z" });
+assert.equal(settleLockedCbbProvisionalBoard(pushLocked, { home: 80, away: 72 })
+  .find(row => row.market === "spread")?.outcome, "push");
 console.log("CBB provisional exact-quote grade tests passed");
