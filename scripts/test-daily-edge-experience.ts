@@ -1972,7 +1972,7 @@ check(
   "the active NFL reader discloses its line-specific calibration boundary",
   candidateSource.includes("Spread and Total probabilities are line-specific") &&
     candidateSource.includes("and can differ from the score-centered winner view") &&
-    nflMemberFixtureSource.includes("separately calibrated ${marketName} forecast side"),
+    nflMemberFixtureSource.includes("Spread and Total decision heads apply separate line-specific calibration"),
 );
 check(
   "the active CFB reader presents one concise writer-owned forecast and exact-price decision",
