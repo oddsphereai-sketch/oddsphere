@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";
 import { gradeCbbProvisional } from "../lib/cbb/provisionalGradePolicy";
 import type { CbbForecast, CbbQuote } from "../lib/cbb/types";
 
@@ -47,4 +48,17 @@ assert.equal(gradeCbbProvisional({ ...input, target: { ...target, fetchedAt: "20
 assert.equal(gradeCbbProvisional({ ...input, forecast: { ...forecast, inputStatus: "incomplete" } })
   .grade, "Held");
 assert.throws(() => gradeCbbProvisional({ ...input, forecast: { ...forecast, gameId: 9 } }), /identity/);
+const moneyline: CbbQuote = { ...target, market: "moneyline", line: null,
+  firstPrice: -305, secondPrice: 255 };
+const total: CbbQuote = { ...target, market: "total", line: 148.5,
+  firstPrice: -110, secondPrice: -110 };
+const board = buildCbbProvisionalBoard(forecast, [moneyline, target, total, sharp]);
+assert.equal(board.rows.length, 3);
+assert.deepEqual(board.rows.map(row => row.market), ["moneyline", "spread", "total"]);
+assert.equal(board.rows.find(row => row.market === "spread")?.grade, "Best Angle");
+assert.equal(board.targetBook, "fanduel");
+assert.ok(Math.abs(board.score.home + board.score.away - board.score.total) < 1e-8);
+assert.ok(Math.abs(board.score.home - board.score.away - board.score.margin) < 1e-8);
+assert.throws(() => buildCbbProvisionalBoard({ ...forecast, total: forecast.total + 1 }, [moneyline, target, total]), /coherent/);
+assert.throws(() => buildCbbProvisionalBoard(forecast, [{ ...target, gameId: 9 }]), /cross-game/);
 console.log("CBB provisional exact-quote grade tests passed");

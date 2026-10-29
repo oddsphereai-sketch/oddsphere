@@ -88,6 +88,13 @@ predictive validation or a final November 1 board. The opened historical
 grade audits found moneyline and total failure blocks, so they do not justify
 promoting this draft as a proven grade policy.
 
+The private r2 board builder now derives all three market reviews from the
+same coherent score and exposes the unqualified prediction-reader state
+explicitly. Grade-side, score, and exact-quote identity tests pass. It does
+not apply a purported market correction to scores when movement, splits, and
+professional-book direction are unqualified; the final sharp-informed
+prediction-reader and the sole writer are still separate launch gates.
+
 ## First private execution receipt
 
 The new date-bounded canonical fixture seed was rehearsed **read-only** on
