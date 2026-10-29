@@ -22,7 +22,7 @@ const checksum=JSON.stringify({row,book});
 const aligned=predictionMarketComparison(row,book);
 assert.equal(aligned.cutoff,now-2*minute);assert.equal(aligned.points.at(-1)?.[0],now-8*minute,"faster Kalshi quote waits beyond the common cutoff");
 assert.equal(aligned.bookPoints.at(-1)?.[0],now-2*minute);
-assert.equal(aligned.start,now-100*minute,"one shared axis retains the earliest real source observation instead of clipping it to the shorter history");
+assert.equal(aligned.start,now-90*minute,"both guides share the genuinely covered window; original earlier quotes remain in the source array");
 assert.equal(aligned.points.at(-1)?.[1],.60,"headline can use the actually plotted observation, not a later hidden quote");
 const fasterBook=predictionMarketComparison({...row,asOf:new Date(now-8*minute).toISOString(),history:row.history.slice(0,2)},book);
 assert.equal(fasterBook.cutoff,now-8*minute);assert.equal(fasterBook.bookPoints.at(-1)?.[0],now-10*minute,"faster sportsbook also waits, symmetrically");
@@ -56,5 +56,5 @@ const feed=readFileSync("lib/services/dailyEdge/predictionMarketDisplayFeed.ts",
 assert.match(feed,/gzipSync\(JSON.stringify\(await publishedContractGames/ ,"large published boards are cached losslessly below Next's item limit");
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
 assert.match(component,/predictionMarketComparisonBook\(game.lockState===\"locked\"/);
-assert.match(component,/data-held-kalshi/);assert.match(component,/data-held-sportsbook/);
+assert.match(component,/predictionMarketGuidePoints\(points,first,last\)/);assert.match(component,/predictionMarketGuidePoints\(bookPoints,first,last\)/);
 console.log("PASS: real same-book recovery, market/side/line isolation, symmetric cutoff, smooth shared tangents, immutable locked reader precedence, zero writes/provider calls");
