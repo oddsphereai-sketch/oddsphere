@@ -3,10 +3,13 @@ import { buildCbbTrainingGames, canonicalCbbTeamName } from "../../lib/cbb/datas
 import { evaluateCbbRows } from "../../lib/cbb/evaluation";
 import { fitCbbScoreResearchState, cbbScoreFeatures, correctCbbScoreForecast, type CbbScoreFeatureRow, type CbbScoreResearchConfig, type CbbScoreCorrection } from "../../lib/cbb/scoreResearch";
 import { forecastCbbGame, settleCbbMarket } from "../../lib/cbb/model";
+import { reviewCbbQuote } from "../../lib/cbb/marketEvidence";
 import { applyCbbMarketHead, buildCbbMarketReaderFeatures, fitCbbMarketHead, CBB_MARKET_READER_RESEARCH_RELEASE, type CbbReaderQuote } from "../../lib/cbb/marketReaderResearch";
 import { assertCbbR2ResearchCohort } from "../../lib/cbb/researchCohort";
 import type { CbbBox, CbbGame, CbbOdds, CbbQuote, CbbRatingState, CbbUncertainty, CbbVenue, CbbMarket } from "../../lib/cbb/types";
 const dir = "/private/tmp/oddsphere-cbb-data";
+// Corrected decision semantics must not overwrite the earlier sign-based audit receipts.
+const receiptSuffix = "-canonical-decision-20261029";
 const cohort = process.argv.includes("--cohort=saturation") ? "saturation" :
   process.argv.includes("--cohort=weekdays") ? "weekdays" :
   process.argv.includes("--cohort=date-diverse") ? "date-diverse" : "baseline";
@@ -28,17 +31,17 @@ function quotes(o: CbbOdds, fetchedAt: string): CbbQuote[] {
     (market !== "total" || line! > 80 && line! < 250)).map(([market, line, a, b]) => ({ gameId: o.game_id, sportsbook: o.vendor,
       market, line, firstPrice: a!, secondPrice: b!, providerObservedAt: o.opened_at!, fetchedAt, phase: "opening" }));
 }
-const firstSide = (r: CbbScoreFeatureRow, market: CbbMarket, line: number | null) => market === "moneyline" ? r.forecast.homeWinProbability >= 0.5 :
-  market === "spread" ? r.forecast.margin + line! > 0 : r.forecast.total > line!;
 function metrics(rows: Row[], model?: ReturnType<typeof fitCbbMarketHead>) {
   const evaluated = rows.map(r => ({ ...r, forecast: model ? applyCbbMarketHead(r, model) : r.forecast }));
   const markets = Object.fromEntries((["moneyline", "spread", "total"] as const).map(market => {
     let wins = 0, losses = 0, pushes = 0, corrections = 0, harms = 0;
     for (const [i, r] of evaluated.entries()) {
       const quote = r.targets.find(q => q.market === market)!;
-      const oldSide = firstSide(rows[i], market, quote.line), nextSide = firstSide(r, market, quote.line);
-      const old = settleCbbMarket(market, oldSide ? "first" : "second", quote.line, r.game.homeScore, r.game.awayScore);
-      const next = settleCbbMarket(market, nextSide ? "first" : "second", quote.line, r.game.homeScore, r.game.awayScore);
+      // Match the member decision path, including discrete scores and no-tie conditioning.
+      const oldSide = reviewCbbQuote(rows[i].forecast, quote).selection as "first" | "second";
+      const nextSide = reviewCbbQuote(r.forecast, quote).selection as "first" | "second";
+      const old = settleCbbMarket(market, oldSide, quote.line, r.game.homeScore, r.game.awayScore);
+      const next = settleCbbMarket(market, nextSide, quote.line, r.game.homeScore, r.game.awayScore);
       wins += Number(next === "win"); losses += Number(next === "loss"); pushes += Number(next === "push");
       corrections += Number(old === "loss" && next === "win"); harms += Number(old === "win" && next === "loss");
     }
@@ -97,7 +100,7 @@ async function main() {
   if (dateDiverse) {
     assertCbbR2ResearchCohort(rows);
     if (new Set(rows.map(r => r.game.id)).size !== rows.length) throw new Error("duplicate date-diverse CBB game");
-    await writeFile(`${dir}/${cohort}-feature-rows.json`, JSON.stringify(rows));
+    await writeFile(`${dir}/${cohort}-feature-rows${receiptSuffix}.json`, JSON.stringify(rows));
     console.log(JSON.stringify({ cohort, eligible: rows.length, exclusions,
       dates: Object.fromEntries([...new Set(rows.map(r => r.game.date.slice(0, 10)))].sort().map(date =>
         [date, rows.filter(r => r.game.date.startsWith(date)).length])), productionWrites: 0 }));
@@ -139,11 +142,11 @@ async function main() {
     const eligible = later.filter(r => Date.parse(r.forecast.asOf) >= Date.parse(head.trainedThrough));
     report.laterBaseline = metrics(eligible); report.laterCandidate = metrics(eligible, head);
     report.laterExcludedModelNotYetAvailable = later.length - eligible.length;
-    await writeFile(`${dir}/candidate-r5-head.json`, JSON.stringify(head, null, 2));
-    await writeFile(`${dir}/candidate-r5-evaluation-rows.json`, JSON.stringify(eligible.map(r => ({ ...r, candidate: applyCbbMarketHead(r, head) }))));
+    await writeFile(`${dir}/candidate-r5-head${receiptSuffix}.json`, JSON.stringify(head, null, 2));
+    await writeFile(`${dir}/candidate-r5-evaluation-rows${receiptSuffix}.json`, JSON.stringify(eligible.map(r => ({ ...r, candidate: applyCbbMarketHead(r, head) }))));
   }
-  await writeFile(`${dir}/market-reader-evaluation-report.json`, JSON.stringify(report, null, 2));
-  await writeFile(`${dir}/market-reader-feature-rows.json`, JSON.stringify(rows));
+  await writeFile(`${dir}/market-reader-evaluation-report${receiptSuffix}.json`, JSON.stringify(report, null, 2));
+  await writeFile(`${dir}/market-reader-feature-rows${receiptSuffix}.json`, JSON.stringify(rows));
   console.log(JSON.stringify({ selected: report.selected, laterBaseline: report.laterBaseline, laterCandidate: report.laterCandidate }, null, 2));
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "CBB market replay failed"); process.exitCode = 1; });
