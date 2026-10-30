@@ -41,7 +41,8 @@ const both=renderToStaticMarkup(<PredictionMarketChart row={warm} book={warmBook
 assert.match(both,/data-chart-mode="comparison"/);assert.match(both,/data-kalshi-line/);assert.match(both,/data-sportsbook-line/);
 assert.equal(JSON.stringify({book,cold}),before,"source/locked evidence is never mutated by the fallback");
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
-assert.match(component,/fallbackBook&&!predictionMarketHasSharedHistory\(comparison\)/);
+assert.match(component,/fallbackBook&&!sharedHistory&&\(game\.sport!=="cbb"\|\|frozen\|\|comparison\.points\.length<2\)/,
+  "cold-market fallback remains for every other sport, locked CBB, and CBB without a real curve");
 assert.match(component,/frozen&&!current\?\.prelockCapturedAt\?null:book/ ,"legacy lock unavailable semantics remain unchanged");
 assert.match(component,/predictionMarketArchivedBook\(storedBook,current.book/ ,"future archive cannot bypass stored book/line/quote precedence");
 console.log("PASS cold-market charts: real sportsbook trace for new/missing Kalshi markets, no fabricated second source, exact market/side/line labels, genuine single-quote state, automatic return to aligned comparison, and immutable pre-lock boundaries.");
