@@ -5,6 +5,7 @@ import { normalizeTeamAbbr } from "../playbook/playbookTeamNormalizer";
 import { cfbProviderTeamMatches } from "../../services/football/cfbProviderTeamIdentity";
 import { uclTeamAsset } from "../../services/ucl/uclTeamAssets";
 import { canonicalCbbTeamName } from "../../cbb/dataset";
+import {kalshiRescheduleWindow,canMatchNextDayContract} from "./predictionMarketEventDate";
 
 export const PREDICTION_MARKET_RELEASE = "owls_kalshi_display_2026_10_28_r1";
 export const PREDICTION_MARKET_TARGETS = {
@@ -61,6 +62,8 @@ export type PredictionMarketRow = {
   /** Completed backfill query begins at this actual market opening time. */
   historyFrom?: string;
   openingQuote?: { point: PredictionMarketPoint; kind: "opening_minute" | "first_available" };
+  /** Verified full-game postponement rule; absent means unknown, not allowed. */
+  rescheduleWindowHours?:48;
 };
 export type PredictionMarketFeed = {
   release: typeof PREDICTION_MARKET_RELEASE;
@@ -78,11 +81,16 @@ export type PredictionMarketGameIdentity = {
   /** Exact BALLDONTLIE institution names; CBB abbreviations are not unique. */
   awayCollege?: string | null;
   homeCollege?: string | null;
+  /** Required for the opt-in future-only calendar-shift display path. */
+  lockState?:string;
+  lockedAt?:string|null;
 };
 export type PredictionMarketMatch = {
   eventTicker: string;
   source: "Kalshi via OWLS" | "Kalshi direct";
   status: "current" | "retained";
+  /** Current published date, only after an explicit valid postponement rule. */
+  rescheduledGameDate?:string;
   asOf: string;
   outcomes: Array<PredictionMarketRow & { side: "away" | "home" | "draw"; label: string }>;
 };
@@ -149,7 +157,8 @@ export function parseOwlsPredictionMarkets(body: unknown, sport: PredictionMarke
     rows.push({ ticker, eventTicker, sideCode, team, gameDate, bid, ask, probability,
       volume24h: volume(raw.volume_24h_fp), totalVolume, asOf,
       ...(typeof raw.open_time==="string"&&Number.isFinite(Date.parse(raw.open_time))?{marketOpenedAt:raw.open_time}:{}),
-      history: [[observed, probability, totalVolume]] });
+      history: [[observed, probability, totalVolume]],
+      ...(kalshiRescheduleWindow(raw,sport,gameDate)?{rescheduleWindowHours:48 as const}:{}) });
   }
   if (new Set(rows.map(row => row.ticker)).size !== rows.length) return null;
   const expectedCount = sport === "soccer" || sport === "ucl" ? 3 : 2;
@@ -164,6 +173,7 @@ export function isPredictionMarketFeed(value: unknown, sport: PredictionMarketSp
   const feed = object(value);
   return feed?.release === PREDICTION_MARKET_RELEASE && feed.sport === sport && typeof feed.fetchedAt === "string" && Array.isArray(feed.rows) && feed.rows.length <= 1200 && feed.rows.every(value => {
     const row = object(value);
+    if(row?.rescheduleWindowHours!==undefined&&row.rescheduleWindowHours!==48)return false;
     if(row?.historicalCheckedAt !== undefined && (typeof row.historicalCheckedAt !== "string" || !Number.isFinite(Date.parse(row.historicalCheckedAt))))return false;
     if(row?.historicalRelease !== undefined && typeof row.historicalRelease!=="string")return false;
     if(row?.historicalCandles !== undefined && (!Array.isArray(row.historicalCandles) || row.historicalCandles.length>192 || !row.historicalCandles.every(point=>Array.isArray(point)&&point.length===3&&Number.isFinite(point[0])&&price(point[1])!==null&&(point[2]===null||volume(point[2])!==null))))return false;
@@ -242,14 +252,16 @@ export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideC
   return (ALIASES[row.sideCode] ?? row.sideCode) === (ALIASES[abbreviation.toUpperCase()] ?? abbreviation.toUpperCase());
 }
 
-/** Exact league + original game date + both opponents; ambiguous events stay absent. */
+/** Exact league + both opponents + date. A rule-verified next-day CFB move is
+ * allowed only for an explicitly open future published game; legacy locks and
+ * missing/conflicting policies retain exact-date matching. Ambiguity fails. */
 export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, game: PredictionMarketGameIdentity, now = Date.now()): PredictionMarketMatch | null {
   if (!feed || feed.sport !== game.sport || !Number.isFinite(Date.parse(game.gameStartAt))) return null;
   const gameDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date(game.gameStartAt));
   const groups = new Map<string, PredictionMarketRow[]>();
   for (const row of feed.rows) {
     const age = now - Date.parse(row.asOf);
-    if (row.gameDate !== gameDate || age < -60_000 || age > 24 * 60 * 60_000) continue;
+    if ((row.gameDate !== gameDate&&!canMatchNextDayContract(row.gameDate,gameDate,row.rescheduleWindowHours,game,now)) || age < -60_000 || age > 24 * 60 * 60_000) continue;
     const rows = groups.get(row.eventTicker) ?? []; rows.push(row); groups.set(row.eventTicker, rows);
   }
   const matches: PredictionMarketMatch[] = [];
@@ -267,6 +279,7 @@ export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, gam
     if (sum < .85 || sum > 1.15) continue;
     const asOf = new Date(Math.min(...stamps)).toISOString();
     matches.push({ eventTicker, source:game.sport==="cbb"?"Kalshi direct":"Kalshi via OWLS", status:now - Math.min(...stamps) <= 10 * 60_000 ? "current" : "retained", asOf,
+      ...(selected[0].gameDate!==gameDate?{rescheduledGameDate:gameDate}:{}),
       outcomes:[{...away[0],side:"away",label:game.awayTeam},{...home[0],side:"home",label:game.homeTeam},...(soccer ? [{...draw[0],side:"draw" as const,label:"Draw"}] : [])] });
   }
   return matches.length === 1 ? matches[0] : null;

@@ -139,7 +139,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // not the first arbitrary YES ticker or a distant alternate on the feed.
   const priority=new Map<string,number>();
   for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
-    const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege});
+    const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege,lockState:game.lockState,lockedAt:game.lockedAt});
     const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
     if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
     for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}

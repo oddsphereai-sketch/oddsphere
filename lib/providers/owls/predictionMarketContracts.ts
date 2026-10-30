@@ -1,5 +1,6 @@
 /** Display-only contract alignment. Never supplies a model, grade, or lock writer. */
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
+import {kalshiRescheduleWindow,kalshiEventSuffixForDate} from "./predictionMarketEventDate";
 import { matchPredictionMarketGame, PREDICTION_MARKET_TARGETS, PREDICTION_MARKET_RELEASE, kalshiGameDate,
   type PredictionMarketFeed, type PredictionMarketMatch, type PredictionMarketRow, type PredictionMarketPoint, type PredictionMarketSport } from "./owlsPredictionMarkets";
 
@@ -84,7 +85,8 @@ export function parseContractFeed(value:unknown,sport:PredictionMarketSport,kind
     const p=(bid+ask)/2,totalVolume=count(raw.volume_fp);
     rows.push({ticker,eventTicker,sideCode,team:String(raw.yes_sub_title??raw.title??kind).slice(0,100),gameDate,bid,ask,probability:p,
       volume24h:count(raw.volume_24h_fp),totalVolume,asOf,history:[[at,p,totalVolume]],contractKind:kind,strike,
-      ...(typeof raw.open_time==="string"&&Number.isFinite(Date.parse(raw.open_time))?{marketOpenedAt:raw.open_time}:{})});
+      ...(typeof raw.open_time==="string"&&Number.isFinite(Date.parse(raw.open_time))?{marketOpenedAt:raw.open_time}:{}),
+      ...(kalshiRescheduleWindow(raw,sport,gameDate)?{rescheduleWindowHours:48 as const}:{})});
   }
   if(new Set(rows.map(row=>row.ticker)).size!==rows.length)return null;
   return {release:PREDICTION_MARKET_RELEASE,sport,fetchedAt:new Date(now).toISOString(),kind,contractRelease:PREDICTION_MARKET_CONTRACT_RELEASE,rows};
@@ -129,7 +131,15 @@ function selectedRow(row:ContractRow,invert:boolean,label:string):ReaderOutcome 
  * threshold is unavailable, retain a separately labeled nearby contract. */
 export function resolveReaderContract(feed:ContractFeed|null,gameMatch:PredictionMarketMatch|null,selection:ContractSelection,now=Date.now()):ReaderMarketMatch|null {
   if(!feed||!gameMatch||feed.kind!==selection.kind||!gameMatch.eventTicker.startsWith(PREDICTION_MARKET_TARGETS[feed.sport].series.toUpperCase()+"-"))return null;
-  const suffix=gameMatch.eventTicker.slice(gameMatch.eventTicker.indexOf("-")+1),event=contractSeries(feed.sport,feed.kind).toUpperCase()+"-"+suffix;
+  if(gameMatch.rescheduledGameDate&&feed.sport!=="cfb")return null;
+  const originalSuffix=gameMatch.eventTicker.slice(gameMatch.eventTicker.indexOf("-")+1);
+  // A postponed winner can keep its original ticker while separately issued
+  // spread/total events use the current date. Never blindly copy that date.
+  const suffix=gameMatch.rescheduledGameDate?kalshiEventSuffixForDate(originalSuffix,gameMatch.rescheduledGameDate):originalSuffix;
+  const currentEvent=contractSeries(feed.sport,feed.kind).toUpperCase()+"-"+suffix;
+  const originalEvent=contractSeries(feed.sport,feed.kind).toUpperCase()+"-"+originalSuffix;
+  const event=feed.rows.some(row=>row.eventTicker===currentEvent)?currentEvent:originalEvent;
+  if(gameMatch.rescheduledGameDate&&event===originalEvent&&feed.rows.some(row=>row.eventTicker===event&&row.rescheduleWindowHours!==48))return null;
   const rows=feed.rows.filter(row=>row.eventTicker===event&&Date.parse(row.asOf)<=now+60_000&&now-Date.parse(row.asOf)<=24*60*60_000);
   if(!rows.length)return null;
   const own=gameMatch.outcomes.find(row=>row.side===selection.side),opponent=gameMatch.outcomes.find(row=>row.side===(selection.side==="away"?"home":"away"));
@@ -170,7 +180,7 @@ export function contractsForPublishedReaders(feed:ContractFeed,winners:Predictio
   const wanted=new Set<string>();
   for(const game of games){
     const selection=readerHistoryContractSelection(game,feed.kind==="total"?"total":"first_inning");if(!selection||selection.kind!==feed.kind)continue;
-    const match=matchPredictionMarketGame(winners,{sport:feed.sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt??"",awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege},now);
+    const match=matchPredictionMarketGame(winners,{sport:feed.sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt??"",awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege,lockState:game.lockState,lockedAt:game.lockedAt},now);
     const resolved=resolveReaderContract(feed,match,selection,now);
     resolved?.context?.sources.forEach(row=>wanted.add(row.ticker));
   }
