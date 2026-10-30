@@ -3,7 +3,7 @@ import type { CbbGame } from "../lib/cbb/types";
 import type { CbbBallDontLieClient } from "../lib/cbb/ballDontLie";
 import type { OwlsInsightClient } from "../lib/providers/owls/owlsInsightClient";
 import type { DailyEdgeResponse } from "../app/lab/lib/labTypes";
-import { buildCbbRollingSchedule } from "../lib/services/cbb/cbbRollingSchedule";
+import { buildCbbRollingSchedule, excludeAnalyzedCbbScheduleGames } from "../lib/services/cbb/cbbRollingSchedule";
 import { refreshCbbMemberBoard } from "../lib/services/cbb/cbbMemberPipeline";
 
 const asOf="2026-10-29T22:00:00Z",start="2026-11-01T14:30:00Z";
@@ -39,6 +39,13 @@ const saveSnapshot=(async(input:{payload:DailyEdgeResponse})=>{published=structu
   return {ok:true,snapshotKey:"test",expiresAt:asOf,staleUntil:asOf};}) as NonNullable<Parameters<typeof refreshCbbMemberBoard>[0]["saveSnapshot"]>;
 
 async function main(){
+  const noOdds={odds:async()=>({body:{success:true,data:[]},status:200,rateLimit:{remainingMinute:null,remainingMonth:null}}),
+    splits:async()=>({body:splits,status:200,rateLimit:{remainingMinute:null,remainingMonth:null}})} as unknown as OwlsInsightClient;
+  const pending=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",
+    trainingGames:[],provider,owls:noOdds,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
+  assert.equal(pending.sourceGames,0);
+  assert.equal((published as DailyEdgeResponse | null)?.games.length,0);
+  assert.equal(schedule.games.length,1,"the future fixture remains on the member slate while its market is unavailable");
   const wrongStart={...schedule,games:schedule.games.map(row=>({...row,gameStartAt:"2026-11-01T14:31:00+00:00"}))};
   await assert.rejects(refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>wrongStart,saveSnapshot}),/lost exact games/);
@@ -54,7 +61,9 @@ async function main(){
   assert.equal(member.markets.moneyline.currentPriceSportsbook,"fanduel");
   assert.equal(member.projected.home+member.projected.away,member.markets.total.modelTotal);
   assert.equal(member.markets.moneyline.sportsbookSplits,null);
+  assert.equal(excludeAnalyzedCbbScheduleGames(schedule,[member.external_id]).games.length,0,
+    "the same fixture becomes an analyzed card, never a duplicate schedule card");
   assert.ok(result.problems.some(problem=>problem.includes("verified_splits_unavailable")));
-  console.log("CBB member pipeline: exact fixture, seven-day card, source price, coherent score, published snapshot and honest split absence passed.");
+  console.log("CBB member pipeline: exact fixture, pending-to-analyzed card, source price, coherent score, published snapshot and honest split absence passed.");
 }
 void main();
