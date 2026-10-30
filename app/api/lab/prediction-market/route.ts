@@ -4,6 +4,7 @@ import {predictionMarketLockBoundary} from "@/app/lab/lib/predictionMarketDispla
 import {readPredictionMarketBook,readPublicTrackerBook} from "@/lib/services/dailyEdge/predictionMarketBookRead";
 import { matchPredictionMarketGame, PREDICTION_MARKET_TARGETS, type PredictionMarketSport } from "@/lib/providers/owls/owlsPredictionMarkets";
 import { resolveReaderContract, formatContractLine, type ContractKind, type ContractSelection } from "@/lib/providers/owls/predictionMarketContracts";
+import {KALSHI_EVENT_DATE_MATCH_RELEASE} from "@/lib/providers/owls/predictionMarketEventDate";
 
 export async function GET(request: Request): Promise<Response> {
   const query = new URL(request.url).searchParams;
@@ -38,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
   ]);
   const gameMatch = matchPredictionMarketGame(feed, {sport:sport as PredictionMarketSport,awayTeam,homeTeam,gameStartAt,
     awayName:game?.awayTeamDisplayName??query.get("awayName")?.slice(0,100),homeName:game?.homeTeamDisplayName??query.get("homeName")?.slice(0,100),
-    awayCollege:game?.cbbAwayCollege,homeCollege:game?.cbbHomeCollege});
+    awayCollege:game?.cbbAwayCollege,homeCollege:game?.cbbHomeCollege,lockState:game?.lockState,lockedAt:game?.lockedAt});
   const market=selection?resolveReaderContract(contracts,gameMatch,selection):gameMatch;
   const side=selection?.side??(["away","home","draw"].includes(requestedSide??"")?requestedSide:gameMatch?.outcomes.slice().sort((a,b)=>b.probability-a.probability)[0]?.side);
   if(game&&side&&predictionMarketLockBoundary(game,Date.now())!==undefined){
@@ -49,5 +50,5 @@ export async function GET(request: Request): Promise<Response> {
   const publicTracker=query.get("display")==="public-tracker-v1";
   const book=game&&side?await (publicTracker?readPublicTrackerBook(game,kind,side,selection?.line??null,sport as PredictionMarketSport):readPredictionMarketBook(game,kind,side,selection?.line??null,sport as PredictionMarketSport,preferredBook)).catch(()=>null):null;
   const availability=market?"available":!feed?"feed_unavailable":!gameMatch?"event_unavailable":selection&&!contracts?"market_feed_unavailable":"contract_unavailable";
-  return Response.json({market,book,availability}, {headers:{"Cache-Control":"private, max-age=30, stale-while-revalidate=30"}});
+  return Response.json({market,book,availability}, {headers:{"Cache-Control":"private, max-age=30, stale-while-revalidate=30","X-Prediction-Market-Date-Match":KALSHI_EVENT_DATE_MATCH_RELEASE}});
 }
