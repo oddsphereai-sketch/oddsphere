@@ -4,11 +4,16 @@ import type { CfbForwardStoredEvidence } from "../lib/services/football/cfbForwa
 import { buildCfbNamedBookPriceHierarchy, retainLatestCfbNamedBookMarkets } from "../lib/services/football/cfbSharpApiOdds";
 import {
   CFB_THE_ODDS_API_CREDIT_RESERVE,
+  CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS,
   CFB_THE_ODDS_API_CREDITS_PER_PULL,
+  CFB_THE_ODDS_API_FAR_REFRESH_MINUTES,
   CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
+  CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES,
+  CFB_THE_ODDS_API_ORDINARY_WEEKLY_CREDIT_LIMIT,
   CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT,
   CFB_THE_ODDS_API_REGIONS,
   CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT,
+  CFB_THE_ODDS_API_WEEKLY_CREDIT_LIMIT,
   fetchCfbTheOddsApiFallback,
   fetchCfbTheOddsApiHistoricalOpenings,
   shouldFetchCfbTheOddsApiFallback,
@@ -20,12 +25,22 @@ const liu = game("g-liu", "Long Island University Sharks", "Duquesne Dukes", "20
 const citadel = game("g-cit", "The Citadel Bulldogs", "VMI Keydets", "2026-10-10T17:00:00.000Z");
 
 async function main(): Promise<void> {
+  let liveRequests = 0;
 const response = await fetchCfbTheOddsApiFallback({
   games: [liu, citadel],
   capturedAt,
   apiKey: "test-secret",
   fetchImpl: async (input) => {
     const url = new URL(String(input));
+    if (url.pathname === "/v4/sports") {
+      return Response.json([], {
+        headers: {
+          "x-requests-last": "0",
+          "x-requests-remaining": "491",
+        },
+      });
+    }
+    liveRequests += 1;
     assert.equal(url.searchParams.get("markets"), "h2h,spreads,totals");
     assert.equal(url.searchParams.get("regions"), CFB_THE_ODDS_API_REGIONS);
     assert.equal(url.searchParams.get("bookmakers"), null);
@@ -44,7 +59,10 @@ const response = await fetchCfbTheOddsApiFallback({
   },
 });
 
-assert.equal(response.requests, 1);
+assert.equal(response.requests, 2);
+assert.equal(response.quotaRequests, 1);
+assert.equal(response.oddsRequests, 1);
+assert.equal(liveRequests, 1);
 assert.equal(response.creditsUsed, 6);
 assert.equal(response.creditsRemaining, 491);
 assert.equal(response.matchedGames, 1);
@@ -65,6 +83,32 @@ assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sports
 assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sportsbook === "caesars")?.targetEligible, false);
 assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sportsbook === "betonline")?.targetEligible, false);
 assert.equal(response.booksByGame["g-liu"]?.find((candidate) => candidate.sportsbook === "betrivers")?.marketReadingEligible, false);
+
+let reserveOddsRequests = 0;
+const quotaReserve = await fetchCfbTheOddsApiFallback({
+  games: [liu],
+  capturedAt,
+  apiKey: "test-secret",
+  fetchImpl: async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/v4/sports") {
+      return Response.json([], {
+        headers: {
+          "x-requests-last": "0",
+          "x-requests-remaining": String(CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS - 1),
+        },
+      });
+    }
+    reserveOddsRequests += 1;
+    return Response.json([]);
+  },
+});
+assert.equal(quotaReserve.requests, 1);
+assert.equal(quotaReserve.quotaRequests, 1);
+assert.equal(quotaReserve.oddsRequests, 0);
+assert.equal(quotaReserve.creditsUsed, 0);
+assert.equal(quotaReserve.failuresByGame["g-liu"], "credit_reserve");
+assert.equal(reserveOddsRequests, 0, "the free quota probe must block the paid odds request below the shared floor");
 
 const paidDraftKings = {
   ...book,
@@ -156,9 +200,10 @@ assert.equal(futureDatedHistorical.failuresByGame["g-liu"], "historical_opening_
 const opening = shouldFetchCfbTheOddsApiFallback({ games: [liu], existing: [], now: capturedAt });
 assert.equal(opening.fetch, true);
 assert.equal(opening.reason, "opening_gap_seed");
-assert.equal(opening.cadenceMinutes, 60);
+assert.equal(opening.cadenceMinutes, CFB_THE_ODDS_API_FAR_REFRESH_MINUTES);
 assert.equal(CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT * CFB_THE_ODDS_API_CREDITS_PER_PULL, 1_152);
-assert.equal(CFB_THE_ODDS_API_CREDIT_RESERVE, 2_304, "reserve must preserve two full worst-case weekly budgets");
+assert.equal(CFB_THE_ODDS_API_CREDIT_RESERVE, 250, "shared account floor must remain available to other products");
+assert.equal(CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS, 12);
 
 const newGameSeed = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
@@ -177,20 +222,29 @@ const recent = shouldFetchCfbTheOddsApiFallback({
 assert.equal(recent.fetch, false);
 assert.equal(recent.reason, "cadence_not_due");
 
-const hourlyDue = shouldFetchCfbTheOddsApiFallback({
+const farCadenceDue = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
-  existing: [stored("2026-10-08T11:00:00.000Z", 19_993)],
+  existing: [stored("2026-10-08T00:00:00.000Z", 19_993)],
   now: capturedAt,
 });
-assert.equal(hourlyDue.fetch, true);
-assert.equal(hourlyDue.reason, "gap_refresh_due");
+assert.equal(farCadenceDue.fetch, true);
+assert.equal(farCadenceDue.reason, "gap_refresh_due");
+
+const nearGame = game("g-near", "LIU Sharks", "Duquesne Dukes", "2026-10-09T12:00:00.000Z");
+const nearCadence = shouldFetchCfbTheOddsApiFallback({
+  games: [nearGame],
+  existing: [stored("2026-10-08T08:00:00.000Z", 19_993)],
+  now: capturedAt,
+});
+assert.equal(nearCadence.fetch, true);
+assert.equal(nearCadence.cadenceMinutes, CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES);
 
 const monthEndContinuity = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
-  existing: [stored("2026-10-08T11:00:00.000Z", 3_470)],
+  existing: [stored("2026-10-08T00:00:00.000Z", 900)],
   now: capturedAt,
 });
-assert.equal(monthEndContinuity.fetch, true, "a healthy paid balance above two complete weekly budgets must remain usable");
+assert.equal(monthEndContinuity.fetch, true, "a paid balance above the shared floor plus a conservative next request must remain usable");
 assert.equal(monthEndContinuity.reason, "gap_refresh_due");
 
 const historicalOnlyDoesNotPostponeCurrent = shouldFetchCfbTheOddsApiFallback({
@@ -233,7 +287,7 @@ const priorWeekAttemptsDoNotConsumeThisWeek = shouldFetchCfbTheOddsApiFallback({
   existing: [
     ...Array.from({ length: CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT }, (_, index) =>
       stored(new Date(Date.parse("2026-09-30T00:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * CFB_THE_ODDS_API_CREDITS_PER_PULL)),
-    stored("2026-10-08T11:00:00.000Z", 19_417),
+    stored("2026-10-08T00:00:00.000Z", 19_417),
   ],
   now: capturedAt,
 });
@@ -252,14 +306,43 @@ assert.equal(lockRefresh.reason, "t60_lock_refresh");
 
 const reserve = shouldFetchCfbTheOddsApiFallback({
   games: [liu],
-  existing: [stored("2026-10-07T00:00:00.000Z", CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CREDITS_PER_PULL - 1)],
+  existing: [stored("2026-10-07T00:00:00.000Z", CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS - 1)],
   now: capturedAt,
 });
 assert.equal(reserve.fetch, false);
 assert.equal(reserve.reason, "credit_reserve");
 
+const deduplicatedReceipts = shouldFetchCfbTheOddsApiFallback({
+  games: [liu],
+  existing: [
+    stored("2026-10-08T05:00:00.000Z", 2_262, { current: 1 }, 80),
+    stored("2026-10-08T05:00:00.000Z", 2_262, { current: 1 }, 80),
+  ],
+  now: capturedAt,
+});
+assert.equal(deduplicatedReceipts.weeklyPulls, 1, "one slate request copied to multiple game rows must count once");
+assert.equal(deduplicatedReceipts.weeklyCredits, 80, "one slate receipt copied to multiple game rows must count once");
+assert.equal(deduplicatedReceipts.estimatedNextCredits, 80);
+
+const ordinaryCreditCappedRows = Array.from({ length: CFB_THE_ODDS_API_ORDINARY_WEEKLY_CREDIT_LIMIT / CFB_THE_ODDS_API_CREDITS_PER_PULL }, (_, index) =>
+  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 5_000));
+const ordinaryCreditCapped = shouldFetchCfbTheOddsApiFallback({ games: [liu], existing: ordinaryCreditCappedRows, now: capturedAt });
+assert.equal(ordinaryCreditCapped.fetch, false);
+assert.equal(ordinaryCreditCapped.reason, "ordinary_weekly_credit_limit");
+
+const emergencyCreditCappedRows = Array.from({ length: CFB_THE_ODDS_API_WEEKLY_CREDIT_LIMIT / CFB_THE_ODDS_API_CREDITS_PER_PULL }, (_, index) =>
+  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 5_000));
+const emergencyCreditCapped = shouldFetchCfbTheOddsApiFallback({
+  games: [liu],
+  existing: emergencyCreditCappedRows,
+  now: capturedAt,
+  forceT60: true,
+});
+assert.equal(emergencyCreditCapped.fetch, false);
+assert.equal(emergencyCreditCapped.reason, "weekly_credit_limit");
+
 const ordinaryCappedRows = Array.from({ length: CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT }, (_, index) =>
-  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * CFB_THE_ODDS_API_CREDITS_PER_PULL));
+  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993, { current: 1 }, 0));
 const ordinaryCapped = shouldFetchCfbTheOddsApiFallback({ games: [liu], existing: ordinaryCappedRows, now: capturedAt });
 assert.equal(ordinaryCapped.fetch, false);
 assert.equal(ordinaryCapped.reason, "ordinary_pull_limit_lock_reserve");
@@ -268,7 +351,7 @@ assert.equal(reservedLock.fetch, true);
 assert.equal(reservedLock.reason, "t60_lock_refresh");
 
 const cappedRows = Array.from({ length: CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT }, (_, index) =>
-  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993 - index * CFB_THE_ODDS_API_CREDITS_PER_PULL));
+  stored(new Date(Date.parse("2026-10-06T04:00:00.000Z") + index * 60_000).toISOString(), 19_993, { current: 1 }, 0));
 const capped = shouldFetchCfbTheOddsApiFallback({ games: [liu], existing: cappedRows, now: capturedAt });
 assert.equal(capped.fetch, false);
 assert.equal(capped.reason, "weekly_pull_limit");
@@ -321,6 +404,7 @@ function stored(
   at: string,
   remaining: number,
   requests: { current?: number; historical?: number } = { current: 1 },
+  currentCredits = (requests.current ?? 0) * CFB_THE_ODDS_API_CREDITS_PER_PULL,
 ): CfbForwardStoredEvidence {
   return {
     capturedAt: at,
@@ -330,6 +414,9 @@ function stored(
       theOddsApiCurrentAttemptedAt: (requests.current ?? 0) > 0 ? at : null,
       theOddsApiHistorical: requests.historical ?? 0,
       theOddsApiHistoricalAttemptedAt: (requests.historical ?? 0) > 0 ? at : null,
+      theOddsApiCredits: currentCredits + (requests.historical ?? 0) * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
+      theOddsApiCurrentCredits: currentCredits,
+      theOddsApiHistoricalCredits: (requests.historical ?? 0) * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
       theOddsApiRemainingCredits: remaining,
     } },
   } as unknown as CfbForwardStoredEvidence;
@@ -375,6 +462,11 @@ function historyStored(
         theOddsApiCurrentAttemptedAt: requests.current > 0 ? at : null,
         theOddsApiHistorical: requests.historical,
         theOddsApiHistoricalAttemptedAt: requests.historical > 0 ? at : null,
+        theOddsApiCredits:
+          requests.current * CFB_THE_ODDS_API_CREDITS_PER_PULL +
+          requests.historical * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
+        theOddsApiCurrentCredits: requests.current * CFB_THE_ODDS_API_CREDITS_PER_PULL,
+        theOddsApiHistoricalCredits: requests.historical * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL,
         theOddsApiRemainingCredits: remaining,
       },
     },

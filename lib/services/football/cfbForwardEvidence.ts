@@ -493,6 +493,8 @@ export type CfbForwardEvidencePayload = {
     theOddsApiHistorical?: number;
     theOddsApiHistoricalAttemptedAt?: string | null;
     theOddsApiCredits?: number;
+    theOddsApiCurrentCredits?: number;
+    theOddsApiHistoricalCredits?: number;
     theOddsApiRemainingCredits?: number | null;
     officialAvailability?: number;
     espnInjuryNews?: number;
@@ -579,7 +581,7 @@ export type CfbForwardMarketHistoryEvidence = Pick<
     >;
     requestBudget?: Pick<
       CfbForwardEvidencePayload["requestBudget"],
-      "theOddsApi" | "theOddsApiCurrent" | "theOddsApiCurrentAttemptedAt" | "theOddsApiHistorical" | "theOddsApiHistoricalAttemptedAt" | "theOddsApiCredits" | "theOddsApiRemainingCredits"
+      "theOddsApi" | "theOddsApiCurrent" | "theOddsApiCurrentAttemptedAt" | "theOddsApiHistorical" | "theOddsApiHistoricalAttemptedAt" | "theOddsApiCredits" | "theOddsApiCurrentCredits" | "theOddsApiHistoricalCredits" | "theOddsApiRemainingCredits"
     >;
     contextualEvidenceCapture?: {
       markets: {

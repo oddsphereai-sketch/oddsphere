@@ -4,7 +4,7 @@ import { activeCfbWeeklyWindow, isGameInCfbWeeklyWindow } from "./cfbWeeklyWindo
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_THE_ODDS_API_FALLBACK_RELEASE =
-  "cfb_the_odds_api_fcs_fallback_2026_10_27_r5_full_us_region_discovery" as const;
+  "cfb_the_odds_api_fcs_fallback_2026_10_30_r6_adaptive_credit_continuity" as const;
 export const CFB_THE_ODDS_API_SPORT_KEY = "americanfootball_ncaaf_fcs" as const;
 export const CFB_THE_ODDS_API_REGIONS = "us,us2" as const;
 // These are the previously validated books that may enter the prediction and
@@ -18,13 +18,16 @@ export const CFB_THE_ODDS_API_CREDITS_PER_PULL = 6 as const;
 export const CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL = 60 as const;
 export const CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT = 176 as const;
 export const CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT = 192 as const;
-// Preserve two complete worst-case weekly budgets. The former 5,000-credit
-// reserve stranded a paid 20,000-credit subscription with 3,470 credits still
-// available and disabled every FCS pull eleven days before the monthly reset.
-export const CFB_THE_ODDS_API_CREDIT_RESERVE =
-  2 * CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT * CFB_THE_ODDS_API_CREDITS_PER_PULL;
-export const CFB_THE_ODDS_API_FAR_REFRESH_MINUTES = 60 as const;
-export const CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES = 60 as const;
+// This key is shared by other products. Preserve a hard account floor while
+// budgeting CFB from the provider's actual x-requests-last receipts. The next
+// request estimate deliberately exceeds the documented six-credit regional
+// query so an unexpected provider price change fails closed before the floor.
+export const CFB_THE_ODDS_API_CREDIT_RESERVE = 250 as const;
+export const CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS = 12 as const;
+export const CFB_THE_ODDS_API_ORDINARY_WEEKLY_CREDIT_LIMIT = 60 as const;
+export const CFB_THE_ODDS_API_WEEKLY_CREDIT_LIMIT = 90 as const;
+export const CFB_THE_ODDS_API_FAR_REFRESH_MINUTES = 720 as const;
+export const CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES = 240 as const;
 export const CFB_THE_ODDS_API_TIMEOUT_MS = 8_000 as const;
 export const CFB_THE_ODDS_API_MAX_RESPONSE_BYTES = 4_000_000 as const;
 export const CFB_THE_ODDS_API_R38_OPENING_SNAPSHOT_DATES = [
@@ -35,7 +38,9 @@ export const CFB_THE_ODDS_API_R38_OPENING_SNAPSHOT_DATES = [
 type JsonRecord = Record<string, unknown>;
 export type CfbTheOddsApiFallbackResult = {
   release: typeof CFB_THE_ODDS_API_FALLBACK_RELEASE;
-  requests: 1;
+  requests: number;
+  quotaRequests: 1;
+  oddsRequests: 0 | 1;
   creditsUsed: number;
   creditsRemaining: number | null;
   attemptedGames: number;
@@ -156,7 +161,33 @@ export async function fetchCfbTheOddsApiFallback(args: {
   url.searchParams.set("markets", "h2h,spreads,totals");
   url.searchParams.set("oddsFormat", "american");
   url.searchParams.set("dateFormat", "iso");
-  const response = await (args.fetchImpl ?? fetch)(url, {
+  const fetchImpl = args.fetchImpl ?? fetch;
+  const quotaUrl = new URL("https://api.the-odds-api.com/v4/sports");
+  quotaUrl.searchParams.set("apiKey", args.apiKey);
+  const quotaResponse = await fetchImpl(quotaUrl, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(CFB_THE_ODDS_API_TIMEOUT_MS),
+  });
+  if (!quotaResponse.ok) throw new Error(`The Odds API quota probe failed (${quotaResponse.status}).`);
+  const quotaRemaining = nonnegativeInteger(quotaResponse.headers.get("x-requests-remaining"));
+  if (quotaRemaining !== null && quotaRemaining < CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS) {
+    return {
+      release: CFB_THE_ODDS_API_FALLBACK_RELEASE,
+      requests: 1,
+      quotaRequests: 1,
+      oddsRequests: 0,
+      creditsUsed: 0,
+      creditsRemaining: quotaRemaining,
+      attemptedGames: games.length,
+      matchedGames: 0,
+      displayMatchedGames: 0,
+      booksByGame: {},
+      displayBooksByGame: {},
+      failuresByGame: Object.fromEntries(games.map((game) => [game.providerGameId, "credit_reserve"])),
+    };
+  }
+  const response = await fetchImpl(url, {
     headers: { accept: "application/json" },
     cache: "no-store",
     signal: AbortSignal.timeout(CFB_THE_ODDS_API_TIMEOUT_MS),
@@ -203,7 +234,9 @@ export async function fetchCfbTheOddsApiFallback(args: {
   }
   return {
     release: CFB_THE_ODDS_API_FALLBACK_RELEASE,
-    requests: 1,
+    requests: 2,
+    quotaRequests: 1,
+    oddsRequests: 1,
     creditsUsed,
     creditsRemaining,
     attemptedGames: games.length,
@@ -222,19 +255,43 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
   now: string;
   forceT60?: boolean;
   forceOpeningSeed?: boolean;
-}): { fetch: boolean; reason: string; cadenceMinutes: number; weeklyPulls: number; lastRemainingCredits: number | null } {
+}): {
+  fetch: boolean;
+  reason: string;
+  cadenceMinutes: number;
+  weeklyPulls: number;
+  weeklyCredits: number;
+  estimatedNextCredits: number;
+  lastRemainingCredits: number | null;
+} {
   const nowMs = Date.parse(args.now);
   const upcoming = args.games.filter((game) => Date.parse(game.scheduledStart) > nowMs);
   const weeklyWindow = activeCfbWeeklyWindow(args.now);
   const attemptRows = args.attemptHistory ?? args.existing;
-  const attempts = [...new Set(attemptRows
-    .flatMap((row) => (row.payload.requestBudget?.theOddsApiCurrent ?? 0) > 0
-      ? [row.payload.requestBudget?.theOddsApiCurrentAttemptedAt ?? row.capturedAt]
-      : [])
-    .filter((attemptedAt) => isGameInCfbWeeklyWindow({ scheduledStart: attemptedAt }, weeklyWindow)))]
-    .map(Date.parse)
-    .filter(Number.isFinite)
-    .sort((a, b) => b - a);
+  const receiptsByAttempt = new Map<number, number>();
+  for (const row of attemptRows) {
+    const budget = row.payload.requestBudget;
+    if ((budget?.theOddsApiCurrent ?? 0) <= 0) continue;
+    const attemptedAt = budget?.theOddsApiCurrentAttemptedAt ?? row.capturedAt;
+    if (!isGameInCfbWeeklyWindow({ scheduledStart: attemptedAt }, weeklyWindow)) continue;
+    const attemptedAtMs = Date.parse(attemptedAt);
+    if (!Number.isFinite(attemptedAtMs)) continue;
+    const explicitCurrentCredits = nonnegativeInteger(budget?.theOddsApiCurrentCredits);
+    const legacyCurrentOnlyCredits = (budget?.theOddsApiHistorical ?? 0) === 0
+      ? nonnegativeInteger(budget?.theOddsApiCredits)
+      : null;
+    const credits = explicitCurrentCredits ?? legacyCurrentOnlyCredits ?? CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS;
+    receiptsByAttempt.set(attemptedAtMs, Math.max(receiptsByAttempt.get(attemptedAtMs) ?? 0, credits));
+  }
+  const attemptReceipts = [...receiptsByAttempt.entries()]
+    .map(([attemptedAt, credits]) => ({ attemptedAt, credits }))
+    .sort((a, b) => b.attemptedAt - a.attemptedAt);
+  const attempts = attemptReceipts.map((receipt) => receipt.attemptedAt);
+  const weeklyCredits = attemptReceipts.reduce((sum, receipt) => sum + receipt.credits, 0);
+  const estimatedNextCredits = Math.max(
+    CFB_THE_ODDS_API_CONSERVATIVE_NEXT_REQUEST_CREDITS,
+    ...attemptReceipts.map((receipt) => receipt.credits),
+  );
   const remainingRows = attemptRows
     .flatMap((row) => Number.isInteger(row.payload.requestBudget?.theOddsApiRemainingCredits)
       ? [{
@@ -252,25 +309,40 @@ export function shouldFetchCfbTheOddsApiFallback(args: {
   const cadenceMinutes = nearestMs <= 48 * 60 * 60_000
     ? CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES
     : CFB_THE_ODDS_API_FAR_REFRESH_MINUTES;
-  if (upcoming.length === 0) return { fetch: false, reason: "no_upcoming_fcs_gaps", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
-  if (attempts.length >= CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT) return { fetch: false, reason: "weekly_pull_limit", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+  const result = (fetch: boolean, reason: string) => ({
+    fetch,
+    reason,
+    cadenceMinutes,
+    weeklyPulls: attempts.length,
+    weeklyCredits,
+    estimatedNextCredits,
+    lastRemainingCredits,
+  });
+  if (upcoming.length === 0) return result(false, "no_upcoming_fcs_gaps");
+  if (attempts.length >= CFB_THE_ODDS_API_WEEKLY_PULL_LIMIT) return result(false, "weekly_pull_limit");
   if (!args.forceT60 && attempts.length >= CFB_THE_ODDS_API_ORDINARY_WEEKLY_PULL_LIMIT) {
-    return { fetch: false, reason: "ordinary_pull_limit_lock_reserve", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+    return result(false, "ordinary_pull_limit_lock_reserve");
   }
-  if (lastRemainingCredits !== null && lastRemainingCredits < CFB_THE_ODDS_API_CREDIT_RESERVE + CFB_THE_ODDS_API_CREDITS_PER_PULL) {
-    return { fetch: false, reason: "credit_reserve", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+  if (lastRemainingCredits !== null && lastRemainingCredits < CFB_THE_ODDS_API_CREDIT_RESERVE + estimatedNextCredits) {
+    return result(false, "credit_reserve");
+  }
+  const weeklyCreditLimit = args.forceT60
+    ? CFB_THE_ODDS_API_WEEKLY_CREDIT_LIMIT
+    : CFB_THE_ODDS_API_ORDINARY_WEEKLY_CREDIT_LIMIT;
+  if (weeklyCredits + estimatedNextCredits > weeklyCreditLimit) {
+    return result(false, args.forceT60 ? "weekly_credit_limit" : "ordinary_weekly_credit_limit");
   }
   const latest = attempts[0] ?? 0;
   if (args.forceOpeningSeed) {
-    return { fetch: true, reason: "new_gap_opening_seed", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+    return result(true, "new_gap_opening_seed");
   }
   if (args.forceT60) {
-    return { fetch: true, reason: "t60_lock_refresh", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+    return result(true, "t60_lock_refresh");
   }
   if (latest > 0 && nowMs - latest < cadenceMinutes * 60_000) {
-    return { fetch: false, reason: "cadence_not_due", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+    return result(false, "cadence_not_due");
   }
-  return { fetch: true, reason: latest === 0 ? "opening_gap_seed" : "gap_refresh_due", cadenceMinutes, weeklyPulls: attempts.length, lastRemainingCredits };
+  return result(true, latest === 0 ? "opening_gap_seed" : "gap_refresh_due");
 }
 
 /** Historical recovery is a one-time bridge for the r38 transition slate.
