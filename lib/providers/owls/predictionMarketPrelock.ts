@@ -4,6 +4,7 @@ import {predictionMarketLockBoundary,selectedPredictionMarketOutcome,type Predic
 import {readerHistoryContractSelection,resolveReaderContract,type ContractFeed,type ReaderMarketMatch} from "./predictionMarketContracts";
 import {matchPredictionMarketGame,type PredictionMarketFeed,type PredictionMarketSport} from "./owlsPredictionMarkets";
 import {bookDisplayTrail,type BookDisplayFeed} from "./owlsBookDisplayHistory";
+import {publicMarketDisplayBook,publicMarketDisplayHistory} from "@/app/lab/lib/publicMarketDisplayTrail";
 
 export const PREDICTION_MARKET_PRELOCK_RELEASE="prediction_market_prelock_display_2026_10_29_r1";
 type PrelockFrame={event:number;start:string;away:string;home:string;key:"moneyline"|"total"|"first_inning";pick:string;kind:string;side:string;line:number|null;capturedAt:number;market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null};
@@ -26,10 +27,15 @@ export function capturePredictionMarketPrelock(previous:PrelockFeed|null,games:D
    const kind=key==="moneyline"?"moneyline":selection?.kind,side=selection?.side??outcome?.side??(label===game.homeTeam.toUpperCase()?"home":label===game.awayTeam.toUpperCase()?"away":label==="DRAW"?"draw":null);
    if(!kind||!side)continue;
    const line=selection?.line??null,market=selection?resolveReaderContract(contracts.find(c=>c.kind===selection.kind)??null,match,selection,now):match;
-   const publishedBook=game.markets[key].movementReferenceSportsbook??game.markets[key].oddsTrail?.filter(s=>s.label==="current"&&s.sportsbook).sort((a,b)=>Date.parse(b.observedAt??"")-Date.parse(a.observedAt??""))[0]?.sportsbook;
+   const storedBook=publicMarketDisplayBook(game.markets[key]);
+   const publishedBook=storedBook?.sportsbook??game.markets[key].movementReferenceSportsbook??game.markets[key].oddsTrail?.filter(s=>s.label==="current"&&s.sportsbook).sort((a,b)=>Date.parse(b.observedAt??"")-Date.parse(a.observedAt??""))[0]?.sportsbook;
    const candidates=books?.rows.filter(e=>e.event===game.external_id&&Date.parse(e.start)===Date.parse(game.gameStartAt!)&&e.away===game.awayTeam&&e.home===game.homeTeam&&e.kind===kind&&e.side===side&&Date.parse(e.checkedAt)<=now)??[];
-   const entry=candidates.find(e=>e.book===publishedBook?.trim().toLowerCase())??candidates[0];
-   const book=entry?bookDisplayTrail(entry,line,now):null;
+   const entry=candidates.find(e=>e.book===publishedBook?.trim().toLowerCase())??(storedBook?undefined:candidates[0]);
+   const history=entry?bookDisplayTrail(entry,storedBook?.line??line,now):null;
+   // Capture the same book/threshold/endpoint users actually see, not an
+   // independently ranked sharp source. Published observations work even
+   // while optional provider backfill is unavailable or budget-deferred.
+   const book=storedBook?publicMarketDisplayHistory(storedBook,history):history;
    if(!market&&!book)continue;
    const next:PrelockReceipt={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,key,pick,kind,side,line,capturedAt:now,market,book};
    const prior=rows.get(identity(next));
