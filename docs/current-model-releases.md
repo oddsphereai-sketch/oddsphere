@@ -6,6 +6,21 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-30
 
+## CBB exact market-observation identity repair — October 30
+
+- Observation capture release `market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation`
+  resolves CBB Playbook and Owl's rows against both verified full team names and
+  institution names, then the exact fixture time/date. A unique neutral-site
+  reversal maps provider home/away selections back to canonical sides; unknown,
+  wrong-time, and ambiguous games remain rejected. The prior r17 collector
+  used the `teams.name` nickname column (for example `Wildcats` and `Fighting
+  Irish`), so institution-only source rows could be silently unmatched.
+- This repair changes the observation substrate only. It does not change the
+  CBB score, model/market marriage, grade, stake, selected price, prediction
+  writer, lock, or member snapshot releases. Existing locked records retain
+  exact precedence. Public splits appear only if a provider actually returns
+  a verified complete two-sided pair; no percentages are inferred from odds.
+
 ## College basketball November 1 staged launch
 
 - Owner approved going live on October 30. The sole leased CBB writer published

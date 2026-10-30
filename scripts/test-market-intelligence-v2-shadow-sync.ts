@@ -10,6 +10,7 @@ import {
   findSharpApiSplitGameMatches,
   isSharpApiHistoryUniqueConflict,
   marketIntelligenceGameKey,
+  matchCbbSourceGame,
   selectNbaRollingMarketGames,
   selectVerifiedSharpApiCurrentRows,
   selectVerifiedSharpApiWindowRows,
@@ -31,8 +32,42 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_10_28_r17_nfl_forward_slate_contract",
+    "market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation",
 );
+
+{
+  const game = {
+    id: 1, externalId: 10882407, slateDate: "2026-11-01", gameDate: "2026-11-01T14:30:00.000Z",
+    homeTeamId: 92, awayTeamId: 107, homeAbbr: "VILL", awayAbbr: "ND",
+    homeName: "Villanova Wildcats", awayName: "Notre Dame Fighting Irish",
+    homeLocation: "Villanova", awayLocation: "Notre Dame",
+  };
+  const sourceStart = "2026-11-01T14:30:33.000Z";
+  const reverse = matchCbbSourceGame([game], "Villanova", "Notre Dame", sourceStart);
+  check("CBB exact institutions match neutral-site reversed provider orientation",
+    reverse?.game.externalId === 10882407 && reverse.reversed);
+  check("CBB full names match the canonical orientation",
+    matchCbbSourceGame([game], "Notre Dame Fighting Irish", "Villanova Wildcats", sourceStart)?.reversed === false);
+  check("CBB nickname-only identity and wrong kickoff never attach market evidence",
+    matchCbbSourceGame([game], "Wildcats", "Fighting Irish", sourceStart) === null &&
+    matchCbbSourceGame([game], "Villanova", "Notre Dame", "2026-11-02T14:30:00Z") === null &&
+    matchCbbSourceGame([game], "Villanova", "Notre Dame", null) === null &&
+    matchCbbSourceGame([game], "Villanova", "Notre Dame", "bad timestamp") === null);
+  check("CBB duplicated candidate identity is rejected rather than guessed",
+    matchCbbSourceGame([game, { ...game, id: 2, externalId: 999 }], "Villanova", "Notre Dame", sourceStart) === null);
+  const price = buildOwlsSharpPriceObservations({
+    sport: "cbb", fetchedAt: new Date("2026-10-30T12:00:00Z"), games: [game],
+    rows: [{ sport: "ncaab", providerEventId: "ncaab:Villanova@Notre Dame-20261101",
+      providerNumericEventId: "123", scheduledStart: sourceStart,
+      homeTeam: "Notre Dame", awayTeam: "Villanova", sportsbook: "circa",
+      observedAt: "2026-10-30T11:59:00Z", market: "moneyline", side: "away",
+      line: null, americanPrice: -300, decimalPrice: 1.3333, noVigProbability: 0.75 }],
+  });
+  check("CBB reversed provider moneyline is stored on canonical Villanova home side",
+    price.rejected.length === 0 && price.observations.length === 1 &&
+    price.observations[0]?.canonical_event_id === "10882407" &&
+    price.observations[0]?.selection_key.endsWith(":home") === true);
+}
 
 {
   const mapped = buildOwlsSharpPriceObservations({

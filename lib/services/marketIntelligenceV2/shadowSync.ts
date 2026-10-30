@@ -12,6 +12,7 @@ import {
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
+import { canonicalCbbTeamName } from "../../cbb/dataset";
 import { OwlsInsightClient, type OwlsSport } from "../../providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookSplits,
@@ -80,7 +81,37 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_10_28_r17_nfl_forward_slate_contract";
+  "market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation";
+
+type CbbSourceMatch = { game: GameRef; reversed: boolean };
+const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
+  reversed && side === "home" ? "away" : reversed && side === "away" ? "home" : side;
+
+/** College names are not mascots: Playbook and Owl's may say "Villanova" while
+ * the canonical teams.name field says "Wildcats". Match both institutions,
+ * then date/time, and reject any duplicate rather than guessing a fixture. */
+export function matchCbbSourceGame(games: readonly GameRef[], sourceAway: string, sourceHome: string,
+  sourceStart: string | null): CbbSourceMatch | null {
+  const away = canonicalCbbTeamName(sourceAway), home = canonicalCbbTeamName(sourceHome);
+  if (!away || !home || away === home || !sourceStart) return null;
+  const named = (observed: string, game: GameRef, side: "home" | "away") =>
+    [side === "home" ? game.homeName : game.awayName,
+      side === "home" ? game.homeLocation : game.awayLocation]
+      .some(value => value && canonicalCbbTeamName(value) === observed);
+  const at = Date.parse(sourceStart);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(sourceStart) ? sourceStart : null;
+  if (!Number.isFinite(at)) return null;
+  const matches = games.flatMap(game => {
+    const start = Date.parse(game.gameDate ?? "");
+    if (!Number.isFinite(start) ||
+      (Number.isFinite(at) && !dateOnly && Math.abs(start - at) > 2 * 60 * 60_000) ||
+      (dateOnly && game.slateDate !== dateOnly && game.gameDate?.slice(0, 10) !== dateOnly)) return [];
+    const direct = named(away, game, "away") && named(home, game, "home");
+    const reversed = named(away, game, "home") && named(home, game, "away");
+    return direct !== reversed ? [{ game, reversed }] : [];
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
 
 export type SharpHistoryFailureClass =
   | "definitive_absence"
@@ -529,14 +560,16 @@ async function loadGamesForSlateWindow(
 ): Promise<GameRef[]> {
   const { data: teams, error: teamsErr } = await supabase
     .from("teams")
-    .select("id, abbreviation, name")
+    .select("id, abbreviation, name, display_name, location")
     .eq("sport", sport);
   if (teamsErr) throw new Error(`teams fetch failed: ${teamsErr.message}`);
   const abbr = new Map<number, string>();
   const name = new Map<number, string>();
+  const location = new Map<number, string>();
   for (const t of teams ?? []) {
     abbr.set(t.id as number, String(t.abbreviation ?? ""));
-    name.set(t.id as number, String(t.name ?? ""));
+    name.set(t.id as number, String(sport === "cbb" ? t.display_name ?? "" : t.name ?? ""));
+    if (sport === "cbb") location.set(t.id as number, String(t.location ?? ""));
   }
 
   const { data: games, error: gamesErr } = await supabase
@@ -563,6 +596,10 @@ async function loadGamesForSlateWindow(
         awayAbbr: abbr.get(awayTeamId) ?? "",
         homeName: name.get(homeTeamId) ?? "",
         awayName: name.get(awayTeamId) ?? "",
+        ...(sport === "cbb" ? {
+          homeLocation: location.get(homeTeamId) ?? "",
+          awayLocation: location.get(awayTeamId) ?? "",
+        } : {}),
       };
     });
   return sport === "nfl" ? readNflForwardCollectionSlate({
@@ -687,7 +724,9 @@ async function collectPlaybookSplits(opts: {
   }
   for (const row of rows) {
     const key = marketIntelligenceGameKey(opts.sport, row.awayTeamName, row.homeTeamName);
-    const game = key ? findPlaybookGameMatch(gamesByKey.get(key) ?? [], row) : null;
+    const cbbMatch = opts.sport === "cbb"
+      ? matchCbbSourceGame(opts.games, row.awayTeamName ?? "", row.homeTeamName ?? "", playbookStartTime(row)) : null;
+    const game = opts.sport === "cbb" ? cbbMatch?.game ?? null : key ? findPlaybookGameMatch(gamesByKey.get(key) ?? [], row) : null;
     if (!game) {
       rejected.push({
         provider: "playbook",
@@ -707,7 +746,7 @@ async function collectPlaybookSplits(opts: {
       ingestionRunId: opts.ingestionRunId,
       pairedLine: (market, side) => playbookLineForSelection(lineByGameId.get(row.gameId), market, side),
       canonicalMarketId: (m) => externalMarketId(game, m),
-      selectionKey: (m, s) => externalSelectionKey(game, m, s),
+      selectionKey: (m, s) => externalSelectionKey(game, m, cbbSide(s, cbbMatch?.reversed ?? false)),
     });
     observations.push(...built.observations);
     rejected.push(...built.rejected);
@@ -793,7 +832,9 @@ async function collectOwlsSplits(opts: {
     if (!first) continue;
     const key = marketIntelligenceGameKey(opts.sport, first.awayTeam, first.homeTeam);
     const candidates = key ? gamesByKey.get(key) ?? [] : [];
-    const game = findOwlsSplitGameMatch(opts.sport === "nfl"
+    const cbbMatch = opts.sport === "cbb"
+      ? matchCbbSourceGame(opts.games, first.awayTeam, first.homeTeam, owlsEventDate(providerEventId)) : null;
+    const game = opts.sport === "cbb" ? cbbMatch?.game ?? null : findOwlsSplitGameMatch(opts.sport === "nfl"
       ? nflOwlsIdentityCandidates(candidates, providerEventId) : candidates, providerEventId);
     if (!game) {
       rejected.push({
@@ -822,7 +863,7 @@ async function collectOwlsSplits(opts: {
       minutesToStart: minutesToStart(game.gameDate, opts.now),
       ingestionRunId: opts.ingestionRunId,
       canonicalMarketId: (market) => externalMarketId(game, market),
-      selectionKey: (market, side) => externalSelectionKey(game, market, side),
+      selectionKey: (market, side) => externalSelectionKey(game, market, cbbSide(side, cbbMatch?.reversed ?? false)),
     });
     observations.push(...built.observations);
     rejected.push(...built.rejected);
@@ -902,7 +943,10 @@ export function buildOwlsSharpPriceObservations(opts: {
   for (const row of opts.rows) {
     const key = marketIntelligenceGameKey(opts.sport, row.awayTeam, row.homeTeam);
     const candidates = key ? gamesByKey.get(key) ?? [] : [];
-    const game = findOwlsPriceGameMatch(opts.sport === "nfl"
+    const cbbMatch = opts.sport === "cbb"
+      ? matchCbbSourceGame(opts.games, row.awayTeam, row.homeTeam,
+        row.scheduledStart ?? owlsEventDate(row.providerEventId)) : null;
+    const game = opts.sport === "cbb" ? cbbMatch?.game ?? null : findOwlsPriceGameMatch(opts.sport === "nfl"
       ? nflOwlsIdentityCandidates(candidates, row.providerEventId, row.scheduledStart) : candidates, row, opts.sport === "nfl");
     if (!game) {
       rejected.push({
@@ -923,7 +967,7 @@ export function buildOwlsSharpPriceObservations(opts: {
       sportsbook: row.sportsbook,
       sharpBook: true,
       marketType: row.market,
-      selectionKey: externalSelectionKey(game, row.market, row.side),
+      selectionKey: externalSelectionKey(game, row.market, cbbSide(row.side, cbbMatch?.reversed ?? false)),
       line: row.line,
       americanPrice: row.americanPrice,
       decimalPrice: row.decimalPrice,

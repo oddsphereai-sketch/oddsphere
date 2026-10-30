@@ -17,6 +17,9 @@ export type MarketIntelligenceCollectionGame = {
   awayAbbr: string;
   homeName: string;
   awayName: string;
+  /** Exact institution names, where a college provider omits the mascot. */
+  homeLocation?: string;
+  awayLocation?: string;
 };
 
 export type NflCollectionSlateRow = {

@@ -1,5 +1,21 @@
 # Model change safety protocol
 
+## CBB institution-level market capture repair — October 30
+
+The owner reported absent Villanova–Notre Dame public/sharp splits and
+incomplete movement trails for the November 1 Rome opener. The r18
+observation-only candidate reads the already present CBB team `display_name`
+and `location` identities, matches both participants and start/date, and
+translates a uniquely verified neutral-site reversal into canonical home/away
+selection keys. It makes no new provider request, uses the existing
+`public_splits_observations_refresh` collector/lease, and does not change any
+score, probability, pick, grade, stake, selected price, model input authority,
+or locked member record. Same-input decision and actionable-board deltas are
+zero by contract. This fixes dropped source rows, but cannot create a split
+when the licensed feeds do not publish one. Publish only after focused tests,
+the full model-change suite, latest-main integration checks, protected PR
+checks, and production source/reader verification.
+
 ## CBB member-reader completeness gate — October 30
 
 The owner found that the pre-publication board lacked obvious dates, public
