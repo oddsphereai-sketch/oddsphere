@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./test-cfb-paired-price-context";
 import {
   buildCfbV1DecisionBundle,
   cfbV1CalibratedSelection,
@@ -58,14 +59,14 @@ for (const decision of bundle.evaluatedBets) {
   }
 }
 
-const missing = buildCfbV1DecisionBundle({ providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU", gameStartsAt: "2026-08-29T16:00:00Z", comparableCurrentBooks: books.slice(0, 2) });
+const missing = buildCfbV1DecisionBundle({ providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU", gameStartsAt: "2026-08-29T16:00:00Z", comparableCurrentBooks: books.slice(0, 2), priceContextPolicy: "legacy_three_book_consensus" });
 assert.equal(missing.evaluatedBets.length, 0);
 assert.equal(missing.heldMarkets.length, 3);
 assert.equal(missing.heldMarkets.every((market) => market.reasonCodes?.includes("target_excluded_same_line_consensus_insufficient")), true);
 
 const recoveryArgs = { providerGameId: "457157", awayTeam: "UNC", homeTeam: "TCU",
   gameStartsAt: "2026-08-29T16:00:00Z", evaluatedAt: "2026-08-25T16:00:00Z", forecast,
-  comparableCurrentBooks: books.slice(0, 2) };
+  comparableCurrentBooks: books.slice(0, 2), priceContextPolicy: "legacy_three_book_consensus" as const };
 const owlsReference = { ...books[2]!, sportsbook: "circa", provider: "owls" as const,
   targetEligible: false, marketReadingEligible: false };
 const recovered = buildCfbV1DecisionBundle({ ...recoveryArgs, supplementalGradingBooks: [owlsReference] });
