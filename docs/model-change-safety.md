@@ -1,5 +1,19 @@
 # Model change safety protocol
 
+## CBB named-book split display identity r1 — October 30
+
+The owner requested an all-game sharp-book split mapping audit and repair.
+This display-only release uses verified CBB institution/full-name identity,
+preserves neutral-site side orientation, rejects ambiguous fixtures, and
+reports an empty named-book source as an internal partial capture instead of
+letting unrelated Kalshi rows make the job look fully healthy. It does not
+grant split evidence prediction or grade authority. No model, price-selection,
+stake, writer, lease, locked payload, or member copy changes. Existing
+source-absence remains a live data-health gap, not a fabricated split. The
+focused named-book, DraftKings Network, capture-health, locked-precedence,
+and full model-change checks plus latest-main PR safety and live verification
+remain required.
+
 ## CBB institution-level market capture repair — October 30
 
 The owner reported absent Villanova–Notre Dame public/sharp splits and

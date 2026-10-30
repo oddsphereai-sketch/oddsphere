@@ -1,6 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
+import { cbbSplitOrientation, cbbSplitTeamMatches } from "@/lib/cbb/exactSplitIdentity";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
 import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
@@ -389,16 +390,24 @@ export function applyDraftKingsNetworkSplitFallback(
   let populatedMarkets = 0;
   const claimedProviderEvents = new Set<string>();
   for (const game of response.games) {
+    if (response.sport === "cbb" && (game.lockState === "locked" || game.lockedAt)) continue;
     const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
       ? Date.parse(game.lockedAt ?? "")
       : null;
     if (game.lockState === "locked" && options.reconstructMissingLockedPreLock && !Number.isFinite(lockedCutoffMs)) continue;
-    const matches = feed.games.filter((candidate) =>
-      !claimedProviderEvents.has(candidate.providerEventId) &&
-      candidate.monthDay === gameMonthDay(game, response.date) &&
-      providerTeamMatches(response.sport, candidate.awayName, game.awayTeam, game.awayTeamDisplayName) &&
-      providerTeamMatches(response.sport, candidate.homeName, game.homeTeam, game.homeTeamDisplayName)
-    );
+    const matches = feed.games.filter((candidate) => {
+      if (claimedProviderEvents.has(candidate.providerEventId) ||
+        candidate.monthDay !== gameMonthDay(game, response.date)) return false;
+      if (response.sport === "cbb") {
+        if (cbbSplitOrientation(candidate.awayName, candidate.homeName, game) === null) return false;
+        // A month/day-only source cannot identify same-day doubleheaders.
+        return response.games.filter((other) =>
+          candidate.monthDay === gameMonthDay(other, response.date) &&
+          cbbSplitOrientation(candidate.awayName, candidate.homeName, other) !== null).length === 1;
+      }
+      return providerTeamMatches(response.sport, candidate.awayName, game.awayTeam, game.awayTeamDisplayName) &&
+        providerTeamMatches(response.sport, candidate.homeName, game.homeTeam, game.homeTeamDisplayName);
+    });
     if (matches.length !== 1) continue;
     const match = matches[0]!;
     claimedProviderEvents.add(match.providerEventId);
@@ -516,8 +525,13 @@ function splitSection(
   fetchedAt: string,
 ): MarketSplitDisplaySection | null {
   const rows = source.sides.flatMap((side) => {
+    const cbbTeamLabel = side.label.replace(/\s+[+-]\d+(?:\.\d+)?\s*$/, "");
+    const cbbHome = game.sport === "cbb" && cbbSplitTeamMatches(cbbTeamLabel, game, "home");
+    const cbbAway = game.sport === "cbb" && cbbSplitTeamMatches(cbbTeamLabel, game, "away");
     const canonicalSide = source.market === "total"
       ? /^over\b/i.test(side.label) ? "over" as const : /^under\b/i.test(side.label) ? "under" as const : null
+      : game.sport === "cbb"
+        ? cbbHome === cbbAway ? null : cbbHome ? "home" as const : "away" as const
       : providerTeamMatches(game.sport, side.label, game.homeTeam, game.homeTeamDisplayName)
         ? "home" as const
         : providerTeamMatches(game.sport, side.label, game.awayTeam, game.awayTeamDisplayName)
