@@ -4969,7 +4969,7 @@ The paired live-slate replay is recorded in
 - Market marriage: `nba_market_marriage_2026_10_29_r25_consumer_execution_authority`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_29_r15_consumer_execution_authority`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_29_r20_consumer_execution_authority`
+- Line refresh: `nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
@@ -5320,7 +5320,15 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_29_r20_consumer_execution_authority`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads`
+  - Allocation-only recovery for an observed out-of-memory kill: the private
+    props history codec uses a single bounded inflate buffer, hashes existing
+    UTF-8 bytes, and streams unchanged JSON through backpressured gzip. No
+    quote is removed, data capacity reduced, model changed, or hosting memory
+    increased. The actual 109 MB stored-history replay retained exact checksum,
+    gzip bytes and decoded values while reducing peak RSS from 1.60 GB to
+    0.97 GB. Existing locks retain exact stored precedence. Evidence:
+    `docs/model-audits/2026-10-30-nba-lock-recovery-memory.md`.
 - NBA member board release: `nba_rolling_member_board_2026_10_20_r3_same_day_final_retention`
   - Current-day `STATUS_FINAL` games remain on the NBA board until the normal ET board-date rollover.
   - This is a visibility/lifecycle repair only: stored locked projections, prices, grades, evidence, and tracking rows remain unchanged and retain precedence.

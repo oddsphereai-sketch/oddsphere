@@ -1,0 +1,22 @@
+name: NBA props memory codec proof
+on:
+  pull_request:
+    paths:
+      - 'lib/services/nba/nbaPlayerPropsPrivateStore.ts'
+      - 'app/api/cron/nba-daily-refresh/route.ts'
+      - 'scripts/test-nba-props-low-copy-payload.ts'
+      - '.github/workflows/nba-props-memory-proof.yml'
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  nba-props-memory-codec-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node --import tsx scripts/test-nba-props-low-copy-payload.ts

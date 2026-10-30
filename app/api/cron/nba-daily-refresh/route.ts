@@ -69,7 +69,7 @@ import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecy
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_29_r20_consumer_execution_authority";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
