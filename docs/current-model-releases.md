@@ -6,6 +6,27 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-30
 
+## CFB paired-price context repair — October 30
+
+- The full CFB board remains eligible, including FCS-FCS. The r57 decision
+  repair removes only the artificial three-book comparison hold: when the
+  incumbent target-excluded exact-line policy cannot form a decision, one
+  fresh, coherent, exact-line two-sided main-market pair from the evaluated
+  sportsbook may supply price context. Existing decisions retain exact
+  precedence; projections, PMFs, sides, and market-reader outputs do not
+  change. Stale, partial, alternate, Owl-only, mismatched, invalid, or
+  conflicting pairs fail closed.
+- Releases are calibration / grade / decision / tuple r30/r29/r57/r44, sole
+  writer r146, fixture / snapshot / reader r99/r59/r44, and tracking r51, all
+  stamped `paired_price_context`. The sole `prediction_pipeline:cfb` lease,
+  cadence, locks, settlement, stakes, provider budgets, and existing FCS paid
+  fallback remain unchanged. Existing locks retain stored precedence.
+- The zero-write current-board rehearsal preserved 192 existing markets and
+  every forecast, recovered 15 held prices, reduced holds 87 to 72, changed
+  actionables 62 to 63 through one promotion and zero demotions, and used zero
+  paid Odds API credits. Evidence and rollback:
+  `docs/model-audits/2026-10-30-cfb-paired-price-context.md`.
+
 ## CBB exact market-observation identity repair — October 30
 
 - Observation capture release `market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation`

@@ -1,5 +1,24 @@
 # Model change safety protocol
 
+## Owner-approved CFB paired-price context — October 30
+
+The owner directed CFB price repair while retaining the full board, including
+FCS-FCS. Future-unlocked r57 decisions preserve every incumbent decision and
+permit a real evaluated-book two-sided pair only when the old three-book
+comparison count would otherwise hold that market. This is price context for
+the existing independent model and market reader, not a forecast blend or
+market-side override. The exact-game, line, time, pair, hold, provider, and
+duplicate gates fail closed; all ordinary health and grade rules still apply.
+
+The zero-write same-runtime rehearsal preserved 192 existing decisions,
+changed zero forecasts or sides, recovered 15 held prices, reduced holds
+87 to 72, and moved actionables 62 to 63 through one promotion and zero
+demotions. The Odds API key was explicitly disabled, proving zero paid credits
+for the audit. Remaining gaps were genuine quote absence and stay eligible for
+the unchanged reserve-protected FCS fallback. Existing locks retain exact
+stored precedence. Releases, verification, rollback, and evidence are recorded
+in `docs/model-audits/2026-10-30-cfb-paired-price-context.md`.
+
 ## CBB institution-level market capture repair — October 30
 
 The owner reported absent Villanova–Notre Dame public/sharp splits and

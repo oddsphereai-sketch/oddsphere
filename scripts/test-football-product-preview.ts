@@ -431,7 +431,7 @@ for (const forbidden of [
 assert.match(fixtureSource, /consensusSplitRows/);
 assert.match(fixtureSource, /PUBLIC_CONSENSUS_SPLITS_CAPTURED_CONTEXT_ONLY/);
 assert.match(fixtureSource, /sharpBookSplits: null/);
-assert.match(readerSource, /dateKeyInTimeZone\(game\.gameStartAt, groupingTimeZone\)/);
+assert.match(readerSource, /Object\.groupBy\(boardEntries, \(entry\) => entry\.game\.gameStartAt \? dateKeyInTimeZone\(entry\.game\.gameStartAt, groupingTimeZone\)/);
 assert.match(readerSource, /const groupingTimeZone = uclBoard \? userTimeZone : "America\/New_York"/);
 assert.match(readerSource, /Counts show games containing at least one market with each grade/);
 assert.match(readerSource, /a game can appear in more than one grade/);
