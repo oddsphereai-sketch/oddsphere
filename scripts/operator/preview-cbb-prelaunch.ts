@@ -1,0 +1,224 @@
+import { createHash } from "node:crypto";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { matchCbbVenue, type EspnCbbEvent } from "../../lib/cbb/dataset";
+import { fitCbbRatings, forecastCbbGame, cbbThresholdProbabilities } from "../../lib/cbb/model";
+import { CBB_ACTIVATION, CBB_MODEL_RELEASE } from "../../lib/cbb/releases";
+import { CBB_SCORE_RESEARCH_RELEASE } from "../../lib/cbb/scoreResearch";
+import { cbbLaunchReadiness } from "../../lib/cbb/readiness";
+import { buildCbbRosterContextAt } from "../../lib/cbb/rosterContext";
+import { cbbPriceObservations, cbbSameBookMovement, normalizeCbbOdds, reviewCbbQuote } from "../../lib/cbb/marketEvidence";
+import { bindCbbQuoteOrientation, normalizeCbbNamedBookOdds, type CbbNamedOddsRow } from "../../lib/cbb/namedBookOdds";
+import type { CbbGame, CbbOdds, CbbPlayer, CbbPlayerSeason, CbbVenue } from "../../lib/cbb/types";
+import { forecastCbbCandidateR2 } from "../../lib/cbb/candidateR2Runtime";
+import { cbbObservedPricePaths, normalizeCbbOwlsCurrent } from "../../lib/cbb/owlsMarketEvidence";
+import { cbbCurrentSplitEvidence } from "../../lib/cbb/owlsSplitEvidence";
+import { buildCbbProvisionalBoard } from "../../lib/cbb/provisionalBoard";
+import { advanceCbbProvisionalSnapshot } from "../../lib/cbb/provisionalLifecycle";
+import { buildCbbProvisionalReader } from "../../lib/cbb/provisionalReader";
+import { buildCbbMarketReaderFeatures, CBB_MARKET_READER_RESEARCH_RELEASE } from "../../lib/cbb/marketReaderResearch";
+import { applyCbbTotalOnlyMarketHead, chooseCbbCompleteTargetBook, CBB_TOTAL_ONLY_MARKET_RESEARCH_RELEASE,
+  type CbbTotalOnlyMarketHead } from "../../lib/cbb/totalOnlyMarketResearch";
+import { completeCbbTeamIdentitiesFromEvents, resolveCbbTeamIdentities, type EspnCbbTeam } from "../../lib/cbb/teamIdentity";
+import type { RawOwlsOddsResponse } from "../../lib/providers/owls/owlsSharpBookOdds";
+import type { RawOwlsSplitsResponse } from "../../lib/providers/owls/owlsSharpBookSplits";
+import { OwlsInsightClient } from "../../lib/providers/owls/owlsInsightClient";
+
+const args = process.argv.slice(2);
+if (args.some(arg => /^(--write|--publish|--activate)/.test(arg))) throw new Error("CBB preview cannot publish");
+const dir = resolve(args.find(arg => arg.startsWith("--data="))?.slice(7) ?? "/private/tmp/oddsphere-cbb-data");
+const date = args.find(arg => arg.startsWith("--date="))?.slice(7) ?? "2026-11-01";
+const candidateR17 = args.includes("--candidate=r17");
+const candidateR5 = args.includes("--candidate=r5") || candidateR17;
+const candidateR2 = args.includes("--candidate=r2") || candidateR5;
+const refreshMarket = args.includes("--refresh-market");
+if (refreshMarket && !candidateR5) throw new Error("Fresh CBB market evidence requires a market candidate");
+const read = async <T>(name: string): Promise<T> => JSON.parse(await readFile(resolve(dir, name), "utf8"));
+const etDay = (value: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+const escape = (value: unknown) => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+async function freshMarketReceipt() {
+  const client = new OwlsInsightClient(process.env.OWLS_INSIGHT_API_KEY ?? "");
+  const [odds, splits] = await Promise.all([
+    client.odds<RawOwlsOddsResponse>("ncaab"),
+    client.splits<RawOwlsSplitsResponse>("ncaab"),
+  ]);
+  if (odds.body.success === false || !odds.body.data ||
+    (typeof splits.body.sport === "string" && splits.body.sport !== "ncaab") ||
+    !Array.isArray(splits.body.data)) {
+    throw new Error("CBB market provider reported failure; stale cache cannot replace this pull");
+  }
+  const fetchedAt = new Date().toISOString();
+  const receipt = { fetchedAt, odds: odds.body, splits: splits.body, productionWrites: 0 };
+  const serialized = JSON.stringify(receipt);
+  if (process.env.OWLS_INSIGHT_API_KEY && serialized.includes(process.env.OWLS_INSIGHT_API_KEY)) {
+    throw new Error("CBB market receipt echoed credential");
+  }
+  const digest = createHash("sha256").update(serialized).digest("hex").slice(0, 16);
+  const receiptPath = resolve(dir, `owls-cbb-private-${Date.parse(fetchedAt)}-${digest}.json`);
+  await writeFile(receiptPath, serialized, { flag: "wx" });
+  return { odds: { fetchedAt, body: odds.body }, splits: splits.body,
+    receipt: { path: receiptPath, sha256Prefix: digest, fetchedAt } };
+}
+async function recentMarketReceipts() {
+  const names = (await readdir(dir)).filter(name => /^owls-cbb-private-\d+-[0-9a-f]{16}\.json$/.test(name))
+    .sort().reverse().slice(0, 8);
+  return Promise.all(names.map(async name => {
+    const serialized = await readFile(resolve(dir, name), "utf8");
+    const expected = name.match(/-([0-9a-f]{16})\.json$/)?.[1];
+    if (createHash("sha256").update(serialized).digest("hex").slice(0, 16) !== expected) {
+      throw new Error("CBB private market receipt integrity failed");
+    }
+    const row = JSON.parse(serialized) as { fetchedAt: string; odds: RawOwlsOddsResponse; splits: RawOwlsSplitsResponse };
+    if (!Number.isFinite(Date.parse(row.fetchedAt)) || !row.odds?.data) throw new Error("Invalid CBB private market receipt");
+    return { ...row, receipt: { path: resolve(dir, name), sha256Prefix: expected!, fetchedAt: row.fetchedAt } };
+  }));
+}
+async function main() {
+  const artifact = await read<Parameters<typeof fitCbbRatings>[1] & { uncertainty: Parameters<typeof forecastCbbGame>[2]; prior: NonNullable<Parameters<typeof fitCbbRatings>[1]["prior"]> }>("candidate-artifact.json");
+  let report = await read<{ confirmation: { wins: number; losses: number; accuracy: number; teamScoreMae: number; marginMae: number; totalMae: number } }>("evaluation-report.json");
+  if (candidateR2) report = { confirmation: (await read<{ diagnostic: typeof report.confirmation }>("score-improvement-report.json")).diagnostic };
+  const schedule = await read<{ fetchedAt: string; data: CbbGame[] }>("games-2026.json");
+  const bdlTeams = await read<{ data: CbbGame["home_team"][] }>("teams.json");
+  const espnTeams = await read<{ data: EspnCbbTeam[] }>("espn-teams.json").catch(() => null);
+  const identities = resolveCbbTeamIdentities(bdlTeams.data, espnTeams?.data ?? []);
+  const roster = await read<{ fetchedAt: string; data: CbbPlayer[] }>("active-players.json");
+  const previousPlayers = await read<{ fetchedAt: string; data: CbbPlayerSeason[] }>("players-2025.json");
+  const opening = await read<{ fetchedAt: string; data: CbbOdds[] }>("odds-opening.json");
+  const current = await read<{ fetchedAt: string; data: CbbOdds[] }>("odds-current.json");
+  const sharp = await read<{ fetchedAt: string; data: CbbNamedOddsRow[] }>("sharp-event-odds.json").catch(() => ({ fetchedAt: new Date().toISOString(), data: [] }));
+  const freshMarket = refreshMarket ? await freshMarketReceipt() : null;
+  const pathReceipts = candidateR5 ? await recentMarketReceipts() : [];
+  const capturedMarket = freshMarket ?? (pathReceipts[0]?.splits ? {
+    odds: { fetchedAt: pathReceipts[0].fetchedAt, body: pathReceipts[0].odds },
+    splits: pathReceipts[0].splits, receipt: pathReceipts[0].receipt,
+  } : null);
+  const owls = candidateR5 ? capturedMarket?.odds ?? await read<{ fetchedAt: string; body: RawOwlsOddsResponse }>("owls-cbb-current.json") : null;
+  const readerExperiment = candidateR5 ? await read<Record<string, unknown>>("market-reader-joint-objective-report.json") : null;
+  const totalHead = candidateR17 ? await read<CbbTotalOnlyMarketHead>("candidate-r17-total-only-head.json") : null;
+  const venues = await read<{ data: CbbVenue[] }>("venues-2026.json");
+  const asOf = new Date().toISOString();
+  const state = fitCbbRatings([], { season: 2026, asOf, config: artifact.config, prior: artifact.prior });
+  const cards = [];
+  for (const game of schedule.data.filter(game => etDay(game.date) === date && game.status === "pre")) {
+    let venue = venues.data.find(row => row.gameId === game.id) ?? null;
+    const espn = await read<{ fetchedAt: string; events: EspnCbbEvent[] }>(`espn-${date}.json`).catch(() => null);
+    if (espn) venue = matchCbbVenue(game, espn.events, espn.fetchedAt);
+    const cardIdentities = espn ? completeCbbTeamIdentitiesFromEvents({ identities,
+      games: [game], events: espn.events, fetchedAt: espn.fetchedAt }) : identities;
+    const r2 = candidateR2 ? forecastCbbCandidateR2({ id: game.id, date: game.date, season: game.season,
+      homeId: game.home_team.id, awayId: game.visitor_team.id, neutral: venue?.neutral ?? null }, asOf) : null;
+    const forecast = r2?.forecast ?? forecastCbbGame(state, { id: game.id, date: game.date, homeId: game.home_team.id,
+      awayId: game.visitor_team.id, neutral: venue?.neutral ?? null }, artifact.uncertainty);
+    const hRoster = buildCbbRosterContextAt(game.home_team.id, roster, previousPlayers, 2025, asOf);
+    const aRoster = buildCbbRosterContextAt(game.visitor_team.id, roster, previousPlayers, 2025, asOf);
+    const named = normalizeCbbNamedBookOdds(game, sharp.data, sharp.fetchedAt, asOf);
+    const owlsNamed = owls ? normalizeCbbOwlsCurrent(game, owls.body, owls.fetchedAt, asOf) : null;
+    const marketSplitEvidence = capturedMarket ? cbbCurrentSplitEvidence(game, capturedMarket.odds.body,
+      capturedMarket.splits, capturedMarket.odds.fetchedAt, asOf) : null;
+    const bdlCurrent = normalizeCbbOdds(current.data.filter(row => row.game_id === game.id), {
+      gameId: game.id, startsAt: game.date, asOf, fetchedAt: current.fetchedAt, phase: "current",
+    });
+    const bdlOpening = normalizeCbbOdds(opening.data.filter(row => row.game_id === game.id), {
+      gameId: game.id, startsAt: game.date, asOf, fetchedAt: opening.fetchedAt, phase: "opening",
+    });
+    const bindings = bdlCurrent.quotes.map(quote => bindCbbQuoteOrientation(quote, named.quotes));
+    const authoritativeQuotes = owlsNamed?.quotes ?? named.quotes; // Exact named selections, never generic home/away guessing.
+    const targetBook = candidateR17 ? chooseCbbCompleteTargetBook(authoritativeQuotes) ?? "unavailable" :
+      authoritativeQuotes.some(q => q.sportsbook === "draftkings") ? "draftkings" : authoritativeQuotes[0]?.sportsbook ?? "unavailable";
+    const displayedQuotes = candidateR17 ? authoritativeQuotes.filter(quote => quote.sportsbook === targetBook) : authoritativeQuotes;
+    const marketContext = candidateR5 ? buildCbbMarketReaderFeatures(forecast, authoritativeQuotes.map(quote => ({ quote,
+      orientation: "named_selections_verified", availability: "observed_live" })), targetBook, { archiveReplay: false }) : null;
+    const marketChronology = capturedMarket ? cbbObservedPricePaths(pathReceipts.flatMap(receipt =>
+      normalizeCbbOwlsCurrent(game, receipt.odds, receipt.fetchedAt, asOf).quotes), targetBook) : [];
+    const marketOutcome = totalHead && marketContext && targetBook !== "unavailable" ?
+      applyCbbTotalOnlyMarketHead(forecast, marketContext.features, totalHead) : null;
+    const finalForecast = marketOutcome?.forecast ?? forecast;
+    const provisionalBoard = candidateR5 ? buildCbbProvisionalBoard(finalForecast, authoritativeQuotes) : null;
+    const readerSnapshot = provisionalBoard && Date.parse(asOf) < Date.parse(game.date) - 60 * 60_000
+      ? advanceCbbProvisionalSnapshot({ existing: null, candidate: provisionalBoard,
+        startsAt: game.date, now: asOf }) : null;
+    const reader = readerSnapshot ? buildCbbProvisionalReader({ game, locked: null,
+      unlocked: readerSnapshot, homeLogo: cardIdentities.get(game.home_team.id)?.logoUrl ?? null,
+      awayLogo: cardIdentities.get(game.visitor_team.id)?.logoUrl ?? null,
+      currentSplits: marketSplitEvidence, currentPricePaths: marketChronology }) : null;
+    cards.push({ game, venue, forecast: finalForecast, roster: { home: hRoster, away: aRoster },
+      marketSplitEvidence, marketChronology,
+      provisionalBoard, reader,
+      teamIdentity: { home: cardIdentities.get(game.home_team.id) ?? null, away: cardIdentities.get(game.visitor_team.id) ?? null },
+      inputAsOf: { schedule: schedule.fetchedAt, prices: candidateR5 ? owls!.fetchedAt : current.fetchedAt,
+        ...(candidateR5 ? { owls: owls!.fetchedAt } : { sharp: sharp.fetchedAt }) },
+      independentRatings: { home: (r2?.state ?? state).teams[game.home_team.id], away: (r2?.state ?? state).teams[game.visitor_team.id] },
+      marketReview: displayedQuotes.map(quote => ({ ...reviewCbbQuote(finalForecast, quote),
+        alternatives: quote.market === "moneyline" ? [] : [-6, -3, 0, 3, 6].map(delta => ({
+          line: quote.line! + delta, ...cbbThresholdProbabilities(finalForecast, quote.market, quote.line! + delta),
+          pricesAvailable: delta === 0,
+        })) })),
+      bdlOrientationBindings: candidateR5 ? [] : bindings, rejectedNamedRows: candidateR5 ? [] : named.rejected,
+      rawProviderMovement: cbbSameBookMovement(bdlOpening.quotes, bdlCurrent.quotes),
+      marketBrainObservations: candidateR5 ? [] : cbbPriceObservations([...bdlOpening.quotes, ...bdlCurrent.quotes]),
+      marketInference: { status: candidateR17 ? "private_total_only_candidate_not_activated" : candidateR5 ? "integrated_private_research_no_candidate_qualified" : "qualification_pending",
+        applied: marketOutcome?.applied ?? false,
+        ...(marketContext ? { readerRelease: candidateR17 ? CBB_TOTAL_ONLY_MARKET_RESEARCH_RELEASE : CBB_MARKET_READER_RESEARCH_RELEASE,
+          targetBook, context: marketContext, provider: "owls" } : {}),
+        ...(candidateR17 ? { reason: marketOutcome?.reason ?? "no_complete_exact_target", independentForecast: forecast,
+          totalCorrection: (marketOutcome?.forecast.total ?? forecast.total) - forecast.total } : {}) },
+      owlsEvidenceRejections: owlsNamed?.rejected ?? [],
+      issues: [...forecast.issues, ...(!venue?.timeConfirmed ? ["unconfirmed_start_time"] : []),
+        ...(!cardIdentities.get(game.home_team.id)?.logoUrl ? ["home_team_logo_unverified"] : []),
+        ...(!cardIdentities.get(game.visitor_team.id)?.logoUrl ? ["away_team_logo_unverified"] : []),
+        "availability_unverified", "roster_impact_unvalidated", "market_reader_qualification_pending", "play_grade_calibration_pending"],
+    });
+  }
+  const release = candidateR17 ? CBB_TOTAL_ONLY_MARKET_RESEARCH_RELEASE : candidateR2 ? CBB_SCORE_RESEARCH_RELEASE : CBB_MODEL_RELEASE;
+  const readiness = { ...cbbLaunchReadiness({ owner_approval: { passed: true,
+    evidence: "2026-10-29 owner approved working toward a graded November 1 CBB Daily Edge with provisional grades" },
+    independent_confirmation: { passed: true, evidence: candidateR2
+    ? "score-improvement-report.json: 2024 selection, opened 2025 paired diagnostic" : "evaluation-report.json: chronological 2025 confirmation" } }), release };
+  const outputName = candidateR17 ? `preview-total-only-${date}` : candidateR5 ? `preview-market-${date}` : `preview-${date}`;
+  const payload = { generatedAt: asOf, date, release, candidate: candidateR17 ? "r17_total_only_private" : candidateR5 ? "r5_integration_audit" : candidateR2 ? "r2" : "r1", activation: CBB_ACTIVATION, readiness, readerExperiment,
+    marketSource: capturedMarket ? { receipt: capturedMarket.receipt, oddsBooksReturned: capturedMarket.odds.body.meta?.booksReturned ?? [],
+      splitStatus: capturedMarket.splits.meta?.status ?? "unknown", splitGames: capturedMarket.splits.data?.length ?? 0 } : null,
+    cards };
+  await writeFile(resolve(dir, `${outputName}.json`), JSON.stringify(payload, null, 2));
+  const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OddsSphere CBB • Private candidate</title><style>
+  *{box-sizing:border-box}body{margin:0;background:#0b111a;color:#e5eaf1;font:15px/1.5 system-ui,sans-serif}main{max-width:1120px;margin:auto;padding:40px 24px}h1{font-size:32px;margin:8px 0}.muted{color:#a2aec0}.tag{color:#64d8c6;font-size:12px;text-transform:uppercase;letter-spacing:1.5px}.summary{display:flex;gap:16px;flex-wrap:wrap;margin:26px 0}.stat,article{background:#131d2a;border:1px solid #293649;border-radius:14px;padding:20px}.stat{min-width:170px}.stat strong{display:block;font-size:25px}article{margin:22px 0}.teams{display:flex;justify-content:space-between;gap:12px}.teams h2{font-size:22px;margin:0}.score{font-size:32px;font-weight:700;white-space:nowrap}.metrics{display:flex;gap:26px;flex-wrap:wrap;margin:16px 0}.metrics span{color:#a2aec0}.metrics b{color:#e5eaf1;margin-left:8px}table{border-collapse:collapse;width:100%;margin-top:20px}td,th{text-align:left;border-bottom:1px solid #293649;padding:10px 8px}th{color:#a2aec0;font-size:12px}details{margin-top:18px}ul{padding-left:20px}.note{padding:14px 18px;border-left:3px solid #64d8c6;background:#15232c;margin:24px 0}a{color:#64d8c6}@media(max-width:600px){main{padding:24px 14px}.teams{display:block}.score{margin-top:10px}td,th{padding:8px 3px;font-size:12px}.stat{min-width:140px;flex:1}}
+  </style><main><div class="tag">OddsSphere • Private prelaunch candidate</div><h1>College basketball</h1><p class="muted">${escape(date)} · Independent forecast and source verification · Publication disabled</p><div class="summary"><div class="stat"><strong>${pct(report.confirmation.accuracy)}</strong>Historical winner accuracy</div><div class="stat"><strong>${report.confirmation.wins}–${report.confirmation.losses}</strong>2025–26 confirmation</div><div class="stat"><strong>${report.confirmation.marginMae.toFixed(2)} points</strong>Average margin error</div><div class="stat"><strong>${report.confirmation.totalMae.toFixed(2)} points</strong>Average total error</div></div><div class="note">${candidateR17 ? "The r17 Total-only market score is a private opening-price experiment. The historical summary above is the independent r2 benchmark, not an r17 accuracy claim. Moneyline/Spread remain independent; grades, injury/roster impact, and live movement/splits qualification remain pending." : "These are independent-model development results. Market-driven score corrections, injury/roster impact and Best Angle/Lean grades await CBB-specific validation."} This preview creates no site changes, locks or wagers.</div>
+  ${cards.map(card => `<article><div class="teams"><div><h2>${card.teamIdentity.away?.logoUrl ? `<img src="${escape(card.teamIdentity.away.logoUrl)}" alt="" width="26" height="26">` : ""}${escape(card.game.visitor_team.full_name)}<br>${card.teamIdentity.home?.logoUrl ? `<img src="${escape(card.teamIdentity.home.logoUrl)}" alt="" width="26" height="26">` : ""}${escape(card.game.home_team.full_name)}</h2><p class="muted">${escape(card.venue?.venue ?? "Venue unverified")} · ${card.venue?.neutral ? "Neutral site" : "Home venue"}</p></div><div class="score">${card.forecast.awayScore.toFixed(1)} – ${card.forecast.homeScore.toFixed(1)}</div></div><div class="metrics"><span>${escape(card.game.home_team.abbreviation)} win<b>${pct(card.forecast.homeWinProbability)}</b></span><span>Total<b>${card.forecast.total.toFixed(1)}</b></span><span>Possessions<b>${card.forecast.possessions.toFixed(1)}</b></span></div><table><thead><tr><th>Market</th><th>Named book</th><th>Forecast side</th><th>Price</th><th>Probability</th><th>Grade</th></tr></thead><tbody>${card.marketReview.map(row => `<tr><td>${row.quote.market}${row.quote.line !== null ? ` ${row.quote.line}` : ""}</td><td>${escape(row.quote.sportsbook)}</td><td>${row.quote.market === "total" ? row.selection === "first" ? "Over" : "Under" : escape(row.selection === "first" ? card.game.home_team.abbreviation : card.game.visitor_team.abbreviation)}</td><td>${row.selection === "first" ? row.quote.firstPrice : row.quote.secondPrice}</td><td>${pct(row.probability)}</td><td>Research only</td></tr>`).join("") || '<tr><td colspan="6">Verified named-team prices unavailable</td></tr>'}</tbody></table><details><summary>Roster and input verification</summary><p>Returning minutes: ${escape(card.game.home_team.abbreviation)} ${card.roster.home.returningMinutesShare === null ? "unknown" : pct(card.roster.home.returningMinutesShare)}; ${escape(card.game.visitor_team.abbreviation)} ${card.roster.away.returningMinutesShare === null ? "unknown" : pct(card.roster.away.returningMinutesShare)}. Roster context is retained; no unvalidated numerical roster correction is applied.</p><ul>${card.issues.map(issue => `<li>${escape(issue.replaceAll("_", " "))}</li>`).join("")}</ul></details></article>`).join("")}
+  <p class="muted">Private ${candidateR17 ? "r17 Total-only experiment" : candidateR2 ? "r2 score-improvement" : "r1 baseline"} preview generated ${escape(asOf)}. Raw evidence, orientation receipts and alternate-line probabilities are included in the adjacent JSON file. ${candidateR2 ? "The 2025–26 comparison is an opened retrospective diagnostic, not a new untouched holdout." : ""}</p></main></html>`;
+  // Keep the private rendered board in parity with its JSON: one exact target
+  // quote and one provisional grade per market, never every book as a pick.
+  const gradedTables = cards.map(card => {
+    const board = card.provisionalBoard;
+    if (!board) return "";
+    const table = `<table><thead><tr><th>Market</th><th>Target book</th><th>Pick</th><th>Line</th><th>Price</th><th>Model win %</th><th>Grade</th><th>Evidence</th></tr></thead><tbody>${board.rows.map(row => {
+      const pick = row.selection === null ? "Unavailable" : row.market === "total" ?
+        row.selection === "first" ? "Over" : "Under" :
+        row.selection === "first" ? card.game.home_team.abbreviation : card.game.visitor_team.abbreviation;
+      const selectedLine = row.line === null ? null : row.market === "spread" && row.selection === "second" ? -row.line : row.line;
+      const line = selectedLine === null ? "ML" : row.market === "total" ? String(selectedLine) :
+        selectedLine > 0 ? `+${selectedLine}` : String(selectedLine);
+      const price = row.price === null ? "—" : row.price > 0 ? `+${row.price}` : String(row.price);
+      return `<tr><td>${escape(row.market)}</td><td>${escape(row.targetBook ?? "—")}</td><td>${escape(pick)}</td><td>${escape(line)}</td><td>${escape(price)}</td><td>${row.probability === null ? "—" : pct(row.probability)}</td><td>${escape(row.grade)}</td><td>${escape(row.reason.replaceAll("_", " "))}; professional ${escape(row.referenceState)}</td></tr>`;
+    }).join("")}</tbody></table>`;
+    const reader = card.reader;
+    const splitRows = reader?.markets.reduce((count, row) => count + row.splits.length, 0) ?? 0;
+    const observedChanges = reader?.markets.flatMap(row => row.pricePaths).filter(path => path.distinctStates > 1) ?? [];
+    const readerSummary = `<details><summary>Game reader · projection, grades and market evidence</summary><p>Projected score: ${reader ? `${reader.away.name} ${reader.score.away.toFixed(1)} – ${reader.home.name} ${reader.score.home.toFixed(1)}` : "Unavailable inside T-60 lock window without a stored snapshot"}. ${reader ? `Home win: ${pct(reader.score.homeWinProbability)}. Total: ${reader.score.total.toFixed(1)}. Prediction-market reader: ${reader.predictionMarketReader}.` : ""}</p><ul>${reader?.markets.map(row => `<li>${escape(row.market)}: ${escape(row.side ?? "Unavailable")} ${row.selectedLine === null ? "ML" : escape(row.selectedLine)} at ${row.price === null ? "unavailable" : escape(row.price)} · ${escape(row.grade)} (${escape(row.gradeReason.replaceAll("_", " "))}) · professional ${escape(row.professionalReferenceState)} · ${row.splits.length} both-side split rows · ${row.pricePaths.length} observed book paths</li>`).join("") ?? ""}</ul></details><div class="note">Market reader: ${board.marketContext.professionalPriceReferences} fresh target-excluded professional references; ${splitRows} verified both-side split rows; ${observedChanges.length} observed same-book price paths with a change. ${observedChanges.length ? "Movement is observed but not treated as a causal sharp-money signal." : "No verified price movement is present in this captured window."} The score remains independent because no CBB market score correction has qualified.</div>`;
+    return table + readerSummary;
+  });
+  let gradedTableIndex = 0;
+  const displayedHtml = candidateR5 ? html.replace(/<table>[\s\S]*?<\/table>/g, () => {
+    const table = gradedTables[gradedTableIndex++];
+    if (!table) throw new Error("CBB private grade table/card mismatch");
+    return table;
+  }) : html;
+  if (candidateR5 && gradedTableIndex !== cards.length) throw new Error("CBB private preview omitted a graded card");
+  const researchNote = candidateR17 ? `<div class="note">Private r17: only eligible, target-book-excluded named prices can correct the Total. Both team scores are derived from that Total and the unchanged independent margin. No-reference games remain exact r2. This is not a validated sharp movement reader or approved play-grade policy.</div>` :
+    candidateR5 ? `<div class="note">Private graded board: each game shows one exact target quote per market and a provisional Best Angle, Lean, Watchlist, No Play, or Held grade. Fresh named prices and target-book-excluded context are connected, but tested market score heads did not qualify, so independent r2 scores remain authoritative. A model-only Lean is not sharp-confirmed; this is not a claimed accuracy improvement.</div>` : "";
+  await writeFile(resolve(dir, `${outputName}.html`), displayedHtml.replace("<div class=\"summary\">", `${researchNote}<div class="summary">`));
+  console.log(JSON.stringify({ date, cards: cards.length, readiness: readiness.remaining, preview: resolve(dir, `${outputName}.html`),
+    forecasts: cards.map(card => ({ away: card.game.visitor_team.full_name, home: card.game.home_team.full_name, awayScore: card.forecast.awayScore, homeScore: card.forecast.homeScore,
+      verifiedQuotes: card.marketReview.length, reversedPrices: card.bdlOrientationBindings.filter(binding => binding.orientation === "verified_reversed").length })) }));
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

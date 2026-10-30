@@ -900,10 +900,10 @@ check(
     candidateMemberPageSource.includes('sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba"'),
 );
 check(
-  "the NBA rolling board becomes interactive before hydrating every future date",
-  candidateDailyEdgeSource.includes('const progressiveNbaBoard = sport === "nba"') &&
+  "the basketball rolling board becomes interactive before hydrating every future date",
+  candidateDailyEdgeSource.includes('const progressiveBasketballBoard = (sport === "nba" || sport === "cbb")') &&
     candidateDailyEdgeSource.includes("window.requestIdleCallback(revealNextDate") &&
-    candidateDailyEdgeSource.includes("const renderedGameGroups = progressiveNbaBoard") &&
+    candidateDailyEdgeSource.includes("const renderedGameGroups = progressiveBasketballBoard") &&
     candidateDailyEdgeSource.includes("renderedGameGroups.map"),
 );
 check(

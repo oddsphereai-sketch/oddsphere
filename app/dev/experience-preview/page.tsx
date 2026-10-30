@@ -7,6 +7,8 @@ import {
   DAILY_EDGE_SPORT_KEYS,
 } from "@/app/lab/lib/dailyEdgeSports";
 import ActualDailyEdgePreview from "./ActualDailyEdgePreview";
+import { currentSlateDate } from "@/lib/dates/slateDate";
+import { loadCbbRollingSchedule } from "@/lib/services/cbb/cbbRollingSchedule";
 import {
   emptyPreviewSnapshot,
   loadCachedFreshContractSnapshot,
@@ -38,6 +40,9 @@ export default async function PrivateExperiencePreviewPage({
   const sport = DAILY_EDGE_SPORT_KEYS.includes(requestedSport as Sport)
     ? (requestedSport as Sport)
     : "mlb";
+  // The CBB candidate has no authenticated preview entitlement yet. A
+  // production-mode preview flag alone must not expose its schedule publicly.
+  if (sport === "cbb" && process.env.NODE_ENV === "production") notFound();
   const requestedDate =
     typeof query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(query.date)
       ? query.date
@@ -49,6 +54,13 @@ export default async function PrivateExperiencePreviewPage({
       ? await loadCachedFreshContractSnapshot(sport, requestedDate ?? "")
       : await loadDailyEdgeSnapshot(sport, requestedDate)
     : emptyPreviewSnapshot(sport);
+  if (sport === "cbb") {
+    // Private schedule review only. This cannot enable the member board or
+    // manufacture a forecast/grade for a fixture without analysis.
+    snapshot.date = requestedDate ?? currentSlateDate("cbb");
+    snapshot.requested_date = snapshot.date;
+    snapshot.cbbRollingSchedule = await loadCbbRollingSchedule(snapshot.date);
+  }
   const [history, pitcherFirstInningHistory] = await Promise.all([
     loadTeamHistory(snapshot, sport),
     loadPitcherFirstInningHistory(snapshot, sport),

@@ -59,7 +59,7 @@ const SPORT_DISPLAY_ORDER: Sport[] = ["mlb", "nba", "wnba", "cbb", "nfl", "cfb",
 const SPORT_MARKETS: Record<Sport, string[]> = {
   mlb: ["ML", "O/U", "NRFI", "YRFI", "NRFI/YRFI"],
   nba: ["ML", "O/U", "Spread"],
-  cbb: ["ML", "O/U"],
+  cbb: ["ML", "O/U", "Spread"],
   nfl: ["ML", "O/U", "Spread"],
   cfb: ["ML", "O/U", "Spread"],
   nhl: ["ML", "O/U", "Spread"],
@@ -549,21 +549,26 @@ async function loadWnbaGradeRows(): Promise<ResultRow[]> {
   return rows;
 }
 
-/** NFL and CFB write their official forward-only records to the modern
+/** NFL, CFB, and CBB write their official forward-only records to the modern
  * prediction_records/prediction_grades path. Bridge settled rows into this
  * legacy aggregate response at each sport's explicit public launch floor. */
-async function loadFootballGradeRows(sport: "nfl" | "cfb"): Promise<ResultRow[]> {
+async function loadLockedGradeRows(sport: "nfl" | "cfb" | "cbb"): Promise<ResultRow[]> {
   const start = officialTrackingStart(sport);
   if (start == null) return [];
-  const { data: records, error: recErr } = await supabase
-    .from("prediction_records")
-    .select("id, market, slate_date")
-    .eq("sport", sport)
-    .gte("slate_date", start);
-  if (recErr || !records || records.length === 0) return [];
+  const records: Array<{id:string;market:string;slate_date:string}>=[];
+  for(let offset=0;offset<100_000;offset+=500){
+    const {data,error}=await supabase.from("prediction_records")
+      .select("id, market, slate_date").eq("sport",sport).gte("slate_date",start)
+      .not("locked_at","is",null).order("id",{ascending:true}).range(offset,offset+499);
+    if(error)throw new Error(`${sport} locked tracking read failed: ${error.message}`);
+    records.push(...(data??[]) as Array<{id:string;market:string;slate_date:string}>);
+    if((data??[]).length<500)break;
+  }
+  if(records.length===100_000)throw new Error(`${sport} locked tracking page budget exhausted`);
+  if(records.length===0)return [];
 
   const byId = new Map<string, { market: string; slate_date: string }>();
-  for (const record of records as Array<{ id: string; market: string; slate_date: string }>) {
+  for (const record of records) {
     byId.set(String(record.id), {
       market: record.market,
       slate_date: String(record.slate_date).slice(0, 10),
@@ -653,13 +658,13 @@ export async function GET(request: Request) {
     // non-fatal: WNBA rows simply won't appear this request.
   }
 
-  // NFL and CFB use the same modern immutable T-60 record/grade tables as
-  // WNBA. Keep either bridge failure isolated from every other sport.
-  for (const sport of ["nfl", "cfb"] as const) {
+  // The three forward-only sports use the same immutable T-60 record/grade
+  // tables. Keep one bridge failure isolated from every other sport.
+  for (const sport of ["nfl", "cfb", "cbb"] as const) {
     try {
-      allRows.push(...(await loadFootballGradeRows(sport)));
+      allRows.push(...(await loadLockedGradeRows(sport)));
     } catch {
-      // non-fatal: one football sport cannot break the complete tracker.
+      // non-fatal: one sport cannot break the complete tracker.
     }
   }
 

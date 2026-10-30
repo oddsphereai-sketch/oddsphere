@@ -21,9 +21,9 @@ const marketKey=(kind:string)=>kind==="moneyline"?"h2h":kind==="spread"?"spreads
 const identity=(e:Pick<BookDisplayEntry,"event"|"start"|"kind"|"side"|"book">)=>[e.event,Date.parse(e.start),e.kind,e.side,e.book].join("|");
 
 export function matchOwlsDisplayEvent(events:RawOwlsOddsEvent[],game:DailyEdgeGameDto,sport:PredictionMarketSport):RawOwlsOddsEvent|null{
-  const matchesTeam=(name:string,abbreviation:string,displayName:string|null|undefined)=>sport==="nfl"?nflProviderTeamMatches(name,abbreviation,displayName??abbreviation):predictionMarketTeamMatches({sideCode:name,team:name},abbreviation,displayName,sport);
+  const matchesTeam=(name:string,abbreviation:string,displayName:string|null|undefined,college?:string|null)=>sport==="nfl"?nflProviderTeamMatches(name,abbreviation,displayName??abbreviation):predictionMarketTeamMatches({sideCode:name,team:name},abbreviation,displayName,sport,college);
   const matches=events.filter(e=>typeof e.eventId==="string"&&Math.abs(Date.parse(e.commence_time??"")-Date.parse(game.gameStartAt??""))<=60*60_000&&
-    matchesTeam(e.away_team??"",game.awayTeam,game.awayTeamDisplayName)&&matchesTeam(e.home_team??"",game.homeTeam,game.homeTeamDisplayName));
+    matchesTeam(e.away_team??"",game.awayTeam,game.awayTeamDisplayName,game.cbbAwayCollege)&&matchesTeam(e.home_team??"",game.homeTeam,game.homeTeamDisplayName,game.cbbHomeCollege));
   return matches.length===1?matches[0]:null;
 }
 
@@ -79,7 +79,7 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
   if(active.length&&(!events.length||now-Date.parse(eventsAt)>2*60*60_000)&&budget.discovery<12&&!reserve()){
     budget.discovery++;
     requests++;
-    try{const result=await client.odds<RawOwlsOddsResponse>((sport==="cfb"?"ncaaf":sport==="ucl"?"soccer":sport) as OwlsSport);remainingMonth=result.rateLimit.remainingMonth??remainingMonth;const data=result.body.data;
+    try{const result=await client.odds<RawOwlsOddsResponse>((sport==="cfb"?"ncaaf":sport==="cbb"?"ncaab":sport==="ucl"?"soccer":sport) as OwlsSport);remainingMonth=result.rateLimit.remainingMonth??remainingMonth;const data=result.body.data;
       if(result.body.success===true&&data){
         const grouped=new Map<string,RawOwlsOddsEvent>();
         for(const e of Array.isArray(data)?data:Object.values(data).flatMap(v=>Array.isArray(v)?v:[]))if(typeof e.eventId==="string"){

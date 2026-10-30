@@ -6,6 +6,33 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-29
 
+## College basketball November 1 staged launch
+
+- Owner approved going live on October 30. This first cutover enables only the
+  sole leased CBB prediction writer (`CBB_ACTIVATION.status=writer_warmup`,
+  `predictionWrites=true`). Member publication remains off until a real stored
+  board, lock path, source coverage, and live cron are verified. There is no
+  separate environment switch that can silently leave the approved writer off.
+  Stakes remain disabled. No existing locked CBB member record is reinterpreted.
+- The private candidate retains independent score release
+  `cbb_candidate_2026_10_28_r2_score_precision`, production provisional grade release
+  `cbb_2026_10_30_r1_provisional_launch`, and exact three-market board
+  release `cbb_candidate_2026_10_29_r3_exact_quote_reader_fields`. The proposed sole
+  leased publisher is `cbb_member_pipeline_2026_10_29_r2_exact_graded_locked_board`; its
+  stored game contract is `cbb_member_game_store_2026_10_29_r1_single_leased_writer`.
+  Tracking mirrors only immutable T-60 records under
+  `cbb_tracking_writer_2026_10_29_r1_locked_only` and starts no earlier than November 1.
+- The candidate's price-level professional corroboration and exact named-book splits are
+  truthful when present. Its score does **not** claim a validated market flip or roster/injury
+  correction; the November 1 source rehearsal currently has no verified professional quote
+  or matched split for either of the two priced games. The owner approved provisional grades
+  despite this early-season limitation, not a claimed win-rate improvement.
+- CBB Kalshi game/spread/total display reads the official Kalshi CBB series separately from
+  prediction and grading. It is matched by exact institution and start, with locked pregame
+  receipts taking precedence. Other sports' model releases and locked records are unchanged.
+
+Evidence, board impact, and rollback: `docs/model-audits/2026-10-29-cbb-november-launch-predeclaration.md`.
+
 ## Cross-sport confidence / execution contract
 
 - Unpublished NFL observation-substrate repair:

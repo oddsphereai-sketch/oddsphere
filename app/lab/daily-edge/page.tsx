@@ -4,6 +4,7 @@ import { isDailyEdgeExperienceCandidateEnabled } from "@/lib/config/dailyEdgeExp
 import { isNflDailyEdgeEnabled } from "@/lib/config/nflDailyEdge";
 import { resolveDailyEdgeSport } from "@/app/lab/lib/dailyEdgeSports";
 import { connection } from "next/server";
+import { CBB_ACTIVATION } from "@/lib/cbb/releases";
 
 export default async function DailyEdgePage({
   searchParams,
@@ -23,8 +24,9 @@ export default async function DailyEdgePage({
   const requestedSport = Array.isArray(query.sport) ? query.sport[0] : query.sport;
   const initialSport = resolveDailyEdgeSport(requestedSport);
   const nflMemberRead = initialSport === "nfl" && isNflDailyEdgeEnabled();
+  const cbbMemberRead = initialSport === "cbb" && CBB_ACTIVATION.memberPublication;
 
-  return isDailyEdgeExperienceCandidateEnabled() || nflMemberRead
+  return isDailyEdgeExperienceCandidateEnabled() || nflMemberRead || cbbMemberRead
     ? <CandidateDailyEdgePage searchParams={Promise.resolve(query)} />
     : <LegacyDailyEdgePage />;
 }

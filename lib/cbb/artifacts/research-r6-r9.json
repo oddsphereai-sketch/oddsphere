@@ -1,0 +1,670 @@
+{
+  "status": "private_research_no_replacement",
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "datasetSha256": "d2bde4460339e83a21e04864bc8168ec2236f25c21663288f8b2124ce4064e48",
+  "trainingSeason": 2023,
+  "selectionSeason": 2024,
+  "diagnosticSeason": 2025,
+  "limitations": "Previously opened, adaptively researched outcomes; no pristine holdout, production or betting-performance claim. Quoted cohort uses fixture-corroborated orientation, not selection-level side proof.",
+  "baseline": {
+    "games": 5721,
+    "wins": 4112,
+    "losses": 1609,
+    "accuracy": 0.7187554623317601,
+    "marginMae": 9.278874638665073,
+    "totalMae": 13.637830726433894,
+    "brier": 0.18001607871723296,
+    "logLoss": 0.5301079147091189
+  },
+  "r6": {
+    "release": "cbb_candidate_2026_10_28_r6_structural_fit",
+    "candidates": [
+      {
+        "variant": {
+          "id": "converged",
+          "seasonEndPrior": false,
+          "dateEnvironment": false
+        },
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4113,
+          "losses": 1597,
+          "accuracy": 0.7203152364273205,
+          "marginMae": 9.24203613877963,
+          "totalMae": 12.906137496182522,
+          "brier": 0.18140631969827273,
+          "logLoss": 0.5344201819530218
+        },
+        "numerical": {
+          "fits": 306,
+          "unconverged": 0,
+          "maxIterations": 85,
+          "maxFinalChange": 9.984395532569579e-8,
+          "maxInitialChange": 0.0026227803175729036
+        }
+      },
+      {
+        "variant": {
+          "id": "converged_season_end",
+          "seasonEndPrior": true,
+          "dateEnvironment": false
+        },
+        "eligible": true,
+        "metrics": {
+          "games": 5710,
+          "wins": 4115,
+          "losses": 1595,
+          "accuracy": 0.7206654991243433,
+          "marginMae": 9.206664846439486,
+          "totalMae": 12.90598995787009,
+          "brier": 0.18094427247934863,
+          "logLoss": 0.5328831210456403
+        },
+        "numerical": {
+          "fits": 306,
+          "unconverged": 0,
+          "maxIterations": 84,
+          "maxFinalChange": 9.998209549166859e-8,
+          "maxInitialChange": 0.0022543796691127937
+        }
+      },
+      {
+        "variant": {
+          "id": "converged_date_environment",
+          "seasonEndPrior": false,
+          "dateEnvironment": true
+        },
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4115,
+          "losses": 1595,
+          "accuracy": 0.7206654991243433,
+          "marginMae": 9.241204553076184,
+          "totalMae": 12.916199534429621,
+          "brier": 0.18135814404834322,
+          "logLoss": 0.5343731068725762
+        },
+        "numerical": {
+          "fits": 306,
+          "unconverged": 0,
+          "maxIterations": 85,
+          "maxFinalChange": 9.992424065963235e-8,
+          "maxInitialChange": 2.3435059039945454
+        }
+      },
+      {
+        "variant": {
+          "id": "converged_season_end_date_environment",
+          "seasonEndPrior": true,
+          "dateEnvironment": true
+        },
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4118,
+          "losses": 1592,
+          "accuracy": 0.7211908931698774,
+          "marginMae": 9.205902028370796,
+          "totalMae": 12.915764407346213,
+          "brier": 0.18089216980960107,
+          "logLoss": 0.532819247173214
+        },
+        "numerical": {
+          "fits": 306,
+          "unconverged": 0,
+          "maxIterations": 84,
+          "maxFinalChange": 9.998208838624123e-8,
+          "maxInitialChange": 2.3971685573943766
+        }
+      }
+    ],
+    "selected": {
+      "id": "converged_season_end",
+      "seasonEndPrior": true,
+      "dateEnvironment": false
+    },
+    "diagnostic": {
+      "candidate": {
+        "games": 5721,
+        "wins": 4105,
+        "losses": 1616,
+        "accuracy": 0.7175319000174795,
+        "marginMae": 9.253433190760134,
+        "totalMae": 13.640644508656013,
+        "brier": 0.17968617242671842,
+        "logLoss": 0.5288862827128974
+      },
+      "corrections": 19,
+      "harms": 26
+    }
+  },
+  "r7": {
+    "release": "cbb_candidate_2026_10_28_r7_matchup_mechanism",
+    "candidates": [
+      {
+        "penalty": 10,
+        "loss": "squared",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4133,
+          "losses": 1577,
+          "accuracy": 0.7238178633975482,
+          "marginMae": 9.158082244149913,
+          "totalMae": 12.939183605375986,
+          "brier": 0.18025254766053828,
+          "logLoss": 0.5310720168227403
+        }
+      },
+      {
+        "penalty": 10,
+        "loss": "huber",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4126,
+          "losses": 1584,
+          "accuracy": 0.7225919439579684,
+          "marginMae": 9.158309962845694,
+          "totalMae": 12.908789365963184,
+          "brier": 0.18013947929703808,
+          "logLoss": 0.5308872449407053
+        }
+      },
+      {
+        "penalty": 100,
+        "loss": "squared",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4127,
+          "losses": 1583,
+          "accuracy": 0.7227670753064799,
+          "marginMae": 9.14902780683134,
+          "totalMae": 12.911969369650489,
+          "brier": 0.18000762713859395,
+          "logLoss": 0.5304782725805562
+        }
+      },
+      {
+        "penalty": 100,
+        "loss": "huber",
+        "eligible": true,
+        "metrics": {
+          "games": 5710,
+          "wins": 4130,
+          "losses": 1580,
+          "accuracy": 0.723292469352014,
+          "marginMae": 9.152485871147604,
+          "totalMae": 12.89260519905425,
+          "brier": 0.1798737969749453,
+          "logLoss": 0.5302977463059436
+        }
+      },
+      {
+        "penalty": 1000,
+        "loss": "squared",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4127,
+          "losses": 1583,
+          "accuracy": 0.7227670753064799,
+          "marginMae": 9.185899010844809,
+          "totalMae": 12.953811207258124,
+          "brier": 0.18023578471219168,
+          "logLoss": 0.5312420685750117
+        }
+      },
+      {
+        "penalty": 1000,
+        "loss": "huber",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4115,
+          "losses": 1595,
+          "accuracy": 0.7206654991243433,
+          "marginMae": 9.21098513020436,
+          "totalMae": 12.982503088362499,
+          "brier": 0.1805254496732543,
+          "logLoss": 0.5321500354392226
+        }
+      }
+    ],
+    "selected": {
+      "penalty": 100,
+      "loss": "huber"
+    },
+    "diagnostic": {
+      "baseline": {
+        "games": 5721,
+        "wins": 4112,
+        "losses": 1609,
+        "accuracy": 0.7187554623317601,
+        "marginMae": 9.278874638665073,
+        "totalMae": 13.637830726433894,
+        "brier": 0.18001607871723296,
+        "logLoss": 0.5301079147091189
+      },
+      "candidate": {
+        "games": 5721,
+        "wins": 4145,
+        "losses": 1576,
+        "accuracy": 0.7245236846705122,
+        "marginMae": 9.230642455546429,
+        "totalMae": 13.573838681706945,
+        "brier": 0.17853336562210742,
+        "logLoss": 0.5266662103093016
+      },
+      "corrections": 174,
+      "harms": 141
+    }
+  },
+  "r8": {
+    "release": "cbb_candidate_2026_10_28_r8_evidence_maturity",
+    "candidates": [
+      {
+        "penalty": 10,
+        "loss": "squared",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4125,
+          "losses": 1585,
+          "accuracy": 0.7224168126094571,
+          "marginMae": 9.161450489101236,
+          "totalMae": 12.948976905600167,
+          "brier": 0.18016793066878392,
+          "logLoss": 0.5308974651140889
+        }
+      },
+      {
+        "penalty": 10,
+        "loss": "huber",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4142,
+          "losses": 1568,
+          "accuracy": 0.7253940455341507,
+          "marginMae": 9.15944458388773,
+          "totalMae": 12.920018759943927,
+          "brier": 0.18009421340239115,
+          "logLoss": 0.5306766451834751
+        }
+      },
+      {
+        "penalty": 100,
+        "loss": "squared",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4130,
+          "losses": 1580,
+          "accuracy": 0.723292469352014,
+          "marginMae": 9.141468940484177,
+          "totalMae": 12.91361435645944,
+          "brier": 0.1798300216045143,
+          "logLoss": 0.5300042697212826
+        }
+      },
+      {
+        "penalty": 100,
+        "loss": "huber",
+        "eligible": true,
+        "metrics": {
+          "games": 5710,
+          "wins": 4144,
+          "losses": 1566,
+          "accuracy": 0.7257443082311734,
+          "marginMae": 9.145009085375037,
+          "totalMae": 12.892936772507136,
+          "brier": 0.1796703779839619,
+          "logLoss": 0.5297475061632697
+        }
+      },
+      {
+        "penalty": 1000,
+        "loss": "squared",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4122,
+          "losses": 1588,
+          "accuracy": 0.7218914185639229,
+          "marginMae": 9.17739022650349,
+          "totalMae": 12.943951776499068,
+          "brier": 0.1800986645690773,
+          "logLoss": 0.5309472258602675
+        }
+      },
+      {
+        "penalty": 1000,
+        "loss": "huber",
+        "eligible": false,
+        "metrics": {
+          "games": 5710,
+          "wins": 4129,
+          "losses": 1581,
+          "accuracy": 0.7231173380035026,
+          "marginMae": 9.198151656450586,
+          "totalMae": 12.96768151788258,
+          "brier": 0.18032671021901245,
+          "logLoss": 0.531706732168265
+        }
+      }
+    ],
+    "selected": {
+      "penalty": 100,
+      "loss": "huber"
+    },
+    "diagnostic": {
+      "baseline": {
+        "games": 5721,
+        "wins": 4112,
+        "losses": 1609,
+        "accuracy": 0.7187554623317601,
+        "marginMae": 9.278874638665073,
+        "totalMae": 13.637830726433894,
+        "brier": 0.18001607871723296,
+        "logLoss": 0.5301079147091189
+      },
+      "candidate": {
+        "games": 5721,
+        "wins": 4146,
+        "losses": 1575,
+        "accuracy": 0.724698479286838,
+        "marginMae": 9.226732088557384,
+        "totalMae": 13.570880095623266,
+        "brier": 0.17860096124656988,
+        "logLoss": 0.5266535081474791
+      },
+      "corrections": 177,
+      "harms": 143
+    }
+  },
+  "r9": {
+    "release": "cbb_candidate_2026_10_28_r9_joint_matchup_market",
+    "counts": {
+      "training": 151,
+      "selection": 162,
+      "later": 40
+    },
+    "candidates": [
+      {
+        "penalty": 1,
+        "eligible": false,
+        "deltas": {
+          "moneyline": -8,
+          "spread": -6,
+          "total": 0
+        },
+        "net": -14
+      },
+      {
+        "penalty": 10,
+        "eligible": false,
+        "deltas": {
+          "moneyline": -3,
+          "spread": -5,
+          "total": 1
+        },
+        "net": -7
+      },
+      {
+        "penalty": 100,
+        "eligible": false,
+        "deltas": {
+          "moneyline": -2,
+          "spread": -5,
+          "total": -1
+        },
+        "net": -8
+      }
+    ],
+    "selected": null
+  },
+  "openingTotal635": {
+    "r2": {
+      "wins": 341,
+      "losses": 294,
+      "pushes": 0,
+      "passes": 0,
+      "accuracy": 0.537007874015748,
+      "corrections": 0,
+      "harms": 0,
+      "unitsAtOneRisked": 14.938728104329106,
+      "conditionalWlBrier": 0.24781454182758503,
+      "conditionalWlLogLoss": 0.6886448174925556
+    },
+    "r6": {
+      "wins": 342,
+      "losses": 293,
+      "pushes": 0,
+      "passes": 0,
+      "accuracy": 0.5385826771653544,
+      "corrections": 3,
+      "harms": 2,
+      "unitsAtOneRisked": 16.835349598776688,
+      "conditionalWlBrier": 0.24776670687732813,
+      "conditionalWlLogLoss": 0.6885473515800705
+    },
+    "r7": {
+      "wins": 335,
+      "losses": 300,
+      "pushes": 0,
+      "passes": 0,
+      "accuracy": 0.5275590551181102,
+      "corrections": 64,
+      "harms": 70,
+      "unitsAtOneRisked": 3.49699190172334,
+      "conditionalWlBrier": 0.24896388523540963,
+      "conditionalWlLogLoss": 0.6910152425076153
+    },
+    "r8": {
+      "wins": 331,
+      "losses": 304,
+      "pushes": 0,
+      "passes": 0,
+      "accuracy": 0.521259842519685,
+      "corrections": 82,
+      "harms": 92,
+      "unitsAtOneRisked": -4.290325616412588,
+      "conditionalWlBrier": 0.2493730356842879,
+      "conditionalWlLogLoss": 0.6918961882456823
+    }
+  },
+  "threeMarket353": {
+    "moneyline": {
+      "r2": {
+        "wins": 241,
+        "losses": 112,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.6827195467422096,
+        "corrections": 0,
+        "harms": 0,
+        "unitsAtOneRisked": -12.660762201937706,
+        "conditionalWlBrier": 0.19452046432401712,
+        "conditionalWlLogLoss": 0.5681213181056686
+      },
+      "r6": {
+        "wins": 243,
+        "losses": 110,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.6883852691218131,
+        "corrections": 2,
+        "harms": 0,
+        "unitsAtOneRisked": -9.120145955439114,
+        "conditionalWlBrier": 0.1942922319567554,
+        "conditionalWlLogLoss": 0.5676388221984822
+      },
+      "r7": {
+        "wins": 239,
+        "losses": 114,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.6770538243626062,
+        "corrections": 8,
+        "harms": 10,
+        "unitsAtOneRisked": -17.358034600814854,
+        "conditionalWlBrier": 0.1940187564663458,
+        "conditionalWlLogLoss": 0.5664664153860078
+      },
+      "r8": {
+        "wins": 240,
+        "losses": 113,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.6798866855524079,
+        "corrections": 10,
+        "harms": 11,
+        "unitsAtOneRisked": -14.858469383423552,
+        "conditionalWlBrier": 0.19396831998054406,
+        "conditionalWlLogLoss": 0.5662903232446158
+      }
+    },
+    "spread": {
+      "r2": {
+        "wins": 198,
+        "losses": 155,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.5609065155807366,
+        "corrections": 0,
+        "harms": 0,
+        "unitsAtOneRisked": 23.149053571120234,
+        "conditionalWlBrier": 0.2430798891868128,
+        "conditionalWlLogLoss": 0.678450477179018
+      },
+      "r6": {
+        "wins": 196,
+        "losses": 157,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.5552407932011332,
+        "corrections": 4,
+        "harms": 6,
+        "unitsAtOneRisked": 18.98649093090306,
+        "conditionalWlBrier": 0.24307618691240396,
+        "conditionalWlLogLoss": 0.6784475002229967
+      },
+      "r7": {
+        "wins": 184,
+        "losses": 169,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.5212464589235127,
+        "corrections": 42,
+        "harms": 56,
+        "unitsAtOneRisked": -3.666997325190862,
+        "conditionalWlBrier": 0.24473926799005005,
+        "conditionalWlLogLoss": 0.68176772752141
+      },
+      "r8": {
+        "wins": 186,
+        "losses": 167,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.5269121813031161,
+        "corrections": 51,
+        "harms": 63,
+        "unitsAtOneRisked": 0.10739411558188561,
+        "conditionalWlBrier": 0.24606617747663276,
+        "conditionalWlLogLoss": 0.6844595802278887
+      }
+    },
+    "total": {
+      "r2": {
+        "wins": 175,
+        "losses": 178,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.49575070821529743,
+        "corrections": 0,
+        "harms": 0,
+        "unitsAtOneRisked": -19.491612004843702,
+        "conditionalWlBrier": 0.2500561888187378,
+        "conditionalWlLogLoss": 0.6931859746199815
+      },
+      "r6": {
+        "wins": 176,
+        "losses": 177,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.4985835694050991,
+        "corrections": 1,
+        "harms": 0,
+        "unitsAtOneRisked": -17.622046787452398,
+        "conditionalWlBrier": 0.2499648014070327,
+        "conditionalWlLogLoss": 0.6929999918534858
+      },
+      "r7": {
+        "wins": 189,
+        "losses": 164,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.5354107648725213,
+        "corrections": 41,
+        "harms": 27,
+        "unitsAtOneRisked": 6.953224284386167,
+        "conditionalWlBrier": 0.2475010329689598,
+        "conditionalWlLogLoss": 0.6880550423818013
+      },
+      "r8": {
+        "wins": 186,
+        "losses": 167,
+        "pushes": 0,
+        "passes": 0,
+        "accuracy": 0.5269121813031161,
+        "corrections": 53,
+        "harms": 42,
+        "unitsAtOneRisked": 1.2995916851013916,
+        "conditionalWlBrier": 0.2472749797878347,
+        "conditionalWlLogLoss": 0.687619153932767
+      }
+    }
+  },
+  "pairedUncertainty": {
+    "r7": {
+      "method": "2000 fixed-seed calendar-date block bootstrap",
+      "independentDates": 148,
+      "scope": "within opened retrospective cohort; excludes selection bias, future seasons and persistent team dependence",
+      "marginMaeDelta95": [
+        -0.09200423362359265,
+        -0.00612739986137618
+      ],
+      "totalMaeDelta95": [
+        -0.11501341620610134,
+        -0.016744084741585986
+      ],
+      "winnerAccuracyDelta95": [
+        -0.0007334066740007334,
+        0.012182566918325326
+      ]
+    },
+    "r8": {
+      "method": "2000 fixed-seed calendar-date block bootstrap",
+      "independentDates": 148,
+      "scope": "within opened retrospective cohort; excludes selection bias, future seasons and persistent team dependence",
+      "marginMaeDelta95": [
+        -0.10208596245548424,
+        -0.004249621039055419
+      ],
+      "totalMaeDelta95": [
+        -0.12802276325949516,
+        -0.009353212616581851
+      ],
+      "winnerAccuracyDelta95": [
+        0,
+        0.012429971988795517
+      ]
+    }
+  },
+  "decision": "No private preview replacement. R6 loses seven full-season winners; R7/R8 hurt quoted Spread and broader Total outcomes; R9 fails selection."
+}

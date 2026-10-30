@@ -31,19 +31,19 @@ export async function GET(request: Request): Promise<Response> {
       // Isolated display capture only. A Kalshi failure must not block splits.
       const [splitResult,predictionResult] = await Promise.allSettled([
         sport === "soccer" || sport === "ucl" ? Promise.resolve(0) : refreshOwlsCurrentSplitFallback(sport),
-        sport === "cbb" ? Promise.resolve({rows:0,owlsRequests:0,warnings:[] as string[]}) : refreshPredictionMarketDisplayFeed(sport as PredictionMarketSport),
+        refreshPredictionMarketDisplayFeed(sport as PredictionMarketSport),
       ]);
       if (splitResult.status === "rejected") throw splitResult.reason;
       const retainedRows = splitResult.value;
       const predictionMarketRows = predictionResult.status === "fulfilled" ? predictionResult.value.rows : 0;
       const predictionMarketError = predictionResult.status === "rejected" ? String(predictionResult.reason) : predictionResult.value.warnings.join("; ")||null;
-      const predictionRequests=predictionResult.status==="fulfilled"?predictionResult.value.owlsRequests:sport==="cbb"?0:5+contractKinds(sport as PredictionMarketSport).length;
+      const predictionRequests=predictionResult.status==="fulfilled"?predictionResult.value.owlsRequests:5+contractKinds(sport as PredictionMarketSport).length;
       return {
         records_updated: retainedRows + predictionMarketRows,
         partial: predictionMarketError !== null,
         error_message: predictionMarketError,
         api_calls_made: (sport==="soccer"||sport==="ucl"?0:1)+predictionRequests,
-        details: { provider: "owls", retainedRows, predictionMarketRows, predictionMarketError, apiCallAccounting:predictionResult.status==="fulfilled"?"OWLS requests":"OWLS request ceiling on capture error",publicHistoryBatchCeiling:3,bookHistoryRequestCeiling:3,bookDiscoveryRequestCeiling:1,
+        details: { provider: sport==="cbb"?"owls_and_kalshi_direct":"owls", retainedRows, predictionMarketRows, predictionMarketError, apiCallAccounting:predictionResult.status==="fulfilled"?"provider requests":"provider request ceiling on capture error",publicHistoryBatchCeiling:3,bookHistoryRequestCeiling:3,bookDiscoveryRequestCeiling:1,
           historyCoverage:predictionResult.status==="fulfilled"&&"historyCoverage"in predictionResult.value?predictionResult.value.historyCoverage:null },
       };
     },

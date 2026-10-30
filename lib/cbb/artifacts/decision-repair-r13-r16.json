@@ -1,0 +1,83 @@
+{
+  "status": "private_audit_only_not_promoted",
+  "defaultPreviewUnchanged": true,
+  "productionWrites": 0,
+  "selectionSeason": 2024,
+  "openedDiagnosticSeason": 2025,
+  "cohorts": {
+    "fullSeasonGames": 5721,
+    "threeMarketOpeningGames": 353,
+    "widerTotalOpeningGames": 635,
+    "neutralSymmetryGames": 689
+  },
+  "baselineR2": {
+    "fullSeasonWinners": 4112,
+    "marginMae": 9.278874638665073,
+    "totalMae": 13.637830726433894,
+    "opening353": { "moneyline": 241, "spread": 198, "total": 175 },
+    "opening635Total": 341
+  },
+  "priorR12": {
+    "fullSeasonWinners": 4126,
+    "marginMae": 9.222866687281755,
+    "totalMae": 13.59141757,
+    "opening353": { "moneyline": 237, "spread": 195, "total": 186 },
+    "opening635Total": 333
+  },
+  "diagnosis": {
+    "r12AverageTotalIncreaseOn635": 1.8035366238115251,
+    "r12FlipsToOver": 158,
+    "r12FlipsToUnder": 8,
+    "r12Corrections": 79,
+    "r12Harms": 87,
+    "actualOvers": 299,
+    "actualUnders": 336,
+    "regulationGames": 600,
+    "regulationUnders": 328,
+    "overtimeGames": 35,
+    "overtimeMeanActualMinusLine": 18.785714285714285,
+    "marketQuoteCohortsSameBookAndCutoff": 100,
+    "marketQuoteCohortsSameTotalLine": 230,
+    "earlierBallDontLieQuoteProbeRows": 0
+  },
+  "candidates": {
+    "r13MatchedMean": {
+      "selectedOn2024Grid": true,
+      "fullSeasonWinners": 4126,
+      "totalMae": 13.59222275708741,
+      "opening353": { "moneyline": 237, "spread": 195, "total": 176 },
+      "opening635Total": 325,
+      "opening635CorrectionsVsR2": 90,
+      "opening635HarmsVsR2": 106
+    },
+    "r14MedianTotal": {
+      "selectedOn2024Grid": false,
+      "fullSeasonWinners": 4126,
+      "totalMae": 13.610214725825374,
+      "opening353": { "moneyline": 237, "spread": 195, "total": 182 },
+      "opening635Total": 330
+    },
+    "r15DecisionDistribution": {
+      "selectedOn2024Grid": false,
+      "fullSeasonWinners": 4115,
+      "totalMae": 13.58016062598356,
+      "opening353": { "moneyline": 238, "spread": 192, "total": 184 },
+      "opening635Total": 324
+    },
+    "r16OvertimeMixture": {
+      "selectedOn2024Grid": true,
+      "fullSeasonWinners": 4126,
+      "opening353": { "moneyline": 237, "spread": 195, "total": 184 },
+      "opening635Total": 329,
+      "opening635CorrectionsVsR12": 17,
+      "opening635HarmsVsR12": 21,
+      "2024GridTotalLogLossR12": 0.2807459733147813,
+      "2024GridTotalLogLossR16": 0.28024183684810533,
+      "2024GridWinnersR12": 105245,
+      "2024GridWinnersR16": 105259,
+      "predictedOvertimeRate2025": 0.05773894358584792,
+      "meanRegulationLocationShift": -1.3940105613076565
+    }
+  },
+  "conclusion": "No candidate improved the opening-line Total record while retaining the independent winner gains and improving the quoted moneyline and spread records. All results remain offline and already-opened 2025 diagnostics, not a validated live release."
+}

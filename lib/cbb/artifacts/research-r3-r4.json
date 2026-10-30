@@ -1,0 +1,291 @@
+{
+  "productionWrites": 0,
+  "shot": {
+    "release": "cbb_candidate_2026_10_28_r3_shot_profile",
+    "trainingSeason": 2023,
+    "selectionSeason": 2024,
+    "baseline": {
+      "games": 5710,
+      "wins": 4113,
+      "losses": 1597,
+      "accuracy": 0.7203152364273205,
+      "marginMae": 9.242039303778343,
+      "totalMae": 12.90613655873017,
+      "teamScoreMae": 8.008022001484179,
+      "brier": 0.18140642155619266,
+      "logLoss": 0.534420518879391,
+      "calibrationGap": 0.02449522206427559
+    },
+    "candidates": [
+      {
+        "id": "linear_10_squared",
+        "metrics": {
+          "games": 5710,
+          "wins": 4145,
+          "losses": 1565,
+          "accuracy": 0.7259194395796847,
+          "marginMae": 9.146676504585697,
+          "totalMae": 12.902139681656429,
+          "teamScoreMae": 7.963991994860001,
+          "brier": 0.17976603237417857,
+          "logLoss": 0.5300150538961808,
+          "calibrationGap": 0.018233093375775552
+        },
+        "eligible": true,
+        "score": 0.9946859699643119
+      },
+      {
+        "id": "linear_10_huber",
+        "metrics": {
+          "games": 5710,
+          "wins": 4131,
+          "losses": 1579,
+          "accuracy": 0.7234676007005254,
+          "marginMae": 9.147337066602592,
+          "totalMae": 12.870100750228769,
+          "teamScoreMae": 7.957367388044262,
+          "brier": 0.17964857974712542,
+          "logLoss": 0.5298889350271968,
+          "calibrationGap": 0.02075699963751195
+        },
+        "eligible": true,
+        "score": 0.9934804781825655
+      },
+      {
+        "id": "linear_100_squared",
+        "metrics": {
+          "games": 5710,
+          "wins": 4138,
+          "losses": 1572,
+          "accuracy": 0.7246935201401051,
+          "marginMae": 9.155642094073814,
+          "totalMae": 12.87825325290092,
+          "teamScoreMae": 7.966296900386256,
+          "brier": 0.17985230453584902,
+          "logLoss": 0.5302161093265164,
+          "calibrationGap": 0.024115319042876445
+        },
+        "eligible": true,
+        "score": 0.9942456234979098
+      },
+      {
+        "id": "linear_100_huber",
+        "metrics": {
+          "games": 5710,
+          "wins": 4146,
+          "losses": 1564,
+          "accuracy": 0.7260945709281962,
+          "marginMae": 9.164834934149605,
+          "totalMae": 12.872126699261857,
+          "teamScoreMae": 7.9718411414712325,
+          "brier": 0.17986060364902676,
+          "logLoss": 0.5304497019304105,
+          "calibrationGap": 0.02168209172067934
+        },
+        "eligible": true,
+        "score": 0.9945056113782481
+      },
+      {
+        "id": "linear_1000_squared",
+        "metrics": {
+          "games": 5710,
+          "wins": 4124,
+          "losses": 1586,
+          "accuracy": 0.7222416812609457,
+          "marginMae": 9.209102122232585,
+          "totalMae": 12.953849886958345,
+          "teamScoreMae": 8.01323392543268,
+          "brier": 0.18061061888759009,
+          "logLoss": 0.5322712387134845,
+          "calibrationGap": 0.023589739275118284
+        },
+        "eligible": false,
+        "score": 1.000066552742183
+      },
+      {
+        "id": "linear_1000_huber",
+        "metrics": {
+          "games": 5710,
+          "wins": 4111,
+          "losses": 1599,
+          "accuracy": 0.7199649737302978,
+          "marginMae": 9.2327289690233,
+          "totalMae": 12.991067197024963,
+          "teamScoreMae": 8.03484529073287,
+          "brier": 0.18092381016111875,
+          "logLoss": 0.5332077132550412,
+          "calibrationGap": 0.024664563230732805
+        },
+        "eligible": false,
+        "score": 1.0027866251668363
+      },
+      {
+        "id": "tree_2",
+        "metrics": {
+          "games": 5710,
+          "wins": 4113,
+          "losses": 1597,
+          "accuracy": 0.7203152364273205,
+          "marginMae": 9.232839216270392,
+          "totalMae": 12.983841213137557,
+          "teamScoreMae": 8.029830626583754,
+          "brier": 0.1811215437710058,
+          "logLoss": 0.5335011691423549,
+          "calibrationGap": 0.025858727177319876
+        },
+        "eligible": false,
+        "score": 1.002512645885577
+      },
+      {
+        "id": "tree_3",
+        "metrics": {
+          "games": 5710,
+          "wins": 4108,
+          "losses": 1602,
+          "accuracy": 0.7194395796847636,
+          "marginMae": 9.229577850201386,
+          "totalMae": 12.97382467221461,
+          "teamScoreMae": 8.021799171032823,
+          "brier": 0.18094132988386571,
+          "logLoss": 0.5329791090727546,
+          "calibrationGap": 0.026260320853919755
+        },
+        "eligible": false,
+        "score": 1.0019481505567072
+      }
+    ],
+    "selected": "linear_10_huber",
+    "diagnosticBaseline": {
+      "games": 5721,
+      "wins": 4112,
+      "losses": 1609,
+      "accuracy": 0.7187554623317601,
+      "marginMae": 9.278874638665073,
+      "totalMae": 13.637830726433894,
+      "teamScoreMae": 8.299451660646458,
+      "brier": 0.18001607871723296,
+      "logLoss": 0.5301079147091189,
+      "calibrationGap": 0.0137253325580737
+    },
+    "diagnostic": {
+      "games": 5721,
+      "wins": 4136,
+      "losses": 1585,
+      "accuracy": 0.7229505331235798,
+      "marginMae": 9.231355556997379,
+      "totalMae": 13.601566476584955,
+      "teamScoreMae": 8.267262269926391,
+      "brier": 0.17853230490630217,
+      "logLoss": 0.5266624359633194,
+      "calibrationGap": 0.01325469495245953
+    },
+    "corrections": 188,
+    "harms": 164,
+    "uncertainty": {
+      "method": "2000 fixed-seed calendar-date block bootstrap",
+      "independentDates": 148,
+      "scope": "within opened retrospective cohort; excludes selection bias, future seasons and persistent team dependence",
+      "marginMaeDelta95": [
+        -0.09552185371817709,
+        0.0016637933167374004
+      ],
+      "totalMaeDelta95": [
+        -0.09484612644737253,
+        0.017426401431366038
+      ],
+      "winnerAccuracyDelta95": [
+        -0.0024681201151789387,
+        0.010741327698538475
+      ]
+    },
+    "decision": "Not promoted: weak paired evidence, worse opening-Total direction on separate benchmark"
+  },
+  "temporal": {
+    "release": "cbb_candidate_2026_10_28_r4_temporal_profile",
+    "baseline": {
+      "games": 5710,
+      "wins": 4131,
+      "losses": 1579,
+      "accuracy": 0.7234676007005254,
+      "marginMae": 9.147337066602592,
+      "totalMae": 12.870100750228769,
+      "teamScoreMae": 7.957367388044262,
+      "brier": 0.17964857974712542,
+      "logLoss": 0.5298889350271968,
+      "calibrationGap": 0.02075699963751195
+    },
+    "candidates": [
+      {
+        "config": {
+          "id": "temporal_30",
+          "ridge": 1,
+          "paceRidge": 0.25,
+          "priorCarry": 0.8,
+          "recencyDays": 30
+        },
+        "metrics": {
+          "games": 5710,
+          "wins": 4122,
+          "losses": 1588,
+          "accuracy": 0.7218914185639229,
+          "marginMae": 9.270332054865067,
+          "totalMae": 12.881573226752883,
+          "teamScoreMae": 8.001075799472565,
+          "brier": 0.18187835977403155,
+          "logLoss": 0.5364283254968342,
+          "calibrationGap": 0.018353139267896754
+        },
+        "eligible": false,
+        "score": 1.007168696879087
+      },
+      {
+        "config": {
+          "id": "temporal_60",
+          "ridge": 1,
+          "paceRidge": 0.25,
+          "priorCarry": 0.8,
+          "recencyDays": 60
+        },
+        "metrics": {
+          "games": 5710,
+          "wins": 4126,
+          "losses": 1584,
+          "accuracy": 0.7225919439579684,
+          "marginMae": 9.193107504761553,
+          "totalMae": 12.86640035693545,
+          "teamScoreMae": 7.970801380297861,
+          "brier": 0.18037179608036025,
+          "logLoss": 0.5320970439704573,
+          "calibrationGap": 0.022367018448419602
+        },
+        "eligible": false,
+        "score": 1.0023580856558423
+      },
+      {
+        "config": {
+          "id": "temporal_120",
+          "ridge": 1,
+          "paceRidge": 0.25,
+          "priorCarry": 0.8,
+          "recencyDays": 120
+        },
+        "metrics": {
+          "games": 5710,
+          "wins": 4145,
+          "losses": 1565,
+          "accuracy": 0.7259194395796847,
+          "marginMae": 9.130879542141775,
+          "totalMae": 12.873791903346639,
+          "teamScoreMae": 7.953526345060898,
+          "brier": 0.17939856447581226,
+          "logLoss": 0.529104702049281,
+          "calibrationGap": 0.020543277626474957
+        },
+        "eligible": false,
+        "score": 0.9992438202372365
+      }
+    ],
+    "selected": null
+  },
+  "diagnosticStatus": "2025 is already opened; not pristine holdout"
+}
