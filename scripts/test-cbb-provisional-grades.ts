@@ -64,6 +64,19 @@ const moneyline: CbbQuote = { ...target, market: "moneyline", line: null,
   firstPrice: -305, secondPrice: 255 };
 const total: CbbQuote = { ...target, market: "total", line: 148.5,
   firstPrice: -110, secondPrice: -110 };
+const bestMoneylineTarget: CbbQuote = { ...moneyline, firstPrice: -125, secondPrice: 110 };
+const bestMoneylineReference: CbbQuote = { ...bestMoneylineTarget, sportsbook: "pinnacle",
+  firstPrice: -135, secondPrice: 115 };
+assert.equal(gradeCbbProvisional({ ...input, target: bestMoneylineTarget,
+  references: [bestMoneylineReference] }).grade, "Best Angle");
+assert.equal(gradeCbbProvisional({ ...input, target: bestMoneylineTarget,
+  references: [] }).grade, "Lean");
+const bestTotalTarget: CbbQuote = { ...total, line: 160.5 };
+const bestTotalReference: CbbQuote = { ...total, sportsbook: "pinnacle", line: 155.5 };
+assert.equal(gradeCbbProvisional({ ...input, target: bestTotalTarget,
+  references: [bestTotalReference] }).grade, "Best Angle");
+assert.equal(gradeCbbProvisional({ ...input, target: bestTotalTarget,
+  references: [] }).grade, "Lean");
 const board = buildCbbProvisionalBoard(forecast, [moneyline, target, total, sharp]);
 const beforeProfessionalArrival = buildCbbProvisionalBoard(forecast, [moneyline, target, total]);
 assert.equal(beforeProfessionalArrival.rows.find(row => row.market === "spread")?.referenceState, "unavailable");

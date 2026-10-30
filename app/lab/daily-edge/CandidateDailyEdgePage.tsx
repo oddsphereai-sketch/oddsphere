@@ -348,7 +348,7 @@ export default async function CandidateDailyEdgePage({
             }
           : cbbRollingBoard
             ? {
-                label: `CBB · Next 7 Days · ${snapshot.games.length} analyzed games · ${snapshot.cbbRollingSchedule?.games.length ?? 0} schedule-only games`,
+                label: "CBB · Daily slates · choose a game day below",
                 previousHref: null,
                 nextHref: null,
                 asOf: snapshot.as_of,
