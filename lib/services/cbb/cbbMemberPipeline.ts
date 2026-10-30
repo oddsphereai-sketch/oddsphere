@@ -20,7 +20,7 @@ import { loadCbbRollingSchedule } from "./cbbRollingSchedule";
 import { dailyEdgeSnapshotKey, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import { writeLockedCbbTracking } from "./cbbTrackingWriter";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_10_29_r2_exact_graded_locked_board" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_10_30_r3_canonical_start_instant" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -82,7 +82,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   let written=0,locked=0,held=0,missingLogos=0,trackingInserted=0;
   for(const game of sourceGames){
     const identity=scheduled.get(game.id);
-    if(!identity||identity.gameStartAt!==game.date||identity.homeTeamDisplayName!==game.home_team.full_name||
+    const seededStart=identity?Date.parse(identity.gameStartAt):NaN;
+    const providerStart=Date.parse(game.date);
+    if(!identity||!Number.isFinite(seededStart)||!Number.isFinite(providerStart)||seededStart!==providerStart||
+      identity.homeTeamDisplayName!==game.home_team.full_name||
       identity.awayTeamDisplayName!==game.visitor_team.full_name){problems.push(`${game.id}:seed_identity_missing_or_changed`);continue;}
     if(!identity.homeTeamLogo||!identity.awayTeamLogo)missingLogos++;
     const previous=prior.get(game.id)??null;

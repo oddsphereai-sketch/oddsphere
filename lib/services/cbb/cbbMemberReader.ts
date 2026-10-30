@@ -29,7 +29,8 @@ export async function overlayCbbLockedMemberGames(board:DailyEdgeResponse,db?:ty
     if(record.snapshot.startsAt!==game.gameStartAt||record.memberGame.id!==game.id)throw new Error("CBB locked reader identity mismatch");
     if(!record.snapshot.lockedAt)return game;
     const official=finals.get(game.external_id);
-    if(!official||official.game_date!==record.snapshot.startsAt)throw new Error("CBB locked result identity missing");
+    if(!official||!Number.isFinite(Date.parse(official.game_date))||
+      Date.parse(official.game_date)!==Date.parse(record.snapshot.startsAt))throw new Error("CBB locked result identity missing");
     return {...structuredClone(record.memberGame),result:cbbOfficialGameResultFromScores(record.snapshot,{
       status:official.status,statusState:official.status==="STATUS_FINAL"?"final":null,
       homeScore:official.home_score,awayScore:official.away_score})};

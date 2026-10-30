@@ -18,7 +18,7 @@ Last reviewed: 2026-10-29
   `cbb_candidate_2026_10_28_r2_score_precision`, production provisional grade release
   `cbb_2026_10_30_r1_provisional_launch`, and exact three-market board
   release `cbb_candidate_2026_10_29_r3_exact_quote_reader_fields`. The proposed sole
-  leased publisher is `cbb_member_pipeline_2026_10_29_r2_exact_graded_locked_board`; its
+  leased publisher is `cbb_member_pipeline_2026_10_30_r3_canonical_start_instant`; its
   stored game contract is `cbb_member_game_store_2026_10_29_r1_single_leased_writer`.
   Tracking mirrors only immutable T-60 records under
   `cbb_tracking_writer_2026_10_29_r1_locked_only` and starts no earlier than November 1.
@@ -32,6 +32,15 @@ Last reviewed: 2026-10-29
   receipts taking precedence. Other sports' model releases and locked records are unchanged.
 
 Evidence, board impact, and rollback: `docs/model-audits/2026-10-29-cbb-november-launch-predeclaration.md`.
+
+The first production writer refresh on October 30 failed closed before member
+publication: PostgreSQL returned canonical `+00:00` fixture timestamps while
+Ball Don't Lie returned equivalent `.000Z` instants. Release r3 compares the
+parsed start instant while still requiring exact game ID, team names, and
+verified logos; a true start-time change remains a hard identity failure. The
+same instant check applies to post-lock official-result overlay, leaving the
+stored locked projection and grade untouched.
+No prediction or locked member game was written by the failed refresh.
 
 ## Cross-sport confidence / execution contract
 
