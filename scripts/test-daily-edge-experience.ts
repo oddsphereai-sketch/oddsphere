@@ -1336,7 +1336,7 @@ check(
     candidateSource.includes('aria-label="Selected Edge collapsed reader"') &&
     candidateSource.includes("Compact read · click any game or market below to open the full reader.") &&
     candidateSource.includes("initialReaderRequested || !initialGame ? initialSelection.market : primaryMarket(initialGame)") &&
-    candidateSource.includes('activeId={game.id}'),
+    candidateSource.includes('activeId={selectedCbbScheduleId === null ? game.id : ""}'),
 );
 check(
   "a URL-restored mobile reader cannot lock desktop page scrolling",
@@ -1950,7 +1950,7 @@ check(
     candidateDailyEdgeSource.includes('const groupingTimeZone = uclBoard ? userTimeZone : "America/New_York"') &&
     candidateDailyEdgeSource.includes('uclBoard ? "Match Schedule"') &&
     candidateDailyEdgeSource.includes("Matches are grouped by your local calendar date.") &&
-    candidateDailyEdgeSource.includes("boardDateLabel(rows[0]?.gameStartAt, groupingTimeZone)"),
+    candidateDailyEdgeSource.includes("boardDateLabel(rows[0]?.game.gameStartAt, groupingTimeZone)"),
 );
 check(
   "shared soccer fallbacks retain provider club names and prefer club logos over country flags",
