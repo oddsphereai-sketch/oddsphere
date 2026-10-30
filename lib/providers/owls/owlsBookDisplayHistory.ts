@@ -2,7 +2,8 @@
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import type { PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import { predictionMarketTeamMatches, type PredictionMarketSport } from "./owlsPredictionMarkets";
-import { readerContractSelection } from "./predictionMarketContracts";
+import { readerHistoryContractSelection } from "./predictionMarketContracts";
+import { publicMarketDisplayBook } from "@/app/lab/lib/publicMarketDisplayTrail";
 import { bookPriorityRank } from "@/lib/config/bookPriority";
 import { isBlockedSportsbook } from "@/lib/config/blockedSportsbooks";
 import { OwlsInsightClient, type OwlsSport } from "./owlsInsightClient";
@@ -92,24 +93,28 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
   }
   const rows=new Map((previous?.rows??[]).filter(e=>Date.parse(e.start)>now-86_400_000).map(e=>[identity(e),e]));
   const targets:Array<Omit<BookDisplayEntry,"opening"|"quotes"|"checkedAt">>=[];
+  const publicTargets=new Set<string>();
   for(const game of active){
     const event=matchOwlsDisplayEvent(events,game,sport);if(!event?.eventId)continue;
     for(const key of ["moneyline","total","first_inning"] as const){
-      const selection=readerContractSelection(game,key),pick=game.markets[key].pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
+      const selection=readerHistoryContractSelection(game,key),pick=game.markets[key].pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
       const kind=key==="moneyline"?"moneyline":selection?.kind,side=selection?.side??(pick===game.awayTeam.toUpperCase()?"away":pick===game.homeTeam.toUpperCase()?"home":pick==="DRAW"?"draw":null);
       if(!kind||!side)continue;
       const rank=(book:string)=>book==="circa"?0:book==="pinnacle"?1:2+bookPriorityRank(book);
       const books=(event.bookmakers??[]).filter(b=>b.key&&!isBlockedSportsbook(b.key)&&Number.isFinite(bookPriorityRank(b.key))&&b.markets?.some(m=>m.key===marketKey(kind))&&Number.isFinite(Date.parse(b.last_update??"")))
         .sort((a,b)=>Number(now-Date.parse(a.last_update!)>600_000)-Number(now-Date.parse(b.last_update!)>600_000)||rank(a.key!)-rank(b.key!));
-      const market=game.markets[key],reference=market.movementReferenceSportsbook?.trim().toLowerCase()??market.oddsTrail?.filter(s=>s.label==="current"&&s.sportsbook).sort((a,b)=>Date.parse(b.observedAt??"")-Date.parse(a.observedAt??""))[0]?.sportsbook?.trim().toLowerCase();
+      const market=game.markets[key],reference=publicMarketDisplayBook(market)?.sportsbook?.trim().toLowerCase()??market.movementReferenceSportsbook?.trim().toLowerCase()??market.oddsTrail?.filter(s=>s.label==="current"&&s.sportsbook).sort((a,b)=>Date.parse(b.observedAt??"")-Date.parse(a.observedAt??""))[0]?.sportsbook?.trim().toLowerCase();
       // The public reader may legitimately choose a fresher fallback. Retain
       // that exact published book's opening too, not only a sharp-book open
       // that cannot be spliced into its trace. Same existing daily/cycle cap.
-      for(const book of new Set([books[0]?.key,books.find(b=>b.key===reference)?.key]))if(book)targets.push({event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side,book});
+      for(const book of new Set([books.find(b=>b.key===reference)?.key,books[0]?.key]))if(book){
+        const target={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side,book};
+        targets.push(target);if(book===reference)publicTargets.add(identity(target));
+      }
     }
   }
   const pending=targets.filter(t=>!rows.has(identity(t))||now-Date.parse(rows.get(identity(t))!.checkedAt)>24*60*60_000)
-    .sort((a,b)=>Number(rows.has(identity(a)))-Number(rows.has(identity(b)))||Date.parse(rows.get(identity(a))?.checkedAt??"1970-01-01")-Date.parse(rows.get(identity(b))?.checkedAt??"1970-01-01")||a.start.localeCompare(b.start));
+    .sort((a,b)=>Number(rows.has(identity(a)))-Number(rows.has(identity(b)))||Number(publicTargets.has(identity(b)))-Number(publicTargets.has(identity(a)))||Date.parse(rows.get(identity(a))?.checkedAt??"1970-01-01")-Date.parse(rows.get(identity(b))?.checkedAt??"1970-01-01")||a.start.localeCompare(b.start));
   if(pending.length&&(reserve()||budget.history>=48))warnings.push("book history: bounded backfill deferred to protect provider allowance; retained quotes remain available");
   for(const target of pending.slice(0,Math.min(3,Math.max(0,48-budget.history)))){
     if(reserve())break;budget.history++;

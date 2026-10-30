@@ -1,0 +1,74 @@
+{
+  "now": "2026-10-30T00:54:00.767Z",
+  "apply": false,
+  "writes": 0,
+  "providerRequests": 0,
+  "sourceRows": 1079,
+  "quarantined": [],
+  "fixtureRelease": "cfb_v1_member_fixture_2026_10_29_r98_immutable_lock_wave_handoff",
+  "sourceCapturedAt": "2026-10-30T00:01:00.813Z",
+  "games": 100,
+  "locks": 7,
+  "focus": [
+    {
+      "id": "cfb-458441",
+      "lock": "locked",
+      "markets": {
+        "moneyline": {
+          "pick": "JMU",
+          "grade": "Watchlist",
+          "held": false,
+          "price": -1100,
+          "book": "betmgm",
+          "observedAt": "2026-10-29T22:28:02.905Z"
+        },
+        "total": {
+          "pick": "Under 51.5",
+          "grade": "Lean",
+          "held": false,
+          "price": -110,
+          "book": "draftkings",
+          "observedAt": "2026-10-29T22:28:02.905Z"
+        },
+        "first_inning": {
+          "pick": "JMU -19.5",
+          "grade": "Watchlist",
+          "held": false,
+          "price": -110,
+          "book": "draftkings",
+          "observedAt": "2026-10-29T22:28:02.905Z"
+        }
+      }
+    },
+    {
+      "id": "cfb-457406",
+      "lock": "open",
+      "markets": {
+        "moneyline": {
+          "pick": "UCF",
+          "grade": "No Play",
+          "held": false,
+          "price": 114,
+          "book": "fanduel",
+          "observedAt": "2026-10-30T00:00:04.153Z"
+        },
+        "total": {
+          "pick": "Under 48",
+          "grade": "Watchlist",
+          "held": false,
+          "price": -107,
+          "book": "caesars",
+          "observedAt": "2026-10-30T00:00:04.153Z"
+        },
+        "first_inning": {
+          "pick": "UCF +1.5",
+          "grade": "Watchlist",
+          "held": false,
+          "price": -104,
+          "book": "caesars",
+          "observedAt": "2026-10-30T00:00:04.153Z"
+        }
+      }
+    }
+  ]
+}

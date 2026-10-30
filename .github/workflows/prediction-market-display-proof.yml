@@ -1,0 +1,27 @@
+name: Prediction market display proof
+on:
+  pull_request:
+    paths:
+      - 'app/lab/**'
+      - 'lib/providers/owls/**'
+      - 'lib/services/dailyEdge/predictionMarket*'
+      - 'scripts/test-prediction-market-*'
+      - '.github/workflows/prediction-market-display-proof.yml'
+  merge_group:
+permissions:
+  contents: read
+jobs:
+  prediction-market-display-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Same-book chart and immutable-lock regressions
+        run: |
+          for test in scripts/test-prediction-market-*.ts scripts/test-prediction-market-*.tsx; do
+            node --import tsx "$test" || exit 1
+          done

@@ -84,7 +84,12 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   // An old locked empty pick never acquires new reader semantics. Only a
   // genuinely captured future pre-lock receipt may activate this display.
   if(frozen&&!legacySelection&&selection&&!heldArchive)return <PredictionMarketUnavailable variant={variant} label={marketKey==="first_inning"?"First inning":"Game winner"} kind={null} lockedAt={lockedAt} status="selection_pending" book={null}/>;
-  const storedBook=heldArchive?publicMarketPrelockHeldBook(trackerBook,current?.prelockCapturedAt,lockedAt):current?predictionMarketReaderBookTrail(selectedMarket,selectedMarket.pick??"",frozen?lockedAt:checkedAt,selection?.line??null):null;
+  // With an actual eligible pre-lock receipt, render the public tracker's
+  // EXACT stored history, including observations older than 24 hours. The
+  // legacy rolling filter can otherwise leave only the locked endpoint,
+  // which falls after the Kalshi receipt and makes the shared graph empty.
+  // No receipt means the legacy locked rendering remains unchanged.
+  const storedBook=frozen&&current?.prelockCapturedAt?publicMarketPrelockHeldBook(trackerBook,current.prelockCapturedAt,lockedAt):current?predictionMarketReaderBookTrail(selectedMarket,selectedMarket.pick??"",frozen?lockedAt:checkedAt,selection?.line??null):null;
   const legacyBook=frozen&&current?.prelockCapturedAt?predictionMarketArchivedBook(storedBook,current.book,current.prelockCapturedAt,lockedAt,selection?.line??null):predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,current?.book??null,current?.sourcePinned===true);
   const book=frozen?legacyBook:current?publicMarketDisplayHistory(trackerBook,current.book):null;
   // Legacy locked records keep their old unavailable state. New auxiliary
