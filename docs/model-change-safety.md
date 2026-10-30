@@ -1,5 +1,20 @@
 # Model change safety protocol
 
+## Owner-approved CBB writer warmup — October 30
+
+The owner approved the November 1 CBB launch. This first stage enables only
+the single `prediction_pipeline:cbb` writer and leaves member publication and
+stakes off. It stamps the same-input provisional grade policy with new
+production calibration release `cbb_2026_10_30_r1_provisional_launch`; no
+grade thresholds, score coefficients, market selections, or actionability
+rules change from the private candidate. On the latest complete Nov. 1 source
+rehearsal the board remains four Leans, one Watchlist, one No Play, zero Best
+Angles and zero Holds: zero same-input promotions, zero demotions, zero net
+actionable change. The grade release bump prevents future current-release
+tracking from blending private and production records. The public reader stays
+closed until the writer is observed live and verified. Prior locked payloads
+from other sports remain untouched.
+
 ## Private CBB full member-path candidate — October 29
 
 This branch adds a proposed CBB seven-day member writer, reader, T-60 lock,

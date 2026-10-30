@@ -2,8 +2,8 @@ import { cbbImpliedProbability, reviewCbbQuote } from "./marketEvidence";
 import { cbbExactMarketCenter } from "./marketReaderResearch";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-/** Candidate only: not imported by a member reader or prediction writer. */
-export const CBB_PROVISIONAL_GRADE_RELEASE = "cbb_candidate_2026_10_29_r4_observed_quote_freshness" as const;
+/** Production provisional calibration; the member reader never regrades it. */
+export const CBB_PROVISIONAL_GRADE_RELEASE = "cbb_2026_10_30_r1_provisional_launch" as const;
 
 export type CbbProvisionalGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play" | "Held";
 export type CbbGradeEvidence = {

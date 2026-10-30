@@ -58,7 +58,7 @@ assert.throws(() => buildCbbRollingSchedule({ anchorDate: "2026-11-01",
 const memberPage = readFileSync(new URL("../app/lab/daily-edge/CandidateDailyEdgePage.tsx", import.meta.url), "utf8");
 const privatePage = readFileSync(new URL("../app/dev/experience-preview/page.tsx", import.meta.url), "utf8");
 const cardView = readFileSync(new URL("../app/dev/experience-preview/ActualDailyEdgePreview.tsx", import.meta.url), "utf8");
-assert.match(memberPage, /CBB_ACTIVATION\.memberPublication &&/);
+assert.match(memberPage, /CBB_ACTIVATION\.memberPublication/);
 assert.match(memberPage, /excludeAnalyzedCbbScheduleGames/);
 assert.match(privatePage, /snapshot\.cbbRollingSchedule = await loadCbbRollingSchedule/);
 assert.match(privatePage, /sport === "cbb" && process\.env\.NODE_ENV === "production"\) notFound\(\)/);

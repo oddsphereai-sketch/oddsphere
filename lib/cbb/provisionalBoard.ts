@@ -6,7 +6,7 @@ import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_10_29_r3_exact_quote_reader_fields" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
-/** Candidate-only single-game projection. No DB, member, stake, or lock authority. */
+/** Pure single-game projection. The leased writer owns persistence and locks. */
 export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote[]) {
   if (![forecast.homeScore, forecast.awayScore, forecast.margin, forecast.total,
     forecast.homeWinProbability].every(Number.isFinite) ||

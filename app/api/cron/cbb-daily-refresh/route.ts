@@ -13,9 +13,6 @@ export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandler(request, "cbb_daily_refresh", async () => {
-    if (process.env.CBB_CRON_ENABLED !== "true") {
-      return { records_updated: 0, details: { disabled: true, release: CBB_FIXTURE_SEED_RELEASE } };
-    }
     const apiKey = process.env.BALLDONTLIE_API_KEY;
     if (!apiKey) throw new Error("BALLDONTLIE_API_KEY missing for CBB fixture seed");
     const now = new Date();

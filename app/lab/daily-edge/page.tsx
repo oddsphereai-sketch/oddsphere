@@ -24,8 +24,7 @@ export default async function DailyEdgePage({
   const requestedSport = Array.isArray(query.sport) ? query.sport[0] : query.sport;
   const initialSport = resolveDailyEdgeSport(requestedSport);
   const nflMemberRead = initialSport === "nfl" && isNflDailyEdgeEnabled();
-  const cbbMemberRead = initialSport === "cbb" && CBB_ACTIVATION.memberPublication &&
-    process.env.CBB_DAILY_EDGE_ENABLED === "true";
+  const cbbMemberRead = initialSport === "cbb" && CBB_ACTIVATION.memberPublication;
 
   return isDailyEdgeExperienceCandidateEnabled() || nflMemberRead || cbbMemberRead
     ? <CandidateDailyEdgePage searchParams={Promise.resolve(query)} />

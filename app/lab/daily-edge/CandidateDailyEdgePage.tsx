@@ -58,8 +58,7 @@ export default async function CandidateDailyEdgePage({
         ? "premier_league"
         : "world_cup";
   const sport: Sport = soccerRequested ? "soccer" : sourceSport;
-  const cbbPublicationEnabled = sport === "cbb" && CBB_ACTIVATION.memberPublication &&
-    process.env.CBB_DAILY_EDGE_ENABLED === "true";
+  const cbbPublicationEnabled = sport === "cbb" && CBB_ACTIVATION.memberPublication;
   const publishedSnapshotOnly = sport === "mlb" || sport === "nba" || sport === "nhl" || sport === "wnba" || cbbPublicationEnabled;
   const eplRequested = competition === "premier_league";
   const eplEnabled = process.env.PREMIER_LEAGUE_DAILY_EDGE_ENABLED === "true";

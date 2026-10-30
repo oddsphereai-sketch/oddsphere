@@ -8,10 +8,10 @@ export const CBB_LAUNCH_REQUIREMENTS = [
 ] as const;
 export type CbbLaunchRequirement = typeof CBB_LAUNCH_REQUIREMENTS[number];
 
-/** No env switch can bypass qualification. The prelaunch package cannot publish. */
+/** Research checklist; writer warmup never implies public reader authority. */
 export function cbbLaunchReadiness(proofs: Partial<Record<CbbLaunchRequirement, { passed: boolean; evidence: string }>>) {
   const requirements = CBB_LAUNCH_REQUIREMENTS.map(name => ({ name, passed: proofs[name]?.passed === true && Boolean(proofs[name]?.evidence?.trim()), evidence: proofs[name]?.evidence ?? null }));
   return { release: CBB_MODEL_RELEASE, activation: CBB_ACTIVATION, ready: false as const,
     requirements, remaining: requirements.filter(row => !row.passed).map(row => row.name),
-    reason: "Owner requested a private prelaunch build; publication is unavailable in this package." };
+    reason: "Owner-approved writer warmup is active; public reader remains closed pending live verification." };
 }

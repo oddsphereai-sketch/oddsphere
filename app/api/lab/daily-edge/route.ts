@@ -6735,7 +6735,7 @@ export async function GET(request: Request) {
     const empty: DailyEdgeResponse = { as_of: new Date().toISOString(), sport,
       date: requestedDate, requested_date: requestedDate, fallback_used: false,
       slateState: "no_data", slate_status: null, last_slate_update_at: null, games: [] };
-    if (!CBB_ACTIVATION.memberPublication || process.env.CBB_DAILY_EDGE_ENABLED !== "true") {
+    if (!CBB_ACTIVATION.memberPublication) {
       return Response.json(empty, { headers: DAILY_EDGE_NO_STORE_HEADERS });
     }
     const { dailyEdgeSnapshotKey, readLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
