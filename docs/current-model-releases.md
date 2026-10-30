@@ -1354,6 +1354,28 @@ No prediction or locked member game was written by the failed refresh.
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 30 paid FCS odds budget-continuity candidate: the paid The Odds API
+  adapter advances to
+  `cfb_the_odds_api_fcs_fallback_2026_10_30_r6_adaptive_credit_continuity` and
+  the sole writer advances to
+  `cfb_forward_evidence_writer_2026_10_30_r145_adaptive_fcs_credit_continuity`.
+  The fixed 2,304-credit reserve is replaced by a quota-free live balance probe,
+  actual distinct-attempt receipt accounting, a 250-credit shared-account floor,
+  a conservative 12-credit next-request allowance, and 60/90 ordinary/T-60
+  weekly CFB budgets. The paid league-level pull costs at most six credits.
+  Unresolved gaps retry at twelve hours beyond 48 hours and four hours inside 48
+  hours; a newly discovered gap may seed immediately. Provider identity,
+  complete named-book validation, book hierarchy, prediction/grade formulas,
+  the sole `prediction_pipeline:cfb` lease, and immutable locks are unchanged.
+  Baseline is 56/100 priced games with 43 upcoming FCS-only games missing all
+  three price markets because the incumbent reserve blocks at 2,262 remaining
+  credits. Publication and live recovery remain gated by the predeclared tests,
+  latest-main integration, PR checks, and post-deploy writer/board audit.
+  Evidence and rollback:
+  `docs/model-audits/2026-10-30-cfb-paid-fcs-odds-budget-continuity-predeclaration.md`
+  and
+  `docs/model-audits/2026-10-30-cfb-paid-fcs-odds-budget-continuity-result.md`.
+
 - October 29 immutable lock-wave handoff: fixture/snapshot/reader advance to
   r98/r58/r43 (`immutable_lock_wave_handoff`), writer to r144. Restore the same
   immutable-lock overlay already used by earlier compatibility families for
@@ -1421,9 +1443,10 @@ No prediction or locked member game was written by the failed refresh.
   model lane is preserved; additional normalized books are display-price-only
   and cannot affect forecasts, probabilities, picks, grades, market reading,
   stakes, locks, or tracking. The call remains one slate-level request on the
-  existing hourly/T-60 cadence, with a six-credit maximum and a 2,304-credit
-  two-week reserve. Missing vendor events remain unavailable rather than
-  synthetic. The model/calibration/decision/fixture/snapshot/reader/tracking
+  existing hourly/T-60 cadence, with the then-assumed six-credit maximum and a
+  2,304-credit two-week reserve. That budget policy is superseded by the
+  October 30 adaptive receipt-accounting candidate above. Missing vendor events
+  remain unavailable rather than synthetic. The model/calibration/decision/fixture/snapshot/reader/tracking
   releases, sole `prediction_pipeline:cfb` lease, and all stored locks are
   unchanged. Evidence and rollback:
   `docs/model-audits/2026-10-27-cfb-full-us-fcs-price-discovery.md`.

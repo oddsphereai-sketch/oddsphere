@@ -3504,7 +3504,11 @@ unseededFcsEvidence.payload.game.home.fbs = false;
 unseededFcsEvidence.payload.market.currentBooks = [];
 unseededFcsEvidence.payload.market.displayBooks = [];
 unseededFcsEvidence.payload.requestBudget.theOddsApi = 0;
-assert.equal(cfbTheOddsApiProviderSeedNeeded(unseededFcsEvidence, "2026-08-28T20:00:00.000Z"), true);
+assert.equal(
+  cfbTheOddsApiProviderSeedNeeded(unseededFcsEvidence, "2026-08-28T20:00:00.000Z"),
+  false,
+  "a far-window unresolved provider gap must respect the twelve-hour paid retry cadence",
+);
 const recentlyEvaluatedFcsEvidence = structuredClone(unseededFcsEvidence);
 recentlyEvaluatedFcsEvidence.capturedAt = "2026-08-28T19:55:00.000Z";
 recentlyEvaluatedFcsEvidence.payload.capturedAt = recentlyEvaluatedFcsEvidence.capturedAt;
@@ -3533,14 +3537,19 @@ assert.deepEqual(
   "a due T-60 capture must remain immediate while the paid-provider retry is cooling down",
 );
 assert.equal(
-  cfbTheOddsApiProviderSeedNeeded(recentlyEvaluatedFcsEvidence, "2026-08-28T20:55:00.000Z"),
+  cfbTheOddsApiProviderSeedNeeded(recentlyEvaluatedFcsEvidence, "2026-08-29T07:55:00.000Z"),
   true,
-  "an unresolved provider seed must become eligible again at the documented hourly cadence",
+  "an unresolved far-window provider seed must become eligible again at the twelve-hour cadence",
 );
 assert.deepEqual(
   cfbForwardReleaseRefreshNeed([unseededFcsEvidence], "2026-08-28T20:00:00.000Z"),
+  null,
+  "a far-window FCS price gap must not bypass the bounded twelve-hour paid-provider retry cadence",
+);
+assert.deepEqual(
+  cfbForwardReleaseRefreshNeed([unseededFcsEvidence], "2026-08-29T07:00:00.000Z"),
   { collect: true, reason: "provider_seed_due", cadenceMinutes: 0 },
-  "an unlocked FCS price gap must receive one immediate paid-provider seed before ordinary hourly cadence",
+  "a far-window FCS price gap becomes due after twelve hours",
 );
 const attemptedFcsEvidence = structuredClone(unseededFcsEvidence);
 attemptedFcsEvidence.payload.requestBudget.theOddsApi = 1;

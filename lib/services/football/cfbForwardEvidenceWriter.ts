@@ -183,18 +183,13 @@ import { fetchCfbOwlsProvider } from "./cfbOwlsProvider";
 import type { CfbSharpApiSplitRecord } from "./cfbSharpApiSplits";
 
 export const CFB_FORWARD_WRITER_RELEASE =
-  "cfb_forward_evidence_writer_2026_10_29_r144_immutable_lock_wave_handoff" as const;
+  "cfb_forward_evidence_writer_2026_10_30_r145_adaptive_fcs_credit_continuity" as const;
 export const CFB_FORWARD_MAX_QB_TEAMS_PER_RUN = 24 as const;
 export const CFB_FORWARD_MAX_SHARP_FALLBACK_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_PROSPECTIVE_GAMES_PER_RUN = 32 as const;
 export const CFB_FORWARD_MAX_ESPN_CURRENT_ODDS_GAMES_PER_RUN = CFB_ESPN_CURRENT_ODDS_MAX_GAMES_PER_RUN;
 export const CFB_FORWARD_RESULTS_BATCH_SIZE = 100 as const;
 export const CFB_FORWARD_MAX_PRIOR_GAME_IDS = 1200 as const;
-export const CFB_FORWARD_PROVIDER_SEED_RETRY_MINUTES = Math.min(
-  CFB_THE_ODDS_API_FAR_REFRESH_MINUTES,
-  CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES,
-);
-
 type CfbForwardCollectionNeed = ReturnType<typeof determineCfbForwardCollectionNeed>;
 
 export function resolveCfbForwardCollectionNeed(args: {
@@ -1240,6 +1235,12 @@ export async function runCfbForwardEvidenceWriter(args: {
             (theOddsApiHistoricalOpeningAttempt.requests * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL)) +
           (theOddsApiAttempt.result?.creditsUsed ??
             (theOddsApiAttempt.requests * CFB_THE_ODDS_API_CREDITS_PER_PULL)),
+        theOddsApiCurrentCredits:
+          theOddsApiAttempt.result?.creditsUsed ??
+          (theOddsApiAttempt.requests * CFB_THE_ODDS_API_CREDITS_PER_PULL),
+        theOddsApiHistoricalCredits:
+          theOddsApiHistoricalOpeningAttempt.result?.creditsUsed ??
+          (theOddsApiHistoricalOpeningAttempt.requests * CFB_THE_ODDS_API_HISTORICAL_CREDITS_PER_PULL),
         theOddsApiRemainingCredits:
           theOddsApiAttempt.result?.creditsRemaining ??
           theOddsApiHistoricalOpeningAttempt.result?.creditsRemaining ??
@@ -1739,10 +1740,13 @@ export function cfbTheOddsApiProviderSeedNeeded(row: CfbForwardStoredEvidence | 
   // A zero-request result means the paid fallback was evaluated but could not
   // run (for example, missing credentials or the credit reserve). Treat the
   // completed full-slate capture as that evaluation boundary so the five-minute
-  // T-60 scheduler cannot turn the documented hourly fallback into a hot loop.
+  // T-60 scheduler cannot turn the paid fallback into a hot loop.
   // Opening collection and due T-60 plans are resolved independently and keep
   // their existing priority.
-  return nowMs - capturedAt >= CFB_FORWARD_PROVIDER_SEED_RETRY_MINUTES * 60_000;
+  const retryMinutes = startsAt - nowMs <= 48 * 60 * 60_000
+    ? CFB_THE_ODDS_API_NEAR_REFRESH_MINUTES
+    : CFB_THE_ODDS_API_FAR_REFRESH_MINUTES;
+  return nowMs - capturedAt >= retryMinutes * 60_000;
 }
 
 export function cfbReferenceCompletionNeeded(row: CfbForwardStoredEvidence | undefined, now: string): boolean {
@@ -2026,6 +2030,17 @@ function marketHistoryForPayload(payload: CfbForwardEvidencePayload): CfbForward
         operationalOpening: payload.market.operationalOpening,
         playbookSplits: payload.market.playbookSplits,
         sharpApiSplits: payload.market.sharpApiSplits?.filter((row) => row.provider !== "owls") ?? null,
+      },
+      requestBudget: {
+        theOddsApi: payload.requestBudget.theOddsApi,
+        theOddsApiCurrent: payload.requestBudget.theOddsApiCurrent,
+        theOddsApiCurrentAttemptedAt: payload.requestBudget.theOddsApiCurrentAttemptedAt,
+        theOddsApiHistorical: payload.requestBudget.theOddsApiHistorical,
+        theOddsApiHistoricalAttemptedAt: payload.requestBudget.theOddsApiHistoricalAttemptedAt,
+        theOddsApiCredits: payload.requestBudget.theOddsApiCredits,
+        theOddsApiCurrentCredits: payload.requestBudget.theOddsApiCurrentCredits,
+        theOddsApiHistoricalCredits: payload.requestBudget.theOddsApiHistoricalCredits,
+        theOddsApiRemainingCredits: payload.requestBudget.theOddsApiRemainingCredits,
       },
     },
   };
