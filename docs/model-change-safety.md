@@ -1,5 +1,45 @@
 # Model change safety protocol
 
+## CBB member-reader completeness gate — October 30
+
+The owner found that the pre-publication board lacked obvious dates, public
+splits, both sides' price movement, spread/total line history, and the Kalshi
+graph. Before member activation, r4 of the sole leased writer records the
+opposing current quote from the same complete exact-book pair and corrects the
+selected spread trail's point sign. The reader-only r1 evidence overlay uses
+already captured OWLS opening/price/line history and exact-game Playbook
+consensus observations for unlocked cards; the scheduled display collector now
+recognizes reversed neutral-site CBB fixtures and requests both outcomes.
+The CBB Kalshi panel retains its official source and displays a real Kalshi
+history curve even before sportsbook history overlaps. Calendar dates appear
+on CBB cards as well as grouped day headers. No provider odds are invented.
+
+Same-input board impact: zero side, score, probability, grade, stake,
+promotion, or demotion changes, and zero actionable-count change. The seven
+analyzed games remain seven, with the two November 1 games unchanged. Public
+consensus has verified complete rows for two of seven future analyzed games
+at the time of audit; the remaining five and all named-book split panels stay
+source-unavailable until genuinely supplied. Locked records always return
+their stored payload before any display-only evidence merge. The old r3 writer
+remains the live production identifier until this candidate passes the full
+suite, latest-main integration, PR checks, and post-merge live verification.
+
+## Owner-approved CBB member publication — October 30
+
+The repaired production refresh returned success under
+`cbb_member_pipeline_2026_10_30_r3_canonical_start_instant` and persisted seven
+priced games with three markets each, exact team IDs and starts, seven complete
+logo pairs, and zero held markets. The November 1 slate contains two of those
+games. `cbb_member_activation_2026_10_30_r1_verified_writer` opens only the
+member read path to that existing stored board. This changes visibility from
+zero member CBB games to seven analyzed games; it changes zero same-input
+predictions, scores, prices, grades, promotions, or demotions. The writer and
+the T-60 immutable lock path are unchanged; stakes remain disabled. Playbook
+public-consensus splits are verified for two of those seven games; named-book
+splits are unavailable for all seven and are not invented.
+Two additional model-covered schedule-only games lack verified ESPN logos and
+are not promoted to analyzed cards until identity and pricing are complete.
+
 ## Owner-approved CBB writer warmup — October 30
 
 The first live writer call failed closed on seven exact-game comparisons because

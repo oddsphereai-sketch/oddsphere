@@ -1,10 +1,11 @@
-// Owner-approved staged production cutover. The member reader remains closed
-// until the sole leased writer publishes and its stored board is verified.
+// Owner-approved member publication after the sole leased writer published
+// and its stored seven-game board was verified in production.
 export const CBB_MODEL_RELEASE = "cbb_candidate_2026_10_28_r1_adjusted_efficiency" as const;
 export const CBB_EVIDENCE_RELEASE = "cbb_evidence_2026_10_28_r1_source_chronology" as const;
 export const CBB_ACTIVATION = Object.freeze({
-  status: "writer_warmup" as const,
-  memberPublication: false,
+  release: "cbb_member_activation_2026_10_30_r1_verified_writer" as const,
+  status: "member_live" as const,
+  memberPublication: true,
   predictionWrites: true,
   stakes: false,
 });

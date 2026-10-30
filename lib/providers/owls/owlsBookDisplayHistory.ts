@@ -23,8 +23,18 @@ const identity=(e:Pick<BookDisplayEntry,"event"|"start"|"kind"|"side"|"book">)=>
 export function matchOwlsDisplayEvent(events:RawOwlsOddsEvent[],game:DailyEdgeGameDto,sport:PredictionMarketSport):RawOwlsOddsEvent|null{
   const matchesTeam=(name:string,abbreviation:string,displayName:string|null|undefined,college?:string|null)=>sport==="nfl"?nflProviderTeamMatches(name,abbreviation,displayName??abbreviation):predictionMarketTeamMatches({sideCode:name,team:name},abbreviation,displayName,sport,college);
   const matches=events.filter(e=>typeof e.eventId==="string"&&Math.abs(Date.parse(e.commence_time??"")-Date.parse(game.gameStartAt??""))<=60*60_000&&
-    matchesTeam(e.away_team??"",game.awayTeam,game.awayTeamDisplayName,game.cbbAwayCollege)&&matchesTeam(e.home_team??"",game.homeTeam,game.homeTeamDisplayName,game.cbbHomeCollege));
+    (matchesTeam(e.away_team??"",game.awayTeam,game.awayTeamDisplayName,game.cbbAwayCollege)&&matchesTeam(e.home_team??"",game.homeTeam,game.homeTeamDisplayName,game.cbbHomeCollege)||
+     sport==="cbb"&&matchesTeam(e.home_team??"",game.awayTeam,game.awayTeamDisplayName,game.cbbAwayCollege)&&matchesTeam(e.away_team??"",game.homeTeam,game.homeTeamDisplayName,game.cbbHomeCollege)));
   return matches.length===1?matches[0]:null;
+}
+
+/** OWLS occasionally reverses neutral-site CBB home/away. Stored reader sides
+ * always follow the canonical board; only the provider request is reversed. */
+export function owlsDisplayProviderSide(event:RawOwlsOddsEvent,game:DailyEdgeGameDto,side:string,sport:PredictionMarketSport):string{
+  if(sport!=="cbb"||side!=="home"&&side!=="away")return side;
+  const reversed=predictionMarketTeamMatches({sideCode:event.home_team??"",team:event.home_team??""},game.awayTeam,game.awayTeamDisplayName,sport,game.cbbAwayCollege)&&
+    predictionMarketTeamMatches({sideCode:event.away_team??"",team:event.away_team??""},game.homeTeam,game.homeTeamDisplayName,sport,game.cbbHomeCollege);
+  return reversed?(side==="home"?"away":"home"):side;
 }
 
 /** The response must explicitly be the requested opening-mode event/book/side.
@@ -93,6 +103,7 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
   }
   const rows=new Map((previous?.rows??[]).filter(e=>Date.parse(e.start)>now-86_400_000).map(e=>[identity(e),e]));
   const targets:Array<Omit<BookDisplayEntry,"opening"|"quotes"|"checkedAt">>=[];
+  const providerSides=new Map<string,string>();
   const publicTargets=new Set<string>();
   for(const game of active){
     const event=matchOwlsDisplayEvent(events,game,sport);if(!event?.eventId)continue;
@@ -107,9 +118,12 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
       // The public reader may legitimately choose a fresher fallback. Retain
       // that exact published book's opening too, not only a sharp-book open
       // that cannot be spliced into its trace. Same existing daily/cycle cap.
-      for(const book of new Set([books.find(b=>b.key===reference)?.key,books[0]?.key]))if(book){
-        const target={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side,book};
-        targets.push(target);if(book===reference)publicTargets.add(identity(target));
+      const sourceBooks=sport==="cbb"?[books.find(b=>b.key===reference)?.key??books[0]?.key]:[...new Set([books.find(b=>b.key===reference)?.key,books[0]?.key])];
+      const sides=sport==="cbb"&&side!=="draw"?[side,kind==="total"?(side==="over"?"under":"over"):(side==="home"?"away":"home")]:[side];
+      for(const book of sourceBooks)if(book)for(const capturedSide of sides){
+        const target={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side:capturedSide,book};
+        targets.push(target);providerSides.set(identity(target),owlsDisplayProviderSide(event,game,capturedSide,sport));
+        if(book===reference)publicTargets.add(identity(target));
       }
     }
   }
@@ -120,10 +134,11 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
     if(reserve())break;budget.history++;
     requests++;
     try{
-      const result=await client.get<unknown>("/api/odds/history",{eventId:target.providerEventId,book:target.book,market:marketKey(target.kind),side:target.side});
+      const providerSide=providerSides.get(identity(target))??target.side;
+      const result=await client.get<unknown>("/api/odds/history",{eventId:target.providerEventId,book:target.book,market:marketKey(target.kind),side:providerSide});
       remainingMonth=result.rateLimit.remainingMonth??remainingMonth;
-      const parsed=parseOwlsBookDisplayHistory(result.body,target,now),old=rows.get(identity(target));
-      if(parsed){rows.set(identity(target),{...parsed,opening:old?.opening??parsed.opening,quotes:boundBookQuotes([...(old?.quotes??[]),...parsed.quotes])});if(!old?.opening&&!parsed.opening)warnings.push(`book history: ${target.event}/${target.kind} opener unavailable`);}
+      const parsed=parseOwlsBookDisplayHistory(result.body,{...target,side:providerSide},now),old=rows.get(identity(target));
+      if(parsed){rows.set(identity(target),{...parsed,side:target.side,opening:old?.opening??parsed.opening,quotes:boundBookQuotes([...(old?.quotes??[]),...parsed.quotes])});if(!old?.opening&&!parsed.opening)warnings.push(`book history: ${target.event}/${target.kind} opener unavailable`);}
       else warnings.push(`book history: ${target.event}/${target.kind} unavailable; retained`);
     }catch{warnings.push(`book history: ${target.event}/${target.kind} request failed; retained`);}
   }

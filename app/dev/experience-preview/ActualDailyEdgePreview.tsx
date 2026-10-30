@@ -622,7 +622,7 @@ function isUclGame(game: DailyEdgeGameDto): boolean {
 }
 
 function DailyEdgeGameStartTime({ game, className, fallback }: { game: DailyEdgeGameDto; className?: string; fallback?: string }) {
-  return <LocalTime value={game.gameStartAt} style={isUclGame(game) ? "date-time" : "time"} fallback={fallback ?? game.gameTime} className={className} />;
+  return <LocalTime value={game.gameStartAt} style={isUclGame(game) || game.sport === "cbb" ? "date-time" : "time"} fallback={fallback ?? game.gameTime} className={className} />;
 }
 
 function memberTeamColor(game: DailyEdgeGameDto, side: "away" | "home", sport: Sport): string {
@@ -3134,7 +3134,7 @@ function sportLabel(sport: Sport): string {
 }
 
 function marketLabelFor(key: MarketKey, sport: Sport): string {
-  if (key === "first_inning" && (sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb")) return "Spread";
+  if (key === "first_inning" && (sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb" || sport === "cbb")) return "Spread";
   if (key === "first_inning" && sport === "nhl") return "Puck Line";
   if (key === "first_inning" && sport === "soccer") return "Both Teams To Score";
   if (key === "moneyline" && sport === "soccer") return "Match Result";
@@ -3144,7 +3144,7 @@ function marketLabelFor(key: MarketKey, sport: Sport): string {
 function marketShortLabelFor(key: MarketKey, sport: Sport): string {
   if (key === "moneyline") return "ML";
   if (key === "total") return "Total";
-  if (sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb") return "Sprd";
+  if (sport === "nba" || sport === "wnba" || sport === "nfl" || sport === "cfb" || sport === "cbb") return "Sprd";
   if (sport === "nhl") return "PL";
   if (sport === "soccer") return "BTTS";
   return "1st";

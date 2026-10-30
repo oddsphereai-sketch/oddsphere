@@ -171,7 +171,9 @@ void testHistoricalCapture().then(()=>console.log("Historical backfill: exact ca
 const reader=readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx","utf8");
 assert.ok(reader.includes('variant="desktop"')&&reader.includes('variant="mobile"'));
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
-assert.ok(component.includes("illustrativeSample"));assert.doesNotMatch(component,/game\.sport\s*!==\s*"cbb"/,"CBB shares the bottom reader panel");
+assert.ok(component.includes("illustrativeSample"));
+assert.match(component,/const sharedHistory=predictionMarketHasSharedHistory\(comparison\)/,
+  "CBB may show its real Kalshi curve before book overlap without removing the shared reader panel");
 assert.ok(component.includes("#7de3c1")&&component.includes("#b7a0f4"),"approved mint and violet chart colors are preserved");
 assert.ok(component.includes("data-book-odds")&&component.includes("activeBook[2]"),"plotted prices and cross-series readouts retain actual American odds");
 assert.ok(component.includes('windowBook.points.length===1?" · one quote"')&&component.includes('windowBook.points.length===1?"History building"'),"one sportsbook observation in view is not evidence of an unchanged market");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {bookDisplayTrail,captureOwlsBookDisplayHistory,parseOwlsBookDisplayHistory,matchOwlsDisplayEvent} from "../lib/providers/owls/owlsBookDisplayHistory";
+import {bookDisplayTrail,captureOwlsBookDisplayHistory,parseOwlsBookDisplayHistory,matchOwlsDisplayEvent,owlsDisplayProviderSide} from "../lib/providers/owls/owlsBookDisplayHistory";
 import {OwlsInsightClient} from "../lib/providers/owls/owlsInsightClient";
 import {backfillKalshiDisplayHistory} from "../lib/providers/owls/kalshiDisplayHistory";
 import {isPredictionMarketFeed,mergePredictionMarketFeeds,type PredictionMarketFeed} from "../lib/providers/owls/owlsPredictionMarkets";
@@ -31,6 +31,12 @@ assert.equal(matchOwlsDisplayEvent([{...event,commence_time:iso(now+36*hour)}],g
 assert.equal(matchOwlsDisplayEvent([{...event,home_team:"Cleveland Cavaliers",away_team:"Atlanta Hawks"}],game,"nba"),null,"orientation cannot flip");
 const nfl={...game,sport:"nfl",awayTeam:"BUF",homeTeam:"KC"} as DailyEdgeGameDto;
 assert.ok(matchOwlsDisplayEvent([{...event,eventId:"nfl:Buffalo Bills@Kansas City Chiefs-20261030",away_team:"Buffalo Bills",home_team:"Kansas City Chiefs"}],nfl,"nfl"),"full NFL names map to the existing authoritative team aliases");
+const cbb={...game,id:"cbb-10882407",external_id:10882407,sport:"cbb",awayTeam:"ND",homeTeam:"VILL",awayTeamDisplayName:"Notre Dame Fighting Irish",homeTeamDisplayName:"Villanova Wildcats",cbbAwayCollege:"Notre Dame",cbbHomeCollege:"Villanova"} as DailyEdgeGameDto;
+const reversedCbb={...event,eventId:"ncaab:Villanova@Notre Dame-20261029",away_team:"Villanova",home_team:"Notre Dame"};
+assert.equal(matchOwlsDisplayEvent([reversedCbb],cbb,"cbb"),reversedCbb,"neutral-site CBB source orientation must not drop verified market history");
+assert.equal(owlsDisplayProviderSide(reversedCbb,cbb,"home","cbb"),"away","canonical home maps to provider away");
+assert.equal(owlsDisplayProviderSide(reversedCbb,cbb,"away","cbb"),"home","canonical away maps to provider home");
+assert.equal(owlsDisplayProviderSide(reversedCbb,cbb,"over","cbb"),"over","totals retain their side");
 
 async function run(){
  let calls=0;
@@ -51,6 +57,22 @@ async function run(){
  const outage=new OwlsInsightClient("fixture-only",{fetchImpl:async()=>{throw new Error("offline");}});
  const retained=await captureOwlsBookDisplayHistory(captured.feed,[game],"nba",outage,now+2*hour);
  assert.deepEqual(retained.feed.rows[0].opening,captured.feed.rows[0].opening,"outage never deletes retained opener");
+
+ const cbbBoard={...cbb,markets:{moneyline:{pick:"VILL ML",line:null,currentPriceSportsbook:"circa"},
+  total:{pick:"Under 148.5",line:148.5,currentPriceSportsbook:"circa"},
+  first_inning:{pick:"VILL -7.5",line:-7.5,currentPriceSportsbook:"circa"}}} as DailyEdgeGameDto;
+ const cbbRequestedSides:string[]=[];
+ const cbbClient=new OwlsInsightClient("fixture-only",{fetchImpl:async(input)=>{const url=new URL(String(input));
+  if(url.pathname.endsWith("/odds"))return Response.json({success:true,data:{circa:[reversedCbb]}});
+  const market=url.searchParams.get("market")!,side=url.searchParams.get("side")!;cbbRequestedSides.push(`${market}:${side}`);
+  return Response.json({success:true,data:{eventId:reversedCbb.eventId,book:"circa",market,side,timeRange:{mode:"opening"},
+    openingLine:null,history:[{timestampUtc:iso(now-hour),price:-110,point:market==="h2h"?null:market==="totals"?148.5:-7.5}]}});
+ }});
+ const cbbCaptured=await captureOwlsBookDisplayHistory(null,[cbbBoard],"cbb",cbbClient,now);
+ assert.equal(cbbCaptured.feed.rows.length,3,"CBB requests both sides under the existing three-per-cycle budget");
+ assert.ok(cbbRequestedSides.includes("h2h:away")&&cbbRequestedSides.includes("h2h:home"),
+  "reversed provider moneyline sides are queried and retained as canonical home/away");
+ assert.deepEqual(cbbCaptured.feed.rows.filter(row=>row.kind==="moneyline").map(row=>row.side).sort(),["away","home"]);
 
  const opened=now-3*24*hour+12_000;
  const row={ticker:"KXNBAGAME-26OCT31CLEATL-ATL",eventTicker:"KXNBAGAME-26OCT31CLEATL",sideCode:"ATL",team:"Atlanta",gameDate:"2026-10-31",bid:.5,ask:.51,probability:.505,volume24h:1,totalVolume:1,asOf:iso(now),marketOpenedAt:iso(opened),history:[[now,.505,1]] as [number,number,number|null][]};
@@ -81,6 +103,8 @@ async function run(){
  const panel=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8"),route=readFileSync("app/api/lab/prediction-market/route.ts","utf8");
  assert.match(panel,/PredictionMarketUnavailable/);assert.match(panel,/Updates automatically when one arrives/);assert.match(panel,/\[key,enabled,kind\]/);
  assert.match(panel,/Full window/);assert.match(panel,/aria-pressed=\{range===\"24h\"\}/);
+ assert.match(panel,/game\.sport!=="cbb"\|\|frozen\|\|comparison\.points\.length<2/,
+   "unlocked CBB Kalshi history stays visible before sportsbook overlap");
  assert.match(route,/availability/);assert.doesNotMatch(route,/client\.(get|odds)|fetch\(/,"member reads cannot call upstream");
  console.log("PASS lifetime history: provider openings, exact line/side/book/event identity, market-specific availability/retry, retained opens, real timestamps, bounded request budgets and immutable locks.");
 }

@@ -180,6 +180,13 @@ export default async function CandidateDailyEdgePage({
     });
     snapshot = lockedRead.value;
     snapshotUnavailable = lockedRead.unavailable;
+    if (!snapshotUnavailable) {
+      // Optional, display-only evidence. A provider/observation outage never
+      // rewrites the sole writer's score, grade, pick, or locked public record.
+      snapshot = await import("@/lib/services/cbb/cbbReaderMarketEvidence")
+        .then(({ overlayCbbReaderMarketEvidence }) => overlayCbbReaderMarketEvidence(snapshot))
+        .catch(() => snapshot);
+    }
   }
   if (snapshotUnavailable && snapshot.games.length === 0) {
     snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");

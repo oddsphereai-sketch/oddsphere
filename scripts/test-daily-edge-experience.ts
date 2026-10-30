@@ -1111,8 +1111,8 @@ check(
     !sportActivityRouteSource.includes(".update("),
 );
 check(
-  "planned college basketball remains visible but unavailable",
-  DAILY_EDGE_SPORTS.find((definition) => definition.key === "cbb")?.memberAvailable === false,
+  "college basketball member board is available after owner-approved activation",
+  DAILY_EDGE_SPORTS.find((definition) => definition.key === "cbb")?.memberAvailable === true,
 );
 
 console.log("\n━━━ Weekly member-board lifecycle ━━━");
@@ -1944,7 +1944,7 @@ check(
 check(
   "UCL kickoff labels and match-day sections use the member's local calendar date",
   candidateDailyEdgeSource.includes('function DailyEdgeGameStartTime({ game, className, fallback }') &&
-    candidateDailyEdgeSource.includes('style={isUclGame(game) ? "date-time" : "time"}') &&
+    candidateDailyEdgeSource.includes('style={isUclGame(game) || game.sport === "cbb" ? "date-time" : "time"}') &&
     (candidateDailyEdgeSource.match(/<DailyEdgeGameStartTime game=\{/g) ?? []).length === 4 &&
     candidateDailyEdgeSource.includes('const uclBoard = sport === "soccer" && games.some(isUclGame)') &&
     candidateDailyEdgeSource.includes('const groupingTimeZone = uclBoard ? userTimeZone : "America/New_York"') &&

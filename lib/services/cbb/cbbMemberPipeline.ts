@@ -20,7 +20,7 @@ import { loadCbbRollingSchedule } from "./cbbRollingSchedule";
 import { dailyEdgeSnapshotKey, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import { writeLockedCbbTracking } from "./cbbTrackingWriter";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_10_30_r3_canonical_start_instant" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_10_30_r4_two_sided_reader_evidence" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -100,7 +100,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       if(candidate.rows.some(row=>row.grade==="Held"))held++;
     }
     const result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
-      awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence},db);
+      awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[]},db);
     if(result.written)written++;
     if(result.record.snapshot.lockedAt)locked++;
     trackingInserted+=await writeLockedCbbTracking(result.record,db);

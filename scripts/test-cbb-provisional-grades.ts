@@ -7,6 +7,8 @@ import { cbbCurrentSplitEvidence } from "../lib/cbb/owlsSplitEvidence";
 import { cbbObservedPricePaths, type CbbQualifiedNamedQuote } from "../lib/cbb/owlsMarketEvidence";
 import { buildCbbProvisionalReader } from "../lib/cbb/provisionalReader";
 import { adaptCbbProvisionalGame, cbbDailyEdgeResponse } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
+import { mergeCbbReaderEvidence } from "../lib/services/cbb/cbbReaderMarketEvidence";
+import type { BookDisplayFeed } from "../lib/providers/owls/owlsBookDisplayHistory";
 import type { CbbForecast, CbbQuote } from "../lib/cbb/types";
 
 const asOf = "2026-11-01T12:00:00.000Z";
@@ -160,18 +162,47 @@ assert.equal(lockedReader.status, "locked");
 assert.equal(lockedReader.score.home, board.score.home);
 assert.equal(lockedReader.marketEvidenceState, "not_stored_at_lock");
 const member=adaptCbbProvisionalGame({game:cbbGame,snapshot:captured,homeLogo:"https://example.com/home.png",
-  awayLogo:"https://example.com/away.png",now:"2026-11-01T12:05:00.000Z",splitEvidence});
+  awayLogo:"https://example.com/away.png",now:"2026-11-01T12:05:00.000Z",splitEvidence,
+  marketQuotes:[moneyline,target,total]});
 assert.equal(member.sport,"cbb");assert.equal(member.cbbAwayCollege,"Notre Dame");
 assert.equal(member.cbbHomeCollege,"Villanova");assert.equal(member.markets.first_inning.verdict.label,"Best Angle");
 assert.equal(member.projected.home,board.score.home);assert.equal(member.markets.total.modelTotal,board.score.total);
 assert.equal(member.markets.first_inning.line,-7.5);assert.equal(member.markets.first_inning.pick,"VILL -7.5");
+assert.equal(member.markets.first_inning.oddsTrail?.[0].line,-7.5,"selected spread movement uses the selected-side point");
+assert.equal(member.markets.first_inning.opposingOddsTrail?.side,"away","same-book opposite spread side is stored");
+assert.equal(member.markets.moneyline.opposingOddsTrail?.stops.length,1,"current two-sided moneyline quote is preserved");
 assert.equal(member.markets.moneyline.sportsbookSplits?.rows.length,2);
 assert.equal(member.markets.moneyline.sportsbookSplits?.sourceBook,"circa");
 assert.ok(member.markets.moneyline.marketFairProb !== null);
 assert.equal(member.markets.moneyline.oddsTrail?.[0].sportsbook,"fanduel");
 assert.equal(cbbDailyEdgeResponse("2026-11-01",[member],asOf).games.length,1);
+const selectedMlSide=member.markets.moneyline.pick?.startsWith(member.homeTeam)?"home":"away";
+const marketBook=member.markets.moneyline.currentPriceSportsbook!;
+const historyFeed={release:"owls_book_display_history_2026_10_29_r1",sport:"cbb",fetchedAt:"2026-11-01T12:05:00Z",
+  eventsAt:"2026-11-01T12:05:00Z",events:[],rows:[
+    {event:member.external_id,start:member.gameStartAt,away:member.awayTeam,home:member.homeTeam,kind:"moneyline",side:selectedMlSide,book:marketBook,
+      providerEventId:"verified-cbb-event",checkedAt:"2026-11-01T12:05:00Z",opening:[Date.parse("2026-11-01T10:00:00Z"),-130,null],
+      quotes:[[Date.parse("2026-11-01T10:00:00Z"),-130,null],[Date.parse("2026-11-01T11:45:00Z"),-145,null]]},
+    {event:member.external_id,start:member.gameStartAt,away:member.awayTeam,home:member.homeTeam,kind:"moneyline",side:selectedMlSide==="home"?"away":"home",book:marketBook,
+      providerEventId:"verified-cbb-event",checkedAt:"2026-11-01T12:05:00Z",opening:null,
+      quotes:[[Date.parse("2026-11-01T10:00:00Z"),110,null],[Date.parse("2026-11-01T11:45:00Z"),125,null]]},
+  ]} as BookDisplayFeed;
+const splitAt="2026-11-01T12:04:00Z",splitRows=["away","home"].map((side,index)=>({canonical_event_id:String(member.external_id),market_type:"moneyline",
+  selection_key:`${member.external_id}:moneyline:${side}`,bets_pct:index?.6:.4,money_pct:index?.65:.35,
+  provider:"playbook",source_book:"consensus",source_type:"multi_book_consensus",source_observed_at:null,fetched_at:splitAt}));
+const enriched=mergeCbbReaderEvidence(cbbDailyEdgeResponse("2026-11-01",[member],asOf),historyFeed,splitRows,Date.parse("2026-11-01T12:05:00Z"));
+assert.equal(enriched.games[0].markets.moneyline.publicSplits.length,2,"verified two-sided public consensus appears without grade authority");
+assert.ok((enriched.games[0].markets.moneyline.opposingOddsTrail?.stops.length??0)>=2,"same-book opposite movement is visible");
+assert.equal(enriched.games[0].markets.moneyline.grade,member.markets.moneyline.grade,"reader overlay cannot regrade");
+assert.equal(enriched.games[0].projected.home,member.projected.home,"reader overlay cannot alter score");
+const frozenOverlay=mergeCbbReaderEvidence(cbbDailyEdgeResponse("2026-11-01",[{...member,lockState:"locked",lockedAt:splitAt}],asOf),historyFeed,splitRows,Date.parse("2026-11-01T12:05:00Z"));
+assert.deepEqual(frozenOverlay.games[0],{...member,lockState:"locked",lockedAt:splitAt},"locked reader payload retains exact precedence");
 const frozenMember=adaptCbbProvisionalGame({game:{...cbbGame,status:"post",status_state:"final",home_score:80,away_score:72},
   snapshot:locked,homeLogo:null,awayLogo:null,now:"2026-11-02T01:00:00Z"});
+const newlyLockedMember=adaptCbbProvisionalGame({game:cbbGame,snapshot:locked,homeLogo:null,awayLogo:null,
+  now:"2026-11-01T13:30:00.000Z",marketQuotes:[moneyline,target,total]});
+assert.equal(newlyLockedMember.markets.moneyline.opposingOddsTrail?.stops.length,1,
+  "a future lock captures its verified opposite quote before the member record freezes");
 assert.equal(frozenMember.lockState,"locked");assert.equal(frozenMember.result?.markets.first_inning.pickResult,"win");
 assert.equal(frozenMember.projected.home,member.projected.home,"final must not reproject the lock");
 assert.deepEqual(lockedReader.markets.map(row => [row.market, row.grade, row.price]),

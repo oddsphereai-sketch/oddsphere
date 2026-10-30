@@ -2,6 +2,7 @@ import type { supabase } from "@/lib/db/supabase";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { advanceCbbProvisionalSnapshot, type CbbProvisionalBoard, type CbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import type { CbbGame } from "@/lib/cbb/types";
+import type { CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { adaptCbbProvisionalGame, cbbOfficialGameResult } from "./adaptCbbProvisionalToDailyEdge";
 
@@ -55,7 +56,8 @@ export async function readCbbMemberGames(ids:number[],db?:typeof supabase):Promi
 /** The only CBB prediction writer. Caller must hold prediction_pipeline:cbb.
  * This function never calls a provider or regrades a locked public record. */
 export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisionalBoard|null;
-  homeLogo:string|null;awayLogo:string|null;now:string;splitEvidence?:ReturnType<typeof cbbCurrentSplitEvidence>|null},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
+  homeLogo:string|null;awayLogo:string|null;now:string;splitEvidence?:ReturnType<typeof cbbCurrentSplitEvidence>|null;
+  marketQuotes?:CbbQuote[]},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
   const client=db??(await import("@/lib/db/supabase")).supabase;
   const existing=await readCbbMemberGame(args.game.id,client);
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
@@ -65,7 +67,7 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const next=advanceCbbProvisionalSnapshot({existing:existing?.snapshot??null,candidate:args.candidate,
     startsAt:args.game.date,now:args.now});
   const memberGame=adaptCbbProvisionalGame({game:args.game,snapshot:next,
-    homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence});
+    homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence,marketQuotes:args.marketQuotes});
   const record:CbbStoredMemberGame={release:CBB_MEMBER_GAME_STORE_RELEASE,snapshot:next,memberGame};
   const now=Date.parse(args.now);
   if(!Number.isFinite(now))throw new Error("CBB writer clock invalid");
