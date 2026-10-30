@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fetchCbbKalshiMarkets } from "../lib/providers/kalshi/cbbMarkets";
-import { matchPredictionMarketGame, parseOwlsPredictionMarkets } from "../lib/providers/owls/owlsPredictionMarkets";
+import { matchPredictionMarketGame, parseOwlsPredictionMarkets, predictionMarketTeamMatches } from "../lib/providers/owls/owlsPredictionMarkets";
 import { parseContractFeed, resolveReaderContract } from "../lib/providers/owls/predictionMarketContracts";
 
 const now=Date.parse("2026-10-29T18:00:00Z");
@@ -25,6 +25,11 @@ const match=matchPredictionMarketGame(feed,game,now)!;
 assert.equal(match.source,"Kalshi direct");assert.equal(match.outcomes[0].team,"Notre Dame");
 assert.equal(matchPredictionMarketGame(feed,{...game,awayCollege:"North Dakota",awayName:"North Dakota Fighting Hawks"},now),null,
   "ambiguous ND code cannot cross institutions");
+assert.equal(predictionMarketTeamMatches({sideCode:"MIA",team:"Miami (FL)"},"MIA","Miami Hurricanes","cbb","Miami"),true);
+assert.equal(predictionMarketTeamMatches({sideCode:"MIA",team:"Miami (FL)"},"MIA","Miami (OH) RedHawks","cbb","Miami"),false,
+  "Miami school alias must never collapse the Florida and Ohio institutions");
+assert.equal(predictionMarketTeamMatches({sideCode:"ISU",team:"Iowa St."},"ISU","Iowa State Cyclones","cbb","Iowa State"),true);
+assert.equal(predictionMarketTeamMatches({sideCode:"OSU",team:"Ohio St."},"OSU","Ohio State Buckeyes","cbb","Ohio State"),true);
 const spreadEvent="KXNCAAMBSPREAD-26NOV01NDVILL";
 const spread={ticker:`${spreadEvent}-VILL8`,event_ticker:spreadEvent,status:"active",market_type:"binary",
   yes_sub_title:"Villanova wins by over 7.5 points",yes_bid_dollars:"0.41",yes_ask_dollars:"0.43",

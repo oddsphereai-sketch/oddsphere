@@ -114,7 +114,8 @@ assert.equal(buildCbbObservedRosterContext(92, appearances, [historicalPlayer], 
 assert.equal(cbbPlayedMinutes("12:30"), 12.5);
 assert.equal(cbbPlayedMinutes(null), 0);
 assert.equal(buildCbbObservedRosterContext(92, [{ ...appearances[0], min: null }], [historicalPlayer], 2025, "2025-11-02T01:00:00Z").currentPlayers, 0);
-assert.deepEqual(CBB_ACTIVATION, { status: "writer_warmup", memberPublication: false, predictionWrites: true, stakes: false });
+assert.deepEqual(CBB_ACTIVATION, { release: "cbb_member_activation_2026_10_30_r1_verified_writer",
+  status: "member_live", memberPublication: true, predictionWrites: true, stakes: false });
 assert.equal(frozenCandidate.release, frozenEvaluation.release);
 assert.equal(frozenCandidate.selectedThroughSeason, 2024);
 assert.equal(frozenCandidate.confirmationThroughSeason, 2025);
@@ -142,4 +143,4 @@ async function providerTests() {
   const auth = new CbbBallDontLieClient("test-secret", { fetch: (async () => new Response("test-secret", { status: 401 })) as typeof fetch });
   await assert.rejects(() => auth.teams(), error => !String(error).includes("test-secret") && String(error).includes("401"));
 }
-providerTests().then(() => console.log("CBB prelaunch tests passed: data, chronology, venue, coherent markets, W-L-P, roster identity, disabled publication, bounded provider."));
+providerTests().then(() => console.log("CBB launch tests passed: data, chronology, venue, coherent markets, W-L-P, roster identity, member publication, bounded provider."));

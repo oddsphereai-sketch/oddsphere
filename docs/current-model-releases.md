@@ -4,29 +4,42 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-29
+Last reviewed: 2026-10-30
 
 ## College basketball November 1 staged launch
 
-- Owner approved going live on October 30. This first cutover enables only the
-  sole leased CBB prediction writer (`CBB_ACTIVATION.status=writer_warmup`,
-  `predictionWrites=true`). Member publication remains off until a real stored
-  board, lock path, source coverage, and live cron are verified. There is no
-  separate environment switch that can silently leave the approved writer off.
-  Stakes remain disabled. No existing locked CBB member record is reinterpreted.
-- The private candidate retains independent score release
+- Owner approved going live on October 30. The sole leased CBB writer published
+  seven exact, priced three-market games in production on October 30 under
+  `cbb_member_pipeline_2026_10_30_r3_canonical_start_instant`: seven written,
+  seven read back, zero held, zero missing analyzed-game logos, zero locked
+  records, and no writer error. The November 1 two-game slate is included.
+  The proposed publication cutover enables the existing stored-snapshot member reader
+  under `cbb_member_activation_2026_10_30_r1_verified_writer` and
+  `CBB_ACTIVATION.status=member_live`; it does not recalculate a prediction
+  during a member request. The CBB prediction writer remains the only leased
+  writer. Stakes remain disabled. No locked record is reinterpreted.
+- The production board retains independent score release
   `cbb_candidate_2026_10_28_r2_score_precision`, production provisional grade release
   `cbb_2026_10_30_r1_provisional_launch`, and exact three-market board
   release `cbb_candidate_2026_10_29_r3_exact_quote_reader_fields`. The proposed sole
-  leased publisher is `cbb_member_pipeline_2026_10_30_r3_canonical_start_instant`; its
+  leased publisher is `cbb_member_pipeline_2026_10_30_r4_two_sided_reader_evidence`; its
   stored game contract is `cbb_member_game_store_2026_10_29_r1_single_leased_writer`.
   Tracking mirrors only immutable T-60 records under
   `cbb_tracking_writer_2026_10_29_r1_locked_only` and starts no earlier than November 1.
-- The candidate's price-level professional corroboration and exact named-book splits are
-  truthful when present. Its score does **not** claim a validated market flip or roster/injury
-  correction; the November 1 source rehearsal currently has no verified professional quote
-  or matched split for either of the two priced games. The owner approved provisional grades
-  despite this early-season limitation, not a claimed win-rate improvement.
+- The r4 publisher preserves both outcomes of the exact graded book's current
+  moneyline, spread, and total pair; adapter release
+  `cbb_member_adapter_2026_10_30_r3_two_sided_current_market` also fixes the
+  selected spread point's sign in its display trail. Reader release
+  `cbb_reader_evidence_2026_10_30_r1_verified_two_sided_display` attaches
+  already captured, same-book price/line history and exact-game Playbook public
+  splits only to unlocked cards. CBB's neutral-site OWLS home/away reversal is
+  mapped before history requests. Kalshi named-institution aliases are limited
+  to verified Miami (FL), Iowa St., and Ohio St. identities. The October 30
+  observation substrate has complete public-consensus rows for two of seven
+  analyzed games; it has no verified named-book splits for those seven. Neither
+  absence is filled with a fabricated value. The independent score, grade,
+  selection, stake, and model/market marriage are unchanged. No validated win
+  rate or market-flip improvement is claimed.
 - CBB Kalshi game/spread/total display reads the official Kalshi CBB series separately from
   prediction and grading. It is matched by exact institution and start, with locked pregame
   receipts taking precedence. Other sports' model releases and locked records are unchanged.

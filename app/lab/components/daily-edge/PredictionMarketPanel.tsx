@@ -105,16 +105,21 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const differentBookLine=!!book&&book.line!==undefined&&book.line!==(selection?.line??null);
   const bookLabel=differentBookLine?(kind==="total"?`${selection?.side==="under"?"Under":"Over"} ${book!.line}`:`${selection?.side==="away"?game.awayTeam:game.homeTeam} ${formatContractLine(book!.line!)}`):context?.requestedLabel??"moneyline";
   const comparison=predictionMarketComparison(outcome,book,lockedAt);
-  if(fallbackBook&&!predictionMarketHasSharedHistory(comparison))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
+  const sharedHistory=predictionMarketHasSharedHistory(comparison);
+  // CBB's Kalshi history can predate its newly captured sportsbook tape by
+  // weeks. Plot the real Kalshi curve alone while the book overlap builds;
+  // a one-quote book must not suppress a genuine prediction-market graph.
+  if(fallbackBook&&!sharedHistory&&(game.sport!=="cbb"||frozen||comparison.points.length<2))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
   if(!comparison.points.length)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} status={frozen?"prelock_unavailable":"history_unavailable"} book={null}/>;
-  const movementView=!frozen&&view==="movement"&&!!book;
+  const plottedBook=game.sport==="cbb"&&!frozen&&!sharedHistory?null:book;
+  const movementView=!frozen&&view==="movement"&&!!plottedBook;
   const plotted=movementView?predictionMarketBookOnlyComparison(book):comparison;
   const chartStart=range==="24h"&&plotted.cutoff!==null?Math.max(plotted.start,plotted.cutoff-24*60*60_000):plotted.start;
   const history=chartStart===comparison.cutoff?comparison.points.slice(-1):predictionMarketWindowPoints(comparison.points,chartStart);
   const comparisonOutcome={...outcome,probability:movementView?outcome.probability:history.at(-1)?.[1]??outcome.probability};
   const delta=history.length>=2?100*(history.at(-1)![1]-history[0][1]):null;
   const bookName=book?bookTitle(book.sportsbook):null;
-  const comparedBook=book&&plotted.bookPoints.length?{...book,points:plotted.bookPoints}:null;
+  const comparedBook=plottedBook&&plotted.bookPoints.length?{...plottedBook,points:plotted.bookPoints}:null;
   const windowBook=comparedBook&&(!frozen||archivedBook)?{...comparedBook,points:predictionMarketWindowPoints(comparedBook.points,chartStart)}:comparedBook;
   const firstBook=comparedBook?.points[0],lastBook=comparedBook?.points.at(-1);
   const bookDelta=windowBook?.points.length?100*(windowBook.points.at(-1)![1]-windowBook.points[0][1]):null;
@@ -124,7 +129,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const changes=windowBook?.points.reduce((count,point,index)=>count+Number(index>0&&point[2]!==windowBook.points[index-1][2]),0)??0;
   const legend=<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#b9acc7] sm:pl-[26px]">
     <span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#7de3c1]"/>Kalshi{movementView?" quote":""}{context?.method==="push_adjusted"?" · push-adjusted":context?.method==="nearby"?" · nearby line":""}</span>
-    {book?<span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookName} {bookLabel}</span>:<span>Sportsbook quote unavailable</span>}
+    {plottedBook?<span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookName} {bookLabel}</span>:<span>{book?"Sportsbook history awaiting overlap":"Sportsbook quote unavailable"}</span>}
   </div>;
   return <section aria-label={`Prediction market · ${context?.kind??"game winner"}`} data-prediction-market={variant} data-prediction-market-kind={context?.kind??"moneyline"} data-contract-method={context?.method??"exact"}
     className={variant==="mobile"?"sm:hidden rounded-lg border border-white/[0.07] bg-[#0d0b13] p-3":"hidden sm:grid grid-cols-[minmax(170px,.9fr)_minmax(0,1.7fr)_minmax(150px,.85fr)] items-center gap-x-5 border-y border-white/[0.07] bg-[#0d0b13] px-5 py-3"}>
@@ -147,7 +152,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
         <button type="button" aria-pressed={view==="comparison"} onClick={()=>setView("comparison")} className={view==="comparison"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>Compare</button>
         <button type="button" aria-pressed={view==="movement"} onClick={()=>setView("movement")} className={view==="movement"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>Full movement</button>
       </div>:null}
-      <PredictionMarketChart row={movementView?null:outcome} book={book} context={movementView?undefined:context} bookLabel={bookLabel} lockedAt={lockedAt} range={range} onRangeChange={setRange}/>
+      <PredictionMarketChart row={movementView?null:outcome} book={plottedBook} context={movementView?undefined:context} bookLabel={bookLabel} lockedAt={lockedAt} range={range} onRangeChange={setRange}/>
     </div>
     <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-2 sm:border-0 sm:pt-0">
       <p data-kalshi-start data-start-kind={kalshiOpening?.kind??"first_available"} data-start-at={kalshiStart[0]} className="min-w-0"><span className="font-semibold text-[#d9d1e4]">Kalshi {kalshiOpening?.kind==="opening_minute"?"opening minute":"first quoted"} · {(kalshiStart[1]*100).toFixed(1)}%</span><span className="block text-[#ac9bbd]">{time(kalshiStart[0],true)}</span><span className="block text-[#9d92ae]">{outcome.historyFrom?"History checked from market open":"Opening history pending"}{kalshiOpening?.kind==="first_available"?" · opening quote unavailable":""}</span></p>
@@ -281,7 +286,7 @@ export function PredictionMarketChart({row,book,context,bookLabel,lockedAt,range
     return first+Math.max(0,Math.min(1,(svgX-left)/(right-left)))*(last-first);
   };
   const earlierDay=new Date(first).toLocaleDateString()!==new Date(last).toLocaleDateString();
-  const chartTitle=`${row?row.team+" "+(context?.method==="push_adjusted"?"push-adjusted from surrounding Kalshi contracts":"recorded quotes")+". Mint: Kalshi. ":"Sportsbook history only; no Kalshi trend is plotted. "}${book?bookTitle(book.sportsbook)+" "+bookLabel+" in violet, with sportsbook margin. ":""}${context?.method==="nearby"?"Nearby line: not the identical sportsbook wager. ":""}${row?"Both sources share the same covered time window. ":""}Curves are bounded guides between recorded quotes, not additional observations. Boundary edges hold an already recorded value without changing its timestamp. Inspect for exact original prices and times.`;
+  const chartTitle=`${row?row.team+" "+(context?.method==="push_adjusted"?"push-adjusted from surrounding Kalshi contracts":"recorded quotes")+". Mint: Kalshi. ":"Sportsbook history only; no Kalshi trend is plotted. "}${book?bookTitle(book.sportsbook)+" "+bookLabel+" in violet, with sportsbook margin. ":""}${context?.method==="nearby"?"Nearby line: not the identical sportsbook wager. ":""}${row&&book?"Both sources share the same covered time window. ":row?"Kalshi-only history; sportsbook overlap is not yet verified. ":""}Curves are bounded guides between recorded quotes, not additional observations. Boundary edges hold an already recorded value without changing its timestamp. Inspect for exact original prices and times.`;
   return <div ref={ref} className="relative min-w-0">
     <svg width="100%" height="128" viewBox={"0 0 "+width+" 128"} role="img" aria-labelledby={id} data-comparison-start={first} data-comparison-cutoff={cutoff} data-lock-boundary={lockedAt} data-chart-treatment="shared-continuous-guides" data-chart-mode={row?"comparison":"sportsbook-only"}>
       <title id={id}>{chartTitle}</title>
@@ -301,7 +306,7 @@ export function PredictionMarketChart({row,book,context,bookLabel,lockedAt,range
       {plotPoints.at(-1)&&(!plotBook.length||Math.abs(y(plotPoints.at(-1)![1])-y(plotBook.at(-1)![1]))>=13)?<text x={right+7} y={y(plotPoints.at(-1)![1])+4} fill="#d8e9e3" fontSize="10">{(plotPoints.at(-1)![1]*100).toFixed(1)}%</text>:null}
       <text x={left} y="120" fill="#ac9dbd" fontSize="10">{time(first,earlierDay)}</text><text x={right} y="120" textAnchor="end" fill="#ac9dbd" fontSize="10">{time(last)}</text>
       {at!==null?<g clipPath={`url(#${clipId})`}><line x1={x(at)} x2={x(at)} y1={top} y2={bottom} stroke="#ffffff35"/>{active?<circle cx={x(active[0])} cy={y(active[1])} r="3" fill="#7de3c1"/>:null}{activeBook?<circle cx={x(activeBook[0])} cy={y(activeBook[1])} r="3" fill="#b7a0f4"/>:null}</g>:null}
-      <rect x={left} y={top} width={right-left} height={bottom-top} fill="transparent" tabIndex={0} role="button" aria-label={`Inspect recorded ${row?"Kalshi and ":""}sportsbook quotes. Tap to pin; arrow keys inspect observations.`}
+      <rect x={left} y={top} width={right-left} height={bottom-top} fill="transparent" tabIndex={0} role="button" aria-label={`Inspect recorded ${row&&book?"Kalshi and sportsbook":row?"Kalshi":"sportsbook"} quotes. Tap to pin; arrow keys inspect observations.`}
         onPointerMove={event=>{if(!focus?.pinned)setFocus({at:cursorAt(event),pinned:false});}}
         onPointerDown={event=>setFocus({at:cursorAt(event),pinned:!focus?.pinned})}
         onPointerLeave={()=>{if(!focus?.pinned)setFocus(null);}}
@@ -316,7 +321,7 @@ export function PredictionMarketChart({row,book,context,bookLabel,lockedAt,range
         }}/>
     </svg>
     <div className="flex flex-wrap items-center justify-between gap-1">
-      <p data-quote-guide-key data-chart-window className="text-[10px] leading-tight text-[#9d92ae]">{range==="24h"?"24h view":row?"Shared chart window":"Sportsbook history"} · {predictionMarketWindowDuration(first,last)}<span className="sr-only">{row?". Both traces start and end at the same times. Original source openings are listed separately.":". Only the actual sportsbook source is plotted. Kalshi history is not invented."} Curves connect recorded quotes; boundary guides hold an existing quote without changing its original timestamp.</span></p>
+      <p data-quote-guide-key data-chart-window className="text-[10px] leading-tight text-[#9d92ae]">{range==="24h"?"24h view":row&&book?"Shared chart window":row?"Kalshi history":"Sportsbook history"} · {predictionMarketWindowDuration(first,last)}<span className="sr-only">{row&&book?". Both traces start and end at the same times. Original source openings are listed separately.":row?". Only recorded Kalshi quotes are plotted until sportsbook history overlaps.":". Only the actual sportsbook source is plotted. Kalshi history is not invented."} Curves connect recorded quotes; boundary guides hold an existing quote without changing its original timestamp.</span></p>
       {onRangeChange&&last-start>24*60*60_000?<div role="group" aria-label="Prediction market history range" className="flex gap-1 text-[10px]">
         <button type="button" aria-pressed={range==="all"} onClick={()=>onRangeChange("all")} className={range==="all"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>Full window</button>
         <button type="button" aria-pressed={range==="24h"} onClick={()=>onRangeChange("24h")} className={range==="24h"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>24h</button>

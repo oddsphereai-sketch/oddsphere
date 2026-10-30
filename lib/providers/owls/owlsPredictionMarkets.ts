@@ -217,8 +217,13 @@ export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideC
     // A code such as MIA or USC may mean several schools. Require the named
     // contract to agree with an exact institutional or full-team identity.
     const observed = canonicalCbbTeamName(row.team);
-    return Boolean(observed) && [name, college].some(expected => expected &&
-      canonicalCbbTeamName(expected) === observed);
+    const namedAliases:Record<string,readonly string[]>={
+      miamifl:["Miami Hurricanes"],iowast:["Iowa State","Iowa State Cyclones"],
+      ohiost:["Ohio State","Ohio State Buckeyes"],
+    };
+    return Boolean(observed) && ([name, college].some(expected => expected &&
+      canonicalCbbTeamName(expected) === observed)||
+      namedAliases[observed]?.some(alias=>name&&canonicalCbbTeamName(alias)===canonicalCbbTeamName(name))===true);
   }
   if (sport === "cfb") return row.sideCode === abbreviation.toUpperCase() || cfbProviderTeamMatches({ observed: row.team, abbreviation, expectedName: name }) || cfbProviderTeamMatches({ observed: row.sideCode, abbreviation, expectedName: name });
   if (sport === "soccer" || sport === "ucl") {

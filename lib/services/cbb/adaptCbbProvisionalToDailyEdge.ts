@@ -5,11 +5,11 @@ import { SHARP_READ_SENTENCES } from "@/lib/services/sharpReadSelector";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { settleLockedCbbProvisionalBoard, type CbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import { cbbImpliedProbability } from "@/lib/cbb/marketEvidence";
-import type { CbbGame, CbbMarket } from "@/lib/cbb/types";
+import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_10_29_r2_exact_quote_reader" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_10_30_r3_two_sided_current_market" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -28,6 +28,7 @@ const selectionLabel=(game:CbbGame,row:BoardRow):string|null=>{
 };
 function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProbability:number):MarketEdgeDto{
   const held=row.grade==="Held",label=selectionLabel(game,row),code=gradeCode(row.grade,row.referenceState);
+  const selectedLine=row.market==="moneyline"?null:row.market==="spread"&&row.selection==="second"&&row.line!==null?-row.line:row.line;
   const v=verdict(row.grade),probability=row.probability,price=row.price;
   const priceImplied=price===null?null:cbbImpliedProbability(price);
   const fair=row.marketFairProbability;
@@ -47,11 +48,11 @@ function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProba
     modelProb:probability,marketFairProb:fair,pinnacleEvPct:null,moneyPct:null,betsPct:null,publicSplits:[],
     priceAmerican:price,currentPriceAmerican:price,currentPriceSportsbook:row.targetBook,currentPriceObservedAt:row.quoteObservedAt,
     lineOpenAmerican:null,modelTotal:row.market==="total"?projectedTotal:null,marketTotal:row.market==="total"?row.line:null,
-    line:row.market==="moneyline"?null:row.market==="spread"&&row.selection==="second"&&row.line!==null?-row.line:row.line,
+    line:selectedLine,
     keyStats:[],modelTrustPct:probability===null?null:probability*100,marketImpliedPct:priceImplied===null?null:priceImplied*100,
     modelMarketGapPct:probability===null||fair===null?null:(probability-fair)*100,recommendationConfidence:held?null:probability===null?null:probability*100,
     marketSource:row.targetBook,marketDataQuality:price===null?"unavailable":"two_sided_consensus",
-    reviewFlags:[],reviewActionSummary:"keep",oddsTrail:price===null?[]:[{american:price,line:row.line,
+    reviewFlags:[],reviewActionSummary:"keep",oddsTrail:price===null?[]:[{american:price,line:selectedLine,
       observedAt:row.quoteObservedAt,sportsbook:row.targetBook,source:"current_line",label:"current"}],
     lineTrail:[],opposingOddsTrail:null};
 }
@@ -73,7 +74,7 @@ export function cbbOfficialGameResultFromScores(snapshot:CbbProvisionalSnapshot,
 
 /** One coherent projection and three exact market rows; no read-time re-grade. */
 export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvisionalSnapshot;homeLogo:string|null;awayLogo:string|null;now:string;
-  splitEvidence?:SplitEvidence|null}):DailyEdgeGameDto{
+  splitEvidence?:SplitEvidence|null;marketQuotes?:CbbQuote[]}):DailyEdgeGameDto{
   const {game,snapshot,now}=args;
   if(snapshot.gameId!==game.id||snapshot.startsAt!==game.date||snapshot.board.gameId!==game.id)throw new Error("CBB member identity mismatch");
   const rows=new Map(snapshot.board.rows.map(row=>[row.market,row]));
@@ -81,7 +82,21 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability),
     spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability),
     total=marketEdge(game,rows.get("total")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability);
+  const cutoff=Date.parse(game.date)-60*60_000,locked=snapshot.lockedAt!==null;
   for(const [kind,market] of [["moneyline",ml],["spread",spread],["total",total]] as const){
+    const boardRow=rows.get(kind)!;
+    const quote=args.marketQuotes?.find(item=>item.gameId===game.id&&item.sportsbook===boardRow.targetBook&&item.market===kind&&
+      item.providerObservedAt===boardRow.quoteObservedAt);
+    if(quote&&boardRow.selection){
+      const selected=boardRow.selection==="first"?quote.firstPrice:quote.secondPrice;
+      if(selected!==boardRow.price||quote.line!==boardRow.line)throw new Error("CBB two-sided reader quote differs from graded exact pair");
+      const opposingFirst=boardRow.selection==="second",opposingLine=kind==="moneyline"?null:
+        kind==="spread"?(opposingFirst?quote.line:-quote.line!):quote.line;
+      market.opposingOddsTrail={side:kind==="total"?(opposingFirst?"over":"under"):(opposingFirst?"home":"away"),
+        label:kind==="total"?(opposingFirst?"Over":"Under"):(opposingFirst?game.home_team.abbreviation:game.visitor_team.abbreviation),
+        stops:[{american:opposingFirst?quote.firstPrice:quote.secondPrice,line:opposingLine,observedAt:quote.providerObservedAt,
+          sportsbook:quote.sportsbook,source:"current_line",label:"current"}]};
+    }
     const sourceRows=(args.splitEvidence?.rows??[]).filter(row=>row.market===kind);
     const preferred=["circa","draftkings","betmgm"].find(book=>sourceRows.filter(row=>row.sourceBook===book).length===2);
     const selected=preferred?sourceRows.filter(row=>row.sourceBook===preferred):[];
@@ -96,7 +111,6 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
       message:selected.length===2?"Verified two-sided named-book split data is available.":"Verified two-sided named-book split data is not available for this game and market.",
       lastUpdated:selected[0]?.observedAt??null};
   }
-  const cutoff=Date.parse(game.date)-60*60_000,locked=snapshot.lockedAt!==null;
   if(locked)for(const market of [ml,spread,total]){
     market.lockedLineAmerican=market.priceAmerican;
     market.lockedLineAt=snapshot.lockedAt;
