@@ -34,16 +34,20 @@ async function main(){
   const read=cbbMemberGameForReader(later.record,{...game,status:"post",status_state:"final",home_score:80,away_score:72});
   assert.equal(read.projected.home,78);assert.equal(read.result?.markets.first_inning.pickResult,"win");
   assert.equal(JSON.stringify(payload),exact,"settlement cannot mutate lock payload");
+  let officialGameDate="2026-11-01T19:00:00+00:00";
   const overlayDb={from:(table:string)=>table==="lab_response_snapshots"?{
     select:()=>({in:async()=>({data:[{snapshot_key:"cbb::member-game::777",payload:frozen.record}],error:null})})
   }:{select:()=>({eq:()=>({in:async()=>({data:[{external_id:777,status:"STATUS_FINAL",home_score:80,
-    away_score:72,game_date:start}],error:null})})})}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
+    away_score:72,game_date:officialGameDate}],error:null})})})}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
   const oldBoard=cbbDailyEdgeResponse("2026-11-01",[first.record.memberGame],before);
   const lockedBoard=await overlayCbbLockedMemberGames(oldBoard,overlayDb);
   assert.equal(lockedBoard.games[0].lockedAt,frozen.record.snapshot.lockedAt);
   assert.equal(lockedBoard.games[0].projected.home,78);
   assert.equal(lockedBoard.games[0].result?.markets.first_inning.pickResult,"win");
   assert.equal(oldBoard.games[0].lockedAt,null,"reader overlay must not mutate the stale board");
+  officialGameDate="2026-11-01T19:01:00+00:00";
+  await assert.rejects(overlayCbbLockedMemberGames(oldBoard,overlayDb),/locked result identity missing/);
+  officialGameDate="2026-11-01T19:00:00+00:00";
   payload=structuredClone(first.record);
   await assert.rejects(writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,
     now:"2026-11-01T19:01:00Z"},db),/missed pregame lock/);

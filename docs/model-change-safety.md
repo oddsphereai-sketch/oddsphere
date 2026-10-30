@@ -2,6 +2,16 @@
 
 ## Owner-approved CBB writer warmup — October 30
 
+The first live writer call failed closed on seven exact-game comparisons because
+PostgreSQL serialized UTC as `+00:00` and the provider serialized the same
+instant as `.000Z`. The r3 writer repair compares parsed start instants and
+retains exact ID/team/logo checks, without changing score, grade, promotion,
+stake, or lock math. A regression covers both equivalent timestamp spellings
+and a genuine one-minute start mismatch. The post-lock official-result overlay
+receives the same instant comparison and still preserves the exact stored lock.
+The member reader remains off until
+the repaired production writer successfully publishes a complete stored board.
+
 The owner approved the November 1 CBB launch. This first stage enables only
 the single `prediction_pipeline:cbb` writer and leaves member publication and
 stakes off. It stamps the same-input provisional grade policy with new

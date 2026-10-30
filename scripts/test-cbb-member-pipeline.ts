@@ -21,7 +21,7 @@ const provider={calls:2,gamesForDates:async(dates:string[])=>dates.includes("202
 const owls={odds:async()=>({body:odds,status:200,rateLimit:{remainingMinute:null,remainingMonth:null}}),
   splits:async()=>({body:splits,status:200,rateLimit:{remainingMinute:null,remainingMonth:null}})} as unknown as OwlsInsightClient;
 const schedule=buildCbbRollingSchedule({anchorDate:"2026-10-29",games:[{external_id:game.id,slate_date:"2026-11-01",
-  game_date:start,status:"STATUS_SCHEDULED",away_team_id:11,home_team_id:92,venue:"Venue"}],
+  game_date:"2026-11-01T14:30:00+00:00",status:"STATUS_SCHEDULED",away_team_id:11,home_team_id:92,venue:"Venue"}],
   teams:[{id:92,abbreviation:"VILL",display_name:home.full_name,logo_url:"https://a.espncdn.com/i/teamlogos/ncaa/500/222.png"},
     {id:11,abbreviation:"ND",display_name:away.full_name,logo_url:"https://a.espncdn.com/i/teamlogos/ncaa/500/87.png"}]});
 const event={id:"espn-1",date:start,competitions:[{neutralSite:true,timeValid:true,
@@ -39,6 +39,10 @@ const saveSnapshot=(async(input:{payload:DailyEdgeResponse})=>{published=structu
   return {ok:true,snapshotKey:"test",expiresAt:asOf,staleUntil:asOf};}) as NonNullable<Parameters<typeof refreshCbbMemberBoard>[0]["saveSnapshot"]>;
 
 async function main(){
+  const wrongStart={...schedule,games:schedule.games.map(row=>({...row,gameStartAt:"2026-11-01T14:31:00+00:00"}))};
+  await assert.rejects(refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",
+    trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>wrongStart,saveSnapshot}),/lost exact games/);
+  assert.equal(stored.size,0,"a real start-time drift must not write a member game");
   const result=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
   assert.equal(result.sourceGames,1);assert.equal(result.published,1);assert.equal(result.written,1);
