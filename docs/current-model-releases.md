@@ -1305,6 +1305,16 @@ Last reviewed: 2026-10-29
 
 ## CFB Daily Edge generalized weekly production release
 
+- October 29 immutable lock-wave handoff: fixture/snapshot/reader advance to
+  r98/r58/r43 (`immutable_lock_wave_handoff`), writer to r144. Restore the same
+  immutable-lock overlay already used by earlier compatibility families for
+  the r54/r55 intermediate waves. Only exact valid locks overlay the supported
+  complete predecessor; an existing earlier lock retains precedence. The
+  complete-current boundary still rejects missing future-unlocked games.
+  Decision/calibration r56/r29, model/distribution/probability r26/r24/r28,
+  grade policy r28, sole writer/lease and every stored record are unchanged.
+  Evidence: `docs/model-audits/2026-10-29-cfb-owls-lock-wave-handoff.md`.
+
 - October 29 normalized-PMF precision repair: coherence implementation advances
   to `cfb_pmf_winner_coherence_2026_10_29_r2_normalized_probability_complement`;
   calibration/decision/tuple to r29/r56/r43, writer to r143 and

@@ -1041,6 +1041,30 @@ assert.deepEqual(cfbLockPlanningEvidence([normalizedOldLock]), [normalizedOldLoc
 assert.equal(JSON.stringify(normalizedOldLock), normalizedOldBytes);
 assert.equal(normalizedTransition.find(row => row.providerGameId === "same-schema-unlocked")?.id, "r56-same-schema-unlocked");
 
+// Production rollout: the intermediate r55 wave failed one unlocked game but
+// created a valid lock. That exact lock must bridge to current r56 without
+// forcing every healthy game back onto the old complete availability board.
+const completeBeforeIntermediate = owlsGradePreviousRows.map(row => {
+  const previous = releaseTransitionPayload({ providerGameId: row.providerGameId, gameStartsAt: row.gameStartAt,
+    capturedAt: row.capturedAt, stage: "unlocked", schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    memberRelease: CFB_FORWARD_MEMBER_RELEASE, decisionRelease: CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE,
+    forecastRelease: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE });
+  return { ...row, stage: "unlocked" as const, payload: previous, payloadSha256: hashCfbForwardEvidencePayload(previous) };
+});
+const currentOnlyUnlocked = { ...evidence, id: "current-after-partial-r55", providerGameId: "same-schema-unlocked", stage: "unlocked" as const,
+  capturedAt: sameSchemaCurrentPayload.capturedAt, gameStartAt: sameSchemaCurrentPayload.game.scheduledStart,
+  payloadSha256: hashCfbForwardEvidencePayload(sameSchemaCurrentPayload), payload: sameSchemaCurrentPayload };
+const bridged = selectLatestCfbMemberEvidenceRows([...completeBeforeIntermediate, normalizedOldLock, currentOnlyUnlocked], "2026-10-24T17:05:00Z");
+assert.equal(bridged.length, 2);
+assert.deepEqual(bridged.find(row => row.providerGameId === normalizedOldLock.providerGameId), normalizedOldLock,
+  "an incomplete intermediate release's exact immutable lock must bridge the new current wave");
+assert.equal(bridged.find(row => row.providerGameId === "same-schema-unlocked")?.id, currentOnlyUnlocked.id);
+assert.deepEqual(cfbLockPlanningEvidence([normalizedOldLock]), [normalizedOldLock]);
+assert.equal(JSON.stringify(normalizedOldLock), normalizedOldBytes);
+const stillIncomplete = selectLatestCfbMemberEvidenceRows([...completeBeforeIntermediate, normalizedOldLock], "2026-10-24T17:05:00Z");
+assert.equal(stillIncomplete.find(row => row.providerGameId === "same-schema-unlocked")?.payload.decisions.decisionRelease,
+  CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE, "missing unlocked current evidence remains a labeled previous-release availability fallback");
+
 const transitionLockedGameId = "release-transition-locked";
 const transitionUnlockedGameId = "release-transition-unlocked";
 const transitionGameStart = "2026-10-10T19:00:00.000Z";

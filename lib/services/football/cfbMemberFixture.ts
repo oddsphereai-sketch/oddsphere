@@ -134,7 +134,7 @@ import { CFB_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS } from "./footballCrossMark
 import { isCurrentMarketCycleOpening } from "../dailyEdge/marketCycleOpening";
 
 export const CFB_MEMBER_FIXTURE_RELEASE =
-  "cfb_v1_member_fixture_2026_10_29_r97_normalized_pmf_coherence" as const;
+  "cfb_v1_member_fixture_2026_10_29_r98_immutable_lock_wave_handoff" as const;
 export const CFB_PUBLIC_OUTCOME_CONTRACT_RELEASE =
   "cfb_market_sharp_public_outcome_contract_2026_10_27_r81_near_tie_pmf_winner_coherence" as const;
 export const CFB_MEMBER_GAME_LIFECYCLE_RELEASE =
@@ -1100,10 +1100,12 @@ export function selectLatestCfbMemberEvidenceRows(
   const owlsGradePreviousRows = rows.filter(row => String(row.payload.decisions.decisionRelease) === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE);
   const previousAuthority = pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ?? exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const owlsGradePrevious = completeRowsForRelease(owlsGradePreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE) ??
-    (previousAuthority ? immutableBoundaryTransitionRows(owlsGradePreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE, previousAuthority) : null);
+    (previousAuthority ? immutableBoundaryTransitionRows(owlsGradePreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE, previousAuthority) ??
+      immutableLockOverlayRows(owlsGradePreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE, previousAuthority) : null);
   const normalizedPmfPreviousRows = rows.filter(row => String(row.payload.decisions.decisionRelease) === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE);
   const normalizedPmfPrevious = completeRowsForRelease(normalizedPmfPreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE) ??
-    (owlsGradePrevious ? immutableBoundaryTransitionRows(normalizedPmfPreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE, owlsGradePrevious) : null);
+    (owlsGradePrevious ? immutableBoundaryTransitionRows(normalizedPmfPreviousRows, now, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE, owlsGradePrevious) ??
+      immutableLockOverlayRows(normalizedPmfPreviousRows, CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE, CFB_FORWARD_MEMBER_RELEASE, CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE, owlsGradePrevious) : null);
   const coordinatorIntegrationPreviousAuthority = normalizedPmfPrevious ?? owlsGradePrevious ?? pmfCoherencePrevious ?? parlayLeanPrevious ?? coordinatorIntegrationPrevious ?? finalWinnerPrevious ??
     exactPriceActionabilityPrevious ?? marketReaderPreviousAuthority;
   const immutableBoundaryTransition = coordinatorIntegrationPreviousAuthority
@@ -1268,7 +1270,7 @@ function immutableLockOverlayRows(
       .map((row) => [row.providerGameId, row]),
   );
   if (lockedByGame.size === 0) return null;
-  return previous.map((row) => lockedByGame.get(row.providerGameId) ?? row);
+  return previous.map((row) => isValidImmutableBoundaryT60(row) ? row : lockedByGame.get(row.providerGameId) ?? row);
 }
 
 function isValidImmutableBoundaryT60(row: CfbForwardStoredEvidence): boolean {
