@@ -16,7 +16,7 @@ const emptyMarket = (): MarketEdgeDto => ({
   recommendationDecision: { sharpBookSplits: null },
 } as unknown as MarketEdgeDto);
 
-const response = (sport: "cfb" | "mlb" | "nba" | "nhl", awayTeam: string, homeTeam: string, awayName: string, homeName: string) => ({
+const response = (sport: "cfb" | "cbb" | "mlb" | "nba" | "nhl", awayTeam: string, homeTeam: string, awayName: string, homeName: string) => ({
   as_of: "2026-09-20T20:00:00.000Z",
   sport,
   date: "2026-09-20",
@@ -63,6 +63,62 @@ for (const market of Object.values(cfb.games[0]!.markets)) {
 }
 assert.equal(cfb.games[0]!.markets.moneyline.sportsbookSplits?.rows[0]?.moneyPct, 61);
 assert.equal(cfb.games[0]!.markets.moneyline.recommendationDecision?.sharpBookSplits, null, "overlay stays display-only");
+
+const cbb = response("cbb", "ND", "VILL", "Notre Dame Fighting Irish", "Villanova Wildcats");
+cbb.games[0]!.cbbAwayCollege = "Notre Dame";
+cbb.games[0]!.cbbHomeCollege = "Villanova";
+const cbbNeutralSource = {
+  ...complete("ncaab", "circa", "Villanova", "Notre Dame", "2026-09-20T20:04:00.000Z"),
+  event_id: "ncaab:Villanova@Notre Dame-20260920",
+  event_start_time: undefined,
+};
+const cbbResult = applySharpApiCurrentSplitOverlay(cbb, {
+  source: "owls_current_splits",
+  release: "owls_current_splits_2026_10_27_r1_complete_named_book",
+  sport: "cbb",
+  fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [cbbNeutralSource],
+}, now);
+assert.deepEqual(cbbResult, { matchedGames: 1, populatedMarkets: 3 }, "CBB institutional names and neutral-site reversal match");
+assert.deepEqual(cbb.games[0]!.markets.moneyline.sportsbookSplits?.rows.map((row) => [row.side, row.moneyPct, row.betsPct]), [
+  ["away", 39, 47], ["home", 61, 53],
+], "source home/away percentages map back to canonical CBB teams");
+assert.deepEqual(cbb.games[0]!.markets.first_inning.sportsbookSplits?.rows.map((row) => [row.side, row.moneyPct]), [
+  ["away", 42], ["home", 58],
+], "reversed CBB spread splits preserve side identity");
+assert.deepEqual(cbb.games[0]!.markets.total.sportsbookSplits?.rows.map((row) => [row.side, row.moneyPct]), [
+  ["over", 44], ["under", 56],
+], "total orientation never flips");
+const cbbWrongTeam = response("cbb", "ND", "VILL", "Notre Dame Fighting Irish", "Villanova Wildcats");
+cbbWrongTeam.games[0]!.cbbAwayCollege = "Notre Dame";
+cbbWrongTeam.games[0]!.cbbHomeCollege = "Villanova";
+assert.deepEqual(applySharpApiCurrentSplitOverlay(cbbWrongTeam, {
+  source: "owls_current_splits", release: "owls_current_splits_2026_10_27_r1_complete_named_book",
+  sport: "cbb", fetchedAt: "2026-09-20T20:04:00.000Z",
+  rows: [{ ...cbbNeutralSource, home_team: "Notre Dame", away_team: "Wildcats" }],
+}, now), { matchedGames: 0, populatedMarkets: 0 }, "nickname-only CBB rows cannot attach");
+assert.equal(sharpApiCurrentTest.rowMatchesGame({ ...cbbNeutralSource,
+  event_start_time: "2026-09-20T22:00:00.000Z",
+}, cbb.games[0]!, cbb.date, "cbb"), false, "wrong-time CBB split events cannot attach");
+const cbbDuplicate = response("cbb", "ND", "VILL", "Notre Dame Fighting Irish", "Villanova Wildcats");
+cbbDuplicate.games[0]!.cbbAwayCollege = "Notre Dame";
+cbbDuplicate.games[0]!.cbbHomeCollege = "Villanova";
+cbbDuplicate.games.push({ ...cbbDuplicate.games[0]!, id: "cbb-2", external_id: 2 });
+assert.deepEqual(applySharpApiCurrentSplitOverlay(cbbDuplicate, {
+  source: "owls_current_splits", release: "owls_current_splits_2026_10_27_r1_complete_named_book",
+  sport: "cbb", fetchedAt: "2026-09-20T20:04:00.000Z", rows: [cbbNeutralSource],
+}, now), { matchedGames: 0, populatedMarkets: 0 }, "same-date ambiguous CBB fixtures fail closed");
+const cbbLocked = response("cbb", "ND", "VILL", "Notre Dame Fighting Irish", "Villanova Wildcats");
+cbbLocked.games[0]!.cbbAwayCollege = "Notre Dame";
+cbbLocked.games[0]!.cbbHomeCollege = "Villanova";
+cbbLocked.games[0]!.lockState = "locked";
+cbbLocked.games[0]!.lockedAt = "2026-09-20T20:05:00.000Z";
+const cbbLockedBefore = JSON.stringify(cbbLocked.games[0]);
+assert.deepEqual(applySharpApiCurrentSplitOverlay(cbbLocked, {
+  source: "owls_current_splits", release: "owls_current_splits_2026_10_27_r1_complete_named_book",
+  sport: "cbb", fetchedAt: "2026-09-20T20:04:00.000Z", rows: [cbbNeutralSource],
+}, now, { reconstructMissingLockedPreLock: true }), { matchedGames: 0, populatedMarkets: 0 });
+assert.equal(JSON.stringify(cbbLocked.games[0]), cbbLockedBefore, "CBB locked reader payload cannot be enriched by the new mapping");
 
 const mlb = response("mlb", "PHI", "NYM", "Philadelphia Phillies", "New York Mets");
 const mlbFeed: NonNullable<Parameters<typeof applySharpApiCurrentSplitOverlay>[1]> = {

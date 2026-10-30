@@ -1,6 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
+import { cbbSplitOrientation } from "@/lib/cbb/exactSplitIdentity";
 import { fetchOwlsCurrentSplitRows } from "@/lib/providers/owls/owlsCurrentSplits";
 import { normalizeTeamAbbr } from "@/lib/providers/playbook/playbookTeamNormalizer";
 import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
@@ -240,11 +241,14 @@ export function applySharpApiCurrentSplitOverlay(
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
+    // CBB's stored locked member card is the entire public record. This new
+    // identity rule may attach only to future/unlocked reader rows.
+    if (feed.sport === "cbb" && (game.lockState === "locked" || game.lockedAt)) continue;
     const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
       ? Date.parse(game.lockedAt ?? "")
       : null;
     if (game.lockState === "locked" && !Number.isFinite(lockedCutoffMs)) continue;
-    const candidates = feed.rows.filter((row) => rowMatchesGame(row, game, response.date, feed.sport));
+    const candidates = feed.rows.filter((row) => rowMatchesUniqueGame(row, game, response, feed.sport));
     if (candidates.length === 0) continue;
     matchedGames += 1;
     populatedMarkets += attachBestMarket(game, "moneyline", "moneyline", candidates, nowMs, lockedCutoffMs);
@@ -269,8 +273,8 @@ export function restoreCompleteSharpApiCurrentSplitDisplay(
   if (!feed || response.sport !== feed.sport) return 0;
   let restored = 0;
   for (const game of response.games) {
-    if (game.lockState === "locked") continue;
-    const candidates = feed.rows.filter((row) => rowMatchesGame(row, game, response.date, feed.sport));
+    if (game.lockState === "locked" || (feed.sport === "cbb" && game.lockedAt)) continue;
+    const candidates = feed.rows.filter((row) => rowMatchesUniqueGame(row, game, response, feed.sport));
     if (candidates.length === 0) continue;
     const markets: Array<[keyof DailyEdgeGameDto["markets"], SplitMarket]> = [
       ["moneyline", "moneyline"],
@@ -493,11 +497,15 @@ function sectionFromRow(
   book: NamedBook,
   row: Json,
 ): MarketSplitDisplaySection | null {
+  const cbbOrientation = game.sport === "cbb"
+    ? cbbSplitOrientation(text(row.away_team) ?? "", text(row.home_team) ?? "", game)
+    : null;
+  if (game.sport === "cbb" && cbbOrientation === null) return null;
   const fetchedAt = timestamp(record(row._oddsphere_market_fetched_at)[market]) ?? timestamp(row.fetched_at);
   const source = record(row[market]);
   if (!fetchedAt) return null;
-  const firstKey = market === "total" ? "over" : "away";
-  const secondKey = market === "total" ? "under" : "home";
+  const firstKey = market === "total" ? "over" : cbbOrientation === "reversed" ? "home" : "away";
+  const secondKey = market === "total" ? "under" : cbbOrientation === "reversed" ? "away" : "home";
   const bets = record(source.bets_pct);
   const handle = record(source.handle_pct);
   const firstMoney = percentage(handle[firstKey]);
@@ -690,8 +698,24 @@ function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sp
     ? `${compactEventDate[1]}-${compactEventDate[2]}-${compactEventDate[3]}`
     : null);
   if (startAt ? !dates.has(easternDate(startAt)) : !eventDate || !dates.has(eventDate)) return false;
+  if (sport === "cbb") {
+    if (startAt && game.gameStartAt &&
+      Math.abs(Date.parse(startAt) - Date.parse(game.gameStartAt)) > 10 * 60_000) return false;
+    return cbbSplitOrientation(text(row.away_team) ?? "", text(row.home_team) ?? "", game) !== null;
+  }
   return teamMatches(sport, row.away_team, game.awayTeam, game.awayTeamDisplayName) &&
     teamMatches(sport, row.home_team, game.homeTeam, game.homeTeamDisplayName);
+}
+
+function rowMatchesUniqueGame(
+  row: Json,
+  game: DailyEdgeGameDto,
+  response: DailyEdgeResponse,
+  sport: SupportedSport,
+): boolean {
+  if (!rowMatchesGame(row, game, response.date, sport)) return false;
+  return sport !== "cbb" || response.games.filter((candidate) =>
+    rowMatchesGame(row, candidate, response.date, sport)).length === 1;
 }
 
 function acceptedDates(gameStartAt: string | null | undefined, slateDate: string): Set<string> {

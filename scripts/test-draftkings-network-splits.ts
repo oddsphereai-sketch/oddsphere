@@ -236,7 +236,7 @@ const footballMarket = (marketName: "moneyline" | "spread" | "total", first: str
     { label: second, moneyPct: 40, betsPct: 45 },
   ],
 });
-const footballResponse = (sport: "nfl" | "cfb", awayTeam: string, homeTeam: string, awayTeamDisplayName?: string, homeTeamDisplayName?: string) => ({
+const footballResponse = (sport: "nfl" | "cfb" | "cbb", awayTeam: string, homeTeam: string, awayTeamDisplayName?: string, homeTeamDisplayName?: string) => ({
   as_of: "2026-09-17T15:00:00.000Z",
   sport,
   date: "2026-09-19",
@@ -310,6 +310,40 @@ const cfbApplied = applyDraftKingsNetworkSplitFallback(cfb, {
   }],
 });
 assert.deepEqual(cfbApplied, { matchedGames: 1, populatedMarkets: 3 }, "CFB provider school aliases must resolve without guessing across Miami teams");
+
+const cbb = footballResponse("cbb", "ND", "VILL", "Notre Dame Fighting Irish", "Villanova Wildcats");
+cbb.games[0]!.cbbAwayCollege = "Notre Dame";
+cbb.games[0]!.cbbHomeCollege = "Villanova";
+const cbbFeed: DraftKingsNetworkSplitFeed = {
+  source: "draftkings_network", sport: "NCAA Basketball", fetchedAt: "2026-09-17T15:01:00.000Z",
+  games: [{
+    providerEventId: "cbb-neutral-1", awayName: "Villanova", homeName: "Notre Dame", monthDay: "9/19",
+    markets: {
+      moneyline: footballMarket("moneyline", "Villanova", "Notre Dame"),
+      spread: footballMarket("spread", "Villanova -7.5", "Notre Dame +7.5"),
+      total: footballMarket("total", "Over 148.5", "Under 148.5"),
+    },
+  }],
+};
+assert.deepEqual(applyDraftKingsNetworkSplitFallback(cbb, cbbFeed), { matchedGames: 1, populatedMarkets: 3 });
+assert.deepEqual(cbb.games[0]!.markets.moneyline.sportsbookSplits?.rows.map((row) => [row.side, row.moneyPct]), [
+  ["home", 60], ["away", 40],
+], "neutral-site provider order cannot invert CBB team splits");
+const cbbAmbiguous = footballResponse("cbb", "ND", "VILL", "Notre Dame Fighting Irish", "Villanova Wildcats");
+cbbAmbiguous.games[0]!.cbbAwayCollege = "Notre Dame";
+cbbAmbiguous.games[0]!.cbbHomeCollege = "Villanova";
+cbbAmbiguous.games.push({ ...cbbAmbiguous.games[0]!, id: "cbb-2", external_id: 2 });
+assert.deepEqual(applyDraftKingsNetworkSplitFallback(cbbAmbiguous, cbbFeed),
+  { matchedGames: 0, populatedMarkets: 0 }, "month/day-only CBB doubleheaders cannot be assigned by first match");
+const cbbLocked = footballResponse("cbb", "ND", "VILL", "Notre Dame Fighting Irish", "Villanova Wildcats");
+cbbLocked.games[0]!.cbbAwayCollege = "Notre Dame";
+cbbLocked.games[0]!.cbbHomeCollege = "Villanova";
+cbbLocked.games[0]!.lockState = "locked";
+cbbLocked.games[0]!.lockedAt = "2026-09-17T15:02:00.000Z";
+const cbbLockedBefore = JSON.stringify(cbbLocked.games[0]);
+assert.deepEqual(applyDraftKingsNetworkSplitFallback(cbbLocked, cbbFeed,
+  { reconstructMissingLockedPreLock: true }), { matchedGames: 0, populatedMarkets: 0 });
+assert.equal(JSON.stringify(cbbLocked.games[0]), cbbLockedBefore, "CBB locked record remains exact under the new fallback matcher");
 
 const lockedCfb = footballResponse("cfb", "MIA", "WAKE", "Miami Hurricanes", "Wake Forest Demon Deacons");
 lockedCfb.games[0]!.lockState = "locked";
