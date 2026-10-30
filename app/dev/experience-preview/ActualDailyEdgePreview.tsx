@@ -17,6 +17,13 @@ import type { Sport } from "@/lib/types/domain/Sport";
 import { currentSlateDate } from "@/lib/dates/slateDate";
 import { boardDateLabel, dateKeyInTimeZone } from "@/app/lab/lib/dailyEdgeBoardDates";
 import {
+  cbbAnalyzedGamesForDate,
+  cbbScheduleForDate,
+  cbbSlateDays,
+  initialCbbSlateDate,
+  type CbbSlateDay,
+} from "@/app/lab/lib/cbbDailySlate";
+import {
   buildDailyEdgeSportSwitchDestination,
   DAILY_EDGE_SPORT_SWITCH_FALLBACK_MS,
   dailyEdgeSportDestinationIsCurrent,
@@ -224,12 +231,21 @@ export default function ActualDailyEdgePreview({
   const displaySnapshot = useMemo(() => normalizeCandidatePicks(renderedSnapshot, sport), [renderedSnapshot, sport]);
   const requestedGameId = searchParams.get("game");
   const requestedMarket = searchParams.get("market");
+  const cbbDays = useMemo(() => sport === "cbb" ? cbbSlateDays(displaySnapshot) : [], [displaySnapshot, sport]);
+  const [cbbBoardDate, setCbbBoardDate] = useState(() => sport === "cbb"
+    ? initialCbbSlateDate(displaySnapshot, requestedGameId) : "");
+  const cbbDailySchedule = useMemo(() => sport === "cbb"
+    ? cbbScheduleForDate(displaySnapshot.cbbRollingSchedule, cbbBoardDate) : undefined,
+  [cbbBoardDate, displaySnapshot.cbbRollingSchedule, sport]);
   const [cfbBoardScope, setCfbBoardScope] = useState<CfbBoardScope>(() =>
     resolveInitialCfbBoardScope({ sport, games: displaySnapshot.games, requestedGameId }),
   );
   const scopedGames = useMemo(
-    () => selectCfbBoardGames(displaySnapshot.games, sport, cfbBoardScope),
-    [cfbBoardScope, displaySnapshot.games, sport],
+    () => {
+      const games = selectCfbBoardGames(displaySnapshot.games, sport, cfbBoardScope);
+      return sport === "cbb" ? cbbAnalyzedGamesForDate(games, cbbBoardDate) : games;
+    },
+    [cbbBoardDate, cfbBoardScope, displaySnapshot.games, sport],
   );
   const initialSelection = resolveInitialReaderSelection(scopedGames, requestedGameId, requestedMarket);
   const initialReaderRequested = Boolean(
@@ -353,9 +369,10 @@ export default function ActualDailyEdgePreview({
   }
 
   const game = useMemo(() => {
-    const boardGame = displaySnapshot.games.find((candidate) => candidate.id === gameId) ?? scopedGames[0];
+    const boardGame = (sport === "cbb" ? scopedGames : displaySnapshot.games)
+      .find((candidate) => candidate.id === gameId) ?? scopedGames[0];
     return boardGame ? footballGameDetails[boardGame.id] ?? boardGame : undefined;
-  }, [footballGameDetails, displaySnapshot.games, gameId, scopedGames]);
+  }, [footballGameDetails, displaySnapshot.games, gameId, scopedGames, sport]);
 
   useEffect(() => {
     if (!mobileSheetOpen) return;
@@ -410,8 +427,8 @@ export default function ActualDailyEdgePreview({
 
   if (!game) {
     const basketballSchedule = sport === "nba" ? displaySnapshot.nbaRollingSchedule :
-      sport === "cbb" ? displaySnapshot.cbbRollingSchedule : undefined;
-    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : basketballSchedule && basketballSchedule.games.length > 0 ? <BasketballRollingSchedule schedule={basketballSchedule} sport={sport === "cbb" ? "cbb" : "nba"} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
+      sport === "cbb" ? cbbDailySchedule : undefined;
+    return <div className="space-y-5 pb-16"><SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} cbbBoardDate={cbbBoardDate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />{sport === "cbb" && cbbDays.length > 0 ? <CbbDateNavigation days={cbbDays} selectedDate={cbbBoardDate} onChange={changeCbbBoardDate} /> : null}{nflWeekOneEvidenceBoard ? <NflWeekOneEvidenceMonitor board={nflWeekOneEvidenceBoard} /> : sport === "nfl" && renderedWeeklySlate ? <NflEvidenceUnavailable label={renderedWeeklySlate.label} /> : renderedWeeklySlate?.unavailable ? <WeeklySlateEvidenceUnavailable sport={sport} /> : displaySnapshot.slateState === "temporarily_unavailable" ? <DailySlateEvidenceUnavailable sport={sport} displayLabel={soccerCompetition?.label} /> : basketballSchedule && basketballSchedule.games.length > 0 ? <BasketballRollingSchedule schedule={basketballSchedule} sport={sport === "cbb" ? "cbb" : "nba"} /> : <EmptyPreview sport={sport} displayLabel={soccerCompetition?.label} />}</div>;
   }
 
   const selectedGame = game;
@@ -512,6 +529,23 @@ export default function ActualDailyEdgePreview({
     setDeepOpen(false);
   }
 
+  function changeCbbBoardDate(next: string) {
+    if (next === cbbBoardDate) return;
+    const nextGames = cbbAnalyzedGamesForDate(displaySnapshot.games, next);
+    setCbbBoardDate(next);
+    setGameId(nextGames[0]?.id ?? "");
+    setMarketKey(nextGames[0] ? primaryMarket(nextGames[0]) : "moneyline");
+    setReaderOpen(false);
+    setMobileSheetOpen(false);
+    setDeepOpen(false);
+    if (!embeddedSample) {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("game");
+      params.delete("market");
+      window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    }
+  }
+
   const scopedGameIndex = scopedGames.findIndex((candidate) => candidate.id === game.id);
   const cfbScopeControl = sport === "cfb"
     ? {
@@ -524,7 +558,9 @@ export default function ActualDailyEdgePreview({
 
   return (
     <div className="space-y-5 pb-16">
-      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />
+      <SlateHeader snapshot={displaySnapshot} sport={sport} onSportChange={switchSport} onSportPrefetch={prefetchSport} sample={embeddedSample} soccerCompetition={soccerCompetition} weeklySlate={renderedWeeklySlate} cbbBoardDate={cbbBoardDate} reviewMode={reviewMode} activePreviewSports={activePreviewSports} sportActivity={sportActivity} />
+
+      {sport === "cbb" && cbbDays.length > 0 ? <CbbDateNavigation days={cbbDays} selectedDate={cbbBoardDate} onChange={changeCbbBoardDate} /> : null}
 
       <div ref={readerRef} className="hidden scroll-mt-4 sm:block">
         {readerOpen ? <div>
@@ -536,8 +572,8 @@ export default function ActualDailyEdgePreview({
 
       {sport === "nba" && displaySnapshot.nbaRollingSchedule?.games.length ? (
         <BasketballRollingSchedule schedule={displaySnapshot.nbaRollingSchedule} sport="nba" />
-      ) : sport === "cbb" && displaySnapshot.cbbRollingSchedule?.games.length ? (
-        <BasketballRollingSchedule schedule={displaySnapshot.cbbRollingSchedule} sport="cbb" />
+      ) : sport === "cbb" && cbbDailySchedule?.games.length ? (
+        <BasketballRollingSchedule schedule={cbbDailySchedule} sport="cbb" />
       ) : null}
 
       {mobileSheetOpen ? (
@@ -824,12 +860,12 @@ function replaceReaderUrl(sport: Sport, gameId: string, market: MarketKey) {
   );
 }
 
-function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample = false, soccerCompetition, weeklySlate, reviewMode = true, activePreviewSports = [], sportActivity = {} }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; reviewMode?: boolean; activePreviewSports?: Sport[]; sportActivity?: DailyEdgeSportActivityMap }) {
+function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample = false, soccerCompetition, weeklySlate, cbbBoardDate, reviewMode = true, activePreviewSports = [], sportActivity = {} }: { snapshot: DailyEdgeResponse; sport: Sport; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; sample?: boolean; soccerCompetition?: SoccerCompetitionPreview; weeklySlate?: WeeklySlatePreview; cbbBoardDate?: string; reviewMode?: boolean; activePreviewSports?: Sport[]; sportActivity?: DailyEdgeSportActivityMap }) {
   const displaySport = soccerCompetition?.label ?? sportLabel(sport);
   const nbaScheduleOnlyCount = sport === "nba" ? snapshot.nbaRollingSchedule?.games.length ?? 0 : 0;
-  const cbbScheduleOnlyCount = sport === "cbb" ? snapshot.cbbRollingSchedule?.games.length ?? 0 : 0;
-  const displayGameCount = weeklySlate?.displayGameCount ??
-    snapshot.games.length + nbaScheduleOnlyCount + cbbScheduleOnlyCount;
+  const cbbDay = sport === "cbb" ? cbbSlateDays(snapshot).find((day) => day.date === cbbBoardDate) : undefined;
+  const displayGameCount = sport === "cbb" ? (cbbDay?.analyzed ?? 0) + (cbbDay?.scheduled ?? 0)
+    : weeklySlate?.displayGameCount ?? snapshot.games.length + nbaScheduleOnlyCount;
   const displayAsOf = weeklySlate?.asOf ?? snapshot.as_of;
   const sportAvailability = previewSportAvailability(activePreviewSports, sportActivity, soccerCompetition, sport, displayGameCount > 0);
   const orderedSports = orderDailyEdgeSportKeys(DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability)
@@ -837,7 +873,7 @@ function SlateHeader({ snapshot, sport, onSportChange, onSportPrefetch, sample =
   return (
     <div>
       <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : snapshot.date} · {displayGameCount} {displaySport} {nbaScheduleOnlyCount + cbbScheduleOnlyCount > 0 ? "games in the next 7 days" : displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
+        <div><p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">OddSphere · {displaySport}</p><h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Daily Edge</h1><p className="mt-1 text-xs text-gray-500">{sample ? "Sample slate" : sport === "cbb" ? cbbBoardDate ?? snapshot.date : snapshot.date} · {displayGameCount} {displaySport} {sport === "nba" && nbaScheduleOnlyCount > 0 ? "games in the next 7 days" : displayGameCount === 1 ? "game" : "games"}{sample ? " · Interactive product preview" : ` · updated ${formatTimestamp(displayAsOf)}`}</p></div>
         <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-gray-600"><span className="text-gray-400">Update rhythm</span> · {weeklySlate?.cadenceLabel ?? (weeklySlate ? "30-minute board" : "hourly board")} · separate market feeds · minute lock checks</p>
       </div>
       <div className="mt-5"><SportSelector active={sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={orderedSports} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density={sample ? "sample" : "default"} /></div>
@@ -2656,7 +2692,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
       <div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
         {cfbScopeControl ? <div className="mb-3 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] px-3 py-2.5"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-violet-200">College football board</p><p className="mt-1 text-[8px] font-semibold text-gray-500">FBS-involved games are the member default. Every model-covered Division I forecast remains available.</p></div><div className="flex gap-1.5" role="group" aria-label="College football board scope"><button type="button" onClick={() => changeScope("fbs")} aria-pressed={cfbScopeControl.active === "fbs"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "fbs" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>FBS {cfbScopeControl.fbsCount}</button><button type="button" onClick={() => changeScope("division_i")} aria-pressed={cfbScopeControl.active === "division_i"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "division_i" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>All Division I {cfbScopeControl.divisionICount}</button></div></div><div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-3"><label htmlFor="cfb-game-search" className="sr-only">Find a college football game</label><input id="cfb-game-search" type="search" value={cfbSearch} onChange={(event) => setCfbSearch(event.target.value)} placeholder="Find a school or abbreviation" className="min-w-0 flex-1 rounded-lg border border-white/[0.09] bg-black/25 px-3 py-2 text-[11px] font-semibold text-white outline-none placeholder:text-gray-700 focus:border-violet-400/55 focus:ring-2 focus:ring-violet-400/15" />{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-2 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Clear</button> : null}<span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-gray-600">{searchedGames.length} found</span></div></div> : null}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard || sport === "cbb" ? "Weekly Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}</span></div>
+          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard ? "Weekly Slate" : sport === "cbb" ? "Daily Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} {games.length === 1 ? "game" : "games"}{footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}</span></div>
           <div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div>
         </div>
         {footballBoard ? (
@@ -2839,6 +2875,26 @@ function basketballScheduleStatusLabel(status: string): string {
 
 type BasketballScheduleGame = NbaRollingScheduleDto["games"][number] | CbbRollingScheduleDto["games"][number];
 
+function CbbDateNavigation({ days, selectedDate, onChange }: {
+  days: CbbSlateDay[];
+  selectedDate: string;
+  onChange: (date: string) => void;
+}) {
+  return <nav aria-label="College basketball slate date" className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
+    <p className="mb-2 text-[9px] font-black uppercase tracking-[0.16em] text-violet-200">College basketball · choose a game day</p>
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      {days.map((day) => <button key={day.date} type="button" onClick={() => onChange(day.date)}
+        aria-pressed={selectedDate === day.date}
+        className={`shrink-0 rounded-lg border px-3 py-2 text-left ${selectedDate === day.date
+          ? "border-violet-400/55 bg-violet-500/[0.18] text-white"
+          : "border-white/[0.08] bg-black/20 text-gray-400 hover:border-white/[0.18] hover:text-white"}`}>
+        <span className="block text-[10px] font-black">{formatNbaScheduleDay(day.date)}</span>
+        <span className="mt-0.5 block text-[8px] font-semibold text-gray-500">{day.analyzed} analyzed{day.scheduled > 0 ? ` · ${day.scheduled} scheduled` : ""}</span>
+      </button>)}
+    </div>
+  </nav>;
+}
+
 function BasketballRollingSchedule({ schedule, sport }: {
   schedule: NbaRollingScheduleDto | CbbRollingScheduleDto;
   sport: "nba" | "cbb";
@@ -2854,11 +2910,11 @@ function BasketballRollingSchedule({ schedule, sport }: {
   );
 
   return (
-    <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.06] via-[#11101a] to-orange-400/[0.035] p-4 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.8)] sm:p-5" aria-labelledby={`${sport}-seven-day-schedule`}>
+    <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.06] via-[#11101a] to-orange-400/[0.035] p-4 shadow-[0_18px_50px_-38px_rgba(167,139,250,0.8)] sm:p-5" aria-labelledby={`${sport}-schedule`}>
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-orange-300/80">Official schedule</p>
-          <h2 id={`${sport}-seven-day-schedule`} className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">{sport === "cbb" ? "College Basketball" : "NBA"} · Next 7 Days</h2>
+          <h2 id={`${sport}-schedule`} className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">{sport === "cbb" ? "College Basketball · Scheduled games" : "NBA · Next 7 Days"}</h2>
         </div>
         <p className="max-w-2xl text-[11px] leading-relaxed text-gray-400 sm:text-right">{sport === "cbb"
           ? "Scheduled matchups appear here until a complete model-and-market analysis is available. Only analyzed cards carry predictions and grades."
