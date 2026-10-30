@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { gunzipSync, gzipSync } from "node:zlib";
+import { isUtf8 } from "node:buffer";
+import { gunzipSync, gzipSync, createGzip } from "node:zlib";
+import { Readable, Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NbaPlayerPropPriceObservation } from "./nbaPlayerPropsContract";
@@ -180,7 +183,7 @@ export async function writeNbaPlayerPropsMarketHistory(args: {
   history: NbaPlayerPropsMarketHistory;
 }): Promise<{ jsonBytes: number; gzipBytes: number }> {
   if (args.history.publicEnabled !== false) throw new Error("NBA props market history must remain private.");
-  const envelope = encode(args.history, "market_history");
+  const envelope = await encodeNbaPlayerPropsMarketHistoryPayload(args.history);
   const retention = new Date(Date.parse(args.history.updatedAt) + 30 * 24 * HOUR_MS).toISOString();
   const { error } = await args.client.from("lab_response_snapshots").upsert({
     snapshot_key: nbaPlayerPropsMarketHistoryKey(args.history.slateDate),
@@ -197,6 +200,69 @@ export async function writeNbaPlayerPropsMarketHistory(args: {
   }, { onConflict: "snapshot_key" });
   if (error) throw new Error(`NBA props market history write failed: ${error.message}`);
   return { jsonBytes: envelope.uncompressedBytes, gzipBytes: envelope.compressedBytes };
+}
+
+/** Serialize the exact existing JSON contract in bounded chunks. A full slate
+ * must not materialize a second history-sized JSON string and UTF-8 buffer
+ * alongside the already decoded quote objects. Compression is backpressured;
+ * the only retained output is the existing <=8 MB compressed envelope. */
+export async function encodeNbaPlayerPropsMarketHistoryPayload(history: NbaPlayerPropsMarketHistory): Promise<Envelope> {
+  const limits = payloadLimits("market_history");
+  const checksum = createHash("sha256");
+  let uncompressedBytes = 0;
+  function* parts(): Generator<string> {
+    yield "{";
+    let first = true;
+    for (const [key, value] of Object.entries(history)) {
+      const scalar = key === "observations" ? null : JSON.stringify(value);
+      if (key !== "observations" && scalar === undefined) continue;
+      yield `${first ? "" : ","}${JSON.stringify(key)}:`;
+      first = false;
+      if (key !== "observations") { yield scalar!; continue; }
+      yield "[";
+      for (let index = 0; index < history.observations.length; index += 1) {
+        if (index) yield ",";
+        yield JSON.stringify(history.observations[index]) ?? "null";
+      }
+      yield "]";
+    }
+    yield "}";
+  }
+  function* chunks(): Generator<Buffer> {
+    let batch = "", batchBytes = 0;
+    for (const part of parts()) {
+      batch += part;
+      batchBytes += Buffer.byteLength(part);
+      if (batchBytes < 64 * 1024) continue;
+      const bytes = Buffer.from(batch);
+      uncompressedBytes += bytes.length;
+      if (uncompressedBytes > limits.json) throw new Error("NBA props private payload JSON limit exceeded.");
+      checksum.update(bytes);
+      yield bytes;
+      batch = ""; batchBytes = 0;
+    }
+    if (batch) {
+      const bytes = Buffer.from(batch);
+      uncompressedBytes += bytes.length;
+      if (uncompressedBytes > limits.json) throw new Error("NBA props private payload JSON limit exceeded.");
+      checksum.update(bytes);
+      yield bytes;
+    }
+  }
+  const output: Buffer[] = [];
+  let compressedBytes = 0;
+  await pipeline(
+    Readable.from(chunks(), { objectMode: false, highWaterMark: 64 * 1024 }),
+    createGzip({ level: 9 }),
+    new Writable({ write(chunk: Buffer, _encoding, done) {
+      compressedBytes += chunk.length;
+      if (compressedBytes > limits.gzip) { done(new Error("NBA props private payload gzip limit exceeded.")); return; }
+      output.push(chunk); done();
+    } }),
+  );
+  return { kind: "nba_player_props_private_envelope_v1", release: NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
+    encoding: "gzip-base64", payloadKind: "market_history", checksum: checksum.digest("hex"),
+    uncompressedBytes, compressedBytes, payload: Buffer.concat(output, compressedBytes).toString("base64") };
 }
 
 export function encodeNbaPlayerPropsPrivatePayload(
@@ -220,7 +286,11 @@ function encode(payload: unknown, payloadKind: Envelope["payloadKind"]): Envelop
   if (uncompressedBytes > limits.json) {
     throw new Error("NBA props private payload JSON limit exceeded.");
   }
-  const compressed = gzipSync(Buffer.from(json), { level: 9 });
+  // Hash the same UTF-8 buffer gzip consumes instead of encoding a second
+  // history-sized byte buffer while the first one is still resident.
+  const bytes = Buffer.from(json);
+  const checksum = createHash("sha256").update(bytes).digest("hex");
+  const compressed = gzipSync(bytes, { level: 9 });
   if (compressed.byteLength > limits.gzip) {
     throw new Error("NBA props private payload gzip limit exceeded.");
   }
@@ -229,7 +299,7 @@ function encode(payload: unknown, payloadKind: Envelope["payloadKind"]): Envelop
     release: NBA_PLAYER_PROPS_PRIVATE_STORE_RELEASE,
     encoding: "gzip-base64",
     payloadKind,
-    checksum: createHash("sha256").update(json).digest("hex"),
+    checksum,
     uncompressedBytes,
     compressedBytes: compressed.byteLength,
     payload: compressed.toString("base64"),
@@ -239,13 +309,27 @@ function encode(payload: unknown, payloadKind: Envelope["payloadKind"]): Envelop
 function decode<T>(value: unknown, payloadKind: Envelope["payloadKind"]): T | null {
   if (!isEnvelope(value) || value.payloadKind !== payloadKind) return null;
   try {
+    const limit = payloadLimits(payloadKind).json;
+    if (value.uncompressedBytes < 0 || value.uncompressedBytes > limit) return null;
     const compressed = Buffer.from(value.payload, "base64");
     if (compressed.byteLength !== value.compressedBytes) return null;
-    const decoded = gunzipSync(compressed, { maxOutputLength: payloadLimits(payloadKind).json });
+    // The independently checked envelope length lets zlib fill one bounded
+    // output buffer. Default tiny chunks require another full-size concat
+    // buffer for a 100+ MB history. One spare byte avoids a second allocation
+    // when the exact declared length fills the first chunk.
+    const footerBytes = compressed.length >= 4 ? compressed.readUInt32LE(compressed.length - 4) : -1;
+    const decoded = gunzipSync(compressed, {
+      maxOutputLength: limit,
+      // Concatenated legacy gzip members and a false declared length retain
+      // ordinary bounded inflate behavior rather than trusting that length.
+      chunkSize: footerBytes === value.uncompressedBytes ? Math.max(64, value.uncompressedBytes + 1) : undefined,
+    });
     if (decoded.byteLength !== value.uncompressedBytes) return null;
-    const json = decoded.toString("utf8");
-    if (createHash("sha256").update(json).digest("hex") !== value.checksum) return null;
-    return JSON.parse(json) as T;
+    // Valid UTF-8 hashes byte-for-byte identically to the legacy string hash.
+    // Preserve legacy replacement-character semantics for malformed UTF-8.
+    const hashInput = isUtf8(decoded) ? decoded : decoded.toString("utf8");
+    if (createHash("sha256").update(hashInput).digest("hex") !== value.checksum) return null;
+    return JSON.parse(decoded.toString("utf8")) as T;
   } catch {
     return null;
   }
