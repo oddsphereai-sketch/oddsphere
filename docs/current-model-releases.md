@@ -6,28 +6,6 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-30
 
-## CBB named-book split display identity — October 30
-
-- Display/capture release `cbb_sharp_split_mapping_2026_10_30_r1_exact_institution_neutral_orientation`
-  resolves CBB named-book and DraftKings Network split rows with verified
-  institution/full team names rather than mascot or abbreviation guesses. A
-  neutral-site source home/away reversal maps money and ticket percentages
-  back to the canonical teams; ambiguous same-day fixtures and wrong-time
-  provider events fail closed. Other sports retain their prior matching.
-- The five-minute CBB named-book capture now reports a partial health result
-  when it stores zero named-book rows, even if Kalshi graph capture succeeds.
-  This prevents prediction-market graph records from masking a missing split
-  feed. No new provider request, writer, lease, score, probability, side,
-  grade, stake, selected price, lock, or member copy is introduced.
-- The October 30 live CBB feed had zero verified named-book split rows; the
-  DraftKings Network fallback returned an upstream-maintenance response.
-  Thus the current-board impact is zero promotions, zero demotions, zero side
-  changes, and unchanged seven-game coverage. The release repairs exact
-  mapping when a source row arrives, but does not claim that a missing
-  provider observation exists or that the CBB score has a qualified
-  split-driven market correction. See
-  `docs/model-audits/2026-10-30-cbb-sharp-split-identity.md`.
-
 ## CBB exact market-observation identity repair — October 30
 
 - Observation capture release `market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation`
@@ -91,6 +69,28 @@ verified logos; a true start-time change remains a hard identity failure. The
 same instant check applies to post-lock official-result overlay, leaving the
 stored locked projection and grade untouched.
 No prediction or locked member game was written by the failed refresh.
+
+## CBB named-book split display identity — October 30
+
+- Display/capture release `cbb_sharp_split_mapping_2026_10_30_r1_exact_institution_neutral_orientation`
+  resolves CBB named-book and DraftKings Network split rows with verified
+  institution/full team names rather than mascot or abbreviation guesses. A
+  neutral-site source home/away reversal maps money and ticket percentages
+  back to the canonical teams; ambiguous same-day fixtures and wrong-time
+  provider events fail closed. Other sports retain their prior matching.
+- The five-minute CBB named-book capture now reports a partial health result
+  when it stores zero named-book rows, even if Kalshi graph capture succeeds.
+  This prevents prediction-market graph records from masking a missing split
+  feed. No new provider request, writer, lease, score, probability, side,
+  grade, stake, selected price, lock, or member copy is introduced.
+- The October 30 live CBB feed had zero verified named-book split rows; the
+  DraftKings Network fallback returned an upstream-maintenance response.
+  Thus the current-board impact is zero promotions, zero demotions, zero side
+  changes, and unchanged seven-game coverage. The release repairs exact
+  mapping when a source row arrives, but does not claim that a missing
+  provider observation exists or that the CBB score has a qualified
+  split-driven market correction. See
+  `docs/model-audits/2026-10-30-cbb-sharp-split-identity.md`.
 
 ## Cross-sport confidence / execution contract
 
