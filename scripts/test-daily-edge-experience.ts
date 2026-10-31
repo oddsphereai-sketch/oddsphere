@@ -1252,7 +1252,7 @@ check(
     candidateSource.includes("onSportChange={switchSport}") &&
     candidateSource.includes("onChange={onSportChange}") &&
     candidateSource.includes("sports={readerSports}") &&
-    candidateSource.includes('density={reader.sample ? "sample" : "compact"}') &&
+    candidateSource.includes('density={reader.illustrativeSample ? "sample" : "compact"}') &&
     candidateSource.includes("activateOnPointerDown") &&
     candidateSource.includes('params.delete("game")') &&
     candidateSource.includes('params.delete("market")'),
