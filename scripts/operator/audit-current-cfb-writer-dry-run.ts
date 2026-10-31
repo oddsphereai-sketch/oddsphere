@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   const focusMatchups = new Set(process.argv
     .filter((value) => value.startsWith("--matchup="))
     .map((value) => value.slice(10).toUpperCase()));
+  const compactAll = process.argv.includes("--compact-all");
   let focusedPayloads: readonly CfbForwardEvidencePayload[] = [];
   const result = await runCfbForwardEvidenceWriter({
     client: createClient(url, serviceKey, { auth: { persistSession: false } }),
@@ -37,7 +38,9 @@ async function main(): Promise<void> {
     sportsDataIoApiKey: process.env.SPORTSDATAIO_CFB_API_KEY ?? null,
     weatherProvider: null,
     auditPayloads: (payloads) => {
-      focusedPayloads = focusMatchups.size > 0
+      focusedPayloads = compactAll
+        ? payloads
+        : focusMatchups.size > 0
         ? payloads.filter((payload) => focusMatchups.has(`${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`.toUpperCase()))
         : [];
     },
@@ -49,6 +52,25 @@ async function main(): Promise<void> {
     apply: false,
     writes: 0,
     result,
+    ...(compactAll ? { compact: focusedPayloads.map((payload) => ({
+      providerGameId: payload.game.providerGameId,
+      matchup: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
+      startsAt: payload.game.scheduledStart,
+      stage: payload.stage,
+      readerRelease: payload.authoritativeForecast?.completeMarketReaderRelease ?? null,
+      readerMarginShift: payload.authoritativeForecast?.marketReaderMarginShiftPoints ?? null,
+      readerTotalShift: payload.authoritativeForecast?.marketReaderTotalShiftPoints ?? null,
+      readerTotalRoute: payload.authoritativeForecast?.marketReaderTotalEvidenceRoute ?? null,
+      expectedMargin: payload.decisions.forecast.expectedMarginHome,
+      expectedTotal: payload.decisions.forecast.expectedTotal,
+      evaluated: payload.decisions.evaluatedBets.map((decision) => ({
+        market: decision.market,
+        side: decision.side,
+        line: decision.evaluatedQuote.line,
+        price: decision.evaluatedQuote.price,
+        grade: decision.grade,
+      })),
+    })) } : {}),
     focus: focusedPayloads.map((payload) => ({
       matchup: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
       stage: payload.stage,

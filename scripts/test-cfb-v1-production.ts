@@ -134,6 +134,8 @@ import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_COORDINATOR_INTEGRATION_PREVIOUS_DECISION_RELEASE,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE,
+  CFB_V1_MARKET_EVIDENCE_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE,
@@ -987,12 +989,16 @@ function releaseTransitionPayload(args: {
   }
   if (next.authoritativeForecast) next.authoritativeForecast.release = args.forecastRelease;
   if (args.decisionRelease !== CFB_V1_DECISION_RELEASE) {
-    next.decisions.policyRelease = CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof next.decisions.policyRelease;
+    const policy = args.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE
+      ? next.decisions.policyRelease : CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE;
+    next.decisions.policyRelease = policy as typeof next.decisions.policyRelease;
     next.decisions.evaluatedBets = next.decisions.evaluatedBets.map(decision => ({
       ...decision,
-      policyRelease: CFB_V1_PRICE_CONTEXT_PREVIOUS_GRADE_POLICY_RELEASE as typeof decision.policyRelease,
+      policyRelease: policy as typeof decision.policyRelease,
       calibrationRelease: (args.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE
         ? CFB_V1_PRICE_CONTEXT_PREVIOUS_CALIBRATION_RELEASE
+        : args.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE
+          ? CFB_V1_MARKET_EVIDENCE_PREVIOUS_CALIBRATION_RELEASE
         : args.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE
           ? CFB_V1_NORMALIZED_PMF_PREVIOUS_CALIBRATION_RELEASE
           : CFB_V1_OWLS_PREVIOUS_CALIBRATION_RELEASE) as typeof decision.calibrationRelease,
@@ -1090,6 +1096,47 @@ assert.deepEqual(cfbLockPlanningEvidence([priceContextOldLock]), [priceContextOl
 assert.equal(priceContextTransition.find((row) => row.providerGameId === "same-schema-unlocked")?.id, "r57-same-schema-unlocked");
 assert.equal(cfbForwardReleaseRefreshNeed([priceContextOldLock], new Date(Date.parse(priceContextOldLock.gameStartAt) + 60_000).toISOString()), null,
   "release refresh must not schedule a completed r56 locked row for rewriting");
+
+const marketEvidencePreviousRows = sameSchemaPreviousRows.map((row) => {
+  const previous = releaseTransitionPayload({
+    providerGameId: row.providerGameId,
+    gameStartsAt: row.gameStartAt,
+    capturedAt: row.capturedAt,
+    stage: row.stage === "t60" ? "t60" : "unlocked",
+    schemaRelease: CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+    memberRelease: CFB_FORWARD_MEMBER_RELEASE,
+    decisionRelease: CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE,
+    forecastRelease: CFB_MARKET_SHARP_AWARE_PRODUCTION_RELEASE,
+  });
+  previous.decisions.evaluatedBets = previous.decisions.evaluatedBets.map((decision) => ({
+    ...decision,
+    schemaRelease: "cfb_v1_exact_price_decision_tuple_2026_10_30_r44_paired_price_context" as typeof decision.schemaRelease,
+  }));
+  return { ...row, id: `r57-${row.providerGameId}`, payload: previous, payloadSha256: hashCfbForwardEvidencePayload(previous) };
+});
+const marketEvidenceOldLock = marketEvidencePreviousRows.find((row) => row.stage === "t60")!;
+const marketEvidenceOldBytes = JSON.stringify(marketEvidenceOldLock);
+const marketEvidenceTransition = selectLatestCfbMemberEvidenceRows([
+  ...marketEvidencePreviousRows,
+  {
+    ...evidence,
+    id: "r58-same-schema-unlocked",
+    providerGameId: "same-schema-unlocked",
+    stage: "unlocked",
+    capturedAt: sameSchemaCurrentPayload.capturedAt,
+    gameStartAt: sameSchemaCurrentPayload.game.scheduledStart,
+    payloadSha256: hashCfbForwardEvidencePayload(sameSchemaCurrentPayload),
+    payload: sameSchemaCurrentPayload,
+  },
+], "2026-10-24T17:05:00Z");
+assert.deepEqual(marketEvidenceTransition.find((row) => row.providerGameId === marketEvidenceOldLock.providerGameId), marketEvidenceOldLock,
+  "r58 reader must preserve the exact r57 lock despite a new reader semantic");
+assert.equal(JSON.stringify(marketEvidenceOldLock), marketEvidenceOldBytes,
+  "r58 release transition cannot rewrite an existing r57 lock");
+assert.deepEqual(cfbLockPlanningEvidence([marketEvidenceOldLock]), [marketEvidenceOldLock],
+  "r58 writer must not plan a replacement for an r57 T-60 lock");
+assert.equal(marketEvidenceTransition.find((row) => row.providerGameId === "same-schema-unlocked")?.id,
+  "r58-same-schema-unlocked");
 
 // Production rollout: the intermediate r55 wave failed one unlocked game but
 // created a valid lock. That exact lock must bridge to current r56 without
