@@ -122,6 +122,44 @@ probe returned no odds rows; this does not prove all archives are unavailable
 and is not permission for further paid history searches. No new influence
 parameters or launch decision follows from these coverage findings.
 
+### MR21: newly supplied ESPN open/close research inputs
+
+A later local evidence handoff supplies4922 rolling-origin forecast rows and
+17769 ESPN provider rows matching2462 games. Read-only inspection confirms
+unique forecast game IDs, unique quote game/provider keys and exact team/date
+joins. It does NOT establish rolling-fit lineage: the forecast CSV has no
+fold training cutoff, artifact/feature/recipe manifest or fitted-model hash.
+The OOF generator and raw extraction manifests still require inspection.
+
+The supplied52-line analysis script separately medians each opening/closing
+field across available providers, then regresses outcome-minus-open on
+independent-minus-open and close-minus-open. That is a global closing-level
+association, not the current source-selected intraday interpretation method.
+Opening/closing support differs in all1231 confirmation games for all three
+markets (development:1102spread/1101Total/1099ML). Confirmation provider rows
+are ESPN BET1231 and ESPN Bet - Live Odds1231; the latter has opening fields
+in all1231 but ZERO closing fields. Regular ESPN BET has1230 paired spread
+and1231 paired Total/ML entries. No rows identify Circa/Pinnacle/Bookmaker.
+Thus the alleged movement can include provider-composition changes. The
+Live Odds label alone does not prove in-play contamination; its actual raw
+endpoint meaning must be established rather than assumed pregame or live.
+
+Quote CSV rows have no endpoint-specific observed/capture times, ingestion
+run or payload hashes; feature_season is blank on all17769. Season is recovered
+from the forecast join, not raw quote lineage. Spread/Total paired juice is
+absent. The data cannot establish availability at T-60, reconstruct intraday
+lead/follow/reversal/split reaction or calibrate named-book price compensation.
+Closing-market research may still be useful; no production implementation or
+whole-reader approval follows from reported MAE or a nearly zero independent
+coefficient. No fits, outcomes experiments, network calls or source edits were
+performed by this inspection. Method approval remains open.
+
+Inspected input SHA256s:
+
+- `/private/tmp/nba-joint-market-oof.csv`: `6360144d6f3248468142c4bbd80cb773c469c7cc2e385297795077cde7e091ec`
+- `/private/tmp/nba-espn-feature-open-close.csv`: `876f9707e5d95aebc49c642e63f8cb9d25bb54638a50a7b725b248166ea21c2d`
+- `/private/tmp/analyze-nba-open-close-reader.py`: `7d29fcf9b37eccdfd320da594c8cba825f79f44ca424214b9967d74f97b7940c`
+
 ## Scope and honest meaning of complete
 
 The catalog below contains 120 explicitly enumerated scenario classes across
