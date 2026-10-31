@@ -231,7 +231,11 @@ export default async function CandidateDailyEdgePage({
     const { populateDailyEdgeStoredSplitFallback } = await import(
       "@/lib/providers/draftkings/draftKingsNetworkSplits"
     );
-    await populateDailyEdgeStoredSplitFallback(snapshot, "cfb", {
+    // Only this game's evidence will reach the reader. Applying the same
+    // overlay to the entire weekly board repeats expensive matching work for
+    // evidence that the board projection immediately discards.
+    const detailSnapshot = { ...snapshot, games: snapshot.games.filter((game) => game.id === initialCfbReaderGameId) };
+    await populateDailyEdgeStoredSplitFallback(detailSnapshot, "cfb", {
       reconstructMissingLockedPreLock: true,
     });
   } else if (!cfbFixture && !publishedSnapshotOnly) {
