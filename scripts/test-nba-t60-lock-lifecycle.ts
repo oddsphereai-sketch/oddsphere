@@ -14,7 +14,18 @@ assert.match(sweep, /sport === "nba"[\s\S]+refreshNbaLines\(\{[\s\S]+externalIds
 assert.match(sweep, /createNbaPredictionRecords\(\{[\s\S]+deferLock: true,[\s\S]+externalIdsFilter: enteringExternalIds/);
 assert.match(sweep, /assessNbaLockCoherence/);
 assert.match(sweep, /NBA_PREDICTION_RECORD_RELEASE/);
-assert.match(sweep, /\.in\("market", \["moneyline", "spread", "total"\]\)/);
+assert.match(sweep, /resolveNbaPredictionRecordLocks/);
+assert.match(sweep, /NBA_PREDICTION_RECORD_LOCK_MARKETS/);
+assert.doesNotMatch(
+  sweep,
+  /select\("game_id, market, model_version, locked_at"\)[\s\S]{0,240}\.eq\("model_version", NBA_PREDICTION_RECORD_RELEASE\)/,
+  "lock discovery must not erase an immutable legacy lock after a release bump",
+);
+assert.match(
+  sweep,
+  /update\(\{ locked_at: lockedAt \}\)[\s\S]{0,360}\.eq\("model_version", NBA_PREDICTION_RECORD_RELEASE\)[\s\S]{0,240}\.is\("locked_at", null\)/,
+  "the writer must lock only the current release's previously unlocked rows",
+);
 assert.match(writer, /externalIdsFilter\?: readonly number\[\]/);
 assert.match(writer, /\["moneyline", "spread", "total"\]/);
 assert.match(writer, /NBA_SPREAD_OFFICIAL_TRACKING_START/);
