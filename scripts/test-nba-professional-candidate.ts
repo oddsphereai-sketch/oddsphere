@@ -252,16 +252,17 @@ const observedReader = buildNbaProfessionalMarketReader({
     line: (row.providerTimestamp === "2026-10-20T14:00:00Z" ? -3 : -2) * (row.selectionKey.endsWith(":home") ? 1 : -1),
   })),
 });
-const observedCandidate = buildNbaProfessionalCandidate({ retainLegacyScoreReconciliation: true, artifact, featureRow: { strength: 5 },
-  lines, history, externalGameId: 9, marketReader: observedReader });
-assert.equal(observedCandidate.final.marginHome, 5);
+const postureFixtureLines = [...lines, ...lines.filter(line => line.sportsbook === "draftkings").map(line => ({ ...line, sportsbook: "bet365" }))];
+const observedCandidate = buildNbaProfessionalCandidate({ retainLegacyScoreReconciliation: true, artifact, featureRow: { strength: 10 },
+  lines: postureFixtureLines, history, externalGameId: 9, marketReader: observedReader });
+assert.equal(observedCandidate.final.marginHome, 10);
 assert.equal(observedCandidate.final.movementApplied, false);
-const observedPrediction = applyNbaProfessionalCandidate({ baseline, candidate: observedCandidate });
+const observedPrediction = applyNbaProfessionalCandidate({ baseline: runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 3 }), candidate: observedCandidate });
 const originalPrediction = structuredClone(observedPrediction);
 delete originalPrediction.audit.professional_grade_context!.namedBookPostures;
-const observedIntel = buildNbaGameIntelligence({ snapshot, prediction: observedPrediction, lines,
+const observedIntel = buildNbaGameIntelligence({ snapshot, prediction: observedPrediction, lines: postureFixtureLines,
   splitsRow: null, opportunities: [], injuriesSource: "espn" });
-const originalIntel = buildNbaGameIntelligence({ snapshot, prediction: originalPrediction, lines,
+const originalIntel = buildNbaGameIntelligence({ snapshot, prediction: originalPrediction, lines: postureFixtureLines,
   splitsRow: null, opportunities: [], injuriesSource: "espn" });
 assert.equal(originalIntel.spread.grade, "best_angle");
 assert.equal(observedIntel.spread.grade, "lean");

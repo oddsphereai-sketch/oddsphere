@@ -156,6 +156,7 @@ export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
     if (posture.market !== intel.market || posture.pickedSide !== intel.pick_side) return "market_neutral";
     if (posture.opposingSources.length) return "market_resistance";
     if (posture.conflictingSources.length) return "market_neutral";
+    if (posture.convictionRiskSources?.length) return "market_neutral";
     return posture.supportingSources.length ? "market_confirmed" : "market_neutral";
   }
   if (intel.market === "moneyline" && intel.qualified_market_direction !== undefined) {

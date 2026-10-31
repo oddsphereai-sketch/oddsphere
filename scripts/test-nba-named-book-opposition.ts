@@ -40,9 +40,9 @@ assert.deepEqual(resolveNbaNamedBookPosture({ reader, market: "spread", pickedSi
 assert.deepEqual(resolveNbaNamedBookPosture({ reader, market: "total", pickedSide: "under" }).opposingSources, ["circa"]);
 assert.equal(JSON.stringify(reader), original, "source facts are immutable");
 
-const base: GradeInput = { market: "spread", pick: "home", confidence: 60, band: "support", edge: 0.1,
+const base: GradeInput = { market: "spread", pick: "home", confidence: 68, band: "support", edge: 0.1,
   dataQualityTier: "high", injuriesKnown: true, independentEdgePoints: 3.2432965576,
-  currentPriceAmerican: -110, modelProbabilityOnPick: 0.6043613020 };
+  currentPriceAmerican: -110, modelProbabilityOnPick: 0.68 };
 const incumbent = gradeNbaMarket(base);
 const corrected = gradeNbaMarket({ ...base, namedBookPosture: spread });
 assert.equal(incumbent.grade, "best_angle"); assert.equal(corrected.grade, "lean");

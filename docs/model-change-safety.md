@@ -4,7 +4,7 @@
 
 The owner stopped historical fitting and directed production-path functional
 repairs followed by forward performance measurement. Candidate NBA modelr27 /
-marriager28 / grader18 / readerr9 / posturer3 replaces the active hard-gated
+marriager28 / grader19 / readerr9 / posturer3 replaces the active hard-gated
 score path with causal relative-odds transport and joint ML/Spread constraints.
 Common-contract probability pooling preserves source agreement; conditioned
 inversion prevents unidentified dispersion. The independent head and residual

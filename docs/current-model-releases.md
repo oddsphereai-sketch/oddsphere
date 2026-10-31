@@ -59,7 +59,7 @@ Last reviewed: 2026-10-31
 Candidate model/marriage/grade are
 `nba_professional_unified_2026_10_31_r27_continuous_market_consequence` /
 `nba_market_marriage_2026_10_31_r28_continuous_market_consequence` /
-`nba_grade_policy_2026_10_31_r18_continuous_market_consequence`.
+`nba_grade_policy_2026_10_31_r19_unified_final_forecast`.
 The active decision head is
 `nba_market_consequence_2026_10_31_r1_semantic_epoch_transport`;
 posture is `nba_named_book_posture_2026_10_31_r3_continuous_consequence`.
@@ -86,6 +86,10 @@ fixed points and real-data source limitations are documented in:
 Grades use actual final probabilities, exact executable prices and retained
 quality/positive-EV rules, not legacy hard-coded correction confidence. Pressure
 and retracement can temper Best to actionable Lean without inventing points.
+The r19 policy is identical for identical final forecast/evidence regardless
+of reader implementation/correction flags. Legacy sleeves are explicit offline
+policy comparisons only. This is an intentional grade recalibration, not a
+claim that every newly actionable row was corrected by market innovation.
 Paired functional examples exercise one actionable promotion and one demotion
 (1→1 actionable count). The complete cursor-paginated seven-game/21-market
 current unlocked rehearsal had six margin and four Total adjustments and

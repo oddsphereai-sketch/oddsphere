@@ -87,8 +87,8 @@ async function main() {
       data_quality: { home_injuries_known: g.injuries.home_known, away_injuries_known: g.injuries.away_known } } as NbaGameSnapshot;
     const baseline = { audit: { data_quality_tier: g.data_quality_tier, confidence_ceiling: V1_CONFIDENCE_CEILING[g.data_quality_tier], model_integrity_notes: [] },
       v1_breakdown: { applied_caps: g.admin_model_badge?.applied_caps ?? [], notes: [], injury_review: { major_out_count: 0, major_unknown_count: 0, reasons: [] } } } as unknown as NbaModelV1Output;
-    const intelligence = (c: ReturnType<typeof buildNbaProfessionalCandidate>) => buildNbaGameIntelligence({ snapshot,
-      prediction: applyNbaProfessionalCandidate({ baseline, candidate: c }), lines, splitsRow: null, opportunities: [], injuriesSource: "none" });
+    const intelligence = (c: ReturnType<typeof buildNbaProfessionalCandidate>, legacyGradePolicyAudit = false) => buildNbaGameIntelligence({ snapshot,
+      prediction: applyNbaProfessionalCandidate({ baseline, candidate: c }), lines, splitsRow: null, opportunities: [], injuriesSource: "none", legacyGradePolicyAudit });
     const executionBooks = (c: ReturnType<typeof buildNbaProfessionalCandidate>) => {
       const intel = intelligence(c);
       return { moneyline: intel.ml.current_price.sportsbook ? [intel.ml.current_price.sportsbook] : [],
@@ -101,10 +101,21 @@ async function main() {
         previousState: seeded.marketConsequence!.state, excludedSportsbooksByMarket, disabledMarkets } });
     } });
     const candidate = resolved.candidate, intel = intelligence(candidate);
+    // Same final forecast and evidence, ONLY grade-policy selection differs.
+    // This identifies a grading change; it is not historical accuracy proof.
+    const legacyGradeAtFinal = intelligence(candidate, true);
+    const continuousGradeAtIndependent = intelligence(buildNbaProfessionalCandidate(args));
     comparisons.push({ event: g.game_external_id, matchup: g.matchup, incumbentRelease: record.model_version, epoch: record.as_of,
       priorProjection: g.projection, candidateProjection: candidate.final, consequence: candidate.marketConsequence,
       markets: (["ml", "spread", "total"] as const).map(m => ({ market: m, before: { pick: g.intelligence[m].pick_side, grade: g.intelligence[m].grade },
-        after: { pick: intel[m].pick_side, grade: intel[m].grade, probability: intel[m].model_prob_on_pick, book: intel[m].current_price.sportsbook } })) });
+        after: { pick: intel[m].pick_side, grade: intel[m].grade, probability: intel[m].model_prob_on_pick, book: intel[m].current_price.sportsbook },
+        attribution: { incumbentPolicyAtFinalForecast: legacyGradeAtFinal[m].grade,
+          continuousPolicyAtIndependentForecast: continuousGradeAtIndependent[m].grade,
+          sameForecastGradePolicyChanges: legacyGradeAtFinal[m].grade !== intel[m].grade,
+          newMarketEffect: m === "total" ? candidate.marketConsequence?.totalApplied : candidate.marketConsequence?.marginApplied,
+          candidateRationale: intel[m].rationale,
+          priorProjectionDiffers: m === "total" ? Math.abs(g.projection.total - candidate.final.total) > 1e-9
+            : Math.abs(g.projection.spread_home - candidate.final.marginHome) > 1e-9 } })) });
   }
   const actionable = (g: string) => ["lean", "best_angle"].includes(g), markets = comparisons.flatMap(c => c.markets);
   const report = { at: now, date, requests, bytes, sourceSha256: createHash("sha256").update(JSON.stringify(source)).digest("hex"), games: comparisons.length,
@@ -118,6 +129,7 @@ async function main() {
     beforeActionables: report.beforeActionables, afterActionables: report.afterActionables, promotions: report.promotions, demotions: report.demotions,
     providerCalls: 0, writes: 0, outcomesRead: 0, comparisons: comparisons.map(c => ({ matchup: c.matchup,
       marginAdjusted: c.consequence?.marginApplied, totalAdjusted: c.consequence?.totalApplied,
-      anchors: Object.keys(c.consequence?.state.anchors ?? {}).length, books: c.consequence?.books.length })) }, null, 2));
+      anchors: Object.keys(c.consequence?.state.anchors ?? {}).length, books: c.consequence?.books.length,
+      changedActionables: c.markets.filter(m => actionable(m.before.grade) !== actionable(m.after.grade)) })) }, null, 2));
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });

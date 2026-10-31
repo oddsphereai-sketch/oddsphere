@@ -7,6 +7,7 @@ import { buildNbaGameIntelligence } from "../lib/services/nba/nbaMarketIntellige
 import { applyNbaProfessionalCandidate, buildNbaProfessionalCandidate } from "../lib/services/nba/nbaProfessionalCandidate";
 import { buildNbaProfessionalMarketReader, type NbaReaderPriceRow, type NbaReaderSplitRow } from "../lib/services/nba/nbaProfessionalMarketReader";
 import { readNbaPricedMarketMovement } from "../lib/services/nba/nbaPricedMarketMovement";
+import { buildMarketSignal, buildNbaSharpStatus } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
 
 const evaluatedAt = "2026-10-31T18:00:00Z", opening = "2026-10-31T14:00:00Z", current = "2026-10-31T17:00:00Z";
 const artifact: NbaPortableModelArtifact = { release: "functional_fixture", featureRelease: "functional_fixture", architecture: "margin_total",
@@ -140,6 +141,12 @@ const partialBuyback = run(["circa", "pinnacle"].flatMap(book => [
   ...pair("spread", book, opening, -3.5), ...pair("spread", book, "2026-10-31T15:00:00Z", -8.5), ...pair("spread", book, current, -5.5) ]));
 assert.ok(partialBuyback.reader.reads.spread.trails.every(t => t.reversalMagnitude === 0), "known opening-relative reversal blind spot");
 assert.ok(partialBuyback.candidate.marketConsequence!.sequences.every(p => p.retracement > 0 && p.latestLeg < 0), "active head catches the legacy reader's partial-buyback blind spot");
+const supportedButTempered = run(["circa", "pinnacle"].flatMap(book => [
+  ...pair("spread", book, opening, -3.5), ...pair("spread", book, "2026-10-31T15:00:00Z", -8.5), ...pair("spread", book, current, -5.5) ]), [], 10);
+assert.ok(supportedButTempered.intel.spread.named_book_posture!.supportingSources.length > 0);
+assert.ok(supportedButTempered.intel.spread.named_book_posture!.convictionRiskSources!.length > 0);
+assert.equal(buildMarketSignal(supportedButTempered.intel.spread), "market_neutral", "member signal must not claim unqualified confirmation over internal buyback tempering");
+assert.equal(buildNbaSharpStatus(supportedButTempered.intel.spread), "mixed");
 const untouched = run([], [], 0);
 const promoted = run(movement("moneyline", null, null, [-110, -110], [-400, 300]), [], 0);
 const demoted = run(movement("moneyline", null, null, [-110, -110], [300, -400]), [], 10);

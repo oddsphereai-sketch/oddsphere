@@ -28,6 +28,7 @@ import {
   classifySpreadConflict,
   classifyTotalConflict,
   gradeNbaMarket,
+  gradeNbaLegacyMarketForAudit,
   noVigPair,
   type GradeOutput,
   type MarketConflictBand,
@@ -556,6 +557,7 @@ function buildMl(
   opps: NbaOpportunity[],
   enforcePositiveModelEv: boolean,
   enforceMoneylineEvidenceGuard: boolean,
+  gradeMarket: typeof gradeNbaMarket,
 ): MarketIntelligence {
   const pickSide = prediction.predicted_ml_winner;
   const pickLabel =
@@ -600,7 +602,7 @@ function buildMl(
     edgePp = c.edge * 100;
   }
 
-  const grade = gradeNbaMarket({
+  const grade = gradeMarket({
     pick: pickSide,
     confidence: modelConf,
     band: pickOdds === null || noVigPick === null ? "market_unavailable" : band,
@@ -695,6 +697,7 @@ function buildSpread(
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
   enforcePositiveModelEv: boolean,
+  gradeMarket: typeof gradeNbaMarket,
 ): MarketIntelligence {
   const consensusLineHome = consensus.spreadHome;
   const consensusExact = exactLineProbability({ prediction, spreadHome: consensusLineHome, total: null });
@@ -780,7 +783,7 @@ function buildSpread(
     edgePoints = c.edge;
   }
 
-  const grade = gradeNbaMarket({
+  const grade = gradeMarket({
     pick: pickSide,
     confidence: modelConf,
     band: pickOdds === null || noVigPick === null ? "market_unavailable" : band,
@@ -879,6 +882,7 @@ function buildTotal(
   splitsRow: NbaSplitsRow | null,
   opps: NbaOpportunity[],
   enforcePositiveModelEv: boolean,
+  gradeMarket: typeof gradeNbaMarket,
 ): MarketIntelligence {
   const consensusLine = consensus.totalLine;
   const consensusExact = exactLineProbability({ prediction, spreadHome: null, total: consensusLine });
@@ -939,7 +943,7 @@ function buildTotal(
     edgePoints = c.edge;
   }
 
-  const grade = gradeNbaMarket({
+  const grade = gradeMarket({
     pick: pickSide,
     confidence: modelConf,
     band: pickOdds === null || noVigPick === null ? "market_unavailable" : band,
@@ -1040,6 +1044,8 @@ export function buildNbaGameIntelligence(opts: {
   enforcePositiveModelEv?: boolean;
   /** Same-input audit hook for the superseded Moneyline Best Angle path. */
   enforceMoneylineEvidenceGuard?: boolean;
+  /** Explicit offline policy comparison, never selected by the sole writer. */
+  legacyGradePolicyAudit?: boolean;
 }): NbaGameIntelligence {
   const consensus = buildNbaMarketConsensus(opts.lines
     .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
@@ -1052,6 +1058,7 @@ export function buildNbaGameIntelligence(opts: {
     })));
   const enforcePositiveModelEv = opts.enforcePositiveModelEv ?? true;
   const enforceMoneylineEvidenceGuard = opts.enforceMoneylineEvidenceGuard ?? true;
+  const gradeMarket = opts.legacyGradePolicyAudit ? gradeNbaLegacyMarketForAudit : gradeNbaMarket;
   const ml = buildMl(
     opts.snapshot,
     opts.prediction,
@@ -1061,9 +1068,10 @@ export function buildNbaGameIntelligence(opts: {
     opts.opportunities,
     enforcePositiveModelEv,
     enforceMoneylineEvidenceGuard,
+    gradeMarket,
   );
-  const spread = buildSpread(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv);
-  const total = buildTotal(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv);
+  const spread = buildSpread(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv, gradeMarket);
+  const total = buildTotal(opts.snapshot, opts.prediction, opts.lines, consensus, opts.splitsRow, opts.opportunities, enforcePositiveModelEv, gradeMarket);
 
   const books = uniqueBooks(opts.lines);
   const sources: SourceBadges = {

@@ -281,7 +281,7 @@ function marketSpecificGrade(input: GradeInput): GradeOutput | null {
   let calibrated = 0;
   let rationale = "";
   if (input.market === "spread") {
-    const bestIndependent = input.readerCorrectionApplied !== true &&
+    const bestIndependent = input.readerQualified !== true &&
       Math.abs(independentEdge) >= 2.5 && Math.abs(independentEdge) < 3.5;
     const bestCorrection = input.readerCorrectionApplied === true &&
       magnitude !== null && magnitude >= 4;
@@ -302,7 +302,7 @@ function marketSpecificGrade(input: GradeInput): GradeOutput | null {
     const edge = Math.abs(independentEdge);
     const bestCorrection = input.readerCorrectionApplied === true && edge >= 5 && edge < 9;
     const leanCorrection = input.readerCorrectionApplied === true && edge >= 9;
-    const leanIndependentOver = input.readerCorrectionApplied !== true && input.pick === "over" &&
+    const leanIndependentOver = input.readerQualified !== true && input.pick === "over" &&
       independentEdge >= 1 && independentEdge < 2;
     if (bestCorrection) {
       grade = "best_angle";
@@ -354,7 +354,15 @@ function memberBandPhrase(band: MarketConflictBand): string {
 }
 
 export function gradeNbaMarket(input: GradeInput): GradeOutput {
-  const incumbent = gradeNbaMarketEconomics(input);
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input));
+}
+
+/** Frozen incumbent comparison only. No production writer selects this policy. */
+export function gradeNbaLegacyMarketForAudit(input: GradeInput): GradeOutput {
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, true));
+}
+
+function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): GradeOutput {
   const posture = input.namedBookPosture;
   if (incumbent.grade !== "best_angle" || posture?.market !== input.market || posture?.pickedSide !== input.pick ||
       (posture.opposingSources.length === 0 && posture.conflictingSources.length === 0 && !posture.convictionRiskSources?.length)) return incumbent;
@@ -368,7 +376,7 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   };
 }
 
-function gradeNbaMarketEconomics(input: GradeInput): GradeOutput {
+function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeOutput {
   const rationale: string[] = [];
   if (input.pick === null) {
     return {
@@ -414,7 +422,10 @@ function gradeNbaMarketEconomics(input: GradeInput): GradeOutput {
       rationale: ["The forecast has a side, but its probability does not clear positive value at the selected price."],
     };
   }
-  const specialized = input.continuousMarketDecision ? null : marketSpecificGrade(input);
+  // Production grades the SAME final forecast/evidence identically regardless
+  // of reader implementation or whether a market adjustment happened. Legacy
+  // correction/independent-edge sleeves survive only as explicit audit policy.
+  const specialized = legacyAudit ? marketSpecificGrade(input) : null;
   if (specialized !== null) return specialized;
   if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") {
     rationale.push(

@@ -104,8 +104,18 @@ unchanged and take precedence before any new semantics.
 
 ## Publication status
 
-Candidate modelr27 / marriager28 / grader18 / posturer3 / continuous-headr1.
+Candidate modelr27 / marriager28 / grader19 / posturer3 / continuous-headr1.
 NOT LIVE. Final type/lint/full safety, latest-main integration, overlap/PR
 protection checks, production release/collector/lease/member proof remain.
+The owner-requested cross-product conformance audit is in
+`2026-10-31-market-reader-scenarios-and-audit.md`. It exposes the remaining
+first-current-level/model-disagreement inference gap: the innovation head
+seeds a first quote but cannot yet correct static disagreement. This is a
+functional design gap, not a historical qualification issue. Do not publish
+this candidate as the completed requested market brain with that unresolved.
+Member conviction-risk labeling is repaired locally and tested. Grader19 is
+one final-input policy regardless of correction/implementation flags; legacy
+market sleeves are offline audit comparisons only. Confidence/value/quality
+bands remain downstream ranking, not permissions for signals to affect scores.
 Full CBB inference follows NBA live verification. NFL/CFB belongs to the
 separate Rebuild Daily Edge models chat, not a duplicate NBA branch.
