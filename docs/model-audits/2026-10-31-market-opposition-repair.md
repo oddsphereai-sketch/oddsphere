@@ -125,3 +125,19 @@ No bypass is authorized. Existing open research/governance PRs touching the
 release registry must rebase/reconcile before either merges. Do not claim this
 candidate, let alone the complete reader, is live or launch-ready from local
 tests. No change to NFL/CFB or broader NBA forecast authority is in this branch.
+
+Local checkpoint547899b3 is clean and unpublished. Final code reproduced all51
+r3 posture outputs from the frozen source with zero network calls/writes and
+without rewriting receipts. Full model-change suite r2, TypeScript and focused
+reader/grade/production/lock tests pass. Source receipts remain as originally
+executed; the separate51-case check proves posture parity under the final code.
+
+Clean-commit integration safety FAILED because another task's
+codex/all-market-data-health-20261031 has overlapping uncommitted release-registry
+and model-safety documentation. Its soccer implementation is separate, but both
+sets of documentation must be preserved. No other task's work was committed,
+cleared, reset or copied over. The owner was asked for coordination permission
+with "Investigate Green Bay no-play grades". Until overlap is reconciled and
+latest-main/integration checks rerun, do not push/merge/publish this candidate.
+This is an additional publication boundary, not the reason the larger forecast
+repair is incomplete. No PR, deployment or production writer invocation occurred.
