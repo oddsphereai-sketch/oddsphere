@@ -16,7 +16,7 @@ const dto = readFileSync(
 
 assert.match(
   pipeline,
-  /const reader = buildNbaProfessionalMarketReader\([\s\S]*grounding_audit = \{[\s\S]*market_reader: reader/,
+  /const reader = buildNbaProfessionalMarketReader\([\s\S]*grounding_audit = \{[\s\S]*market_reader: \{ \.\.\.reader/,
   "the internal market reader must be computed inside the prediction pipeline and retained as audit evidence",
 );
 assert.doesNotMatch(

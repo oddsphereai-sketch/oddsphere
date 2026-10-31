@@ -10,10 +10,9 @@
  * nbaFeatureWeights.ts. The professional artifact supplies its released
  * residual scale and, when present, the selected margin-mixture calibration.
  *
- * Independence guarantee: each market is computed from its own model
- * inputs against its own market line. ML probability does NOT cascade
- * into spread or total probability. This matches the user's
- * "ML/spread/total must be independent" requirement.
+ * One margin law owns ML and Spread; the Total law owns Over/Under.
+ * Markets are evaluated at their actual contract thresholds, never by
+ * converting a grade or an ML probability into a second market's score.
  */
 
 // ─────────────────────────────────────────────────────────────
@@ -38,6 +37,7 @@ function erf(x: number): number {
 }
 
 function normalCdf(z: number): number {
+  if (z === 0) return .5; // Exact symmetry: the approximation must not invent a tie-breaking side.
   return 0.5 * (1 + erf(z / Math.SQRT2));
 }
 

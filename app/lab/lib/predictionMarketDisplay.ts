@@ -237,6 +237,14 @@ export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history
 export function predictionMarketHasSharedHistory(comparison:ReturnType<typeof predictionMarketComparison>):boolean{
   return !comparison.pending&&comparison.points.length>=2&&comparison.cutoff!==null&&comparison.start<comparison.cutoff;
 }
+/** Do not let a one-instant intersection erase a genuine standalone curve.
+ * Callers opt in only for the supported auxiliary CBB/CFB display scope. */
+export function predictionMarketVisibleComparison(row:Parameters<typeof predictionMarketComparison>[0],book:PredictionMarketBookTrail|null,lockedAt:number|undefined,allowStandalone:boolean){
+ const paired=predictionMarketComparison(row,book,lockedAt),shared=predictionMarketHasSharedHistory(paired);
+ const full=allowStandalone&&!shared?predictionMarketComparison(row,null,lockedAt):null;
+ const standalone=!!full&&full.points.length>=2;
+ return {comparison:standalone?full!:paired,book:standalone?null:book,shared,standalone};
+}
 export function predictionMarketBookOnlyComparison(book:PredictionMarketBookTrail|null,lockedAt?:number){
   const ceiling=lockedAt===undefined?Infinity:Number.isFinite(lockedAt)?lockedAt:-Infinity;
   const bookPoints=book?.points.filter(p=>Number.isFinite(p[0])&&p[0]<=ceiling)??[];

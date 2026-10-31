@@ -13,7 +13,11 @@ const dynamic = {
   game_external_id: 9001,
   matchup: "AWY @ HME",
   projection: { home_score: 120, away_score: 110, total: 230, spread_home: 10 },
-  intelligence: { ml: { pick_side: "home" } },
+  intelligence: { ml: { pick_side: "home", grade: "lean", named_book_posture: {
+    release: "nba_named_book_posture_2026_10_31_r1_observed_opposition", market: "moneyline", pickedSide: "home",
+    evaluatedAt: "2026-10-20T22:05:00Z", supportingSources: [], opposingSources: ["pinnacle"],
+    conflictingSources: [], forecastAuthorityGranted: false,
+  } } },
   injuries: {
     source: "espn",
     home_known: true,

@@ -103,8 +103,9 @@ async function run(){
  const panel=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8"),route=readFileSync("app/api/lab/prediction-market/route.ts","utf8");
  assert.match(panel,/PredictionMarketUnavailable/);assert.match(panel,/Updates automatically when one arrives/);assert.match(panel,/\[key,enabled,kind\]/);
  assert.match(panel,/Full window/);assert.match(panel,/aria-pressed=\{range===\"24h\"\}/);
- assert.match(panel,/game\.sport!=="cbb"\|\|frozen\|\|comparison\.points\.length<2/,
+ assert.match(panel,/predictionMarketVisibleComparison\(outcome,book,lockedAt,game\.sport===\"cbb\"&&!frozen\|\|game\.sport===\"cfb\"/,
    "unlocked CBB Kalshi history stays visible before sportsbook overlap");
+ assert.match(panel,/if\(fallbackBook&&!sharedHistory&&!standaloneHistory\)/,"only an ineligible standalone history takes the sportsbook-only fallback");
  assert.match(route,/availability/);assert.doesNotMatch(route,/client\.(get|odds)|fetch\(/,"member reads cannot call upstream");
  console.log("PASS lifetime history: provider openings, exact line/side/book/event identity, market-specific availability/retry, retained opens, real timestamps, bounded request budgets and immutable locks.");
 }

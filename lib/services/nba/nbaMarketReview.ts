@@ -13,6 +13,8 @@
  * even if the model itself is confident — honest disagreement matters.
  */
 
+import type { NbaNamedBookPosture } from "./nbaNamedBookPosture";
+
 // ─── American/decimal/implied probability helpers ──────────────────
 
 export function americanToDecimal(american: number | null): number | null {
@@ -215,6 +217,9 @@ export type GradeInput = {
   /** Uncapped probability from the same coherent distribution that owns the pick. */
   modelProbabilityOnPick?: number | null;
   moneylineEvidence?: NbaMoneylineReaderEvidence;
+  /** Fresh target-excluded source observations, independent of flip permission. */
+  namedBookPosture?: NbaNamedBookPosture;
+  continuousMarketDecision?: boolean;
   /** Same-input audit hook for the superseded Moneyline Best Angle path. */
   enforceMoneylineEvidenceGuard?: boolean;
   /** Same-input audit hook for the superseded price-incoherent grade path. */
@@ -231,6 +236,7 @@ export type NbaMoneylineReaderEvidence = {
   spreadReadQualified: boolean;
   spreadReadSide: "home" | "away" | null;
   spreadCorrectionApplied: boolean;
+  jointConflict?: boolean;
 };
 
 export type GradeOutput = {
@@ -348,6 +354,29 @@ function memberBandPhrase(band: MarketConflictBand): string {
 }
 
 export function gradeNbaMarket(input: GradeInput): GradeOutput {
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input));
+}
+
+/** Frozen incumbent comparison only. No production writer selects this policy. */
+export function gradeNbaLegacyMarketForAudit(input: GradeInput): GradeOutput {
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, true));
+}
+
+function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): GradeOutput {
+  const posture = input.namedBookPosture;
+  if (incumbent.grade !== "best_angle" || posture?.market !== input.market || posture?.pickedSide !== input.pick ||
+      (posture.opposingSources.length === 0 && posture.conflictingSources.length === 0 && !posture.convictionRiskSources?.length)) return incumbent;
+  return {
+    ...incumbent,
+    grade: "lean",
+    bestAngleEligible: false,
+    rationale: [...incumbent.rationale,
+      posture.opposingSources.length ? "Named-book economic movement opposes this pick. Value remains playable, but the market disagreement keeps it below Best Angle."
+        : "Held pressure, recent buyback or unresolved source disagreement tempers the strongest recommendation without inventing a different score."],
+  };
+}
+
+function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeOutput {
   const rationale: string[] = [];
   if (input.pick === null) {
     return {
@@ -393,7 +422,10 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
       rationale: ["The forecast has a side, but its probability does not clear positive value at the selected price."],
     };
   }
-  const specialized = marketSpecificGrade(input);
+  // Production grades the SAME final forecast/evidence identically regardless
+  // of reader implementation or whether a market adjustment happened. Legacy
+  // correction/independent-edge sleeves survive only as explicit audit policy.
+  const specialized = legacyAudit ? marketSpecificGrade(input) : null;
   if (specialized !== null) return specialized;
   if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") {
     rationale.push(
@@ -444,7 +476,7 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
       evidence?.spreadReadQualified === true && evidence.spreadReadSide !== null &&
       evidence.spreadReadSide !== pickedSide;
     const opposingObservation = input.market === "moneyline" &&
-      evidence?.spreadCorrectionApplied !== true && (directOpposes || spreadOpposes);
+      (directOpposes || (evidence?.spreadCorrectionApplied !== true && spreadOpposes));
     if (input.enforceMoneylineEvidenceGuard !== false && opposingObservation) {
       rationale.push(
         "The independent value remains playable, but qualified opposite-side movement keeps it below Best Angle; the signal is not strong enough to flip the pick.",

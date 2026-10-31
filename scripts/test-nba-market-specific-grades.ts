@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 
-import { gradeNbaMarket, type GradeInput } from "../lib/services/nba/nbaMarketReview";
+// Frozen legacy sleeves remain auditable; they are no longer production
+// permissions. The production policy is tested independently below.
+import { gradeNbaLegacyMarketForAudit as gradeNbaMarket, gradeNbaMarket as productionGrade, type GradeInput } from "../lib/services/nba/nbaMarketReview";
 
 const base: GradeInput = {
   pick: "home",
@@ -12,6 +14,18 @@ const base: GradeInput = {
   currentPriceAmerican: -110,
   modelProbabilityOnPick: 0.6,
 };
+
+for (const market of ["moneyline", "spread", "total"] as const) {
+  const final: GradeInput = { ...base, market, pick: market === "total" ? "over" : "home", confidence: 60,
+    modelProbabilityOnPick: .6, independentEdgePoints: 7, readerMagnitudePoints: .1 };
+  const grade = productionGrade(final);
+  assert.deepEqual(productionGrade({ ...final, continuousMarketDecision: true }), grade);
+  assert.deepEqual(productionGrade({ ...final, continuousMarketDecision: false }), grade);
+  assert.deepEqual(productionGrade({ ...final, readerQualified: true, readerCorrectionApplied: true }), grade,
+    "same final forecast/evidence cannot change grade because a reader implementation reports a correction");
+  assert.equal(grade.grade, "lean");
+  assert.equal(productionGrade({ ...final, modelProbabilityOnPick: .51, confidence: 51 }).grade, "watch");
+}
 
 assert.deepEqual(
   gradeNbaMarket({ ...base, market: "spread", independentEdgePoints: 2.5 }),
@@ -204,8 +218,8 @@ assert.equal(
       spreadCorrectionApplied: true,
     },
   }).grade,
-  "best_angle",
-  "a final side authored by the validated Spread correction outranks observational disagreement",
+  "lean",
+  "direct Moneyline opposition cannot be erased by a Spread-authored final side",
 );
 assert.equal(
   gradeNbaMarket({

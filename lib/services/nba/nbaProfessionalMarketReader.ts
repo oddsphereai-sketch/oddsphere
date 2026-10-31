@@ -1,7 +1,7 @@
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_PROFESSIONAL_MARKET_READER_RELEASE =
-  "nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion" as const;
+  "nba_professional_market_reader_2026_10_31_r9_causal_exact_contract_flow" as const;
 
 export type NbaReaderSide = "home" | "away" | "over" | "under";
 type Direction = -1 | 1;
@@ -20,6 +20,9 @@ export type NbaReaderSplitRow = {
 };
 
 export type NbaReaderPriceRow = {
+  provider?: string;
+  providerEventId?: string | null;
+  ingestionRunId?: string | null;
   sportsbook: string;
   sharpBook: boolean;
   market: NbaMovementMarket;
@@ -31,6 +34,11 @@ export type NbaReaderPriceRow = {
 };
 
 export type NbaReaderTrail = {
+  provider?: string;
+  openingIngestionRunId?: string;
+  currentIngestionRunId?: string;
+  openingCaptureAt?: string;
+  currentCaptureAt?: string;
   sportsbook: string;
   sourceClass: "named" | "retail";
   openingAt: string;
@@ -40,12 +48,17 @@ export type NbaReaderTrail = {
   currentNumber: number | null;
   numberDelta: number | null;
   fairProbabilityDeltaPp: number;
+  /** Endpoint pairs; fairProbabilityDeltaPp instead uses the first observation
+   * at the CURRENT number and cannot attest across-number price compensation. */
+  openingFairFirstProbability?: number;
+  currentFairFirstProbability?: number;
   numberDirection: NbaReaderSide | null;
   priceDirection: NbaReaderSide | null;
   direction: NbaReaderSide | null;
   persistenceTimeShare: number;
   reversalMagnitude: number;
   buybackToOpening: boolean;
+  providerConflict?: boolean;
 };
 
 export type NbaReaderFlow = {
@@ -71,11 +84,15 @@ export type NbaProfessionalMarketRead = {
     | "stale_or_incomplete_flow"
     | "evidence_unavailable"
     | "book_disagreement"
+    | "provider_conflict"
     | "reversal_or_buyback";
   resistance: "none" | "flow_resistance" | "reverse_flow" | "book_disagreement";
   trails: NbaReaderTrail[];
   flows: NbaReaderFlow[];
   excludedSportsbooks: string[];
+  /** Separate provider-attested lanes; legacy mixed-provider forecast trails
+   * above keep their exact incumbent behavior until separately qualified. */
+  namedBookPostureTrails?: NbaReaderTrail[];
 };
 
 export type NbaProfessionalMarketReader = {
@@ -87,7 +104,8 @@ export type NbaProfessionalMarketReader = {
     spread: "conditional_categorical_score_correction";
     total: "conditional_categorical_score_correction";
   };
-  evidenceStatus: "complete" | "unavailable";
+  evidenceStatus: "complete" | "partial" | "unavailable";
+  evidenceFamilies?: { prices: "complete" | "failed"; splits: "complete" | "failed" };
   evidenceErrors: string[];
   evaluatedAt: string;
   reads: Record<NbaMovementMarket, NbaProfessionalMarketRead>;
@@ -95,6 +113,7 @@ export type NbaProfessionalMarketReader = {
 
 type PairedObservation = {
   observedAt: string;
+  capturedAt: string;
   firstLine: number | null;
   firstPrice: number;
   secondPrice: number;
@@ -117,8 +136,13 @@ export function buildNbaProfessionalMarketReader(args: {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NBA professional market reader requires a valid evaluatedAt.");
   const evidenceErrors = [...(args.evidenceErrors ?? [])];
+  const sharedFailure = evidenceErrors.some(error => !/^(price|split)_observation_/.test(error));
+  const priceFailure = sharedFailure || evidenceErrors.some(error => error.startsWith("price_observation_"));
+  const splitFailure = sharedFailure || evidenceErrors.some(error => error.startsWith("split_observation_"));
+  const priceRows = priceFailure ? [] : args.priceRows;
+  const splitRows = splitFailure ? [] : args.splitRows;
   const reads = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => {
-    if (evidenceErrors.length > 0) {
+    if (priceFailure && splitFailure) {
       return [market, {
         status: "unavailable",
         side: null,
@@ -134,19 +158,23 @@ export function buildNbaProfessionalMarketReader(args: {
     );
     const trails = buildTrails({
       market,
-      rows: args.priceRows,
+      rows: priceRows,
       evaluatedAt,
       excluded,
     });
     const flows = buildFlows({
       market,
-      rows: args.splitRows,
+      rows: splitRows,
       evaluatedAt,
       excluded,
       selectedLine: market === "spread" ? args.selectedLines.spreadHome
         : market === "total" ? args.selectedLines.total : null,
     });
-    return [market, qualify(market, trails, flows, [...excluded].sort())];
+    return [market, { ...qualify(market, trails, flows, [...excluded].sort()),
+      ...(priceFailure ? { reason: "evidence_unavailable" as const } : {}),
+      namedBookPostureTrails: buildNbaAttestedNamedBookTrails({ market, rows: priceRows,
+        evaluatedAt: args.evaluatedAt, excludedSportsbooks: [...excluded] }),
+    }];
   })) as Record<NbaMovementMarket, NbaProfessionalMarketRead>;
   return {
     release: NBA_PROFESSIONAL_MARKET_READER_RELEASE,
@@ -157,7 +185,8 @@ export function buildNbaProfessionalMarketReader(args: {
       spread: "conditional_categorical_score_correction",
       total: "conditional_categorical_score_correction",
     },
-    evidenceStatus: evidenceErrors.length === 0 ? "complete" : "unavailable",
+    evidenceStatus: priceFailure && splitFailure ? "unavailable" : priceFailure || splitFailure ? "partial" : "complete",
+    evidenceFamilies: { prices: priceFailure ? "failed" : "complete", splits: splitFailure ? "failed" : "complete" },
     evidenceErrors,
     evaluatedAt: args.evaluatedAt,
     reads,
@@ -165,6 +194,57 @@ export function buildNbaProfessionalMarketReader(args: {
 }
 
 function buildTrails(args: {
+  market: NbaMovementMarket; rows: readonly NbaReaderPriceRow[]; evaluatedAt: number; excluded: Set<string>;
+}): NbaReaderTrail[] {
+  const lanes = new Map<string, NbaReaderPriceRow[]>();
+  for (const row of args.rows) {
+    if (row.market !== args.market) continue;
+    const captured = Date.parse(row.fetchedAt), observed = Date.parse(row.providerTimestamp ?? row.fetchedAt);
+    if (![captured, observed].every(Number.isFinite) || captured > args.evaluatedAt || observed > captured) continue;
+    const key = `${canonical(row.sportsbook)}|${row.provider ?? "legacy_fixture"}`;
+    lanes.set(key, [...(lanes.get(key) ?? []), row]);
+  }
+  const byBook = new Map<string, NbaReaderTrail[]>();
+  for (const rows of lanes.values()) {
+    const provider = rows[0]!.provider;
+    // Legacy in-memory callers retain compatibility. Stored unattributed or
+    // unknown provider rows never acquire new current forecast authority.
+    if (provider !== undefined && !["owls", "canonical_lines"].includes(provider)) continue;
+    const batches = new Map<string, NbaReaderPriceRow[]>();
+    const events = new Set(rows.map(r => r.selectionKey.slice(0, r.selectionKey.lastIndexOf(":"))));
+    const providerEvents = new Set(rows.map(r => r.providerEventId ?? null));
+    if (events.size !== 1 || providerEvents.size !== 1) continue;
+    for (const row of rows) batches.set(row.fetchedAt, [...(batches.get(row.fetchedAt) ?? []), row]);
+    const firstSide = args.market === "total" ? "over" : "home", secondSide = args.market === "total" ? "under" : "away";
+    const paired = [...batches.values()].flatMap(batch => {
+      const first = batch.filter(r => selectionSide(r.selectionKey) === firstSide);
+      const second = batch.filter(r => selectionSide(r.selectionKey) === secondSide);
+      if (batch.length !== 2 || first.length !== 1 || second.length !== 1 ||
+          !batch.every(r => Number.isFinite(r.americanPrice) && r.americanPrice !== 0) ||
+          !coherentLines(args.market, first[0]!.line, second[0]!.line) ||
+          (provider !== undefined && (batch.some(r => !r.ingestionRunId || (provider === "owls" && !r.providerEventId)) ||
+            new Set(batch.map(r => r.ingestionRunId)).size !== 1))) return [];
+      return batch;
+    });
+    const trails = buildSingleLaneTrails({ ...args, rows: paired });
+    for (const trail of trails) {
+      const source = { ...trail, provider,
+        openingIngestionRunId: batches.get(trail.openingCaptureAt!)?.[0]?.ingestionRunId ?? undefined,
+        currentIngestionRunId: batches.get(trail.currentCaptureAt!)?.[0]?.ingestionRunId ?? undefined };
+      byBook.set(trail.sportsbook, [...(byBook.get(trail.sportsbook) ?? []), source]);
+    }
+  }
+  return [...byBook.values()].map(lanes => {
+    // One real book is one source, never two provider votes. A fresh conflict
+    // remains explicit rather than manufacturing a convenient paired contract.
+    const directions = new Set(lanes.map(t => t.direction).filter(d => d !== null));
+    const selected = [...lanes].sort((a, b) => Date.parse(b.currentCaptureAt!) - Date.parse(a.currentCaptureAt!) ||
+      (a.provider === "owls" ? -1 : b.provider === "owls" ? 1 : 0))[0]!;
+    return directions.size > 1 ? { ...selected, providerConflict: true, direction: null, numberDirection: null, priceDirection: null } : selected;
+  }).sort((a, b) => a.sportsbook.localeCompare(b.sportsbook));
+}
+
+function buildSingleLaneTrails(args: {
   market: NbaMovementMarket;
   rows: readonly NbaReaderPriceRow[];
   evaluatedAt: number;
@@ -174,6 +254,9 @@ function buildTrails(args: {
   const raw = args.rows.flatMap((row) => {
     const side = selectionSide(row.selectionKey);
     if (row.market !== args.market || row.americanPrice === null || !side) return [];
+    const captured = Date.parse(row.fetchedAt), observed = Date.parse(row.providerTimestamp ?? row.fetchedAt);
+    if (!Number.isFinite(captured) || !Number.isFinite(observed) || captured > args.evaluatedAt ||
+        observed > captured || observed > args.evaluatedAt) return [];
     return [{
       sportsbook: row.sportsbook,
       sharpBook: row.sharpBook,
@@ -198,7 +281,7 @@ function buildTrails(args: {
       const second = rows.find((row) => row.side === sidePair[1] && Number.isFinite(row.price));
       if (!first || !second || !coherentLines(args.market, first.line, second.line)) return [];
       const observedAt = new Date(Math.max(Date.parse(first.observedAt), Date.parse(second.observedAt))).toISOString();
-      return [{ observedAt, firstLine: first.line, firstPrice: first.price, secondPrice: second.price }];
+      return [{ observedAt, capturedAt: first.capturedAt, firstLine: first.line, firstPrice: first.price, secondPrice: second.price }];
     }).sort((left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt));
     const opening = observations[0];
     const current = observations.at(-1);
@@ -245,11 +328,15 @@ function buildTrails(args: {
         ? "named" : "retail",
       openingAt: opening.observedAt,
       currentAt: current.observedAt,
+      openingCaptureAt: opening.capturedAt,
+      currentCaptureAt: current.capturedAt,
       observations: observations.length,
       openingNumber,
       currentNumber,
       numberDelta,
       fairProbabilityDeltaPp: probabilityDelta,
+      openingFairFirstProbability: fairFirst(opening),
+      currentFairFirstProbability: fairFirst(current),
       numberDirection,
       priceDirection,
       direction,
@@ -259,6 +346,52 @@ function buildTrails(args: {
     });
   }
   return trails.sort((left, right) => left.sportsbook.localeCompare(right.sportsbook));
+}
+
+/** New grade evidence uses the SAME pairing/trail computation, but never joins
+ * providers, events or ingestion runs. It does not alter legacy flip authority. */
+export function buildNbaAttestedNamedBookTrails(args: {
+  market: NbaMovementMarket; rows: readonly NbaReaderPriceRow[];
+  evaluatedAt: string; excludedSportsbooks: readonly string[];
+}): NbaReaderTrail[] {
+  const evaluated = Date.parse(args.evaluatedAt), excluded = new Set(args.excludedSportsbooks.map(canonical));
+  if (!Number.isFinite(evaluated)) return [];
+  const lanes = new Map<string, NbaReaderPriceRow[]>();
+  for (const row of args.rows) {
+    const book = canonical(row.sportsbook);
+    const captured = Date.parse(row.fetchedAt), observed = Date.parse(row.providerTimestamp ?? row.fetchedAt);
+    if (row.market !== args.market || !NAMED_BOOKS.has(book) || excluded.has(book) ||
+        !["owls", "canonical_lines"].includes(row.provider ?? "") ||
+        ![captured, observed].every(Number.isFinite) || captured > evaluated || observed > captured) continue;
+    const key = `${row.provider}|${book}`;
+    lanes.set(key, [...(lanes.get(key) ?? []), row]);
+  }
+  return [...lanes.values()].flatMap(rows => {
+    const batches = new Map<string, NbaReaderPriceRow[]>();
+    for (const row of rows) batches.set(row.fetchedAt, [...(batches.get(row.fetchedAt) ?? []), row]);
+    const firstSide = args.market === "total" ? "over" : "home", secondSide = args.market === "total" ? "under" : "away";
+    const eventKeys = new Set(rows.map(r => r.selectionKey.slice(0, r.selectionKey.lastIndexOf(":"))));
+    const providerEvents = new Set(rows.map(r => r.providerEventId ?? null));
+    if (eventKeys.size !== 1 || providerEvents.size !== 1 ||
+        rows.some(r => !r.ingestionRunId || (r.provider === "owls" && !r.providerEventId) ||
+          !Number.isFinite(Date.parse(r.fetchedAt)) ||
+          !Number.isFinite(Date.parse(r.providerTimestamp ?? r.fetchedAt)) ||
+          Date.parse(r.providerTimestamp ?? r.fetchedAt) > evaluated)) return [];
+    for (const batch of batches.values()) {
+      if (batch.length !== 2 || new Set(batch.map(r => r.ingestionRunId)).size !== 1 ||
+          !batch.every(r => Number.isFinite(r.americanPrice) && r.americanPrice !== 0) ||
+          batch.filter(r => selectionSide(r.selectionKey) === firstSide).length !== 1 ||
+          batch.filter(r => selectionSide(r.selectionKey) === secondSide).length !== 1) return [];
+      const first = batch.find(r => selectionSide(r.selectionKey) === firstSide)!;
+      const second = batch.find(r => selectionSide(r.selectionKey) === secondSide)!;
+      if (!coherentLines(args.market, first.line, second.line)) return [];
+    }
+    return buildSingleLaneTrails({ market: args.market, rows, evaluatedAt: evaluated, excluded }).map(trail => ({
+      ...trail, provider: rows[0]!.provider,
+      openingIngestionRunId: batches.get(trail.openingCaptureAt!)![0]!.ingestionRunId!,
+      currentIngestionRunId: batches.get(trail.currentCaptureAt!)![0]!.ingestionRunId!,
+    }));
+  });
 }
 
 function buildFlows(args: {
@@ -272,6 +405,9 @@ function buildFlows(args: {
   const latest = new Map<string, NbaReaderSplitRow>();
   for (const row of args.rows) {
     if (row.market !== args.market || selectionSide(row.selectionKey) !== firstSide) continue;
+    const captured = Date.parse(row.fetchedAt), observed = Date.parse(observedAt(row));
+    if (!Number.isFinite(captured) || !Number.isFinite(observed) || captured > args.evaluatedAt ||
+        observed > captured || observed > args.evaluatedAt) continue;
     const book = canonical(row.sourceBook);
     if (book && args.excluded.has(book)) continue;
     const key = `${row.provider}|${book}|${row.sourceType}`;
@@ -289,7 +425,7 @@ function buildFlows(args: {
     if (Math.abs(gap) < FLOW_MINIMUM_PP) return [];
     const exactLineMatched = args.market === "moneyline" ? null
       : row.marketLine === null || args.selectedLine === null ? false
-      : Math.abs(Math.abs(row.marketLine) - Math.abs(args.selectedLine)) < 0.01;
+      : Math.abs(row.marketLine - args.selectedLine) < 0.01;
     const source = row.sourceType === "sharp_adjacent_book" ? "named_book" as const
       : row.sourceBook === "consensus" ? "public_consensus" as const : "retail_book" as const;
     return [{
@@ -333,6 +469,7 @@ function qualify(
     : strongestFlow && movement === null ? "flow_resistance" as const
     : strongestFlow && movement !== strongestFlow.side ? "reverse_flow" as const : "none" as const;
   const base = { trails, flows, excludedSportsbooks, resistance };
+  if (trails.some(trail => trail.sourceClass === "named" && trail.providerConflict)) return { ...base, status: "unavailable", side: null, reason: "provider_conflict", resistance: "book_disagreement" };
   if (bookDisagreement) return { ...base, status: "unavailable", side: null, reason: "book_disagreement" };
   if (namedReversalOrBuyback) {
     return { ...base, status: "unavailable", side: null, reason: "reversal_or_buyback" };

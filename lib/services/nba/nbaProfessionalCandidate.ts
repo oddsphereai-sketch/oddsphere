@@ -14,6 +14,13 @@ import {
   type NbaMovementHistoryRow,
 } from "./nbaSameBookMovement";
 import type { NbaProfessionalMarketReader } from "./nbaProfessionalMarketReader";
+import { resolveNbaNamedBookPosture, resolveNbaConsequencePosture } from "./nbaNamedBookPosture";
+import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
+import { NBA_MARKET_CONSEQUENCE_RELEASE, reconcileNbaMarketConsequence, type NbaMarketConsequenceContext } from "./nbaMarketConsequence";
+
+function episodeIncludesSource(episode: { authority: string; selectedSource: string | null; equivalentSources?: readonly string[] } | undefined, book: string) {
+  return episode?.authority === "causal_authority" && (episode.selectedSource === book || episode.equivalentSources?.includes(book) === true);
+}
 
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -32,10 +39,11 @@ function median(values: number[]): number | null {
  */
 export function selectNbaQualifiedSpreadRead(
   reader: NbaProfessionalMarketReader | null | undefined,
+  priceLaw?: NbaPriceCoordinateLaw,
 ): { side: "home" | "away"; magnitudePoints: number } | null {
   const read = reader?.reads.spread;
   if (
-    reader?.evidenceStatus !== "complete" ||
+    !reader || reader.evidenceStatus === "unavailable" ||
     read?.status !== "qualified" ||
     (read.side !== "home" && read.side !== "away")
   ) return null;
@@ -44,7 +52,8 @@ export function selectNbaQualifiedSpreadRead(
     trail.numberDirection === read.side &&
     trail.numberDelta !== null &&
     Math.abs(trail.numberDelta) >= 2 &&
-    trail.persistenceTimeShare >= 2 / 3
+    trail.persistenceTimeShare >= 2 / 3 &&
+    (priceLaw === undefined || readNbaPricedMarketMovement({ market: "spread", trail, law: priceLaw }).economicSide === read.side)
   );
   if (supporting.length < 2 || !supporting.some((trail) => trail.sourceClass === "named")) return null;
   const magnitudePoints = median(supporting.map((trail) => Math.abs(trail.numberDelta!)));
@@ -59,10 +68,11 @@ export function selectNbaQualifiedSpreadRead(
  */
 export function selectNbaQualifiedTotalRead(
   reader: NbaProfessionalMarketReader | null | undefined,
+  priceLaw?: NbaPriceCoordinateLaw,
 ): { side: "over" | "under"; magnitudePoints: number } | null {
   const read = reader?.reads.total;
   if (
-    reader?.evidenceStatus !== "complete" ||
+    !reader || reader.evidenceStatus === "unavailable" ||
     read?.status !== "qualified" ||
     (read.side !== "over" && read.side !== "under")
   ) return null;
@@ -72,7 +82,8 @@ export function selectNbaQualifiedTotalRead(
     trail.numberDirection === read.side &&
     trail.numberDelta !== null &&
     Math.abs(trail.numberDelta) >= 5 &&
-    trail.persistenceTimeShare >= 2 / 3
+    trail.persistenceTimeShare >= 2 / 3 &&
+    (priceLaw === undefined || readNbaPricedMarketMovement({ market: "total", trail, law: priceLaw }).economicSide === read.side)
   );
   if (supporting.length < 2) return null;
   const magnitudePoints = median(supporting.map((trail) => Math.abs(trail.numberDelta!)));
@@ -91,6 +102,9 @@ export function buildNbaProfessionalCandidate(args: {
   externalGameId: number;
   marketReader?: NbaProfessionalMarketReader | null;
   independentOverride?: NbaPortableScore;
+  marketContext?: NbaMarketConsequenceContext;
+  /** Offline incumbent contrast ONLY. The sole production writer never sets this. */
+  retainLegacyScoreReconciliation?: boolean;
 }) {
   if (!args.artifact.distribution) {
     throw new Error("NBA professional candidate requires calibrated residual distribution state.");
@@ -116,9 +130,15 @@ export function buildNbaProfessionalCandidate(args: {
     acceptedSportsbooks: consensus.spreadAcceptedBooks,
     currentObservedAt,
   });
-  const qualifiedSpreadRead = selectNbaQualifiedSpreadRead(args.marketReader);
-  const qualifiedTotalRead = selectNbaQualifiedTotalRead(args.marketReader);
-  const final = buildNbaUnifiedFinalProjection({
+  const priceLaw: NbaPriceCoordinateLaw = { marginSigma: args.artifact.distribution.marginSigma,
+    totalSigma: args.artifact.distribution.totalSigma,
+    marginMixture: args.artifact.distribution.marginCalibration === undefined ? undefined : {
+      core_sigma_multiplier: args.artifact.distribution.marginCalibration.coreSigmaMultiplier,
+      tail_weight: args.artifact.distribution.marginCalibration.tailWeight,
+      tail_sigma_multiplier: args.artifact.distribution.marginCalibration.tailSigmaMultiplier } };
+  const qualifiedSpreadRead = args.retainLegacyScoreReconciliation ? selectNbaQualifiedSpreadRead(args.marketReader, priceLaw) : null;
+  const qualifiedTotalRead = args.retainLegacyScoreReconciliation ? selectNbaQualifiedTotalRead(args.marketReader, priceLaw) : null;
+  const baselineFinal = args.retainLegacyScoreReconciliation ? buildNbaUnifiedFinalProjection({
     independentHomeScore: independent.homeScore,
     independentAwayScore: independent.awayScore,
     currentSpreadHome: consensus.spreadHome,
@@ -126,13 +146,37 @@ export function buildNbaProfessionalCandidate(args: {
     openingSpreadHome: openingSpread?.spreadHome ?? null,
     qualifiedSpreadRead,
     qualifiedTotalRead,
-  });
+  }) : {
+    release: NBA_MARKET_CONSEQUENCE_RELEASE,
+    homeScore: independent.homeScore, awayScore: independent.awayScore, marginHome: independent.marginHome, total: independent.total,
+    spreadResidual: consensus.spreadHome === null ? null : independent.marginHome + consensus.spreadHome,
+    totalResidual: consensus.totalLine === null ? null : independent.total - consensus.totalLine,
+    movementQualified: false, movementApplied: false, totalMovementQualified: false, totalMovementApplied: false,
+    marketApplied: { margin: false, total: false },
+    audit: { independentMarginHome: independent.marginHome, independentTotal: independent.total,
+      marketMarginHome: consensus.spreadHome === null ? null : -consensus.spreadHome, marketTotal: consensus.totalLine,
+      spreadMovementHomeSupport: openingSpread === null || consensus.spreadHome === null ? null : openingSpread.spreadHome - consensus.spreadHome },
+  };
+  const consequence = args.marketContext ? reconcileNbaMarketConsequence({ independentMargin: independent.marginHome,
+    independentTotal: independent.total, law: priceLaw, context: args.marketContext,
+    spreadHome: consensus.spreadHome, totalLine: consensus.totalLine }) : null;
+  const spreadEvidence = consequence?.books.filter(b => episodeIncludesSource(consequence.arbitration.margin, b.book) && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes("spread"))
+    .flatMap(b => b.proposals.filter(p => p.market === "spread" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
+  const totalEvidence = consequence?.books.filter(b => episodeIncludesSource(consequence.arbitration.total, b.book))
+    .flatMap(b => b.proposals.filter(p => p.market === "total" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
+  const final = consequence ? { ...baselineFinal, release: consequence.release,
+    homeScore: consequence.homeScore, awayScore: consequence.awayScore, marginHome: consequence.margin, total: consequence.total,
+    spreadResidual: consensus.spreadHome === null ? null : consequence.margin + consensus.spreadHome,
+    totalResidual: consensus.totalLine === null ? null : consequence.total - consensus.totalLine,
+    movementQualified: spreadEvidence.length > 0, movementApplied: consequence.marginApplied,
+    totalMovementQualified: totalEvidence.length > 0, totalMovementApplied: consequence.totalApplied,
+    marketApplied: { margin: consequence.marginApplied, total: consequence.totalApplied } } : baselineFinal;
   const probabilities = computeNbaMarketProbabilities({
     projected_home_margin: final.marginHome,
     projected_total: final.total,
     market_spread_home: consensus.spreadHome,
     market_total: consensus.totalLine,
-    margin_sd_base: args.artifact.distribution.marginSigma,
+    margin_sd_base: args.artifact.distribution.marginSigma * (consequence?.marginScale ?? 1),
     total_sd_base: args.artifact.distribution.totalSigma,
     margin_residual_mixture: args.artifact.distribution.marginCalibration === undefined
       ? undefined
@@ -170,19 +214,30 @@ export function buildNbaProfessionalCandidate(args: {
     consensus,
     openingSpread,
     marketReader: args.marketReader ?? null,
+    priceLaw,
+    marketConsequence: consequence,
+    continuousMarketDecision: !args.retainLegacyScoreReconciliation,
     final,
     probabilities,
     picks,
     readerDecisionAudit: {
+      pricedContractChecks: {
+        spread: (args.marketReader?.reads.spread.trails ?? []).map(trail => readNbaPricedMarketMovement({ market: "spread", trail, law: priceLaw })),
+        total: (args.marketReader?.reads.total.trails ?? []).map(trail => readNbaPricedMarketMovement({ market: "total", trail, law: priceLaw })),
+      },
       independentPicks,
       finalPicks: picks,
       spreadReadQualified: final.movementQualified,
-      spreadCorrectionApplied: final.movementApplied,
+      spreadCorrectionApplied: final.movementApplied && (consequence === null || spreadEvidence.length > 0),
       totalReadQualified: final.totalMovementQualified,
       totalCorrectionApplied: final.totalMovementApplied,
-      spreadMagnitudePoints: qualifiedSpreadRead?.magnitudePoints ?? null,
-      totalMagnitudePoints: qualifiedTotalRead?.magnitudePoints ?? null,
-      effects: {
+      spreadMagnitudePoints: consequence ? Math.abs(final.marginHome - independent.marginHome) : qualifiedSpreadRead?.magnitudePoints ?? null,
+      totalMagnitudePoints: consequence ? Math.abs(final.total - independent.total) : qualifiedTotalRead?.magnitudePoints ?? null,
+      effects: consequence ? {
+        moneyline: independentPicks.moneyline !== picks.moneyline ? "flipped_by_causal_market_episode" as const : consequence.actions.margin,
+        spread: independentPicks.spread !== picks.spread ? "flipped_by_causal_market_episode" as const : consequence.actions.margin,
+        total: independentPicks.total !== picks.total ? "flipped_by_causal_market_episode" as const : consequence.actions.total,
+      } : {
         moneyline: independentPicks.moneyline !== picks.moneyline
           ? "flipped_by_validated_spread_score" as const
           : "unchanged_no_direct_moneyline_authority" as const,
@@ -241,6 +296,13 @@ export function applyNbaProfessionalCandidate(args: {
   const mlPick = candidate.picks.moneyline;
   const spreadPick = candidate.picks.spread ?? baseline.predicted_spread_side;
   const totalPick = candidate.picks.total ?? baseline.predicted_total_side;
+  const consequenceSide = (market: "moneyline" | "spread") => {
+    const decision = candidate.marketConsequence?.arbitration.margin;
+    const signs = new Set((candidate.marketConsequence?.books ?? []).filter(b => episodeIncludesSource(decision, b.book) && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes(market))
+      .flatMap(b => b.proposals.filter(p => p.market === market && Math.abs(p.observedLocationDelta) > 1e-9).map(p => Math.sign(p.observedLocationDelta))));
+    return signs.size === 1 ? signs.has(1) ? "home" as const : "away" as const : null;
+  };
+  const directSide = consequenceSide("moneyline"), spreadSide = consequenceSide("spread");
   return {
     ...baseline,
     predicted_home_score: candidate.final.homeScore,
@@ -279,24 +341,36 @@ export function applyNbaProfessionalCandidate(args: {
       total_pick: totalPick,
       total_confidence: totalOver === null ? baseline.total_confidence : pickConfidence(totalOver),
       professional_grade_context: {
+        continuousMarketDecision: candidate.continuousMarketDecision,
+        namedBookPostures: {
+          moneyline: candidate.marketConsequence ? resolveNbaConsequencePosture({ consequence: candidate.marketConsequence, market: "moneyline", pickedSide: mlPick })
+            : resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "moneyline", pickedSide: mlPick, priceLaw: candidate.priceLaw }),
+          spread: candidate.marketConsequence ? resolveNbaConsequencePosture({ consequence: candidate.marketConsequence, market: "spread", pickedSide: spreadPick })
+            : resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "spread", pickedSide: spreadPick, priceLaw: candidate.priceLaw }),
+          total: candidate.marketConsequence ? resolveNbaConsequencePosture({ consequence: candidate.marketConsequence, market: "total", pickedSide: totalPick })
+            : resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "total", pickedSide: totalPick, priceLaw: candidate.priceLaw }),
+        },
         moneyline: {
-          directReadQualified: candidate.marketReader?.reads.moneyline.status === "qualified",
+          directReadQualified: candidate.marketConsequence ? directSide !== null : candidate.marketReader?.reads.moneyline.status === "qualified",
           directReadSide:
-            candidate.marketReader?.reads.moneyline.side === "home" ||
+            candidate.marketConsequence ? directSide : candidate.marketReader?.reads.moneyline.side === "home" ||
             candidate.marketReader?.reads.moneyline.side === "away"
               ? candidate.marketReader.reads.moneyline.side
               : null,
-          spreadReadQualified: candidate.marketReader?.reads.spread.status === "qualified",
+          spreadReadQualified: candidate.marketConsequence ? spreadSide !== null : candidate.marketReader?.reads.spread.status === "qualified",
           spreadReadSide:
-            candidate.marketReader?.reads.spread.side === "home" ||
+            candidate.marketConsequence ? spreadSide : candidate.marketReader?.reads.spread.side === "home" ||
             candidate.marketReader?.reads.spread.side === "away"
               ? candidate.marketReader.reads.spread.side
               : null,
-          spreadCorrectionApplied: candidate.final.movementApplied,
+          spreadCorrectionApplied: candidate.readerDecisionAudit.spreadCorrectionApplied,
+          ...(candidate.marketConsequence ? { jointConflict: candidate.marketConsequence.books.some(b => b.jointStatus === "joint_conflict") ||
+            candidate.marketConsequence.arbitration.margin.conflicts.length > 0 ||
+            candidate.marketConsequence.reasons.some(r => r.includes("provider_economic_conflict")) } : {}),
         },
         spread: {
           readQualified: candidate.final.movementQualified,
-          correctionApplied: candidate.final.movementApplied,
+          correctionApplied: candidate.readerDecisionAudit.spreadCorrectionApplied,
           magnitudePoints: candidate.readerDecisionAudit.spreadMagnitudePoints,
         },
         total: {
@@ -310,12 +384,16 @@ export function applyNbaProfessionalCandidate(args: {
         ...professionalAvailabilityReasons,
         `Professional independent release: ${candidate.modelRelease}.`,
         `Unified projection release: ${candidate.final.release}.`,
-        candidate.final.movementApplied
+        ...(candidate.marketConsequence ? [
+          `Continuous margin decision: ${candidate.marketConsequence.actions.margin}; Total: ${candidate.marketConsequence.actions.total}.`,
+          `Market evidence epoch: ${candidate.marketConsequence.state.knowledgeAt}; numerical independent revisions preserve source knowledge; only attested coordinate-specific consumed information retires overlap.`,
+          ...candidate.marketConsequence.reasons,
+        ] : [candidate.final.movementApplied
           ? "Qualified target-excluded categorical Spread reader changed the final margin; no consensus weight was applied."
           : "Independent score remained authoritative; no categorical Spread correction was applied.",
         candidate.final.totalMovementApplied
           ? "Qualified target-excluded categorical Total disagreement changed the final total; no consensus weight was applied."
-          : "Independent total remained authoritative; no categorical Total correction was applied.",
+          : "Independent total remained authoritative; no categorical Total correction was applied."]),
       ],
     },
     v1_probabilities: candidate.probabilities,
@@ -343,7 +421,8 @@ export function applyNbaProfessionalCandidate(args: {
               ...baseline.v1_breakdown.notes.filter((note) => !note.includes("confidence capped")),
               ...professionalAvailabilityReasons,
             ]),
-        "Professional point-in-time scorer and independent-first categorical market reader applied.",
+        candidate.marketConsequence ? "Professional independent forecast and continuous causal market decision reconciled into one final score law."
+          : "Professional point-in-time scorer applied without continuous market context.",
       ],
     },
   };
