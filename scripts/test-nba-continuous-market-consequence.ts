@@ -193,6 +193,16 @@ assert.equal(held.pressure[0]!.reaction, "held", "80% tickets AND money must not
 assert.equal(held.marginApplied, false, "held pressure is conviction evidence, not invented points");
 const notMatching = run(heldRows, heldSeed.state, { splitRows: [{ ...split, marketLine: 5.5 }] });
 assert.equal(notMatching.pressure[0]!.reaction, "unmatched_quote_context");
+const unmatchedNamedOpposition = resolveNbaConsequencePosture({ consequence: notMatching, market: "spread", pickedSide: "away" });
+assert.ok(unmatchedNamedOpposition.convictionRiskSources!.includes("circa:unmatched_named_pressure_against_pick"),
+  "verified opposite named-book pressure remains conviction risk when exact quote timing cannot identify the reaction");
+assert.equal(gradeNbaMarket({ ...earnedBest, market: "spread", pick: "away", namedBookPosture: unmatchedNamedOpposition }).grade, "lean",
+  "unmatched opposite named-book pressure tempers Best Angle without inventing a score or side change");
+const unmatchedNamedAgreement = resolveNbaConsequencePosture({ consequence: notMatching, market: "spread", pickedSide: "home" });
+assert.equal(unmatchedNamedAgreement.convictionRiskSources!.includes("circa:unmatched_named_pressure_against_pick"), false,
+  "unmatched named pressure agreeing with a pick is context, not fabricated confirmation or opposition");
+assert.deepEqual(unmatchedNamedAgreement.supportingSources, [],
+  "an unmatched split cannot promote or confirm the pick without a verified quote reaction");
 
 const followerRows = [...sequence, ...pair("moneyline", "draftkings", epoch, 0, .5), ...pair("moneyline", "draftkings", "2026-10-31T15:30:00Z", 0, .45)];
 assert.equal(run(followerRows, initialized.state).followers[0]!.reaction, "followed");

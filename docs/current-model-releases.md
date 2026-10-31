@@ -83,11 +83,11 @@ Last reviewed: 2026-10-31
 
 Candidate model/marriage/grade are
 `nba_professional_unified_2026_10_31_r30_chronology_fitted_innovation` /
-`nba_market_marriage_2026_10_31_r31_chronology_fitted_innovation` /
-`nba_grade_policy_2026_10_31_r20_chronology_fitted_final_forecast`.
+`nba_market_marriage_2026_10_31_r32_unmatched_named_pressure_guard` /
+`nba_grade_policy_2026_10_31_r21_unmatched_named_pressure_guard`.
 The active decision head is
 `nba_market_consequence_2026_10_31_r5_chronology_fitted_innovation`;
-posture is `nba_named_book_posture_2026_10_31_r6_deferred_numeric_direction_retained`.
+posture is `nba_named_book_posture_2026_10_31_r7_unmatched_named_pressure_guard`.
 These identifiers describe the publication candidate, not a claim that it is
 already production. They supersede the rejected r3 dynamic-scale reader. That
 reader was not published and must not be restored.
@@ -103,6 +103,12 @@ median, source vote, arbitrary cap, or dynamic blend. Margin `1.813` is the
 proper-score coefficient fitted on the 2023-24 and 2024-25 development seasons.
 Total `1.0` is the predeclared no-amplification transport rule because the
 unconstrained fitted coefficient harmed market-direction performance.
+
+R32/r21/r7 preserve r5's exact score law and add one grade-only sharp-context
+guard. Verified named-book split pressure opposing a pick remains conviction
+risk when the exact pre-pressure quote needed to classify the response is
+unavailable. It may temper Best Angle to Lean, but cannot create points, flip a
+side, promote a grade, or relabel an unmatched reaction as held/aligned/opposed.
 
 Chronology-later 2025-26 confirmation (1,229 matched games) improved margin
 MAE 11.3770→11.0520, RMSE 14.5350→14.1661, and exact-line direction

@@ -4,7 +4,7 @@ import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPr
 import type { reconcileNbaMarketConsequence } from "./nbaMarketConsequence";
 
 export const NBA_NAMED_BOOK_POSTURE_RELEASE =
-  "nba_named_book_posture_2026_10_31_r6_deferred_numeric_direction_retained" as const;
+  "nba_named_book_posture_2026_10_31_r7_unmatched_named_pressure_guard" as const;
 
 export type NbaNamedBookPosture = {
   release: typeof NBA_NAMED_BOOK_POSTURE_RELEASE;
@@ -82,6 +82,15 @@ export function resolveNbaConsequencePosture(args: {
     const resistanceSide = pressure.reaction === "held" ? opposite : null;
     result.flowInterpretations!.push({ source: pressure.source, sourceType: pressure.sourceType, book: pressure.reactionBook,
       pressureSide: pressure.side, reaction: pressure.reaction, quoteSide, resistanceSide });
+    // A missing exact pre-pressure quote prevents us from declaring a held,
+    // aligned or opposed reaction. It does not erase the verified direction of
+    // a named-book split. Opposite Circa/Pinnacle/Bookmaker pressure therefore
+    // tempers only the strongest grade; it cannot invent score points, flip a
+    // side, or count as confirmation when it agrees with the pick.
+    if (pressure.reaction === "unmatched_quote_context" && pressure.sourceType === "sharp_adjacent_book" &&
+        pressure.side !== args.pickedSide) {
+      result.convictionRiskSources!.push(`${pressure.source}:unmatched_named_pressure_against_pick`);
+    }
     if (resistanceSide !== null && pressure.reactionBook !== null) {
       if (resistanceSide === args.pickedSide) result.heldResistanceSupportingSources!.push(pressure.reactionBook);
       else result.convictionRiskSources!.push(`${pressure.source}:${pressure.reactionBook}:held_under_pressure`);
