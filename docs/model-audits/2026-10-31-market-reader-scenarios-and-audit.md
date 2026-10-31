@@ -59,6 +59,43 @@ Forward measurement must distinguish model releases and locked timestamps;
 it cannot retroactively make a structurally incorrect method professional.
 This audit used no new paid provider requests or production prediction writes.
 
+### Reliability-aware joint inference: reviewed option, not invented calibration
+
+The owner's actual clarification in the coordinated basketball chat allows a
+weighting/blending method only if multiple outside auditors confirm it serves
+the product vision. That does not authorize fixed percentages or guessed
+parameters. Independent AI method review supports joint inference as a
+defensible candidate: the independent prediction is one noisy observation of
+the same latent final game state as current exact-contract market evidence.
+An influence rule is mathematically unavoidable; that fact alone does not
+prove blending is best, establish sharp identity, or determine coefficients.
+
+The separate read-only calibration audit found no release-qualified NBA
+per-game input-mean uncertainty, source bias/error or cross-input covariance
+artifact in inspected runtime/research paths. R15 exports game residual scales
+(margin12.9641, Total18.2516, margin mixture), not epistemic/source covariance.
+Those scales originated in the historical market-marriage final distribution
+and subsequent probability calibration; they cannot be relabeled independent
+mean reliability. Its metric bootstrap resamples fixed errors, not refitted
+model parameters. The compact frozen bootstrap has6152games/12304team boxes
+and source hashes, but no sportsbook/news chronology. The two current-board
+receipts have seven games each and no outcomes; raw input arrays were hashed,
+not serialized. Named full research source/features paths were not found
+locally; that is not evidence upstream/archive data cannot be recovered.
+
+Tracked MR20: define the estimand/contract measurement, establish comparable-
+time paired input receipts and attributable consumed-information lineage,
+estimate source biases/dependence with a declared method, and keep shared
+outcome noise distinct from input-mean uncertainty. Duplicate feeds and copied
+followers cannot create precision. Same-book ML/spread require temporal and
+settlement alignment. Each calibrated release must own one coherent final
+score law, probabilities and decisions. The coordinated owner is checking
+actual DB coverage; no claim of a usable joined calibration dataset yet.
+Do not reuse the rejected opening/closing residual proxy, treat disagreement
+as calibrated uncertainty, or fill missing covariance with convenient numbers.
+This is a missing inference component, not a demand to wait for a win-rate
+qualification or resume a broad historical model tournament.
+
 ## Scope and honest meaning of complete
 
 The catalog below contains 120 explicitly enumerated scenario classes across
