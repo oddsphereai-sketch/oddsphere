@@ -6,6 +6,62 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-31
 
+## NFL named-price chronology candidate — October 31, private
+
+- The proposed sole writer `nfl_forward_evidence_writer_2026_10_31_r94_single_episode_price_corroboration`
+  reads the existing leased Market Intelligence V2 Owl's Circa/Pinnacle observation tape;
+  it makes no second provider request and never uses those books as the evaluated member quote.
+  Exact same-run, two-sided, source-timed Moneyline/Spread/Total pairs feed
+  `nfl_daily_edge_forward_context_capture_2026_10_31_r10_owls_named_chronology` and
+  `nfl_market_state_2026_10_31_r2_named_retail_sequence`.
+- The proposed public family is
+  `nfl_v1_daily_edge_model_2026_10_31_r38_single_episode_price_corroboration` /
+  `nfl_v1_daily_edge_calibration_2026_10_31_r37_single_episode_price_corroboration` /
+  `nfl_v1_daily_edge_decision_2026_10_31_r46_single_episode_price_corroboration` /
+  `nfl_v1_grade_policy_2026_10_31_r46_single_episode_price_corroboration` /
+  `nfl_v1_member_release_2026_10_31_r43_single_episode_price_corroboration` /
+  `nfl_weekly_member_fixture_2026_10_31_r58_single_episode_price_corroboration` /
+  `nfl_forward_member_snapshot_2026_10_31_r50_single_episode_price_corroboration`.
+  The full-game runtime is r4, ledger r7, arbiter r20, and spread direction model r23.
+  The proposed no-weight classifier is
+  `nfl_v1_no_weight_market_reader_2026_10_31_r5_independent_classification_target_free_score`;
+  target-excluded outcome is
+  `nfl_target_excluded_market_outcome_2026_10_31_r21_paired_price_score_authority`.
+  Prior locked r40/r55/r47 payloads remain immutable and retain exact reader precedence.
+- **Not production-qualified:** although source pairing and focused/model-change tests pass,
+  the final NFL arbiter still has a rigid winner-change permission path that can ignore
+  a credible standalone price episode. The independent score must be one input to a
+  unified game read, not an untouchable answer or a competing expert ballot. A no-write
+  13-game current-board run used stored timestamped Playbook observations because this
+  local workspace lacks its key; 39 markets evaluated, zero writes. The latest r19/r3
+  candidate was seven Best Angles, three Leans, 10 Watchlists, 19 No Plays versus the
+  prior stored r1 board's 14 actionables. The candidate changes some sides and scores;
+  provider-time differences prevent attributing this whole delta solely to code. This
+  is not a qualified same-input publication comparison. The optional joint gap-fill
+  path made zero actionable promotions or demotions, one nonactionable promotion,
+  and one nonactionable demotion on the same run.
+  Private r1 Moneyline/Spread/Total episode transport and a joint discrete-law
+  reader can move a tight score across the winner boundary without a flip quota;
+  focused tests preserve one coherent score/probability output. These pure
+  components are not connected to the writer, current-level/split interpretation,
+  or grades and are not qualified as a final reader.
+  A separate private r1 gap-fill operator preserves any market-adjusted axis
+  in the incumbent forecast before admitting a named-book consequence on an
+  untouched axis; it is likewise unwired and not a production release.
+  The synthetic reflection in the older no-weight/three-state score path is now
+  removed in this candidate: score-changing market authority requires an exact
+  target-excluded paired-price-derived margin/Total candidate. The final arbiter
+  now uses a coherent paired-price-implied whole-game score rather than an unrelated
+  statistical expert and removes a blanket Moneyline-promotion veto. However, the
+  actionable board still contracts. A clean standalone named episode can now
+  receive authority when a separate target-excluded current paired price confirms
+  its side. The subsequent no-write 13-game run showed zero incremental score,
+  side, or grade changes from r19/r3; the board remained seven Best Angles,
+  three Leans, 10 Watchlists, and 19 No Plays. Product conformance and grade
+  impact remain unresolved.
+  No accuracy claim or public cutover is authorized; see
+  `docs/model-audits/2026-10-31-nfl-named-price-chronology.md`.
+
 ## Soccer complete-market and current-price health repair — October 31
 
 - Owner-directed all-product data-health audit repairs current EPL/UCL ingestion:

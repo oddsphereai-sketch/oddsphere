@@ -16,6 +16,13 @@ import {
 } from "../lib/services/football/nflV1WeekOneOutcome";
 import type { NflV1ActionableGradeBundle } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import type { NflRegularEvaluatedBetDecision } from "../lib/services/football/nflRegularDecisionEvidence";
+import {
+  NFL_V1_MEMBER_RELEASE,
+  NFL_V1_PRODUCTION_MODEL_RELEASE,
+  NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
+  NFL_V1_PRODUCTION_DECISION_RELEASE,
+  NFL_V1_GRADE_POLICY_RELEASE,
+} from "../lib/services/football/nflV1ProductionDecision";
 
 const evaluatedAt = "2026-10-25T16:00:00.000Z";
 const gameStartsAt = "2026-10-26T20:00:00.000Z";
@@ -66,6 +73,7 @@ const narrowHomeWinner = buildNflIndependentScoreBaseForecast({
 const favoriteCoverCorrection = applyNflThreeStateMarketReader({
   forecast: narrowHomeWinner,
   authority: authority({ side: 1, outcomeBoundarySide: 1, spreadBoundary: 3 }),
+  marketImpliedHomeMargin: 4,
 });
 assert.equal(favoriteCoverCorrection.threeStateMarketReader?.state, "value_resistance",
   "agreeing on the outright winner is not confirmation when the qualified sharp side opposes the projected cover");
@@ -79,6 +87,7 @@ assert.ok(Math.abs(favoriteCoverCorrection.expectedHomeScore +
 const outcomeCorrection = applyNflThreeStateMarketReader({
   forecast: base,
   authority: authority({ side: -1, outcomeBoundarySide: -1 }),
+  marketImpliedHomeMargin: -4,
 });
 assert.equal(outcomeCorrection.expectedHomeScore - outcomeCorrection.expectedAwayScore, -4);
 assert.equal(outcomeCorrection.threeStateMarketReader?.state, "outcome_correction");
@@ -88,6 +97,7 @@ assert.ok(Math.abs(outcomeCorrection.expectedHomeScore + outcomeCorrection.expec
 const valueResistance = applyNflThreeStateMarketReader({
   forecast: base,
   authority: authority({ side: -1, outcomeBoundarySide: 1, spreadBoundary: 3 }),
+  marketImpliedHomeMargin: 1.5,
 });
 assert.equal(valueResistance.expectedHomeScore - valueResistance.expectedAwayScore, 1.5);
 assert.equal(valueResistance.threeStateMarketReader?.state, "value_resistance");
@@ -98,10 +108,18 @@ assert.ok(Math.abs(valueResistance.expectedHomeScore + valueResistance.expectedA
 const rejectedWinnerCross = applyNflThreeStateMarketReader({
   forecast: base,
   authority: authority({ side: -1, outcomeBoundarySide: 1, spreadBoundary: -1 }),
+  marketImpliedHomeMargin: -2,
 });
 assert.equal(rejectedWinnerCross.expectedHomeScore - rejectedWinnerCross.expectedAwayScore, 4,
   "value resistance cannot cross the outright winner boundary");
 assert.equal(rejectedWinnerCross.threeStateMarketReader?.spreadBoundaryCorrectionApplied, false);
+const noPairedPrice = applyNflThreeStateMarketReader({
+  forecast: base,
+  authority: authority({ side: -1, outcomeBoundarySide: -1, spreadBoundary: 3 }),
+});
+assert.equal(noPairedPrice.expectedHomeScore - noPairedPrice.expectedAwayScore, 4,
+  "a categorical signal without a target-excluded paired price cannot reflect a score across zero or a line");
+assert.equal(noPairedPrice.threeStateMarketReader?.outcomeCorrectionApplied, false);
 
 const moneylineFamilies: NflForwardContextMarket["families"] = [
   ["circa", "s", "c", null,
@@ -234,11 +252,12 @@ assert.equal(crossMarketResistanceAuthority.spreadBoundary, -3);
 const crossMarketResistanceCorrection = applyNflThreeStateMarketReader({
   forecast: narrowHomeWinner,
   authority: crossMarketResistanceAuthority,
+  marketImpliedHomeMargin: -8,
 });
 assert.equal(crossMarketResistanceCorrection.threeStateMarketReader?.state, "outcome_correction");
 assert.equal(crossMarketResistanceCorrection.expectedHomeScore -
   crossMarketResistanceCorrection.expectedAwayScore, -8,
-  "the resistance route mirrors the stale upset margin across the target-excluded Spread boundary");
+  "the resistance route selects a target-excluded price-derived score candidate");
 assert.ok(Math.abs(crossMarketResistanceCorrection.expectedHomeScore +
   crossMarketResistanceCorrection.expectedAwayScore - 44) < 1e-6,
   "cross-market resistance cannot alter the independently resolved Total projection");
@@ -272,7 +291,9 @@ const baltimoreAuthority = buildNflThreeStateMarketAuthority({
 assert.equal(baltimoreAuthority.reason, "qualified_named_price_and_two_source_flow");
 assert.equal(baltimoreAuthority.side, -1);
 assert.equal(baltimoreAuthority.outcomeBoundarySide, -1);
-const baltimoreCorrection = applyNflThreeStateMarketReader({ forecast: base, authority: baltimoreAuthority });
+const baltimoreCorrection = applyNflThreeStateMarketReader({
+  forecast: base, authority: baltimoreAuthority, marketImpliedHomeMargin: -4,
+});
 assert.equal(baltimoreCorrection.expectedHomeScore - baltimoreCorrection.expectedAwayScore, -4,
   "the Cincinnati-over-Baltimore pattern crosses the target-excluded 50% boundary and corrects the winner");
 
@@ -308,10 +329,11 @@ assert.equal(crossMarketBaltimoreAuthority.reason,
 const crossMarketBaltimoreCorrection = applyNflThreeStateMarketReader({
   forecast: base,
   authority: crossMarketBaltimoreAuthority,
+  marketImpliedHomeMargin: -10,
 });
 assert.equal(crossMarketBaltimoreCorrection.expectedHomeScore -
   crossMarketBaltimoreCorrection.expectedAwayScore, -10,
-"the cross-market route reflects the stale independent margin across the target-free spread boundary");
+"the cross-market route selects the target-free paired-price score candidate");
 assert.ok(Math.abs(crossMarketBaltimoreCorrection.expectedHomeScore +
   crossMarketBaltimoreCorrection.expectedAwayScore - 44) < 1e-6,
 "the cross-market correction cannot alter the Total projection");
@@ -361,6 +383,7 @@ assert.equal(sanFranciscoAuthority.outcomeBoundarySide, -1);
 const sanFranciscoCorrection = applyNflThreeStateMarketReader({
   forecast: sanFranciscoBase,
   authority: sanFranciscoAuthority,
+  marketImpliedHomeMargin: -1.25,
 });
 assert.equal(sanFranciscoCorrection.expectedHomeScore - sanFranciscoCorrection.expectedAwayScore, -1.25,
   "the Atlanta resistance pattern changes the cover side without blindly flipping the SF winner");
@@ -499,12 +522,12 @@ function bundle(evaluatedBets: NflRegularEvaluatedBetDecision[]): NflV1Actionabl
   return {
     evaluatedBets,
     outcomeConfidence: [],
-    modelPromotionStatus: "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation",
+    modelPromotionStatus: NFL_V1_MEMBER_RELEASE,
     publicationEnabled: true,
     trackingEnabled: false,
-    modelRelease: "nfl_v1_daily_edge_model_2026_10_26_r35_complete_signal_interpretation",
-    calibrationRelease: "nfl_v1_daily_edge_calibration_2026_10_26_r34_complete_signal_interpretation",
-    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation",
-    policyRelease: "nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation",
+    modelRelease: NFL_V1_PRODUCTION_MODEL_RELEASE,
+    calibrationRelease: NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
+    decisionRelease: NFL_V1_PRODUCTION_DECISION_RELEASE,
+    policyRelease: NFL_V1_GRADE_POLICY_RELEASE,
   };
 }

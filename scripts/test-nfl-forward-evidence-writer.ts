@@ -22,7 +22,11 @@ import {
   NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
   NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
 } from "../lib/services/football/nflV1ActionableGradeCandidate";
-import { NFL_FORWARD_CONTEXT_CAPTURE_RELEASE } from "../lib/services/football/nflForwardEvidenceCapture";
+import {
+  buildNflForwardContextMarket,
+  NFL_FORWARD_CONTEXT_CAPTURE_RELEASE,
+} from "../lib/services/football/nflForwardEvidenceCapture";
+import { captureBooksWithSharpBooks } from "../lib/services/football/sharpApiFootballSharpOdds";
 import {
   NFL_WEEK_ONE_EVIDENCE_BOARD_RELEASE,
   buildNflWeekOneEvidenceBoard,
@@ -31,8 +35,27 @@ import {
   hasImmutableNflLockedRecord,
   latestVerifiedInjuriesForGame,
   nflEvidenceCapturedAt,
+  usableNflNamedPriceBooks,
   preserveVerifiedNflLockedGames,
+  runNflForwardEvidenceWriter,
 } from "../lib/services/football/nflForwardEvidenceWriter";
+
+void (async () => {
+  await assert.rejects(
+    runNflForwardEvidenceWriter({ apply: true, auditJointImpact: () => {} } as unknown as
+      Parameters<typeof runNflForwardEvidenceWriter>[0]),
+    /joint-impact audit options are forbidden on the authoritative writer/,
+    "a no-write market-impact hook must never run inside the production writer",
+  );
+  await assert.rejects(
+    runNflForwardEvidenceWriter({ apply: true, playbookAuditOnlySkip: true } as
+      Parameters<typeof runNflForwardEvidenceWriter>[0]),
+    /joint-impact audit options are forbidden on the authoritative writer/,
+    "a locally missing Playbook key must never suppress production ingestion",
+  );
+})().catch((error: unknown) => {
+  throw error;
+});
 
 const game: NflPreviewGame = {
   providerGameId: "1001",
@@ -385,6 +408,8 @@ assert.equal((writer.match(/buildNflProfessionalMarketAuthority\(\{/g) ?? []).le
 assert.equal((writer.match(/buildNflNamedMarketSequenceAuthority\(\{/g) ?? []).length, 1,
   "named authority must be built only inside the evaluated-family exclusion loop");
 assert.match(writer, /forecastTargetExclusion: resolved\.targetExclusion/);
+assert.match(writer, /buildNflMarketState\(\{[\s\S]*?excludedFamilies: excludedFamiliesByMarket\[market\]/,
+  "the evaluated sportsbook must be excluded before named-book direction and resistance are formed");
 assert.match(writer, /outcomeForecast: outcome/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
 assert.match(writer, /writeOfficialTrackingFromPayloads/);
@@ -396,7 +421,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_10_27_r91_owls_capture_only/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_10_31_r94_single_episode_price_corroboration/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");
@@ -708,6 +733,35 @@ assert.equal(allBooks[game.providerGameId]?.length, 3);
 assert.equal(allBooks[game.providerGameId]?.find((row: NflPreviewBookOdds) => row.sportsbook === "FanDuel")?.observedAt, "2026-08-22T13:00:00.000Z");
 const comparableBooks = __BALLDONTLIE_NFL_PREVIEW_SLATE_TEST__.comparableBooksByGame(allBooks);
 assert.deepEqual(comparableBooks[game.providerGameId]?.map((row: NflPreviewBookOdds) => row.sportsbook), ["FanDuel", "DraftKings"]);
+const sharpEvidenceBook: NflPreviewBookOdds = {
+  ...comparableBooks[game.providerGameId]![0]!,
+  sportsbook: "circa", provider: "sharpapi", targetEligible: false,
+};
+const mergedEvidence = captureBooksWithSharpBooks(comparableBooks[game.providerGameId]!, [sharpEvidenceBook]);
+assert.deepEqual(mergedEvidence.map((row) => row.sportsbook), ["circa", "FanDuel", "DraftKings"]);
+assert.equal(sharpEvidenceBook.targetEligible, false,
+  "named-book evidence remains ineligible as an executable member quote");
+const mixedClockSharpBook: NflPreviewBookOdds = {
+  ...sharpEvidenceBook,
+  observedAt: "2026-08-22T13:31:00.000Z",
+  marketObservedAt: {
+    moneyline: "2026-08-22T13:00:00.000Z",
+    spread: "2026-08-22T11:00:00.000Z",
+    total: "2026-08-22T13:31:00.000Z",
+  },
+};
+const scopedSharp = usableNflNamedPriceBooks([mixedClockSharpBook], "2026-08-22T13:30:00.000Z")[0]!;
+assert.ok(scopedSharp.moneyline);
+assert.equal(scopedSharp.spread, null, "an old Spread quote cannot be refreshed by a newer ML quote");
+assert.equal(scopedSharp.total, null, "a future provider Total quote cannot enter a pregame decision");
+assert.equal(scopedSharp.targetEligible, false);
+const scopedContext = buildNflForwardContextMarket({
+  market: "moneyline", capturedAt: "2026-08-22T13:30:00.000Z",
+  currentBooks: [scopedSharp], openingBooks: [], operationalOpening: scopedSharp,
+  decision: null, homeTeam: "SEA", publicEvidence: null, sharpEvidence: null,
+});
+assert.equal(scopedContext.families[0]?.[5][0], "2026-08-22T13:00:00.000Z",
+  "the reader must use the market-specific source timestamp, not another market's latest timestamp");
 
 const candidatePage = readFileSync(path.resolve("app/lab/daily-edge/CandidateDailyEdgePage.tsx"), "utf8");
 const nflMemberReader = readFileSync(path.resolve("lib/services/football/nflMemberReader.ts"), "utf8");
@@ -726,6 +780,14 @@ assert.match(candidatePage, /readCurrentNflWeekOneHeldMemberFixture/);
 assert.doesNotMatch(candidatePage, /nflWeekOneEvidenceBoard=\{/);
 assert.doesNotMatch(candidatePage, /nflPublishedMemberSnapshotStore|readCurrentNflPublishedMemberSnapshot/);
 const writerSource = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
+const nflCronSource = readFileSync(path.resolve("app/api/cron/nfl-forward-evidence/route.ts"), "utf8");
+assert.doesNotMatch(nflCronSource, /sharpApiKey: process\.env\.SHARPAPI_KEY\?\.trim\(\)/);
+assert.match(writerSource, /readNflOwlsNamedPriceHistory/);
+assert.doesNotMatch(writerSource, /fetchSharpApiNflSharpOdds/);
+assert.match(writerSource, /const contextCurrentBooks = captureBooksWithSharpBooks\(/);
+assert.match(writerSource, /captureCurrentBooks: contextCurrentBooks/);
+assert.match(writerSource, /namedPriceCapture:/);
+assert.match(writerSource, /nfl_named_price_history_partial/);
 assert.equal(
   writerSource.match(/nflForwardT60TrackingEligibility\(\{[^}]*outcomeConfidence:/g)?.length,
   2,

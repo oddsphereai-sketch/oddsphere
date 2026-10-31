@@ -17,12 +17,12 @@ import {
   type NflV1ActionableGradeBundle,
 } from "./nflV1ActionableGradeCandidate";
 import {
-  buildNflIndependentScoreBaseForecast,
+  buildNflUnifiedMarketAdjustedForecast,
   type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_10_26_r1_complete_signal_interpretation" as const;
+  "nfl_full_game_evidence_runtime_2026_10_31_r4_single_episode_price_corroboration" as const;
 
 type Market = "moneyline" | "spread" | "total";
 
@@ -79,13 +79,11 @@ export function applyNflFullGameEvidenceRuntime(args: {
       arbitration,
     };
   }
-  const coherent = buildNflIndependentScoreBaseForecast({
+  const coherent = buildNflUnifiedMarketAdjustedForecast({
     baseForecast: args.releasedForecast,
-    independentScore: {
-      expectedHomeMargin: arbitration.finalHomeMargin,
-      expectedTotal: arbitration.finalTotal,
-      marketInputPolicy: "prohibited_from_independent_score",
-    },
+    expectedHomeMargin: arbitration.finalHomeMargin,
+    expectedTotal: arbitration.finalTotal,
+    marketInputPolicy: "target_excluded_continuous_residual",
   });
   const outcome: NflV1WeekOneOutcomeForecast = {
     ...args.releasedForecast,

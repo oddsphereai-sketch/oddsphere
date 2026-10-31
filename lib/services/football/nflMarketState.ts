@@ -3,7 +3,7 @@ import type { NflForwardContextFamily, NflForwardContextMarket } from "./nflForw
 import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_STATE_RELEASE =
-  "nfl_market_state_2026_10_09_r1_truthful_signal_identity" as const;
+  "nfl_market_state_2026_10_31_r2_named_retail_sequence" as const;
 
 export type NflMarketStateMarket = "moneyline" | "spread" | "total";
 export type NflMarketStateSide = -1 | 1;
@@ -100,21 +100,31 @@ export function buildNflMarketState(args: {
   const namedMoved = trails.filter((trail): trail is NflMarketStateTrail & { direction: NflMarketStateSide } =>
     trail.sourceClass === "named" && trail.direction !== null && !trail.buybackToOpening);
   const namedDirections = new Set(namedMoved.map((trail) => trail.direction));
-  const namedDirection = namedMoved.length >= 2 && namedDirections.size === 1
+  const candidateNamedDirection = namedMoved.length > 0 && namedDirections.size === 1
     ? namedMoved[0]!.direction
     : null;
-  const namedMoveTimes = namedDirection === null
+  const namedMoveTimes = candidateNamedDirection === null
     ? []
     : namedMoved.map(firstMaterialMoveAt).filter((value): value is string => value !== null);
-  const namedLeadCompletedAt = namedMoveTimes.length === namedMoved.length && namedMoveTimes.length >= 2
+  const candidateLeadAt = namedMoveTimes.length === namedMoved.length && namedMoveTimes.length > 0
     ? new Date(Math.max(...namedMoveTimes.map(Date.parse))).toISOString()
     : null;
-  const namedLeadCompletedAtMs = namedLeadCompletedAt === null ? null : Date.parse(namedLeadCompletedAt);
-  const followers = namedDirection === null || namedLeadCompletedAt === null
+  const candidateLeadAtMs = candidateLeadAt === null ? null : Date.parse(candidateLeadAt);
+  const candidateFollowers = candidateNamedDirection === null || candidateLeadAt === null
     ? []
-    : trails.filter((trail) => trail.sourceClass === "retail" && trail.direction === namedDirection &&
+    : trails.filter((trail) => trail.sourceClass === "retail" && trail.direction === candidateNamedDirection &&
       !trail.buybackToOpening && firstMaterialMoveAt(trail) !== null &&
-      Date.parse(firstMaterialMoveAt(trail)!) >= namedLeadCompletedAtMs!);
+      Date.parse(firstMaterialMoveAt(trail)!) > candidateLeadAtMs!);
+  // One named source can establish a market episode if a genuinely separate
+  // retail family subsequently follows it. Two named sources can establish it
+  // without retail follow-through. Neither a lone named tick nor simultaneous
+  // retail movement is silently promoted to independent confirmation.
+  const namedDirection = candidateNamedDirection !== null &&
+    (namedMoved.length >= 2 || candidateFollowers.length > 0)
+    ? candidateNamedDirection : null;
+  const namedLeadCompletedAt = namedDirection === null ? null : candidateLeadAt;
+  const namedLeadCompletedAtMs = namedLeadCompletedAt === null ? null : Date.parse(namedLeadCompletedAt);
+  const followers = namedDirection === null ? [] : candidateFollowers;
   const qualifyingSplits = splits.filter((split) => Math.abs(split.gapPp) >= splitMinimum(split));
   const flow = strongestSplit(qualifyingSplits);
   const priceDirections = trails.filter((trail) => trail.direction !== null).map((trail) => trail.direction!);

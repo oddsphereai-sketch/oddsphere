@@ -12,6 +12,7 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 import {
   buildNflMarketEvidenceOutcomeForecast,
+  inferNflTargetExcludedSpreadMean,
   NFL_V1_WEEKLY_RAW_SIGNAL_RELEASE,
   type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
@@ -26,7 +27,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration" as const;
+  "nfl_target_excluded_market_outcome_2026_10_31_r21_paired_price_score_authority" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -163,7 +164,21 @@ export function resolveNflTargetExcludedProduction(args: {
         spread: marginExcluded,
         total: initialTargets.total,
       });
-      const classified = applyNflThreeStateMarketReader({ forecast: baseline.outcome, authority });
+      const marginAnchor = resolveNflTargetExcludedMarketAnchor({
+        books: args.comparableCurrentBooks,
+        marginExcludedSportsbooks: marginExcluded,
+        totalExcludedSportsbooks: initialTargets.total,
+        evaluatedAt: args.evaluatedAt,
+      });
+      const classified = applyNflThreeStateMarketReader({
+        forecast: baseline.outcome,
+        authority,
+        marketImpliedHomeMargin: marginAnchor ? inferNflTargetExcludedSpreadMean({
+          independentForecast: args.baseOutcome,
+          homeMarginBoundary: marginAnchor.homeMargin,
+          homeCoverFairProbability: marginAnchor.spreadHomeFairProbability,
+        }) : null,
+      });
       const reader = classified.threeStateMarketReader;
       if (reader?.status !== "available") return safeResistance ?? baseline;
 
@@ -291,7 +306,15 @@ export function resolveNflTargetExcludedProduction(args: {
       total: excluded.total,
     });
     const outcomeCandidate = threeStateAuthority
-      ? applyNflThreeStateMarketReader({ forecast: unifiedOutcome, authority: threeStateAuthority })
+      ? applyNflThreeStateMarketReader({
+          forecast: unifiedOutcome,
+          authority: threeStateAuthority,
+          marketImpliedHomeMargin: inferNflTargetExcludedSpreadMean({
+            independentForecast: args.baseOutcome,
+            homeMarginBoundary: anchor.homeMargin,
+            homeCoverFairProbability: anchor.spreadHomeFairProbability,
+          }),
+        })
       : unifiedOutcome;
     const productionCandidate = applyNflThreeStateGradePolicy({
       baseline: buildProduction(unifiedOutcome),

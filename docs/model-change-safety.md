@@ -1,5 +1,39 @@
 # Model change safety protocol
 
+## Owner-directed NFL market-reader repair — October 31, private candidate
+
+The proposed NFL release reads exact two-sided Circa/Pinnacle price chronology
+from the existing Owl's observation owner, including market-specific source
+times, rather than treating a single current capture as a movement history.
+It interprets named-book movement, retail follow-through, split conflict,
+winner/cover divergence, and coherent whole-game score consequences. Named
+prices remain capture-only and cannot become the member's executable quote.
+No extra paid price request, separate writer, lease change, or locked-record
+rewrite is permitted. Older locked payloads must render under their stored
+release before any future unlocked r43 decision. Publication is gated on
+the focused conformance tests, release-pure board-count report, full
+`npm run verify:model-change`, latest-main integration safety, protected PR,
+and post-merge live evidence/reader checks. Until those checks pass the
+candidate remains private; no improvement in win rate is claimed.
+The later r5/r21/r20 private correction removes synthetic zero/line-reflected
+score changes and prevents the final semantic arbiter from borrowing an
+unrelated statistical or player-aware score as market authority. A coherent
+target-excluded paired-price-derived whole-game score can move the final
+margin and Total; the independent estimate remains evidence, not a veto.
+The r20 grade policy no longer automatically downgrades a Moneyline promotion
+earned by the existing grade evaluator. The latest 13-game no-write board
+had 10 candidate actionables versus 14 on an earlier stored live capture;
+those are not same-input causal deltas, and local Playbook used timestamped
+stored observations. The optional joint gap-fill path made zero actionable
+promotions or demotions, one nonactionable promotion, and one nonactionable
+demotion on the same run. A lone named move can now be corroborated by a
+separate target-free paired price; the subsequent 13-game no-write run found
+zero incremental score, side, grade, or actionable-count changes from that
+particular r20 rule. The
+board-count contract and complete episode interpretation remain unresolved, so this
+candidate does not pass product conformance and must not be published merely
+because the verification suite is green.
+
 ## Owner-directed correctness repair: all-product market-data health, October 31
 
 The owner requested a current audit and repair of Daily Edge and Player Props data.

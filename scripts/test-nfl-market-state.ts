@@ -93,6 +93,31 @@ assert.equal(state.splits[0]?.source, "retail_book", "DraftKings split remains r
 assert.equal(state.trails.find((trail) => trail.source === "circa")?.numberDelta, 0.5);
 assert.equal(state.trails.find((trail) => trail.source === "circa")?.moveOrder, "number_only");
 
+const singleNamedThenRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "draftkings", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(singleNamedThenRetail.namedDirection, 1);
+assert.deepEqual(singleNamedThenRetail.followerSources, ["draftkings"]);
+const simultaneousRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:00:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "draftkings", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(simultaneousRetail.namedDirection, null,
+  "simultaneous retail movement cannot be invented as later independent follow-through");
+
 const excluded = buildNflMarketState({
   market: "spread",
   evaluatedAt: "2026-10-09T11:30:00.000Z",
