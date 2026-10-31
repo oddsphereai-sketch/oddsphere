@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import type { NbaPortableModelArtifact } from "../lib/automodel/nba/nbaPortableScoreModel";
+import { buildNbaProfessionalCandidate } from "../lib/services/nba/nbaProfessionalCandidate";
 import { buildNbaProfessionalMarketReader, type NbaReaderPriceRow } from "../lib/services/nba/nbaProfessionalMarketReader";
 import { resolveNbaNamedBookPosture } from "../lib/services/nba/nbaNamedBookPosture";
 import { gradeNbaMarket, type GradeInput } from "../lib/services/nba/nbaMarketReview";
@@ -115,3 +117,83 @@ for (const currentPriceAmerican of [-450, -210, -110, 110]) {
   comparisons++;
 }
 console.log(`NBA observed opposition: mixed-market source retention, priced-contract ambiguity, source/clock/exclusion negatives and ${comparisons} grade pairs passed (${bestToLean} Best Angle→Lean; zero actionable changes).`);
+
+// The owner explicitly rejected an automatic favorite follower OR automatic
+// contrarian. Reflect the complete scoring/reader input, not just a pick label.
+// This is an implementation symmetry proof, not an accuracy experiment.
+const artifact: NbaPortableModelArtifact = {
+  release: "side_symmetry_fixture", featureRelease: "side_symmetry_fixture",
+  architecture: "margin_total", model: { family: "ridge", alpha: 1000 },
+  design: { features: ["strength"], missingIndicatorColumns: [], rawFeatureMedians: [0],
+    designMeans: [0], designStandardDeviations: [1], designColumns: 1, splineKnots: [] },
+  coefficients: { target_home_margin: [1, 0], target_total: [0, 220] },
+  distribution: { family: "normal_residual", marginSigma: 11.5, totalSigma: 16, calibratedOn: "fixture" },
+};
+const close = (a: number, b: number, label: string) => assert.ok(Math.abs(a - b) < 1e-9, `${label}: ${a} != ${b}`);
+function sideCase(independentMargin: number, marketMargin: number, move: number, totalMove: number, reversePriceFavorite = false) {
+  const homePriceFavorite = reversePriceFavorite ? marketMargin < 0 : marketMargin > 0;
+  const current = ["circa", "pinnacle"].flatMap(sportsbook => [
+    { market_type: "moneyline", sportsbook, side: "home", line_value: null, odds_american: homePriceFavorite ? -210 : 180, fetched_at: at },
+    { market_type: "moneyline", sportsbook, side: "away", line_value: null, odds_american: homePriceFavorite ? 180 : -210, fetched_at: at },
+    { market_type: "spread", sportsbook, side: "home", line_value: -marketMargin, odds_american: -110, fetched_at: at },
+    { market_type: "spread", sportsbook, side: "away", line_value: marketMargin, odds_american: -110, fetched_at: at },
+    { market_type: "total", sportsbook, side: "over", line_value: 220, odds_american: -110, fetched_at: at },
+    { market_type: "total", sportsbook, side: "under", line_value: 220, odds_american: -110, fetched_at: at },
+  ]);
+  const historyRows = ["circa", "pinnacle"].flatMap(book => [
+    ...pair("spread", book, "2026-10-30T20:30:00Z", -marketMargin + move),
+    ...pair("spread", book, "2026-10-30T22:00:00Z", -marketMargin),
+    ...pair("total", book, "2026-10-30T20:30:00Z", 220 - totalMove),
+    ...pair("total", book, "2026-10-30T22:00:00Z", 220),
+  ]);
+  const read = buildNbaProfessionalMarketReader({ evaluatedAt: at, priceRows: historyRows, splitRows: [],
+    selectedLines: { spreadHome: -marketMargin, total: 220 } });
+  const candidate = buildNbaProfessionalCandidate({ artifact, featureRow: { strength: independentMargin },
+    lines: current, history: [], externalGameId: 9, marketReader: read });
+  return { candidate, read };
+}
+let mirroredForecastCases = 0, favoritePriceOnlyCases = 0;
+let underdogWinnerCases = 0, favoriteWinnerCases = 0;
+let underdogSpreadCases = 0, favoriteSpreadCases = 0;
+for (const margin of [-8, -3, -0.25, 0.25, 3, 8])
+for (const marketMargin of [-6, -2, 2, 6])
+for (const move of [-3, -0.5, 0, 0.5, 3])
+for (const totalMove of [-5, 0, 5]) {
+  const originalCase = sideCase(margin, marketMargin, move, totalMove);
+  const reflectedCase = sideCase(-margin, -marketMargin, -move, totalMove);
+  const left = originalCase.candidate, right = reflectedCase.candidate;
+  close(left.final.marginHome, -right.final.marginHome, "reflected margin");
+  close(left.final.total, right.final.total, "invariant Total");
+  close(left.final.homeScore, right.final.awayScore, "reflected home score");
+  close(left.final.awayScore, right.final.homeScore, "reflected away score");
+  close(left.probabilities.ml_home_win_prob, right.probabilities.ml_away_win_prob, "reflected ML probability");
+  close(left.probabilities.spread_home_cover_prob!, right.probabilities.spread_away_cover_prob!, "reflected Spread probability");
+  close(left.probabilities.total_over_prob!, right.probabilities.total_over_prob!, "invariant Total probability");
+  if (Math.abs(left.final.marginHome) > 1e-9) assert.notEqual(left.picks.moneyline, right.picks.moneyline);
+  if (Math.abs(left.final.marginHome - marketMargin) > 1e-9) assert.notEqual(left.picks.spread, right.picks.spread);
+  assert.equal(left.picks.total, right.picks.total);
+  assert.equal(left.final.movementApplied, right.final.movementApplied);
+  assert.equal(left.final.totalMovementApplied, right.final.totalMovementApplied);
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    const a = resolveNbaNamedBookPosture({ reader: originalCase.read, market, pickedSide: left.picks[market]! });
+    const b = resolveNbaNamedBookPosture({ reader: reflectedCase.read, market, pickedSide: right.picks[market]! });
+    for (const key of ["supportingSources", "opposingSources", "conflictingSources"] as const) assert.deepEqual(a[key], b[key]);
+  }
+  const winnerIsFavorite = (left.picks.moneyline === "home") === (marketMargin > 0);
+  if (winnerIsFavorite) favoriteWinnerCases++; else underdogWinnerCases++;
+  const spreadIsFavorite = (left.picks.spread === "home") === (marketMargin > 0);
+  if (spreadIsFavorite) favoriteSpreadCases++; else underdogSpreadCases++;
+  mirroredForecastCases++;
+
+  // Changing only current ML favorite prices is economics evidence, not a
+  // direction command. A future qualified ML head must update this contract
+  // explicitly rather than silently following the shorter quote.
+  const quoteOnly = sideCase(margin, marketMargin, move, totalMove, true).candidate;
+  assert.deepEqual(left.final, quoteOnly.final);
+  assert.deepEqual(left.picks, quoteOnly.picks);
+  assert.deepEqual(left.probabilities, quoteOnly.probabilities);
+  favoritePriceOnlyCases++;
+}
+assert.ok(underdogWinnerCases > 0 && favoriteWinnerCases > 0);
+assert.ok(underdogSpreadCases > 0 && favoriteSpreadCases > 0);
+console.log(`NBA side neutrality: ${mirroredForecastCases} complete forecast reflections and ${favoritePriceOnlyCases} quote-only controls passed; both favorite/underdog winners and Spread sides are possible. Not predictive qualification.`);

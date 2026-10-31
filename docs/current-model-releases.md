@@ -68,7 +68,11 @@ Observed stable fresh target-excluded named-book opposition reaches the grade
 owner independently of flip qualification. An otherwise eligible Best Angle
 becomes a same-probability actionable Lean; it does not become a No Play.
 New member signals report resistance/mixed rather than deriving sharp
-confirmation from the actionable grade. Exact legacy locks still take priority.
+confirmation from the actionable grade. New empty/conflicting posture is
+neutral/mixed; only actual supporting-only observations can confirm, even
+when a price remains non-actionable. The720 full-forecast reflection/quote-only
+controls prove side neutrality, not predictive accuracy. Exact legacy locks
+still take priority.
 This is not the completed forecast-reader repair or an accuracy-improvement
 claim. NFL/CFB inference is not changed by this stage. Publication/live status
 and receipts: `docs/model-audits/2026-10-31-market-opposition-repair.md`.
