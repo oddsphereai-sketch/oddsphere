@@ -698,7 +698,11 @@ async function collectPlaybookSplits(opts: {
     return { fetchedRows: 0, observations: [], rejected: [], errors: ["PLAYBOOK_API_KEY missing; skipped Playbook v2 shadow splits"] };
   }
   const client = new PlaybookReadBroker(opts.apiKey, opts.prelockTimeoutMs === undefined ? undefined : {
-    timeoutMs: opts.prelockTimeoutMs, sharedCache: false,
+    // Reuse the production current-data cache; T-60 is not permission to
+    // bypass it and bill duplicate reads. This timeout applies to the direct
+    // fallback only; shared cache misses use the broker's normal 20s client.
+    // The absolute pre-write deadline below remains authoritative either way.
+    timeoutMs: opts.prelockTimeoutMs,
   });
   const readMode = playbookSplitsReadMode(opts.slateDate, opts.todayUtc);
   const res = readMode === "current"

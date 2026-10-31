@@ -82,12 +82,18 @@ Last reviewed: 2026-10-31
 ## NBA event-arbitrated market consequence — October 31 candidate
 
 Candidate model/marriage/grade are
-`nba_professional_unified_2026_10_31_r28_single_episode_reader` /
-`nba_market_marriage_2026_10_31_r29_single_episode_reader` /
+`nba_professional_unified_2026_10_31_r29_input_continuity` /
+`nba_market_marriage_2026_10_31_r30_input_continuity` /
 `nba_grade_policy_2026_10_31_r19_unified_final_forecast`.
 The active decision head is
-`nba_market_consequence_2026_10_31_r2_single_episode_arbitration`;
-posture is `nba_named_book_posture_2026_10_31_r4_episode_and_static_context`.
+`nba_market_consequence_2026_10_31_r3_input_continuity`;
+posture is `nba_named_book_posture_2026_10_31_r5_input_disposition`.
+These identifiers describe an unpublished repair, not production or complete
+joint inference. The owner requires the independent model to be one data point,
+not a protected forecast. The relative-episode operator still retains its
+starting level bias; professional absolute-level adjudication remains open.
+The sign-gated full-market replacement considered during review was rejected
+and removed, not released. See the cross-product audit's October31 addendum.
 NBA canonical receipt is `nba_canonical_price_capture_2026_10_31_r1_attested_batch`:
 the existing collector stamps one actual run ID and one receipt instant across
 NBA canonical pairs, preserving source timestamps and all non-NBA behavior.
@@ -114,9 +120,13 @@ This retains the independent head and residual family, but market constraints
 CAN change conditional margin dispersion; it is not unchanged calibration.
 Ill-conditioned scale retains the usable ML scalar with an explicit reason.
 The sole sport-scoped writer persists exact causal quote anchors in existing
-unlocked captures. Effective independent-law changes explicitly retire the old
-epoch, not claim consumption of every news item. First post-input observation
-is an anchor, not movement. Its exact current level still enters value/static
+unlocked captures. Numeric independent-law changes preserve source anchors and
+unrelated coordinates, with unresolved information overlap reaching posture
+metadata. A numeric revision alone creates no opposition or automatic grade gate.
+Only explicit newer coordinate-specific consumed-information receipts retire
+overlapping evidence; the production caller fabricates none from a hash change.
+Replayed old receipts cannot clear uncertainty from a newer datum revision.
+First observation is an anchor, not movement. Its exact current level still enters value/static
 alignment/opposition context; it is not ignored or blended into the score.
 Static opposition tempers Best, while static agreement is not labeled causal
 sharp confirmation. Same-input retries rebuild pristine independent
@@ -125,13 +135,16 @@ still take priority. Source failures, pressure/buyback/lead-lag, target-book
 fixed points and real-data source limitations are documented in:
 `docs/model-audits/2026-10-31-nba-single-episode-reader.md`.
 The existing NBA T-60 owner additionally stamps
-`nba_prelock_market_capture_2026_10_31_r1_scoped_v2`: after canonical line
+`nba_prelock_market_capture_2026_10_31_r2_shared_public_cache`: after canonical line
 refresh, capture v2 current prices/splits only for entering games, then freshly
 resolve injuries and build the final forecast/grade, check coherence, lock and
 publish. The same collector is reused under `prediction_pipeline:nba`, with
 no new timer/prediction writer, no history call or full-slate snapshot rebuild.
-This adds at most four current endpoint calls per entering-game batch (not per
-game): Owls odds/splits and Playbook splits/paired lines. Explicit timeout and
+This adds at most four current endpoint opportunities per entering-game batch
+attempt (not per game or lifetime): Owls odds/splits and Playbook splits/paired
+lines. Production Playbook shared caching remains enabled; cache misses use the
+normal20-second client timeout, direct fallback the shorter scoped timeout.
+Existing cron retries can repeat an attempt. Explicit timeout and
 absolute deadline checks precede observation writes and final prediction;
 storage/deadline failures defer the lock, while partial provider errors remain
 explicit in the stored actual-run receipt without erasing valid other sources.

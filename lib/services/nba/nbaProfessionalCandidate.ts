@@ -386,7 +386,7 @@ export function applyNbaProfessionalCandidate(args: {
         `Unified projection release: ${candidate.final.release}.`,
         ...(candidate.marketConsequence ? [
           `Continuous margin decision: ${candidate.marketConsequence.actions.margin}; Total: ${candidate.marketConsequence.actions.total}.`,
-          `Market evidence epoch: ${candidate.marketConsequence.state.knowledgeAt}; effective independent-law change retires the previous epoch, without claiming all prior news was consumed.`,
+          `Market evidence epoch: ${candidate.marketConsequence.state.knowledgeAt}; numerical independent revisions preserve source knowledge; only attested coordinate-specific consumed information retires overlap.`,
           ...candidate.marketConsequence.reasons,
         ] : [candidate.final.movementApplied
           ? "Qualified target-excluded categorical Spread reader changed the final margin; no consensus weight was applied."

@@ -1,10 +1,33 @@
 # Model change safety protocol
 
+## Cross-product independent-input contract — October 31
+
+The owner explicitly requires the independent forecast to be evidence, not a
+protected origin, competing winner or guaranteed fallback expert. The final
+sport-specific joint forecast must account for source quality, chronology,
+current levels, price/line compensation, book reaction, disagreement and the
+independent model's information lineage. It may retain, strengthen, weaken,
+moderately correct or fully reverse a forecast. Neither a fixed small nudge
+nor unconditional sharp-book adoption meets that requirement. No finite audit
+can certify every possible market scenario or eventual predictive accuracy.
+
+Outside AI reviews found material nonconformance across products; the ledger
+is `docs/model-audits/2026-10-31-market-reader-scenarios-and-audit.md`.
+NBA r29/r30/r19 with consequence r3 and posture r5 is an UNPUBLISHED continuity
+repair, NOT a completed joint-inference design. Numeric independent revisions
+preserve causal quote knowledge and mark unresolved information overlap;
+only an explicit newer coordinate-specific consumption receipt retires it.
+The current writer does not fabricate such receipts from a forecast hash.
+Absolute-level adjudication remains unresolved. A proposed sign-based full
+market replacement was rejected after a 0.0001pp quote change caused a
+20.0995-point flip. It is not in the candidate. Do not publish this artifact
+as satisfying the owner's complete market-reader standard.
+
 ## NBA single-episode market consequences — October 31 candidate
 
 The owner stopped historical fitting and directed production-path functional
-repairs followed by forward performance measurement. Candidate NBA modelr28 /
-marriager29 / grader19 / readerr9 / posturer4 selects one physical-source
+repairs followed by forward performance measurement. Candidate NBA modelr29 /
+marriager30 / grader19 / readerr9 / posturer5 selects one physical-source
 causal episode per coordinate before applying its actual economic displacement.
 There is no market/model blend, logit posterior, cross-book median, source-count
 vote or minimum signal-size permission. Same-book ML/Spread constraints remain;
@@ -14,8 +37,9 @@ sport-scoped writer persists bounded epoch/anchor state in unlocked snapshots.
 Full/partial compensation, small/price-only moves, pressure/reaction timing,
 partial buybacks, lead/follow and actual-target exclusion have deterministic
 production-path coverage. Exact stored locks still win; no reconstruction.
-Current-forecast-law epoch changes retire old market evidence as policy, not
-proof all news was consumed. First quote seeds an anchor and is interpreted as
+Numeric forecast revisions no longer clear source anchors or unrelated axes.
+Unknown information overlap is explicit lineage uncertainty, not proof of consumed
+news or a reason to silently erase evidence. First quote seeds an anchor and is interpreted as
 exact static/value context; it is not invented chronology. Static opposition,
 held named books, aligned/opposed timed split reactions and unresolved episodes
 reach grade/member posture without arbitrary score points. Causal followers do
@@ -31,8 +55,11 @@ collector, preserving source clocks and non-NBA behavior. This is decision-stage
 proof, not predictive improvement or full raw-feature/writer replay. No silent board contraction, duplicate writer,
 production shadow or accuracy guarantee is authorized. The scoped T-60 follow-up
 uses the existing leased collector for entering NBA games only: at most four
-additional current endpoint calls per batch, no history/per-game fetch, bounded
-provider timeouts and absolute deadline checks. This explicit cost increase
+additional current endpoint opportunities per attempt, no history/per-game fetch,
+production Playbook shared-cache reuse, provider timeouts and absolute deadline
+checks. Shared Playbook cache misses retain the normal20-second timeout; only
+direct fallback uses the shorter scoped timeout. A failed lock can retry on the
+existing cadence, so four is not a lifetime/per-game cost cap. This cost increase
 must be included in the release/live operational check; do not call it zero-cost.
 Normal fresh-main/PR/live checks remain mandatory. Details:
 docs/model-audits/2026-10-31-nba-single-episode-reader.md. The new head needs its

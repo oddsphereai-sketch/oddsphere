@@ -5,6 +5,8 @@ import { syncMarketIntelligenceV2Shadow } from "../lib/services/marketIntelligen
 import { assertNbaPrelockCaptureBudget, selectNbaPrelockCaptureGames } from "../lib/services/nba/nbaPrelockMarketCapture";
 
 async function main() {
+  assert.doesNotMatch(readFileSync("lib/services/marketIntelligenceV2/shadowSync.ts", "utf8"), /sharedCache:\s*false/,
+    "scoped lock capture cannot silently bypass the production paid-provider shared cache");
   const now = new Date(), sourceAt = new Date(now.getTime() - 1000).toISOString(), slate = now.toISOString().slice(0, 10);
   const scope = { externalIds: [9], deadlineAtMs: Date.now() + 30_000 };
   assert.throws(() => assertNbaPrelockCaptureBudget({ ...scope, externalIds: [] }), /scope/);

@@ -8,6 +8,8 @@ import type { NbaDailyEdgeGameDto } from "../lib/services/nba/buildNbaDailyEdgeD
 import type { DailyEdgeGameDto } from "../app/lab/lib/labTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadNbaMarketKnowledgeStates } from "../lib/services/nba/nbaMarketKnowledgeStore";
+import { resolveNbaConsequencePosture } from "../lib/services/nba/nbaNamedBookPosture";
+import { gradeNbaMarket } from "../lib/services/nba/nbaMarketReview";
 import type { NbaReaderPriceRow, NbaReaderSplitRow } from "../lib/services/nba/nbaProfessionalMarketReader";
 
 const law = { marginSigma: 12, totalSigma: 18 };
@@ -41,14 +43,19 @@ const awayPrior = run(sequence, initialized.state, {}, -nbaResidualQuantile("spr
 assert.ok(awayPrior.margin < 0 && awayPrior.margin > -initialized.margin, "same market can weaken an Away pick without blindly following Home");
 const flipped = run([...pair("moneyline", "circa", epoch, 0, .5), ...pair("moneyline", "circa", next, 0, .8)], initialized.state, {}, -1);
 assert.ok(flipped.margin > 0, "strong coherent direct ML may naturally flip the winner");
-const reset = run(sequence, moved.state, { inputFingerprint: "semantic_B" });
+const revised = run(sequence, moved.state, { inputFingerprint: "semantic_B" });
+assert.equal(revised.margin, moved.margin, "a fingerprint revision is not proof that market evidence was consumed");
+assert.equal(revised.state.knowledgeAt, epoch);
+const reset = run(sequence, moved.state, { inputFingerprint: "semantic_B",
+  consumedInformation: [{ at: now, coordinates: ["margin"], evidenceIds: ["fixture:attested-consumed-information"] }] });
 assert.equal(reset.independentInputChanged, true);
-assert.equal(reset.marginApplied, false, "a changed effective independent law explicitly retires old-epoch evidence; no claim all news was consumed");
-assert.equal(reset.state.knowledgeAt, now);
+assert.equal(reset.marginApplied, false, "only attested consumption retires evidence for its own coordinate");
+assert.equal(reset.state.knowledgeAt, epoch);
+assert.equal(reset.state.retiredBefore.margin!.at, now);
 assert.ok(reset.reasons.some(r => r.includes("awaiting_post_input_anchor")));
 const resetAgain = run(sequence, reset.state, { inputFingerprint: "semantic_B", evaluatedAt: "2026-10-31T16:01:00Z" });
 assert.equal(resetAgain.independentInputChanged, false);
-assert.equal(resetAgain.state.knowledgeAt, now, "unchanged semantic inputs do not keep resetting the epoch");
+assert.equal(resetAgain.state.retiredBefore.margin!.at, now, "unchanged semantic inputs do not keep resetting the cutoff");
 const firstPost = run([...sequence, ...pair("moneyline", "circa", "2026-10-31T16:01:00Z", 0, .56)], resetAgain.state,
   { inputFingerprint: "semantic_B", evaluatedAt: "2026-10-31T16:02:00Z" });
 assert.equal(firstPost.marginApplied, false, "the first post-input quote is an anchor, not evidence movement");
@@ -59,6 +66,48 @@ assert.ok(run(spreadRows, spreadSeed.state).margin > spreadSeed.margin, "fixed-n
 const totalRows = [...pair("total", "circa", epoch, 220, .5), ...pair("total", "circa", next, 220.5, .5)];
 const totalSeed = run(totalRows.slice(0, 2), null, { evaluatedAt: epoch });
 assert.ok(run(totalRows, totalSeed.state).total > totalSeed.total, "sub-five-point Total move changes Total");
+// Exact outside-review reproductions: a tiny independent revision must not
+// erase a whole accepted episode or unrelated Total knowledge.
+const strongRows = [...pair("moneyline", "circa", epoch, 0, .5), ...pair("moneyline", "circa", next, 0, .8), ...totalRows];
+const strongSeed = run(strongRows.filter(r => r.fetchedAt === epoch), null, { evaluatedAt: epoch }, -1);
+const strongBefore = run(strongRows, strongSeed.state, {}, -1);
+const strongAfter = run(strongRows, strongBefore.state, { inputFingerprint: "margin-revised" }, -.99);
+assert.ok(Math.abs(strongAfter.margin - strongBefore.margin - .01) < 1e-8,
+  "a .01 datum revision cannot erase ten points of accepted market evidence");
+assert.equal(strongAfter.total, strongBefore.total, "margin-only revision preserves Total evidence");
+assert.deepEqual(strongAfter.state.unresolvedInputRevisions, ["margin"]);
+assert.ok(strongAfter.reasons.some(r => r.includes("revision_overlap_unresolved")));
+const revisedMarginPosture = resolveNbaConsequencePosture({ consequence: strongAfter, market: "moneyline", pickedSide: "home" });
+const unchangedTotalPosture = resolveNbaConsequencePosture({ consequence: strongAfter, market: "total", pickedSide: "over" });
+assert.equal(revisedMarginPosture.informationOverlapUnresolved, true);
+assert.equal(unchangedTotalPosture.informationOverlapUnresolved, false);
+const earnedBest = { market: "moneyline" as const, pick: "home" as const, confidence: 80, modelProbabilityOnPick: .8,
+  band: "support" as const, edge: .1, dataQualityTier: "high" as const, injuriesKnown: true, currentPriceAmerican: -160 };
+assert.equal(gradeNbaMarket(earnedBest).grade, "best_angle");
+assert.equal(gradeNbaMarket({ ...earnedBest, namedBookPosture: revisedMarginPosture }).grade, "best_angle",
+  "a numerical revision alone cannot invent opposition or a permanent Best→Lean permission gate");
+const marginConsumed = run(strongRows, strongAfter.state, { inputFingerprint: "margin-revised",
+  consumedInformation: [{ at: now, coordinates: ["margin"], evidenceIds: ["fixture:new-margin-information"] }] }, -.99);
+assert.equal(marginConsumed.margin, -.99);
+assert.equal(marginConsumed.total, strongBefore.total, "margin consumption cannot retire unrelated Total evidence");
+assert.deepEqual(marginConsumed.state.unresolvedInputRevisions, []);
+assert.deepEqual(run(strongRows, marginConsumed.state, { inputFingerprint: "margin-revised",
+  consumedInformation: [{ at: now, coordinates: ["margin"], evidenceIds: ["fixture:new-margin-information"] }] }, -.99), marginConsumed);
+const replayAfterRevision = run(strongRows, marginConsumed.state, { inputFingerprint: "later-margin-revision",
+  evaluatedAt: "2026-10-31T16:01:00Z", consumedInformation: [{ at: now, coordinates: ["margin"], evidenceIds: ["fixture:new-margin-information"] }] }, -.98);
+assert.deepEqual(replayAfterRevision.state.unresolvedInputRevisions, ["margin"],
+  "a replayed prior attestation cannot resolve overlap from a newer independent revision");
+assert.throws(() => run(strongRows, strongAfter.state, { consumedInformation: [{ at: "2026-10-31T17:00:00Z", coordinates: ["margin"], evidenceIds: ["future"] }] }), /Invalid NBA information/);
+assert.throws(() => run(strongRows, strongAfter.state, { consumedInformation: [{ at: now, coordinates: ["margin"], evidenceIds: [7 as unknown as string] }] }), /Invalid NBA information/);
+// Guard against the outside-review rejected absolute replacement. Quote
+// epsilon and zero-boundary datum changes cannot manufacture a huge flip.
+const epsilonOpen = pair("moneyline", "circa", epoch, 0, .8);
+const epsilonSeed = run(epsilonOpen, null, { evaluatedAt: epoch }, -10);
+const epsilonMove = run([...epsilonOpen, ...pair("moneyline", "circa", next, 0, .800001)], epsilonSeed.state, {}, -10);
+assert.ok(Math.abs(epsilonMove.margin + 10) < .001);
+const justBelow = run([...epsilonOpen, ...pair("moneyline", "circa", next, 0, .800001)], epsilonSeed.state, {}, -.000001);
+const justAbove = run([...epsilonOpen, ...pair("moneyline", "circa", next, 0, .800001)], epsilonSeed.state, {}, .000001);
+assert.ok(Math.abs(justAbove.margin - justBelow.margin - .000002) < 1e-8);
 const equivalentFair = .6;
 const originalLocation = 5.5 + nbaResidualQuantile("spread", equivalentFair, law);
 const zeroRows = [...pair("spread", "circa", epoch, 5.5, equivalentFair), ...pair("spread", "circa", next, originalLocation, .5)];
@@ -277,6 +326,6 @@ async function persistenceBoundary() {
   assert.ok(queries.some(q => q[0] === "select" && String(q[1]).includes("snapshot_json->nba_game_dto_at_capture->grounding_audit->market_reader_knowledge_state")));
   stored = { ...stored, eventId: "wrong_event" };
   await assert.rejects(load, /corrupt/);
-  console.log("NBA continuous consequence: numerical reviewer regressions, source clocks/pairs, epoch/reset, persisted two-refresh boundary, direct ML/flip, tiny/price-only/Total, joint constraints, compensation, buyback, pressure and target fixed-point passed; zero historical games/provider calls/DB writes.");
+  console.log("NBA continuous consequence: source clocks/pairs, coordinate continuity/attested retirement/replay, persisted refreshes, direct ML/flip, tiny/price-only/Total, joint constraints, compensation, buyback, pressure, target fixed-point and rejected absolute-sign override regressions passed; numerical revision alone adds no grade gate; zero historical games/provider calls/DB writes.");
 }
 persistenceBoundary().catch(error => { console.error(error); process.exitCode = 1; });

@@ -15,6 +15,50 @@ pooled r27 design below; a static current quote now has explicit alignment/
 opposition consequences without invented chronology or score points. The
 catalog is a concrete repair contract, not a claim these gaps are already closed.
 
+## Independent-model-as-evidence review addendum — October31
+
+Owner clarification applies to EVERY league, sport and prop model: independent
+output is one fallible input, not a competing expert with protected authority.
+The objective is one coherent sport-specific forecast informed by the whole
+admissible evidence set. Retain, confirm, strengthen, weaken, small/large
+corrections and full flips are possible conclusions, not compulsory action
+labels. Independent disagreement alone neither vetoes market evidence nor
+proves the independent model is wrong. Named-book movement and betting splits
+do not identify every bettor or guarantee a correct outcome.
+
+Three outside AI review cohorts checked this criterion against code and pure
+synthetic cases (NBA/MLB/WNBA/props; football/CBB; NHL/soccer). Their conclusion
+is NOT all-product conformance. The following are tracked semantic gaps,
+distinct from provider capture/display defects and accuracy testing:
+
+| Gap | Scope and concrete finding | Disposition |
+| --- | --- | --- |
+| MR10 | NBA relative episode adds displacement to the independent starting level; opposing absolute levels cannot adjudicate that original gap. | Open method gap; r3 continuity is not a fix for this. |
+| MR11 | NBA a .01 margin revision erased a .50→.80 episode and unrelated Total anchors. | Repaired locally in r3 input continuity; not deployed. Numeric revisions preserve knowledge, flag unknown overlap; only newer explicit axis-specific consumption can retire it. |
+| MR12 | Proposed NBA sign-triggered absolute replacement turned .800000→.800001 into a20.0995-point flip, with independent sign discontinuity. | Rejected and removed; regressions added. Do not restore as a shortcut. |
+| MR13 | Combining a new ML quote and an older spread confirmation can imply an unobserved current joint law. | Open temporal-alignment requirement; not solved by matching each pair internally. |
+| MR14 | Private NFL chooses alternate experts closest to released origin, mirrors the released margin to flip, and retains Total without an alternate Total expert. | Separate owner notified; not conformant or production. |
+| MR15 | Live CFB r7 repairs source/timing/economics but retains fixed static authority and a categorical independent-upset preservation rule. | Owner reports r7 live/source verification; full decision-method gap remains. Earlier r6 incident notes below are historical. |
+| MR16 | CBB has no market-to-score consequence head; current score/probabilities remain independent and opposition chiefly affects grade. | Full reader needed after NBA; display/identity repair is not that reader. |
+| MR17 | EPL keeps independent result marginals; UCL fixed pool retains≥55% independent authority with categorical Total/BTTS permissions; WC fixed65/35 Elo/market. | Open sport-specific inference work, not NBA code reuse. |
+| MR18 | NHL ML needs price/move/split permissions; absent splits can null valid opposing price evidence; Total uses fixed source/sequence authority. | Open alongside reproduced target-history exclusion defect. |
+| MR19 | MLB/WNBA/props have fixed blends, caps, source/category permissions or separately regularized marginals detailed below. | Open respective product repairs; preserve each current release registry and locked records. |
+
+NBA r3 retains the accepted relative method while fixing MR11. It does not
+claim independent input is now fully unprivileged. If an explicit verified
+material-input failure invalidates an independent coordinate, that is a
+different evidence state from market disagreement. A future replacement rule
+must have an actual producer/receipt and current coherent source constraints;
+the current pipeline produces no such invalidation attestation. Do not invent
+one from a forecast sign, size, loss, opposing quote or fingerprint revision.
+Unknown information lineage remains explicit risk, not manufactured certainty.
+
+Functional source→interpretation→final distribution→pick/grade→stored/member
+tests remain necessary even without a retrospective accuracy tournament.
+Forward measurement must distinguish model releases and locked timestamps;
+it cannot retroactively make a structurally incorrect method professional.
+This audit used no new paid provider requests or production prediction writes.
+
 ## Scope and honest meaning of complete
 
 The catalog below contains 120 explicitly enumerated scenario classes across

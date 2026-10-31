@@ -1,8 +1,10 @@
 import { nbaResidualCdf, nbaResidualQuantile, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
 import type { NbaReaderPriceRow, NbaReaderSplitRow } from "./nbaProfessionalMarketReader";
 
-export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_10_31_r2_single_episode_arbitration" as const;
+export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_10_31_r3_input_continuity" as const;
 type Market = "moneyline" | "spread" | "total";
+type Coordinate = "margin" | "total";
+type ConsumptionReceipt = { at: string; coordinates: readonly Coordinate[]; evidenceIds: readonly string[] };
 type Frame = { book: string; provider: string; market: Market; captureAt: string; sourceAt: string;
   run: string; event: string; threshold: number; fair: number };
 export type NbaMarketKnowledgeState = {
@@ -10,6 +12,9 @@ export type NbaMarketKnowledgeState = {
   eventId: string;
   inputFingerprint: string;
   knowledgeAt: string;
+  retiredBefore: Partial<Record<Coordinate, { at: string; evidenceIds: string[] }>>;
+  independentInput: { margin: number; total: number; marginSigma: number; totalSigma: number; mixture: string };
+  unresolvedInputRevisions: Coordinate[];
   anchors: Record<string, Frame>;
 };
 export type NbaMarketConsequenceContext = {
@@ -17,6 +22,9 @@ export type NbaMarketConsequenceContext = {
   inputFingerprint: string;
   evaluatedAt: string;
   previousState?: NbaMarketKnowledgeState | null;
+  /** A numerical forecast revision is NOT proof of consumed information.
+   * Only an attested information receipt may retire overlapping quote history. */
+  consumedInformation?: readonly ConsumptionReceipt[];
   priceRows: readonly NbaReaderPriceRow[];
   splitRows: readonly NbaReaderSplitRow[];
   pricesTrusted: boolean;
@@ -39,6 +47,8 @@ const key = (p: Pick<Frame, "book" | "provider" | "market">) => `${p.book}|${p.p
 const numericalZero = (n: number) => Math.abs(n) <= 1e-9;
 const axis = (market: Market) => market === "total" ? "total" as const : "spread" as const;
 const location = (frame: Frame, law: NbaPriceCoordinateLaw) => frame.threshold + nbaResidualQuantile(axis(frame.market), frame.fair, law);
+const coordinateOf = (market: Market): Coordinate => market === "total" ? "total" : "margin";
+const knowledgeCutoff = (state: NbaMarketKnowledgeState, market: Market) => state.retiredBefore[coordinateOf(market)]?.at ?? state.knowledgeAt;
 
 // The released A&S CDF approximation has <1.5e-7 absolute error. Two
 // constraints closer than their combined numerical uncertainty do not identify
@@ -58,11 +68,19 @@ export function isNbaMarketKnowledgeState(value: unknown): value is NbaMarketKno
   if (!value || typeof value !== "object") return false;
   const v = value as NbaMarketKnowledgeState;
   if (v.release !== NBA_MARKET_CONSEQUENCE_RELEASE || typeof v.eventId !== "string" || typeof v.inputFingerprint !== "string" ||
-      !Number.isFinite(Date.parse(v.knowledgeAt)) || !v.anchors || typeof v.anchors !== "object" || Array.isArray(v.anchors)) return false;
+      !Number.isFinite(Date.parse(v.knowledgeAt)) || !v.anchors || typeof v.anchors !== "object" || Array.isArray(v.anchors) ||
+      !v.retiredBefore || typeof v.retiredBefore !== "object" || Array.isArray(v.retiredBefore) ||
+      !v.independentInput || ![v.independentInput.margin, v.independentInput.total, v.independentInput.marginSigma, v.independentInput.totalSigma].every(Number.isFinite) ||
+      v.independentInput.marginSigma <= 0 || v.independentInput.totalSigma <= 0 || v.independentInput.total <= 0 ||
+      typeof v.independentInput.mixture !== "string" || !Array.isArray(v.unresolvedInputRevisions) ||
+      v.unresolvedInputRevisions.some(c => c !== "margin" && c !== "total")) return false;
+  if (!Object.entries(v.retiredBefore).every(([c, r]) => (c === "margin" || c === "total") && r && Number.isFinite(Date.parse(r.at)) &&
+      Date.parse(r.at) >= Date.parse(v.knowledgeAt) && Array.isArray(r.evidenceIds) && r.evidenceIds.length > 0 &&
+      r.evidenceIds.length <= 32 && r.evidenceIds.every(id => typeof id === "string" && id.length > 0 && id.length <= 256))) return false;
   return Object.entries(v.anchors).every(([laneKey, f]) => f && typeof f.book === "string" && typeof f.provider === "string" &&
     typeof f.event === "string" && !!f.run && ["moneyline", "spread", "total"].includes(f.market) &&
     [Date.parse(f.captureAt), Date.parse(f.sourceAt), f.threshold, f.fair].every(Number.isFinite) &&
-    Date.parse(f.captureAt) >= Date.parse(v.knowledgeAt) && Date.parse(f.sourceAt) >= Date.parse(v.knowledgeAt) && Date.parse(f.sourceAt) <= Date.parse(f.captureAt) &&
+    Date.parse(f.captureAt) >= Date.parse(knowledgeCutoff(v, f.market)) && Date.parse(f.sourceAt) >= Date.parse(knowledgeCutoff(v, f.market)) && Date.parse(f.sourceAt) <= Date.parse(f.captureAt) &&
     f.fair > 0 && f.fair < 1 && key(f) === laneKey);
 }
 
@@ -124,11 +142,43 @@ export function reconcileNbaMarketConsequence(args: {
       args.independentTotal <= 0 || law.marginSigma <= 0 || law.totalSigma <= 0) throw new Error("Invalid NBA consequence context");
   const previous = context.previousState;
   const continuing = isNbaMarketKnowledgeState(previous) && previous.eventId === context.eventId &&
-    previous.inputFingerprint === context.inputFingerprint && Number.isFinite(Date.parse(previous.knowledgeAt)) && Date.parse(previous.knowledgeAt) <= evaluated;
+    Number.isFinite(Date.parse(previous.knowledgeAt)) && Date.parse(previous.knowledgeAt) <= evaluated &&
+    Object.values(previous.retiredBefore).every(r => Date.parse(r.at) <= evaluated);
+  const independentInput = { margin: args.independentMargin, total: args.independentTotal,
+    marginSigma: law.marginSigma, totalSigma: law.totalSigma, mixture: JSON.stringify(law.marginMixture ?? null) };
   const state: NbaMarketKnowledgeState = { release: NBA_MARKET_CONSEQUENCE_RELEASE, eventId: context.eventId,
     inputFingerprint: context.inputFingerprint, knowledgeAt: continuing ? previous!.knowledgeAt : context.evaluatedAt,
-    anchors: continuing ? structuredClone(previous!.anchors) : {} };
+    anchors: continuing ? structuredClone(previous!.anchors) : {}, retiredBefore: continuing ? structuredClone(previous!.retiredBefore) : {},
+    independentInput, unresolvedInputRevisions: continuing ? [...previous!.unresolvedInputRevisions] : [] };
+  const independentInputChanged = !continuing || previous!.inputFingerprint !== context.inputFingerprint ||
+    JSON.stringify(previous!.independentInput) !== JSON.stringify(independentInput);
+  if (continuing) {
+    if (previous!.independentInput.margin !== independentInput.margin || previous!.independentInput.marginSigma !== independentInput.marginSigma || previous!.independentInput.mixture !== independentInput.mixture) state.unresolvedInputRevisions.push("margin");
+    if (previous!.independentInput.total !== independentInput.total || previous!.independentInput.totalSigma !== independentInput.totalSigma) state.unresolvedInputRevisions.push("total");
+  }
+  if ((context.consumedInformation?.length ?? 0) > 32) throw new Error("NBA information-consumption receipt budget exceeded");
+  for (const receipt of context.consumedInformation ?? []) {
+    if (!receipt || !Number.isFinite(Date.parse(receipt.at)) || Date.parse(receipt.at) > evaluated ||
+        !Array.isArray(receipt.coordinates) || !receipt.coordinates.length || receipt.coordinates.some(c => c !== "margin" && c !== "total") ||
+        !Array.isArray(receipt.evidenceIds) || !receipt.evidenceIds.length || receipt.evidenceIds.length > 32 ||
+        receipt.evidenceIds.some(id => typeof id !== "string" || !id.length || id.length > 256)) {
+      throw new Error("Invalid NBA information-consumption receipt");
+    }
+    for (const coordinate of receipt.coordinates as readonly Coordinate[]) {
+      const retired = state.retiredBefore[coordinate];
+      const oldAt = retired?.at ?? state.knowledgeAt;
+      // Replaying an old attestation cannot clear uncertainty introduced by
+      // a later independent revision. A new retirement must advance its clock.
+      if (Date.parse(receipt.at) >= Date.parse(oldAt) && (!retired || Date.parse(receipt.at) > Date.parse(oldAt))) {
+        state.retiredBefore[coordinate] = { at: receipt.at, evidenceIds: [...receipt.evidenceIds] };
+        state.unresolvedInputRevisions = state.unresolvedInputRevisions.filter(c => c !== coordinate);
+      }
+    }
+  }
+  state.unresolvedInputRevisions = [...new Set(state.unresolvedInputRevisions)];
+  for (const [lane, anchor] of Object.entries(state.anchors)) if (Date.parse(anchor.sourceAt) < Date.parse(knowledgeCutoff(state, anchor.market))) delete state.anchors[lane];
   const captured = frames(context), reasons: string[] = [...captured.issues];
+  for (const coordinate of state.unresolvedInputRevisions) reasons.push(`${coordinate}:independent_revision_overlap_unresolved_market_knowledge_preserved`);
   for (const market of context.disabledMarkets ?? []) reasons.push(`${market}:execution_target_cycle_coordinate_retired`);
   if (!context.pricesTrusted) reasons.push("price_family_failed_valid_other_families_retained");
   if (!context.splitsTrusted) reasons.push("split_family_failed_price_authority_retained");
@@ -138,6 +188,7 @@ export function reconcileNbaMarketConsequence(args: {
   const contextFrames: Frame[] = [];
   const proposals: Proposal[] = [];
   for (const [laneKey, capturedSequence] of lanes) {
+    const cutoff = knowledgeCutoff(state, capturedSequence[0]!.market);
     let contextSource = Date.parse(state.anchors[laneKey]?.sourceAt ?? "") || -Infinity;
     let contextPrior: Frame | undefined = state.anchors[laneKey];
     for (const f of capturedSequence) {
@@ -146,11 +197,11 @@ export function reconcileNbaMarketConsequence(args: {
           (Math.abs(f.fair - contextPrior.fair) > 1e-9 || f.threshold !== contextPrior.threshold)) continue;
       contextFrames.push(f); contextSource = source; contextPrior = f;
     }
-    let latestSource = Date.parse(state.anchors[laneKey]?.sourceAt ?? state.knowledgeAt);
+    let latestSource = Date.parse(state.anchors[laneKey]?.sourceAt ?? cutoff);
     let lastSourceFrame: Frame | undefined = state.anchors[laneKey];
     const sequence = capturedSequence.filter(f => {
       const source = Date.parse(f.sourceAt);
-      if (source < Date.parse(state.knowledgeAt) || source < latestSource ||
+      if (source < Date.parse(cutoff) || source < latestSource ||
           lastSourceFrame && source === latestSource && (Math.abs(f.fair - lastSourceFrame.fair) > 1e-9 || f.threshold !== lastSourceFrame.threshold)) {
         reasons.push(`${laneKey}:regressed_or_contradictory_source_clock`); return false;
       }
@@ -161,10 +212,10 @@ export function reconcileNbaMarketConsequence(args: {
     if (!latest) { reasons.push(`${laneKey}:awaiting_post_input_anchor`); continue; }
     if (!names.has(latest.book) || !context.pricesTrusted || context.disabledMarkets?.includes(latest.market)) continue;
     let anchor: Frame | undefined = state.anchors[laneKey];
-    if (anchor && (key(anchor) !== laneKey || Date.parse(anchor.captureAt) < Date.parse(state.knowledgeAt) ||
+    if (anchor && (key(anchor) !== laneKey || Date.parse(anchor.captureAt) < Date.parse(cutoff) ||
         Date.parse(anchor.captureAt) > evaluated || anchor.event !== latest.event)) { reasons.push(`${laneKey}:invalid_saved_anchor`); continue; }
     if (!anchor) {
-      anchor = sequence.find(f => Date.parse(f.captureAt) >= Date.parse(state.knowledgeAt) && Date.parse(f.sourceAt) >= Date.parse(state.knowledgeAt));
+      anchor = sequence.find(f => Date.parse(f.captureAt) >= Date.parse(cutoff) && Date.parse(f.sourceAt) >= Date.parse(cutoff));
       if (anchor) state.anchors[laneKey] = anchor;
     }
     if (!anchor) { reasons.push(`${laneKey}:awaiting_post_input_anchor`); continue; }
@@ -343,6 +394,9 @@ export function reconcileNbaMarketConsequence(args: {
       episodeAt: new Date(frontierExtended ? leader.latestEconomic : leader.onset).toISOString(), priorFrontierSource, incrementalExtension, frontierPath };
   };
   const marginEpisode = arbitrate("margin"), totalEpisode = arbitrate("total");
+  // Preserve the accepted relative-episode method while repairing state
+  // continuity. Absolute level adjudication remains an explicit design gap;
+  // a sign-gated full-market replacement was rejected by outside review.
   let margin = marginEpisode.selected?.margin ?? args.independentMargin;
   let marginScale = marginEpisode.selected?.marginScale ?? 1;
   let total = totalEpisode.selected?.total ?? args.independentTotal;
@@ -459,7 +513,7 @@ export function reconcileNbaMarketConsequence(args: {
     homeScore: (total + margin) / 2, awayScore: (total - margin) / 2,
     marginApplied, totalApplied, books, pressure, sequences, followers, currentContexts,
     arbitration: { margin: receipt(marginEpisode), total: receipt(totalEpisode) },
-    independentInputChanged: !continuing, reasons: [...new Set(reasons)],
+    independentInputChanged, reasons: [...new Set(reasons)],
     diagnosticCounts,
     actions: { margin: marginEpisode.status === "frontier_extension_unresolved" ? "retain_last_uncontested" : ["unresolved_conflict", "leader_unidentified"].includes(marginEpisode.status) ? "unresolved" : marginApplied ? "correct" : "context_only",
       total: totalEpisode.status === "frontier_extension_unresolved" ? "retain_last_uncontested" : ["unresolved_conflict", "leader_unidentified"].includes(totalEpisode.status) ? "unresolved" : totalApplied ? "correct" : "context_only" },

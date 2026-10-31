@@ -109,17 +109,19 @@ v2 price/split evidence. The follow-up repairs the actual substrate, NOT the
 unrelated legacy public-splits table. Order is canonical lines→scoped current
 v2 capture→fresh injury/pipeline→episode consequence→coherent records→lock→
 member publication. The capture release is
-`nba_prelock_market_capture_2026_10_31_r1_scoped_v2`.
+`nba_prelock_market_capture_2026_10_31_r2_shared_public_cache`.
 Only entering game IDs are normalized/written; no new prediction writer,
 lease, cadence, history recovery or full-slate v2 snapshot rebuild is added.
 The bounded reviewer reproduced a past-slate/history fallback; scoped captures
 now reject noncurrent slates before any DB/provider request, while ordinary
 collector history behavior is unchanged. The regression proves zero requests
 and writes for that rejected request.
-There are at most FOUR additional current endpoint calls per entering batch:
-Owls odds/splits and Playbook splits/paired lines. Public cache is bypassed
-only for this bounded lock capture, with4-second per-endpoint timeouts; Owls
-is capped at8seconds. An absolute deadline is checked before capture, before
+There are at most FOUR additional current endpoint opportunities per entering
+batch attempt: Owls odds/splits and Playbook splits/paired lines. Production
+public cache remains enabled, reducing duplicate paid calls. Shared cache
+misses use the normal20-second Playbook timeout; direct fallback is capped at
+4seconds. Owls is capped at8seconds. Existing cron retries can repeat an attempt;
+this is not a per-game lifetime cost guarantee. An absolute deadline is checked before capture, before
 observation writes and before final prediction. Scope/storage/deadline failure
 cannot proceed to lock; missing provider evidence is recorded and valid other
 sources are retained. This is not zero added cost and must be monitored.
@@ -135,3 +137,47 @@ Over↔Under flips and held resistance retaining the underdog without points.
 Fresh-main integration/overlap/protected-PR and production verification remain
 required before publication. The120-case cross-product audit remains the
 broader coverage contract; no all-sport pass or accuracy guarantee is claimed.
+
+### r3 continuity repair and rejected absolute replacement
+
+This addendum supersedes r2's forecast-hash epoch-retirement policy only.
+Current runtime identifiers: modelr29/marriager30/grader19, consequence
+`nba_market_consequence_2026_10_31_r3_input_continuity`, posturer5.
+The historical r2 board report above does not qualify this new release.
+
+The outside AI reviewer reproduced an independent margin−1 plus a .50→.80
+ML episode yielding+9.09945. A margin-only revision to−.99 previously reset
+all quote anchors and yielded−.99, erasing ten points of accepted evidence and
+unrelated Total knowledge. r3 preserves raw anchors, updates the independent
+datum, and marks coordinate-specific information overlap as unresolved.
+The resulting forecast changes by .01 rather than10.08945 points. Margin-only
+revisions/explicit consumption do not erase Total evidence. Only an explicit
+newer consumed-information receipt can retire the named coordinate; replayed
+old attestations cannot resolve later uncertainty. No live upstream lineage
+receipt is invented. Unknown news overlap remains a limitation, not proof that
+double counting cannot occur. Targeted tests cover continuity, axis isolation,
+replayed receipts, invalid/future receipts and exact persistence boundaries.
+
+This does NOT fix the larger method gap: relative displacement still preserves
+the independent forecast's starting-level bias. A temporary proposal replaced
+that level with a named source's absolute law whenever both source endpoints
+opposed the model and the episode extended. External AI review rejected it:
+independent−10, sigma12, Circa ML .800000→.800001 produced+10.09949556 despite
+only .000042863 points of economic movement. A2e−6 independent sign change
+also caused a10.09945-point discontinuity. That entire proposal was removed;
+counterexample tests guard against restoring it. Review additionally identified
+unproven cross-market synchronization when a supposed current ML/spread solve
+uses a spread last confirmed before the ML episode. Absolute joint adjudication
+requires an explicit professionally justified method, not a sign-triggered
+copy-market rule. NBA remains unpublished and not fully conformant.
+
+The scoped outside AI re-review passed the retained continuity patch, including
+same-time receipt replay, a later independent revision, typed malformed receipt
+rejection, cross-axis isolation and locked-snapshot/approved-legacy precedence.
+It explicitly did NOT approve inference design or publication. Focused checks
+also retain the synthetic Toronto-pattern winner flip with a tight independent
+favorite, resistance without automatic flip for a stronger favorite, and paired
+positive-EV promotion/demotion1→1. Unknown-input overlap remains explicit
+metadata; a numeric revision alone does not invent opposition or impose a
+permanent Best→Lean grade permission without evidence of actual duplication.
+No provider/DB requests or outcome labels were used in these regressions.

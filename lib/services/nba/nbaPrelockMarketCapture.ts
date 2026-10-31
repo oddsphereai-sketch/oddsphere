@@ -1,4 +1,4 @@
-export const NBA_PRELOCK_MARKET_CAPTURE_RELEASE = "nba_prelock_market_capture_2026_10_31_r1_scoped_v2" as const;
+export const NBA_PRELOCK_MARKET_CAPTURE_RELEASE = "nba_prelock_market_capture_2026_10_31_r2_shared_public_cache" as const;
 export type NbaPrelockCaptureScope = { externalIds: readonly number[]; deadlineAtMs: number };
 export type NbaPrelockCaptureReceipt = { release: typeof NBA_PRELOCK_MARKET_CAPTURE_RELEASE; externalIds: readonly number[];
   ingestionRunId: string; capturedAt: string; providerRequestCeiling: 4; providerErrors: readonly string[] };

@@ -4,7 +4,7 @@ import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPr
 import type { reconcileNbaMarketConsequence } from "./nbaMarketConsequence";
 
 export const NBA_NAMED_BOOK_POSTURE_RELEASE =
-  "nba_named_book_posture_2026_10_31_r4_episode_and_static_context" as const;
+  "nba_named_book_posture_2026_10_31_r5_input_disposition" as const;
 
 export type NbaNamedBookPosture = {
   release: typeof NBA_NAMED_BOOK_POSTURE_RELEASE;
@@ -22,6 +22,7 @@ export type NbaNamedBookPosture = {
   knowledgeAt?: string;
   consequence?: string;
   scoreEffectApplied?: boolean;
+  informationOverlapUnresolved?: boolean;
   forecastAuthorityGranted: false;
 };
 
@@ -36,7 +37,12 @@ export function resolveNbaConsequencePosture(args: {
     // Posture itself grants no second adjustment. This explicitly identifies
     // the already applied forecast consequence instead of denying its effect.
     forecastAuthorityGranted: false, scoreEffectApplied: args.market === "total" ? c.totalApplied : c.marginApplied,
-    knowledgeAt: c.state.knowledgeAt, consequence: args.market === "total" ? c.actions.total : c.actions.margin };
+    knowledgeAt: c.state.retiredBefore[args.market === "total" ? "total" : "margin"]?.at ?? c.state.knowledgeAt,
+    consequence: args.market === "total" ? c.actions.total : c.actions.margin,
+    // A revised numerical datum is not itself market opposition or proof of
+    // duplicated information. Expose the unknown lineage without adding an
+    // automatic permanent Best→Lean gate whenever the independent head moves.
+    informationOverlapUnresolved: c.state.unresolvedInputRevisions.includes(args.market === "total" ? "total" : "margin") };
   for (const book of c.books) {
     const p = book.proposals.find(p => p.market === args.market);
     if (!p) continue;
