@@ -114,6 +114,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   if(fallbackBook&&!sharedHistory&&!standaloneHistory)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
   if(!comparison.points.length)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} status={frozen?"prelock_unavailable":"history_unavailable"} book={null}/>;
   const movementView=!frozen&&view==="movement"&&!!book;
+  const separateBookHistory=!movementView&&standaloneHistory&&!!book?.points.length;
   const plottedBook=movementView?book:visible.book;
   const plotted=movementView?predictionMarketBookOnlyComparison(book):comparison;
   const chartStart=range==="24h"&&plotted.cutoff!==null?Math.max(plotted.start,plotted.cutoff-24*60*60_000):plotted.start;
@@ -131,7 +132,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const changes=windowBook?.points.reduce((count,point,index)=>count+Number(index>0&&point[2]!==windowBook.points[index-1][2]),0)??0;
   const legend=<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#b9acc7] sm:pl-[26px]">
     <span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#7de3c1]"/>Kalshi{movementView?" quote":""}{context?.method==="push_adjusted"?" · push-adjusted":context?.method==="nearby"?" · nearby line":""}</span>
-    {plottedBook?<span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookName} {bookLabel}</span>:<span>{book?"Sportsbook history awaiting overlap":"Sportsbook quote unavailable"}</span>}
+    {plottedBook||separateBookHistory?<span className="inline-flex items-center gap-1"><i className="h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookName} {bookLabel}{separateBookHistory?" · history below":""}</span>:<span>{book?"Sportsbook history awaiting overlap":"Sportsbook quote unavailable"}</span>}
   </div>;
   return <section aria-label={`Prediction market · ${context?.kind??"game winner"}`} data-prediction-market={variant} data-prediction-market-kind={context?.kind??"moneyline"} data-contract-method={context?.method??"exact"}
     className={variant==="mobile"?"sm:hidden rounded-lg border border-white/[0.07] bg-[#0d0b13] p-3":"hidden sm:grid grid-cols-[minmax(170px,.9fr)_minmax(0,1.7fr)_minmax(150px,.85fr)] items-center gap-x-5 border-y border-white/[0.07] bg-[#0d0b13] px-5 py-3"}>
@@ -155,6 +156,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
         <button type="button" aria-pressed={view==="movement"} onClick={()=>setView("movement")} className={view==="movement"?"rounded bg-white/10 px-2 py-1 text-[#e0d7ed]":"rounded px-2 py-1 text-[#9d92ae]"}>Full movement</button>
       </div>:null}
       <PredictionMarketChart row={movementView?null:outcome} book={plottedBook} context={movementView?undefined:context} bookLabel={bookLabel} lockedAt={lockedAt} range={range} onRangeChange={setRange}/>
+      {separateBookHistory?<RecordedSportsbookHistory book={book!} label={bookLabel} lockedAt={lockedAt}/>:null}
     </div>
     <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-2 sm:border-0 sm:pt-0">
       <p data-kalshi-start data-start-kind={kalshiOpening?.kind??"first_available"} data-start-at={kalshiStart[0]} className="min-w-0"><span className="font-semibold text-[#d9d1e4]">Kalshi {kalshiOpening?.kind==="opening_minute"?"opening minute":"first quoted"} · {(kalshiStart[1]*100).toFixed(1)}%</span><span className="block text-[#ac9bbd]">{time(kalshiStart[0],true)}</span><span className="block text-[#9d92ae]">{outcome.historyFrom?"History checked from market open":"Opening history pending"}{kalshiOpening?.kind==="first_available"?" · opening quote unavailable":""}</span></p>
@@ -169,6 +171,17 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
       <p className="col-span-2 text-[#9d92ae]">{current.availability==="refresh_failed"?"Refresh unavailable · retained quotes · ":""}{frozen?(historicalCfb?"Historical quotes · through ":"Pre-lock history · through ")+time(comparison.cutoff??comparison.points.at(-1)![0]):movementView?"Sportsbook through "+time(plotted.cutoff!):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
     </div>
   </section>;
+}
+
+/** Keep the exact existing book receipts visible when they cover a different
+ * window from Kalshi. This adds a source-only view; it never extends a quote,
+ * joins thresholds, or replaces any stored locked field or legacy curve. */
+export function RecordedSportsbookHistory({book,label,lockedAt}:{book:PredictionMarketBookTrail;label:string;lockedAt?:number}){
+  return <div className="mt-3 border-t border-white/[0.07] pt-2" data-recorded-sportsbook-history={book.sportsbook}>
+    <p className="text-[10px] font-semibold text-[#d9d1e4]"><span aria-hidden="true" className="mr-1 inline-block h-0.5 w-2.5 bg-[#b7a0f4]"/>{bookTitle(book.sportsbook)} · {label} · recorded prices</p>
+    <p className="mt-1 text-[9px] text-[#ac9bbd]">The sources cover different time windows. Each history keeps its original quote times.</p>
+    <PredictionMarketChart row={null} book={book} context={undefined} bookLabel={label} lockedAt={lockedAt}/>
+  </div>;
 }
 
 export function PredictionMarketUnavailable({variant,label,status,book,kind,lockedAt,quote}:{variant:"mobile"|"desktop";label:string;status:string;book:PredictionMarketBookTrail|null;kind?:string|null;lockedAt?:number;quote?:{label:string;probability:number;at:number;method?:"exact"|"nearby"|"push_adjusted"}}){

@@ -37,7 +37,7 @@ assert.match(detailRoute, /hasMemberSession/);
 assert.match(detailRoute, /verifyWhopSession/);
 assert.match(detailRoute, /isValidBetaSession/);
 assert.match(detailRoute, /detailSnapshot\.games\[0\] \?\? game/);
-assert.match(page, /cfbFixture[\s\S]*populateDailyEdgeStoredSplitFallback\(snapshot, "cfb", \{[\s\S]*reconstructMissingLockedPreLock: true/);
+assert.match(page, /cfbFixture[\s\S]*games: snapshot\.games\.filter\(\(game\) => game\.id === initialCfbReaderGameId\)[\s\S]*populateDailyEdgeStoredSplitFallback\(detailSnapshot, "cfb", \{[\s\S]*reconstructMissingLockedPreLock: true/);
 assert.match(detailRoute, /populateDailyEdgeStoredSplitFallback\(detailSnapshot, "cfb", \{[\s\S]*reconstructMissingLockedPreLock: true/);
 assert.match(fallbackProvider, /applySharpApiCurrentSplitOverlay\(response, sharpFeed, Date\.now\(\), options\)/);
 assert.match(reader, /Pre-lock evidence/);
