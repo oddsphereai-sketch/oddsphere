@@ -24,9 +24,12 @@ Last reviewed: 2026-10-31
   in Notre Dame–Navy and large Total shifts requiring review in Auburn–Ole Miss,
   SMU–Syracuse, and California–NC State. See
   `docs/model-audits/2026-10-31-cfb-noon-market-evidence.md`.
-  Focused synthetic checks pass; same-board promotions/demotions, full model
-  safety, integration, protected PR, and post-merge verification remain open.
-  Do not present this candidate as live or proven more accurate.
+  Focused synthetic, production-lock, TypeScript, and full model-change checks
+  pass. A zero-write current-slate comparison reports the near-synchronous
+  grade/hold counts in the incident audit, but is not a same-input causal
+  promotion/demotion or accuracy result. Integration safety passed against
+  `origin/main` at `7007590d`; protected PR and post-merge live verification
+  remain open. Do not present this candidate as live or proven more accurate.
 
 ## Soccer complete-market and current-price health repair — October 31
 
