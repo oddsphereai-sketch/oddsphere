@@ -108,6 +108,20 @@ accepted as current-model performance or evidence r3 improves predictions.
 The source owner is checking release-pure/chronological usability; no fitting
 parameters, new production writer or lock mutation is authorized by coverage.
 
+Subsequent source-lineage inspection narrows this further: the first verified
+provider-attributed sharp row is October28 at12:31:15.914UTC (Owls event/run/
+payload hash). Earlier October15–27 observations are legacy/unattributed for
+current-reader authority. The81-game descriptive cohort is therefore NOT a
+fully provenance-qualified calibration set. Only the October28+ subset may
+qualify after freezing its exact IDs, clocks, hashes and release strata; its
+qualified game count has not been supplied. Locks retain exact independent
+outputs and roster-regime audit but no explicit independent artifact/feature
+version; current r15/r13 cannot be retroactively stamped as original lineage.
+The coordinated owner also reports one bounded BallDontLie historical-odds
+probe returned no odds rows; this does not prove all archives are unavailable
+and is not permission for further paid history searches. No new influence
+parameters or launch decision follows from these coverage findings.
+
 ## Scope and honest meaning of complete
 
 The catalog below contains 120 explicitly enumerated scenario classes across
