@@ -10,9 +10,10 @@ working decision reader.
 Audit outcome: NO all-product pass. Current readers differ materially and many
 still use the fixed blends/activation permissions the owner rejects. CBB has
 no market-to-score head. NHL and NBA props have reproduced exclusion/current-
-reference defects. NBA's unpublished continuous head has real signal effects
-but still lacks first-current-level/model-disagreement inference. The catalog
-is a concrete repair contract, not a claim these gaps are already closed.
+reference defects. NBA's unpublished r28 single-episode head supersedes the
+pooled r27 design below; a static current quote now has explicit alignment/
+opposition consequences without invented chronology or score points. The
+catalog is a concrete repair contract, not a claim these gaps are already closed.
 
 ## Scope and honest meaning of complete
 
@@ -25,6 +26,10 @@ combined with applicable timing, source, missing-data and locked-state cases.
 Unknown/unrepresented evidence must be named, not silently called supported.
 
 Code inspected: NBA branch 8988c555, integrated main7007590 at018d9e26.
+NBA October 31 follow-up: model r28 / marriage r29 / grade r19 / consequence r2
+removes relative-odds updating and cross-book pooling. Exact decision contract:
+`docs/model-audits/2026-10-31-nba-single-episode-reader.md`. Original r27 source
+receipts below remain historical evidence, not proof of the replacement head.
 Football candidates are separately identified below; they are NOT production.
 The current release registry and exported MLB/WNBA constants were checked
 before auditing those products. No other sport's code was changed by this
@@ -258,6 +263,7 @@ P=production code; U=unmerged candidate. None of these proves accuracy.
 | --- | --- | --- | --- |
 | NBA P r24 | Legacy categorical qualified Spread/Total crossings; ML indirect |2/5-point permissions, forced boundary crossing, partial/price-only/direct-ML gaps; not new brain | C; incumbent contrast tests |
 | NBA U r27 | Continuous exact price/number relative-odds, joint ML/Spread location/scale; Total coordinate; persisted epoch | Still chosen unit-odds transport + median fusion, not “no influence assumptions”; existing grade thresholds remain. Static current level/model gap is not independently resolved by the innovation-only head. No limit/depth/rumor/exchange inference. Grade-policy expansion and member tempering need final conformance work. | C/T/L;7games,6margin/4Total changes; NOT LIVE |
+| NBA U r28 (supersedes r27) | One source-timed episode per coordinate applies its actual number-plus-price displacement once; same-book joint ML/Spread solve; Total coordinate; persisted epoch | No market/model blend, cross-book pooling, vote quota or minimum-move permission. Static opposition, held books, timed pressure, reversals, cancellation and unresolved leadership reach posture/grade. No limit/depth/rumor/exchange inference. Static current context does not invent temporal displacement; same-input grade-policy and reader effects must be attributed separately. | C/T; replacement current-input report pending; NOT LIVE |
 | NFL P | Semantic side reader; production Total arbiter is a no-op | Evaluated-book exclusions missing in current state builder; no actual Total consequence; numeric move gates | C/T baseline |
 | NFL U | Named ML/Spread arbitration into one score forecast; Total routes added | Still.5-point/1pp activation, contradiction/reversal vetoes, not continuous economic flow; true grade/writer applied fixture missing; registry/runtime mismatch | C/T; NOT LIVE |
 | CFB P r6 | Current consensus/flow can tilt one score PMF | Stale/future/wrong-line/evaluated-book fallback Total splits can influence scores | C/T baseline |
@@ -282,12 +288,12 @@ NBA: `lib/services/nba/nbaMarketConsequence.ts:123`,
 Tests: `test-nba-continuous-market-consequence.ts`,
 `test-nba-market-signal-consequences.ts`, `test-nba-canonical-price-capture.ts`,
 `test-nba-professional-candidate.ts`, `test-nba-locked-member-snapshot.ts`.
-The r3 bounded current-source audit is documented in the separate NBA repair
+The superseded r27/r1-head r3 bounded current-source audit is documented in the separate NBA repair
 record. Its3→14 actionables (12 promotions,1 demotion) need policy attribution:
 continuous mode bypasses `marketSpecificGrade`; do not call all promotions the
 result of market intelligence. No NBA candidate deployment is claimed.
 
-The later r4 same-current-input attribution receipt at15:28:11Z has6margin and
+The superseded r27/r1-head r4 same-current-input attribution receipt at15:28:11Z has6margin and
 6Total changes, actionables3→15 (13 promotions,1 demotion),22SELECTs/3,933,648
 bytes, zero provider calls/outcomes/writes. Ten of13 promotions disappear when
 only the incumbent grade policy is evaluated on the SAME final forecast and

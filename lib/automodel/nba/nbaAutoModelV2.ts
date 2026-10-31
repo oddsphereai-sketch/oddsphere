@@ -410,16 +410,16 @@ export type NbaModelV1Output = NbaAutoModelOutput & {
   v1_breakdown: NbaModelV1Breakdown;
   v1_probabilities: NbaMarketProbabilities;
   /**
-   * The v0 prediction this v1 result was compared against. Always
-   * present; lets the audit script + admin UI render v0/v1 deltas
-   * without re-running v0 separately.
+   * Legacy audit comparison only. Null in the professional production path;
+   * a skipped comparison is not fabricated v0 evidence.
    */
-  v0_comparison: NbaAutoModelOutput;
+  v0_comparison: NbaAutoModelOutput | null;
   v0_v1_delta: {
     spread_pts: number;
     total_pts: number;
     ml_home_prob_pp: number;
     flagged: string[];
+    comparison_skipped?: boolean;
   };
 };
 
@@ -474,7 +474,7 @@ export type NbaModelV1Breakdown = {
 export function runNbaAutoModelV2(
   snap: NbaGameSnapshot,
   stage: NbaModelStage,
-  opts: { isPlayoffs?: boolean; bookCount?: number } = {},
+  opts: { isPlayoffs?: boolean; bookCount?: number; /** Professional writer never executes the legacy blended v0 audit model. */ skipLegacyComparison?: boolean } = {},
 ): NbaModelV1Output {
   const isPlayoffs = opts.isPlayoffs ?? (snap.season_type === "postseason");
   const notes: string[] = [];
@@ -619,7 +619,12 @@ export function runNbaAutoModelV2(
     mlConfidence >= V1_BEST_ANGLE_MIN_CONFIDENCE;
 
   // Compose v0 result for comparison
-  const v0 = runNbaAutoModelV1(snap, stage);
+  const v0 = opts.skipLegacyComparison ? {
+    predicted_spread_home: projectedSpreadHome, predicted_total: projectedTotal,
+    predicted_ml_winner: mlPick, ml_confidence: mlProb * 100,
+    predicted_spread_side: spreadPick, predicted_total_side: totalPick,
+  } : runNbaAutoModelV1(snap, stage);
+  if (opts.skipLegacyComparison) notes.push("Legacy market-blended v0 comparison intentionally not executed; comparison deltas are self-reference, not v0 evidence.");
   const flagged: string[] = [];
   const spreadDelta = projectedSpreadHome - v0.predicted_spread_home;
   const totalDelta = projectedTotal - v0.predicted_total;
@@ -735,12 +740,13 @@ export function runNbaAutoModelV2(
       notes,
     },
     v1_probabilities: probabilities,
-    v0_comparison: v0,
+    v0_comparison: opts.skipLegacyComparison ? null : v0 as NbaAutoModelOutput,
     v0_v1_delta: {
       spread_pts: round1(spreadDelta),
       total_pts: round1(totalDelta),
       ml_home_prob_pp: round1(mlHomeProbDeltaPp),
       flagged,
+      ...(opts.skipLegacyComparison ? { comparison_skipped: true } : {}),
     },
   };
 }

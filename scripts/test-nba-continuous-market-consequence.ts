@@ -32,7 +32,8 @@ const sequence = [...pair("moneyline", "circa", epoch, 0, .5), ...pair("moneylin
 const moved = run(sequence, initialized.state);
 assert.equal(moved.marginApplied, true);
 assert.ok(moved.margin > initialized.margin);
-assert.ok(Math.abs(moved.books[0]!.proposals[0]!.probability - .6470588235294118) < 1e-8);
+assert.ok(Math.abs(moved.margin - initialized.margin - nbaResidualQuantile("spread", .55, law)) < 1e-8,
+  "the selected observed economic displacement is applied once; no odds/model blend");
 assert.deepEqual(run(sequence, moved.state), moved, "same state/input rebuild is idempotent and never compounds its previous adjusted score");
 const tiny = run([...pair("moneyline", "circa", epoch, 0, .5), ...pair("moneyline", "circa", next, 0, .5001)], initialized.state);
 assert.ok(tiny.margin > initialized.margin && tiny.margin < moved.margin, "0.01pp is a real continuous innovation, not a 1pp/2pt gate");
@@ -117,20 +118,25 @@ assert.equal(run(preceding, initialized.state).followers[0]!.reaction, "preceded
 function targets(book: string, mu: number, scale: number, baseMargin: number) {
   return (["moneyline", "spread"] as const).flatMap(market => {
     const k = market === "moneyline" ? 0 : 5.5;
-    const prior = nbaResidualCdf("spread", baseMargin - k, law);
     const target = nbaResidualCdf("spread", (mu - k) / scale, law);
-    const odds = target / (1 - target) / (prior / (1 - prior));
-    return pair(market, book, next, k, odds / (1 + odds));
+    const fair = nbaResidualCdf("spread", k + nbaResidualQuantile("spread", target, law) - baseMargin, law);
+    return pair(market, book, next, k, fair).map(r => ({ ...r, providerTimestamp: book === "circa" ? "2026-10-31T14:59:59Z" : next }));
   });
 }
 const twoBooks = ["circa", "pinnacle"].flatMap(book => [...pair("moneyline", book, epoch, 0, .5), ...pair("spread", book, epoch, 5.5, .5)]);
 const twoSeed = run(twoBooks, null, { evaluatedAt: epoch }, 3);
 const combined = run([...twoBooks, ...targets("circa", 6, 1, 3), ...targets("pinnacle", 24, 4, 3)], twoSeed.state, {}, 3);
 assert.ok(Math.abs(nbaResidualCdf("spread", combined.margin / combined.marginScale, law) - nbaResidualCdf("spread", 6, law)) < 1e-7);
+assert.ok(Math.abs(combined.margin - 6) < 1e-6 && Math.abs(combined.marginScale - 1) < 1e-6,
+  "Circa's earlier source episode authors the state; no cross-book midpoint or synthetic scale");
+assert.equal(combined.arbitration.margin.leader, "circa");
+const sameMlUnequalLaw = run([...twoBooks, ...targets("circa", 6, 1, 3).map(r => ({ ...r, providerTimestamp: next })),
+  ...targets("pinnacle", 24, 4, 3)], twoSeed.state, {}, 3);
+assert.equal(sameMlUnequalLaw.arbitration.margin.status, "leader_unidentified");
+assert.equal(sameMlUnequalLaw.margin, 3, "equal ML probability is not equivalent joint margin and dispersion");
 const nearTargets = (["moneyline", "spread"] as const).flatMap(market => {
   const k = market === "moneyline" ? 0 : 5.5, target = market === "moneyline" ? .5 : .49999999;
-  const prior = nbaResidualCdf("spread", 3 - k, law), odds = target / (1 - target) / (prior / (1 - prior));
-  return pair(market, "circa", next, k, odds / (1 + odds));
+  return pair(market, "circa", next, k, nbaResidualCdf("spread", k + nbaResidualQuantile("spread", target, law) - 3, law));
 });
 const unstable = run([...twoBooks.filter(r => r.sportsbook === "circa"), ...nearTargets], jointSeed.state, {}, 3);
 assert.ok(Math.abs(unstable.marginScale - 1) < 1e-6);
@@ -172,6 +178,84 @@ const cycle = resolveNbaExecutionFixedPoint({ initial: "home", executionBooks: c
   evaluate: (excluded, disabled) => disabled.includes("moneyline") ? "home" : excluded.moneyline.includes("draftkings") ? "away" : "home" });
 assert.deepEqual(cycle.cycleMarkets, ["moneyline", "spread"]);
 assert.equal(cycle.candidate, "home");
+
+const half = "2026-10-31T14:30:00Z", quarter = "2026-10-31T14:45:00Z";
+const openingBooks = [...pair("moneyline", "circa", epoch, 0, .5), ...pair("moneyline", "pinnacle", epoch, 0, .5)];
+const episodeSeed = run(openingBooks, null, { evaluatedAt: epoch }, 3);
+const leaderRows = [...openingBooks, ...pair("moneyline", "circa", half, 0, .6),
+  ...pair("moneyline", "circa", next, 0, .6).map(r => ({ ...r, providerTimestamp: half })), ...pair("moneyline", "pinnacle", next, 0, .7)];
+const led = run(leaderRows, episodeSeed.state, {}, 3);
+assert.equal(led.arbitration.margin.leader, "circa");
+assert.ok(Math.abs(led.margin - (3 + nbaResidualQuantile("spread", .6, law))) < 1e-7);
+assert.deepEqual(led.arbitration.margin.followers, ["pinnacle"]);
+assert.equal(run([...leaderRows, ...leaderRows.filter(r => r.sportsbook === "pinnacle")], episodeSeed.state, {}, 3).margin, led.margin,
+  "copied follower rows add zero amplitude");
+const resistance = run([...openingBooks, ...pair("moneyline", "pinnacle", half, 0, .6),
+  ...pair("moneyline", "pinnacle", next, 0, .6).map(r => ({ ...r, providerTimestamp: half })), ...pair("moneyline", "circa", next, 0, .4)], episodeSeed.state, {}, 3);
+assert.equal(resistance.arbitration.margin.status, "unresolved_conflict");
+assert.equal(resistance.margin, 3, "fresh opposite peers are contested, not a synthetic midpoint");
+const tie = run([...openingBooks, ...pair("moneyline", "circa", next, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .6)], episodeSeed.state, {}, 3);
+assert.equal(tie.arbitration.margin.status, "equivalent_simultaneous_episode");
+assert.equal(tie.arbitration.margin.leader, null, "equivalent effects do not identify which physical book led");
+assert.deepEqual(tie.arbitration.margin.equivalentSources, ["circa", "pinnacle"]);
+assert.ok(Math.abs(tie.margin - (3 + nbaResidualQuantile("spread", .6, law))) < 1e-7,
+  "identical observed consequences can apply once without a vote quota, pooling, or invented leadership");
+const tiedRows = [...openingBooks, ...pair("moneyline", "circa", next, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .6)];
+assert.equal(run([...tiedRows].reverse(), episodeSeed.state, {}, 3).margin, tie.margin);
+assert.equal(run([...tiedRows, ...tiedRows], episodeSeed.state, {}, 3).margin, tie.margin);
+const unequalTie = run([...openingBooks, ...pair("moneyline", "circa", next, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .7)], episodeSeed.state, {}, 3);
+assert.equal(unequalTie.margin, 3, "unequal simultaneous effects are not averaged or resolved by a hidden book preference");
+assert.equal(unequalTie.arbitration.margin.status, "leader_unidentified");
+assert.equal(unequalTie.actions.margin, "unresolved");
+const totalTiedRows = ["circa", "pinnacle"].flatMap(book => [...pair("total", book, epoch, 220, .5), ...pair("total", book, next, 221, .5)]);
+const totalTied = run(totalTiedRows, run(totalTiedRows.filter(r => r.fetchedAt === epoch), null, { evaluatedAt: epoch }).state);
+assert.equal(totalTied.total, 221);
+assert.equal(totalTied.arbitration.total.leader, null);
+assert.equal(totalTied.arbitration.total.status, "equivalent_simultaneous_episode");
+const frontier = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .7)], episodeSeed.state, {}, 3);
+assert.equal(frontier.arbitration.margin.status, "frontier_extension");
+assert.equal(frontier.arbitration.margin.leader, "pinnacle");
+assert.ok(Math.abs(frontier.margin - (3 + nbaResidualQuantile("spread", .7, law))) < 1e-7,
+  "a frontier extension replaces the prior causal endpoint, not add the whole follower move twice");
+const lateReverse = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", quarter, 0, .6),
+  ...pair("moneyline", "circa", next, 0, .4)], episodeSeed.state, {}, 3);
+assert.equal(lateReverse.arbitration.margin.leader, "circa");
+assert.equal(lateReverse.arbitration.margin.status, "later_episode_supersedes_unobserved_laggards");
+assert.ok(Math.abs(lateReverse.margin - (3 + nbaResidualQuantile("spread", .4, law))) < 1e-7);
+const staticOpposition = run(pair("moneyline", "circa", epoch, 0, .2), null, { evaluatedAt: epoch }, 10);
+assert.equal(staticOpposition.margin, 10);
+assert.equal(staticOpposition.currentContexts[0]!.authority, "context_only");
+assert.equal(staticOpposition.currentContexts[0]!.favoredSide, "away");
+assert.equal(staticOpposition.actions.margin, "context_only");
+const cancelledLead = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", quarter, 0, .6),
+  ...pair("moneyline", "circa", next, 0, .5)], episodeSeed.state, {}, 3);
+assert.equal(cancelledLead.margin, 3, "full buyback cannot resurrect a copied follower's old move");
+assert.deepEqual(cancelledLead.arbitration.margin.lagging, ["pinnacle"]);
+assert.deepEqual(cancelledLead.arbitration.margin.cancelledBy, ["circa"]);
+const notCopiedOpposite = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", quarter, 0, .4),
+  ...pair("moneyline", "circa", next, 0, .5)], episodeSeed.state, {}, 3);
+assert.equal(notCopiedOpposite.arbitration.margin.selectedSource, "pinnacle", "a buyback cannot erase a different book's opposite episode");
+assert.ok(notCopiedOpposite.margin < 3);
+assert.deepEqual(notCopiedOpposite.arbitration.margin.lagging, []);
+const notCopiedAmplitude = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", quarter, 0, .7),
+  ...pair("moneyline", "circa", next, 0, .5)], episodeSeed.state, {}, 3);
+assert.equal(notCopiedAmplitude.arbitration.margin.selectedSource, "pinnacle", "a distinct frontier is not assumed a canceled copy merely because directions agree");
+const heldNamed = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .5)], episodeSeed.state, {}, 3);
+assert.equal(heldNamed.arbitration.margin.leader, "circa");
+assert.deepEqual(heldNamed.arbitration.margin.heldSources, ["pinnacle"]);
+const thirdOpen = [...openingBooks, ...pair("moneyline", "bookmaker", epoch, 0, .5)];
+const thirdFrontier = run([...thirdOpen, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", quarter, 0, .7),
+  ...pair("moneyline", "bookmaker", next, 0, .8)], run(thirdOpen, null, { evaluatedAt: epoch }, 3).state, {}, 3);
+assert.equal(thirdFrontier.arbitration.margin.selectedSource, "bookmaker");
+assert.deepEqual(thirdFrontier.arbitration.margin.frontierPath, ["circa", "pinnacle", "bookmaker"]);
+assert.ok(Math.abs(thirdFrontier.margin - (3 + nbaResidualQuantile("spread", .8, law))) < 1e-7,
+  "the latest distinct frontier must not be lost after processing the first extension");
+const ambiguousFrontier = run([...thirdOpen, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .7),
+  ...pair("moneyline", "bookmaker", next, 0, .75)], run(thirdOpen, null, { evaluatedAt: epoch }, 3).state, {}, 3);
+assert.equal(ambiguousFrontier.arbitration.margin.status, "frontier_extension_unresolved");
+assert.equal(ambiguousFrontier.arbitration.margin.leader, "circa");
+assert.ok(Math.abs(ambiguousFrontier.margin - (3 + nbaResidualQuantile("spread", .6, law))) < 1e-7,
+  "ambiguous extension retains the last uncontested source, never selects/averages the tied new sources");
 async function persistenceBoundary() {
   let stored = capture(initialized.state);
   const queries: unknown[][] = [];

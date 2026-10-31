@@ -497,6 +497,7 @@ export async function buildNbaDailyEdgePipeline(
     const lines = linesByExtId.get(s.game_external_id) ?? [];
     const baseline = runNbaAutoModelV2(s, "t60_locked", {
       bookCount: new Set(lines.map((line) => line.sportsbook)).size,
+      skipLegacyComparison: true,
     });
     const featureRow = professionalFeatures.get(s.game_external_id);
     if (!featureRow) throw new Error(`Missing NBA professional feature row for ${s.game_external_id}.`);
@@ -623,7 +624,7 @@ export async function buildNbaDailyEdgePipeline(
         ...candidate.marketConsequence, state: undefined,
         books: candidate.marketConsequence.books.map(book => ({ ...book, proposals: book.proposals.map(p => ({
           market: p.market, provider: p.provider, anchorCaptureAt: p.anchor.captureAt, currentCaptureAt: p.current.captureAt,
-          innovationLogOdds: p.innovationLogOdds, probability: p.probability, location: p.location, delta: p.delta, path: p.path,
+          observedLocationDelta: p.observedLocationDelta, probability: p.probability, location: p.location, delta: p.delta, path: p.path,
         })) })),
       },
       roster_regime: {

@@ -4,7 +4,7 @@ import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPr
 import type { reconcileNbaMarketConsequence } from "./nbaMarketConsequence";
 
 export const NBA_NAMED_BOOK_POSTURE_RELEASE =
-  "nba_named_book_posture_2026_10_31_r3_continuous_consequence" as const;
+  "nba_named_book_posture_2026_10_31_r4_episode_and_static_context" as const;
 
 export type NbaNamedBookPosture = {
   release: typeof NBA_NAMED_BOOK_POSTURE_RELEASE;
@@ -15,6 +15,9 @@ export type NbaNamedBookPosture = {
   opposingSources: string[];
   conflictingSources: string[];
   convictionRiskSources?: string[];
+  staticSupportingSources?: string[];
+  staticOpposingSources?: string[];
+  flowInterpretations?: { source: string; sourceType: string; book: string | null; pressureSide: string; reaction: string; quoteSide: string | null }[];
   knowledgeAt?: string;
   consequence?: string;
   scoreEffectApplied?: boolean;
@@ -27,6 +30,8 @@ export function resolveNbaConsequencePosture(args: {
   const c = args.consequence;
   const result: NbaNamedBookPosture = { release: NBA_NAMED_BOOK_POSTURE_RELEASE, evaluatedAt: null, market: args.market,
     pickedSide: args.pickedSide, supportingSources: [], opposingSources: [], conflictingSources: [], convictionRiskSources: [],
+    staticSupportingSources: [], staticOpposingSources: [],
+    flowInterpretations: [],
     // Posture itself grants no second adjustment. This explicitly identifies
     // the already applied forecast consequence instead of denying its effect.
     forecastAuthorityGranted: false, scoreEffectApplied: args.market === "total" ? c.totalApplied : c.marginApplied,
@@ -36,16 +41,38 @@ export function resolveNbaConsequencePosture(args: {
     if (!p) continue;
     result.evaluatedAt = p.current.captureAt;
     if (book.jointStatus === "joint_conflict" && args.market !== "total" || book.ignoredMarkets?.includes(args.market)) { result.conflictingSources.push(book.book); continue; }
-    if (Math.abs(p.innovationLogOdds) <= 1e-9) continue;
-    const side = args.market === "total" ? p.innovationLogOdds > 0 ? "over" : "under" : p.innovationLogOdds > 0 ? "home" : "away";
+    if (Math.abs(p.observedLocationDelta) <= 1e-9) continue;
+    const side = args.market === "total" ? p.observedLocationDelta > 0 ? "over" : "under" : p.observedLocationDelta > 0 ? "home" : "away";
     (side === args.pickedSide ? result.supportingSources : result.opposingSources).push(book.book);
     if (p.path.retracement > 1e-9 && Math.sign(p.path.latestLeg) !== 0 && Math.sign(p.path.latestLeg) !== Math.sign(p.path.netLocationChange)) {
       result.convictionRiskSources!.push(`${book.book}:recent_buyback`);
     }
   }
   for (const reason of c.reasons) if (reason.includes(":provider_economic_conflict") && reason.includes(`:${args.market}:`)) result.conflictingSources.push(reason.split(":")[0]!);
+  const arbitration = args.market === "total" ? c.arbitration.total : c.arbitration.margin;
+  result.conflictingSources.push(...arbitration.conflicts);
+  for (const source of arbitration.heldSources ?? []) result.convictionRiskSources!.push(`${source}:named_quote_held_after_lead`);
+  for (const source of arbitration.cancelledBy ?? []) result.convictionRiskSources!.push(`${source}:episode_fully_bought_back`);
+  for (const context of c.currentContexts) if (context.market === args.market && context.favoredSide !== null) {
+    if (context.conflicted) { result.conflictingSources.push(context.book); continue; }
+    if (context.favoredSide === args.pickedSide) result.staticSupportingSources!.push(context.book);
+    else {
+      result.staticOpposingSources!.push(context.book);
+      result.convictionRiskSources!.push(`${context.book}:static_current_opposition`);
+    }
+  }
   for (const pressure of c.pressure) if (pressure.market === args.market && pressure.side === args.pickedSide && pressure.reaction === "held") {
     result.convictionRiskSources!.push(`${pressure.source}:${pressure.reactionBook}:held_under_pressure`);
+  }
+  for (const pressure of c.pressure) if (pressure.market === args.market) {
+    const opposite = pressure.side === "home" ? "away" : pressure.side === "away" ? "home" : pressure.side === "over" ? "under" : "over";
+    const quoteSide = pressure.reaction === "aligned" ? pressure.side : pressure.reaction === "opposed" ? opposite : null;
+    result.flowInterpretations!.push({ source: pressure.source, sourceType: pressure.sourceType, book: pressure.reactionBook,
+      pressureSide: pressure.side, reaction: pressure.reaction, quoteSide });
+    if (quoteSide !== null && pressure.reactionBook !== null) {
+      if (quoteSide === args.pickedSide) result.supportingSources.push(pressure.reactionBook);
+      else result.convictionRiskSources!.push(`${pressure.reactionBook}:timed_price_reaction_against_pick`);
+    }
   }
   for (const follower of c.followers) if (follower.market === args.market && follower.reaction === "rejected") {
     result.convictionRiskSources!.push(`${follower.leader}:${follower.follower}:follow_through_rejected`);

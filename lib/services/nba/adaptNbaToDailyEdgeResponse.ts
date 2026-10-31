@@ -154,7 +154,7 @@ export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
   const posture = intel.named_book_posture;
   if (posture) {
     if (posture.market !== intel.market || posture.pickedSide !== intel.pick_side) return "market_neutral";
-    if (posture.opposingSources.length) return "market_resistance";
+    if (posture.opposingSources.length || posture.staticOpposingSources?.length) return "market_resistance";
     if (posture.conflictingSources.length) return "market_neutral";
     if (posture.convictionRiskSources?.length) return "market_neutral";
     return posture.supportingSources.length ? "market_confirmed" : "market_neutral";

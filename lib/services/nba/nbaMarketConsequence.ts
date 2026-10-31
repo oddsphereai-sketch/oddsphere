@@ -1,7 +1,7 @@
 import { nbaResidualCdf, nbaResidualQuantile, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
 import type { NbaReaderPriceRow, NbaReaderSplitRow } from "./nbaProfessionalMarketReader";
 
-export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_10_31_r1_semantic_epoch_transport" as const;
+export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_10_31_r2_single_episode_arbitration" as const;
 type Market = "moneyline" | "spread" | "total";
 type Frame = { book: string; provider: string; market: Market; captureAt: string; sourceAt: string;
   run: string; event: string; threshold: number; fair: number };
@@ -25,9 +25,10 @@ export type NbaMarketConsequenceContext = {
   disabledMarkets?: readonly Market[];
 };
 type Proposal = { book: string; provider: string; market: Market; anchor: Frame; current: Frame;
-  innovationLogOdds: number; probability: number; location: number; delta: number;
+  observedLocationDelta: number; probability: number; location: number; delta: number;
   path: { peakLocation: number; troughLocation: number; netLocationChange: number; retracement: number;
-    onsetAt: string | null; latestLeg: number; captures: number } };
+    onsetAt: string | null; onsetSourceAt: string | null; regimeOnsetAt: string | null; regimeSourceAt: string | null;
+    lastEconomicSourceAt: string | null; latestLeg: number; captures: number } };
 type BookDecision = { book: string; margin: number | null; marginScale: number; total: number | null;
   jointStatus: "joint_constraints" | "single_contract" | "joint_conflict" | "no_side_update";
   ignoredMarkets?: Market[];
@@ -36,15 +37,6 @@ const canonical = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 const names = new Set(["circa", "pinnacle", "bookmaker"]);
 const key = (p: Pick<Frame, "book" | "provider" | "market">) => `${p.book}|${p.provider}|${p.market}`;
 const numericalZero = (n: number) => Math.abs(n) <= 1e-9;
-const logit = (p: number) => {
-  if (!(p > 0 && p < 1)) throw new Error("Unresolved tail probability");
-  return Math.log(p) - Math.log1p(-p);
-};
-const logistic = (z: number) => z >= 0 ? 1 / (1 + Math.exp(-z)) : Math.exp(z) / (1 + Math.exp(z));
-const median = (xs: number[]) => {
-  const v = [...xs].sort((a, b) => a - b), i = Math.floor(v.length / 2);
-  return v.length % 2 ? v[i]! : (v[i - 1]! + v[i]!) / 2;
-};
 const axis = (market: Market) => market === "total" ? "total" as const : "spread" as const;
 const location = (frame: Frame, law: NbaPriceCoordinateLaw) => frame.threshold + nbaResidualQuantile(axis(frame.market), frame.fair, law);
 
@@ -117,7 +109,7 @@ function frames(context: NbaMarketConsequenceContext) {
   return { frames: result.sort((a, b) => Date.parse(a.captureAt) - Date.parse(b.captureAt)), issues };
 }
 
-/** Continuous relative-odds transport, not a current-market forecast anchor.
+/** Event-selected economic displacement, not a current-market forecast anchor.
  * Same-book ML/Spread constrain one location/scale jointly (never added or
  * fixed 50/50). The released residual family is retained; impossible ordering
  * produces explicit conflict rather than an invented forced crossing.
@@ -143,8 +135,17 @@ export function reconcileNbaMarketConsequence(args: {
   const lanes = new Map<string, Frame[]>();
   for (const frame of captured.frames) lanes.set(key(frame), [...(lanes.get(key(frame)) ?? []), frame]);
   const causalLanes = new Map<string, Frame[]>();
+  const contextFrames: Frame[] = [];
   const proposals: Proposal[] = [];
   for (const [laneKey, capturedSequence] of lanes) {
+    let contextSource = Date.parse(state.anchors[laneKey]?.sourceAt ?? "") || -Infinity;
+    let contextPrior: Frame | undefined = state.anchors[laneKey];
+    for (const f of capturedSequence) {
+      const source = Date.parse(f.sourceAt);
+      if (source < contextSource || contextPrior && source === contextSource &&
+          (Math.abs(f.fair - contextPrior.fair) > 1e-9 || f.threshold !== contextPrior.threshold)) continue;
+      contextFrames.push(f); contextSource = source; contextPrior = f;
+    }
     let latestSource = Date.parse(state.anchors[laneKey]?.sourceAt ?? state.knowledgeAt);
     let lastSourceFrame: Frame | undefined = state.anchors[laneKey];
     const sequence = capturedSequence.filter(f => {
@@ -173,19 +174,28 @@ export function reconcileNbaMarketConsequence(args: {
     if (evaluated - Date.parse(latest.captureAt) > 120 * 60_000) { reasons.push(`${laneKey}:stale_current_capture`); continue; }
     try {
       const kind = axis(latest.market), independent = kind === "total" ? args.independentTotal : args.independentMargin;
-      const openingAtCurrent = nbaResidualCdf(kind, location(anchor, law) - latest.threshold, law);
-      const independentProbability = nbaResidualCdf(kind, independent - latest.threshold, law);
-      const innovation = logit(latest.fair) - logit(openingAtCurrent);
-      const probability = logistic(logit(independentProbability) + innovation);
-      const proposed = numericalZero(innovation) ? independent : latest.threshold + nbaResidualQuantile(kind, probability, law);
       const path = [anchor, ...sequence.filter(f => Date.parse(f.captureAt) > Date.parse(anchor!.captureAt))];
       const points = path.map(f => location(f, law)), first = points[0]!, end = points.at(-1)!;
       const peak = Math.max(...points), trough = Math.min(...points), net = end - first;
+      const proposed = independent + (numericalZero(net) ? 0 : net);
+      const probability = nbaResidualCdf(kind, proposed - latest.threshold, law);
+      let regimeStart: number | null = null;
+      let lastEconomicIndex: number | null = null;
+      for (let i = 1; i < points.length; i++) {
+        if (!numericalZero(points[i]! - points[i - 1]!)) lastEconomicIndex = i;
+        const signed = points[i]! - first;
+        if (numericalZero(signed) || Math.sign(signed) !== Math.sign(net)) regimeStart = null;
+        else if (regimeStart === null) regimeStart = i;
+      }
       proposals.push({ book: latest.book, provider: latest.provider, market: latest.market, anchor, current: latest,
-        innovationLogOdds: innovation, probability, location: proposed, delta: proposed - independent,
+        observedLocationDelta: numericalZero(net) ? 0 : net, probability, location: proposed, delta: proposed - independent,
         path: { peakLocation: peak, troughLocation: trough, netLocationChange: net,
           retracement: net >= 0 ? peak - end : end - trough,
           onsetAt: path.find((f, i) => !numericalZero(points[i]! - first))?.captureAt ?? null,
+          onsetSourceAt: path.find((f, i) => !numericalZero(points[i]! - first))?.sourceAt ?? null,
+          regimeOnsetAt: regimeStart === null ? null : path[regimeStart]!.captureAt,
+          regimeSourceAt: regimeStart === null ? null : path[regimeStart]!.sourceAt,
+          lastEconomicSourceAt: lastEconomicIndex === null ? null : path[lastEconomicIndex]!.sourceAt,
           latestLeg: points.length >= 2 ? end - points[points.length - 2]! : 0, captures: points.length } });
     } catch { reasons.push(`${laneKey}:numerically_unresolved_contract`); }
   }
@@ -204,7 +214,7 @@ export function reconcileNbaMarketConsequence(args: {
     const ml = rows.find(p => p.market === "moneyline"), spread = rows.find(p => p.market === "spread"), total = rows.find(p => p.market === "total");
     let margin: number | null = null, scale = 1, jointStatus: BookDecision["jointStatus"] = "no_side_update";
     if (ml && spread) {
-      if (numericalZero(ml.innovationLogOdds) && numericalZero(spread.innovationLogOdds)) {
+      if (numericalZero(ml.observedLocationDelta) && numericalZero(spread.observedLocationDelta)) {
         margin = args.independentMargin; jointStatus = "joint_constraints";
         if (rows.length) books.push({ book, margin, marginScale: scale, total: total?.location ?? null, jointStatus, proposals: rows });
         continue;
@@ -221,19 +231,121 @@ export function reconcileNbaMarketConsequence(args: {
     if (rows.length) books.push({ book, margin, marginScale: scale, total: total?.location ?? null, jointStatus, proposals: rows,
       ignoredMarkets: reasons.includes(`${book}:spread_scale_unidentified_moneyline_scalar_retained`) ? ["spread"] : [] });
   }
-  const sideBooks = books.filter(b => b.margin !== null), totalBooks = books.filter(b => b.total !== null);
-  // Pool probabilities on COMMON contracts, not separately averaged parameters:
-  // combining (mu=6,s=1) and (mu=24,s=4) must preserve their unanimous ML.
-  const pWin = sideBooks.length ? median(sideBooks.map(b => nbaResidualCdf("spread", b.margin! / b.marginScale, law))) : null;
-  const coverThreshold = args.spreadHome == null ? null : -args.spreadHome;
-  const pCover = coverThreshold === null || !sideBooks.length ? null : median(sideBooks.map(b => nbaResidualCdf("spread", (b.margin! - coverThreshold) / b.marginScale, law)));
-  const aggregate = pWin === null ? null : pCover === null ? { margin: nbaResidualQuantile("spread", pWin, law), scale: 1 }
-    : jointLaw(pWin, pCover, coverThreshold!, law);
-  if (pWin !== null && aggregate === null) reasons.push("aggregate_scale_unidentified_moneyline_scalar_retained");
-  let margin = aggregate?.margin ?? (pWin === null ? args.independentMargin : nbaResidualQuantile("spread", pWin, law));
-  let marginScale = aggregate?.scale ?? 1;
-  const totalThreshold = args.totalLine ?? args.independentTotal;
-  let total = totalBooks.length ? totalThreshold + nbaResidualQuantile("total", median(totalBooks.map(b => nbaResidualCdf("total", b.total! - totalThreshold, law))), law) : args.independentTotal;
+  // One physical source/episode authors each coordinate. No averaging,
+  // probability pooling, source-count vote or model/market percentage.
+  const arbitrate = (coordinate: "margin" | "total") => {
+    const relevant = (book: BookDecision) => book.proposals.filter(p => coordinate === "total" ? p.market === "total" : p.market !== "total" && !book.ignoredMarkets?.includes(p.market));
+    const cancellations = books.flatMap(book => {
+      const ps = relevant(book);
+      const unchanged = coordinate === "total" ? book.total !== null && numericalZero(book.total - args.independentTotal)
+        : book.margin !== null && numericalZero(book.margin - args.independentMargin) && numericalZero(book.marginScale - 1);
+      const changed = ps.filter(p => p.path.lastEconomicSourceAt !== null && p.path.onsetSourceAt !== null);
+      if (!unchanged || !changed.length || !ps.every(p => numericalZero(p.observedLocationDelta))) return [];
+      // A cancellation can retire an observed copy of its own excursion,
+      // never every other book that happened to change during that window.
+      const excursions = changed.map(p => ({ market: p.market, deltas: (causalLanes.get(key(p.anchor)) ?? [])
+        .filter(f => Date.parse(f.sourceAt) < Date.parse(p.path.lastEconomicSourceAt!))
+        .map(f => ({ delta: location(f, law) - location(p.anchor, law), at: Date.parse(f.sourceAt) }))
+        .filter(d => !numericalZero(d.delta)) }));
+      return [{ book: book.book, from: Math.min(...changed.map(p => Date.parse(p.path.onsetSourceAt!))),
+        at: Math.max(...changed.map(p => Date.parse(p.path.lastEconomicSourceAt!))), excursions }];
+    });
+    const candidates = books.filter(b => coordinate === "total" ? b.total !== null : b.margin !== null && b.jointStatus !== "joint_conflict")
+      .map(book => {
+        const ps = relevant(book);
+        const delta = coordinate === "total" ? book.total! - args.independentTotal : book.margin! - args.independentMargin;
+        const scaleDelta = coordinate === "total" ? 0 : book.marginScale - 1;
+        const times = ps.flatMap(p => p.path.regimeSourceAt ? [Date.parse(p.path.regimeSourceAt)] : []);
+        return { book, delta, scaleDelta, onset: times.length ? Math.min(...times) : Infinity,
+          latestEconomic: Math.max(...ps.flatMap(p => p.path.lastEconomicSourceAt ? [Date.parse(p.path.lastEconomicSourceAt)] : [])),
+          current: ps.length ? Math.max(...ps.map(p => Date.parse(p.current.captureAt))) : -Infinity };
+      }).filter(c => !numericalZero(c.delta) || !numericalZero(c.scaleDelta));
+    const cancelledFollowers = candidates.filter(c => cancellations.some(cancel => c.onset >= cancel.from && c.latestEconomic <= cancel.at &&
+      numericalZero(c.scaleDelta) && relevant(c.book).filter(p => !numericalZero(p.observedLocationDelta)).every(p =>
+        cancel.excursions.some(e => e.market === p.market && e.deltas.some(d => d.at <= c.onset && numericalZero(d.delta - p.observedLocationDelta)))))).map(c => c.book.book);
+    const activeCandidates = candidates.filter(c => !cancelledFollowers.includes(c.book.book));
+    const opposite = (a: typeof candidates[number], b: typeof candidates[number]) =>
+      !numericalZero(a.delta) && !numericalZero(b.delta) && Math.sign(a.delta) !== Math.sign(b.delta) ||
+      !numericalZero(a.scaleDelta) && !numericalZero(b.scaleDelta) && Math.sign(a.scaleDelta) !== Math.sign(b.scaleDelta);
+    const order = (a: typeof candidates[number], b: typeof candidates[number]) => a.onset - b.onset;
+    const sameEffect = (a: typeof candidates[number], b: typeof candidates[number]) =>
+      numericalZero(a.delta - b.delta) && numericalZero(a.scaleDelta - b.scaleDelta);
+    const equivalentRepresentative = (group: typeof candidates) => ({ ...group[0]!, current: Math.max(...group.map(c => c.current)) });
+    const leaders = [...activeCandidates].sort(order);
+    if (!leaders.length) return { authority: "context_only" as const, status: "no_causal_displacement", leader: null as string | null,
+      selected: null as BookDecision | null, followers: [] as string[], lagging: cancelledFollowers, conflicts: [] as string[], episodeAt: null as string | null,
+      cancelledBy: cancellations.map(c => c.book), heldSources: [] as string[] };
+    let leader = leaders[0]!;
+    let leaderSources = [leader.book.book];
+    const initialGroup = leaders.filter(c => c.onset === leader.onset);
+    if (initialGroup.length > 1 && !initialGroup.every(c => sameEffect(c, leader))) {
+      reasons.push(`${coordinate}:leader_unidentified_equal_source_instant`);
+      return { authority: "context_only" as const, status: "leader_unidentified", leader: null,
+        selected: null, followers: [], lagging: [], conflicts: leaders.filter(c => c.onset === leader.onset).map(c => c.book.book), episodeAt: null };
+    }
+    if (initialGroup.length > 1) {
+      leader = equivalentRepresentative(initialGroup); leaderSources = initialGroup.map(c => c.book.book);
+    }
+    const conflicting = activeCandidates.filter(c => opposite(c, leader));
+    const lagging: string[] = [];
+    if (conflicting.length) {
+      let latestEpisode = [...activeCandidates].sort((a, b) => b.onset - a.onset || order(a, b))[0]!;
+      const latestGroup = activeCandidates.filter(c => c.onset === latestEpisode.onset);
+      if (latestGroup.length > 1 && !latestGroup.every(c => sameEffect(c, latestEpisode))) {
+        reasons.push(`${coordinate}:leader_unidentified_equal_source_instant`);
+        return { authority: "context_only" as const, status: "leader_unidentified", leader: null,
+          selected: null, followers: [], lagging: [], conflicts: activeCandidates.filter(c => c.onset === latestEpisode.onset).map(c => c.book.book), episodeAt: null };
+      }
+      if (latestGroup.length > 1) latestEpisode = equivalentRepresentative(latestGroup);
+      const opponents = activeCandidates.filter(c => opposite(c, latestEpisode));
+      if (opponents.every(c => c.current < latestEpisode.onset)) {
+        leader = latestEpisode; leaderSources = latestGroup.map(c => c.book.book); lagging.push(...opponents.map(c => c.book.book));
+      } else {
+        reasons.push(`${coordinate}:unresolved_named_episode_conflict`);
+        return { authority: "context_only" as const, status: "unresolved_conflict", leader: null,
+          selected: null, followers: [], lagging: [], conflicts: activeCandidates.map(c => c.book.book), episodeAt: null };
+      }
+    }
+    let priorFrontierSource: string | null = null, incrementalExtension = 0;
+    let frontierExtended = false;
+    let ambiguousExtensions = false;
+    let extensionConflicts: string[] = [];
+    const frontierPath = [...leaderSources];
+    // Walk the chronology through every new frontier; a third distinct event
+    // must not be mislabeled a copied follower after processing only the first.
+    for (let step = 0; step < activeCandidates.length; step++) {
+      const extensions = activeCandidates.filter(c => c !== leader && !opposite(c, leader) && c.latestEconomic > leader.onset &&
+        leader.current < c.latestEconomic && Math.abs(c.delta) > Math.abs(leader.delta) && numericalZero(c.scaleDelta - leader.scaleDelta))
+        .sort((a, b) => a.latestEconomic - b.latestEconomic);
+      if (!extensions.length) break;
+      const extensionGroup = extensions.filter(c => c.latestEconomic === extensions[0]!.latestEconomic);
+      ambiguousExtensions = extensionGroup.length > 1 && !extensionGroup.every(c => sameEffect(c, extensionGroup[0]!));
+      if (ambiguousExtensions) {
+        reasons.push(`${coordinate}:frontier_extension_leader_unidentified`);
+        extensionConflicts = extensionGroup.map(c => c.book.book);
+        break;
+      }
+      const extension = equivalentRepresentative(extensionGroup);
+      priorFrontierSource = leaderSources.length === 1 ? leaderSources[0]! : null;
+      incrementalExtension = extension.delta - leader.delta; leader = extension; frontierExtended = true;
+      leaderSources = extensionGroup.map(c => c.book.book);
+      frontierPath.push(...leaderSources);
+    }
+    const heldSources = books.filter(b => !leaderSources.includes(b.book) && !cancellations.some(c => c.book === b.book) && relevant(b).length &&
+      relevant(b).every(p => numericalZero(p.observedLocationDelta)) && relevant(b).some(p => Date.parse(p.current.captureAt) >= leader.onset)).map(b => b.book);
+    return { authority: "causal_authority" as const, status: ambiguousExtensions ? "frontier_extension_unresolved" : frontierExtended ? "frontier_extension" : lagging.length ? "later_episode_supersedes_unobserved_laggards" : leaderSources.length > 1 ? "equivalent_simultaneous_episode" : "observed_named_leader",
+      leader: leaderSources.length === 1 ? leaderSources[0]! : null, selected: leader.book,
+      equivalentSources: leaderSources.length > 1 ? leaderSources : [],
+      selectionBasis: leaderSources.length > 1 ? "identical_coordinate_receipt" : "observed_source_chronology",
+      followers: activeCandidates.filter(c => !leaderSources.includes(c.book.book) && !opposite(c, leader)).map(c => c.book.book),
+      lagging: [...lagging, ...cancelledFollowers], heldSources, cancelledBy: cancellations.map(c => c.book),
+      conflicts: extensionConflicts,
+      episodeAt: new Date(frontierExtended ? leader.latestEconomic : leader.onset).toISOString(), priorFrontierSource, incrementalExtension, frontierPath };
+  };
+  const marginEpisode = arbitrate("margin"), totalEpisode = arbitrate("total");
+  let margin = marginEpisode.selected?.margin ?? args.independentMargin;
+  let marginScale = marginEpisode.selected?.marginScale ?? 1;
+  let total = totalEpisode.selected?.total ?? args.independentTotal;
   if (![margin, marginScale, total].every(Number.isFinite) || marginScale <= 0 || total <= 0 || Math.abs(margin) > total) {
     reasons.push("joint_score_support_conflict"); margin = args.independentMargin; total = args.independentTotal; marginScale = 1;
   }
@@ -326,12 +438,29 @@ export function reconcileNbaMarketConsequence(args: {
   const totalApplied = !numericalZero(total - args.independentTotal);
   const diagnosticCounts: Record<string, number> = {};
   for (const reason of reasons) diagnosticCounts[reason] = (diagnosticCounts[reason] ?? 0) + 1;
+  const currentContexts = [...names].flatMap(book => (["moneyline", "spread", "total"] as const).flatMap(market => {
+    const current = contextFrames.filter(f => f.book === book && f.market === market && context.pricesTrusted &&
+      evaluated - Date.parse(f.captureAt) <= 120 * 60_000)
+      .sort((a, b) => Date.parse(b.captureAt) - Date.parse(a.captureAt) || Number(b.provider === "owls") - Number(a.provider === "owls"))[0];
+    if (!current) return [];
+    const evaluatedThreshold = market === "moneyline" ? 0 : market === "spread" ? args.spreadHome == null ? null : -args.spreadHome : args.totalLine ?? null;
+    const threshold = current.threshold, matchesEvaluatedContract = evaluatedThreshold !== null && numericalZero(threshold - evaluatedThreshold);
+    const fairAtBookContract = current.fair;
+    const independent = market === "total" ? args.independentTotal : args.independentMargin;
+    return [{ book, market, provider: current.provider, captureAt: current.captureAt, sourceAt: current.sourceAt,
+      conflicted: reasons.includes(`${book}:${market}:provider_economic_conflict`),
+      threshold, fairAtBookContract, independentProbability: nbaResidualCdf(axis(market), independent - threshold, law), matchesEvaluatedContract,
+      favoredSide: !matchesEvaluatedContract || numericalZero(fairAtBookContract - .5) ? null : market === "total" ? fairAtBookContract > .5 ? "over" : "under" : fairAtBookContract > .5 ? "home" : "away",
+      authority: "context_only" as const, scoreDelta: 0 }];
+  }));
+  const receipt = ({ selected, ...r }: ReturnType<typeof arbitrate>) => ({ ...r, selectedSource: selected?.book ?? null });
   return { release: NBA_MARKET_CONSEQUENCE_RELEASE, state, margin, total, marginScale,
     homeScore: (total + margin) / 2, awayScore: (total - margin) / 2,
-    marginApplied, totalApplied, books, pressure, sequences, followers,
+    marginApplied, totalApplied, books, pressure, sequences, followers, currentContexts,
+    arbitration: { margin: receipt(marginEpisode), total: receipt(totalEpisode) },
     independentInputChanged: !continuing, reasons: [...new Set(reasons)],
     diagnosticCounts,
-    actions: { margin: marginApplied ? "adjusted_from_post_input_evidence" : sideBooks.length ? "confirmed_or_offset" : "retained_with_reason",
-      total: totalApplied ? "adjusted_from_post_input_evidence" : totalBooks.length ? "confirmed_or_offset" : "retained_with_reason" },
+    actions: { margin: marginEpisode.status === "frontier_extension_unresolved" ? "retain_last_uncontested" : ["unresolved_conflict", "leader_unidentified"].includes(marginEpisode.status) ? "unresolved" : marginApplied ? "correct" : "context_only",
+      total: totalEpisode.status === "frontier_extension_unresolved" ? "retain_last_uncontested" : ["unresolved_conflict", "leader_unidentified"].includes(totalEpisode.status) ? "unresolved" : totalApplied ? "correct" : "context_only" },
     providerCalls: 0, productionWrites: 0 };
 }

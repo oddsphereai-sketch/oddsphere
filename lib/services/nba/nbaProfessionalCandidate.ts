@@ -16,7 +16,7 @@ import {
 import type { NbaProfessionalMarketReader } from "./nbaProfessionalMarketReader";
 import { resolveNbaNamedBookPosture, resolveNbaConsequencePosture } from "./nbaNamedBookPosture";
 import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
-import { reconcileNbaMarketConsequence, type NbaMarketConsequenceContext } from "./nbaMarketConsequence";
+import { NBA_MARKET_CONSEQUENCE_RELEASE, reconcileNbaMarketConsequence, type NbaMarketConsequenceContext } from "./nbaMarketConsequence";
 
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -134,7 +134,7 @@ export function buildNbaProfessionalCandidate(args: {
       tail_sigma_multiplier: args.artifact.distribution.marginCalibration.tailSigmaMultiplier } };
   const qualifiedSpreadRead = args.retainLegacyScoreReconciliation ? selectNbaQualifiedSpreadRead(args.marketReader, priceLaw) : null;
   const qualifiedTotalRead = args.retainLegacyScoreReconciliation ? selectNbaQualifiedTotalRead(args.marketReader, priceLaw) : null;
-  const baselineFinal = buildNbaUnifiedFinalProjection({
+  const baselineFinal = args.retainLegacyScoreReconciliation ? buildNbaUnifiedFinalProjection({
     independentHomeScore: independent.homeScore,
     independentAwayScore: independent.awayScore,
     currentSpreadHome: consensus.spreadHome,
@@ -142,13 +142,24 @@ export function buildNbaProfessionalCandidate(args: {
     openingSpreadHome: openingSpread?.spreadHome ?? null,
     qualifiedSpreadRead,
     qualifiedTotalRead,
-  });
+  }) : {
+    release: NBA_MARKET_CONSEQUENCE_RELEASE,
+    homeScore: independent.homeScore, awayScore: independent.awayScore, marginHome: independent.marginHome, total: independent.total,
+    spreadResidual: consensus.spreadHome === null ? null : independent.marginHome + consensus.spreadHome,
+    totalResidual: consensus.totalLine === null ? null : independent.total - consensus.totalLine,
+    movementQualified: false, movementApplied: false, totalMovementQualified: false, totalMovementApplied: false,
+    marketApplied: { margin: false, total: false },
+    audit: { independentMarginHome: independent.marginHome, independentTotal: independent.total,
+      marketMarginHome: consensus.spreadHome === null ? null : -consensus.spreadHome, marketTotal: consensus.totalLine,
+      spreadMovementHomeSupport: openingSpread === null || consensus.spreadHome === null ? null : openingSpread.spreadHome - consensus.spreadHome },
+  };
   const consequence = args.marketContext ? reconcileNbaMarketConsequence({ independentMargin: independent.marginHome,
     independentTotal: independent.total, law: priceLaw, context: args.marketContext,
     spreadHome: consensus.spreadHome, totalLine: consensus.totalLine }) : null;
-  const spreadEvidence = consequence?.books.filter(b => b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes("spread"))
-    .flatMap(b => b.proposals.filter(p => p.market === "spread" && Math.abs(p.innovationLogOdds) > 1e-9)) ?? [];
-  const totalEvidence = consequence?.books.flatMap(b => b.proposals.filter(p => p.market === "total" && Math.abs(p.innovationLogOdds) > 1e-9)) ?? [];
+  const spreadEvidence = consequence?.books.filter(b => consequence.arbitration.margin.authority === "causal_authority" && b.book === consequence.arbitration.margin.selectedSource && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes("spread"))
+    .flatMap(b => b.proposals.filter(p => p.market === "spread" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
+  const totalEvidence = consequence?.books.filter(b => consequence.arbitration.total.authority === "causal_authority" && b.book === consequence.arbitration.total.selectedSource)
+    .flatMap(b => b.proposals.filter(p => p.market === "total" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
   const final = consequence ? { ...baselineFinal, release: consequence.release,
     homeScore: consequence.homeScore, awayScore: consequence.awayScore, marginHome: consequence.margin, total: consequence.total,
     spreadResidual: consensus.spreadHome === null ? null : consequence.margin + consensus.spreadHome,
@@ -219,9 +230,9 @@ export function buildNbaProfessionalCandidate(args: {
       spreadMagnitudePoints: consequence ? Math.abs(final.marginHome - independent.marginHome) : qualifiedSpreadRead?.magnitudePoints ?? null,
       totalMagnitudePoints: consequence ? Math.abs(final.total - independent.total) : qualifiedTotalRead?.magnitudePoints ?? null,
       effects: consequence ? {
-        moneyline: independentPicks.moneyline !== picks.moneyline ? "flipped_by_joint_market_transport" as const : consequence.actions.margin,
-        spread: independentPicks.spread !== picks.spread ? "flipped_by_joint_market_transport" as const : consequence.actions.margin,
-        total: independentPicks.total !== picks.total ? "flipped_by_joint_market_transport" as const : consequence.actions.total,
+        moneyline: independentPicks.moneyline !== picks.moneyline ? "flipped_by_causal_market_episode" as const : consequence.actions.margin,
+        spread: independentPicks.spread !== picks.spread ? "flipped_by_causal_market_episode" as const : consequence.actions.margin,
+        total: independentPicks.total !== picks.total ? "flipped_by_causal_market_episode" as const : consequence.actions.total,
       } : {
         moneyline: independentPicks.moneyline !== picks.moneyline
           ? "flipped_by_validated_spread_score" as const
@@ -282,8 +293,9 @@ export function applyNbaProfessionalCandidate(args: {
   const spreadPick = candidate.picks.spread ?? baseline.predicted_spread_side;
   const totalPick = candidate.picks.total ?? baseline.predicted_total_side;
   const consequenceSide = (market: "moneyline" | "spread") => {
-    const signs = new Set((candidate.marketConsequence?.books ?? []).filter(b => b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes(market))
-      .flatMap(b => b.proposals.filter(p => p.market === market && Math.abs(p.innovationLogOdds) > 1e-9).map(p => Math.sign(p.innovationLogOdds))));
+    const decision = candidate.marketConsequence?.arbitration.margin;
+    const signs = new Set((candidate.marketConsequence?.books ?? []).filter(b => decision?.authority === "causal_authority" && b.book === decision.selectedSource && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes(market))
+      .flatMap(b => b.proposals.filter(p => p.market === market && Math.abs(p.observedLocationDelta) > 1e-9).map(p => Math.sign(p.observedLocationDelta))));
     return signs.size === 1 ? signs.has(1) ? "home" as const : "away" as const : null;
   };
   const directSide = consequenceSide("moneyline"), spreadSide = consequenceSide("spread");
@@ -349,6 +361,7 @@ export function applyNbaProfessionalCandidate(args: {
               : null,
           spreadCorrectionApplied: candidate.readerDecisionAudit.spreadCorrectionApplied,
           ...(candidate.marketConsequence ? { jointConflict: candidate.marketConsequence.books.some(b => b.jointStatus === "joint_conflict") ||
+            candidate.marketConsequence.arbitration.margin.conflicts.length > 0 ||
             candidate.marketConsequence.reasons.some(r => r.includes("provider_economic_conflict")) } : {}),
         },
         spread: {

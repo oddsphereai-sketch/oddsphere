@@ -8,6 +8,8 @@ import { applyNbaProfessionalCandidate, buildNbaProfessionalCandidate } from "..
 import { buildNbaProfessionalMarketReader, type NbaReaderPriceRow, type NbaReaderSplitRow } from "../lib/services/nba/nbaProfessionalMarketReader";
 import { readNbaPricedMarketMovement } from "../lib/services/nba/nbaPricedMarketMovement";
 import { buildMarketSignal, buildNbaSharpStatus } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
+import { gradeNbaMarket } from "../lib/services/nba/nbaMarketReview";
+import { readFileSync } from "node:fs";
 
 const evaluatedAt = "2026-10-31T18:00:00Z", opening = "2026-10-31T14:00:00Z", current = "2026-10-31T17:00:00Z";
 const artifact: NbaPortableModelArtifact = { release: "functional_fixture", featureRelease: "functional_fixture", architecture: "margin_total",
@@ -19,7 +21,7 @@ const pair = (market: "moneyline" | "spread" | "total", book: string, at: string
   prices: [number, number] = [-110, -110]): NbaReaderPriceRow[] => (market === "total" ? ["over", "under"] : ["home", "away"]).map((side, index) => ({
     market, sportsbook: book, sharpBook: ["circa", "pinnacle"].includes(book), provider: "owls", providerEventId: "9", ingestionRunId: `run:${at}`,
     selectionKey: `9:${market}:${side}`, line: market === "spread" && index === 1 ? -number! : number,
-    americanPrice: prices[index]!, providerTimestamp: at, fetchedAt: at }));
+    americanPrice: prices[index]!, providerTimestamp: book === "circa" && at !== opening ? new Date(Date.parse(at) - 1000).toISOString() : at, fetchedAt: at }));
 const movement = (market: "moneyline" | "spread" | "total", from: number | null, to: number | null,
   oldPrices: [number, number] = [-110, -110], newPrices: [number, number] = [-110, -110]) => ["circa", "pinnacle"].flatMap(book => [
     ...pair(market, book, opening, from, oldPrices), ...pair(market, book, current, to, newPrices) ]);
@@ -44,7 +46,7 @@ const snapshot: NbaGameSnapshot = { game_external_id: 9, slate_date: "2026-10-31
     spread: { home_line: -5.5, home_odds_american: -110, away_odds_american: -110 },
     total: { line: 220, over_odds_american: -110, under_odds_american: -110 } },
   data_quality: { ratings_present: true, home_injuries_known: true, away_injuries_known: true, market_present: true, series_context_derived: true } };
-const baseline = runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 2 });
+const baseline = runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 2, skipLegacyComparison: true });
 function run(rows: NbaReaderPriceRow[], splits: NbaReaderSplitRow[] = [], margin = -4, total = 210) {
   const reader = buildNbaProfessionalMarketReader({ evaluatedAt, priceRows: rows, splitRows: splits, selectedLines: { spreadHome: -5.5, total: 220 } });
   const context = { eventId: "9", inputFingerprint: `fixture:${margin}:${total}`, evaluatedAt: opening,
@@ -147,6 +149,46 @@ assert.ok(supportedButTempered.intel.spread.named_book_posture!.supportingSource
 assert.ok(supportedButTempered.intel.spread.named_book_posture!.convictionRiskSources!.length > 0);
 assert.equal(buildMarketSignal(supportedButTempered.intel.spread), "market_neutral", "member signal must not claim unqualified confirmation over internal buyback tempering");
 assert.equal(buildNbaSharpStatus(supportedButTempered.intel.spread), "mixed");
+const staticOnly = run(pair("moneyline", "circa", current, null, [300, -400]), [], 10);
+assert.equal(staticOnly.candidate.final.marginHome, 10);
+assert.equal(staticOnly.candidate.marketConsequence!.actions.margin, "context_only");
+assert.equal(staticOnly.prediction.audit.professional_grade_context!.moneyline!.directReadQualified, false);
+assert.deepEqual(staticOnly.intel.ml.named_book_posture!.staticOpposingSources, ["circa"]);
+const strongStatic = { market: "moneyline" as const, pick: "home" as const, confidence: 70, modelProbabilityOnPick: .8,
+  band: "support" as const, edge: .1, dataQualityTier: "high" as const, injuriesKnown: true, currentPriceAmerican: -160 };
+assert.equal(gradeNbaMarket(strongStatic).grade, "best_angle");
+assert.equal(gradeNbaMarket({ ...strongStatic, namedBookPosture: staticOnly.intel.ml.named_book_posture }).grade, "lean",
+  "static opposition affects conviction/grade without fabricated score points or destroying genuine positive value");
+assert.equal(buildMarketSignal(staticOnly.intel.ml), "market_resistance");
+const heldHome = run(movement("spread", -5.5, -5.5), [{ ...split,
+  sourceObservedAt: "2026-10-31T16:00:00Z", fetchedAt: "2026-10-31T16:00:00Z" }], 10);
+assert.equal(heldHome.candidate.final.marginHome, 10, "held pressure must not invent score points");
+assert.ok(heldHome.intel.spread.named_book_posture!.convictionRiskSources!.some(r => r.includes("held_under_pressure")));
+assert.equal(gradeNbaMarket({ ...strongStatic, market: "spread", namedBookPosture: heldHome.intel.spread.named_book_posture }).grade, "lean",
+  "the exact held-pressure interpretation must reach the actual grade policy");
+assert.equal(buildMarketSignal(heldHome.intel.spread), "market_neutral");
+const timedSplit = { ...split, sourceObservedAt: "2026-10-31T16:00:00Z", fetchedAt: "2026-10-31T16:00:00Z" };
+const flowAligned = run(movement("spread", -5.5, -7.5), [timedSplit], 10);
+assert.ok(flowAligned.intel.spread.named_book_posture!.flowInterpretations!.some(p =>
+  p.source === "circa" && p.sourceType === "sharp_adjacent_book" && p.reaction === "aligned" && p.quoteSide === "home"));
+assert.ok(flowAligned.candidate.final.marginHome > 10);
+const flowOpposed = run(movement("spread", -5.5, -3.5), [timedSplit], 10);
+assert.ok(flowOpposed.intel.spread.named_book_posture!.flowInterpretations!.some(p =>
+  p.reaction === "opposed" && p.pressureSide === "home" && p.quoteSide === "away"));
+assert.ok(flowOpposed.candidate.final.marginHome < 10);
+assert.equal(gradeNbaMarket({ ...strongStatic, market: "spread", namedBookPosture: flowOpposed.intel.spread.named_book_posture }).grade, "lean");
+assert.equal(buildMarketSignal(flowOpposed.intel.spread), "market_resistance");
+const unresolved = run(["circa", "pinnacle"].flatMap(book => [...pair("spread", book, opening, -5.5),
+  ...pair("spread", book, current, book === "circa" ? -6.5 : -4.5)]));
+assert.equal(unresolved.candidate.final.movementQualified, false);
+assert.equal(unresolved.candidate.final.movementApplied, false);
+assert.equal(unresolved.prediction.audit.professional_grade_context!.moneyline!.spreadReadQualified, false);
+const activeBaseline = runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 3, skipLegacyComparison: true });
+assert.equal(activeBaseline.v0_comparison, null);
+assert.equal(activeBaseline.v0_v1_delta.comparison_skipped, true);
+const writerSource = readFileSync("lib/services/nba/buildNbaDailyEdgeAdapted.ts", "utf8");
+assert.match(writerSource, /skipLegacyComparison: true/);
+assert.doesNotMatch(writerSource, /retainLegacyScoreReconciliation: true|blendPosterior\(|groundNba/);
 const untouched = run([], [], 0);
 const promoted = run(movement("moneyline", null, null, [-110, -110], [-400, 300]), [], 0);
 const demoted = run(movement("moneyline", null, null, [-110, -110], [300, -400]), [], 10);
