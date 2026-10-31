@@ -45,6 +45,7 @@ async function main(): Promise<void> {
         : [];
     },
     auditForceUnlocked: process.argv.includes("--force-unlocked"),
+    auditWindowStartDate: process.argv.find((value) => value.startsWith("--window="))?.slice(9),
     auditDisableNearTiePmfCoherence: process.argv.includes("--disable-near-tie-pmf-coherence"),
   });
   console.log(JSON.stringify({

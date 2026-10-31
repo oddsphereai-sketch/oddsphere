@@ -538,6 +538,21 @@ assert.equal(flatSpreadNumberResult.namedMarginStatus, "flat");
 assert.ok(Math.abs(namedSpreadNumberResult.forecast.expectedMarginHome -
   flatSpreadNumberResult.forecast.expectedMarginHome) > 1e-6,
 "a moved named Spread contract must change the unified score, not merely receive a movement label");
+const differingNamedSpreadNumbers = structuredClone(namedSpreadNumber);
+differingNamedSpreadNumbers.markets.spread.families = differingNamedSpreadNumbers.markets.spread.families.map((family) => [
+  family[0], family[1], family[2], family[3], family[4],
+  landmark("2026-10-10T22:00:00.000Z", family[0] === "circa" ? -4 : -5, -110, -110),
+] as CfbForwardMarketReaderObservation["markets"]["spread"]["families"][number]);
+const differingNamedSpreadResult = applyCfbCompleteMarketReader({
+  ...common,
+  forecast: numberForecast,
+  independentForecast: numberForecast,
+  evaluatedLines: { ...common.evaluatedLines, homeSpread: -4 },
+  currentObservation: differingNamedSpreadNumbers,
+});
+assert.equal(differingNamedSpreadResult.namedMarginStatus, "applied",
+  "aligned named Spread moves at different current lines must normalize to one coherent margin read");
+assert.ok(differingNamedSpreadResult.forecast.expectedMarginHome > numberForecast.expectedMarginHome);
 const compensatedSpreadNumber = structuredClone(namedSpreadNumber);
 compensatedSpreadNumber.markets.spread.families = compensatedSpreadNumber.markets.spread.families.map((family) => [
   family[0], family[1], family[2], family[3], family[4],

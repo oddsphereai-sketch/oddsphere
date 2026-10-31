@@ -285,15 +285,16 @@ function namedMarginPriceOnlyTarget(args: {
     const named = trails.filter((trail) => trail.sourceClass === "named");
     if (named.length < 2) return { status: named.length ? "insufficient" : "missing", delta: null } as const;
     if (boundary !== null && named.some((trail) =>
-      trail.openingAxis === null || trail.currentAxis !== boundary)) {
+      trail.openingAxis === null || trail.currentAxis === null)) {
       return { status: "line_mismatch", delta: null } as const;
     }
     if (named.some((trail) => trail.priceReversalCount > 0 || trail.reversalCount > 0)) {
       return { status: "reversal", delta: null } as const;
     }
     // A moved spread number and its juice are one economic observation.
-    // Compare each quoted probability with the same PMF at that book's exact
-    // opening/current cover contract before inferring a directional change.
+    // Books need not quote the evaluated number: normalize each book against
+    // the same PMF at its own opening and current cover contracts, then
+    // transfer only the agreed change to the evaluated contract below.
     const deltas = named.map((trail) => boundary === null
       ? logOdds(trail.currentProbability) - logOdds(trail.openingProbability)
       : logOdds(trail.currentProbability) -
