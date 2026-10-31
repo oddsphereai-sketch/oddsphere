@@ -146,6 +146,19 @@ function buildPickLabel(intel: MarketIntelligence): string | null {
 // MarketSignal union: market_confirmed | market_neutral | market_resistance |
 // public_smoke | steam_alert
 export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
+  // A positive model/price gap is model value, not proof of sharp agreement.
+  // New reader snapshots carry actual observed source posture. An empty or
+  // conflicting posture cannot fall through into legacy value-as-confirmation.
+  // Legacy payloads retain their prior semantics; exact locks win before this
+  // adapter is called and are never relabeled by the new contract.
+  const posture = intel.named_book_posture;
+  if (posture) {
+    if (posture.market !== intel.market || posture.pickedSide !== intel.pick_side) return "market_neutral";
+    if (posture.opposingSources.length || posture.staticOpposingSources?.length) return "market_resistance";
+    if (posture.conflictingSources.length) return "market_neutral";
+    if (posture.convictionRiskSources?.length) return "market_neutral";
+    return posture.supportingSources.length ? "market_confirmed" : "market_neutral";
+  }
   if (intel.market === "moneyline" && intel.qualified_market_direction !== undefined) {
     if (intel.qualified_market_direction.state === "confirmed") return "market_confirmed";
     if (intel.qualified_market_direction.state === "resistance") return "market_resistance";
@@ -168,7 +181,11 @@ function buildSignalType(intel: MarketIntelligence): SignalType {
   return "model_only";
 }
 
-function buildSharpStatusFromGrade(grade: RecommendationGrade): "confirm" | "mixed" | "caution" {
+export function buildNbaSharpStatus(intel: MarketIntelligence): "confirm" | "mixed" | "caution" {
+  if (intel.named_book_posture) {
+    return buildMarketSignal(intel) === "market_confirmed" ? "confirm" : "mixed";
+  }
+  const grade = intel.grade;
   if (grade === "best_angle" || grade === "lean") return "confirm";
   if (grade === "caution") return "caution";
   return "mixed";
@@ -320,7 +337,7 @@ function buildMarketEdgeDto(opts: {
     grade: held ? null : gradeToMlbGrade(intel.grade),
     signalType: buildSignalType(intel),
     marketSignal: buildMarketSignal(intel),
-    sharpStatus: buildSharpStatusFromGrade(intel.grade),
+    sharpStatus: buildNbaSharpStatus(intel),
     held,
     verdict,
     guidedGuide,
@@ -386,7 +403,7 @@ function buildPredictionDto(intel: MarketIntelligence): DailyEdgePredictionDto {
   return {
     pick: buildPickLabel(intel),
     confidence: pickConfidenceFraction(intel),
-    sharpStatus: buildSharpStatusFromGrade(intel.grade),
+    sharpStatus: buildNbaSharpStatus(intel),
     grade: held ? null : gradeToMlbGrade(intel.grade),
     signalType: buildSignalType(intel),
     marketSignal: buildMarketSignal(intel),

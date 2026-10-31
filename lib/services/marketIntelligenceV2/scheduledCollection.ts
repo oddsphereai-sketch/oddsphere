@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { currentSlateDate } from "../../dates/slateDate";
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
 import type { Sport } from "../../types/domain/Sport";
+import type { NbaPrelockCaptureScope } from "../nba/nbaPrelockMarketCapture";
 import {
   syncMarketIntelligenceV2Shadow,
   type MarketIntelligenceV2ShadowSyncResult,
@@ -31,6 +32,7 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
   now?: Date;
   includeSharpApiHistory?: boolean;
   slateDateThrough?: string;
+  nbaPrelockScope?: NbaPrelockCaptureScope;
 }): Promise<ScheduledMarketIntelligenceV2Result> {
   const config = readMarketIntelligenceV2Config();
   const slateDate = opts.slateDate ?? currentSlateDate(opts.sport);
@@ -58,6 +60,7 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
       now,
       includeSharpApiHistory: opts.includeSharpApiHistory,
       slateDateThrough: opts.slateDateThrough,
+      nbaPrelockScope: opts.nbaPrelockScope,
     });
     result.shadow = shadow;
     result.recordsUpdated += shadow.splitObservationsWritten + shadow.priceObservationsWritten;
@@ -69,6 +72,10 @@ export async function runScheduledMarketIntelligenceV2Collection(opts: {
   } catch (e) {
     result.errors.push(`shadow: ${e instanceof Error ? e.message : String(e)}`);
   }
+
+  // The lock owner needs only fresh scoped observations. A full-slate v2
+  // snapshot rebuild would duplicate unrelated work inside a minute sweep.
+  if (opts.nbaPrelockScope) return result;
 
   try {
     const snapshots = await syncMarketIntelligenceV2Snapshots({

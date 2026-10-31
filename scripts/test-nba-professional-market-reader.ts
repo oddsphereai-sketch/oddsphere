@@ -293,7 +293,7 @@ const failedEvidence = buildNbaProfessionalMarketReader({
   evidenceErrors: ["price_observation_page_truncated"],
   selectedLines: { spreadHome: null, total: null },
 });
-assert.equal(failedEvidence.evidenceStatus, "unavailable");
+assert.equal(failedEvidence.evidenceStatus, "partial", "price failure does not falsely declare the independent split family unavailable");
 assert.equal(failedEvidence.reads.moneyline.status, "unavailable");
 assert.equal(failedEvidence.reads.moneyline.reason, "evidence_unavailable");
 

@@ -85,6 +85,7 @@ import {
   NBA_LOCK_COHERENCE_RELEASE,
 } from "@/lib/services/nba/nbaLockCoherence";
 import { NBA_PREDICTION_RECORD_RELEASE } from "@/lib/automodel/nba/nbaChampionRuntime";
+import { assertNbaPrelockCaptureBudget, NBA_PRELOCK_MARKET_CAPTURE_RELEASE, type NbaPrelockCaptureReceipt } from "@/lib/services/nba/nbaPrelockMarketCapture";
 import {
   loadLatestMlbPropsBoardSnapshot,
   loadLatestMlbPropsGameLockSchedule,
@@ -548,6 +549,7 @@ export async function GET(request: Request) {
       let nhlPreLockLines: Awaited<ReturnType<typeof refreshNhlLines>> | null = null;
       let nhlPreLockSplits: Awaited<ReturnType<typeof syncPublicSplitsObservations>> | null = null;
       let nbaPreLockLines: Awaited<ReturnType<typeof refreshNbaLines>> | null = null;
+      let nbaPreLockCapture: NbaPrelockCaptureReceipt | undefined;
       let marketIntelligenceV2: ScheduledMarketIntelligenceV2Result | null = null;
 
       // Fresh market data must exist BEFORE the T-60 model pass. The scheduled
@@ -657,6 +659,24 @@ export async function GET(request: Request) {
         });
         records += nbaPreLockLines.linesWritten + nbaPreLockLines.lineHistoryWritten;
         apiCalls += 1;
+        const scope = { externalIds: partition.entering_lock.map(game => game.external_id), deadlineAtMs: softDeadlineAtMs };
+        marketIntelligenceV2 = await runScheduledMarketIntelligenceV2Collection({
+          supabase, sport: "nba", slateDate: date, phase: "pregame_sweep", nbaPrelockScope: scope,
+        });
+        assertNbaPrelockCaptureBudget(scope);
+        const capture = marketIntelligenceV2.shadow;
+        const actualRun = (capture?.details.nba_prelock_capture as { ingestion_run_id?: unknown } | undefined)?.ingestion_run_id;
+        if (!marketIntelligenceV2.enabled || !capture || capture.skippedTableMissing || capture.priceObservationsWritten === 0 ||
+            typeof actualRun !== "string" || !actualRun || capture.errors.some(error => /upsert|dedup|write/i.test(error))) {
+          throw new Error("NBA T-60 scoped v2 capture incomplete; final prediction and lock deferred");
+        }
+        records += marketIntelligenceV2.recordsUpdated;
+        // Report the conservative hard provider ceiling, not returned-row counts
+        // masquerading as billed calls. No call is made per entering game.
+        apiCalls += 4;
+        nbaPreLockCapture = { release: NBA_PRELOCK_MARKET_CAPTURE_RELEASE, externalIds: scope.externalIds,
+          ingestionRunId: actualRun,
+          capturedAt: new Date().toISOString(), providerRequestCeiling: 4, providerErrors: marketIntelligenceV2.errors };
       }
 
       // ── 2. Final pre-lock auto-model pass for ENTERING_LOCK games ───
@@ -718,6 +738,7 @@ export async function GET(request: Request) {
             launchDay: false,
             deferLock: true,
             externalIdsFilter: enteringExternalIds,
+            prelockMarketCapture: nbaPreLockCapture,
             supabase,
           });
           enteringLockModelResult = {
@@ -1079,6 +1100,7 @@ export async function GET(request: Request) {
               nba_lines_written: nbaPreLockLines?.linesWritten ?? 0,
               nba_line_history_written: nbaPreLockLines?.lineHistoryWritten ?? 0,
               nba_ran_before_t60_model: nbaPreLockLines !== null,
+              nba_market_capture: nbaPreLockCapture ?? null,
             },
             errors_count:
               lockResult.errors.length +

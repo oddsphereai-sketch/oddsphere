@@ -1,5 +1,100 @@
 # Model change safety protocol
 
+## Cross-product independent-input contract — October 31
+
+The owner explicitly requires the independent forecast to be evidence, not a
+protected origin, competing winner or guaranteed fallback expert. The final
+sport-specific joint forecast must account for source quality, chronology,
+current levels, price/line compensation, book reaction, disagreement and the
+independent model's information lineage. It may retain, strengthen, weaken,
+moderately correct or fully reverse a forecast. Neither a fixed small nudge
+nor unconditional sharp-book adoption meets that requirement. No finite audit
+can certify every possible market scenario or eventual predictive accuracy.
+
+Outside AI reviews found material nonconformance across products; the ledger
+is `docs/model-audits/2026-10-31-market-reader-scenarios-and-audit.md`.
+NBA r30/r31/r20 with consequence r5 and posture r6 is the publication candidate.
+It supersedes the unpublished r3 dynamic-scale continuity repair. The sign-based
+full-market replacement remains rejected: a 0.0001pp quote change produced a
+20.0995-point discontinuity. The r5 law instead applies only independent-relative
+named-book innovation using frozen coefficients fitted before chronology-later
+confirmation. It has no per-game market/model weight, dynamic scale, arbitrary
+point gate, source vote, or cross-book pooling. Numeric independent revisions
+preserve causal quote knowledge and mark unresolved information overlap; only
+an explicit newer coordinate-specific consumption receipt retires it. The
+writer does not fabricate such receipts from a forecast hash. Exact evidence,
+limitations, board impact, transport qualification, and rollback are in
+`docs/model-audits/2026-10-31-nba-market-consequence.md`. Do not publish before
+that audit's transport, focused-test, integration, and production-proof contract
+is complete.
+
+## NBA single-episode market consequences — October 31 superseded candidate
+
+Historical only: this section records r3 review evidence. It is not an eligible
+runtime or rollback specification and does not qualify r5 for publication.
+
+The owner stopped historical fitting and directed production-path functional
+repairs followed by forward performance measurement. Candidate NBA modelr29 /
+marriager30 / grader19 / readerr9 / posturer5 selects one physical-source
+causal episode per coordinate before applying its actual economic displacement.
+There is no market/model blend, logit posterior, cross-book median, source-count
+vote or minimum signal-size permission. Same-book ML/Spread constraints remain;
+conditioned inversion prevents unidentified dispersion. The independent head and residual
+family remain; conditional margin scale can change, explicitly. Existing sole
+sport-scoped writer persists bounded epoch/anchor state in unlocked snapshots.
+Full/partial compensation, small/price-only moves, pressure/reaction timing,
+partial buybacks, lead/follow and actual-target exclusion have deterministic
+production-path coverage. Exact stored locks still win; no reconstruction.
+Numeric forecast revisions no longer clear source anchors or unrelated axes.
+Unknown information overlap is explicit lineage uncertainty, not proof of consumed
+news or a reason to silently erase evidence. First quote seeds an anchor and is interpreted as
+exact static/value context; it is not invented chronology. Static opposition,
+held named books, aligned/opposed timed split reactions and unresolved episodes
+reach grade/member posture without arbitrary score points. Causal followers do
+not amplify an event; frontier extension and full cancellation are explicit.
+Legacy blended v0 comparison/2–5-point correction is not executed by the sole
+professional writer; offline incumbent controls remain isolated.
+Functional scenarios and current unlocked board consequences replace the stopped
+historical tournament. The superseded r1-head cursor-paginated source rehearsal has
+six margin/four Total changes on seven games and actionables3→14 (12 promotions,
+one demotion). Earlier truncated r1/r2 receipts are not accepted as full-source
+proof. Missing canonical batch identity is prospectively repaired in the existing
+collector, preserving source clocks and non-NBA behavior. This is decision-stage
+proof, not predictive improvement or full raw-feature/writer replay. No silent board contraction, duplicate writer,
+production shadow or accuracy guarantee is authorized. The scoped T-60 follow-up
+uses the existing leased collector for entering NBA games only: at most four
+additional current endpoint opportunities per attempt, no history/per-game fetch,
+production Playbook shared-cache reuse, provider timeouts and absolute deadline
+checks. Shared Playbook cache misses retain the normal20-second timeout; only
+direct fallback uses the shorter scoped timeout. A failed lock can retry on the
+existing cadence, so four is not a lifetime/per-game cost cap. This cost increase
+must be included in the release/live operational check; do not call it zero-cost.
+Normal fresh-main/PR/live checks remain mandatory. Details:
+docs/model-audits/2026-10-31-nba-single-episode-reader.md. The new head needs its
+own updated current-input report; old-head counts are not reused as qualification.
+
+## NBA named-book opposition contract candidate — October 31
+
+The owner requested production repair of market opposition being lost between
+interpretation and final decisions. NBA candidate r25/r26/r16 preserves the
+incumbent score, probability law, pick, exact quote and actionable set while
+carrying provider/book/event/run-attested opposition independently of forecast
+flip qualification. An otherwise Best Angle becomes a same-probability
+actionable Lean; it never becomes a new No Play or an invented opposing bet.
+The same new evidence yields resistance/mixed member signals instead of sharp
+confirmation inferred from grade alone. For new posture-bearing snapshots,
+empty/conflicting evidence is neutral/mixed; supporting-only observations can
+confirm independently of economics. Existing locks retain exact precedence.
+No writer, lease, cadence, provider request or storage table is added.
+
+The17-game/51-market retained-stage comparison reproduces incumbent grades,
+finds four hypothetical locked Best Angle→Lean changes and zero changes on21
+unlocked markets. Actionable promotions/demotions, probability/pick/price changes
+and lock mutations are zero. It is not a forecast-improvement qualification or
+the completed owner-requested market reader. Full/focused checks, fresh-main
+integration, protected PR/up-to-date checks and live leased-writer/member proof
+remain required. Details: docs/model-audits/2026-10-31-market-opposition-repair.md.
+
 ## CFB first-wave market-evidence integrity — October 31 candidate
 
 The owner requested an urgent correction of pregame market reading, with the

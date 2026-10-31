@@ -9,6 +9,7 @@ import {
   buildNbaProfessionalCandidate,
 } from "../lib/services/nba/nbaProfessionalCandidate";
 import { buildNbaProfessionalMarketReader } from "../lib/services/nba/nbaProfessionalMarketReader";
+import { buildMarketSignal, buildNbaSharpStatus } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
 
 const artifact: NbaPortableModelArtifact = {
   release: "fixture",
@@ -89,6 +90,7 @@ const marketReader = buildNbaProfessionalMarketReader({
   selectedLines: { spreadHome: -2, total: 218 },
 });
 const result = buildNbaProfessionalCandidate({
+  retainLegacyScoreReconciliation: true, // Frozen incumbent contrast; active continuous head has separate end-to-end scenarios.
   artifact,
   featureRow: { strength: -4 },
   lines,
@@ -105,6 +107,7 @@ assert.equal(result.picks.moneyline, "home");
 assert.equal(result.picks.spread, "home");
 assert.equal(result.picks.total, "over");
 assert.deepEqual(result.readerDecisionAudit, {
+  pricedContractChecks: result.readerDecisionAudit.pricedContractChecks,
   independentPicks: { moneyline: "away", spread: "away", total: "over" },
   finalPicks: { moneyline: "home", spread: "home", total: "over" },
   spreadReadQualified: true,
@@ -154,6 +157,7 @@ const totalReader = buildNbaProfessionalMarketReader({
   selectedLines: { spreadHome: -2, total: 218 },
 });
 const totalCorrected = buildNbaProfessionalCandidate({
+  retainLegacyScoreReconciliation: true,
   artifact: totalArtifact,
   featureRow: { strength: -4 },
   lines,
@@ -239,6 +243,55 @@ assert.notEqual(intelligence.ml.grade, "held");
 assert.notEqual(intelligence.spread.grade, "held");
 assert.notEqual(intelligence.total.grade, "held");
 
+// Actual production assembly: an observed sub-threshold named move must reach
+// grading and member signal without being promoted into forecast authority.
+const observedReader = buildNbaProfessionalMarketReader({
+  evaluatedAt: fetchedAt, splitRows: [], selectedLines: { spreadHome: -2, total: 218 },
+  priceRows: priceRows.map(row => ({ ...row, provider: "owls", providerEventId: "9",
+    ingestionRunId: `run:${row.fetchedAt}`, americanPrice: -110,
+    line: (row.providerTimestamp === "2026-10-20T14:00:00Z" ? -3 : -2) * (row.selectionKey.endsWith(":home") ? 1 : -1),
+  })),
+});
+const postureFixtureLines = [...lines, ...lines.filter(line => line.sportsbook === "draftkings").map(line => ({ ...line, sportsbook: "bet365" }))];
+const observedCandidate = buildNbaProfessionalCandidate({ retainLegacyScoreReconciliation: true, artifact, featureRow: { strength: 10 },
+  lines: postureFixtureLines, history, externalGameId: 9, marketReader: observedReader });
+assert.equal(observedCandidate.final.marginHome, 10);
+assert.equal(observedCandidate.final.movementApplied, false);
+const observedPrediction = applyNbaProfessionalCandidate({ baseline: runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 3 }), candidate: observedCandidate });
+const originalPrediction = structuredClone(observedPrediction);
+delete originalPrediction.audit.professional_grade_context!.namedBookPostures;
+const observedIntel = buildNbaGameIntelligence({ snapshot, prediction: observedPrediction, lines: postureFixtureLines,
+  splitsRow: null, opportunities: [], injuriesSource: "espn" });
+const originalIntel = buildNbaGameIntelligence({ snapshot, prediction: originalPrediction, lines: postureFixtureLines,
+  splitsRow: null, opportunities: [], injuriesSource: "espn" });
+assert.equal(originalIntel.spread.grade, "best_angle");
+assert.equal(observedIntel.spread.grade, "lean");
+assert.equal(buildMarketSignal(observedIntel.spread), "market_resistance");
+assert.equal(buildNbaSharpStatus(observedIntel.spread), "mixed");
+const posture = observedIntel.spread.named_book_posture!;
+assert.equal(buildNbaSharpStatus({ ...observedIntel.spread, grade: "best_angle",
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: [] } }), "mixed",
+"Best Angle is not proof of sharp confirmation");
+assert.equal(buildNbaSharpStatus({ ...observedIntel.spread, grade: "watch",
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: ["circa"] } }), "confirm",
+"observed direction and playable economics remain separate");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: [] } }), "market_neutral",
+"positive model value alone is not observed sharp confirmation");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: ["circa"] } }), "market_confirmed");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: ["circa"], conflictingSources: ["pinnacle"] } }), "market_neutral",
+"a conflicting source is not erased by one supportive observation");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, pickedSide: "away", opposingSources: [], supportingSources: ["circa"] } }), "market_neutral",
+"wrong-pick evidence cannot claim confirmation");
+for (const key of ["ml", "spread", "total"] as const) {
+  for (const field of ["pick_side", "model_prob_on_pick", "consensus_line", "current_price", "effective_confidence"] as const) {
+    assert.deepEqual(observedIntel[key][field], originalIntel[key][field], `${key}:${field} unchanged by opposition plumbing`);
+  }
+}
+
 const injuredSnapshot: NbaGameSnapshot = {
   ...snapshot,
   home_injuries: [{ player_id: null, name: "Verified Player", status: "out" }],
@@ -302,6 +355,7 @@ const mixtureArtifact: NbaPortableModelArtifact = {
   },
 };
 const mixtureResult = buildNbaProfessionalCandidate({
+  retainLegacyScoreReconciliation: true,
   artifact: mixtureArtifact,
   featureRow: { strength: -4 },
   lines,
