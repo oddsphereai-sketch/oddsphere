@@ -1,5 +1,25 @@
 # Model change safety protocol
 
+## NBA named-book opposition contract candidate — October 31
+
+The owner requested production repair of market opposition being lost between
+interpretation and final decisions. NBA candidate r25/r26/r16 preserves the
+incumbent score, probability law, pick, exact quote and actionable set while
+carrying provider/book/event/run-attested opposition independently of forecast
+flip qualification. An otherwise Best Angle becomes a same-probability
+actionable Lean; it never becomes a new No Play or an invented opposing bet.
+The same new evidence yields resistance/mixed member signals instead of sharp
+confirmation inferred from grade alone. Existing locks retain exact precedence.
+No writer, lease, cadence, provider request or storage table is added.
+
+The17-game/51-market retained-stage comparison reproduces incumbent grades,
+finds four hypothetical locked Best Angle→Lean changes and zero changes on21
+unlocked markets. Actionable promotions/demotions, probability/pick/price changes
+and lock mutations are zero. It is not a forecast-improvement qualification or
+the completed owner-requested market reader. Full/focused checks, fresh-main
+integration, protected PR/up-to-date checks and live leased-writer/member proof
+remain required. Details: docs/model-audits/2026-10-31-market-opposition-repair.md.
+
 ## Owner-approved CFB paired-price context — October 30
 
 The owner directed CFB price repair while retaining the full board, including
