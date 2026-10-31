@@ -217,6 +217,38 @@ const overToUnder = run(movement("total", 220, 215), [], 2, 222);
 assert.equal(overToUnder.candidate.picks.total, "under");
 const underToOver = run(movement("total", 220, 225), [], 2, 218);
 assert.equal(underToOver.candidate.picks.total, "over");
+// Owner's Toronto/Orlando PATTERN, not a reconstruction of that game's tape.
+// Home is only a fixture label for Toronto; it does not assert actual venue.
+const favoritePressure: NbaReaderSplitRow[] = [
+  { ...split, market: "moneyline", selectionKey: "9:moneyline:home", marketLine: null,
+    betsPct: .8, moneyPct: .8, sourceObservedAt: "2026-10-31T16:00:00Z", fetchedAt: "2026-10-31T16:00:00Z" },
+  { ...split, provider: "playbook", sourceBook: "consensus", sourceType: "public_consensus", market: "moneyline",
+    selectionKey: "9:moneyline:home", marketLine: null, betsPct: .8, moneyPct: .8,
+    sourceObservedAt: "2026-10-31T16:00:00Z", fetchedAt: "2026-10-31T16:00:00Z" },
+];
+const weakeningFavoriteRows = [...movement("moneyline", null, null, [-240, 200], [-160, 140]),
+  ...movement("spread", -5.5, -4.5)];
+const tightFavorite = run(weakeningFavoriteRows, favoritePressure, 1.5, 220);
+assert.equal(tightFavorite.candidate.picks.moneyline, "away");
+assert.equal(tightFavorite.candidate.picks.spread, "away");
+assert.ok(tightFavorite.candidate.final.marginHome < 0 && tightFavorite.candidate.final.marginHome < 1.5);
+assert.equal(tightFavorite.candidate.final.total, 220, "side resistance alone does not invent a Total move");
+assert.ok(tightFavorite.candidate.marketConsequence!.pressure.every(p => p.reaction === "opposed" && p.side === "home"));
+assert.ok(tightFavorite.intel.ml.named_book_posture!.supportingSources.includes("circa"));
+const strongerFavorite = run(weakeningFavoriteRows, favoritePressure, 5, 220);
+assert.equal(strongerFavorite.candidate.picks.moneyline, "home", "the same adverse market can weaken, not automatically flip, a stronger favorite forecast");
+assert.ok(strongerFavorite.candidate.final.marginHome > 0 && strongerFavorite.candidate.final.marginHome < 5);
+assert.equal(buildMarketSignal(strongerFavorite.intel.ml), "market_resistance");
+console.log(JSON.stringify({ scenario: "hypothetical_toronto_orlando_pattern_not_actual_tape",
+  pricePath: { favorite: [-240, -160], underdog: [200, 140], favoriteSpread: [-5.5, -4.5] },
+  tightIndependent: { favoriteMargin: 1.5, total: 220 },
+  final: { favoriteScore: tightFavorite.candidate.final.homeScore, underdogScore: tightFavorite.candidate.final.awayScore,
+    margin: tightFavorite.candidate.final.marginHome, total: tightFavorite.candidate.final.total,
+    winner: tightFavorite.candidate.picks.moneyline, underdogWinProbability: 1 - tightFavorite.candidate.probabilities.ml_home_win_prob,
+    spreadSide: tightFavorite.candidate.picks.spread, spreadGrade: tightFavorite.intel.spread.grade, moneylineGrade: tightFavorite.intel.ml.grade },
+  pressure: tightFavorite.candidate.marketConsequence!.pressure,
+  strongerIndependent: { favoriteMargin: 5, finalFavoriteMargin: strongerFavorite.candidate.final.marginHome,
+    winner: strongerFavorite.candidate.picks.moneyline, memberSignal: buildMarketSignal(strongerFavorite.intel.ml) } }));
 const promoted = run(movement("moneyline", null, null, [-110, -110], [-400, 300]), [], 0);
 const demoted = run(movement("moneyline", null, null, [-110, -110], [300, -400]), [], 10);
 const beforeDemotion = run([], [], 10);
