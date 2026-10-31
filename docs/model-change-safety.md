@@ -13,17 +13,25 @@ can certify every possible market scenario or eventual predictive accuracy.
 
 Outside AI reviews found material nonconformance across products; the ledger
 is `docs/model-audits/2026-10-31-market-reader-scenarios-and-audit.md`.
-NBA r29/r30/r19 with consequence r3 and posture r5 is an UNPUBLISHED continuity
-repair, NOT a completed joint-inference design. Numeric independent revisions
-preserve causal quote knowledge and mark unresolved information overlap;
-only an explicit newer coordinate-specific consumption receipt retires it.
-The current writer does not fabricate such receipts from a forecast hash.
-Absolute-level adjudication remains unresolved. A proposed sign-based full
-market replacement was rejected after a 0.0001pp quote change caused a
-20.0995-point flip. It is not in the candidate. Do not publish this artifact
-as satisfying the owner's complete market-reader standard.
+NBA r30/r31/r20 with consequence r5 and posture r6 is the publication candidate.
+It supersedes the unpublished r3 dynamic-scale continuity repair. The sign-based
+full-market replacement remains rejected: a 0.0001pp quote change produced a
+20.0995-point discontinuity. The r5 law instead applies only independent-relative
+named-book innovation using frozen coefficients fitted before chronology-later
+confirmation. It has no per-game market/model weight, dynamic scale, arbitrary
+point gate, source vote, or cross-book pooling. Numeric independent revisions
+preserve causal quote knowledge and mark unresolved information overlap; only
+an explicit newer coordinate-specific consumption receipt retires it. The
+writer does not fabricate such receipts from a forecast hash. Exact evidence,
+limitations, board impact, transport qualification, and rollback are in
+`docs/model-audits/2026-10-31-nba-market-consequence.md`. Do not publish before
+that audit's transport, focused-test, integration, and production-proof contract
+is complete.
 
-## NBA single-episode market consequences — October 31 candidate
+## NBA single-episode market consequences — October 31 superseded candidate
+
+Historical only: this section records r3 review evidence. It is not an eligible
+runtime or rollback specification and does not qualify r5 for publication.
 
 The owner stopped historical fitting and directed production-path functional
 repairs followed by forward performance measurement. Candidate NBA modelr29 /

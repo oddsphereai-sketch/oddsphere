@@ -79,21 +79,59 @@ Last reviewed: 2026-10-31
   `docs/model-audits/2026-10-31-all-market-data-health.md` and the paired JSON.
   Roll back this complete family together; never rewrite an immutable lock.
 
-## NBA event-arbitrated market consequence — October 31 candidate
+## NBA chronology-fitted market consequence — October 31 candidate
 
 Candidate model/marriage/grade are
-`nba_professional_unified_2026_10_31_r29_input_continuity` /
-`nba_market_marriage_2026_10_31_r30_input_continuity` /
-`nba_grade_policy_2026_10_31_r19_unified_final_forecast`.
+`nba_professional_unified_2026_10_31_r30_chronology_fitted_innovation` /
+`nba_market_marriage_2026_10_31_r31_chronology_fitted_innovation` /
+`nba_grade_policy_2026_10_31_r20_chronology_fitted_final_forecast`.
 The active decision head is
-`nba_market_consequence_2026_10_31_r3_input_continuity`;
-posture is `nba_named_book_posture_2026_10_31_r5_input_disposition`.
-These identifiers describe an unpublished repair, not production or complete
-joint inference. The owner requires the independent model to be one data point,
-not a protected forecast. The relative-episode operator still retains its
-starting level bias; professional absolute-level adjudication remains open.
-The sign-gated full-market replacement considered during review was rejected
-and removed, not released. See the cross-product audit's October31 addendum.
+`nba_market_consequence_2026_10_31_r5_chronology_fitted_innovation`;
+posture is `nba_named_book_posture_2026_10_31_r6_deferred_numeric_direction_retained`.
+These identifiers describe the publication candidate, not a claim that it is
+already production. They supersede the rejected r3 dynamic-scale reader. That
+reader was not published and must not be restored.
+
+The r5 head applies named-book chronology to a pristine independent forecast.
+For each margin or Total coordinate, movement from the opening anchor toward
+the independent coordinate is confirmation already expressed by the model and
+is not counted twice. Movement away from the model is corrective innovation;
+movement through the independent coordinate applies only the overshoot. The
+remaining innovation is translated with frozen, explicit coefficients: margin
+`1.813`, Total `1.0`. This is not a hidden per-game market/model percentage,
+median, source vote, arbitrary cap, or dynamic blend. Margin `1.813` is the
+proper-score coefficient fitted on the 2023-24 and 2024-25 development seasons.
+Total `1.0` is the predeclared no-amplification transport rule because the
+unconstrained fitted coefficient harmed market-direction performance.
+
+Chronology-later 2025-26 confirmation (1,229 matched games) improved margin
+MAE 11.3770→11.0520, RMSE 14.5350→14.1661, and exact-line direction
+49.064%→51.424%; margin prediction SD increased 6.876→7.665 and predictions
+with |margin|≥10 increased 17.33%→21.56%. Total MAE improved
+15.2131→14.9964 and RMSE 19.125→18.873. Paired game bootstrap 95% intervals
+for MAE change were [-0.477,-0.178] margin and [-0.341,-0.095] Total.
+Direction changes were favorable but their intervals included zero and are not
+claimed as established improvement. A separate exact 25-game production-source
+replay improved margin MAE 12.6247→12.4569 and Total MAE
+18.0364→17.2495 while preserving 64% winner accuracy. These are fixed
+historical confirmations, not guarantees of future wagering performance.
+The completed anonymous-book T-60 transport panel retained the frozen r5 law:
+on 1,212/1,088 chronology-later Book1/Book2 games, margin MAE improved
+11.0658→10.8451 / 11.1609→10.9033, winner accuracy improved
+66.83%→68.15% / 66.45%→67.10%, and exact-line direction improved
+50.13%→50.88% / 50.09%→51.01%. Anonymous books are never relabeled as named
+sharp books. This is source/timing transport evidence, not an independent
+second outcome holdout; exact hashes and limitations are in the audit.
+
+Same-book ML and Spread are fixed-scale measurements of one margin. Their
+quote-bin intervals intersect when coherent. If they conflict, the direct
+Spread contract owns the numeric margin consequence and ML remains diagnostic;
+the prior dynamic-scale inversion could become unbounded at ordinary one-tick
+precision and is forbidden. Across books, one observed causal leader authors a
+coordinate; later followers do not add amplitude. Unresolved simultaneous
+conflicts fail closed rather than being averaged. Static market levels remain
+value/opposition context and can affect posture/grade, but cannot invent score
+points without observed chronology.
 NBA canonical receipt is `nba_canonical_price_capture_2026_10_31_r1_attested_batch`:
 the existing collector stamps one actual run ID and one receipt instant across
 NBA canonical pairs, preserving source timestamps and all non-NBA behavior.
@@ -101,11 +139,8 @@ Old observations receive no retroactive batch authority.
 The r9 categorical reader remains diagnostic/legacy comparison, not an
 activation gate for the active head. Direct ML, price-only and arbitrarily
 small valid Spread/Total economic changes are interpreted. A physical book's
-line plus de-vigged paired juice is converted to a released-CDF coordinate;
-the selected observed episode's displacement is applied once to the pristine
-independent forecast. No model/market percentage, relative-odds posterior,
-cross-book median, vote or probabilistic pooling owns the forecast.
-Same-book ML/Spread may jointly constrain its one location/scale. Named books
+line plus de-vigged paired juice is converted to a released-CDF coordinate.
+Named books
 are interpreted chronologically: observed leader, follower, held resistance,
 frontier extension, buyback/cancellation, later reversal, unresolved conflict.
 Equal source-time leadership without distinguishing evidence is unidentified,
@@ -116,9 +151,8 @@ Followers do not add
 amplitude; a new extension replaces the frontier without double-counting.
 Full buyback cannot resurrect a stale copied follower. Unresolved new episodes
 retain the pristine or last uncontested consequence, with explicit posture.
-This retains the independent head and residual family, but market constraints
-CAN change conditional margin dispersion; it is not unchanged calibration.
-Ill-conditioned scale retains the usable ML scalar with an explicit reason.
+This retains the released independent residual family and a fixed scale;
+game-specific dispersion is not inferred from transformed market probabilities.
 The sole sport-scoped writer persists exact causal quote anchors in existing
 unlocked captures. Numeric independent-law changes preserve source anchors and
 unrelated coordinates, with unresolved information overlap reaching posture
@@ -155,25 +189,24 @@ quality/positive-EV rules, not legacy hard-coded correction confidence. Pressure
 and retracement can temper Best to actionable Lean without inventing points.
 Held resistance to opposite-side pressure can support retaining the earned
 forecast/grade; it is not falsely labeled a directional quote change or sharp buy.
-The r19 policy is identical for identical final forecast/evidence regardless
+The r20 policy is identical for identical final forecast/evidence regardless
 of reader implementation/correction flags. Legacy sleeves are explicit offline
 policy comparisons only. This is an intentional grade recalibration, not a
 claim that every newly actionable row was corrected by market innovation.
 The professional writer skips execution of the old market-blended v0 audit
 comparison and does not call the old2/5-point crossing function in its default
 path. Both remain explicit offline contrasts only; exact locked payloads win.
-Paired functional examples exercise one actionable promotion and one demotion
-(1→1 actionable count). The complete cursor-paginated seven-game/21-market
-superseded r1-head unlocked rehearsal had six margin and four Total adjustments and
-3→14 actionables (12 promotions, one demotion). The initial r1/r2 rehearsal
-silently hit the DB's1,000-row cap and is rejected as source-completeness proof;
-r3 uses22 bounded SELECTs /3,688,486bytes and existing OWLS evidence. Missing
-canonical batch metadata is repaired prospectively, never fabricated on old rows.
-Those old-head counts do not qualify the new event-arbitrated head. Updated
-functional/current-input evidence is recorded separately. This is NOT predictive
-improvement or a raw-feature/writer replay. Protected publication
-and live state/collector/member verification remain pending. NFL/CFB ownership
-is separate; full CBB inference follows verified NBA publication.
+The exact current unlocked six-game/18-market zero-write rehearsal changed
+actionables 2→9 (eight promotions, one demotion), all Leans. It used zero
+provider calls, writes, or outcomes. The one PHI-CHA Total Lean→Watch demotion
+is paired with eight tested promotions and follows the final positive-value
+economics. Some grade
+changes come from the already reviewed final-forecast grade policy rather than a
+numeric market consequence; the receipt separates them. This expansion is
+disclosed and must be checked on the live reader after release. Missing canonical
+batch metadata is repaired prospectively, never fabricated on old rows.
+Protected PR publication, production release/collector/lease/member proof, and
+forward grading remain required. Exact locked payloads retain precedence.
 
 ## CFB paired-price context repair — October 30
 

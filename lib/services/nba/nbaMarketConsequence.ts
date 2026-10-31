@@ -1,12 +1,16 @@
 import { nbaResidualCdf, nbaResidualQuantile, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
 import type { NbaReaderPriceRow, NbaReaderSplitRow } from "./nbaProfessionalMarketReader";
 
-export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_10_31_r3_input_continuity" as const;
+export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_10_31_r5_chronology_fitted_innovation" as const;
+export const NBA_MARKET_CONSEQUENCE_COEFFICIENTS = {
+  margin: 1.813,
+  total: 1,
+} as const;
 type Market = "moneyline" | "spread" | "total";
 type Coordinate = "margin" | "total";
 type ConsumptionReceipt = { at: string; coordinates: readonly Coordinate[]; evidenceIds: readonly string[] };
 type Frame = { book: string; provider: string; market: Market; captureAt: string; sourceAt: string;
-  run: string; event: string; threshold: number; fair: number };
+  run: string; event: string; threshold: number; fair: number; fairLow: number; fairHigh: number };
 export type NbaMarketKnowledgeState = {
   release: typeof NBA_MARKET_CONSEQUENCE_RELEASE;
   eventId: string;
@@ -33,7 +37,9 @@ export type NbaMarketConsequenceContext = {
   disabledMarkets?: readonly Market[];
 };
 type Proposal = { book: string; provider: string; market: Market; anchor: Frame; current: Frame;
-  observedLocationDelta: number; probability: number; location: number; delta: number;
+  observedLocationDelta: number; probability: number; location: number; locationLow: number; locationHigh: number; delta: number;
+  innovation: number; consequenceCoefficient: number;
+  application: "no_movement" | "confirmation_only" | "corrective_innovation" | "overshoot_innovation";
   path: { peakLocation: number; troughLocation: number; netLocationChange: number; retracement: number;
     onsetAt: string | null; onsetSourceAt: string | null; regimeOnsetAt: string | null; regimeSourceAt: string | null;
     lastEconomicSourceAt: string | null; latestLeg: number; captures: number } };
@@ -47,21 +53,44 @@ const key = (p: Pick<Frame, "book" | "provider" | "market">) => `${p.book}|${p.p
 const numericalZero = (n: number) => Math.abs(n) <= 1e-9;
 const axis = (market: Market) => market === "total" ? "total" as const : "spread" as const;
 const location = (frame: Frame, law: NbaPriceCoordinateLaw) => frame.threshold + nbaResidualQuantile(axis(frame.market), frame.fair, law);
+const locationInterval = (frame: Frame, law: NbaPriceCoordinateLaw) => ({
+  low: frame.threshold + nbaResidualQuantile(axis(frame.market), frame.fairLow, law),
+  high: frame.threshold + nbaResidualQuantile(axis(frame.market), frame.fairHigh, law),
+});
 const coordinateOf = (market: Market): Coordinate => market === "total" ? "total" : "margin";
 const knowledgeCutoff = (state: NbaMarketKnowledgeState, market: Market) => state.retiredBefore[coordinateOf(market)]?.at ?? state.knowledgeAt;
 
-// The released A&S CDF approximation has <1.5e-7 absolute error. Two
-// constraints closer than their combined numerical uncertainty do not identify
-// scale. This is numerical identifiability, not a market-amplitude threshold.
-function jointLaw(pWin: number, pCover: number, threshold: number, law: NbaPriceCoordinateLaw) {
-  if (numericalZero(threshold)) return Math.abs(pWin - pCover) <= 3e-7
-    ? { margin: nbaResidualQuantile("spread", pWin, law), scale: 1 } : null;
-  if (Math.abs(pWin - pCover) <= 3e-7 || Math.sign(pWin - pCover) !== Math.sign(threshold)) return null;
-  const qWin = nbaResidualQuantile("spread", pWin, law), qCover = nbaResidualQuantile("spread", pCover, law);
-  const difference = qWin - qCover, scale = threshold / difference, margin = scale * qWin;
-  const condition = (Math.abs(qWin) + Math.abs(qCover)) / Math.abs(difference);
-  return Number.isFinite(scale) && Number.isFinite(margin) && scale > 0 && condition * Number.EPSILON < 1e-9
-    ? { margin, scale } : null;
+/** Remove the portion of a move already expressed by the independent score.
+ * A named book moving from its anchor toward the independent forecast confirms
+ * that forecast; applying the same displacement again would double count it.
+ * Movement away from the forecast is new corrective information. If the book
+ * passes through the independent coordinate, only the overshoot is new. The
+ * remaining innovation uses the frozen coordinate-specific coefficient that
+ * improved both score error and market-side direction on chronology-later
+ * confirmation data. This is an explicit fitted influence law, not a hidden
+ * gate, arbitrary per-game cap, source vote, or dynamic model/market blend.
+ */
+function independentRelativeInnovation(independent: number, anchor: number, current: number, coordinate: Coordinate) {
+  const gap = independent - anchor, movement = current - anchor;
+  const coefficient = NBA_MARKET_CONSEQUENCE_COEFFICIENTS[coordinate];
+  if (numericalZero(movement)) return { location: independent, innovation: 0, coefficient, application: "no_movement" as const };
+  if (numericalZero(gap) || Math.sign(movement) !== Math.sign(gap)) {
+    return { location: independent + coefficient * movement, innovation: movement, coefficient,
+      application: "corrective_innovation" as const };
+  }
+  const innovation = Math.sign(movement) * Math.max(0, Math.abs(movement) - Math.abs(gap));
+  return { location: independent + coefficient * innovation, innovation, coefficient,
+    application: numericalZero(innovation) ? "confirmation_only" as const : "overshoot_innovation" as const };
+}
+
+function innovationInterval(independent: number, anchor: Frame, current: Frame, law: NbaPriceCoordinateLaw, coordinate: Coordinate) {
+  const a = locationInterval(anchor, law), c = locationInterval(current, law);
+  const anchorPoints = [a.low, location(anchor, law), a.high];
+  const currentPoints = [c.low, location(current, law), c.high];
+  if (independent >= c.low && independent <= c.high) currentPoints.push(independent);
+  const values = anchorPoints.flatMap(anchorPoint => currentPoints.map(currentPoint =>
+    independentRelativeInnovation(independent, anchorPoint, currentPoint, coordinate).location));
+  return { low: Math.min(...values), high: Math.max(...values) };
 }
 
 export function isNbaMarketKnowledgeState(value: unknown): value is NbaMarketKnowledgeState {
@@ -79,9 +108,9 @@ export function isNbaMarketKnowledgeState(value: unknown): value is NbaMarketKno
       r.evidenceIds.length <= 32 && r.evidenceIds.every(id => typeof id === "string" && id.length > 0 && id.length <= 256))) return false;
   return Object.entries(v.anchors).every(([laneKey, f]) => f && typeof f.book === "string" && typeof f.provider === "string" &&
     typeof f.event === "string" && !!f.run && ["moneyline", "spread", "total"].includes(f.market) &&
-    [Date.parse(f.captureAt), Date.parse(f.sourceAt), f.threshold, f.fair].every(Number.isFinite) &&
+    [Date.parse(f.captureAt), Date.parse(f.sourceAt), f.threshold, f.fair, f.fairLow, f.fairHigh].every(Number.isFinite) &&
     Date.parse(f.captureAt) >= Date.parse(knowledgeCutoff(v, f.market)) && Date.parse(f.sourceAt) >= Date.parse(knowledgeCutoff(v, f.market)) && Date.parse(f.sourceAt) <= Date.parse(f.captureAt) &&
-    f.fair > 0 && f.fair < 1 && key(f) === laneKey);
+    f.fairLow > 0 && f.fairLow <= f.fair && f.fair <= f.fairHigh && f.fairHigh < 1 && key(f) === laneKey);
 }
 
 /** Complete captured contracts only. Malformed frames do not erase unrelated
@@ -118,19 +147,30 @@ function frames(context: NbaMarketConsequenceContext) {
         Math.abs(a[0]!.line! + (market === "spread" ? 1 : -1) * b[0]!.line!) > 1e-9));
     if (invalid) { issues.push(`${groupKey.split("|").slice(0, 3).join("|")}:incomplete_or_ambiguous_pair`); continue; }
     const implied = (p: number) => p < 0 ? -p / (100 - p) : 100 / (100 + p);
+    const priceBin = (price: number) => {
+      const text = String(price), decimals = text.includes(".") ? text.length - text.indexOf(".") - 1 : 0;
+      const halfTick = 0.5 * 10 ** -Math.min(decimals, 6);
+      const values = [price - halfTick, price, price + halfTick]
+        .filter(value => Math.sign(value) === Math.sign(price) && Math.abs(value) >= 100);
+      return values.length ? values : [price];
+    };
     const pa = implied(a[0]!.americanPrice!), pb = implied(b[0]!.americanPrice!);
+    const fairValues = priceBin(a[0]!.americanPrice!).flatMap(priceA => priceBin(b[0]!.americanPrice!)
+      .map(priceB => implied(priceA) / (implied(priceA) + implied(priceB))));
+    const fairLow = Math.min(...fairValues), fairHigh = Math.max(...fairValues);
     result.push({ book: canonical(first.sportsbook), provider: first.provider!, market, captureAt: first.fetchedAt,
       sourceAt: new Date(Math.max(...rows.map(r => Date.parse(r.providerTimestamp ?? r.fetchedAt)))).toISOString(),
       run: first.ingestionRunId!, event: first.providerEventId ?? context.eventId,
-      threshold: market === "moneyline" ? 0 : market === "spread" ? -a[0]!.line! : a[0]!.line!, fair: pa / (pa + pb) });
+      threshold: market === "moneyline" ? 0 : market === "spread" ? -a[0]!.line! : a[0]!.line!,
+      fair: pa / (pa + pb), fairLow, fairHigh });
   }
   return { frames: result.sort((a, b) => Date.parse(a.captureAt) - Date.parse(b.captureAt)), issues };
 }
 
 /** Event-selected economic displacement, not a current-market forecast anchor.
- * Same-book ML/Spread constrain one location/scale jointly (never added or
- * fixed 50/50). The released residual family is retained; impossible ordering
- * produces explicit conflict rather than an invented forced crossing.
+ * Same-book ML/Spread constrain one fixed-scale location jointly. Quote-bin
+ * intersection is a measurement constraint, never a percentage blend or a
+ * game-specific dispersion estimate. Incompatible contracts fail closed.
  */
 export function reconcileNbaMarketConsequence(args: {
   independentMargin: number; independentTotal: number; law: NbaPriceCoordinateLaw; context: NbaMarketConsequenceContext;
@@ -140,14 +180,23 @@ export function reconcileNbaMarketConsequence(args: {
   if (!Number.isFinite(evaluated) || !context.inputFingerprint || !context.eventId ||
       ![args.independentMargin, args.independentTotal, law.marginSigma, law.totalSigma].every(Number.isFinite) ||
       args.independentTotal <= 0 || law.marginSigma <= 0 || law.totalSigma <= 0) throw new Error("Invalid NBA consequence context");
+  const captured = frames(context);
   const previous = context.previousState;
   const continuing = isNbaMarketKnowledgeState(previous) && previous.eventId === context.eventId &&
     Number.isFinite(Date.parse(previous.knowledgeAt)) && Date.parse(previous.knowledgeAt) <= evaluated &&
     Object.values(previous.retiredBefore).every(r => Date.parse(r.at) <= evaluated);
   const independentInput = { margin: args.independentMargin, total: args.independentTotal,
     marginSigma: law.marginSigma, totalSigma: law.totalSigma, mixture: JSON.stringify(law.marginMixture ?? null) };
+  // A new release must not erase already captured opening-to-pregame history.
+  // The chronology-fitted law was qualified from a current independent score
+  // plus the complete prior exact-contract trail. Bootstrap only from the
+  // earliest verified source clock in this event; malformed/future/cross-event
+  // rows were already rejected by frames().
+  const bootstrapKnowledgeAt = captured.frames.length === 0
+    ? context.evaluatedAt
+    : new Date(Math.min(...captured.frames.map(frame => Date.parse(frame.sourceAt)))).toISOString();
   const state: NbaMarketKnowledgeState = { release: NBA_MARKET_CONSEQUENCE_RELEASE, eventId: context.eventId,
-    inputFingerprint: context.inputFingerprint, knowledgeAt: continuing ? previous!.knowledgeAt : context.evaluatedAt,
+    inputFingerprint: context.inputFingerprint, knowledgeAt: continuing ? previous!.knowledgeAt : bootstrapKnowledgeAt,
     anchors: continuing ? structuredClone(previous!.anchors) : {}, retiredBefore: continuing ? structuredClone(previous!.retiredBefore) : {},
     independentInput, unresolvedInputRevisions: continuing ? [...previous!.unresolvedInputRevisions] : [] };
   const independentInputChanged = !continuing || previous!.inputFingerprint !== context.inputFingerprint ||
@@ -177,7 +226,7 @@ export function reconcileNbaMarketConsequence(args: {
   }
   state.unresolvedInputRevisions = [...new Set(state.unresolvedInputRevisions)];
   for (const [lane, anchor] of Object.entries(state.anchors)) if (Date.parse(anchor.sourceAt) < Date.parse(knowledgeCutoff(state, anchor.market))) delete state.anchors[lane];
-  const captured = frames(context), reasons: string[] = [...captured.issues];
+  const reasons: string[] = [...captured.issues];
   for (const coordinate of state.unresolvedInputRevisions) reasons.push(`${coordinate}:independent_revision_overlap_unresolved_market_knowledge_preserved`);
   for (const market of context.disabledMarkets ?? []) reasons.push(`${market}:execution_target_cycle_coordinate_retired`);
   if (!context.pricesTrusted) reasons.push("price_family_failed_valid_other_families_retained");
@@ -228,7 +277,10 @@ export function reconcileNbaMarketConsequence(args: {
       const path = [anchor, ...sequence.filter(f => Date.parse(f.captureAt) > Date.parse(anchor!.captureAt))];
       const points = path.map(f => location(f, law)), first = points[0]!, end = points.at(-1)!;
       const peak = Math.max(...points), trough = Math.min(...points), net = end - first;
-      const proposed = independent + (numericalZero(net) ? 0 : net);
+      const coordinate = coordinateOf(latest.market);
+      const innovation = independentRelativeInnovation(independent, first, end, coordinate);
+      const proposed = innovation.location;
+      const proposedInterval = innovationInterval(independent, anchor, latest, law, coordinate);
       const probability = nbaResidualCdf(kind, proposed - latest.threshold, law);
       let regimeStart: number | null = null;
       let lastEconomicIndex: number | null = null;
@@ -239,7 +291,10 @@ export function reconcileNbaMarketConsequence(args: {
         else if (regimeStart === null) regimeStart = i;
       }
       proposals.push({ book: latest.book, provider: latest.provider, market: latest.market, anchor, current: latest,
-        observedLocationDelta: numericalZero(net) ? 0 : net, probability, location: proposed, delta: proposed - independent,
+        observedLocationDelta: numericalZero(net) ? 0 : net, probability, location: proposed,
+        locationLow: proposedInterval.low, locationHigh: proposedInterval.high, delta: proposed - independent,
+        innovation: innovation.innovation, consequenceCoefficient: innovation.coefficient,
+        application: innovation.application,
         path: { peakLocation: peak, troughLocation: trough, netLocationChange: net,
           retracement: net >= 0 ? peak - end : end - trough,
           onsetAt: path.find((f, i) => !numericalZero(points[i]! - first))?.captureAt ?? null,
@@ -263,24 +318,38 @@ export function reconcileNbaMarketConsequence(args: {
   for (const book of names) {
     const rows = selected.filter(p => p.book === book);
     const ml = rows.find(p => p.market === "moneyline"), spread = rows.find(p => p.market === "spread"), total = rows.find(p => p.market === "total");
-    let margin: number | null = null, scale = 1, jointStatus: BookDecision["jointStatus"] = "no_side_update";
+    let margin: number | null = null, jointStatus: BookDecision["jointStatus"] = "no_side_update";
+    const scale = 1;
+    const ignoredMarkets: Market[] = [];
     if (ml && spread) {
       if (numericalZero(ml.observedLocationDelta) && numericalZero(spread.observedLocationDelta)) {
         margin = args.independentMargin; jointStatus = "joint_constraints";
         if (rows.length) books.push({ book, margin, marginScale: scale, total: total?.location ?? null, jointStatus, proposals: rows });
         continue;
       }
-      const solved = jointLaw(ml.probability, spread.probability, spread.current.threshold, law);
-      if (solved && Math.abs(solved.margin) <= args.independentTotal) {
-        margin = solved.margin; scale = solved.scale; jointStatus = "joint_constraints";
-      } else if (Math.abs(ml.probability - spread.probability) <= 3e-7 && !numericalZero(spread.current.threshold)) {
-        margin = ml.location; jointStatus = "single_contract";
-        reasons.push(`${book}:spread_scale_unidentified_moneyline_scalar_retained`);
-      } else jointStatus = "joint_conflict";
-      if (jointStatus === "joint_conflict") reasons.push(`${book}:moneyline_spread_joint_conflict`);
+      // Relative movement was already translated under the released fixed
+      // residual law. Inferring a second, game-specific scale from those
+      // independent-relative pseudo-probabilities is circular and becomes
+      // unbounded at ordinary one-tick quote resolution. Keep scale frozen and
+      // require the two same-book measurements to share a feasible location.
+      const overlapLow = Math.max(ml.locationLow, spread.locationLow);
+      const overlapHigh = Math.min(ml.locationHigh, spread.locationHigh);
+      if (overlapLow <= overlapHigh + 1e-9) {
+        margin = (overlapLow + overlapHigh) / 2; jointStatus = "joint_constraints";
+        reasons.push(`${book}:fixed_scale_contract_intersection`);
+      } else {
+        // Spread is the direct margin contract used by the chronology-fitted
+        // release. If the simultaneously observed ML transform is incompatible
+        // under the frozen residual scale, keep the coherent Spread consequence
+        // and retain ML as diagnostic context. Rejecting both erased valid
+        // Spread movement on most real T-60 games.
+        margin = spread.location; jointStatus = "single_contract";
+        ignoredMarkets.push("moneyline");
+        reasons.push(`${book}:moneyline_spread_fixed_scale_conflict_spread_authority`);
+      }
     } else if (ml || spread) { margin = (ml ?? spread)!.location; jointStatus = "single_contract"; }
     if (rows.length) books.push({ book, margin, marginScale: scale, total: total?.location ?? null, jointStatus, proposals: rows,
-      ignoredMarkets: reasons.includes(`${book}:spread_scale_unidentified_moneyline_scalar_retained`) ? ["spread"] : [] });
+      ignoredMarkets: ignoredMarkets.length ? ignoredMarkets : undefined });
   }
   // One physical source/episode authors each coordinate. No averaging,
   // probability pooling, source-count vote or model/market percentage.
@@ -301,20 +370,46 @@ export function reconcileNbaMarketConsequence(args: {
       return [{ book: book.book, from: Math.min(...changed.map(p => Date.parse(p.path.onsetSourceAt!))),
         at: Math.max(...changed.map(p => Date.parse(p.path.lastEconomicSourceAt!))), excursions }];
     });
-    const candidates = books.filter(b => coordinate === "total" ? b.total !== null : b.margin !== null && b.jointStatus !== "joint_conflict")
+    const signals = books.filter(b => coordinate === "total" ? b.total !== null : b.margin !== null && b.jointStatus !== "joint_conflict")
       .map(book => {
         const ps = relevant(book);
         const delta = coordinate === "total" ? book.total! - args.independentTotal : book.margin! - args.independentMargin;
         const scaleDelta = coordinate === "total" ? 0 : book.marginScale - 1;
         const times = ps.flatMap(p => p.path.regimeSourceAt ? [Date.parse(p.path.regimeSourceAt)] : []);
+        const observedDirections = [...new Set(ps.map(p => Math.sign(p.observedLocationDelta)).filter(Boolean))];
         return { book, delta, scaleDelta, onset: times.length ? Math.min(...times) : Infinity,
           latestEconomic: Math.max(...ps.flatMap(p => p.path.lastEconomicSourceAt ? [Date.parse(p.path.lastEconomicSourceAt)] : [])),
-          current: ps.length ? Math.max(...ps.map(p => Date.parse(p.current.captureAt))) : -Infinity };
-      }).filter(c => !numericalZero(c.delta) || !numericalZero(c.scaleDelta));
+          current: ps.length ? Math.max(...ps.map(p => Date.parse(p.current.captureAt))) : -Infinity,
+          observedDirection: observedDirections.length === 1 ? observedDirections[0]! : 0 };
+      });
+    const candidates = signals.filter(c => !numericalZero(c.delta) || !numericalZero(c.scaleDelta));
     const cancelledFollowers = candidates.filter(c => cancellations.some(cancel => c.onset >= cancel.from && c.latestEconomic <= cancel.at &&
       numericalZero(c.scaleDelta) && relevant(c.book).filter(p => !numericalZero(p.observedLocationDelta)).every(p =>
         cancel.excursions.some(e => e.market === p.market && e.deltas.some(d => d.at <= c.onset && numericalZero(d.delta - p.observedLocationDelta)))))).map(c => c.book.book);
     const activeCandidates = candidates.filter(c => !cancelledFollowers.includes(c.book.book));
+    const confirmations = signals.filter(c => numericalZero(c.delta) && numericalZero(c.scaleDelta) && c.observedDirection !== 0 &&
+      relevant(c.book).some(p => p.application === "confirmation_only"));
+    // A zero-point confirmation is still evidence. If another named book moves
+    // away from the independent forecast during the same episode, allowing the
+    // corrective book to own the score merely because confirmation is encoded
+    // as zero would silently discard half of the market read. Resolve only when
+    // chronology separates the events: a later confirmation cancels the prior
+    // correction; a later correction may supersede the earlier confirmation.
+    for (const correction of activeCandidates) for (const confirmation of confirmations) {
+      if (!correction.observedDirection || Math.sign(correction.observedDirection) === Math.sign(confirmation.observedDirection)) continue;
+      if (confirmation.onset > correction.latestEconomic) {
+        reasons.push(`${coordinate}:later_confirmation_supersedes_prior_correction`);
+        return { authority: "context_only" as const, status: "later_confirmation_supersedes_prior_correction", leader: null,
+          selected: null, followers: [], lagging: [correction.book.book], conflicts: [], episodeAt: new Date(confirmation.onset).toISOString(),
+          cancelledBy: [confirmation.book.book], heldSources: [] as string[] };
+      }
+      if (correction.onset <= confirmation.latestEconomic) {
+        reasons.push(`${coordinate}:unresolved_correction_confirmation_conflict`);
+        return { authority: "context_only" as const, status: "unresolved_correction_confirmation_conflict", leader: null,
+          selected: null, followers: [], lagging: [], conflicts: [correction.book.book, confirmation.book.book], episodeAt: null,
+          cancelledBy: [] as string[], heldSources: [] as string[] };
+      }
+    }
     const opposite = (a: typeof candidates[number], b: typeof candidates[number]) =>
       !numericalZero(a.delta) && !numericalZero(b.delta) && Math.sign(a.delta) !== Math.sign(b.delta) ||
       !numericalZero(a.scaleDelta) && !numericalZero(b.scaleDelta) && Math.sign(a.scaleDelta) !== Math.sign(b.scaleDelta);
@@ -394,9 +489,9 @@ export function reconcileNbaMarketConsequence(args: {
       episodeAt: new Date(frontierExtended ? leader.latestEconomic : leader.onset).toISOString(), priorFrontierSource, incrementalExtension, frontierPath };
   };
   const marginEpisode = arbitrate("margin"), totalEpisode = arbitrate("total");
-  // Preserve the accepted relative-episode method while repairing state
-  // continuity. Absolute level adjudication remains an explicit design gap;
-  // a sign-gated full-market replacement was rejected by outside review.
+  // Apply only the selected chronology-fitted innovation. Static market level
+  // remains value/opposition context; adopting it as a score without observed
+  // chronology would reintroduce the rejected discontinuous market replacement.
   let margin = marginEpisode.selected?.margin ?? args.independentMargin;
   let marginScale = marginEpisode.selected?.marginScale ?? 1;
   let total = totalEpisode.selected?.total ?? args.independentTotal;

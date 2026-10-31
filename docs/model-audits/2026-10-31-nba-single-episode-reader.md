@@ -1,5 +1,11 @@
 # NBA event reader — no cross-book blending
 
+> Superseded release note (October 31): the r3 dynamic-scale inference described
+> below was rejected and never published. The publication candidate is
+> `nba_market_consequence_2026_10_31_r5_chronology_fitted_innovation`, documented
+> in `2026-10-31-nba-market-consequence.md`. This file remains historical audit
+> evidence and is not an eligible runtime or rollback specification.
+
 This supersedes the unpublished r27/r1 relative-odds and pooled-probability
 candidate. That candidate never went live and must not be restored as the
 current reader. Historical audit receipts remain unchanged and labeled.

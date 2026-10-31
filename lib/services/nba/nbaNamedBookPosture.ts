@@ -4,7 +4,7 @@ import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPr
 import type { reconcileNbaMarketConsequence } from "./nbaMarketConsequence";
 
 export const NBA_NAMED_BOOK_POSTURE_RELEASE =
-  "nba_named_book_posture_2026_10_31_r5_input_disposition" as const;
+  "nba_named_book_posture_2026_10_31_r6_deferred_numeric_direction_retained" as const;
 
 export type NbaNamedBookPosture = {
   release: typeof NBA_NAMED_BOOK_POSTURE_RELEASE;
@@ -47,7 +47,12 @@ export function resolveNbaConsequencePosture(args: {
     const p = book.proposals.find(p => p.market === args.market);
     if (!p) continue;
     result.evaluatedAt = p.current.captureAt;
-    if (book.jointStatus === "joint_conflict" && args.market !== "total" || book.ignoredMarkets?.includes(args.market)) { result.conflictingSources.push(book.book); continue; }
+    if (book.jointStatus === "joint_conflict" && args.market !== "total") { result.conflictingSources.push(book.book); continue; }
+    // Losing numeric authority to the direct Spread contract does not erase the
+    // observed ML direction. Preserve it as posture evidence while making the
+    // deferred score authority explicit; otherwise a genuine timed reaction
+    // against the final pick is silently rendered neutral.
+    if (book.ignoredMarkets?.includes(args.market)) result.convictionRiskSources!.push(`${book.book}:${args.market}_numeric_authority_deferred`);
     if (Math.abs(p.observedLocationDelta) <= 1e-9) continue;
     const side = args.market === "total" ? p.observedLocationDelta > 0 ? "over" : "under" : p.observedLocationDelta > 0 ? "home" : "away";
     (side === args.pickedSide ? result.supportingSources : result.opposingSources).push(book.book);

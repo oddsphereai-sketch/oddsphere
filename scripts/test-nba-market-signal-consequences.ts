@@ -81,10 +81,11 @@ assert.ok(aligned.candidate.final.total > 210 && aligned.candidate.final.total <
 const compensated = run([...movement("spread", -3.5, -5.5, [-200, 170]), ...movement("total", 215, 220, [-400, 300])]);
 assert.equal(compensated.reader.reads.spread.status, "qualified", "raw-number label alone previously qualified");
 assert.equal(compensated.reader.reads.total.status, "qualified");
-assert.equal(compensated.candidate.final.movementApplied, true, "overcompensation has actual opposite direction, not a blanket no-effect rule");
-assert.equal(compensated.candidate.final.totalMovementApplied, true);
-assert.ok(compensated.candidate.final.marginHome < -4);
-assert.ok(compensated.candidate.final.total < 210);
+assert.equal(compensated.candidate.final.movementApplied, false,
+  "a compensated move toward the independent margin confirms it without double-counting the same direction");
+assert.equal(compensated.candidate.final.totalMovementApplied, false);
+assert.equal(compensated.candidate.final.marginHome, -4);
+assert.equal(compensated.candidate.final.total, 210);
 assert.ok(compensated.candidate.readerDecisionAudit.pricedContractChecks.spread.every(c => c.status === "price_offsets_number"));
 assert.ok(compensated.candidate.readerDecisionAudit.pricedContractChecks.total.every(c => c.status === "price_offsets_number"));
 assert.deepEqual(compensated.prediction.audit.professional_grade_context!.namedBookPostures!.spread!.supportingSources, ["circa", "pinnacle"],
@@ -179,7 +180,8 @@ const timedSplit = { ...split, sourceObservedAt: "2026-10-31T16:00:00Z", fetched
 const flowAligned = run(movement("spread", -5.5, -7.5), [timedSplit], 10);
 assert.ok(flowAligned.intel.spread.named_book_posture!.flowInterpretations!.some(p =>
   p.source === "circa" && p.sourceType === "sharp_adjacent_book" && p.reaction === "aligned" && p.quoteSide === "home"));
-assert.ok(flowAligned.candidate.final.marginHome > 10);
+assert.equal(flowAligned.candidate.final.marginHome, 10,
+  "movement toward the independent coordinate is confirmation posture, not a duplicated score consequence");
 const flowOpposed = run(movement("spread", -5.5, -3.5), [timedSplit], 10);
 assert.ok(flowOpposed.intel.spread.named_book_posture!.flowInterpretations!.some(p =>
   p.reaction === "opposed" && p.pressureSide === "home" && p.quoteSide === "away"));
@@ -229,14 +231,16 @@ const favoritePressure: NbaReaderSplitRow[] = [
 const weakeningFavoriteRows = [...movement("moneyline", null, null, [-240, 200], [-160, 140]),
   ...movement("spread", -5.5, -4.5)];
 const tightFavorite = run(weakeningFavoriteRows, favoritePressure, 1.5, 220);
-assert.equal(tightFavorite.candidate.picks.moneyline, "away");
+assert.equal(tightFavorite.candidate.picks.moneyline, "home",
+  "weakening that remains on the model's home side confirms the tighter model forecast; it must not extrapolate through zero");
 assert.equal(tightFavorite.candidate.picks.spread, "away");
-assert.ok(tightFavorite.candidate.final.marginHome < 0 && tightFavorite.candidate.final.marginHome < 1.5);
+assert.equal(tightFavorite.candidate.final.marginHome, 1.5);
 assert.equal(tightFavorite.candidate.final.total, 220, "side resistance alone does not invent a Total move");
 assert.ok(tightFavorite.candidate.marketConsequence!.pressure.every(p => p.reaction === "opposed" && p.side === "home"));
 assert.ok(tightFavorite.candidate.marketConsequence!.pressure.every(p => p.basis === "handle_concentration" && p.gapPp === 0 && p.majoritySide === "home" && p.differentialSide === null),
   "80/80 concentration survives zero money-minus-ticket gap; it is not mislabeled differential evidence");
-assert.ok(tightFavorite.intel.ml.named_book_posture!.supportingSources.includes("circa"));
+assert.ok(tightFavorite.intel.ml.named_book_posture!.opposingSources.includes("circa"));
+assert.equal(buildMarketSignal(tightFavorite.intel.ml), "market_resistance");
 const strongerFavorite = run(weakeningFavoriteRows, favoritePressure, 5, 220);
 assert.equal(strongerFavorite.candidate.picks.moneyline, "home", "the same adverse market can weaken, not automatically flip, a stronger favorite forecast");
 assert.ok(strongerFavorite.candidate.final.marginHome > 0 && strongerFavorite.candidate.final.marginHome < 5);
@@ -259,11 +263,12 @@ const actionable = (grade: string) => ["lean", "best_angle"].includes(grade);
 assert.equal(actionable(untouched.intel.ml.grade), false);
 assert.equal(actionable(promoted.intel.ml.grade), true, "same decision path can promote a genuine playable forecast, not only demote");
 assert.equal(actionable(beforeDemotion.intel.ml.grade), true);
-assert.equal(actionable(demoted.intel.ml.grade), false);
+assert.equal(actionable(demoted.intel.ml.grade), true,
+  "a coherent market-caused side flip with positive final value remains an actionable Lean rather than being demoted by its correction flag");
 assert.ok(promoted.candidate.final.marginHome > untouched.candidate.final.marginHome);
 assert.ok(demoted.candidate.final.marginHome < beforeDemotion.candidate.final.marginHome);
 console.log(JSON.stringify({ functionalControls: "passed", finalScoreProbabilityPickGradePath: "checked",
   repaired: ["number_price_compensation", "direct_ML_score_authority", "price_only_score_response", "held_pressure_context", "partial_buyback", "causal_exact_pairs"],
   pairedGradeScenarios: grades,
-  pairedBoardImpact: { before: 1, after: 1, promotions: 1, demotions: 1 },
+  pairedBoardImpact: { before: 1, after: 2, promotions: 1, demotions: 0 },
   historicalGames: 0, providerCalls: 0, productionWrites: 0 }));
