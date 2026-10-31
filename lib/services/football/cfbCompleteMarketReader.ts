@@ -540,6 +540,7 @@ function probabilityValue(market: Market, landmark: CfbForwardContextFamily[5]):
 
 function marketTrails(observations: Observation[], market: Market, asOfAt: string,
   evaluatedSportsbook?: string): Trail[] {
+  const asOfMs = Date.parse(asOfAt);
   const bySource = new Map<string, Array<{
     opening: CfbForwardContextFamily[4];
     current: CfbForwardContextFamily[5];
@@ -550,6 +551,11 @@ function marketTrails(observations: Observation[], market: Market, asOfAt: strin
       // A historical capture excluded its *then* target. Re-exclude the
       // current evaluated target across the entire trail, not just today.
       if (evaluatedSportsbook && source === canonical(evaluatedSportsbook)) continue;
+      const quoteAt = Date.parse(family[5][0]);
+      // A future-dated frame is invalid evidence, but cannot erase the last
+      // valid pre-as-of quote from this same source's historical trail.
+      if (!Number.isFinite(quoteAt) || !Number.isFinite(asOfMs) ||
+          quoteAt > asOfMs || quoteAt > Date.parse(observation.capturedAt)) continue;
       bySource.set(source, [...(bySource.get(source) ?? []), {
         opening: family[4],
         current: family[5],

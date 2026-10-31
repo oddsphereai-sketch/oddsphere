@@ -288,6 +288,31 @@ assert.ok(namedPriceOnly.totalShiftPoints > 0,
   "two independent named books moving Over price at a fixed Total must update the coherent score distribution");
 assert.ok(Math.abs(namedPriceOnly.forecast.expectedTotal -
   (namedPriceOnly.forecast.expectedHomePoints + namedPriceOnly.forecast.expectedAwayPoints)) < 1e-9);
+const validPriorNamed = structuredClone(namedPriceOnlyObservation);
+validPriorNamed.capturedAt = "2026-10-10T21:55:00.000Z";
+validPriorNamed.markets.total.families = validPriorNamed.markets.total.families.map((family) => [
+  family[0], family[1], family[2], family[3], family[4],
+  landmark(validPriorNamed.capturedAt, 48, -125, 105),
+] as CfbForwardMarketReaderObservation["markets"]["total"]["families"][number]);
+const futureNamedFrame = structuredClone(namedPriceOnlyObservation);
+futureNamedFrame.markets.total.families = futureNamedFrame.markets.total.families.map((family) => [
+  family[0], family[1], family[2], family[3], family[4],
+  landmark("2026-10-10T22:05:00.000Z", 48, -125, 105),
+] as CfbForwardMarketReaderObservation["markets"]["total"]["families"][number]);
+const preservedPriorNamed = applyCfbCompleteMarketReader({
+  ...common,
+  histories: [{
+    capturedAt: validPriorNamed.capturedAt,
+    payload: {
+      contextualEvidenceCapture: { markets: validPriorNamed.markets },
+      market: { playbookSplits: null, sharpApiSplits: [] },
+    },
+  } as never],
+  currentObservation: futureNamedFrame,
+});
+assert.equal(preservedPriorNamed.namedTotalStatus, "applied",
+  "a future-dated quote must not erase a valid recent named-book trail");
+assert.ok(preservedPriorNamed.totalShiftPoints > 0);
 const namedPriceOnlyUnderObservation = replaceTotalCurrent(namedPriceOnlyObservation,
   () => landmark("2026-10-10T22:00:00.000Z", 48, 105, -125));
 const namedPriceOnlyUnder = applyCfbCompleteMarketReader({
