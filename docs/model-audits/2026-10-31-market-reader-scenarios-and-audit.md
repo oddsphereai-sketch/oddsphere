@@ -96,6 +96,18 @@ as calibrated uncertainty, or fill missing covariance with convenient numbers.
 This is a missing inference component, not a demand to wait for a win-rate
 qualification or resume a broad historical model tournament.
 
+Coordinated DB coverage follow-up reports256 locked NBA market rows and81
+unique settled games (October20–30) with stored independent projections and
+complete pre-lock named-book quote sets (Circa80, Pinnacle1). This is a
+candidate cohort, not yet a frozen qualified artifact: record releases span
+r11/r15/r17/r18/r20/r21/r22/r24 and the DTO independent-release field is null.
+The implementing thread has not independently repeated that query. Exact row
+IDs, source/run clocks, cross-market synchronization, release lineage and a
+frozen source hash remain required. No mixed-cohort accuracy statistic is
+accepted as current-model performance or evidence r3 improves predictions.
+The source owner is checking release-pure/chronological usability; no fitting
+parameters, new production writer or lock mutation is authorized by coverage.
+
 ## Scope and honest meaning of complete
 
 The catalog below contains 120 explicitly enumerated scenario classes across
