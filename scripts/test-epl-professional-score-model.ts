@@ -70,7 +70,7 @@ assert.ok(prediction.lambdaHome > prediction.lambdaAway, "matchup process and at
 assert.ok(Math.abs((prediction.probabilities.home + prediction.probabilities.draw + prediction.probabilities.away) - 1) < 1e-9);
 assert.ok(Math.abs((prediction.probabilities.over25 + prediction.probabilities.under25) - 1) < 1e-9);
 assert.ok(Math.abs((prediction.probabilities.bttsYes + prediction.probabilities.bttsNo) - 1) < 1e-9);
-assert.equal(prediction.release, "epl_goals_coherent_2026_10_31_r22_complete_official_market_prices");
+assert.equal(prediction.release, "epl_goals_coherent_2026_10_31_r23_partial_price_publication");
 
 const future = {
   ...matches[0]!,
