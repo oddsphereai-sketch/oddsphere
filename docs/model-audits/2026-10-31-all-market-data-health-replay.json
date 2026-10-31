@@ -1,0 +1,2260 @@
+{
+  "readOnly": true,
+  "startingMain": "95b9e7f35afa99ea6997ea091b30d22e859c00b5",
+  "capturedAt": "2026-10-31T12:24:27Z",
+  "scope": "same captured Owls responses, same BDL stats/PMFs, same durable history, same locked payloads; no The Odds API paid request",
+  "cohorts": [
+    {
+      "competition": "epl",
+      "before": {
+        "markets": 40,
+        "priced": 21,
+        "held": 19,
+        "actionable": 4,
+        "grades": {
+          "Best Angle": 0,
+          "Lean": 4,
+          "Watchlist": 10,
+          "No Play": 26,
+          "Caution": 0
+        }
+      },
+      "after": {
+        "markets": 40,
+        "priced": 39,
+        "held": 1,
+        "actionable": 9,
+        "grades": {
+          "Best Angle": 0,
+          "Lean": 9,
+          "Watchlist": 15,
+          "No Play": 16,
+          "Caution": 0
+        }
+      },
+      "promotions": 5,
+      "demotions": 0,
+      "sideChanges": 0,
+      "probabilityChanges": 0,
+      "lockedUnchanged": true,
+      "changes": [
+        {
+          "before": {
+            "game": "LEE@BOU",
+            "key": "3818268:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BOU or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7748157212823039,
+            "projection": {
+              "away": 0.9687834524359759,
+              "home": 1.5027524620894728
+            }
+          },
+          "after": {
+            "game": "LEE@BOU",
+            "key": "3818268:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BOU or Draw",
+            "grade": "Watchlist",
+            "price": -300,
+            "held": false,
+            "probability": 0.7748157212823039,
+            "projection": {
+              "away": 0.9687834524359759,
+              "home": 1.5027524620894728
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "LEE@BOU",
+            "key": "3818268:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "No",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.5052837531837876,
+            "projection": {
+              "away": 0.9687834524359759,
+              "home": 1.5027524620894728
+            }
+          },
+          "after": {
+            "game": "LEE@BOU",
+            "key": "3818268:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "No",
+            "grade": "No Play",
+            "price": 115,
+            "held": false,
+            "probability": 0.5052837531837876,
+            "projection": {
+              "away": 0.9687834524359759,
+              "home": 1.5027524620894728
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "NFO@BRE",
+            "key": "3818272:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BRE or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6987570962018397,
+            "projection": {
+              "away": 1.5196243136811731,
+              "home": 1.869898555939481
+            }
+          },
+          "after": {
+            "game": "NFO@BRE",
+            "key": "3818272:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BRE or Draw",
+            "grade": "No Play",
+            "price": -257,
+            "held": false,
+            "probability": 0.6987570962018397,
+            "projection": {
+              "away": 1.5196243136811731,
+              "home": 1.869898555939481
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "NFO@BRE",
+            "key": "3818272:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6705199207064184,
+            "projection": {
+              "away": 1.5196243136811731,
+              "home": 1.869898555939481
+            }
+          },
+          "after": {
+            "game": "NFO@BRE",
+            "key": "3818272:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -160,
+            "held": false,
+            "probability": 0.6705199207064184,
+            "projection": {
+              "away": 1.5196243136811731,
+              "home": 1.869898555939481
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SUN@COV",
+            "key": "3818276:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "COV or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6651605274451742,
+            "projection": {
+              "away": 1.364402910375833,
+              "home": 1.4611877850903514
+            }
+          },
+          "after": {
+            "game": "SUN@COV",
+            "key": "3818276:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "COV or Draw",
+            "grade": "No Play",
+            "price": -150,
+            "held": false,
+            "probability": 0.6651605274451742,
+            "projection": {
+              "away": 1.364402910375833,
+              "home": 1.4611877850903514
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SUN@COV",
+            "key": "3818276:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.5836404100115881,
+            "projection": {
+              "away": 1.364402910375833,
+              "home": 1.4611877850903514
+            }
+          },
+          "after": {
+            "game": "SUN@COV",
+            "key": "3818276:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -127,
+            "held": false,
+            "probability": 0.5836404100115881,
+            "projection": {
+              "away": 1.364402910375833,
+              "home": 1.4611877850903514
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "IPS@HUL",
+            "key": "3818278:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "HUL or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7660353846356249,
+            "projection": {
+              "away": 1.2437309778677612,
+              "home": 1.8984600399565195
+            }
+          },
+          "after": {
+            "game": "IPS@HUL",
+            "key": "3818278:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "HUL or Draw",
+            "grade": "Watchlist",
+            "price": -170,
+            "held": false,
+            "probability": 0.7660353846356249,
+            "projection": {
+              "away": 1.2437309778677612,
+              "home": 1.8984600399565195
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "IPS@HUL",
+            "key": "3818278:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6153966257130542,
+            "projection": {
+              "away": 1.2437309778677612,
+              "home": 1.8984600399565195
+            }
+          },
+          "after": {
+            "game": "IPS@HUL",
+            "key": "3818278:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -138,
+            "held": false,
+            "probability": 0.6153966257130542,
+            "projection": {
+              "away": 1.2437309778677612,
+              "home": 1.8984600399565195
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BHA@MNC",
+            "key": "3818282:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MNC or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7718804833291358,
+            "projection": {
+              "away": 1.3789810996199625,
+              "home": 2.157772526511304
+            }
+          },
+          "after": {
+            "game": "BHA@MNC",
+            "key": "3818282:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MNC or Draw",
+            "grade": "No Play",
+            "price": -400,
+            "held": false,
+            "probability": 0.7718804833291358,
+            "projection": {
+              "away": 1.3789810996199625,
+              "home": 2.157772526511304
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BHA@MNC",
+            "key": "3818282:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6705809030391967,
+            "projection": {
+              "away": 1.3789810996199625,
+              "home": 2.157772526511304
+            }
+          },
+          "after": {
+            "game": "BHA@MNC",
+            "key": "3818282:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -186,
+            "held": false,
+            "probability": 0.6705809030391967,
+            "projection": {
+              "away": 1.3789810996199625,
+              "home": 2.157772526511304
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "CRY@TOT",
+            "key": "3818287:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "TOT or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7112599014215369,
+            "projection": {
+              "away": 1.277468741846948,
+              "home": 1.596261416511244
+            }
+          },
+          "after": {
+            "game": "CRY@TOT",
+            "key": "3818287:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "TOT or Draw",
+            "grade": "No Play",
+            "price": -441,
+            "held": false,
+            "probability": 0.7112599014215369,
+            "projection": {
+              "away": 1.277468741846948,
+              "home": 1.596261416511244
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "CRY@TOT",
+            "key": "3818287:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.5866660892366073,
+            "projection": {
+              "away": 1.277468741846948,
+              "home": 1.596261416511244
+            }
+          },
+          "after": {
+            "game": "CRY@TOT",
+            "key": "3818287:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -127,
+            "held": false,
+            "probability": 0.5866660892366073,
+            "projection": {
+              "away": 1.277468741846948,
+              "home": 1.596261416511244
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "FUL@AVL",
+            "key": "3818270:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "AVL or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7154997109202437,
+            "projection": {
+              "away": 1.1732385564428074,
+              "home": 1.4659959571306693
+            }
+          },
+          "after": {
+            "game": "FUL@AVL",
+            "key": "3818270:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "AVL or Draw",
+            "grade": "No Play",
+            "price": -264,
+            "held": false,
+            "probability": 0.7154997109202437,
+            "projection": {
+              "away": 1.1732385564428074,
+              "home": 1.4659959571306693
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "FUL@AVL",
+            "key": "3818270:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.5435189654612562,
+            "projection": {
+              "away": 1.1732385564428074,
+              "home": 1.4659959571306693
+            }
+          },
+          "after": {
+            "game": "FUL@AVL",
+            "key": "3818270:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -138,
+            "held": false,
+            "probability": 0.5435189654612562,
+            "projection": {
+              "away": 1.1732385564428074,
+              "home": 1.4659959571306693
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "ARS@LIV",
+            "key": "3818281:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "ARS or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6910096569382227,
+            "projection": {
+              "away": 1.2302456454976194,
+              "home": 1.2302456454976194
+            }
+          },
+          "after": {
+            "game": "ARS@LIV",
+            "key": "3818281:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "ARS or Draw",
+            "grade": "No Play",
+            "price": -203,
+            "held": false,
+            "probability": 0.6910096569382227,
+            "projection": {
+              "away": 1.2302456454976194,
+              "home": 1.2302456454976194
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "ARS@LIV",
+            "key": "3818281:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.5122095456672439,
+            "projection": {
+              "away": 1.2302456454976194,
+              "home": 1.2302456454976194
+            }
+          },
+          "after": {
+            "game": "ARS@LIV",
+            "key": "3818281:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": -133,
+            "held": false,
+            "probability": 0.5122095456672439,
+            "projection": {
+              "away": 1.2302456454976194,
+              "home": 1.2302456454976194
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "EVE@NEW",
+            "key": "3818285:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "NEW or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7361294771588287,
+            "projection": {
+              "away": 1.1771815683014402,
+              "home": 1.5949977437046041
+            }
+          },
+          "after": {
+            "game": "EVE@NEW",
+            "key": "3818285:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "NEW or Draw",
+            "grade": "Watchlist",
+            "price": -212,
+            "held": false,
+            "probability": 0.7361294771588287,
+            "projection": {
+              "away": 1.1771815683014402,
+              "home": 1.5949977437046041
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "EVE@NEW",
+            "key": "3818285:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.5632576216079768,
+            "projection": {
+              "away": 1.1771815683014402,
+              "home": 1.5949977437046041
+            }
+          },
+          "after": {
+            "game": "EVE@NEW",
+            "key": "3818285:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -163,
+            "held": false,
+            "probability": 0.5632576216079768,
+            "projection": {
+              "away": 1.1771815683014402,
+              "home": 1.5949977437046041
+            }
+          }
+        }
+      ]
+    },
+    {
+      "competition": "ucl",
+      "before": {
+        "markets": 72,
+        "priced": 68,
+        "held": 4,
+        "actionable": 12,
+        "grades": {
+          "Best Angle": 0,
+          "Lean": 12,
+          "Watchlist": 30,
+          "No Play": 30,
+          "Caution": 0
+        }
+      },
+      "after": {
+        "markets": 72,
+        "priced": 49,
+        "held": 23,
+        "actionable": 7,
+        "grades": {
+          "Best Angle": 0,
+          "Lean": 7,
+          "Watchlist": 20,
+          "No Play": 45,
+          "Caution": 0
+        }
+      },
+      "promotions": 1,
+      "demotions": 6,
+      "sideChanges": 2,
+      "probabilityChanges": 4,
+      "lockedUnchanged": true,
+      "changes": [
+        {
+          "before": {
+            "game": "VFB@GAL",
+            "key": "4243833:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "GAL or Draw",
+            "grade": "No Play",
+            "price": -224,
+            "held": false,
+            "probability": 0.64355749016369,
+            "projection": {
+              "away": 1.6,
+              "home": 1.7
+            }
+          },
+          "after": {
+            "game": "VFB@GAL",
+            "key": "4243833:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "GAL or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.64355749016369,
+            "projection": {
+              "away": 1.6,
+              "home": 1.7
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "VFB@GAL",
+            "key": "4243833:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -247,
+            "held": false,
+            "probability": 0.6508725153832685,
+            "projection": {
+              "away": 1.6,
+              "home": 1.7
+            }
+          },
+          "after": {
+            "game": "VFB@GAL",
+            "key": "4243833:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6508725153832685,
+            "projection": {
+              "away": 1.6,
+              "home": 1.7
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "VFB@GAL",
+            "key": "4243833:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -258,
+            "held": false,
+            "probability": 0.6692177361648094,
+            "projection": {
+              "away": 1.6,
+              "home": 1.7
+            }
+          },
+          "after": {
+            "game": "VFB@GAL",
+            "key": "4243833:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6692177361648094,
+            "projection": {
+              "away": 1.6,
+              "home": 1.7
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SCP@SHK",
+            "key": "4243835:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "SCP or Draw",
+            "grade": "No Play",
+            "price": -338,
+            "held": false,
+            "probability": 0.6840875897038842,
+            "projection": {
+              "away": 1.4751268254220378,
+              "home": 1.3695330999004758
+            }
+          },
+          "after": {
+            "game": "SCP@SHK",
+            "key": "4243835:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "SCP or Draw",
+            "grade": "No Play",
+            "price": -300,
+            "held": false,
+            "probability": 0.6840875897038842,
+            "projection": {
+              "away": 1.4751268254220378,
+              "home": 1.3695330999004758
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SCP@SHK",
+            "key": "4243835:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -156,
+            "held": false,
+            "probability": 0.5826104383972778,
+            "projection": {
+              "away": 1.4751268254220378,
+              "home": 1.3695330999004758
+            }
+          },
+          "after": {
+            "game": "SCP@SHK",
+            "key": "4243835:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -163,
+            "held": false,
+            "probability": 0.5826104383972778,
+            "projection": {
+              "away": 1.4751268254220378,
+              "home": 1.3695330999004758
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "MUN@ATM",
+            "key": "4243837:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MUN or Draw",
+            "grade": "No Play",
+            "price": -300,
+            "held": false,
+            "probability": 0.6673274567075446,
+            "projection": {
+              "away": 2.206771640114851,
+              "home": 1.9861990665551328
+            }
+          },
+          "after": {
+            "game": "MUN@ATM",
+            "key": "4243837:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MUN or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6673274567075446,
+            "projection": {
+              "away": 2.206771640114851,
+              "home": 1.9861990665551328
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "MUN@ATM",
+            "key": "4243837:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Lean",
+            "price": -265,
+            "held": false,
+            "probability": 0.7893265841216835,
+            "projection": {
+              "away": 2.206771640114851,
+              "home": 1.9861990665551328
+            }
+          },
+          "after": {
+            "game": "MUN@ATM",
+            "key": "4243837:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7893265841216835,
+            "projection": {
+              "away": 2.206771640114851,
+              "home": 1.9861990665551328
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "MUN@ATM",
+            "key": "4243837:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -280,
+            "held": false,
+            "probability": 0.7763965787989395,
+            "projection": {
+              "away": 2.206771640114851,
+              "home": 1.9861990665551328
+            }
+          },
+          "after": {
+            "game": "MUN@ATM",
+            "key": "4243837:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7763965787989395,
+            "projection": {
+              "away": 2.206771640114851,
+              "home": 1.9861990665551328
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "AVL@BAR",
+            "key": "4243838:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BAR or Draw",
+            "grade": "No Play",
+            "price": -1409,
+            "held": false,
+            "probability": 0.8408770772599621,
+            "projection": {
+              "away": 1.400046576530073,
+              "home": 2.6428772205622058
+            }
+          },
+          "after": {
+            "game": "AVL@BAR",
+            "key": "4243838:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BAR or Draw",
+            "grade": "No Play",
+            "price": -1076,
+            "held": false,
+            "probability": 0.8408770772599621,
+            "projection": {
+              "away": 1.400046576530073,
+              "home": 2.6428772205622058
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "AVL@BAR",
+            "key": "4243838:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -500,
+            "held": false,
+            "probability": 0.7690421150774726,
+            "projection": {
+              "away": 1.400046576530073,
+              "home": 2.6428772205622058
+            }
+          },
+          "after": {
+            "game": "AVL@BAR",
+            "key": "4243838:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7690421150774726,
+            "projection": {
+              "away": 1.400046576530073,
+              "home": 2.6428772205622058
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "AVL@BAR",
+            "key": "4243838:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -199,
+            "held": false,
+            "probability": 0.7272393028125768,
+            "projection": {
+              "away": 1.400046576530073,
+              "home": 2.6428772205622058
+            }
+          },
+          "after": {
+            "game": "AVL@BAR",
+            "key": "4243838:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -194,
+            "held": false,
+            "probability": 0.7272393028125768,
+            "projection": {
+              "away": 1.400046576530073,
+              "home": 2.6428772205622058
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "LILL@BODO",
+            "key": "4243839:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BODO or Draw",
+            "grade": "Watchlist",
+            "price": -370,
+            "held": false,
+            "probability": 0.7504004251509818,
+            "projection": {
+              "away": 1.1720014796527407,
+              "home": 1.8272844052307131
+            }
+          },
+          "after": {
+            "game": "LILL@BODO",
+            "key": "4243839:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "BODO or Draw",
+            "grade": "No Play",
+            "price": -335,
+            "held": false,
+            "probability": 0.7504004251509818,
+            "projection": {
+              "away": 1.1720014796527407,
+              "home": 1.8272844052307131
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "LILL@BODO",
+            "key": "4243839:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -213,
+            "held": false,
+            "probability": 0.5767320168519637,
+            "projection": {
+              "away": 1.1720014796527407,
+              "home": 1.8272844052307131
+            }
+          },
+          "after": {
+            "game": "LILL@BODO",
+            "key": "4243839:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -203,
+            "held": false,
+            "probability": 0.5767320168519637,
+            "projection": {
+              "away": 1.1720014796527407,
+              "home": 1.8272844052307131
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "INT@FEY",
+            "key": "4243841:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "INT or Draw",
+            "grade": "No Play",
+            "price": -442,
+            "held": false,
+            "probability": 0.7182626510299113,
+            "projection": {
+              "away": 1.762974806678736,
+              "home": 1.4115891102610547
+            }
+          },
+          "after": {
+            "game": "INT@FEY",
+            "key": "4243841:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "INT or Draw",
+            "grade": "No Play",
+            "price": -376,
+            "held": false,
+            "probability": 0.7182626510299113,
+            "projection": {
+              "away": 1.762974806678736,
+              "home": 1.4115891102610547
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "INT@FEY",
+            "key": "4243841:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -254,
+            "held": false,
+            "probability": 0.6148667619449935,
+            "projection": {
+              "away": 1.762974806678736,
+              "home": 1.4115891102610547
+            }
+          },
+          "after": {
+            "game": "INT@FEY",
+            "key": "4243841:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6148667619449935,
+            "projection": {
+              "away": 1.762974806678736,
+              "home": 1.4115891102610547
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "INT@FEY",
+            "key": "4243841:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -240,
+            "held": false,
+            "probability": 0.6433779223124415,
+            "projection": {
+              "away": 1.762974806678736,
+              "home": 1.4115891102610547
+            }
+          },
+          "after": {
+            "game": "INT@FEY",
+            "key": "4243841:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -212,
+            "held": false,
+            "probability": 0.6433779223124415,
+            "projection": {
+              "away": 1.762974806678736,
+              "home": 1.4115891102610547
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SLB@LAS",
+            "key": "4243843:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "LAS or Draw",
+            "grade": "No Play",
+            "price": -770,
+            "held": false,
+            "probability": 0.8042872430498802,
+            "projection": {
+              "away": 1.6494947910627742,
+              "home": 3.0050361762243782
+            }
+          },
+          "after": {
+            "game": "SLB@LAS",
+            "key": "4243843:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "LAS or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.8042872430498802,
+            "projection": {
+              "away": 1.6494947910627742,
+              "home": 3.0050361762243782
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SLB@LAS",
+            "key": "4243843:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -185,
+            "held": false,
+            "probability": 0.7645496103290119,
+            "projection": {
+              "away": 1.6494947910627742,
+              "home": 3.0050361762243782
+            }
+          },
+          "after": {
+            "game": "SLB@LAS",
+            "key": "4243843:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7645496103290119,
+            "projection": {
+              "away": 1.6494947910627742,
+              "home": 3.0050361762243782
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "ROMA@MAN",
+            "key": "4243845:moneyline",
+            "market": "moneyline",
+            "locked": false,
+            "pick": "MAN",
+            "grade": "No Play",
+            "price": 130,
+            "held": false,
+            "probability": 0.5567076909681287,
+            "projection": {
+              "away": 1.2221987929845712,
+              "home": 2.1139959510902995
+            }
+          },
+          "after": {
+            "game": "ROMA@MAN",
+            "key": "4243845:moneyline",
+            "market": "moneyline",
+            "locked": false,
+            "pick": "MAN",
+            "grade": "No Play",
+            "price": 130,
+            "held": false,
+            "probability": 0.49495167421580377,
+            "projection": {
+              "away": 1.3220539643407545,
+              "home": 2.014140779734114
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "ROMA@MAN",
+            "key": "4243845:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MAN or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.779198221821284,
+            "projection": {
+              "away": 1.2221987929845712,
+              "home": 2.1139959510902995
+            }
+          },
+          "after": {
+            "game": "ROMA@MAN",
+            "key": "4243845:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MAN or Draw",
+            "grade": "Watchlist",
+            "price": -178,
+            "held": false,
+            "probability": 0.7281971564668503,
+            "projection": {
+              "away": 1.3220539643407545,
+              "home": 2.014140779734114
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "ROMA@MAN",
+            "key": "4243845:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6158990024393843,
+            "projection": {
+              "away": 1.2221987929845712,
+              "home": 2.1139959510902995
+            }
+          },
+          "after": {
+            "game": "ROMA@MAN",
+            "key": "4243845:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -203,
+            "held": false,
+            "probability": 0.6158990024047669,
+            "projection": {
+              "away": 1.3220539643407545,
+              "home": 2.014140779734114
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "PSG@VIL",
+            "key": "4243846:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "PSG or Draw",
+            "grade": "No Play",
+            "price": -497,
+            "held": false,
+            "probability": 0.7769214258178564,
+            "projection": {
+              "away": 2.1310439233771112,
+              "home": 1.3437668353068577
+            }
+          },
+          "after": {
+            "game": "PSG@VIL",
+            "key": "4243846:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "PSG or Draw",
+            "grade": "No Play",
+            "price": -441,
+            "held": false,
+            "probability": 0.7769214258178564,
+            "projection": {
+              "away": 2.1310439233771112,
+              "home": 1.3437668353068577
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "PSG@VIL",
+            "key": "4243846:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -276,
+            "held": false,
+            "probability": 0.674815069394453,
+            "projection": {
+              "away": 2.1310439233771112,
+              "home": 1.3437668353068577
+            }
+          },
+          "after": {
+            "game": "PSG@VIL",
+            "key": "4243846:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.674815069394453,
+            "projection": {
+              "away": 2.1310439233771112,
+              "home": 1.3437668353068577
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "PSG@VIL",
+            "key": "4243846:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -240,
+            "held": false,
+            "probability": 0.666499149591071,
+            "projection": {
+              "away": 2.1310439233771112,
+              "home": 1.3437668353068577
+            }
+          },
+          "after": {
+            "game": "PSG@VIL",
+            "key": "4243846:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -233,
+            "held": false,
+            "probability": 0.666499149591071,
+            "projection": {
+              "away": 2.1310439233771112,
+              "home": 1.3437668353068577
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "RMA@AEK",
+            "key": "4438969:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "RMA or Draw",
+            "grade": "No Play",
+            "price": -1168,
+            "held": false,
+            "probability": 0.7753274807385763,
+            "projection": {
+              "away": 2.0077563241336245,
+              "home": 1.4377888579845008
+            }
+          },
+          "after": {
+            "game": "RMA@AEK",
+            "key": "4438969:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "RMA or Draw",
+            "grade": "No Play",
+            "price": -1011,
+            "held": false,
+            "probability": 0.7753274807385763,
+            "projection": {
+              "away": 2.0077563241336245,
+              "home": 1.4377888579845008
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "RMA@AEK",
+            "key": "4438969:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -318,
+            "held": false,
+            "probability": 0.6691451769954695,
+            "projection": {
+              "away": 2.0077563241336245,
+              "home": 1.4377888579845008
+            }
+          },
+          "after": {
+            "game": "RMA@AEK",
+            "key": "4438969:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6691451769954695,
+            "projection": {
+              "away": 2.0077563241336245,
+              "home": 1.4377888579845008
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "RMA@AEK",
+            "key": "4438969:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -168,
+            "held": false,
+            "probability": 0.6829498016707488,
+            "projection": {
+              "away": 2.0077563241336245,
+              "home": 1.4377888579845008
+            }
+          },
+          "after": {
+            "game": "RMA@AEK",
+            "key": "4438969:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -156,
+            "held": false,
+            "probability": 0.6829498016707488,
+            "projection": {
+              "away": 2.0077563241336245,
+              "home": 1.4377888579845008
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "LIV@FEN",
+            "key": "4438971:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "LIV or Draw",
+            "grade": "No Play",
+            "price": -496,
+            "held": false,
+            "probability": 0.7488129911795951,
+            "projection": {
+              "away": 1.8645334216040996,
+              "home": 1.3194995221375216
+            }
+          },
+          "after": {
+            "game": "LIV@FEN",
+            "key": "4438971:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "LIV or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7488129911795951,
+            "projection": {
+              "away": 1.8645334216040996,
+              "home": 1.3194995221375216
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "LIV@FEN",
+            "key": "4438971:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -203,
+            "held": false,
+            "probability": 0.6168909855961177,
+            "projection": {
+              "away": 1.8645334216040996,
+              "home": 1.3194995221375216
+            }
+          },
+          "after": {
+            "game": "LIV@FEN",
+            "key": "4438971:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6168909855961177,
+            "projection": {
+              "away": 1.8645334216040996,
+              "home": 1.3194995221375216
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "LIV@FEN",
+            "key": "4438971:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -200,
+            "held": false,
+            "probability": 0.6382384979143445,
+            "projection": {
+              "away": 1.8645334216040996,
+              "home": 1.3194995221375216
+            }
+          },
+          "after": {
+            "game": "LIV@FEN",
+            "key": "4438971:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6382384979143445,
+            "projection": {
+              "away": 1.8645334216040996,
+              "home": 1.3194995221375216
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BET@DOR",
+            "key": "4438974:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "DOR or Draw",
+            "grade": "No Play",
+            "price": -409,
+            "held": false,
+            "probability": 0.7603140438276847,
+            "projection": {
+              "away": 1.4273602538270722,
+              "home": 2.1602254891153745
+            }
+          },
+          "after": {
+            "game": "BET@DOR",
+            "key": "4438974:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "DOR or Draw",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7603140438276847,
+            "projection": {
+              "away": 1.4273602538270722,
+              "home": 2.1602254891153745
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BET@DOR",
+            "key": "4438974:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Lean",
+            "price": -196,
+            "held": false,
+            "probability": 0.6954715427076004,
+            "projection": {
+              "away": 1.4273602538270722,
+              "home": 2.1602254891153745
+            }
+          },
+          "after": {
+            "game": "BET@DOR",
+            "key": "4438974:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6954715427076004,
+            "projection": {
+              "away": 1.4273602538270722,
+              "home": 2.1602254891153745
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BET@DOR",
+            "key": "4438974:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -215,
+            "held": false,
+            "probability": 0.6808916791658691,
+            "projection": {
+              "away": 1.4273602538270722,
+              "home": 2.1602254891153745
+            }
+          },
+          "after": {
+            "game": "BET@DOR",
+            "key": "4438974:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6808916791658691,
+            "projection": {
+              "away": 1.4273602538270722,
+              "home": 2.1602254891153745
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "NAP@FCP",
+            "key": "4438975:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "FCP or Draw",
+            "grade": "No Play",
+            "price": -274,
+            "held": false,
+            "probability": 0.7017562352360908,
+            "projection": {
+              "away": 1.2926300166733127,
+              "home": 1.6028116624331894
+            }
+          },
+          "after": {
+            "game": "NAP@FCP",
+            "key": "4438975:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "FCP or Draw",
+            "grade": "No Play",
+            "price": -245,
+            "held": false,
+            "probability": 0.7017562352360908,
+            "projection": {
+              "away": 1.2926300166733127,
+              "home": 1.6028116624331894
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "NAP@FCP",
+            "key": "4438975:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -160,
+            "held": false,
+            "probability": 0.5908166561402001,
+            "projection": {
+              "away": 1.2926300166733127,
+              "home": 1.6028116624331894
+            }
+          },
+          "after": {
+            "game": "NAP@FCP",
+            "key": "4438975:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -167,
+            "held": false,
+            "probability": 0.5908166561402001,
+            "projection": {
+              "away": 1.2926300166733127,
+              "home": 1.6028116624331894
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "COMO@RCL",
+            "key": "4438978:moneyline",
+            "market": "moneyline",
+            "locked": false,
+            "pick": "COMO",
+            "grade": "No Play",
+            "price": 117,
+            "held": false,
+            "probability": 0.38035128130087476,
+            "projection": {
+              "away": 1.7,
+              "home": 1.6
+            }
+          },
+          "after": {
+            "game": "COMO@RCL",
+            "key": "4438978:moneyline",
+            "market": "moneyline",
+            "locked": false,
+            "pick": "RCL",
+            "grade": "No Play",
+            "price": 191,
+            "held": false,
+            "probability": 0.40595741872382846,
+            "projection": {
+              "away": 1.6081494620764327,
+              "home": 1.7534727381216257
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "COMO@RCL",
+            "key": "4438978:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "COMO or Draw",
+            "grade": "No Play",
+            "price": -239,
+            "held": false,
+            "probability": 0.6288583784274614,
+            "projection": {
+              "away": 1.7,
+              "home": 1.6
+            }
+          },
+          "after": {
+            "game": "COMO@RCL",
+            "key": "4438978:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "RCL or Draw",
+            "grade": "No Play",
+            "price": -133,
+            "held": false,
+            "probability": 0.6526910065378642,
+            "projection": {
+              "away": 1.6081494620764327,
+              "home": 1.7534727381216257
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "COMO@RCL",
+            "key": "4438978:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -189,
+            "held": false,
+            "probability": 0.6529546405837615,
+            "projection": {
+              "away": 1.7,
+              "home": 1.6
+            }
+          },
+          "after": {
+            "game": "COMO@RCL",
+            "key": "4438978:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6529546405070548,
+            "projection": {
+              "away": 1.6081494620764327,
+              "home": 1.7534727381216257
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "COMO@RCL",
+            "key": "4438978:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6709157913146061,
+            "projection": {
+              "away": 1.7,
+              "home": 1.6
+            }
+          },
+          "after": {
+            "game": "COMO@RCL",
+            "key": "4438978:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -203,
+            "held": false,
+            "probability": 0.6709157912929915,
+            "projection": {
+              "away": 1.6081494620764327,
+              "home": 1.7534727381216257
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BRU@PSV",
+            "key": "4438979:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "PSV or Draw",
+            "grade": "No Play",
+            "price": -250,
+            "held": false,
+            "probability": 0.6731426229922067,
+            "projection": {
+              "away": 1.9882879343319786,
+              "home": 2.3188375778862924
+            }
+          },
+          "after": {
+            "game": "BRU@PSV",
+            "key": "4438979:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "PSV or Draw",
+            "grade": "No Play",
+            "price": -223,
+            "held": false,
+            "probability": 0.6731426229922067,
+            "projection": {
+              "away": 1.9882879343319786,
+              "home": 2.3188375778862924
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BRU@PSV",
+            "key": "4438979:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Lean",
+            "price": -273,
+            "held": false,
+            "probability": 0.8041467446830032,
+            "projection": {
+              "away": 1.9882879343319786,
+              "home": 2.3188375778862924
+            }
+          },
+          "after": {
+            "game": "BRU@PSV",
+            "key": "4438979:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.8041467446830032,
+            "projection": {
+              "away": 1.9882879343319786,
+              "home": 2.3188375778862924
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "BRU@PSV",
+            "key": "4438979:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -310,
+            "held": false,
+            "probability": 0.7857190717245046,
+            "projection": {
+              "away": 1.9882879343319786,
+              "home": 2.3188375778862924
+            }
+          },
+          "after": {
+            "game": "BRU@PSV",
+            "key": "4438979:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -257,
+            "held": false,
+            "probability": 0.7857190717245046,
+            "projection": {
+              "away": 1.9882879343319786,
+              "home": 2.3188375778862924
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "MNC@RBL",
+            "key": "4438980:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MNC or Draw",
+            "grade": "No Play",
+            "price": -602,
+            "held": false,
+            "probability": 0.7175741143703146,
+            "projection": {
+              "away": 1.7043722923737976,
+              "home": 1.4210984483447804
+            }
+          },
+          "after": {
+            "game": "MNC@RBL",
+            "key": "4438980:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "MNC or Draw",
+            "grade": "No Play",
+            "price": -525,
+            "held": false,
+            "probability": 0.7175741143703146,
+            "projection": {
+              "away": 1.7043722923737976,
+              "home": 1.4210984483447804
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "MNC@RBL",
+            "key": "4438980:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Watchlist",
+            "price": -285,
+            "held": false,
+            "probability": 0.6044350858363948,
+            "projection": {
+              "away": 1.7043722923737976,
+              "home": 1.4210984483447804
+            }
+          },
+          "after": {
+            "game": "MNC@RBL",
+            "key": "4438980:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.6044350858363948,
+            "projection": {
+              "away": 1.7043722923737976,
+              "home": 1.4210984483447804
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "MNC@RBL",
+            "key": "4438980:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -225,
+            "held": false,
+            "probability": 0.6318097850305034,
+            "projection": {
+              "away": 1.7043722923737976,
+              "home": 1.4210984483447804
+            }
+          },
+          "after": {
+            "game": "MNC@RBL",
+            "key": "4438980:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Watchlist",
+            "price": -212,
+            "held": false,
+            "probability": 0.6318097850305034,
+            "projection": {
+              "away": 1.7043722923737976,
+              "home": 1.4210984483447804
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "ARS@SLP",
+            "key": "4438981:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "ARS or Draw",
+            "grade": "No Play",
+            "price": -1137,
+            "held": false,
+            "probability": 0.8677058997114597,
+            "projection": {
+              "away": 2.2798551390296535,
+              "home": 1.0219885063701917
+            }
+          },
+          "after": {
+            "game": "ARS@SLP",
+            "key": "4438981:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "ARS or Draw",
+            "grade": "No Play",
+            "price": -1011,
+            "held": false,
+            "probability": 0.8677058997114597,
+            "projection": {
+              "away": 2.2798551390296535,
+              "home": 1.0219885063701917
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "ARS@SLP",
+            "key": "4438981:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -103,
+            "held": false,
+            "probability": 0.6012203171508955,
+            "projection": {
+              "away": 2.2798551390296535,
+              "home": 1.0219885063701917
+            }
+          },
+          "after": {
+            "game": "ARS@SLP",
+            "key": "4438981:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -113,
+            "held": false,
+            "probability": 0.6012203171508955,
+            "projection": {
+              "away": 2.2798551390296535,
+              "home": 1.0219885063701917
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SAB@VFK",
+            "key": "4438983:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "VFK or Draw",
+            "grade": "No Play",
+            "price": -743,
+            "held": false,
+            "probability": 0.7890753117021245,
+            "projection": {
+              "away": 1.4882114279216874,
+              "home": 2.4270404764336653
+            }
+          },
+          "after": {
+            "game": "SAB@VFK",
+            "key": "4438983:double_chance",
+            "market": "double_chance",
+            "locked": false,
+            "pick": "VFK or Draw",
+            "grade": "No Play",
+            "price": -590,
+            "held": false,
+            "probability": 0.7890753117021245,
+            "projection": {
+              "away": 1.4882114279216874,
+              "home": 2.4270404764336653
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SAB@VFK",
+            "key": "4438983:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "Lean",
+            "price": -233,
+            "held": false,
+            "probability": 0.7499143214019607,
+            "projection": {
+              "away": 1.4882114279216874,
+              "home": 2.4270404764336653
+            }
+          },
+          "after": {
+            "game": "SAB@VFK",
+            "key": "4438983:total",
+            "market": "total",
+            "locked": false,
+            "pick": "Over",
+            "grade": "No Play",
+            "price": null,
+            "held": true,
+            "probability": 0.7499143214019607,
+            "projection": {
+              "away": 1.4882114279216874,
+              "home": 2.4270404764336653
+            }
+          }
+        },
+        {
+          "before": {
+            "game": "SAB@VFK",
+            "key": "4438983:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -180,
+            "held": false,
+            "probability": 0.7193399490178767,
+            "projection": {
+              "away": 1.4882114279216874,
+              "home": 2.4270404764336653
+            }
+          },
+          "after": {
+            "game": "SAB@VFK",
+            "key": "4438983:btts",
+            "market": "btts",
+            "locked": false,
+            "pick": "Yes",
+            "grade": "Lean",
+            "price": -170,
+            "held": false,
+            "probability": 0.7193399490178767,
+            "projection": {
+              "away": 1.4882114279216874,
+              "home": 2.4270404764336653
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "inputSha256": {
+    "epl": "9f0c6aa57811d37a44921920b3f2d45b441395d5cd7639604c4599c52de129ea",
+    "ucl": "08ea936327b45b367678554d22c838b903c4386af00fdeb4bb3360f7534904de"
+  }
+}

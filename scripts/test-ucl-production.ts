@@ -95,6 +95,8 @@ const partialFixture: EplSharpFixtureMarket = {
 const recoveredFixture = applyUclStoredQuoteFallback({
   fixture: partialFixture,
   providerId: 991,
+  kickoff: "2026-10-14T18:45:00Z",
+  now: new Date("2026-10-14T16:35:00Z"),
   history: [
     stored({ side: "over", american: -145, recordedAt: "2026-10-14T16:20:00Z" }),
     stored({ side: "under", american: 125, recordedAt: "2026-10-14T16:20:00Z" }),
@@ -109,7 +111,15 @@ const completeFixture: EplSharpFixtureMarket = {
   ...partialFixture,
   odds: [sharpRow({ selection: "over", odds_american: -105 }), sharpRow({ selection: "under", odds_american: -115 })],
 };
-assert.equal(applyUclStoredQuoteFallback({ fixture: completeFixture, providerId: 991, history: [stored({ side: "over" }), stored({ side: "under" })] }), completeFixture, "a complete current provider market wins without stored augmentation");
+assert.equal(applyUclStoredQuoteFallback({ fixture: completeFixture, providerId: 991, kickoff: "2026-10-14T18:45:00Z", history: [stored({ side: "over" }), stored({ side: "under" })] }), completeFixture, "a complete current provider market wins without stored augmentation");
+assert.equal(applyUclStoredQuoteFallback({ fixture: partialFixture, providerId: 991,
+  kickoff: "2026-10-14T18:45:00Z", now: new Date("2026-10-14T17:01:00Z"),
+  history: [stored({ side: "over" }), stored({ side: "under" })],
+}), partialFixture, "stale stored prices cannot be relabeled as current or revive an actionable market");
+assert.equal(applyUclStoredQuoteFallback({ fixture: partialFixture, providerId: 991,
+  kickoff: "2026-10-14T18:45:00Z", now: new Date("2026-10-14T16:20:00Z"),
+  history: [stored({ side: "over" }), stored({ side: "under" })],
+}), partialFixture, "future-dated stored quotes fail closed");
 
 // Provider product/auth identity: dedicated UCL v1, no invented league id.
 const calls: Array<{ url: string; auth: string | null }> = [];
@@ -443,7 +453,7 @@ const qualifiedTotalCorrection = deriveUclCoherentMarketOutcome({
 assert.equal(qualifiedTotalCorrection.audit.goalsReader?.totalCorrectionApplied, true, "a weak Total may be corrected by stable target-excluded consensus");
 assert.equal(qualifiedTotalCorrection.markets.total.over > 0.5, true);
 assert.equal(qualifiedTotalCorrection.audit.goalsReader?.bttsCorrectionApplied, false);
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_10_20_r10_no_shadow_payload");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_10_31_r11_partial_price_freshness");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -487,7 +497,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_10_28_r3_owls_the_odds_price_source");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_10_31_r4_complete_official_market_prices");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
@@ -704,7 +714,7 @@ for (let mask = 0; mask < 2 ** subKeys.length; mask++) {
   const on = resolveUclFeatureFlags({ ...env, UCL_PIPELINE_ENABLED: "true" });
   assert.equal(on.publication, on.writes && on.member && env.UCL_PUBLICATION_ENABLED === "true");
 }
-const heldMarket = { held: true, currentPriceAmerican: null, soccerPriceBoard: null };
+const heldMarket = { held: true, currentPriceAmerican: null, soccerPriceBoard: null, verdict: { key: "no_play", label: "No Play" } };
 const pricedMarket = { held: false, currentPriceAmerican: -110, soccerPriceBoard: { rows: [{}, {}, {}] } };
 const coverage = evaluateUclPublicationCoverage(
   { matches: [{ id: 1, status: "scheduled" }] } as never,
@@ -730,8 +740,14 @@ const partialPriceCoverage = evaluateUclPublicationCoverage(
 );
 assert.equal(partialPriceCoverage.priceCollapse, false);
 assert.equal(partialPriceCoverage.unlockedPriceRegressions, 1);
-assert.match(partialPriceCoverage.errors.join(";"), /unlocked current-price coverage regressed for 1 market.*last-known-good/i, "one transient unlocked omission cannot replace its prior complete member snapshot");
-assert.deepEqual(partialPriceCoverage.hardErrors, [], "partial quote regression preserves the member LKG without blocking the ordinary writer evidence path");
+assert.deepEqual(partialPriceCoverage.errors, [], "one unavailable market must not freeze every other current quote on the board");
+assert.match(partialPriceCoverage.warnings.join(";"), /1 unlocked market.*lost current prices.*remain held/i);
+assert.deepEqual(partialPriceCoverage.hardErrors, [], "explicit missing-price holds can publish without changing the complete forecast");
+const dishonestPriceCoverage = evaluateUclPublicationCoverage(
+  { matches: [{ id: 1, status: "scheduled" }] } as never,
+  { games: [{ external_id: 1, soccerProjection: { goalOutlookProbabilities: { home: 0.4, draw: 0.3, away: 0.3, over25: 0.55, under25: 0.45, bttsYes: 0.52, bttsNo: 0.48 } }, markets: { moneyline: pricedMarket, total: { ...heldMarket, held: false }, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket }] } as never,
+);
+assert.match(dishonestPriceCoverage.hardErrors.join(";"), /unpriced market.*explicit evidence hold/i, "partial publication cannot disguise a missing quote as a completed normal evaluation");
 const lockedPartialPriceCoverage = evaluateUclPublicationCoverage(
   { matches: [{ id: 1, status: "in_progress" }] } as never,
   { games: [{ external_id: 1, lockState: "locked", lockedAt: "2026-10-14T15:47:34.921Z", soccerProjection: { goalOutlookProbabilities: { home: 0.4, draw: 0.3, away: 0.3, over25: 0.55, under25: 0.45, bttsYes: 0.52, bttsNo: 0.48 } }, markets: { moneyline: pricedMarket, total: heldMarket, first_inning: pricedMarket }, soccerDoubleChanceMarket: pricedMarket }] } as never,

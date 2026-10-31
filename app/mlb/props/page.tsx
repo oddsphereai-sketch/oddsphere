@@ -61,8 +61,8 @@ export default async function MlbPropsMemberPage({
     <section className="mx-auto max-w-4xl py-10 sm:py-20">
       <div className="border-y border-gray-800 py-10 sm:py-14">
         <div className="flex items-center gap-3 text-xs font-bold text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />MLB Prop Researcher</div>
-        <h1 className="mt-5 max-w-2xl text-4xl font-black leading-tight text-white sm:text-5xl">{dataUnavailable ? "Player Props data is temporarily unavailable." : "Today’s prop board is loading."}</h1>
-        <p className="mt-4 max-w-2xl text-base leading-7 text-gray-400">{dataUnavailable ? "The data service did not respond in time. Please refresh in a moment; no picks or prices were changed." : "The latest complete market snapshot will appear here as soon as sportsbook prices are ready."}</p>
+        <h1 className="mt-5 max-w-2xl text-4xl font-black leading-tight text-white sm:text-5xl">{dataUnavailable ? "Player Props data is temporarily unavailable." : "No MLB props available today."}</h1>
+        <p className="mt-4 max-w-2xl text-base leading-7 text-gray-400">{dataUnavailable ? "The data service did not respond in time. Please refresh in a moment; no picks or prices were changed." : "MLB props appear when games are scheduled and current sportsbook markets are available. Explore the active leagues above."}</p>
       </div>
     </section>
   </ProductAppFrame>;
