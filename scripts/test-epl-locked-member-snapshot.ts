@@ -179,9 +179,20 @@ assert.equal(
 );
 assert.equal(
   preserveLockedEplGames(oldLocked, verified.lockedResponse, new Date(), { authoritativeLockedProviderIds: [providerId] }).games[0]?.markets.total.currentPriceAmerican,
-  -188,
-  "a DB-verified four-market reconstruction can repair the existing locked member card",
+  -999,
+  "even a DB-verified reconstruction must preserve an existing public lock; correction requires owner approval",
 );
+const oldPayload = JSON.stringify(oldLocked);
+const verifiedPayload = JSON.stringify(verified.lockedResponse);
+const preservedPublicLock = preserveLockedEplGames(oldLocked, verified.lockedResponse, new Date(), {
+  authoritativeLockedProviderIds: [providerId],
+}).games[0]!;
+assert.deepEqual(preservedPublicLock.markets, oldLocked.games[0]?.markets);
+assert.deepEqual(preservedPublicLock.soccerProjection, oldLocked.games[0]?.soccerProjection);
+assert.deepEqual(preservedPublicLock.predictions, oldLocked.games[0]?.predictions);
+assert.deepEqual(preservedPublicLock.breakdown, oldLocked.games[0]?.breakdown);
+assert.equal(JSON.stringify(oldLocked), oldPayload, "reader must not mutate the old public payload");
+assert.equal(JSON.stringify(verified.lockedResponse), verifiedPayload, "reader must not mutate the verified DB payload");
 
 console.log("EPL locked member reconstruction: all focused tests passed");
 }
