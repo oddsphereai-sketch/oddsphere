@@ -67,6 +67,7 @@ assert.equal(readPredictionMarketPrelock(archive,locked,"spread","away",-2.5,loc
 assert.equal(capturePredictionMarketPrelock(null,[locked],"cfb",feed,[spreads,totals],null,lock+1).rows.length,0,"legacy locks never acquire new evidence");
 assert.equal(JSON.stringify({game,feed}),before,"scheduled time, prediction tuple and provider evidence are untouched");
 for(const path of["app/api/lab/prediction-market/route.ts","lib/providers/owls/predictionMarketPrelock.ts","lib/providers/owls/predictionMarketContracts.ts","lib/services/dailyEdge/predictionMarketDisplayFeed.ts"]){
- const source=readFileSync(path,"utf8");assert.match(source,/lockState:game\??\.lockState/ ,path+": published lock state is passed to matching");
+ const source=readFileSync(path,"utf8");assert.match(source,/marketDisplayGameIdentity\(game,/ ,path+": published identity/lock state is passed through the shared helper");
 }
+assert.match(readFileSync("lib/cbb/marketDisplayIdentity.ts","utf8"),/lockState: game\.lockState, lockedAt: game\.lockedAt/,"shared identity retains the authoritative lock state");
 console.log("PASS CFB event-date matching: verified 48h policy, exact teams, next-day-only future-open guard, all three actual-date markets, no ambiguous/stale/cross-sport joins, pre-lock capture and immutable legacy locks.");

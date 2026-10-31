@@ -114,7 +114,7 @@ Last reviewed: 2026-10-31
   moneyline, spread, and total pair; adapter release
   `cbb_member_adapter_2026_10_30_r3_two_sided_current_market` also fixes the
   selected spread point's sign in its display trail. Reader release
-  `cbb_reader_evidence_2026_10_31_r2_restored_named_book_display` attaches
+  `cbb_reader_evidence_2026_10_31_r3_source_scoped_tracking` attaches
   already captured, same-book price/line history and exact-game Playbook public
   splits only to unlocked cards. CBB's neutral-site OWLS home/away reversal is
   mapped before history requests. Kalshi named-institution aliases are limited
@@ -137,6 +137,17 @@ Last reviewed: 2026-10-31
 - CBB Kalshi game/spread/total display reads the official Kalshi CBB series separately from
   prediction and grading. It is matched by exact institution and start, with locked pregame
   receipts taking precedence. Other sports' model releases and locked records are unchanged.
+- Display tracking release `cbb_market_tracking_2026_10_31_r1_observed_tape_verified_midnight`
+  accumulates actual published observations and existing pre-lock display receipts in the
+  existing five-minute book-history capture, including both outcomes, even when optional
+  history backfill is deferred. Original timestamps, selected books and point lines remain
+  authoritative; no provider opener is inferred. CBB capacity covers a full opening-day
+  board. A unique exact-institution Owls event within one minute may establish the Kalshi
+  calendar date for a future unlocked display; it never moves the canonical fixture or
+  widens locked matching. Public consensus has its own bounded paginated source read, so
+  named-book observations cannot crowd it out. No model, forecast, grade, stake, writer,
+  lease, cron cadence, provider budget or stored lock changes. See
+  `docs/model-audits/2026-10-31-cbb-continuous-market-tracking.md`.
 
 Evidence, board impact, and rollback: `docs/model-audits/2026-10-29-cbb-november-launch-predeclaration.md`.
 

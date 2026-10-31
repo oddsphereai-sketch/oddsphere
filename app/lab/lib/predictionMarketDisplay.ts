@@ -2,7 +2,7 @@ import type { DailyEdgeGameDto, MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history"|"prelock_archive";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>;sourceChange?:{from:string;at:number}};
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history"|"prelock_archive"|"observed_quotes";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>;sourceChange?:{from:string;at:number}};
 
 /** Full same-book point-line history is independent of the Kalshi overlap.
  * Conflicting thresholds at one timestamp may be alternates, not a main-line
