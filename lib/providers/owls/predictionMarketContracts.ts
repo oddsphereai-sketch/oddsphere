@@ -1,5 +1,7 @@
 /** Display-only contract alignment. Never supplies a model, grade, or lock writer. */
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
+import type { RawOwlsOddsEvent } from "./owlsSharpBookOdds";
+import { marketDisplayGameIdentity } from "@/lib/cbb/marketDisplayIdentity";
 import {kalshiRescheduleWindow,kalshiEventSuffixForDate} from "./predictionMarketEventDate";
 import { matchPredictionMarketGame, PREDICTION_MARKET_TARGETS, PREDICTION_MARKET_RELEASE, kalshiGameDate,
   type PredictionMarketFeed, type PredictionMarketMatch, type PredictionMarketRow, type PredictionMarketPoint, type PredictionMarketSport } from "./owlsPredictionMarkets";
@@ -176,11 +178,11 @@ export function resolveReaderContract(feed:ContractFeed|null,gameMatch:Predictio
 
 /** Persist every source contract needed by the published board (including
  * push brackets), instead of thousands of unrelated alternate lines. */
-export function contractsForPublishedReaders(feed:ContractFeed,winners:PredictionMarketFeed,games:DailyEdgeGameDto[],now=Date.now()):ContractFeed {
+export function contractsForPublishedReaders(feed:ContractFeed,winners:PredictionMarketFeed,games:DailyEdgeGameDto[],now=Date.now(),events:readonly RawOwlsOddsEvent[]=[]):ContractFeed {
   const wanted=new Set<string>();
   for(const game of games){
     const selection=readerHistoryContractSelection(game,feed.kind==="total"?"total":"first_inning");if(!selection||selection.kind!==feed.kind)continue;
-    const match=matchPredictionMarketGame(winners,{sport:feed.sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt??"",awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege,lockState:game.lockState,lockedAt:game.lockedAt},now);
+    const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,feed.sport,events,now),now);
     const resolved=resolveReaderContract(feed,match,selection,now);
     resolved?.context?.sources.forEach(row=>wanted.add(row.ticker));
   }
