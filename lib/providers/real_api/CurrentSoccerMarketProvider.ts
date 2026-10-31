@@ -13,7 +13,7 @@ import { eplClubNamesMatch, uclClubNamesMatch } from "./soccerClubIdentity";
 import type { EplSharpFixtureMarket, EplSharpOddsRecord } from "./SharpApiEplMarketProvider";
 
 export const CURRENT_SOCCER_MARKET_PROVIDER_RELEASE =
-  "soccer_current_market_provider_2026_10_28_r1_owls_the_odds" as const;
+  "soccer_current_market_provider_2026_10_31_r2_complete_official_markets" as const;
 
 export const THE_ODDS_API_SOCCER_CREDIT_RESERVE = 1_000 as const;
 export const THE_ODDS_API_SOCCER_MAX_PAID_REQUESTS_PER_CYCLE = 20 as const;
@@ -202,7 +202,11 @@ function normalizeOwlsFixture(
       if (!sportsbook || !observedAt || nowMs - Date.parse(observedAt) > PROVIDER_TIMESTAMP_MAX_AGE_MS) continue;
       for (const rawMarket of bookmaker.markets ?? []) {
         const key = token(rawMarket.key);
-        const market: OfficialSoccerMarket | null = key === "h2h" ? "match_result" : key === "totals" ? "total" : null;
+        const market: OfficialSoccerMarket | null = key === "h2h" ? "match_result"
+          : key === "totals" ? "total"
+          : key === "doublechance" ? "double_chance"
+          : key === "btts" ? "btts"
+          : null;
         if (!market) continue;
         for (const outcome of rawMarket.outcomes ?? []) {
           const rawName = text(outcome.name);
@@ -232,7 +236,7 @@ function completeMarket(rows: readonly EplSharpOddsRecord[], market: OfficialSoc
   return [...groups.values()].some((sides) => REQUIRED_SIDES[market].every((side) => sides.has(side)));
 }
 
-function freshnessCadenceMs(kickoff: string, nowMs: number): number {
+export function soccerStoredPriceMaxAgeMs(kickoff: string, nowMs: number): number {
   const untilKickoff = Date.parse(kickoff) - nowMs;
   if (untilKickoff <= 6 * 3_600_000) return 30 * 60_000;
   if (untilKickoff <= 48 * 3_600_000) return 60 * 60_000;
@@ -247,7 +251,7 @@ function freshStoredRows(args: {
   nowMs: number;
 }): EplSharpOddsRecord[] {
   if (args.providerId === null) return [];
-  const cadence = freshnessCadenceMs(args.kickoff, args.nowMs);
+  const cadence = soccerStoredPriceMaxAgeMs(args.kickoff, args.nowMs);
   const latestByGroupSide = new Map<string, StoredSoccerPriceObservation>();
   for (const row of args.history) {
     if (row.providerId !== args.providerId || row.market !== args.market || !row.sportsbook || row.isOpener) continue;

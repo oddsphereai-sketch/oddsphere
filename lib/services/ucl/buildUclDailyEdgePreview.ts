@@ -17,7 +17,7 @@ import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
-export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_10_28_r3_owls_the_odds_price_source" as const;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_10_31_r4_complete_official_market_prices" as const;
 
 export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions,
   "captureAllBookPrices"
@@ -126,6 +126,7 @@ export async function buildUclDailyEdgePreview(slate: UclSlate, options: UclPrev
     finalizeFixtureMarket: (fixture, match) => applyUclStoredQuoteFallback({
       fixture,
       providerId: match.id,
+      kickoff: match.kickoff,
       history: options.storedPriceHistory ?? [],
     }),
     competitionLabel: "Champions League",

@@ -79,29 +79,6 @@ function formatOdds(americanOdds: number | null): string {
   return String(americanOdds);
 }
 
-// (slate-window helpers removed in 5E.1 — see lib/dates/slateDate.ts.)
-//
-// Date resolution: if ?date= is present and games exist on that slate, use it.
-// Otherwise fall back to the most recent slate_date with games for this sport,
-// signalled to the client via `fallback_used`.
-async function resolveSlateDate(sport: Sport, requested: string): Promise<string> {
-  const { data: probe } = await supabase
-    .from("games")
-    .select("slate_date")
-    .eq("sport", sport)
-    .eq("slate_date", requested)
-    .limit(1);
-  if ((probe ?? []).length > 0) return requested;
-
-  const { data: latest } = await supabase
-    .from("games")
-    .select("slate_date")
-    .eq("sport", sport)
-    .order("slate_date", { ascending: false })
-    .limit(1);
-  return (latest ?? [])[0]?.slate_date ?? requested;
-}
-
 // ───────────────────────────────────────────────────────────────────────────
 // Filter parsing
 // ───────────────────────────────────────────────────────────────────────────
@@ -222,8 +199,9 @@ export async function GET(request: Request) {
     });
   }
 
-  // Resolve actual slate (fallback to most recent if requested is empty).
-  const effectiveDate = await resolveSlateDate(sport, requestedDate);
+  // An empty/offseason slate stays empty. Historical records remain available
+  // only when their exact date is requested; never present them as today's props.
+  const effectiveDate = requestedDate;
 
   // ─── (1) Games for the slate ─────────────────────────────────────────────
   const { data: gameData, error: gameErr } = await supabase

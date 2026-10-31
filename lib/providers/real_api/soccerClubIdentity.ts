@@ -1,5 +1,5 @@
 export const SOCCER_CLUB_IDENTITY_RELEASE =
-  "soccer_club_identity_2026_10_28_r1_provider_neutral_exact_ucl" as const;
+  "soccer_club_identity_2026_10_31_r2_exact_ucl_club_aliases" as const;
 
 const EPL_EQUIVALENCE_GROUPS = [
   ["coventrycity", "coventry"],
@@ -12,6 +12,8 @@ const EPL_EQUIVALENCE_GROUPS = [
 ] as const;
 
 const UCL_EQUIVALENCE_GROUPS = [
+  ["feyenoordrotterdam", "feyenoord"],
+  ["como", "calciocomo1907"],
   ["sabahfk", "sabah", "sabahmasazir", "fcsabahmasazir", "sabahbakufk"],
   ["asroma", "roma"],
   ["fcporto", "porto"],
@@ -19,7 +21,7 @@ const UCL_EQUIVALENCE_GROUPS = [
   ["sscnapoli", "napoli"],
   ["bodoglimt", "bodoeglimt", "bodglimt"],
   ["fcbarcelona", "barcelona"],
-  ["manchesterunited", "manunited"],
+  ["manchesterunited", "manunited", "manutd"],
   ["vikingfk", "viking", "vikingstavanger"],
   ["manchestercity", "mancity"],
   ["internazionalemilano", "internazionale", "intermilan", "inter"],

@@ -48,6 +48,8 @@ export function evaluateUclPublicationCoverage(
   const selectedExpected = games.length * 4;
   const outcomeExpected = games.length * 10;
   const heldMarkets = markets.filter((market) => market.held || market.currentPriceAmerican === null).length;
+  const unpricedWithoutHold = markets.filter((market) => market.currentPriceAmerican == null
+    && (!market.held || market.verdict?.key !== "no_play")).length;
   const nonpositiveEvActionables = markets.filter((market) =>
     (market.verdict?.key === "best_angle" || market.verdict?.key === "lean")
       && !(typeof market.pinnacleEvPct === "number" && market.pinnacleEvPct > 0)
@@ -75,6 +77,7 @@ export function evaluateUclPublicationCoverage(
     ), 0);
   }, 0);
   const hardErrors = [
+    ...(unpricedWithoutHold === 0 ? [] : [`${unpricedWithoutHold} unpriced market(s) lack an explicit evidence hold`]),
     ...(slate.providerHealth?.uclHistory.status === "degraded" ? [`UCL provider history degraded: ${slate.providerHealth.uclHistory.strategy}${slate.providerHealth.uclHistory.error ? ` (${slate.providerHealth.uclHistory.error})` : ""}; preserving last-known-good member snapshot`] : []),
     ...(games.length === activeIds.size ? [] : [`fixture/model coverage ${games.length}/${activeIds.size}`]),
     ...(markets.length === selectedExpected ? [] : [`market prediction coverage ${markets.length}/${selectedExpected}`]),
@@ -85,11 +88,12 @@ export function evaluateUclPublicationCoverage(
     ...hardErrors,
     ...(priceCollapse
       ? [`current-price coverage collapsed ${previousSelectedCurrent}->0; preserving last-known-good member snapshot`]
-      : unlockedPriceRegressions > 0
-        ? [`unlocked current-price coverage regressed for ${unlockedPriceRegressions} market(s); preserving last-known-good member snapshot`]
-        : []),
+      : []),
   ];
   const warnings = [
+    ...(unlockedPriceRegressions > 0 && !priceCollapse
+      ? [`${unlockedPriceRegressions} unlocked market(s) lost current prices; unavailable markets remain held while fresh markets publish`]
+      : []),
     ...(slate.providerHealth?.uclHistory.contractDeviation ? [`UCL provider contract deviation: ${slate.providerHealth.uclHistory.contractDeviation}`] : []),
     ...(selectedCurrent === selectedExpected ? [] : [`selected current-price coverage ${selectedCurrent}/${selectedExpected}; missing markets held`]),
     ...(outcomeCurrent === outcomeExpected ? [] : [`outcome price-board coverage ${outcomeCurrent}/${outcomeExpected}; missing outcomes held`]),
