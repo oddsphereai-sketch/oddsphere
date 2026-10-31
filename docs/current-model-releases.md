@@ -6,6 +6,28 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-31
 
+## CFB market-evidence integrity — October 31 candidate, not live
+
+- Production remains CFB decision r57, calibration r30, writer r146, and complete
+  reader r6 until a protected PR is merged and a fresh live writer is verified.
+  This isolated branch proposes decision r58, calibration r31, tuple r45,
+  writer r147, member fixture r100, compact snapshot r60, member reader r45,
+  and `cfb_complete_market_reader_2026_10_31_r7_exact_source_named_total_economics`.
+- The independent football score model and frozen coefficient artifact are
+  unchanged. Future unlocked rows would reject stale, future, wrong-line,
+  and self-evaluated sportsbook splits; normalize named-book line and price
+  changes at each source's exact opening/current contract; and preserve one
+  coherent PMF for the displayed score and all three market decisions.
+  Existing T-60 rows remain the exact public record under their stored r57
+  release and previous snapshot identifiers.
+- A current first-wave inspection identified a concrete Total evidence conflict
+  in Notre Dame–Navy and large Total shifts requiring review in Auburn–Ole Miss,
+  SMU–Syracuse, and California–NC State. See
+  `docs/model-audits/2026-10-31-cfb-noon-market-evidence.md`.
+  Focused synthetic checks pass; same-board promotions/demotions, full model
+  safety, integration, protected PR, and post-merge verification remain open.
+  Do not present this candidate as live or proven more accurate.
+
 ## Soccer complete-market and current-price health repair — October 31
 
 - Owner-directed all-product data-health audit repairs current EPL/UCL ingestion:
