@@ -140,7 +140,8 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // Warm the actual selected markets of the nearest unlocked games first,
   // not the first arbitrary YES ticker or a distant alternate on the feed.
   const priority=new Map<string,number>();
-  for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
+  for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()||
+    sport==="cfb"&&g.lockState==="locked"&&g.lockedAt&&Date.now()-Date.parse(g.lockedAt)<24*60*60_000).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
     const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,sport,priorBooks?.events));
     const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
     if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
