@@ -49,6 +49,9 @@ async function main() {
     process.env.MARKET_INTELLIGENCE_V2_ENABLED = "true";
     const opts = { supabase: client, sport: "nba" as const, slateDate: slate, todayUtc: slate, now,
       apply: true, owlsApiKey: "fixture", playbookApiKey: "fixture", nbaPrelockScope: scope };
+    await assert.rejects(syncMarketIntelligenceV2Shadow({ ...opts, slateDate: "2000-01-01" }), /current slate/);
+    assert.equal(calls.length, 0, "a past-slate lock cannot silently call a history endpoint behind a current-only receipt");
+    assert.equal(writes.length, 0);
     const captured = await syncMarketIntelligenceV2Shadow(opts);
     assert.equal(captured.gamesLoaded, 1);
     assert.ok(captured.priceObservationsWritten > 0 && captured.splitObservationsWritten > 0);

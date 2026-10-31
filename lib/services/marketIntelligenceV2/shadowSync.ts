@@ -1787,6 +1787,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   if (opts.nbaPrelockScope) {
     assertNbaPrelockCaptureBudget(opts.nbaPrelockScope);
     if (opts.sport !== "nba" || opts.slateDateThrough) throw new Error("NBA pre-lock capture requires an exact NBA slate, not a rolling/full-sport job");
+    if (opts.slateDate !== opts.todayUtc) throw new Error("NBA pre-lock capture requires the current slate; historical/future endpoints are not allowed");
   }
   const ingestionRunId = `${opts.sport}:${opts.slateDate}:${now.toISOString()}`;
   const logger = opts.logger ?? (() => {});

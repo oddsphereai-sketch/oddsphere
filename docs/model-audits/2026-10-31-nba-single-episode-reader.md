@@ -112,6 +112,10 @@ member publication. The capture release is
 `nba_prelock_market_capture_2026_10_31_r1_scoped_v2`.
 Only entering game IDs are normalized/written; no new prediction writer,
 lease, cadence, history recovery or full-slate v2 snapshot rebuild is added.
+The bounded reviewer reproduced a past-slate/history fallback; scoped captures
+now reject noncurrent slates before any DB/provider request, while ordinary
+collector history behavior is unchanged. The regression proves zero requests
+and writes for that rejected request.
 There are at most FOUR additional current endpoint calls per entering batch:
 Owls odds/splits and Playbook splits/paired lines. Public cache is bypassed
 only for this bounded lock capture, with4-second per-endpoint timeouts; Owls

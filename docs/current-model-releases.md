@@ -135,6 +135,8 @@ game): Owls odds/splits and Playbook splits/paired lines. Explicit timeout and
 absolute deadline checks precede observation writes and final prediction;
 storage/deadline failures defer the lock, while partial provider errors remain
 explicit in the stored actual-run receipt without erasing valid other sources.
+Scoped capture rejects noncurrent slates before any read/request, so its
+current-only/no-history receipt cannot conceal a generic history fallback.
 Grades use actual final probabilities, exact executable prices and retained
 quality/positive-EV rules, not legacy hard-coded correction confidence. Pressure
 and retracement can temper Best to actionable Lean without inventing points.

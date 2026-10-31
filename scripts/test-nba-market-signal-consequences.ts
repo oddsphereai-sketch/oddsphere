@@ -234,6 +234,8 @@ assert.equal(tightFavorite.candidate.picks.spread, "away");
 assert.ok(tightFavorite.candidate.final.marginHome < 0 && tightFavorite.candidate.final.marginHome < 1.5);
 assert.equal(tightFavorite.candidate.final.total, 220, "side resistance alone does not invent a Total move");
 assert.ok(tightFavorite.candidate.marketConsequence!.pressure.every(p => p.reaction === "opposed" && p.side === "home"));
+assert.ok(tightFavorite.candidate.marketConsequence!.pressure.every(p => p.basis === "handle_concentration" && p.gapPp === 0 && p.majoritySide === "home" && p.differentialSide === null),
+  "80/80 concentration survives zero money-minus-ticket gap; it is not mislabeled differential evidence");
 assert.ok(tightFavorite.intel.ml.named_book_posture!.supportingSources.includes("circa"));
 const strongerFavorite = run(weakeningFavoriteRows, favoritePressure, 5, 220);
 assert.equal(strongerFavorite.candidate.picks.moneyline, "home", "the same adverse market can weaken, not automatically flip, a stronger favorite forecast");
