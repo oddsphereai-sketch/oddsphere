@@ -61,7 +61,8 @@ No model release changes; this is an auxiliary display and retention repair.
 Use `scripts/operator/audit-cfb-prediction-market-coverage.tsx` for the entire
 ET-dated slate, all three markets, static SVG paths, original lock cutoffs,
 source/member immutability and frozen-record hashes. `--live` reads the actual
-member endpoint with concurrency three and no upstream provider requests.
+member endpoint with concurrency three and no upstream provider requests, using
+the ordinary configured beta login in memory without logging credentials/cookies.
 Separate real source/history gaps from render failures; do not claim that every
 graph is live from one successful Illinois sample or a branch replay.
 

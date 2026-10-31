@@ -1,5 +1,6 @@
-/** SELECT-only coverage/render proof. --live adds bounded member-API GETs,
- * never provider/model calls, cron triggers, snapshot or prediction writes. */
+/** SELECT-only coverage/render proof. --live uses the normal existing beta
+ * login then bounded member-API GETs. No provider/model calls, cron triggers,
+ * product-data writes or credential/cookie output. */
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {gunzipSync} from "node:zlib";
@@ -23,6 +24,13 @@ async function main(){
  if(process.argv.includes("--write"))throw new Error("Read-only audit");
  const date=process.argv.find(a=>a.startsWith("--date="))?.slice(7)??et(new Date());
  const now=Date.now(),live=process.argv.includes("--live");
+ let cookie:string|undefined;
+ if(live){
+  if(!process.env.LAB_BETA_PASSWORD)throw new Error("Live member audit requires the configured beta login credential");
+  const login=await fetch("https://www.oddsphereai.com/api/auth/login",{method:"POST",redirect:"manual",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:process.env.LAB_BETA_PASSWORD,next:"/lab/daily-edge?sport=cfb"}),signal:AbortSignal.timeout(12_000)});
+  cookie=login.headers.get("set-cookie")?.split(";")[0];
+  if(login.status!==303||!cookie)throw new Error("Ordinary member audit login failed; no API coverage claims are valid");
+ }
  const [board,sources,locks]=await Promise.all([
   supabase.from("lab_response_snapshots").select("snapshot_key,payload,generated_at").like("snapshot_key","cfb::daily-edge::2026::%").order("generated_at",{ascending:false}).limit(1).single(),
   supabase.from("lab_response_snapshots").select("snapshot_key,payload,generated_at").like("snapshot_key","daily-edge::prediction-market%::cfb::%"),
@@ -50,7 +58,7 @@ async function main(){
    const query=new URLSearchParams({sport:"cfb",away:game.awayTeam,home:game.homeTeam,start:game.gameStartAt!,market:kind,event:String(game.external_id),display:"public-tracker-v1",side});
    if(selection?.line!==null&&selection?.line!==undefined)query.set("line",String(selection.line));
    if(game.awayTeamDisplayName)query.set("awayName",game.awayTeamDisplayName);if(game.homeTeamDisplayName)query.set("homeName",game.homeTeamDisplayName);
-   try{const response=await fetch("https://www.oddsphereai.com/api/lab/prediction-market?"+query,{signal:AbortSignal.timeout(12_000)});
+   try{const response=await fetch("https://www.oddsphereai.com/api/lab/prediction-market?"+query,{headers:cookie?{Cookie:cookie}:{},signal:AbortSignal.timeout(12_000)});
     http=response.status;release=response.headers.get("X-CFB-Chart-Continuity");const body=await response.json();market=body.market;book=body.book;availability=body.availability;
    }catch{market=null;book=null;availability="request_failed";}
   }
