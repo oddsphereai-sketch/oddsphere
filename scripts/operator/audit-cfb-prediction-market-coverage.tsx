@@ -11,7 +11,7 @@ import type {DailyEdgeGameDto} from "../../app/lab/lib/labTypes";
 import {matchPredictionMarketGame,type PredictionMarketFeed} from "../../lib/providers/owls/owlsPredictionMarkets";
 import {readerHistoryContractSelection,resolveReaderContract,type ContractFeed,type ReaderMarketMatch} from "../../lib/providers/owls/predictionMarketContracts";
 import {readPredictionMarketPrelock,type PrelockFeed} from "../../lib/providers/owls/predictionMarketPrelock";
-import {recoverCfbHistoricalChart} from "../../lib/providers/owls/cfbHistoricalChart";
+import {recoverCfbHistoricalChart,supplementCfbPrelockMarket} from "../../lib/providers/owls/cfbHistoricalChart";
 import {marketDisplayGameIdentity} from "../../lib/cbb/marketDisplayIdentity";
 import {predictionMarketLockBoundary,predictionMarketVisibleComparison,selectedPredictionMarketOutcome,type PredictionMarketBookTrail} from "../../app/lab/lib/predictionMarketDisplay";
 import {publicMarketDisplayBook,publicMarketPrelockHeldBook} from "../../app/lab/lib/publicMarketDisplayTrail";
@@ -50,7 +50,7 @@ async function main(){
   const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,"cfb"),now);
   const receipt=boundary!==undefined&&kind?readPredictionMarketPrelock(archive,game,kind,side,selection?.line??null,now):null;
   const recovery=kind?recoverCfbHistoricalChart(game,kind,side,selection?.line??null,winners,contracts,now):null;
-  let market:ReaderMarketMatch|null=receipt?.market??recovery?.market??(selection?resolveReaderContract(contracts,match,selection,now):match);
+  let market:ReaderMarketMatch|null=receipt?.market?supplementCfbPrelockMarket(game,receipt.market,recovery?.market??null,now):recovery?.market??(selection?resolveReaderContract(contracts,match,selection,now):match);
   const tracker=publicMarketDisplayBook(game.markets[key]);
   let book:PredictionMarketBookTrail|null=receipt?.market?publicMarketPrelockHeldBook(tracker,receipt.capturedAt,boundary):recovery?.book??tracker;
   let availability=market?"available":"source_or_selection_unavailable",http:number|undefined,release:string|null=null;

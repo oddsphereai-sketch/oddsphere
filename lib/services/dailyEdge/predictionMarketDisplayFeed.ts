@@ -15,7 +15,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { currentDailyEdgeBoardDate, currentSlateDate } from "@/lib/dates/slateDate";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { BOOK_DISPLAY_HISTORY_RELEASE, captureOwlsBookDisplayHistory, isBookDisplayFeed, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
-import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
+import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,cfbLockedPrelockHistoryTickers,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
 import { fetchCbbKalshiMarkets } from "@/lib/providers/kalshi/cbbMarkets";
 import { marketDisplayGameIdentity } from "@/lib/cbb/marketDisplayIdentity";
 
@@ -140,6 +140,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // Warm the actual selected markets of the nearest unlocked games first,
   // not the first arbitrary YES ticker or a distant alternate on the feed.
   const priority=new Map<string,number>();
+  if(sport==="cfb")for(const ticker of cfbLockedPrelockHistoryTickers(priorArchive,games??[]))priority.set(ticker,priority.size);
   for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()||
     sport==="cfb"&&g.lockState==="locked"&&g.lockedAt&&Date.now()-Date.parse(g.lockedAt)<24*60*60_000).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
     const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,sport,priorBooks?.events));

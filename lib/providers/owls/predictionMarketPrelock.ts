@@ -92,3 +92,25 @@ export function readPredictionMarketPrelock(feed:PrelockFeed|null,game:DailyEdge
  // not retrospectively downloaded prices with old source timestamps.
  return row?[row,...(row.checkpoints??[])].filter(r=>r.capturedAt<=boundary).sort((a,b)=>b.capturedAt-a.capturedAt)[0]??null:null;
 }
+
+/** Existing bounded history budget: an integer line newly selected at lock
+ * still needs BOTH exact source brackets warmed. Current live event matching
+ * intentionally excludes postponed locked fixtures; the actual captured
+ * receipt already proves these source ticker identities. */
+export function cfbLockedPrelockHistoryTickers(feed:PrelockFeed|null,games:DailyEdgeGameDto[],now=Date.now()):string[]{
+ const tickers=new Set<string>();
+ for(const game of games){
+  const at=Date.parse(game.lockedAt??"");
+  if(game.sport!=="cfb"||game.lockState!=="locked"||!Number.isFinite(at)||at>now||now-at>86_400_000)continue;
+  for(const key of ["moneyline","total","first_inning"]as const){
+   const selection=readerHistoryContractSelection(game,key),pick=game.markets[key].pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
+   const side=selection?.side??(pick===game.awayTeam.toUpperCase()?"away":pick===game.homeTeam.toUpperCase()?"home":null),kind=key==="moneyline"?"moneyline":selection?.kind;
+   if(!side||!kind)continue;
+   const receipt=readPredictionMarketPrelock(feed,game,kind,side,selection?.line??null,now);
+   const market=receipt?.market;if(!market)continue;
+   if(market.context)market.context.sources.forEach(r=>tickers.add(r.ticker));
+   else{const outcome=selectedPredictionMarketOutcome(market,game.markets[key].pick);if(outcome)tickers.add(outcome.ticker);}
+  }
+ }
+ return [...tickers];
+}

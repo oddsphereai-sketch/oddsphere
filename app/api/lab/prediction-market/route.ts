@@ -6,7 +6,7 @@ import { matchPredictionMarketGame, PREDICTION_MARKET_TARGETS, type PredictionMa
 import { resolveReaderContract, formatContractLine, type ContractKind, type ContractSelection } from "@/lib/providers/owls/predictionMarketContracts";
 import {KALSHI_EVENT_DATE_MATCH_RELEASE} from "@/lib/providers/owls/predictionMarketEventDate";
 import {marketDisplayGameIdentity,CBB_MARKET_TRACKING_RELEASE} from "@/lib/cbb/marketDisplayIdentity";
-import {recoverCfbHistoricalChart,CFB_CHART_CONTINUITY_RELEASE} from "@/lib/providers/owls/cfbHistoricalChart";
+import {recoverCfbHistoricalChart,supplementCfbPrelockMarket,CFB_CHART_CONTINUITY_RELEASE} from "@/lib/providers/owls/cfbHistoricalChart";
 
 export async function GET(request: Request): Promise<Response> {
   const query = new URL(request.url).searchParams;
@@ -46,8 +46,11 @@ export async function GET(request: Request): Promise<Response> {
   const side=selection?.side??(["away","home","draw"].includes(requestedSide??"")?requestedSide:gameMatch?.outcomes.slice().sort((a,b)=>b.probability-a.probability)[0]?.side);
   if(game&&side&&predictionMarketLockBoundary(game,Date.now())!==undefined){
     const archive=readPredictionMarketPrelock(await readPredictionMarketPrelockFeed(sport as PredictionMarketSport).catch(()=>null),game,kind,side,selection?.line??null);
-    if(archive?.market)return Response.json({market:archive.market,book:archive.book,prelockCapturedAt:archive.capturedAt,availability:"available"},{headers:{"Cache-Control":"private, max-age=30","X-CFB-Chart-Continuity":CFB_CHART_CONTINUITY_RELEASE}});
     const recovered=recoverCfbHistoricalChart(game,kind,side,selection?.line??null,feed,contracts);
+    if(archive?.market){
+      const market=supplementCfbPrelockMarket(game,archive.market,recovered?.market??null);
+      return Response.json({market,book:archive.book,prelockCapturedAt:archive.capturedAt,...(market!==archive.market?{recoveredAt:Date.now()}:{}),availability:"available"},{headers:{"Cache-Control":"private, max-age=30","X-CFB-Chart-Continuity":CFB_CHART_CONTINUITY_RELEASE}});
+    }
     if(recovered)return Response.json({...recovered,availability:"available"},{headers:{"Cache-Control":"private, max-age=30","X-CFB-Chart-Continuity":CFB_CHART_CONTINUITY_RELEASE}});
     if(archive)return Response.json({market:archive.market,book:archive.book,prelockCapturedAt:archive.capturedAt,availability:"contract_unavailable"},{headers:{"Cache-Control":"private, max-age=30"}});
   }

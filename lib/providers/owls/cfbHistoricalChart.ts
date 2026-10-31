@@ -6,7 +6,7 @@ import {marketDisplayGameIdentity} from "@/lib/cbb/marketDisplayIdentity";
 import {matchPredictionMarketGame,type PredictionMarketFeed,type PredictionMarketRow} from "./owlsPredictionMarkets";
 import {readerHistoryContractSelection,resolveReaderContract,type ContractFeed,type ReaderMarketMatch} from "./predictionMarketContracts";
 
-export const CFB_CHART_CONTINUITY_RELEASE="cfb_chart_continuity_2026_10_31_r1_verified_history";
+export const CFB_CHART_CONTINUITY_RELEASE="cfb_chart_continuity_2026_10_31_r2_frozen_endpoint_history";
 
 /** Historical values come from actual stored observations/candles, never
  * today's price carried backwards. The original feed remains unchanged.
@@ -49,4 +49,27 @@ export function recoverCfbHistoricalChart(game:DailyEdgeGameDto,kind:string,side
   marketHistory:stored.marketHistory?.filter(p=>p[0]<=boundary),
   opening:stored.opening&&stored.opening.point[0]<=boundary?stored.opening:undefined}:null;
  return {market,book:book?.points.length?book:null,historicalThrough:boundary,recoveredAt:now,release:CFB_CHART_CONTINUITY_RELEASE};
+}
+
+/** A frozen auxiliary receipt can contain only the first quote of a newly
+ * selected integer line's push bracket. Owner-approved earlier history may
+ * fill that graph, but every stored field/quote and endpoint wins unchanged.
+ * A different event, contract, bracket or method cannot supplement it. */
+export function supplementCfbPrelockMarket(game:DailyEdgeGameDto,stored:ReaderMarketMatch,recovered:ReaderMarketMatch|null,now=Date.now()):ReaderMarketMatch{
+ const boundary=predictionMarketLockBoundary(game,now),ceiling=Math.min(boundary??NaN,Date.parse(stored.asOf));
+ if(game.sport!=="cfb"||game.lockState!=="locked"||!Number.isFinite(ceiling)||!recovered||stored.eventTicker!==recovered.eventTicker||
+  stored.context?.kind!==recovered.context?.kind||stored.context?.method!==recovered.context?.method||
+  stored.context?.requestedLabel!==recovered.context?.requestedLabel||
+  JSON.stringify(stored.context?.sources.map(r=>r.ticker).sort())!==JSON.stringify(recovered.context?.sources.map(r=>r.ticker).sort()))return stored;
+ const counts=stored.outcomes.map(row=>predictionMarketChartSeries(row).points.filter(p=>p[0]<=ceiling).length);
+ if(counts.every(n=>n>=2))return stored;
+ const outcomes=stored.outcomes.map((row,index)=>{
+  if(counts[index]>=2)return row;
+  const earlier=recovered.outcomes.find(r=>r.ticker===row.ticker&&r.label===row.label);if(!earlier)return row;
+  const merge=(a:typeof row.history,b:typeof row.history)=>[...new Map([...a.filter(p=>p[0]<=ceiling),...b].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]);
+  const next={...row,history:merge(earlier.history,row.history),historicalCandles:merge(earlier.historicalCandles??[],row.historicalCandles??[]),
+   historyFrom:row.historyFrom??earlier.historyFrom,openingQuote:row.openingQuote??(earlier.openingQuote&&earlier.openingQuote.point[0]<=ceiling?earlier.openingQuote:undefined)};
+  return predictionMarketChartSeries(next).points.filter(p=>p[0]<=ceiling).length>counts[index]?next:row;
+ });
+ return outcomes.some((row,i)=>row!==stored.outcomes[i])?{...stored,outcomes}:stored;
 }
