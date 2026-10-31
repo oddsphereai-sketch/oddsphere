@@ -348,8 +348,8 @@ assert.equal(forecastAnchoredDoubleChanceSide("home", { home: 0.72, draw: 0.19, 
 assert.equal(forecastAnchoredDoubleChanceSide("away", { home: 0.18, draw: 0.24, away: 0.58 }), "away_or_draw", "an away forecast must be covered by away or draw");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.34, draw: 0.38, away: 0.28 }), "home_or_draw", "a draw forecast should pair with the more likely club");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.27, draw: 0.4, away: 0.33 }), "away_or_draw", "a draw forecast should pair with the more likely club");
-assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_28_r21_owls_the_odds_price_source");
-assert.equal(EPL_PREVIEW_GRADE_RELEASE, "epl_grade_policy_2026_10_28_v26_owls_the_odds_price_source");
+assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_31_r22_complete_official_market_prices");
+assert.equal(EPL_PREVIEW_GRADE_RELEASE, "epl_grade_policy_2026_10_31_v27_complete_official_market_prices");
 const lockedMarkets = { moneyline: { pick: "ARS" }, total: { pick: "Over" }, first_inning: { pick: "No" } } as unknown as DailyEdgeGameDto["markets"];
 const refreshedMarkets = { moneyline: { pick: "COV" }, total: { pick: "Under" }, first_inning: { pick: "Yes" } } as unknown as DailyEdgeGameDto["markets"];
 const lockedGame = {
