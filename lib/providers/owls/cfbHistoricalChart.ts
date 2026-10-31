@@ -38,7 +38,31 @@ export function recoverCfbHistoricalChart(game:DailyEdgeGameDto,kind:string,side
  const bounded={...winners,rows:winners.rows.flatMap(r=>{const value=through(r,boundary);return value?[value]:[];})};
  const identity=marketDisplayGameIdentity(game,"cfb");
  const match=matchPredictionMarketGame(bounded,{...identity,lockState:"open",lockedAt:null},boundary);
- const historicalContracts=contracts?{...contracts,rows:contracts.rows.flatMap(r=>{const value=through(r,boundary);return value?[value]:[];})}:null;
+ let historicalContracts=contracts?{...contracts,rows:contracts.rows.flatMap(r=>{const value=through(r,boundary);return value?[value]:[];})}:null;
+ // Integer lines need two half-point tails. Their latest pre-lock live
+ // receipts may differ, while actual historical candles share timestamps.
+ // Align ONLY the two independently identified bracket contracts at exact
+ // common observations; never interpolate or carry either price backwards.
+ const identityOnly=selection?resolveReaderContract(contracts,match,selection,now):null;
+ if(historicalContracts&&contracts&&selection?.line!==null&&Number.isInteger(selection?.line)&&identityOnly?.context&&selection){
+  const strike=selection.kind==="spread"?Math.abs(selection.line!):selection.line!;
+  const anchor=contracts.rows.find(r=>r.ticker===identityOnly.context!.sources[0]?.ticker);
+  const choices=contracts.rows.filter(r=>r.eventTicker===identityOnly.eventTicker&&(selection.kind!=="spread"||r.sideCode===anchor?.sideCode));
+  const lower=choices.filter(r=>r.strike===strike-.5),upper=choices.filter(r=>r.strike===strike+.5);
+  const ids=choices.some(r=>r.strike===strike)||lower.length!==1||upper.length!==1?[]:[lower[0].ticker,upper[0].ticker];
+  const rows=ids.map(id=>historicalContracts!.rows.find(r=>r.ticker===id));
+  if(rows.length===2&&rows.every(r=>r!==undefined)){
+   const series=rows.map(r=>predictionMarketChartSeries(r!).points),right=new Set(series[1].map(p=>p[0]));
+   const common=series[0].filter(p=>right.has(p[0])).map(p=>p[0]);
+   const last=common.at(-1);
+   if(last!==undefined)historicalContracts={...historicalContracts,rows:historicalContracts.rows.map(row=>{
+    if(!ids.includes(row.ticker))return row;
+    const observations=new Map(predictionMarketChartSeries(row).points.map(p=>[p[0],p]));
+    const history=common.map(at=>[at,observations.get(at)![1],null]as typeof row.history[number]);
+    return {...row,asOf:new Date(last).toISOString(),probability:history.at(-1)![1],history};
+   })};
+  }
+ }
  const resolved=selection?resolveReaderContract(historicalContracts,match,selection,boundary):match;
  if(!resolved)return null;
  const market:ReaderMarketMatch={...resolved,outcomes:resolved.outcomes.map(r=>({...r,bid:null,ask:null,volume24h:null,totalVolume:null}))};

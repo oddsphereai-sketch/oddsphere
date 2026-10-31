@@ -18,6 +18,7 @@ import { BOOK_DISPLAY_HISTORY_RELEASE, captureOwlsBookDisplayHistory, isBookDisp
 import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,cfbLockedPrelockHistoryTickers,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
 import { fetchCbbKalshiMarkets } from "@/lib/providers/kalshi/cbbMarkets";
 import { marketDisplayGameIdentity } from "@/lib/cbb/marketDisplayIdentity";
+import { recoverCfbHistoricalChart } from "@/lib/providers/owls/cfbHistoricalChart";
 
 const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-prelock::${sport}::${PREDICTION_MARKET_PRELOCK_RELEASE}`;
 async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
@@ -146,7 +147,12 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
     const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,sport,priorBooks?.events));
     const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
     if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
-    for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}
+    for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);
+      if(selection&&feed){
+        const resolved=resolveReaderContract(feed,match,selection)??(sport==="cfb"?recoverCfbHistoricalChart(game,kind,selection.side,selection.line,winners,feed)?.market:null);
+        resolved?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});
+      }
+    }
   }
   interleaved.sort((a,b)=>(priority.get(a.ticker)??10_000)-(priority.get(b.ticker)??10_000));
   const [captured,bookCapture]=await Promise.all([

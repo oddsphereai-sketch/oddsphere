@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import type {DailyEdgeGameDto} from "../app/lab/lib/labTypes";
 import type {ReaderMarketMatch} from "../lib/providers/owls/predictionMarketContracts";
-import {supplementCfbPrelockMarket} from "../lib/providers/owls/cfbHistoricalChart";
+import {supplementCfbPrelockMarket,recoverCfbHistoricalChart} from "../lib/providers/owls/cfbHistoricalChart";
+import type {PredictionMarketFeed} from "../lib/providers/owls/owlsPredictionMarkets";
+import type {ContractFeed} from "../lib/providers/owls/predictionMarketContracts";
 import {cfbLockedPrelockHistoryTickers,PREDICTION_MARKET_PRELOCK_RELEASE,type PrelockFeed} from "../lib/providers/owls/predictionMarketPrelock";
 import {predictionMarketChartSeries} from "../app/lab/lib/predictionMarketDisplay";
 const lock=Date.parse("2026-10-31T15:46:00Z"),iso=(v:number)=>new Date(v).toISOString();
@@ -23,4 +25,13 @@ const archive:PrelockFeed={release:PREDICTION_MARKET_PRELOCK_RELEASE,sport:"cfb"
 assert.deepEqual(cfbLockedPrelockHistoryTickers(archive,[game],lock+300_000),sources.map(r=>r.ticker),"both actual push-bracket tickers retain history priority after lock/date matching closes");
 assert.deepEqual(cfbLockedPrelockHistoryTickers({...archive,rows:archive.rows.map(r=>({...r,capturedAt:lock+1}))},[game],lock+300_000),[],"post-lock captures cannot establish source authority");
 assert.deepEqual(cfbLockedPrelockHistoryTickers(archive,[{...game,markets:{...game.markets,first_inning:{...game.markets.first_inning,line:-12,pick:"MISS -12"}}}],lock+300_000),[],"different locked selection cannot inherit prior brackets");
+const base={sideCode:"MISS",team:"Mississippi",gameDate:"2026-10-30",bid:.6,ask:.61,probability:.605,asOf:iso(lock+300_000),volume24h:10,totalVolume:10,rescheduleWindowHours:48 as const,historyFrom:iso(lock-7200_000),history:[[lock-300_000,.6,10]]as[number,number,number|null][],historicalCandles:[[lock-7200_000,.5,1],[lock-3600_000,.55,1]]as[number,number,number|null][]};
+const winners:PredictionMarketFeed={release:"owls_kalshi_display_2026_10_28_r1",sport:"cfb",fetchedAt:iso(lock+300_000),rows:[{...base,ticker:"KXNCAAFGAME-26OCT30AUBMISS-MISS",eventTicker:"KXNCAAFGAME-26OCT30AUBMISS"},{...base,sideCode:"AUB",team:"Auburn",ticker:"KXNCAAFGAME-26OCT30AUBMISS-AUB",eventTicker:"KXNCAAFGAME-26OCT30AUBMISS",history:[[lock-300_000,.4,10]]}]};
+const brackets:ContractFeed={...winners,kind:"spread",contractRelease:"kalshi_reader_contracts_2026_10_28_r1",rows:[{...base,ticker:sources[0].ticker,eventTicker:stored.eventTicker,contractKind:"spread",strike:10.5,history:[[lock-120_000,.7,10]],historicalCandles:[[lock-7200_000,.65,1],[lock-3600_000,.7,1]]},{...base,ticker:sources[1].ticker,eventTicker:stored.eventTicker,contractKind:"spread",strike:11.5,history:[[lock-60_000,.6,10]],historicalCandles:[[lock-7200_000,.55,1],[lock-3600_000,.6,1]]}]};
+const aligned=recoverCfbHistoricalChart(game,"spread","home",-11,winners,brackets,lock+300_000)!;
+assert.ok(aligned,"actual common candle observations can recover brackets whose latest live timestamps differ");
+assert.equal(aligned.market.context?.method,"push_adjusted");
+assert.deepEqual(aligned.market.outcomes[0].history.map(p=>p[0]),[lock-7200_000,lock-3600_000],"only exact common source observations are paired");
+assert.ok(Math.abs(aligned.market.outcomes[0].probability-2/3)<1e-12);
+assert.equal(aligned.market.asOf,iso(lock-3600_000),"newer unpaired live receipts cannot be invented into a synchronized endpoint");
 console.log("PASS CFB lock wave: both captured bracket histories retain priority; earlier verified quotes supplement one-point graphs without changing any archived field, quote, endpoint or input.");

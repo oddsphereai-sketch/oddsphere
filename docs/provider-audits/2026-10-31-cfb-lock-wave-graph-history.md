@@ -10,8 +10,12 @@ closed at lock, unintentionally removing the captured bracket tickers from
 history priority. A valid one-point archived market also prevented recovery
 from later verified earlier history.
 
-Keep both exact ticker identities from the genuine eligible pre-lock receipt
-inside the existing three-request scheduled history budget. No new provider
+Keep both exact ticker identities from the genuine eligible pre-lock receipt,
+or the explicitly approved historical exact-event view when the line first
+appeared immediately before lock, inside the existing three-request scheduled
+history budget. Pair historical bracket values only at exact timestamps present
+in both sources; different latest live times cannot erase their genuine common
+historical candles or become interpolated synchronized quotes. No new provider
 requests, timer, prediction input, writer or lease. Under the owner's explicit
 approval for separate graph restoration, supplement only missing earlier graph
 history, from the identical event/selection/method/source bracket, at or before
