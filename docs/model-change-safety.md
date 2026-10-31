@@ -9,7 +9,9 @@ carrying provider/book/event/run-attested opposition independently of forecast
 flip qualification. An otherwise Best Angle becomes a same-probability
 actionable Lean; it never becomes a new No Play or an invented opposing bet.
 The same new evidence yields resistance/mixed member signals instead of sharp
-confirmation inferred from grade alone. Existing locks retain exact precedence.
+confirmation inferred from grade alone. For new posture-bearing snapshots,
+empty/conflicting evidence is neutral/mixed; supporting-only observations can
+confirm independently of economics. Existing locks retain exact precedence.
 No writer, lease, cadence, provider request or storage table is added.
 
 The17-game/51-market retained-stage comparison reproduces incumbent grades,

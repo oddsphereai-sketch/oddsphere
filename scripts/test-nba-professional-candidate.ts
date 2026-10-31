@@ -9,7 +9,7 @@ import {
   buildNbaProfessionalCandidate,
 } from "../lib/services/nba/nbaProfessionalCandidate";
 import { buildNbaProfessionalMarketReader } from "../lib/services/nba/nbaProfessionalMarketReader";
-import { buildMarketSignal } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
+import { buildMarketSignal, buildNbaSharpStatus } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
 
 const artifact: NbaPortableModelArtifact = {
   release: "fixture",
@@ -263,6 +263,25 @@ const originalIntel = buildNbaGameIntelligence({ snapshot, prediction: originalP
 assert.equal(originalIntel.spread.grade, "best_angle");
 assert.equal(observedIntel.spread.grade, "lean");
 assert.equal(buildMarketSignal(observedIntel.spread), "market_resistance");
+assert.equal(buildNbaSharpStatus(observedIntel.spread), "mixed");
+const posture = observedIntel.spread.named_book_posture!;
+assert.equal(buildNbaSharpStatus({ ...observedIntel.spread, grade: "best_angle",
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: [] } }), "mixed",
+"Best Angle is not proof of sharp confirmation");
+assert.equal(buildNbaSharpStatus({ ...observedIntel.spread, grade: "watch",
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: ["circa"] } }), "confirm",
+"observed direction and playable economics remain separate");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: [] } }), "market_neutral",
+"positive model value alone is not observed sharp confirmation");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: ["circa"] } }), "market_confirmed");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, opposingSources: [], supportingSources: ["circa"], conflictingSources: ["pinnacle"] } }), "market_neutral",
+"a conflicting source is not erased by one supportive observation");
+assert.equal(buildMarketSignal({ ...observedIntel.spread,
+  named_book_posture: { ...posture, pickedSide: "away", opposingSources: [], supportingSources: ["circa"] } }), "market_neutral",
+"wrong-pick evidence cannot claim confirmation");
 for (const key of ["ml", "spread", "total"] as const) {
   for (const field of ["pick_side", "model_prob_on_pick", "consensus_line", "current_price", "effective_confidence"] as const) {
     assert.deepEqual(observedIntel[key][field], originalIntel[key][field], `${key}:${field} unchanged by opposition plumbing`);

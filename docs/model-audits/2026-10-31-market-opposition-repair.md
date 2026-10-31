@@ -141,3 +141,44 @@ with "Investigate Green Bay no-play grades". Until overlap is reconciled and
 latest-main/integration checks rerun, do not push/merge/publish this candidate.
 This is an additional publication boundary, not the reason the larger forecast
 repair is incomplete. No PR, deployment or production writer invocation occurred.
+
+## October 31 follow-up: side neutrality and false confirmation
+
+The owner additionally rejected automatic favorite following. The complete
+reader→candidate→score/probability path now has360 reflected home/away cases
+across independent margins, posted Spreads and two movement axes, plus360
+controls that change only which current ML price is shorter. Mirrored cases
+reverse the margin, team scores, ML/Spread probabilities and sides, preserve
+Total, and retain source-posture symmetry. Quote-only controls preserve every
+forecast and side. Both favorite and underdog ML/Spread selections occur.
+These are implementation invariants, not evidence of predictive accuracy or
+an endorsement of the incumbent's numerical score-response thresholds.
+
+Fixed another specific signal defect for new posture-bearing snapshots:
+positive model value or an actionable grade no longer fabricates sharp
+confirmation. Actual supporting-only posture can confirm; opposition resists;
+empty, conflicting or wrong-market/wrong-pick posture remains neutral/mixed.
+Direction and economics remain separate: observed confirmation can exist on
+a Watchlist, and a Best Angle need not have observed sharp confirmation.
+Legacy no-posture compatibility behavior and exact locked-card precedence are
+unchanged. Focused production-assembly, direction/value and locked-reader
+tests pass. A bounded independent invalidation review found no specific
+semantic or lock regression in this delta, without endorsing full forecasts.
+
+Production main advanced to506315ba (#893). Merge checkpointa8e02dc0 preserves
+the entire soccer/MLB health repair and both shared release/safety entries.
+Integration safety passed at that clean checkpoint. The earlier403 API
+protection visibility gap was resolved read-only through the existing signed-in
+GitHub browser: main rule82075762 requires PRs, current-main-ancestor from
+GitHub Actions and strict up-to-date branches, prohibits bypass, and disallows
+force pushes/deletions. No setting was changed or saved.
+
+The retained raw17-game source was also inspected for extending attested lanes
+into existing forecast permission. All original stored Spread/Total decisions
+had zero applied score corrections. Ordinary valid movements commonly remain
+below incumbent2/5-point authority; some endpoint number/price directions are
+conflicting, and one two-point Pinnacle Spread trail has only0.5346 persistence.
+This inspection made no source, receipt, forecast, lock or database change.
+It does not justify relaxing those numerical rules, choosing a correction
+amplitude or forcing Toronto to flip. Full source-specific conditional forecast
+response remains unresolved and is NOT implemented by this first-stage branch.
