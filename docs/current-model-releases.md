@@ -90,8 +90,8 @@ Last reviewed: 2026-10-31
   A no-write same-input upstream-versus-final stage audit attributes four
   actionable demotions and zero actionable promotions to the final semantic
   reader on this 13-game slate. The tested promotion path exists, but no
-  current price/value tuple qualified; this contraction remains a release
-  blocker, not a reason to invent plays.
+  current candidate was promoted by the final grade evaluator. This
+  contraction remains a release blocker, not a reason to invent plays.
 
 ## CFB market-evidence integrity — October 31 candidate, not live
 

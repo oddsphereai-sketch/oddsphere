@@ -268,8 +268,9 @@ made zero actionable promotions, and changed scores on TEN@CIN, LV@NYJ,
 IND@JAX, NE@MIA and PHI@WSH. In LV@NYJ the final winner changed from LV to
 NYJ; in PHI@WSH from PHI to WSH. The test-verified Moneyline and Spread
 promotion paths remain open when the final side has sufficient exact-price
-value, but none qualified on this slate. This is candidate behavior on one
-same-input run, not proof of predictive correctness. The missing reciprocal
+value, but none was promoted by the final grade evaluator on this slate.
+This is candidate behavior on one same-input run, not proof of predictive
+correctness. The missing reciprocal
 promotions are an explicit release blocker; no arbitrary play is fabricated.
 
 Dedicated branch/worktree starting base: `7007590d8c1e9ce7604ccc3d66d9b724ece8c60d`.
