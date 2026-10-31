@@ -16,8 +16,8 @@ Last reviewed: 2026-10-31
 - Source / identity releases are
   `soccer_current_market_provider_2026_10_31_r2_complete_official_markets` /
   `soccer_club_identity_2026_10_31_r2_exact_ucl_club_aliases`. EPL model/grade are
-  r22/v27; UCL model/grade/projected-score are r13/r16/r4, each stamped
-  `complete_official_market_prices`. Score equations, grade thresholds, stakes,
+  r23/v28 (`partial_price_publication`); UCL model/grade/projected-score are
+  r13/r16/r4 (`complete_official_market_prices`). Score equations, grade thresholds, stakes,
   and the single `prediction_pipeline:soccer` writer/lease are unchanged.
 - UCL stored-price fallback r2 now shares soccer's existing 30-minute / one-hour /
   six-hour freshness windows. Historical quotes never become current merely
@@ -26,6 +26,14 @@ Last reviewed: 2026-10-31
   prices without that state fail the publication gate. Whole-board price loss,
   incomplete fixtures, PMF errors and actionable EV failures still block
   publication. Existing locked snapshots retain exact stored precedence.
+- EPL member lifecycle r7 (`partial_price_publication`) completes the live
+  verification follow-up: its prior all-prices publication requirement still
+  rejected the 39/40 recovered board. Explicit missing-price holds are now
+  warnings while every fresh complete market publishes. Missing fixtures,
+  forecasts, unheld unavailable prices, incomplete priced outcome vectors and
+  whole-board price loss remain hard failures. The r22/v27→r23/v28 stamp
+  changes no same-input forecast, grade, price, probability or stake; this
+  follow-up has zero promotions and zero demotions relative to r22/v27.
 - Frozen-source paired replay: EPL priced markets 21→39/40, actionables 4→9,
   five promotions / zero demotions, no side or probability changes. UCL current
   priced markets 68→49/72 because stale quotes are no longer called current;
@@ -3571,12 +3579,12 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 ## Premier League production release (active)
 
 - October 28 provider cutover: future-unlocked EPL prices use one cached Owls soccer board for fresh named-book Match Result and exact-2.5 Total vectors, with the paid The Odds API event endpoint filling only missing BTTS, Double Chance, and exact-2.5 Total vectors. Exact team orientation, kickoff proximity, complete same-book outcome vectors, provider timestamps, a 20-request cycle ceiling, and a 1,000-credit reserve fail closed. The free event catalog is used for identity and quota proof. Fresh durable quotes may bridge the bounded cadence only as explicitly attributed `stored_quote` rows and are never re-recorded as new provider observations. Playbook consensus is not a sportsbook and remains outside this price lane. The existing writer, `prediction_pipeline:soccer` lease, schedule, stake, copy, labels, layout, settlement, and locked payload precedence are unchanged. The zero-write rehearsal preserved all 40 forecast sides and every model probability; the fresh-price comparison moved actionables 9 to 7 through two BTTS price demotions and zero promotions. This is an exact-price economics change, not a new grading rule. Production proof must still show live supplemental coverage and quota telemetry before completion. Evidence and rollback: `docs/model-audits/2026-10-28-soccer-owls-the-odds-provider-cutover-predeclaration.md`, `docs/model-audits/2026-10-28-soccer-owls-the-odds-provider-cutover-results.md`; roll back r21/v26/r3 and the composite provider together without rewriting any lock.
-- Runtime/model release: `epl_goals_coherent_2026_10_31_r22_complete_official_market_prices`
+- Runtime/model release: `epl_goals_coherent_2026_10_31_r23_partial_price_publication`
 - Probability core: one Dixon–Coles score PMF supplies decimal expected goals, likely and representative scores, Match Result, Double Chance, Total, and BTTS. R20 preserves the r19 independent Total head and combines it with a chronologically validated 75% professional attack/defence matchup margin plus 25% r19 margin. The matchup margin uses only prior-match goals/xG, shots, shots on target and possession; it contains no sportsbook target. A chronologically selected draw selector may choose Draw when the exact-score mode is level, the best-club/Draw gap is at most 8pp, the scoring-mean gap is at most 0.20, Draw is at least 24%, and neither club exceeds 40%; an accepted Draw equalizes the displayed team means around the unchanged Total so the final score and result remain coherent. The independent club PMF is otherwise authoritative unless at least two fresh, complete, target-excluded exact-2.5 Total vectors have distinct source families, distinct quote signatures, and unanimous direction; qualified evidence applies the versioned minimum-change Total tilt while preserving every Match Result marginal exactly. Evaluated Match Result, Total, and BTTS books and direct BTTS prices never enter the forecast.
 - Coherent outcome contract: `epl_coherent_market_outcome_2026_10_28_r3_provider_attributed_price_vectors`
-- Display-grade / calibration release: `epl_grade_policy_2026_10_31_v27_complete_official_market_prices`
+- Display-grade / calibration release: `epl_grade_policy_2026_10_31_v28_partial_price_publication`
 - Match Result locked-score reader release: `epl_match_result_exact_locked_score_2026_08_23_r2`
-- Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`; EPL snapshot continuity/publication lifecycle: `epl_member_snapshot_lifecycle_2026_10_24_r6_scheduled_price_recovery_priority`; tracking lock policy: `epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction`
+- Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`; EPL snapshot continuity/publication lifecycle: `epl_member_snapshot_lifecycle_2026_10_31_r7_partial_price_publication`; tracking lock policy: `epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction`
 - Runtime constants: `lib/services/epl/eplShadowModel.ts`
 - Provider boundary: BALLDONTLIE supplies fixtures/history/stats, a complete current three-way moneyline fallback, and its distinct opening endpoint. `CurrentSoccerMarketProvider` owns current named-book prices: Owls is primary for Match Result and exact-2.5 Total; The Odds API fills only missing BTTS, Double Chance, and exact-2.5 Total. Soccer splits remain unavailable and neutral. A live Playbook probe proved EPL is unsupported: EPL aliases silently returned NFL rows, so Playbook is not allowed into EPL odds or splits.
 - Model configuration: the retained r19 Total head uses a 365-day half-life, four-match shrinkage, 35% xG / 65% goals where xG is present, Dixon–Coles tau -0.10, and separate home/away club attack and defense. The r20 matchup-margin component uses the same half-life, ten-match shrinkage, 20% xG / 80% goals where xG is present, a 30% prior-match process contribution, and tau -0.15; the final margin is 75% r20 component and 25% r19.

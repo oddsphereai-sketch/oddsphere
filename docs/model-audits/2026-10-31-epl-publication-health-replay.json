@@ -1,0 +1,44 @@
+{
+  "base": "506315ba36d12c2b6d2fa2ee0837c22bddce310b",
+  "readOnly": true,
+  "providerCalls": 0,
+  "productionWrites": 0,
+  "markets": 40,
+  "priced": 39,
+  "held": 1,
+  "actionable": 9,
+  "promotions": 0,
+  "demotions": 0,
+  "forecastChanges": 0,
+  "probabilityChanges": 0,
+  "gradeChanges": 0,
+  "priceChanges": 0,
+  "stakeChanges": 0,
+  "inputHash": "3eb9c546722794804f9875c005f13415aed99c9187d95b41d8ecd32c17f27953",
+  "outputHash": "3eb9c546722794804f9875c005f13415aed99c9187d95b41d8ecd32c17f27953",
+  "payloadUnchanged": true,
+  "before": {
+    "activeFixtures": 10,
+    "selectedCurrent": 39,
+    "selectedExpected": 40,
+    "outcomeCurrent": 98,
+    "outcomeExpected": 100,
+    "errors": [
+      "selected current-price coverage 39/40",
+      "outcome price-board coverage 98/100"
+    ]
+  },
+  "after": {
+    "activeFixtures": 10,
+    "selectedCurrent": 39,
+    "selectedExpected": 40,
+    "outcomeCurrent": 98,
+    "outcomeExpected": 100,
+    "heldMarkets": 1,
+    "errors": [],
+    "warnings": [
+      "selected current-price coverage 39/40; missing markets held",
+      "outcome price-board coverage 98/100; missing outcomes held"
+    ]
+  }
+}

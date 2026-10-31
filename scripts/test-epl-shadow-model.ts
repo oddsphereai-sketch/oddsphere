@@ -105,9 +105,41 @@ const activeCoverage = evaluateEplPublicationCoverage(
 );
 assert.deepEqual(
   activeCoverage,
-  { activeFixtures: 1, selectedCurrent: 4, selectedExpected: 4, outcomeCurrent: 10, outcomeExpected: 10, errors: [] },
+  { activeFixtures: 1, selectedCurrent: 4, selectedExpected: 4, outcomeCurrent: 10, outcomeExpected: 10, heldMarkets: 0, errors: [], warnings: [] },
   "EPL publication coverage must ignore live and full-time fixtures after sportsbooks remove their prices",
 );
+
+const heldQuote = { currentPriceAmerican: null, held: true, verdict: { key: "no_play" }, soccerPriceBoard: { rows: [] } };
+const scheduledSlate = { matches: [{ id: 2, status: "scheduled" }] } as never;
+const partialGame = {
+  external_id: "2",
+  markets: { moneyline: completeMarket, total: heldQuote, first_inning: { ...completeMarket, soccerPriceBoard: { rows: [{}, {}] } } },
+  soccerDoubleChanceMarket: completeMarket,
+};
+const heldResponse = { games: [partialGame] };
+const heldBefore = JSON.stringify(heldResponse);
+const partialCoverage = evaluateEplPublicationCoverage(scheduledSlate, heldResponse as never);
+assert.deepEqual(partialCoverage.errors, [], "one honestly held market must not block the other fresh markets");
+assert.equal(partialCoverage.selectedCurrent, 3);
+assert.equal(partialCoverage.heldMarkets, 1);
+assert.equal(partialCoverage.warnings.length, 2);
+assert.equal(JSON.stringify(heldResponse), heldBefore, "publication checking must not change stored prices/grades/holds");
+assert.match(evaluateEplPublicationCoverage(scheduledSlate, { games: [{ ...partialGame,
+  markets: { ...partialGame.markets, total: { ...heldQuote, held: false } },
+}] } as never).errors.join(), /lack an explicit evidence hold/);
+assert.match(evaluateEplPublicationCoverage(scheduledSlate, { games: [{ ...partialGame,
+  markets: { ...partialGame.markets, total: { ...heldQuote, verdict: { key: "lean" } } },
+}] } as never).errors.join(), /lack an explicit evidence hold/);
+assert.match(evaluateEplPublicationCoverage(scheduledSlate, { games: [{ ...partialGame,
+  markets: { moneyline: heldQuote, total: heldQuote, first_inning: heldQuote }, soccerDoubleChanceMarket: heldQuote,
+}] } as never).errors.join(), /collapsed to zero/);
+assert.match(evaluateEplPublicationCoverage(scheduledSlate, { games: [] }).errors.join(), /fixture\/model coverage/);
+assert.match(evaluateEplPublicationCoverage(scheduledSlate, { games: [{ ...partialGame,
+  soccerDoubleChanceMarket: null,
+}] } as never).errors.join(), /market prediction coverage/);
+assert.match(evaluateEplPublicationCoverage(scheduledSlate, { games: [{ ...partialGame,
+  soccerDoubleChanceMarket: { ...completeMarket, soccerPriceBoard: { rows: [{}] } },
+}] } as never).errors.join(), /incomplete outcome vectors/);
 
 const emergencySnapshot = {
   games: [{ gameStartAt: "2026-08-24T19:00:00.000Z" }],
@@ -348,8 +380,8 @@ assert.equal(forecastAnchoredDoubleChanceSide("home", { home: 0.72, draw: 0.19, 
 assert.equal(forecastAnchoredDoubleChanceSide("away", { home: 0.18, draw: 0.24, away: 0.58 }), "away_or_draw", "an away forecast must be covered by away or draw");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.34, draw: 0.38, away: 0.28 }), "home_or_draw", "a draw forecast should pair with the more likely club");
 assert.equal(forecastAnchoredDoubleChanceSide("draw", { home: 0.27, draw: 0.4, away: 0.33 }), "away_or_draw", "a draw forecast should pair with the more likely club");
-assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_31_r22_complete_official_market_prices");
-assert.equal(EPL_PREVIEW_GRADE_RELEASE, "epl_grade_policy_2026_10_31_v27_complete_official_market_prices");
+assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_31_r23_partial_price_publication");
+assert.equal(EPL_PREVIEW_GRADE_RELEASE, "epl_grade_policy_2026_10_31_v28_partial_price_publication");
 const lockedMarkets = { moneyline: { pick: "ARS" }, total: { pick: "Over" }, first_inning: { pick: "No" } } as unknown as DailyEdgeGameDto["markets"];
 const refreshedMarkets = { moneyline: { pick: "COV" }, total: { pick: "Under" }, first_inning: { pick: "Yes" } } as unknown as DailyEdgeGameDto["markets"];
 const lockedGame = {
@@ -554,7 +586,7 @@ assert.match(lockRoute, /findEplGamesEnteringLock/);
 assert.match(lockRoute, /predictions\.priorTuplesLocked[\s\S]*prior_priced_tuples_locked:\s*predictions\.priorTuplesLocked/, "fallback locks must count as writes and remain visible in cron telemetry");
 assert.match(memberStore, /current-week/);
 assert.match(memberStore, /readLatestLabResponseSnapshot/, "EPL reads need a bounded emergency fallback when a valid weekly snapshot outlives its cache deadline");
-assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_24_r6_scheduled_price_recovery_priority/, "EPL continuity behavior must carry its own immutable lifecycle release");
+assert.match(memberStore, /epl_member_snapshot_lifecycle_2026_10_31_r7_partial_price_publication/, "EPL continuity behavior must carry its own immutable lifecycle release");
 for (const route of [refreshRoute, lockRoute]) {
   assert.match(route, /reconstructVerifiedEplLockedGames/, "every EPL publisher must reconstruct due locked games from the verified four-market DB cohort");
   assert.match(route, /authoritativeLockedProviderIds:\s*lockVerification\.completeProviderIds/, "only DB-verified locked games may replace a prior locked member card");
