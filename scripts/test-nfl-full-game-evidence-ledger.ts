@@ -128,6 +128,47 @@ assert.deepEqual(reconcileNflFullGameScoreTuple({
 }), { homeMargin: 2, total: 48 },
 "a single target-excluded paired-price score may coherently resolve both axes");
 
+const totalWithOpposingRetail = buildNflMarketState({
+  market: "total", evaluatedAt,
+  snapshots: [{
+    capturedAt: "2026-10-26T19:50:00.000Z",
+    markets: {
+      moneyline: { families: [] }, spread: { families: [] },
+      total: { families: [
+        ...["circa", "pinnacle"].map((source) => [
+          source, "s", source === "circa" ? "c" : "p", null,
+          landmark("2026-10-26T18:00:00.000Z", 44.5, -110, -110),
+          landmark("2026-10-26T19:50:00.000Z", 44.5, -120, -100),
+        ] as NflForwardContextMarket["families"][number]),
+        ["fanduel", "b", "n", null,
+          landmark("2026-10-26T18:00:00.000Z", 44.5, -110, -110),
+          landmark("2026-10-26T19:50:00.000Z", 44.5, -100, -120),
+        ] as NflForwardContextMarket["families"][number],
+      ] },
+    },
+  }],
+  current: { spread: { homeLine: 3.5 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(totalWithOpposingRetail.namedDirection, 1);
+assert.equal(totalWithOpposingRetail.resistance, "retail_price_resistance");
+const noSideState = { ...states.moneyline, namedDirection: null, trails: [], splits: [], resistance: "none" as const };
+const retailResistanceLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  finalForecast: { expectedAwayScore: 22, expectedHomeScore: 21 },
+  states: { moneyline: noSideState, spread: { ...states.spread, ...noSideState, market: "spread" },
+    total: totalWithOpposingRetail },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    forecast: { expectedAwayScore: 23, expectedHomeScore: 24 } }],
+});
+const retailResistanceRead = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 22, expectedHomeScore: 21 },
+  ledger: retailResistanceLedger,
+});
+assert.equal(retailResistanceRead.totalStory, "scoring_environment_change");
+assert.equal(retailResistanceRead.finalTotal, 47,
+  "retail opposition remains visible but cannot masquerade as a Circa/Pinnacle conflict veto");
+
 const publicMoneyline = ledger.signals.find((value) =>
   value.kind === "split" && value.market === "moneyline" && value.source === "public_consensus");
 assert.ok(publicMoneyline, "a captured sub-threshold split must remain in the full-game ledger");

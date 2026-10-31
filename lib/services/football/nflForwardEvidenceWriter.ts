@@ -46,7 +46,7 @@ import {
   unavailableNflSharpApiSplitSources,
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
-import { fetchNflOwlsSplits } from "./nflOwlsSplits";
+import { fetchNflOwlsSplits, qualifyNflOwlsSplitsForModel } from "./nflOwlsSplits";
 import { captureBooksWithSharpBooks } from "./sharpApiFootballSharpOdds";
 import { readNflOwlsNamedPriceHistory } from "./nflOwlsNamedPriceHistory";
 import {
@@ -150,7 +150,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_31_r94_single_episode_price_corroboration" as const;
+  "nfl_forward_evidence_writer_2026_10_31_r97_flow_and_retail_conflict_precedence" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -629,10 +629,18 @@ export async function runNflForwardEvidenceWriter(args: {
     const displaySharpSplits = sharpResult.splitsByGame[plan.game.providerGameId]
       ?? previous?.payload.market.sharpApiSplits
       ?? null;
-    // Owls is captured for named-book display continuity only in this release.
-    // The separate market-reader task retains sole authority to qualify Owls
-    // for predictions; historical SharpAPI rows keep their incumbent meaning.
+    // Only exact-game, fresh Circa rows at the evaluated main-line contract
+    // qualify as model evidence. Other Owls rows retain display provenance;
+    // an off-line split can never direct a different spread or total.
+    const qualifiedOwls = qualifyNflOwlsSplitsForModel({
+      splits: displaySharpSplits,
+      providerGameId: plan.game.providerGameId,
+      evaluatedAt: capturedAt,
+      currentHomeSpread: current.spread?.homeLine ?? null,
+      currentTotal: current.total?.line ?? null,
+    });
     const sharpSplits = nflModelSharpSplits(displaySharpSplits)
+      ?? qualifiedOwls.splits
       ?? latestLegacyNflSharpSplits(historicalExisting, plan.game.providerGameId);
     const contextCurrentBooks = captureBooksWithSharpBooks(
       comparableCurrentBooks,
@@ -696,7 +704,12 @@ export async function runNflForwardEvidenceWriter(args: {
     const rosterAndDepth = awayDepth.roster.length > 0 && homeDepth.roster.length > 0;
     const expectedQuarterbacks = awayDepth.expectedStartingQuarterback !== null && homeDepth.expectedStartingQuarterback !== null;
     const playbookCoverage = completePlaybookSplits(playbookSplits);
-    const sharpCoverage = completeSharpApiNflSplitSet(sharpSplits ?? undefined);
+    const modelSplitCoverage = completeSharpApiNflSplitSet(sharpSplits ?? undefined) &&
+      Object.values(sharpSplits!).every((split) => {
+        const age = Date.parse(capturedAt) - Date.parse(split.providerFetchedAt ?? split.capturedAt);
+        return Number.isFinite(age) && age >= 0 && age <= 120 * 60_000;
+      });
+    const sharpApiCoverage = modelSplitCoverage && sharpSplits?.moneyline.provider === "sharpapi";
     const owlsCoverage = displaySharpSplits?.moneyline.provider === "owls" &&
       completeSharpApiNflSplitSet(displaySharpSplits);
     const weatherCoverage = plan.stage === "unlocked" || weather.status !== "provider_unavailable";
@@ -705,8 +718,10 @@ export async function runNflForwardEvidenceWriter(args: {
       !expectedQuarterbacks ? "expected_quarterback_unavailable" : null,
       injuries === null ? "injury_report_unavailable" : null,
       !playbookCoverage ? "playbook_splits_unavailable" : null,
-      !sharpCoverage ? owlsCoverage
-        ? "owls_splits_model_qualification_pending"
+      !modelSplitCoverage ? owlsCoverage
+        ? qualifiedOwls.qualifiedMarkets.length > 0
+          ? "owls_splits_model_partial_contract_coverage"
+          : "owls_splits_model_unqualified"
         : "named_book_splits_unavailable" : null,
       comparableCurrentBooks.length < 2 ? "multibook_consensus_unavailable" : null,
       comparableCurrentBooks.length < 3 ? "r6_leave_one_out_consensus_unavailable" : null,
@@ -1092,7 +1107,8 @@ export async function runNflForwardEvidenceWriter(args: {
         multibookConsensusReady: comparableCurrentBooks.length >= 2,
         operationalOpening: true, rosterAndDepth, expectedQuarterbacks,
         injuries: injuries !== null, playbookSplits: playbookCoverage,
-        sharpApiSplits: sharpCoverage, owlsSplits: owlsCoverage,
+        sharpApiSplits: Boolean(sharpApiCoverage), owlsSplits: owlsCoverage,
+        owlsModelQualifiedMarkets: qualifiedOwls.qualifiedMarkets,
         weather: weatherCoverage, healthHolds: holds,
         quarterbackHistory: shadowMoneyline.quarterbackContext,
         forecastTargetExclusion: resolved.targetExclusion,

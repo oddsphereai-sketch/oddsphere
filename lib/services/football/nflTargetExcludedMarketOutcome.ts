@@ -27,7 +27,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_31_r21_paired_price_score_authority" as const;
+  "nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -533,20 +533,25 @@ function targetFamilySignature(value: NflEvaluatedTargetFamilies): string {
   return [value.byMarket.moneyline, value.byMarket.spread, value.byMarket.total].join("|");
 }
 
-function targetFreeSharpSplits(
+export function targetFreeSharpSplits(
   value: NflRegularSharpSplitSet | null,
   excluded: NflEvaluatedTargetFamilies,
 ): NflRegularSharpSplitSet | null {
   if (!value) return null;
+  const mask = (row: NflRegularSharpSplitSet["moneyline"]): NflRegularSharpSplitSet["moneyline"] => ({
+    ...row,
+    homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null,
+    overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null,
+  });
   return {
     moneyline: excluded.margin.includes(normalizeBook(value.moneyline.sourceSportsbook))
-      ? { ...value.moneyline, sourceSportsbook: null }
+      ? mask(value.moneyline)
       : value.moneyline,
     spread: excluded.margin.includes(normalizeBook(value.spread.sourceSportsbook))
-      ? { ...value.spread, sourceSportsbook: null }
+      ? mask(value.spread)
       : value.spread,
     total: excluded.total.includes(normalizeBook(value.total.sourceSportsbook))
-      ? { ...value.total, sourceSportsbook: null }
+      ? mask(value.total)
       : value.total,
   };
 }

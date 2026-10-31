@@ -8,25 +8,25 @@ Last reviewed: 2026-10-31
 
 ## NFL named-price chronology candidate — October 31, private
 
-- The proposed sole writer `nfl_forward_evidence_writer_2026_10_31_r94_single_episode_price_corroboration`
+- The proposed sole writer `nfl_forward_evidence_writer_2026_10_31_r97_flow_and_retail_conflict_precedence`
   reads the existing leased Market Intelligence V2 Owl's Circa/Pinnacle observation tape;
   it makes no second provider request and never uses those books as the evaluated member quote.
   Exact same-run, two-sided, source-timed Moneyline/Spread/Total pairs feed
   `nfl_daily_edge_forward_context_capture_2026_10_31_r10_owls_named_chronology` and
-  `nfl_market_state_2026_10_31_r2_named_retail_sequence`.
+  `nfl_market_state_2026_10_31_r4_flow_and_retail_conflict_precedence`.
 - The proposed public family is
-  `nfl_v1_daily_edge_model_2026_10_31_r38_single_episode_price_corroboration` /
-  `nfl_v1_daily_edge_calibration_2026_10_31_r37_single_episode_price_corroboration` /
-  `nfl_v1_daily_edge_decision_2026_10_31_r46_single_episode_price_corroboration` /
-  `nfl_v1_grade_policy_2026_10_31_r46_single_episode_price_corroboration` /
-  `nfl_v1_member_release_2026_10_31_r43_single_episode_price_corroboration` /
-  `nfl_weekly_member_fixture_2026_10_31_r58_single_episode_price_corroboration` /
-  `nfl_forward_member_snapshot_2026_10_31_r50_single_episode_price_corroboration`.
-  The full-game runtime is r4, ledger r7, arbiter r20, and spread direction model r23.
+  `nfl_v1_daily_edge_model_2026_10_31_r41_flow_and_retail_conflict_precedence` /
+  `nfl_v1_daily_edge_calibration_2026_10_31_r40_flow_and_retail_conflict_precedence` /
+  `nfl_v1_daily_edge_decision_2026_10_31_r49_flow_and_retail_conflict_precedence` /
+  `nfl_v1_grade_policy_2026_10_31_r49_flow_and_retail_conflict_precedence` /
+  `nfl_v1_member_release_2026_10_31_r46_flow_and_retail_conflict_precedence` /
+  `nfl_weekly_member_fixture_2026_10_31_r61_flow_and_retail_conflict_precedence` /
+  `nfl_forward_member_snapshot_2026_10_31_r53_flow_and_retail_conflict_precedence`.
+  The full-game runtime is r7, ledger r7, arbiter r23, and spread direction model r23.
   The proposed no-weight classifier is
   `nfl_v1_no_weight_market_reader_2026_10_31_r5_independent_classification_target_free_score`;
   target-excluded outcome is
-  `nfl_target_excluded_market_outcome_2026_10_31_r21_paired_price_score_authority`.
+  `nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion`.
   Prior locked r40/r55/r47 payloads remain immutable and retain exact reader precedence.
 - **Not production-qualified:** although source pairing and focused/model-change tests pass,
   the final NFL arbiter still has a rigid winner-change permission path that can ignore
@@ -59,8 +59,29 @@ Last reviewed: 2026-10-31
   side, or grade changes from r19/r3; the board remained seven Best Angles,
   three Leans, 10 Watchlists, and 19 No Plays. Product conformance and grade
   impact remain unresolved.
+  The subsequent private r95/r3 correction distinguishes opposing retail
+  price movement from genuine Circa/Pinnacle disagreement. A synthetic
+  end-to-end Total case now permits a coherent target-free score consequence
+  with retail resistance present; genuine opposing named books still conflict.
+  A later zero-write 13-game run had seven Best Angles, four Leans, eight
+  Watchlists and 20 No Plays, identical to the immediately preceding candidate
+  run at the observed board-count level. Those runs are not frozen same-input
+  comparisons and used stored timestamped Playbook observations. The broader
+  standalone-episode/grade qualification remains open.
+  Private r96/r2 admits fresh exact-game Circa Owl's money/ticket pairs only
+  on the matching evaluated main-line contract. Off-line and stale scopes are
+  masked market-by-market. Target-exclusion r22 masks the actual percentages
+  of an evaluated-book split, not merely its book label; the Total reader can
+  no longer consume that self-reference. A subsequent 13-game zero-write
+  rehearsal returned seven Best Angles, three Leans, nine Watchlists and
+  20 No Plays. One near-time Lean→Watchlist change is visible, but source
+  clocks were not frozen and this is not a same-input causal comparison.
   No accuracy claim or public cutover is authorized; see
   `docs/model-audits/2026-10-31-nfl-named-price-chronology.md`.
+  Private r97/r4 preserves `reverse_flow` when named-book price and a
+  qualified split oppose each other, even if retail price also resists.
+  Retail opposition remains separate context, not a replacement for the
+  sharper contradictory flow observation. This is not a public release.
 ## CFB market-evidence integrity — October 31 candidate, not live
 
 - Production remains CFB decision r57, calibration r30, writer r146, and complete

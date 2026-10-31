@@ -33,6 +33,29 @@ particular r20 rule. The
 board-count contract and complete episode interpretation remain unresolved, so this
 candidate does not pass product conformance and must not be published merely
 because the verification suite is green.
+Private r95/r3 separates opposing retail price movement from actual disagreement
+between Circa and Pinnacle. The previous state labeled both `book_disagreement`,
+which could veto a coherent named-book Total read. A full-ledger regression now
+proves retail resistance remains visible while a separately target-excluded
+paired-price Total can change the final score; opposed named books still fail
+as conflict. The current no-write slate remained seven Best Angles and four
+Leans before and after this correction, but the live inputs were not frozen
+between runs. This repairs one classification error; it does not clear the
+unresolved episode or same-input publication gates.
+
+The private r96 Owl's split step reuses the existing single league capture
+and qualifies only exact-game, fresh Circa rows on the evaluated main line;
+other books remain display context and off-line/stale markets are masked.
+Target-exclusion r22 corrects a concrete leak: removing the evaluated book's
+label while retaining its percentages let the Total reader consume its own
+split. The percentages are now masked without mutating the source receipt.
+The first zero-write current-slate run with qualified Owl's rows had seven
+Best Angles, three Leans, nine Watchlists and 20 No Plays versus a near-time
+prior seven/four/eight/twenty; those clocks were not frozen and are not a
+same-input causal board report. Private r97/r4 also prevents an opposing
+retail price from erasing qualified reverse flow against named-book price.
+No live publication is approved yet.
+
 ## Cross-product independent-input contract — October 31
 
 The owner explicitly requires the independent forecast to be evidence, not a

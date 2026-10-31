@@ -103,7 +103,7 @@ const namedLeadWithOpposingRetail = authority({
 });
 assert.equal(namedLeadWithOpposingRetail.spreadSide, "home",
   "an opposing retail quote is preserved as disagreement but cannot veto two named leaders plus named flow");
-assert.equal(namedLeadWithOpposingRetail.reads.spread.resistance, "book_disagreement");
+assert.equal(namedLeadWithOpposingRetail.reads.spread.resistance, "retail_price_resistance");
 
 const twoRetailFollowers = authority({
   spread: [...namedHomeSpread, family("fanduel", -3, -4, FOLLOW), family("draftkings", -3, -4, FOLLOW)],

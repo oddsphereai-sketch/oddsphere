@@ -230,20 +230,48 @@ ATL@TB and KC@DEN had named Under movement while their target-free current
 paired prices implied a Total over the evaluated line. These cannot be
 called missed flips without resolving the contradictory economic evidence.
 
-Dedicated branch/worktree base: `7007590d8c1e9ce7604ccc3d66d9b724ece8c60d`.
+The next private r95/r3 state correction found that `book_disagreement`
+previously conflated two different observations: Circa and Pinnacle moving
+opposite ways, and retail prices opposing an aligned named-book move. The
+latter is now `retail_price_resistance`, retained in the ledger without
+misreporting a named-book conflict. A full-ledger Total regression verifies
+that the distinct retail resistance does not automatically veto a coherent,
+target-excluded paired-price score consequence; actual named-book disagreement
+remains a conflict. A zero-write current 13-game run after this correction
+reported seven Best Angles, four Leans, eight Watchlists and 20 No Plays,
+with 39 evaluated markets, zero writes, and complete named price pairs for all
+13 games. The immediately prior run had the same grade counts, but inputs
+were not frozen, so this is not a same-input board-impact or accuracy claim.
+Local Playbook still used timestamped stored observations. A subsequent r96
+step can qualify Owl's Circa splits only on fresh exact-game and exact-line
+contracts, market by market. An evaluated sportsbook's own split values are
+now masked from target-excluded prediction paths; clearing only its label
+previously leaked those values into the Total reader. The next zero-write
+13-game slate had seven Best Angles, three Leans, nine Watchlists and 20 No
+Plays, 39 markets, and zero writes. After the split-value isolation fix, a
+second zero-write slate at a later source time retained the same grade counts.
+These are not frozen same-input code-effect comparisons or accuracy claims.
+Private r97/r4 separately preserves a qualified reverse-flow signal when
+retail pricing opposes named pricing at the same time. The r96 precedence had
+allowed `retail_price_resistance` to obscure that stronger contradiction.
+
+Dedicated branch/worktree starting base: `7007590d8c1e9ce7604ccc3d66d9b724ece8c60d`.
+Integrated remote main `fc810902a20f994138264173f19072bdc4e14a94` with a
+reviewed docs-only merge conflict. Fresh-main verification is still required
+before publication.
 The r20 read attempted no publication or tracking write. Focused ledger tests,
-TypeScript, diff check, and `npm run verify:model-change` pass. The test run
+ TypeScript, diff check, and an earlier `npm run verify:model-change` pass. The test run
 skipped the optional Market Brain PostgreSQL proof because its URL is unset;
 that research path is not an authority in this candidate. Latest-main
-integration/PR/live verification have not been attempted, because the
+PR/live verification have not been attempted, because the
 candidate is not publication-qualified.
 
-Proposed releases: writer r94, context r10, market state r2, runtime r4,
-ledger r7, arbiter r20, model r38, calibration r37, decision r46, grade r46,
-member r43, spread direction r23, fixture r58, snapshot r50; the unwired pure
+Proposed releases: writer r97, context r10, market state r4, Owl's splits r2,
+runtime r7, ledger r7, arbiter r23, model r41, calibration r40, decision r49,
+grade r49, member r46, spread direction r23, fixture r61, snapshot r53; the unwired pure
 Moneyline transport is candidate r1 and the target-excluded two-book joint
 episode reader is candidate r2. The no-weight classifier is r5 and the
-target-excluded paired-price score-authority resolver is r21. Collector,
+target-excluded paired-price score-authority resolver is r22. Collector,
 tracking serializer, prediction lease, and locked record releases are unchanged.
 
 Before production: report current-board grades and candidate-versus-incumbent

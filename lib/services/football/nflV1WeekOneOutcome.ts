@@ -107,7 +107,7 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_25_r17_unified_total_interpreter"
       | "nfl_target_excluded_market_outcome_2026_10_26_r18_nuanced_market_reader"
       | "nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration"
-      | "nfl_target_excluded_market_outcome_2026_10_31_r21_paired_price_score_authority";
+      | "nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;

@@ -3,7 +3,7 @@ import type { NflForwardContextFamily, NflForwardContextMarket } from "./nflForw
 import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_STATE_RELEASE =
-  "nfl_market_state_2026_10_31_r2_named_retail_sequence" as const;
+  "nfl_market_state_2026_10_31_r4_flow_and_retail_conflict_precedence" as const;
 
 export type NflMarketStateMarket = "moneyline" | "spread" | "total";
 export type NflMarketStateSide = -1 | 1;
@@ -57,7 +57,7 @@ export type NflMarketState = {
   namedLeadCompletedAt: string | null;
   followerSources: string[];
   followerDelaysMinutes: number[];
-  resistance: "none" | "flow_resistance" | "reverse_flow" | "book_disagreement";
+  resistance: "none" | "flow_resistance" | "reverse_flow" | "book_disagreement" | "retail_price_resistance";
   unavailable: {
     absoluteHandle: true;
     ticketCount: true;
@@ -127,15 +127,20 @@ export function buildNflMarketState(args: {
   const followers = namedDirection === null ? [] : candidateFollowers;
   const qualifyingSplits = splits.filter((split) => Math.abs(split.gapPp) >= splitMinimum(split));
   const flow = strongestSplit(qualifyingSplits);
-  const priceDirections = trails.filter((trail) => trail.direction !== null).map((trail) => trail.direction!);
-  const bookDisagreement = priceDirections.includes(1) && priceDirections.includes(-1);
-  const materialPriceDirection = consensusDirection(priceDirections);
-  const resistance = bookDisagreement
+  const namedPriceDirections = namedMoved.map((trail) => trail.direction);
+  const namedBookDisagreement = namedPriceDirections.includes(1) && namedPriceDirections.includes(-1);
+  const retailPriceOpposition = candidateNamedDirection !== null && trails.some((trail) =>
+    trail.sourceClass === "retail" && trail.direction === -candidateNamedDirection);
+  const allPriceDirections = trails.filter((trail) => trail.direction !== null).map((trail) => trail.direction!);
+  const materialPriceDirection = candidateNamedDirection ?? consensusDirection(allPriceDirections);
+  const resistance = namedBookDisagreement
     ? "book_disagreement" as const
     : flow && materialPriceDirection === null
       ? "flow_resistance" as const
       : flow && materialPriceDirection === -flow.direction
         ? "reverse_flow" as const
+        : retailPriceOpposition
+          ? "retail_price_resistance" as const
         : "none" as const;
   return {
     release: NFL_MARKET_STATE_RELEASE,
@@ -286,6 +291,10 @@ function buildSplits(
       ? lineMatches(args.playbookLine?.homeSpread, args.current.spread?.homeLine)
       : source === "public" && args.market === "total"
         ? lineMatches(args.playbookLine?.total, args.current.total?.line)
+        : source === "sharp" && args.market === "spread" && "sourceLine" in split && split.sourceLine !== undefined
+          ? lineMatches(split.sourceLine, args.current.spread?.homeLine)
+          : source === "sharp" && args.market === "total" && "sourceLine" in split && split.sourceLine !== undefined
+            ? lineMatches(split.sourceLine, args.current.total?.line)
         : null;
     if (exactLineMatched === false) return;
     result.push({
