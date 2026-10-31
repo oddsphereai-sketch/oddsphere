@@ -52,7 +52,7 @@ const request="/api/lab/prediction-market?sport=nba&market=spread&book=betmgm&di
 assert.equal(pins.request(request),request,"an old session's Circa preference cannot override the public tracker binding");
 assert.equal(JSON.stringify(market),original);
 const ui=readFileSync("app/dev/experience-preview/ActualDailyEdgePreview.tsx","utf8"),panel=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8"),route=readFileSync("app/api/lab/prediction-market/route.ts","utf8");
-assert.match(ui,/publicMarketDisplayStops\(market,displayedPrice,displayedBook\)/);assert.match(panel,/book=frozen\?legacyBook/);
+assert.match(ui,/publicMarketDisplayStops\(market,displayedPrice,displayedBook\)/);assert.match(panel,/book=historicalCfb\?current\?\.book\?\?null:frozen\?legacyBook/);
 assert.match(panel,/useState<"movement"\|"comparison">\("comparison"\)/,"owner-selected default keeps both source curves on the common overlap");
 assert.match(panel,/Full movement/ ,"the actual earlier sportsbook move remains reachable without inventing earlier Kalshi quotes");
 assert.ok(route.indexOf("if(game&&side&&predictionMarketLockBoundary")<route.indexOf('query.get("display")'),"legacy pre-lock archive precedence is evaluated before the new display binding");

@@ -62,6 +62,6 @@ async function capture(){
 const component=readFileSync("app/lab/components/daily-edge/PredictionMarketPanel.tsx","utf8");
 assert.doesNotMatch(component,/strokeDasharray|data-book-turning-price|data-quote-gap-key/);
 assert.match(component,/data-chart-treatment="shared-continuous-guides"/);
-assert.match(component,/predictionMarketComparison\(outcome,book,lockedAt\)/);
+assert.match(component,/predictionMarketVisibleComparison\(outcome,book,lockedAt,/);
 assert.match(component,/!frozen&&outcome.volume24h/ ,"post-lock current rolling volume cannot masquerade as locked context");
 void capture().then(()=>console.log("PASS preview parity: aligned continuous guides, real-only quote inspection, 24h bounded history, unchanged three-call budget, immutable locked-book precedence and no post-lock chart advancement"));

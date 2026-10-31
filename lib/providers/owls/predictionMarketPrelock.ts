@@ -8,9 +8,10 @@ import {publicMarketDisplayBook,publicMarketDisplayHistory} from "@/app/lab/lib/
 import {marketDisplayGameIdentity} from "@/lib/cbb/marketDisplayIdentity";
 
 export const PREDICTION_MARKET_PRELOCK_RELEASE="prediction_market_prelock_display_2026_10_29_r1";
+export const PREDICTION_MARKET_RETENTION_RELEASE="prediction_market_retention_2026_10_31_r2_current_tuple_priority";
 type PrelockFrame={event:number;start:string;away:string;home:string;key:"moneyline"|"total"|"first_inning";pick:string;kind:string;side:string;line:number|null;capturedAt:number;market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null};
 export type PrelockReceipt=PrelockFrame&{checkpoints?:PrelockFrame[]};
-export type PrelockFeed={release:typeof PREDICTION_MARKET_PRELOCK_RELEASE;sport:PredictionMarketSport;rows:PrelockReceipt[]};
+export type PrelockFeed={release:typeof PREDICTION_MARKET_PRELOCK_RELEASE;retentionRelease?:string;sport:PredictionMarketSport;rows:PrelockReceipt[]};
 const identity=(r:Pick<PrelockReceipt,"event"|"start"|"key"|"pick"|"side"|"line">)=>JSON.stringify([r.event,Date.parse(r.start),r.key,r.pick,r.side,r.line]);
 
 /** Same sole five-minute capture. No new upstream requests, no model input.
@@ -51,7 +52,35 @@ export function capturePredictionMarketPrelock(previous:PrelockFeed|null,games:D
    rows.set(identity(next),{...next,market:market??prior?.market??null,book:book??prior?.book??null,...(retained.length?{checkpoints:retained}:{})});
   }
  }
- return {release:PREDICTION_MARKET_PRELOCK_RELEASE,sport,rows:[...rows.values()].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start)).slice(0,sport==="cbb"?3000:450)};
+ return {release:PREDICTION_MARKET_PRELOCK_RELEASE,...(sport==="cfb"?{retentionRelease:PREDICTION_MARKET_RETENTION_RELEASE}:{}),sport,rows:retainPrelockRows([...rows.values()],games,sport,now)};
+}
+
+/** A large CFB slate changes thresholds throughout the week. Sorting by
+ * latest kickoff before truncation evicted the imminent/locked game's only
+ * receipt. Protect every currently published tuple first, then nearby older
+ * variants. Bound both rows and decoded bytes; never silently drop a
+ * protected tuple merely to make room for an obsolete alternate. */
+export function retainPrelockRows(rows:PrelockReceipt[],games:DailyEdgeGameDto[],sport:PredictionMarketSport,now:number):PrelockReceipt[]{
+ if(sport!=="cfb")return rows.sort((a,b)=>Date.parse(b.start)-Date.parse(a.start)).slice(0,sport==="cbb"?3000:450);
+ const protectedRows=new Set<PrelockReceipt>();
+ for(const game of games)for(const key of ["moneyline","total","first_inning"]as const){
+  const selection=readerHistoryContractSelection(game,key),pick=game.markets[key].pick??"";
+  for(const row of rows)if(row.event===game.external_id&&Date.parse(row.start)===Date.parse(game.gameStartAt??"")&&
+   row.away===game.awayTeam&&row.home===game.homeTeam&&row.key===key&&row.pick===pick&&row.line===(selection?.line??null)&&
+   (!selection||row.side===selection.side))protectedRows.add(row);
+ }
+ const ordered=[...protectedRows,...rows.filter(r=>!protectedRows.has(r)).sort((a,b)=>
+  Math.abs(Date.parse(a.start)-now)-Math.abs(Date.parse(b.start)-now)||b.capturedAt-a.capturedAt)];
+ const retained:PrelockReceipt[]=[];let bytes=1024;
+ for(const row of ordered){
+  const size=new TextEncoder().encode(JSON.stringify(row)).byteLength+1;
+  if(retained.length>=3000||bytes+size>48_000_000){
+   if(protectedRows.has(row))throw new Error("CFB pre-lock archive capacity: protected published tuple cannot be evicted");
+   continue;
+  }
+  retained.push(row);bytes+=size;
+ }
+ return retained;
 }
 
 export function readPredictionMarketPrelock(feed:PrelockFeed|null,game:DailyEdgeGameDto,kind:string,side:string,line:number|null,now=Date.now()):PrelockReceipt|null{
