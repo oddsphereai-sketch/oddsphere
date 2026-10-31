@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test:nba-named-book-opposition": "node --import tsx scripts/test-nba-named-book-opposition.ts",
+    "test:nba-named-book-opposition": "node --import tsx scripts/test-nba-named-book-opposition.ts && node --import tsx scripts/test-nba-continuous-market-consequence.ts && node --import tsx scripts/test-nba-market-signal-consequences.ts && node --import tsx scripts/test-nba-canonical-price-capture.ts && node --import tsx scripts/test-nba-professional-market-reader.ts",
     "pretest:nfl-market-capture": "npm run test:nba-named-book-opposition",
     "test:nfl-market-capture": "tsx scripts/test-nfl-forward-collection-slate.ts && tsx scripts/test-market-intelligence-v2-shadow-sync.ts",
     "dev": "next dev",

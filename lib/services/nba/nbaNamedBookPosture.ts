@@ -1,8 +1,10 @@
 import type { NbaProfessionalMarketReader, NbaReaderSide } from "./nbaProfessionalMarketReader";
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
+import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
+import type { reconcileNbaMarketConsequence } from "./nbaMarketConsequence";
 
 export const NBA_NAMED_BOOK_POSTURE_RELEASE =
-  "nba_named_book_posture_2026_10_31_r1_observed_opposition" as const;
+  "nba_named_book_posture_2026_10_31_r3_continuous_consequence" as const;
 
 export type NbaNamedBookPosture = {
   release: typeof NBA_NAMED_BOOK_POSTURE_RELEASE;
@@ -12,8 +14,46 @@ export type NbaNamedBookPosture = {
   supportingSources: string[];
   opposingSources: string[];
   conflictingSources: string[];
+  convictionRiskSources?: string[];
+  knowledgeAt?: string;
+  consequence?: string;
+  scoreEffectApplied?: boolean;
   forecastAuthorityGranted: false;
 };
+
+export function resolveNbaConsequencePosture(args: {
+  consequence: ReturnType<typeof reconcileNbaMarketConsequence>; market: NbaMovementMarket; pickedSide: NbaReaderSide;
+}): NbaNamedBookPosture {
+  const c = args.consequence;
+  const result: NbaNamedBookPosture = { release: NBA_NAMED_BOOK_POSTURE_RELEASE, evaluatedAt: null, market: args.market,
+    pickedSide: args.pickedSide, supportingSources: [], opposingSources: [], conflictingSources: [], convictionRiskSources: [],
+    // Posture itself grants no second adjustment. This explicitly identifies
+    // the already applied forecast consequence instead of denying its effect.
+    forecastAuthorityGranted: false, scoreEffectApplied: args.market === "total" ? c.totalApplied : c.marginApplied,
+    knowledgeAt: c.state.knowledgeAt, consequence: args.market === "total" ? c.actions.total : c.actions.margin };
+  for (const book of c.books) {
+    const p = book.proposals.find(p => p.market === args.market);
+    if (!p) continue;
+    result.evaluatedAt = p.current.captureAt;
+    if (book.jointStatus === "joint_conflict" && args.market !== "total" || book.ignoredMarkets?.includes(args.market)) { result.conflictingSources.push(book.book); continue; }
+    if (Math.abs(p.innovationLogOdds) <= 1e-9) continue;
+    const side = args.market === "total" ? p.innovationLogOdds > 0 ? "over" : "under" : p.innovationLogOdds > 0 ? "home" : "away";
+    (side === args.pickedSide ? result.supportingSources : result.opposingSources).push(book.book);
+    if (p.path.retracement > 1e-9 && Math.sign(p.path.latestLeg) !== 0 && Math.sign(p.path.latestLeg) !== Math.sign(p.path.netLocationChange)) {
+      result.convictionRiskSources!.push(`${book.book}:recent_buyback`);
+    }
+  }
+  for (const reason of c.reasons) if (reason.includes(":provider_economic_conflict") && reason.includes(`:${args.market}:`)) result.conflictingSources.push(reason.split(":")[0]!);
+  for (const pressure of c.pressure) if (pressure.market === args.market && pressure.side === args.pickedSide && pressure.reaction === "held") {
+    result.convictionRiskSources!.push(`${pressure.source}:${pressure.reactionBook}:held_under_pressure`);
+  }
+  for (const follower of c.followers) if (follower.market === args.market && follower.reaction === "rejected") {
+    result.convictionRiskSources!.push(`${follower.leader}:${follower.follower}:follow_through_rejected`);
+  }
+  for (const field of ["supportingSources", "opposingSources", "conflictingSources", "convictionRiskSources"] as const) result[field] = [...new Set(result[field])].sort();
+  if (result.supportingSources.length && result.opposingSources.length) result.convictionRiskSources!.push("named_book_disagreement");
+  return result;
+}
 
 /** Price observations can challenge the strongest recommendation without
  * identifying a new score, changing a probability, or requiring a flip. The
@@ -22,6 +62,7 @@ export function resolveNbaNamedBookPosture(args: {
   reader: NbaProfessionalMarketReader | null | undefined;
   market: NbaMovementMarket;
   pickedSide: NbaReaderSide;
+  priceLaw?: NbaPriceCoordinateLaw;
 }): NbaNamedBookPosture {
   const { reader, market, pickedSide } = args;
   const result: NbaNamedBookPosture = {
@@ -33,7 +74,7 @@ export function resolveNbaNamedBookPosture(args: {
     forecastAuthorityGranted: false,
   };
   const evaluated = Date.parse(reader?.evaluatedAt ?? "");
-  if (reader?.evidenceStatus !== "complete" || !Number.isFinite(evaluated) ||
+  if (!reader || reader.evidenceStatus === "unavailable" || !Number.isFinite(evaluated) ||
       (market === "total" ? !["over", "under"].includes(pickedSide) : !["home", "away"].includes(pickedSide))) return result;
   const read = reader.reads[market];
   const canonical = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -48,7 +89,7 @@ export function resolveNbaNamedBookPosture(args: {
         evaluated - current > 120 * 60_000 || trail.observations < 2 ||
         !Number.isFinite(trail.persistenceTimeShare) || trail.persistenceTimeShare < 2 / 3 || trail.persistenceTimeShare > 1 ||
         trail.reversalMagnitude !== 0 || trail.buybackToOpening || !Number.isFinite(trail.fairProbabilityDeltaPp)) continue;
-    const side = market === "moneyline" ? trail.priceDirection : trail.numberDirection;
+    let side = market === "moneyline" ? trail.priceDirection : trail.numberDirection;
     if (side === null || side !== trail.direction) continue;
     const first = market === "total" ? "over" : "home";
     const direction = side === first ? 1 : -1;
@@ -69,7 +110,10 @@ export function resolveNbaNamedBookPosture(args: {
       if (openingFair === undefined || currentFair === undefined ||
           !Number.isFinite(openingFair) || !Number.isFinite(currentFair) ||
           openingFair <= 0 || openingFair >= 1 || currentFair <= 0 || currentFair >= 1) continue;
-      if (direction * (currentFair - openingFair) < 0) {
+      if (args.priceLaw !== undefined) {
+        side = readNbaPricedMarketMovement({ market, trail, law: args.priceLaw }).economicSide;
+        if (side === null) continue;
+      } else if (direction * (currentFair - openingFair) < 0) {
         result.conflictingSources.push(source);
         continue;
       }

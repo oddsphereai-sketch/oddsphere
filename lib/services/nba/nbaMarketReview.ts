@@ -219,6 +219,7 @@ export type GradeInput = {
   moneylineEvidence?: NbaMoneylineReaderEvidence;
   /** Fresh target-excluded source observations, independent of flip permission. */
   namedBookPosture?: NbaNamedBookPosture;
+  continuousMarketDecision?: boolean;
   /** Same-input audit hook for the superseded Moneyline Best Angle path. */
   enforceMoneylineEvidenceGuard?: boolean;
   /** Same-input audit hook for the superseded price-incoherent grade path. */
@@ -235,6 +236,7 @@ export type NbaMoneylineReaderEvidence = {
   spreadReadQualified: boolean;
   spreadReadSide: "home" | "away" | null;
   spreadCorrectionApplied: boolean;
+  jointConflict?: boolean;
 };
 
 export type GradeOutput = {
@@ -279,7 +281,7 @@ function marketSpecificGrade(input: GradeInput): GradeOutput | null {
   let calibrated = 0;
   let rationale = "";
   if (input.market === "spread") {
-    const bestIndependent = input.readerQualified !== true &&
+    const bestIndependent = input.readerCorrectionApplied !== true &&
       Math.abs(independentEdge) >= 2.5 && Math.abs(independentEdge) < 3.5;
     const bestCorrection = input.readerCorrectionApplied === true &&
       magnitude !== null && magnitude >= 4;
@@ -300,7 +302,7 @@ function marketSpecificGrade(input: GradeInput): GradeOutput | null {
     const edge = Math.abs(independentEdge);
     const bestCorrection = input.readerCorrectionApplied === true && edge >= 5 && edge < 9;
     const leanCorrection = input.readerCorrectionApplied === true && edge >= 9;
-    const leanIndependentOver = input.readerQualified !== true && input.pick === "over" &&
+    const leanIndependentOver = input.readerCorrectionApplied !== true && input.pick === "over" &&
       independentEdge >= 1 && independentEdge < 2;
     if (bestCorrection) {
       grade = "best_angle";
@@ -355,13 +357,14 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   const incumbent = gradeNbaMarketEconomics(input);
   const posture = input.namedBookPosture;
   if (incumbent.grade !== "best_angle" || posture?.market !== input.market || posture?.pickedSide !== input.pick ||
-      posture.opposingSources.length === 0) return incumbent;
+      (posture.opposingSources.length === 0 && posture.conflictingSources.length === 0 && !posture.convictionRiskSources?.length)) return incumbent;
   return {
     ...incumbent,
     grade: "lean",
     bestAngleEligible: false,
     rationale: [...incumbent.rationale,
-      "Persistent named-book price evidence opposes this pick. The model value remains playable, but the unresolved market disagreement keeps it below Best Angle."],
+      posture.opposingSources.length ? "Named-book economic movement opposes this pick. Value remains playable, but the market disagreement keeps it below Best Angle."
+        : "Held pressure, recent buyback or unresolved source disagreement tempers the strongest recommendation without inventing a different score."],
   };
 }
 
@@ -411,7 +414,7 @@ function gradeNbaMarketEconomics(input: GradeInput): GradeOutput {
       rationale: ["The forecast has a side, but its probability does not clear positive value at the selected price."],
     };
   }
-  const specialized = marketSpecificGrade(input);
+  const specialized = input.continuousMarketDecision ? null : marketSpecificGrade(input);
   if (specialized !== null) return specialized;
   if (input.dataQualityTier === "fallback" || input.dataQualityTier === "low") {
     rationale.push(
@@ -462,7 +465,7 @@ function gradeNbaMarketEconomics(input: GradeInput): GradeOutput {
       evidence?.spreadReadQualified === true && evidence.spreadReadSide !== null &&
       evidence.spreadReadSide !== pickedSide;
     const opposingObservation = input.market === "moneyline" &&
-      evidence?.spreadCorrectionApplied !== true && (directOpposes || spreadOpposes);
+      (directOpposes || (evidence?.spreadCorrectionApplied !== true && spreadOpposes));
     if (input.enforceMoneylineEvidenceGuard !== false && opposingObservation) {
       rationale.push(
         "The independent value remains playable, but qualified opposite-side movement keeps it below Best Angle; the signal is not strong enough to flip the pick.",

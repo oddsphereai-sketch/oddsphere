@@ -42,6 +42,7 @@ import {
 import {
   assertNbaChampionRuntime,
   NBA_MARKET_MARRIAGE_RELEASE,
+  NBA_MODEL_RELEASE,
 } from "../../automodel/nba/nbaChampionRuntime";
 import {
   buildNbaProfessionalRuntimeFeatures,
@@ -64,7 +65,7 @@ import {
   matchOpportunitiesForGame,
   type NbaOpportunity,
 } from "./nbaOpportunitiesClient";
-import type { NbaLineRow } from "./nbaMarketIntelligence";
+import { selectBestNbaExecutableOffer, type NbaLineRow } from "./nbaMarketIntelligence";
 import {
   buildNbaMovementHistoryFromCanonicalPrices,
   selectNbaComparableOpening,
@@ -110,6 +111,9 @@ import {
 import { buildNbaSpreadReaderStats } from "./nbaSpreadReaderStats";
 import { isNbaAuthoritativeSportsbook } from "./nbaMarketSourceEligibility";
 import { loadNbaConsumerMemberLineHistory } from "./nbaConsumerMemberLineHistory";
+import { nbaIndependentInputFingerprint } from "./nbaIndependentKnowledge";
+import { loadNbaMarketKnowledgeStates } from "./nbaMarketKnowledgeStore";
+import { resolveNbaExecutionFixedPoint, type NbaExecutionExclusions } from "./nbaMarketExecution";
 
 const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
 
@@ -269,6 +273,11 @@ export async function buildNbaDailyEdgePipeline(
   const dbIdToExt = new Map<number, number>(
     (gameRows ?? []).map((g: { id: number; external_id: number }) => [g.id, g.external_id]),
   );
+  // One bounded read of the sole writer's current unlocked state. It is not
+  // a second writer or a reconstruction of old/locked inputs. On failure do
+  // not reset epochs and publish a newly seeded board over coherent state.
+  const priorKnowledgeByExternalId = await loadNbaMarketKnowledgeStates({ client: supabase, slateDate: date,
+    modelRelease: NBA_MODEL_RELEASE, externalIdByDbId: dbIdToExt });
   const consumerMemberHistory = await loadNbaConsumerMemberLineHistory({
     client: supabase,
     externalIdByDbId: dbIdToExt,
@@ -515,16 +524,26 @@ export async function buildNbaDailyEdgePipeline(
       externalGameId: s.game_external_id,
       independentOverride: selectedIndependent,
     });
-    const independentMlSide = previewCandidate.independent.marginHome >= 0 ? "home" as const : "away" as const;
-    const independentSpreadSide = previewCandidate.consensus.spreadHome === null ||
-      previewCandidate.independent.marginHome + previewCandidate.consensus.spreadHome >= 0
-      ? "home" as const : "away" as const;
-    const independentTotalSide = previewCandidate.consensus.totalLine === null ||
-      previewCandidate.independent.total - previewCandidate.consensus.totalLine >= 0
-      ? "over" as const : "under" as const;
-    const spreadExecutionLine = previewCandidate.consensus.spreadHome === null ? null
-      : independentSpreadSide === "home" ? previewCandidate.consensus.spreadHome : -previewCandidate.consensus.spreadHome;
-    const reader = buildNbaProfessionalMarketReader({
+    const executionBooks = (c: typeof previewCandidate): NbaExecutionExclusions => {
+      const book = (market: "moneyline" | "spread" | "total", side: "home" | "away" | "over" | "under" | null, line: number | null) => {
+        if (market !== "moneyline" && side !== null) {
+          const pFirst = market === "spread" ? c.probabilities.spread_home_cover_prob : c.probabilities.total_over_prob;
+          const probability = pFirst === null ? null : side === "home" || side === "over" ? pFirst : 1 - pFirst;
+          const offer = selectBestNbaExecutableOffer({ lines, market, pickSide: side,
+            acceptedBooks: market === "spread" ? c.consensus.spreadAcceptedBooks : c.consensus.totalAcceptedBooks,
+            consensusPickLine: line, modelProbabilityAtPickLine: () => probability });
+          if (offer) return [offer.pick.sportsbook];
+        }
+        const selected = side === null ? null : bestExecutionSportsbook({ lines, market, side, line });
+        return selected ? [selected] : [];
+      };
+      return { moneyline: book("moneyline", c.picks.moneyline, null),
+        spread: book("spread", c.picks.spread, c.consensus.spreadHome === null ? null : c.picks.spread === "home" ? c.consensus.spreadHome : -c.consensus.spreadHome),
+        total: book("total", c.picks.total, c.consensus.totalLine) };
+    };
+    const resolvedExecution = resolveNbaExecutionFixedPoint({ initial: previewCandidate, executionBooks,
+      evaluate: (executionExclusions, disabledMarkets) => {
+      const reader = buildNbaProfessionalMarketReader({
       evaluatedAt: readerEvaluatedAt,
       priceRows: readerPriceRowsByGame.get(s.game_external_id) ?? [],
       splitRows: readerSplitRowsByGame.get(s.game_external_id) ?? [],
@@ -533,28 +552,9 @@ export async function buildNbaDailyEdgePipeline(
         spreadHome: previewCandidate.consensus.spreadHome,
         total: previewCandidate.consensus.totalLine,
       },
-      excludedSportsbooksByMarket: {
-        moneyline: [bestExecutionSportsbook({
-          lines,
-          market: "moneyline",
-          side: independentMlSide,
-          line: null,
-        }) ?? ""],
-        spread: [bestExecutionSportsbook({
-          lines,
-          market: "spread",
-          side: independentSpreadSide,
-          line: spreadExecutionLine,
-        }) ?? ""],
-        total: [bestExecutionSportsbook({
-          lines,
-          market: "total",
-          side: independentTotalSide,
-          line: previewCandidate.consensus.totalLine,
-        }) ?? ""],
-      },
+      excludedSportsbooksByMarket: executionExclusions,
     });
-    const candidate = buildNbaProfessionalCandidate({
+      return buildNbaProfessionalCandidate({
       artifact: professionalArtifact,
       featureRow: portableFeatureRow,
       lines,
@@ -562,7 +562,25 @@ export async function buildNbaDailyEdgePipeline(
       externalGameId: s.game_external_id,
       marketReader: reader,
       independentOverride: selectedIndependent,
-    });
+      marketContext: {
+        eventId: String(s.game_external_id), evaluatedAt: readerEvaluatedAt,
+        inputFingerprint: nbaIndependentInputFingerprint({ modelRelease: NBA_MODEL_RELEASE,
+          artifactRelease: professionalArtifact.release, featureRelease: professionalArtifact.featureRelease, rosterRelease: rosterRegime.audit.release,
+          features: portableFeatureRow, independentMargin: selectedIndependent.marginHome, independentTotal: selectedIndependent.total,
+          residualLaw: previewCandidate.priceLaw,
+          injuriesKnown: [s.data_quality.home_injuries_known, s.data_quality.away_injuries_known],
+          homeInjuries: s.home_injuries, awayInjuries: s.away_injuries, rosterStatus: rosterRegime.audit.status,
+          homeRetained: rosterRegime.audit.homeRetainedMinutesShare, awayRetained: rosterRegime.audit.awayRetainedMinutesShare }),
+        previousState: priorKnowledgeByExternalId.get(s.game_external_id),
+        priceRows: readerPriceRowsByGame.get(s.game_external_id) ?? [], splitRows: readerSplitRowsByGame.get(s.game_external_id) ?? [],
+        pricesTrusted: reader.evidenceFamilies?.prices !== "failed", splitsTrusted: reader.evidenceFamilies?.splits !== "failed",
+        excludedSportsbooksByMarket: executionExclusions,
+        disabledMarkets,
+      },
+      });
+    } });
+    const candidate = resolvedExecution.candidate;
+    const reader = candidate.marketReader!;
     const pred = applyNbaProfessionalCandidate({
       baseline,
       candidate,
@@ -591,12 +609,22 @@ export async function buildNbaDailyEdgePipeline(
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,
-      independent_primary: true,
+      independent_primary: false,
+      independent_role: "pristine_forecast_input_to_joint_market_decision",
       independent_projection: {
         home_score: candidate.independent.homeScore,
         away_score: candidate.independent.awayScore,
         total: candidate.independent.total,
         margin_home: candidate.independent.marginHome,
+      },
+      market_reader_knowledge_state: candidate.marketConsequence?.state ?? null,
+      market_reader_execution_resolution: { excluded: resolvedExecution.exclusions, iterations: resolvedExecution.iterations, cycleMarkets: resolvedExecution.cycleMarkets },
+      market_reader_consequence: candidate.marketConsequence === null ? null : {
+        ...candidate.marketConsequence, state: undefined,
+        books: candidate.marketConsequence.books.map(book => ({ ...book, proposals: book.proposals.map(p => ({
+          market: p.market, provider: p.provider, anchorCaptureAt: p.anchor.captureAt, currentCaptureAt: p.current.captureAt,
+          innovationLogOdds: p.innovationLogOdds, probability: p.probability, location: p.location, delta: p.delta, path: p.path,
+        })) })),
       },
       roster_regime: {
         ...rosterRegime.audit,
@@ -631,7 +659,7 @@ export async function buildNbaDailyEdgePipeline(
           home_cover: candidate.probabilities.spread_home_cover_prob,
         },
       },
-      market_reader: reader,
+      market_reader: { ...reader, activeDecisionHead: candidate.marketConsequence?.release ?? null, legacyQualificationsAreDiagnostics: true },
       market_reader_price_postures: pred.audit.professional_grade_context?.namedBookPostures,
       market_reader_decision: candidate.readerDecisionAudit,
     };

@@ -54,36 +54,49 @@ Last reviewed: 2026-10-31
   `docs/model-audits/2026-10-31-all-market-data-health.md` and the paired JSON.
   Roll back this complete family together; never rewrite an immutable lock.
 
-## NBA priced-contract consequence — October 31 candidate
+## NBA continuous market consequence — October 31 candidate
 
 Candidate model/marriage/grade are
-`nba_professional_unified_2026_10_31_r26_priced_contract_consequence` /
-`nba_market_marriage_2026_10_31_r27_priced_contract_consequence` /
-`nba_grade_policy_2026_10_31_r17_priced_contract_consequence`.
-Reader r9 isolates exact source/run pairs and causal capture clocks; posture
-`nba_named_book_posture_2026_10_31_r2_priced_contract_direction` uses the same
-released-CDF number-plus-juice direction as the forecast selector. This retains
-the r24 independent head, residual law, quotes, positive-EV gates, sole writer
-and sport-scoped lease. A fully over-offset raw-number change cannot trigger
-the opposite score correction; partial price compensation does not automatically
-cancel net economic direction. Wrong-signed split contracts and future-captured
-price/split evidence cannot qualify. Source providers never become extra books.
-These correctness fixes can alter future-unlocked score/pick/grade consequences;
-they do not implement all remaining price-only/ML/path/pressure score-response
-branches. Functional scope and board impact:
+`nba_professional_unified_2026_10_31_r27_continuous_market_consequence` /
+`nba_market_marriage_2026_10_31_r28_continuous_market_consequence` /
+`nba_grade_policy_2026_10_31_r18_continuous_market_consequence`.
+The active decision head is
+`nba_market_consequence_2026_10_31_r1_semantic_epoch_transport`;
+posture is `nba_named_book_posture_2026_10_31_r3_continuous_consequence`.
+NBA canonical receipt is `nba_canonical_price_capture_2026_10_31_r1_attested_batch`:
+the existing collector stamps one actual run ID and one receipt instant across
+NBA canonical pairs, preserving source timestamps and all non-NBA behavior.
+Old observations receive no retroactive batch authority.
+The r9 categorical reader remains diagnostic/legacy comparison, not an
+activation gate for the continuous head. Direct ML, price-only and small
+Spread/Total innovations use the released residual CDF and relative odds.
+One physical book's ML/Spread constrain one location/scale; common-contract
+probability medians combine books without multiplying duplicated evidence.
+This retains the independent head and residual family, but market constraints
+CAN change conditional margin dispersion; it is not unchanged calibration.
+Ill-conditioned scale retains the usable ML scalar with an explicit reason.
+The sole sport-scoped writer persists exact causal quote anchors in existing
+unlocked captures. Effective independent-law changes explicitly retire the old
+epoch, not claim consumption of every news item. First post-input observation
+is an anchor, not movement. Same-input retries rebuild pristine independent
+scores and never compound their prior market adjustment. Exact legacy locks
+still take priority. Source failures, pressure/buyback/lead-lag, target-book
+fixed points and real-data source limitations are documented in:
 `docs/model-audits/2026-10-31-nba-market-consequence.md`.
-Observed stable fresh target-excluded named-book opposition reaches the grade
-owner independently of flip qualification. An otherwise eligible Best Angle
-becomes a same-probability actionable Lean; it does not become a No Play.
-New member signals report resistance/mixed rather than deriving sharp
-confirmation from the actionable grade. New empty/conflicting posture is
-neutral/mixed; only actual supporting-only observations can confirm, even
-when a price remains non-actionable. The720 full-forecast reflection/quote-only
-controls prove side neutrality, not predictive accuracy. Exact legacy locks
-still take priority.
-This is not the completed forecast-reader repair. NFL/CFB inference is not
-changed by this stage. Publication/live status
-and receipts: `docs/model-audits/2026-10-31-market-opposition-repair.md`.
+Grades use actual final probabilities, exact executable prices and retained
+quality/positive-EV rules, not legacy hard-coded correction confidence. Pressure
+and retracement can temper Best to actionable Lean without inventing points.
+Paired functional examples exercise one actionable promotion and one demotion
+(1→1 actionable count). The complete cursor-paginated seven-game/21-market
+current unlocked rehearsal had six margin and four Total adjustments and
+3→14 actionables (12 promotions, one demotion). The initial r1/r2 rehearsal
+silently hit the DB's1,000-row cap and is rejected as source-completeness proof;
+r3 uses22 bounded SELECTs /3,688,486bytes and existing OWLS evidence. Missing
+canonical batch metadata is repaired prospectively, never fabricated on old rows.
+This is functional decision-stage evidence, NOT predictive improvement or a
+raw-feature/writer replay. Protected publication
+and live state/collector/member verification remain pending. NFL/CFB ownership
+is separate; full CBB inference follows verified NBA publication.
 
 ## CFB paired-price context repair — October 30
 

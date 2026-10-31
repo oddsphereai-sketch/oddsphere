@@ -607,11 +607,14 @@ async function loadGamesForSlateWindow(
   }) : canonical;
 }
 
-async function loadPriceObservations(opts: {
+export const NBA_CANONICAL_PRICE_CAPTURE_RELEASE = "nba_canonical_price_capture_2026_10_31_r1_attested_batch" as const;
+
+export async function loadPriceObservations(opts: {
   supabase: SupabaseClient;
   sport: Sport;
   games: readonly GameRef[];
   now: Date;
+  ingestionRunId?: string;
 }): Promise<MarketPriceObservationV2[]> {
   // Forward-football IDs are not generic games-table IDs. Never guess that
   // namespace or query another sport's lines with a provider ID.
@@ -640,6 +643,8 @@ async function loadPriceObservations(opts: {
     },
   });
 
+  if (opts.sport === "nba" && !opts.ingestionRunId) throw new Error("NBA canonical capture requires its actual collector run ID");
+  const nbaCapturedAt = opts.sport === "nba" ? new Date().toISOString() : null;
   const out: MarketPriceObservationV2[] = [];
   for (const r of rows) {
     const game = gameById.get(r.game_id);
@@ -663,7 +668,8 @@ async function loadPriceObservations(opts: {
       decimalPrice: r.odds_decimal,
       noVigProbability: r.implied_probability,
       providerTimestamp: r.fetched_at,
-      fetchedAt: new Date().toISOString(),
+      fetchedAt: nbaCapturedAt ?? new Date().toISOString(),
+      ...(opts.sport === "nba" ? { ingestionRunId: opts.ingestionRunId } : {}),
       minutesToStart: minutesToStart(game.gameDate, opts.now),
       rawPayloadHash: null,
     }));
@@ -1808,6 +1814,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     ? selectNbaRollingMarketGames(loadedGames, opts.slateDate)
     : loadedGames;
   result.gamesLoaded = games.length;
+  if (opts.sport === "nba") result.details.nba_canonical_price_capture_release = NBA_CANONICAL_PRICE_CAPTURE_RELEASE;
   if (opts.sport === "nfl") result.details.canonical_slate = {
     source: "generic_games_plus_nfl_forward_evidence",
     genericGames: games.filter((game) => game.id !== null).length,
@@ -1879,7 +1886,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       now,
       ingestionRunId,
     }),
-    loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now })
+    loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now, ingestionRunId })
       .then((observations) => ({ observations, error: null as string | null }))
       .catch((error) => {
         if (opts.sport !== "nfl") throw error;

@@ -200,21 +200,22 @@ export type MarketIntelligence = {
 
 export type NbaMoneylineDirectionalSignal = {
   state: "confirmed" | "resistance" | "neutral";
-  source: "validated_spread_correction" | "direct_moneyline" | "spread_observation" | "none";
+  source: "validated_spread_correction" | "direct_moneyline" | "spread_observation" | "joint_market_conflict" | "none";
 };
 
 export function resolveNbaMoneylineDirectionalSignal(
   pickSide: "home" | "away",
   evidence: NbaMoneylineReaderEvidence | undefined,
 ): NbaMoneylineDirectionalSignal {
-  if (evidence?.spreadCorrectionApplied === true) {
-    return { state: "confirmed", source: "validated_spread_correction" };
-  }
+  if (evidence?.jointConflict) return { state: "neutral", source: "joint_market_conflict" };
   if (evidence?.directReadQualified === true && evidence.directReadSide !== null) {
     return {
       state: evidence.directReadSide === pickSide ? "confirmed" : "resistance",
       source: "direct_moneyline",
     };
+  }
+  if (evidence?.spreadCorrectionApplied === true) {
+    return { state: "confirmed", source: "validated_spread_correction" };
   }
   if (evidence?.spreadReadQualified === true && evidence.spreadReadSide !== null) {
     return {
@@ -611,6 +612,7 @@ function buildMl(
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProbOnPick,
     moneylineEvidence: prediction.audit.professional_grade_context?.moneyline,
+    continuousMarketDecision: prediction.audit.professional_grade_context?.continuousMarketDecision,
     namedBookPosture: prediction.audit.professional_grade_context?.namedBookPostures?.moneyline,
     enforceMoneylineEvidenceGuard,
     enforcePositiveModelEv,
@@ -794,6 +796,7 @@ function buildSpread(
     readerCorrectionApplied: prediction.audit.professional_grade_context?.spread.correctionApplied ?? false,
     readerMagnitudePoints: prediction.audit.professional_grade_context?.spread.magnitudePoints ?? null,
     namedBookPosture: prediction.audit.professional_grade_context?.namedBookPostures?.spread,
+    continuousMarketDecision: prediction.audit.professional_grade_context?.continuousMarketDecision,
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProb,
     enforcePositiveModelEv,
@@ -952,6 +955,7 @@ function buildTotal(
     readerCorrectionApplied: prediction.audit.professional_grade_context?.total.correctionApplied ?? false,
     readerMagnitudePoints: prediction.audit.professional_grade_context?.total.magnitudePoints ?? null,
     namedBookPosture: prediction.audit.professional_grade_context?.namedBookPostures?.total,
+    continuousMarketDecision: prediction.audit.professional_grade_context?.continuousMarketDecision,
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProb,
     enforcePositiveModelEv,

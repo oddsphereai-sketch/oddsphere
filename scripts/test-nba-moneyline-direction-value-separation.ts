@@ -69,8 +69,8 @@ const correctedWinner = resolveNbaMoneylineDirectionalSignal("home", {
 });
 assert.deepEqual(
   correctedWinner,
-  { state: "confirmed", source: "validated_spread_correction" },
-  "a validated Spread-authored winner is confirmed after the correction crosses the side",
+  { state: "resistance", source: "direct_moneyline" },
+  "a Spread-authored winner cannot erase direct Moneyline opposition after crossing the side",
 );
 
 function intelligence(

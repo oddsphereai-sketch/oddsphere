@@ -71,7 +71,7 @@ const compensated = structuredClone(reader);
 compensated.reads.spread.namedBookPostureTrails![0]!.currentFairFirstProbability = 0.8;
 const ambiguous = resolveNbaNamedBookPosture({ reader: compensated, market: "spread", pickedSide: "home" });
 assert.deepEqual(ambiguous.opposingSources, []); assert.deepEqual(ambiguous.conflictingSources, ["circa"]);
-assert.deepEqual(gradeNbaMarket({ ...base, namedBookPosture: ambiguous }), incumbent);
+assert.equal(gradeNbaMarket({ ...base, namedBookPosture: ambiguous }).grade, "lean", "unresolved economics tempers Best without removing the actionable pick");
 assert.deepEqual(resolveNbaNamedBookPosture({ reader: null, market: "spread", pickedSide: "home" }).opposingSources, []);
 
 // Mirror roles AND favorite/underdog prices, not just the preferred-side label.

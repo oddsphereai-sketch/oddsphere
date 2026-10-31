@@ -90,6 +90,7 @@ const marketReader = buildNbaProfessionalMarketReader({
   selectedLines: { spreadHome: -2, total: 218 },
 });
 const result = buildNbaProfessionalCandidate({
+  retainLegacyScoreReconciliation: true, // Frozen incumbent contrast; active continuous head has separate end-to-end scenarios.
   artifact,
   featureRow: { strength: -4 },
   lines,
@@ -106,6 +107,7 @@ assert.equal(result.picks.moneyline, "home");
 assert.equal(result.picks.spread, "home");
 assert.equal(result.picks.total, "over");
 assert.deepEqual(result.readerDecisionAudit, {
+  pricedContractChecks: result.readerDecisionAudit.pricedContractChecks,
   independentPicks: { moneyline: "away", spread: "away", total: "over" },
   finalPicks: { moneyline: "home", spread: "home", total: "over" },
   spreadReadQualified: true,
@@ -155,6 +157,7 @@ const totalReader = buildNbaProfessionalMarketReader({
   selectedLines: { spreadHome: -2, total: 218 },
 });
 const totalCorrected = buildNbaProfessionalCandidate({
+  retainLegacyScoreReconciliation: true,
   artifact: totalArtifact,
   featureRow: { strength: -4 },
   lines,
@@ -249,7 +252,7 @@ const observedReader = buildNbaProfessionalMarketReader({
     line: (row.providerTimestamp === "2026-10-20T14:00:00Z" ? -3 : -2) * (row.selectionKey.endsWith(":home") ? 1 : -1),
   })),
 });
-const observedCandidate = buildNbaProfessionalCandidate({ artifact, featureRow: { strength: 5 },
+const observedCandidate = buildNbaProfessionalCandidate({ retainLegacyScoreReconciliation: true, artifact, featureRow: { strength: 5 },
   lines, history, externalGameId: 9, marketReader: observedReader });
 assert.equal(observedCandidate.final.marginHome, 5);
 assert.equal(observedCandidate.final.movementApplied, false);
@@ -351,6 +354,7 @@ const mixtureArtifact: NbaPortableModelArtifact = {
   },
 };
 const mixtureResult = buildNbaProfessionalCandidate({
+  retainLegacyScoreReconciliation: true,
   artifact: mixtureArtifact,
   featureRow: { strength: -4 },
   lines,
