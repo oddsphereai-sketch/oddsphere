@@ -1,6 +1,7 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -843,7 +844,24 @@ function SoccerDecisionSummary({ game, market, marketKey }: { game: DailyEdgeGam
   return <section className="mt-3 rounded-xl border border-violet-400/20 bg-gradient-to-br from-violet-500/[0.08] via-black/15 to-sky-500/[0.035] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><VerdictBadge market={market} large /><span className="text-[8px] font-black uppercase tracking-wider text-gray-600">Bet grade · exact-price decision</span></div><span className="text-[7px] font-black uppercase tracking-wider text-violet-200">Daily Edge read</span></div><div className="mt-3 flex items-end justify-between gap-3"><div><h3 className="text-2xl font-black tracking-tight text-white">{dailyEdgeOutcomeForecastLabel({ game, market, marketKey, sport: "soccer" })}</h3><p className="mt-1 text-[8px] text-gray-600">{game.awayTeam} at {game.homeTeam}</p></div><span className="text-right"><span className="block font-mono text-base font-black text-violet-100">{formatAmerican(currentDisplayedPrice(market))}</span><span className="block text-[7px] font-bold text-gray-600">{market.currentPriceSportsbook ? formatSportsbook(market.currentPriceSportsbook) : "Sportsbook unavailable"}</span></span></div><div className="mt-3 grid grid-cols-2 gap-2">{metric("Outcome confidence", formatProbability(market.modelProb))}{metric("Market", formatMarketProbability(market))}{metric("Gap", probabilityGap === null ? "—" : `${probabilityGap > 0 ? "+" : ""}${probabilityGap.toFixed(1)} pp`)}{metric("Bet actionability", market.recommendationConfidence === null || market.recommendationConfidence === undefined ? "—" : `${market.recommendationConfidence.toFixed(0)}/100`)}</div><p className="mt-2 text-[8px] leading-relaxed text-gray-500">Outcome confidence estimates the selected result. Bet grade evaluates that result at the exact offered price and market evidence; neither is a guarantee or automatic parlay recommendation.</p><div className="mt-3 grid gap-2"><div className="rounded-lg border border-emerald-400/15 bg-emerald-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-emerald-300">Why it rates</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{currentAwareGuidedGuide(market, market.whyLine)}</p></div><div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-3"><p className="text-[7px] font-black uppercase tracking-wider text-amber-300">Main risk</p><p className="mt-1.5 text-[9px] leading-relaxed text-gray-400">{displayRiskLine(market)}</p></div></div></section>;
 }
 
+// Hydrate URL-opened readers without accessing the DOM during server rendering.
+const subscribeToReaderPortal = () => () => {};
+const readerPortalTarget = () => document.body;
+const serverReaderPortalTarget = () => null;
+
 function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePreviewSports, sportActivity, soccerCompetition, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; activePreviewSports: Sport[]; sportActivity: DailyEdgeSportActivityMap; soccerCompetition?: SoccerCompetitionPreview; onPrev: (() => void) | null; onNext: (() => void) | null }) {
+  const portalTarget = useSyncExternalStore(subscribeToReaderPortal, readerPortalTarget, serverReaderPortalTarget);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!portalTarget || !window.matchMedia("(max-width: 639px)").matches) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [portalTarget]);
+
   useEffect(() => {
     const phoneViewport = window.matchMedia("(max-width: 639px)");
     let previousOverflow: string | null = null;
@@ -873,17 +891,18 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
   const sportAvailability = previewSportAvailability(activePreviewSports, sportActivity, soccerCompetition, reader.sport, true);
   const readerSports = orderDailyEdgeSportKeys(ACTIVE_DAILY_EDGE_TOP_LEVEL_SPORT_KEYS, sportAvailability);
 
-  return (
-    <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" aria-label={`${reader.game.awayTeam} at ${reader.game.homeTeam} analysis`}>
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }} aria-hidden="true" />
-      <nav aria-label="Reader sport switch" className="absolute inset-x-0 top-0 z-20 border-b border-violet-400/25 bg-[#100e18] px-4 py-2 shadow-[0_12px_35px_-24px_rgba(124,58,237,0.9)]">
-        <SportSelector active={reader.sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={readerSports} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density={reader.sample ? "sample" : "compact"} activateOnPointerDown />
+  if (!portalTarget) return null;
+
+  return createPortal(
+    <div className="fixed left-0 top-0 z-[110] m-0 flex h-dvh w-dvw min-h-0 flex-col overflow-hidden bg-[#0a0910] pt-[env(safe-area-inset-top)] sm:hidden" role="dialog" aria-modal="true" aria-label={`${reader.game.awayTeam} at ${reader.game.homeTeam} analysis`}>
+      <nav aria-label="Reader sport switch" className="shrink-0 border-b border-violet-400/25 bg-[#100e18] px-4 py-2 shadow-[0_12px_35px_-24px_rgba(124,58,237,0.9)]">
+        <SportSelector active={reader.sport} onChange={onSportChange} onPrefetch={onSportPrefetch} sports={readerSports} showCounts={false} showPendingState availability={sportAvailability} labelOverrides={{ soccer: "Soccer" }} density={reader.illustrativeSample ? "sample" : "compact"} activateOnPointerDown />
       </nav>
-      <div className="absolute inset-x-0 bottom-0 top-[65px] flex flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><CompactMatchupIdentity game={reader.game} sport={reader.sport} /><DailyEdgeGameStartTime game={reader.game} className="truncate text-[9px] text-gray-600" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
-            <button type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-xl text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">×</button>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2"><CompactMatchupIdentity game={reader.game} sport={reader.sport} /><DailyEdgeGameStartTime game={reader.game} className="truncate text-[9px] text-gray-400" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
+            <button ref={closeRef} type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/25 bg-white/[0.08] text-2xl text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"><span aria-hidden="true">×</span></button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
             <button type="button" onClick={onPrev ?? undefined} disabled={onPrev === null} className="rounded-full border border-violet-400/25 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-violet-100 disabled:border-white/[0.05] disabled:text-gray-700">← Prev</button>
@@ -892,13 +911,14 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
           </div>
         </div>
         <div className="shrink-0"><MarketStrip game={reader.game} sport={reader.sport} active={reader.marketKey} setActive={reader.setMarket} /></div>
-        <div className="flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]" data-reader-scroll-body>
           <ReaderEvidence game={reader.game} market={reader.market} marketKey={reader.marketKey} sport={reader.sport} history={reader.history} pitcherFirstInningHistory={reader.pitcherFirstInningHistory} availability={reader.availability} sample={reader.sample} illustrativeSample={reader.illustrativeSample} />
           <DeepResearchToggle open={reader.deepOpen} setOpen={reader.setDeepOpen} market={reader.market} marketKey={reader.marketKey} game={reader.game} illustrativeSample={reader.illustrativeSample} />
           {reader.deepOpen ? <DeepResearch game={reader.game} market={reader.market} marketKey={reader.marketKey} sport={reader.sport} history={reader.history} sample={reader.sample} setSample={reader.setSample} view={reader.deepView} setView={reader.setDeepView} illustrativeSample={reader.illustrativeSample} /> : null}
         </div>
       </div>
-    </div>
+    </div>,
+    portalTarget,
   );
 }
 
