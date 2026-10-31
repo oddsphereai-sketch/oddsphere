@@ -1,0 +1,436 @@
+{
+  "asOf": "2026-10-31T14:02:20.856Z",
+  "base": "88576d3cd169aa49b433080a6a5704a9aa058f6b",
+  "providerCalls": 0,
+  "productionWrites": 0,
+  "inputHash": "680ed82718d7be64aa1fa9033da8df6f4807a9929b58e8acefc8be5a649cf4b3",
+  "games": 16,
+  "beforePanels": 0,
+  "afterPanels": 15,
+  "matchedGames": 7,
+  "primaryOutputsUnchanged": true,
+  "promotions": 0,
+  "demotions": 0,
+  "panels": [
+    {
+      "game": "ND@VILL",
+      "market": "total",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "over",
+          "label": "Over",
+          "betsPct": 52,
+          "moneyPct": 55.00000000000001,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "under",
+          "label": "Under",
+          "betsPct": 48,
+          "moneyPct": 45,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "ND@VILL",
+      "market": "moneyline",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "ND",
+          "betsPct": 55.00000000000001,
+          "moneyPct": 55.00000000000001,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "VILL",
+          "betsPct": 45,
+          "moneyPct": 45,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "ND@VILL",
+      "market": "first_inning",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "ND",
+          "betsPct": 41,
+          "moneyPct": 40,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "VILL",
+          "betsPct": 59,
+          "moneyPct": 60,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "LIB@HPU",
+      "market": "moneyline",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "LIB",
+          "betsPct": 12,
+          "moneyPct": 43,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "HPU",
+          "betsPct": 88,
+          "moneyPct": 56.99999999999999,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "LIB@HPU",
+      "market": "first_inning",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "LIB",
+          "betsPct": 0,
+          "moneyPct": 0,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "HPU",
+          "betsPct": 100,
+          "moneyPct": 100,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "MIA@FLA",
+      "market": "moneyline",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "MIA",
+          "betsPct": 38,
+          "moneyPct": 3,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "FLA",
+          "betsPct": 62,
+          "moneyPct": 97,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "MIA@FLA",
+      "market": "first_inning",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "MIA",
+          "betsPct": 43,
+          "moneyPct": 57.99999999999999,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "FLA",
+          "betsPct": 56.99999999999999,
+          "moneyPct": 42,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "MEM@ISU",
+      "market": "moneyline",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "MEM",
+          "betsPct": 5,
+          "moneyPct": 14.000000000000002,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "ISU",
+          "betsPct": 95,
+          "moneyPct": 86,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "MEM@ISU",
+      "market": "first_inning",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "MEM",
+          "betsPct": 0,
+          "moneyPct": 0,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "ISU",
+          "betsPct": 100,
+          "moneyPct": 100,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "GONZ@PUR",
+      "market": "moneyline",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "GONZ",
+          "betsPct": 82,
+          "moneyPct": 21,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "PUR",
+          "betsPct": 18,
+          "moneyPct": 79,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "GONZ@PUR",
+      "market": "first_inning",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "GONZ",
+          "betsPct": 100,
+          "moneyPct": 100,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "PUR",
+          "betsPct": 0,
+          "moneyPct": 0,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "OSU@BYU",
+      "market": "moneyline",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "OSU",
+          "betsPct": 76,
+          "moneyPct": 20,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "BYU",
+          "betsPct": 24,
+          "moneyPct": 80,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "OSU@BYU",
+      "market": "first_inning",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "OSU",
+          "betsPct": 0,
+          "moneyPct": 0,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "BYU",
+          "betsPct": 100,
+          "moneyPct": 100,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "ARIZ@UCLA",
+      "market": "moneyline",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "ARIZ",
+          "betsPct": 62,
+          "moneyPct": 97,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "UCLA",
+          "betsPct": 38,
+          "moneyPct": 3,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    },
+    {
+      "game": "ARIZ@UCLA",
+      "market": "first_inning",
+      "sourceBook": "draftkings",
+      "observedAt": "2026-10-31T13:56:50.173+00:00",
+      "rows": [
+        {
+          "side": "away",
+          "label": "ARIZ",
+          "betsPct": 100,
+          "moneyPct": 100,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        },
+        {
+          "side": "home",
+          "label": "UCLA",
+          "betsPct": 0,
+          "moneyPct": 0,
+          "observedAt": "2026-10-31T13:56:50.173+00:00",
+          "freshnessCheckedAt": "2026-10-31T14:02:02.864+00:00",
+          "staleAfterMinutes": 180,
+          "isStale": false
+        }
+      ]
+    }
+  ]
+}

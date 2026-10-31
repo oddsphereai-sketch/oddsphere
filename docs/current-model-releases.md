@@ -114,7 +114,7 @@ Last reviewed: 2026-10-31
   moneyline, spread, and total pair; adapter release
   `cbb_member_adapter_2026_10_30_r3_two_sided_current_market` also fixes the
   selected spread point's sign in its display trail. Reader release
-  `cbb_reader_evidence_2026_10_30_r1_verified_two_sided_display` attaches
+  `cbb_reader_evidence_2026_10_31_r2_restored_named_book_display` attaches
   already captured, same-book price/line history and exact-game Playbook public
   splits only to unlocked cards. CBB's neutral-site OWLS home/away reversal is
   mapped before history requests. Kalshi named-institution aliases are limited
@@ -124,6 +124,16 @@ Last reviewed: 2026-10-31
   absence is filled with a fabricated value. The independent score, grade,
   selection, stake, and model/market marriage are unchanged. No validated win
   rate or market-flip improvement is claimed.
+- October 31 DraftKings restoration verification confirms the provider returns
+  DraftKings in all five named-book split feeds. The r2 CBB reader now displays
+  already captured exact-game Owls named-book pairs on unlocked future cards;
+  its r1 reader only displayed Playbook public consensus and omitted the restored
+  named-book data. Fresh complete Circa retains priority, then DraftKings, then
+  BetMGM. Both percentage axes must be complete and coherent at one original
+  source timestamp within the existing three-hour named-book window. Missing,
+  mismatched, future, stale or single-axis pairs are not fabricated. No extra
+  provider call, writer, schedule, model input, prediction, grade, price, stake
+  or locked payload changes. Evidence: `docs/model-audits/2026-10-31-draftkings-splits-restoration.md`.
 - CBB Kalshi game/spread/total display reads the official Kalshi CBB series separately from
   prediction and grading. It is matched by exact institution and start, with locked pregame
   receipts taking precedence. Other sports' model releases and locked records are unchanged.

@@ -1,7 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_10_30_r1_verified_two_sided_display" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_10_31_r2_restored_named_book_display" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 const marketEntries=[['moneyline','moneyline'],['total','total'],['first_inning','spread']] as const;
@@ -41,6 +41,57 @@ function splitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|
   return pair;
 }
 
+const namedBooks=["circa","draftkings","betmgm"] as const;
+function namedSplitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
+  const sides=kind==="total"?["over","under"]:["away","home"];
+  for(const book of namedBooks){
+    const groups=new Map<string,SplitRow[]>();
+    for(const row of rows){
+      const observed=Date.parse(row.source_observed_at??""),fetched=Date.parse(row.fetched_at);
+      if(row.canonical_event_id!==String(id)||row.market_type!==kind||row.provider!=="owls"||row.source_book!==book||
+        row.source_type!==(book==="circa"?"sharp_adjacent_book":"retail_book")||
+        !sides.includes(row.selection_key.split(":").at(-1)??"")||!Number.isFinite(observed)||!Number.isFinite(fetched)||
+        observed>fetched||fetched>now||observed>now||now-observed>3*60*60_000)continue;
+      groups.set(row.source_observed_at!,[...(groups.get(row.source_observed_at!)??[]),row]);
+    }
+    for(const [,group] of [...groups.entries()].sort(([a],[b])=>Date.parse(b)-Date.parse(a))){
+      const pair=sides.map(side=>{
+        const matches=group.filter(row=>row.selection_key.split(":").at(-1)===side);
+        const first=matches[0];
+        return first&&matches.every(row=>row.bets_pct===first.bets_pct&&row.money_pct===first.money_pct)?first:null;
+      });
+      if(pair.some(row=>!row||!validPct(row.bets_pct)||!validPct(row.money_pct)))continue;
+      const complete=pair as SplitRow[];
+      if(Math.abs(complete.reduce((sum,row)=>sum+row.bets_pct!,0)-1)>.03||
+        Math.abs(complete.reduce((sum,row)=>sum+row.money_pct!,0)-1)>.03)continue;
+      return complete;
+    }
+  }
+  return null;
+}
+
+function namedSection(game:DailyEdgeGameDto,pair:SplitRow[]):NonNullable<MarketEdgeDto["sportsbookSplits"]>{
+  const book=pair[0].source_book as typeof namedBooks[number];
+  return {label:book==="circa"?"Sharp Book Splits":book==="draftkings"?"DraftKings Splits":"BetMGM Splits",
+    sourceBook:book,sourceObservedAt:pair[0].source_observed_at!,lastUpdated:pair[0].source_observed_at!,signal:null,
+    rows:pair.map(row=>{const side=row.selection_key.split(":").at(-1) as "home"|"away"|"over"|"under";
+      return {side,label:label(game,side),betsPct:row.bets_pct!*100,moneyPct:row.money_pct!*100,
+        observedAt:row.source_observed_at,freshnessCheckedAt:row.fetched_at,staleAfterMinutes:180,isStale:false};})};
+}
+
+function preferNamedSection(existing:MarketEdgeDto["sportsbookSplits"],incoming:NonNullable<MarketEdgeDto["sportsbookSplits"]>,now:number):boolean{
+  if(!existing)return true;
+  const observed=Date.parse(existing.sourceObservedAt??existing.lastUpdated??"");
+  const priority=namedBooks.indexOf(existing.sourceBook as typeof namedBooks[number]);
+  const complete=existing.rows.length===2&&new Set(existing.rows.map(row=>row.side)).size===2&&
+    existing.rows.every(row=>row.betsPct!==null&&row.moneyPct!==null)&&
+    Math.abs(existing.rows.reduce((sum,row)=>sum+(row.betsPct??0),0)-100)<=3&&
+    Math.abs(existing.rows.reduce((sum,row)=>sum+(row.moneyPct??0),0)-100)<=3;
+  if(!complete||priority<0||!Number.isFinite(observed)||observed>now||now-observed>3*60*60_000)return true;
+  const incomingPriority=namedBooks.indexOf(incoming.sourceBook as typeof namedBooks[number]);
+  return incomingPriority<priority||incomingPriority===priority&&Date.parse(incoming.sourceObservedAt!)>observed;
+}
+
 /** Display-only unlocked overlay. The stored grade, pick, projection, price and
  * every locked payload retain precedence over these separately captured rows. */
 export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayFeed|null,splitRows:SplitRow[],now=Date.now()):DailyEdgeResponse{
@@ -51,6 +102,14 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
     for(const [key,kind] of marketEntries){
       const market={...markets[key]},side=sideOf(game,kind,market);
       const pair=splitPair(splitRows,game.external_id,kind,now);
+      const named=namedSplitPair(splitRows,game.external_id,kind,now);
+      if(named){
+        const section=namedSection(game,named);
+        if(preferNamedSection(market.sportsbookSplits,section,now)){
+          market.sportsbookSplits=section;
+          market.sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section.sourceObservedAt!};
+        }
+      }
       if(pair)market.publicSplits=pair.map(row=>({side:row.selection_key.split(":").at(-1) as "home"|"away"|"over"|"under",
         label:label(game,row.selection_key.split(":").at(-1)!),betsPct:row.bets_pct!*100,moneyPct:row.money_pct!*100,
         observedAt:row.source_observed_at??row.fetched_at,freshnessCheckedAt:row.fetched_at,staleAfterMinutes:30,isStale:false}));
