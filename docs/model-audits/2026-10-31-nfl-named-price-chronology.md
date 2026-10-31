@@ -254,13 +254,31 @@ These are not frozen same-input code-effect comparisons or accuracy claims.
 Private r97/r4 separately preserves a qualified reverse-flow signal when
 retail pricing opposes named pricing at the same time. The r96 precedence had
 allowed `retail_price_resistance` to obscure that stronger contradiction.
+After integrating remote main `6434cc7213c78278c2917dcd4bcd679ecc50e702`,
+the latest zero-write r97 slate had 39 markets: seven Best Angles, two Leans,
+eight Watchlists and 22 No Plays. All 13 games had complete named price pairs;
+the Owl's feed matched 13, and the operator used timestamped stored Playbook
+fallback. The older stored public board had 13 actionables against this
+candidate's nine, but different source clocks prohibit a causal code-effect
+claim. The actionability contraction and standalone-episode gate remain open.
+The new no-write same-input stage audit isolates the final semantic reader:
+upstream-to-final grades changed on five games. It demoted four actionables
+to nonactionables (LV@NYJ Moneyline and Spread; PHI@WSH Moneyline and Spread),
+made zero actionable promotions, and changed scores on TEN@CIN, LV@NYJ,
+IND@JAX, NE@MIA and PHI@WSH. In LV@NYJ the final winner changed from LV to
+NYJ; in PHI@WSH from PHI to WSH. The test-verified Moneyline and Spread
+promotion paths remain open when the final side has sufficient exact-price
+value, but none qualified on this slate. This is candidate behavior on one
+same-input run, not proof of predictive correctness. The missing reciprocal
+promotions are an explicit release blocker; no arbitrary play is fabricated.
 
 Dedicated branch/worktree starting base: `7007590d8c1e9ce7604ccc3d66d9b724ece8c60d`.
 Integrated remote main `fc810902a20f994138264173f19072bdc4e14a94` with a
 reviewed docs-only merge conflict. Fresh-main verification is still required
 before publication.
 The r20 read attempted no publication or tracking write. Focused ledger tests,
- TypeScript, diff check, and an earlier `npm run verify:model-change` pass. The test run
+TypeScript, diff check, and `npm run verify:model-change` pass after latest-main
+integration. The test run
 skipped the optional Market Brain PostgreSQL proof because its URL is unset;
 that research path is not an authority in this candidate. Latest-main
 PR/live verification have not been attempted, because the

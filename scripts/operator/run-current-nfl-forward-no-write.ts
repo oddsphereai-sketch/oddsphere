@@ -23,6 +23,7 @@ async function main(): Promise<void> {
   });
   const auditRows: Array<Record<string, unknown>> = [];
   const jointImpactRows: Array<Record<string, unknown>> = [];
+  const semanticImpactRows: Array<Record<string, unknown>> = [];
   const playbookApiKey = process.env.PLAYBOOK_API_KEY?.trim();
   const result = await runNflForwardEvidenceWriter({
     client,
@@ -39,6 +40,9 @@ async function main(): Promise<void> {
     weatherProvider: null,
     auditJointImpact: process.argv.includes("--joint-impact")
       ? (rows) => { jointImpactRows.push(...rows); }
+      : undefined,
+    auditSemanticImpact: process.argv.includes("--semantic-impact")
+      ? (rows) => { semanticImpactRows.push(...rows); }
       : undefined,
     auditPayloads: process.argv.includes("--detail") ? (payloads) => {
       for (const payload of payloads) {
@@ -106,6 +110,7 @@ async function main(): Promise<void> {
     ...(process.argv.includes("--detail") ? { auditRows } : {}),
     ...(process.argv.includes("--compare-stored") ? { storedComparison } : {}),
     ...(process.argv.includes("--joint-impact") ? { jointImpactRows } : {}),
+    ...(process.argv.includes("--semantic-impact") ? { semanticImpactRows } : {}),
   }, null, 2));
 }
 

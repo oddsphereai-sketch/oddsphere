@@ -54,6 +54,10 @@ Best Angles, three Leans, nine Watchlists and 20 No Plays versus a near-time
 prior seven/four/eight/twenty; those clocks were not frozen and are not a
 same-input causal board report. Private r97/r4 also prevents an opposing
 retail price from erasing qualified reverse flow against named-book price.
+After latest-main integration, the zero-write 13-game slate showed seven Best
+Angles, two Leans, eight Watchlists and 22 No Plays, versus 13 actionables in
+the earlier stored public board. The source times differ, so the effect is
+not causally attributable, but it remains a material board-contraction risk.
 No live publication is approved yet.
 
 ## Cross-product independent-input contract — October 31

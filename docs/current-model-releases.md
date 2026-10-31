@@ -81,7 +81,18 @@ Last reviewed: 2026-10-31
   Private r97/r4 preserves `reverse_flow` when named-book price and a
   qualified split oppose each other, even if retail price also resists.
   Retail opposition remains separate context, not a replacement for the
-  sharper contradictory flow observation. This is not a public release.
+  sharper contradictory flow observation. Its latest post-integration,
+  zero-write 13-game slate had seven Best Angles, two Leans, eight Watchlists
+  and 22 No Plays (39 markets). The earlier stored public board had 13
+  actionables versus nine here, but inputs were observed at different times;
+  this is a board-risk warning, not a causal comparison. This is not a public
+  release.
+  A no-write same-input upstream-versus-final stage audit attributes four
+  actionable demotions and zero actionable promotions to the final semantic
+  reader on this 13-game slate. The tested promotion path exists, but no
+  current price/value tuple qualified; this contraction remains a release
+  blocker, not a reason to invent plays.
+
 ## CFB market-evidence integrity — October 31 candidate, not live
 
 - Production remains CFB decision r57, calibration r30, writer r146, and complete

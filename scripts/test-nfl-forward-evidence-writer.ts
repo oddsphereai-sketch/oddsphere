@@ -48,6 +48,12 @@ void (async () => {
     "a no-write market-impact hook must never run inside the production writer",
   );
   await assert.rejects(
+    runNflForwardEvidenceWriter({ apply: true, auditSemanticImpact: () => {} } as unknown as
+      Parameters<typeof runNflForwardEvidenceWriter>[0]),
+    /joint-impact audit options are forbidden on the authoritative writer/,
+    "the same-input semantic-impact hook must never run inside the production writer",
+  );
+  await assert.rejects(
     runNflForwardEvidenceWriter({ apply: true, playbookAuditOnlySkip: true } as
       Parameters<typeof runNflForwardEvidenceWriter>[0]),
     /joint-impact audit options are forbidden on the authoritative writer/,

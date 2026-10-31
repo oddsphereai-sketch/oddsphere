@@ -234,6 +234,18 @@ export async function runNflForwardEvidenceWriter(args: {
   auditPayloads?: (payloads: NflForwardEvidencePayload[]) => void;
   /** One-run, no-write comparison only; never stored or used for publication. */
   auditJointImpact?: (rows: NflJointMarketImpactAuditRow[]) => void;
+  /** Same-input, no-write comparison of the upstream game tuple to the final semantic reader. */
+  auditSemanticImpact?: (rows: Array<{
+    providerGameId: string;
+    game: string;
+    upstreamScore: [number, number];
+    finalScore: [number, number];
+    upstreamDecisions: Array<{ market: string; side: string; grade: string }>;
+    finalDecisions: Array<{ market: string; side: string; grade: string }>;
+    sideStory: string;
+    totalStory: string;
+    status: string;
+  }>) => void;
   /** No-write audit reuses timestamped stored Playbook observations if this local key is absent. */
   playbookAuditOnlySkip?: boolean;
   /** Test/audit-only provider injection; production always uses the default fetcher. */
@@ -257,7 +269,7 @@ export async function runNflForwardEvidenceWriter(args: {
     windowClosesAt: string;
   }>>;
 }): Promise<NflForwardWriterResult> {
-  if (args.apply && (args.auditJointImpact || args.playbookAuditOnlySkip)) {
+  if (args.apply && (args.auditJointImpact || args.auditSemanticImpact || args.playbookAuditOnlySkip)) {
     throw new Error("NFL joint-impact audit options are forbidden on the authoritative writer.");
   }
   let marketBrainCaptureEnabled = args.marketBrainCaptureEnabled === true;
@@ -582,6 +594,7 @@ export async function runNflForwardEvidenceWriter(args: {
 
   const payloadBuildHolds: string[] = [];
   const jointImpactRows: Parameters<NonNullable<typeof args.auditJointImpact>>[0] = [];
+  const semanticImpactRows: Parameters<NonNullable<typeof args.auditSemanticImpact>>[0] = [];
   const payloads = plans.flatMap((plan): NflForwardEvidencePayload[] => {
     try {
     const current = requiredCurrentOdds(slate.currentOddsByGame[plan.game.providerGameId], plan.game.providerGameId);
@@ -969,6 +982,22 @@ export async function runNflForwardEvidenceWriter(args: {
       existingLockedRecord,
     });
     const { outcome, production } = semantic;
+    if (args.auditSemanticImpact && !existingLockedRecord) {
+      const decisions = (rows: typeof production.evaluatedBets) => rows.map((bet) => ({
+        market: bet.market, side: bet.side, grade: bet.grade,
+      }));
+      semanticImpactRows.push({
+        providerGameId: plan.game.providerGameId,
+        game: `${plan.game.away.abbreviation}@${plan.game.home.abbreviation}`,
+        upstreamScore: [resolved.outcome.expectedAwayScore, resolved.outcome.expectedHomeScore],
+        finalScore: [outcome.expectedAwayScore, outcome.expectedHomeScore],
+        upstreamDecisions: decisions(resolved.production.evaluatedBets),
+        finalDecisions: decisions(production.evaluatedBets),
+        sideStory: semantic.arbitration.sideStory,
+        totalStory: semantic.arbitration.totalStory,
+        status: semantic.arbitration.status,
+      });
+    }
     if (args.auditJointImpact && exactProviderScore && currentSeasonState && !existingLockedRecord) {
       const history = (namedPriceResult.result?.historyByGame[plan.game.providerGameId] ?? [])
         .flatMap((receipt) => receipt.books);
@@ -1235,6 +1264,7 @@ export async function runNflForwardEvidenceWriter(args: {
   });
 
   args.auditJointImpact?.(jointImpactRows);
+  args.auditSemanticImpact?.(semanticImpactRows);
   args.auditPayloads?.(payloads);
   const authoritativePayloads = payloads.map(withoutMarketBrainShadow);
   const write = await appendNflForwardEvidence({

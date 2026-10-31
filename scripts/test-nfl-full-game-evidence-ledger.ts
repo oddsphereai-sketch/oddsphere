@@ -674,6 +674,14 @@ const promotedMoneyline = applyNflFullGameSemanticGradePolicy({
 });
 assert.equal(promotedMoneyline.evaluatedBets[0]?.grade, "Lean",
   "the final candidate grade must not be silently capped when a paired-price-supported score changes");
+const promotedSpread = applyNflFullGameSemanticGradePolicy({
+  baseline: { evaluatedBets: [{ market: "spread", side: "AWAY", grade: "Watchlist" }] } as never,
+  candidate: { evaluatedBets: [{ market: "spread", side: "HOME", grade: "Watchlist",
+    expectedValue: 0.03, modelProbability: 0.56, marketFairProbability: 0.53 }] } as never,
+  arbitration: { ...sameWinnerArbitration, sideStory: "spread_only_repricing" },
+});
+assert.equal(promotedSpread.evaluatedBets[0]?.grade, "Lean",
+  "a coherent same-input spread-side correction with positive value can promote a Watchlist");
 assert.ok(sameWinnerArbitration.signalInterpretations.some((item) =>
   item.source === "target_excluded_paired_price_score" && item.market === "spread" &&
   item.roles.includes("target_excluded_price_score")),
