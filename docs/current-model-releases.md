@@ -34,6 +34,13 @@ Last reviewed: 2026-10-31
   whole-board price loss remain hard failures. The r22/v27→r23/v28 stamp
   changes no same-input forecast, grade, price, probability or stake; this
   follow-up has zero promotions and zero demotions relative to r22/v27.
+- Active EPL member lifecycle is now r8 (`exact_locked_payload_precedence`).
+  The final zero-write production-lock preflight found the old DB-verification
+  bypass could replace locked supporting predictions, breakdown and availability
+  evidence. An already stored public lock now wins in full, including legacy or
+  apparently corrupt fields; correction requires explicit owner approval. DB
+  verification still establishes a missing/new public lock. Model/calibration
+  remain r23/v28; unlocked outputs, provider calls, cadence and stakes do not change.
 - Frozen-source paired replay: EPL priced markets 21→39/40, actionables 4→9,
   five promotions / zero demotions, no side or probability changes. UCL current
   priced markets 68→49/72 because stale quotes are no longer called current;
@@ -3607,7 +3614,7 @@ The bullets below record the preceding r29/r15 rollback era and its historical v
 - Coherent outcome contract: `epl_coherent_market_outcome_2026_10_28_r3_provider_attributed_price_vectors`
 - Display-grade / calibration release: `epl_grade_policy_2026_10_31_v28_partial_price_publication`
 - Match Result locked-score reader release: `epl_match_result_exact_locked_score_2026_08_23_r2`
-- Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`; EPL snapshot continuity/publication lifecycle: `epl_member_snapshot_lifecycle_2026_10_31_r7_partial_price_publication`; tracking lock policy: `epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction`
+- Member reader lifecycle: `daily_edge_weekly_reader_lifecycle_2026_08_21_r1`; EPL snapshot continuity/publication lifecycle: `epl_member_snapshot_lifecycle_2026_10_31_r8_exact_locked_payload_precedence`; tracking lock policy: `epl_tracking_lock_2026_09_20_r2_verified_member_reconstruction`
 - Runtime constants: `lib/services/epl/eplShadowModel.ts`
 - Provider boundary: BALLDONTLIE supplies fixtures/history/stats, a complete current three-way moneyline fallback, and its distinct opening endpoint. `CurrentSoccerMarketProvider` owns current named-book prices: Owls is primary for Match Result and exact-2.5 Total; The Odds API fills only missing BTTS, Double Chance, and exact-2.5 Total. Soccer splits remain unavailable and neutral. A live Playbook probe proved EPL is unsupported: EPL aliases silently returned NFL rows, so Playbook is not allowed into EPL odds or splits.
 - Model configuration: the retained r19 Total head uses a 365-day half-life, four-match shrinkage, 35% xG / 65% goals where xG is present, Dixon–Coles tau -0.10, and separate home/away club attack and defense. The r20 matchup-margin component uses the same half-life, ten-match shrinkage, 20% xG / 80% goals where xG is present, a 30% prior-match process contribution, and tau -0.15; the final margin is 75% r20 component and 25% r19.

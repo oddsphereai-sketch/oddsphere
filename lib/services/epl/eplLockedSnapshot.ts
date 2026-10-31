@@ -34,7 +34,6 @@ export function preserveLockedEplGames(
 ): DailyEdgeResponse {
   if (!previous) return incoming;
   const previousByExternalId = new Map(previous.games.map((game) => [game.external_id, game]));
-  const authoritativeLockedProviderIds = new Set(options.authoritativeLockedProviderIds ?? []);
   const incomingExternalIds = new Set(incoming.games.map((game) => game.external_id));
   // EPL/WC retain their established 2 a.m. board rollover by default. A
   // competition with a different published lifecycle may supply the exact
@@ -51,7 +50,9 @@ export function preserveLockedEplGames(
   });
   const games = incoming.games.map((fresh) => {
     const locked = previousByExternalId.get(fresh.external_id);
-    if (authoritativeLockedProviderIds.has(Number(fresh.external_id))) return fresh;
+    // A verified DB cohort may establish a new lock, but cannot replace an
+    // existing public member lock. Even an apparently corrupt legacy value
+    // requires owner approval before correction; newer evidence never wins.
     if (!locked || locked.lockState !== "locked" || !locked.lockedAt) return fresh;
     const preserved: DailyEdgeGameDto = {
       ...locked,
