@@ -17,6 +17,7 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { BOOK_DISPLAY_HISTORY_RELEASE, captureOwlsBookDisplayHistory, isBookDisplayFeed, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
 import { fetchCbbKalshiMarkets } from "@/lib/providers/kalshi/cbbMarkets";
+import { marketDisplayGameIdentity } from "@/lib/cbb/marketDisplayIdentity";
 
 const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-prelock::${sport}::${PREDICTION_MARKET_PRELOCK_RELEASE}`;
 async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
@@ -34,12 +35,12 @@ export const predictionMarketBookSnapshotKey=(sport:PredictionMarketSport)=>`dai
 async function bookHistoryStored(sport:PredictionMarketSport):Promise<BookDisplayFeed|null>{
   const stored=await readLatestLabResponseSnapshot<Record<string,unknown>>(predictionMarketBookSnapshotKey(sport));
   let value=stored?.payload;
-  if(value?.encoding==="gzip-base64"&&typeof value.payload==="string")value=JSON.parse(gunzipSync(Buffer.from(value.payload,"base64"),{maxOutputLength:8_000_000}).toString());
+  if(value?.encoding==="gzip-base64"&&typeof value.payload==="string")value=JSON.parse(gunzipSync(Buffer.from(value.payload,"base64"),{maxOutputLength:sport==="cbb"?32_000_000:8_000_000}).toString());
   return isBookDisplayFeed(value,sport)?value:null;
 }
 const bookHistoryCompressed=unstable_cache(async(sport:PredictionMarketSport)=>gzipSync(JSON.stringify(await bookHistoryStored(sport))).toString("base64"),[BOOK_DISPLAY_HISTORY_RELEASE],{revalidate:30,tags:[BOOK_DISPLAY_HISTORY_RELEASE]});
 export async function readPredictionMarketBookHistory(sport:PredictionMarketSport):Promise<BookDisplayFeed|null>{
-  return JSON.parse(gunzipSync(Buffer.from(await bookHistoryCompressed(sport),"base64"),{maxOutputLength:8_000_000}).toString());
+  return JSON.parse(gunzipSync(Buffer.from(await bookHistoryCompressed(sport),"base64"),{maxOutputLength:sport==="cbb"?32_000_000:8_000_000}).toString());
 }
 
 export function predictionMarketSnapshotKey(sport: PredictionMarketSport): string {
@@ -76,7 +77,8 @@ async function publishedContractGames(sport:PredictionMarketSport):Promise<Daily
   if(payload?.encoding==="gzip-base64")payload=JSON.parse(gunzipSync(Buffer.from(payload.payload,"base64"),{maxOutputLength:8_000_000}).toString("utf8"));
   const snapshot=payload?.fixture?.snapshot??payload?.snapshot??payload;
   if(!snapshot||!Array.isArray(snapshot.games))throw new Error(`Published ${sport} contract selection missing`);
-  return snapshot.games.slice(0,250);
+  if(sport==="cbb"&&snapshot.games.length>500)throw new Error("CBB published market selection exceeds bounded capacity");
+  return snapshot.games.slice(0,sport==="cbb"?500:250);
 }
 // CFB/NBA published boards can exceed Next's 2 MB data-cache item limit.
 // Cache the lossless compressed view, not an uncachable expanded DTO array.
@@ -94,23 +96,24 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   const target = PREDICTION_MARKET_TARGETS[sport];
   const client=new OwlsInsightClient(key,{timeoutMs:5000}),kinds=contractKinds(sport);
   const gamesRead=publishedContractGames(sport).catch(()=>null);
-  const [previous,response,games] = await Promise.all([
+  const [previous,response,games,priorBooks,priorArchive] = await Promise.all([
     readStored(sport),
-    sport === "cbb" ? fetchCbbKalshiMarkets(target.series.toUpperCase()) : client.get<unknown>(`/api/v2/kalshi/${target.sport}`, {league:target.series}),
+    sport === "cbb" ? fetchCbbKalshiMarkets(target.series.toUpperCase()).catch(()=>null) : client.get<unknown>(`/api/v2/kalshi/${target.sport}`, {league:target.series}),
     gamesRead,
+    bookHistoryStored(sport).catch(()=>null),
+    prelockStored(sport).catch(()=>null),
   ]);
-  const current = parseOwlsPredictionMarkets("body" in response ? response.body : response, sport);
-  if (!current) throw new Error(`Kalshi ${sport} returned an invalid or old source receipt`);
-  const winners=mergePredictionMarketFeeds(previous,current);
+  const current = response?parseOwlsPredictionMarkets("body" in response ? response.body : response, sport):null;
+  if (!current&&sport!=="cbb") throw new Error(`Kalshi ${sport} returned an invalid or old source receipt`);
+  const warnings:string[]=current?[]:["Kalshi CBB source unavailable; retained prior contracts and continued sportsbook capture"];
+  const winners=current?mergePredictionMarketFeeds(previous,current):previous??{release:PREDICTION_MARKET_RELEASE,sport,fetchedAt:new Date().toISOString(),rows:[]};
   const contractInputs=await Promise.all(kinds.map(async kind=>{
     const previous=await readContractStored(sport,kind);
     const skipped=games===null||games.length===0;
     if(skipped)return {kind,previous,skipped,response:null};
     const series=contractSeries(sport,kind).toUpperCase();
     const eventTickers=sport==="cbb"?[...new Set(games.flatMap(game=>{
-      const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,
-        awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege,
-        gameStartAt:game.gameStartAt??""});
+      const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,sport,priorBooks?.events));
       return match?[`${series}-${match.eventTicker.slice(match.eventTicker.indexOf("-")+1)}`]:[];
     }))]:[];
     // Read only events attached to the published CBB board. The generic
@@ -119,7 +122,6 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
       client.get<unknown>(`/api/v2/kalshi/${target.sport}`,{league:contractSeries(sport,kind)})).catch(()=>null);
     return {kind,previous,skipped,response:receipt};
   }));
-  const warnings:string[]=[];
   const contracts=contractInputs.flatMap(input=>{
     if(input.skipped){
       if(games===null)warnings.push(`${input.kind}: published selection unavailable; retained`);
@@ -127,7 +129,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
     }
     const parsed=input.response?parseContractFeed("body" in input.response?input.response.body:input.response,sport,input.kind):null;
     if(!parsed||games===null){warnings.push(`${input.kind}: source receipt unavailable; retained`);return input.previous?[input.previous]:[];}
-    const selected=contractsForPublishedReaders(parsed,winners,games);
+    const selected=contractsForPublishedReaders(parsed,winners,games,Date.now(),priorBooks?.events);
     return [mergePredictionMarketFeeds(input.previous,selected) as ContractFeed];
   });
   // Keep the existing <=3 public-history requests per sport/cycle, shared
@@ -139,7 +141,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // not the first arbitrary YES ticker or a distant alternate on the feed.
   const priority=new Map<string,number>();
   for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
-    const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege,lockState:game.lockState,lockedAt:game.lockedAt});
+    const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,sport,priorBooks?.events));
     const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
     if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
     for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}
@@ -147,7 +149,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   interleaved.sort((a,b)=>(priority.get(a.ticker)??10_000)-(priority.get(b.ticker)??10_000));
   const [captured,bookCapture]=await Promise.all([
     backfillKalshiDisplayHistory({...winners,rows:interleaved}),
-    games?bookHistoryStored(sport).then(previous=>captureOwlsBookDisplayHistory(previous,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}),Date.now(),"rateLimit" in response?response.rateLimit.remainingMonth:null)).catch(()=>null):Promise.resolve(null),
+    games?captureOwlsBookDisplayHistory(priorBooks,games,sport,new OwlsInsightClient(key,{timeoutMs:1500}),Date.now(),response&&"rateLimit" in response?response.rateLimit.remainingMonth:null,priorArchive).catch(()=>null):Promise.resolve(null),
   ]);
   if(bookCapture){
     warnings.push(...bookCapture.warnings);
@@ -162,7 +164,7 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   const updatedContracts=contracts.map(contract=>({...contract,rows:contract.rows.map(row=>byTicker.get(row.ticker)??row)}) as ContractFeed);
   if(games){
     try{
-      const prior=await prelockStored(sport),archive=capturePredictionMarketPrelock(prior,games,sport,feed,updatedContracts,bookCapture?.feed??null,Date.now());
+      const archive=capturePredictionMarketPrelock(priorArchive,games,sport,feed,updatedContracts,bookCapture?.feed??null,Date.now());
       const saved=await upsertLabResponseSnapshot({snapshotKey:prelockKey(sport),kind:"daily_edge",sport:sport==="ucl"?"soccer":sport,payload:{encoding:"gzip-base64",payload:gzipSync(JSON.stringify(archive)).toString("base64")},source:"prediction_market_prelock_display",payloadVersion:PREDICTION_MARKET_PRELOCK_RELEASE,ttlMs:5*60_000,staleMs:90*86_400_000});
       if(saved.ok)revalidateTag(PREDICTION_MARKET_PRELOCK_RELEASE,{expire:0});else warnings.push("pre-lock chart receipt: store unavailable; retained");
     }catch{warnings.push("pre-lock chart receipt: capture unavailable; retained");}
@@ -183,6 +185,6 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // retained receipt while a stale-while-revalidate layer catches up.
   revalidateTag(PREDICTION_MARKET_RELEASE,{expire:0});
   revalidateTag(PREDICTION_MARKET_CONTRACT_RELEASE,{expire:0});
-  return {rows:current.rows.length+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:("requests" in response?response.requests:1)+contractInputs.reduce((sum,input)=>sum+(input.response?("requests" in input.response?input.response.requests:1):0),0)+(bookCapture?.requests??0),warnings,
+  return {rows:(current?.rows.length??0)+contracts.reduce((sum,feed)=>sum+feed.rows.length,0),owlsRequests:(response&&"requests" in response?response.requests:1)+contractInputs.reduce((sum,input)=>sum+(input.response?("requests" in input.response?input.response.requests:1):0),0)+(bookCapture?.requests??0),warnings,
     historyCoverage:{kalshiFromOpen:captured.rows.filter(r=>r.historyFrom).length,kalshiPending:captured.rows.filter(r=>!r.historyFrom).length,bookHistoryEntries:bookCapture?.feed.rows.length??0,bookProviderOpenings:bookCapture?.feed.rows.filter(r=>r.opening).length??0}};
 }

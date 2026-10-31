@@ -84,6 +84,8 @@ export type PredictionMarketGameIdentity = {
   /** Required for the opt-in future-only calendar-shift display path. */
   lockState?:string;
   lockedAt?:string|null;
+  /** Exact named-institution odds event, supplied only by the stored display collector. */
+  cbbMarketStartAt?:string;
 };
 export type PredictionMarketMatch = {
   eventTicker: string;
@@ -258,10 +260,15 @@ export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideC
 export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, game: PredictionMarketGameIdentity, now = Date.now()): PredictionMarketMatch | null {
   if (!feed || feed.sport !== game.sport || !Number.isFinite(Date.parse(game.gameStartAt))) return null;
   const gameDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date(game.gameStartAt));
+  const sourceStart = Date.parse(game.cbbMarketStartAt ?? "");
+  const verifiedSourceDate = game.sport === "cbb" && game.lockState === "open" && game.lockedAt === null &&
+    Date.parse(game.gameStartAt) > now && Number.isFinite(sourceStart) && Math.abs(sourceStart - Date.parse(game.gameStartAt)) <= 60_000
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date(sourceStart)) : null;
   const groups = new Map<string, PredictionMarketRow[]>();
   for (const row of feed.rows) {
     const age = now - Date.parse(row.asOf);
-    if ((row.gameDate !== gameDate&&!canMatchNextDayContract(row.gameDate,gameDate,row.rescheduleWindowHours,game,now)) || age < -60_000 || age > 24 * 60 * 60_000) continue;
+    const verifiedMidnight = verifiedSourceDate === row.gameDate;
+    if ((row.gameDate !== gameDate&&!verifiedMidnight&&!canMatchNextDayContract(row.gameDate,gameDate,row.rescheduleWindowHours,game,now)) || age < -60_000 || age > 24 * 60 * 60_000) continue;
     const rows = groups.get(row.eventTicker) ?? []; rows.push(row); groups.set(row.eventTicker, rows);
   }
   const matches: PredictionMarketMatch[] = [];
@@ -279,7 +286,7 @@ export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, gam
     if (sum < .85 || sum > 1.15) continue;
     const asOf = new Date(Math.min(...stamps)).toISOString();
     matches.push({ eventTicker, source:game.sport==="cbb"?"Kalshi direct":"Kalshi via OWLS", status:now - Math.min(...stamps) <= 10 * 60_000 ? "current" : "retained", asOf,
-      ...(selected[0].gameDate!==gameDate?{rescheduledGameDate:gameDate}:{}),
+      ...(game.sport==="cfb"&&selected[0].gameDate!==gameDate?{rescheduledGameDate:gameDate}:{}),
       outcomes:[{...away[0],side:"away",label:game.awayTeam},{...home[0],side:"home",label:game.homeTeam},...(soccer ? [{...draw[0],side:"draw" as const,label:"Draw"}] : [])] });
   }
   return matches.length === 1 ? matches[0] : null;

@@ -1,7 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_10_31_r2_restored_named_book_display" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_10_31_r3_source_scoped_tracking" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 const marketEntries=[['moneyline','moneyline'],['total','total'],['first_inning','spread']] as const;
@@ -25,6 +25,10 @@ function stops(entry:BookDisplayEntry,cutoff:number):OddsTrailStopDto[]{
   return unique.map(row=>({american:row[1],line:row[2],observedAt:new Date(row[0]).toISOString(),sportsbook:entry.book,
     source:opening&&row[0]===opening[0]&&row[1]===opening[1]&&row[2]===opening[2]?"provider_opening":"line_history",
     label:opening&&row[0]===opening[0]?"open":"move"}));
+}
+function mergeTrail(history:OddsTrailStopDto[],current:OddsTrailStopDto[]):OddsTrailStopDto[]{
+  return [...new Map([...history,...current].map(stop=>[`${stop.sportsbook}:${stop.observedAt}:${stop.line}`,stop])).values()]
+    .sort((a,b)=>Date.parse(a.observedAt??"")-Date.parse(b.observedAt??""));
 }
 function splitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
   const sides=kind==="total"?["over","under"]:["away","home"];
@@ -118,7 +122,7 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
         const selected=matchingHistory(feed,game,kind,side,book),other=matchingHistory(feed,game,kind,opposing(side),book);
         if(selected){
           const history=stops(selected,cutoff),current=(market.oddsTrail??[]).filter(stop=>stop.label==="current"&&stop.sportsbook===book);
-          const trail=[...history,...current].sort((a,b)=>Date.parse(a.observedAt??"")-Date.parse(b.observedAt??""));
+          const trail=mergeTrail(history,current);
           market.lineTrail=trail;
           market.oddsTrail=trail.filter(stop=>stop.line===market.line);
           market.movementReferenceSportsbook=book;
@@ -126,7 +130,7 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
         if(other){
           const existing=market.opposingOddsTrail?.side===opposing(side)?market.opposingOddsTrail.stops:[];
           market.opposingOddsTrail={side:opposing(side) as "home"|"away"|"over"|"under",label:label(game,opposing(side)),
-            stops:[...stops(other,cutoff),...existing].sort((a,b)=>Date.parse(a.observedAt??"")-Date.parse(b.observedAt??""))};
+            stops:mergeTrail(stops(other,cutoff),existing)};
         }
       }
       markets[key]=market;
@@ -137,12 +141,42 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
 
 export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse):Promise<DailyEdgeResponse>{
   if(board.sport!=="cbb"||board.games.length===0)return board;
-  const [{readPredictionMarketBookHistory},{supabase}]=await Promise.all([
-    import("@/lib/services/dailyEdge/predictionMarketDisplayFeed"),import("@/lib/db/supabase")]);
+  const [{readPredictionMarketBookHistory},{supabase},{readStoredSharpApiCurrentSplits,applySharpApiCurrentSplitOverlay}]=await Promise.all([
+    import("@/lib/services/dailyEdge/predictionMarketDisplayFeed"),import("@/lib/db/supabase"),import("@/lib/providers/real_api/sharpApiCurrentSplits")]);
   const ids=board.games.filter(game=>game.lockedAt===null&&game.lockState!=="locked").map(game=>String(game.external_id));
-  const [feed,result]=await Promise.all([readPredictionMarketBookHistory("cbb").catch(()=>null),
-    ids.length?supabase.from("market_split_observations_v2")
-      .select("canonical_event_id,market_type,selection_key,bets_pct,money_pct,provider,source_book,source_type,source_observed_at,fetched_at")
-      .eq("league","cbb").in("canonical_event_id",ids).order("fetched_at",{ascending:false}).limit(300):Promise.resolve({data:[],error:null})]);
-  return mergeCbbReaderEvidence(board,feed,result.error?[]:result.data as SplitRow[]);
+  const publicRows=async():Promise<SplitRow[]>=>{
+    if(!ids.length)return [];
+    const rows:SplitRow[]=[],since=new Date(Date.now()-30*60_000).toISOString();
+    for(let offset=0;offset<12_000;offset+=500){
+      const result=await supabase.from("market_split_observations_v2")
+        .select("canonical_event_id,market_type,selection_key,bets_pct,money_pct,provider,source_book,source_type,source_observed_at,fetched_at")
+        .eq("league","cbb").eq("provider","playbook").in("canonical_event_id",ids).gte("fetched_at",since)
+        .order("fetched_at",{ascending:false}).order("id",{ascending:true}).range(offset,offset+499);
+      if(result.error)throw new Error(`CBB public split read failed: ${result.error.message}`);
+      rows.push(...result.data as SplitRow[]);
+      if(result.data.length<500)return rows;
+    }
+    throw new Error("CBB public split page budget exhausted; refusing partial coverage");
+  };
+  const [feed,rows,namedFeed]=await Promise.all([readPredictionMarketBookHistory("cbb").catch(()=>null),publicRows().catch(()=>[]),
+    readStoredSharpApiCurrentSplits("cbb").catch(()=>null)]);
+  // Named-book polling must not crowd public consensus out of a shared row cap.
+  // The durable named-book display feed already has exact institution matching,
+  // source timestamps and freshness checks; no provider request is made here.
+  const merged=mergeCbbReaderEvidence(board,feed,rows),now=Date.now();
+  const candidates=structuredClone({...merged,games:merged.games.filter(game=>game.lockState!=="locked"&&game.lockedAt===null&&Date.parse(game.gameStartAt??"")>now)});
+  applySharpApiCurrentSplitOverlay(candidates,namedFeed,now);
+  for(const candidate of candidates.games){
+    const game=merged.games.find(row=>row.external_id===candidate.external_id)!;
+    for(const [key] of marketEntries){
+      const section=candidate.markets[key].sportsbookSplits,observed=Date.parse(section?.sourceObservedAt??section?.lastUpdated??"");
+      if(!section||!Number.isFinite(observed)||observed>now||now-observed>3*60*60_000||section.rows.length!==2||new Set(section.rows.map(row=>row.side)).size!==2||
+        section.rows.some(row=>row.betsPct===null||row.moneyPct===null||!Number.isFinite(row.betsPct)||!Number.isFinite(row.moneyPct)||row.betsPct<0||row.betsPct>100||row.moneyPct<0||row.moneyPct>100)||
+        Math.abs(section.rows.reduce((sum,row)=>sum+row.betsPct!,0)-100)>3||Math.abs(section.rows.reduce((sum,row)=>sum+row.moneyPct!,0)-100)>3||
+        !preferNamedSection(game.markets[key].sportsbookSplits,section,now))continue;
+      game.markets[key].sportsbookSplits=section;
+      game.markets[key].sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:new Date(observed).toISOString()};
+    }
+  }
+  return merged;
 }
