@@ -13,6 +13,8 @@
  * even if the model itself is confident — honest disagreement matters.
  */
 
+import type { NbaNamedBookPosture } from "./nbaNamedBookPosture";
+
 // ─── American/decimal/implied probability helpers ──────────────────
 
 export function americanToDecimal(american: number | null): number | null {
@@ -215,6 +217,8 @@ export type GradeInput = {
   /** Uncapped probability from the same coherent distribution that owns the pick. */
   modelProbabilityOnPick?: number | null;
   moneylineEvidence?: NbaMoneylineReaderEvidence;
+  /** Fresh target-excluded source observations, independent of flip permission. */
+  namedBookPosture?: NbaNamedBookPosture;
   /** Same-input audit hook for the superseded Moneyline Best Angle path. */
   enforceMoneylineEvidenceGuard?: boolean;
   /** Same-input audit hook for the superseded price-incoherent grade path. */
@@ -348,6 +352,20 @@ function memberBandPhrase(band: MarketConflictBand): string {
 }
 
 export function gradeNbaMarket(input: GradeInput): GradeOutput {
+  const incumbent = gradeNbaMarketEconomics(input);
+  const posture = input.namedBookPosture;
+  if (incumbent.grade !== "best_angle" || posture?.market !== input.market || posture?.pickedSide !== input.pick ||
+      posture.opposingSources.length === 0) return incumbent;
+  return {
+    ...incumbent,
+    grade: "lean",
+    bestAngleEligible: false,
+    rationale: [...incumbent.rationale,
+      "Persistent named-book price evidence opposes this pick. The model value remains playable, but the unresolved market disagreement keeps it below Best Angle."],
+  };
+}
+
+function gradeNbaMarketEconomics(input: GradeInput): GradeOutput {
   const rationale: string[] = [];
   if (input.pick === null) {
     return {

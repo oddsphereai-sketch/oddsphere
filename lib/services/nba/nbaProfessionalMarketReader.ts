@@ -1,7 +1,7 @@
 import type { NbaMovementMarket } from "./nbaSameBookMovement";
 
 export const NBA_PROFESSIONAL_MARKET_READER_RELEASE =
-  "nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion" as const;
+  "nba_professional_market_reader_2026_10_31_r8_endpoint_price_posture" as const;
 
 export type NbaReaderSide = "home" | "away" | "over" | "under";
 type Direction = -1 | 1;
@@ -20,6 +20,9 @@ export type NbaReaderSplitRow = {
 };
 
 export type NbaReaderPriceRow = {
+  provider?: string;
+  providerEventId?: string | null;
+  ingestionRunId?: string | null;
   sportsbook: string;
   sharpBook: boolean;
   market: NbaMovementMarket;
@@ -31,6 +34,11 @@ export type NbaReaderPriceRow = {
 };
 
 export type NbaReaderTrail = {
+  provider?: string;
+  openingIngestionRunId?: string;
+  currentIngestionRunId?: string;
+  openingCaptureAt?: string;
+  currentCaptureAt?: string;
   sportsbook: string;
   sourceClass: "named" | "retail";
   openingAt: string;
@@ -40,6 +48,10 @@ export type NbaReaderTrail = {
   currentNumber: number | null;
   numberDelta: number | null;
   fairProbabilityDeltaPp: number;
+  /** Endpoint pairs; fairProbabilityDeltaPp instead uses the first observation
+   * at the CURRENT number and cannot attest across-number price compensation. */
+  openingFairFirstProbability?: number;
+  currentFairFirstProbability?: number;
   numberDirection: NbaReaderSide | null;
   priceDirection: NbaReaderSide | null;
   direction: NbaReaderSide | null;
@@ -76,6 +88,9 @@ export type NbaProfessionalMarketRead = {
   trails: NbaReaderTrail[];
   flows: NbaReaderFlow[];
   excludedSportsbooks: string[];
+  /** Separate provider-attested lanes; legacy mixed-provider forecast trails
+   * above keep their exact incumbent behavior until separately qualified. */
+  namedBookPostureTrails?: NbaReaderTrail[];
 };
 
 export type NbaProfessionalMarketReader = {
@@ -95,6 +110,7 @@ export type NbaProfessionalMarketReader = {
 
 type PairedObservation = {
   observedAt: string;
+  capturedAt: string;
   firstLine: number | null;
   firstPrice: number;
   secondPrice: number;
@@ -146,7 +162,10 @@ export function buildNbaProfessionalMarketReader(args: {
       selectedLine: market === "spread" ? args.selectedLines.spreadHome
         : market === "total" ? args.selectedLines.total : null,
     });
-    return [market, qualify(market, trails, flows, [...excluded].sort())];
+    return [market, { ...qualify(market, trails, flows, [...excluded].sort()),
+      namedBookPostureTrails: buildNbaAttestedNamedBookTrails({ market, rows: args.priceRows,
+        evaluatedAt: args.evaluatedAt, excludedSportsbooks: [...excluded] }),
+    }];
   })) as Record<NbaMovementMarket, NbaProfessionalMarketRead>;
   return {
     release: NBA_PROFESSIONAL_MARKET_READER_RELEASE,
@@ -198,7 +217,7 @@ function buildTrails(args: {
       const second = rows.find((row) => row.side === sidePair[1] && Number.isFinite(row.price));
       if (!first || !second || !coherentLines(args.market, first.line, second.line)) return [];
       const observedAt = new Date(Math.max(Date.parse(first.observedAt), Date.parse(second.observedAt))).toISOString();
-      return [{ observedAt, firstLine: first.line, firstPrice: first.price, secondPrice: second.price }];
+      return [{ observedAt, capturedAt: first.capturedAt, firstLine: first.line, firstPrice: first.price, secondPrice: second.price }];
     }).sort((left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt));
     const opening = observations[0];
     const current = observations.at(-1);
@@ -245,11 +264,15 @@ function buildTrails(args: {
         ? "named" : "retail",
       openingAt: opening.observedAt,
       currentAt: current.observedAt,
+      openingCaptureAt: opening.capturedAt,
+      currentCaptureAt: current.capturedAt,
       observations: observations.length,
       openingNumber,
       currentNumber,
       numberDelta,
       fairProbabilityDeltaPp: probabilityDelta,
+      openingFairFirstProbability: fairFirst(opening),
+      currentFairFirstProbability: fairFirst(current),
       numberDirection,
       priceDirection,
       direction,
@@ -259,6 +282,51 @@ function buildTrails(args: {
     });
   }
   return trails.sort((left, right) => left.sportsbook.localeCompare(right.sportsbook));
+}
+
+/** New grade evidence uses the SAME pairing/trail computation, but never joins
+ * providers, events or ingestion runs. It does not alter legacy flip authority. */
+export function buildNbaAttestedNamedBookTrails(args: {
+  market: NbaMovementMarket; rows: readonly NbaReaderPriceRow[];
+  evaluatedAt: string; excludedSportsbooks: readonly string[];
+}): NbaReaderTrail[] {
+  const evaluated = Date.parse(args.evaluatedAt), excluded = new Set(args.excludedSportsbooks.map(canonical));
+  if (!Number.isFinite(evaluated)) return [];
+  const lanes = new Map<string, NbaReaderPriceRow[]>();
+  for (const row of args.rows) {
+    const book = canonical(row.sportsbook);
+    if (row.market !== args.market || !NAMED_BOOKS.has(book) || excluded.has(book) ||
+        !["owls", "canonical_lines"].includes(row.provider ?? "") ||
+        Date.parse(row.fetchedAt) > evaluated) continue;
+    const key = `${row.provider}|${book}`;
+    lanes.set(key, [...(lanes.get(key) ?? []), row]);
+  }
+  return [...lanes.values()].flatMap(rows => {
+    const batches = new Map<string, NbaReaderPriceRow[]>();
+    for (const row of rows) batches.set(row.fetchedAt, [...(batches.get(row.fetchedAt) ?? []), row]);
+    const firstSide = args.market === "total" ? "over" : "home", secondSide = args.market === "total" ? "under" : "away";
+    const eventKeys = new Set(rows.map(r => r.selectionKey.slice(0, r.selectionKey.lastIndexOf(":"))));
+    const providerEvents = new Set(rows.map(r => r.providerEventId ?? null));
+    if (eventKeys.size !== 1 || providerEvents.size !== 1 ||
+        rows.some(r => !r.ingestionRunId || (r.provider === "owls" && !r.providerEventId) ||
+          !Number.isFinite(Date.parse(r.fetchedAt)) ||
+          !Number.isFinite(Date.parse(r.providerTimestamp ?? r.fetchedAt)) ||
+          Date.parse(r.providerTimestamp ?? r.fetchedAt) > evaluated)) return [];
+    for (const batch of batches.values()) {
+      if (batch.length !== 2 || new Set(batch.map(r => r.ingestionRunId)).size !== 1 ||
+          !batch.every(r => Number.isFinite(r.americanPrice) && r.americanPrice !== 0) ||
+          batch.filter(r => selectionSide(r.selectionKey) === firstSide).length !== 1 ||
+          batch.filter(r => selectionSide(r.selectionKey) === secondSide).length !== 1) return [];
+      const first = batch.find(r => selectionSide(r.selectionKey) === firstSide)!;
+      const second = batch.find(r => selectionSide(r.selectionKey) === secondSide)!;
+      if (!coherentLines(args.market, first.line, second.line)) return [];
+    }
+    return buildTrails({ market: args.market, rows, evaluatedAt: evaluated, excluded }).map(trail => ({
+      ...trail, provider: rows[0]!.provider,
+      openingIngestionRunId: batches.get(trail.openingCaptureAt!)![0]!.ingestionRunId!,
+      currentIngestionRunId: batches.get(trail.currentCaptureAt!)![0]!.ingestionRunId!,
+    }));
+  });
 }
 
 function buildFlows(args: {

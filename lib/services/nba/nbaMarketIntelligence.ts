@@ -45,6 +45,7 @@ import {
   type NbaMarketConsensus,
 } from "../../automodel/nba/nbaMarketConsensus";
 import { computeNbaMarketProbabilities } from "../../automodel/nba/nbaDistribution";
+import type { NbaNamedBookPosture } from "./nbaNamedBookPosture";
 
 // ─── Raw per-book line row (subset of `lines` table columns) ───────
 
@@ -181,6 +182,7 @@ export type MarketIntelligence = {
    * Optional so legacy locked snapshots retain their exact stored behavior.
    */
   qualified_market_direction?: NbaMoneylineDirectionalSignal;
+  named_book_posture?: NbaNamedBookPosture;
 
   // ── Splits ──
   splits: {
@@ -609,6 +611,7 @@ function buildMl(
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProbOnPick,
     moneylineEvidence: prediction.audit.professional_grade_context?.moneyline,
+    namedBookPosture: prediction.audit.professional_grade_context?.namedBookPostures?.moneyline,
     enforceMoneylineEvidenceGuard,
     enforcePositiveModelEv,
   });
@@ -671,6 +674,7 @@ function buildMl(
     best_angle_eligible: grade.bestAngleEligible,
     rationale: grade.rationale,
     qualified_market_direction: qualifiedMarketDirection,
+    named_book_posture: prediction.audit.professional_grade_context?.namedBookPostures?.moneyline,
     splits: {
       pick_side: pickSplits,
       other_side: otherSplits,
@@ -789,6 +793,7 @@ function buildSpread(
     readerQualified: prediction.audit.professional_grade_context?.spread.readQualified ?? false,
     readerCorrectionApplied: prediction.audit.professional_grade_context?.spread.correctionApplied ?? false,
     readerMagnitudePoints: prediction.audit.professional_grade_context?.spread.magnitudePoints ?? null,
+    namedBookPosture: prediction.audit.professional_grade_context?.namedBookPostures?.spread,
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProb,
     enforcePositiveModelEv,
@@ -820,6 +825,7 @@ function buildSpread(
   return {
     market: "spread",
     pick_label: pickLabel,
+    named_book_posture: prediction.audit.professional_grade_context?.namedBookPostures?.spread,
     pick_side: pickSide,
     consensus_line: sideLineDisplay,
     current_price: {
@@ -945,6 +951,7 @@ function buildTotal(
     readerQualified: prediction.audit.professional_grade_context?.total.readQualified ?? false,
     readerCorrectionApplied: prediction.audit.professional_grade_context?.total.correctionApplied ?? false,
     readerMagnitudePoints: prediction.audit.professional_grade_context?.total.magnitudePoints ?? null,
+    namedBookPosture: prediction.audit.professional_grade_context?.namedBookPostures?.total,
     currentPriceAmerican: pickOdds,
     modelProbabilityOnPick: modelProb,
     enforcePositiveModelEv,
@@ -973,6 +980,7 @@ function buildTotal(
   return {
     market: "total",
     pick_label: pickLabel,
+    named_book_posture: prediction.audit.professional_grade_context?.namedBookPostures?.total,
     pick_side: pickSide,
     consensus_line: line,
     current_price: {

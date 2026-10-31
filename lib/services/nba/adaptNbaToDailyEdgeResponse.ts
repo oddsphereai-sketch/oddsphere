@@ -146,6 +146,7 @@ function buildPickLabel(intel: MarketIntelligence): string | null {
 // MarketSignal union: market_confirmed | market_neutral | market_resistance |
 // public_smoke | steam_alert
 export function buildMarketSignal(intel: MarketIntelligence): MarketSignal {
+  if (intel.named_book_posture?.opposingSources.length) return "market_resistance";
   if (intel.market === "moneyline" && intel.qualified_market_direction !== undefined) {
     if (intel.qualified_market_direction.state === "confirmed") return "market_confirmed";
     if (intel.qualified_market_direction.state === "resistance") return "market_resistance";
@@ -168,7 +169,8 @@ function buildSignalType(intel: MarketIntelligence): SignalType {
   return "model_only";
 }
 
-function buildSharpStatusFromGrade(grade: RecommendationGrade): "confirm" | "mixed" | "caution" {
+function buildSharpStatusFromGrade(grade: RecommendationGrade, intel?: MarketIntelligence): "confirm" | "mixed" | "caution" {
+  if (intel?.named_book_posture?.opposingSources.length) return "mixed";
   if (grade === "best_angle" || grade === "lean") return "confirm";
   if (grade === "caution") return "caution";
   return "mixed";
@@ -320,7 +322,7 @@ function buildMarketEdgeDto(opts: {
     grade: held ? null : gradeToMlbGrade(intel.grade),
     signalType: buildSignalType(intel),
     marketSignal: buildMarketSignal(intel),
-    sharpStatus: buildSharpStatusFromGrade(intel.grade),
+    sharpStatus: buildSharpStatusFromGrade(intel.grade, intel),
     held,
     verdict,
     guidedGuide,
@@ -386,7 +388,7 @@ function buildPredictionDto(intel: MarketIntelligence): DailyEdgePredictionDto {
   return {
     pick: buildPickLabel(intel),
     confidence: pickConfidenceFraction(intel),
-    sharpStatus: buildSharpStatusFromGrade(intel.grade),
+    sharpStatus: buildSharpStatusFromGrade(intel.grade, intel),
     grade: held ? null : gradeToMlbGrade(intel.grade),
     signalType: buildSignalType(intel),
     marketSignal: buildMarketSignal(intel),

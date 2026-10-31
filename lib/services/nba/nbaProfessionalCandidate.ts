@@ -14,6 +14,7 @@ import {
   type NbaMovementHistoryRow,
 } from "./nbaSameBookMovement";
 import type { NbaProfessionalMarketReader } from "./nbaProfessionalMarketReader";
+import { resolveNbaNamedBookPosture } from "./nbaNamedBookPosture";
 
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -279,6 +280,11 @@ export function applyNbaProfessionalCandidate(args: {
       total_pick: totalPick,
       total_confidence: totalOver === null ? baseline.total_confidence : pickConfidence(totalOver),
       professional_grade_context: {
+        namedBookPostures: {
+          moneyline: resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "moneyline", pickedSide: mlPick }),
+          spread: resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "spread", pickedSide: spreadPick }),
+          total: resolveNbaNamedBookPosture({ reader: candidate.marketReader, market: "total", pickedSide: totalPick }),
+        },
         moneyline: {
           directReadQualified: candidate.marketReader?.reads.moneyline.status === "qualified",
           directReadSide:

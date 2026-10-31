@@ -54,6 +54,25 @@ Last reviewed: 2026-10-31
   `docs/model-audits/2026-10-31-all-market-data-health.md` and the paired JSON.
   Roll back this complete family together; never rewrite an immutable lock.
 
+## NBA observed named-book opposition — October 31 candidate
+
+Candidate model/marriage/grade are
+`nba_professional_unified_2026_10_31_r25_named_book_opposition` /
+`nba_market_marriage_2026_10_31_r26_named_book_opposition` /
+`nba_grade_policy_2026_10_31_r16_named_book_opposition`.
+Reader r8 retains exact endpoint fair prices for posture contract
+`nba_named_book_posture_2026_10_31_r1_observed_opposition`.
+This preserves the r24 independent score, probability law, forecast permissions,
+picks, quotes, positive-EV gates, actionability, writer and sport-scoped lease.
+Observed stable fresh target-excluded named-book opposition reaches the grade
+owner independently of flip qualification. An otherwise eligible Best Angle
+becomes a same-probability actionable Lean; it does not become a No Play.
+New member signals report resistance/mixed rather than deriving sharp
+confirmation from the actionable grade. Exact legacy locks still take priority.
+This is not the completed forecast-reader repair or an accuracy-improvement
+claim. NFL/CFB inference is not changed by this stage. Publication/live status
+and receipts: `docs/model-audits/2026-10-31-market-opposition-repair.md`.
+
 ## CFB paired-price context repair — October 30
 
 - The full CFB board remains eligible, including FCS-FCS. The r57 decision

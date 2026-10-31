@@ -400,6 +400,9 @@ export async function buildNbaDailyEdgePipeline(
   if (gameExternalIds.length > 0) {
     type ReaderPriceDbRow = {
       id: number;
+      provider: string;
+      provider_event_id: string | null;
+      ingestion_run_id: string | null;
       canonical_event_id: string;
       sportsbook: string;
       sharp_book: boolean;
@@ -425,7 +428,7 @@ export async function buildNbaDailyEdgePipeline(
     while (lastPriceId < priceHighWaterId) {
       const page = await supabase
         .from("market_price_observations_v2")
-        .select("id, canonical_event_id, sportsbook, sharp_book, market_type, selection_key, american_price, line, provider_timestamp, fetched_at")
+        .select("id, provider, provider_event_id, ingestion_run_id, canonical_event_id, sportsbook, sharp_book, market_type, selection_key, american_price, line, provider_timestamp, fetched_at")
         .eq("league", "nba")
         .in("canonical_event_id", gameExternalIds.map(String))
         .gt("id", lastPriceId)
@@ -454,6 +457,9 @@ export async function buildNbaDailyEdgePipeline(
       ) continue;
       const gameReaderRows = readerPriceRowsByGame.get(externalId) ?? [];
       gameReaderRows.push({
+        provider: row.provider,
+        providerEventId: row.provider_event_id,
+        ingestionRunId: row.ingestion_run_id,
         sportsbook: row.sportsbook,
         sharpBook: row.sharp_book,
         market: row.market_type as NbaMovementMarket,
@@ -626,6 +632,7 @@ export async function buildNbaDailyEdgePipeline(
         },
       },
       market_reader: reader,
+      market_reader_price_postures: pred.audit.professional_grade_context?.namedBookPostures,
       market_reader_decision: candidate.readerDecisionAudit,
     };
     return [dto];

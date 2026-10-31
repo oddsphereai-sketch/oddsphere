@@ -9,6 +9,7 @@ import {
   buildNbaProfessionalCandidate,
 } from "../lib/services/nba/nbaProfessionalCandidate";
 import { buildNbaProfessionalMarketReader } from "../lib/services/nba/nbaProfessionalMarketReader";
+import { buildMarketSignal } from "../lib/services/nba/adaptNbaToDailyEdgeResponse";
 
 const artifact: NbaPortableModelArtifact = {
   release: "fixture",
@@ -238,6 +239,35 @@ assert.equal(intelligence.total.current_price.odds_american, -110);
 assert.notEqual(intelligence.ml.grade, "held");
 assert.notEqual(intelligence.spread.grade, "held");
 assert.notEqual(intelligence.total.grade, "held");
+
+// Actual production assembly: an observed sub-threshold named move must reach
+// grading and member signal without being promoted into forecast authority.
+const observedReader = buildNbaProfessionalMarketReader({
+  evaluatedAt: fetchedAt, splitRows: [], selectedLines: { spreadHome: -2, total: 218 },
+  priceRows: priceRows.map(row => ({ ...row, provider: "owls", providerEventId: "9",
+    ingestionRunId: `run:${row.fetchedAt}`, americanPrice: -110,
+    line: (row.providerTimestamp === "2026-10-20T14:00:00Z" ? -3 : -2) * (row.selectionKey.endsWith(":home") ? 1 : -1),
+  })),
+});
+const observedCandidate = buildNbaProfessionalCandidate({ artifact, featureRow: { strength: 5 },
+  lines, history, externalGameId: 9, marketReader: observedReader });
+assert.equal(observedCandidate.final.marginHome, 5);
+assert.equal(observedCandidate.final.movementApplied, false);
+const observedPrediction = applyNbaProfessionalCandidate({ baseline, candidate: observedCandidate });
+const originalPrediction = structuredClone(observedPrediction);
+delete originalPrediction.audit.professional_grade_context!.namedBookPostures;
+const observedIntel = buildNbaGameIntelligence({ snapshot, prediction: observedPrediction, lines,
+  splitsRow: null, opportunities: [], injuriesSource: "espn" });
+const originalIntel = buildNbaGameIntelligence({ snapshot, prediction: originalPrediction, lines,
+  splitsRow: null, opportunities: [], injuriesSource: "espn" });
+assert.equal(originalIntel.spread.grade, "best_angle");
+assert.equal(observedIntel.spread.grade, "lean");
+assert.equal(buildMarketSignal(observedIntel.spread), "market_resistance");
+for (const key of ["ml", "spread", "total"] as const) {
+  for (const field of ["pick_side", "model_prob_on_pick", "consensus_line", "current_price", "effective_confidence"] as const) {
+    assert.deepEqual(observedIntel[key][field], originalIntel[key][field], `${key}:${field} unchanged by opposition plumbing`);
+  }
+}
 
 const injuredSnapshot: NbaGameSnapshot = {
   ...snapshot,

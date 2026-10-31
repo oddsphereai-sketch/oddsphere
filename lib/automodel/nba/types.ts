@@ -278,6 +278,7 @@ export type NbaAutoModelAudit = {
   provisional: boolean;
   /** Future-unlocked professional grade context. Optional for legacy fixtures and immutable locks. */
   professional_grade_context?: {
+    namedBookPostures?: Partial<Record<"moneyline" | "spread" | "total", import("../../services/nba/nbaNamedBookPosture").NbaNamedBookPosture>>;
     moneyline?: {
       directReadQualified: boolean;
       directReadSide: "home" | "away" | null;
