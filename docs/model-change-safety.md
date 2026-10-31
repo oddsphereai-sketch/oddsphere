@@ -3,6 +3,13 @@
 ## Owner-directed correctness repair: all-product market-data health, October 31
 
 The owner requested a current audit and repair of Daily Edge and Player Props data.
+Live verification also found EPL still rejecting its entire recovered board for
+one explicitly held missing total quote. The r23/v28 / member-r7 follow-up applies
+the same truthful partial-price publication principle to EPL, retaining hard
+failures for missing fixtures/forecasts, dishonest holds, incomplete priced vectors
+and whole-board price loss. Its same-input forecasts, grades, prices and stakes
+are unchanged relative to r22/v27: zero promotions and zero demotions. Existing
+locked payloads retain exact prior precedence.
 The bounded soccer repair in `docs/model-audits/2026-10-31-all-market-data-health.md`
 retains verified official Owls BTTS/Double Chance vectors, repairs exact UCL club
 aliases, removes stale stored quotes from current-price authority and permits

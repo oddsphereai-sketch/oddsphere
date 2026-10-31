@@ -153,7 +153,7 @@ for (const market of ["total", "btts"] as const) {
   assert.match(negative.reasons.join(" "), /exact forecast-side price does not have positive expected value/);
 }
 assert.equal(EPL_PREVIEW_GRADE_RELEASE, EPL_SHADOW_CALIBRATION_RELEASE);
-assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_31_r22_complete_official_market_prices");
+assert.equal(EPL_SHADOW_MODEL_RELEASE, "epl_goals_coherent_2026_10_31_r23_partial_price_publication");
 
 const previewSource = readFileSync("lib/services/epl/buildEplDailyEdgePreview.ts", "utf8");
 const coherentSource = readFileSync("lib/services/epl/eplCoherentMarketOutcome.ts", "utf8");
