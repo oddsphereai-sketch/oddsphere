@@ -15,9 +15,10 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { currentDailyEdgeBoardDate, currentSlateDate } from "@/lib/dates/slateDate";
 import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { BOOK_DISPLAY_HISTORY_RELEASE, captureOwlsBookDisplayHistory, isBookDisplayFeed, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
-import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
+import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,cfbLockedPrelockHistoryTickers,type PrelockFeed} from "@/lib/providers/owls/predictionMarketPrelock";
 import { fetchCbbKalshiMarkets } from "@/lib/providers/kalshi/cbbMarkets";
 import { marketDisplayGameIdentity } from "@/lib/cbb/marketDisplayIdentity";
+import { recoverCfbHistoricalChart } from "@/lib/providers/owls/cfbHistoricalChart";
 
 const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-prelock::${sport}::${PREDICTION_MARKET_PRELOCK_RELEASE}`;
 async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
@@ -140,11 +141,18 @@ export async function refreshPredictionMarketDisplayFeed(sport: PredictionMarket
   // Warm the actual selected markets of the nearest unlocked games first,
   // not the first arbitrary YES ticker or a distant alternate on the feed.
   const priority=new Map<string,number>();
-  for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
+  if(sport==="cfb")for(const ticker of cfbLockedPrelockHistoryTickers(priorArchive,games??[]))priority.set(ticker,priority.size);
+  for(const game of [...(games??[])].filter(g=>g.lockState!=="locked"&&Date.parse(g.gameStartAt??"")>Date.now()||
+    sport==="cfb"&&g.lockState==="locked"&&g.lockedAt&&Date.now()-Date.parse(g.lockedAt)<24*60*60_000).sort((a,b)=>Date.parse(a.gameStartAt!)-Date.parse(b.gameStartAt!))){
     const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,sport,priorBooks?.events));
     const outcome=match?selectedPredictionMarketOutcome(match,game.markets.moneyline.pick):null;
     if(outcome&&!priority.has(outcome.ticker))priority.set(outcome.ticker,priority.size);
-    for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);if(selection&&feed)resolveReaderContract(feed,match,selection)?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});}
+    for(const kind of kinds){const selection=readerHistoryContractSelection(game,kind==="total"?"total":"first_inning"),feed=contracts.find(c=>c.kind===kind);
+      if(selection&&feed){
+        const resolved=resolveReaderContract(feed,match,selection)??(sport==="cfb"?recoverCfbHistoricalChart(game,kind,selection.side,selection.line,winners,feed)?.market:null);
+        resolved?.context?.sources.forEach(r=>{if(!priority.has(r.ticker))priority.set(r.ticker,priority.size);});
+      }
+    }
   }
   interleaved.sort((a,b)=>(priority.get(a.ticker)??10_000)-(priority.get(b.ticker)??10_000));
   const [captured,bookCapture]=await Promise.all([

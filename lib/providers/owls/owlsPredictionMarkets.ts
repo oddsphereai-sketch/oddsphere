@@ -237,7 +237,17 @@ export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideC
       canonicalCbbTeamName(expected) === observed)||
       namedAliases[observed]?.some(alias=>name&&canonicalCbbTeamName(alias)===canonicalCbbTeamName(name))===true);
   }
-  if (sport === "cfb") return row.sideCode === abbreviation.toUpperCase() || cfbProviderTeamMatches({ observed: row.team, abbreviation, expectedName: name }) || cfbProviderTeamMatches({ observed: row.sideCode, abbreviation, expectedName: name });
+  if (sport === "cfb") {
+    // Exchange-only aliases, not a model/provider canonicalizer change.
+    // Both the published full institution and named contract must agree.
+    const exact:Record<string,{code:string;team:string;names:string[]}>= {
+      MIZ:{code:"MIZZ",team:"Missouri",names:["Missouri Tigers"]},
+      UALB:{code:"ALBY",team:"University at Albany",names:["Albany Great Danes","UAlbany Great Danes"]},
+    };
+    const alias=exact[abbreviation.toUpperCase()];
+    return !!alias&&row.sideCode===alias.code&&clean(row.team)===clean(alias.team)&&!!name&&alias.names.some(n=>clean(n)===clean(name))||
+      row.sideCode === abbreviation.toUpperCase() || cfbProviderTeamMatches({ observed: row.team, abbreviation, expectedName: name }) || cfbProviderTeamMatches({ observed: row.sideCode, abbreviation, expectedName: name });
+  }
   if (sport === "soccer" || sport === "ucl") {
     const providerCode = SOCCER_ALIASES[row.sideCode] ?? row.sideCode;
     return providerCode === abbreviation.toUpperCase() || [name, uclTeamAsset(abbreviation)?.displayName].some(expected => expected && clean(expected) === clean(row.team));

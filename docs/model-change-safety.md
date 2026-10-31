@@ -56,6 +56,33 @@ the completed owner-requested market reader. Full/focused checks, fresh-main
 integration, protected PR/up-to-date checks and live leased-writer/member proof
 remain required. Details: docs/model-audits/2026-10-31-market-opposition-repair.md.
 
+## CFB first-wave market-evidence integrity — October 31 candidate
+
+The owner requested an urgent correction of pregame market reading, with the
+October 31 noon ET slate as the first priority. The production r6 complete
+reader can take an older, wrong-line, or self-evaluated split as directional
+Total authority and can force the PMF across the evaluated Total. The concrete
+Notre Dame–Navy pre-lock receipt had independent Total 51.51, final Total 59.18,
+and an Over 55.5 Best Angle despite both Circa and Pinnacle moving their
+numbers downward. This is a product-correctness issue, not an inferred result.
+
+The isolated r7 candidate admits source splits only at their actual current
+line, timestamp, and non-evaluated book; it compares named books' opening and
+current two-sided prices at each book's own Total contract before applying a
+coherent PMF change. Named disagreement, one-book leads, flat prices under
+public pressure, and reversals remain distinct non-commanding cases. The
+existing football independent score and market-reader coefficient artifact
+are unchanged. No manually chosen outcome or arbitrary game-specific rule is
+introduced. No evidence proves predictive improvement yet.
+
+Old T-60 records remain immutable under r57 and prior snapshot releases. New
+future-unlocked r58/r31/r7 decisions require a same-board report covering all
+three markets and actionable promotions/demotions, the focused CFB production
+and lock suites, `npm run verify:model-change`, latest-main integration safety,
+protected PR checks, and live writer/reader confirmation. The T-60 cutoff must
+not be delayed mid-slate to fit an unfinished release. Evidence:
+`docs/model-audits/2026-10-31-cfb-noon-market-evidence.md`.
+
 ## Owner-directed correctness repair: all-product market-data health, October 31
 
 The owner requested a current audit and repair of Daily Edge and Player Props data.

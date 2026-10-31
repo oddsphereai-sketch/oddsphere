@@ -5,11 +5,11 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { readerContractSelection,readerHistoryContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
 import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookStart, predictionMarketWindowDuration, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
-import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketHasSharedHistory,predictionMarketBookLineHistory} from "@/app/lab/lib/predictionMarketDisplay";
+import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketVisibleComparison,predictionMarketHasSharedHistory,predictionMarketBookLineHistory} from "@/app/lab/lib/predictionMarketDisplay";
 import {PredictionMarketSourcePins} from "@/app/lab/lib/predictionMarketSourcePins";
 import {publicMarketDisplayBook,publicMarketDisplayHistory,publicMarketPrelockHeldBook} from "@/app/lab/lib/publicMarketDisplayTrail";
 
-type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string;prelockCapturedAt?:number;sourcePinned?:boolean};
+type Receipt={market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null;availability?:string;prelockCapturedAt?:number;historicalThrough?:number;recoveredAt?:number;sourcePinned?:boolean};
 const cache = new Map<string, { at:number; value:Receipt; pending?:Promise<Receipt> }>();
 const sourcePins=new PredictionMarketSourcePins(()=>typeof window==="undefined"?undefined:window.sessionStorage);
 function load(key: string): Promise<Receipt> {
@@ -23,7 +23,7 @@ function load(key: string): Promise<Receipt> {
     })
     .then(value => {
       const at=Date.now(),book=value.book??stored?.value.book??null;
-      const pinned=value.prelockCapturedAt?value:{...value,book:sourcePins.accept(key,book,at),sourcePinned:!!book};
+      const pinned=value.prelockCapturedAt||value.historicalThrough?value:{...value,book:sourcePins.accept(key,book,at),sourcePinned:!!book};
       cache.set(key,{at,value:pinned});return pinned;
     })
     .catch(error => { if (stored) cache.set(key,{...stored,pending:undefined}); else cache.delete(key); throw error; });
@@ -80,9 +80,10 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const current=receipt?.key===key?receipt:null;
   const marketLabel=kind==="total"?"Total":kind==="spread"?(game.sport==="nhl"?"Puck line":"Spread"):kind==="btts"?"Both teams to score":marketKey==="first_inning"?"First inning":"Game winner";
   const checkedAt=current?.checkedAt??0,lockedAt=predictionMarketLockBoundary(game,checkedAt),frozen=lockedAt!==undefined;
-  const heldArchive=frozen&&!legacySelection&&!!selection&&current?.prelockCapturedAt!==undefined&&Number.isFinite(lockedAt)&&current.prelockCapturedAt<=lockedAt!;
-  // An old locked empty pick never acquires new reader semantics. Only a
-  // genuinely captured future pre-lock receipt may activate this display.
+  const historicalCfb=game.sport==="cfb"&&frozen&&Number.isFinite(lockedAt)&&current?.historicalThrough===lockedAt;
+  const heldArchive=frozen&&!legacySelection&&!!selection&&(historicalCfb||current?.prelockCapturedAt!==undefined&&Number.isFinite(lockedAt)&&current.prelockCapturedAt<=lockedAt!);
+  // Locked picks are never manufactured. The separate owner-approved CFB
+  // historical view must independently verify the exact stored selection.
   if(frozen&&!legacySelection&&selection&&!heldArchive)return <PredictionMarketUnavailable variant={variant} label={marketKey==="first_inning"?"First inning":"Game winner"} kind={null} lockedAt={lockedAt} status="selection_pending" book={null}/>;
   // With an actual eligible pre-lock receipt, render the public tracker's
   // EXACT stored history, including observations older than 24 hours. The
@@ -91,28 +92,29 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   // No receipt means the legacy locked rendering remains unchanged.
   const storedBook=frozen&&current?.prelockCapturedAt?publicMarketPrelockHeldBook(trackerBook,current.prelockCapturedAt,lockedAt):current?predictionMarketReaderBookTrail(selectedMarket,selectedMarket.pick??"",frozen?lockedAt:checkedAt,selection?.line??null):null;
   const legacyBook=frozen&&current?.prelockCapturedAt?predictionMarketArchivedBook(storedBook,current.book,current.prelockCapturedAt,lockedAt,selection?.line??null):predictionMarketComparisonBook(game.lockState==="locked"||frozen,storedBook,current?.book??null,current?.sourcePinned===true);
-  const book=frozen?legacyBook:current?publicMarketDisplayHistory(trackerBook,current.book):null;
-  // Legacy locked records keep their old unavailable state. New auxiliary
-  // history can only come from the existing exact pre-lock receipt guard.
-  const fallbackBook=frozen&&!current?.prelockCapturedAt?null:book;
+  const book=historicalCfb?current?.book??null:frozen?legacyBook:current?publicMarketDisplayHistory(trackerBook,current.book):null;
+  // Other legacy locks retain their unavailable state; only the explicit CFB
+  // historical view may recover already recorded quotes without a receipt.
+  const fallbackBook=frozen&&!current?.prelockCapturedAt&&!historicalCfb?null:book;
   if(kind===null||!current?.market)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status={kind===null?(game.sport==="mlb"&&marketKey==="first_inning"?"unsupported":"selection_pending"):current?.availability??(current?"contract_unavailable":"loading")} book={fallbackBook}/>;
   const market=current.market;
   const outcome=selectedPredictionMarketOutcome(market,selectedMarket.pick);
-  if(!outcome||(!current.prelockCapturedAt&&current.checkedAt-Date.parse(market.asOf)>24*60*60_000))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="feed_unavailable" book={fallbackBook}/>;
+  if(!outcome||(!current.prelockCapturedAt&&!historicalCfb&&current.checkedAt-Date.parse(market.asOf)>24*60*60_000))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="feed_unavailable" book={fallbackBook}/>;
   const retained=current.checkedAt-Date.parse(market.asOf)>10*60_000;
   const archivedBook=book?.historyScope==="prelock_archive";
   const context=market.context;
   const differentBookLine=!!book&&book.line!==undefined&&book.line!==(selection?.line??null);
   const bookLabel=differentBookLine?(kind==="total"?`${selection?.side==="under"?"Under":"Over"} ${book!.line}`:`${selection?.side==="away"?game.awayTeam:game.homeTeam} ${formatContractLine(book!.line!)}`):context?.requestedLabel??"moneyline";
-  const comparison=predictionMarketComparison(outcome,book,lockedAt);
+  const visible=predictionMarketVisibleComparison(outcome,book,lockedAt,game.sport==="cbb"&&!frozen||game.sport==="cfb"&&(!frozen||!!current.prelockCapturedAt||historicalCfb));
+  const comparison=visible.comparison;
   const sharedHistory=predictionMarketHasSharedHistory(comparison);
-  // CBB's Kalshi history can predate its newly captured sportsbook tape by
-  // weeks. Plot the real Kalshi curve alone while the book overlap builds;
-  // a one-quote book must not suppress a genuine prediction-market graph.
-  if(fallbackBook&&!sharedHistory&&(game.sport!=="cbb"||frozen||comparison.points.length<2))return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
+  // Genuine CBB/CFB Kalshi history remains visible without pretending a
+  // one-quote sportsbook endpoint provides a full two-source overlap.
+  const standaloneHistory=visible.standalone;
+  if(fallbackBook&&!sharedHistory&&!standaloneHistory)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
   if(!comparison.points.length)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} status={frozen?"prelock_unavailable":"history_unavailable"} book={null}/>;
-  const plottedBook=game.sport==="cbb"&&!frozen&&!sharedHistory?null:book;
-  const movementView=!frozen&&view==="movement"&&!!plottedBook;
+  const movementView=!frozen&&view==="movement"&&!!book;
+  const plottedBook=movementView?book:visible.book;
   const plotted=movementView?predictionMarketBookOnlyComparison(book):comparison;
   const chartStart=range==="24h"&&plotted.cutoff!==null?Math.max(plotted.start,plotted.cutoff-24*60*60_000):plotted.start;
   const history=chartStart===comparison.cutoff?comparison.points.slice(-1):predictionMarketWindowPoints(comparison.points,chartStart);
@@ -164,7 +166,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
       </p>:null}
       {(!frozen||archivedBook)&&book?<BookLineHistory book={book} kind={kind} start={chartStart} end={comparison.cutoff??undefined} frozen={frozen}/>:null}
       {!frozen&&outcome.volume24h!==null?<p className="col-span-2"><span className="font-semibold text-[#d9d1e4]">{compact(outcome.volume24h)}</span> {context?.method==="push_adjusted"?"source contracts":"contracts"} · 24h</p>:null}
-      <p className="col-span-2 text-[#9d92ae]">{current.availability==="refresh_failed"?"Refresh unavailable · retained quotes · ":""}{frozen?"Pre-lock history · through "+time(comparison.cutoff??comparison.points.at(-1)![0]):movementView?"Sportsbook through "+time(plotted.cutoff!):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
+      <p className="col-span-2 text-[#9d92ae]">{current.availability==="refresh_failed"?"Refresh unavailable · retained quotes · ":""}{frozen?(historicalCfb?"Historical quotes · through ":"Pre-lock history · through ")+time(comparison.cutoff??comparison.points.at(-1)![0]):movementView?"Sportsbook through "+time(plotted.cutoff!):comparison.cutoff!==null?"Compared through "+time(comparison.cutoff)+(book?.locked?" · frozen reference":""):comparison.pending?"Waiting for overlapping quotes":retained?"Last available Kalshi · "+time(Date.parse(market.asOf)):"Kalshi · "+time(Date.parse(market.asOf))}</p>
     </div>
   </section>;
 }
