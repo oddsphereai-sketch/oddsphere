@@ -182,3 +182,108 @@ This inspection made no source, receipt, forecast, lock or database change.
 It does not justify relaxing those numerical rules, choosing a correction
 amplitude or forcing Toronto to flip. Full source-specific conditional forecast
 response remains unresolved and is NOT implemented by this first-stage branch.
+
+## Full-forecast work: bounded real-source cohort capture
+
+Draft PR895 remains a prerequisite, not launch approval. The next experiment
+must use actual decision-time named-book observations rather than substituting
+the old public-consensus proxy or changing the2/5-point rules by intuition.
+A SELECT-only metadata inventory found71 unique locked NBA ML game records
+from October20–29 across eight capture-era releases (13,275 response bytes,
+one successful request, zero outcomes/provider calls/writes). They are not
+pooled and advertised as current-r24 performance. The independent head and
+capture clocks must be checked per row before any estimator receives authority.
+
+Capture phase is frozen before outcome retrieval: at most128 locked games,
+160 SELECT requests,64MiB raw response data,3,000 named-book price rows/game,
+one original stored ML snapshot per game, and no provider requests, outcomes,
+fits, production writes, refreshes or lock changes. Recover full provider/run
+chronology only before the original reader/lock cutoff. Reject ambiguous,
+late or duplicate captures; expose ineligible rows rather than silently filling
+them. Use exclusive-write private receipts and SHA256 manifests. No new live
+model path, shadow payload, cron, writer or database schema is authorized.
+
+Before fitting: freeze eligible membership, source hashes, features, estimator
+recipe, chronological train/calibration/confirmation boundaries and pass/fail
+criteria. Same-cohort results must report both scores and proper ML/Spread/
+Total probabilities plus exact-line decisions and board counts, stratified by
+capture release. Real source-specific behavior cannot inherit qualification
+merely because a consensus-only model looked better on score error. Do not
+repeatedly open a holdout or force known Toronto outcomes. No fitted candidate
+is activated solely by this capture plan.
+
+Capture result:71/71 pregame clocks validate;15 games have current-provider
+attested trails. Source SHA256
+6f96d23ce033076034d9911fc2c4cbbaca36ee8de98d5e94050fc28cb719fddc;
+locked-inputs SHA256
+f3cad8ecb36d8cb68f7cc7b2d8466f728b6e8d8f03a538733d769e9cb6181172.
+Private root /private/tmp/oddsphere-nba-forecast-J3aNUx. Capture used75 SELECTs /
+7,065,169 raw bytes; the metadata inventory used one request /13,275 bytes.
+A12-row older-source sample used2,084 bytes and showed legacy_unattributed
+with null provider-event/run. A final bounded inventory over all56 games
+without attested rows found zero already-stored non-null event/run rows
+(one SELECT /2 bytes). V51 explicitly prohibits inventing that lineage.
+No outcome, fit, paid-provider request, prediction or lock write occurred.
+
+The next conditional-distribution kernel is implemented ONLY under
+scripts/operator/nba/nbaAttestedForecastDistribution.ts, not imported by any
+writer/member/runtime model. It maps exact number+juice into an equivalent
+location under a frozen residual CDF, keeps one independent component and
+source-specific components, and derives ML/Spread from one margin CDF. A
+single source and arbitrarily small observations can affect that distribution;
+no two-book vote or2/5-point permission gate is embedded. Future source logits,
+fusion, movement response, scales and age response must be learned/sealed,
+not presented as human-authored calibrated beliefs. The product copula is
+explicit; unlearned cross-axis correlation/full path response is not claimed.
+
+The pure prototype returns a representative median-based score because a
+skewed mixture's expected margin can disagree with the majority win/cover
+probability. Expected means are audit-only; no0.25-point crossing is invented.
+Synthetic tests cover that counterexample, direct ML and Spread crossing,
+continuous small-signal response, missing dimensions retaining exact prior,
+source/future/duplicate negatives and home/away reflection. These are NOT
+fitted coefficients or a predictive result; productionQualified is false,
+and no production artifact or shadow snapshot is emitted. This is a concrete
+forecast implementation substrate, not launch readiness. The original
+grade/signal prerequisite remains draft PR895, unmerged.
+
+## Scenario-to-consequence ledger (not a resolved-scenario count)
+
+An observed label is not a completed decision response. NFL/CFB ownership is
+in the coordinated Rebuild chat; this table describes NBA only. Source health
+and future/outcome contamination are validity constraints, not numerical
+sharp-signal voting quotas. No table row grants itself prediction authority.
+
+| Observable family | Incumbent forecast consequence | First-stage repair | Offline distribution / remaining gap |
+| --- | --- | --- | --- |
+| Named ML moves against a pick | No direct ML score authority | Real opposition can lower Best to Lean | Direct ML may move one shared margin CDF; unfit |
+| Sub-two-point Spread change | No score response | Meaningful observed opposition survives mixed-reader failure | Continuous source-level/price response; unfit |
+| Number and juice compensate | Raw-number forecast may still qualify | Conflict is not claimed as two agreeing votes | Equivalent location uses both number and juice; unfit |
+| Favorite wins but may not cover | Narrow Spread read may flip cover; ML indirect | ML/Spread opposition kept separate | ML/Spread use one CDF, not one side label; synthetic proof only |
+| Public/named handle pressure with a held line | Some reverse-flow labels; no general response | No new split-only score authority | Flow-volume and non-movement interactions NOT implemented |
+| Named leader, retail follower, book disagreement | Qualifier uses breadth/disagreement | Provider/run/book lanes preserve disagreement | Full lead/lag and independent-source information NOT implemented |
+| Reversal, partial/full buyback, recent onset | Broad categorical veto/persistence rules | No false stable-opposition claim after detected reversal | Kernel uses endpoints/age; full path response NOT implemented |
+| Independent disagreement/uncertainty | Independent score owns default outside gates | Model value no longer called sharp confirmation | Learned source reliability/fusion/scales NOT fitted |
+| Missing splits or only one real book | Prices can still qualify subject to old gates | Valid price posture does not require splits | One source may affect a marginal; missing dimension retains prior |
+| Exact price changes without new direction | Grade/economics only | Confirmation is independent of grade | Final exact-quote grading/board integration NOT implemented |
+| Favorite/underdog and home/away roles | Existing side laws |720 neutrality controls pass | Synthetic reflected CDF/score controls pass; no accuracy claim |
+| Locked public record | Stored payload must win | Writer/reader immutability tests pass | No kernel writer or production artifact exists |
+
+The independent reviewer proposed a development experiment, not a deployment
+exception: keep older observations explicitly legacy_unattributed_book_level,
+require unambiguous exact canonical-market/capture pairs, use the same36h
+capture-time window in both cohorts, tie most parameters globally and reserve
+all15 attested games for a single descriptive transport check. A pass cannot
+be called current-r24 performance (12 attested games are r22; only3 are r24).
+No arbitrary80/30/60 sample quorum, new95%-every-metric threshold, production
+shadow or automatic live approval was adopted. Features/recipe/splits must be
+frozen before labels, with adverse proper-score/ML/Spread/Total results a
+rejection, not an invitation to retune the same confirmation data.
+
+Git-only inspection of release-introduction main trees finds the same five-file
+score/feature/roster blob fingerprint for r17/r18/r20/r21/r22/r24
+(3d8a08ea4a16b2722d8a974bc51d4a4882732ec5ed442c762e37162c76caba24).
+R11/r15 omit the roster layer and have a different fingerprint. This is a
+reconstructed code-tree comparison, NOT a fingerprint stored in those locks,
+not proof of identical raw inputs, and not permission to pool capture eras
+and advertise them as current-model results. Outcome labels remain unread.
