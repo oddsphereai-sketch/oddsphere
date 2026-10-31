@@ -5,6 +5,7 @@ import {readerHistoryContractSelection,resolveReaderContract,type ContractFeed,t
 import {matchPredictionMarketGame,type PredictionMarketFeed,type PredictionMarketSport} from "./owlsPredictionMarkets";
 import {bookDisplayTrail,type BookDisplayFeed} from "./owlsBookDisplayHistory";
 import {publicMarketDisplayBook,publicMarketDisplayHistory} from "@/app/lab/lib/publicMarketDisplayTrail";
+import {marketDisplayGameIdentity} from "@/lib/cbb/marketDisplayIdentity";
 
 export const PREDICTION_MARKET_PRELOCK_RELEASE="prediction_market_prelock_display_2026_10_29_r1";
 type PrelockFrame={event:number;start:string;away:string;home:string;key:"moneyline"|"total"|"first_inning";pick:string;kind:string;side:string;line:number|null;capturedAt:number;market:ReaderMarketMatch|null;book:PredictionMarketBookTrail|null};
@@ -20,7 +21,7 @@ export function capturePredictionMarketPrelock(previous:PrelockFeed|null,games:D
  const rows=new Map((previous?.rows??[]).filter(r=>Date.parse(r.start)>now-90*86_400_000).map(r=>[identity(r),r]));
  for(const game of games){
   if(game.lockState==="locked"||predictionMarketLockBoundary(game,now)!==undefined||Date.parse(game.gameStartAt??"")<=now)continue;
-  const match=matchPredictionMarketGame(winners,{sport,awayTeam:game.awayTeam,homeTeam:game.homeTeam,gameStartAt:game.gameStartAt!,awayName:game.awayTeamDisplayName,homeName:game.homeTeamDisplayName,awayCollege:game.cbbAwayCollege,homeCollege:game.cbbHomeCollege,lockState:game.lockState,lockedAt:game.lockedAt},now);
+  const match=matchPredictionMarketGame(winners,marketDisplayGameIdentity(game,sport,books?.events,now),now);
   for(const key of ["moneyline","total","first_inning"] as const){
    const selection=readerHistoryContractSelection(game,key),pick=game.markets[key].pick??"",outcome=match?selectedPredictionMarketOutcome(match,pick):null;
    const label=pick.replace(/\s+ML$/i,"").trim().toUpperCase();
@@ -50,7 +51,7 @@ export function capturePredictionMarketPrelock(previous:PrelockFeed|null,games:D
    rows.set(identity(next),{...next,market:market??prior?.market??null,book:book??prior?.book??null,...(retained.length?{checkpoints:retained}:{})});
   }
  }
- return {release:PREDICTION_MARKET_PRELOCK_RELEASE,sport,rows:[...rows.values()].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start)).slice(0,450)};
+ return {release:PREDICTION_MARKET_PRELOCK_RELEASE,sport,rows:[...rows.values()].sort((a,b)=>Date.parse(b.start)-Date.parse(a.start)).slice(0,sport==="cbb"?3000:450)};
 }
 
 export function readPredictionMarketPrelock(feed:PrelockFeed|null,game:DailyEdgeGameDto,kind:string,side:string,line:number|null,now=Date.now()):PrelockReceipt|null{
