@@ -11,7 +11,7 @@ const detailRoute = readFileSync("app/api/lab/cfb-game-detail/route.ts", "utf8")
 const fallbackProvider = readFileSync("lib/providers/draftkings/draftKingsNetworkSplits.ts", "utf8");
 const writer = readFileSync("lib/services/football/cfbForwardEvidenceWriter.ts", "utf8");
 
-assert.match(memberReader, /readCachedCfbMemberFixture = unstable_cache\(/);
+assert.match(memberReader, /readCachedCompressedCfbMemberFixture = unstable_cache\(/);
 assert.match(memberReader, /readCfbForwardMemberSnapshot\(\{ client: supabase, season \}\)/);
 assert.match(memberReader, /return published\?\.fixture \?\? null/);
 assert.doesNotMatch(page, /readCurrentCfbMemberFixture/, "the member request must never rebuild the full immutable evidence season");
