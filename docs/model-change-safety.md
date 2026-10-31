@@ -1,5 +1,30 @@
 # Model change safety protocol
 
+## Owner-directed correctness repair: all-product market-data health, October 31
+
+The owner requested a current audit and repair of Daily Edge and Player Props data.
+The bounded soccer repair in `docs/model-audits/2026-10-31-all-market-data-health.md`
+retains verified official Owls BTTS/Double Chance vectors, repairs exact UCL club
+aliases, removes stale stored quotes from current-price authority and permits
+honest per-market missing-price holds while other complete current markets refresh.
+Whole-board price collapse and malformed/incoherent publication still fail closed.
+
+This is a source-correctness release, not a fitted model or a new grade threshold.
+The same-input EPL replay recovers 18 prices and five existing-policy actionables,
+with no demotions or forecast changes. The UCL replay reports current prices
+68→49/72 after stale quotes lose current authority; actionables 12→7 through one
+tested existing-policy promotion and six explicit data/economics demotions. Two
+sides and four probabilities change only through newly matched existing UCL
+market-reader evidence. The contraction is disclosed; stale evidence cannot be
+kept actionable merely to preserve a board count. No accuracy improvement is claimed.
+
+Version the complete affected soccer family, preserve the existing sole
+`prediction_pipeline:soccer` lease, original provider receipts, existing credit
+reserve and exact locked writer/reader precedence, and run all focused/full,
+integration, protected-publication and post-deploy live checks before completion.
+Missing supplemental markets remain held; this repair authorizes no quota bypass,
+new writer, secret export, shadow model or reconstruction of locked data.
+
 ## Owner-approved CFB paired-price context — October 30
 
 The owner directed CFB price repair while retaining the full board, including

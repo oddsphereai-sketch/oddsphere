@@ -1,8 +1,9 @@
 import type { EplSharpFixtureMarket, EplSharpOddsRecord } from "@/lib/providers/real_api/SharpApiEplMarketProvider";
 import type { EplStoredPriceObservation } from "@/lib/services/epl/buildEplDailyEdgePreview";
+import { soccerStoredPriceMaxAgeMs } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
 
 export const UCL_STORED_QUOTE_FALLBACK_RELEASE =
-  "ucl_stored_quote_fallback_2026_10_14_r1_complete_same_book" as const;
+  "ucl_stored_quote_fallback_2026_10_31_r2_fresh_complete_same_book" as const;
 
 export const UCL_STORED_QUOTE_FALLBACK_ENDPOINT = "/oddsphere/ucl/stored-line-history" as const;
 
@@ -45,11 +46,16 @@ function storedRowsForMarket(input: {
   providerId: number;
   market: Market;
   history: EplStoredPriceObservation[];
+  kickoff: string;
+  nowMs: number;
 }): EplSharpOddsRecord[] {
   const latestByGroupSide = new Map<string, EplStoredPriceObservation>();
   for (const row of input.history) {
     if (row.providerId !== input.providerId || row.market !== input.market || !row.sportsbook) continue;
     if (!Number.isFinite(row.american) || row.american === 0) continue;
+    const recordedAt = Date.parse(row.recordedAt);
+    if (row.isOpener || !Number.isFinite(recordedAt) || recordedAt > input.nowMs
+      || input.nowMs - recordedAt > soccerStoredPriceMaxAgeMs(input.kickoff, input.nowMs)) continue;
     if (input.market === "total" && row.line !== 2.5) continue;
     const key = `${canonicalBook(row.sportsbook)}:${lineKey(row.market, row.line)}:${row.side}`;
     const prior = latestByGroupSide.get(key);
@@ -86,8 +92,8 @@ function storedRowsForMarket(input: {
   });
 }
 
-/** Restore an absent UCL market from its latest complete same-book stored
- * tuples. Any complete current provider market wins untouched. Stored rows
+/** Restore an absent UCL market from its latest fresh complete same-book stored
+ * tuples under the shared soccer freshness window. Current provider markets win. Stored rows
  * remain exact-price availability/economics evidence and are deliberately
  * ineligible for forecast arbitration because their original Sharp event ID
  * was not retained by the legacy line-history schema. */
@@ -95,10 +101,13 @@ export function applyUclStoredQuoteFallback(input: {
   fixture: EplSharpFixtureMarket;
   providerId: number;
   history: EplStoredPriceObservation[];
+  kickoff: string;
+  now?: Date;
 }): EplSharpFixtureMarket {
   const fallbackRows = (Object.keys(MARKET_REQUIREMENTS) as Market[]).flatMap((market) => {
     if (currentMarketIsComplete(input.fixture, market)) return [];
-    return storedRowsForMarket({ providerId: input.providerId, market, history: input.history });
+    return storedRowsForMarket({ providerId: input.providerId, market, history: input.history,
+      kickoff: input.kickoff, nowMs: (input.now ?? new Date()).getTime() });
   });
   if (fallbackRows.length === 0) return input.fixture;
   return { ...input.fixture, odds: [...input.fixture.odds, ...fallbackRows] };

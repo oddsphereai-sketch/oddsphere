@@ -83,6 +83,7 @@ async function main() {
     finalizeFixtureMarket: (fixture: UclSharpFixtureMarket, match: EplShadowSlateMatch) => applyUclStoredQuoteFallback({
       fixture,
       providerId: match.id,
+      kickoff: match.kickoff,
       history: storedPriceHistory,
     }),
   };
