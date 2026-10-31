@@ -25,6 +25,9 @@ leadership is unidentified, not silently tie-broken by book preference. When
 every simultaneous source yields the identical full coordinate (including
 dispersion), that common effect applies once with `leader=null` and explicit
 equivalent sources. Same direction or equal ML probability alone is not enough.
+The receipt has both `leader=null` and `selectedSource=null`; downstream
+qualification consumes the explicit equivalent-source episode, never credits
+an arbitrary representative book with leadership.
 Copied followers add zero amplitude. An observed extension can replace the
 prior frontier; successive distinct extensions are walked chronologically,
 never the whole move added twice. Full buyback cancels its episode and cannot
@@ -51,6 +54,9 @@ not invent same-line opposition. Valid timed split reactions are classified
 aligned/held/opposed with actual source types and quote-side direction; they
 affect posture, not arbitrarily assigned points. Unresolved direction and
 source-clock problems cannot become a false confirmation.
+Held pressure toward the pick tempers conviction; resistance to opposite-side
+pressure supports retaining the earned forecast/grade. That resistance is
+explicit context, not an invented directional quote move or identified sharp buy.
 
 ## Runtime and evidence
 
@@ -81,6 +87,10 @@ provider request is part of these tests.
 
 Not live. Full safety/type/lint/build passed before the final bounded reviewer
 regressions; those affected checks must be rerun on the final checkpoint.
+Fresh main c3a557fe is integrated at e339cb9a; both NBA and CFB safety declarations
+were retained. Integration safety passed at that clean checkpoint. Independent
+review reproduced and accepted the opposite-buyback, successive-frontier and
+equivalent-source fixes; no remaining blocker in those three bounded cases.
 Current-input board attribution,
 fresh-main integration/overlap/protected-PR and production verification remain
 required before publication. The120-case cross-product audit remains the

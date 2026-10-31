@@ -197,6 +197,7 @@ assert.equal(resistance.margin, 3, "fresh opposite peers are contested, not a sy
 const tie = run([...openingBooks, ...pair("moneyline", "circa", next, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .6)], episodeSeed.state, {}, 3);
 assert.equal(tie.arbitration.margin.status, "equivalent_simultaneous_episode");
 assert.equal(tie.arbitration.margin.leader, null, "equivalent effects do not identify which physical book led");
+assert.equal(tie.arbitration.margin.selectedSource, null, "equivalent evidence cannot falsely credit a single arbitrary physical source");
 assert.deepEqual(tie.arbitration.margin.equivalentSources, ["circa", "pinnacle"]);
 assert.ok(Math.abs(tie.margin - (3 + nbaResidualQuantile("spread", .6, law))) < 1e-7,
   "identical observed consequences can apply once without a vote quota, pooling, or invented leadership");
@@ -215,6 +216,7 @@ assert.equal(totalTied.arbitration.total.status, "equivalent_simultaneous_episod
 const frontier = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .7)], episodeSeed.state, {}, 3);
 assert.equal(frontier.arbitration.margin.status, "frontier_extension");
 assert.equal(frontier.arbitration.margin.leader, "pinnacle");
+assert.ok(Math.abs(frontier.arbitration.margin.incrementalExtension! - (nbaResidualQuantile("spread", .7, law) - nbaResidualQuantile("spread", .6, law))) < 1e-7);
 assert.ok(Math.abs(frontier.margin - (3 + nbaResidualQuantile("spread", .7, law))) < 1e-7,
   "a frontier extension replaces the prior causal endpoint, not add the whole follower move twice");
 const lateReverse = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", quarter, 0, .6),
@@ -248,6 +250,7 @@ const thirdFrontier = run([...thirdOpen, ...pair("moneyline", "circa", half, 0, 
   ...pair("moneyline", "bookmaker", next, 0, .8)], run(thirdOpen, null, { evaluatedAt: epoch }, 3).state, {}, 3);
 assert.equal(thirdFrontier.arbitration.margin.selectedSource, "bookmaker");
 assert.deepEqual(thirdFrontier.arbitration.margin.frontierPath, ["circa", "pinnacle", "bookmaker"]);
+assert.ok(Math.abs(thirdFrontier.arbitration.margin.incrementalExtension! - (nbaResidualQuantile("spread", .8, law) - nbaResidualQuantile("spread", .7, law))) < 1e-7);
 assert.ok(Math.abs(thirdFrontier.margin - (3 + nbaResidualQuantile("spread", .8, law))) < 1e-7,
   "the latest distinct frontier must not be lost after processing the first extension");
 const ambiguousFrontier = run([...thirdOpen, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", next, 0, .7),

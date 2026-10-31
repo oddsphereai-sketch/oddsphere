@@ -453,7 +453,8 @@ export function reconcileNbaMarketConsequence(args: {
       favoredSide: !matchesEvaluatedContract || numericalZero(fairAtBookContract - .5) ? null : market === "total" ? fairAtBookContract > .5 ? "over" : "under" : fairAtBookContract > .5 ? "home" : "away",
       authority: "context_only" as const, scoreDelta: 0 }];
   }));
-  const receipt = ({ selected, ...r }: ReturnType<typeof arbitrate>) => ({ ...r, selectedSource: selected?.book ?? null });
+  const receipt = ({ selected, ...r }: ReturnType<typeof arbitrate>) => ({ ...r,
+    selectedSource: r.equivalentSources?.length ? null : selected?.book ?? null });
   return { release: NBA_MARKET_CONSEQUENCE_RELEASE, state, margin, total, marginScale,
     homeScore: (total + margin) / 2, awayScore: (total - margin) / 2,
     marginApplied, totalApplied, books, pressure, sequences, followers, currentContexts,

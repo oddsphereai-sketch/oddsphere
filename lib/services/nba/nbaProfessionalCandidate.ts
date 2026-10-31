@@ -18,6 +18,10 @@ import { resolveNbaNamedBookPosture, resolveNbaConsequencePosture } from "./nbaN
 import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
 import { NBA_MARKET_CONSEQUENCE_RELEASE, reconcileNbaMarketConsequence, type NbaMarketConsequenceContext } from "./nbaMarketConsequence";
 
+function episodeIncludesSource(episode: { authority: string; selectedSource: string | null; equivalentSources?: readonly string[] } | undefined, book: string) {
+  return episode?.authority === "causal_authority" && (episode.selectedSource === book || episode.equivalentSources?.includes(book) === true);
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
@@ -156,9 +160,9 @@ export function buildNbaProfessionalCandidate(args: {
   const consequence = args.marketContext ? reconcileNbaMarketConsequence({ independentMargin: independent.marginHome,
     independentTotal: independent.total, law: priceLaw, context: args.marketContext,
     spreadHome: consensus.spreadHome, totalLine: consensus.totalLine }) : null;
-  const spreadEvidence = consequence?.books.filter(b => consequence.arbitration.margin.authority === "causal_authority" && b.book === consequence.arbitration.margin.selectedSource && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes("spread"))
+  const spreadEvidence = consequence?.books.filter(b => episodeIncludesSource(consequence.arbitration.margin, b.book) && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes("spread"))
     .flatMap(b => b.proposals.filter(p => p.market === "spread" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
-  const totalEvidence = consequence?.books.filter(b => consequence.arbitration.total.authority === "causal_authority" && b.book === consequence.arbitration.total.selectedSource)
+  const totalEvidence = consequence?.books.filter(b => episodeIncludesSource(consequence.arbitration.total, b.book))
     .flatMap(b => b.proposals.filter(p => p.market === "total" && Math.abs(p.observedLocationDelta) > 1e-9)) ?? [];
   const final = consequence ? { ...baselineFinal, release: consequence.release,
     homeScore: consequence.homeScore, awayScore: consequence.awayScore, marginHome: consequence.margin, total: consequence.total,
@@ -294,7 +298,7 @@ export function applyNbaProfessionalCandidate(args: {
   const totalPick = candidate.picks.total ?? baseline.predicted_total_side;
   const consequenceSide = (market: "moneyline" | "spread") => {
     const decision = candidate.marketConsequence?.arbitration.margin;
-    const signs = new Set((candidate.marketConsequence?.books ?? []).filter(b => decision?.authority === "causal_authority" && b.book === decision.selectedSource && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes(market))
+    const signs = new Set((candidate.marketConsequence?.books ?? []).filter(b => episodeIncludesSource(decision, b.book) && b.jointStatus !== "joint_conflict" && !b.ignoredMarkets?.includes(market))
       .flatMap(b => b.proposals.filter(p => p.market === market && Math.abs(p.observedLocationDelta) > 1e-9).map(p => Math.sign(p.observedLocationDelta))));
     return signs.size === 1 ? signs.has(1) ? "home" as const : "away" as const : null;
   };

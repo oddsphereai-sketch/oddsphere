@@ -103,7 +103,10 @@ Same-book ML/Spread may jointly constrain its one location/scale. Named books
 are interpreted chronologically: observed leader, follower, held resistance,
 frontier extension, buyback/cancellation, later reversal, unresolved conflict.
 Equal source-time leadership without distinguishing evidence is unidentified,
-not resolved by an undocumented Circa/Pinnacle hierarchy. Followers do not add
+not resolved by an undocumented Circa/Pinnacle hierarchy. Identical full
+coordinates from simultaneous books apply once as an equivalent-source episode,
+with both leader and selectedSource null; unequal effects are never pooled.
+Followers do not add
 amplitude; a new extension replaces the frontier without double-counting.
 Full buyback cannot resurrect a stale copied follower. Unresolved new episodes
 retain the pristine or last uncontested consequence, with explicit posture.
@@ -124,6 +127,8 @@ fixed points and real-data source limitations are documented in:
 Grades use actual final probabilities, exact executable prices and retained
 quality/positive-EV rules, not legacy hard-coded correction confidence. Pressure
 and retracement can temper Best to actionable Lean without inventing points.
+Held resistance to opposite-side pressure can support retaining the earned
+forecast/grade; it is not falsely labeled a directional quote change or sharp buy.
 The r19 policy is identical for identical final forecast/evidence regardless
 of reader implementation/correction flags. Legacy sleeves are explicit offline
 policy comparisons only. This is an intentional grade recalibration, not a

@@ -167,6 +167,14 @@ assert.ok(heldHome.intel.spread.named_book_posture!.convictionRiskSources!.some(
 assert.equal(gradeNbaMarket({ ...strongStatic, market: "spread", namedBookPosture: heldHome.intel.spread.named_book_posture }).grade, "lean",
   "the exact held-pressure interpretation must reach the actual grade policy");
 assert.equal(buildMarketSignal(heldHome.intel.spread), "market_neutral");
+const heldAway = run(movement("spread", -5.5, -5.5), [{ ...split,
+  sourceObservedAt: "2026-10-31T16:00:00Z", fetchedAt: "2026-10-31T16:00:00Z" }], -10);
+assert.equal(heldAway.candidate.final.marginHome, -10);
+assert.deepEqual(heldAway.intel.spread.named_book_posture!.heldResistanceSupportingSources, ["circa"]);
+assert.ok(heldAway.intel.spread.named_book_posture!.flowInterpretations!.some(p => p.reaction === "held" && p.quoteSide === null && p.resistanceSide === "away"));
+assert.equal(gradeNbaMarket({ ...strongStatic, market: "spread", pick: "away", namedBookPosture: heldAway.intel.spread.named_book_posture }).grade, "best_angle",
+  "resistance to opposite-side pressure supports retaining the earned grade, not a fake score move or blanket demotion");
+assert.equal(buildMarketSignal(heldAway.intel.spread), "market_neutral", "a held quote is not falsely labeled a directional sharp buy");
 const timedSplit = { ...split, sourceObservedAt: "2026-10-31T16:00:00Z", fetchedAt: "2026-10-31T16:00:00Z" };
 const flowAligned = run(movement("spread", -5.5, -7.5), [timedSplit], 10);
 assert.ok(flowAligned.intel.spread.named_book_posture!.flowInterpretations!.some(p =>
@@ -183,6 +191,12 @@ const unresolved = run(["circa", "pinnacle"].flatMap(book => [...pair("spread", 
 assert.equal(unresolved.candidate.final.movementQualified, false);
 assert.equal(unresolved.candidate.final.movementApplied, false);
 assert.equal(unresolved.prediction.audit.professional_grade_context!.moneyline!.spreadReadQualified, false);
+const equalSourceRows = movement("spread", -5.5, -6.5).map(r => ({ ...r, providerTimestamp: r.fetchedAt }));
+const equalSource = run(equalSourceRows);
+assert.equal(equalSource.candidate.marketConsequence!.arbitration.margin.selectedSource, null);
+assert.deepEqual(equalSource.candidate.marketConsequence!.arbitration.margin.equivalentSources, ["circa", "pinnacle"]);
+assert.equal(equalSource.candidate.final.movementApplied, true);
+assert.equal(equalSource.candidate.final.movementQualified, true, "equivalent composite episode retains qualification without arbitrary single-book credit");
 const activeBaseline = runNbaAutoModelV2(snapshot, "t60_locked", { bookCount: 3, skipLegacyComparison: true });
 assert.equal(activeBaseline.v0_comparison, null);
 assert.equal(activeBaseline.v0_v1_delta.comparison_skipped, true);

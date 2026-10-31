@@ -17,7 +17,8 @@ export type NbaNamedBookPosture = {
   convictionRiskSources?: string[];
   staticSupportingSources?: string[];
   staticOpposingSources?: string[];
-  flowInterpretations?: { source: string; sourceType: string; book: string | null; pressureSide: string; reaction: string; quoteSide: string | null }[];
+  heldResistanceSupportingSources?: string[];
+  flowInterpretations?: { source: string; sourceType: string; book: string | null; pressureSide: string; reaction: string; quoteSide: string | null; resistanceSide: string | null }[];
   knowledgeAt?: string;
   consequence?: string;
   scoreEffectApplied?: boolean;
@@ -31,7 +32,7 @@ export function resolveNbaConsequencePosture(args: {
   const result: NbaNamedBookPosture = { release: NBA_NAMED_BOOK_POSTURE_RELEASE, evaluatedAt: null, market: args.market,
     pickedSide: args.pickedSide, supportingSources: [], opposingSources: [], conflictingSources: [], convictionRiskSources: [],
     staticSupportingSources: [], staticOpposingSources: [],
-    flowInterpretations: [],
+    flowInterpretations: [], heldResistanceSupportingSources: [],
     // Posture itself grants no second adjustment. This explicitly identifies
     // the already applied forecast consequence instead of denying its effect.
     forecastAuthorityGranted: false, scoreEffectApplied: args.market === "total" ? c.totalApplied : c.marginApplied,
@@ -61,14 +62,19 @@ export function resolveNbaConsequencePosture(args: {
       result.convictionRiskSources!.push(`${context.book}:static_current_opposition`);
     }
   }
-  for (const pressure of c.pressure) if (pressure.market === args.market && pressure.side === args.pickedSide && pressure.reaction === "held") {
-    result.convictionRiskSources!.push(`${pressure.source}:${pressure.reactionBook}:held_under_pressure`);
-  }
   for (const pressure of c.pressure) if (pressure.market === args.market) {
     const opposite = pressure.side === "home" ? "away" : pressure.side === "away" ? "home" : pressure.side === "over" ? "under" : "over";
     const quoteSide = pressure.reaction === "aligned" ? pressure.side : pressure.reaction === "opposed" ? opposite : null;
+    // A hold is resistance to the observed pressure, not a directional quote
+    // change or proof who bet. It can support retaining the opposite forecast
+    // without inventing points or calling the unchanged book a sharp buy.
+    const resistanceSide = pressure.reaction === "held" ? opposite : null;
     result.flowInterpretations!.push({ source: pressure.source, sourceType: pressure.sourceType, book: pressure.reactionBook,
-      pressureSide: pressure.side, reaction: pressure.reaction, quoteSide });
+      pressureSide: pressure.side, reaction: pressure.reaction, quoteSide, resistanceSide });
+    if (resistanceSide !== null && pressure.reactionBook !== null) {
+      if (resistanceSide === args.pickedSide) result.heldResistanceSupportingSources!.push(pressure.reactionBook);
+      else result.convictionRiskSources!.push(`${pressure.source}:${pressure.reactionBook}:held_under_pressure`);
+    }
     if (quoteSide !== null && pressure.reactionBook !== null) {
       if (quoteSide === args.pickedSide) result.supportingSources.push(pressure.reactionBook);
       else result.convictionRiskSources!.push(`${pressure.reactionBook}:timed_price_reaction_against_pick`);
