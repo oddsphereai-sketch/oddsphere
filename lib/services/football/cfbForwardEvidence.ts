@@ -11,6 +11,7 @@ import type { DailyEdgeGameAvailability } from "@/lib/services/dailyEdge/gameAva
 import {
   CFB_T60_MAX_CAPTURE_LAG_MINUTES,
   CFB_V1_DECISION_RELEASE,
+  CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE,
   CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE,
   CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE,
   CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE,
@@ -195,6 +196,7 @@ export function isCfbPublishedT60AccuracyLockPayload(payload: CfbForwardEvidence
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
     (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE ||
+      payload.decisions.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE ||
       payload.decisions.decisionRelease === CFB_V1_PMF_COHERENCE_PREVIOUS_DECISION_RELEASE ||
@@ -287,7 +289,7 @@ export function isCfbPublishedLateT60RecoveryPayload(payload: CfbForwardEvidence
   const heldMarkets = new Set(payload.decisions.heldMarkets.map((market) => market.market));
   return payload.schemaRelease === CFB_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
     payload.memberRelease === CFB_FORWARD_MEMBER_RELEASE &&
-    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE) &&
+    (payload.decisions.decisionRelease === CFB_V1_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_MARKET_EVIDENCE_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_PRICE_CONTEXT_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_NORMALIZED_PMF_PREVIOUS_DECISION_RELEASE || payload.decisions.decisionRelease === CFB_V1_OWLS_PREVIOUS_DECISION_RELEASE) &&
     payload.stage === "t60" &&
     payload.captureTiming === "on_time" &&
     lag !== null && Number.isFinite(lag) && lag > CFB_T60_MAX_CAPTURE_LAG_MINUTES &&
@@ -443,6 +445,9 @@ export type CfbForwardEvidencePayload = {
     marketReaderMarginShiftPoints?: number;
     marketReaderTotalShiftPoints?: number;
     marketReaderTotalSideFlipped?: boolean;
+    marketReaderNamedMarginStatus?: string;
+    marketReaderNamedTotalStatus?: string;
+    marketReaderTotalEvidenceRoute?: string;
     finalWinnerCoordinatorRelease?: string;
     finalWinnerCoordinatorArtifactRelease?: string;
     finalWinnerCoordinatorBoundaryRelease?: string;

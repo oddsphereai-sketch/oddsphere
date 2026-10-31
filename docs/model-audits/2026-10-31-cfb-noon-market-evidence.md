@@ -1,0 +1,26 @@
+# CFB first-wave market-reader incident — October 31
+
+This is a read-only pre-lock audit, not a published model change or an accuracy claim. The dedicated worktree started from `origin/main` at `0ad30e17a8901dafad6634fd6a4fea4ad8940cdb`. Production still stamped complete reader r6 when inspected at 14:50 UTC.
+
+The current member snapshot at 14:50:48 UTC covered 100 games, with 19 scheduled from 16:00 through 16:45 UTC. Every selected game below was still unlocked at the audit instant. Preserve its later T-60 record exactly if it locks before a verified release.
+
+| Game | Independent total | Published total | Evaluated total | Evidence requiring adjudication |
+| --- | ---: | ---: | --- | --- |
+| Notre Dame–Navy | 51.51 | 59.18 | DraftKings 55.5 | Circa 56.5→55 and Pinnacle 57→55.5; Circa Over money/tickets 54/62 at 55; DraftKings Over 80/72 at the evaluated 55.5. The r6 reader's +7.67 total shift and Over Best Angle conflict with the named-book number path, and the positive exact-line split is self-evaluated. |
+| Auburn–Ole Miss | 49.17 | 66.15 | BetMGM 58.5 | Circa held 58; Pinnacle 57.5→58.5; Circa Over 64/67 at 58 and DraftKings Over 77/81 at 58.5. The +16.98 total shift is not explained by aligned positive Over money-ticket gaps or two aligned named moves. |
+| SMU–Syracuse | 52.31 | 64.43 | Caesars 58.5 | Circa 58→58.5, Pinnacle 57.5→58; DraftKings Over 94/70 at 58.5, Circa 100/100. There is directional Over evidence, but the +12.12 score shift is not yet qualified as the correct magnitude. |
+| California–NC State | 53.91 | 59.03 | BetMGM 56.5 | Circa held 56.5 and Pinnacle held 57 while DraftKings Over was 88/70 at 56.5. The +5.13 shift needs source-provenance review. |
+
+The code-level defect is that r6 `splitReads` can select an older nonzero-gap observation and `consensusSplitSide` does not require current source freshness, exact evaluated line, or exclusion of the evaluated sportsbook. Its `alignTotalPmfSide` can then force a directional Total and enlarge the projected score shift. The private r7 candidate adds source/line/time gates and named-book economic-path adjudication; focused synthetic tests pass, but this worktree has not cleared full CFB release-family compatibility, same-board impact, clean integration, PR checks, or live verification. It must not be deployed or used to alter an existing lock merely to meet the first-wave deadline.
+
+No result in this document is a betting recommendation. A line move or split is evidence, not proof of the winner or total.
+
+## Post-lock, zero-write current-slate comparison
+
+All 16 exact-noon games acquired their T-60 rows at 15:00:43–15:00:57 UTC. None is eligible for a reader rewrite. At approximately 15:16 UTC, forced-unlocked rehearsals of the production r6 writer and r7 candidate both processed the October 27–November 2 weekly window with `apply: false` and zero writes. Both proposed 74 future-unlocked rows. Production reported 219 priced markets, 38 Best Angles, 35 Leans, and three holds; the candidate reported 218 priced markets, 35 Best Angles, 53 Leans, and four holds. These are near-synchronous provider calls, not a same-input causal grade comparison: independent provider observations changed between calls. The counts are disclosed to detect broad board flattening, not offered as evidence of accuracy.
+
+Auburn–Ole Miss illustrates the point. Both later rehearsals selected Under 58.5 Best Angle with an approximately 49.17 expected Total, unlike the earlier published Over 58.5/66.15 receipt. The live input changed; attributing that flip to r7 would be false. The candidate and baseline used the same current BetMGM Total and both saw Circa holding 58 while Pinnacle quoted 58.5. The r7 change does not command an Over from an older or different-line split. The local environment lacks `PLAYBOOK_API_KEY`; the audit script substituted its explicit placeholder, so its Playbook lines/splits HTTP 401 is expected and says nothing about production credential health. Both rehearsals retained cached Playbook split evidence.
+
+Further code review found a distinct spread-path omission: r7 originally required every named book's current spread number to equal the evaluated sportsbook's number, despite comparing each named book at its own opening/current contract. That incorrectly marked two aligned sharp-book moves at different quoted numbers as `line_mismatch`. The candidate now normalizes each book's number and juice against the same PMF, then applies only the agreed economic change to the evaluated score distribution; a focused differing-line regression passes. A spread line move, moneyline repricing, Total move, and score consequence are therefore tested as separate observations of one coherent game forecast.
+
+A source's future-dated current frame previously made its entire assembled trail fail freshness, including a valid recent historical quote. The reader now discards only the impossible frame; a scenario test proves the last valid pre-as-of named-book movement still reaches the Total PMF. This is a time-integrity repair, not evidence that every market/news scenario is fully adjudicated. The reader does not yet establish causal timing between a player-availability update and a price move.
