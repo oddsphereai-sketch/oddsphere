@@ -113,6 +113,7 @@ import { isNbaAuthoritativeSportsbook } from "./nbaMarketSourceEligibility";
 import { loadNbaConsumerMemberLineHistory } from "./nbaConsumerMemberLineHistory";
 import { nbaIndependentInputFingerprint } from "./nbaIndependentKnowledge";
 import { loadNbaMarketKnowledgeStates } from "./nbaMarketKnowledgeStore";
+import type { NbaPrelockCaptureReceipt } from "./nbaPrelockMarketCapture";
 import { resolveNbaExecutionFixedPoint, type NbaExecutionExclusions } from "./nbaMarketExecution";
 
 const NBA_READER_EVIDENCE_PAGE_SIZE = 1000;
@@ -188,6 +189,8 @@ export async function buildNbaDailyEdgePipeline(
     retainLegacyRosterRegime?: boolean;
     /** Read-only same-input audit hook for a proposed complete current-line board. */
     currentLinesOverrideByExternalId?: ReadonlyMap<number, readonly NbaLineRow[]>;
+    /** Exact receipt from the existing leased NBA T-60 collector. */
+    prelockMarketCapture?: NbaPrelockCaptureReceipt;
   } = {},
 ): Promise<NbaDailyEdgePipelineResult> {
   const etWindow = etSlateDateToUtcWindow(date);
@@ -612,6 +615,8 @@ export async function buildNbaDailyEdgePipeline(
       release: NBA_MARKET_MARRIAGE_RELEASE,
       independent_primary: false,
       independent_role: "pristine_forecast_input_to_joint_market_decision",
+      ...(options.prelockMarketCapture?.externalIds.includes(s.game_external_id)
+        ? { lock_time_market_capture: options.prelockMarketCapture } : {}),
       independent_projection: {
         home_score: candidate.independent.homeScore,
         away_score: candidate.independent.awayScore,

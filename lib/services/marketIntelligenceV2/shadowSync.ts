@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { assertNbaPrelockCaptureBudget, selectNbaPrelockCaptureGames, NBA_PRELOCK_MARKET_CAPTURE_RELEASE, type NbaPrelockCaptureScope } from "../nba/nbaPrelockMarketCapture";
 import {
   PlaybookReadBroker,
   playbookSplitsReadMode,
@@ -685,6 +686,7 @@ async function collectPlaybookSplits(opts: {
   apiKey: string | undefined;
   now: Date;
   ingestionRunId: string;
+  prelockTimeoutMs?: number;
 }): Promise<{
   fetchedRows: number;
   observations: MarketSplitObservationV2[];
@@ -695,7 +697,9 @@ async function collectPlaybookSplits(opts: {
   if (!opts.apiKey) {
     return { fetchedRows: 0, observations: [], rejected: [], errors: ["PLAYBOOK_API_KEY missing; skipped Playbook v2 shadow splits"] };
   }
-  const client = new PlaybookReadBroker(opts.apiKey);
+  const client = new PlaybookReadBroker(opts.apiKey, opts.prelockTimeoutMs === undefined ? undefined : {
+    timeoutMs: opts.prelockTimeoutMs, sharedCache: false,
+  });
   const readMode = playbookSplitsReadMode(opts.slateDate, opts.todayUtc);
   const res = readMode === "current"
     ? await client.splits(opts.sport)
@@ -710,6 +714,7 @@ async function collectPlaybookSplits(opts: {
     }
   }
   const rows = (((res.body as { data?: unknown[] }).data) ?? []) as PlaybookSplitGame[];
+  const capturedNow = opts.prelockTimeoutMs === undefined ? opts.now : new Date();
   const gamesByKey = new Map<string, GameRef[]>();
   for (const game of opts.games) {
     const key = opts.sport === "mlb"
@@ -747,8 +752,8 @@ async function collectPlaybookSplits(opts: {
       row,
       canonicalEventId: String(game.externalId),
       league: opts.sport,
-      fetchedAt: opts.now.toISOString(),
-      minutesToStart: minutesToStart(game.gameDate, opts.now),
+      fetchedAt: capturedNow.toISOString(),
+      minutesToStart: minutesToStart(game.gameDate, capturedNow),
       ingestionRunId: opts.ingestionRunId,
       pairedLine: (market, side) => playbookLineForSelection(lineByGameId.get(row.gameId), market, side),
       canonicalMarketId: (m) => externalMarketId(game, m),
@@ -793,6 +798,7 @@ async function collectOwlsSplits(opts: {
   apiKey: string | undefined;
   now: Date;
   ingestionRunId: string;
+  prelockTimeoutMs?: number;
 }): Promise<{
   fetchedRows: number;
   observations: MarketSplitObservationV2[];
@@ -808,7 +814,7 @@ async function collectOwlsSplits(opts: {
 
   let response: RawOwlsSplitsResponse;
   try {
-    response = (await new OwlsInsightClient(opts.apiKey).splits<RawOwlsSplitsResponse>(owlsSport)).body;
+    response = (await new OwlsInsightClient(opts.apiKey, { timeoutMs: opts.prelockTimeoutMs }).splits<RawOwlsSplitsResponse>(owlsSport)).body;
   } catch (error) {
     return {
       fetchedRows: 0,
@@ -818,6 +824,7 @@ async function collectOwlsSplits(opts: {
     };
   }
 
+  const capturedNow = opts.prelockTimeoutMs === undefined ? opts.now : new Date();
   const coverage = normalizeOwlsSharpBookSplits(response, owlsSport);
   const gamesByKey = new Map<string, GameRef[]>();
   for (const game of opts.games) {
@@ -857,7 +864,7 @@ async function collectOwlsSplits(opts: {
       selectAllInternalNamedBookSplits(eventRows, {
         providerEventId,
         market,
-        nowMs: opts.now.getTime(),
+        nowMs: capturedNow.getTime(),
       }),
     );
     if (selectedRows.length === 0) continue;
@@ -865,8 +872,8 @@ async function collectOwlsSplits(opts: {
       rows: selectedRows,
       canonicalEventId: String(game.externalId),
       league: opts.sport,
-      fetchedAt: opts.now.toISOString(),
-      minutesToStart: minutesToStart(game.gameDate, opts.now),
+      fetchedAt: capturedNow.toISOString(),
+      minutesToStart: minutesToStart(game.gameDate, capturedNow),
       ingestionRunId: opts.ingestionRunId,
       canonicalMarketId: (market) => externalMarketId(game, market),
       selectionKey: (market, side) => externalSelectionKey(game, market, cbbSide(side, cbbMatch?.reversed ?? false)),
@@ -994,6 +1001,7 @@ async function collectOwlsPrices(opts: {
   apiKey: string | undefined;
   now: Date;
   ingestionRunId: string;
+  prelockTimeoutMs?: number;
 }): Promise<{
   fetchedRows: number;
   observations: MarketPriceObservationV2[];
@@ -1008,7 +1016,7 @@ async function collectOwlsPrices(opts: {
   }
   let response: RawOwlsOddsResponse;
   try {
-    response = (await new OwlsInsightClient(opts.apiKey).odds<RawOwlsOddsResponse>(owlsSport)).body;
+    response = (await new OwlsInsightClient(opts.apiKey, { timeoutMs: opts.prelockTimeoutMs }).odds<RawOwlsOddsResponse>(owlsSport)).body;
   } catch (error) {
     return {
       fetchedRows: 0,
@@ -1022,7 +1030,7 @@ async function collectOwlsPrices(opts: {
     sport: opts.sport,
     games: opts.games,
     rows: coverage.prices,
-    fetchedAt: opts.now,
+    fetchedAt: opts.prelockTimeoutMs === undefined ? opts.now : new Date(),
     ingestionRunId: opts.ingestionRunId,
   });
   return {
@@ -1771,9 +1779,15 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   sharpApiKey?: string;
   includeSharpApiHistory?: boolean;
   slateDateThrough?: string;
+  /** Only the existing NBA T-60 owner may request this bounded current capture. */
+  nbaPrelockScope?: NbaPrelockCaptureScope;
   logger?: (message: string) => void;
 }): Promise<MarketIntelligenceV2ShadowSyncResult> {
   const now = opts.now ?? new Date();
+  if (opts.nbaPrelockScope) {
+    assertNbaPrelockCaptureBudget(opts.nbaPrelockScope);
+    if (opts.sport !== "nba" || opts.slateDateThrough) throw new Error("NBA pre-lock capture requires an exact NBA slate, not a rolling/full-sport job");
+  }
   const ingestionRunId = `${opts.sport}:${opts.slateDate}:${now.toISOString()}`;
   const logger = opts.logger ?? (() => {});
   const result: MarketIntelligenceV2ShadowSyncResult = {
@@ -1810,9 +1824,17 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   // Preserve current-day preseason rehearsal, but do not let a rolling
   // forward collector gather future preseason events. Future NBA evidence is
   // restricted to the regular-season member window.
-  const games = opts.sport === "nba" && opts.slateDateThrough
+  const eligibleGames = opts.sport === "nba" && opts.slateDateThrough
     ? selectNbaRollingMarketGames(loadedGames, opts.slateDate)
     : loadedGames;
+  const games = opts.nbaPrelockScope ? selectNbaPrelockCaptureGames(opts.sport, eligibleGames, opts.nbaPrelockScope) : eligibleGames;
+  if (opts.nbaPrelockScope) result.details.nba_prelock_capture = {
+    release: NBA_PRELOCK_MARKET_CAPTURE_RELEASE, external_ids: [...opts.nbaPrelockScope.externalIds],
+    ingestion_run_id: ingestionRunId,
+    deadline_at: new Date(opts.nbaPrelockScope.deadlineAtMs).toISOString(),
+    additional_provider_request_ceiling: 4, history_requests: 0,
+    note: "one current odds/splits endpoint each; public splits/lines each; no per-game fetch, retries or snapshot rebuild",
+  };
   result.gamesLoaded = games.length;
   if (opts.sport === "nba") result.details.nba_canonical_price_capture_release = NBA_CANONICAL_PRICE_CAPTURE_RELEASE;
   if (opts.sport === "nfl") result.details.canonical_slate = {
@@ -1864,8 +1886,9 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       apiKey: opts.playbookApiKey ?? process.env.PLAYBOOK_API_KEY,
       now,
       ingestionRunId,
+      prelockTimeoutMs: opts.nbaPrelockScope ? Math.max(500, Math.min(4000, Math.floor((opts.nbaPrelockScope.deadlineAtMs - Date.now()) / 2))) : undefined,
     }).catch((error) => {
-      if (opts.sport !== "nfl") throw error;
+      if (opts.sport !== "nfl" && !opts.nbaPrelockScope) throw error;
       return {
       fetchedRows: 0, observations: [] as MarketSplitObservationV2[],
       rejected: [] as CanonicalObservationRejection[],
@@ -1878,6 +1901,7 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       apiKey: opts.owlsApiKey ?? process.env.OWLS_INSIGHT_API_KEY,
       now,
       ingestionRunId,
+      prelockTimeoutMs: opts.nbaPrelockScope ? Math.max(1, Math.min(8000, opts.nbaPrelockScope.deadlineAtMs - Date.now())) : undefined,
     }),
     collectOwlsPrices({
       sport: opts.sport,
@@ -1885,11 +1909,12 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
       apiKey: opts.owlsApiKey ?? process.env.OWLS_INSIGHT_API_KEY,
       now,
       ingestionRunId,
+      prelockTimeoutMs: opts.nbaPrelockScope ? Math.max(1, Math.min(8000, opts.nbaPrelockScope.deadlineAtMs - Date.now())) : undefined,
     }),
     loadPriceObservations({ supabase: opts.supabase, sport: opts.sport, games, now, ingestionRunId })
       .then((observations) => ({ observations, error: null as string | null }))
       .catch((error) => {
-        if (opts.sport !== "nfl") throw error;
+        if (opts.sport !== "nfl" && !opts.nbaPrelockScope) throw error;
         return { observations: [] as MarketPriceObservationV2[],
           error: `Canonical line collection failed: ${error instanceof Error ? error.message : String(error)}` };
       }),
@@ -1933,6 +1958,8 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   );
 
   if (!opts.apply) return result;
+  // No timed-out background collection may write after the final lock pass.
+  if (opts.nbaPrelockScope) assertNbaPrelockCaptureBudget(opts.nbaPrelockScope);
   const config = readMarketIntelligenceV2Config();
   if (!config.enabled) {
     result.errors.push("MARKET_INTELLIGENCE_V2_ENABLED must be true for v2 shadow writes");

@@ -85,13 +85,49 @@ provider request is part of these tests.
 
 ## Release status
 
-Not live. Full safety/type/lint/build passed before the final bounded reviewer
-regressions; those affected checks must be rerun on the final checkpoint.
+Not live. Full safety/type/lint/build passed at3944904a. The subsequent scoped
+lock follow-up requires those affected checks again on its final checkpoint.
 Fresh main c3a557fe is integrated at e339cb9a; both NBA and CFB safety declarations
 were retained. Integration safety passed at that clean checkpoint. Independent
 review reproduced and accepted the opposite-buyback, successive-frontier and
 equivalent-source fixes; no remaining blocker in those three bounded cases.
-Current-input board attribution,
-fresh-main integration/overlap/protected-PR and production verification remain
+The bounded3944904a current-input rehearsal at16:17:51Z has7games/21markets,
+4margin and3Total changes, actionables3→13 (11promotions/1demotion),22SELECTs,
+4,244,777response bytes and zero provider calls/outcomes/production writes.
+Three promotions have reader effects, ten differ under the legacy grade
+policy at the same final forecast, and six have neither a new reader effect
+nor a changed forecast (policy-only). These overlap/interact; they are not
+eleven reader wins. Receipt `/private/tmp/nba-single-episode-current-board-20261031-r2.json`,
+sourceSHA c0116e50f1c540e1c3685dbdc005cc87cf3c7160fcb9e649770d6a12f5bf0a0c.
+The raw independent feature head is frozen at its stored input receipt, not
+fully replayed. This is current decision-stage evidence, not accuracy proof.
+
+### Scoped lock-time follow-up
+
+The prior lock route freshly fetched lines/injuries but only read scheduled
+v2 price/split evidence. The follow-up repairs the actual substrate, NOT the
+unrelated legacy public-splits table. Order is canonical lines→scoped current
+v2 capture→fresh injury/pipeline→episode consequence→coherent records→lock→
+member publication. The capture release is
+`nba_prelock_market_capture_2026_10_31_r1_scoped_v2`.
+Only entering game IDs are normalized/written; no new prediction writer,
+lease, cadence, history recovery or full-slate v2 snapshot rebuild is added.
+There are at most FOUR additional current endpoint calls per entering batch:
+Owls odds/splits and Playbook splits/paired lines. Public cache is bypassed
+only for this bounded lock capture, with4-second per-endpoint timeouts; Owls
+is capped at8seconds. An absolute deadline is checked before capture, before
+observation writes and before final prediction. Scope/storage/deadline failure
+cannot proceed to lock; missing provider evidence is recorded and valid other
+sources are retained. This is not zero added cost and must be monitored.
+
+Mocked-provider/DB tests exercise the actual collector, exact entering scope,
+four endpoint ceiling, no history, source versus receipt clocks and zero
+expired writes. Source-order assertions cover the real sole route/writer;
+they are not a claim of an actual DB/lease/T-60 transaction rehearsal. Existing
+writer/reader lock immutability tests still apply. Active-head full-path tests
+also show favorite→underdog and underdog→favorite ML, winner/cover divergence,
+Over↔Under flips and held resistance retaining the underdog without points.
+
+Fresh-main integration/overlap/protected-PR and production verification remain
 required before publication. The120-case cross-product audit remains the
 broader coverage contract; no all-sport pass or accuracy guarantee is claimed.

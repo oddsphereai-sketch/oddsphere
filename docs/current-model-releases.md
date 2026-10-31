@@ -124,6 +124,17 @@ scores and never compound their prior market adjustment. Exact legacy locks
 still take priority. Source failures, pressure/buyback/lead-lag, target-book
 fixed points and real-data source limitations are documented in:
 `docs/model-audits/2026-10-31-nba-single-episode-reader.md`.
+The existing NBA T-60 owner additionally stamps
+`nba_prelock_market_capture_2026_10_31_r1_scoped_v2`: after canonical line
+refresh, capture v2 current prices/splits only for entering games, then freshly
+resolve injuries and build the final forecast/grade, check coherence, lock and
+publish. The same collector is reused under `prediction_pipeline:nba`, with
+no new timer/prediction writer, no history call or full-slate snapshot rebuild.
+This adds at most four current endpoint calls per entering-game batch (not per
+game): Owls odds/splits and Playbook splits/paired lines. Explicit timeout and
+absolute deadline checks precede observation writes and final prediction;
+storage/deadline failures defer the lock, while partial provider errors remain
+explicit in the stored actual-run receipt without erasing valid other sources.
 Grades use actual final probabilities, exact executable prices and retained
 quality/positive-EV rules, not legacy hard-coded correction confidence. Pressure
 and retracement can temper Best to actionable Lean without inventing points.

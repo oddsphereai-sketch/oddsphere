@@ -29,7 +29,11 @@ one demotion). Earlier truncated r1/r2 receipts are not accepted as full-source
 proof. Missing canonical batch identity is prospectively repaired in the existing
 collector, preserving source clocks and non-NBA behavior. This is decision-stage
 proof, not predictive improvement or full raw-feature/writer replay. No silent board contraction, duplicate writer,
-provider-budget increase, production shadow or accuracy guarantee is authorized.
+production shadow or accuracy guarantee is authorized. The scoped T-60 follow-up
+uses the existing leased collector for entering NBA games only: at most four
+additional current endpoint calls per batch, no history/per-game fetch, bounded
+provider timeouts and absolute deadline checks. This explicit cost increase
+must be included in the release/live operational check; do not call it zero-cost.
 Normal fresh-main/PR/live checks remain mandatory. Details:
 docs/model-audits/2026-10-31-nba-single-episode-reader.md. The new head needs its
 own updated current-input report; old-head counts are not reused as qualification.

@@ -49,6 +49,7 @@ import {
   NBA_SPREAD_OFFICIAL_TRACKING_START,
 } from "../../config/officialTrackingStart";
 import { NBA_PREDICTION_RECORD_RELEASE } from "../../automodel/nba/nbaChampionRuntime";
+import type { NbaPrelockCaptureReceipt } from "./nbaPrelockMarketCapture";
 
 /** Within this many minutes of tip-off, the lock seals the snapshot. */
 const LOCK_MINUTES_BEFORE_TIP = 60;
@@ -67,6 +68,7 @@ export type CreateNbaRecordsOptions = {
   deferLock?: boolean;
   /** Optional bounded write scope for games entering the lock window. */
   externalIdsFilter?: readonly number[];
+  prelockMarketCapture?: NbaPrelockCaptureReceipt;
   supabase: SupabaseClient;
 };
 
@@ -308,7 +310,7 @@ export async function createNbaPredictionRecords(
   // tracking matches what users saw. The pipeline is read-only.
   let pipelineResult: Awaited<ReturnType<typeof buildNbaDailyEdgePipeline>>;
   try {
-    pipelineResult = await buildNbaDailyEdgePipeline(opts.slateDate);
+    pipelineResult = await buildNbaDailyEdgePipeline(opts.slateDate, { prelockMarketCapture: opts.prelockMarketCapture });
   } catch (e) {
     result.errors.push({
       game_id: null,
