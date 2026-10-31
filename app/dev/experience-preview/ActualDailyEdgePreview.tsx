@@ -273,6 +273,7 @@ export default function ActualDailyEdgePreview({
   const [footballGameDetails, setFootballGameDetails] = useState<Record<string, DailyEdgeGameDto>>({});
   const footballDetailRequests = useRef(new Map<string, Promise<DailyEdgeGameDto | null>>());
   const footballSelectionRequest = useRef(0);
+  const [footballReaderRequest, setFootballReaderRequest] = useState<{ gameId: string; status: "loading" | "failed" } | null>(null);
   const deferredFootballGames = useMemo(
     () => new Set(sport === "nfl" ? deferredNflGameIds : sport === "cfb" ? deferredCfbGameIds : []),
     [deferredCfbGameIds, deferredNflGameIds, sport],
@@ -410,6 +411,8 @@ export default function ActualDailyEdgePreview({
       .find((candidate) => candidate.id === gameId) ?? scopedGames[0];
     return boardGame ? footballGameDetails[boardGame.id] ?? boardGame : undefined;
   }, [footballGameDetails, displaySnapshot.games, gameId, scopedGames, sport]);
+  const readerDetailState = footballReaderRequest?.gameId === game?.id && !footballGameDetails[game?.id ?? ""]
+    ? footballReaderRequest?.status ?? null : null;
 
   useEffect(() => {
     if (!mobileSheetOpen) return;
@@ -493,7 +496,7 @@ export default function ActualDailyEdgePreview({
     const detailEndpoint = sport === "nfl"
       ? "/api/lab/nfl-game-detail"
       : "/api/lab/cfb-game-detail";
-    const request = fetch(`${detailEndpoint}?${params.toString()}`)
+    const request = fetch(`${detailEndpoint}?${params.toString()}`, { signal: AbortSignal.timeout(10_000) })
       .then((response) => response.ok ? response.json() : null)
       .then((body: { game?: DailyEdgeGameDto; availability?: DailyEdgeGameAvailability | null } | null) => {
         if (!body?.game || body.game.id !== gameIdToLoad) return null;
@@ -516,19 +519,23 @@ export default function ActualDailyEdgePreview({
 
   async function selectGame(next: DailyEdgeGameDto, nextMarket: MarketKey = primaryMarket(next)) {
     const requestId = ++footballSelectionRequest.current;
-    const detailed = (sport === "cfb" || sport === "nfl") && deferredFootballGames.has(next.id)
-      ? await loadFootballGameDetail(next.id)
-      : footballGameDetails[next.id] ?? next;
-    if (!detailed || requestId !== footballSelectionRequest.current) return;
-    setGameId(detailed.id);
+    const needsDetail = (sport === "cfb" || sport === "nfl") && deferredFootballGames.has(next.id) && !footballGameDetails[next.id];
+    setFootballReaderRequest(needsDetail ? { gameId: next.id, status: "loading" } : null);
+    // A tap opens the reader immediately; deferred evidence must not hold the
+    // interaction hostage or make a second tap necessary.
+    setGameId(next.id);
     setSelectedCbbScheduleId(null);
     setMarketKey(nextMarket);
     setReaderOpen(true);
     setDeepOpen(false);
     setDeepView("case");
-    if (!embeddedSample) replaceReaderUrl(sport, detailed.id, nextMarket);
+    if (!embeddedSample) replaceReaderUrl(sport, next.id, nextMarket);
     if (isMobileViewport()) setMobileSheetOpen(true);
     else scrollReaderIntoView();
+    if (!needsDetail) return;
+    const detailed = await loadFootballGameDetail(next.id);
+    if (requestId !== footballSelectionRequest.current) return;
+    setFootballReaderRequest(detailed ? null : { gameId: next.id, status: "failed" });
   }
 
   function selectCbbScheduledGame(next: CbbRollingScheduleDto["games"][number]) {
@@ -559,6 +566,8 @@ export default function ActualDailyEdgePreview({
   }
 
   function collapseReader() {
+    footballSelectionRequest.current += 1;
+    setFootballReaderRequest(null);
     setReaderOpen(false);
     setMobileSheetOpen(false);
     setDeepOpen(false);
@@ -617,7 +626,7 @@ export default function ActualDailyEdgePreview({
 
       <div ref={readerRef} className={selectedCbbSchedule ? "scroll-mt-4" : "hidden scroll-mt-4 sm:block"}>
         {selectedCbbSchedule ? <CbbScheduledReader game={selectedCbbSchedule} /> : readerOpen ? <div>
-          <ReaderSurface game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onCollapse={collapseReader} index={scopedGameIndex} total={scopedGames.length} illustrativeSample={embeddedSample} />
+          <ReaderSurface game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onCollapse={collapseReader} index={scopedGameIndex} total={scopedGames.length} illustrativeSample={embeddedSample} detailState={readerDetailState} onRetryDetail={() => void selectGame(game, marketKey)} />
         </div> : <CollapsedReader game={game} market={market} marketKey={marketKey} sport={sport} onOpen={() => selectGame(game, marketKey)} onOpenMarket={(nextMarket) => selectGame(game, nextMarket)} index={scopedGameIndex} total={scopedGames.length} />}
       </div>
 
@@ -628,7 +637,7 @@ export default function ActualDailyEdgePreview({
       ) : null}
 
       {mobileSheetOpen ? (
-        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} sportActivity={sportActivity} soccerCompetition={soccerCompetition} onPrev={scopedGameIndex > 0 ? () => selectAdjacentGame(-1) : null} onNext={scopedGameIndex < scopedGames.length - 1 ? () => selectAdjacentGame(1) : null} index={scopedGameIndex} total={scopedGames.length} illustrativeSample={embeddedSample} />
+        <MobileReaderSheet game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability[game.id] ?? null} sample={sample} setSample={setSample} deepOpen={deepOpen} setDeepOpen={setDeepOpen} deepView={deepView} setDeepView={setDeepView} setMarket={selectMarket} onClose={collapseReader} onSportChange={switchSport} onSportPrefetch={prefetchSport} activePreviewSports={activePreviewSports} sportActivity={sportActivity} soccerCompetition={soccerCompetition} onPrev={scopedGameIndex > 0 ? () => selectAdjacentGame(-1) : null} onNext={scopedGameIndex < scopedGames.length - 1 ? () => selectAdjacentGame(1) : null} index={scopedGameIndex} total={scopedGames.length} illustrativeSample={embeddedSample} detailState={readerDetailState} onRetryDetail={() => void selectGame(game, marketKey)} />
       ) : null}
 
       {reviewMode ? <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-700">
@@ -696,6 +705,8 @@ type ReaderSurfaceProps = {
   index: number;
   total: number;
   illustrativeSample: boolean;
+  detailState?: "loading" | "failed" | null;
+  onRetryDetail?: () => void;
 };
 
 function memberTeamName(game: DailyEdgeGameDto, side: "away" | "home", sport: Sport): string {
@@ -808,15 +819,24 @@ function CollapsedReader({ game, market, marketKey, sport, onOpen, onOpenMarket,
   );
 }
 
-function ReaderSurface({ game, market, marketKey, sport, history, pitcherFirstInningHistory, availability, sample, setSample, deepOpen, setDeepOpen, deepView, setDeepView, setMarket, onCollapse, index, total, illustrativeSample }: ReaderSurfaceProps) {
+function ReaderDetailPending({ state, onRetry }: { state: "loading" | "failed"; onRetry?: () => void }) {
+  return <div className="space-y-3 p-5" role="status" aria-live="polite" aria-busy={state === "loading"}>
+    <p className="text-sm font-bold text-gray-200">{state === "loading" ? "Loading game analysis…" : "The full analysis could not be loaded."}</p>
+    {state === "loading" ? <><p className="text-xs text-gray-400">Your game is open. Market evidence and matchup details are loading.</p><div aria-hidden="true" className="h-28 animate-pulse rounded-xl bg-white/[0.04]" /></> : <button type="button" onClick={onRetry} className="min-h-11 rounded-lg border border-violet-400/40 bg-violet-500/10 px-4 text-sm font-bold text-violet-100">Retry analysis</button>}
+  </div>;
+}
+
+function ReaderSurface({ game, market, marketKey, sport, history, pitcherFirstInningHistory, availability, sample, setSample, deepOpen, setDeepOpen, deepView, setDeepView, setMarket, onCollapse, index, total, illustrativeSample, detailState, onRetryDetail }: ReaderSurfaceProps) {
   return (
     <section className="overflow-hidden rounded-2xl border border-violet-400/30 bg-[#100e18] shadow-[0_0_0_1px_rgba(124,58,237,0.10),0_24px_90px_-48px_rgba(124,58,237,0.95)]">
       {isUclGame(game) ? <MatchupColorAccent game={game} sport={sport} /> : null}
       <ReaderHeader game={game} market={market} sport={sport} onCollapse={onCollapse} index={index} total={total} />
       <MarketStrip game={game} sport={sport} active={marketKey} setActive={setMarket} />
+      {detailState ? <ReaderDetailPending state={detailState} onRetry={onRetryDetail} /> : <>
       <ReaderEvidence game={game} market={market} marketKey={marketKey} sport={sport} history={history} pitcherFirstInningHistory={pitcherFirstInningHistory} availability={availability} sample={sample} illustrativeSample={illustrativeSample} />
       <DeepResearchToggle open={deepOpen} setOpen={setDeepOpen} market={market} marketKey={marketKey} game={game} illustrativeSample={illustrativeSample} />
       {deepOpen ? <DeepResearch game={game} market={market} marketKey={marketKey} sport={sport} history={history} sample={sample} setSample={setSample} view={deepView} setView={setDeepView} illustrativeSample={illustrativeSample} /> : null}
+      </>}
     </section>
   );
 }
@@ -848,6 +868,22 @@ function SoccerDecisionSummary({ game, market, marketKey }: { game: DailyEdgeGam
 const subscribeToReaderPortal = () => () => {};
 const readerPortalTarget = () => document.body;
 const serverReaderPortalTarget = () => null;
+
+function MobileReaderMatchup({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
+  return <div className="min-w-0" data-mobile-reader-matchup>
+    <div className="flex min-w-0 items-center gap-2" aria-label={`${memberTeamName(game, "away", sport)} at ${memberTeamName(game, "home", sport)}`}>
+      <TeamLogo src={memberTeamLogo(game, "away")} label={game.awayTeam} sport={sport} primaryColor={memberTeamColor(game, "away", sport)} compact />
+      <strong className="truncate text-sm font-black text-white" title={memberTeamName(game, "away", sport)}>{game.awayTeam}</strong>
+      <span className="shrink-0 text-[10px] text-gray-500">@</span>
+      <strong className="truncate text-sm font-black text-white" title={memberTeamName(game, "home", sport)}>{game.homeTeam}</strong>
+      <TeamLogo src={memberTeamLogo(game, "home")} label={game.homeTeam} sport={sport} primaryColor={memberTeamColor(game, "home", sport)} compact />
+    </div>
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px]">
+      <DailyEdgeGameStartTime game={game} className="text-gray-400" />
+      <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
+    </div>
+  </div>;
+}
 
 function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePreviewSports, sportActivity, soccerCompetition, onPrev, onNext, ...reader }: ReaderSurfaceProps & { onClose: () => void; onSportChange: (sport: Sport) => void; onSportPrefetch: (sport: Sport) => void; activePreviewSports: Sport[]; sportActivity: DailyEdgeSportActivityMap; soccerCompetition?: SoccerCompetitionPreview; onPrev: (() => void) | null; onNext: (() => void) | null }) {
   const portalTarget = useSyncExternalStore(subscribeToReaderPortal, readerPortalTarget, serverReaderPortalTarget);
@@ -901,7 +937,7 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-2xl border-t border-violet-400/35 bg-[#0a0910] shadow-[0_-24px_80px_-35px_rgba(124,58,237,0.85)]">
         <div className="shrink-0 border-b border-white/[0.07] bg-[#100e18] px-3 pb-2 pt-3">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2"><CompactMatchupIdentity game={reader.game} sport={reader.sport} /><DailyEdgeGameStartTime game={reader.game} className="truncate text-[9px] text-gray-400" /><LockBadge lockState={reader.game.lockState} lockedAt={reader.game.lockedAt} scheduledLockAt={reader.game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" /></div>
+            <MobileReaderMatchup game={reader.game} sport={reader.sport} />
             <button ref={closeRef} type="button" onClick={onClose} aria-label="Close reader" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/25 bg-white/[0.08] text-2xl text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300"><span aria-hidden="true">×</span></button>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
@@ -912,9 +948,11 @@ function MobileReaderSheet({ onClose, onSportChange, onSportPrefetch, activePrev
         </div>
         <div className="shrink-0"><MarketStrip game={reader.game} sport={reader.sport} active={reader.marketKey} setActive={reader.setMarket} /></div>
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]" data-reader-scroll-body>
+          {reader.detailState ? <ReaderDetailPending state={reader.detailState} onRetry={reader.onRetryDetail} /> : <>
           <ReaderEvidence game={reader.game} market={reader.market} marketKey={reader.marketKey} sport={reader.sport} history={reader.history} pitcherFirstInningHistory={reader.pitcherFirstInningHistory} availability={reader.availability} sample={reader.sample} illustrativeSample={reader.illustrativeSample} />
           <DeepResearchToggle open={reader.deepOpen} setOpen={reader.setDeepOpen} market={reader.market} marketKey={reader.marketKey} game={reader.game} illustrativeSample={reader.illustrativeSample} />
           {reader.deepOpen ? <DeepResearch game={reader.game} market={reader.market} marketKey={reader.marketKey} sport={reader.sport} history={reader.history} sample={reader.sample} setSample={reader.setSample} view={reader.deepView} setView={reader.setDeepView} illustrativeSample={reader.illustrativeSample} /> : null}
+          </>}
         </div>
       </div>
     </div>,
@@ -3247,7 +3285,7 @@ function CoverageGap({ text }: { text: string }) {
   return <div className="mt-4 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-3 text-[9px] leading-relaxed text-amber-200/55"><span className="font-black text-amber-300">Coverage gap:</span> {text}</div>;
 }
 
-function TeamLogo({ src, label, sport, primaryColor }: { src: string | null; label: string; sport?: Sport; primaryColor?: string | null }) {
+function TeamLogo({ src, label, sport, primaryColor, compact = false }: { src: string | null; label: string; sport?: Sport; primaryColor?: string | null; compact?: boolean }) {
   // The response owns team identity. Several WNBA abbreviations overlap MLB
   // (ATL, CHI, SEA, TOR), so an MLB-first fallback silently replaced correct
   // WNBA assets in the candidate reader. Legacy MLB rows still contain the
@@ -3263,7 +3301,7 @@ function TeamLogo({ src, label, sport, primaryColor }: { src: string | null; lab
   const theme = teamTheme(label, sport);
   const accent = primaryColor ?? (sport ? teamPrimaryColor(label, sport) : teamAccent(label));
   return (
-    <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f8fb] text-[7px] font-black shadow-[0_4px_14px_rgba(0,0,0,0.28)]" style={{ borderColor: `${accent}99`, color: primaryColor ?? theme.primary }}>
+    <span className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#f7f8fb] text-[7px] font-black shadow-[0_4px_14px_rgba(0,0,0,0.28)] ${compact ? "h-7 w-7" : "h-10 w-10"}`} style={{ borderColor: `${accent}99`, color: primaryColor ?? theme.primary }}>
       <span className="relative z-10 tracking-tight">{label.slice(0, 3)}</span>
       {resolvedSrc && !imageFailed ? (
         // eslint-disable-next-line @next/next/no-img-element

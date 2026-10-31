@@ -2,6 +2,7 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { CFB_MEMBER_FIXTURE_RELEASE } from "./cfbMemberFixture";
+import { decodeCfbMemberFixtureCache, encodeCfbMemberFixtureCache } from "./cfbMemberFixtureCache";
 import {
   CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
   CFB_MEMBER_SNAPSHOT_READER_RELEASE,
@@ -16,16 +17,20 @@ async function readUncachedCfbMemberFixture(season: number) {
   return published?.fixture ?? null;
 }
 
-export const readCachedCfbMemberFixture = unstable_cache(
-  readUncachedCfbMemberFixture,
+const readCachedCompressedCfbMemberFixture = unstable_cache(
+  async (season: number) => encodeCfbMemberFixtureCache(await readUncachedCfbMemberFixture(season)),
   [
-    "cfb-current-member-fixture",
+    "cfb-current-member-fixture-gzip-v1",
     CFB_MEMBER_FIXTURE_RELEASE,
     CFB_FORWARD_MEMBER_SNAPSHOT_RELEASE,
     CFB_MEMBER_SNAPSHOT_READER_RELEASE,
   ],
   { revalidate: 60, tags: [CFB_MEMBER_FIXTURE_RELEASE] },
 );
+
+export async function readCachedCfbMemberFixture(season: number) {
+  return decodeCfbMemberFixtureCache(await readCachedCompressedCfbMemberFixture(season));
+}
 
 export async function readResilientCfbMemberFixture(season: number) {
   const cached = await readCachedCfbMemberFixture(season).catch(() => null);
