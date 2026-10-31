@@ -1,0 +1,26 @@
+{
+  "asOf": "2026-10-31T13:10:17.015Z",
+  "providerCalls": 0,
+  "productionWrites": 0,
+  "completeIds": [
+    3818275
+  ],
+  "incompleteIds": [],
+  "beforeChanges": [
+    {
+      "game": "soccer-epl-3818275",
+      "changedFields": [
+        "breakdown",
+        "generatedAt",
+        "predictions",
+        "soccerAvailability"
+      ]
+    }
+  ],
+  "changes": [
+    {
+      "game": "soccer-epl-3818275",
+      "changedFields": []
+    }
+  ]
+}
