@@ -142,6 +142,7 @@ export type NflForwardEvidencePayload = {
   outcomeForecast: NflV1WeekOneOutcomeForecast;
   /** Future-unlocked semantic audit trail; absent on legacy locks, which retain exact stored precedence. */
   fullGameEvidenceInterpretation?: {
+    marketInnovation?: import("./nflMarketInnovationRuntime").NflMarketInnovationReceipt;
     runtimeRelease: string;
     targetResolution?: import("./nflFullGameEvidenceRuntime").NflFullGameTargetResolution;
     ledgerRelease: string;
@@ -230,7 +231,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_11_01_r48_evaluated_contract_resolution"
       | "nfl_v1_member_release_2026_11_01_r49_source_to_decision_contract"
       | "nfl_v1_member_release_2026_11_01_r50_independent_market_axes"
-      | "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation";
+      | "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation"
+      | "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

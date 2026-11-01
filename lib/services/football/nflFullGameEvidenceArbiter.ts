@@ -6,7 +6,7 @@ import type { NflV1ActionableGradeBundle } from "./nflV1ActionableGradeCandidate
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_ARBITER_CANDIDATE_RELEASE =
-  "nfl_full_game_evidence_arbiter_candidate_2026_11_01_r27_movement_contract_separation" as const;
+  "nfl_full_game_evidence_arbiter_candidate_2026_11_01_r28_relative_market_innovations" as const;
 
 type Side = "home" | "away";
 type TotalSide = "over" | "under";

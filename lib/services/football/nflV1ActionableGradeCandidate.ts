@@ -100,6 +100,8 @@ export function buildNflV1ActionableGradeBundle(args: {
   comparableCurrentBooks: NflPreviewBookOdds[];
   shadowMoneyline: NflR6ShadowMoneylineDecision;
   outcomeForecast?: NflV1WeekOneOutcomeForecast;
+  /** The current joint reader has qualified the complete final law, including an unchanged statistical Total. */
+  qualifiedJointForecast?: boolean;
 }): NflV1ActionableGradeBundle {
   args = { ...args, comparableCurrentBooks: nflExecutionBooksAt({
     books: args.comparableCurrentBooks, evaluatedAt: args.shadowMoneyline.evaluatedAt,
@@ -143,6 +145,7 @@ export function buildNflV1ActionableGradeBundle(args: {
     awayTeam: args.awayTeam,
     homeTeam: args.homeTeam,
     gameStartsAt: args.gameStartsAt,
+    qualifiedJointForecast: args.qualifiedJointForecast,
   });
   const total = selectMarket({
     market: "total",
@@ -151,6 +154,7 @@ export function buildNflV1ActionableGradeBundle(args: {
     awayTeam: args.awayTeam,
     homeTeam: args.homeTeam,
     gameStartsAt: args.gameStartsAt,
+    qualifiedJointForecast: args.qualifiedJointForecast,
   });
   if (!spread || !total) return emptyBundle(currentBundle.outcomeConfidence);
   const evaluatedBets = [moneyline, spread, total].map((decision) => "decisionKind" in decision
@@ -214,6 +218,7 @@ function selectMarket(args: {
   awayTeam: string;
   homeTeam: string;
   gameStartsAt: string;
+  qualifiedJointForecast?: boolean;
 }): MarketEvaluation | null {
   const candidates = args.books.flatMap((target): MarketEvaluation[] => {
     const board = args.market === "spread" ? target.spread : target.total;
@@ -273,7 +278,7 @@ function selectMarket(args: {
         cushion,
         penalty,
         totalDirectionAvailable: args.market === "total" &&
-          args.forecast.marketEvidence?.totalDirection?.status === "available",
+          (args.qualifiedJointForecast === true || args.forecast.marketEvidence?.totalDirection?.status === "available"),
       });
       // A stable target-excluded anchor already excludes the evaluated family
       // and proves at least three independent market families. It can replace
