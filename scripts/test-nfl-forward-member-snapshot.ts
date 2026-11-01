@@ -207,6 +207,42 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const movementContractPredecessor = {
+    ...snapshot,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r58_movement_contract_separation",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r66_movement_contract_separation",
+    memberRelease: "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_01_r54_movement_contract_separation",
+    fixture: { ...fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r66_movement_contract_separation",
+      snapshot: { ...fixture.snapshot, games: fixture.snapshot.games.map((game) => ({
+        ...game, lockedAt: "2026-08-27T11:00:00.000Z",
+        markets: Object.fromEntries(Object.entries(game.markets).map(([market, value], index) => [market, {
+          ...value, predictedAwayScore: 20.1234 + index, predictedHomeScore: 23.9876 + index,
+          selectedSide: index === 0 ? "BUF" : index === 1 ? "Under 45.5" : "PHI",
+          modelProbability: .500001 + index / 10, pushProbability: .021 + index / 100,
+          grade: index === 0 ? "Best Angle" : index === 1 ? "No Play" : "Lean",
+          currentPriceAmerican: index === 0 ? -145 : index === 1 ? 105 : -110,
+          stakeUnits: .73 + index / 10, evidence: { legacySentinel: market, sourceAt: "2026-08-27T10:59:00.000Z" },
+        }])),
+      })) },
+    },
+  };
+  storedKey = ["nfl", "daily-edge", 2026, 1,
+    movementContractPredecessor.snapshotRelease, movementContractPredecessor.fixtureRelease,
+    movementContractPredecessor.memberRelease, movementContractPredecessor.decisionRelease].join("::");
+  storedPayload = movementContractPredecessor;
+  const movementContractBefore = JSON.stringify(movementContractPredecessor);
+  const movementContractRead = await readNflForwardMemberSnapshot({
+    client, season: 2026, week: 1, now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.deepEqual(movementContractRead, movementContractPredecessor,
+    "r58/r66/r51/r54 must retain exact locked predecessor precedence under relative-market semantics");
+  assert.equal(JSON.stringify(movementContractRead), movementContractBefore,
+    "relative innovations cannot recalculate legacy locked scores, sides, probabilities, grades, prices, stakes or evidence");
+  assert.equal(storedPayload, movementContractPredecessor,
+    "reading the locked movement-contract predecessor cannot write or replace its stored payload");
+
   const independentAxesPredecessor = {
     ...snapshot,
     snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r57_independent_market_axes",

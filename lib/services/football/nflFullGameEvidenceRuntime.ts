@@ -23,7 +23,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_11_01_r12_movement_contract_separation" as const;
+  "nfl_full_game_evidence_runtime_2026_11_01_r13_relative_market_innovations" as const;
 
 type Market = "moneyline" | "spread" | "total";
 

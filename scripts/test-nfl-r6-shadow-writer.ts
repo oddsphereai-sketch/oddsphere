@@ -414,18 +414,19 @@ assert.equal(falsifiedLagT60.lockedAt, null);
 assert.ok(falsifiedLagT60.health.blockingReasons.includes("t60_capture_late"));
 
 const writer = readFileSync(path.resolve("lib/services/football/nflForwardEvidenceWriter.ts"), "utf8");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_01_r102_movement_contract_separation/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_01_r103_relative_market_innovations/);
 assert.match(writer, /availabilityArbitrationShadow/);
 assert.match(writer, /\.\.\.shadowMoneyline\.health\.blockingReasons/);
 assert.equal((writer.match(/readNflPlayerPropsCurrentSeasonState\(/g) ?? []).length, 1);
 assert.match(writer, /buildNflWeeklyPossessionMargin/);
 assert.match(writer, /buildNflR6ShadowMoneylineDecision/);
 assert.match(writer, /quarterbackHistory: shadowMoneyline\.quarterbackContext/);
-assert.doesNotMatch(
-  writer,
-  /buildNflV1ActionableGradeBundle/,
-  "the authoritative writer must route the shadow prior through target-excluded production resolution",
-);
+assert.equal((writer.match(/buildNflV1ActionableGradeBundle\(\{/g) ?? []).length, 1,
+  "the statistical grade bundle is only an initial target-selection baseline");
+assert.match(writer, /applyNflMarketInnovationRuntime/);
+assert.match(writer, /stabilizeNflFullGameEvidenceTargets/);
+assert.match(writer, /const \{ outcome, production, marketImpliedMargin, marketImpliedTotal \} = semantic;/,
+  "the authoritative writer must publish the stabilized final semantic tuple");
 assert.match(writer, /resolveNflTargetExcludedProduction/);
 assert.match(writer, /evaluatedBets: production\.evaluatedBets/);
 assert.doesNotMatch(writer, /shadowEvaluatedBets: \[shadowMoneyline\]/);

@@ -15,7 +15,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_JOINT_MARKET_EPISODE_READ_CANDIDATE_RELEASE =
-  "nfl_joint_market_episode_read_candidate_2026_10_31_r2_two_book_target_exclusion" as const;
+  "nfl_joint_market_episode_read_candidate_2026_11_01_r3_independent_market_innovations" as const;
 
 type Constraint = { boundary: number; target: number; market: "moneyline" | "spread" | "total" };
 
@@ -25,14 +25,18 @@ export type NflJointMarketEpisodeRead = {
   reason: string;
   outcome: NflV1WeekOneOutcomeForecast;
   selectedSources: Partial<Record<"moneyline" | "spread" | "total", string>>;
+  informationOverlap?: "not_attested";
+  axisReasons?: { margin?: string; total?: string };
   constraints: Array<{ market: Constraint["market"]; targetProbability: number; achievedProbability: number }>;
 };
 
 /** Produce a fully provenance-bound read for each book; do not invent cross-book episodes. */
 export function readNflJointMarketEpisodesByBook(args: {
   statisticalForecast: NflV1WeekOneOutcomeForecast;
-  statisticalKnowledgeAt: string;
+  statisticalKnowledgeAt: string | null;
+  informationOverlap?: "not_attested";
   evaluatedAt: string;
+  gameStartsAt?: string;
   history: NflPreviewBookOdds[];
   /** The evaluated sportsbook for each market cannot grade itself. */
   excludedFamiliesByMarket?: Record<"moneyline" | "spread" | "total", string[]>;
@@ -44,6 +48,8 @@ export function readNflJointMarketEpisodesByBook(args: {
       providerGameId: args.statisticalForecast.providerGameId,
       statisticalKnowledgeAt: args.statisticalKnowledgeAt,
       evaluatedAt: args.evaluatedAt,
+      informationOverlap: args.informationOverlap,
+      gameStartsAt: args.gameStartsAt,
     };
     const admitted = (market: "moneyline" | "spread" | "total") =>
       !(args.excludedFamiliesByMarket?.[market] ?? [])
@@ -51,6 +57,7 @@ export function readNflJointMarketEpisodesByBook(args: {
     return readNflJointMarketEpisode({
       statisticalForecast: args.statisticalForecast,
       statisticalKnowledgeAt: args.statisticalKnowledgeAt,
+      informationOverlap: args.informationOverlap,
       moneyline: admitted("moneyline") ? selectNflNamedMoneylineEpisodeAfterKnowledge(shared) : null,
       spread: admitted("spread")
         ? selectNflNamedPricedLineEpisodeAfterKnowledge({ ...shared, market: "spread" }) : null,
@@ -200,109 +207,124 @@ export function reconcileNflNamedBookEpisodeReads(args: {
  */
 export function readNflJointMarketEpisode(args: {
   statisticalForecast: NflV1WeekOneOutcomeForecast;
-  statisticalKnowledgeAt: string;
+  statisticalKnowledgeAt: string | null;
+  informationOverlap?: "not_attested";
   moneyline: NflNamedMoneylineEpisode | null;
   spread: NflPricedLineEpisode | null;
   total: NflPricedLineEpisode | null;
 }): NflJointMarketEpisodeRead {
   const base = args.statisticalForecast;
   const sources: NflJointMarketEpisodeRead["selectedSources"] = {};
+  const axisReasons: NonNullable<NflJointMarketEpisodeRead["axisReasons"]> = {};
+  const overlap = args.statisticalKnowledgeAt === null && args.informationOverlap === "not_attested"
+    ? { informationOverlap: "not_attested" as const } : {};
   const neutral = (status: NflJointMarketEpisodeRead["status"], reason: string): NflJointMarketEpisodeRead => ({
     release: NFL_JOINT_MARKET_EPISODE_READ_CANDIDATE_RELEASE,
-    status, reason, outcome: base, selectedSources: {}, constraints: [],
+    status, reason, outcome: base, selectedSources: {}, constraints: [], axisReasons, ...overlap,
   });
-  if ((args.spread?.market !== undefined && args.spread.market !== "spread") ||
-      (args.total?.market !== undefined && args.total.market !== "total")) {
-    return neutral("unidentified", "market_contract_mismatch");
+  let marginConstraints: Constraint[] = [];
+  let totalConstraints: Constraint[] = [];
+  let marginChanged = false;
+  let totalChanged = false;
+  const shared = { statisticalForecast: base, statisticalKnowledgeAt: args.statisticalKnowledgeAt,
+    informationOverlap: args.informationOverlap };
+  if (args.spread && args.spread.market !== "spread") {
+    axisReasons.margin = "market_contract_mismatch";
+  } else if (args.moneyline && args.spread && args.moneyline.source !== args.spread.source) {
+    axisReasons.margin = "cross_book_margin_synthesis_rejected";
+  } else {
+    if (args.moneyline) {
+      const transported = transportNflMoneylineEpisode({ ...shared, episode: args.moneyline });
+      if (transported.status === "unidentified") axisReasons.margin = `moneyline:${transported.reason}`;
+      else {
+        sources.moneyline = args.moneyline.source;
+        marginChanged ||= transported.status === "transported";
+        marginConstraints.push({ boundary: 0, target: transported.finalHomeWinProbability, market: "moneyline" });
+      }
+    }
+    if (args.spread && !axisReasons.margin) {
+      const transported = transportNflPricedLineEpisode({ ...shared, episode: args.spread });
+      if (transported.status === "unidentified") axisReasons.margin = `spread:${transported.reason}`;
+      else {
+        sources.spread = args.spread.source;
+        marginChanged ||= transported.status === "transported";
+        // A genuinely unchanged axis must retain its existing law, including fractional support.
+        const moved = transported.status === "unchanged" ? base : buildNflUnifiedMarketAdjustedForecast({
+          baseForecast: base, expectedHomeMargin: transported.finalMean,
+          expectedTotal: base.expectedHomeScore + base.expectedAwayScore,
+          marketInputPolicy: "target_excluded_continuous_residual", preserveUnchangedAxes: true,
+        });
+        const target = nflV1WeekOneLineProbabilities({ forecast: moved, homeSpread: -args.spread.currentNumber,
+          totalLine: base.expectedHomeScore + base.expectedAwayScore }).spread.homeCoverProbability;
+        marginConstraints.push({ boundary: args.spread.currentNumber, target, market: "spread" });
+      }
+    }
   }
-  if (args.moneyline && args.spread && args.moneyline.source !== args.spread.source) {
-    return neutral("unidentified", "cross_book_margin_synthesis_rejected");
-  }
-  const marginConstraints: Constraint[] = [];
-  const totalConstraints: Constraint[] = [];
-  if (args.moneyline) {
-    const transported = transportNflMoneylineEpisode({
-      statisticalForecast: base, statisticalKnowledgeAt: args.statisticalKnowledgeAt,
-      episode: args.moneyline,
-    });
-    if (transported.status === "unidentified") return neutral("unidentified", `moneyline:${transported.reason}`);
-    sources.moneyline = args.moneyline.source;
-    marginConstraints.push({ boundary: 0, target: transported.finalHomeWinProbability, market: "moneyline" });
-  }
-  if (args.spread) {
-    const transported = transportNflPricedLineEpisode({
-      statisticalForecast: base, statisticalKnowledgeAt: args.statisticalKnowledgeAt,
-      episode: args.spread,
-    });
-    if (transported.status === "unidentified") return neutral("unidentified", `spread:${transported.reason}`);
-    sources.spread = args.spread.source;
-    const moved = buildNflUnifiedMarketAdjustedForecast({
-      baseForecast: base,
-      expectedHomeMargin: transported.finalMean,
-      expectedTotal: base.expectedHomeScore + base.expectedAwayScore,
-      marketInputPolicy: "target_excluded_continuous_residual",
-    });
-    const target = nflV1WeekOneLineProbabilities({
-      forecast: moved, homeSpread: -args.spread.currentNumber,
-      totalLine: base.expectedHomeScore + base.expectedAwayScore,
-    }).spread.homeCoverProbability;
-    marginConstraints.push({ boundary: args.spread.currentNumber, target, market: "spread" });
-  }
+  if (axisReasons.margin) { marginConstraints = []; delete sources.moneyline; delete sources.spread; }
+  else if (!marginChanged) { marginConstraints = []; axisReasons.margin = "no_economic_axis_change"; }
   if (args.total) {
-    const transported = transportNflPricedLineEpisode({
-      statisticalForecast: base, statisticalKnowledgeAt: args.statisticalKnowledgeAt,
-      episode: args.total,
-    });
-    if (transported.status === "unidentified") return neutral("unidentified", `total:${transported.reason}`);
-    sources.total = args.total.source;
-    const moved = buildNflUnifiedMarketAdjustedForecast({
-      baseForecast: base,
-      expectedHomeMargin: base.expectedHomeScore - base.expectedAwayScore,
-      expectedTotal: transported.finalMean,
-      marketInputPolicy: "target_excluded_continuous_residual",
-    });
-    const target = nflV1WeekOneLineProbabilities({
-      forecast: moved, homeSpread: 0, totalLine: args.total.currentNumber,
-    }).total.overProbability;
-    totalConstraints.push({ boundary: args.total.currentNumber, target, market: "total" });
+    if (args.total.market !== "total") axisReasons.total = "market_contract_mismatch";
+    else {
+      const transported = transportNflPricedLineEpisode({ ...shared, episode: args.total });
+      if (transported.status === "unidentified") axisReasons.total = `total:${transported.reason}`;
+      else {
+        sources.total = args.total.source;
+        totalChanged = transported.status === "transported";
+        if (totalChanged) {
+          const moved = buildNflUnifiedMarketAdjustedForecast({
+            baseForecast: base, expectedHomeMargin: base.expectedHomeScore - base.expectedAwayScore,
+            expectedTotal: transported.finalMean, marketInputPolicy: "target_excluded_continuous_residual",
+            preserveUnchangedAxes: true,
+          });
+          const target = nflV1WeekOneLineProbabilities({ forecast: moved, homeSpread: 0,
+            totalLine: args.total.currentNumber }).total.overProbability;
+          totalConstraints.push({ boundary: args.total.currentNumber, target, market: "total" });
+        } else axisReasons.total = "no_economic_axis_change";
+      }
+    }
   }
-  if (marginConstraints.length + totalConstraints.length === 0) return neutral("neutral", "no_selected_episode");
-  const marginProbabilities = tiltToConstraints(
-    base.marginDistribution.values, base.marginDistribution.probabilities, marginConstraints,
-  );
-  const totalProbabilities = tiltToConstraints(
-    base.totalDistribution.values, base.totalDistribution.probabilities, totalConstraints,
-  );
-  if (!marginProbabilities || !totalProbabilities) return neutral("unidentified", "joint_score_constraints_unidentifiable");
+  let marginProbabilities = tiltToConstraints(base.marginDistribution.values,
+    base.marginDistribution.probabilities, marginConstraints);
+  let totalProbabilities = tiltToConstraints(base.totalDistribution.values,
+    base.totalDistribution.probabilities, totalConstraints);
+  if (!marginProbabilities) {
+    axisReasons.margin = "joint_score_constraints_unidentifiable";
+    marginConstraints = []; delete sources.moneyline; delete sources.spread;
+    marginProbabilities = base.marginDistribution.probabilities;
+  }
+  if (!totalProbabilities) {
+    axisReasons.total = "joint_score_constraints_unidentifiable";
+    totalConstraints = []; delete sources.total;
+    totalProbabilities = base.totalDistribution.probabilities;
+  }
+  if (!marginConstraints.length && !totalConstraints.length) {
+    const error = [axisReasons.margin, axisReasons.total].find((reason) => reason && reason !== "no_economic_axis_change");
+    return neutral(error ? "unidentified" : "neutral", error ??
+      (args.moneyline || args.spread || args.total ? "episodes_have_no_net_game_law_change" : "no_selected_episode"));
+  }
   let outcome: NflV1WeekOneOutcomeForecast;
   try {
-    outcome = buildNflReconciledEvidenceDistributionForecast({
-      baseForecast: base, marginProbabilities, totalProbabilities,
-    });
+    outcome = buildNflReconciledEvidenceDistributionForecast({ baseForecast: base, marginProbabilities, totalProbabilities });
   } catch {
     return neutral("unidentified", "joint_score_law_outside_physical_domain");
   }
   const constraints = [...marginConstraints.map((constraint) => ({
-    market: constraint.market,
-    targetProbability: constraint.target,
-    achievedProbability: conditionalProbability(
-      outcome.marginDistribution.values, outcome.marginDistribution.probabilities, constraint.boundary,
-    ),
+    market: constraint.market, targetProbability: constraint.target,
+    achievedProbability: conditionalProbability(outcome.marginDistribution.values,
+      outcome.marginDistribution.probabilities, constraint.boundary),
   })), ...totalConstraints.map((constraint) => ({
-    market: constraint.market,
-    targetProbability: constraint.target,
-    achievedProbability: conditionalProbability(
-      outcome.totalDistribution.values, outcome.totalDistribution.probabilities, constraint.boundary,
-    ),
+    market: constraint.market, targetProbability: constraint.target,
+    achievedProbability: conditionalProbability(outcome.totalDistribution.values,
+      outcome.totalDistribution.probabilities, constraint.boundary),
   }))];
-  const changed = Math.abs(outcome.expectedHomeScore - base.expectedHomeScore) > 1e-7 ||
-    Math.abs(outcome.expectedAwayScore - base.expectedAwayScore) > 1e-7 ||
-    Math.abs(outcome.homeWinProbability - base.homeWinProbability) > 1e-7;
+  const changed = outcome.marginDistribution.probabilities.some((value, index) =>
+    value !== base.marginDistribution.probabilities[index]) ||
+    outcome.totalDistribution.probabilities.some((value, index) => value !== base.totalDistribution.probabilities[index]);
   return {
     release: NFL_JOINT_MARKET_EPISODE_READ_CANDIDATE_RELEASE,
     status: changed ? "applied" : "neutral",
     reason: changed ? "one_reconciled_discrete_game_law" : "episodes_have_no_net_game_law_change",
-    outcome, selectedSources: sources, constraints,
+    outcome, selectedSources: sources, constraints, axisReasons, ...overlap,
   };
 }
 

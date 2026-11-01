@@ -68,6 +68,7 @@ async function main(): Promise<void> {
             evaluatedBets: payload.decisions.evaluatedBets,
           } : {}),
           marketRead: payload.fullGameEvidenceInterpretation && {
+            innovation: payload.fullGameEvidenceInterpretation.marketInnovation,
             status: payload.fullGameEvidenceInterpretation.status,
             targetResolution: payload.fullGameEvidenceInterpretation.targetResolution,
             sideStory: payload.fullGameEvidenceInterpretation.sideStory,

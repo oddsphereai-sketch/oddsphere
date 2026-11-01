@@ -5,6 +5,7 @@ import {
   selectNflNamedPricedLineEpisodeAfterKnowledge,
   transportNflMoneylineEpisode,
   transportNflPricedLineEpisode,
+  type NflEpisodeHistoryBook,
 } from "@/lib/services/football/nflMoneylineEpisodeTransport";
 import type { NflPreviewBookOdds } from "@/lib/services/football/balldontlieNflPreviewSlate";
 import {
@@ -218,3 +219,95 @@ assert.ok(movedTotal.finalMean > total,
   "a Total line increase at unchanged de-vig price raises the scoring coordinate");
 
 console.log("NFL Moneyline, Spread, and Total episode transport tests passed");
+
+const selectorArgs = { history, sportsbook: "circa", providerGameId: "1392224",
+  statisticalKnowledgeAt: null, informationOverlap: "not_attested" as const,
+  evaluatedAt: "2026-10-31T16:00:00.000Z", gameStartsAt: "2026-10-31T17:00:00.000Z" };
+const unknown = selectNflNamedMoneylineEpisodeAfterKnowledge(selectorArgs);
+assert.ok(unknown);
+assert.equal(unknown.openingAt, history[0]!.observedAt, "unknown overlap uses a real earliest episode, not an invented cutoff");
+assert.equal(unknown.informationOverlap, "not_attested");
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...selectorArgs, informationOverlap: undefined }), null);
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...selectorArgs,
+  evaluatedAt: "2026-10-31T16:00:00.001Z", history: [history[0]!,
+    quote("2026-10-31T14:00:00.000Z", 105, -125)] }), null, "current endpoint older than 120 minutes is unavailable");
+assert.ok(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...selectorArgs,
+  history: [history[0]!, quote("2026-10-31T14:00:00.000Z", 105, -125)] }), "120-minute boundary remains usable");
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...selectorArgs,
+  history: [history[0]!, quote("2026-10-31T16:01:00.000Z", 105, -125)] }), null, "future prices are not current evidence");
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...selectorArgs,
+  gameStartsAt: "2026-10-31T15:00:00.000Z" }), null, "started games cannot receive an episode update");
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...selectorArgs,
+  history: [history[0]!, quote(currentAtForTest(), -1000, -1000)] }), null, "implausible overround cannot become fair evidence");
+function currentAtForTest() { return "2026-10-31T15:00:00.000Z"; }
+const pricedArgs = { ...selectorArgs, history: pricedHistory, market: "spread" as const };
+assert.ok(selectNflNamedPricedLineEpisodeAfterKnowledge(pricedArgs));
+assert.equal(selectNflNamedPricedLineEpisodeAfterKnowledge({ ...pricedArgs, history: [pricedHistory[0]!, {
+  ...pricedHistory[1]!, spread: { ...pricedHistory[1]!.spread!, awayLine: 7 },
+}] }), null, "asymmetric Spread pair cannot become an episode");
+assert.equal(selectNflNamedPricedLineEpisodeAfterKnowledge({ ...pricedArgs, history: [pricedHistory[0]!, {
+  ...pricedHistory[1]!, marketObservedAt: { spread: "2026-10-31T13:59:59.999Z" },
+}] }), null, "fresh composite clock cannot refresh an old Spread source");
+assert.equal(transportNflMoneylineEpisode({ statisticalForecast: close, statisticalKnowledgeAt: null,
+  episode: episode(0.53, 0.46) }).status, "unidentified");
+const transportedUnknown = transportNflMoneylineEpisode({ statisticalForecast: close, statisticalKnowledgeAt: null,
+  informationOverlap: "not_attested", episode: episode(0.53, 0.46) });
+assert.equal(transportedUnknown.status, "transported");
+assert.equal(transportedUnknown.statisticalKnowledgeAt, null);
+assert.equal(transportedUnknown.informationOverlap, "not_attested");
+assert.equal(transportNflPricedLineEpisode({ statisticalForecast: close, statisticalKnowledgeAt: null,
+  informationOverlap: "not_attested", episode: { market: "total", source: "circa",
+    openingAt: episode(0.5,0.5).openingAt, currentAt: episode(0.5,0.5).currentAt,
+    openingNumber: 45, currentNumber: 46, openingFirstFairProbability: 0.5, currentFirstFairProbability: 0.5,
+  } }).informationOverlap, "not_attested");
+console.log("NFL episode source contracts: nullable acknowledged overlap, freshness, kickoff and coherent quote pairs passed");
+
+// Continuity is the same physical book, not a fabricated single-provider event ID.
+const storedOpening: NflEpisodeHistoryBook = {
+  ...pricedHistory[0]!, provider: "sharpapi", providerEventId: "sharp-original-event",
+  storedCanonicalEvent: { provenance: "stored_context_capture", canonicalGameId: "1392224",
+    sourceProvider: "sharpapi", sourceEventId: "sharp-original-event",
+    sourceObservedAt: pricedHistory[0]!.observedAt },
+};
+const continuityArgs = { ...selectorArgs, history: [storedOpening, pricedHistory[1]!] };
+const continuityMl = selectNflNamedMoneylineEpisodeAfterKnowledge(continuityArgs);
+assert.ok(continuityMl);
+assert.equal(continuityMl.openingAt, storedOpening.observedAt);
+assert.equal(continuityMl.sourceProvenance?.opening.provider, "sharpapi");
+assert.equal(continuityMl.sourceProvenance?.opening.providerEventId, "sharp-original-event");
+assert.equal(continuityMl.sourceProvenance?.current.provider, "owls");
+assert.equal(continuityMl.sourceProvenance?.current.providerEventId, "owls-exact-game-1392224");
+for (const market of ["spread", "total"] as const) {
+  const selectedContinuity = selectNflNamedPricedLineEpisodeAfterKnowledge({ ...continuityArgs, market });
+  assert.ok(selectedContinuity);
+  assert.equal(selectedContinuity.sourceProvenance?.opening.identity, "stored_exact_canonical_event");
+}
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...continuityArgs,
+  history: [{ ...storedOpening, storedCanonicalEvent: undefined }, pricedHistory[1]!] }), null,
+  "raw SharpAPI rows cannot enter through an Owl-specific exact-event contract");
+const noOriginalId: NflEpisodeHistoryBook = { ...storedOpening, providerEventId: undefined,
+  storedCanonicalEvent: { ...storedOpening.storedCanonicalEvent!, sourceEventId: null } };
+assert.ok(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...continuityArgs,
+  history: [noOriginalId, pricedHistory[1]!] }), "legacy exact-canonical receipt needs no fabricated provider ID");
+const tamperCases: NflEpisodeHistoryBook[] = [
+  { ...storedOpening, provider: "owls" },
+  { ...storedOpening, providerGameId: "different-canonical-game" },
+  { ...storedOpening, storedCanonicalEvent: { ...storedOpening.storedCanonicalEvent!, canonicalGameId: "different-canonical-game" } },
+  { ...storedOpening, storedCanonicalEvent: { ...storedOpening.storedCanonicalEvent!, sourceObservedAt: atForWrongClock() } },
+  { ...storedOpening, storedCanonicalEvent: { ...storedOpening.storedCanonicalEvent!, sourceEventId: "invented-other-id" } },
+];
+function atForWrongClock() { return "2026-10-30T18:01:00.000Z"; }
+for (const tampered of tamperCases) assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({
+  ...continuityArgs, history: [tampered, pricedHistory[1]!],
+}), null, "mismatched canonical event, original provider, source ID or clock cannot attest continuity");
+const secondStored: NflEpisodeHistoryBook = { ...storedOpening, observedAt: "2026-10-30T19:00:00Z",
+  marketObservedAt: { moneyline: "2026-10-30T19:00:00Z" }, providerEventId: "conflicting-sharp-event",
+  storedCanonicalEvent: { ...storedOpening.storedCanonicalEvent!, sourceEventId: "conflicting-sharp-event",
+    sourceObservedAt: "2026-10-30T19:00:00Z" } };
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...continuityArgs,
+  history: [storedOpening, secondStored, pricedHistory[1]!] }), null,
+  "same canonical game does not excuse conflicting original event IDs within one provider");
+assert.equal(selectNflNamedMoneylineEpisodeAfterKnowledge({ ...selectorArgs,
+  history: [history[0]!, { ...history[2]!, providerEventId: undefined }],
+}), null, "raw Owl rows still require their actual upstream event ID");
+console.log("NFL source continuity: exact canonical stored context across real providers, original clocks and ID conflicts passed");
