@@ -59,6 +59,29 @@ async function main(): Promise<void> {
   assert.equal(timedOut.waitedMs, 2_500, "wait never exceeds the configured bound");
   assert.equal(timedOut.attempts, 4, "the final partial interval receives one last acquire attempt");
 
+  clockMs = 0;
+  const nhl = await acquireCronJobLeaseWithRetry(
+    {
+      jobName: "prediction_pipeline:nhl",
+      runId: "daily-stats",
+      leaseSeconds: 600,
+      maxWaitMs: 60_000,
+      retryIntervalMs: 2_000,
+    },
+    {
+      acquire: async (opts) => {
+        assert.equal(opts.jobName, "prediction_pipeline:nhl", "stats and splits still serialize on the same sport lease");
+        return clockMs < 20_000
+          ? { ...skipped("public-splits"), jobName: opts.jobName, runId: opts.runId }
+          : { ...acquired, jobName: opts.jobName, runId: opts.runId };
+      },
+      sleep: async (ms) => { clockMs += ms; },
+      now: () => clockMs,
+    },
+  );
+  assert.equal(nhl.lease.mode, "acquired", "the sole NHL daily stats run survives the real short split-publisher collision");
+  assert.equal(nhl.waitedMs, 20_000, "NHL starts as soon as the existing lease becomes available");
+
   console.log("PASS cron lease retry recovers short lock collisions and bounds long contention");
 }
 

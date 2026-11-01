@@ -49,7 +49,7 @@ import { supabase } from "@/lib/db/supabase";
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
-const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_10_27_r14_owls_current_odds";
+const NHL_DAILY_REFRESH_RELEASE = "nhl_daily_refresh_schedule_2026_11_01_r15_stats_lease_recovery";
 
 /**
  * Returns the MoneyPuck-style season start-year for a given UTC date.
@@ -354,6 +354,10 @@ export async function GET(request: Request): Promise<Response> {
       leaseGroup: "prediction_pipeline",
       requireLease: true,
       lockMinutes: 10,
+      // The daily stats scrape must survive a short collision with the
+      // quarter-hour public-splits publisher on this same sport lease.
+      leaseRetryMaxWaitMs: intraday ? 0 : 60_000,
+      leaseRetryIntervalMs: 2_000,
     },
   );
 }
