@@ -5,7 +5,7 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { readerContractSelection,readerHistoryContractSelection, type ReaderMarketMatch, type ReaderOutcome } from "@/lib/providers/owls/predictionMarketContracts";
 import { predictionMarketReaderBookTrail, predictionMarketComparisonBook, predictionMarketComparison, predictionMarketLockBoundary, predictionMarketGuidePoints, predictionMarketWindowPoints, predictionMarketChartDomain, predictionMarketCurve, predictionMarketBookStart, predictionMarketWindowDuration, predictionMarketBookPricePath, predictionMarketObservationAt, formatPredictionMarketOdds, selectedPredictionMarketOutcome, type PredictionMarketBookTrail } from "@/app/lab/lib/predictionMarketDisplay";
 import {formatContractLine} from "@/lib/providers/owls/predictionMarketContracts";
-import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketVisibleComparison,predictionMarketHasSharedHistory,predictionMarketBookLineHistory} from "@/app/lab/lib/predictionMarketDisplay";
+import {predictionMarketArchivedBook,predictionMarketBookOnlyComparison,predictionMarketVisibleComparison,predictionMarketHasSharedHistory,predictionMarketBookLineHistory,predictionMarketAllowsStandaloneHistory} from "@/app/lab/lib/predictionMarketDisplay";
 import {PredictionMarketSourcePins} from "@/app/lab/lib/predictionMarketSourcePins";
 import {publicMarketDisplayBook,publicMarketDisplayHistory,publicMarketPrelockHeldBook} from "@/app/lab/lib/publicMarketDisplayTrail";
 
@@ -105,10 +105,10 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
   const context=market.context;
   const differentBookLine=!!book&&book.line!==undefined&&book.line!==(selection?.line??null);
   const bookLabel=differentBookLine?(kind==="total"?`${selection?.side==="under"?"Under":"Over"} ${book!.line}`:`${selection?.side==="away"?game.awayTeam:game.homeTeam} ${formatContractLine(book!.line!)}`):context?.requestedLabel??"moneyline";
-  const visible=predictionMarketVisibleComparison(outcome,book,lockedAt,game.sport==="cbb"&&!frozen||game.sport==="cfb"&&(!frozen||!!current.prelockCapturedAt||historicalCfb));
+  const visible=predictionMarketVisibleComparison(outcome,book,lockedAt,predictionMarketAllowsStandaloneHistory(game.sport,frozen,!!current.prelockCapturedAt,historicalCfb));
   const comparison=visible.comparison;
   const sharedHistory=predictionMarketHasSharedHistory(comparison);
-  // Genuine CBB/CFB Kalshi history remains visible without pretending a
+  // Genuine supported Kalshi history remains visible without pretending a
   // one-quote sportsbook endpoint provides a full two-source overlap.
   const standaloneHistory=visible.standalone;
   if(fallbackBook&&!sharedHistory&&!standaloneHistory)return <PredictionMarketUnavailable variant={variant} label={selection?.label??marketLabel} kind={kind} lockedAt={lockedAt} status="history_building" book={fallbackBook} quote={!frozen||Date.parse(market.asOf)<=lockedAt!?{label:outcome.label,probability:outcome.probability,at:Date.parse(market.asOf),method:market.context?.method}:undefined}/>;
