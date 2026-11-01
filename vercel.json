@@ -115,7 +115,7 @@
     },
     {
       "path": "/api/cron/nhl-daily-refresh",
-      "schedule": "45 11 * * *"
+      "schedule": "47 11 * * *"
     },
     {
       "path": "/api/cron/nhl-daily-refresh?intraday=true",
