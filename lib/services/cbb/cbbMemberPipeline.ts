@@ -20,7 +20,7 @@ import { loadCbbRollingSchedule } from "./cbbRollingSchedule";
 import { dailyEdgeSnapshotKey, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import { writeLockedCbbTracking } from "./cbbTrackingWriter";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_10_30_r4_two_sided_reader_evidence" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_01_r5_locked_refresh_continuity" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -28,12 +28,12 @@ const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(an
 export async function refreshCbbMemberBoard(args:{anchorDate:string;season:number;now?:string;bdlKey:string;owlsKey:string;
   trainingGames:CbbTrainingGame[];db?:typeof supabase;provider?:CbbBallDontLieClient;owls?:OwlsInsightClient;
   fetcher?:typeof fetch;loadSchedule?:typeof loadCbbRollingSchedule;
-  saveSnapshot?:typeof upsertLabResponseSnapshot}){
+  saveSnapshot?:typeof upsertLabResponseSnapshot;syncFixtures?:(games:CbbGame[])=>Promise<unknown>}){
   const db=args.db??(await import("@/lib/db/supabase")).supabase;
   const provider=args.provider??new CbbBallDontLieClient(args.bdlKey,{maxRequests:160});
   const owls=args.owls??new OwlsInsightClient(args.owlsKey,{timeoutMs:8_000});
   const dates=dateWindow(args.anchorDate),providerDates=[addDaysToSlate(args.anchorDate,-1),...dates];
-  const [a,b,schedule,odds,splits]=await Promise.all([
+  const [a,b,initialSchedule,odds,splits]=await Promise.all([
     provider.gamesForDates(providerDates.slice(0,7),args.season),
     provider.gamesForDates(providerDates.slice(7),args.season),
     (args.loadSchedule??loadCbbRollingSchedule)(args.anchorDate),
@@ -51,6 +51,16 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   }
   const games=[...byId.values()].filter(game=>dates.includes(computeSlateDate("cbb",game.date))&&
     game.home_team.conference_id&&game.visitor_team.conference_id).sort((x,y)=>x.date.localeCompare(y.date)||x.id-y.id);
+  let schedule=initialSchedule;
+  if(args.syncFixtures){
+    const indexed=new Map(schedule.games.map(game=>[game.externalId,game]));
+    const changed=games.filter(game=>{
+      const prior=indexed.get(game.id);
+      return !prior||Date.parse(prior.gameStartAt)!==Date.parse(game.date)||prior.status!==cbbCanonicalStatus(game)||
+        prior.homeTeamDisplayName!==game.home_team.full_name||prior.awayTeamDisplayName!==game.visitor_team.full_name;
+    });
+    if(changed.length){await args.syncFixtures(changed);schedule=await (args.loadSchedule??loadCbbRollingSchedule)(args.anchorDate);}
+  }
   const scheduled=new Map(schedule.games.map(game=>[game.externalId,game]));
   const candidateGames=games.filter(game=>{
     const canonical=cbbCanonicalStatus(game);
@@ -68,10 +78,14 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const missingIdentity=candidateGames.filter(game=>!scheduled.has(game.id)).length;
   const missingLogosOnSchedule=candidateGames.filter(game=>{const identity=scheduled.get(game.id);
     return identity&&(!identity.homeTeamLogo||!identity.awayTeamLogo);}).length;
-  const contextDays=[...new Set(sourceGames.filter(game=>Date.parse(game.date)>Date.parse(asOf))
-    .map(game=>computeSlateDate("cbb",game.date)))];
+  // Forecast only rows that can still accept a new candidate. Recomputing a
+  // locked/started game is both unused and rejected by the point-in-time model;
+  // one completed game must not stop fresh predictions for the rest of the slate.
+  const forecastGames=sourceGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&
+    Date.parse(asOf)<Date.parse(game.date)-60*60_000);
+  const contextDays=[...new Set(forecastGames.map(game=>computeSlateDate("cbb",game.date)))];
   const dayEvents=new Map(await Promise.all(contextDays.map(async date=>[date,await fetchCbbDayEvents(date,args.fetcher)] as const)));
-  const forecasts=forecastCbbCandidateR2Batch(sourceGames.map(game=>{
+  const forecasts=forecastCbbCandidateR2Batch(forecastGames.map(game=>{
     const evidence=dayEvents.get(computeSlateDate("cbb",game.date));
     const venue=evidence?matchCbbVenue(game,evidence.events,evidence.fetchedAt):null;
     return {id:game.id,date:game.date,season:game.season,homeId:game.home_team.id,

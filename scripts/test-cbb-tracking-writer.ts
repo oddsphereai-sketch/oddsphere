@@ -25,7 +25,7 @@ const memberGame=adaptCbbProvisionalGame({game,snapshot,homeLogo:null,awayLogo:n
 const record:CbbStoredMemberGame={release:CBB_MEMBER_GAME_STORE_RELEASE,snapshot,memberGame};
 const rows:Array<Record<string,unknown>>=[];
 const db={from:(table:string)=>{
-  if(table==="games")return {select:()=>{const q={eq:()=>q,maybeSingle:async()=>({data:{id:44,external_id:777,game_date:start,slate_date:"2026-11-01"},error:null})};return q;}};
+  if(table==="games")return {select:()=>{const q={eq:()=>q,maybeSingle:async()=>({data:{id:44,external_id:777,game_date:"2026-11-01T19:00:00+00:00",slate_date:"2026-11-01"},error:null})};return q;}};
   assert.equal(table,"prediction_records");
   return {select:()=>{const q={eq:()=>q,then:(resolve:(value:unknown)=>unknown)=>resolve({data:rows,error:null})};return q;},
     insert:async(row:Record<string,unknown>)=>{rows.push(structuredClone(row));return {error:null};}};
@@ -42,7 +42,11 @@ async function main(){
   const settled=rows.map(row=>gradePrediction({record:{...row,id:1} as PredictionRecordRow,
     game:{status:"STATUS_FINAL",home_score:80,away_score:72,first_inning_runs:null},source:"auto_score_ingest"}).result);
   assert.deepEqual(settled,["win","win","loss"]);
-  assert.equal(await writeLockedCbbTracking(record,db),0,"replay must not replace a locked row");
+  for(const row of rows)row.locked_at="2026-11-01T18:00:00+00:00";
+  assert.equal(await writeLockedCbbTracking(record,db),0,"equivalent PostgreSQL timestamp representations must not replace or conflict with a locked row");
+  rows[0].locked_at="2026-11-01T18:01:00+00:00";
+  await assert.rejects(writeLockedCbbTracking(record,db),/conflicts with locked member/);
+  rows[0].locked_at="2026-11-01T18:00:00+00:00";
   rows[0].odds_american=999;
   await assert.rejects(writeLockedCbbTracking(record,db),/conflicts with locked member/);
   console.log("CBB tracking writer: frozen three-market rows, selected-side spread, idempotence and immutable conflict passed.");

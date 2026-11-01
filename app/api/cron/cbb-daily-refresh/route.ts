@@ -1,5 +1,5 @@
 import { cronHandler } from "@/lib/cron/runCron";
-import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
+import { addDaysToSlate, computeSlateDate, currentSlateDate } from "@/lib/dates/slateDate";
 import { CBB_FIXTURE_SEED_RELEASE, cbbFixtureRefreshDates, seedCbbGames } from "@/lib/services/cbb/seedCbbGamesService";
 import { fetchCbbTeamIdentities } from "@/lib/services/cbb/fetchCbbTeamIdentities";
 import { refreshCbbCurrentTraining } from "@/lib/services/cbb/cbbCurrentSeasonTraining";
@@ -37,7 +37,15 @@ export async function GET(request: Request): Promise<Response> {
     if (!owlsKey) throw new Error("OWLS_INSIGHT_API_KEY missing for CBB member writer");
     const training = await refreshCbbCurrentTraining({season,anchorDate:today,apiKey,now:now.toISOString()});
     const board = await refreshCbbMemberBoard({anchorDate:today,season,bdlKey:apiKey,owlsKey,
-      trainingGames:training.receipt.games});
+      trainingGames:training.receipt.games,syncFixtures:async games=>{
+        // Reuse this leased writer's captured fixtures: no second provider poll.
+        // The canonical seeder preserves both member and tracking locks.
+        for(const slateDate of [...new Set(games.map(game=>computeSlateDate("cbb",game.date)))]){
+          seeded.push(await seedCbbGames({slateDate,season,apiKey,dryRun:false,
+            capturedGames:games.filter(game=>computeSlateDate("cbb",game.date)===slateDate),
+            identityFetcher:fetchCbbTeamIdentities}));
+        }
+      }});
     const graded = [];
     for (const slateDate of Array.from({length:7},(_,i)=>addDaysToSlate(today,i-6))) {
       const result = await gradePredictionsForSlate({sport:"cbb",slateDate,apply:true,supabase,source:"auto_score_ingest"});

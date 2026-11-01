@@ -1,3 +1,4 @@
+import type { supabase as SupabaseClient } from "../../db/supabase";
 import { CbbBallDontLieClient } from "../../cbb/ballDontLie";
 import { assertCbbFixtureRefreshSafe, cbbCanonicalGamePayload, cbbCanonicalStatus,
   cbbCanonicalTeamPayload, type CbbExistingFixture } from "../../cbb/canonicalFixture";
@@ -6,7 +7,7 @@ import { cbbRollingSlateDates } from "../../cbb/rollingSlate";
 import { fetchCbbTeamIdentities } from "./fetchCbbTeamIdentities";
 import { addDaysToSlate, computeSlateDate } from "../../dates/slateDate";
 
-export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_10_29_r4_seven_day_et_window" as const;
+export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_11_01_r5_captured_intraday_sync" as const;
 
 /** The same seven Eastern slate dates the member board will display. */
 export function cbbFixtureSeedDates(today: string): string[] {
@@ -24,6 +25,9 @@ type SeedOptions = {
   season: number;
   apiKey: string;
   dryRun: boolean;
+  /** Reuse the sole writer's existing bounded provider receipt. */
+  capturedGames?: CbbGame[];
+  db?: typeof SupabaseClient;
   client?: CbbBallDontLieClient;
   identityFetcher?: typeof fetchCbbTeamIdentities;
 };
@@ -58,7 +62,7 @@ export async function seedCbbGames(options: SeedOptions) {
   const dates = [addDaysToSlate(options.slateDate, -1), options.slateDate,
     addDaysToSlate(options.slateDate, 1)];
   const client = options.client ?? new CbbBallDontLieClient(options.apiKey, { maxRequests: 25 });
-  const games = selectCbbSlateGames(await client.gamesForDates(dates, options.season),
+  const games = selectCbbSlateGames(options.capturedGames ?? await client.gamesForDates(dates, options.season),
     options.slateDate, options.season);
   const teams = new Map<number, CbbTeam>();
   for (const game of games) {
@@ -75,7 +79,7 @@ export async function seedCbbGames(options: SeedOptions) {
     season: options.season, providerCalls: client.calls, games: games.length,
     teams: teams.size, verifiedLogos, identitySource: identities ? "espn_catalog_and_exact_event" : "not_requested", written: false };
   if (options.dryRun || !games.length) return result;
-  const { supabase } = await import("../../db/supabase");
+  const supabase = options.db ?? (await import("../../db/supabase")).supabase;
 
   const teamDbIds = new Map<number, number>();
   for (const batch of chunks([...teams.values()].map(team =>
