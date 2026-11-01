@@ -8,6 +8,19 @@ Last reviewed: 2026-11-01
 
 ## NFL relative market innovations — November 1 correction
 
+Publication continuity follow-up from production base
+`5450cc1a807dfd08c2b7c2003dc96132d9edf07b`: fixture advances to
+`nfl_weekly_member_fixture_2026_11_01_r68_locked_fixture_continuity` and member
+snapshot to `nfl_forward_member_snapshot_2026_11_01_r60_locked_fixture_continuity`.
+Writer103/model47/cal46/decision55/member52 forecasts and grades are unchanged.
+The mixed board explicitly accepts exact prior r51/r54 immutable T-60 tuples;
+the first stored lock takes precedence over any later unlocked current release.
+The r59 reader tuple remains an exact compatible predecessor. The first r103
+writer produced five coherent current games but correctly retained the previous
+member board when its fixture builder admitted only6/14 games. This follow-up
+repairs that publication path, without changing or recreating any lock.
+Evidence: `docs/model-audits/2026-11-01-nfl-locked-fixture-continuity.md`.
+
 Starting base: `27bd94d5b39cfa0617bc5caaec06bcdf5887bf5f` (PR910).
 The correction supersedes the r102 absolute-price coordinate replacement for
 future unlocked decisions only. Publication requires the checks below; the
