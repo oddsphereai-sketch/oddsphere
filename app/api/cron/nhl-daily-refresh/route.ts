@@ -46,6 +46,9 @@ import { refreshNhlGoalieStats } from "@/lib/services/nhl/refreshNhlGoalieStatsS
 import { syncPublicSplitsObservations } from "@/lib/services/syncPublicSplitsObservations";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { supabase } from "@/lib/db/supabase";
+import { nhlDailyStatsRecoveryDue, readNhlDailyStatsCompletion, recordNhlDailyStatsCompletion } from "@/lib/services/nhl/nhlDailyStatsRecovery";
+
+export const maxDuration = 300;
 
 const NHL_CRON_ENV = "NHL_CRON_ENABLED";
 const NHL_PREDS_ENV = "NHL_PREDICTIONS_DB_WRITES_ENABLED";
@@ -180,8 +183,15 @@ export async function GET(request: Request): Promise<Response> {
       // every participating team exists locally. Snapshot selection silently
       // falls back to the completed prior season during opening-week lag.
       const season = nhlSeasonStartYearFromDate(new Date());
+      let refreshStableInputs = !intraday;
+      if (intraday && nhlDailyStatsRecoveryDue(new Date(), slateDate, null)) {
+        const completedDate = await readNhlDailyStatsCompletion(supabase, season, new Date()).catch(() => null);
+        refreshStableInputs = nhlDailyStatsRecoveryDue(new Date(), slateDate, completedDate);
+        if (refreshStableInputs) stepDetails.mode = "intraday_stats_recovery";
+      }
       let teamStatsWritten = 0;
-      if (intraday) {
+      let teamStatsComplete = false;
+      if (!refreshStableInputs) {
         stepDetails.team_stats = { skipped: true, reason: "daily_full_only" };
       } else try {
         let sourceSeason = season;
@@ -205,6 +215,7 @@ export async function GET(request: Request): Promise<Response> {
           });
         }
         teamStatsWritten = teamStats.written;
+        teamStatsComplete = teamStats.errors.length === 0 && teamStats.written > 0;
         stepDetails.team_stats = { ...teamStats, sourceSeason, currentError };
         if (teamStats.errors.length > 0) partial = true;
       } catch (error) {
@@ -212,7 +223,8 @@ export async function GET(request: Request): Promise<Response> {
         stepDetails.team_stats = { error: error instanceof Error ? error.message : String(error) };
       }
       let goalieStatsWritten = 0;
-      if (intraday) {
+      let goalieStatsComplete = false;
+      if (!refreshStableInputs) {
         stepDetails.goalie_stats = { skipped: true, reason: "daily_full_only" };
       } else try {
         let sourceSeason = season;
@@ -236,11 +248,23 @@ export async function GET(request: Request): Promise<Response> {
           });
         }
         goalieStatsWritten = goalieStats.written;
+        goalieStatsComplete = goalieStats.errors.length === 0 && goalieStats.written > 0;
         stepDetails.goalie_stats = { ...goalieStats, sourceSeason, currentError };
         if (goalieStats.errors.length > 0) partial = true;
       } catch (error) {
         partial = true;
         stepDetails.goalie_stats = { error: error instanceof Error ? error.message : String(error) };
+      }
+
+      if (refreshStableInputs && teamStatsComplete && goalieStatsComplete) {
+        try {
+          await recordNhlDailyStatsCompletion(supabase, { season, slateDate, now: new Date(),
+            teamRows: teamStatsWritten, goalieRows: goalieStatsWritten });
+          stepDetails.stats_completion = { slateDate, recorded: true };
+        } catch (error) {
+          partial = true;
+          stepDetails.stats_completion = { error: error instanceof Error ? error.message : String(error) };
+        }
       }
 
       // Step 4 — write prediction_records for tonight's regular-season slate.
