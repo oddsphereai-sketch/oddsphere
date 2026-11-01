@@ -899,15 +899,20 @@ export async function runNflForwardEvidenceWriter(args: {
       homeTeam: plan.game.home.abbreviation,
       build: (evaluationTargets) => {
     const excludedFamiliesByMarket = nflFullGameExcludedFamilies(evaluationTargets.evaluatedBets);
+    // Already captured named-book PAIRS are forecast evidence even though
+    // targetEligible:false correctly forbids offering them as executable bets.
+    // Anchor builders qualify each market's original source clock, exact line
+    // and distinct target-free family; execution lists below remain retail.
+    const forecastPriceBooks = [...comparableCurrentBooks, ...namedCurrentBooks];
     const axes = resolveNflTargetExcludedMarketAxes({
-      books: comparableCurrentBooks,
+      books: forecastPriceBooks,
       requireSameLineTotalPrices: true,
       marginExcludedSportsbooks: excludedFamiliesByMarket.moneyline,
       totalExcludedSportsbooks: excludedFamiliesByMarket.total,
       evaluatedAt: capturedAt,
     });
     const moneylineAnchor = resolveNflTargetExcludedMoneylineAnchor({
-      books: comparableCurrentBooks,
+      books: forecastPriceBooks,
       excludedSportsbooks: excludedFamiliesByMarket.moneyline,
       evaluatedAt: capturedAt,
     });

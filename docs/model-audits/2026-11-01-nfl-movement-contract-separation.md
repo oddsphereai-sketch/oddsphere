@@ -97,3 +97,32 @@ defect in that scope. Open PR intersections are documentation or distinct packag
 scripts; no overlapping NFL runtime change was found. Latest main still equals
 the recorded base. Protected publication and live release/writer/reader/lock
 verification remain required; this paragraph does not itself assert activation.
+
+## Final source-authority correction and repeat
+
+The14:08 pre-merge repeat was complete but PHI reverted because an unavailable
+Spread coordinate's partial-buyback guard vetoed valid ML authority. Publication
+was held. Missing numeric axes now retain their raw interpreted context without
+owning or vetoing another axis's correction. A sole qualified Spread coordinate
+can strengthen, weaken, cross the winner boundary or resolve a tie; an unrelated
+static ML price cannot lend it a numeric correction. These missing-axis and
+ownership cases are explicit regression tests.
+
+The14:47 read also found fresh Circa/Pinnacle paired quotes were present in the
+tape but omitted from numeric score anchors. For ATL, target exclusion left only
+two retail families at43; the two named pairs produce four valid families at43.
+Semantic anchors now receive those existing named quotes as forecast-only input.
+Executable member prices still use the unchanged retail list. Anchor helpers use
+each market's original source clock and select whole paired observations per
+canonical family AFTER freshness/pair validation; a partial/invalid newer row
+cannot erase another valid axis. No opposing sides are stitched. The existing
+three-family exact-line qualification remains. Target outcome release is r26.
+
+The final14:52:35.695Z no-write pass again includes all13 games/39 markets,
+zero findings/held games and stable targets. Grades are3 Best Angles/2 Leans/
+8 Watchlists/26 No Plays; same-input upstream11 actionables become5 through
+six demotions and zero promotions. This supersedes earlier-clock board counts.
+PHI21.56–WSH20.83 becomes17.62–23.75 (WSHwinner, PHI+6.5cover); ATLTotal46.60
+becomes43.84 withOver43 at50%/NoPlay; BUFmargin8.91 falls to3.47 and Total53.42
+rises to55.36, reflecting separate side/scoring evidence. All use real current
+targets and distribution-derived probabilities. No historical result is used.

@@ -24,7 +24,11 @@ check after that merge found that movement direction was wrongly compared with
 the bet side at the new handicap/Total. The candidate writer r102 uses model46,
 calibration45, decision/grade54, member51, fixture66 and snapshot58, all dated
 `2026_11_01` with suffix `movement_contract_separation`; arbiter27/runtime12.
-Ledger10, state6 and target outcome25 remain unchanged. Chronology corroborates
+Ledger10 and state6 remain unchanged; target outcome26 uses fresh named pairs
+as numeric forecast evidence with per-market source clocks and deduplication.
+Its exact identifier is
+`nfl_target_excluded_market_outcome_2026_11_01_r26_named_paired_price_authority`.
+Chronology corroborates
 the market-derived coordinate relative to the independent score; winner, cover,
 Over/Under and grades are derived separately from the final distribution. Thus
 a strengthened favorite may win without covering its larger handicap, and a

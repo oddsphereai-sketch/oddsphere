@@ -302,10 +302,21 @@ function interpretSideStory(
   spreadDirection: -1 | 0 | 1;
   evidenceRoles: string[];
 } {
-  const moneyline = ledger.marketContexts.moneyline;
-  const spread = ledger.marketContexts.spread;
+  const moneylinePrice = targetExcludedPriceScoreValue(ledger, "moneyline");
+  const spreadPrice = targetExcludedPriceScoreValue(ledger, "spread");
+  // A captured path remains interpreted evidence, but an unavailable numeric
+  // axis cannot own a correction or veto a separately priced axis. In
+  // particular, a Spread buyback without a usable Spread coordinate cannot
+  // cancel the current paired Moneyline implication for the outright winner.
+  const moneyline = { ...ledger.marketContexts.moneyline,
+    namedDirection: moneylinePrice === null ? null : ledger.marketContexts.moneyline.namedDirection };
+  const spread = { ...ledger.marketContexts.spread,
+    namedDirection: spreadPrice === null ? null : ledger.marketContexts.spread.namedDirection };
+  ledger = { ...ledger, marketContexts: { ...ledger.marketContexts, moneyline, spread } };
   const releasedWinner = releasedHomeMargin > 0 ? "home" : releasedHomeMargin < 0 ? "away" : null;
-  const currentWinner = currentMarketSide(ledger, "moneyline") as Side | null;
+  const winnerCoordinate = moneyline.namedDirection !== null ? moneylinePrice : spreadPrice;
+  const currentWinner: Side | null = winnerCoordinate === null || winnerCoordinate === 0
+    ? null : winnerCoordinate > 0 ? "home" : "away";
   const moneylineDirection = namedSide(moneyline.namedDirection);
   const spreadDirection = namedSide(spread.namedDirection);
   const directions: { moneylineDirection: -1 | 0 | 1; spreadDirection: -1 | 0 | 1 } = {
@@ -389,7 +400,7 @@ function interpretSideStory(
   const desiredSide = moneylineDirection ?? spreadDirection;
   if (!desiredSide) return { story: "market_story_unavailable", desiredSide: null, evidenceRoles, ...directions };
   if (!releasedWinner) {
-    return moneylineDirection && spreadDirection && currentWinner === desiredSide
+    return currentWinner === desiredSide
       ? { story: "tie_resolution", desiredSide, evidenceRoles, ...directions }
       : { story: "conflicted_market_story", desiredSide: null, evidenceRoles, ...directions };
   }
@@ -408,6 +419,10 @@ function interpretSideStory(
   if (moneylineDirection && currentWinner === desiredSide &&
       Math.sign(targetExcludedPriceScoreValue(ledger, "moneyline") ?? 0) ===
         (desiredSide === "home" ? 1 : -1)) {
+    return { story: "winner_regime_change", desiredSide, evidenceRoles, ...directions };
+  }
+  if (!moneylineDirection && spreadDirection && currentWinner === desiredSide && spreadPrice !== null &&
+      Math.sign(spreadPrice - releasedHomeMargin) === spread.namedDirection) {
     return { story: "winner_regime_change", desiredSide, evidenceRoles, ...directions };
   }
   if (currentWinner === releasedWinner) {
@@ -623,7 +638,8 @@ function resolveMargin(args: {
   if (!args.desiredSide || args.story === "conflicted_market_story" ||
       args.story === "market_story_unavailable") return args.releasedHomeMargin;
   if (args.story === "market_confirms_game") {
-    const owningMarket = args.ledger.marketContexts.spread.namedDirection !== null ? "spread" : "moneyline";
+    const owningMarket = args.ledger.marketContexts.spread.namedDirection !== null &&
+      targetExcludedPriceScoreValue(args.ledger, "spread") !== null ? "spread" : "moneyline";
     const marketScore = targetExcludedPriceScoreValue(args.ledger, owningMarket);
     return marketScore !== null && Math.sign(marketScore) === Math.sign(args.releasedHomeMargin) &&
       (args.desiredSide === "home" ? marketScore > args.releasedHomeMargin : marketScore < args.releasedHomeMargin)
@@ -644,7 +660,10 @@ function resolveMargin(args: {
     }
     return args.releasedHomeMargin;
   }
-  const candidate = targetExcludedPriceScoreValue(args.ledger, "moneyline");
+  const candidate = args.ledger.marketContexts.moneyline.namedDirection !== null &&
+    targetExcludedPriceScoreValue(args.ledger, "moneyline") !== null
+    ? targetExcludedPriceScoreValue(args.ledger, "moneyline")
+    : targetExcludedPriceScoreValue(args.ledger, "spread");
   if (candidate !== null && Math.sign(candidate) === (args.desiredSide === "home" ? 1 : -1) &&
       Math.sign(candidate - args.releasedHomeMargin) === (args.desiredSide === "home" ? 1 : -1)) {
     // Moneyline identifies the outright winner; Spread directly locates the
@@ -753,15 +772,15 @@ function describeMarketResolution(
     : !pathDirection ? "non_directional" : flowDirections.has(-pathDirection as -1 | 1)
       ? "opposes_price" : "confirms_price";
   const reason = changed
-    ? context.namedDirection === null || context.namedDirection !== correctionDirection
+    ? price === null || context.namedDirection === null || context.namedDirection !== correctionDirection
       ? "joint_score_reconciliation"
       : flow === "sources_disagree" ? "paired_price_and_named_path_prevail_over_conflicting_flow_sources"
       : flow === "opposes_price" ? "price_led_resistance_to_flow_with_current_price_confirmation"
         : "named_path_and_current_price_select_coherent_score"
     : context.resistance === "book_disagreement" ? "named_books_disagree_retain_released_score"
-      : context.namedDirection !== null && priceCorrectionDirection !== context.namedDirection
+      : price === null ? "no_coherent_paired_price_score_retain_released_score"
+        : context.namedDirection !== null && priceCorrectionDirection !== context.namedDirection
         ? "current_price_does_not_confirm_named_path_retain_released_score"
-        : price === null ? "no_coherent_paired_price_score_retain_released_score"
           : context.namedDirection === null ? "no_corroborated_named_episode_retain_released_score"
             : "released_score_already_satisfies_market_read_or_joint_tuple_not_supported";
   const directional = (signal: NflFullGameEvidenceSignal) => signal.kind !== "availability" &&
