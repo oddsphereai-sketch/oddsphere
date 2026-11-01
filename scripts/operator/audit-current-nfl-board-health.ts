@@ -55,6 +55,7 @@ async function main(): Promise<void> {
       grade: dto.verdict.label,
       held: dto.held,
       price: dto.currentPriceAmerican,
+      evaluatedBook: dto.currentPriceSportsbook ?? dto.marketSource ?? "unknown",
       trailLength: dto.oddsTrail?.length ?? 0,
     };
   }));
@@ -96,6 +97,7 @@ async function main(): Promise<void> {
       upcomingGradeTotals: count(upcoming, (row) => row.grade),
       actionableMarkets: actionable.length,
       actionableByMarketAndSide: count(actionable, (row) => `${row.market}:${row.prediction ?? "missing"}`),
+      evaluatedBooksByMarket: count(upcoming, (row) => `${row.market}:${row.evaluatedBook}`),
       upcomingMissingPrices: upcoming.filter((row) => row.price === null).length,
       upcomingZeroTrails: upcoming.filter((row) => row.trailLength === 0).length,
       upcomingHeld: upcoming.filter((row) => row.held).length,

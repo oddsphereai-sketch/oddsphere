@@ -192,6 +192,7 @@ export async function GET(request: Request): Promise<Response> {
         tracking_records_inserted: result.trackingRecordsInserted,
         tracking_records_existing: result.trackingRecordsExisting,
         owls_capture: result.owlsCapture,
+        named_price_capture: result.namedPriceCapture,
         ...marketBrainDetails,
         player_props_enabled: playerPropsEnabled,
         player_props_cadence: playerPropsCadence,

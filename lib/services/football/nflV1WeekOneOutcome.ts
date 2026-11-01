@@ -64,7 +64,7 @@ export const NFL_V1_MONEYLINE_PRICE_MOVE_MINIMUM_PP = 1 as const;
 export const NFL_V1_MONEYLINE_PUBLIC_GAP_MINIMUM_PP = 8 as const;
 export const NFL_V1_MONEYLINE_SHARP_GAP_MINIMUM_PP = 10 as const;
 export const NFL_V1_NO_WEIGHT_MARKET_READER_RELEASE =
-  "nfl_v1_no_weight_market_reader_2026_10_25_r4_unified_total_interpreter" as const;
+  "nfl_v1_no_weight_market_reader_2026_10_31_r5_independent_classification_target_free_score" as const;
 
 type DiscreteDistribution = {
   values: number[];
@@ -106,7 +106,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_25_r16_two_source_flow_boundary"
       | "nfl_target_excluded_market_outcome_2026_10_25_r17_unified_total_interpreter"
       | "nfl_target_excluded_market_outcome_2026_10_26_r18_nuanced_market_reader"
-      | "nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration";
+      | "nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration"
+      | "nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -404,6 +405,54 @@ export function buildNflUnifiedMarketAdjustedForecast(args: {
   });
 }
 
+/** Infer a score coordinate from a target-excluded paired Spread quote, never by reflecting across its number. */
+export function inferNflTargetExcludedSpreadMean(args: {
+  independentForecast: NflV1WeekOneOutcomeForecast;
+  homeMarginBoundary: number;
+  homeCoverFairProbability: number;
+}): number | null {
+  const { independentForecast: forecast, homeMarginBoundary: boundary, homeCoverFairProbability: fair } = args;
+  if (!Number.isFinite(boundary) || !Number.isFinite(fair) || fair <= 0 || fair >= 1) return null;
+  const margin = meanForSideProbability({
+    source: forecast.marginDistribution,
+    initialMean: forecast.expectedHomeScore - forecast.expectedAwayScore,
+    targetProbability: fair,
+    score: (value) => value - boundary,
+    nonNegative: false,
+  });
+  const achieved = distributionSideProbability(
+    shiftedDistribution(forecast.marginDistribution, margin, false),
+    (value) => value - boundary,
+  );
+  return Number.isFinite(margin) && Math.abs(achieved - fair) < 1e-6 &&
+    forecast.expectedHomeScore + forecast.expectedAwayScore > Math.abs(margin)
+    ? margin : null;
+}
+
+/** Infer a Total coordinate from an exact target-excluded paired Over/Under price. */
+export function inferNflTargetExcludedTotalMean(args: {
+  independentForecast: NflV1WeekOneOutcomeForecast;
+  totalLine: number;
+  overFairProbability: number;
+}): number | null {
+  const { independentForecast: forecast, totalLine, overFairProbability: fair } = args;
+  if (!Number.isFinite(totalLine) || !Number.isFinite(fair) || fair <= 0 || fair >= 1) return null;
+  const total = meanForSideProbability({
+    source: forecast.totalDistribution,
+    initialMean: forecast.expectedHomeScore + forecast.expectedAwayScore,
+    targetProbability: fair,
+    score: (value) => value - totalLine,
+    nonNegative: true,
+  });
+  const achieved = distributionSideProbability(
+    shiftedDistribution(forecast.totalDistribution, total, true),
+    (value) => value - totalLine,
+  );
+  return Number.isFinite(total) && Math.abs(achieved - fair) < 1e-6 &&
+    total > Math.abs(forecast.expectedHomeScore - forecast.expectedAwayScore)
+    ? total : null;
+}
+
 type SplitPercentages = {
   capturedAt: string;
   homeMoneyPct: number | null; homeBetsPct: number | null;
@@ -438,6 +487,8 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
     "release" | "providerCollectedAt" | "projectedHomeMargin" | "projectedTotal">;
   namedSequenceAuthority?: NflNamedMarketSequenceAuthority;
   professionalMarketAuthority?: NflProfessionalMarketAuthority;
+  /** Internal semantic pass: classify evidence against the actual statistical score, without scalar market preloading. */
+  classificationFromIndependentOnly?: boolean;
   evaluatedAt: string;
 }): NflV1WeekOneOutcomeForecast {
   if (!args.current.spread || !args.current.total) return args.baseForecast;
@@ -463,7 +514,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   )) {
     throw new Error("NFL paid team-score input is invalid.");
   }
-  const rawTargetMargin = args.paidTeamScore
+  const rawTargetMargin = args.classificationFromIndependentOnly
+    ? args.baseForecast.expectedHomeScore - args.baseForecast.expectedAwayScore
+    : args.paidTeamScore
     ? args.paidTeamScore.projectedHomeMargin
     : args.weeklyRawSignal
     ? (1 - NFL_V1_WEEKLY_RAW_MARGIN_MARKET_WEIGHT) * args.weeklyRawSignal.independentHomeMargin
@@ -471,7 +524,9 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       + args.weeklyRawSignal.directionHomeMarginCorrection
     : (1 - NFL_V1_MARKET_WEIGHT) * args.footballHomeMargin
       + NFL_V1_MARKET_WEIGHT * -args.current.spread.homeLine;
-  const rawTargetTotal = args.paidTeamScore
+  const rawTargetTotal = args.classificationFromIndependentOnly
+    ? baseTotal
+    : args.paidTeamScore
     ? args.paidTeamScore.projectedTotal
     : (1 - NFL_V1_MARKET_WEIGHT) * baseTotal + NFL_V1_MARKET_WEIGHT * args.current.total.line;
   const sharpMarginGap = firstFinite(
@@ -531,7 +586,8 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
       (!Number.isFinite(args.marketHomeCoverProbability) || args.marketHomeCoverProbability <= 0 || args.marketHomeCoverProbability >= 1)) {
     throw new Error("NFL priced-neutral Spread probability must be between zero and one.");
   }
-  const correction = !args.paidTeamScore && hasNflV1ActionableGradeCorrection(args.baseForecast.providerGameId)
+  const correction = !args.classificationFromIndependentOnly && !args.paidTeamScore &&
+    hasNflV1ActionableGradeCorrection(args.baseForecast.providerGameId)
     ? getNflV1ActionableGradeCorrection({
         providerGameId: args.baseForecast.providerGameId,
         awayTeam: args.baseForecast.awayTeam,
@@ -562,7 +618,8 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
         nonNegative: false,
       })
     : rawTargetMargin;
-  const calibratedTotal = correction || (!args.paidTeamScore && args.marketOverProbability !== undefined)
+  const calibratedTotal = correction || (!args.classificationFromIndependentOnly &&
+    !args.paidTeamScore && args.marketOverProbability !== undefined)
     ? meanForSideProbability({
         source: args.baseForecast.totalDistribution,
         initialMean: rawTargetTotal,
@@ -574,7 +631,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   const guardedMargin = guardWeakEvidenceReversal({
     source: args.baseForecast.marginDistribution,
     calibratedMean: calibratedHomeMargin,
-    proposedMean: calibratedHomeMargin + combinedHomeMarginShiftPoints,
+    proposedMean: calibratedHomeMargin + (args.classificationFromIndependentOnly ? 0 : combinedHomeMarginShiftPoints),
     score: (margin) => margin + args.current.spread!.homeLine,
     nonNegative: false,
     sharpShift: sharpHomeMarginShiftPoints,
@@ -584,7 +641,7 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   const guardedTotal = guardWeakEvidenceReversal({
     source: args.baseForecast.totalDistribution,
     calibratedMean: calibratedTotal,
-    proposedMean: calibratedTotal + (args.paidTeamScore
+    proposedMean: calibratedTotal + (args.classificationFromIndependentOnly ? 0 : args.paidTeamScore
       ? 0
       : args.weeklyRawSignal
         ? movement.totalShiftPoints
@@ -753,7 +810,10 @@ export function buildNflNoWeightMarketEvidenceOutcomeForecast(
   args: Parameters<typeof buildNflMarketEvidenceOutcomeForecast>[0],
 ): NflV1WeekOneOutcomeForecast {
   if (!args.current.spread || !args.current.total) return args.baseForecast;
-  const reader = buildNflMarketEvidenceOutcomeForecast(args);
+  const reader = buildNflMarketEvidenceOutcomeForecast({
+    ...args,
+    classificationFromIndependentOnly: true,
+  });
   const evidence = reader.marketEvidence;
   if (!evidence) return args.baseForecast;
   const independentHomeMargin = args.baseForecast.expectedHomeScore - args.baseForecast.expectedAwayScore;
@@ -764,26 +824,56 @@ export function buildNflNoWeightMarketEvidenceOutcomeForecast(
   let professionalSpreadCorrectionApplied = false;
   let qualifiedTotalCorrectionApplied = false;
 
+  // A categorical market decision may select a market-implied score candidate,
+  // but it must not invent that score by reflecting the statistical margin
+  // across zero or a betting line. The executable target quote cannot supply
+  // this mean: only the separately supplied target-excluded paired fair price
+  // at its exact line has score authority here.
+  const marketHomeMargin = -args.current.spread.homeLine;
+  const marketMarginCandidate = args.marketHomeCoverProbability === undefined ? null
+    : meanForSideProbability({
+        source: args.baseForecast.marginDistribution,
+        initialMean: independentHomeMargin,
+        targetProbability: args.marketHomeCoverProbability,
+        score: (margin) => margin - marketHomeMargin,
+        nonNegative: false,
+      });
+  const marketTotalCandidate = args.marketOverProbability === undefined ? null
+    : meanForSideProbability({
+        source: args.baseForecast.totalDistribution,
+        initialMean: independentTotal,
+        targetProbability: args.marketOverProbability,
+        score: (points) => points - args.current.total!.line,
+        nonNegative: true,
+      });
+
   if (evidence.winnerCoherence?.status === "authorized") {
     const desired = Math.sign(reader.expectedHomeScore - reader.expectedAwayScore);
-    if (desired !== 0 && Math.sign(finalHomeMargin) !== desired) {
-      finalHomeMargin = -finalHomeMargin;
+    if (desired !== 0 && Math.sign(finalHomeMargin) !== desired &&
+        marketMarginCandidate !== null && Math.sign(marketMarginCandidate) === desired &&
+        independentTotal > Math.abs(marketMarginCandidate)) {
+      finalHomeMargin = marketMarginCandidate;
       winnerCorrectionApplied = true;
     }
   }
-  const marketHomeMargin = -args.current.spread.homeLine;
   if (evidence.spreadDirection?.status === "available"
     && evidence.spreadDirection.reason?.startsWith("professional_market_")) {
     const desired = evidence.spreadDirection.side === "home" ? 1 : -1;
-    if (Math.sign(finalHomeMargin - marketHomeMargin) !== desired) {
-      finalHomeMargin = 2 * marketHomeMargin - finalHomeMargin;
+    if (Math.sign(finalHomeMargin - marketHomeMargin) !== desired &&
+        marketMarginCandidate !== null &&
+        Math.sign(marketMarginCandidate - marketHomeMargin) === desired &&
+        independentTotal > Math.abs(marketMarginCandidate)) {
+      finalHomeMargin = marketMarginCandidate;
       professionalSpreadCorrectionApplied = true;
     }
   }
   if (evidence.totalDirection?.status === "available" && evidence.totalDirection.side) {
     const desired = evidence.totalDirection.side === "over" ? 1 : -1;
-    if (Math.sign(finalTotal - args.current.total.line) !== desired) {
-      finalTotal = 2 * args.current.total.line - finalTotal;
+    if (Math.sign(finalTotal - args.current.total.line) !== desired &&
+        marketTotalCandidate !== null &&
+        Math.sign(marketTotalCandidate - args.current.total.line) === desired &&
+        marketTotalCandidate > Math.abs(finalHomeMargin)) {
+      finalTotal = marketTotalCandidate;
       qualifiedTotalCorrectionApplied = true;
     }
   }
@@ -1227,6 +1317,46 @@ function outcomeFromDistributions(args: {
     totalDistribution: args.totalDistribution,
     sourceExpectedAwayScore: expectedAwayScore,
     sourceExpectedHomeScore: expectedHomeScore,
+  };
+}
+
+/** Construct one score/probability law from a reconciled evidence distribution. */
+export function buildNflReconciledEvidenceDistributionForecast(args: {
+  baseForecast: NflV1WeekOneOutcomeForecast;
+  marginProbabilities: number[];
+  totalProbabilities: number[];
+}): NflV1WeekOneOutcomeForecast {
+  const valid = (source: DiscreteDistribution, probabilities: number[]) =>
+    probabilities.length === source.values.length && probabilities.length > 0 &&
+    probabilities.every((value) => Number.isFinite(value) && value >= 0) &&
+    Math.abs(probabilities.reduce((sum, value) => sum + value, 0) - 1) < 1e-8;
+  if (!valid(args.baseForecast.marginDistribution, args.marginProbabilities) ||
+      !valid(args.baseForecast.totalDistribution, args.totalProbabilities)) {
+    throw new Error(`NFL reconciled evidence distribution is invalid for ${args.baseForecast.providerGameId}.`);
+  }
+  const reconciled = outcomeFromDistributions({
+    providerGameId: args.baseForecast.providerGameId,
+    awayTeam: args.baseForecast.awayTeam,
+    homeTeam: args.baseForecast.homeTeam,
+    marginDistribution: {
+      values: [...args.baseForecast.marginDistribution.values],
+      probabilities: [...args.marginProbabilities],
+    },
+    totalDistribution: {
+      values: [...args.baseForecast.totalDistribution.values],
+      probabilities: [...args.totalProbabilities],
+    },
+  });
+  if (reconciled.expectedHomeScore + reconciled.expectedAwayScore <=
+      Math.abs(reconciled.expectedHomeScore - reconciled.expectedAwayScore)) {
+    throw new Error(`NFL reconciled score means are physically inconsistent for ${args.baseForecast.providerGameId}.`);
+  }
+  return {
+    ...args.baseForecast,
+    ...reconciled,
+    marketEvidence: args.baseForecast.marketEvidence,
+    targetExclusion: args.baseForecast.targetExclusion,
+    noWeightMarketReader: args.baseForecast.noWeightMarketReader,
   };
 }
 

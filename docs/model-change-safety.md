@@ -1,5 +1,65 @@
 # Model change safety protocol
 
+## Owner-directed NFL market-reader repair — October 31, private candidate
+
+The proposed NFL release reads exact two-sided Circa/Pinnacle price chronology
+from the existing Owl's observation owner, including market-specific source
+times, rather than treating a single current capture as a movement history.
+It interprets named-book movement, retail follow-through, split conflict,
+winner/cover divergence, and coherent whole-game score consequences. Named
+prices remain capture-only and cannot become the member's executable quote.
+No extra paid price request, separate writer, lease change, or locked-record
+rewrite is permitted. Older locked payloads must render under their stored
+release before any future unlocked r43 decision. Publication is gated on
+the focused conformance tests, release-pure board-count report, full
+`npm run verify:model-change`, latest-main integration safety, protected PR,
+and post-merge live evidence/reader checks. Until those checks pass the
+candidate remains private; no improvement in win rate is claimed.
+The later r5/r21/r20 private correction removes synthetic zero/line-reflected
+score changes and prevents the final semantic arbiter from borrowing an
+unrelated statistical or player-aware score as market authority. A coherent
+target-excluded paired-price-derived whole-game score can move the final
+margin and Total; the independent estimate remains evidence, not a veto.
+The r20 grade policy no longer automatically downgrades a Moneyline promotion
+earned by the existing grade evaluator. The latest 13-game no-write board
+had 10 candidate actionables versus 14 on an earlier stored live capture;
+those are not same-input causal deltas, and local Playbook used timestamped
+stored observations. The optional joint gap-fill path made zero actionable
+promotions or demotions, one nonactionable promotion, and one nonactionable
+demotion on the same run. A lone named move can now be corroborated by a
+separate target-free paired price; the subsequent 13-game no-write run found
+zero incremental score, side, grade, or actionable-count changes from that
+particular r20 rule. The
+board-count contract and complete episode interpretation remain unresolved, so this
+candidate does not pass product conformance and must not be published merely
+because the verification suite is green.
+Private r95/r3 separates opposing retail price movement from actual disagreement
+between Circa and Pinnacle. The previous state labeled both `book_disagreement`,
+which could veto a coherent named-book Total read. A full-ledger regression now
+proves retail resistance remains visible while a separately target-excluded
+paired-price Total can change the final score; opposed named books still fail
+as conflict. The current no-write slate remained seven Best Angles and four
+Leans before and after this correction, but the live inputs were not frozen
+between runs. This repairs one classification error; it does not clear the
+unresolved episode or same-input publication gates.
+
+The private r96 Owl's split step reuses the existing single league capture
+and qualifies only exact-game, fresh Circa rows on the evaluated main line;
+other books remain display context and off-line/stale markets are masked.
+Target-exclusion r22 corrects a concrete leak: removing the evaluated book's
+label while retaining its percentages let the Total reader consume its own
+split. The percentages are now masked without mutating the source receipt.
+The first zero-write current-slate run with qualified Owl's rows had seven
+Best Angles, three Leans, nine Watchlists and 20 No Plays versus a near-time
+prior seven/four/eight/twenty; those clocks were not frozen and are not a
+same-input causal board report. Private r97/r4 also prevents an opposing
+retail price from erasing qualified reverse flow against named-book price.
+After latest-main integration, the zero-write 13-game slate showed seven Best
+Angles, two Leans, eight Watchlists and 22 No Plays, versus 13 actionables in
+the earlier stored public board. The source times differ, so the effect is
+not causally attributable, but it remains a material board-contraction risk.
+No live publication is approved yet.
+
 ## Cross-product independent-input contract — October 31
 
 The owner explicitly requires the independent forecast to be evidence, not a

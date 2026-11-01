@@ -93,6 +93,31 @@ assert.equal(state.splits[0]?.source, "retail_book", "DraftKings split remains r
 assert.equal(state.trails.find((trail) => trail.source === "circa")?.numberDelta, 0.5);
 assert.equal(state.trails.find((trail) => trail.source === "circa")?.moveOrder, "number_only");
 
+const singleNamedThenRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "draftkings", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(singleNamedThenRetail.namedDirection, 1);
+assert.deepEqual(singleNamedThenRetail.followerSources, ["draftkings"]);
+const simultaneousRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:00:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "draftkings", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(simultaneousRetail.namedDirection, null,
+  "simultaneous retail movement cannot be invented as later independent follow-through");
+
 const excluded = buildNflMarketState({
   market: "spread",
   evaluatedAt: "2026-10-09T11:30:00.000Z",
@@ -136,6 +161,49 @@ const resisted = buildNflMarketState({
   sharpSplits: splitSet("Circa"),
 });
 assert.equal(resisted.resistance, "flow_resistance");
+
+const namedVersusRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "pinnacle", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "fanduel", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -1 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(namedVersusRetail.namedDirection, 1);
+assert.equal(namedVersusRetail.resistance, "retail_price_resistance",
+  "opposing retail price movement must not be mislabeled as disagreement between named books");
+const opposedFlowSet = splitSet("Circa");
+opposedFlowSet.spread = { ...opposedFlowSet.spread, homeMoneyPct: 30, awayMoneyPct: 70 };
+const namedRetailAndFlow = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "pinnacle", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "fanduel", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -1 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: opposedFlowSet,
+});
+assert.equal(namedRetailAndFlow.resistance, "reverse_flow",
+  "genuine opposite money flow must not be hidden by a simultaneous opposing retail price");
+const opposingNamed = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "pinnacle", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -1 }),
+  ])],
+  current: { spread: { homeLine: -1.5 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(opposingNamed.namedDirection, null);
+assert.equal(opposingNamed.resistance, "book_disagreement",
+  "opposing Circa and Pinnacle moves remain a genuine named-book conflict");
 
 const latePersistentMove = buildNflMarketState({
   market: "spread",

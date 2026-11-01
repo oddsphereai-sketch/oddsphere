@@ -14,7 +14,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_OWLS_SPLITS_RELEASE =
-  "nfl_owls_splits_2026_10_27_r1_capture_only_named_books" as const;
+  "nfl_owls_splits_2026_10_31_r2_exact_line_model_qualification" as const;
 
 const SOURCE_BOOK_PRIORITY = ["circa", "draftkings", "betmgm"] as const;
 
@@ -104,13 +104,21 @@ function buildSplitSet(
   const spread = market("spread");
   const total = market("total");
   if (moneyline.length !== 2 || spread.length !== 2 || total.length !== 2) return null;
-  const sportsbook = observations[0]!.sourceBook;
   const row = (rows: NormalizedOwlsSplitObservation[], side: string) => rows.find((candidate) => candidate.side === side)!;
+  const spreadHomeLine = row(spread, "home").line;
+  const spreadAwayLine = row(spread, "away").line;
+  const totalLine = row(total, "over").line;
+  if (spreadHomeLine === null || spreadAwayLine === null ||
+      Math.abs(spreadHomeLine + spreadAwayLine) > 1e-9 ||
+      totalLine === null || row(total, "under").line !== totalLine) return null;
+  const sportsbook = observations[0]!.sourceBook;
   const base = (marketRows: NormalizedOwlsSplitObservation[]) => ({
     provider: "owls" as const,
     providerGameId: game.providerGameId,
     sourceEventId: providerEventId,
     sourceSportsbook: sportsbook,
+    sourceLine: marketRows[0]!.market === "spread" ? spreadHomeLine
+      : marketRows[0]!.market === "total" ? totalLine : null,
     capturedAt,
     providerFetchedAt: marketRows[0]!.observedAt,
   });
@@ -141,6 +149,63 @@ function buildSplitSet(
       underBetsPct: percentage(row(total, "under").betsPct),
     },
   };
+}
+
+export type NflOwlsModelSplitQualification = {
+  splits: NflRegularSharpSplitSet | null;
+  qualifiedMarkets: NflRegularSharpMarket[];
+  reasons: Partial<Record<NflRegularSharpMarket, "missing_or_unverified_circa" | "stale_or_future" | "different_line">>;
+};
+
+/**
+ * Reuse the exact-game Owls capture, but never equate a split on another line
+ * with the evaluated main-line contract. A partial set masks only the mismatched
+ * market; it does not turn DraftKings/BetMGM display fallback into sharp flow.
+ */
+export function qualifyNflOwlsSplitsForModel(args: {
+  splits: NflRegularSharpSplitSet | null;
+  providerGameId: string;
+  evaluatedAt: string;
+  currentHomeSpread: number | null;
+  currentTotal: number | null;
+}): NflOwlsModelSplitQualification {
+  const markets: NflRegularSharpMarket[] = ["moneyline", "spread", "total"];
+  const value = args.splits;
+  const empty = { splits: null, qualifiedMarkets: [],
+    reasons: Object.fromEntries(markets.map((market) => [market, "missing_or_unverified_circa"])) as
+      NflOwlsModelSplitQualification["reasons"] };
+  if (!value || !completeSharpApiNflSplitSet(value)) return empty;
+  const rows = markets.map((market) => value[market]);
+  if (rows.some((row) => row.provider !== "owls" || row.sourceSportsbook !== "circa" ||
+      row.providerGameId !== args.providerGameId || !row.sourceEventId) ||
+      new Set(rows.map((row) => row.sourceEventId)).size !== 1) return empty;
+  const evaluatedMs = Date.parse(args.evaluatedAt);
+  if (!Number.isFinite(evaluatedMs)) return empty;
+  const reasons: NflOwlsModelSplitQualification["reasons"] = {};
+  const qualifiedMarkets = markets.filter((market) => {
+    const row = value[market];
+    const observedMs = Date.parse(row.providerFetchedAt ?? "");
+    if (!Number.isFinite(observedMs) || observedMs > evaluatedMs || evaluatedMs - observedMs > 120 * 60_000) {
+      reasons[market] = "stale_or_future";
+      return false;
+    }
+    const targetLine = market === "spread" ? args.currentHomeSpread
+      : market === "total" ? args.currentTotal : null;
+    if (market !== "moneyline" && (targetLine === null || row.sourceLine === null ||
+        row.sourceLine === undefined || Math.abs(row.sourceLine - targetLine) > 1e-9)) {
+      reasons[market] = "different_line";
+      return false;
+    }
+    return true;
+  });
+  if (qualifiedMarkets.length === 0) return { splits: null, qualifiedMarkets, reasons };
+  const masked = (row: NflRegularSharpSplit): NflRegularSharpSplit => ({ ...row,
+    homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null,
+    overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null,
+  });
+  return { splits: Object.fromEntries(markets.map((market) => [market,
+    qualifiedMarkets.includes(market) ? value[market] : masked(value[market]),
+  ])) as NflRegularSharpSplitSet, qualifiedMarkets, reasons };
 }
 
 function exactGame(game: NflPreviewGame, row: NormalizedOwlsSplitObservation): boolean {

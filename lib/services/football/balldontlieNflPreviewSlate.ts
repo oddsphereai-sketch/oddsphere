@@ -53,7 +53,7 @@ export type NflPreviewBookOdds = {
   sportsbook: string;
   observedAt: string;
   /** Price-feed provenance. Older immutable rows omit this and are BALLDONTLIE by contract. */
-  provider?: "balldontlie" | "sharpapi";
+  provider?: "balldontlie" | "sharpapi" | "owls";
   /** Exact upstream event identity when a secondary named-book feed is used. */
   providerEventId?: string;
   /** Capture-only named books are never eligible as the evaluated member quote. */

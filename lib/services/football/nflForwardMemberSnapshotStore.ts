@@ -10,7 +10,15 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
+  "nfl_forward_member_snapshot_2026_10_31_r53_flow_and_retail_conflict_precedence" as const;
+const NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation" as const;
+const NFL_NAMED_PRICE_PREDECESSOR_FIXTURE_RELEASE =
+  "nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation" as const;
+const NFL_NAMED_PRICE_PREDECESSOR_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation" as const;
+const NFL_NAMED_PRICE_PREDECESSOR_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation" as const;
 const NFL_COMPLETE_SIGNAL_PREDECESSOR_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_26_r46_joint_side_market_arbitration" as const;
 const NFL_COMPLETE_SIGNAL_PREDECESSOR_FIXTURE_RELEASE =
@@ -252,6 +260,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE,
   NFL_COMPLETE_SIGNAL_PREDECESSOR_SNAPSHOT_RELEASE,
   NFL_WINNER_COVER_PREDECESSOR_SNAPSHOT_RELEASE,
   NFL_NUANCED_READER_PREDECESSOR_SNAPSHOT_RELEASE,
@@ -361,6 +370,7 @@ function nflForwardMemberSnapshotKeyForRelease(
   snapshotRelease: string,
 ): string {
   const current = snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE;
+  const namedPricePredecessor = snapshotRelease === NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE;
   const completeSignalPredecessor = snapshotRelease === NFL_COMPLETE_SIGNAL_PREDECESSOR_SNAPSHOT_RELEASE;
   const winnerCoverPredecessor = snapshotRelease === NFL_WINNER_COVER_PREDECESSOR_SNAPSHOT_RELEASE;
   const nuancedReaderPredecessor = snapshotRelease === NFL_NUANCED_READER_PREDECESSOR_SNAPSHOT_RELEASE;
@@ -401,6 +411,8 @@ function nflForwardMemberSnapshotKeyForRelease(
     snapshotRelease,
     current
       ? NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE
+      : namedPricePredecessor
+        ? NFL_NAMED_PRICE_PREDECESSOR_FIXTURE_RELEASE
       : completeSignalPredecessor
         ? NFL_COMPLETE_SIGNAL_PREDECESSOR_FIXTURE_RELEASE
       : winnerCoverPredecessor
@@ -468,6 +480,8 @@ function nflForwardMemberSnapshotKeyForRelease(
               : NFL_PREVIOUS_FIXTURE_RELEASE,
     current
       ? NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE
+      : namedPricePredecessor
+        ? NFL_NAMED_PRICE_PREDECESSOR_MEMBER_RELEASE
       : completeSignalPredecessor
         ? NFL_COMPLETE_SIGNAL_PREDECESSOR_MEMBER_RELEASE
       : winnerCoverPredecessor
@@ -784,6 +798,11 @@ function validateNflForwardMemberSnapshot(
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
+  const namedPricePredecessorContract =
+    memberRelease === NFL_NAMED_PRICE_PREDECESSOR_MEMBER_RELEASE &&
+    decisionRelease === NFL_NAMED_PRICE_PREDECESSOR_DECISION_RELEASE &&
+    fixtureRelease === NFL_NAMED_PRICE_PREDECESSOR_FIXTURE_RELEASE &&
+    heldMemberFixtureRelease === NFL_NAMED_PRICE_PREDECESSOR_FIXTURE_RELEASE;
   const completeSignalPredecessorContract =
     memberRelease === NFL_COMPLETE_SIGNAL_PREDECESSOR_MEMBER_RELEASE &&
     decisionRelease === NFL_COMPLETE_SIGNAL_PREDECESSOR_DECISION_RELEASE &&
@@ -958,7 +977,7 @@ function validateNflForwardMemberSnapshot(
   if (
     ![NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE, ...NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES].includes(snapshot.snapshotRelease as typeof NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE) ||
     snapshot.evidenceRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
-    (!currentContract && !completeSignalPredecessorContract && !winnerCoverPredecessorContract && !nuancedReaderPredecessorContract && !unifiedTotalPredecessorContract && !twoSourcePreviousContract && !threeStatePreviousContract && !fullMarketTrailPreviousContract && !currentMarketCyclePreviousContract && !personnelCoveragePreviousContract && !foundationalPreviousContract && !personnelEligibilityPreviousContract && !personnelPreviousContract && !professionalPreviousContract && !marketStatePreviousContract && !namedSequenceReleasePreviousContract && !namedSequencePreviousContract && !exactQuoteLabelPreviousContract && !spreadGradePreviousContract && !jointMoneylinePreviousContract && !marketMarriagePreviousContract && !paidScorePreviousContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
+    (!currentContract && !namedPricePredecessorContract && !completeSignalPredecessorContract && !winnerCoverPredecessorContract && !nuancedReaderPredecessorContract && !unifiedTotalPredecessorContract && !twoSourcePreviousContract && !threeStatePreviousContract && !fullMarketTrailPreviousContract && !currentMarketCyclePreviousContract && !personnelCoveragePreviousContract && !foundationalPreviousContract && !personnelEligibilityPreviousContract && !personnelPreviousContract && !professionalPreviousContract && !marketStatePreviousContract && !namedSequenceReleasePreviousContract && !namedSequencePreviousContract && !exactQuoteLabelPreviousContract && !spreadGradePreviousContract && !jointMoneylinePreviousContract && !marketMarriagePreviousContract && !paidScorePreviousContract && !pressureDirectionPreviousContract && !currentSeasonPreviousContract && !rawSignalPreviousContract && !scorePreviousContract && !nonpushPreviousContract && !openingDirectionPreviousContract && !lockedTransitionPreviousContract && !mlTotalPreviousContract && !injuryPaginationPreviousContract && !onePointPreviousContract && !openingFollowUpPreviousContract && !predictionOwnedPreviousContract && !previousContract) ||
     snapshot.season !== expected.season ||
     snapshot.week !== expected.week ||
     snapshot.fixture?.week?.week !== expected.week ||

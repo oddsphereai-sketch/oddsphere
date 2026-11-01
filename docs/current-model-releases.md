@@ -6,6 +6,93 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-31
 
+## NFL named-price chronology candidate — October 31, private
+
+- The proposed sole writer `nfl_forward_evidence_writer_2026_10_31_r97_flow_and_retail_conflict_precedence`
+  reads the existing leased Market Intelligence V2 Owl's Circa/Pinnacle observation tape;
+  it makes no second provider request and never uses those books as the evaluated member quote.
+  Exact same-run, two-sided, source-timed Moneyline/Spread/Total pairs feed
+  `nfl_daily_edge_forward_context_capture_2026_10_31_r10_owls_named_chronology` and
+  `nfl_market_state_2026_10_31_r4_flow_and_retail_conflict_precedence`.
+- The proposed public family is
+  `nfl_v1_daily_edge_model_2026_10_31_r41_flow_and_retail_conflict_precedence` /
+  `nfl_v1_daily_edge_calibration_2026_10_31_r40_flow_and_retail_conflict_precedence` /
+  `nfl_v1_daily_edge_decision_2026_10_31_r49_flow_and_retail_conflict_precedence` /
+  `nfl_v1_grade_policy_2026_10_31_r49_flow_and_retail_conflict_precedence` /
+  `nfl_v1_member_release_2026_10_31_r46_flow_and_retail_conflict_precedence` /
+  `nfl_weekly_member_fixture_2026_10_31_r61_flow_and_retail_conflict_precedence` /
+  `nfl_forward_member_snapshot_2026_10_31_r53_flow_and_retail_conflict_precedence`.
+  The full-game runtime is r7, ledger r7, arbiter r23, and spread direction model r23.
+  The proposed no-weight classifier is
+  `nfl_v1_no_weight_market_reader_2026_10_31_r5_independent_classification_target_free_score`;
+  target-excluded outcome is
+  `nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion`.
+  Prior locked r40/r55/r47 payloads remain immutable and retain exact reader precedence.
+- **Not production-qualified:** although source pairing and focused/model-change tests pass,
+  the final NFL arbiter still has a rigid winner-change permission path that can ignore
+  a credible standalone price episode. The independent score must be one input to a
+  unified game read, not an untouchable answer or a competing expert ballot. A no-write
+  13-game current-board run used stored timestamped Playbook observations because this
+  local workspace lacks its key; 39 markets evaluated, zero writes. The latest r19/r3
+  candidate was seven Best Angles, three Leans, 10 Watchlists, 19 No Plays versus the
+  prior stored r1 board's 14 actionables. The candidate changes some sides and scores;
+  provider-time differences prevent attributing this whole delta solely to code. This
+  is not a qualified same-input publication comparison. The optional joint gap-fill
+  path made zero actionable promotions or demotions, one nonactionable promotion,
+  and one nonactionable demotion on the same run.
+  Private r1 Moneyline/Spread/Total episode transport and a joint discrete-law
+  reader can move a tight score across the winner boundary without a flip quota;
+  focused tests preserve one coherent score/probability output. These pure
+  components are not connected to the writer, current-level/split interpretation,
+  or grades and are not qualified as a final reader.
+  A separate private r1 gap-fill operator preserves any market-adjusted axis
+  in the incumbent forecast before admitting a named-book consequence on an
+  untouched axis; it is likewise unwired and not a production release.
+  The synthetic reflection in the older no-weight/three-state score path is now
+  removed in this candidate: score-changing market authority requires an exact
+  target-excluded paired-price-derived margin/Total candidate. The final arbiter
+  now uses a coherent paired-price-implied whole-game score rather than an unrelated
+  statistical expert and removes a blanket Moneyline-promotion veto. However, the
+  actionable board still contracts. A clean standalone named episode can now
+  receive authority when a separate target-excluded current paired price confirms
+  its side. The subsequent no-write 13-game run showed zero incremental score,
+  side, or grade changes from r19/r3; the board remained seven Best Angles,
+  three Leans, 10 Watchlists, and 19 No Plays. Product conformance and grade
+  impact remain unresolved.
+  The subsequent private r95/r3 correction distinguishes opposing retail
+  price movement from genuine Circa/Pinnacle disagreement. A synthetic
+  end-to-end Total case now permits a coherent target-free score consequence
+  with retail resistance present; genuine opposing named books still conflict.
+  A later zero-write 13-game run had seven Best Angles, four Leans, eight
+  Watchlists and 20 No Plays, identical to the immediately preceding candidate
+  run at the observed board-count level. Those runs are not frozen same-input
+  comparisons and used stored timestamped Playbook observations. The broader
+  standalone-episode/grade qualification remains open.
+  Private r96/r2 admits fresh exact-game Circa Owl's money/ticket pairs only
+  on the matching evaluated main-line contract. Off-line and stale scopes are
+  masked market-by-market. Target-exclusion r22 masks the actual percentages
+  of an evaluated-book split, not merely its book label; the Total reader can
+  no longer consume that self-reference. A subsequent 13-game zero-write
+  rehearsal returned seven Best Angles, three Leans, nine Watchlists and
+  20 No Plays. One near-time Lean→Watchlist change is visible, but source
+  clocks were not frozen and this is not a same-input causal comparison.
+  No accuracy claim or public cutover is authorized; see
+  `docs/model-audits/2026-10-31-nfl-named-price-chronology.md`.
+  Private r97/r4 preserves `reverse_flow` when named-book price and a
+  qualified split oppose each other, even if retail price also resists.
+  Retail opposition remains separate context, not a replacement for the
+  sharper contradictory flow observation. Its latest post-integration,
+  zero-write 13-game slate had seven Best Angles, two Leans, eight Watchlists
+  and 22 No Plays (39 markets). The earlier stored public board had 13
+  actionables versus nine here, but inputs were observed at different times;
+  this is a board-risk warning, not a causal comparison. This is not a public
+  release.
+  A no-write same-input upstream-versus-final stage audit attributes four
+  actionable demotions and zero actionable promotions to the final semantic
+  reader on this 13-game slate. The tested promotion path exists, but no
+  current candidate was promoted by the final grade evaluator. This
+  contraction remains a release blocker, not a reason to invent plays.
+
 ## CFB market-evidence integrity — October 31 candidate, not live
 
 - Production remains CFB decision r57, calibration r30, writer r146, and complete

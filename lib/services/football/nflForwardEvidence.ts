@@ -220,7 +220,10 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_10_25_r36_unified_total_interpreter"
       | "nfl_v1_member_release_2026_10_26_r37_nuanced_market_reader"
       | "nfl_v1_member_release_2026_10_26_r39_joint_side_market_arbitration"
-      | "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation";
+      | "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation"
+      | "nfl_v1_member_release_2026_10_31_r41_named_price_chronology"
+      | "nfl_v1_member_release_2026_10_31_r42_paired_price_score_authority"
+      | "nfl_v1_member_release_2026_10_31_r46_flow_and_retail_conflict_precedence";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;
@@ -236,8 +239,10 @@ export type NflForwardEvidencePayload = {
     injuries: boolean;
     playbookSplits: boolean;
     sharpApiSplits: boolean;
-    /** Display/capture-only named-book coverage; absent on legacy rows. */
+    /** Captured named-book coverage; absent on legacy rows. */
     owlsSplits?: boolean;
+    /** Exact-line, fresh Circa model scopes on future-unlocked rows only. */
+    owlsModelQualifiedMarkets?: Array<"moneyline" | "spread" | "total">;
     weather: boolean;
     healthHolds: string[];
     quarterbackHistory?: NflR6ShadowMoneylineDecision["quarterbackContext"];
