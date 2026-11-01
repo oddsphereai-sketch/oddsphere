@@ -1,5 +1,5 @@
 export const FOOTBALL_CROSS_MARKET_COHERENCE_RELEASE =
-  "football_cross_market_coherence_2026_10_15_r13_pmf_near_tie_representative_score" as const;
+  "football_cross_market_coherence_2026_11_01_r14_push_aware_nfl_ev" as const;
 
 const EPSILON = 1e-9;
 const EV_TOLERANCE = 1e-8;
@@ -36,6 +36,7 @@ export type FootballCoherenceDecision = {
    * actionable may truthfully be a zero-stake Shop.
    */
   executionStatus?: "bet" | "shop";
+  /** NFL conditional side probability uses this refund mass for unconditional EV; absent legacy NFL tuples retain conditional EV. */
   pushProbability?: number;
   calibrationFamily?: string;
   evaluatedQuote: {
@@ -429,6 +430,10 @@ function normalizeDecision(args: {
   if (!Number.isFinite(decision.marketFairProbability) || decision.marketFairProbability <= 0 || decision.marketFairProbability >= 1) {
     args.fatalIssues.push({ code: "decision_fair_probability", detail: `${decision.market} fair probability ${decision.marketFairProbability}.` });
   }
+  if (decision.pushProbability !== undefined && (!Number.isFinite(decision.pushProbability) ||
+      decision.pushProbability < 0 || decision.pushProbability > 1)) {
+    args.fatalIssues.push({ code: "decision_probability", detail: `${decision.market} push probability ${decision.pushProbability}.` });
+  }
   const price = decision.evaluatedQuote.price;
   const line = decision.evaluatedQuote.line;
   if (!decision.evaluatedQuote.sportsbook || !Number.isFinite(price) || price === 0 ||
@@ -444,7 +449,7 @@ function normalizeDecision(args: {
   }
   const recomputedEv = args.sport === "cfb"
     ? cfbExpectedValue(decision.modelProbability, decision.pushProbability ?? 0, price)
-    : expectedValue(decision.modelProbability, price);
+    : (1 - (decision.pushProbability ?? 0)) * expectedValue(decision.modelProbability, price);
   if (Number.isFinite(recomputedEv) && Math.abs(recomputedEv - decision.expectedValue) > EV_TOLERANCE) {
     args.fatalIssues.push({ code: "decision_ev_mismatch", detail: `${decision.market} stored/recomputed EV ${decision.expectedValue}/${recomputedEv}.` });
   }

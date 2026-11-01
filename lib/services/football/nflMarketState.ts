@@ -3,7 +3,7 @@ import type { NflForwardContextFamily, NflForwardContextMarket } from "./nflForw
 import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_STATE_RELEASE =
-  "nfl_market_state_2026_10_09_r1_truthful_signal_identity" as const;
+  "nfl_market_state_2026_11_01_r6_lossless_price_episodes" as const;
 
 export type NflMarketStateMarket = "moneyline" | "spread" | "total";
 export type NflMarketStateSide = -1 | 1;
@@ -26,6 +26,15 @@ export type NflMarketStateTrail = {
   firstPriceMoveAt: string | null;
   moveOrder: "number_before_price" | "price_before_number" | "same_observation" | "number_only" | "price_only" | "none";
   lastEconomicMoveAt: string | null;
+  /** Latest economic step, separate from the opening-to-current direction. */
+  lastEconomicDirection?: NflMarketStateSide | null;
+  lastNumberDirection?: NflMarketStateSide | null;
+  lastPriceDirection?: NflMarketStateSide | null;
+  /** Residual pullback from the opening-relative directional peak to current. */
+  retracementNumberMagnitude?: number;
+  retracementPriceMagnitudePp?: number;
+  numberPeakAt?: string | null;
+  pricePeakAt?: string | null;
   direction: NflMarketStateSide | null;
   numberDirection: NflMarketStateSide | null;
   priceDirection: NflMarketStateSide | null;
@@ -53,11 +62,13 @@ export type NflMarketState = {
   excludedFamilies: string[];
   trails: NflMarketStateTrail[];
   splits: NflMarketStateSplit[];
+  /** A named episode awaiting separate confirmation; never a consensus vote by itself. */
+  candidateNamedDirection?: NflMarketStateSide | null;
   namedDirection: NflMarketStateSide | null;
   namedLeadCompletedAt: string | null;
   followerSources: string[];
   followerDelaysMinutes: number[];
-  resistance: "none" | "flow_resistance" | "reverse_flow" | "book_disagreement";
+  resistance: "none" | "flow_resistance" | "reverse_flow" | "book_disagreement" | "retail_price_resistance";
   unavailable: {
     absoluteHandle: true;
     ticketCount: true;
@@ -75,8 +86,11 @@ type Snapshot = {
 
 const FRESH_MINUTES = 120;
 const NAMED_PRICE_BOOKS = new Set(["circa", "pinnacle"]);
-const PRICE_MOVE_PP = 1;
-const ECONOMIC_PRICE_MOVE_PP = 0.25;
+// Numerical equality only: episode availability must not discard a real
+// paired-price move merely because it is smaller than a betting heuristic.
+// Its magnitude and corroboration remain separate inputs to the arbiter.
+const PRICE_MOVE_PP = 1e-9;
+const ECONOMIC_PRICE_MOVE_PP = 1e-9;
 
 export function buildNflMarketState(args: {
   market: NflMarketStateMarket;
@@ -100,32 +114,47 @@ export function buildNflMarketState(args: {
   const namedMoved = trails.filter((trail): trail is NflMarketStateTrail & { direction: NflMarketStateSide } =>
     trail.sourceClass === "named" && trail.direction !== null && !trail.buybackToOpening);
   const namedDirections = new Set(namedMoved.map((trail) => trail.direction));
-  const namedDirection = namedMoved.length >= 2 && namedDirections.size === 1
+  const candidateNamedDirection = namedMoved.length > 0 && namedDirections.size === 1
     ? namedMoved[0]!.direction
     : null;
-  const namedMoveTimes = namedDirection === null
+  const namedMoveTimes = candidateNamedDirection === null
     ? []
     : namedMoved.map(firstMaterialMoveAt).filter((value): value is string => value !== null);
-  const namedLeadCompletedAt = namedMoveTimes.length === namedMoved.length && namedMoveTimes.length >= 2
+  const candidateLeadAt = namedMoveTimes.length === namedMoved.length && namedMoveTimes.length > 0
     ? new Date(Math.max(...namedMoveTimes.map(Date.parse))).toISOString()
     : null;
-  const namedLeadCompletedAtMs = namedLeadCompletedAt === null ? null : Date.parse(namedLeadCompletedAt);
-  const followers = namedDirection === null || namedLeadCompletedAt === null
+  const candidateLeadAtMs = candidateLeadAt === null ? null : Date.parse(candidateLeadAt);
+  const candidateFollowers = candidateNamedDirection === null || candidateLeadAt === null
     ? []
-    : trails.filter((trail) => trail.sourceClass === "retail" && trail.direction === namedDirection &&
+    : trails.filter((trail) => trail.sourceClass === "retail" && trail.direction === candidateNamedDirection &&
       !trail.buybackToOpening && firstMaterialMoveAt(trail) !== null &&
-      Date.parse(firstMaterialMoveAt(trail)!) >= namedLeadCompletedAtMs!);
+      Date.parse(firstMaterialMoveAt(trail)!) > candidateLeadAtMs!);
+  // One named source can establish a market episode if a genuinely separate
+  // retail family subsequently follows it. Two named sources can establish it
+  // without retail follow-through. Neither a lone named tick nor simultaneous
+  // retail movement is silently promoted to independent confirmation.
+  const namedDirection = candidateNamedDirection !== null &&
+    (namedMoved.length >= 2 || candidateFollowers.length > 0)
+    ? candidateNamedDirection : null;
+  const namedLeadCompletedAt = namedDirection === null ? null : candidateLeadAt;
+  const namedLeadCompletedAtMs = namedLeadCompletedAt === null ? null : Date.parse(namedLeadCompletedAt);
+  const followers = namedDirection === null ? [] : candidateFollowers;
   const qualifyingSplits = splits.filter((split) => Math.abs(split.gapPp) >= splitMinimum(split));
   const flow = strongestSplit(qualifyingSplits);
-  const priceDirections = trails.filter((trail) => trail.direction !== null).map((trail) => trail.direction!);
-  const bookDisagreement = priceDirections.includes(1) && priceDirections.includes(-1);
-  const materialPriceDirection = consensusDirection(priceDirections);
-  const resistance = bookDisagreement
+  const namedPriceDirections = namedMoved.map((trail) => trail.direction);
+  const namedBookDisagreement = namedPriceDirections.includes(1) && namedPriceDirections.includes(-1);
+  const retailPriceOpposition = candidateNamedDirection !== null && trails.some((trail) =>
+    trail.sourceClass === "retail" && trail.direction === -candidateNamedDirection);
+  const allPriceDirections = trails.filter((trail) => trail.direction !== null).map((trail) => trail.direction!);
+  const materialPriceDirection = candidateNamedDirection ?? consensusDirection(allPriceDirections);
+  const resistance = namedBookDisagreement
     ? "book_disagreement" as const
     : flow && materialPriceDirection === null
       ? "flow_resistance" as const
       : flow && materialPriceDirection === -flow.direction
         ? "reverse_flow" as const
+        : retailPriceOpposition
+          ? "retail_price_resistance" as const
         : "none" as const;
   return {
     release: NFL_MARKET_STATE_RELEASE,
@@ -134,6 +163,7 @@ export function buildNflMarketState(args: {
     excludedFamilies: [...excluded].sort(),
     trails,
     splits,
+    candidateNamedDirection,
     namedDirection,
     namedLeadCompletedAt,
     followerSources: followers.map((trail) => trail.source),
@@ -196,10 +226,27 @@ function buildTrails(
       Math.abs(100 * (fairFirstProbability(market, value) - openingProbability)) >= PRICE_MOVE_PP)?.[0] ?? null;
     const economic = observations.filter((value, index) => {
       const previous = index === 0 ? opening : observations[index - 1]!;
-      return numberAxis(market, previous) !== numberAxis(market, value) ||
+      const previousNumber = numberAxis(market, previous);
+      const nextNumber = numberAxis(market, value);
+      return (previousNumber !== null && nextNumber !== null && Math.abs(nextNumber - previousNumber) >= 1e-9) ||
         Math.abs(100 * (fairFirstProbability(market, value) - fairFirstProbability(market, previous))) >=
           ECONOMIC_PRICE_MOVE_PP;
     });
+    const lastEconomic = economic.at(-1);
+    const lastEconomicIndex = lastEconomic ? observations.indexOf(lastEconomic) : -1;
+    const beforeLastEconomic = lastEconomicIndex <= 0 ? opening : observations[lastEconomicIndex - 1]!;
+    const lastNumberBefore = numberAxis(market, beforeLastEconomic);
+    const lastNumberAfter = lastEconomic ? numberAxis(market, lastEconomic) : null;
+    const lastNumberDelta = lastNumberBefore !== null && lastNumberAfter !== null
+      ? lastNumberAfter - lastNumberBefore : 0;
+    const lastPriceDelta = lastEconomic
+      ? 100 * (fairFirstProbability(market, lastEconomic) - fairFirstProbability(market, beforeLastEconomic)) : 0;
+    const lastNumberDirection = Math.abs(lastNumberDelta) >= 1e-9 ? sign(lastNumberDelta) : null;
+    const lastPriceDirection = Math.abs(lastPriceDelta) >= PRICE_MOVE_PP ? sign(lastPriceDelta) : null;
+    const numberRetracement = residualRetracement(opening, current, observations,
+      (value) => numberAxis(market, value), 1e-9);
+    const priceRetracement = residualRetracement(opening, current, observations,
+      (value) => 100 * fairFirstProbability(market, value), PRICE_MOVE_PP);
     const firstAlignedAt = direction === null
       ? null
       : observations.find((value) => observationDirection(market, opening, value) === direction)?.[0] ?? null;
@@ -239,6 +286,13 @@ function buildTrails(
       firstPriceMoveAt,
       moveOrder: moveOrder(firstNumberMoveAt, firstPriceMoveAt),
       lastEconomicMoveAt: economic.at(-1)?.[0] ?? null,
+      lastEconomicDirection: lastNumberDirection ?? lastPriceDirection,
+      lastNumberDirection,
+      lastPriceDirection,
+      retracementNumberMagnitude: numberRetracement.magnitude,
+      retracementPriceMagnitudePp: priceRetracement.magnitude,
+      numberPeakAt: numberRetracement.peakAt,
+      pricePeakAt: priceRetracement.peakAt,
       direction,
       numberDirection,
       priceDirection,
@@ -248,6 +302,39 @@ function buildTrails(
       crossedKeyNumbers: crossedKeys(market, openingNumber, currentNumber),
     }];
   });
+}
+
+function residualRetracement(
+  opening: NflForwardContextFamily[5],
+  current: NflForwardContextFamily[5],
+  observations: NflForwardContextFamily[5][],
+  axis: (value: NflForwardContextFamily[5]) => number | null,
+  tolerance: number,
+): { magnitude: number; peakAt: string | null } {
+  const start = axis(opening);
+  const end = axis(current);
+  if (start === null || end === null) return { magnitude: 0, peakAt: null };
+  const points = observations.flatMap((value) => {
+    const coordinate = axis(value);
+    return coordinate === null ? [] : [{ at: value[0], delta: coordinate - start }];
+  });
+  const net = end - start;
+  const largestExcursion = points.reduce((peak, point) =>
+    Math.abs(point.delta) > Math.abs(peak) + tolerance ? point.delta : peak, 0);
+  const direction = Math.abs(net) >= tolerance ? sign(net)
+    : Math.abs(largestExcursion) >= tolerance ? sign(largestExcursion) : null;
+  if (direction === null) return { magnitude: 0, peakAt: null };
+  let peakMagnitude = 0;
+  let peakAt: string | null = null;
+  for (const point of points) {
+    const magnitude = point.delta * direction;
+    if (magnitude > peakMagnitude + tolerance) {
+      peakMagnitude = magnitude;
+      peakAt = point.at;
+    }
+  }
+  const magnitude = peakMagnitude - net * direction;
+  return { magnitude: magnitude >= tolerance ? magnitude : 0, peakAt };
 }
 
 function buildSplits(
@@ -276,6 +363,10 @@ function buildSplits(
       ? lineMatches(args.playbookLine?.homeSpread, args.current.spread?.homeLine)
       : source === "public" && args.market === "total"
         ? lineMatches(args.playbookLine?.total, args.current.total?.line)
+        : source === "sharp" && args.market === "spread" && "sourceLine" in split && split.sourceLine !== undefined
+          ? lineMatches(split.sourceLine, args.current.spread?.homeLine)
+          : source === "sharp" && args.market === "total" && "sourceLine" in split && split.sourceLine !== undefined
+            ? lineMatches(split.sourceLine, args.current.total?.line)
         : null;
     if (exactLineMatched === false) return;
     result.push({

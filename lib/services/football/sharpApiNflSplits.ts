@@ -19,6 +19,8 @@ export type NflRegularSharpSplit = {
   providerGameId: string;
   sourceEventId: string | null;
   sourceSportsbook: string | null;
+  /** Owls exact-book spread home line or full-game total; absent on legacy SharpAPI rows. */
+  sourceLine?: number | null;
   capturedAt: string;
   providerFetchedAt: string | null;
   homeMoneyPct: number | null;
@@ -363,7 +365,7 @@ export function nflProviderTeamMatches(value: unknown, abbreviation: string, dis
   return aliases.some((alias) => normalize(alias) === observed);
 }
 
-/** Owls rows remain display/capture-only until the separate market-reader release qualifies them. */
+/** Legacy SharpAPI-only admission; Owl's Circa is qualified separately, per evaluated line. */
 export function nflModelSharpSplits(value: NflRegularSharpSplitSet | null | undefined): NflRegularSharpSplitSet | null {
   if (!value) return null;
   return Object.values(value).every((row) => row.provider === "sharpapi") ? value : null;

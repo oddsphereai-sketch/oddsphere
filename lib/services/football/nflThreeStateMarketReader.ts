@@ -189,6 +189,8 @@ export function buildNflThreeStateMarketAuthority(args: {
 export function applyNflThreeStateMarketReader(args: {
   forecast: NflV1WeekOneOutcomeForecast;
   authority: NflThreeStateMarketAuthority;
+  /** Exact target-excluded paired-price score candidate. Null means the market number has no score authority. */
+  marketImpliedHomeMargin?: number | null;
 }): NflV1WeekOneOutcomeForecast {
   const initialHomeMargin = args.forecast.expectedHomeScore - args.forecast.expectedAwayScore;
   const total = args.forecast.expectedHomeScore + args.forecast.expectedAwayScore;
@@ -207,24 +209,21 @@ export function applyNflThreeStateMarketReader(args: {
       state = "confirmation";
     } else if (args.authority.side !== independentSide &&
         args.authority.outcomeBoundarySide === args.authority.side) {
-      state = "outcome_correction";
-      const crossMarketCandidate = boundary === null ? null : 2 * boundary - initialHomeMargin;
-      const crossMarketOutcome = args.authority.reason === "qualified_named_price_flow_and_cross_market_consensus" ||
-        args.authority.reason === "qualified_opposing_flow_and_cross_market_consensus";
-      finalHomeMargin = crossMarketOutcome &&
-        boundary !== null && crossMarketCandidate !== null && sign(crossMarketCandidate) === args.authority.side &&
-        sign(crossMarketCandidate - boundary) === args.authority.side && total > Math.abs(crossMarketCandidate)
-        ? crossMarketCandidate
-        : -initialHomeMargin;
-      outcomeCorrectionApplied = true;
+      const candidate = args.marketImpliedHomeMargin;
+      if (candidate !== null && candidate !== undefined && Number.isFinite(candidate) &&
+          sign(candidate) === args.authority.side && total > Math.abs(candidate)) {
+        state = "outcome_correction";
+        finalHomeMargin = candidate;
+        outcomeCorrectionApplied = true;
+      } else {
+        state = "value_resistance";
+      }
     } else {
       state = "value_resistance";
       if (boundary !== null && boundary !== 0 && args.authority.side !== sign(initialHomeMargin - boundary)) {
-        const sharpSideIsMarketUnderdog = args.authority.side !== sign(boundary);
-        const candidate = sharpSideIsMarketUnderdog
-          ? boundary / 2
-          : 2 * boundary - initialHomeMargin;
-        if (sign(candidate) === independentSide &&
+        const candidate = args.marketImpliedHomeMargin;
+        if (candidate !== null && candidate !== undefined && Number.isFinite(candidate) &&
+            sign(candidate) === independentSide &&
             sign(candidate - boundary) === args.authority.side &&
             total > Math.abs(candidate)) {
           finalHomeMargin = candidate;

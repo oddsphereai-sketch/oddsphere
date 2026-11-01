@@ -13,15 +13,15 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_V1_PRODUCTION_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_10_26_r35_complete_signal_interpretation" as const;
+  "nfl_v1_daily_edge_model_2026_11_01_r45_independent_market_axes" as const;
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_10_26_r34_complete_signal_interpretation" as const;
+  "nfl_v1_daily_edge_calibration_2026_11_01_r44_independent_market_axes" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation" as const;
+  "nfl_v1_daily_edge_decision_2026_11_01_r53_independent_market_axes" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_10_26_r43_complete_signal_interpretation" as const;
+  "nfl_v1_grade_policy_2026_11_01_r53_independent_market_axes" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation" as const;
+  "nfl_v1_member_release_2026_11_01_r50_independent_market_axes" as const;
 
 export const NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.01 as const;
 export const NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;
@@ -50,6 +50,10 @@ export function buildNflV1ProductionDecisionBundle(args: {
   shadowMoneyline: NflR6ShadowMoneylineDecision;
   outcomeForecast?: NflV1WeekOneOutcomeForecast;
 }): NflV1ProductionDecisionBundle {
+  args = { ...args, comparableCurrentBooks: nflExecutionBooksAt({
+    books: args.comparableCurrentBooks, evaluatedAt: args.shadowMoneyline.evaluatedAt,
+    gameStartsAt: args.gameStartsAt,
+  }) };
   const spread = args.current.spread;
   const total = args.current.total;
   if (!spread || !total) throw new Error(`NFL v1 current spread/total is incomplete for ${args.providerGameId}.`);
@@ -126,8 +130,10 @@ export function buildNflV1ProductionDecisionBundle(args: {
     home: homeWinner,
     modelProbability: homeWinner ? outcome.homeWinProbability : outcome.awayWinProbability,
     gameStartsAt: args.gameStartsAt,
+    evaluatedAt: args.shadowMoneyline.evaluatedAt,
   });
-  if (!coherentMoneyline) throw new Error(`NFL v1 target-excluded moneyline tuple is incomplete for ${args.providerGameId}.`);
+  if (!coherentMoneyline) return { evaluatedBets: [], outcomeConfidence,
+    modelPromotionStatus: NFL_V1_MEMBER_RELEASE, publicationEnabled: true, trackingEnabled: false };
   const moneyline = buildNflRegularEvaluatedBetDecision({
     ...common,
     market: "moneyline",
@@ -150,6 +156,7 @@ export function buildNflV1ProductionDecisionBundle(args: {
   const spreadDecision = spreadEvaluation ? buildNflRegularEvaluatedBetDecision({
     ...common, market: "spread", side: spreadEvaluation.side,
     modelProbability: spreadEvaluation.probability,
+    pushProbability: spreadEvaluation.pushProbability,
     marketFairProbability: spreadEvaluation.looFairProbability,
     evaluatedQuote: spreadEvaluation.quote,
     grade: spreadEvaluation.watchlist ? "Watchlist" : "No Play",
@@ -159,6 +166,7 @@ export function buildNflV1ProductionDecisionBundle(args: {
   const totalDecision = totalEvaluation ? buildNflRegularEvaluatedBetDecision({
     ...common, market: "total", side: totalEvaluation.side,
     modelProbability: totalEvaluation.probability,
+    pushProbability: totalEvaluation.pushProbability,
     marketFairProbability: totalEvaluation.looFairProbability,
     evaluatedQuote: totalEvaluation.quote,
     grade: totalEvaluation.watchlist ? "Watchlist" : "No Play",
@@ -207,7 +215,9 @@ export function selectNflPredictionOwnedMoneylineEvaluation(args: {
   home: boolean;
   modelProbability: number;
   gameStartsAt: string;
+  evaluatedAt: string;
 }): NflPredictionOwnedMoneylineEvaluation | null {
+  args = { ...args, books: nflExecutionBooksAt(args) };
   const selected = args.books.flatMap((target): Omit<NflPredictionOwnedMoneylineEvaluation, "grade">[] => {
     if (!target.moneyline || Date.parse(target.observedAt) >= Date.parse(args.gameStartsAt)) return [];
     const price = args.home ? target.moneyline.homePrice : target.moneyline.awayPrice;
@@ -234,6 +244,28 @@ export function selectNflPredictionOwnedMoneylineEvaluation(args: {
     second.quote.price - first.quote.price ||
     first.quote.sportsbook.localeCompare(second.quote.sportsbook))[0] ?? null;
   return selected === null ? null : { ...selected, grade: moneylineGrade(selected) };
+}
+
+/** Shared source-clock contract for execution targets and leave-one-out price evidence. */
+export function nflExecutionBooksAt(args: {
+  books: NflPreviewBookOdds[];
+  evaluatedAt: string;
+  gameStartsAt: string;
+}): NflPreviewBookOdds[] {
+  const evaluated = Date.parse(args.evaluatedAt);
+  const kickoff = Date.parse(args.gameStartsAt);
+  if (!Number.isFinite(evaluated) || !Number.isFinite(kickoff)) return [];
+  const byFamily = new Map<string, NflPreviewBookOdds>();
+  for (const book of args.books) {
+    const sourceAt = Date.parse(book.observedAt);
+    if (!Number.isFinite(sourceAt) || sourceAt > evaluated || sourceAt >= kickoff ||
+        evaluated - sourceAt > 120 * 60_000) continue;
+    const family = book.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!family) continue;
+    const prior = byFamily.get(family);
+    if (!prior || Date.parse(prior.observedAt) < sourceAt) byFamily.set(family, book);
+  }
+  return [...byFamily.values()];
 }
 
 function moneylineGrade(evaluation: Omit<NflPredictionOwnedMoneylineEvaluation, "grade">): "Lean" | "Watchlist" | "No Play" {

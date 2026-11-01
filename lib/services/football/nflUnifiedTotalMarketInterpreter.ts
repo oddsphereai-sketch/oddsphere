@@ -10,7 +10,8 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_UNIFIED_TOTAL_MARKET_INTERPRETER_RELEASE =
-  "nfl_unified_total_market_interpreter_2026_10_25_r1" as const;
+  "nfl_unified_total_market_interpreter_2026_11_01_r2_qualified_split_features" as const;
+const TRAINED_MODEL_RELEASE = "nfl_unified_total_market_interpreter_2026_10_25_r1" as const;
 export const NFL_UNIFIED_TOTAL_MARKET_INTERPRETER_ARTIFACT_RELEASE =
   "nfl_unified_total_market_interpreter_artifact_2026_10_25_r1" as const;
 
@@ -21,7 +22,7 @@ type Snapshot = {
 
 type Artifact = {
   artifactRelease: typeof NFL_UNIFIED_TOTAL_MARKET_INTERPRETER_ARTIFACT_RELEASE;
-  modelRelease: typeof NFL_UNIFIED_TOTAL_MARKET_INTERPRETER_RELEASE;
+  modelRelease: typeof TRAINED_MODEL_RELEASE;
   tournamentRelease: string;
   trainingRows: number;
   confirmationRows: number;
@@ -56,6 +57,7 @@ export function applyNflUnifiedTotalMarketInterpreter(args: {
   gameStartsAt: string;
   snapshots: Snapshot[];
   current: NflPreviewBookOdds;
+  splitContractCurrent?: { spread: { homeLine: number } | null; total: { line: number } | null };
   playbookLine: NflForwardPlaybookLine | null;
   playbookSplits: NflForwardPlaybookSplitSet | null;
   sharpSplits: NflRegularSharpSplitSet | null;
@@ -92,7 +94,7 @@ export function applyNflUnifiedTotalMarketInterpreter(args: {
     evaluatedAt: args.evaluatedAt,
     snapshots: args.snapshots,
     excludedFamilies,
-    current: args.current,
+    current: args.splitContractCurrent ?? args.current,
     playbookLine: args.playbookLine,
     playbookSplits: args.playbookSplits,
     sharpSplits: args.sharpSplits,
@@ -104,8 +106,11 @@ export function applyNflUnifiedTotalMarketInterpreter(args: {
   const stateBuybackShare = totalState.trails.length === 0
     ? 0
     : totalState.trails.filter((trail) => trail.buybackToOpening).length / totalState.trails.length;
-  const playbookGap = splitGap(args.playbookSplits?.total ?? null);
-  const sharpGap = splitGap(args.sharpSplits?.total ?? null);
+  const contractTotal = (args.splitContractCurrent ?? args.current).total?.line;
+  const playbookGap = qualifiedSplitGap(args.playbookSplits?.total ?? null,
+    args.playbookLine?.total, contractTotal, args.evaluatedAt, false, excludedFamilies, args.playbookLine?.capturedAt);
+  const sharpGap = qualifiedSplitGap(args.sharpSplits?.total ?? null,
+    args.sharpSplits?.total.sourceLine, contractTotal, args.evaluatedAt, true, excludedFamilies);
   const marketTotalGap = args.targetExcludedAnchor.total - independentTotal;
   const featureValues: Record<string, number> = {
     market_total_gap: marketTotalGap,
@@ -161,11 +166,26 @@ export function applyNflUnifiedTotalMarketInterpreter(args: {
   };
 }
 
-function splitGap(split: {
+function qualifiedSplitGap(split: {
+  capturedAt: string;
+  providerFetchedAt?: string | null;
+  sourceSportsbook?: string | null;
   overMoneyPct: number | null;
   overBetsPct: number | null;
-} | null): number {
-  return typeof split?.overMoneyPct === "number" && typeof split.overBetsPct === "number"
+} | null, sourceLine: number | null | undefined, contractLine: number | undefined,
+  evaluatedAt: string, sharp: boolean, excluded: string[], sourceLineAt?: string): number {
+  if (!split || sourceLine == null || contractLine == null || !Number.isFinite(sourceLine) ||
+      !Number.isFinite(contractLine) || Math.abs(sourceLine - contractLine) > 1e-9) return 0;
+  const age = Date.parse(evaluatedAt) - Date.parse(split.providerFetchedAt ?? split.capturedAt);
+  if (!Number.isFinite(age) || age < 0 || age > 120 * 60_000) return 0;
+  if (sourceLineAt !== undefined) {
+    const lineAge = Date.parse(evaluatedAt) - Date.parse(sourceLineAt);
+    if (!Number.isFinite(lineAge) || lineAge < 0 || lineAge > 120 * 60_000) return 0;
+  }
+  if (sharp && (!split.sourceSportsbook || excluded.includes(normalizeBook(split.sourceSportsbook)))) return 0;
+  return typeof split.overMoneyPct === "number" && typeof split.overBetsPct === "number" &&
+    Number.isFinite(split.overMoneyPct) && Number.isFinite(split.overBetsPct) &&
+    split.overMoneyPct >= 0 && split.overMoneyPct <= 100 && split.overBetsPct >= 0 && split.overBetsPct <= 100
     ? (split.overMoneyPct - split.overBetsPct) / 100
     : 0;
 }
@@ -185,7 +205,7 @@ function normalizeBook(value: string): string {
 
 function validateArtifact(value: Artifact): void {
   if (value.artifactRelease !== NFL_UNIFIED_TOTAL_MARKET_INTERPRETER_ARTIFACT_RELEASE ||
-      value.modelRelease !== NFL_UNIFIED_TOTAL_MARKET_INTERPRETER_RELEASE ||
+      value.modelRelease !== TRAINED_MODEL_RELEASE ||
       value.featureNames.length === 0 || value.featureNames.length !== value.means.length ||
       value.featureNames.length !== value.scales.length ||
       value.coefficients.length !== value.featureNames.length + 1 ||

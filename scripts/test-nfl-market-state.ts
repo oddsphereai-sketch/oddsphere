@@ -93,6 +93,62 @@ assert.equal(state.splits[0]?.source, "retail_book", "DraftKings split remains r
 assert.equal(state.trails.find((trail) => trail.source === "circa")?.numberDelta, 0.5);
 assert.equal(state.trails.find((trail) => trail.source === "circa")?.moveOrder, "number_only");
 
+const singleNamedThenRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "draftkings", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(singleNamedThenRetail.namedDirection, 1);
+assert.deepEqual(singleNamedThenRetail.followerSources, ["draftkings"]);
+const simultaneousRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:00:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "draftkings", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(simultaneousRetail.namedDirection, null,
+  "simultaneous retail movement cannot be invented as later independent follow-through");
+assert.equal(simultaneousRetail.candidateNamedDirection, 1,
+  "a real named episode survives for separate confirmation even without later retail follow-through");
+
+const loneNamed = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(loneNamed.candidateNamedDirection, 1,
+  "the production builder retains a lone named move for independent paired-price corroboration downstream");
+assert.equal(loneNamed.namedDirection, null,
+  "retaining a lone episode must not manufacture the established consensus used by other readers");
+assert.deepEqual(loneNamed.followerSources, []);
+assert.equal(loneNamed.namedLeadCompletedAt, null);
+
+const excludedLoneNamed = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  excludedFamilies: ["Circa"],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(excludedLoneNamed.candidateNamedDirection, null,
+  "the evaluated book cannot reappear as a lone candidate episode");
+
 const excluded = buildNflMarketState({
   market: "spread",
   evaluatedAt: "2026-10-09T11:30:00.000Z",
@@ -137,6 +193,51 @@ const resisted = buildNflMarketState({
 });
 assert.equal(resisted.resistance, "flow_resistance");
 
+const namedVersusRetail = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "pinnacle", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "fanduel", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -1 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(namedVersusRetail.namedDirection, 1);
+assert.equal(namedVersusRetail.resistance, "retail_price_resistance",
+  "opposing retail price movement must not be mislabeled as disagreement between named books");
+const opposedFlowSet = splitSet("Circa");
+opposedFlowSet.spread = { ...opposedFlowSet.spread, homeMoneyPct: 30, awayMoneyPct: 70 };
+const namedRetailAndFlow = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "pinnacle", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "fanduel", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -1 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: opposedFlowSet,
+});
+assert.equal(namedRetailAndFlow.resistance, "reverse_flow",
+  "genuine opposite money flow must not be hidden by a simultaneous opposing retail price");
+const opposingNamed = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -2 }),
+    family({ source: "pinnacle", currentAt: "2026-10-09T11:00:00.000Z", openingLine: -1.5, currentLine: -1 }),
+  ])],
+  current: { spread: { homeLine: -1.5 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(opposingNamed.namedDirection, null);
+assert.equal(opposingNamed.candidateNamedDirection, null,
+  "opposing named episodes cannot become a single candidate direction");
+assert.equal(opposingNamed.resistance, "book_disagreement",
+  "opposing Circa and Pinnacle moves remain a genuine named-book conflict");
+
 const latePersistentMove = buildNflMarketState({
   market: "spread",
   evaluatedAt: "2026-10-09T11:30:00.000Z",
@@ -157,7 +258,110 @@ const latePersistentMove = buildNflMarketState({
 });
 assert.equal(latePersistentMove.trails[0]?.persistenceTimeShare, 1,
   "persistence begins with the first material directional move, not the market opening");
-assert.equal(latePersistentMove.trails[0]?.reversalMagnitude, 0,
-  "sub-threshold price shading before a material move is not a reversal");
+assert.ok(latePersistentMove.trails[0]!.reversalMagnitude > 0,
+  "real early price shading against the final direction remains visible, however small");
+
+// Actual paired repricing is available for interpretation before any arbiter
+// decides whether it is persuasive. It cannot vanish behind a one-point floor.
+const priceOnlyState = (away: number, home: number, excludedFamilies: string[] = []) => {
+  const families = ["circa", "pinnacle"].map((source) => family({
+    source, currentAt: "2026-10-09T11:20:00.000Z", openingLine: 0, currentLine: 0,
+    currentAway: away, currentHome: home,
+  }));
+  return buildNflMarketState({
+    market: "moneyline", evaluatedAt: "2026-10-09T11:30:00.000Z", excludedFamilies,
+    snapshots: [{ capturedAt: "2026-10-09T11:20:00.000Z", markets: {
+      moneyline: { families }, spread: { families: [] }, total: { families: [] },
+    } }],
+    current: { spread: null, total: null }, playbookLine: null, playbookSplits: null, sharpSplits: null,
+  });
+};
+const smallPriceEpisode = priceOnlyState(-107, -113);
+assert.equal(smallPriceEpisode.namedDirection, 1);
+assert.equal(smallPriceEpisode.candidateNamedDirection, 1);
+for (const trail of smallPriceEpisode.trails) {
+  assert.ok(Math.abs(trail.fairProbabilityDeltaPp - 0.6496037417175526) < 1e-9);
+  assert.equal(trail.priceDirection, 1);
+  assert.equal(trail.moveOrder, "price_only");
+  assert.equal(trail.lastEconomicMoveAt, "2026-10-09T11:20:00.000Z");
+}
+const tinyPriceEpisode = priceOnlyState(-110, -110.001);
+assert.equal(tinyPriceEpisode.namedDirection, 1,
+  "even a tiny genuine fair-price reaction is exposed, not automatically trusted or flipped");
+assert.ok(tinyPriceEpisode.trails[0]!.fairProbabilityDeltaPp > 0);
+assert.ok(tinyPriceEpisode.trails[0]!.fairProbabilityDeltaPp < 0.25);
+assert.equal(priceOnlyState(-110, -110).namedDirection, null,
+  "unchanged paired prices cannot create an episode");
+const vigOnly = priceOnlyState(-120, -120);
+assert.equal(vigOnly.namedDirection, null,
+  "a symmetric hold change without a no-vig probability move is non-directional");
+assert.equal(vigOnly.trails[0]?.priceDirection, null);
+assert.equal(vigOnly.trails[0]?.lastEconomicMoveAt, null);
+assert.ok(vigOnly.trails[0]!.holdDeltaPp > 0);
+const excludedSmall = priceOnlyState(-107, -113, ["circa"]);
+assert.deepEqual(excludedSmall.trails.map((trail) => trail.source), ["pinnacle"]);
+assert.equal(excludedSmall.namedDirection, null);
+assert.equal(excludedSmall.candidateNamedDirection, 1,
+  "excluding the target book preserves only a candidate, not a second named vote");
+const smallBuyback = buildNflMarketState({
+  market: "spread", evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [
+    snapshot("2026-10-09T11:10:00.000Z", [family({source: "circa", currentAt: "2026-10-09T11:10:00.000Z",
+      openingLine: 0, currentLine: 0, currentAway: -107, currentHome: -113})]),
+    snapshot("2026-10-09T11:20:00.000Z", [family({source: "circa", currentAt: "2026-10-09T11:20:00.000Z",
+      openingLine: 0, currentLine: 0})]),
+  ], current: {spread: {homeLine: 0}, total: null}, playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(smallBuyback.trails[0]?.buybackToOpening, true,
+  "a return after a small real paired-price move remains a recorded buyback");
+assert.equal(smallBuyback.namedDirection, null);
+
+const partialNumberBuyback = buildNflMarketState({
+  market: "spread", evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [
+    snapshot("2026-10-09T10:30:00.000Z", [family({ source: "circa",
+      currentAt: "2026-10-09T10:30:00.000Z", openingLine: -3, currentLine: -7 })]),
+    snapshot("2026-10-09T11:20:00.000Z", [family({ source: "circa",
+      currentAt: "2026-10-09T11:20:00.000Z", openingLine: -3, currentLine: -4 })]),
+  ], current: { spread: { homeLine: -4 }, total: null },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+}).trails[0]!;
+assert.equal(partialNumberBuyback.direction, 1,
+  "the net opening-to-current number still supports the home side");
+assert.equal(partialNumberBuyback.lastEconomicDirection, -1);
+assert.equal(partialNumberBuyback.lastNumberDirection, -1);
+assert.equal(partialNumberBuyback.lastPriceDirection, null);
+assert.equal(partialNumberBuyback.retracementNumberMagnitude, 3);
+assert.equal(partialNumberBuyback.numberPeakAt, "2026-10-09T10:30:00.000Z");
+assert.equal(partialNumberBuyback.retracementPriceMagnitudePp, 0);
+assert.equal(partialNumberBuyback.buybackToOpening, false,
+  "a partial retracement is distinct from a complete return to opening");
+assert.equal(partialNumberBuyback.persistenceTimeShare, 1,
+  "opening-relative persistence remains a separate statistic, not a denial of the late retracement");
+const partialPriceBuyback = buildNflMarketState({
+  market: "spread", evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [
+    snapshot("2026-10-09T10:30:00.000Z", [family({ source: "circa",
+      currentAt: "2026-10-09T10:30:00.000Z", openingLine: 0, currentLine: 0,
+      currentAway: 100, currentHome: -140 })]),
+    snapshot("2026-10-09T11:20:00.000Z", [family({ source: "circa",
+      currentAt: "2026-10-09T11:20:00.000Z", openingLine: 0, currentLine: 0,
+      currentAway: -105, currentHome: -115 })]),
+  ], current: { spread: { homeLine: 0 }, total: null },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+}).trails[0]!;
+assert.equal(partialPriceBuyback.direction, 1);
+assert.equal(partialPriceBuyback.lastEconomicDirection, -1);
+assert.equal(partialPriceBuyback.lastPriceDirection, -1);
+assert.equal(partialPriceBuyback.lastNumberDirection, null);
+assert.ok(partialPriceBuyback.retracementPriceMagnitudePp! > 2);
+assert.equal(partialPriceBuyback.pricePeakAt, "2026-10-09T10:30:00.000Z");
+assert.equal(partialPriceBuyback.retracementNumberMagnitude, 0);
+assert.ok(smallBuyback.trails[0]!.retracementPriceMagnitudePp! > 0,
+  "a complete price buyback retains the size and time of the erased excursion");
+assert.equal(smallBuyback.trails[0]!.lastPriceDirection, -1);
+assert.equal(vigOnly.trails[0]!.pricePeakAt, null);
+assert.equal(vigOnly.trails[0]!.retracementPriceMagnitudePp, 0,
+  "hold-only changes cannot create a false directional peak or retracement");
 
 console.log("NFL market-state tests passed.");

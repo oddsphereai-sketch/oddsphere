@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
 import { NFL_PAID_PROJECTION_SHADOW_RELEASE } from "../lib/services/football/balldontlieNflWeeklyProjectionShadow";
+import { NFL_MARKET_STATE_RELEASE } from "../lib/services/football/nflMarketState";
 import {
   NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
   NFL_R6_MONEYLINE_DECISION_RELEASE,
@@ -28,6 +29,7 @@ import {
   buildNflPaidTeamScoreBaseForecast,
   buildNflMarketEvidenceOutcomeForecast,
   buildNflNoWeightMarketEvidenceOutcomeForecast,
+  buildNflUnifiedMarketAdjustedForecast,
   getNflV1WeekOneOutcomeForecast,
   NFL_V1_MARKET_EVIDENCE_OUTCOME_RELEASE,
   NFL_V1_MARKET_EVIDENCE_REPRESENTATIVE_SCORE_RELEASE,
@@ -82,7 +84,7 @@ function namedSequenceAuthority(args: {
     followerDelaysMinutes: [] as number[],
     resistance: "none" as const,
     sharpSplitSource: null,
-    stateRelease: "nfl_market_state_2026_10_09_r1_truthful_signal_identity" as const,
+    stateRelease: NFL_MARKET_STATE_RELEASE,
     numberMoveSources: [] as string[],
     priceOnlyMoveSources: [] as string[],
   };
@@ -137,25 +139,8 @@ const targetExcludedAnchor = resolveNflTargetExcludedMarketAnchor({
   totalExcludedSportsbooks: ["betmgm"],
   evaluatedAt,
 });
-assert.deepEqual(targetExcludedAnchor && {
-  ...targetExcludedAnchor,
-  spreadHomeFairProbability: undefined,
-  totalOverFairProbability: undefined,
-}, {
-  release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
-  homeMargin: 4,
-  spreadHomeFairProbability: undefined,
-  total: 44.5,
-  totalOverFairProbability: undefined,
-  marginFamilyCount: 4,
-  totalFamilyCount: 5,
-  marginExcludedSportsbooks: ["draftkings", "fanduel"],
-  totalExcludedSportsbooks: ["betmgm"],
-});
-assert.ok(targetExcludedAnchor && targetExcludedAnchor.totalOverFairProbability > 0.48 &&
-  targetExcludedAnchor.totalOverFairProbability < 0.51);
-assert.ok(targetExcludedAnchor && targetExcludedAnchor.spreadHomeFairProbability > 0.49 &&
-  targetExcludedAnchor.spreadHomeFairProbability < 0.52);
+assert.equal(targetExcludedAnchor, null,
+  "different spread/total contracts cannot manufacture a paired-price anchor at their median line");
 assert.equal(resolveNflTargetExcludedMarketAnchor({
   books: targetExcludedBooks,
   marginExcludedSportsbooks: ["fanduel", "draftkings", "caesars", "betmgm"],
@@ -219,8 +204,8 @@ const targetExcludedProduction = resolveNflTargetExcludedProduction({
   evaluatedAt,
   baseOutcome: getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }),
   incumbentOutcome: getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam }),
-  current: targetExcludedBooks[0]!,
-  comparableCurrentBooks: targetExcludedBooks,
+  current: comparableCurrentBooks[0]!,
+  comparableCurrentBooks,
   operationalOpening: {
     provenance: "provider_opening",
     capturedAt: "2026-08-25T09:21:34.519Z",
@@ -854,15 +839,78 @@ const noWeightTotalMoveOver = buildNflNoWeightMarketEvidenceOutcomeForecast({
   evaluatedAt,
 });
 assert.equal(noWeightTotalMoveOver.marketEvidence?.marketWeight, 0);
-assert.equal(noWeightTotalMoveOver.noWeightMarketReader?.qualifiedTotalCorrectionApplied, true);
+assert.equal(noWeightTotalMoveOver.noWeightMarketReader?.qualifiedTotalCorrectionApplied, false);
 assert.ok(Math.abs(
   noWeightTotalMoveOver.noWeightMarketReader!.finalTotal -
-    (2 * current.total!.line - noWeightTotalMoveOver.noWeightMarketReader!.independentTotal),
-) < 0.000002, "qualified Total evidence must reflect across the line without weighted blending");
+    noWeightTotalMoveOver.noWeightMarketReader!.independentTotal,
+) < 0.000002, "a direction label without target-excluded paired price must not manufacture a reflected Total");
 assert.ok(Math.abs(
   noWeightTotalMoveOver.expectedHomeScore - noWeightTotalMoveOver.expectedAwayScore -
     (paidBase.expectedHomeScore - paidBase.expectedAwayScore),
 ) < 0.000002, "a categorical Total correction must preserve the independent margin");
+const noWeightTotalWithTargetFreePrice = buildNflNoWeightMarketEvidenceOutcomeForecast({
+  baseForecast: paidBase,
+  footballHomeMargin: 4.25,
+  current,
+  operationalOpening: {
+    quote: {
+      ...current,
+      observedAt: "2026-08-25T09:00:00.000Z",
+      total: { ...current.total!, line: 43.5 },
+    },
+  },
+  movementCurrent: current,
+  playbookLine: { capturedAt: evaluatedAt, homeSpread: -3.5, total: 44.5 },
+  playbookSplits: splitSet({ homeMoneyPct: 50, homeBetsPct: 50 }),
+  sharpSplits: sharpSplitSet({ homeMoneyPct: 50, homeBetsPct: 50 }),
+  spreadDirectionCandidate: true,
+  totalDirectionCandidate: true,
+  marketOverProbability: 0.58,
+  paidTeamScore,
+  evaluatedAt,
+});
+assert.equal(noWeightTotalWithTargetFreePrice.noWeightMarketReader?.qualifiedTotalCorrectionApplied, true);
+assert.ok(noWeightTotalWithTargetFreePrice.noWeightMarketReader!.finalTotal > current.total!.line,
+  "a qualified target-free price may select an Over score law");
+assert.notEqual(noWeightTotalWithTargetFreePrice.noWeightMarketReader!.finalTotal,
+  2 * current.total!.line - noWeightTotalWithTargetFreePrice.noWeightMarketReader!.independentTotal,
+  "the score must come from paired market economics, not line reflection");
+
+const closeIndependent = {
+  ...buildNflUnifiedMarketAdjustedForecast({
+    baseForecast: paidBase,
+    expectedHomeMargin: -0.7,
+    expectedTotal: 44,
+    marketInputPolicy: "target_excluded_continuous_residual",
+  }),
+  providerGameId: "synthetic-close-market-game",
+};
+const sixPointMarket = {
+  ...current,
+  spread: { ...current.spread!, homeLine: -6, awayLine: 6 },
+};
+const noWeightMarketWinner = buildNflNoWeightMarketEvidenceOutcomeForecast({
+  baseForecast: closeIndependent,
+  footballHomeMargin: -0.7,
+  current: sixPointMarket,
+  operationalOpening: {
+    quote: { ...sixPointMarket, spread: { ...sixPointMarket.spread!, homeLine: -3, awayLine: 3 } },
+  },
+  movementCurrent: sixPointMarket,
+  playbookLine: null,
+  playbookSplits: null,
+  sharpSplits: null,
+  spreadDirectionCandidate: true,
+  totalDirectionCandidate: true,
+  marketHomeCoverProbability: 0.52,
+  namedSequenceAuthority: namedSequenceAuthority({ moneylineSide: "home", spreadSide: "home" }),
+  evaluatedAt,
+});
+assert.ok(noWeightMarketWinner.noWeightMarketReader!.finalHomeMargin > 0,
+  "a coherent target-free market may reverse a close independent winner");
+assert.ok(noWeightMarketWinner.noWeightMarketReader!.finalHomeMargin < 12,
+  "a six-point line must not manufacture a twelve-point winner by reflecting the score");
+assert.notEqual(noWeightMarketWinner.noWeightMarketReader!.finalHomeMargin, 12.7);
 
 const noWeightFallback = resolveNflTargetExcludedProduction({
   providerGameId,
@@ -1142,7 +1190,50 @@ assert.equal(fragmented.evaluatedBets.some((decision) => decision.market !== "mo
   ["Best Angle", "Lean"].includes(decision.grade)), false,
 "one target-excluded same-line comparator cannot authorize an actionable spread/total grade");
 
-console.log("NFL actionable grade release: coherent-PMF identity, forecast flips, underdog value, exact-price grades, movement, weekly runtime, and publication boundaries passed");
+const clockSafeBaselineArgs = {
+  providerGameId, awayTeam, homeTeam, gameStartsAt, current, comparableCurrentBooks,
+  shadowMoneyline: shadow(),
+};
+const clockSafeBaseline = buildNflV1ActionableGradeBundle(clockSafeBaselineArgs);
+const pushConsistentForecast = getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam });
+for (const line of [3, 3.5]) {
+  const pushBooks = comparableCurrentBooks.map((book) => ({ ...book,
+    spread: { ...book.spread!, homeLine: -line, awayLine: line },
+    total: { ...book.total!, line: line === 3 ? 44 : 44.5 },
+  }));
+  const pushBundle = buildNflV1ActionableGradeBundle({ ...clockSafeBaselineArgs,
+    current: pushBooks[0]!, comparableCurrentBooks: pushBooks, outcomeForecast: pushConsistentForecast });
+  for (const bet of pushBundle.evaluatedBets.filter((bet) => bet.market !== "moneyline")) {
+    const p = nflV1WeekOneLineProbabilities({ forecast: pushConsistentForecast,
+      homeSpread: bet.market === "spread" ? bet.side === homeTeam ? bet.evaluatedQuote.line! : -bet.evaluatedQuote.line! : 0,
+      totalLine: bet.market === "total" ? bet.evaluatedQuote.line! : 0 });
+    const push = bet.market === "spread" ? p.spread.pushProbability : p.total.pushProbability;
+    assert.equal(bet.pushProbability, push, "stored tuple must carry the exact final-distribution refund probability");
+    const profit = bet.evaluatedQuote.price > 0 ? bet.evaluatedQuote.price / 100 : 100 / -bet.evaluatedQuote.price;
+    assert.ok(Math.abs(bet.expectedValue - (1 - push) *
+      (bet.modelProbability * profit - (1 - bet.modelProbability))) < 1e-12,
+    "stored EV must match the same push-adjusted quantity used by the selector and grade");
+    assert.equal(line === 3 ? push > 0 : push === 0, true);
+  }
+}
+for (const observedAt of [
+  new Date(Date.parse(evaluatedAt) - 121 * 60_000).toISOString(),
+  new Date(Date.parse(evaluatedAt) + 1).toISOString(),
+]) {
+  const temptingInvalidQuote: NflPreviewBookOdds = {
+    ...structuredClone(current), sportsbook: "invalid-execution", observedAt,
+    moneyline: { homePrice: 300, awayPrice: -350 },
+    spread: { homeLine: 20, awayLine: -20, homePrice: 250, awayPrice: -300 },
+    total: { line: 80, overPrice: -300, underPrice: 250 },
+  };
+  assert.deepEqual(buildNflV1ActionableGradeBundle({ ...clockSafeBaselineArgs,
+    comparableCurrentBooks: [...comparableCurrentBooks, temptingInvalidQuote] }), clockSafeBaseline,
+  "invalid-clock prices cannot change Moneyline, Spread, Total targets, comparisons or grades");
+  assert.equal(buildNflV1ActionableGradeBundle({ ...clockSafeBaselineArgs,
+    comparableCurrentBooks: [comparableCurrentBooks[0]!, ...comparableCurrentBooks.slice(1).map((book) => ({ ...book, observedAt }))],
+  }).evaluatedBets.length, 0, "invalid-clock comparators cannot manufacture complete evaluations");
+}
+console.log("NFL actionable grade release: coherent-PMF identity, forecast flips, underdog value, exact-price grades, movement, source-clock targets/comparators, weekly runtime, and publication boundaries passed");
 
 function quote(
   sportsbook: string,

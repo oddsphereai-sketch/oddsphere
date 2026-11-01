@@ -30,6 +30,17 @@ const unlocked = buildNflRegularEvaluatedBetDecision({ ...base, stage: "unlocked
 assert.equal(unlocked.decisionKind, "exact_price_bet");
 assert.equal(unlocked.lockedAt, null);
 assert.ok(unlocked.expectedValue > 0);
+assert.equal(unlocked.pushProbability, undefined, "legacy tuples retain missing push metadata and conditional EV semantics");
+const integerPush = buildNflRegularEvaluatedBetDecision({ ...base, stage: "unlocked",
+  evaluatedQuote: { ...base.evaluatedQuote, line: -3 }, pushProbability: 0.12 });
+assert.equal(integerPush.pushProbability, 0.12);
+assert.ok(Math.abs(integerPush.expectedValue - unlocked.expectedValue * 0.88) < 1e-12,
+  "integer-line EV must account for the refund probability");
+const halfPoint = buildNflRegularEvaluatedBetDecision({ ...base, stage: "unlocked", pushProbability: 0 });
+assert.equal(halfPoint.expectedValue, unlocked.expectedValue,
+  "fractional-line zero-push EV retains the same conditional result");
+assert.throws(() => buildNflRegularEvaluatedBetDecision({ ...base, stage: "unlocked", pushProbability: 1.1 }), /pushProbability/);
+assert.throws(() => buildNflRegularEvaluatedBetDecision({ ...base, market: "moneyline", stage: "unlocked", pushProbability: 0.1 }), /Moneyline/);
 assert.equal(nflRegularQuoteDisposition({
   decision: unlocked,
   currentQuote: { ...base.evaluatedQuote, observedAt: "2026-09-09T21:25:00.000Z" },

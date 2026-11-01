@@ -6,7 +6,7 @@ import type { NflRegularSharpSplit } from "./sharpApiNflSplits";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FORWARD_CONTEXT_CAPTURE_RELEASE =
-  "nfl_daily_edge_forward_context_capture_2026_10_26_r9_lossless_price_history" as const;
+  "nfl_daily_edge_forward_context_capture_2026_10_31_r10_owls_named_chronology" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_SCHEMA = "nflfec4" as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_FAMILIES_PER_MARKET = 24 as const;
 export const NFL_FORWARD_CONTEXT_CAPTURE_MAX_PROVENANCE_RECORDS_PER_MARKET = 2 as const;
@@ -17,7 +17,7 @@ export const NFL_FORWARD_CONTEXT_CAPTURE_FRESH_MINUTES = 120 as const;
 type Market = NflRegularDecisionMarket;
 type CanonicalSide = "h" | "a" | "o" | "u";
 type Freshness = "f" | "s" | "x";
-type Provider = "b" | "s";
+type Provider = "b" | "s" | "o";
 type SourceClass = "c" | "p" | "b" | "n";
 
 /** [observedAt, ageMinutes, freshness, line, away/over price, home/under price]. */
@@ -243,12 +243,12 @@ export function buildNflForwardContextMarket(args: {
   const openingByFamily = earliestByFamily([
     ...args.openingBooks,
     args.operationalOpening,
-  ].filter((book) => quote(book, args.market) !== null));
+  ].filter((book) => quote(book, args.market) !== null), args.market);
   const families = retained.map((book): NflForwardContextFamily => {
     const family = canonicalBook(book.sportsbook);
     return [
       family,
-      book.provider === "sharpapi" ? "s" : "b",
+      book.provider === "owls" ? "o" : book.provider === "sharpapi" ? "s" : "b",
       sourceClass(family),
       null,
       landmark(openingByFamily.get(family) ?? null, args.market, args.capturedAt),
@@ -400,17 +400,19 @@ function landmark(book: NflPreviewBookOdds | null, market: Market, capturedAt: s
   if (!book) return null;
   const value = quote(book, market);
   if (!value) return null;
-  const ageMinutes = (Date.parse(capturedAt) - Date.parse(book.observedAt)) / 60_000;
+  const observedAt = book.marketObservedAt?.[market] ?? book.observedAt;
+  const ageMinutes = (Date.parse(capturedAt) - Date.parse(observedAt)) / 60_000;
   const freshness: Freshness = ageMinutes < 0 ? "x" : ageMinutes <= NFL_FORWARD_CONTEXT_CAPTURE_FRESH_MINUTES ? "f" : "s";
-  return [book.observedAt, ageMinutes, freshness, ...value];
+  return [observedAt, ageMinutes, freshness, ...value];
 }
 
-function earliestByFamily(books: NflPreviewBookOdds[]) {
+function earliestByFamily(books: NflPreviewBookOdds[], market: Market) {
   const result = new Map<string, NflPreviewBookOdds>();
   for (const book of books) {
     const family = canonicalBook(book.sportsbook);
     const prior = result.get(family);
-    if (!prior || prior.observedAt > book.observedAt) result.set(family, book);
+    if (!prior || (prior.marketObservedAt?.[market] ?? prior.observedAt) >
+      (book.marketObservedAt?.[market] ?? book.observedAt)) result.set(family, book);
   }
   return result;
 }
@@ -471,14 +473,14 @@ export function nflForwardContextSharpHistoryBooks(
   for (const market of ["moneyline", "spread", "total"] as const) {
     for (const family of capture.markets[market].families) {
       const [sportsbook, provider, source, , , current] = family;
-      if (provider !== "s" || !["c", "p", "b"].includes(source)) continue;
+      if ((provider !== "s" && provider !== "o") || !["c", "p", "b"].includes(source)) continue;
       const [observedAt, , freshness, line, firstPrice, secondPrice] = current;
       if (freshness === "x") continue;
       books.push({
         providerGameId: capture.gameId,
         sportsbook,
         observedAt,
-        provider: "sharpapi",
+        provider: provider === "o" ? "owls" : "sharpapi",
         targetEligible: false,
         marketSelection: { [market]: "main_line" },
         marketObservedAt: { [market]: observedAt },

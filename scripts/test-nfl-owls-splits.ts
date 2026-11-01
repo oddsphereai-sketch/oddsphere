@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 import type { RawOwlsSplitsResponse } from "../lib/providers/owls/owlsSharpBookSplits";
 import type { NflPreviewGame } from "../lib/services/football/balldontlieNflPreviewSlate";
-import { mapNflOwlsSplits, NFL_OWLS_SPLITS_RELEASE } from "../lib/services/football/nflOwlsSplits";
+import { mapNflOwlsSplits, NFL_OWLS_SPLITS_RELEASE, qualifyNflOwlsSplitsForModel } from "../lib/services/football/nflOwlsSplits";
 import { nflModelSharpSplits } from "../lib/services/football/sharpApiNflSplits";
 
 const game: NflPreviewGame = {
@@ -64,6 +64,31 @@ assert.equal(split.total.overMoneyPct, 58);
 assert.equal(split.total.underBetsPct, 49);
 assert.equal(split.moneyline.providerFetchedAt, "2026-10-27T23:45:00.000Z");
 assert.equal(nflModelSharpSplits(split), null, "Owls capture cannot enter the separate predictive market reader");
+assert.equal(split.spread.sourceLine, -3.5);
+assert.equal(split.total.sourceLine, 46.5);
+const qualified = qualifyNflOwlsSplitsForModel({
+  splits: split, providerGameId: game.providerGameId,
+  evaluatedAt: "2026-10-27T23:47:00.000Z", currentHomeSpread: -3.5, currentTotal: 46.5,
+});
+assert.deepEqual(qualified.qualifiedMarkets, ["moneyline", "spread", "total"]);
+assert.equal(qualified.splits?.moneyline.provider, "owls");
+const wrongLine = qualifyNflOwlsSplitsForModel({
+  splits: split, providerGameId: game.providerGameId,
+  evaluatedAt: "2026-10-27T23:47:00.000Z", currentHomeSpread: -4, currentTotal: 47,
+});
+assert.deepEqual(wrongLine.qualifiedMarkets, ["moneyline"]);
+assert.equal(wrongLine.splits?.spread.homeMoneyPct, null);
+assert.equal(wrongLine.splits?.total.overMoneyPct, null);
+assert.equal(wrongLine.reasons.spread, "different_line");
+assert.equal(wrongLine.reasons.total, "different_line");
+assert.equal(qualifyNflOwlsSplitsForModel({
+  splits: split, providerGameId: game.providerGameId,
+  evaluatedAt: "2026-10-28T02:47:00.000Z", currentHomeSpread: -3.5, currentTotal: 46.5,
+}).splits, null, "an old source timestamp cannot be refreshed by recapture");
+assert.equal(qualifyNflOwlsSplitsForModel({
+  splits: split, providerGameId: "different-game",
+  evaluatedAt: "2026-10-27T23:47:00.000Z", currentHomeSpread: -3.5, currentTotal: 46.5,
+}).splits, null, "Owls evidence cannot cross exact game IDs");
 
 const wrongDate = structuredClone(response);
 wrongDate.data![0]!.event_id = "nfl:Carolina-Panthers@Green-Bay-Packers-20261108";

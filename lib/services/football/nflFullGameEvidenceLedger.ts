@@ -9,7 +9,7 @@ import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "./sharpApiNf
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_LEDGER_RELEASE =
-  "nfl_full_game_evidence_ledger_2026_10_26_r3_interpretable_market_path" as const;
+  "nfl_full_game_evidence_ledger_2026_11_01_r10_independent_market_axes" as const;
 
 type Market = NflMarketStateMarket;
 type Disposition = "supports" | "resists" | "uncertainty" | "stale" | "identity_mismatch" | "unavailable";
@@ -44,6 +44,13 @@ export type NflFullGameEvidenceSignal = {
     priceDirection: NflMarketStateSide | null;
   } | null;
   marketPath?: {
+    lastEconomicDirection?: NflMarketStateSide | null;
+    lastNumberDirection?: NflMarketStateSide | null;
+    lastPriceDirection?: NflMarketStateSide | null;
+    retracementNumberMagnitude?: number;
+    retracementPriceMagnitudePp?: number;
+    numberPeakAt?: string | null;
+    pricePeakAt?: string | null;
     persistenceTimeShare: number;
     reversalMagnitude: number;
     buybackToOpening: boolean;
@@ -54,6 +61,8 @@ export type NflFullGameEvidenceSignal = {
     ageMinutes: number | null;
     moneyPct: number | null;
     ticketPct: number | null;
+    /** Both handle and tickets select this majority; it is not a bettor-identity claim. */
+    sharedMajoritySide: "home" | "away" | "over" | "under" | null;
     booksUsed: number | null;
     exactLineMatched: boolean | null;
     denominatorKnown: false;
@@ -74,6 +83,11 @@ export type NflFullGameEvidenceSignal = {
 export type NflFullGameEvidenceLedger = {
   release: typeof NFL_FULL_GAME_EVIDENCE_LEDGER_RELEASE;
   evaluatedAt: string;
+  pairedPriceFamilyCounts?: { margin: number; total: number; moneyline?: number };
+  evaluatedContract: {
+    spreadHomeMarginBoundary: number | null;
+    totalLine: number | null;
+  };
   finalAxes: {
     homeMargin: number;
     total: number;
@@ -83,6 +97,7 @@ export type NflFullGameEvidenceLedger = {
   };
   marketContexts: Record<Market, {
     namedDirection: NflMarketStateSide | null;
+    candidateNamedDirection?: NflMarketStateSide | null;
     namedLeadCompletedAt: string | null;
     followerSources: string[];
     followerDelaysMinutes: number[];
@@ -105,6 +120,10 @@ export type NflFullGameEvidenceLedger = {
 type ForecastCandidate = {
   source: string;
   forecast: Pick<NflV1WeekOneOutcomeForecast, "expectedHomeScore" | "expectedAwayScore"> | null;
+  /** Price authority is axis-specific; omitted only by legacy complete candidates. */
+  authoritativeMarkets?: Market[];
+  /** Each market may imply its own margin; the final arbiter reconciles one score. */
+  marketValues?: Partial<Record<Market, number>>;
 };
 
 export function buildNflFullGameEvidenceLedger(args: {
@@ -119,7 +138,10 @@ export function buildNflFullGameEvidenceLedger(args: {
     spreadHomeFairProbability: number;
     totalOverFairProbability: number;
     marginFamilyCount: number;
+    moneylineFamilyCount?: number;
     totalFamilyCount: number;
+    /** Missing cohorts cannot borrow an independent score axis as price evidence. */
+    availableMarkets?: Market[];
   } | null;
   states: Record<Market, NflMarketState>;
   excludedFamiliesByMarket: Record<Market, string[]>;
@@ -153,10 +175,25 @@ export function buildNflFullGameEvidenceLedger(args: {
   const signals: NflFullGameEvidenceSignal[] = [];
 
   for (const candidate of args.forecastCandidates) {
+    const targetExcludedPriceScore = candidate.source === "target_excluded_paired_price_score";
+    const appendForecastSignal = (value: Omit<NflFullGameEvidenceSignal, "id" | "submittedTo">) => {
+      const market = value.market as Market;
+      const axisValue = candidate.marketValues?.[market];
+      if (targetExcludedPriceScore && axisValue !== undefined && Number.isFinite(axisValue)) {
+        const boundary = market === "moneyline" ? 0 : market === "spread" ? args.currentSpreadBoundary : args.currentTotalLine;
+        const side = boundary === null ? null : sideName(market, signOrNull(axisValue - boundary));
+        value = { ...value, value: axisValue, side,
+          continuousMagnitude: boundary === null ? null : Math.abs(axisValue - boundary),
+          disposition: disposition(side, finalSides[market]) };
+      }
+      const available = !targetExcludedPriceScore || candidate.authoritativeMarkets === undefined ||
+        candidate.authoritativeMarkets.includes(value.market as Market);
+      signals.push(signal(available ? value : unavailableAxis(value, "paired_price_axis_not_authoritative")));
+    };
     if (!candidate.forecast) {
       signals.push(signal({
         kind: "forecast_expert", market: "game", source: candidate.source,
-        targetExcluded: null,
+        targetExcluded: targetExcludedPriceScore ? true : null,
         observedAt: null, status: "unavailable", side: null, value: null,
         continuousMagnitude: null, disposition: "unavailable",
         reason: "forecast_candidate_not_available", influenceClass: "data_quality",
@@ -164,18 +201,36 @@ export function buildNflFullGameEvidenceLedger(args: {
       continue;
     }
     const margin = candidate.forecast.expectedHomeScore - candidate.forecast.expectedAwayScore;
-    signals.push(signal({
+    appendForecastSignal({
       kind: "forecast_expert", market: "moneyline", source: candidate.source,
-      targetExcluded: null,
+      targetExcluded: targetExcludedPriceScore ? true : null,
       observedAt: args.evaluatedAt, status: "usable", side: sideName("moneyline", signOrNull(margin)),
       value: margin, continuousMagnitude: Math.abs(margin),
       disposition: disposition(sideName("moneyline", signOrNull(margin)), finalSides.moneyline),
       reason: "coherent_forecast_candidate_margin", influenceClass: "forecast_candidate",
-    }));
+    });
+    appendForecastSignal({
+      kind: "forecast_expert", market: "spread", source: candidate.source,
+      targetExcluded: targetExcludedPriceScore ? true : null,
+      observedAt: args.evaluatedAt, status: "usable",
+      side: args.currentSpreadBoundary === null
+        ? null : sideName("spread", signOrNull(margin - args.currentSpreadBoundary)),
+      value: margin,
+      continuousMagnitude: args.currentSpreadBoundary === null
+        ? null : Math.abs(margin - args.currentSpreadBoundary),
+      disposition: disposition(
+        args.currentSpreadBoundary === null
+          ? null : sideName("spread", signOrNull(margin - args.currentSpreadBoundary)),
+        finalSides.spread,
+      ),
+      reason: args.currentSpreadBoundary === null
+        ? "current_spread_line_unavailable" : "coherent_forecast_candidate_spread",
+      influenceClass: args.currentSpreadBoundary === null ? "uncertainty" : "forecast_candidate",
+    });
     const total = candidate.forecast.expectedHomeScore + candidate.forecast.expectedAwayScore;
-    signals.push(signal({
+    appendForecastSignal({
       kind: "forecast_expert", market: "total", source: candidate.source,
-      targetExcluded: null,
+      targetExcluded: targetExcludedPriceScore ? true : null,
       observedAt: args.evaluatedAt, status: "usable",
       side: args.currentTotalLine === null ? null : sideName("total", signOrNull(total - args.currentTotalLine)),
       value: total, continuousMagnitude: args.currentTotalLine === null ? null : Math.abs(total - args.currentTotalLine),
@@ -185,12 +240,16 @@ export function buildNflFullGameEvidenceLedger(args: {
       ),
       reason: args.currentTotalLine === null ? "current_total_line_unavailable" : "coherent_forecast_candidate_total",
       influenceClass: args.currentTotalLine === null ? "uncertainty" : "forecast_candidate",
-    }));
+    });
   }
 
   if (args.targetExcludedMarket) {
     const market = args.targetExcludedMarket;
-    signals.push(signal({
+    const appendMarketSignal = (value: Omit<NflFullGameEvidenceSignal, "id" | "submittedTo">) => {
+      const available = market.availableMarkets === undefined || market.availableMarkets.includes(value.market as Market);
+      signals.push(signal(available ? value : unavailableAxis(value, "target_excluded_axis_unavailable")));
+    };
+    appendMarketSignal({
       kind: "target_excluded_market", market: "moneyline", source: "target_excluded_market_consensus",
       targetExcluded: true,
       observedAt: args.evaluatedAt, status: "usable",
@@ -203,8 +262,8 @@ export function buildNflFullGameEvidenceLedger(args: {
       ),
       reason: `target_excluded_no_vig_market_${market.marginFamilyCount}_families`,
       influenceClass: "continuous_market_evidence",
-    }));
-    signals.push(signal({
+    });
+    appendMarketSignal({
       kind: "target_excluded_market", market: "spread", source: "target_excluded_market_consensus",
       targetExcluded: true,
       observedAt: args.evaluatedAt, status: "usable",
@@ -225,8 +284,8 @@ export function buildNflFullGameEvidenceLedger(args: {
         ? "current_spread_boundary_unavailable"
         : `target_excluded_spread_market_${market.marginFamilyCount}_families`,
       influenceClass: args.currentSpreadBoundary === null ? "uncertainty" : "continuous_market_evidence",
-    }));
-    signals.push(signal({
+    });
+    appendMarketSignal({
       kind: "target_excluded_market", market: "total", source: "target_excluded_market_consensus",
       targetExcluded: true,
       observedAt: args.evaluatedAt, status: "usable",
@@ -241,7 +300,7 @@ export function buildNflFullGameEvidenceLedger(args: {
         ? "current_total_line_unavailable"
         : `target_excluded_total_market_${market.totalFamilyCount}_families`,
       influenceClass: args.currentTotalLine === null ? "uncertainty" : "continuous_market_evidence",
-    }));
+    });
   } else {
     signals.push(signal({
       kind: "target_excluded_market", market: "game", source: "target_excluded_market_consensus",
@@ -283,6 +342,13 @@ export function buildNflFullGameEvidenceLedger(args: {
           priceDirection: trail.priceDirection,
         },
         marketPath: {
+          lastEconomicDirection: trail.lastEconomicDirection,
+          lastNumberDirection: trail.lastNumberDirection,
+          lastPriceDirection: trail.lastPriceDirection,
+          retracementNumberMagnitude: trail.retracementNumberMagnitude,
+          retracementPriceMagnitudePp: trail.retracementPriceMagnitudePp,
+          numberPeakAt: trail.numberPeakAt,
+          pricePeakAt: trail.pricePeakAt,
           persistenceTimeShare: trail.persistenceTimeShare,
           reversalMagnitude: trail.reversalMagnitude,
           buybackToOpening: trail.buybackToOpening,
@@ -315,18 +381,27 @@ export function buildNflFullGameEvidenceLedger(args: {
       const splitSide = gap === null ? null : sideName(market, signOrNull(gap));
       const moneyPct = market === "total" ? candidate.value.overMoneyPct : candidate.value.homeMoneyPct;
       const ticketPct = market === "total" ? candidate.value.overBetsPct : candidate.value.homeBetsPct;
+      const sharedMajorityDirection = typeof moneyPct === "number" && typeof ticketPct === "number" &&
+        Math.sign(moneyPct - 50) === Math.sign(ticketPct - 50) && moneyPct !== 50 && ticketPct !== 50
+        ? Math.sign(moneyPct - 50) as NflMarketStateSide : null;
       const isPublic = candidate.source === "public_consensus";
-      const exactLineMatched = state.splits.find((item) => item.source === "public_consensus")?.exactLineMatched ?? null;
+      const acceptedStateSplit = state.splits.find((item) => isPublic
+        ? item.source === "public_consensus"
+        : item.sportsbook === normalizeBook(candidate.source));
+      const exactLineMatched = acceptedStateSplit?.exactLineMatched ?? null;
+      const targetExcluded = isPublic || !excluded.has(normalizeBook(candidate.source));
       const qualifiedForDirection = status === "usable" && gap !== null &&
-        Math.abs(gap) >= (isPublic ? 8 : 10) && exactLineMatched !== false;
+        Math.abs(gap) >= (isPublic ? 8 : 10) && acceptedStateSplit !== undefined && targetExcluded &&
+        exactLineMatched !== false;
       signals.push(signal({
         kind: "split", market, source: candidate.source, observedAt,
-        targetExcluded: candidate.source === "public_consensus" || !excluded.has(normalizeBook(candidate.source)),
+        targetExcluded,
         status, side: splitSide, value: gap, continuousMagnitude: gap === null ? null : Math.abs(gap),
         splitContext: {
           ageMinutes: Number.isFinite(ageMinutes) ? ageMinutes : null,
           moneyPct: typeof moneyPct === "number" ? moneyPct : null,
           ticketPct: typeof ticketPct === "number" ? ticketPct : null,
+          sharedMajoritySide: sideName(market, sharedMajorityDirection),
           booksUsed: "booksUsed" in candidate.value ? candidate.value.booksUsed : 1,
           exactLineMatched,
           denominatorKnown: false,
@@ -372,6 +447,12 @@ export function buildNflFullGameEvidenceLedger(args: {
   return {
     release: NFL_FULL_GAME_EVIDENCE_LEDGER_RELEASE,
     evaluatedAt: args.evaluatedAt,
+    // These are the exact offered contracts used to determine cover/Over
+    // eligibility, never target-book directional market evidence.
+    evaluatedContract: {
+      spreadHomeMarginBoundary: args.currentSpreadBoundary,
+      totalLine: args.currentTotalLine,
+    },
     finalAxes: {
       homeMargin: finalHomeMargin,
       total: finalTotal,
@@ -379,10 +460,16 @@ export function buildNflFullGameEvidenceLedger(args: {
       spreadSide: finalSides.spread,
       totalSide: finalSides.total,
     },
+    pairedPriceFamilyCounts: args.targetExcludedMarket ? {
+      margin: args.targetExcludedMarket.marginFamilyCount,
+      moneyline: args.targetExcludedMarket.moneylineFamilyCount ?? args.targetExcludedMarket.marginFamilyCount,
+      total: args.targetExcludedMarket.totalFamilyCount,
+    } : undefined,
     marketContexts: Object.fromEntries(([
       "moneyline", "spread", "total",
     ] as const).map((market) => [market, {
       namedDirection: args.states[market].namedDirection,
+      candidateNamedDirection: args.states[market].candidateNamedDirection,
       namedLeadCompletedAt: args.states[market].namedLeadCompletedAt,
       followerSources: [...args.states[market].followerSources],
       followerDelaysMinutes: [...args.states[market].followerDelaysMinutes],
@@ -409,6 +496,14 @@ function signal(value: Omit<NflFullGameEvidenceSignal, "id" | "submittedTo">): N
     id: createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16),
     submittedTo: "full_game_evidence_arbiter",
   };
+}
+
+function unavailableAxis(
+  value: Omit<NflFullGameEvidenceSignal, "id" | "submittedTo">,
+  reason: string,
+): Omit<NflFullGameEvidenceSignal, "id" | "submittedTo"> {
+  return { ...value, observedAt: null, status: "unavailable", side: null, value: null,
+    continuousMagnitude: null, disposition: "unavailable", reason, influenceClass: "data_quality" };
 }
 
 function splitGap(value: NflForwardPlaybookSplit | NflRegularSharpSplit, market: Market): number | null {

@@ -207,6 +207,40 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const namedPricePredecessorSnapshotRelease =
+    "nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation";
+  const namedPricePredecessorFixtureRelease =
+    "nfl_weekly_member_fixture_2026_10_26_r55_complete_signal_interpretation";
+  const namedPricePredecessorPayload = {
+    ...snapshot,
+    snapshotRelease: namedPricePredecessorSnapshotRelease,
+    memberRelease: "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_10_26_r43_complete_signal_interpretation",
+    fixtureRelease: namedPricePredecessorFixtureRelease,
+    fixture: {
+      ...fixture,
+      heldMemberFixtureRelease: namedPricePredecessorFixtureRelease,
+    },
+  };
+  storedKey = [
+    "nfl", "daily-edge", 2026, 1,
+    namedPricePredecessorSnapshotRelease,
+    namedPricePredecessorFixtureRelease,
+    namedPricePredecessorPayload.memberRelease,
+    namedPricePredecessorPayload.decisionRelease,
+  ].join("::");
+  storedPayload = namedPricePredecessorPayload;
+  const namedPriceContinuityRead = await readNflForwardMemberSnapshot({
+    client,
+    season: 2026,
+    week: 1,
+    now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.deepEqual(namedPriceContinuityRead, namedPricePredecessorPayload,
+    "the deployed r47/r55/r40/r43 predecessor must be found under its exact stored key and returned unchanged");
+  assert.equal(storedPayload, namedPricePredecessorPayload,
+    "predecessor reads must not replace the stored payload");
+
   const completeSignalPredecessorSnapshotRelease =
     "nfl_forward_member_snapshot_2026_10_26_r46_joint_side_market_arbitration";
   const completeSignalPredecessorFixtureRelease =
