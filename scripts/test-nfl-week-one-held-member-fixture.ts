@@ -22,7 +22,8 @@ import {
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_RELEASE,
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
 } from "../lib/services/football/nflV1WeekOneOutcome";
-import { buildNflV1ActionableGradeBundle } from "../lib/services/football/nflV1ActionableGradeCandidate";
+import { buildNflV1ActionableGradeBundle, NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE,
+  NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE } from "../lib/services/football/nflV1ActionableGradeCandidate";
 import {
   NFL_R6_MONEYLINE_CALIBRATION_RELEASE,
   NFL_R6_MONEYLINE_DECISION_RELEASE,
@@ -119,6 +120,91 @@ assert.equal(
   16,
   "a release transition must preserve every immutable T-60 game until its current-release replacement exists",
 );
+// The r51 public locks remain the authority through the r52 unlocked release.
+const r51Rows = structuredClone(releaseTransitionRows);
+for (const row of r51Rows.slice(1)) {
+  const payload = row.payload as NflForwardEvidencePayload;
+  payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation";
+  payload.decisions.evaluatedBets = payload.decisions.evaluatedBets.map((decision, index) => ({
+    ...decision, decisionRelease: "nfl_v1_daily_edge_decision_2026_11_01_r54_movement_contract_separation",
+    modelProbability: [0.57123456789, 0.61234567891, 0.64345678912][index]!,
+    pushProbability: decision.market === "moneyline" ? undefined : 0.03123456789,
+    grade: (["Best Angle", "Lean", "No Play"] as const)[index]!,
+  }));
+}
+const r51Before = JSON.stringify(r51Rows);
+const r51Fixture = buildNflWeekOneHeldMemberFixture(r51Rows);
+assert.equal(r51Fixture.snapshot.games.length, 16);
+assert.equal(JSON.stringify(r51Rows), r51Before, "all stored lock fields, including push and evidence, remain immutable");
+const currentEquivalent = structuredClone(r51Rows);
+for (const row of currentEquivalent) {
+  row.payload.decisions.modelPromotionStatus = NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE;
+  row.payload.decisions.evaluatedBets.forEach((decision) => {
+    decision.decisionRelease = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
+  });
+}
+assert.deepEqual(r51Fixture.snapshot.games, buildNflWeekOneHeldMemberFixture(currentEquivalent).snapshot.games,
+  "legacy admission must not reinterpret the same stored projection, decision, price or recommendation fields");
+const oldLock = r51Rows[1]!;
+const oldPayload = oldLock.payload as NflForwardEvidencePayload;
+const lockedGame = r51Fixture.snapshot.games.find((game) => game.id === `nfl-${oldLock.providerGameId}`)!;
+assert.equal(lockedGame.lockState, "locked");
+assert.equal(lockedGame.lockedAt, oldPayload.capturedAt);
+assert.equal(lockedGame.footballProjection?.expectedAwayPoints, oldPayload.outcomeForecast.expectedAwayScore);
+assert.equal(lockedGame.footballProjection?.expectedHomePoints, oldPayload.outcomeForecast.expectedHomeScore);
+assert.equal(lockedGame.footballProjection?.homeWinProbability, oldPayload.outcomeForecast.homeWinProbability);
+for (const decision of oldPayload.decisions.evaluatedBets) {
+  const market = lockedGame.markets[decision.market === "spread" ? "first_inning" : decision.market];
+  assert.equal(market.modelProb, decision.modelProbability);
+  assert.equal(market.confidence, decision.modelProbability);
+  assert.equal(market.marketFairProb, decision.marketFairProbability);
+  assert.equal(market.verdict.label, decision.grade);
+  assert.equal(market.priceAmerican, decision.evaluatedQuote.price);
+  assert.equal(market.currentPriceAmerican, decision.evaluatedQuote.price);
+  assert.equal(market.gradePriceAmerican, decision.evaluatedQuote.price);
+  assert.equal(market.line, decision.evaluatedQuote.line);
+  assert.equal(market.lockedLineAmerican, decision.evaluatedQuote.price);
+  assert.equal(market.lockedLineAt, decision.lockedAt);
+  assert.equal(market.currentPriceObservedAt, decision.evaluatedQuote.observedAt);
+}
+const laterUnlocked = structuredClone(rows[1]!);
+laterUnlocked.id = "later-current-unlocked-must-not-win";
+laterUnlocked.stage = "unlocked";
+laterUnlocked.payload.stage = "unlocked";
+laterUnlocked.capturedAt = "2026-08-23T13:50:56.934Z";
+laterUnlocked.payload.capturedAt = laterUnlocked.capturedAt;
+(laterUnlocked.payload as NflForwardEvidencePayload).outcomeForecast.expectedAwayScore += 12;
+laterUnlocked.payload.decisions.evaluatedBets.forEach((decision) => { decision.grade = "Watchlist"; });
+const laterDuplicateLock = structuredClone(oldLock);
+laterDuplicateLock.id = "later-duplicate-lock-must-not-win";
+laterDuplicateLock.capturedAt = "2026-08-23T13:50:56.934Z";
+laterDuplicateLock.payload.capturedAt = laterDuplicateLock.capturedAt;
+(laterDuplicateLock.payload as NflForwardEvidencePayload).outcomeForecast.expectedHomeScore += 10;
+laterDuplicateLock.payload.decisions.evaluatedBets.forEach((decision) => {
+  decision.lockedAt = laterDuplicateLock.capturedAt;
+  decision.evaluatedAt = laterDuplicateLock.capturedAt;
+  decision.grade = "No Play";
+});
+for (const competingRows of [
+  [...r51Rows, laterUnlocked, laterDuplicateLock],
+  [laterDuplicateLock, laterUnlocked, ...r51Rows],
+]) {
+  const rendered = buildNflWeekOneHeldMemberFixture(competingRows).snapshot.games.find(
+    (game) => game.id === lockedGame.id,
+  );
+  assert.deepEqual(rendered, lockedGame, "earliest immutable public lock wins in both row orders over newer releases and duplicate locks");
+}
+const wrongR51Pair = structuredClone(r51Rows);
+wrongR51Pair[1]!.payload.decisions.evaluatedBets[0]!.decisionRelease = "nfl_v1_daily_edge_decision_2026_11_01_r55_relative_market_innovations";
+assert.throws(() => buildNflWeekOneHeldMemberFixture(wrongR51Pair), /coverage is 15\/16 games/,
+  "legacy admission requires the exact r51/r54 tuple, never a mixed release");
+const unlockedR51 = structuredClone(r51Rows);
+unlockedR51[1]!.stage = "unlocked";
+unlockedR51[1]!.payload.stage = "unlocked";
+assert.throws(() => buildNflWeekOneHeldMemberFixture(unlockedR51), /coverage is 15\/16 games/,
+  "an unlocked r51 row cannot cross the r52 release boundary");
+console.log("NFL r51 locked continuity: exact stored reader fields, release isolation and first-public-lock precedence passed");
+
 const currentCollectorSnapshot = buildNflWeekOneHeldMemberFixture(releaseTransitionRows).snapshot;
 for (const collectorRelease of [
   "nfl_forward_evidence_collector_2026_09_28_r16_injury_continuity",

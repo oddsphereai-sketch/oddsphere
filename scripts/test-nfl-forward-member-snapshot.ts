@@ -243,6 +243,20 @@ async function main() {
   assert.equal(storedPayload, movementContractPredecessor,
     "reading the locked movement-contract predecessor cannot write or replace its stored payload");
 
+  const relativeInnovationPredecessor = { ...snapshot,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r59_relative_market_innovations",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations",
+    fixture: { ...fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations" },
+  };
+  storedKey = ["nfl", "daily-edge", 2026, 1, relativeInnovationPredecessor.snapshotRelease,
+    relativeInnovationPredecessor.fixtureRelease, relativeInnovationPredecessor.memberRelease,
+    relativeInnovationPredecessor.decisionRelease].join("::");
+  storedPayload = relativeInnovationPredecessor;
+  assert.deepEqual(await readNflForwardMemberSnapshot({
+    client, season: 2026, week: 1, now: "2026-08-27T12:02:00.000Z",
+  }), relativeInnovationPredecessor, "r59 exact tuple remains readable before the r60 publication exists");
+
   const independentAxesPredecessor = {
     ...snapshot,
     snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r57_independent_market_axes",
