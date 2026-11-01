@@ -5,6 +5,7 @@ import {
   NFL_FORWARD_EVIDENCE_PREVIOUS_SCHEMA_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   hashNflForwardEvidencePayload,
+  normalizeNflForwardEvidenceForStorage,
   type NflForwardAnyEvidencePayload,
   type NflForwardEvidencePayload,
   type NflForwardStoredEvidence,
@@ -100,7 +101,11 @@ export async function appendNflForwardEvidence(args: {
       ("marketBrainRawParserInputs" in payload && payload.marketBrainRawParserInputs !== undefined)) {
       throw new Error("Research Market Brain sidecars are forbidden from authoritative NFL evidence writes.");
     }
-    const payloadSha256 = hashNflForwardEvidencePayload(payload);
+    // Hash precisely what JSON transport stores. Optional undefined object
+    // keys are omitted by transport but were encoded as null by stableJson.
+    // Never change historical hashing or mutate the caller's forecast object.
+    const storedPayload = normalizeNflForwardEvidenceForStorage(payload);
+    const payloadSha256 = hashNflForwardEvidencePayload(storedPayload);
     return {
       evidence_release: payload.schemaRelease,
       collector_release: payload.collectorRelease,
@@ -114,7 +119,7 @@ export async function appendNflForwardEvidence(args: {
       stage: payload.stage,
       captured_at: payload.capturedAt,
       cutoff_at: payload.cutoffAt,
-      payload,
+      payload: storedPayload,
       payload_sha256: payloadSha256,
       coverage: payload.coverage,
     };
@@ -147,8 +152,9 @@ function normalizeStoredRow(
   ) {
     throw new Error(`NFL evidence ${row.id} violates the immutable payload contract.`);
   }
-  const expectedHash = hashNflForwardEvidencePayload(payload);
-  if (expectedHash !== row.payload_sha256) throw new Error(`NFL evidence ${row.id} checksum mismatch.`);
+  if (!nflForwardEvidenceStoredHashMatches(payload, row.payload_sha256)) {
+    throw new Error(`NFL evidence ${row.id} checksum mismatch.`);
+  }
   return {
     id: row.id,
     providerGameId: row.provider_game_id,
@@ -158,4 +164,33 @@ function normalizeStoredRow(
     payloadSha256: row.payload_sha256,
     payload,
   };
+}
+
+/** Verify the exact r101 transport defect without changing a stored field. */
+export function nflForwardEvidenceStoredHashMatches(
+  payload: NflForwardAnyEvidencePayload,
+  storedHash: string,
+): boolean {
+  if (hashNflForwardEvidencePayload(payload) === storedHash) return true;
+  // The first r101 publication applied ML-only scores to two unlocked games
+  // whose upstream forecast lacked these OPTIONAL fields. The writer hashed
+  // undefined as null, then JSON transport omitted both keys. Matching the
+  // original digest with exactly these two null slots attests that defect;
+  // this is not permission to accept arbitrary corruption or reconstruct data.
+  if (!("outcomeForecast" in payload) || payload.stage !== "unlocked" ||
+      payload.decisions.modelPromotionStatus !== "nfl_v1_member_release_2026_11_01_r50_independent_market_axes" ||
+      payload.fullGameEvidenceInterpretation?.arbiterRelease !==
+        "nfl_full_game_evidence_arbiter_candidate_2026_11_01_r26_independent_market_axes" ||
+      payload.fullGameEvidenceInterpretation?.runtimeRelease !==
+        "nfl_full_game_evidence_runtime_2026_11_01_r11_independent_market_axes" ||
+      payload.decisions.evaluatedBets.length !== 3 ||
+      !payload.decisions.evaluatedBets.every((bet) =>
+        bet.calibrationRelease === "nfl_v1_daily_edge_calibration_2026_11_01_r44_independent_market_axes" &&
+        bet.decisionRelease === "nfl_v1_daily_edge_decision_2026_11_01_r53_independent_market_axes") ||
+      Object.hasOwn(payload.outcomeForecast, "marketEvidence") ||
+      Object.hasOwn(payload.outcomeForecast, "noWeightMarketReader")) return false;
+  const hashOnlyCopy = { ...payload, outcomeForecast: {
+    ...payload.outcomeForecast, marketEvidence: null, noWeightMarketReader: null,
+  } } as unknown as NflForwardAnyEvidencePayload;
+  return hashNflForwardEvidencePayload(hashOnlyCopy) === storedHash;
 }

@@ -23,7 +23,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_11_01_r11_independent_market_axes" as const;
+  "nfl_full_game_evidence_runtime_2026_11_01_r12_movement_contract_separation" as const;
 
 type Market = "moneyline" | "spread" | "total";
 
@@ -112,6 +112,7 @@ export function applyNflFullGameEvidenceRuntime(args: {
     expectedHomeMargin: arbitration.finalHomeMargin,
     expectedTotal: arbitration.finalTotal,
     marketInputPolicy: "target_excluded_continuous_residual",
+    preserveUnchangedAxes: true,
   });
   const outcome: NflV1WeekOneOutcomeForecast = {
     ...args.releasedForecast,

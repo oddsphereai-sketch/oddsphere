@@ -6,6 +6,40 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-31
 
+## NFL movement and contract separation — November 1 correction candidate
+
+Base: `b572163d335d7b51efe6c5b3af6e9514c8de2164` (PR908). Runtime identifiers:
+
+- `nfl_forward_evidence_writer_2026_11_01_r102_movement_contract_separation`
+- `nfl_v1_daily_edge_model_2026_11_01_r46_movement_contract_separation`
+- `nfl_v1_daily_edge_calibration_2026_11_01_r45_movement_contract_separation`
+- `nfl_v1_daily_edge_decision_2026_11_01_r54_movement_contract_separation`
+- `nfl_v1_grade_policy_2026_11_01_r54_movement_contract_separation`
+- `nfl_v1_member_release_2026_11_01_r51_movement_contract_separation`
+- `nfl_weekly_member_fixture_2026_11_01_r66_movement_contract_separation`
+- `nfl_forward_member_snapshot_2026_11_01_r58_movement_contract_separation`
+
+The reasoning spot
+check after that merge found that movement direction was wrongly compared with
+the bet side at the new handicap/Total. The candidate writer r102 uses model46,
+calibration45, decision/grade54, member51, fixture66 and snapshot58, all dated
+`2026_11_01` with suffix `movement_contract_separation`; arbiter27/runtime12.
+Ledger10 and state6 remain unchanged; target outcome26 uses fresh named pairs
+as numeric forecast evidence with per-market source clocks and deduplication.
+Its exact identifier is
+`nfl_target_excluded_market_outcome_2026_11_01_r26_named_paired_price_authority`.
+Chronology corroborates
+the market-derived coordinate relative to the independent score; winner, cover,
+Over/Under and grades are derived separately from the final distribution. Thus
+a strengthened favorite may win without covering its larger handicap, and a
+lower Total can still favor Over at the new line. Same-winner ML weakening and
+independent market-axis authority remain supported. No forced line crossing,
+new writer, provider call, lease, stake or locked-record mutation is introduced.
+Stored r57/r65/r50/r53 snapshots retain exact predecessor precedence. Publication
+requires focused/full checks, complete current-board reasoning and grade impact,
+fresh-base integration, protected PR and live writer/reader verification.
+Evidence: `docs/model-audits/2026-11-01-nfl-movement-contract-separation.md`.
+
 ## NFL independent market axes — November 1 release
 
 The owner-directed source-to-decision release uses sole writer

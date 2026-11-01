@@ -26,6 +26,7 @@ import {
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
   determineNflForwardCollectionNeed,
   hashNflForwardEvidencePayload,
+  normalizeNflForwardEvidenceForStorage,
   planNflForwardEvidenceCaptures,
   type NflForwardEvidencePayload,
   type NflForwardOperationalOpening,
@@ -151,7 +152,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_01_r101_independent_market_axes" as const;
+  "nfl_forward_evidence_writer_2026_11_01_r102_movement_contract_separation" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -898,15 +899,20 @@ export async function runNflForwardEvidenceWriter(args: {
       homeTeam: plan.game.home.abbreviation,
       build: (evaluationTargets) => {
     const excludedFamiliesByMarket = nflFullGameExcludedFamilies(evaluationTargets.evaluatedBets);
+    // Already captured named-book PAIRS are forecast evidence even though
+    // targetEligible:false correctly forbids offering them as executable bets.
+    // Anchor builders qualify each market's original source clock, exact line
+    // and distinct target-free family; execution lists below remain retail.
+    const forecastPriceBooks = [...comparableCurrentBooks, ...namedCurrentBooks];
     const axes = resolveNflTargetExcludedMarketAxes({
-      books: comparableCurrentBooks,
+      books: forecastPriceBooks,
       requireSameLineTotalPrices: true,
       marginExcludedSportsbooks: excludedFamiliesByMarket.moneyline,
       totalExcludedSportsbooks: excludedFamiliesByMarket.total,
       evaluatedAt: capturedAt,
     });
     const moneylineAnchor = resolveNflTargetExcludedMoneylineAnchor({
-      books: comparableCurrentBooks,
+      books: forecastPriceBooks,
       excludedSportsbooks: excludedFamiliesByMarket.moneyline,
       evaluatedAt: capturedAt,
     });
@@ -1319,7 +1325,7 @@ export async function runNflForwardEvidenceWriter(args: {
   args.auditJointImpact?.(jointImpactRows);
   args.auditSemanticImpact?.(semanticImpactRows);
   args.auditPayloads?.(payloads);
-  const authoritativePayloads = payloads.map(withoutMarketBrainShadow);
+  const authoritativePayloads = payloads.map(withoutMarketBrainShadow).map(normalizeNflForwardEvidenceForStorage);
   const write = await appendNflForwardEvidence({
     client: args.client,
     runId: args.runId,

@@ -27,7 +27,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_11_01_r25_market_axis_evidence" as const;
+  "nfl_target_excluded_market_outcome_2026_11_01_r26_named_paired_price_authority" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -497,20 +497,19 @@ export function resolveNflTargetExcludedMarketAxes(args: NflTargetExcludedMarket
   const minimumFamilies = args.minimumFamilies ?? 3;
   const marginExcluded = normalizedSet(args.marginExcludedSportsbooks);
   const totalExcluded = normalizedSet(args.totalExcludedSportsbooks);
-  const books = distinctLatestBooks(args.books);
-  const marginBooks = books.filter((book) =>
+  const marginBooks = distinctLatestMarketBooks(args.books.filter((book) =>
     !marginExcluded.has(normalizeBook(book.sportsbook)) &&
     book.spread !== null && Number.isFinite(book.spread.homeLine) &&
     book.spread.awayLine === -book.spread.homeLine &&
     validPair(book.spread.homePrice, book.spread.awayPrice) &&
-    isFresh(book.observedAt, evaluatedAt, freshnessMs)
-  );
-  const totalBooks = books.filter((book) =>
+    isFresh(marketObservedAt(book, "spread"), evaluatedAt, freshnessMs)
+  ), "spread");
+  const totalBooks = distinctLatestMarketBooks(args.books.filter((book) =>
     !totalExcluded.has(normalizeBook(book.sportsbook)) &&
     book.total !== null && Number.isFinite(book.total.line) && book.total.line > 0 &&
     validPair(book.total.overPrice, book.total.underPrice) &&
-    isFresh(book.observedAt, evaluatedAt, freshnessMs)
-  );
+    isFresh(marketObservedAt(book, "total"), evaluatedAt, freshnessMs)
+  ), "total");
   const marginPriceBooks = exactLineCohort(marginBooks, (book) => book.spread!.homeLine, minimumFamilies);
   const totalPriceBooks = exactLineCohort(totalBooks, (book) => book.total!.line, minimumFamilies);
   return {
@@ -584,10 +583,10 @@ export function resolveNflTargetExcludedMoneylineAnchor(args: {
   const freshnessMs = (args.freshnessMinutes ?? 120) * 60_000;
   const minimumFamilies = args.minimumFamilies ?? 3;
   const excluded = normalizedSet(args.excludedSportsbooks);
-  const books = distinctLatestBooks(args.books).filter((book) =>
+  const books = distinctLatestMarketBooks(args.books.filter((book) =>
     !excluded.has(normalizeBook(book.sportsbook)) && book.moneyline !== null &&
     validPair(book.moneyline.homePrice, book.moneyline.awayPrice) &&
-    isFresh(book.observedAt, evaluatedAt, freshnessMs));
+    isFresh(marketObservedAt(book, "moneyline"), evaluatedAt, freshnessMs)), "moneyline");
   if (books.length < minimumFamilies) return null;
   return { familyCount: books.length, homeFairProbability: median(books.map((book) => twoSidedFair(
     book.moneyline!.homePrice,
@@ -677,15 +676,28 @@ export function targetContractPlaybookSplits(
   };
 }
 
-function distinctLatestBooks(books: NflPreviewBookOdds[]): NflPreviewBookOdds[] {
+/** Deduplicate only after validating this axis; partial rows cannot erase another market. */
+function distinctLatestMarketBooks(
+  books: NflPreviewBookOdds[],
+  market: "moneyline" | "spread" | "total",
+): NflPreviewBookOdds[] {
   const result = new Map<string, NflPreviewBookOdds>();
   for (const book of books) {
     const family = normalizeBook(book.sportsbook);
     if (!family) continue;
     const prior = result.get(family);
-    if (!prior || Date.parse(book.observedAt) > Date.parse(prior.observedAt)) result.set(family, book);
+    const observedAt = Date.parse(marketObservedAt(book, market));
+    const priorObservedAt = prior ? Date.parse(marketObservedAt(prior, market)) : -Infinity;
+    // The entire paired observation wins. Never splice two opposing prices.
+    // Resolve equal source-clock observations deterministically, independent of input order.
+    if (!prior || observedAt > priorObservedAt || (observedAt === priorObservedAt &&
+        JSON.stringify(book[market]) < JSON.stringify(prior[market]))) result.set(family, book);
   }
   return [...result.values()];
+}
+
+function marketObservedAt(book: NflPreviewBookOdds, market: "moneyline" | "spread" | "total"): string {
+  return book.marketObservedAt?.[market] ?? book.observedAt;
 }
 
 function normalizedSet(values: Iterable<string>): Set<string> {

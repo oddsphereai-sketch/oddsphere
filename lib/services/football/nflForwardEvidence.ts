@@ -229,7 +229,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_11_01_r47_explicit_episode_resolution"
       | "nfl_v1_member_release_2026_11_01_r48_evaluated_contract_resolution"
       | "nfl_v1_member_release_2026_11_01_r49_source_to_decision_contract"
-      | "nfl_v1_member_release_2026_11_01_r50_independent_market_axes";
+      | "nfl_v1_member_release_2026_11_01_r50_independent_market_axes"
+      | "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;
@@ -475,6 +476,11 @@ export function hashNflForwardEvidencePayload(payload: NflForwardAnyEvidencePayl
   // contain the sidecar, so the same function preserves both eras without
   // reinterpreting an immutable stored row.
   return createHash("sha256").update(stableJson(payload)).digest("hex");
+}
+
+/** New writes and all their downstream references use the exact JSON transport shape. */
+export function normalizeNflForwardEvidenceForStorage(payload: NflForwardEvidencePayload): NflForwardEvidencePayload {
+  return JSON.parse(JSON.stringify(payload)) as NflForwardEvidencePayload;
 }
 
 function groupByGame(rows: NflForwardStoredEvidence[]): Map<string, NflForwardStoredEvidence[]> {
