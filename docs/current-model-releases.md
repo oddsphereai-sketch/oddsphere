@@ -6,9 +6,9 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-31
 
-## NFL independent market axes — November 1, private
+## NFL independent market axes — November 1 release
 
-The final source-to-decision candidate is sole writer
+The owner-directed source-to-decision release uses sole writer
 `nfl_forward_evidence_writer_2026_11_01_r101_independent_market_axes`;
 model / calibration / decision / grade / member / fixture / snapshot are
 `nfl_v1_daily_edge_model_2026_11_01_r45_independent_market_axes` /
@@ -23,7 +23,10 @@ price authority are retained independently, including held-line price changes;
 the arbiter reconciles one physically valid score, preserving the unsupported
 coordinate. Target outcome r25, state r6, unified Total r2 and shared validator
 r14 remain in the same release family. Prior r100 is private audit evidence.
-Evidence and rollback: `docs/model-audits/2026-11-01-nfl-source-to-decision-contract.md`.
+Exact-head checks and a repeated 13-game/39-market no-write prelaunch pass are
+complete. Protected publication and production writer/reader proof determine the
+activation time; no prior lock is relabeled. Evidence and rollback:
+`docs/model-audits/2026-11-01-nfl-source-to-decision-contract.md`.
 
 ## NFL source-to-decision contract repair — November 1, private
 

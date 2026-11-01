@@ -121,3 +121,20 @@ or otherwise unqualified split scopes stay context-only; no source data or
 medical clearance is fabricated. Current code is private until protected PR
 publication and live writer/reader/lease/lock proof; this report is not a claim
 that the deployed reader changed or that future outcomes are known.
+
+## Prelaunch repeat and publication gate
+
+The exact r101 build repeated the strict check at `2026-11-01T12:42:20.977Z`:
+13/13 eligible games, 39/39 markets, zero contract findings/game failures, all
+targets stable, and identical 8/2/11/18 grade counts. Source limitations remain
+as reported above. Required hosted current-main-ancestor and postgres-proof
+checks passed on the tested head.
+
+The GitHub API installation cannot read full protection settings (403), but the
+owner's signed-in repository settings were inspected read-only at
+`https://github.com/oddsphereai-sketch/oddsphere/settings/branch_protection_rules/82075762`.
+The saved main rule requires PRs, status checks including current-main-ancestor,
+branches to be up to date, and no bypass even for administrators. Force pushes
+and deletions are disabled. No setting was changed. This resolves the earlier
+verification blocker. Protected merge and post-deployment live proof follow;
+this prelaunch record does not itself assert production activation.
