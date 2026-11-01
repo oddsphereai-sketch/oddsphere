@@ -181,6 +181,7 @@ export default function ActualDailyEdgePreview({
   history,
   pitcherFirstInningHistory,
   initialAvailability = {},
+  deferredCbbGameIds = [],
   deferredCfbGameIds = [],
   deferredNflGameIds = [],
   sport,
@@ -198,6 +199,7 @@ export default function ActualDailyEdgePreview({
   history: PreviewHistoryByTeam;
   pitcherFirstInningHistory: PreviewPitcherFirstInningByGame;
   initialAvailability?: PreviewAvailabilityByGame;
+  deferredCbbGameIds?: string[];
   deferredCfbGameIds?: string[];
   deferredNflGameIds?: string[];
   sport: Sport;
@@ -270,13 +272,13 @@ export default function ActualDailyEdgePreview({
   const [sample, setSample] = useState<5 | 10>(10);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(initialReaderRequested);
   const [availability, setAvailability] = useState<PreviewAvailabilityByGame>(initialAvailability);
-  const [footballGameDetails, setFootballGameDetails] = useState<Record<string, DailyEdgeGameDto>>({});
+  const [footballGameDetails, setFootballGameDetails] = useState<Record<string, { game: DailyEdgeGameDto; asOf: string }>>({});
   const footballDetailRequests = useRef(new Map<string, Promise<DailyEdgeGameDto | null>>());
   const footballSelectionRequest = useRef(0);
   const [footballReaderRequest, setFootballReaderRequest] = useState<{ gameId: string; status: "loading" | "failed" } | null>(null);
   const deferredFootballGames = useMemo(
-    () => new Set(sport === "nfl" ? deferredNflGameIds : sport === "cfb" ? deferredCfbGameIds : []),
-    [deferredCfbGameIds, deferredNflGameIds, sport],
+    () => new Set(sport === "nfl" ? deferredNflGameIds : sport === "cfb" ? deferredCfbGameIds : sport === "cbb" ? deferredCbbGameIds : []),
+    [deferredCbbGameIds, deferredCfbGameIds, deferredNflGameIds, sport],
   );
   const [sportActivity, setSportActivity] = useState<DailyEdgeSportActivityMap>({});
   const readerRef = useRef<HTMLDivElement>(null);
@@ -409,9 +411,10 @@ export default function ActualDailyEdgePreview({
   const game = useMemo(() => {
     const boardGame = (sport === "cbb" ? scopedGames : displaySnapshot.games)
       .find((candidate) => candidate.id === gameId) ?? scopedGames[0];
-    return boardGame ? footballGameDetails[boardGame.id] ?? boardGame : undefined;
-  }, [footballGameDetails, displaySnapshot.games, gameId, scopedGames, sport]);
-  const readerDetailState = footballReaderRequest?.gameId === game?.id && !footballGameDetails[game?.id ?? ""]
+    const detail = boardGame ? footballGameDetails[boardGame.id] : undefined;
+    return boardGame ? detail?.asOf === displaySnapshot.as_of && deferredFootballGames.has(boardGame.id) ? detail.game : boardGame : undefined;
+  }, [footballGameDetails, displaySnapshot.games, displaySnapshot.as_of, deferredFootballGames, gameId, scopedGames, sport]);
+  const readerDetailState = footballReaderRequest?.gameId === game?.id && footballGameDetails[game?.id ?? ""]?.asOf !== displaySnapshot.as_of
     ? footballReaderRequest?.status ?? null : null;
 
   useEffect(() => {
@@ -486,30 +489,33 @@ export default function ActualDailyEdgePreview({
 
   function loadFootballGameDetail(gameIdToLoad: string): Promise<DailyEdgeGameDto | null> {
     const loaded = footballGameDetails[gameIdToLoad];
-    if (loaded) return Promise.resolve(loaded);
-    if ((sport !== "cfb" && sport !== "nfl") || !deferredFootballGames.has(gameIdToLoad)) {
+    if (loaded?.asOf === displaySnapshot.as_of) return Promise.resolve(loaded.game);
+    if ((sport !== "cfb" && sport !== "nfl" && sport !== "cbb") || !deferredFootballGames.has(gameIdToLoad)) {
       return Promise.resolve(null);
     }
-    const existing = footballDetailRequests.current.get(gameIdToLoad);
+    const detailAsOf = displaySnapshot.as_of;
+    const requestKey = `${detailAsOf}:${gameIdToLoad}`;
+    const existing = footballDetailRequests.current.get(requestKey);
     if (existing) return existing;
     const params = new URLSearchParams({ game: gameIdToLoad });
     const detailEndpoint = sport === "nfl"
       ? "/api/lab/nfl-game-detail"
+      : sport === "cbb" ? "/api/lab/cbb-game-detail"
       : "/api/lab/cfb-game-detail";
     const request = fetch(`${detailEndpoint}?${params.toString()}`, { signal: AbortSignal.timeout(10_000) })
       .then((response) => response.ok ? response.json() : null)
       .then((body: { game?: DailyEdgeGameDto; availability?: DailyEdgeGameAvailability | null } | null) => {
         if (!body?.game || body.game.id !== gameIdToLoad) return null;
         const normalized = normalizeCandidateGame(body.game, sport);
-        setFootballGameDetails((current) => ({ ...current, [gameIdToLoad]: normalized }));
+        setFootballGameDetails((current) => ({ ...current, [gameIdToLoad]: { game: normalized, asOf: detailAsOf } }));
         if (body.availability) {
           setAvailability((current) => ({ ...current, [gameIdToLoad]: body.availability! }));
         }
         return normalized;
       })
       .catch(() => null)
-      .finally(() => footballDetailRequests.current.delete(gameIdToLoad));
-    footballDetailRequests.current.set(gameIdToLoad, request);
+      .finally(() => footballDetailRequests.current.delete(requestKey));
+    footballDetailRequests.current.set(requestKey, request);
     return request;
   }
 
@@ -519,7 +525,7 @@ export default function ActualDailyEdgePreview({
 
   async function selectGame(next: DailyEdgeGameDto, nextMarket: MarketKey = primaryMarket(next)) {
     const requestId = ++footballSelectionRequest.current;
-    const needsDetail = (sport === "cfb" || sport === "nfl") && deferredFootballGames.has(next.id) && !footballGameDetails[next.id];
+    const needsDetail = (sport === "cfb" || sport === "nfl" || sport === "cbb") && deferredFootballGames.has(next.id) && footballGameDetails[next.id]?.asOf !== displaySnapshot.as_of;
     setFootballReaderRequest(needsDetail ? { gameId: next.id, status: "loading" } : null);
     // A tap opens the reader immediately; deferred evidence must not hold the
     // interaction hostage or make a second tap necessary.

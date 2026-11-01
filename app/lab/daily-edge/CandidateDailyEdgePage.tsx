@@ -184,7 +184,7 @@ export default async function CandidateDailyEdgePage({
       // Optional, display-only evidence. A provider/observation outage never
       // rewrites the sole writer's score, grade, pick, or locked public record.
       snapshot = await import("@/lib/services/cbb/cbbReaderMarketEvidence")
-        .then(({ overlayCbbReaderMarketEvidence }) => overlayCbbReaderMarketEvidence(snapshot))
+        .then(({ overlayCbbReaderMarketEvidence }) => overlayCbbReaderMarketEvidence(snapshot, { gameIds: requestedGame ? [requestedGame] : [] }))
         .catch(() => snapshot);
     }
   }
@@ -216,6 +216,9 @@ export default async function CandidateDailyEdgePage({
     snapshot = (await import("@/lib/services/dailyEdge/weeklyReaderLifecycle"))
       .filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
+  const deferredCbbGameIds = cbbPublicationEnabled
+    ? snapshot.games.filter((game) => game.id !== requestedGame).map((game) => game.id)
+    : [];
   const initialCfbReaderGameId = cfbFixture && requestedGame && snapshot.games.some((game) => game.id === requestedGame)
     ? requestedGame
     : null;
@@ -328,6 +331,7 @@ export default async function CandidateDailyEdgePage({
         history={history}
         pitcherFirstInningHistory={pitcherFirstInningHistory}
         initialAvailability={visibleNflAvailability}
+        deferredCbbGameIds={deferredCbbGameIds}
         deferredCfbGameIds={cfbBoardProjection?.deferredGameIds}
         deferredNflGameIds={nflBoardProjection?.deferredGameIds}
         sport={sport}

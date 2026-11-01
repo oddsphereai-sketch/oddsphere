@@ -504,6 +504,31 @@ forward grading remain required. Exact locked payloads retain precedence.
   exact precedence. Public splits appear only if a provider actually returns
   a verified complete two-sided pair; no percentages are inferred from odds.
 
+## CBB November 1 locked-game refresh continuity and market display
+
+- Sole publisher: `cbb_member_pipeline_2026_11_01_r5_locked_refresh_continuity`.
+  Only games still eligible for a new pre-lock candidate enter the unchanged
+  r2 forecast batch. Started/locked games retain their stored member record;
+  they no longer trigger the future-state guard and abort the entire refresh.
+- Fixture seed: `cbb_fixture_seed_2026_11_01_r5_captured_intraday_sync` reuses
+  the same leased writer's captured rows to sync changed canonical fixtures
+  before forecasting. No extra BDL request or independent writer is added.
+  Exact team IDs, member locks and tracking locks retain the seeder's guards.
+- Tracking mirror: `cbb_tracking_writer_2026_11_01_r2_canonical_timestamp_instants`.
+  Canonical fixture and existing lock timestamps compare exact finite instants,
+  accepting equivalent PostgreSQL `+00:00` / `Z` representations. Different
+  instants, prices, picks, grades, releases and duplicate markets still fail.
+  Existing locked prediction/tracking payloads are never rewritten.
+- Display collector: `cbb_market_tracking_2026_11_01_r2_exact_exchange_names_provider_date`.
+  Exact future-open exchange institution aliases and independently encoded
+  midnight event dates restore chart identity without moving fixtures or
+  supplying model inputs. CBB reader evidence hydrates only the selected game.
+- Independent model, calibration, grade, stake, selected-book policy, sole writer,
+  sport-scoped prediction lease and provider cadence are unchanged. No grade
+  demotion/promotion rule changes; same-input unlocked forecast/grade impact is
+  zero. See `docs/college-reader-market-repair-2026-11-01.md` for validation,
+  source coverage and operational failure evidence.
+
 ## College basketball November 1 staged launch
 
 - Owner approved going live on October 30. The sole leased CBB writer published

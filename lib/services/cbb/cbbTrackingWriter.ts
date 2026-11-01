@@ -6,7 +6,12 @@ import { CBB_SCORE_RESEARCH_RELEASE } from "@/lib/cbb/scoreResearch";
 import { CBB_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
 import type { CbbStoredMemberGame } from "./cbbMemberGameStore";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_10_29_r1_locked_only" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_01_r2_canonical_timestamp_instants" as const;
+
+function sameInstant(left:string|null|undefined,right:string):boolean {
+  const first=Date.parse(left??""),second=Date.parse(right);
+  return Number.isFinite(first)&&Number.isFinite(second)&&first===second;
+}
 
 /** Mirror the already-frozen public record into shared official tracking.
  * The member snapshot, never a new model calculation, is the authority. */
@@ -20,7 +25,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
   const { data: fixture, error: fixtureError } = await client.from("games")
     .select("id,external_id,game_date,slate_date").eq("sport", "cbb")
     .eq("external_id", snapshot.gameId).maybeSingle();
-  if (fixtureError || !fixture || fixture.game_date !== snapshot.startsAt ||
+  if (fixtureError || !fixture || !sameInstant(fixture.game_date,snapshot.startsAt) ||
     fixture.slate_date !== computeSlateDate("cbb", snapshot.startsAt)) {
     throw new Error(`CBB tracking canonical fixture missing or changed: ${fixtureError?.message ?? snapshot.gameId}`);
   }
@@ -45,7 +50,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
     const prior = existing.get(row.market)?.[0];
     if (prior) {
       if (prior.pick !== side || prior.side !== side || prior.line_value !== line ||
-        prior.odds_american !== row.price || prior.play_grade !== grade || prior.locked_at !== lock ||
+        prior.odds_american !== row.price || prior.play_grade !== grade || !sameInstant(prior.locked_at,lock) ||
         prior.model_version !== CBB_SCORE_RESEARCH_RELEASE ||
         prior.calibration_version !== CBB_PROVISIONAL_GRADE_RELEASE) {
         throw new Error(`CBB immutable tracking row conflicts with locked member market ${row.market}`);
