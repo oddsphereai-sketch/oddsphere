@@ -77,9 +77,11 @@ assert.ok(Math.abs(base.expectedHomeScore - base.expectedAwayScore - 0.3) < 1e-9
 const wrongBook = readNflJointMarketEpisode({
   ...args, spread: { ...spread, source: "pinnacle" },
 });
-assert.equal(wrongBook.status, "unidentified");
-assert.equal(wrongBook.reason, "cross_book_margin_synthesis_rejected");
-assert.deepEqual(wrongBook.outcome, base);
+assert.equal(wrongBook.status, "applied");
+assert.equal(wrongBook.axisReasons?.margin, "cross_book_margin_synthesis_rejected");
+assert.deepEqual(wrongBook.outcome.marginDistribution, base.marginDistribution);
+assert.ok(wrongBook.outcome.expectedHomeScore + wrongBook.outcome.expectedAwayScore > total,
+  "unidentified margin evidence cannot cancel a separately valid Total");
 
 const staleKnowledge = readNflJointMarketEpisode({
   ...args, statisticalKnowledgeAt: "2026-10-31T14:00:00.000Z",
@@ -214,3 +216,39 @@ assert.deepEqual(noDoubleApply.outcome, alreadyAdjustedMargin,
   "a previously adjusted margin cannot receive the price episode a second time");
 
 console.log("NFL joint margin, total, and moneyline episode read tests passed");
+
+const unknownOverlap = readNflJointMarketEpisode({ ...args, statisticalKnowledgeAt: null,
+  informationOverlap: "not_attested" });
+assert.equal(unknownOverlap.status, "applied");
+assert.equal(unknownOverlap.informationOverlap, "not_attested");
+assert.equal(readNflJointMarketEpisode({ ...args, statisticalKnowledgeAt: null }).status, "unidentified",
+  "unknown statistical timing requires an explicit overlap acknowledgment");
+const invalidTotal = readNflJointMarketEpisode({ ...args, total: {
+  ...gameTotal, currentFirstFairProbability: 1,
+} });
+assert.equal(invalidTotal.status, "applied");
+assert.match(invalidTotal.axisReasons?.total ?? "", /invalid_line_episode/);
+assert.deepEqual(invalidTotal.outcome.totalDistribution, base.totalDistribution);
+assert.ok(invalidTotal.outcome.homeWinProbability < base.homeWinProbability);
+const invalidMargin = readNflJointMarketEpisode({ ...args, moneyline: {
+  ...moneyline, currentHomeFairProbability: 1,
+} });
+assert.equal(invalidMargin.status, "applied");
+assert.match(invalidMargin.axisReasons?.margin ?? "", /invalid_probability_or_score_law/);
+assert.deepEqual(invalidMargin.outcome.marginDistribution, base.marginDistribution);
+assert.ok(invalidMargin.outcome.expectedHomeScore + invalidMargin.outcome.expectedAwayScore > total);
+const unchanged = readNflJointMarketEpisode({ ...args,
+  moneyline: { ...moneyline, currentHomeFairProbability: moneyline.openingHomeFairProbability },
+  total: { ...gameTotal, currentNumber: gameTotal.openingNumber },
+});
+assert.equal(unchanged.status, "neutral");
+assert.strictEqual(unchanged.outcome, base, "unchanged episodes retain the exact original forecast object");
+const tiny = readNflJointMarketEpisode({ ...args, spread: null, total: null,
+  moneyline: { ...moneyline, currentHomeFairProbability: moneyline.openingHomeFairProbability - 1e-8 },
+});
+assert.equal(tiny.status, "applied");
+assert.ok(tiny.outcome.homeWinProbability < base.homeWinProbability);
+assert.ok(base.homeWinProbability - tiny.outcome.homeWinProbability < 1e-6,
+  "tiny economic moves produce tiny probability changes, without an activation floor");
+assert.deepEqual(tiny.outcome.totalDistribution, base.totalDistribution);
+console.log("NFL joint episode: explicit unknown overlap, independent axis failures and exact unchanged laws passed");

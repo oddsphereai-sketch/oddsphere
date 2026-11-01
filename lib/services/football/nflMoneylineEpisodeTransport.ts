@@ -5,13 +5,33 @@ import {
   type NflV1WeekOneOutcomeForecast,
 } from "./nflV1WeekOneOutcome";
 
+/** Stored context is admitted only with an explicit exact canonical-event attestation.
+ * The adapter must preserve the actual source provider and original per-market quote clock.
+ */
+export type NflEpisodeHistoryBook = NflPreviewBookOdds & {
+  storedCanonicalEvent?: {
+    provenance: "stored_context_capture";
+    canonicalGameId: string;
+    sourceProvider: "sharpapi" | "owls" | "balldontlie";
+    sourceEventId: string | null;
+    sourceObservedAt: string;
+  };
+};
+export type NflEpisodeSourceProvenance = {
+  provider: "sharpapi" | "owls" | "balldontlie";
+  providerEventId: string | null;
+  observedAt: string;
+  identity: "raw_exact_provider_event" | "stored_exact_canonical_event";
+};
+
 export const NFL_MONEYLINE_EPISODE_TRANSPORT_CANDIDATE_RELEASE =
-  "nfl_moneyline_episode_transport_candidate_2026_10_31_r1" as const;
+  "nfl_moneyline_episode_transport_candidate_2026_11_01_r2_relative_innovation_law" as const;
 
 export type NflMoneylineEpisodeTransport = {
   release: typeof NFL_MONEYLINE_EPISODE_TRANSPORT_CANDIDATE_RELEASE;
   source: string;
-  statisticalKnowledgeAt: string;
+  statisticalKnowledgeAt: string | null;
+  informationOverlap?: "not_attested";
   openingAt: string;
   currentAt: string;
   status: "transported" | "unchanged" | "unidentified";
@@ -26,6 +46,8 @@ export type NflMoneylineEpisodeTransport = {
 
 export type NflNamedMoneylineEpisode = {
   source: string;
+  sourceProvenance?: { opening: NflEpisodeSourceProvenance; current: NflEpisodeSourceProvenance };
+  informationOverlap?: "not_attested";
   openingAt: string;
   currentAt: string;
   openingHomeFairProbability: number;
@@ -33,6 +55,8 @@ export type NflNamedMoneylineEpisode = {
 };
 
 export type NflPricedLineEpisode = {
+  sourceProvenance?: { opening: NflEpisodeSourceProvenance; current: NflEpisodeSourceProvenance };
+  informationOverlap?: "not_attested";
   market: "spread" | "total";
   source: string;
   openingAt: string;
@@ -50,6 +74,7 @@ export type NflPricedLineTransport = {
   reason: string;
   market: "spread" | "total";
   source: string;
+  informationOverlap?: "not_attested";
   statisticalMean: number;
   finalMean: number;
   openingImpliedMean: number | null;
@@ -65,7 +90,8 @@ export type NflPricedLineTransport = {
  */
 export function transportNflPricedLineEpisode(args: {
   statisticalForecast: NflV1WeekOneOutcomeForecast;
-  statisticalKnowledgeAt: string;
+  statisticalKnowledgeAt: string | null;
+  informationOverlap?: "not_attested";
   episode: NflPricedLineEpisode;
 }): NflPricedLineTransport {
   const forecast = args.statisticalForecast;
@@ -73,21 +99,24 @@ export function transportNflPricedLineEpisode(args: {
   const margin = forecast.expectedHomeScore - forecast.expectedAwayScore;
   const total = forecast.expectedHomeScore + forecast.expectedAwayScore;
   const statisticalMean = episode.market === "spread" ? margin : total;
-  const base = { market: episode.market, source: episode.source, statisticalMean };
+  const base = { market: episode.market, source: episode.source, statisticalMean,
+    ...(args.statisticalKnowledgeAt === null && args.informationOverlap === "not_attested"
+      ? { informationOverlap: "not_attested" as const } : {}) };
   const unidentified = (reason: string): NflPricedLineTransport => ({
     ...base, status: "unidentified", reason, finalMean: statisticalMean,
     openingImpliedMean: null, currentImpliedMean: null,
   });
   const openAt = Date.parse(episode.openingAt);
   const currentAt = Date.parse(episode.currentAt);
-  const knowledgeAt = Date.parse(args.statisticalKnowledgeAt);
-  if (!episode.source.trim() || ![openAt, currentAt, knowledgeAt, episode.openingNumber,
+  const knowledgeAt = args.statisticalKnowledgeAt === null ? NaN : Date.parse(args.statisticalKnowledgeAt);
+  const unattested = args.statisticalKnowledgeAt === null && args.informationOverlap === "not_attested";
+  if ((!unattested && !Number.isFinite(knowledgeAt)) || !episode.source.trim() || ![openAt, currentAt, episode.openingNumber,
       episode.currentNumber, episode.openingFirstFairProbability,
       episode.currentFirstFairProbability].every(Number.isFinite) ||
       openAt >= currentAt || episode.openingFirstFairProbability <= 0 ||
       episode.openingFirstFairProbability >= 1 || episode.currentFirstFairProbability <= 0 ||
       episode.currentFirstFairProbability >= 1) return unidentified("invalid_line_episode");
-  if (knowledgeAt > openAt) return unidentified("episode_overlaps_statistical_knowledge");
+  if (!unattested && knowledgeAt > openAt) return unidentified("episode_overlaps_statistical_knowledge");
   if (episode.openingNumber === episode.currentNumber &&
       episode.openingFirstFairProbability === episode.currentFirstFairProbability) {
     return {
@@ -154,29 +183,35 @@ function impliedMeanForLineQuote(args: {
 
 /** Select only the still-new portion of one physical book's price history. */
 export function selectNflNamedMoneylineEpisodeAfterKnowledge(args: {
-  history: NflPreviewBookOdds[];
+  history: NflEpisodeHistoryBook[];
   sportsbook: string;
   providerGameId: string;
-  statisticalKnowledgeAt: string;
+  statisticalKnowledgeAt: string | null;
+  informationOverlap?: "not_attested";
   evaluatedAt: string;
+  gameStartsAt?: string;
 }): NflNamedMoneylineEpisode | null {
-  const knowledgeAt = Date.parse(args.statisticalKnowledgeAt);
+  const knowledgeAt = args.statisticalKnowledgeAt === null ? NaN : Date.parse(args.statisticalKnowledgeAt);
+  const unattested = args.statisticalKnowledgeAt === null && args.informationOverlap === "not_attested";
   const evaluatedAt = Date.parse(args.evaluatedAt);
-  if (!Number.isFinite(knowledgeAt) || !Number.isFinite(evaluatedAt) || knowledgeAt >= evaluatedAt) return null;
+  const startsAt = args.gameStartsAt === undefined ? Infinity : Date.parse(args.gameStartsAt);
+  if ((!unattested && (!Number.isFinite(knowledgeAt) || knowledgeAt >= evaluatedAt)) ||
+      !Number.isFinite(evaluatedAt) || Number.isNaN(startsAt) || evaluatedAt >= startsAt) return null;
   const source = args.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "");
   if (source !== "circa" && source !== "pinnacle") return null;
   const admitted = args.history.flatMap((quote) => {
-    if (quote.providerGameId !== args.providerGameId || quote.provider !== "owls" ||
-        quote.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "") !== source ||
-        !quote.providerEventId || !quote.moneyline) return [];
-    const observedAt = quote.marketObservedAt?.moneyline ?? quote.observedAt;
+    if (quote.providerGameId !== args.providerGameId ||
+        quote.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "") !== source || !quote.moneyline) return [];
+    const provenance = episodeQuoteProvenance(quote, "moneyline", args.providerGameId);
+    if (!provenance) return [];
+    const observedAt = provenance.observedAt;
     const instant = Date.parse(observedAt);
     const fair = twoSidedFairHome(quote.moneyline.homePrice, quote.moneyline.awayPrice);
-    return Number.isFinite(instant) && instant >= knowledgeAt && instant <= evaluatedAt && fair !== null
-      ? [{ observedAt: new Date(instant).toISOString(), instant, eventId: quote.providerEventId, fair }]
+    return Number.isFinite(instant) && (unattested || instant >= knowledgeAt) && instant <= evaluatedAt && instant < startsAt && fair !== null
+      ? [{ observedAt: new Date(instant).toISOString(), instant, provenance, fair }]
       : [];
   }).sort((first, second) => first.instant - second.instant);
-  if (admitted.length < 2 || new Set(admitted.map((item) => item.eventId)).size !== 1) return null;
+  if (admitted.length < 2 || conflictingProviderEventIds(admitted)) return null;
   const byTime = new Map<number, number>();
   for (const item of admitted) {
     const prior = byTime.get(item.instant);
@@ -185,8 +220,10 @@ export function selectNflNamedMoneylineEpisodeAfterKnowledge(args: {
   }
   const opening = admitted[0]!;
   const current = admitted.at(-1)!;
-  return opening.instant < current.instant ? {
+  return opening.instant < current.instant && evaluatedAt - current.instant <= 120 * 60_000 ? {
     source, openingAt: opening.observedAt, currentAt: current.observedAt,
+    sourceProvenance: { opening: opening.provenance, current: current.provenance },
+    ...(unattested ? { informationOverlap: "not_attested" as const } : {}),
     openingHomeFairProbability: opening.fair,
     currentHomeFairProbability: current.fair,
   } : null;
@@ -194,37 +231,44 @@ export function selectNflNamedMoneylineEpisodeAfterKnowledge(args: {
 
 /** Select one real, exact-game, same-book priced-line episode after the statistical input. */
 export function selectNflNamedPricedLineEpisodeAfterKnowledge(args: {
-  history: NflPreviewBookOdds[];
+  history: NflEpisodeHistoryBook[];
   market: "spread" | "total";
   sportsbook: string;
   providerGameId: string;
-  statisticalKnowledgeAt: string;
+  statisticalKnowledgeAt: string | null;
+  informationOverlap?: "not_attested";
   evaluatedAt: string;
+  gameStartsAt?: string;
 }): NflPricedLineEpisode | null {
-  const knowledgeAt = Date.parse(args.statisticalKnowledgeAt);
+  const knowledgeAt = args.statisticalKnowledgeAt === null ? NaN : Date.parse(args.statisticalKnowledgeAt);
+  const unattested = args.statisticalKnowledgeAt === null && args.informationOverlap === "not_attested";
   const evaluatedAt = Date.parse(args.evaluatedAt);
-  if (!Number.isFinite(knowledgeAt) || !Number.isFinite(evaluatedAt) || knowledgeAt >= evaluatedAt) return null;
+  const startsAt = args.gameStartsAt === undefined ? Infinity : Date.parse(args.gameStartsAt);
+  if ((!unattested && (!Number.isFinite(knowledgeAt) || knowledgeAt >= evaluatedAt)) ||
+      !Number.isFinite(evaluatedAt) || Number.isNaN(startsAt) || evaluatedAt >= startsAt) return null;
   const source = args.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "");
   if (source !== "circa" && source !== "pinnacle") return null;
   const admitted = args.history.flatMap((quote) => {
-    if (quote.providerGameId !== args.providerGameId || quote.provider !== "owls" ||
-        quote.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "") !== source ||
-        !quote.providerEventId) return [];
+    if (quote.providerGameId !== args.providerGameId ||
+        quote.sportsbook.toLowerCase().replace(/[^a-z0-9]+/g, "") !== source) return [];
     const market = quote[args.market];
     if (!market) return [];
-    const observedAt = quote.marketObservedAt?.[args.market] ?? quote.observedAt;
+    const provenance = episodeQuoteProvenance(quote, args.market, args.providerGameId);
+    if (!provenance) return [];
+    const observedAt = provenance.observedAt;
     const instant = Date.parse(observedAt);
     const number = args.market === "spread" ? -(quote.spread?.homeLine ?? NaN) : quote.total?.line ?? NaN;
     const fair = args.market === "spread"
       ? twoSidedFairHome(quote.spread!.homePrice, quote.spread!.awayPrice)
       : twoSidedFairHome(quote.total!.overPrice, quote.total!.underPrice);
-    return Number.isFinite(instant) && instant >= knowledgeAt && instant <= evaluatedAt &&
-      Number.isFinite(number) && fair !== null
-      ? [{ observedAt: new Date(instant).toISOString(), instant, eventId: quote.providerEventId,
-          number, fair }]
+    return Number.isFinite(instant) && (unattested || instant >= knowledgeAt) && instant <= evaluatedAt && instant < startsAt &&
+      Number.isFinite(number) && (args.market === "spread"
+        ? quote.spread!.awayLine === -quote.spread!.homeLine
+        : number > 0) && fair !== null
+      ? [{ observedAt: new Date(instant).toISOString(), instant, provenance, number, fair }]
       : [];
   }).sort((first, second) => first.instant - second.instant);
-  if (admitted.length < 2 || new Set(admitted.map((item) => item.eventId)).size !== 1) return null;
+  if (admitted.length < 2 || conflictingProviderEventIds(admitted)) return null;
   const byTime = new Map<number, { number: number; fair: number }>();
   for (const item of admitted) {
     const prior = byTime.get(item.instant);
@@ -233,8 +277,10 @@ export function selectNflNamedPricedLineEpisodeAfterKnowledge(args: {
   }
   const opening = admitted[0]!;
   const current = admitted.at(-1)!;
-  return opening.instant < current.instant ? {
+  return opening.instant < current.instant && evaluatedAt - current.instant <= 120 * 60_000 ? {
     market: args.market, source, openingAt: opening.observedAt, currentAt: current.observedAt,
+    sourceProvenance: { opening: opening.provenance, current: current.provenance },
+    ...(unattested ? { informationOverlap: "not_attested" as const } : {}),
     openingNumber: opening.number, currentNumber: current.number,
     openingFirstFairProbability: opening.fair, currentFirstFairProbability: current.fair,
   } : null;
@@ -251,10 +297,13 @@ export function selectNflNamedPricedLineEpisodeAfterKnowledge(args: {
 export function transportNflMoneylineEpisode(args: {
   statisticalForecast: NflV1WeekOneOutcomeForecast;
   /** Latest source information already consumed by this statistical forecast. */
-  statisticalKnowledgeAt: string;
+  statisticalKnowledgeAt: string | null;
+  informationOverlap?: "not_attested";
   episode: NflNamedMoneylineEpisode;
 }): NflMoneylineEpisodeTransport {
   const { statisticalForecast: forecast } = args;
+  const knowledgeAt = args.statisticalKnowledgeAt === null ? NaN : Date.parse(args.statisticalKnowledgeAt);
+  const unattested = args.statisticalKnowledgeAt === null && args.informationOverlap === "not_attested";
   const statisticalHomeMargin = forecast.expectedHomeScore - forecast.expectedAwayScore;
   const statisticalTotal = forecast.expectedHomeScore + forecast.expectedAwayScore;
   const statisticalHomeWinProbability = twoWayHomeProbability(forecast);
@@ -262,6 +311,8 @@ export function transportNflMoneylineEpisode(args: {
     release: NFL_MONEYLINE_EPISODE_TRANSPORT_CANDIDATE_RELEASE,
     source: args.episode.source,
     statisticalKnowledgeAt: args.statisticalKnowledgeAt,
+    ...(args.statisticalKnowledgeAt === null && args.informationOverlap === "not_attested"
+      ? { informationOverlap: "not_attested" as const } : {}),
     openingAt: args.episode.openingAt,
     currentAt: args.episode.currentAt,
     statisticalHomeMargin,
@@ -274,7 +325,7 @@ export function transportNflMoneylineEpisode(args: {
   if (![opening, current, statisticalHomeWinProbability, statisticalTotal].every(Number.isFinite) ||
       !args.episode.source.trim() || !Number.isFinite(Date.parse(args.episode.openingAt)) ||
       !Number.isFinite(Date.parse(args.episode.currentAt)) ||
-      !Number.isFinite(Date.parse(args.statisticalKnowledgeAt)) ||
+      (!unattested && !Number.isFinite(knowledgeAt)) ||
       Date.parse(args.episode.openingAt) >= Date.parse(args.episode.currentAt) ||
       opening <= 0 || opening >= 1 || current <= 0 || current >= 1 ||
       statisticalHomeWinProbability <= 0 || statisticalHomeWinProbability >= 1 ||
@@ -285,7 +336,8 @@ export function transportNflMoneylineEpisode(args: {
       finalHomeWinProbability: statisticalHomeWinProbability,
     };
   }
-  if (Date.parse(args.statisticalKnowledgeAt) > Date.parse(args.episode.openingAt)) {
+  if (args.statisticalKnowledgeAt !== null &&
+      Date.parse(args.statisticalKnowledgeAt) > Date.parse(args.episode.openingAt)) {
     return {
       ...base, status: "unidentified", reason: "episode_overlaps_statistical_knowledge",
       finalHomeMargin: statisticalHomeMargin,
@@ -352,5 +404,46 @@ function twoSidedFairHome(homeAmerican: number, awayAmerican: number): number | 
     (price > -100 && price < 100) ? null : price > 0 ? 100 / (price + 100) : -price / (100 - price);
   const home = implied(homeAmerican);
   const away = implied(awayAmerican);
-  return home === null || away === null || home + away <= 0 ? null : home / (home + away);
+  return home === null || away === null || home + away < 0.8 || home + away > 1.2
+    ? null : home / (home + away);
+}
+
+/** Different providers use different event IDs; conflicts within one provider remain identity failures. */
+function conflictingProviderEventIds(rows: Array<{ provenance: NflEpisodeSourceProvenance }>): boolean {
+  const byProvider = new Map<string, Set<string>>();
+  for (const { provenance } of rows) {
+    if (!provenance.providerEventId) continue;
+    const ids = byProvider.get(provenance.provider) ?? new Set<string>();
+    ids.add(provenance.providerEventId);
+    byProvider.set(provenance.provider, ids);
+    if (ids.size > 1) return true;
+  }
+  return false;
+}
+
+function episodeQuoteProvenance(
+  quote: NflEpisodeHistoryBook,
+  market: "moneyline" | "spread" | "total",
+  canonicalGameId: string,
+): NflEpisodeSourceProvenance | null {
+  const observedAt = quote.marketObservedAt?.[market] ?? quote.observedAt;
+  const stored = quote.storedCanonicalEvent;
+  if (stored) {
+    // A provider's ID may be unavailable in a legacy context. The exact,
+    // hash-verified canonical-event receipt is the alternative attestation;
+    // it is never represented as an invented upstream ID or provider.
+    if (stored.provenance !== "stored_context_capture" || stored.canonicalGameId !== canonicalGameId ||
+        quote.providerGameId !== canonicalGameId || quote.provider !== stored.sourceProvider ||
+        !["owls", "sharpapi", "balldontlie"].includes(stored.sourceProvider) ||
+        !Number.isFinite(Date.parse(observedAt)) ||
+        Date.parse(stored.sourceObservedAt) !== Date.parse(observedAt) ||
+        (stored.sourceEventId !== null &&
+          (typeof stored.sourceEventId !== "string" || !stored.sourceEventId.trim())) ||
+        (quote.providerEventId !== undefined && quote.providerEventId !== stored.sourceEventId)) return null;
+    return { provider: stored.sourceProvider, providerEventId: stored.sourceEventId,
+      observedAt, identity: "stored_exact_canonical_event" };
+  }
+  return quote.provider === "owls" && typeof quote.providerEventId === "string" && quote.providerEventId.trim()
+    ? { provider: "owls", providerEventId: quote.providerEventId, observedAt,
+        identity: "raw_exact_provider_event" } : null;
 }

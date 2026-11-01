@@ -132,6 +132,9 @@ import {
 import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import { buildNflMarketState } from "./nflMarketState";
 import { applyNflFullGameEvidenceRuntime, deriveNflEvaluatedMarketContract, stabilizeNflFullGameEvidenceTargets } from "./nflFullGameEvidenceRuntime";
+import { applyNflMarketInnovationRuntime } from "./nflMarketInnovationRuntime";
+import { nflStoredMarketEpisodeHistory } from "./nflStoredMarketEpisodeHistory";
+import { buildNflV1ActionableGradeBundle } from "./nflV1ActionableGradeCandidate";
 import {
   buildNflMarketBrainShadow,
   nflMarketBrainCaptureFailure,
@@ -152,7 +155,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_01_r102_movement_contract_separation" as const;
+  "nfl_forward_evidence_writer_2026_11_01_r103_relative_market_innovations" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -241,6 +244,10 @@ export async function runNflForwardEvidenceWriter(args: {
     providerGameId: string;
     game: string;
     upstreamScore: [number, number];
+    independentScore?: [number, number];
+    incumbentScore?: [number, number];
+    incumbentDecisions?: Array<{ market: string; side: string; grade: string }>;
+    incumbentRelease?: string;
     finalScore: [number, number];
     upstreamDecisions: Array<{ market: string; side: string; grade: string }>;
     finalDecisions: Array<{ market: string; side: string; grade: string }>;
@@ -894,10 +901,14 @@ export async function runNflForwardEvidenceWriter(args: {
       } : {}),
     });
     const existingLockedRecord = hasImmutableNflLockedRecord(historicalExisting, plan.game.providerGameId);
-    const semantic = stabilizeNflFullGameEvidenceTargets({
-      baselineProduction: resolved.production, releasedForecast: resolved.outcome,
-      homeTeam: plan.game.home.abbreviation,
-      build: (evaluationTargets) => {
+    const independentInnovationEnabled = exactProviderScore?.marketInputPolicy === "prohibited_from_independent_score";
+    const semanticBaseOutcome = independentInnovationEnabled ? baseOutcome : resolved.outcome;
+    const semanticBaseProduction = independentInnovationEnabled ? buildNflV1ActionableGradeBundle({
+      providerGameId: plan.game.providerGameId, awayTeam: plan.game.away.abbreviation,
+      homeTeam: plan.game.home.abbreviation, gameStartsAt: plan.game.scheduledStart,
+      current, comparableCurrentBooks, shadowMoneyline, outcomeForecast: baseOutcome,
+    }) : resolved.production;
+    const buildSemantic = (evaluationTargets: typeof semanticBaseProduction, useInnovation = independentInnovationEnabled) => {
     const excludedFamiliesByMarket = nflFullGameExcludedFamilies(evaluationTargets.evaluatedBets);
     // Already captured named-book PAIRS are forecast evidence even though
     // targetEligible:false correctly forbids offering them as executable bets.
@@ -979,14 +990,14 @@ export async function runNflForwardEvidenceWriter(args: {
       expectedAwayScore: (total - margin) / 2,
       expectedHomeScore: (total + margin) / 2,
     });
-    const candidate = applyNflFullGameEvidenceRuntime({
+    const candidateArgs: Parameters<typeof applyNflFullGameEvidenceRuntime>[0] = {
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
       gameStartsAt: plan.game.scheduledStart,
       evaluatedAt: capturedAt,
-      releasedForecast: resolved.outcome,
-      baselineProduction: resolved.production,
+      releasedForecast: useInnovation ? semanticBaseOutcome : resolved.outcome,
+      baselineProduction: useInnovation ? semanticBaseProduction : resolved.production,
       evaluatedProduction: evaluationTargets,
       current,
       comparableCurrentBooks,
@@ -1027,10 +1038,26 @@ export async function runNflForwardEvidenceWriter(args: {
         weatherAvailable: weatherCoverage,
       },
       existingLockedRecord,
-    });
+    };
+    const candidate = useInnovation ? applyNflMarketInnovationRuntime({
+      ...candidateArgs, independentInputPolicy: "market_inputs_prohibited",
+      history: [
+        ...(namedPriceResult.result?.historyByGame[plan.game.providerGameId] ?? []).flatMap(x => x.books),
+        ...nflStoredMarketEpisodeHistory({ providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
+          captures: historicalExisting.filter(row => row.providerGameId === plan.game.providerGameId)
+            .map(row => row.payload.contextualEvidenceCapture) }),
+      ],
+    }) : { ...applyNflFullGameEvidenceRuntime(candidateArgs), innovation: undefined };
     return { ...candidate, marketImpliedMargin, marketImpliedTotal };
-      },
+    };
+    const semantic = stabilizeNflFullGameEvidenceTargets({
+      baselineProduction: semanticBaseProduction, releasedForecast: semanticBaseOutcome,
+      homeTeam: plan.game.home.abbreviation, build: (targets) => buildSemantic(targets),
     });
+    const auditIncumbent = args.auditSemanticImpact ? stabilizeNflFullGameEvidenceTargets({
+      baselineProduction: resolved.production, releasedForecast: resolved.outcome,
+      homeTeam: plan.game.home.abbreviation, build: (targets) => buildSemantic(targets, false),
+    }) : null;
     const { outcome, production, marketImpliedMargin, marketImpliedTotal } = semantic;
     const finalContract = deriveNflEvaluatedMarketContract({ baselineProduction: production, homeTeam: plan.game.home.abbreviation });
     const finalQualifiedOwls = qualifyNflOwlsSplitsForModel({
@@ -1046,6 +1073,12 @@ export async function runNflForwardEvidenceWriter(args: {
         providerGameId: plan.game.providerGameId,
         game: `${plan.game.away.abbreviation}@${plan.game.home.abbreviation}`,
         upstreamScore: [resolved.outcome.expectedAwayScore, resolved.outcome.expectedHomeScore],
+        independentScore: [baseOutcome.expectedAwayScore, baseOutcome.expectedHomeScore],
+        ...(auditIncumbent ? {
+          incumbentScore: [auditIncumbent.outcome.expectedAwayScore, auditIncumbent.outcome.expectedHomeScore] as [number, number],
+          incumbentDecisions: decisions(auditIncumbent.production.evaluatedBets),
+          incumbentRelease: "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation",
+        } : {}),
         finalScore: [outcome.expectedAwayScore, outcome.expectedHomeScore],
         upstreamDecisions: decisions(resolved.production.evaluatedBets),
         finalDecisions: decisions(production.evaluatedBets),
@@ -1174,6 +1207,8 @@ export async function runNflForwardEvidenceWriter(args: {
           sideStory: semantic.arbitration.sideStory,
           totalStory: semantic.arbitration.totalStory,
           marketResolutions: semantic.arbitration.marketResolutions,
+          ...(semantic.innovation && semantic.targetResolution.status === "stable"
+            ? { marketInnovation: semantic.innovation } : {}),
           interpretationAccounting: semantic.arbitration.interpretationAccounting,
           signalInterpretations: semantic.arbitration.signalInterpretations,
         },

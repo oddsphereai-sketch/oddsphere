@@ -1,5 +1,22 @@
 # Model change safety protocol
 
+## Owner-directed NFL flat-board correction — November 1
+
+The owner directed immediate functional repair of market interpretation and grading,
+followed by forward accuracy evaluation, rather than another historical tournament
+or a production shadow. The r103/model47/calibration46/decision55/member52 candidate
+repairs r102's unconditional absolute-market-score substitution. Real same-book
+paired-price innovations act on the market-free joint statistical law; current
+market levels remain evidence. Provenance-safe retained chronology closes the
+cross-provider history gap. Strong qualified Total laws can use the existing
+grade ladder; unresolved named opposition can temper Best Angle to actionable Lean.
+The mandatory paired promotion/grade tests and same-input board impact accompany
+this exception. No historical win-rate improvement is claimed. All functional,
+release, single-writer, source-clock, target-exclusion, locked-precedence,
+fresh-main, protected-PR and production-proof requirements remain mandatory.
+Stored locked records cannot be corrected or delayed to fit this release.
+Evidence: `docs/model-audits/2026-11-01-nfl-relative-market-innovations.md`.
+
 ## Owner-directed NFL market-reader repair — October 31, private candidate
 
 The proposed NFL release reads exact two-sided Circa/Pinnacle price chronology

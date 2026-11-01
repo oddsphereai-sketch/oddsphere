@@ -4,7 +4,44 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-10-31
+Last reviewed: 2026-11-01
+
+## NFL relative market innovations — November 1 correction
+
+Starting base: `27bd94d5b39cfa0617bc5caaec06bcdf5887bf5f` (PR910).
+The correction supersedes the r102 absolute-price coordinate replacement for
+future unlocked decisions only. Publication requires the checks below; the
+registry does not itself certify deployment.
+
+- `nfl_forward_evidence_writer_2026_11_01_r103_relative_market_innovations`
+- `nfl_v1_daily_edge_model_2026_11_01_r47_relative_market_innovations`
+- `nfl_v1_daily_edge_calibration_2026_11_01_r46_relative_market_innovations`
+- `nfl_v1_daily_edge_decision_2026_11_01_r55_relative_market_innovations`
+- `nfl_v1_grade_policy_2026_11_01_r55_relative_market_innovations`
+- `nfl_v1_member_release_2026_11_01_r52_relative_market_innovations`
+- `nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations`
+- `nfl_forward_member_snapshot_2026_11_01_r59_relative_market_innovations`
+
+Arbiter28/runtime13 use `relative_market_innovations`; ledger10/state6 and
+target-outcome26 retain their evidence/classification roles. Numerical updates
+start from the explicitly market-free statistical law and apply actual same-book
+paired ML log-odds changes and paired Spread/Total economic changes, once, through
+one coherent joint distribution. Current sportsbook levels are evidence, not an
+automatic replacement forecast. Unknown information overlap is recorded honestly.
+Earlier checksum-verified stored observations preserve original provider and clock
+across physical-book continuity; compact openers with missing provider lineage
+are never relabeled. Actual post-flow paired-price reactions can adjudicate an
+older opposed book episode; split percentages do not supply arbitrary score points.
+
+The complete qualified final Total law may earn the existing grade ladder without
+an obsolete direction-field veto. Numeric price/probability/EV/edge gates remain.
+Unresolved adverse named-book conflict tempers Best Angle to Lean while retaining
+the actionable count; applied adverse changes do not automatically cap a pick.
+Existing r58/r66/r51/r54 snapshots and all stored T-60 fields retain exact precedence.
+The sole leased writer, request budget, schedule and stake policy remain.
+Evidence, release-pure board counts, limitations, checks and rollback:
+`docs/model-audits/2026-11-01-nfl-relative-market-innovations.md`.
+
 
 ## NFL movement and contract separation — November 1 correction candidate
 
