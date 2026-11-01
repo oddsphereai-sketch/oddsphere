@@ -31,6 +31,8 @@ export type NflRegularEvaluatedBetDecision = {
   market: NflRegularDecisionMarket;
   side: string;
   modelProbability: number;
+  /** Probability of a refund; absent on immutable legacy tuples whose EV was conditional. */
+  pushProbability?: number;
   marketFairProbability: number;
   evaluatedQuote: NflRegularEvaluatedQuote;
   expectedValue: number;
@@ -58,6 +60,12 @@ export function buildNflRegularEvaluatedBetDecision(args: Omit<
 > & { lockedAt?: string | null }): NflRegularEvaluatedBetDecision {
   assertProbability(args.modelProbability, "modelProbability");
   assertProbability(args.marketFairProbability, "marketFairProbability");
+  if (args.pushProbability !== undefined) {
+    if (!Number.isFinite(args.pushProbability) || args.pushProbability < 0 || args.pushProbability > 1) {
+      throw new Error("pushProbability must be between zero and one, inclusive.");
+    }
+    if (args.market === "moneyline" && args.pushProbability !== 0) throw new Error("NFL Moneyline cannot carry a push probability.");
+  }
   assertAmericanPrice(args.evaluatedQuote.price);
   const evaluatedAt = timestamp(args.evaluatedAt, "evaluatedAt");
   const quoteAt = timestamp(args.evaluatedQuote.observedAt, "evaluatedQuote.observedAt");
@@ -78,7 +86,7 @@ export function buildNflRegularEvaluatedBetDecision(args: Omit<
     ...args,
     schemaRelease: NFL_REGULAR_DECISION_EVIDENCE_SCHEMA,
     decisionKind: "exact_price_bet",
-    expectedValue: expectedValue(args.modelProbability, args.evaluatedQuote.price),
+    expectedValue: (1 - (args.pushProbability ?? 0)) * expectedValue(args.modelProbability, args.evaluatedQuote.price),
     lockedAt,
   };
 }

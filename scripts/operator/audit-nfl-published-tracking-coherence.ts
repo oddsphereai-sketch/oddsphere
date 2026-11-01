@@ -55,6 +55,7 @@ function correctedMoneyline(payload: NflForwardEvidencePayload): CorrectedMoneyl
     home,
     modelProbability,
     gameStartsAt: payload.game.scheduledStart,
+    evaluatedAt: payload.capturedAt,
   });
   if (!selected) throw new Error(`NFL ${payload.game.providerGameId} has no prediction-side Moneyline tuple.`);
   return {

@@ -27,7 +27,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_11_01_r23_evaluated_contract_resolution" as const;
+  "nfl_target_excluded_market_outcome_2026_11_01_r25_market_axis_evidence" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -466,7 +466,7 @@ function targetFreeMovementCurrent(
  * margin distribution, so both evaluated operator families are removed from
  * that axis; Total removes only its own evaluated family.
  */
-export function resolveNflTargetExcludedMarketAnchor(args: {
+type NflTargetExcludedMarketAnchorArgs = {
   books: NflPreviewBookOdds[];
   marginExcludedSportsbooks: Iterable<string>;
   totalExcludedSportsbooks: Iterable<string>;
@@ -474,7 +474,23 @@ export function resolveNflTargetExcludedMarketAnchor(args: {
   freshnessMinutes?: number;
   minimumFamilies?: number;
   requireSameLineTotalPrices?: boolean;
-}): NflTargetExcludedMarketAnchor | null {
+};
+
+export type NflTargetExcludedMarketAxes = {
+  margin: Pick<NflTargetExcludedMarketAnchor, "release" | "homeMargin" |
+    "spreadHomeFairProbability" | "marginFamilyCount" | "marginExcludedSportsbooks"> | null;
+  total: Pick<NflTargetExcludedMarketAnchor, "release" | "total" |
+    "totalOverFairProbability" | "totalFamilyCount" | "totalExcludedSportsbooks"> | null;
+};
+
+/** Compatibility for older whole-game consumers; new readers may consume either valid axis. */
+export function resolveNflTargetExcludedMarketAnchor(args: NflTargetExcludedMarketAnchorArgs): NflTargetExcludedMarketAnchor | null {
+  const axes = resolveNflTargetExcludedMarketAxes(args);
+  return axes.margin && axes.total ? { ...axes.margin, ...axes.total } : null;
+}
+
+/** Missing or invalid evidence on one market cannot erase a separate valid market cohort. */
+export function resolveNflTargetExcludedMarketAxes(args: NflTargetExcludedMarketAnchorArgs): NflTargetExcludedMarketAxes {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL target-excluded anchor evaluatedAt is invalid.");
   const freshnessMs = (args.freshnessMinutes ?? 120) * 60_000;
@@ -484,34 +500,66 @@ export function resolveNflTargetExcludedMarketAnchor(args: {
   const books = distinctLatestBooks(args.books);
   const marginBooks = books.filter((book) =>
     !marginExcluded.has(normalizeBook(book.sportsbook)) &&
-    book.spread !== null && isFresh(book.observedAt, evaluatedAt, freshnessMs)
+    book.spread !== null && Number.isFinite(book.spread.homeLine) &&
+    book.spread.awayLine === -book.spread.homeLine &&
+    validPair(book.spread.homePrice, book.spread.awayPrice) &&
+    isFresh(book.observedAt, evaluatedAt, freshnessMs)
   );
   const totalBooks = books.filter((book) =>
     !totalExcluded.has(normalizeBook(book.sportsbook)) &&
-    book.total !== null && isFresh(book.observedAt, evaluatedAt, freshnessMs)
+    book.total !== null && Number.isFinite(book.total.line) && book.total.line > 0 &&
+    validPair(book.total.overPrice, book.total.underPrice) &&
+    isFresh(book.observedAt, evaluatedAt, freshnessMs)
   );
-  if (marginBooks.length < minimumFamilies || totalBooks.length < minimumFamilies) return null;
-  const total = median(totalBooks.map((book) => book.total!.line));
-  const sameLineTotalBooks = totalBooks.filter((book) => book.total!.line === total);
-  if (args.requireSameLineTotalPrices && sameLineTotalBooks.length < minimumFamilies) return null;
-  const totalPriceBooks = sameLineTotalBooks.length >= minimumFamilies ? sameLineTotalBooks : totalBooks;
+  const marginPriceBooks = exactLineCohort(marginBooks, (book) => book.spread!.homeLine, minimumFamilies);
+  const totalPriceBooks = exactLineCohort(totalBooks, (book) => book.total!.line, minimumFamilies);
   return {
-    release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
-    homeMargin: -median(marginBooks.map((book) => book.spread!.homeLine)),
-    spreadHomeFairProbability: median(marginBooks.map((book) => twoSidedFair(
-      book.spread!.homePrice,
-      book.spread!.awayPrice,
-    ))),
-    total,
-    totalOverFairProbability: median(totalPriceBooks.map((book) => twoSidedFair(
-      book.total!.overPrice,
-      book.total!.underPrice,
-    ))),
-    marginFamilyCount: marginBooks.length,
-    totalFamilyCount: totalBooks.length,
-    marginExcludedSportsbooks: [...marginExcluded].sort(),
-    totalExcludedSportsbooks: [...totalExcluded].sort(),
+    margin: marginPriceBooks ? {
+      release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
+      homeMargin: -marginPriceBooks[0]!.spread!.homeLine,
+      spreadHomeFairProbability: median(marginPriceBooks.map((book) => twoSidedFair(
+        book.spread!.homePrice,
+        book.spread!.awayPrice,
+      ))),
+      marginFamilyCount: marginPriceBooks.length,
+      marginExcludedSportsbooks: [...marginExcluded].sort(),
+    } : null,
+    total: totalPriceBooks ? {
+      release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
+      total: totalPriceBooks[0]!.total!.line,
+      totalOverFairProbability: median(totalPriceBooks.map((book) => twoSidedFair(
+        book.total!.overPrice,
+        book.total!.underPrice,
+      ))),
+      totalFamilyCount: totalPriceBooks.length,
+      totalExcludedSportsbooks: [...totalExcluded].sort(),
+    } : null,
   };
+}
+
+/** A fair probability is meaningful only at the line quoted by those same books. */
+function exactLineCohort(
+  books: NflPreviewBookOdds[],
+  line: (book: NflPreviewBookOdds) => number,
+  minimumFamilies: number,
+): NflPreviewBookOdds[] | null {
+  if (books.length < minimumFamilies) return null;
+  const center = median(books.map(line));
+  const groups = new Map<number, NflPreviewBookOdds[]>();
+  for (const book of books) {
+    const value = line(book);
+    groups.set(value, [...(groups.get(value) ?? []), book]);
+  }
+  return [...groups.values()].filter((rows) => rows.length >= minimumFamilies).sort((first, second) =>
+    second.length - first.length ||
+    Math.abs(line(first[0]!) - center) - Math.abs(line(second[0]!) - center) ||
+    line(first[0]!) - line(second[0]!))[0] ?? null;
+}
+
+function validPair(first: number, second: number): boolean {
+  if (!Number.isFinite(first) || !Number.isFinite(second) || first === 0 || second === 0) return false;
+  const hold = americanImplied(first) + americanImplied(second);
+  return hold >= 0.8 && hold <= 1.2;
 }
 
 export function resolveNflTargetExcludedMoneylineHomeProbability(args: {
@@ -521,6 +569,16 @@ export function resolveNflTargetExcludedMoneylineHomeProbability(args: {
   freshnessMinutes?: number;
   minimumFamilies?: number;
 }): number | null {
+  return resolveNflTargetExcludedMoneylineAnchor(args)?.homeFairProbability ?? null;
+}
+
+export function resolveNflTargetExcludedMoneylineAnchor(args: {
+  books: NflPreviewBookOdds[];
+  excludedSportsbooks: Iterable<string>;
+  evaluatedAt: string;
+  freshnessMinutes?: number;
+  minimumFamilies?: number;
+}): { homeFairProbability: number; familyCount: number } | null {
   const evaluatedAt = Date.parse(args.evaluatedAt);
   if (!Number.isFinite(evaluatedAt)) throw new Error("NFL target-excluded Moneyline evaluatedAt is invalid.");
   const freshnessMs = (args.freshnessMinutes ?? 120) * 60_000;
@@ -528,12 +586,13 @@ export function resolveNflTargetExcludedMoneylineHomeProbability(args: {
   const excluded = normalizedSet(args.excludedSportsbooks);
   const books = distinctLatestBooks(args.books).filter((book) =>
     !excluded.has(normalizeBook(book.sportsbook)) && book.moneyline !== null &&
+    validPair(book.moneyline.homePrice, book.moneyline.awayPrice) &&
     isFresh(book.observedAt, evaluatedAt, freshnessMs));
   if (books.length < minimumFamilies) return null;
-  return median(books.map((book) => twoSidedFair(
+  return { familyCount: books.length, homeFairProbability: median(books.map((book) => twoSidedFair(
     book.moneyline!.homePrice,
     book.moneyline!.awayPrice,
-  )));
+  ))) };
 }
 
 function evaluatedTargetFamilies(

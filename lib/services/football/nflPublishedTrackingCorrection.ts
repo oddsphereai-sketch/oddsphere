@@ -73,6 +73,7 @@ export function buildNflPublishedMoneylineTrackingCorrection(args: {
     home,
     modelProbability,
     gameStartsAt: args.payload.game.scheduledStart,
+    evaluatedAt: args.payload.capturedAt,
   });
   if (evaluation === null) {
     throw new Error(`NFL tracking record ${sourceId} has no exact prediction-side T-60 moneyline tuple.`);

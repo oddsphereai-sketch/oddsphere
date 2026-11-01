@@ -227,7 +227,9 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_10_31_r42_paired_price_score_authority"
       | "nfl_v1_member_release_2026_10_31_r46_flow_and_retail_conflict_precedence"
       | "nfl_v1_member_release_2026_11_01_r47_explicit_episode_resolution"
-      | "nfl_v1_member_release_2026_11_01_r48_evaluated_contract_resolution";
+      | "nfl_v1_member_release_2026_11_01_r48_evaluated_contract_resolution"
+      | "nfl_v1_member_release_2026_11_01_r49_source_to_decision_contract"
+      | "nfl_v1_member_release_2026_11_01_r50_independent_market_axes";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

@@ -12,6 +12,7 @@ import type { NflForwardPlaybookSplitSet } from "./nflForwardEvidence";
 import type { NflMarketState } from "./nflMarketState";
 import type { NflR6ShadowMoneylineDecision } from "./nflR6MoneylineShadow";
 import type { NflRegularSharpSplitSet } from "./sharpApiNflSplits";
+import { NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE } from "./nflTargetExcludedMarketOutcome";
 import {
   buildNflV1ActionableGradeBundle,
   type NflV1ActionableGradeBundle,
@@ -22,7 +23,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_11_01_r9_evaluated_contract_resolution" as const;
+  "nfl_full_game_evidence_runtime_2026_11_01_r11_independent_market_axes" as const;
 
 type Market = "moneyline" | "spread" | "total";
 
@@ -117,9 +118,11 @@ export function applyNflFullGameEvidenceRuntime(args: {
     ...coherent,
     marketEvidence: args.releasedForecast.marketEvidence,
     targetExclusion: args.targetExcludedMarket ? {
-      release: args.releasedForecast.targetExclusion?.release ?? "nfl_target_excluded_market_outcome_2026_11_01_r23_evaluated_contract_resolution",
+      release: NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE,
       status: "target_excluded_market", reason: "stable_complete_tuple",
       marginFamilyCount: args.targetExcludedMarket.marginFamilyCount,
+      moneylineFamilyCount: args.targetExcludedMarket.moneylineFamilyCount,
+      availableMarkets: args.targetExcludedMarket.availableMarkets,
       totalFamilyCount: args.targetExcludedMarket.totalFamilyCount,
       marginExcludedSportsbooks: [...args.excludedFamiliesByMarket.moneyline],
       totalExcludedSportsbooks: [...args.excludedFamiliesByMarket.total],

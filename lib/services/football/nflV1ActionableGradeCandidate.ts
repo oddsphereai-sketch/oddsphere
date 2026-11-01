@@ -11,6 +11,7 @@ import {
   NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   NFL_V1_PRODUCTION_DECISION_RELEASE,
   NFL_V1_PRODUCTION_MODEL_RELEASE,
+  nflExecutionBooksAt,
 } from "./nflV1ProductionDecision";
 import {
   getNflV1WeekOneOutcomeForecast,
@@ -100,6 +101,10 @@ export function buildNflV1ActionableGradeBundle(args: {
   shadowMoneyline: NflR6ShadowMoneylineDecision;
   outcomeForecast?: NflV1WeekOneOutcomeForecast;
 }): NflV1ActionableGradeBundle {
+  args = { ...args, comparableCurrentBooks: nflExecutionBooksAt({
+    books: args.comparableCurrentBooks, evaluatedAt: args.shadowMoneyline.evaluatedAt,
+    gameStartsAt: args.gameStartsAt,
+  }) };
   const currentBundle = buildNflV1ProductionDecisionBundle(args);
   const currentMoneyline = currentBundle.evaluatedBets.find((decision) => decision.market === "moneyline");
   if (!currentMoneyline) return emptyBundle(currentBundle.outcomeConfidence);
@@ -155,6 +160,7 @@ export function buildNflV1ActionableGradeBundle(args: {
         market: decision.market,
         side: decision.side,
         modelProbability: decision.probability,
+        pushProbability: decision.pushProbability,
         marketFairProbability: decision.looFairProbability,
         evaluatedQuote: decision.quote,
         grade: decision.grade,

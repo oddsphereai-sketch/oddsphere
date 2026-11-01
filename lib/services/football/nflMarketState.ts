@@ -3,7 +3,7 @@ import type { NflForwardContextFamily, NflForwardContextMarket } from "./nflForw
 import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_STATE_RELEASE =
-  "nfl_market_state_2026_11_01_r5_explicit_episode_resolution" as const;
+  "nfl_market_state_2026_11_01_r6_lossless_price_episodes" as const;
 
 export type NflMarketStateMarket = "moneyline" | "spread" | "total";
 export type NflMarketStateSide = -1 | 1;
@@ -26,6 +26,15 @@ export type NflMarketStateTrail = {
   firstPriceMoveAt: string | null;
   moveOrder: "number_before_price" | "price_before_number" | "same_observation" | "number_only" | "price_only" | "none";
   lastEconomicMoveAt: string | null;
+  /** Latest economic step, separate from the opening-to-current direction. */
+  lastEconomicDirection?: NflMarketStateSide | null;
+  lastNumberDirection?: NflMarketStateSide | null;
+  lastPriceDirection?: NflMarketStateSide | null;
+  /** Residual pullback from the opening-relative directional peak to current. */
+  retracementNumberMagnitude?: number;
+  retracementPriceMagnitudePp?: number;
+  numberPeakAt?: string | null;
+  pricePeakAt?: string | null;
   direction: NflMarketStateSide | null;
   numberDirection: NflMarketStateSide | null;
   priceDirection: NflMarketStateSide | null;
@@ -77,8 +86,11 @@ type Snapshot = {
 
 const FRESH_MINUTES = 120;
 const NAMED_PRICE_BOOKS = new Set(["circa", "pinnacle"]);
-const PRICE_MOVE_PP = 1;
-const ECONOMIC_PRICE_MOVE_PP = 0.25;
+// Numerical equality only: episode availability must not discard a real
+// paired-price move merely because it is smaller than a betting heuristic.
+// Its magnitude and corroboration remain separate inputs to the arbiter.
+const PRICE_MOVE_PP = 1e-9;
+const ECONOMIC_PRICE_MOVE_PP = 1e-9;
 
 export function buildNflMarketState(args: {
   market: NflMarketStateMarket;
@@ -214,10 +226,27 @@ function buildTrails(
       Math.abs(100 * (fairFirstProbability(market, value) - openingProbability)) >= PRICE_MOVE_PP)?.[0] ?? null;
     const economic = observations.filter((value, index) => {
       const previous = index === 0 ? opening : observations[index - 1]!;
-      return numberAxis(market, previous) !== numberAxis(market, value) ||
+      const previousNumber = numberAxis(market, previous);
+      const nextNumber = numberAxis(market, value);
+      return (previousNumber !== null && nextNumber !== null && Math.abs(nextNumber - previousNumber) >= 1e-9) ||
         Math.abs(100 * (fairFirstProbability(market, value) - fairFirstProbability(market, previous))) >=
           ECONOMIC_PRICE_MOVE_PP;
     });
+    const lastEconomic = economic.at(-1);
+    const lastEconomicIndex = lastEconomic ? observations.indexOf(lastEconomic) : -1;
+    const beforeLastEconomic = lastEconomicIndex <= 0 ? opening : observations[lastEconomicIndex - 1]!;
+    const lastNumberBefore = numberAxis(market, beforeLastEconomic);
+    const lastNumberAfter = lastEconomic ? numberAxis(market, lastEconomic) : null;
+    const lastNumberDelta = lastNumberBefore !== null && lastNumberAfter !== null
+      ? lastNumberAfter - lastNumberBefore : 0;
+    const lastPriceDelta = lastEconomic
+      ? 100 * (fairFirstProbability(market, lastEconomic) - fairFirstProbability(market, beforeLastEconomic)) : 0;
+    const lastNumberDirection = Math.abs(lastNumberDelta) >= 1e-9 ? sign(lastNumberDelta) : null;
+    const lastPriceDirection = Math.abs(lastPriceDelta) >= PRICE_MOVE_PP ? sign(lastPriceDelta) : null;
+    const numberRetracement = residualRetracement(opening, current, observations,
+      (value) => numberAxis(market, value), 1e-9);
+    const priceRetracement = residualRetracement(opening, current, observations,
+      (value) => 100 * fairFirstProbability(market, value), PRICE_MOVE_PP);
     const firstAlignedAt = direction === null
       ? null
       : observations.find((value) => observationDirection(market, opening, value) === direction)?.[0] ?? null;
@@ -257,6 +286,13 @@ function buildTrails(
       firstPriceMoveAt,
       moveOrder: moveOrder(firstNumberMoveAt, firstPriceMoveAt),
       lastEconomicMoveAt: economic.at(-1)?.[0] ?? null,
+      lastEconomicDirection: lastNumberDirection ?? lastPriceDirection,
+      lastNumberDirection,
+      lastPriceDirection,
+      retracementNumberMagnitude: numberRetracement.magnitude,
+      retracementPriceMagnitudePp: priceRetracement.magnitude,
+      numberPeakAt: numberRetracement.peakAt,
+      pricePeakAt: priceRetracement.peakAt,
       direction,
       numberDirection,
       priceDirection,
@@ -266,6 +302,39 @@ function buildTrails(
       crossedKeyNumbers: crossedKeys(market, openingNumber, currentNumber),
     }];
   });
+}
+
+function residualRetracement(
+  opening: NflForwardContextFamily[5],
+  current: NflForwardContextFamily[5],
+  observations: NflForwardContextFamily[5][],
+  axis: (value: NflForwardContextFamily[5]) => number | null,
+  tolerance: number,
+): { magnitude: number; peakAt: string | null } {
+  const start = axis(opening);
+  const end = axis(current);
+  if (start === null || end === null) return { magnitude: 0, peakAt: null };
+  const points = observations.flatMap((value) => {
+    const coordinate = axis(value);
+    return coordinate === null ? [] : [{ at: value[0], delta: coordinate - start }];
+  });
+  const net = end - start;
+  const largestExcursion = points.reduce((peak, point) =>
+    Math.abs(point.delta) > Math.abs(peak) + tolerance ? point.delta : peak, 0);
+  const direction = Math.abs(net) >= tolerance ? sign(net)
+    : Math.abs(largestExcursion) >= tolerance ? sign(largestExcursion) : null;
+  if (direction === null) return { magnitude: 0, peakAt: null };
+  let peakMagnitude = 0;
+  let peakAt: string | null = null;
+  for (const point of points) {
+    const magnitude = point.delta * direction;
+    if (magnitude > peakMagnitude + tolerance) {
+      peakMagnitude = magnitude;
+      peakAt = point.at;
+    }
+  }
+  const magnitude = peakMagnitude - net * direction;
+  return { magnitude: magnitude >= tolerance ? magnitude : 0, peakAt };
 }
 
 function buildSplits(

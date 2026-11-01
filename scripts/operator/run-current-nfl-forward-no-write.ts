@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { runNflForwardEvidenceWriter } from "../../lib/services/football/nflForwardEvidenceWriter";
 import { readNflForwardEvidence } from "../../lib/services/football/nflForwardEvidenceStore";
 import { resolveNflForwardWeek } from "../../lib/services/football/nflForwardWeekSelection";
+import { auditNflReaderProductContract, nflReaderMeanBoundaryCases } from "../../lib/services/football/nflReaderProductContractAudit";
 
 loadEnvConfig(process.cwd());
 
@@ -44,12 +45,14 @@ async function main(): Promise<void> {
     auditSemanticImpact: process.argv.includes("--semantic-impact")
       ? (rows) => { semanticImpactRows.push(...rows); }
       : undefined,
-    auditPayloads: process.argv.includes("--detail") ? (payloads) => {
+    auditPayloads: process.argv.includes("--detail") || process.argv.includes("--require-complete-contract") ? (payloads) => {
       for (const payload of payloads) {
         auditRows.push({
           providerGameId: payload.game.providerGameId,
           game: `${payload.game.away.abbreviation}@${payload.game.home.abbreviation}`,
           stage: payload.stage,
+          contractFindings: auditNflReaderProductContract(payload),
+          meanBoundaryCases: nflReaderMeanBoundaryCases(payload),
           comparableBooks: payload.market.comparableCurrentBooks.map((book) => book.sportsbook),
           contextBooks: Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [
             market,
@@ -70,6 +73,11 @@ async function main(): Promise<void> {
             sideStory: payload.fullGameEvidenceInterpretation.sideStory,
             totalStory: payload.fullGameEvidenceInterpretation.totalStory,
             marketResolutions: payload.fullGameEvidenceInterpretation.marketResolutions,
+            priceAxisAvailability: Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [market,
+              payload.fullGameEvidenceInterpretation?.signalInterpretations.some((item) =>
+                item.market === market && item.source === "target_excluded_paired_price_score" &&
+                item.roles.includes("target_excluded_price_score")) ?? false,
+            ])),
             accounting: payload.fullGameEvidenceInterpretation.interpretationAccounting,
             roles: payload.fullGameEvidenceInterpretation.signalInterpretations.reduce<Record<string, number>>(
               (counts, item) => {
@@ -114,7 +122,18 @@ async function main(): Promise<void> {
       candidateDecisions: candidate.decisions,
     };
   });
+  const contractSummary = {
+    expectedGames: Math.max(result.games, result.namedPriceCapture.matchedGames),
+    auditedGames: auditRows.length,
+    evaluatedMarkets: result.publishedEvaluations,
+    findings: auditRows.flatMap((row) => (row.contractFindings as string[]).map((finding) => ({ game: row.game, finding }))),
+    gameFailures: result.healthHolds.filter((reason) => reason.startsWith("game_") && reason.includes("_held_")),
+  };
+  const completeContract = contractSummary.expectedGames > 0 && contractSummary.auditedGames === contractSummary.expectedGames &&
+    contractSummary.evaluatedMarkets === 3 * contractSummary.expectedGames &&
+    contractSummary.findings.length === 0 && contractSummary.gameFailures.length === 0;
   console.log(JSON.stringify({ readOnly: true, aheadMinutes: ahead, season, week,
+    contractSummary: { ...contractSummary, complete: completeContract },
     playbookSource: playbookApiKey ? "live_provider" : "stored_timestamped_fallback",
     result,
     ...(process.argv.includes("--detail") ? { auditRows } : {}),
@@ -122,6 +141,7 @@ async function main(): Promise<void> {
     ...(process.argv.includes("--joint-impact") ? { jointImpactRows } : {}),
     ...(process.argv.includes("--semantic-impact") ? { semanticImpactRows } : {}),
   }, null, 2));
+  if (process.argv.includes("--require-complete-contract") && !completeContract) process.exitCode = 1;
 }
 
 function requiredEnv(name: string): string {

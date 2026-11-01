@@ -588,7 +588,29 @@ assert.throws(
   /must be finite and nonnegative/,
 );
 
-console.log("Football cross-market coherence: score identity, event containment, price divergence, and actionable-value gates passed.");
+const legacyNflDecisions = [
+  decision({ market: "moneyline", side: "HME", probability: 0.6, fair: 0.5, price: -110, grade: "No Play" }),
+  decision({ market: "spread", side: "HME", probability: 0.54, fair: 0.5, price: -110, line: -3, grade: "No Play" }),
+  decision({ market: "total", side: "Under 44", probability: 0.56, fair: 0.5, price: -110, line: 44, grade: "No Play" }),
+].map(({ pushProbability: _legacyAbsentPush, ...row }) => row);
+const nflPushAudit = (decisions: FootballCoherenceDecision[]) => auditFootballCrossMarketCoherence({
+  sport: "nfl", providerGameId: "nfl-push-ev", awayTeam: "AWY", homeTeam: "HME", forecast, decisions,
+});
+assert.equal(nflPushAudit(legacyNflDecisions).fatalIssues.some((issue) => issue.code === "decision_ev_mismatch"), false,
+  "legacy absent push tuples retain exact conditional EV validation");
+const pushAwareNflDecisions = legacyNflDecisions.map((row) => row.market === "moneyline" ? row : {
+  ...row, pushProbability: 0.08, expectedValue: row.expectedValue * 0.92,
+});
+assert.equal(nflPushAudit(pushAwareNflDecisions).passed, true,
+  "current NFL integer-line tuples validate the same refund-adjusted EV used to grade");
+assert.equal(nflPushAudit(pushAwareNflDecisions.map((row) => ({ ...row, expectedValue: row.expectedValue + 0.01 })))
+  .fatalIssues.some((issue) => issue.code === "decision_ev_mismatch"), true,
+"push awareness cannot hide an actually incorrect stored EV");
+assert.equal(nflPushAudit(legacyNflDecisions.map((row) => ({ ...row, pushProbability: 0 }))).passed, true,
+  "zero-push fractional contracts retain conditional EV exactly");
+assert.equal(nflPushAudit(pushAwareNflDecisions.map((row) => ({ ...row, pushProbability: -0.1 })))
+  .fatalIssues.some((issue) => issue.code === "decision_probability"), true);
+console.log("Football cross-market coherence: score identity, event containment, price divergence, push EV and actionable-value gates passed.");
 
 function decision(args: {
   market: "moneyline" | "spread" | "total";

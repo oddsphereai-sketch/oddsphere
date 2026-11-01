@@ -1023,6 +1023,61 @@ assert.equal(reversingSideArbitration.sideStory, "conflicted_market_story");
 assert.equal(reversingSideArbitration.finalHomeMargin, -3,
   "one stable and one reversing named Spread trail cannot authorize a side score change");
 
+const emptyAxisStates = Object.fromEntries((["moneyline", "spread", "total"] as const).map((marketName) => [marketName,
+  buildNflMarketState({ market: marketName, evaluatedAt, snapshots: [],
+    current: { spread: { homeLine: 3.5 }, total: { line: 44.5 } },
+    playbookLine: null, playbookSplits: null, sharpSplits: null }),
+])) as typeof states;
+const standaloneTotalLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  states: { ...emptyAxisStates, total: singleNamedStates.total },
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    homeMargin: 0, moneylineHomeFairProbability: 0.5, marginFamilyCount: 0, moneylineFamilyCount: 0,
+    total: 44.5, totalOverFairProbability: 0.4, totalFamilyCount: 3, availableMarkets: ["total"] },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    forecast: { expectedAwayScore: 20, expectedHomeScore: 23 }, authoritativeMarkets: ["total"],
+    marketValues: { total: 43 } }],
+});
+assert.equal(standaloneTotalLedger.marketContexts.total.namedDirection, null);
+const standaloneTotalResult = arbitrateNflFullGameEvidence({ releasedForecast: ledgerArgs.finalForecast, ledger: standaloneTotalLedger });
+assert.equal(standaloneTotalResult.marketResolutions?.total.corroboratedSingleEpisode, true,
+  "held Total number with directional juice corroborates a real lone named price episode");
+assert.equal(standaloneTotalResult.finalTotal, 43,
+  "raw cohort line equal to evaluated line cannot erase the current price-implied Under");
+assert.equal(standaloneTotalResult.finalHomeMargin, -3);
+
+const standaloneMlForecast = { expectedAwayScore: 20, expectedHomeScore: 21 };
+const standaloneMlLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs, finalForecast: standaloneMlForecast,
+  states: { ...emptyAxisStates, moneyline: singleNamedStates.moneyline },
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    homeMargin: 0, moneylineHomeFairProbability: 0.6, marginFamilyCount: 0, moneylineFamilyCount: 3,
+    total: 0, totalOverFairProbability: 0.5, totalFamilyCount: 0, availableMarkets: ["moneyline"] },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    forecast: { expectedAwayScore: 19, expectedHomeScore: 22 }, authoritativeMarkets: ["moneyline"],
+    marketValues: { moneyline: 3 } }],
+});
+const standaloneMlResult = arbitrateNflFullGameEvidence({ releasedForecast: standaloneMlForecast, ledger: standaloneMlLedger });
+assert.equal(standaloneMlResult.sideStory, "market_confirms_game");
+assert.equal(standaloneMlResult.finalHomeMargin, 3,
+  "a confirmed direct ML-only price may strengthen the same winner without any Spread cohort");
+assert.equal(standaloneMlResult.finalTotal, 41);
+
+const spreadTotalOnlyLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    moneylineFamilyCount: 0, availableMarkets: ["spread", "total"] },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    forecast: { expectedAwayScore: 20, expectedHomeScore: 23 }, authoritativeMarkets: ["spread", "total"],
+    marketValues: { spread: 3, total: 43 } }],
+});
+assert.deepEqual(reconcileNflFullGameScoreTuple({ ledger: spreadTotalOnlyLedger,
+  releasedHomeMargin: 2, releasedTotal: 45, proposedHomeMargin: 3, proposedTotal: 43 }),
+{ homeMargin: 3, total: 43 }, "independently qualified Spread and Total coordinates form one coherent game without ML evidence");
+assert.deepEqual(reconcileNflFullGameScoreTuple({ ledger: spreadTotalOnlyLedger,
+  releasedHomeMargin: 2, releasedTotal: 45, proposedHomeMargin: 4, proposedTotal: 43 }),
+{ homeMargin: 2, total: 45 }, "a proposed coordinate cannot borrow unrelated market authority merely because its direction agrees");
+
 const immutableForecast = { expectedAwayScore: 24, expectedHomeScore: 21 } as never;
 const immutableProduction = { marker: "stored-lock-must-win" } as never;
 const lockedRuntime = applyNflFullGameEvidenceRuntime({
@@ -1056,5 +1111,222 @@ assert.equal(lockedRuntime.outcome, immutableForecast,
   "an existing locked score must retain exact stored-object precedence");
 assert.equal(lockedRuntime.production, immutableProduction,
   "an existing locked decision bundle must retain exact stored-object precedence");
+
+const retracingMoneyline = buildNflMarketState({
+  market: "moneyline", evaluatedAt,
+  snapshots: [
+    { at: "2026-10-26T19:00:00.000Z", away: 100, home: -140 },
+    { at: "2026-10-26T19:50:00.000Z", away: -105, home: -115 },
+  ].map((point) => ({ capturedAt: point.at, markets: {
+    moneyline: { families: ["circa", "pinnacle"].map((source) => [
+      source, "s", source === "circa" ? "c" : "p", null,
+      landmark("2026-10-26T18:00:00.000Z", null, -110, -110),
+      landmark(point.at, null, point.away, point.home),
+    ] as NflForwardContextMarket["families"][number]) },
+    spread: { families: [] }, total: { families: [] },
+  } })),
+  current: { spread: null, total: null }, playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(retracingMoneyline.namedDirection, 1);
+assert.equal(retracingMoneyline.trails[0]?.lastEconomicDirection, -1);
+const retracingLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  states: { moneyline: retracingMoneyline, spread: { ...noSideState, candidateNamedDirection: null },
+    total: { ...noSideState, candidateNamedDirection: null } },
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, homeMargin: 2, moneylineHomeFairProbability: 0.6 },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    forecast: { expectedAwayScore: 21, expectedHomeScore: 23 } }],
+  playbookSplits: null,
+});
+const resolvedRetracement = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 }, ledger: retracingLedger,
+});
+assert.ok(resolvedRetracement.signalInterpretations.some((item) =>
+  item.market === "moneyline" && item.source === "circa" && item.roles.includes("partial_buyback")),
+"the real price-only partial retracement reaches the full-game interpretation");
+assert.equal(resolvedRetracement.finalHomeMargin, 2,
+  "a late retracement is adjudicated by current prices rather than automatically vetoing the net direction");
+const opposedRetracementLedger = structuredClone(retracingLedger);
+for (const signal of opposedRetracementLedger.signals) {
+  if (signal.market === "moneyline" && signal.source === "target_excluded_paired_price_score") {
+    signal.value = -2;
+    signal.side = "away";
+  }
+}
+const heldRetracement = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 }, ledger: opposedRetracementLedger,
+});
+assert.equal(heldRetracement.sideStory, "conflicted_market_story");
+assert.equal(heldRetracement.finalHomeMargin, -3,
+  "an uncorroborated net move with late opposing price action holds the released score");
+assert.ok(heldRetracement.signalInterpretations.some((item) => item.roles.includes("partial_buyback")),
+  "holding the score cannot erase the late buyback evidence");
+
+const loneEpisodeWithEarlyTick = (includeEarlyTick: boolean) => buildNflMarketState({
+  market: "moneyline", evaluatedAt,
+  snapshots: [
+    ...(includeEarlyTick ? [{ at: "2026-10-26T19:00:00.000Z", away: -110, home: -109.999 }] : []),
+    { at: "2026-10-26T19:50:00.000Z", away: -107, home: -113 },
+  ].map((point) => ({ capturedAt: point.at, markets: {
+    moneyline: { families: [[
+      "circa", "s", "c", null,
+      landmark("2026-10-26T18:00:00.000Z", null, -110, -110),
+      landmark(point.at, null, point.away, point.home),
+    ] as NflForwardContextMarket["families"][number]] },
+    spread: { families: [] }, total: { families: [] },
+  } })),
+  current: { spread: null, total: null }, playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+const earlyTickLedgerArgs = (includeEarlyTick: boolean) => ({
+  ...ledgerArgs,
+  states: { moneyline: loneEpisodeWithEarlyTick(includeEarlyTick),
+    spread: { ...noSideState, candidateNamedDirection: null },
+    total: { ...noSideState, candidateNamedDirection: null } },
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, homeMargin: 2, moneylineHomeFairProbability: 0.6 },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score", forecast: { expectedAwayScore: 21, expectedHomeScore: 23 } }],
+  playbookSplits: null,
+});
+const adjudicateEarlyTick = (includeEarlyTick: boolean) => arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
+  ledger: buildNflFullGameEvidenceLedger(earlyTickLedgerArgs(includeEarlyTick)),
+});
+const withoutEarlyTick = adjudicateEarlyTick(false);
+const withEarlyTick = adjudicateEarlyTick(true);
+assert.equal(loneEpisodeWithEarlyTick(true).namedDirection, null);
+assert.equal(loneEpisodeWithEarlyTick(true).candidateNamedDirection, 1);
+assert.ok(loneEpisodeWithEarlyTick(true).trails[0]!.reversalMagnitude > 0);
+assert.equal(withEarlyTick.finalHomeMargin, withoutEarlyTick.finalHomeMargin,
+  "an early opposite tick cannot silently veto the same independently corroborated current lone-book episode");
+assert.equal(withEarlyTick.finalHomeMargin, 2);
+assert.equal(withEarlyTick.marketResolutions?.moneyline.corroboratedSingleEpisode, true);
+assert.ok(withEarlyTick.signalInterpretations.some((item) => item.roles.includes("reversal")),
+  "admitting the current episode does not erase its earlier opposite price path");
+const earlyTickWithoutPrice = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
+  ledger: buildNflFullGameEvidenceLedger({ ...earlyTickLedgerArgs(true), forecastCandidates: [] }),
+});
+assert.equal(earlyTickWithoutPrice.finalHomeMargin, -3,
+  "removing the blanket reversal veto cannot authorize an uncorroborated lone-book flip");
+const earlyTickAgainstPrice = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
+  ledger: buildNflFullGameEvidenceLedger({ ...earlyTickLedgerArgs(true),
+    targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, homeMargin: -2, moneylineHomeFairProbability: 0.4 },
+    forecastCandidates: [{ source: "target_excluded_paired_price_score", forecast: { expectedAwayScore: 23, expectedHomeScore: 21 } }],
+  }),
+});
+assert.equal(earlyTickAgainstPrice.finalHomeMargin, -3,
+  "contrary current price evidence still prevents the lone-book correction");
+
+const sideAxisOnlyLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    availableMarkets: ["moneyline", "spread"], homeMargin: 2, total: 99 },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    authoritativeMarkets: ["moneyline", "spread"],
+    forecast: { expectedAwayScore: 48.5, expectedHomeScore: 50.5 } }],
+});
+for (const marketName of ["moneyline", "spread"] as const) {
+  assert.ok(sideAxisOnlyLedger.signals.some((item) => item.kind === "target_excluded_market" &&
+    item.market === marketName && item.status === "usable"));
+  assert.ok(sideAxisOnlyLedger.signals.some((item) => item.kind === "forecast_expert" &&
+    item.source === "target_excluded_paired_price_score" && item.market === marketName && item.status === "usable" && item.value === 2));
+}
+const missingTotalSignals = sideAxisOnlyLedger.signals.filter((item) => item.market === "total" &&
+  ["target_excluded_market", "forecast_expert"].includes(item.kind));
+assert.equal(missingTotalSignals.length, 2);
+assert.ok(missingTotalSignals.every((item) => item.status === "unavailable" && item.value === null &&
+  item.side === null && item.continuousMagnitude === null && item.observedAt === null),
+"a missing Total cohort cannot borrow the coherent score's other axis as market evidence");
+
+const totalAxisOnlyLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    availableMarkets: ["total"], homeMargin: 10, total: 44 },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    authoritativeMarkets: ["total"], forecast: { expectedAwayScore: 17, expectedHomeScore: 27 } }],
+});
+assert.ok(totalAxisOnlyLedger.signals.some((item) => item.kind === "target_excluded_market" &&
+  item.market === "total" && item.status === "usable" && item.value === 44));
+assert.ok(totalAxisOnlyLedger.signals.some((item) => item.kind === "forecast_expert" &&
+  item.source === "target_excluded_paired_price_score" && item.market === "total" && item.status === "usable" && item.value === 44));
+for (const marketName of ["moneyline", "spread"] as const) {
+  const missing = totalAxisOnlyLedger.signals.filter((item) => item.market === marketName &&
+    ["target_excluded_market", "forecast_expert"].includes(item.kind));
+  assert.equal(missing.length, 2);
+  assert.ok(missing.every((item) => item.status === "unavailable" && item.value === null && item.side === null),
+    `a missing ${marketName} cohort cannot acquire authority from the coherent Total score`);
+}
+const independentAxesRemainAvailable = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  forecastCandidates: [{ source: "independent_exact_stat", authoritativeMarkets: [],
+    forecast: { expectedAwayScore: 17, expectedHomeScore: 27 } }],
+});
+assert.equal(independentAxesRemainAvailable.signals.filter((item) =>
+  item.source === "independent_exact_stat" && item.status === "usable").length, 3,
+"market-axis authority restrictions do not mask a separately attributed independent forecast");
+
+const moneylineOnlyAuthority = buildNflFullGameEvidenceLedger({
+  ...earlyTickLedgerArgs(true),
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    availableMarkets: ["moneyline"], moneylineFamilyCount: 5, marginFamilyCount: 0, totalFamilyCount: 0,
+    homeMargin: 123, total: 999, moneylineHomeFairProbability: 0.6 },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    authoritativeMarkets: ["moneyline"], marketValues: { moneyline: 2 },
+    forecast: { expectedAwayScore: 21.5, expectedHomeScore: 23.5 } }],
+});
+const independentMoneylineCorrection = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 }, ledger: moneylineOnlyAuthority,
+});
+assert.equal(independentMoneylineCorrection.finalHomeMargin, 2,
+  "a genuine Moneyline cohort can correct the winner while Spread and Total cohorts are absent");
+assert.equal(independentMoneylineCorrection.finalTotal, 45,
+  "a Moneyline-only correction preserves the independent scoring environment");
+assert.equal(independentMoneylineCorrection.marketResolutions?.moneyline.corroboratedSingleEpisode, true,
+  "Moneyline-specific family provenance does not depend on a missing Spread cohort");
+for (const marketName of ["spread", "total"] as const) {
+  assert.ok(moneylineOnlyAuthority.signals.filter((item) => item.market === marketName &&
+    ["target_excluded_market", "forecast_expert"].includes(item.kind))
+    .every((item) => item.status === "unavailable" && item.value === null && item.side === null),
+  `the absent ${marketName} cohort remains explicitly unavailable through the correction`);
+}
+
+const totalOnlyAuthority = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  states: { moneyline: { ...noSideState, candidateNamedDirection: null },
+    spread: { ...noSideState, candidateNamedDirection: null }, total: states.total },
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    availableMarkets: ["total"], moneylineFamilyCount: 0, marginFamilyCount: 0, totalFamilyCount: 5,
+    homeMargin: 123, total: 44, totalOverFairProbability: 0.45 },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    authoritativeMarkets: ["total"], marketValues: { total: 44 },
+    forecast: { expectedAwayScore: 23.5, expectedHomeScore: 20.5 } }],
+  playbookSplits: null,
+});
+const independentTotalCorrection = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 }, ledger: totalOnlyAuthority,
+});
+assert.equal(independentTotalCorrection.finalTotal, 44,
+  "a genuine Total cohort can change the scoring environment without Moneyline or Spread cohorts");
+assert.equal(independentTotalCorrection.finalHomeMargin, -3,
+  "a Total-only correction preserves the independent winner and margin");
+for (const marketName of ["moneyline", "spread"] as const) {
+  assert.ok(totalOnlyAuthority.signals.filter((item) => item.market === marketName &&
+    ["target_excluded_market", "forecast_expert"].includes(item.kind))
+    .every((item) => item.status === "unavailable" && item.value === null && item.side === null),
+  `the absent ${marketName} cohort never acquires authority from a Total-only correction`);
+}
+
+const distinctMarketValueLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    authoritativeMarkets: ["moneyline", "spread", "total"],
+    marketValues: { moneyline: 4, spread: -5, total: 50 },
+    forecast: { expectedAwayScore: 21, expectedHomeScore: 23 } }],
+});
+const distinctPriceSignals = distinctMarketValueLedger.signals.filter((item) =>
+  item.source === "target_excluded_paired_price_score");
+assert.deepEqual(distinctPriceSignals.map((item) => [item.market, item.value, item.side]),
+  [["moneyline", 4, "home"], ["spread", -5, "away"], ["total", 50, "over"]],
+  "each market retains its own price-implied value and direction rather than borrowing the whole-score axis");
 
 console.log("NFL full-game evidence ledger tests passed");

@@ -108,10 +108,14 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_26_r18_nuanced_market_reader"
       | "nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration"
       | "nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion"
-      | "nfl_target_excluded_market_outcome_2026_11_01_r23_evaluated_contract_resolution";
+      | "nfl_target_excluded_market_outcome_2026_11_01_r23_evaluated_contract_resolution"
+      | "nfl_target_excluded_market_outcome_2026_11_01_r24_exact_contract_price_cohorts"
+      | "nfl_target_excluded_market_outcome_2026_11_01_r25_market_axis_evidence";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
+    moneylineFamilyCount?: number | null;
+    availableMarkets?: Array<"moneyline" | "spread" | "total">;
     totalFamilyCount: number | null;
     marginExcludedSportsbooks: string[];
     totalExcludedSportsbooks: string[];
@@ -428,6 +432,20 @@ export function inferNflTargetExcludedSpreadMean(args: {
   return Number.isFinite(margin) && Math.abs(achieved - fair) < 1e-6 &&
     forecast.expectedHomeScore + forecast.expectedAwayScore > Math.abs(margin)
     ? margin : null;
+}
+
+/** Infer a Moneyline margin from its own target-excluded paired price, independent of a Spread cohort. */
+export function inferNflTargetExcludedMoneylineMean(args: {
+  independentForecast: NflV1WeekOneOutcomeForecast;
+  homeWinFairProbability: number;
+}): number | null {
+  // NFL Moneyline probabilities are conditional on a decided game. The same
+  // marginal inverse at zero excludes tie mass, matching outcomeFromDistributions.
+  return inferNflTargetExcludedSpreadMean({
+    independentForecast: args.independentForecast,
+    homeMarginBoundary: 0,
+    homeCoverFairProbability: args.homeWinFairProbability,
+  });
 }
 
 /** Infer a Total coordinate from an exact target-excluded paired Over/Under price. */

@@ -74,6 +74,7 @@ import {
   getNflV1WeekOneOutcomeForecast,
   hasNflV1WeekOneOutcomeForecast,
   inferNflTargetExcludedSpreadMean,
+  inferNflTargetExcludedMoneylineMean,
   inferNflTargetExcludedTotalMean,
   NFL_V1_WEEKLY_OUTCOME_MODEL_RELEASE,
   NFL_V1_PAID_TEAM_SCORE_MODEL_RELEASE,
@@ -82,8 +83,8 @@ import {
   NFL_V1_WEEK_ONE_OUTCOME_ARTIFACT_SHA256,
 } from "./nflV1WeekOneOutcome";
 import {
-  resolveNflTargetExcludedMarketAnchor,
-  resolveNflTargetExcludedMoneylineHomeProbability,
+  resolveNflTargetExcludedMarketAxes,
+  resolveNflTargetExcludedMoneylineAnchor,
   resolveNflTargetExcludedProduction,
 } from "./nflTargetExcludedMarketOutcome";
 import {
@@ -150,7 +151,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_01_r99_evaluated_contract_resolution" as const;
+  "nfl_forward_evidence_writer_2026_11_01_r101_independent_market_axes" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -897,34 +898,54 @@ export async function runNflForwardEvidenceWriter(args: {
       homeTeam: plan.game.home.abbreviation,
       build: (evaluationTargets) => {
     const excludedFamiliesByMarket = nflFullGameExcludedFamilies(evaluationTargets.evaluatedBets);
-    const targetExcludedAnchor = resolveNflTargetExcludedMarketAnchor({
+    const axes = resolveNflTargetExcludedMarketAxes({
       books: comparableCurrentBooks,
+      requireSameLineTotalPrices: true,
       marginExcludedSportsbooks: excludedFamiliesByMarket.moneyline,
       totalExcludedSportsbooks: excludedFamiliesByMarket.total,
       evaluatedAt: capturedAt,
     });
-    const moneylineHomeFairProbability = resolveNflTargetExcludedMoneylineHomeProbability({
+    const moneylineAnchor = resolveNflTargetExcludedMoneylineAnchor({
       books: comparableCurrentBooks,
       excludedSportsbooks: excludedFamiliesByMarket.moneyline,
       evaluatedAt: capturedAt,
     });
-    const marketImpliedMargin = targetExcludedAnchor ? inferNflTargetExcludedSpreadMean({
-      independentForecast: baseOutcome,
-      homeMarginBoundary: targetExcludedAnchor.homeMargin,
-      homeCoverFairProbability: targetExcludedAnchor.spreadHomeFairProbability,
+    const moneylineHomeFairProbability = moneylineAnchor?.homeFairProbability ?? null;
+    const moneylineMargin = moneylineHomeFairProbability !== null ? inferNflTargetExcludedMoneylineMean({
+      independentForecast: baseOutcome, homeWinFairProbability: moneylineHomeFairProbability,
     }) : null;
-    const marketImpliedTotal = targetExcludedAnchor ? inferNflTargetExcludedTotalMean({
+    const spreadMargin = axes.margin ? inferNflTargetExcludedSpreadMean({
       independentForecast: baseOutcome,
-      totalLine: targetExcludedAnchor.total,
-      overFairProbability: targetExcludedAnchor.totalOverFairProbability,
+      homeMarginBoundary: axes.margin.homeMargin,
+      homeCoverFairProbability: axes.margin.spreadHomeFairProbability,
     }) : null;
-    const marketScoreCandidate = moneylineHomeFairProbability !== null &&
-      marketImpliedMargin !== null && marketImpliedTotal !== null &&
-      marketImpliedTotal > Math.abs(marketImpliedMargin)
+    const marketImpliedTotal = axes.total ? inferNflTargetExcludedTotalMean({
+      independentForecast: baseOutcome,
+      totalLine: axes.total.total,
+      overFairProbability: axes.total.totalOverFairProbability,
+    }) : null;
+    const availableMarkets = ([moneylineMargin !== null && "moneyline", spreadMargin !== null && "spread",
+      marketImpliedTotal !== null && "total"].filter(Boolean)) as Array<"moneyline" | "spread" | "total">;
+    const marketImpliedMargin = spreadMargin ?? moneylineMargin;
+    const candidateMargin = moneylineMargin ?? spreadMargin ?? (resolved.outcome.expectedHomeScore - resolved.outcome.expectedAwayScore);
+    const candidateTotal = marketImpliedTotal ?? (resolved.outcome.expectedHomeScore + resolved.outcome.expectedAwayScore);
+    const marketScoreCandidate = availableMarkets.length > 0 && candidateTotal > Math.abs(candidateMargin)
       ? {
-          expectedAwayScore: (marketImpliedTotal - marketImpliedMargin) / 2,
-          expectedHomeScore: (marketImpliedTotal + marketImpliedMargin) / 2,
+          expectedAwayScore: (candidateTotal - candidateMargin) / 2,
+          expectedHomeScore: (candidateTotal + candidateMargin) / 2,
         } : null;
+    // Unavailable coordinates below are render-only placeholders. availableMarkets
+    // causes the ledger to emit null/unavailable, never independent-as-price evidence.
+    const targetExcludedAnchor = availableMarkets.length > 0 ? {
+      homeMargin: axes.margin?.homeMargin ?? 0,
+      spreadHomeFairProbability: axes.margin?.spreadHomeFairProbability ?? 0.5,
+      total: axes.total?.total ?? 0,
+      totalOverFairProbability: axes.total?.totalOverFairProbability ?? 0.5,
+      marginFamilyCount: axes.margin?.marginFamilyCount ?? 0,
+      moneylineFamilyCount: moneylineAnchor?.familyCount ?? 0,
+      totalFamilyCount: axes.total?.totalFamilyCount ?? 0,
+      availableMarkets,
+    } : null;
     const evaluatedContract = deriveNflEvaluatedMarketContract({
       baselineProduction: evaluationTargets, homeTeam: plan.game.home.abbreviation,
     });
@@ -964,8 +985,8 @@ export async function runNflForwardEvidenceWriter(args: {
       current,
       comparableCurrentBooks,
       shadowMoneyline,
-      targetExcludedMarket: targetExcludedAnchor && moneylineHomeFairProbability !== null
-        ? { ...targetExcludedAnchor, moneylineHomeFairProbability }
+      targetExcludedMarket: targetExcludedAnchor
+        ? { ...targetExcludedAnchor, moneylineHomeFairProbability: moneylineHomeFairProbability ?? 0.5 }
         : null,
       states: marketStates,
       excludedFamiliesByMarket,
@@ -984,7 +1005,11 @@ export async function runNflForwardEvidenceWriter(args: {
             ? fromMarginTotal(paidProjectionShadow.projectedHomeMargin, paidProjectionShadow.projectedTotal)
             : null,
         },
-        { source: "target_excluded_paired_price_score", forecast: marketScoreCandidate },
+        { source: "target_excluded_paired_price_score", forecast: marketScoreCandidate,
+          authoritativeMarkets: availableMarkets,
+          marketValues: { ...(moneylineMargin !== null ? { moneyline: moneylineMargin } : {}),
+            ...(spreadMargin !== null ? { spread: spreadMargin } : {}),
+            ...(marketImpliedTotal !== null ? { total: marketImpliedTotal } : {}) } },
         { source: "released_current", forecast: resolved.outcome },
       ],
       availability: {

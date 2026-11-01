@@ -6,7 +6,7 @@ import type { NflV1ActionableGradeBundle } from "./nflV1ActionableGradeCandidate
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_ARBITER_CANDIDATE_RELEASE =
-  "nfl_full_game_evidence_arbiter_candidate_2026_11_01_r24_explicit_episode_resolution" as const;
+  "nfl_full_game_evidence_arbiter_candidate_2026_11_01_r26_independent_market_axes" as const;
 
 type Side = "home" | "away";
 type TotalSide = "over" | "under";
@@ -51,6 +51,7 @@ export type NflFullGameEvidenceRole =
   | "price_resistance"
   | "number_price_divergence"
   | "buyback"
+  | "partial_buyback"
   | "reversal"
   | "key_number_transition"
   | "source_flow_confirmation"
@@ -221,7 +222,7 @@ export function arbitrateNflFullGameEvidence(args: {
 }
 
 
-/** Keep the two axes one physically possible game, with a single expert when both change. */
+/** Keep independently evidenced coordinates one physically possible game. */
 export function reconcileNflFullGameScoreTuple(args: {
   ledger: NflFullGameEvidenceLedger;
   releasedHomeMargin: number;
@@ -241,20 +242,25 @@ export function reconcileNflFullGameScoreTuple(args: {
       ? { homeMargin: args.proposedHomeMargin, total: args.proposedTotal }
       : { homeMargin: args.releasedHomeMargin, total: args.releasedTotal };
   }
-  const marketMargin = targetExcludedPriceScoreValue(args.ledger, "moneyline");
+  const marginCandidates = (["moneyline", "spread"] as const)
+    .map((market) => targetExcludedPriceScoreValue(args.ledger, market))
+    .filter((value): value is number => value !== null);
   const marketTotal = targetExcludedPriceScoreValue(args.ledger, "total");
   const marginBoundary = args.ledger.evaluatedContract.spreadHomeMarginBoundary;
   const totalBoundary = args.ledger.evaluatedContract.totalLine;
   const sameCategory = (candidate: number, proposed: number, boundary: number) =>
     Math.sign(candidate - boundary) === Math.sign(proposed - boundary);
-  if (marketMargin !== null && marketTotal !== null && valid(marketMargin, marketTotal) &&
+  const marketMargin = marginCandidates.find((value) => Math.abs(value - args.proposedHomeMargin) < 1e-8);
+  if (marketMargin !== undefined && marketTotal !== null && valid(marketMargin, marketTotal) &&
+      Math.abs(marketTotal - args.proposedTotal) < 1e-8 &&
       sameCategory(marketMargin, args.proposedHomeMargin, 0) &&
       (marginBoundary === null || sameCategory(marketMargin, args.proposedHomeMargin, marginBoundary)) &&
       (totalBoundary === null || sameCategory(marketTotal, args.proposedTotal, totalBoundary))) {
     return { homeMargin: marketMargin, total: marketTotal };
   }
-  // Two simultaneous changes need a single whole-game source; neither a
-  // statistical expert nor one market axis may be stitched to the other.
+  // Each proposed coordinate must equal a genuine market-derived coordinate.
+  // Missing Moneyline evidence cannot erase a valid Spread+Total combination,
+  // and an unrelated statistical expert cannot stand in for either market.
   return { homeMargin: args.releasedHomeMargin, total: args.releasedTotal };
 }
 
@@ -305,6 +311,19 @@ function interpretSideStory(
     spreadDirection: spread.namedDirection ?? 0,
   };
   const evidenceRoles = interpretationRoleLabels(interpretations, ["moneyline", "spread"]);
+  for (const market of ["moneyline", "spread"] as const) {
+    const direction = ledger.marketContexts[market].namedDirection;
+    const lateOpposition = direction !== null && ledger.signals.some((signal) =>
+      signal.market === market && signal.kind === "book_trail" && signal.sourceClass === "named" &&
+      signal.status === "usable" && signal.marketPath?.lastEconomicDirection === -direction &&
+      ((signal.marketPath?.retracementNumberMagnitude ?? 0) > 0 ||
+       (signal.marketPath?.retracementPriceMagnitudePp ?? 0) > 1e-9));
+    const price = targetExcludedPriceScoreValue(ledger, market);
+    const boundary = market === "moneyline" ? 0 : ledger.evaluatedContract.spreadHomeMarginBoundary;
+    if (lateOpposition && (price === null || boundary === null || Math.sign(price - boundary) !== direction)) {
+      return { story: "conflicted_market_story", desiredSide: null, evidenceRoles, ...directions };
+    }
+  }
   // Flow opposed to a price path is resistance to the flow, not an automatic
   // command to follow it. Resolve toward price only if the current paired
   // implication corroborates the path; otherwise retain the forecast.
@@ -520,6 +539,7 @@ function interpretSignal(
   const path = signal.marketPath;
   const roles: NflFullGameEvidenceRole[] = [];
   if (path?.buybackToOpening) roles.push("buyback");
+  if ((path?.retracementNumberMagnitude ?? 0) > 0 || (path?.retracementPriceMagnitudePp ?? 0) > 1e-9) roles.push("partial_buyback");
   if ((path?.reversalMagnitude ?? 0) > 0) roles.push("reversal");
   if ((path?.crossedKeyNumbers.length ?? 0) > 0) roles.push("key_number_transition");
   if (observation?.numberDirection !== null && observation?.priceDirection !== null &&
@@ -571,6 +591,7 @@ function describeBookTrail(signal: NflFullGameEvidenceSignal, roles: NflFullGame
     roles.includes("key_number_transition") ? `crossed ${path?.crossedKeyNumbers.join(", ")}` : null,
     roles.includes("reversal") ? "contained a reversal" : null,
     roles.includes("buyback") ? "bought back to the opener" : null,
+    roles.includes("partial_buyback") ? `retraced ${path?.retracementNumberMagnitude ?? 0} number points / ${path?.retracementPriceMagnitudePp ?? 0} fair-price percentage points; latest direction ${path?.lastEconomicDirection ?? "held"}; current paired prices must resolve the remaining direction` : null,
   ].filter((value): value is string => value !== null);
   return `${signal.source} is interpreted as ${roles.join(", ")}; ${facts.join("; ") || "the path was non-directional"}.`;
 }
@@ -609,7 +630,8 @@ function resolveMargin(args: {
   }
   const currentSpreadBoundary = args.ledger.evaluatedContract.spreadHomeMarginBoundary;
   if (args.story === "market_confirms_game") {
-    const marketScore = targetExcludedPriceScoreValue(args.ledger, "spread");
+    const owningMarket = args.ledger.marketContexts.spread.namedDirection !== null ? "spread" : "moneyline";
+    const marketScore = targetExcludedPriceScoreValue(args.ledger, owningMarket);
     return marketScore !== null && Math.sign(marketScore) === Math.sign(args.releasedHomeMargin) &&
       (args.desiredSide === "home" ? marketScore > args.releasedHomeMargin : marketScore < args.releasedHomeMargin)
       ? marketScore : args.releasedHomeMargin;
@@ -682,11 +704,13 @@ function corroborateSingleEpisodes(ledger: NflFullGameEvidenceLedger): NflFullGa
     if (context.namedDirection !== null || !direction || context.resistance === "book_disagreement") continue;
     // Counts come from canonical distinct, fresh, target-excluded families in
     // the sole writer's anchor builder. The mover cannot confirm itself.
-    if (((market === "total" ? ledger.pairedPriceFamilyCounts?.total : ledger.pairedPriceFamilyCounts?.margin) ?? 0) < 2) continue;
+    if (((market === "total" ? ledger.pairedPriceFamilyCounts?.total : market === "moneyline"
+      ? ledger.pairedPriceFamilyCounts?.moneyline ?? ledger.pairedPriceFamilyCounts?.margin
+      : ledger.pairedPriceFamilyCounts?.margin) ?? 0) < 2) continue;
     const stable = ledger.signals.filter((signal) => signal.kind === "book_trail" &&
       signal.market === market && signal.sourceClass === "named" && signal.status === "usable" &&
       signal.targetExcluded === true && semanticDirection(signal) === direction &&
-      !signal.marketPath?.buybackToOpening && (signal.marketPath?.reversalMagnitude ?? 0) === 0 &&
+      !signal.marketPath?.buybackToOpening &&
       !(signal.marketObservation?.numberDirection != null && signal.marketObservation?.priceDirection != null &&
         signal.marketObservation.numberDirection !== signal.marketObservation.priceDirection));
     const price = targetExcludedPriceScoreValue(ledger, market);
@@ -753,6 +777,15 @@ function currentMarketSide(
   ledger: NflFullGameEvidenceLedger,
   market: "moneyline" | "spread" | "total",
 ) {
+  if (market !== "moneyline") {
+    const priceScore = targetExcludedPriceScoreValue(ledger, market);
+    const boundary = market === "spread" ? ledger.evaluatedContract.spreadHomeMarginBoundary : ledger.evaluatedContract.totalLine;
+    if (priceScore !== null && boundary !== null) {
+      const direction = Math.sign(priceScore - boundary);
+      return market === "total" ? direction > 0 ? "over" : direction < 0 ? "under" : null
+        : direction > 0 ? "home" : direction < 0 ? "away" : null;
+    }
+  }
   return ledger.signals.find((signal) =>
     signal.kind === "target_excluded_market" && signal.market === market && signal.status === "usable")?.side ?? null;
 }

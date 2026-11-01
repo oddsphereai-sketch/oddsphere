@@ -13,6 +13,7 @@ import {
   NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   NFL_V1_PRODUCTION_MODEL_RELEASE,
   selectNflPredictionOwnedMoneylineEvaluation,
+  nflExecutionBooksAt,
 } from "../lib/services/football/nflV1ProductionDecision";
 import { getNflV1WeekOneOutcomeForecast } from "../lib/services/football/nflV1WeekOneOutcome";
 
@@ -43,9 +44,34 @@ const predictionOwnedPromotion = selectNflPredictionOwnedMoneylineEvaluation({
   home: true,
   modelProbability: 0.65,
   gameStartsAt,
+  evaluatedAt,
 });
 assert.equal(predictionOwnedPromotion?.quote.sportsbook, "fanduel");
 assert.equal(predictionOwnedPromotion?.grade, "Lean", "a value-supported predicted winner retains an actionable promotion path");
+const quoteClock = { evaluatedAt, gameStartsAt };
+const freshPromotionBooks = [
+  { ...structuredClone(current), sportsbook: "fanduel", moneyline: { awayPrice: 100, homePrice: -120 } },
+  { ...structuredClone(current), sportsbook: "draftkings", moneyline: { awayPrice: 125, homePrice: -150 } },
+  { ...structuredClone(current), sportsbook: "caesars", moneyline: { awayPrice: 125, homePrice: -150 } },
+];
+const staleTime = new Date(Date.parse(evaluatedAt) - 120 * 60_000 - 1).toISOString();
+const futureTime = new Date(Date.parse(evaluatedAt) + 1).toISOString();
+for (const observedAt of [staleTime, futureTime]) {
+  const temptingInvalidTarget = { ...structuredClone(current), sportsbook: "invalid-target", observedAt,
+    moneyline: { homePrice: 300, awayPrice: -350 } };
+  assert.deepEqual(selectNflPredictionOwnedMoneylineEvaluation({ ...quoteClock,
+    books: [...freshPromotionBooks, temptingInvalidTarget], home: true, modelProbability: 0.65 }), predictionOwnedPromotion,
+  "stale or future attractive execution prices cannot replace a current target");
+  assert.equal(selectNflPredictionOwnedMoneylineEvaluation({ ...quoteClock,
+    books: [freshPromotionBooks[0]!, { ...freshPromotionBooks[1]!, observedAt }, { ...freshPromotionBooks[2]!, observedAt }],
+    home: true, modelProbability: 0.65 }), null,
+  "stale or future comparators cannot create target-free price support");
+}
+assert.equal(nflExecutionBooksAt({ ...quoteClock, books: [{ ...current,
+  observedAt: new Date(Date.parse(evaluatedAt) - 120 * 60_000).toISOString() }] }).length, 1);
+assert.equal(nflExecutionBooksAt({ ...quoteClock, evaluatedAt: "invalid", books: comparableCurrentBooks }).length, 0);
+assert.equal(nflExecutionBooksAt({ ...quoteClock, books: [current,
+  { ...current, sportsbook: "Fan_Duel" }] }).length, 1, "one source family cannot supply multiple LOO votes");
 const outcome = getNflV1WeekOneOutcomeForecast({ providerGameId, awayTeam, homeTeam });
 assert.ok(outcome.homeWinProbability > outcome.awayWinProbability);
 

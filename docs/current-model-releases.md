@@ -6,6 +6,53 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-31
 
+## NFL independent market axes — November 1, private
+
+The final source-to-decision candidate is sole writer
+`nfl_forward_evidence_writer_2026_11_01_r101_independent_market_axes`;
+model / calibration / decision / grade / member / fixture / snapshot are
+`nfl_v1_daily_edge_model_2026_11_01_r45_independent_market_axes` /
+`nfl_v1_daily_edge_calibration_2026_11_01_r44_independent_market_axes` /
+`nfl_v1_daily_edge_decision_2026_11_01_r53_independent_market_axes` /
+`nfl_v1_grade_policy_2026_11_01_r53_independent_market_axes` /
+`nfl_v1_member_release_2026_11_01_r50_independent_market_axes` /
+`nfl_weekly_member_fixture_2026_11_01_r65_independent_market_axes` /
+`nfl_forward_member_snapshot_2026_11_01_r57_independent_market_axes`.
+Ledger / arbiter / runtime are r10 / r26 / r11. Valid ML, Spread and Total
+price authority are retained independently, including held-line price changes;
+the arbiter reconciles one physically valid score, preserving the unsupported
+coordinate. Target outcome r25, state r6, unified Total r2 and shared validator
+r14 remain in the same release family. Prior r100 is private audit evidence.
+Evidence and rollback: `docs/model-audits/2026-11-01-nfl-source-to-decision-contract.md`.
+
+## NFL source-to-decision contract repair — November 1, private
+
+After integrating production base `98628e14`, the full pipeline review replaces
+candidate r99 with sole writer
+`nfl_forward_evidence_writer_2026_11_01_r100_source_to_decision_contract`.
+The proposed model / calibration / decision / grade / member / fixture / snapshot are
+`nfl_v1_daily_edge_model_2026_11_01_r44_source_to_decision_contract` /
+`nfl_v1_daily_edge_calibration_2026_11_01_r43_source_to_decision_contract` /
+`nfl_v1_daily_edge_decision_2026_11_01_r52_source_to_decision_contract` /
+`nfl_v1_grade_policy_2026_11_01_r52_source_to_decision_contract` /
+`nfl_v1_member_release_2026_11_01_r49_source_to_decision_contract` /
+`nfl_weekly_member_fixture_2026_11_01_r64_source_to_decision_contract` /
+`nfl_forward_member_snapshot_2026_11_01_r56_source_to_decision_contract`.
+State r6 preserves small price episodes and late retracement; target-excluded
+outcome r25 uses independent exact-line probability cohorts; direct Moneyline
+score inversion uses its own decided-game probability and does not require a
+Spread or Total cohort. Missing axes remain explicitly unavailable. Unified Total r2 rejects stale,
+future, off-line and target-book raw split features at T-60 while retaining the
+immutable r1 coefficient artifact. Ledger / arbiter / runtime advance to
+r9 / r25 / r10. All execution and comparator prices use the original source time
+at the explicit evaluation clock. No provider loop, writer, schedule, stake,
+member surface or locked-record changes. Whole-board contract audit independently
+checks final PMF probabilities, EV, source quote identity and exclusion.
+New unlocked tuples retain explicit push probability and push-adjusted EV; legacy
+tuples without push probability keep their stored semantics. Shared coherence
+validator r14 accepts that explicit NFL convention while preserving CFB behavior.
+Evidence: `docs/model-audits/2026-11-01-nfl-source-to-decision-contract.md`.
+
 ## NFL explicit episode resolution — November 1, private repair
 
 The random post-repair sample found representative/selected line drift. Latest
