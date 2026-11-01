@@ -8,6 +8,20 @@ Last reviewed: 2026-10-31
 
 ## NFL explicit episode resolution — November 1, private repair
 
+The random post-repair sample found representative/selected line drift. Latest
+candidate writer is `nfl_forward_evidence_writer_2026_11_01_r99_evaluated_contract_resolution`;
+model / calibration / decision / grade / member / fixture / snapshot are
+`nfl_v1_daily_edge_model_2026_11_01_r43_evaluated_contract_resolution` /
+`nfl_v1_daily_edge_calibration_2026_11_01_r42_evaluated_contract_resolution` /
+`nfl_v1_daily_edge_decision_2026_11_01_r51_evaluated_contract_resolution` /
+`nfl_v1_grade_policy_2026_11_01_r51_evaluated_contract_resolution` /
+`nfl_v1_member_release_2026_11_01_r48_evaluated_contract_resolution` /
+`nfl_weekly_member_fixture_2026_11_01_r63_evaluated_contract_resolution` /
+`nfl_forward_member_snapshot_2026_11_01_r55_evaluated_contract_resolution`.
+Runtime r9 and target-excluded outcome r23 carry exact selected-line qualification
+through state, ledger and the resolver's line/book convergence. The r98 family
+below is superseded private evidence, not production.
+
 Owner-directed repair of the October 31 spot-check findings is implemented in the
 candidate writer `nfl_forward_evidence_writer_2026_11_01_r98_explicit_episode_resolution`.
 Model / calibration / decision / grade / member / fixture / snapshot are

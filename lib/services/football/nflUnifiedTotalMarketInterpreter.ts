@@ -56,6 +56,7 @@ export function applyNflUnifiedTotalMarketInterpreter(args: {
   gameStartsAt: string;
   snapshots: Snapshot[];
   current: NflPreviewBookOdds;
+  splitContractCurrent?: { spread: { homeLine: number } | null; total: { line: number } | null };
   playbookLine: NflForwardPlaybookLine | null;
   playbookSplits: NflForwardPlaybookSplitSet | null;
   sharpSplits: NflRegularSharpSplitSet | null;
@@ -92,7 +93,7 @@ export function applyNflUnifiedTotalMarketInterpreter(args: {
     evaluatedAt: args.evaluatedAt,
     snapshots: args.snapshots,
     excludedFamilies,
-    current: args.current,
+    current: args.splitContractCurrent ?? args.current,
     playbookLine: args.playbookLine,
     playbookSplits: args.playbookSplits,
     sharpSplits: args.sharpSplits,

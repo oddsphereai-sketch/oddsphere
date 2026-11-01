@@ -107,7 +107,8 @@ export type NflV1WeekOneOutcomeForecast = {
       | "nfl_target_excluded_market_outcome_2026_10_25_r17_unified_total_interpreter"
       | "nfl_target_excluded_market_outcome_2026_10_26_r18_nuanced_market_reader"
       | "nfl_target_excluded_market_outcome_2026_10_26_r20_joint_side_market_arbitration"
-      | "nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion";
+      | "nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion"
+      | "nfl_target_excluded_market_outcome_2026_11_01_r23_evaluated_contract_resolution";
     status: "target_excluded_market" | "incumbent_fallback";
     reason: "stable_complete_tuple" | "insufficient_or_unstable_target_free_evidence";
     marginFamilyCount: number | null;
@@ -469,6 +470,8 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   current: NflPreviewBookOdds;
   operationalOpening?: { quote: NflPreviewBookOdds } | null;
   playbookLine: { capturedAt: string; homeSpread: number | null; total: number | null } | null;
+  /** Exact selected contracts for split identity; carries no executable prices. */
+  splitContractCurrent?: { spread: { homeLine: number } | null; total: { line: number } | null };
   playbookSplits: { spread: SplitPercentages; moneyline: SplitPercentages; total: SplitPercentages } | null;
   sharpSplits: { spread: SharpSplitPercentages; moneyline: SharpSplitPercentages; total: SharpSplitPercentages } | null;
   marketHomeCoverProbability?: number;
@@ -535,13 +538,14 @@ export function buildNflMarketEvidenceOutcomeForecast(args: {
   );
   const sharpTotalGap = freshCircaGap(args.sharpSplits?.total, "over", evaluatedAt);
   const sharpMoneylineGap = freshCircaGap(args.sharpSplits?.moneyline, "home", evaluatedAt);
-  const publicMarginGap = playbookLineMatches(args.playbookLine?.homeSpread, args.current.spread.homeLine)
+  const splitContract = args.splitContractCurrent ?? args.current;
+  const publicMarginGap = playbookLineMatches(args.playbookLine?.homeSpread, splitContract.spread?.homeLine ?? NaN)
     ? firstFinite(
         freshPublicGap(args.playbookSplits?.spread, "home", evaluatedAt),
         freshPublicGap(args.playbookSplits?.moneyline, "home", evaluatedAt),
       )
     : null;
-  const publicTotalGap = playbookLineMatches(args.playbookLine?.total, args.current.total.line)
+  const publicTotalGap = playbookLineMatches(args.playbookLine?.total, splitContract.total?.line ?? NaN)
     ? freshPublicGap(args.playbookSplits?.total, "over", evaluatedAt)
     : null;
   const publicMoneylineGap = freshPublicGap(args.playbookSplits?.moneyline, "home", evaluatedAt);
@@ -1419,7 +1423,8 @@ function symmetricShiftedDistribution(
 }
 
 function playbookLineMatches(value: number | null | undefined, current: number): boolean {
-  return value !== null && value !== undefined && Math.abs(value - current) <= 0.5;
+  return typeof value === "number" && Number.isFinite(value) && Number.isFinite(current) &&
+    Math.abs(value - current) < 1e-9;
 }
 
 function firstFinite(...values: Array<number | null>): number | null {

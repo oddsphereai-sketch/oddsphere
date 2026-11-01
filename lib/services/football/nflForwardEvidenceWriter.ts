@@ -129,7 +129,7 @@ import {
 } from "./nflExactProviderScoreRuntime";
 import { buildNflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import { buildNflMarketState } from "./nflMarketState";
-import { applyNflFullGameEvidenceRuntime } from "./nflFullGameEvidenceRuntime";
+import { applyNflFullGameEvidenceRuntime, deriveNflEvaluatedMarketContract, stabilizeNflFullGameEvidenceTargets } from "./nflFullGameEvidenceRuntime";
 import {
   buildNflMarketBrainShadow,
   nflMarketBrainCaptureFailure,
@@ -150,7 +150,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_01_r98_explicit_episode_resolution" as const;
+  "nfl_forward_evidence_writer_2026_11_01_r99_evaluated_contract_resolution" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -851,20 +851,20 @@ export async function runNflForwardEvidenceWriter(args: {
         directionHomeMarginCorrection: weeklyRawSignal.directionHomeMarginCorrection,
       } : undefined,
       paidTeamScore: paidProjectionShadow,
-      namedSequenceAuthorityFactory: (excludedFamiliesByMarket) => buildNflNamedMarketSequenceAuthority({
+      namedSequenceAuthorityFactory: (excludedFamiliesByMarket, contract) => buildNflNamedMarketSequenceAuthority({
         evaluatedAt: capturedAt,
         snapshots: namedSequenceSnapshots,
-        current,
+        current: contract ?? current,
         playbookLine,
         playbookSplits,
         sharpSplits,
         excludedFamiliesByMarket,
         minimumFollowerSources: 2,
       }),
-      professionalMarketAuthorityFactory: (excludedFamiliesByMarket) => buildNflProfessionalMarketAuthority({
+      professionalMarketAuthorityFactory: (excludedFamiliesByMarket, contract) => buildNflProfessionalMarketAuthority({
         evaluatedAt: capturedAt,
         snapshots: namedSequenceSnapshots,
-        current,
+        current: contract ? { ...contract, sportsbook: current.sportsbook } : current,
         playbookLine,
         playbookSplits,
         sharpSplits,
@@ -891,7 +891,12 @@ export async function runNflForwardEvidenceWriter(args: {
         fallbackOutcome: baseOutcome,
       } : {}),
     });
-    const excludedFamiliesByMarket = nflFullGameExcludedFamilies(resolved.production.evaluatedBets);
+    const existingLockedRecord = hasImmutableNflLockedRecord(historicalExisting, plan.game.providerGameId);
+    const semantic = stabilizeNflFullGameEvidenceTargets({
+      baselineProduction: resolved.production, releasedForecast: resolved.outcome,
+      homeTeam: plan.game.home.abbreviation,
+      build: (evaluationTargets) => {
+    const excludedFamiliesByMarket = nflFullGameExcludedFamilies(evaluationTargets.evaluatedBets);
     const targetExcludedAnchor = resolveNflTargetExcludedMarketAnchor({
       books: comparableCurrentBooks,
       marginExcludedSportsbooks: excludedFamiliesByMarket.moneyline,
@@ -920,6 +925,16 @@ export async function runNflForwardEvidenceWriter(args: {
           expectedAwayScore: (marketImpliedTotal - marketImpliedMargin) / 2,
           expectedHomeScore: (marketImpliedTotal + marketImpliedMargin) / 2,
         } : null;
+    const evaluatedContract = deriveNflEvaluatedMarketContract({
+      baselineProduction: evaluationTargets, homeTeam: plan.game.home.abbreviation,
+    });
+    const semanticSharpSplits = displaySharpSplits?.moneyline.provider === "owls"
+      ? qualifyNflOwlsSplitsForModel({
+          splits: displaySharpSplits, providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
+          currentHomeSpread: evaluatedContract.spread?.homeLine ?? null,
+          currentTotal: evaluatedContract.total?.line ?? null,
+        }).splits
+      : sharpSplits;
     const marketStates = Object.fromEntries((["moneyline", "spread", "total"] as const).map((market) => [
       market,
       buildNflMarketState({
@@ -927,18 +942,17 @@ export async function runNflForwardEvidenceWriter(args: {
         evaluatedAt: capturedAt,
         snapshots: namedSequenceSnapshots,
         excludedFamilies: excludedFamiliesByMarket[market],
-        current,
+        current: evaluatedContract,
         playbookLine,
         playbookSplits,
-        sharpSplits,
+        sharpSplits: semanticSharpSplits,
       }),
     ])) as Record<"moneyline" | "spread" | "total", ReturnType<typeof buildNflMarketState>>;
     const fromMarginTotal = (margin: number, total: number) => ({
       expectedAwayScore: (total - margin) / 2,
       expectedHomeScore: (total + margin) / 2,
     });
-    const existingLockedRecord = hasImmutableNflLockedRecord(historicalExisting, plan.game.providerGameId);
-    const semantic = applyNflFullGameEvidenceRuntime({
+    const candidate = applyNflFullGameEvidenceRuntime({
       providerGameId: plan.game.providerGameId,
       awayTeam: plan.game.away.abbreviation,
       homeTeam: plan.game.home.abbreviation,
@@ -946,6 +960,7 @@ export async function runNflForwardEvidenceWriter(args: {
       evaluatedAt: capturedAt,
       releasedForecast: resolved.outcome,
       baselineProduction: resolved.production,
+      evaluatedProduction: evaluationTargets,
       current,
       comparableCurrentBooks,
       shadowMoneyline,
@@ -955,7 +970,7 @@ export async function runNflForwardEvidenceWriter(args: {
       states: marketStates,
       excludedFamiliesByMarket,
       playbookSplits,
-      sharpSplits,
+      sharpSplits: semanticSharpSplits,
       forecastCandidates: [
         {
           source: "independent_exact_stat",
@@ -982,7 +997,10 @@ export async function runNflForwardEvidenceWriter(args: {
       },
       existingLockedRecord,
     });
-    const { outcome, production } = semantic;
+    return { ...candidate, marketImpliedMargin, marketImpliedTotal };
+      },
+    });
+    const { outcome, production, marketImpliedMargin, marketImpliedTotal } = semantic;
     if (args.auditSemanticImpact && !existingLockedRecord) {
       const decisions = (rows: typeof production.evaluatedBets) => rows.map((bet) => ({
         market: bet.market, side: bet.side, grade: bet.grade,
@@ -1112,6 +1130,7 @@ export async function runNflForwardEvidenceWriter(args: {
       ...(!existingLockedRecord ? {
         fullGameEvidenceInterpretation: {
           runtimeRelease: semantic.release,
+          targetResolution: semantic.targetResolution,
           ledgerRelease: semantic.ledger.release,
           arbiterRelease: semantic.arbitration.release,
           status: semantic.arbitration.status,

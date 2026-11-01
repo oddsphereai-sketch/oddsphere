@@ -56,8 +56,17 @@ async function main(): Promise<void> {
             payload.contextualEvidenceCapture?.markets[market].families.map((family) => family[0]) ?? [],
           ])),
           score: [payload.outcomeForecast.expectedAwayScore, payload.outcomeForecast.expectedHomeScore],
+          ...(process.argv.includes("--market-evidence") ? {
+            capturedAt: payload.capturedAt,
+            gameStartsAt: payload.game.scheduledStart,
+            marketEvidence: payload.market,
+            contextCapture: payload.contextualEvidenceCapture,
+            interpretations: payload.fullGameEvidenceInterpretation?.signalInterpretations,
+            evaluatedBets: payload.decisions.evaluatedBets,
+          } : {}),
           marketRead: payload.fullGameEvidenceInterpretation && {
             status: payload.fullGameEvidenceInterpretation.status,
+            targetResolution: payload.fullGameEvidenceInterpretation.targetResolution,
             sideStory: payload.fullGameEvidenceInterpretation.sideStory,
             totalStory: payload.fullGameEvidenceInterpretation.totalStory,
             marketResolutions: payload.fullGameEvidenceInterpretation.marketResolutions,

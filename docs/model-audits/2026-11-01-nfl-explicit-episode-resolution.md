@@ -72,3 +72,39 @@ outputs to the preceding complete production family; never rewrite locks.
 Release qualification remains separate from the passing implementation checks:
 the current board has three actionable demotions and no replacements. The broader
 candidate must not be declared fully production-qualified from this rehearsal.
+
+## Requested random post-repair checks
+
+A random draw excluding the original defect examples selected MIN@DET, CHI@SEA,
+and NE@MIA. Exact quote probabilities and EV recompute correctly for all nine
+markets. Every selected side agrees with the single final score.
+
+NE@MIA's apparent history discrepancy was resolved against the original stored
+October 27 captures: Circa and Pinnacle were both NE -7.5 before the later -7
+tape. A Miami cover correction can coexist with a New England outright winner.
+Both evaluated side prices have negative EV, correctly remaining No Play. The
+Under remains Watchlist because the current paired-price implication does not
+confirm an actionable Under at the evaluated line.
+
+MIN@DET exposed a genuine additional defect: the evaluated Under 46 was receiving
+split qualification against representative Total 46.5. R99 now derives each
+contract from the selected quote, checks source lines exactly (no half-point
+tolerance), and includes selected line in target resolution convergence. It
+passes that contract through public/sharp qualification, named/professional
+factories, unified Total, the final state and ledger. Narrow line-only contexts
+never manufacture sportsbook prices. The new focused test reproduces and rejects
+46.5 flow at an evaluated 46 contract while retaining matching 46 evidence.
+
+The subsequent 13-game r99 no-write capture confirms MIN's off-line Total flow is
+context only, with its score and evaluated Under 46 unchanged. The three random
+scores remain MIN21.82–DET24.14, CHI19.31–SEA23.43, NE24.26–MIA17.66. Chicago's
+old Circa source clock is excluded despite a later retrieval time. Source-timed
+Pinnacle resistance is retained; current prices still support Seattle, so no
+automatic winner flip is inferred. R99 candidate counts are 5 Best Angles /
+2 Leans / 9 Watchlists / 23 No Plays at that source clock.
+
+Post-contract focused NFL tests, full model-change verification, TypeScript and
+webpack production build pass. The Turbopack build rejects this worktree's shared
+node_modules symlink; webpack compiles and prerenders successfully. The repaired
+snapshot reader loads the existing production r47 snapshot, 14 games/42 markets,
+with no critical health findings and no writes.

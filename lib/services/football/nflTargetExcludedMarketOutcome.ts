@@ -27,7 +27,7 @@ import {
 import { applyNflUnifiedTotalMarketInterpreter } from "./nflUnifiedTotalMarketInterpreter";
 
 export const NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE =
-  "nfl_target_excluded_market_outcome_2026_10_31_r22_split_value_target_exclusion" as const;
+  "nfl_target_excluded_market_outcome_2026_11_01_r23_evaluated_contract_resolution" as const;
 
 export type NflTargetExcludedMarketAnchor = {
   release: typeof NFL_TARGET_EXCLUDED_MARKET_OUTCOME_RELEASE;
@@ -45,9 +45,11 @@ type NflEvaluatedTargetFamilies = {
   byMarket: Record<"moneyline" | "spread" | "total", string>;
   margin: string[];
   total: string[];
+  contractLines?: { homeSpread: number | null; total: number | null };
 };
 
 export type NflNamedSequenceExcludedFamilies = Record<"moneyline" | "spread" | "total", string[]>;
+export type EvaluatedContract = { spread: { homeLine: number } | null; total: { line: number } | null };
 
 export function resolveNflTargetExcludedProduction(args: {
   providerGameId: string;
@@ -77,13 +79,16 @@ export function resolveNflTargetExcludedProduction(args: {
   namedSequenceAuthority?: NflNamedMarketSequenceAuthority;
   namedSequenceAuthorityFactory?: (
     excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
+    evaluatedContract?: EvaluatedContract,
   ) => NflNamedMarketSequenceAuthority;
   professionalMarketAuthority?: NflProfessionalMarketAuthority;
   professionalMarketAuthorityFactory?: (
     excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
+    evaluatedContract?: EvaluatedContract,
   ) => NflProfessionalMarketAuthority;
   threeStateMarketAuthorityFactory?: (
     excludedFamiliesByMarket: NflNamedSequenceExcludedFamilies,
+    evaluatedContract?: EvaluatedContract,
   ) => NflThreeStateMarketAuthority;
   marketStateSnapshots?: Array<{
     capturedAt: string;
@@ -142,28 +147,33 @@ export function resolveNflTargetExcludedProduction(args: {
     const baseline = resolveNflTargetExcludedProduction({
       ...args,
       suppressNuancedMarginOverlay: true,
-      threeStateMarketAuthorityFactory: (excludedFamiliesByMarket) => {
-        const authority = authorityFactory(excludedFamiliesByMarket);
+      threeStateMarketAuthorityFactory: (excludedFamiliesByMarket, evaluatedContract) => {
+        const authority = authorityFactory(excludedFamiliesByMarket, evaluatedContract);
         return authority.reason === "qualified_named_price_flow_and_cross_market_consensus" ||
           authority.reason === "qualified_opposing_flow_and_cross_market_consensus"
           ? unavailableCandidateAuthority(authority)
           : authority;
       },
     });
-    const initialTargets = evaluatedTargetFamilies(baseline.production.evaluatedBets);
+    const initialTargets = evaluatedTargetFamilies(baseline.production.evaluatedBets, args.homeTeam);
     if (!initialTargets) return baseline;
     let marginExcluded = [...initialTargets.margin].sort();
+    let contractLines = initialTargets.contractLines;
+    const overlaySeen = new Set<string>();
     let safeResistance: typeof baseline | null = null;
     const familyBound = Math.min(
       9,
       new Set(args.comparableCurrentBooks.map((book) => normalizeBook(book.sportsbook)).filter(Boolean)).size + 1,
     );
     for (let iteration = 0; iteration < familyBound; iteration++) {
+      const overlaySignature = JSON.stringify([marginExcluded, contractLines]);
+      if (overlaySeen.has(overlaySignature)) return safeResistance ?? baseline;
+      overlaySeen.add(overlaySignature);
       const authority = authorityFactory({
         moneyline: marginExcluded,
         spread: marginExcluded,
         total: initialTargets.total,
-      });
+      }, splitContractCurrentFor(contractLines));
       const marginAnchor = resolveNflTargetExcludedMarketAnchor({
         books: args.comparableCurrentBooks,
         marginExcludedSportsbooks: marginExcluded,
@@ -209,18 +219,20 @@ export function resolveNflTargetExcludedProduction(args: {
         outcome: classified,
         demoteOpposedSpreadActionable: true,
       });
-      const targets = evaluatedTargetFamilies(candidate.evaluatedBets);
+      const targets = evaluatedTargetFamilies(candidate.evaluatedBets, args.homeTeam);
       if (!targets) return safeResistance ?? baseline;
-      if (targets.margin.every((family) => marginExcluded.includes(family))) {
+      if (targets.margin.every((family) => marginExcluded.includes(family)) &&
+          JSON.stringify(targets.contractLines) === JSON.stringify(contractLines)) {
         return { ...baseline, outcome: classified, production: candidate };
       }
       marginExcluded = [...new Set([...marginExcluded, ...targets.margin])].sort();
+      contractLines = targets.contractLines;
     }
     return safeResistance ?? baseline;
   }
 
   let production = buildProduction(args.incumbentOutcome);
-  let excluded = evaluatedTargetFamilies(production.evaluatedBets);
+  let excluded = evaluatedTargetFamilies(production.evaluatedBets, args.homeTeam);
   if (!excluded) return fallback();
   const seen = new Set<string>();
   const familyBound = Math.min(
@@ -239,6 +251,9 @@ export function resolveNflTargetExcludedProduction(args: {
       requireSameLineTotalPrices: args.pricedNeutralTotalCandidate === true,
     });
     if (!anchor) return fallback();
+    const splitContractCurrent = splitContractCurrentFor(excluded.contractLines);
+    const contractPlaybookSplits = targetContractPlaybookSplits(args.playbookSplits, args.playbookLine, excluded.contractLines);
+    const contractSharpSplits = targetFreeSharpSplits(args.sharpSplits, excluded);
     const targetFreeCurrent: NflPreviewBookOdds = {
       ...args.current,
       sportsbook: "target-excluded-consensus",
@@ -255,14 +270,14 @@ export function resolveNflTargetExcludedProduction(args: {
           moneyline: excluded.margin,
           spread: excluded.margin,
           total: excluded.total,
-        })
+        }, splitContractCurrent)
       : args.namedSequenceAuthority;
     const professionalMarketAuthority = args.professionalMarketAuthorityFactory
       ? args.professionalMarketAuthorityFactory({
           moneyline: excluded.margin,
           spread: excluded.margin,
           total: excluded.total,
-        })
+        }, splitContractCurrent)
       : args.professionalMarketAuthority;
     diagnosticProfessionalAuthority = professionalMarketAuthority ?? null;
     const preThreeStateOutcome = (args.marketOutcomeBuilder ?? buildNflMarketEvidenceOutcomeForecast)({
@@ -271,8 +286,9 @@ export function resolveNflTargetExcludedProduction(args: {
       current: targetFreeCurrent,
       operationalOpening: args.operationalOpening ?? null,
       playbookLine: args.playbookLine,
-      playbookSplits: args.playbookSplits,
-      sharpSplits: targetFreeSharpSplits(args.sharpSplits, excluded),
+      playbookSplits: contractPlaybookSplits,
+      sharpSplits: contractSharpSplits,
+      splitContractCurrent,
       marketHomeCoverProbability: anchor.spreadHomeFairProbability,
       marketOverProbability: args.pricedNeutralTotalCandidate ? anchor.totalOverFairProbability : undefined,
       spreadDirectionCandidate: args.operationalOpening !== undefined && args.operationalOpening !== null,
@@ -293,9 +309,10 @@ export function resolveNflTargetExcludedProduction(args: {
           gameStartsAt: args.gameStartsAt,
           snapshots: args.marketStateSnapshots,
           current: args.current,
+          splitContractCurrent,
           playbookLine: args.playbookLine,
-          playbookSplits: args.playbookSplits,
-          sharpSplits: targetFreeSharpSplits(args.sharpSplits, excluded),
+          playbookSplits: contractPlaybookSplits,
+          sharpSplits: contractSharpSplits,
           excludedFamilies: excluded.total,
           targetExcludedAnchor: anchor,
         })
@@ -304,7 +321,7 @@ export function resolveNflTargetExcludedProduction(args: {
       moneyline: excluded.margin,
       spread: excluded.margin,
       total: excluded.total,
-    });
+    }, splitContractCurrent);
     const outcomeCandidate = threeStateAuthority
       ? applyNflThreeStateMarketReader({
           forecast: unifiedOutcome,
@@ -321,7 +338,7 @@ export function resolveNflTargetExcludedProduction(args: {
       candidate: buildProduction(outcomeCandidate),
       outcome: outcomeCandidate,
     });
-    const nextExcluded = evaluatedTargetFamilies(productionCandidate.evaluatedBets);
+    const nextExcluded = evaluatedTargetFamilies(productionCandidate.evaluatedBets, args.homeTeam);
     if (!nextExcluded) return fallback();
     if (targetFamilySignature(nextExcluded) === signature) {
       const targetExclusion = {
@@ -340,6 +357,12 @@ export function resolveNflTargetExcludedProduction(args: {
         candidate: buildProduction(outcome),
         outcome,
       });
+      const finalTargets = evaluatedTargetFamilies(finalProduction.evaluatedBets, args.homeTeam);
+      if (!finalTargets) return fallback();
+      if (targetFamilySignature(finalTargets) !== signature) {
+        excluded = finalTargets;
+        continue;
+      }
       return { outcome, production: finalProduction, targetExclusion, diagnosticProfessionalAuthority };
     }
     production = productionCandidate;
@@ -515,6 +538,7 @@ export function resolveNflTargetExcludedMoneylineHomeProbability(args: {
 
 function evaluatedTargetFamilies(
   decisions: NflV1ActionableGradeBundle["evaluatedBets"],
+  homeTeam: string,
 ): NflEvaluatedTargetFamilies | null {
   const byMarket = Object.fromEntries(decisions.map((decision) => [
     decision.market,
@@ -522,15 +546,23 @@ function evaluatedTargetFamilies(
   ])) as Partial<NflEvaluatedTargetFamilies["byMarket"]>;
   if (!byMarket.moneyline || !byMarket.spread || !byMarket.total) return null;
   const complete = byMarket as NflEvaluatedTargetFamilies["byMarket"];
+  const spread = decisions.find((decision) => decision.market === "spread");
+  const total = decisions.find((decision) => decision.market === "total");
   return {
     byMarket: complete,
     margin: [...new Set([complete.moneyline, complete.spread])],
     total: [complete.total],
+    contractLines: {
+      homeSpread: spread?.evaluatedQuote.line == null ? null
+        : spread.side === homeTeam ? spread.evaluatedQuote.line : -spread.evaluatedQuote.line,
+      total: total?.evaluatedQuote.line ?? null,
+    },
   };
 }
 
 function targetFamilySignature(value: NflEvaluatedTargetFamilies): string {
-  return [value.byMarket.moneyline, value.byMarket.spread, value.byMarket.total].join("|");
+  return [value.byMarket.moneyline, value.byMarket.spread, value.contractLines?.homeSpread,
+    value.byMarket.total, value.contractLines?.total].join("|");
 }
 
 export function targetFreeSharpSplits(
@@ -547,12 +579,42 @@ export function targetFreeSharpSplits(
     moneyline: excluded.margin.includes(normalizeBook(value.moneyline.sourceSportsbook))
       ? mask(value.moneyline)
       : value.moneyline,
-    spread: excluded.margin.includes(normalizeBook(value.spread.sourceSportsbook))
+    spread: excluded.margin.includes(normalizeBook(value.spread.sourceSportsbook)) ||
+      (excluded.contractLines !== undefined && !exactContractLine(value.spread.sourceLine, excluded.contractLines.homeSpread))
       ? mask(value.spread)
       : value.spread,
-    total: excluded.total.includes(normalizeBook(value.total.sourceSportsbook))
+    total: excluded.total.includes(normalizeBook(value.total.sourceSportsbook)) ||
+      (excluded.contractLines !== undefined && !exactContractLine(value.total.sourceLine, excluded.contractLines.total))
       ? mask(value.total)
       : value.total,
+  };
+}
+
+function exactContractLine(source: number | null | undefined, target: number | null | undefined): boolean {
+  return typeof source === "number" && Number.isFinite(source) && typeof target === "number" &&
+    Number.isFinite(target) && Math.abs(source - target) < 1e-9;
+}
+
+function splitContractCurrentFor(lines: NflEvaluatedTargetFamilies["contractLines"]): EvaluatedContract {
+  return {
+    spread: lines?.homeSpread == null ? null : { homeLine: lines.homeSpread },
+    total: lines?.total == null ? null : { line: lines.total },
+  };
+}
+
+export function targetContractPlaybookSplits(
+  value: NflForwardPlaybookSplitSet | null,
+  line: NflForwardPlaybookLine | null,
+  contract: NflEvaluatedTargetFamilies["contractLines"],
+): NflForwardPlaybookSplitSet | null {
+  if (!value || !contract) return value;
+  const mask = (row: NflForwardPlaybookSplitSet["moneyline"]) => row && ({ ...row,
+    homeMoneyPct: null, awayMoneyPct: null, homeBetsPct: null, awayBetsPct: null,
+    overMoneyPct: null, underMoneyPct: null, overBetsPct: null, underBetsPct: null,
+  });
+  return { ...value,
+    spread: exactContractLine(line?.homeSpread, contract.homeSpread) ? value.spread : mask(value.spread),
+    total: exactContractLine(line?.total, contract.total) ? value.total : mask(value.total),
   };
 }
 
