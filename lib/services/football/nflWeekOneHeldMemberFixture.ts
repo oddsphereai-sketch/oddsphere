@@ -48,7 +48,12 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations" as const;
+  "nfl_weekly_member_fixture_2026_11_01_r68_locked_fixture_continuity" as const;
+
+const NFL_MOVEMENT_CONTRACT_PREDECESSOR_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation" as const;
+const NFL_MOVEMENT_CONTRACT_PREDECESSOR_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_11_01_r54_movement_contract_separation" as const;
 
 const NFL_NAMED_PRICE_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation" as const;
@@ -302,6 +307,9 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_MOVEMENT_CONTRACT_PREDECESSOR_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_MOVEMENT_CONTRACT_PREDECESSOR_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_NAMED_PRICE_PREDECESSOR_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_NAMED_PRICE_PREDECESSOR_DECISION_RELEASE)) ||
@@ -377,6 +385,18 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
     if (hasCurrentAuthority && !isCurrentAuthority(row) && !transitionLockedPrevious) continue;
     if (!hasCurrentAuthority && !isPreviousAuthority(row)) continue;
     const current = latest.get(row.providerGameId);
+    // The first immutable public lock takes precedence over every later
+    // unlocked refresh, including one stamped with a newer model release.
+    if (current && hasImmutableT60Tuple(current)) {
+      if (hasImmutableT60Tuple(row) && Date.parse(row.capturedAt) < Date.parse(current.capturedAt)) {
+        latest.set(row.providerGameId, row);
+      }
+      continue;
+    }
+    if (hasImmutableT60Tuple(row)) {
+      latest.set(row.providerGameId, row);
+      continue;
+    }
     if (!current || isCurrentAuthority(row) && !isCurrentAuthority(current) ||
         isCurrentAuthority(row) === isCurrentAuthority(current) && Date.parse(row.capturedAt) > Date.parse(current.capturedAt)) {
       latest.set(row.providerGameId, row as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload });

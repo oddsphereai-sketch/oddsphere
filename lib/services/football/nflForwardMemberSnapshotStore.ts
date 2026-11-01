@@ -10,7 +10,13 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_11_01_r59_relative_market_innovations" as const;
+  "nfl_forward_member_snapshot_2026_11_01_r60_locked_fixture_continuity" as const;
+const NFL_RELATIVE_INNOVATION_PREDECESSOR = {
+  snapshot: "nfl_forward_member_snapshot_2026_11_01_r59_relative_market_innovations",
+  fixture: "nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations",
+  member: "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations",
+  decision: "nfl_v1_daily_edge_decision_2026_11_01_r55_relative_market_innovations",
+} as const;
 const NFL_MOVEMENT_CONTRACT_PREDECESSOR = {
   snapshot: "nfl_forward_member_snapshot_2026_11_01_r58_movement_contract_separation",
   fixture: "nfl_weekly_member_fixture_2026_11_01_r66_movement_contract_separation",
@@ -272,6 +278,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_RELATIVE_INNOVATION_PREDECESSOR.snapshot,
   NFL_MOVEMENT_CONTRACT_PREDECESSOR.snapshot,
   NFL_INDEPENDENT_AXES_PREDECESSOR.snapshot,
   NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE,
@@ -387,6 +394,11 @@ function nflForwardMemberSnapshotKeyForRelease(
     return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
       NFL_MOVEMENT_CONTRACT_PREDECESSOR.fixture, NFL_MOVEMENT_CONTRACT_PREDECESSOR.member,
       NFL_MOVEMENT_CONTRACT_PREDECESSOR.decision].join("::");
+  }
+  if (snapshotRelease === NFL_RELATIVE_INNOVATION_PREDECESSOR.snapshot) {
+    return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
+      NFL_RELATIVE_INNOVATION_PREDECESSOR.fixture, NFL_RELATIVE_INNOVATION_PREDECESSOR.member,
+      NFL_RELATIVE_INNOVATION_PREDECESSOR.decision].join("::");
   }
   if (snapshotRelease === NFL_INDEPENDENT_AXES_PREDECESSOR.snapshot) {
     return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
@@ -830,6 +842,10 @@ function validateNflForwardMemberSnapshot(
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
     heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE) ||
     independentAxesPredecessorContract ||
+    (memberRelease === NFL_RELATIVE_INNOVATION_PREDECESSOR.member &&
+      decisionRelease === NFL_RELATIVE_INNOVATION_PREDECESSOR.decision &&
+      fixtureRelease === NFL_RELATIVE_INNOVATION_PREDECESSOR.fixture &&
+      heldMemberFixtureRelease === NFL_RELATIVE_INNOVATION_PREDECESSOR.fixture) ||
     (memberRelease === NFL_MOVEMENT_CONTRACT_PREDECESSOR.member &&
       decisionRelease === NFL_MOVEMENT_CONTRACT_PREDECESSOR.decision &&
       fixtureRelease === NFL_MOVEMENT_CONTRACT_PREDECESSOR.fixture &&
