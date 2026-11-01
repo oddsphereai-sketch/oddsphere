@@ -11,7 +11,7 @@ export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   if (!await verifyWhopSession(request.cookies.get(WHOP_SESSION_COOKIE_NAME)?.value) &&
-      !isValidBetaSession(request.cookies.get(BETA_SESSION_COOKIE_NAME)?.value)) {
+      !await isValidBetaSession(request.cookies.get(BETA_SESSION_COOKIE_NAME)?.value)) {
     return Response.json({ error: "auth_required" }, { status: 401 });
   }
   const gameId = request.nextUrl.searchParams.get("game")?.trim() ?? "";
