@@ -703,6 +703,14 @@ const promotedMoneyline = applyNflFullGameSemanticGradePolicy({
 });
 assert.equal(promotedMoneyline.evaluatedBets[0]?.grade, "Lean",
   "the final candidate grade must not be silently capped when a paired-price-supported score changes");
+const demotedMoneyline = applyNflFullGameSemanticGradePolicy({
+  baseline: { evaluatedBets: [{ market: "moneyline", side: "HOME", grade: "Best Angle" }] } as never,
+  candidate: { evaluatedBets: [{ market: "moneyline", side: "HOME", grade: "No Play",
+    modelProbability: 0.6, expectedValue: -0.1, evaluatedQuote: { price: -200 } }] } as never,
+  arbitration: sameWinnerArbitration,
+});
+assert.equal(demotedMoneyline.evaluatedBets[0]?.grade, "No Play",
+  "the same coherent correction also preserves an exact-price evaluator's demotion instead of resurrecting the former Best Angle");
 const promotedSpread = applyNflFullGameSemanticGradePolicy({
   baseline: { evaluatedBets: [{ market: "spread", side: "AWAY", grade: "Watchlist" }] } as never,
   candidate: { evaluatedBets: [{ market: "spread", side: "HOME", grade: "Watchlist",
@@ -987,11 +995,13 @@ const reverseFlowUnconfirmed = arbitrateNflFullGameEvidence({
   releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
   ledger: reverseFlowLedger(-2, 0.4),
 });
-assert.equal(reverseFlowUnconfirmed.finalHomeMargin, -3,
-  "opposing flow with a contrary current-price implication must challenge the named path before any flip");
-assert.equal(reverseFlowUnconfirmed.sideStory, "conflicted_market_story");
-assert.equal(reverseFlowUnconfirmed.marketResolutions?.moneyline.reason,
-  "current_price_does_not_confirm_named_path_retain_released_score");
+assert.equal(reverseFlowUnconfirmed.finalHomeMargin, -2,
+  "home-directed movement may weaken an away winner from -3 to -2 without forcing an outright home flip");
+assert.equal(reverseFlowUnconfirmed.sideStory, "same_winner_repricing");
+assert.equal(reverseFlowUnconfirmed.marketResolutions?.moneyline.action, "changed");
+assert.notEqual(reverseFlowUnconfirmed.marketResolutions?.moneyline.reason,
+  "current_price_does_not_confirm_named_path_retain_released_score",
+  "a same-winner displacement in the movement direction is not a contrary current-price hold");
 const compensatedSideLedger = structuredClone(ledger);
 compensatedSideLedger.marketContexts.spread.namedDirection = 1;
 for (const signal of compensatedSideLedger.signals) {
@@ -1210,12 +1220,12 @@ assert.equal(earlyTickWithoutPrice.finalHomeMargin, -3,
 const earlyTickAgainstPrice = arbitrateNflFullGameEvidence({
   releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
   ledger: buildNflFullGameEvidenceLedger({ ...earlyTickLedgerArgs(true),
-    targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, homeMargin: -2, moneylineHomeFairProbability: 0.4 },
-    forecastCandidates: [{ source: "target_excluded_paired_price_score", forecast: { expectedAwayScore: 23, expectedHomeScore: 21 } }],
+    targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, homeMargin: -4, moneylineHomeFairProbability: 0.4 },
+    forecastCandidates: [{ source: "target_excluded_paired_price_score", forecast: { expectedAwayScore: 24, expectedHomeScore: 20 } }],
   }),
 });
 assert.equal(earlyTickAgainstPrice.finalHomeMargin, -3,
-  "contrary current price evidence still prevents the lone-book correction");
+  "a paired-price displacement from -3 toward -4 opposes the home-directed path and prevents the lone-book correction");
 
 const sideAxisOnlyLedger = buildNflFullGameEvidenceLedger({
   ...ledgerArgs,
@@ -1328,5 +1338,131 @@ const distinctPriceSignals = distinctMarketValueLedger.signals.filter((item) =>
 assert.deepEqual(distinctPriceSignals.map((item) => [item.market, item.value, item.side]),
   [["moneyline", 4, "home"], ["spread", -5, "away"], ["total", 50, "over"]],
   "each market retains its own price-implied value and direction rather than borrowing the whole-score axis");
+
+// Prospective semantic controls: movement direction is a displacement, not
+// necessarily the final winner/cover/Over category at the evaluated contract.
+const semanticSideTotal = 42.3855;
+const semanticSideForecast = {
+  expectedAwayScore: (semanticSideTotal + 0.729) / 2,
+  expectedHomeScore: (semanticSideTotal - 0.729) / 2,
+};
+const awayMoneylineFlow = { ...split, homeMoneyPct: 20, awayMoneyPct: 80, homeBetsPct: 60, awayBetsPct: 40 };
+const semanticSideSnapshots = [{ capturedAt: "2026-10-26T19:50:00.000Z", markets: {
+  moneyline: { families: ["circa", "pinnacle"].map((source) => [
+    source, "s", source === "circa" ? "c" : "p", null,
+    landmark("2026-10-26T18:00:00.000Z", null, 210, -245),
+    landmark("2026-10-26T19:50:00.000Z", null, 220, -260),
+  ] as NflForwardContextMarket["families"][number]) },
+  spread: { families: ["circa", "pinnacle"].map((source) => [
+    source, "s", source === "circa" ? "c" : "p", null,
+    landmark("2026-10-26T18:00:00.000Z", -5.5, -110, -110),
+    landmark("2026-10-26T19:50:00.000Z", -6, -110, -110),
+  ] as NflForwardContextMarket["families"][number]) },
+  total: { families: [] },
+} }];
+const semanticSideStates = Object.fromEntries((["moneyline", "spread", "total"] as const).map((name) => [name,
+  buildNflMarketState({ market: name, evaluatedAt, snapshots: semanticSideSnapshots,
+    current: { spread: { homeLine: -6.5 }, total: null }, playbookLine: null,
+    playbookSplits: { moneyline: awayMoneylineFlow, spread: split, total: split }, sharpSplits: null }),
+])) as typeof states;
+assert.equal(semanticSideStates.moneyline.namedDirection, 1);
+assert.equal(semanticSideStates.spread.namedDirection, 1);
+assert.equal(semanticSideStates.moneyline.resistance, "reverse_flow");
+const semanticSideLedger = buildNflFullGameEvidenceLedger({
+  ...ledgerArgs, finalForecast: semanticSideForecast, currentSpreadBoundary: 6.5,
+  states: semanticSideStates,
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket,
+    availableMarkets: ["moneyline", "spread"], homeMargin: 6.3635,
+    moneylineHomeFairProbability: 0.72, spreadHomeFairProbability: 0.49 },
+  playbookSplits: { moneyline: awayMoneylineFlow, spread: split, total: split },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    authoritativeMarkets: ["moneyline", "spread"], marketValues: { moneyline: 7.2786, spread: 6.3635 },
+    forecast: { expectedAwayScore: (semanticSideTotal - 6.3635) / 2,
+      expectedHomeScore: (semanticSideTotal + 6.3635) / 2 } }],
+});
+const semanticSideRead = arbitrateNflFullGameEvidence({ releasedForecast: semanticSideForecast, ledger: semanticSideLedger });
+assert.ok(semanticSideRead.finalHomeMargin > 0 && semanticSideRead.finalHomeMargin < 6.5,
+  "home-directed ML and Spread movement may correct a narrow away winner while retaining away cover at home -6.5");
+assert.ok(Math.abs(semanticSideRead.finalHomeMargin - 6.3635) < 1e-9,
+  "the offered-contract Spread implication reconciles home winner with away cover instead of forcing both to home");
+assert.ok(Math.abs(semanticSideRead.finalTotal - semanticSideTotal) < 1e-9);
+assert.ok(semanticSideRead.signalInterpretations.some((item) => item.market === "moneyline" &&
+  item.roles.includes("source_flow_disagreement")),
+"opposing qualified moneyline flow remains visible during current-price adjudication");
+
+const descendingTotalSnapshots = [{ capturedAt: "2026-10-26T19:50:00.000Z", markets: {
+  moneyline: { families: [] }, spread: { families: [] },
+  total: { families: ["circa", "pinnacle"].map((source) => [
+    source, "s", source === "circa" ? "c" : "p", null,
+    landmark("2026-10-26T18:00:00.000Z", 46.5, -110, -110),
+    landmark("2026-10-26T19:50:00.000Z", 43.5, -110, -110),
+  ] as NflForwardContextMarket["families"][number]) },
+} }];
+const descendingTotalStates = Object.fromEntries((["moneyline", "spread", "total"] as const).map((name) => [name,
+  buildNflMarketState({ market: name, evaluatedAt, snapshots: descendingTotalSnapshots,
+    current: { spread: null, total: { line: 43.5 } }, playbookLine: null, playbookSplits: null, sharpSplits: null }),
+])) as typeof states;
+assert.equal(descendingTotalStates.total.namedDirection, -1);
+const readDescendingTotal = (independentTotal: number, priceTotal: number) => {
+  const releasedForecast = { expectedAwayScore: (independentTotal + 3) / 2,
+    expectedHomeScore: (independentTotal - 3) / 2 };
+  return arbitrateNflFullGameEvidence({ releasedForecast,
+    ledger: buildNflFullGameEvidenceLedger({ ...ledgerArgs, finalForecast: releasedForecast,
+      states: descendingTotalStates, currentTotalLine: 43.5,
+      targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, availableMarkets: ["total"],
+        total: priceTotal, totalOverFairProbability: priceTotal > 43.5 ? 0.51 : 0.49 },
+      playbookSplits: null,
+      forecastCandidates: [{ source: "target_excluded_paired_price_score", authoritativeMarkets: ["total"],
+        marketValues: { total: priceTotal }, forecast: { expectedAwayScore: (priceTotal + 3) / 2,
+          expectedHomeScore: (priceTotal - 3) / 2 } }],
+    }),
+  });
+};
+const lowerButStillOver = readDescendingTotal(46.6035, 44.1829);
+assert.ok(Math.abs(lowerButStillOver.finalTotal - 44.1829) < 1e-9,
+  "a downward 46.5→43.5 path can reduce 46.6035 to 44.1829 without forcing the final prediction Under 43.5");
+assert.ok(lowerButStillOver.finalTotal > 43.5);
+assert.ok(Math.abs(lowerButStillOver.finalHomeMargin + 3) < 1e-9,
+  "Total displacement preserves the independent winner and margin");
+const underPriceButUpwardDisplacement = readDescendingTotal(40, 42);
+assert.ok(Math.abs(underPriceButUpwardDisplacement.finalTotal - 40) < 1e-9,
+  "a downward named path cannot increase an independent 40 merely because the paired 42 remains Under 43.5");
+const overPriceAndUpwardDisplacement = readDescendingTotal(46.6035, 47);
+assert.ok(Math.abs(overPriceAndUpwardDisplacement.finalTotal - 46.6035) < 1e-9,
+  "a downward named path cannot authorize upward score displacement on the Over side either");
+
+const awayMovingMoneylineSnapshots = [{ capturedAt: "2026-10-26T19:50:00.000Z", markets: {
+  moneyline: { families: ["circa", "pinnacle"].map((source) => [
+    source, "s", source === "circa" ? "c" : "p", null,
+    landmark("2026-10-26T18:00:00.000Z", null, 220, -260),
+    landmark("2026-10-26T19:50:00.000Z", null, 180, -210),
+  ] as NflForwardContextMarket["families"][number]) },
+  spread: { families: [] }, total: { families: [] },
+} }];
+const awayMovingMoneylineStates = Object.fromEntries((["moneyline", "spread", "total"] as const).map((name) => [name,
+  buildNflMarketState({ market: name, evaluatedAt, snapshots: awayMovingMoneylineSnapshots,
+    current: { spread: null, total: null }, playbookLine: null, playbookSplits: null, sharpSplits: null }),
+])) as typeof states;
+assert.equal(awayMovingMoneylineStates.moneyline.namedDirection, -1);
+const readAwayMovingMoneyline = (priceMargin: number) => arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 19, expectedHomeScore: 27 },
+  ledger: buildNflFullGameEvidenceLedger({ ...ledgerArgs,
+    finalForecast: { expectedAwayScore: 19, expectedHomeScore: 27 }, states: awayMovingMoneylineStates,
+    targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, availableMarkets: ["moneyline"],
+      homeMargin: 0, moneylineHomeFairProbability: 0.65, moneylineFamilyCount: 5, marginFamilyCount: 0, totalFamilyCount: 0 },
+    playbookSplits: null,
+    forecastCandidates: [{ source: "target_excluded_paired_price_score", authoritativeMarkets: ["moneyline"],
+      marketValues: { moneyline: priceMargin }, forecast: { expectedAwayScore: (46 - priceMargin) / 2,
+        expectedHomeScore: (46 + priceMargin) / 2 } }],
+  }),
+});
+const weakerHomeWinner = readAwayMovingMoneyline(4);
+assert.equal(weakerHomeWinner.sideStory, "same_winner_repricing");
+assert.equal(weakerHomeWinner.finalHomeMargin, 4,
+  "away-directed Moneyline movement can weaken a projected home margin from 8 to 4 while home remains the winner");
+assert.equal(weakerHomeWinner.finalTotal, 46);
+const strongerHomeAgainstAwayMove = readAwayMovingMoneyline(9);
+assert.equal(strongerHomeAgainstAwayMove.finalHomeMargin, 8,
+  "an away-directed Moneyline path cannot strengthen the home forecast just because current prices still favor home");
 
 console.log("NFL full-game evidence ledger tests passed");

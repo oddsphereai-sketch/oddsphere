@@ -48,7 +48,7 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_11_01_r65_independent_market_axes" as const;
+  "nfl_weekly_member_fixture_2026_11_01_r66_movement_contract_separation" as const;
 
 const NFL_NAMED_PRICE_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation" as const;

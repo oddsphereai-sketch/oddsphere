@@ -1,5 +1,12 @@
 # NFL source-to-decision contract repair
 
+Post-merge correction: the later substantive reasoning check found that the r101
+ATL hold described below was a semantic defect, not a successful adjudication.
+Movement direction must be separated from bet side at the new line; the same
+error blocked PHI–WSH winner correction. Do not restore that hold rule from this
+historical report. See `2026-11-01-nfl-movement-contract-separation.md` for the
+correction and complete current-board reasoning.
+
 Production base `98628e14` integrated into the task's clean isolated branch before
 editing. This continues PR908 and supersedes the private r99 candidate. It is not
 a live-release or accuracy claim. Owner requested full reader repair after spot

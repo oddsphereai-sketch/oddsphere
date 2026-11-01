@@ -207,6 +207,38 @@ async function main() {
   assert.deepEqual(read, snapshot);
   assert.equal(JSON.stringify(read?.fixture), JSON.stringify(fixture));
 
+  const independentAxesPredecessor = {
+    ...snapshot,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r57_independent_market_axes",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r65_independent_market_axes",
+    memberRelease: "nfl_v1_member_release_2026_11_01_r50_independent_market_axes",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_01_r53_independent_market_axes",
+    fixture: { ...fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r65_independent_market_axes",
+      snapshot: { ...fixture.snapshot, games: fixture.snapshot.games.map((game) => ({
+        ...game, lockedAt: "2026-08-27T11:00:00.000Z",
+        markets: { ...game.markets,
+          moneyline: { ...game.markets.moneyline, predictedAwayScore: 21.5571, predictedHomeScore: 20.8282,
+            selectedSide: "PHI", modelProbability: 0.521, grade: "Best Angle", currentPriceAmerican: 220 },
+        },
+      })) },
+    },
+  };
+  storedKey = ["nfl", "daily-edge", 2026, 1,
+    independentAxesPredecessor.snapshotRelease, independentAxesPredecessor.fixtureRelease,
+    independentAxesPredecessor.memberRelease, independentAxesPredecessor.decisionRelease].join("::");
+  storedPayload = independentAxesPredecessor;
+  const independentAxesBefore = JSON.stringify(independentAxesPredecessor);
+  const independentAxesRead = await readNflForwardMemberSnapshot({
+    client, season: 2026, week: 1, now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.deepEqual(independentAxesRead, independentAxesPredecessor,
+    "r57/r65/r50/r53 must be read under its exact stored predecessor key, including legacy locked market values");
+  assert.equal(JSON.stringify(independentAxesRead), independentAxesBefore,
+    "new movement semantics cannot recompute or replace any prior locked score, side, probability, grade or price");
+  assert.equal(storedPayload, independentAxesPredecessor,
+    "predecessor continuity must not write or replace the stored object");
+
   const namedPricePredecessorSnapshotRelease =
     "nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation";
   const namedPricePredecessorFixtureRelease =

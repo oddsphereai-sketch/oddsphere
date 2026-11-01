@@ -10,7 +10,13 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_11_01_r57_independent_market_axes" as const;
+  "nfl_forward_member_snapshot_2026_11_01_r58_movement_contract_separation" as const;
+const NFL_INDEPENDENT_AXES_PREDECESSOR = {
+  snapshot: "nfl_forward_member_snapshot_2026_11_01_r57_independent_market_axes",
+  fixture: "nfl_weekly_member_fixture_2026_11_01_r65_independent_market_axes",
+  member: "nfl_v1_member_release_2026_11_01_r50_independent_market_axes",
+  decision: "nfl_v1_daily_edge_decision_2026_11_01_r53_independent_market_axes",
+} as const;
 const NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation" as const;
 const NFL_NAMED_PRICE_PREDECESSOR_FIXTURE_RELEASE =
@@ -260,6 +266,7 @@ const NFL_RAW_SIGNAL_PREVIOUS_FIXTURE_RELEASE =
 const NFL_NONPUSH_PREVIOUS_FIXTURE_RELEASE =
   "nfl_weekly_member_fixture_2026_09_21_r26_locked_transition_continuity" as const;
 const NFL_FORWARD_PREVIOUS_MEMBER_SNAPSHOT_RELEASES = [
+  NFL_INDEPENDENT_AXES_PREDECESSOR.snapshot,
   NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE,
   NFL_COMPLETE_SIGNAL_PREDECESSOR_SNAPSHOT_RELEASE,
   NFL_WINNER_COVER_PREDECESSOR_SNAPSHOT_RELEASE,
@@ -369,6 +376,11 @@ function nflForwardMemberSnapshotKeyForRelease(
   input: { season: number; week: number },
   snapshotRelease: string,
 ): string {
+  if (snapshotRelease === NFL_INDEPENDENT_AXES_PREDECESSOR.snapshot) {
+    return ["nfl", "daily-edge", input.season, input.week, snapshotRelease,
+      NFL_INDEPENDENT_AXES_PREDECESSOR.fixture, NFL_INDEPENDENT_AXES_PREDECESSOR.member,
+      NFL_INDEPENDENT_AXES_PREDECESSOR.decision].join("::");
+  }
   const current = snapshotRelease === NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE;
   const namedPricePredecessor = snapshotRelease === NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE;
   const completeSignalPredecessor = snapshotRelease === NFL_COMPLETE_SIGNAL_PREDECESSOR_SNAPSHOT_RELEASE;
@@ -795,11 +807,17 @@ function validateNflForwardMemberSnapshot(
   const decisionRelease = snapshot.decisionRelease as string | undefined;
   const fixtureRelease = snapshot.fixtureRelease as string | undefined;
   const heldMemberFixtureRelease = snapshot.fixture?.heldMemberFixtureRelease as string | undefined;
+  const independentAxesPredecessorContract =
+    memberRelease === NFL_INDEPENDENT_AXES_PREDECESSOR.member &&
+    decisionRelease === NFL_INDEPENDENT_AXES_PREDECESSOR.decision &&
+    fixtureRelease === NFL_INDEPENDENT_AXES_PREDECESSOR.fixture &&
+    heldMemberFixtureRelease === NFL_INDEPENDENT_AXES_PREDECESSOR.fixture;
   const currentContract =
-    memberRelease === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
+    (memberRelease === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
     decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE &&
     fixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE &&
-    heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE;
+    heldMemberFixtureRelease === NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE) ||
+    independentAxesPredecessorContract;
   const namedPricePredecessorContract =
     memberRelease === NFL_NAMED_PRICE_PREDECESSOR_MEMBER_RELEASE &&
     decisionRelease === NFL_NAMED_PRICE_PREDECESSOR_DECISION_RELEASE &&

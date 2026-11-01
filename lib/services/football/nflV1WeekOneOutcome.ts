@@ -387,6 +387,8 @@ export function buildNflUnifiedMarketAdjustedForecast(args: {
   expectedHomeMargin: number;
   expectedTotal: number;
   marketInputPolicy: "target_excluded_continuous_residual";
+  /** The semantic reader cannot re-discretize an axis it decided to retain. */
+  preserveUnchangedAxes?: boolean;
 }): NflV1WeekOneOutcomeForecast {
   if (!Number.isFinite(args.expectedHomeMargin) || !Number.isFinite(args.expectedTotal) ||
       args.expectedTotal <= Math.abs(args.expectedHomeMargin) ||
@@ -397,12 +399,16 @@ export function buildNflUnifiedMarketAdjustedForecast(args: {
     providerGameId: args.baseForecast.providerGameId,
     awayTeam: args.baseForecast.awayTeam,
     homeTeam: args.baseForecast.homeTeam,
-    marginDistribution: shiftedDistribution(
+    marginDistribution: args.preserveUnchangedAxes && Math.abs(args.expectedHomeMargin -
+      (args.baseForecast.expectedHomeScore - args.baseForecast.expectedAwayScore)) < 1e-9
+      ? args.baseForecast.marginDistribution : shiftedDistribution(
       args.baseForecast.marginDistribution,
       args.expectedHomeMargin,
       false,
     ),
-    totalDistribution: shiftedDistribution(
+    totalDistribution: args.preserveUnchangedAxes && Math.abs(args.expectedTotal -
+      (args.baseForecast.expectedHomeScore + args.baseForecast.expectedAwayScore)) < 1e-9
+      ? args.baseForecast.totalDistribution : shiftedDistribution(
       args.baseForecast.totalDistribution,
       args.expectedTotal,
       true,
