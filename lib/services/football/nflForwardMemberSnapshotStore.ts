@@ -10,7 +10,7 @@ import {
 } from "./nflV1ActionableGradeCandidate";
 
 export const NFL_FORWARD_MEMBER_SNAPSHOT_RELEASE =
-  "nfl_forward_member_snapshot_2026_10_31_r53_flow_and_retail_conflict_precedence" as const;
+  "nfl_forward_member_snapshot_2026_11_01_r54_explicit_episode_resolution" as const;
 const NFL_NAMED_PRICE_PREDECESSOR_SNAPSHOT_RELEASE =
   "nfl_forward_member_snapshot_2026_10_26_r47_complete_signal_interpretation" as const;
 const NFL_NAMED_PRICE_PREDECESSOR_FIXTURE_RELEASE =
@@ -541,6 +541,8 @@ function nflForwardMemberSnapshotKeyForRelease(
             : NFL_PREVIOUS_MEMBER_RELEASE,
     current
       ? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE
+      : namedPricePredecessor
+        ? NFL_NAMED_PRICE_PREDECESSOR_DECISION_RELEASE
       : completeSignalPredecessor
         ? NFL_COMPLETE_SIGNAL_PREDECESSOR_DECISION_RELEASE
       : winnerCoverPredecessor

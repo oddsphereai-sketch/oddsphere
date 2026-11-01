@@ -150,7 +150,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_10_31_r97_flow_and_retail_conflict_precedence" as const;
+  "nfl_forward_evidence_writer_2026_11_01_r98_explicit_episode_resolution" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -244,6 +244,7 @@ export async function runNflForwardEvidenceWriter(args: {
     finalDecisions: Array<{ market: string; side: string; grade: string }>;
     sideStory: string;
     totalStory: string;
+    marketResolutions?: import("./nflFullGameEvidenceArbiter").NflFullGameEvidenceArbitration["marketResolutions"];
     status: string;
   }>) => void;
   /** No-write audit reuses timestamped stored Playbook observations if this local key is absent. */
@@ -995,6 +996,7 @@ export async function runNflForwardEvidenceWriter(args: {
         finalDecisions: decisions(production.evaluatedBets),
         sideStory: semantic.arbitration.sideStory,
         totalStory: semantic.arbitration.totalStory,
+        marketResolutions: semantic.arbitration.marketResolutions,
         status: semantic.arbitration.status,
       });
     }
@@ -1115,6 +1117,7 @@ export async function runNflForwardEvidenceWriter(args: {
           status: semantic.arbitration.status,
           sideStory: semantic.arbitration.sideStory,
           totalStory: semantic.arbitration.totalStory,
+          marketResolutions: semantic.arbitration.marketResolutions,
           interpretationAccounting: semantic.arbitration.interpretationAccounting,
           signalInterpretations: semantic.arbitration.signalInterpretations,
         },

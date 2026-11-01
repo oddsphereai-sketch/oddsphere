@@ -148,6 +148,7 @@ export type NflForwardEvidencePayload = {
     status: "applied" | "neutral" | "unavailable";
     sideStory: string;
     totalStory: string;
+    marketResolutions?: import("./nflFullGameEvidenceArbiter").NflFullGameEvidenceArbitration["marketResolutions"];
     interpretationAccounting: {
       capturedSignals: number;
       interpretedCapturedSignals: number;
@@ -223,7 +224,8 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_10_26_r40_complete_signal_interpretation"
       | "nfl_v1_member_release_2026_10_31_r41_named_price_chronology"
       | "nfl_v1_member_release_2026_10_31_r42_paired_price_score_authority"
-      | "nfl_v1_member_release_2026_10_31_r46_flow_and_retail_conflict_precedence";
+      | "nfl_v1_member_release_2026_10_31_r46_flow_and_retail_conflict_precedence"
+      | "nfl_v1_member_release_2026_11_01_r47_explicit_episode_resolution";
     publicationEnabled: true;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;

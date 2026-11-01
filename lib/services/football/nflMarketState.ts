@@ -3,7 +3,7 @@ import type { NflForwardContextFamily, NflForwardContextMarket } from "./nflForw
 import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "./sharpApiNflSplits";
 
 export const NFL_MARKET_STATE_RELEASE =
-  "nfl_market_state_2026_10_31_r4_flow_and_retail_conflict_precedence" as const;
+  "nfl_market_state_2026_11_01_r5_explicit_episode_resolution" as const;
 
 export type NflMarketStateMarket = "moneyline" | "spread" | "total";
 export type NflMarketStateSide = -1 | 1;
@@ -53,6 +53,8 @@ export type NflMarketState = {
   excludedFamilies: string[];
   trails: NflMarketStateTrail[];
   splits: NflMarketStateSplit[];
+  /** A named episode awaiting separate confirmation; never a consensus vote by itself. */
+  candidateNamedDirection?: NflMarketStateSide | null;
   namedDirection: NflMarketStateSide | null;
   namedLeadCompletedAt: string | null;
   followerSources: string[];
@@ -149,6 +151,7 @@ export function buildNflMarketState(args: {
     excludedFamilies: [...excluded].sort(),
     trails,
     splits,
+    candidateNamedDirection,
     namedDirection,
     namedLeadCompletedAt,
     followerSources: followers.map((trail) => trail.source),

@@ -60,6 +60,7 @@ async function main(): Promise<void> {
             status: payload.fullGameEvidenceInterpretation.status,
             sideStory: payload.fullGameEvidenceInterpretation.sideStory,
             totalStory: payload.fullGameEvidenceInterpretation.totalStory,
+            marketResolutions: payload.fullGameEvidenceInterpretation.marketResolutions,
             accounting: payload.fullGameEvidenceInterpretation.interpretationAccounting,
             roles: payload.fullGameEvidenceInterpretation.signalInterpretations.reduce<Record<string, number>>(
               (counts, item) => {

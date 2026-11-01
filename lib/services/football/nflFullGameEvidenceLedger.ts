@@ -9,7 +9,7 @@ import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "./sharpApiNf
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_LEDGER_RELEASE =
-  "nfl_full_game_evidence_ledger_2026_10_31_r7_paired_price_provenance" as const;
+  "nfl_full_game_evidence_ledger_2026_11_01_r8_explicit_episode_resolution" as const;
 
 type Market = NflMarketStateMarket;
 type Disposition = "supports" | "resists" | "uncertainty" | "stale" | "identity_mismatch" | "unavailable";
@@ -76,6 +76,7 @@ export type NflFullGameEvidenceSignal = {
 export type NflFullGameEvidenceLedger = {
   release: typeof NFL_FULL_GAME_EVIDENCE_LEDGER_RELEASE;
   evaluatedAt: string;
+  pairedPriceFamilyCounts?: { margin: number; total: number };
   evaluatedContract: {
     spreadHomeMarginBoundary: number | null;
     totalLine: number | null;
@@ -89,6 +90,7 @@ export type NflFullGameEvidenceLedger = {
   };
   marketContexts: Record<Market, {
     namedDirection: NflMarketStateSide | null;
+    candidateNamedDirection?: NflMarketStateSide | null;
     namedLeadCompletedAt: string | null;
     followerSources: string[];
     followerDelaysMinutes: number[];
@@ -419,10 +421,15 @@ export function buildNflFullGameEvidenceLedger(args: {
       spreadSide: finalSides.spread,
       totalSide: finalSides.total,
     },
+    pairedPriceFamilyCounts: args.targetExcludedMarket ? {
+      margin: args.targetExcludedMarket.marginFamilyCount,
+      total: args.targetExcludedMarket.totalFamilyCount,
+    } : undefined,
     marketContexts: Object.fromEntries(([
       "moneyline", "spread", "total",
     ] as const).map((market) => [market, {
       namedDirection: args.states[market].namedDirection,
+      candidateNamedDirection: args.states[market].candidateNamedDirection,
       namedLeadCompletedAt: args.states[market].namedLeadCompletedAt,
       followerSources: [...args.states[market].followerSources],
       followerDelaysMinutes: [...args.states[market].followerDelaysMinutes],

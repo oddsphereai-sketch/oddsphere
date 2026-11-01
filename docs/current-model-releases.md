@@ -6,6 +6,25 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-10-31
 
+## NFL explicit episode resolution — November 1, private repair
+
+Owner-directed repair of the October 31 spot-check findings is implemented in the
+candidate writer `nfl_forward_evidence_writer_2026_11_01_r98_explicit_episode_resolution`.
+Model / calibration / decision / grade / member / fixture / snapshot are
+`nfl_v1_daily_edge_model_2026_11_01_r42_explicit_episode_resolution` /
+`nfl_v1_daily_edge_calibration_2026_11_01_r41_explicit_episode_resolution` /
+`nfl_v1_daily_edge_decision_2026_11_01_r50_explicit_episode_resolution` /
+`nfl_v1_grade_policy_2026_11_01_r50_explicit_episode_resolution` /
+`nfl_v1_member_release_2026_11_01_r47_explicit_episode_resolution` /
+`nfl_weekly_member_fixture_2026_11_01_r62_explicit_episode_resolution` /
+`nfl_forward_member_snapshot_2026_11_01_r54_explicit_episode_resolution`.
+State / ledger / arbiter / runtime advance to r5 / r8 / r24 / r8. The reader
+corroborates lone named episodes through a separate price implication, resolves
+opposing flow explicitly, records each market's actual score consequence and fixes
+the production predecessor snapshot lookup. Existing locks remain exact. This
+entry is not a deployment claim. Evidence, checks and rollback:
+`docs/model-audits/2026-11-01-nfl-explicit-episode-resolution.md`.
+
 ## NFL named-price chronology candidate — October 31, private
 
 - The proposed sole writer `nfl_forward_evidence_writer_2026_10_31_r97_flow_and_retail_conflict_precedence`

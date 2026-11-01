@@ -22,7 +22,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_10_31_r7_flow_and_retail_conflict_precedence" as const;
+  "nfl_full_game_evidence_runtime_2026_11_01_r8_explicit_episode_resolution" as const;
 
 type Market = "moneyline" | "spread" | "total";
 

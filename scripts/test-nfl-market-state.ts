@@ -117,6 +117,37 @@ const simultaneousRetail = buildNflMarketState({
 });
 assert.equal(simultaneousRetail.namedDirection, null,
   "simultaneous retail movement cannot be invented as later independent follow-through");
+assert.equal(simultaneousRetail.candidateNamedDirection, 1,
+  "a real named episode survives for separate confirmation even without later retail follow-through");
+
+const loneNamed = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(loneNamed.candidateNamedDirection, 1,
+  "the production builder retains a lone named move for independent paired-price corroboration downstream");
+assert.equal(loneNamed.namedDirection, null,
+  "retaining a lone episode must not manufacture the established consensus used by other readers");
+assert.deepEqual(loneNamed.followerSources, []);
+assert.equal(loneNamed.namedLeadCompletedAt, null);
+
+const excludedLoneNamed = buildNflMarketState({
+  market: "spread",
+  evaluatedAt: "2026-10-09T11:30:00.000Z",
+  snapshots: [snapshot("2026-10-09T11:20:00.000Z", [
+    family({ source: "circa", currentAt: "2026-10-09T11:20:00.000Z", openingLine: -1.5, currentLine: -2 }),
+  ])],
+  excludedFamilies: ["Circa"],
+  current: { spread: { homeLine: -2 }, total: { line: 44.5 } },
+  playbookLine: null, playbookSplits: null, sharpSplits: null,
+});
+assert.equal(excludedLoneNamed.candidateNamedDirection, null,
+  "the evaluated book cannot reappear as a lone candidate episode");
 
 const excluded = buildNflMarketState({
   market: "spread",
@@ -202,6 +233,8 @@ const opposingNamed = buildNflMarketState({
   playbookLine: null, playbookSplits: null, sharpSplits: null,
 });
 assert.equal(opposingNamed.namedDirection, null);
+assert.equal(opposingNamed.candidateNamedDirection, null,
+  "opposing named episodes cannot become a single candidate direction");
 assert.equal(opposingNamed.resistance, "book_disagreement",
   "opposing Circa and Pinnacle moves remain a genuine named-book conflict");
 

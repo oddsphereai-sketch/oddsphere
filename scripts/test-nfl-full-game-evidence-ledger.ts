@@ -304,10 +304,18 @@ const singleNamedWithCurrentPriceLedger = buildNflFullGameEvidenceLedger({
     ...ledgerArgs.targetExcludedMarket, homeMargin: 2, moneylineHomeFairProbability: 0.6,
   },
   states: {
-    ...states,
-    moneyline: { ...states.moneyline,
-      trails: states.moneyline.trails.filter((trail) => trail.source === "pinnacle") },
-    spread: { ...states.spread, namedDirection: null },
+    ...Object.fromEntries((["moneyline", "spread", "total"] as const).map((name) => [name,
+      buildNflMarketState({
+        market: name, evaluatedAt,
+        snapshots: snapshots.map((capture) => ({ ...capture, markets: Object.fromEntries(
+          (["moneyline", "spread", "total"] as const).map((marketName) => [marketName, {
+            families: capture.markets[marketName].families.filter((family) => family[0] === "pinnacle"),
+          }]),
+        ) as typeof capture.markets })),
+        current: { spread: { homeLine: 3.5 }, total: { line: 44.5 } },
+        playbookLine: null, playbookSplits: null, sharpSplits: null,
+      }),
+    ])) as typeof states,
   },
   forecastCandidates: [
     { source: "released_current", forecast: { expectedAwayScore: 24, expectedHomeScore: 21 } },
@@ -322,6 +330,27 @@ assert.equal(singleNamedWithCurrentPrice.sideStory, "winner_regime_change",
   "one clean named ML move can be corroborated by an independent target-excluded current price");
 assert.equal(singleNamedWithCurrentPrice.finalHomeMargin, 2,
   "the independently corroborated paired price, not a reflected independent score, supplies the new margin");
+assert.equal(singleNamedWithCurrentPriceLedger.marketContexts.moneyline.namedDirection, null,
+  "the production state builder must leave a lone book unconfirmed before arbitration");
+assert.equal(singleNamedWithCurrentPriceLedger.marketContexts.moneyline.candidateNamedDirection, 1);
+assert.equal(singleNamedWithCurrentPrice.marketResolutions?.moneyline.corroboratedSingleEpisode, true,
+  "the real builder-to-ledger-to-arbiter path must corroborate the retained episode");
+for (const pairedPriceFamilyCounts of [{ margin: 1, total: 2 }, undefined]) {
+  const selfConfirmingNamedMove = arbitrateNflFullGameEvidence({
+    releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
+    ledger: { ...singleNamedWithCurrentPriceLedger, pairedPriceFamilyCounts },
+  });
+  assert.equal(selfConfirmingNamedMove.finalHomeMargin, -3,
+    "a lone named mover cannot corroborate itself through a one-family or unproven paired-price score");
+  assert.equal(selfConfirmingNamedMove.marketResolutions?.moneyline.corroboratedSingleEpisode, false);
+}
+const independentlyCorroboratedNamedMove = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
+  ledger: { ...singleNamedWithCurrentPriceLedger, pairedPriceFamilyCounts: { margin: 2, total: 2 } },
+});
+assert.equal(independentlyCorroboratedNamedMove.finalHomeMargin, 2,
+  "two canonical target-excluded families can independently corroborate the real single-book episode");
+assert.equal(independentlyCorroboratedNamedMove.marketResolutions?.moneyline.corroboratedSingleEpisode, true);
 const singleNamedWithoutMatchingPrice = arbitrateNflFullGameEvidence({
   releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
   ledger: { ...singleNamedWithCurrentPriceLedger,
@@ -412,7 +441,7 @@ const totalDownLedger = buildNflFullGameEvidenceLedger({
 const totalDownArbitration = arbitrateNflFullGameEvidence({
   releasedForecast: { expectedAwayScore: 23, expectedHomeScore: 24 }, ledger: totalDownLedger,
 });
-assert.equal(totalDownArbitration.totalStory, "scoring_environment_change");
+assert.equal(totalDownArbitration.totalStory, "conflicted_market_story");
 assert.equal(totalDownArbitration.finalTotal, 47,
   "a player-aware estimate cannot stand in for an observed target-excluded price-implied total");
 const pricedTotalDownLedger = buildNflFullGameEvidenceLedger({
@@ -446,8 +475,8 @@ assert.equal(divergentTotalContract.evaluatedContract.totalLine, 45);
 assert.equal(arbitrateNflFullGameEvidence({
   releasedForecast: { expectedAwayScore: 23, expectedHomeScore: 23 },
   ledger: divergentTotalContract,
-}).totalStory, "scoring_environment_change",
-"an inferred target-free Total level is not the evaluated Over/Under contract boundary");
+}).totalStory, "conflicted_market_story",
+"a named Under path without a paired-price scoring implication cannot claim a changed environment");
 const confirmedUnderLedger = buildNflFullGameEvidenceLedger({
   ...ledgerArgs,
   finalForecast: { expectedAwayScore: 21, expectedHomeScore: 21 },
@@ -913,6 +942,56 @@ assert.equal(singleNamedArbitration.finalHomeMargin, -3,
   "one named-book lead without independent confirmation cannot flip the score");
 assert.equal(singleNamedArbitration.finalTotal, 45,
   "one named-book Total lead cannot command a new scoring environment");
+
+const reverseFlowSplit = { ...split, awayMoneyPct: 70, homeMoneyPct: 30 };
+const reverseFlowStates = Object.fromEntries((["moneyline", "spread", "total"] as const).map((name) => [name,
+  buildNflMarketState({
+    market: name, evaluatedAt, snapshots,
+    current: { spread: { homeLine: 3.5 }, total: { line: 44.5 } },
+    playbookLine: null,
+    playbookSplits: { moneyline: reverseFlowSplit, spread: split, total: split },
+    sharpSplits: null,
+  }),
+])) as typeof states;
+assert.equal(reverseFlowStates.moneyline.resistance, "reverse_flow");
+const reverseFlowLedger = (homeMargin: number, moneylineHomeFairProbability: number) => buildNflFullGameEvidenceLedger({
+  ...ledgerArgs,
+  states: reverseFlowStates,
+  playbookSplits: { moneyline: reverseFlowSplit, spread: split, total: split },
+  targetExcludedMarket: { ...ledgerArgs.targetExcludedMarket, homeMargin, moneylineHomeFairProbability,
+    spreadHomeFairProbability: 0.6, totalOverFairProbability: 0.6, total: 46 },
+  forecastCandidates: [{ source: "target_excluded_paired_price_score",
+    forecast: { expectedAwayScore: (46 - homeMargin) / 2, expectedHomeScore: (46 + homeMargin) / 2 } }],
+});
+const reverseFlowConfirmed = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
+  ledger: reverseFlowLedger(2, 0.6),
+});
+assert.equal(reverseFlowConfirmed.finalHomeMargin, 2,
+  "price resistance to opposing flow can select the price-confirmed winner without blindly following money");
+assert.equal(reverseFlowConfirmed.marketResolutions?.moneyline.flow, "opposes_price");
+assert.equal(reverseFlowConfirmed.marketResolutions?.moneyline.reason,
+  "price_led_resistance_to_flow_with_current_price_confirmation");
+assert.ok(reverseFlowConfirmed.marketResolutions?.moneyline.opposingSignalIds.some((id) =>
+  reverseFlowLedger(2, 0.6).signals.some((signal) => signal.id === id && signal.kind === "split")),
+"the opposed flow must remain attached to the final decision rather than disappear after a flip");
+assert.equal(reverseFlowConfirmed.status, "applied");
+assert.equal(reverseFlowConfirmed.finalTotal, 45);
+assert.equal(reverseFlowConfirmed.totalStory, "conflicted_market_story",
+  "a side correction cannot make an unchanged Total claim a scoring environment change");
+assert.equal(reverseFlowConfirmed.marketResolutions?.moneyline.action, "changed");
+assert.equal(reverseFlowConfirmed.marketResolutions?.total.action, "held");
+assert.equal(reverseFlowConfirmed.marketResolutions?.total.reason,
+  "current_price_does_not_confirm_named_path_retain_released_score");
+const reverseFlowUnconfirmed = arbitrateNflFullGameEvidence({
+  releasedForecast: { expectedAwayScore: 24, expectedHomeScore: 21 },
+  ledger: reverseFlowLedger(-2, 0.4),
+});
+assert.equal(reverseFlowUnconfirmed.finalHomeMargin, -3,
+  "opposing flow with a contrary current-price implication must challenge the named path before any flip");
+assert.equal(reverseFlowUnconfirmed.sideStory, "conflicted_market_story");
+assert.equal(reverseFlowUnconfirmed.marketResolutions?.moneyline.reason,
+  "current_price_does_not_confirm_named_path_retain_released_score");
 const compensatedSideLedger = structuredClone(ledger);
 compensatedSideLedger.marketContexts.spread.namedDirection = 1;
 for (const signal of compensatedSideLedger.signals) {
