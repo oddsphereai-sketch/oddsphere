@@ -43,6 +43,8 @@ export type SharpApiCurrentSplitOverlayOptions = {
    * immutable lock instant. It never updates the locked decision or reader.
    */
   reconstructMissingLockedPreLock?: boolean;
+  /** Full board identity context when only one reader is being hydrated. */
+  identityGames?: readonly DailyEdgeGameDto[];
 };
 
 const LEAGUE_BY_SPORT: Record<SupportedSport, string> = {
@@ -238,6 +240,7 @@ export function applySharpApiCurrentSplitOverlay(
   options: SharpApiCurrentSplitOverlayOptions = {},
 ): SharpApiCurrentSplitOverlayResult {
   if (!feed || response.sport !== feed.sport) return { matchedGames: 0, populatedMarkets: 0 };
+  const matches = createRowMatcher(response, feed.sport, options.identityGames);
   let matchedGames = 0;
   let populatedMarkets = 0;
   for (const game of response.games) {
@@ -248,7 +251,7 @@ export function applySharpApiCurrentSplitOverlay(
       ? Date.parse(game.lockedAt ?? "")
       : null;
     if (game.lockState === "locked" && !Number.isFinite(lockedCutoffMs)) continue;
-    const candidates = feed.rows.filter((row) => rowMatchesUniqueGame(row, game, response, feed.sport));
+    const candidates = feed.rows.filter((row) => matches(row, game));
     if (candidates.length === 0) continue;
     matchedGames += 1;
     populatedMarkets += attachBestMarket(game, "moneyline", "moneyline", candidates, nowMs, lockedCutoffMs);
@@ -271,10 +274,11 @@ export function restoreCompleteSharpApiCurrentSplitDisplay(
   feed: SharpApiCurrentSplitFeed | null,
 ): number {
   if (!feed || response.sport !== feed.sport) return 0;
+  const matches = createRowMatcher(response, feed.sport);
   let restored = 0;
   for (const game of response.games) {
     if (game.lockState === "locked" || (feed.sport === "cbb" && game.lockedAt)) continue;
-    const candidates = feed.rows.filter((row) => rowMatchesUniqueGame(row, game, response, feed.sport));
+    const candidates = feed.rows.filter((row) => matches(row, game));
     if (candidates.length === 0) continue;
     const markets: Array<[keyof DailyEdgeGameDto["markets"], SplitMarket]> = [
       ["moneyline", "moneyline"],
@@ -687,9 +691,19 @@ function hasMemberFacingFreshnessState(section: MarketSplitDisplaySection): bool
   );
 }
 
-function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sport: SupportedSport): boolean {
+type MatchDateCache = { dates: Map<string, Set<string>>; eastern: Map<string, string> };
+function cachedEasternDate(value: string, cache?: MatchDateCache): string {
+  if (!cache) return easternDate(value);
+  let date = cache.eastern.get(value);
+  if (date === undefined) { date = easternDate(value); cache.eastern.set(value, date); }
+  return date;
+}
+
+function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sport: SupportedSport, cache?: MatchDateCache): boolean {
   if (normalize(text(row.league) ?? "") !== normalize(LEAGUE_BY_SPORT[sport])) return false;
-  const dates = acceptedDates(game.gameStartAt, slateDate);
+  const dateKey = game.gameStartAt ?? `slate:${slateDate}`;
+  let dates = cache?.dates.get(dateKey);
+  if (!dates) { dates = acceptedDates(game.gameStartAt, slateDate); cache?.dates.set(dateKey, dates); }
   const startAt = timestamp(row.event_start_time);
   const rawEventId = text(row.event_id) ?? "";
   const dashedEventDate = rawEventId.match(/_(\d{4}-\d{2}-\d{2})(?:_|$)/)?.[1] ?? null;
@@ -697,7 +711,7 @@ function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sp
   const eventDate = dashedEventDate ?? (compactEventDate
     ? `${compactEventDate[1]}-${compactEventDate[2]}-${compactEventDate[3]}`
     : null);
-  if (startAt ? !dates.has(easternDate(startAt)) : !eventDate || !dates.has(eventDate)) return false;
+  if (startAt ? !dates.has(cachedEasternDate(startAt, cache)) : !eventDate || !dates.has(eventDate)) return false;
   if (sport === "cbb") {
     if (startAt && game.gameStartAt &&
       Math.abs(Date.parse(startAt) - Date.parse(game.gameStartAt)) > 10 * 60_000) return false;
@@ -707,15 +721,21 @@ function rowMatchesGame(row: Json, game: DailyEdgeGameDto, slateDate: string, sp
     teamMatches(sport, row.home_team, game.homeTeam, game.homeTeamDisplayName);
 }
 
-function rowMatchesUniqueGame(
-  row: Json,
-  game: DailyEdgeGameDto,
-  response: DailyEdgeResponse,
-  sport: SupportedSport,
-): boolean {
-  if (!rowMatchesGame(row, game, response.date, sport)) return false;
-  return sport !== "cbb" || response.games.filter((candidate) =>
-    rowMatchesGame(row, candidate, response.date, sport)).length === 1;
+/** Request-scoped memoization only: the exact date, institution and ambiguity
+ * rules are unchanged. Never retain feed rows or stale matches across reads. */
+function createRowMatcher(response: DailyEdgeResponse, sport: SupportedSport, identityGames = response.games as readonly DailyEdgeGameDto[]) {
+  const cache: MatchDateCache = { dates: new Map(), eastern: new Map() };
+  const unique = new WeakMap<Json, boolean>();
+  return (row: Json, game: DailyEdgeGameDto): boolean => {
+    if (!rowMatchesGame(row, game, response.date, sport, cache)) return false;
+    if (sport !== "cbb") return true;
+    let unambiguous = unique.get(row);
+    if (unambiguous === undefined) {
+      unambiguous = identityGames.filter(candidate => rowMatchesGame(row, candidate, response.date, sport, cache)).length === 1;
+      unique.set(row, unambiguous);
+    }
+    return unambiguous;
+  };
 }
 
 function acceptedDates(gameStartAt: string | null | undefined, slateDate: string): Set<string> {
@@ -732,10 +752,11 @@ function acceptedDates(gameStartAt: string | null | undefined, slateDate: string
   return dates;
 }
 
+const easternDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+});
 function easternDate(value: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(new Date(value));
+  const parts = easternDateFormatter.formatToParts(new Date(value));
   const part = (type: "year" | "month" | "day") => parts.find((entry) => entry.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
 }

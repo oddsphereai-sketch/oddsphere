@@ -139,11 +139,14 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
   })};
 }
 
-export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse):Promise<DailyEdgeResponse>{
+export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse,options:{gameIds?:readonly string[]}={}):Promise<DailyEdgeResponse>{
   if(board.sport!=="cbb"||board.games.length===0)return board;
+  const requested=options.gameIds?new Set(options.gameIds):null;
+  const selected={...board,games:board.games.filter(game=>!requested||requested.has(game.id))};
+  if(selected.games.length===0||selected.games.every(game=>game.lockState==="locked"||game.lockedAt!==null))return board;
   const [{readPredictionMarketBookHistory},{supabase},{readStoredSharpApiCurrentSplits,applySharpApiCurrentSplitOverlay}]=await Promise.all([
     import("@/lib/services/dailyEdge/predictionMarketDisplayFeed"),import("@/lib/db/supabase"),import("@/lib/providers/real_api/sharpApiCurrentSplits")]);
-  const ids=board.games.filter(game=>game.lockedAt===null&&game.lockState!=="locked").map(game=>String(game.external_id));
+  const ids=selected.games.filter(game=>game.lockedAt===null&&game.lockState!=="locked").map(game=>String(game.external_id));
   const publicRows=async():Promise<SplitRow[]>=>{
     if(!ids.length)return [];
     const rows:SplitRow[]=[],since=new Date(Date.now()-30*60_000).toISOString();
@@ -163,9 +166,9 @@ export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse):Pr
   // Named-book polling must not crowd public consensus out of a shared row cap.
   // The durable named-book display feed already has exact institution matching,
   // source timestamps and freshness checks; no provider request is made here.
-  const merged=mergeCbbReaderEvidence(board,feed,rows),now=Date.now();
+  const merged=mergeCbbReaderEvidence(selected,feed,rows),now=Date.now();
   const candidates=structuredClone({...merged,games:merged.games.filter(game=>game.lockState!=="locked"&&game.lockedAt===null&&Date.parse(game.gameStartAt??"")>now)});
-  applySharpApiCurrentSplitOverlay(candidates,namedFeed,now);
+  applySharpApiCurrentSplitOverlay(candidates,namedFeed,now,{identityGames:board.games});
   for(const candidate of candidates.games){
     const game=merged.games.find(row=>row.external_id===candidate.external_id)!;
     for(const [key] of marketEntries){
@@ -178,5 +181,6 @@ export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse):Pr
       game.markets[key].sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:new Date(observed).toISOString()};
     }
   }
-  return merged;
+  const details=new Map(merged.games.map(game=>[game.id,game]));
+  return {...board,games:board.games.map(game=>details.get(game.id)??game)};
 }

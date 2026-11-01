@@ -86,6 +86,8 @@ export type PredictionMarketGameIdentity = {
   lockedAt?:string|null;
   /** Exact named-institution odds event, supplied only by the stored display collector. */
   cbbMarketStartAt?:string;
+  /** Date encoded by the exact independent odds event at a midnight boundary. */
+  cbbMarketDate?:string;
 };
 export type PredictionMarketMatch = {
   eventTicker: string;
@@ -224,7 +226,7 @@ const SOCCER_ALIASES: Record<string, string> = {
   BVB:"DOR",RBB:"BET",SBH:"SAB",VIK:"VFK",COM:"COMO",SLA:"SLP",STU:"VFB",
 };
 function clean(value: string): string { return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(fc|afc|cf)\b/g, "").replace(/[^a-z0-9]/g, ""); }
-export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideCode"|"team">, abbreviation: string, name: string | null | undefined, sport: PredictionMarketSport, college?: string | null): boolean {
+export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideCode"|"team">, abbreviation: string, name: string | null | undefined, sport: PredictionMarketSport, college?: string | null, currentCbbNames = false): boolean {
   if (sport === "cbb") {
     // A code such as MIA or USC may mean several schools. Require the named
     // contract to agree with an exact institutional or full-team identity.
@@ -233,6 +235,15 @@ export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideC
       miamifl:["Miami Hurricanes"],iowast:["Iowa State","Iowa State Cyclones"],
       ohiost:["Ohio State","Ohio State Buckeyes"],
     };
+    const currentAliases:Record<string,readonly string[]> = {
+      appalachianst:["App State Mountaineers","Appalachian State Mountaineers"],
+      sanjosest:["San Jose State Spartans"],
+      uscupstate:["South Carolina Upstate Spartans"],
+      ncst:["NC State Wolfpack"], pennst:["Penn State Nittany Lions"],
+      kentst:["Kent State Golden Flashes"], tennesseemartin:["UT Martin Skyhawks"],
+      seattle:["Seattle U Redhawks"],
+    };
+    if (currentCbbNames && name && currentAliases[observed]?.some(alias => canonicalCbbTeamName(alias) === canonicalCbbTeamName(name))) return true;
     return Boolean(observed) && ([name, college].some(expected => expected &&
       canonicalCbbTeamName(expected) === observed)||
       namedAliases[observed]?.some(alias=>name&&canonicalCbbTeamName(alias)===canonicalCbbTeamName(name))===true);
@@ -274,17 +285,20 @@ export function matchPredictionMarketGame(feed: PredictionMarketFeed | null, gam
   const verifiedSourceDate = game.sport === "cbb" && game.lockState === "open" && game.lockedAt === null &&
     Date.parse(game.gameStartAt) > now && Number.isFinite(sourceStart) && Math.abs(sourceStart - Date.parse(game.gameStartAt)) <= 60_000
       ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date(sourceStart)) : null;
+  const futureOpenCbb = game.sport === "cbb" && game.lockState === "open" && game.lockedAt === null && Date.parse(game.gameStartAt) > now;
+  const nextMinuteDate = new Intl.DateTimeFormat("en-CA", { timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit" }).format(new Date(Date.parse(game.gameStartAt)+60_000));
+  const verifiedEventDate = futureOpenCbb && verifiedSourceDate !== null && nextMinuteDate !== gameDate && game.cbbMarketDate === nextMinuteDate ? game.cbbMarketDate : null;
   const groups = new Map<string, PredictionMarketRow[]>();
   for (const row of feed.rows) {
     const age = now - Date.parse(row.asOf);
-    const verifiedMidnight = verifiedSourceDate === row.gameDate;
+    const verifiedMidnight = verifiedSourceDate === row.gameDate || verifiedEventDate === row.gameDate;
     if ((row.gameDate !== gameDate&&!verifiedMidnight&&!canMatchNextDayContract(row.gameDate,gameDate,row.rescheduleWindowHours,game,now)) || age < -60_000 || age > 24 * 60 * 60_000) continue;
     const rows = groups.get(row.eventTicker) ?? []; rows.push(row); groups.set(row.eventTicker, rows);
   }
   const matches: PredictionMarketMatch[] = [];
   for (const [eventTicker, rows] of groups) {
-    const away = rows.filter(row => predictionMarketTeamMatches(row, game.awayTeam, game.awayName, game.sport, game.awayCollege));
-    const home = rows.filter(row => predictionMarketTeamMatches(row, game.homeTeam, game.homeName, game.sport, game.homeCollege));
+    const away = rows.filter(row => predictionMarketTeamMatches(row, game.awayTeam, game.awayName, game.sport, game.awayCollege, futureOpenCbb));
+    const home = rows.filter(row => predictionMarketTeamMatches(row, game.homeTeam, game.homeName, game.sport, game.homeCollege, futureOpenCbb));
     const draw = rows.filter(row => /^(TIE|DRAW)$/.test(row.sideCode));
     const soccer = game.sport === "soccer" || game.sport === "ucl";
     if (away.length !== 1 || home.length !== 1 || away[0].ticker === home[0].ticker || (soccer && draw.length !== 1)) continue;
