@@ -237,8 +237,13 @@ export function predictionMarketComparison(row:Pick<PredictionMarketRow,"history
 export function predictionMarketHasSharedHistory(comparison:ReturnType<typeof predictionMarketComparison>):boolean{
   return !comparison.pending&&comparison.points.length>=2&&comparison.cutoff!==null&&comparison.start<comparison.cutoff;
 }
+/** An actual frozen auxiliary receipt may expose its own recorded history;
+ * an unsupported legacy lock cannot acquire a new interpretation here. */
+export function predictionMarketAllowsStandaloneHistory(sport:string,frozen:boolean,hasPrelockReceipt:boolean,historicalCfb=false):boolean{
+ return sport==="cbb"&&!frozen||sport==="cfb"&&(!frozen||hasPrelockReceipt||historicalCfb)||sport==="nfl"&&(!frozen||hasPrelockReceipt);
+}
 /** Do not let a one-instant intersection erase a genuine standalone curve.
- * Callers opt in only for the supported auxiliary CBB/CFB display scope. */
+ * Callers opt in only for the supported auxiliary display scope. */
 export function predictionMarketVisibleComparison(row:Parameters<typeof predictionMarketComparison>[0],book:PredictionMarketBookTrail|null,lockedAt:number|undefined,allowStandalone:boolean){
  const paired=predictionMarketComparison(row,book,lockedAt),shared=predictionMarketHasSharedHistory(paired);
  const full=allowStandalone&&!shared?predictionMarketComparison(row,null,lockedAt):null;
