@@ -413,7 +413,7 @@ assert.equal((writer.match(/buildNflProfessionalMarketAuthority\(\{/g) ?? []).le
   "professional authority must be built only inside the evaluated-family exclusion loop");
 assert.equal((writer.match(/buildNflNamedMarketSequenceAuthority\(\{/g) ?? []).length, 1,
   "named authority must be built only inside the evaluated-family exclusion loop");
-assert.match(writer, /forecastTargetExclusion: resolved\.targetExclusion/);
+assert.match(writer, /forecastTargetExclusion: outcome\.targetExclusion \?\? resolved\.targetExclusion/);
 assert.match(writer, /buildNflMarketState\(\{[\s\S]*?excludedFamilies: excludedFamiliesByMarket\[market\]/,
   "the evaluated sportsbook must be excluded before named-book direction and resistance are formed");
 assert.match(writer, /outcomeForecast: outcome/);

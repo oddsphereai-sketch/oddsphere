@@ -108,3 +108,30 @@ webpack production build pass. The Turbopack build rejects this worktree's share
 node_modules symlink; webpack compiles and prerenders successfully. The repaired
 snapshot reader loads the existing production r47 snapshot, 14 games/42 markets,
 with no critical health findings and no writes.
+
+## Final evaluated-target ordering and repeat sample
+
+After a score changes, price shopping can change its evaluated book or line.
+The final writer now rebuilds exclusions, paired prices, exact split contracts
+and the reader from the original released forecast until those final targets
+match. It never compounds corrections, adds a provider request, or invents a
+price. A bounded cycle/unavailable case retains the exact original score/grades
+and records an explicit target-resolution hold. Tests cover changed books,
+same-book line changes, convergence and cycles. Final target-exclusion and
+Owl qualification coverage reflect final selected contracts.
+
+The final zero-write r99 capture has 12 stable games and one explicit two-step
+cycle (NE@MIA), with 5 Best Angles / 2 Leans / 11 Watchlists / 21 No Plays.
+The same-run final-stage impact remains zero actionable promotions and three
+demotions. The final random checks independently recompute all nine exact-price
+EVs and confirm all score/pick sides. MIN and CHI stabilize in one iteration;
+NE preserves its original 24.79–17.13 score and exact grades after its cycle,
+rather than publishing a self-referential quote correction. Its reader is
+neutral and does not claim an applied market resolution.
+
+MIN's retained October 27 Circa opening was 45.5, followed by 46.5 and a return
+to 45.5. It is a buyback, not simply an opening-to-current Under move. The
+earlier spot-check summary beginning at the later tape observation cannot
+replace that original source history. Final MIN Under46 excludes public46.5
+and Circa45.5 flow from directional authority; stale CHI Circa flow remains
+excluded. No new defect was found in the repeated random sample.

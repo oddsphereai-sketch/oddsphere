@@ -1001,6 +1001,12 @@ export async function runNflForwardEvidenceWriter(args: {
       },
     });
     const { outcome, production, marketImpliedMargin, marketImpliedTotal } = semantic;
+    const finalContract = deriveNflEvaluatedMarketContract({ baselineProduction: production, homeTeam: plan.game.home.abbreviation });
+    const finalQualifiedOwls = qualifyNflOwlsSplitsForModel({
+      splits: displaySharpSplits, providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
+      currentHomeSpread: finalContract.spread?.homeLine ?? null,
+      currentTotal: finalContract.total?.line ?? null,
+    });
     if (args.auditSemanticImpact && !existingLockedRecord) {
       const decisions = (rows: typeof production.evaluatedBets) => rows.map((bet) => ({
         market: bet.market, side: bet.side, grade: bet.grade,
@@ -1159,10 +1165,10 @@ export async function runNflForwardEvidenceWriter(args: {
         operationalOpening: true, rosterAndDepth, expectedQuarterbacks,
         injuries: injuries !== null, playbookSplits: playbookCoverage,
         sharpApiSplits: Boolean(sharpApiCoverage), owlsSplits: owlsCoverage,
-        owlsModelQualifiedMarkets: qualifiedOwls.qualifiedMarkets,
+        owlsModelQualifiedMarkets: finalQualifiedOwls.qualifiedMarkets,
         weather: weatherCoverage, healthHolds: holds,
         quarterbackHistory: shadowMoneyline.quarterbackContext,
-        forecastTargetExclusion: resolved.targetExclusion,
+        forecastTargetExclusion: outcome.targetExclusion ?? resolved.targetExclusion,
         paidProjectionShadow: Boolean(paidProjectionShadow),
       },
       requestBudget: {
