@@ -177,8 +177,8 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /intraday \? "in
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /intraday \? "intraday_market" : "daily_full"/, "NHL separates lightweight market refreshes from the full stats scrape");
 assert.deepEqual(
   crons.filter((cron) => cron.path === "/api/cron/nhl-daily-refresh").map((cron) => cron.schedule),
-  ["45 11 * * *"],
-  "NHL has one staggered daily stable-input refresh; the route's exact env gate controls writes",
+  ["47 11 * * *"],
+  "NHL's sole daily stats refresh starts after the quarter-hour split publisher releases the shared lease",
 );
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /process\.env\[NBA_CRON_ENV\] !== "true"/, "NBA refresh remains fail-closed behind its runtime gate");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /refreshDailyEdgeResponseSnapshot/, "NBA publishes the prepared date-keyed member snapshot");
@@ -188,7 +188,8 @@ assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[N
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads/, "NBA refresh exposes its current bounded-payload release");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /season:\s*season - 1[\s\S]*skipFetchWhenRegularSeasonComplete:\s*true/, "NBA full refresh recovers an incomplete prior-season ratings pack once");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /futureWindowPartial:\s*partial && snapshotBlockers\.length === 0/, "future-window quote gaps remain visible without suppressing a complete current NBA slate");
-assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_10_27_r14_owls_current_odds/, "NHL refresh exposes its Owls current-odds release");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_11_01_r15_stats_lease_recovery/, "NHL refresh exposes its stats lease-recovery release");
+assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /leaseRetryMaxWaitMs:\s*intraday \? 0 : 60_000/, "the once-daily stats run retries short contention without multiplying intraday work");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/pregame-sweep?lockOnly=true" && cron.schedule?.startsWith("* ")), "lock sweep runs every minute while remaining targeted");
 assert.ok(crons.some((cron) => cron.path === "/api/cron/public-splits-observations-refresh" && cron.schedule === "*/15 11-12 * * *"), "split recovery starts at 07:00 ET");
 assert.ok(

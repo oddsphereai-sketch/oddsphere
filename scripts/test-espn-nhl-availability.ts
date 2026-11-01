@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   }
   assert.match(
     readFileSync("app/api/cron/nhl-daily-refresh/route.ts", "utf8"),
-    /nhl_daily_refresh_schedule_2026_10_27_r14_owls_current_odds/,
+    /nhl_daily_refresh_schedule_2026_11_01_r15_stats_lease_recovery/,
   );
 
   console.log("ESPN NHL availability tests passed");
