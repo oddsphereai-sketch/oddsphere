@@ -606,6 +606,10 @@ forward grading remain required. Exact locked payloads retain precedence.
   Future boards stamp their exact grade policy. Existing stored DTOs retain
   reader precedence. The score model remains independent r2: movement, splits
   and Kalshi are not qualified projection inputs in this release.
+- Future board rows also retain the actual target-excluded professional quote
+  tuples used by grading, with original source/receipt timestamps, in the same
+  authoritative snapshot. Existing locks are not augmented or reconstructed.
+  This permits reproducible prospective qualification without provider re-pulls.
 - Reader comparison recognizes opposing signed spread thresholds and still
   rejects different books or numbers. Unopened CBB chart evidence is deferred
   through the existing exact-game detail endpoint, retaining every published

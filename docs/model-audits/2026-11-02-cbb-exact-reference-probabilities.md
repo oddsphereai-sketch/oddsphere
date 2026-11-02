@@ -49,6 +49,14 @@ demotes Best->Watchlist: its sole Circa reference is exactly 50%, falsely corrob
 by the old rule. UCLA +4.5 (-106) demotes Lean->Watchlist: Pinnacle 49.3320% opposes,
 while Circa is neutral. Tests must exercise all three, with inputs unchanged.
 
+Future rows retain the exact deduplicated target-excluded professional quotes
+actually used in grading, including their original source and receipt clocks.
+The current count/state-only payload cannot reproduce those references after
+source movement. This uses the same existing member snapshot, adds no provider
+request or writer, and never augments an existing locked payload. It supplies
+prospective evidence for future model qualification rather than declaring an
+unvalidated market-adjusted projection live.
+
 ## Locked release ownership and efficiency
 
 New boards stamp grade r2. Tracking derives the frozen board's grade release;

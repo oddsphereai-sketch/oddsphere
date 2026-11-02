@@ -68,7 +68,7 @@ async function main(){
   assert.equal(JSON.stringify(payload),exact,"settlement cannot mutate lock payload");
   let officialGameDate="2026-11-01T19:00:00+00:00";
   const indexRow={snapshot_key:"cbb::member-game::777",storeRelease:frozen.record.release,gameId:"777",startsAt:start,
-    lockedAt:frozen.record.snapshot.lockedAt,memberId:"cbb-777",memberExternalId:"777",memberStart:start,memberLock:frozen.record.snapshot.lockedAt};
+    lockedAt:frozen.record.snapshot.lockedAt as string|null,memberId:"cbb-777",memberExternalId:"777",memberStart:start,memberLock:frozen.record.snapshot.lockedAt as string|null};
   let missingIndex=false,fullReads=0;
   const overlayDb={from:(table:string)=>table==="lab_response_snapshots"?{
     select:(fields:string)=>({in:async()=>{if(fields.includes("storeRelease:"))return {data:missingIndex?[]:[indexRow],error:null};fullReads++;return {data:[{snapshot_key:"cbb::member-game::777",payload:frozen.record}],error:null};}})

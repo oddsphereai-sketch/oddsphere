@@ -51,7 +51,7 @@ export function gradeCbbProvisional(input: CbbGradeEvidence) {
     return { release: CBB_PROVISIONAL_GRADE_RELEASE, market: target.market,
       grade: "Held" as const, reason: "incomplete_forecast_or_executable_quote",
       selection: null, price: null, expectedValue: null, referenceState: "unavailable" as const,
-      professionalReferences: 0, stake: 0 };
+      professionalReferences: 0, professionalReferenceQuotes: [] as CbbQuote[], stake: 0 };
   }
   const review = reviewCbbQuote(forecast, target);
   const price = review.selection === "first" ? target.firstPrice : target.secondPrice;
@@ -103,5 +103,5 @@ export function gradeCbbProvisional(input: CbbGradeEvidence) {
       !priceEligible ? "price_too_steep_for_actionable" :
       value >= 0 ? "edge_below_actionable_reserve" : "non_positive_exact_price_value",
     selection: review.selection, price, expectedValue: value, referenceState,
-    professionalReferences: sharp.length, stake: 0 };
+    professionalReferences: sharp.length, professionalReferenceQuotes: structuredClone(sharp), stake: 0 };
 }

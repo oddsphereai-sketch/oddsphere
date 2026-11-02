@@ -39,7 +39,7 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       reason: targetBook?"no_verified_target_quote_for_market":"no_complete_three_market_target_book", selection: null, line: null,
       price: null, probability: null, marketFairProbability: null, quoteObservedAt: null,
       pushProbability: null, expectedValue: null,
-      observedQuote:null,quoteProvider:null, professionalReferences: 0, referenceState: "unavailable" as const };
+      observedQuote:null,quoteProvider:null, professionalReferences: 0, professionalReferenceQuotes: [] as CbbQuote[], referenceState: "unavailable" as const };
     const review = reviewCbbQuote(forecast, target);
     const grade = gradeCbbProvisional({ target, references: quotes.filter(quote => quote !== target),
       forecast, asOf: forecast.asOf });
@@ -55,6 +55,7 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       probability: grade.selection === null ? null : review.probability,
       pushProbability: grade.selection === null ? null : review.pushProbability,
       expectedValue: grade.expectedValue, professionalReferences: grade.professionalReferences,
+      professionalReferenceQuotes: grade.professionalReferenceQuotes,
       referenceState: grade.referenceState };
   });
   return { release: CBB_PROVISIONAL_BOARD_RELEASE, gradeRelease: CBB_PROVISIONAL_GRADE_RELEASE, gameId: forecast.gameId,

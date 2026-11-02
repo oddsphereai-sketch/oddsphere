@@ -11,6 +11,8 @@ for (const row of fixture.cases) {
   const result = gradeCbbProvisional(input);
   assert.equal(result.grade, row.nextGrade, row.match);
   assert.equal(result.referenceState, row.nextState, row.match);
+  assert.equal(result.professionalReferenceQuotes.length,result.professionalReferences,"future frozen grades retain the exact references used");
+  assert.ok(result.professionalReferenceQuotes.every(q=>q.gameId===row.id&&q.providerObservedAt<=fixture.asOf&&q.fetchedAt<=fixture.asOf));
   assert.equal(JSON.stringify(input), before, "grading does not mutate source, forecast or uncertainty");
 }
 const forecast = fixture.cases[0].forecast as CbbGradeEvidence["forecast"];
