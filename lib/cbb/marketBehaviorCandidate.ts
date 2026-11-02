@@ -138,7 +138,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
   if(base.inputStatus==="complete")for(const anchor of anchors.quotes){
     const book=cbbBookFamily(anchor.sportsbook),currentQuote=current.find(q=>cbbBookFamily(q.sportsbook)===book&&q.market===anchor.market);
     const key=`${book}:${anchor.market}`;
-    if(currentQuote&&currentQuote.providerObservedAt===anchor.providerObservedAt&&tuple(currentQuote)!==tuple(anchor)){
+    if(currentQuote&&Date.parse(currentQuote.providerObservedAt)===Date.parse(anchor.providerObservedAt)&&tuple(currentQuote)!==tuple(anchor)){
       quarantined.add(key);sourceProblems.push(`${key}:ambiguous_original_source_timestamp`);
     }
     if(quarantined.has(key)||!currentQuote||Date.parse(currentQuote.providerObservedAt)<=Date.parse(anchor.providerObservedAt)||Date.parse(currentQuote.fetchedAt)<Date.parse(anchor.fetchedAt))continue;

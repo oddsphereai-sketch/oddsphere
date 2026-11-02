@@ -96,6 +96,7 @@ assert.equal(disputed.receipt.winnerArbitration.status,"conflicting");assert.equ
 assert.equal(arbitrated.receipt.margin.delta,arbitrated.forecast.margin-14,"current-level arbitration replaces, never doubles, the relative displacement");
 const quarantinedWinner=run(marketOpposition,{independent:forecast(14),anchors:{...anchors([{...marketOpposition[1],firstPrice:-130,secondPrice:110}]),capturedAt:at}});
 assert.deepEqual(quarantinedWinner.receipt.anchors.quarantinedKeys,["pinnacle:spread"]);
+assert.deepEqual(run(marketOpposition,{independent:forecast(14),anchors:{...anchors([{...marketOpposition[1],providerObservedAt:"2026-11-02T15:20:00+00:00",firstPrice:-130,secondPrice:110}]),capturedAt:at}}).receipt.anchors.quarantinedKeys,["pinnacle:spread"],"equivalent ISO source clocks cannot bypass quarantine");
 assert.notEqual(quarantinedWinner.receipt.winnerArbitration.status,"applied","quarantined source cannot regain forecast authority through static arbitration");
 const ambiguousRef={...quote("spread",-3.5,-130,110),fetchedAt:current[1].fetchedAt};
 const quarantineGradeRead=run([ambiguousRef],{independent:forecast(12),anchors:anchors([original[1]])});
