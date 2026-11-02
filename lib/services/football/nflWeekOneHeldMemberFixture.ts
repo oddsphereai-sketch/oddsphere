@@ -48,7 +48,11 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_11_02_r69_source_qualified_market_read" as const;
+  "nfl_weekly_member_fixture_2026_11_02_r70_market_conviction_grades" as const;
+const NFL_SOURCE_QUALIFIED_PREDECESSOR_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_11_02_r53_source_qualified_market_read" as const;
+const NFL_SOURCE_QUALIFIED_PREDECESSOR_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_11_02_r56_source_qualified_market_read" as const;
 const NFL_RELATIVE_INNOVATION_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations" as const;
 const NFL_RELATIVE_INNOVATION_PREDECESSOR_DECISION_RELEASE =
@@ -156,6 +160,7 @@ const NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES = new Set<string>([
   "nfl_forward_evidence_collector_2026_10_27_r26_source_evidence_release_binding",
   "nfl_forward_evidence_collector_2026_10_27_r27_research_failure_isolation",
   "nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only",
+  "nfl_forward_evidence_collector_2026_11_02_r30_source_qualified_attempts",
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
 ]);
 
@@ -345,6 +350,9 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[], preservedLockedIds
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_SOURCE_QUALIFIED_PREDECESSOR_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_SOURCE_QUALIFIED_PREDECESSOR_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_RELATIVE_INNOVATION_PREDECESSOR_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_RELATIVE_INNOVATION_PREDECESSOR_DECISION_RELEASE)) ||

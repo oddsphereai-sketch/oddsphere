@@ -157,7 +157,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_02_r104_source_qualified_market_read" as const;
+  "nfl_forward_evidence_writer_2026_11_02_r105_market_conviction_grades" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -1076,6 +1076,7 @@ export async function runNflForwardEvidenceWriter(args: {
     const candidate = useInnovation ? applyNflMarketInnovationRuntime({
       ...candidateArgs, independentInputPolicy: "market_inputs_prohibited",
       history: episodeHistory, referenceBooks: namedCurrentBooks, sourceReactionContext,
+      executionAvailableAt: slate.currentOddsFetchedAt,
     }) : { ...applyNflFullGameEvidenceRuntime(candidateArgs), innovation: undefined };
     return { ...candidate, marketImpliedMargin, marketImpliedTotal };
     };

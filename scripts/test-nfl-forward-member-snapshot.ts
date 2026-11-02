@@ -267,6 +267,31 @@ async function main() {
   assert.equal(storedPayload, lockedContinuityPredecessor,
     "a predecessor read cannot write or replace its immutable stored object");
 
+  const sourceQualifiedPredecessor = {
+    ...lockedContinuityPredecessor,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_02_r61_source_qualified_market_read",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_02_r69_source_qualified_market_read",
+    memberRelease: "nfl_v1_member_release_2026_11_02_r53_source_qualified_market_read",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_02_r56_source_qualified_market_read",
+    fixture: { ...lockedContinuityPredecessor.fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_02_r69_source_qualified_market_read" },
+  };
+  storedKey = ["nfl", "daily-edge", 2026, 1, sourceQualifiedPredecessor.snapshotRelease,
+    sourceQualifiedPredecessor.fixtureRelease, sourceQualifiedPredecessor.memberRelease,
+    sourceQualifiedPredecessor.decisionRelease].join("::");
+  storedPayload = sourceQualifiedPredecessor;
+  const sourceQualifiedBefore = JSON.stringify(sourceQualifiedPredecessor);
+  assert.deepEqual(await readNflForwardMemberSnapshot({ client, season: 2026, week: 1,
+    now: "2026-08-27T12:02:00.000Z" }), sourceQualifiedPredecessor,
+    "r61/r69/r53/r56 stays readable under its exact previous key before the new grade publication exists");
+  assert.equal(JSON.stringify(storedPayload), sourceQualifiedBefore,
+    "symmetric grade promotion cannot alter any prior locked projection, probability, pick, price, grade or evidence");
+  const mixedSourceQualified = { ...sourceQualifiedPredecessor, decisionRelease: snapshot.decisionRelease };
+  storedPayload = mixedSourceQualified;
+  assert.equal(await readNflForwardMemberSnapshot({ client, season: 2026, week: 1,
+    now: "2026-08-27T12:02:00.000Z" }), null,
+    "a mixed new-decision/old-reader tuple cannot be admitted as the exact source-qualified predecessor");
+
   const relativeInnovationPredecessor = { ...snapshot,
     snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r59_relative_market_innovations",
     fixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations",

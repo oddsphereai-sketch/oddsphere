@@ -69,7 +69,11 @@ innovation3 / posture3 / fixture70 / snapshot62 use the `2026_11_02` market-conv
 suffixes in exported constants. Collector31 records exact quote availability and
 regular-slate source r5 records page and current-batch receipt clocks. Schema r6,
 independent heads and market transport equations remain unchanged. Exact r61/fixture69/member53/decision56
-is an accepted reader predecessor. Preserve every existing lock and historical
+is an accepted reader predecessor. Qualification r2 uses a transport-stable
+fingerprint of the exact numeric law, so JSON key ordering cannot invalidate it;
+changed scores, probabilities, PMFs, event or market still fail qualification.
+The old locked qualification receipts are preserved opaquely. Exact preceding releases
+retain reader precedence. Preserve every existing lock and historical
 failed-slot card, the one `prediction_pipeline:nfl` writer/lease, provider budget,
 schedule and tracking ownership. No UI copy, layout, extra writer or production shadow.
 

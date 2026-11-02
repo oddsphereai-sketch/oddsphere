@@ -12,7 +12,7 @@ import {
 export const BALLDONTLIE_NFL_PREVIEW_SLATE_RELEASE =
   "balldontlie_nfl_preview_slate_2026_08_19_r1" as const;
 export const BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE =
-  "balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture" as const;
+  "balldontlie_nfl_regular_slate_2026_11_02_r5_current_quote_receipt" as const;
 export const BALLDONTLIE_NFL_REGULAR_RESULTS_RELEASE =
   "balldontlie_nfl_regular_results_2026_08_25_r1" as const;
 export const BALLDONTLIE_NFL_RAW_PRICE_MANIFEST_RELEASE =
@@ -51,6 +51,8 @@ export type NflRegularProviderResults = {
 export type NflPreviewBookOdds = {
   providerGameId: string;
   sportsbook: string;
+  /** Receipt of the actual current response page containing this offer. */
+  availableAt?: string;
   observedAt: string;
   /** Price-feed provenance. Older immutable rows omit this and are BALLDONTLIE by contract. */
   provider?: "balldontlie" | "sharpapi" | "owls";
@@ -91,6 +93,8 @@ export type NflPreviewProviderSlate = {
 
 export type NflRegularProviderSlate = Omit<NflPreviewProviderSlate, "release"> & {
   release: typeof BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE;
+  /** Actual current-odds receipt before the separate opening-history read. */
+  currentOddsFetchedAt?: string;
   currentOddsAllBooksByGame: Record<string, NflPreviewBookOdds[]>;
   currentOddsComparableBooksByGame: Record<string, NflPreviewBookOdds[]>;
   openingOddsAllBooksByGame: Record<string, NflPreviewBookOdds[]>;
@@ -261,6 +265,8 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     throw new Error("BALLDONTLIE returned no complete verified NFL regular-season week.");
   }
   const gameIds = games.map((game) => game.providerGameId);
+  const currentPageReceipts = new Map<unknown, string>();
+  let currentOddsFetchedAt = "";
   const currentRead = await readPages({
     path: "/odds",
     query: { "game_ids[]": gameIds, per_page: 100 },
@@ -269,6 +275,10 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     fetchImpl,
     onRequest: () => { providerRequests += 1; },
     captureResponseDigests: args.captureRawPriceManifest === true,
+    onPageReceived: rows => {
+      currentOddsFetchedAt = args.clock?.() ?? new Date().toISOString();
+      for (const row of rows) currentPageReceipts.set(row, currentOddsFetchedAt);
+    },
   });
   if (currentRead.nextCursor !== null) throw new Error("BALLDONTLIE regular current odds exceeded the pagination safety budget.");
   const openingRead = await readPages({
@@ -289,7 +299,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
       values: currentRead.rows,
       requestedGameIds,
       phase: "current",
-      providerFetchedAt: fetchedAt,
+      providerFetchedAt: currentOddsFetchedAt,
       rawResponseSha256: rawPriceSha256(currentRead.pageResponseSha256s),
       includeRawParserInput: true,
     }),
@@ -302,7 +312,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
       includeRawParserInput: true,
     }),
   } : undefined;
-  const currentOddsAllBooksByGame = groupBooksByGame(currentRead.rows, requestedGameIds);
+  const currentOddsAllBooksByGame = groupBooksByGame(currentRead.rows, requestedGameIds, false, currentPageReceipts);
   const currentOddsComparableBooksByGame = comparableBooksByGame(currentOddsAllBooksByGame);
   const openingOddsAllBooksByGame = groupBooksByGame(openingRead.rows, requestedGameIds, true);
   const openingOddsComparableBooksByGame = comparableBooksByGame(openingOddsAllBooksByGame);
@@ -318,6 +328,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
   return {
     release: BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
     fetchedAt,
+    currentOddsFetchedAt,
     season: args.season,
     productWeek: args.week,
     providerWeek: args.week,
@@ -383,6 +394,7 @@ async function readPages(args: {
   onRequest: () => void;
   optional?: boolean;
   captureResponseDigests?: boolean;
+  onPageReceived?: (rows: unknown[]) => void;
 }): Promise<{ rows: unknown[]; nextCursor: string | null; pageResponseSha256s: string[] }> {
   const rows: unknown[] = [];
   const pageResponseSha256s: string[] = [];
@@ -416,6 +428,7 @@ async function readPages(args: {
     const body = await response.json() as BdlEnvelope;
     if (args.captureResponseDigests) pageResponseSha256s.push(rawPriceSha256(body));
     if (!Array.isArray(body.data)) throw new Error(`BALLDONTLIE ${args.path} returned a malformed payload.`);
+    args.onPageReceived?.(body.data);
     rows.push(...body.data);
     const next = body.meta?.next_cursor;
     cursor = typeof next === "string" || typeof next === "number" ? String(next) : null;
@@ -497,11 +510,14 @@ function groupBooksByGame(
   values: unknown[],
   requestedGameIds: ReadonlySet<string>,
   allowOpenedAt = false,
+  availableByValue?: ReadonlyMap<unknown, string>,
 ): Record<string, NflPreviewBookOdds[]> {
   const grouped = new Map<string, Map<string, NflPreviewBookOdds[]>>();
   for (const value of values) {
     const row = normalizeOdds(value, allowOpenedAt);
     if (!row || !requestedGameIds.has(row.providerGameId)) continue;
+    const availableAt = availableByValue?.get(value);
+    if (availableAt) row.availableAt = availableAt;
     const vendor = row.sportsbook.toLowerCase();
     const byVendor = grouped.get(row.providerGameId) ?? new Map<string, NflPreviewBookOdds[]>();
     byVendor.set(vendor, [...(byVendor.get(vendor) ?? []), row]);
