@@ -91,8 +91,9 @@ async function main() {
   assert.equal(calls.filter(c=>c.startsWith("named:")).length,7);
   calls.length=0;sports=["mlb","wnba","nba","nhl","nfl","cfb","cbb"];
   const pubResult=await (await pub.GET(request)).json();
-  for(const run of pubResult.runs){assert.equal(run.result.records_updated,6);assert.equal(run.result.api_calls_made,3);assert.equal(run.result.partial,false);}
-  assert.equal(calls.length,21,"scheduled games preserve each existing source and sole snapshot path");
+  for(const run of pubResult.runs){assert.equal(run.result.records_updated,run.sport==="cbb"?5:6);assert.equal(run.result.api_calls_made,3);assert.equal(run.result.partial,false);}
+  assert.equal(calls.length,20,"scheduled games preserve each existing source; only the CBB pipeline publishes its board");
+  assert.equal(calls.includes("snapshot:cbb"),false,"CBB split capture cannot recopy the complete board or renew its freshness clock");
   console.log("PASS empty MLB/WNBA slates spend zero capture calls/writes; real games resume all sources, other sports stay exact, read failures do not suppress capture, ET windows and existing lease/cadence preserved");
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,5 +1,17 @@
 # Current production model releases and qualified research candidates
 
+## CBB canonical snapshot ownership — November 2 operational repair
+
+`cbb_snapshot_publication_2026_11_02_r1_pipeline_only` prevents the generic
+snapshot copier from overwriting the CBB pipeline's board/release or renewing
+an old board's TTL. The public-splits job keeps both existing source collectors
+and the sport-scoped lease, but omits its redundant full-board read/write.
+Unlocked readers still overlay qualified fresh captured splits; the normal CBB
+pipeline remains the sole publisher, with its existing r10 release and cadence.
+No forecast, probability, quote, grade, stake, lock or historical record changes.
+Evidence and rollback:
+`docs/model-audits/2026-11-02-cbb-snapshot-publication-ownership.md`.
+
 ## Idle MLB/WNBA market capture — November 2 operational repair
 
 `daily_edge_market_capture_2026_11_02_r1_empty_slates` skips the shared named-book,
