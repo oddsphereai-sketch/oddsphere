@@ -2,6 +2,15 @@
 
 ## Owner-authorized CBB market-decision repair — November 2
 
+Subsequent owner requirement: external AI market-reader audit, followed by
+coordination with the existing “Assess sharp market reader” chat. That audit
+rejected the unmerged r4 method and found additional source/grade defects.
+This authorization is therefore NOT permission to deploy the failed r4
+candidate. No release or locked value has been changed. Keep source/path
+repairs isolated until reconciled with the existing reader contract; do not
+invent a new sign-copy, blend or half-space rule to satisfy a deadline.
+See `docs/model-audits/2026-11-02-cbb-external-market-reader-audit.md`.
+
 After reviewing PR938, the339-market impact (103->98 actionable,0 promotions,
 5 demotions,10 selected-side changes), the possibility of projected-winner
 changes, and the explicit absence of held-out outcome qualification, Daniel

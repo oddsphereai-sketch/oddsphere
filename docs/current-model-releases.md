@@ -1,8 +1,19 @@
 # Current production model releases and qualified research candidates
 
-## CBB observed-market behavior release — November 2
+## CBB observed-market behavior r4 — external audit rejected; never deployed
 
-The owner-authorized production repair uses final score
+The owner's subsequent required outside-AI audit reproduced material method
+and source-path failures in PR938. Publication is held and the PR is draft.
+The r4 family below has NEVER been production: production remains independent
+r3 /board r6 /grade r2 /publisher r12 /tracking r4. The earlier go-live
+authorization does not make the failed method valid. The owner directed
+coordination with the existing “Assess sharp market reader” chat before any
+new inference policy. Do not activate this r4 sign-triggered market-copy rule,
+nor substitute a guessed blend, winner half-space or source-name amplitude.
+Concrete findings and handoff status:
+`docs/model-audits/2026-11-02-cbb-external-market-reader-audit.md`.
+
+The rejected, unmerged candidate proposed final score
 `cbb_candidate_2026_11_02_r4_observed_market_behavior`, board
 `cbb_candidate_2026_11_02_r7_observed_market_behavior`, grade
 `cbb_2026_11_02_r3_bound_market_behavior`, receipt
