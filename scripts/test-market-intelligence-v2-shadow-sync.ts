@@ -32,7 +32,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_02_r19_cbb_verified_source_aliases",
+    "market_intelligence_v2_capture_2026_11_02_r20_cbb_complete_institution_names",
 );
 
 {
@@ -81,6 +81,27 @@ check(
     awayName:"Miami Ohio RedHawks",awayLocation:"Miami Ohio"};
   check("CBB institution aliases never guess USC or Miami's school",
     matchCbbSourceGame([ambiguous],"Miami","USC",sourceStart)===null);
+  for (const [awaySource,homeSource,awayLocation,homeLocation,awayName,homeName] of [
+    ["Weber St Wildcats","Oregon St Beavers","Weber State","Oregon State","Weber State Wildcats","Oregon State Beavers"],
+    ["C Connecticut Blue Devils","Temple Owls","Central Connecticut","Temple","Central Connecticut Blue Devils","Temple Owls"],
+    ["Quinnipiac Bobcats","Michigan St Spartans","Quinnipiac","Michigan State","Quinnipiac Bobcats","Michigan State Spartans"],
+    ["Northeastern Huskies","Boston U Terriers","Northeastern","Boston University","Northeastern Huskies","Boston University Terriers"],
+    ["Morehead St Eagles","Western KY Hilltoppers","Morehead State","Western Kentucky","Morehead State Eagles","Western Kentucky Hilltoppers"],
+  ]) {
+    const fixture={...game,awayName,homeName,awayLocation,homeLocation};
+    check(`CBB complete provider names retain verified institution and mascot ${awaySource}@${homeSource}`,
+      matchCbbSourceGame([fixture],awaySource,homeSource,sourceStart)?.reversed===false&&
+      matchCbbSourceGame([fixture],homeSource,awaySource,sourceStart)?.reversed===true);
+    check(`CBB complete-name aliases keep unique fixture and time proof ${awaySource}`,
+      matchCbbSourceGame([fixture,{...fixture,id:2,externalId:999}],awaySource,homeSource,sourceStart)===null&&
+      matchCbbSourceGame([fixture],awaySource,homeSource,"2026-11-02T14:30:00Z")===null);
+  }
+  const stateFixture={...game,awayName:"Weber State Wildcats",awayLocation:"Weber State",
+    homeName:"Oregon State Beavers",homeLocation:"Oregon State"};
+  check("CBB full-name repair rejects wrong mascots, wrong institutions and mascot-only aliases",
+    matchCbbSourceGame([stateFixture],"Weber St Beavers","Oregon St Wildcats",sourceStart)===null&&
+    matchCbbSourceGame([stateFixture],"Kansas St Wildcats","Oregon St Beavers",sourceStart)===null&&
+    matchCbbSourceGame([stateFixture],"Wildcats","Beavers",sourceStart)===null);
   const price = buildOwlsSharpPriceObservations({
     sport: "cbb", fetchedAt: new Date("2026-10-30T12:00:00Z"), games: [game],
     rows: [{ sport: "ncaab", providerEventId: "ncaab:Villanova@Notre Dame-20261101",
