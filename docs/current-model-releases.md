@@ -6,6 +6,22 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-11-02
 
+## NFL symmetric market-conviction grades — November 2 candidate
+
+Starting base `1196af6b0b1550d42f97a25c69f1f7376453090a`. Candidate authoritative
+runtime constants use `2026_11_02` and the `market_conviction_grades` suffix:
+writer105, model49, calibration48, decision57, grade policy57, member54,
+runtime15, innovation3, fixture70 and snapshot62. Posture advances to
+`nfl_market_innovation_posture_2026_11_02_r3_symmetric_market_conviction`.
+The direct step recognizes a qualified already-applied same-market consequence
+with Watchlist→Lean and Lean→Best Angle actions, while preserving price/forecast
+economics and opposing-context demotions. No second probability/score update,
+No Play promotion, provider/writer/lease/schedule change or historical rewrite.
+Collector30, schema r6 and independent/transport heads remain unchanged.
+The exact preceding r61/r69/member53/decision56 reader tuple remains accepted.
+Policy, bounds, board impact and publication status:
+`docs/model-audits/2026-11-02-nfl-symmetric-market-grades.md`.
+
 ## NFL source-qualified reader and grades — November 2 release
 
 Starting base `9876c3dd99539b1302c7617765d22fe0e8976fed`; integrated production
