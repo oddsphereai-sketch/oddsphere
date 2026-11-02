@@ -114,6 +114,36 @@ assert.deepEqual(
 );
 assert.equal(evidence.spread.movementReferenceSportsbook, "fanduel");
 assert.equal(evidence.spread.lineTrail, evidence.spread.oddsTrail);
+
+const flatObservedRows: NbaReaderPriceRow[] = [
+  price("moneyline", "home", "fanduel", -184, null, "2026-10-16T13:00:00Z"),
+  price("moneyline", "away", "fanduel", 154, null, "2026-10-16T13:00:00Z"),
+  price("moneyline", "home", "fanduel", -184, null, "2026-10-16T15:00:00Z"),
+  price("moneyline", "away", "fanduel", 154, null, "2026-10-16T15:00:00Z"),
+  price("moneyline", "home", "fanduel", -184, null, "2026-10-16T17:55:00Z"),
+  price("moneyline", "away", "fanduel", 154, null, "2026-10-16T17:55:00Z"),
+];
+const flatObservedEvidence = buildNbaMemberGameEvidence({
+  game: {
+    ...game,
+    intelligence: {
+      ...game.intelligence,
+      ml: intel("moneyline", "home", null, -184, "fanduel"),
+    },
+  },
+  priceRows: flatObservedRows,
+  splitRows,
+  evaluatedAt,
+});
+assert.deepEqual(
+  flatObservedEvidence.moneyline.oddsTrail.map((stop) => [stop.label, stop.american, stop.observedAt]),
+  [
+    ["first", -184, "2026-10-16T13:00:00Z"],
+    ["move", -184, "2026-10-16T15:00:00Z"],
+    ["current", -184, "2026-10-16T17:55:00Z"],
+  ],
+  "a flat market with three genuine captures must retain Opening, Prior, and Current",
+);
 assert.deepEqual(
   evidence.moneyline.oddsTrail.map((stop) => stop.label),
   ["current"],
@@ -190,9 +220,10 @@ function sharpSplit(args: {
   betsPct: number | null;
   moneyPct: number | null;
   at: string;
+  provider?: "owls" | "sharpapi";
 }): NbaReaderSplitRow {
   return {
-    provider: "sharpapi",
+    provider: args.provider ?? "owls",
     sourceBook: args.book,
     sourceType: args.book === "circa" ? "sharp_adjacent_book" : "retail_book",
     market: "moneyline",
@@ -219,6 +250,18 @@ assert.deepEqual(
   fallbackEvidence.moneyline.sportsbookSplits?.rows.map((row) => [row.side, row.betsPct, row.moneyPct]),
   [["home", 48, 57], ["away", 52, 43]],
   "a partial source must never be mixed into a different book's complete pair",
+);
+
+const legacySharpApiRows = [
+  ...splitRows,
+  sharpSplit({ book: "draftkings", side: "home", betsPct: 0.48, moneyPct: 0.57, at: "2026-10-16T17:50:00Z", provider: "sharpapi" }),
+  sharpSplit({ book: "draftkings", side: "away", betsPct: 0.52, moneyPct: 0.43, at: "2026-10-16T17:50:00Z", provider: "sharpapi" }),
+];
+const legacySharpApiEvidence = buildNbaMemberGameEvidence({ game, priceRows, splitRows: legacySharpApiRows, evaluatedAt });
+assert.equal(
+  legacySharpApiEvidence.moneyline.sportsbookSplits?.sourceBook,
+  "draftkings",
+  "legacy SharpAPI observations remain readable while current Owls observations own live ingestion",
 );
 
 const withCirca = [

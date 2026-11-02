@@ -155,7 +155,12 @@ function sharpBookSnapshots(
 ): SplitSnapshot[] {
   const byCapture = new Map<string, Map<NbaReaderSide, NbaReaderSplitRow>>();
   for (const row of rows) {
-    if (row.market !== market || canonical(row.provider) !== "sharpapi" || sharpSourceBook(row) !== sourceBook) continue;
+    const provider = canonical(row.provider);
+    if (
+      row.market !== market ||
+      (provider !== "owls" && provider !== "sharpapi") ||
+      sharpSourceBook(row) !== sourceBook
+    ) continue;
     const side = selectionSide(row.selectionKey);
     if (!side || !expectedSides(market).includes(side)) continue;
     const captured = byCapture.get(row.fetchedAt) ?? new Map<NbaReaderSide, NbaReaderSplitRow>();
@@ -242,7 +247,9 @@ function buildSharpBookEvidence(args: {
       ? fallback
       : circa;
   const rawSharp = args.rows.filter((row) =>
-    row.market === args.market && canonical(row.provider) === "sharpapi" && sharpSourceBook(row) !== null);
+    row.market === args.market &&
+    ["owls", "sharpapi"].includes(canonical(row.provider)) &&
+    sharpSourceBook(row) !== null);
   const lastRawUpdate = rawSharp
     .map((row) => row.fetchedAt)
     .filter((value) => Number.isFinite(Date.parse(value)))
@@ -292,6 +299,12 @@ function compactTrail(rows: NbaReaderPriceRow[]): NbaReaderPriceRow[] {
   }
   const terminal = rows.at(-1)!;
   if (observationTime(compacted.at(-1)!) !== observationTime(terminal)) compacted.push(terminal);
+  // The member map promises an honest Opening -> Prior -> Current chronology.
+  // When the quote remained unchanged across several real captures, the
+  // change-only compaction above would otherwise erase every intermediate
+  // observation and make a well-tracked market look like a two-stop trail.
+  // Retain the latest genuine pre-terminal capture; never synthesize a point.
+  if (compacted.length === 2) compacted.splice(1, 0, rows.at(-2)!);
   return compacted;
 }
 
