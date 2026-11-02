@@ -150,3 +150,17 @@ fitted authority is not approved CBB behavior.
 Completion requires a defensible CBB level-aware inference decision, independent
 review of that actual method, release-specific board/outcome qualification,
 fresh-main protected publication and live verification. PR938 stays draft.
+
+## Subsequent source-owner integration
+
+Protected source-only PR941 merged as
+`f397cdb8360a3edf13ca6c5a06976e5f9fb62e0f`, capture R20. The private reader
+branch integrated that exact production base, retaining both R19/R20 registry
+entries. Reviewed changes affect exact institution-plus-canonical-mascot
+matching and bounded rejection diagnostics, with no forecast/grade hunk.
+After integration the13-suite CBB focused gate,100 shared source assertions,
+standalone TypeScript and clean integration-safety check pass. Earlier full
+model/build/lint checks described above were run against the preceding
+`4df9ed25` production base; no claim substitutes those for future publication
+checks. The source owner is still verifying normal live capture/reader coverage.
+No reader model was merged or deployed by this integration.
