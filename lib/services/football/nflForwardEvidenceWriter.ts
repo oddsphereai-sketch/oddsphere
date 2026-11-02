@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isDeepStrictEqual } from "node:util";
+import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { computeSlateDate } from "@/lib/dates/slateDate";
@@ -104,6 +106,9 @@ import { nflForwardT60TrackingEligibility } from "./nflTrackingLifecycle";
 import {
   buildNflImmutableT60RecoveryRecords,
   buildNflOfficialTrackingRecords,
+  buildNflPublishedPregameRecoveryRecords,
+  selectNflPublishedPregameRecoverySource,
+  type NflPublishedPregameRecovery,
   nflProviderIntegerId,
   nflTrackingMarketsForPayload,
 } from "./nflOfficialTrackingRecord";
@@ -2111,9 +2116,23 @@ export async function writeOfficialTrackingFromPayloads(args: {
   client: SupabaseClient;
   payloads: NflForwardEvidencePayload[];
   apply: boolean;
+  /** Explicit operator recovery under the same prediction_pipeline:nfl lease. */
+  publishedPregameRecovery?: { rows: NflForwardStoredEvidence[]; receipt: NflPublishedPregameRecovery };
 }): Promise<NflTrackingWriteResult> {
+  const recovery = args.publishedPregameRecovery;
+  const recoverySource = recovery ? selectNflPublishedPregameRecoverySource({
+    rows: recovery.rows, recovery: recovery.receipt,
+  }) : null;
+  if (recoverySource && (args.payloads.length !== 1 ||
+      hashNflForwardEvidencePayload(args.payloads[0]!) !== recoverySource.payloadSha256)) {
+    throw new Error("NFL recovery writer requires exactly the approved original source payload.");
+  }
   const eligibleByGame = new Map<string, NflForwardEvidencePayload>();
   for (const payload of args.payloads) {
+    if (recoverySource) {
+      eligibleByGame.set(payload.game.providerGameId, payload);
+      continue;
+    }
     const boundary = nflForwardT60TrackingEligibility({
       stage: payload.stage,
       captureTiming: payload.captureTiming,
@@ -2156,13 +2175,34 @@ export async function writeOfficialTrackingFromPayloads(args: {
   if (decisionReleases.size > 1) throw new Error("NFL T-60 tracking payloads carry incoherent decision releases.");
   const decisionRelease = [...decisionReleases][0] ?? NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
   const externalIds = payloads.map((payload) => nflProviderIntegerId(payload.game.providerGameId, "game"));
-  const { data: existingRows, error: existingError } = await args.client
+  let existingQuery = args.client
     .from("prediction_records")
-    .select("id,external_id,market,locked_at")
+    .select(recovery
+      ? "id,external_id,market,pick,line_value,odds_american,play_grade,model_probability,model_version,locked_at,snapshot_json"
+      : "id,external_id,market,locked_at")
     .eq("sport", "nfl")
-    .eq("model_version", decisionRelease)
     .in("external_id", externalIds);
+  if (!recovery) existingQuery = existingQuery.eq("model_version", decisionRelease);
+  const { data: existingData, error: existingError } = await existingQuery;
+  const existingRows = existingData as unknown as PredictionRecordRow[] | null;
   if (existingError) throw new Error(`NFL tracking record read failed: ${existingError.message}`);
+  if (recovery && (existingRows ?? []).length > 0 &&
+      ((existingRows ?? []).length !== 3 || new Set(existingRows?.map(row => row.market)).size !== 3 ||
+      (existingRows ?? []).some(row => {
+        const receipt = row.snapshot_json?.published_pregame_recovery as NflPublishedPregameRecovery | undefined;
+        const original = recoverySource?.payload.decisions.evaluatedBets.find(decision => decision.market === row.market);
+        return !row.locked_at || receipt?.sourcePayloadSha256 !== recovery.receipt.sourcePayloadSha256 ||
+          receipt?.failedPayloadSha256 !== recovery.receipt.failedPayloadSha256 || !original ||
+          !isDeepStrictEqual(row.snapshot_json?.decision_tuple, original) ||
+          row.pick !== original.side || row.model_version !== original.decisionRelease ||
+          // The exact original probability stays in decision_tuple; the
+          // indexed NUMERIC(7,6) column uses PostgreSQL's stored precision.
+          row.model_probability !== Number(original.modelProbability.toFixed(6)) || row.line_value !== original.evaluatedQuote.line ||
+          row.odds_american !== original.evaluatedQuote.price ||
+          row.play_grade !== original.grade.toLowerCase().replace(/\s+/g, "_");
+      }))) {
+    throw new Error("NFL recovery refuses existing or partial tracking records from any release.");
+  }
   const existingKeys = buildMarketScopedFootballTrackingPlan(trackingGames, (existingRows ?? []) as Array<{
     external_id: number;
     market: string;
@@ -2177,12 +2217,37 @@ export async function writeOfficialTrackingFromPayloads(args: {
     };
   }
 
-  const teamIdByProviderId = await upsertTrackedNflTeams(args.client, payloads);
-  const gameIdByProviderId = await upsertTrackedNflGames(args.client, payloads, teamIdByProviderId);
+  let gameIdByProviderId: Map<string, number>;
+  if (recovery) {
+    // Historical game scores/status must never be upserted from a pregame payload.
+    const { data: games, error } = await args.client.from("games")
+      .select("id,external_id,game_date").eq("sport", "nfl").in("external_id", externalIds);
+    if (error) throw new Error(`NFL recovery game read failed: ${error.message}`);
+    if ((games?.length ?? 0) > 1 || (games?.length === 1 &&
+        Date.parse(games[0]!.game_date) !== Date.parse(payloads[0]!.game.scheduledStart))) {
+      throw new Error("NFL recovery requires the existing exact game identity.");
+    }
+    if (games?.length === 1) {
+      gameIdByProviderId = new Map([[payloads[0]!.game.providerGameId, games[0]!.id]]);
+    } else {
+      const providerTeamIds = [payloads[0]!.game.away.id, payloads[0]!.game.home.id];
+      const { data: teams, error: teamError } = await args.client.from("teams")
+        .select("id,external_id").eq("sport", "nfl").in("external_id", providerTeamIds);
+      if (teamError || teams?.length !== 2) throw new Error("NFL recovery requires both existing team identities.");
+      gameIdByProviderId = await upsertTrackedNflGames(args.client, payloads,
+        new Map(teams.map(team => [team.external_id, team.id])), true);
+    }
+  } else {
+    const teamIdByProviderId = await upsertTrackedNflTeams(args.client, payloads);
+    gameIdByProviderId = await upsertTrackedNflGames(args.client, payloads, teamIdByProviderId);
+  }
   const records = payloads.flatMap((payload) => {
     const externalId = nflProviderIntegerId(payload.game.providerGameId, "game");
     const gameId = gameIdByProviderId.get(payload.game.providerGameId);
     if (gameId === undefined) throw new Error(`NFL tracking game row missing for ${payload.game.providerGameId}.`);
+    if (recovery && recoverySource) {
+      return buildNflPublishedPregameRecoveryRecords({ source: recoverySource, gameId, recovery: recovery.receipt });
+    }
     let built: ReturnType<typeof buildNflOfficialTrackingRecords>;
     try {
       built = buildNflOfficialTrackingRecords({
@@ -2262,6 +2327,7 @@ async function upsertTrackedNflGames(
   client: SupabaseClient,
   payloads: NflForwardEvidencePayload[],
   teamIdByProviderId: Map<number, number>,
+  insertOnly = false,
 ): Promise<Map<string, number>> {
   const rows = payloads.map((payload) => ({
     external_id: nflProviderIntegerId(payload.game.providerGameId, "game"),
@@ -2283,10 +2349,9 @@ async function upsertTrackedNflGames(
       },
     },
   }));
-  const { data, error } = await client
-    .from("games")
-    .upsert(rows, { onConflict: "sport,external_id" })
-    .select("id,external_id");
+  const query = client.from("games");
+  const { data, error } = await (insertOnly ? query.insert(rows) :
+    query.upsert(rows, { onConflict: "sport,external_id" })).select("id,external_id");
   if (error) throw new Error(`NFL tracking game upsert failed: ${error.message}`);
   const providerByExternal = new Map(payloads.map((payload) => [
     nflProviderIntegerId(payload.game.providerGameId, "game"),

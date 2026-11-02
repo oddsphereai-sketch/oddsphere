@@ -3,6 +3,7 @@ import type {
   PredictionRecordRow,
   TrackedMarketV17,
 } from "@/lib/types/domain/Tracking";
+import { NFL_PUBLISHED_PREGAME_RECOVERY_RELEASE } from "../football/nflOfficialTrackingRecord";
 
 export type AlternateLineDisplaySport =
   | "mlb"
@@ -64,6 +65,7 @@ export type AlternateLineSourceRow = {
 
 type AlternateLineRecordProjection = PredictionRecordRow & {
   alternate_line_evidence_sha256?: unknown;
+  alternate_line_pregame_recovery?: unknown;
 };
 
 type AdjustmentDefinition = {
@@ -137,6 +139,25 @@ export function hasVerifiedAlternateLineSource(record: PredictionRecordRow): boo
   const gameStartsAt = Date.parse(record.game_date ?? "");
   const lockedAt = Date.parse(record.locked_at ?? "");
   const createdAt = Date.parse(record.created_at ?? "");
+  if (record.sport === "nfl" && record.prediction_source === "nfl_published_pregame_recovery") {
+    const raw = (record as AlternateLineRecordProjection).alternate_line_pregame_recovery ??
+      record.snapshot_json?.published_pregame_recovery;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+    const receipt = raw as Record<string, unknown>;
+    const sourceAt = Date.parse(String(receipt.originalCapturedAt ?? ""));
+    const evidenceHash = evidencePayloadSha256(record);
+    return receipt.release === NFL_PUBLISHED_PREGAME_RECOVERY_RELEASE &&
+      receipt.onTimeT60Lock === false && receipt.originalLockedAt === null && receipt.originalStage === "unlocked" &&
+      typeof receipt.ownerApproval === "string" && receipt.ownerApproval.trim().length > 0 &&
+      typeof receipt.sourceEvidenceId === "string" && receipt.sourceEvidenceId.length > 0 &&
+      evidenceHash !== null && /^[a-f0-9]{64}$/i.test(evidenceHash) && receipt.sourcePayloadSha256 === evidenceHash &&
+      typeof receipt.failedPayloadSha256 === "string" && /^[a-f0-9]{64}$/i.test(receipt.failedPayloadSha256) &&
+      receipt.originalMarket === record.market && receipt.originalSide === record.side && receipt.originalLine === record.line_value &&
+      Number.isFinite(gameStartsAt) && Number.isFinite(lockedAt) && lockedAt > gameStartsAt &&
+      Date.parse(String(receipt.recoveredAt ?? "")) === lockedAt &&
+      Number.isFinite(sourceAt) && sourceAt <= gameStartsAt - 60 * 60_000 &&
+      Date.parse(record.published_at ?? "") === sourceAt;
+  }
   if (!Number.isFinite(gameStartsAt) || !Number.isFinite(lockedAt) || lockedAt > gameStartsAt) return false;
   if (Number.isFinite(createdAt) && createdAt <= gameStartsAt) return true;
 

@@ -35,6 +35,23 @@ writer, schedule, lease, stake or historical rewrite. Exact r62/r70/member54/dec
 is an accepted opaque reader predecessor. Evidence and publication status:
 `docs/model-audits/2026-11-02-nfl-published-rounding-pressure.md`.
 
+## NFL owner-directed missed-lock accounting recovery — November 2
+
+`nfl_published_pregame_tracking_recovery_2026_11_02_r1` adds an explicit historical
+recovery option to the existing leased NFL tracking writer. It serializes the
+exact latest pre-cutoff PHI–WSH publication (original model47/calibration46/decision55)
+with the actual recovery freeze time and original null decision lock, records that
+it was not an on-time T-60 lock, and preserves all source/failed evidence unchanged.
+All three markets are recovered together, including the losing Eagles +6 Best Angle.
+No current model/grade identifier, normal cron behavior, future board, stake, schedule,
+lease or existing member snapshot changes. Existing locked decisions from any release
+block recovery; identical complete recovery is idempotent. Aggregate v19 admits the
+verified original market/side/line recovery receipt in alternate-line panels too.
+Legacy locks and ordinary late-created row exclusions remain unchanged. Writer104's coherent-law
+and legal-window retry fixes remain authoritative prospectively. Incident, hashes,
+board impact and required live checks:
+`docs/model-audits/2026-11-02-nfl-missed-lock-recovery.md`.
+
 ## NFL symmetric market-conviction grades — November 2 candidate
 
 Starting base `1196af6b0b1550d42f97a25c69f1f7376453090a`. Candidate authoritative
