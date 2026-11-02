@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import {normalCdf} from "../lib/cbb/model";
 import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
-import {readCbbMarketBehavior,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
+import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
+import {gradeCbbProvisional} from "../lib/cbb/provisionalGradePolicy";
 import {buildCbbProvisionalBoard} from "../lib/cbb/provisionalBoard";
 import {writeCbbMemberGame,cbbMemberGameForReader,type CbbStoredMemberGame} from "../lib/services/cbb/cbbMemberGameStore";
 import {writeLockedCbbTracking} from "../lib/services/cbb/cbbTrackingWriter";
@@ -47,6 +48,15 @@ async function main(){
  const source=cbbCurrentSplitEvidence(game,odds,splits,at,at),flows=cbbBehaviorFlows(source);
  assert.equal(flows.length,1);assert.equal(flows[0].sourceIdentity,"independent_named_fixture_join");assert.equal(flows[0].sourceEventId,splits.data[0].event_id);assert.equal(flows[0].line,3.5);assert.equal(flows[0].firstMoney,.1);
  assert.equal(cbbBehaviorFlows(cbbCurrentSplitEvidence(game,{success:true,data:[]},splits,at,at)).length,0,"an unverified participant/time event cannot create model pressure from labels");
+ const confirmingSplits=structuredClone(splits);
+ Object.assign(confirmingSplits.data[0].splits[0].spread,{home_bets_pct:40,away_bets_pct:60,home_handle_pct:80,away_handle_pct:20});
+ const realNamedFlow=cbbBehaviorFlows(cbbCurrentSplitEvidence(game,odds,confirmingSplits,"2026-11-02T15:11:00Z",at));
+ const target={...targets[1],line:3.5},current={...target,sportsbook:"circa"},anchor={...current,firstPrice:120,secondPrice:-140,providerObservedAt:"2026-11-02T15:00:00Z",fetchedAt:"2026-11-02T15:01:00Z"};
+ const confirmingRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[target],currentQuotes:[current],flows:realNamedFlow,
+   anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"frozen-source",capturedAt:"2026-11-02T15:01:00Z",quotes:[anchor]}});
+ const confirmingInput={forecast:confirmingRead.forecast,target,references:[current],asOf:at};
+ assert.equal(gradeCbbProvisional(confirmingInput).grade,"Watchlist");
+ assert.equal(gradeCbbMarketBehavior(confirmingInput,confirmingRead.receipt).grade,"Lean","actual supported Circa fixture/flow normalization reaches the paired promotion; no unavailable Pinnacle split source is required");
  const history=[{date:"2026-11-02T09:29:59Z"},{date:"2026-11-02T09:30:00Z"},{date:"2026-11-02T09:30:01Z"}] as Parameters<typeof cbbHistoryAtDecision>[0];
  assert.deepEqual(cbbHistoryAtDecision(history,at),history.slice(0,2),"old independent replay uses its own six-hour availability cutoff");
  console.log("PASS CBB market behavior lock path: coherent opposing quote/side, T-60 freezes last public law, reader precedence, exact model/grade tracking and independent source-flow join.");
