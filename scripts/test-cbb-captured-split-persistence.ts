@@ -113,7 +113,7 @@ async function main(){
   stored=null;writes=0;
   const dkSaved=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:at,capturedNamedSections:dkSections},db);
   assert.deepEqual(dkSaved.record.memberGame.markets.moneyline.sportsbookSplits,dkSections.moneyline,"sole writer persists the source-qualified DKN display");
-  const dkFrozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:"2026-11-02T17:00:00Z"},db);
+  const dkFrozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:"2026-11-02T17:00:00Z",capturedNamedSections:sections},db);
   assert.deepEqual(dkFrozen.record.memberGame.markets.moneyline.sportsbookSplits,dkSections.moneyline,"future lock freezes the same DKN values and source time");
   const dkLockedBytes=JSON.stringify(stored);
   await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-02T17:10:00Z",capturedNamedSections:sections},db);
