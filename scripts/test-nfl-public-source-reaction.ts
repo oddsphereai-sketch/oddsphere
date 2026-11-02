@@ -85,4 +85,10 @@ const heldHeavy = qualifyNflPublicSourceReaction({ ...args, splits: { ...splits,
   total: { ...split, overMoneyPct: 90, underMoneyPct: 10, overBetsPct: 90, underBetsPct: 10 } } });
 assert.equal(heldHeavy.total!.flows[0]!.direction, 1,
   "equal money/ticket shares still reveal heavy same-side pressure for a later held-price interpretation");
+const changedBeforeFlow = qualifyNflPublicSourceReaction({ ...args, history: [paired, { ...paired,
+  observedAt: "2026-11-02T13:58:00.000Z", total: { ...paired.total!, line: 47.5 } }] });
+assert.equal(changedBeforeFlow.total!.flows[0]!.sourceLine, 45.5, "historical own-contract pressure remains context");
+assert.deepEqual(changedBeforeFlow.total!.flows[0]!.contractAttestations, [{ book: "circa", observedAt: quoteAt,
+  reactionBaselineObservedAt: "2026-11-02T13:58:00.000Z" }],
+  "a price change already observed before flow cannot be relabeled as its later reaction");
 console.log("NFL public source reaction: own contracts, prior paired evidence, exact source clocks and contextual authority passed.");

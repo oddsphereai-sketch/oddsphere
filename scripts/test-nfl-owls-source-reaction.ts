@@ -1,3 +1,5 @@
+import { readNflMarketInnovation } from "@/lib/services/football/nflMarketInnovationRuntime";
+import { getNflV1WeekOneOutcomeForecast } from "@/lib/services/football/nflV1WeekOneOutcome";
 import assert from "node:assert/strict";
 import { qualifyNflOwlsSplitsForModel, qualifyNflOwlsSplitsForSourceReaction } from "@/lib/services/football/nflOwlsSplits";
 import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "@/lib/services/football/sharpApiNflSplits";
@@ -86,3 +88,46 @@ const brokenPercentages = qualifyNflOwlsSplitsForSourceReaction({ ...args, split
   total: { ...splits.total, underMoneyPct: 20 } } });
 assert.equal(brokenPercentages.flows.total, undefined);
 console.log("NFL Owl source-contract reaction: own-line continuity, exact source clocks/pairs, identity and target isolation passed.");
+
+// Historical pressure on a real older contract remains evidence, while the
+// actual latest pre-flow price becomes the economic reaction baseline.
+const pressureAt = "2026-11-02T13:00:00.000Z";
+const earlyOwnAt = "2026-11-02T12:50:00.000Z";
+const revisedBeforeFlowAt = "2026-11-02T12:55:00.000Z";
+const totalQuote = (sportsbook: string, clock: string, line: number): NflEpisodeHistoryBook => ({
+  ...paired, sportsbook, observedAt: clock, moneyline: null, spread: null,
+  total: { line, overPrice: -110, underPrice: -110 },
+});
+const reactionHistory = [
+  totalQuote("circa", earlyOwnAt, 45.5),
+  totalQuote("circa", revisedBeforeFlowAt, 47.5),
+  totalQuote("circa", observedAt, 47.5),
+  totalQuote("pinnacle", "2026-11-02T12:00:00.000Z", 45.5),
+  totalQuote("pinnacle", "2026-11-02T12:30:00.000Z", 44.5),
+  totalQuote("pinnacle", observedAt, 44.5),
+];
+const retainedPressure = qualifyNflOwlsSplitsForSourceReaction({ ...args, history: reactionHistory,
+  splits: { ...splits, total: { ...splits.total, sourceLine: 45.5, providerFetchedAt: pressureAt } } });
+assert.equal(retainedPressure.flows.total![0]!.pairedQuoteObservedAt, earlyOwnAt);
+assert.equal(retainedPressure.flows.total![0]!.reactionBaselineObservedAt, revisedBeforeFlowAt);
+assert.equal(retainedPressure.flows.total![0]!.sourceLine, 45.5,
+  "the known own-contract pressure is retained without relabeling its handicap or quote clock");
+assert.equal(source.flows.total![0]!.reactionBaselineObservedAt, quoteAt,
+  "the original exact latest own-contract case retains its clock");
+
+const reactionForecast = { ...getNflV1WeekOneOutcomeForecast({ providerGameId: "1392224", awayTeam: "CLE", homeTeam: "JAX" }),
+  providerGameId: args.providerGameId };
+const noInventedReaction = readNflMarketInnovation({ independentForecast: reactionForecast,
+  independentInputPolicy: "market_inputs_prohibited", history: reactionHistory,
+  evaluatedAt, gameStartsAt, excludedFamiliesByMarket: args.excludedFamiliesByMarket,
+  marketReactionContext: { total: { books: [], flows: retainedPressure.flows.total! } } });
+assert.equal(noInventedReaction.receipt.reasons.total, "opposed_named_economic_episodes");
+assert.equal(noInventedReaction.receipt.selectedSources.total, undefined);
+assert.strictEqual(noInventedReaction.outcome, reactionForecast,
+  "a move completed before the pressure observation cannot become an invented post-flow reaction");
+const baselineConflict = qualifyNflOwlsSplitsForSourceReaction({ ...args,
+  history: [...reactionHistory, totalQuote("circa", revisedBeforeFlowAt, 48.5)],
+  splits: { ...splits, total: { ...splits.total, sourceLine: 45.5, providerFetchedAt: pressureAt } } });
+assert.equal(baselineConflict.flows.total, undefined);
+assert.equal(baselineConflict.reasons.total, "conflicting_source_economic_baselines");
+console.log("NFL source-reaction clocks: historical own-contract context and latest actual pre-flow economic baseline passed");

@@ -24,6 +24,8 @@ Base `9876c3dd99539b1302c7617765d22fe0e8976fed`. Candidate runtime constants:
 - `nfl_joint_market_episode_read_candidate_2026_11_02_r4_coherent_source_law`
 - `nfl_weekly_member_fixture_2026_11_02_r69_source_qualified_market_read`
 - `nfl_forward_member_snapshot_2026_11_02_r61_source_qualified_market_read`
+- `nfl_owls_splits_2026_11_02_r3_unique_canonical_game_claims`
+- `nfl_owls_source_reaction_2026_11_02_r2_latest_preflow_economic_baseline`
 
 Captured same-contract references qualify retail execution separately. Own-contract
 splits remain context, economic buybacks/reversals retain chronology, and per-market

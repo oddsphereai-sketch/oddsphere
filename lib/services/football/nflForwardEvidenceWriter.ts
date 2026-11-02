@@ -1060,16 +1060,17 @@ export async function runNflForwardEvidenceWriter(args: {
       .map(row => ({ sharp: row.payload.market.sharpApiSplits, line: row.payload.market.playbookLine,
         public: row.payload.market.playbookSplits })),
       { sharp: displaySharpSplits, line: playbookLine, public: playbookSplits }];
+    const qualifiedSources = sourceFlows.map(source => ({
+        named: qualifyNflOwlsSplitsForSourceReaction({ splits: source.sharp,
+          providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
+          gameStartsAt: plan.game.scheduledStart, history: episodeHistory, excludedFamiliesByMarket }),
+        retail: qualifyNflPublicSourceReaction({ line: source.line, splits: source.public,
+          providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
+          gameStartsAt: plan.game.scheduledStart, history: episodeHistory, excludedFamiliesByMarket }),
+      }));
     const sourceReactionContext = Object.fromEntries((["moneyline", "spread", "total"] as const).map(market => {
-      const flows = sourceFlows.flatMap(source => {
-        const named = qualifyNflOwlsSplitsForSourceReaction({ splits: source.sharp,
-          providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
-          gameStartsAt: plan.game.scheduledStart, history: episodeHistory, excludedFamiliesByMarket });
-        const retail = qualifyNflPublicSourceReaction({ line: source.line, splits: source.public,
-          providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
-          gameStartsAt: plan.game.scheduledStart, history: episodeHistory, excludedFamiliesByMarket });
-        return [...(named.flows[market] ?? []), ...(retail[market]?.flows ?? [])];
-      });
+      const flows = qualifiedSources.flatMap(({named, retail}) =>
+        [...(named.flows[market] ?? []), ...(retail[market]?.flows ?? [])]);
       return [market, { books: [], flows: [...new Map(flows.map(flow => [JSON.stringify(flow), flow])).values()] }];
     }));
     const candidate = useInnovation ? applyNflMarketInnovationRuntime({

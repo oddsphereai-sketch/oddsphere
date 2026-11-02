@@ -87,6 +87,13 @@ change; whole-law physical rejection must propagate unavailable qualification;
 ML-only or Spread-only consequences identify the shared margin law in both
 receipts; fresh held buybacks retain their original continuing resistance state.
 No failure receipt masquerades as a successful independent fallback.
+Source-contract and economic-baseline clocks are distinct: an old-line pressure
+observation remains context, while the latest intact pre-flow quote supplies the
+reaction baseline. A move before the flow followed by a held quote cannot invent
+a reaction. Owl's split mapper also rejects distinct provider event IDs claiming
+one canonical game instead of allowing row order to select percentages. All rows
+within one event must agree on its canonical participants. Source adapter r3 and
+source-reaction r2 record these prospective changes.
 
 The no-write current CHI@SEA capture at `2026-11-02T13:28:19.199Z` produced all three
 exact market tuples, no reader contract findings and no health holds. Pinnacle

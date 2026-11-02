@@ -24,7 +24,8 @@ type Candidate = { book: Book; market: Market; episode: Episode; direction: -1 |
 export type NflInnovationReactionContext = Partial<Record<Market, {
   flows: Array<{ observedAt: string; direction: -1 | 1; book?: string; sourceLine?: number | null;
     sourceEventId?: string; authority?: string; moneyPct?: number; ticketPct?: number;
-    pairedQuoteObservedAt?: string; contractAttestations?: Array<{ book: string; observedAt: string }> }>;
+    pairedQuoteObservedAt?: string; reactionBaselineObservedAt?: string;
+    contractAttestations?: Array<{ book: string; observedAt: string; reactionBaselineObservedAt?: string }> }>;
   books: Array<{ book: string; lastEconomicMoveAt: string | null; lastEconomicDirection: -1 | 1 | null }>;
 }>>;
 export type NflMarketInnovationReceipt = {
@@ -108,8 +109,10 @@ export function readNflMarketInnovation(args: {
     // not proof of an economic reaction, nor evidence of bookmaker intent.
     const reactionAfterFlow = context?.flows.some(flow => {
         if (flow.book && canonical(flow.book) !== book) return false;
-        const priorAt = flow.book && canonical(flow.book) === book ? flow.pairedQuoteObservedAt
-          : flow.contractAttestations?.find(pair => canonical(pair.book) === book)?.observedAt;
+        const attestation = flow.contractAttestations?.find(pair => canonical(pair.book) === book);
+        const priorAt = flow.book && canonical(flow.book) === book
+          ? flow.reactionBaselineObservedAt ?? flow.pairedQuoteObservedAt
+          : attestation?.reactionBaselineObservedAt ?? attestation?.observedAt;
         const hasPrior = !!priorAt && Number.isFinite(Date.parse(priorAt)) &&
           Date.parse(priorAt) <= Date.parse(flow.observedAt) &&
           Date.parse(flow.observedAt) - Date.parse(priorAt) <= 120 * 60_000;

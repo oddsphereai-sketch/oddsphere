@@ -15,7 +15,7 @@ import {
 } from "./sharpApiNflSplits";
 
 export const NFL_OWLS_SPLITS_RELEASE =
-  "nfl_owls_splits_2026_10_31_r2_exact_line_model_qualification" as const;
+  "nfl_owls_splits_2026_11_02_r3_unique_canonical_game_claims" as const;
 
 const SOURCE_BOOK_PRIORITY = ["circa", "draftkings", "betmgm"] as const;
 
@@ -53,20 +53,27 @@ export function mapNflOwlsSplits(args: {
   const byEvent = groupBy(coverage.observations, (row) => row.providerEventId);
   const splitsByGame: Record<string, NflRegularSharpSplitSet> = {};
   const rejected = [...coverage.rejected];
-  const claimedEvents = new Set<string>();
-
+  const matchedEvents = new Map<string, NflPreviewGame>();
+  const claimsByGame = new Map<string, string[]>();
   for (const [providerEventId, observations] of byEvent) {
-    const matches = args.games.filter((game) => exactGame(game, observations[0]!));
+    const matches = args.games.filter((game) => observations.every(row => exactGame(game, row)));
     if (matches.length !== 1) {
       rejected.push(`${providerEventId}: ${matches.length === 0 ? "unmatched" : "ambiguous"} NFL game`);
       continue;
     }
-    if (claimedEvents.has(providerEventId)) {
-      rejected.push(`${providerEventId}: provider event matched multiple NFL games`);
-      continue;
-    }
-    claimedEvents.add(providerEventId);
     const game = matches[0]!;
+    matchedEvents.set(providerEventId, game);
+    claimsByGame.set(game.providerGameId, [...(claimsByGame.get(game.providerGameId) ?? []), providerEventId]);
+  }
+  const ambiguousGames = new Set<string>();
+  for (const [gameId, claims] of [...claimsByGame].sort(([a], [b]) => a.localeCompare(b))) {
+    if (claims.length <= 1) continue;
+    ambiguousGames.add(gameId);
+    rejected.push(`${gameId}: ambiguous provider event claims for one canonical NFL game: ${claims.sort().join(", ")}`);
+  }
+  for (const [providerEventId, observations] of byEvent) {
+    const game = matchedEvents.get(providerEventId);
+    if (!game || ambiguousGames.has(game.providerGameId)) continue;
     const selected = SOURCE_BOOK_PRIORITY.flatMap((sportsbook) => {
       const bookRows = observations.filter((row) => row.sourceBook === sportsbook);
       const split = buildSplitSet(game, providerEventId, bookRows, args.capturedAt);
@@ -158,7 +165,7 @@ export type NflOwlsModelSplitQualification = {
   reasons: Partial<Record<NflRegularSharpMarket, "missing_or_unverified_circa" | "stale_or_future" | "different_line">>;
 };
 
-export const NFL_OWLS_SOURCE_REACTION_RELEASE = "nfl_owls_source_reaction_2026_11_02_r1_own_contract" as const;
+export const NFL_OWLS_SOURCE_REACTION_RELEASE = "nfl_owls_source_reaction_2026_11_02_r2_latest_preflow_economic_baseline" as const;
 export type NflSourceContractReactionFlow = {
   market: NflRegularSharpMarket;
   book: "circa" | "pinnacle";
@@ -167,6 +174,8 @@ export type NflSourceContractReactionFlow = {
   providerGameId: string;
   observedAt: string;
   pairedQuoteObservedAt: string;
+  /** Latest complete same-book paired quote before flow, across contracts; never borrow an older handicap for reaction economics. */
+  reactionBaselineObservedAt: string;
   direction: -1 | 1;
   moneyPct: number;
   ticketPct: number;
@@ -217,7 +226,7 @@ export function qualifyNflOwlsSplitsForSourceReaction(args: {
     const sourceLine = market === "moneyline" ? null : row.sourceLine;
     if (market !== "moneyline" && (typeof sourceLine !== "number" || !Number.isFinite(sourceLine) ||
       (market === "total" && sourceLine <= 0))) { reject("source_contract_missing"); continue; }
-    const paired = args.history.filter(quote => {
+    const priorPairs = args.history.filter(quote => {
       if (quote.providerGameId !== args.providerGameId || quote.provider !== "owls" ||
         quote.providerEventId !== row.sourceEventId ||
         quote.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "") !== book) return false;
@@ -230,13 +239,20 @@ export function qualifyNflOwlsSplitsForSourceReaction(args: {
           : [quote.total!.overPrice, quote.total!.underPrice];
       if (!prices.every(price => Number.isFinite(price) && (price <= -100 || price >= 100))) return false;
       return market === "moneyline" || (market === "spread"
-        ? Math.abs(quote.spread!.homeLine - sourceLine!) <= 1e-9 && quote.spread!.awayLine === -quote.spread!.homeLine
-        : Math.abs(quote.total!.line - sourceLine!) <= 1e-9);
+        ? Number.isFinite(quote.spread!.homeLine) && quote.spread!.awayLine === -quote.spread!.homeLine
+        : Number.isFinite(quote.total!.line) && quote.total!.line > 0);
     }).sort((a, b) => Date.parse(b.marketObservedAt?.[market] ?? b.observedAt) - Date.parse(a.marketObservedAt?.[market] ?? a.observedAt));
+    const paired = priorPairs.filter(quote => market === "moneyline" || (market === "spread"
+      ? Math.abs(quote.spread!.homeLine - sourceLine!) <= 1e-9
+      : Math.abs(quote.total!.line - sourceLine!) <= 1e-9));
     if (!paired[0]) { reject("no_prior_complete_source_contract_pair"); continue; }
+    const baseline = priorPairs[0]!;
+    const baselineClock = Date.parse(baseline.marketObservedAt?.[market] ?? baseline.observedAt);
     const pairClock = Date.parse(paired[0].marketObservedAt?.[market] ?? paired[0].observedAt);
     if (new Set(paired.filter(quote => Date.parse(quote.marketObservedAt?.[market] ?? quote.observedAt) === pairClock)
       .map(quote => JSON.stringify(quote[market]))).size > 1) { reject("conflicting_source_contract_pairs"); continue; }
+    if (new Set(priorPairs.filter(quote => Date.parse(quote.marketObservedAt?.[market] ?? quote.observedAt) === baselineClock)
+      .map(quote => JSON.stringify(quote[market]))).size > 1) { reject("conflicting_source_economic_baselines"); continue; }
     const moneyPct = percentages[0]!;
     const ticketPct = percentages[2]!;
     const gap = moneyPct - ticketPct;
@@ -245,6 +261,7 @@ export function qualifyNflOwlsSplitsForSourceReaction(args: {
     result.flows[market] = [{ market, book, sourceLine: sourceLine ?? null,
       sourceEventId: row.sourceEventId, providerGameId: args.providerGameId,
       observedAt: row.providerFetchedAt!, pairedQuoteObservedAt: paired[0].marketObservedAt?.[market] ?? paired[0].observedAt,
+      reactionBaselineObservedAt: baseline.marketObservedAt?.[market] ?? baseline.observedAt,
       direction: pressure > 0 ? 1 : -1, moneyPct, ticketPct, moneyTicketDifferencePp: gap,
       authority: "source_contract_reaction_context_only" }];
   }
