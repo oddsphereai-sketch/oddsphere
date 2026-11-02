@@ -96,7 +96,8 @@ async function persistenceProof(): Promise<void> {
   const args = { client, payloads: [sourcePayload], apply: true, publishedPregameRecovery: { rows, receipt: recovery } };
   assert.equal((await writeOfficialTrackingFromPayloads(args)).trackingRecordsInserted, 3);
   assert.deepEqual(inserted, records);
-  existing = records.map((record, id) => ({ ...record, id }));
+  existing = records.map((record, id) => ({ ...record, id,
+    model_probability: Number(record.model_probability!.toFixed(6)) }));
   assert.equal((await writeOfficialTrackingFromPayloads(args)).trackingRecordsInserted, 0, "exact repeated recovery is idempotent");
   existing = [{ external_id: 1392335, market: "moneyline", locked_at: captured, snapshot_json: {} }];
   await assert.rejects(writeOfficialTrackingFromPayloads(args), /refuses existing or partial/);

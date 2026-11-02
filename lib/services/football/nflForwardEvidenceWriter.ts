@@ -2195,7 +2195,9 @@ export async function writeOfficialTrackingFromPayloads(args: {
           receipt?.failedPayloadSha256 !== recovery.receipt.failedPayloadSha256 || !original ||
           !isDeepStrictEqual(row.snapshot_json?.decision_tuple, original) ||
           row.pick !== original.side || row.model_version !== original.decisionRelease ||
-          row.model_probability !== original.modelProbability || row.line_value !== original.evaluatedQuote.line ||
+          // The exact original probability stays in decision_tuple; the
+          // indexed NUMERIC(7,6) column uses PostgreSQL's stored precision.
+          row.model_probability !== Number(original.modelProbability.toFixed(6)) || row.line_value !== original.evaluatedQuote.line ||
           row.odds_american !== original.evaluatedQuote.price ||
           row.play_grade !== original.grade.toLowerCase().replace(/\s+/g, "_");
       }))) {
