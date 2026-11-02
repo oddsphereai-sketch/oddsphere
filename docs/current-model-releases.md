@@ -519,6 +519,53 @@ forward grading remain required. Exact locked payloads retain precedence.
   exact precedence. Public splits appear only if a provider actually returns
   a verified complete two-sided pair; no percentages are inferred from odds.
 
+## CBB November 2 verified coverage recovery
+
+- Sole publisher `cbb_member_pipeline_2026_11_02_r6_verified_coverage_recovery`;
+  fixture seed `cbb_fixture_seed_2026_11_02_r6_locked_conflict_isolation`.
+  A provider change to an already-locked fixture is preserved and reported,
+  without rewriting its canonical identity, stored reader or tracking record,
+  and without blocking unrelated games. The job remains partial while that
+  source conflict is unresolved, even though the rest of the board refreshes.
+- Named source mapping `cbb_provider_identity_2026_11_02_r1_exact_institution_aliases`
+  is the authoritative explicit institution alias path for current odds and
+  future unlocked split/exchange display. Both opponents, league and source
+  time remain mandatory; Maryland/UMES, Tennessee/ETSU, UNC/NC State, Louisiana/ULM,
+  Miami schools and ambiguous USC names remain distinct. Unknown names fail.
+- Current quote capture `cbb_current_quotes_2026_11_02_r1_bdl_exact_id_gap_fill`
+  checks BALLDONTLIE's exact game-ID odds only for missing primary market types.
+  Qualified Owl's markets keep precedence; every two-sided pair stays with one
+  provider/book/timestamp. The fallback uses the same leased writer and bounded
+  BDL client request budget; no separate poller or Owl's request is added.
+  Real steep prices (including -100000) remain market context, not an automatic
+  actionable grade. Held analysis retains the paired observed quote separately
+  from its null executable bet. Adapter is
+  `cbb_member_adapter_2026_11_02_r4_available_quote_context`.
+- Board release `cbb_candidate_2026_11_02_r4_supported_market_coverage` preserves
+  every prior complete-book choice. When none exists, a coherent partial book
+  may publish its supported markets; a different market may use its own verified
+  book when absent at the preferred book. Absent markets remain Held. Forecast
+  mathematics, grade thresholds, references, calibration and stakes are unchanged.
+  Verified logo assets are optional presentation data; exact fixture IDs and
+  team identity remain mandatory for a model card.
+- Display tracking `cbb_market_tracking_2026_11_02_r3_verified_institution_aliases`;
+  split mapping `cbb_sharp_split_mapping_2026_11_02_r2_verified_institution_aliases`.
+  Legacy locked fields and reader semantics keep first precedence.
+- Every matchup with at least one D1 participant remains on the schedule;
+  only non-D1/non-D1 games are excluded. No new member copy or placeholder UI
+  is introduced. D1/non-D1 predictions and the missing St. Thomas prior remain
+  open input-coverage findings; they are not declared repaired by this release.
+- Official venue identity `cbb_venue_identity_2026_11_02_r1_verified_external_ids`;
+  current-season training `cbb_current_training_2026_11_02_r2_provider_venue_identity`.
+  Both participants, time and unique event remain required. Existing r1 training
+  receipts remain readable; verified ESPN 2900 resolves the shortened St. Thomas
+  name without a generic ambiguous school alias.
+- Frozen-receipt zero-write rehearsal recovered 118 analyzed games from the
+  stale board's 64, preserving the exact locked App State/Merrimack DTO. No new
+  grade demotion rule is added; supported partial-market actionable promotions
+  and complete-book precedence are tested. Full counts and limitations:
+  `docs/model-audits/2026-11-02-daily-edge-market-coverage-recovery.md`.
+
 ## CBB November 1 locked-game refresh continuity and market display
 
 - Sole publisher: `cbb_member_pipeline_2026_11_01_r5_locked_refresh_continuity`.

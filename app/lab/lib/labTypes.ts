@@ -366,6 +366,8 @@ export type MarketEdgeDto = {
   currentPriceAmerican?: number | null;
   currentPriceSportsbook?: string | null;
   currentPriceObservedAt?: string | null;
+  /** Available paired source prices even when model inputs prevent a grade. */
+  observedMarketQuote?: {sportsbook:string;observedAt:string;quotes:Array<{label:string;american:number;line:number|null}>};
   /**
    * Fresh best bettor price from a coherent two-sided book pair. This is
    * display-only and never rewrites the immutable grade/lock price above.
@@ -1265,6 +1267,7 @@ export type DailyEdgeResponse = {
   nbaRollingSchedule?: NbaRollingScheduleDto;
   /** Schedule-only CBB matchups never imply a forecast, Bet grade, or lock. */
   cbbRollingSchedule?: CbbRollingScheduleDto;
+  cbbScheduleCoverage?: { eligibleGameIds: number[]; modelEligibleGameIds: number[] };
   games: DailyEdgeGameDto[];
 };
 

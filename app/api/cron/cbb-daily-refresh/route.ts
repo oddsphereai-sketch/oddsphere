@@ -52,7 +52,11 @@ export async function GET(request: Request): Promise<Response> {
       if (result.errors.length) throw new Error(`CBB tracking settlement failed: ${result.errors.map(e=>e.reason).join("; ")}`);
       graded.push({date:slateDate,settled:result.upsertedCount});
     }
+    const conflicts=[...new Set([...seeded.flatMap(row=>row.preservedLockedConflicts),
+      ...board.problems.filter(p=>p.includes("locked_provider_conflict_preserved")).map(p=>Number(p.split(":")[0]))])];
     return {
+      partial:conflicts.length>0||board.providerWarnings.length>0,
+      error_message:[...(conflicts.length?[`CBB locked provider conflicts preserved (${conflicts.join(",")}); remaining board refreshed`]:[]),...board.providerWarnings].join("; ")||null,
       records_updated: seeded.reduce((sum, row) => sum + (row.written ? row.games + row.teams : 0), 0)
         + board.written + board.trackingInserted + training.added + graded.reduce((sum,row)=>sum+row.settled,0),
       api_calls_made: seeded.reduce((sum, row) => sum + row.providerCalls + (row.games ? 2 : 0), 0)

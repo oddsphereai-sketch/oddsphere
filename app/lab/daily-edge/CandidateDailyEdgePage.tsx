@@ -199,9 +199,9 @@ export default async function CandidateDailyEdgePage({
         .loadCbbRollingSchedule(currentSlateDate("cbb")),
     });
     if (scheduleRead.value) {
-      snapshot.cbbRollingSchedule = (await import("@/lib/services/cbb/cbbRollingSchedule"))
-        .excludeAnalyzedCbbScheduleGames(scheduleRead.value,
-          snapshot.games.map((game) => game.external_id));
+      const {applyCbbScheduleCoverage,excludeAnalyzedCbbScheduleGames}=await import("@/lib/services/cbb/cbbRollingSchedule");
+      snapshot.cbbRollingSchedule = excludeAnalyzedCbbScheduleGames(
+        applyCbbScheduleCoverage(scheduleRead.value,snapshot.cbbScheduleCoverage),snapshot.games.map(game=>game.external_id));
     } else if (scheduleRead.unavailable && snapshot.games.length === 0) {
       snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
     }

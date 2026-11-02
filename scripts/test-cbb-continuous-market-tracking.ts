@@ -51,6 +51,8 @@ async function main(){
  const advanced=accumulateCbbPublishedQuotes(feed,[next],archive,now+120_000);
  assert.deepEqual(advanced.rows.find(r=>r.kind==="spread"&&r.side==="home")!.quotes.map(q=>q[1]),[-102,-115,-110]);
  assert.deepEqual(accumulateCbbPublishedQuotes(feed,[locked],archive,now).rows,feed.rows,"locked writer/reader inputs retain exact stored evidence");
+ const steep=structuredClone(game);steep.markets.moneyline.oddsTrail=[stop(null,-100000)];
+ assert.equal(accumulateCbbPublishedQuotes(books,[steep],null,now).rows.find(r=>r.kind==="moneyline"&&r.side==="home")!.quotes[0][1],-100000,"real steep CBB moneylines remain on the observed tape");
  const noFuture=structuredClone(game);noFuture.markets.first_inning.oddsTrail=[stop(-7.5,-130,now+60_000)];
  assert.equal(accumulateCbbPublishedQuotes(books,[noFuture],null,now).rows.some(r=>r.quotes.some(q=>q[1]===-130)),false);
  const corrupt={...archive,rows:archive.rows.map(r=>({...r,event:999}))};

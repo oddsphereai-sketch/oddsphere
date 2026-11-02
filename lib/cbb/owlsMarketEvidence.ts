@@ -1,4 +1,4 @@
-import { canonicalCbbTeamName } from "./dataset";
+import { cbbProviderInstitutionName as canonicalCbbTeamName } from "./providerInstitutionIdentity";
 import { cbbImpliedProbability } from "./marketEvidence";
 import type { CbbGame, CbbMarket, CbbQuote } from "./types";
 import type { RawOwlsOddsResponse } from "../providers/owls/owlsSharpBookOdds";

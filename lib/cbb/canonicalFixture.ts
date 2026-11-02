@@ -90,6 +90,10 @@ export type CbbExistingFixture = {
   away_team_id: number | null;
 };
 
+export function cbbFixtureIdentityWouldChange(previous:CbbExistingFixture,payload:ReturnType<typeof cbbCanonicalGamePayload>):boolean {
+  return Date.parse(previous.game_date)!==Date.parse(payload.game_date)||previous.home_team_id!==payload.home_team_id||previous.away_team_id!==payload.away_team_id;
+}
+
 /** A provider refresh may not move or reassign a locked public fixture. */
 export function assertCbbFixtureRefreshSafe(previous: CbbExistingFixture | undefined,
   payload: ReturnType<typeof cbbCanonicalGamePayload>, locked: boolean): void {
