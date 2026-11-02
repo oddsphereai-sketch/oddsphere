@@ -82,9 +82,8 @@ original evidence hashes, verify all three settled rows and public denominators,
 refresh the existing tracking snapshot/cache, and verify the deployed leased writer
 and member snapshot. Preserve valid locked rows on any later release.
 
-Open PR921 changes prospective grades and shares the writer, package scripts and
-registry. Integrate latest production main and preserve its changes before either
-publication; do not replace its forecast or historical-card continuity work.
+PR921 merged during this task; its prospective grades, writer changes, package
+scripts and registry have been integrated and preserved.
 
 ## Integrated base and completed local checks
 
@@ -95,3 +94,15 @@ Registry/safety additions from both tasks are preserved. The normal writer retai
 its original narrow tracking SELECT; full original-tuple checks are recovery-only.
 The zero-write incident rehearsal validates all source hashes and the exact provider
 10–27 final, with zero prediction, game, grade or evidence writes.
+
+Member UI verification caught a second denominator boundary: alternate-line panels
+required an original pregame lock even for this owner-approved published-prediction
+recovery. Aggregate v19 projects only the compact recovery receipt in addition to
+the existing evidence hash. Alternate-line admission verifies release, owner approval,
+original capture before the actual cutoff, source/failed hashes, exact original
+market/side/line, publication time, and actual recovery freeze time. Ordinary late rows
+and every legacy lock retain existing treatment. Both baseline and alternate panels
+therefore include thirteen games. Tests cover raw and bounded-projection reads,
+changed line/publication/hash rejection, actual 10–27 settlement, and the loss at
+0/+3/+6 for PHI+6 versus the Over40.5 win only at the favorable +6 adjustment.
+These remain clearly labeled hypothetical adjusted-line results, not stored wagers.

@@ -16,10 +16,13 @@ it was not an on-time T-60 lock, and preserves all source/failed evidence unchan
 All three markets are recovered together, including the losing Eagles +6 Best Angle.
 No current model/grade identifier, normal cron behavior, future board, stake, schedule,
 lease or existing member snapshot changes. Existing locked decisions from any release
-block recovery; identical complete recovery is idempotent. Writer104's coherent-law
+block recovery; identical complete recovery is idempotent. Aggregate v19 admits the
+verified original market/side/line recovery receipt in alternate-line panels too.
+Legacy locks and ordinary late-created row exclusions remain unchanged. Writer104's coherent-law
 and legal-window retry fixes remain authoritative prospectively. Incident, hashes,
 board impact and required live checks:
 `docs/model-audits/2026-11-02-nfl-missed-lock-recovery.md`.
+
 ## NFL symmetric market-conviction grades — November 2 candidate
 
 Starting base `1196af6b0b1550d42f97a25c69f1f7376453090a`. Candidate authoritative

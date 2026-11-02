@@ -4,6 +4,8 @@ import { hashNflForwardEvidencePayload, NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE, typ
 import { buildNflPublishedPregameRecoveryRecords, selectNflPublishedPregameRecoverySource, type NflPublishedPregameRecovery } from "../lib/services/football/nflOfficialTrackingRecord";
 import { writeOfficialTrackingFromPayloads } from "../lib/services/football/nflForwardEvidenceWriter";
 import { effectiveTrackingPlayGrade, isTrackingRecordEligible } from "../lib/services/trackingAggregateService";
+import { alternateLineOutcome, hasVerifiedAlternateLineSource } from "../lib/services/tracking/alternateLinePerformance";
+import { gradePrediction } from "../lib/services/predictionGrader";
 
 const start = "2026-11-02T01:20:00.000Z";
 const captured = "2026-11-01T23:06:36.644Z";
@@ -60,6 +62,27 @@ for (const record of records) {
   assert.equal((record.snapshot_json?.published_pregame_recovery as { onTimeT60Lock: boolean }).onTimeT60Lock, false);
   assert.equal(isTrackingRecordEligible(record), true, "the public reader includes this explicitly frozen recovered prediction");
   assert.equal(effectiveTrackingPlayGrade(record), decision.grade === "Best Angle" ? "best_angle" : "no_play");
+  const grade = gradePrediction({ record: { ...record, id: 1 }, game: {
+    status: "final", home_score: 27, away_score: 10, first_inning_runs: null,
+  }, source: "manual_operator" });
+  assert.equal(grade.result, record.market === "moneyline" ? "win" : "loss");
+  if (record.market !== "moneyline") {
+    assert.equal(hasVerifiedAlternateLineSource(record), true);
+    const receipt = record.snapshot_json?.published_pregame_recovery;
+    const projected = { ...record, snapshot_json: null,
+      alternate_line_evidence_sha256: record.snapshot_json?.evidence_payload_sha256,
+      alternate_line_pregame_recovery: receipt };
+    assert.equal(hasVerifiedAlternateLineSource(projected), true, "bounded aggregate projection retains recovery provenance");
+    assert.equal(hasVerifiedAlternateLineSource({ ...record, line_value: record.line_value! + 1 }), false);
+    assert.equal(hasVerifiedAlternateLineSource({ ...record, published_at: recovery.recoveredAt }), false);
+    assert.equal(hasVerifiedAlternateLineSource({ ...record, snapshot_json: null }), false);
+    assert.equal(hasVerifiedAlternateLineSource({ ...projected, alternate_line_pregame_recovery: {
+      ...(receipt as Record<string, unknown>), sourcePayloadSha256: "wrong-hash",
+    } }), false);
+    assert.equal(alternateLineOutcome(record, grade, 0), "loss");
+    assert.equal(alternateLineOutcome(record, grade, 3), "loss");
+    assert.equal(alternateLineOutcome(record, grade, 6), record.market === "spread" ? "loss" : "win");
+  }
 }
 assert.equal(JSON.stringify(rows), original, "writer and reader do not mutate original or failed evidence");
 const rejects = (mutate: (value: NflForwardStoredEvidence[]) => void, pattern: RegExp) => {
