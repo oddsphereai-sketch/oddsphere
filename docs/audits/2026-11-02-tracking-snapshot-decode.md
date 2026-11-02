@@ -89,3 +89,34 @@ Rollback is to restore the unchanged legacy query path in a fresh protected
 PR; the view can remain unused. No evidence or tracking row needs repair,
 reconstruction, replacement or deletion. Stop rollout on any value/row-count
 parity failure, permission difference, incomplete page, or worsened read health.
+
+## Production proof and default-grant correction
+
+PR #936 merged as `6dad1738c5c789adc7821d3b1b79e94556dcab18` with the
+tested tree and a successful production deployment. The PG17 Data API returned
+identical complete 47-column projections for 100 recent multi-sport locks,
+39 current-week NFL locks, and 100 legacy UCL locks. A read-only execution of
+the old and new complete NFL aggregates also matched exactly, including all
+alternate-line windows. The measured full-aggregate runs were 2,587 ms and
+1,866 ms respectively; these timings are not a controlled memory comparison.
+
+Production permission inspection exposed a gap in the disposable fixture:
+Supabase default privileges grant the existing service role ALL privileges on
+new views. A SELECT grant alone does not revoke those defaults. This follow-up
+starts from `6dad1738c5c789adc7821d3b1b79e94556dcab18` on its own clean branch,
+explicitly revokes the defaults from the new view before granting SELECT,
+and reproduces the production default grant in the regression fixture. The
+strengthened test fails before the migration correction and passes after it.
+No base-table privilege or stored record changes; the lateral projection view
+does not create an application writer. Apply the protected corrected migration
+and prove the actual service role has SELECT but no write privileges.
+
+At 20:02:43 UTC, commitment remained 2.752 GB against a 2.036 GB limit with
+about 506 MB swap occupied and no database restart since 19:21:33 UTC. Thus
+the memory incident remains unresolved despite verified workload improvements.
+Intraday source collectors and football evidence jobs continued to record
+completions; partial source statuses were preserved, not relabeled healthy.
+Public member-route verification requires an active member session; the
+available beta login did not establish one. No authentication setting was
+changed. The authenticated service Data API and exact production runtime
+provided the record and aggregate parity evidence instead.

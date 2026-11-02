@@ -11,6 +11,9 @@ const db = new PGlite();
 try {
   await db.exec(`
     CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+    -- Supabase grants service_role all table privileges by default; views
+    -- inherit those defaults too. The migration must explicitly narrow them.
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
     CREATE TABLE public.prediction_records (
       id integer PRIMARY KEY, snapshot_json jsonb,
       play_grade text DEFAULT 'no_play', locked_at timestamptz DEFAULT '2026-01-01Z'

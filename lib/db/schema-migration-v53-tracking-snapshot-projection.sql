@@ -29,7 +29,8 @@ CROSS JOIN LATERAL jsonb_to_record(
   supersedes_prediction_record_id jsonb
 );
 
-REVOKE ALL ON public.prediction_records_tracking_projection FROM PUBLIC, anon, authenticated;
+-- Override Supabase's service_role default table/view privileges as well.
+REVOKE ALL ON public.prediction_records_tracking_projection FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.prediction_records_tracking_projection TO service_role;
 COMMENT ON VIEW public.prediction_records_tracking_projection IS
   'Exact legacy tracking fields from immutable stored JSON; invoker RLS and SELECT-only service access.';
