@@ -1,3 +1,4 @@
+import { buildNflMarketQualification } from "../lib/services/football/nflMarketQualification";
 import assert from "node:assert/strict";
 import type { NflPreviewBookOdds } from "@/lib/services/football/balldontlieNflPreviewSlate";
 import { readNflMarketInnovation } from "@/lib/services/football/nflMarketInnovationRuntime";
@@ -156,9 +157,15 @@ const buybackReaction = read(buybackHistory, original, { marketReactionContext: 
     reactionContext.moneyline.books[1]!,
   ] },
 } });
-assert.equal(buybackReaction.receipt.reasons.moneyline, "opposed_named_economic_episodes");
-assert.deepEqual(buybackReaction.outcome.marginDistribution, original.marginDistribution,
-  "a last-leg buyback opposing the net direction cannot confirm the full old net episode");
+assert.equal(buybackReaction.receipt.reasons.moneyline, "current_economic_paths_adjudicate_older_opposition");
+assert.equal(buybackReaction.receipt.selectedSources.moneyline, "pinnacle");
+assert.ok(margin(buybackReaction.outcome) < margin(original),
+  "Circa's current adverse buyback corroborates Pinnacle's continuing away direction; the old Circa home net must not be reused");
+const boughtBackCirca = buybackReaction.receipt.paths?.find(path => path.book === "circa" && path.market === "moneyline");
+assert.equal(boughtBackCirca?.hasUnresolvedAdverseLeg, true);
+assert.equal(boughtBackCirca?.latestEconomicDirection, -1);
+assert.ok(buybackReaction.receipt.episodes.some(episode => episode.book === "circa" && !episode.selected),
+  "the older conflicting net remains recorded after current-path adjudication");
 const compensatedReaction = read([
   quote("circa", openingAt, { spread: sp(-3.5, 100, -120) }),
   quote("circa", "2026-11-01T13:15:00.000Z", { spread: sp(-3.5, 100, -120) }),
@@ -268,7 +275,8 @@ assert.throws(() => read(tinyHistory, original, {
 const gradedTotal = (forecast: ReturnType<typeof base>, qualifiedJointForecast: boolean,
   price = -110, bookCount = 3) => {
   const books = ["draftkings", "fanduel", "betmgm"].slice(0, bookCount).map((book) =>
-    quote(book, currentAt, { moneyline: ml(.5), spread: sp(-3.5), total: tot(45.5, price, price) }));
+    ({ ...quote(book, currentAt, { moneyline: ml(.5), spread: sp(-3.5), total: tot(45.5, price === -110 ? price : 180, price) }),
+      targetEligible: true }));
   const shadowMoneyline = {
     health: { blockingReasons: [] }, decisionStage: "unlocked", lockedAt: null,
     evaluatedAt, evaluatedQuote: { sportsbook: books[0]!.sportsbook, line: null,
@@ -277,7 +285,12 @@ const gradedTotal = (forecast: ReturnType<typeof base>, qualifiedJointForecast: 
   } as unknown as Parameters<typeof buildNflV1ActionableGradeBundle>[0]["shadowMoneyline"];
   return buildNflV1ActionableGradeBundle({ providerGameId: raw.providerGameId,
     awayTeam: "CLE", homeTeam: "JAX", gameStartsAt, current: books[0]!, comparableCurrentBooks: books,
-    shadowMoneyline, outcomeForecast: { ...forecast, marketEvidence: undefined }, qualifiedJointForecast,
+    shadowMoneyline, outcomeForecast: { ...forecast, marketEvidence: undefined },
+    marketQualification: qualifiedJointForecast ? { total: buildNflMarketQualification({
+      market: "total", providerGameId: raw.providerGameId, evaluatedAt, gameStartsAt, forecast,
+      basis: "market_free_independent_law", independentInputPolicy: "market_inputs_prohibited",
+      sourceMarketId: `${raw.providerGameId}:total`, sourceReceipt: "test-own-market-source-read", evidenceQualified: true,
+    }) } : undefined,
   }).evaluatedBets.find(bet => bet.market === "total")!;
 };
 const strongTotal = base(3, 39);
@@ -298,3 +311,31 @@ assert.ok(costlyTotal.grade === "No Play" || costlyTotal.grade === "Watchlist",
   "qualifying the joint law cannot waive negative expected value");
 
 console.log("NFL market innovation runtime contract tests passed.");
+
+// Individually identifiable economic axes can still contradict the physical joint game.
+// That rejection must remain an explicit qualification failure, never a silent source success.
+const physicalBase = base(8.9, 39);
+const physicalRejected = read([
+  quote("circa", openingAt, { moneyline: { homePrice: -110, awayPrice: -110 },
+    spread: sp(0), total: tot(45) }),
+  quote("circa", currentAt, { moneyline: { homePrice: -5000, awayPrice: 2000 },
+    spread: sp(-20), total: tot(20) }),
+], physicalBase);
+assert.strictEqual(physicalRejected.outcome, physicalBase);
+assert.deepEqual(physicalRejected.receipt.selectedSources, {});
+assert.deepEqual(physicalRejected.receipt.constraints, []);
+assert.equal(physicalRejected.receipt.readStatus, "unidentified");
+assert.equal(physicalRejected.receipt.readReason, "joint_score_law_outside_physical_domain");
+const physicalStatuses = physicalRejected.receipt.marketQualificationStatus;
+assert.ok(physicalStatuses);
+for (const market of ["moneyline", "spread", "total"] as const) {
+  assert.equal(physicalStatuses[market].status, "unavailable");
+  assert.equal(physicalStatuses[market].reason,
+    "joint_score_law_outside_physical_domain");
+  assert.notEqual(physicalRejected.receipt.reasons[market], "single_named_economic_episode",
+    "a rejected joint-law update cannot be described as a successfully qualified episode");
+}
+assert.equal(physicalRejected.receipt.episodes.length, 3,
+  "failed source constraints remain visible as evidence rather than disappearing");
+assert.ok(physicalRejected.receipt.episodes.every(e => !e.selected));
+console.log("NFL physical joint-law failure: original forecast, explicit failure receipt and unavailable qualification passed");

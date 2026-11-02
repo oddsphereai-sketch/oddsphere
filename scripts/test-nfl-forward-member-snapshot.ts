@@ -243,9 +243,35 @@ async function main() {
   assert.equal(storedPayload, movementContractPredecessor,
     "reading the locked movement-contract predecessor cannot write or replace its stored payload");
 
+  const lockedContinuityPredecessor = {
+    ...movementContractPredecessor,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r60_locked_fixture_continuity",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r68_locked_fixture_continuity",
+    memberRelease: "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_01_r55_relative_market_innovations",
+    fixture: { ...movementContractPredecessor.fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r68_locked_fixture_continuity" },
+  };
+  storedKey = ["nfl", "daily-edge", 2026, 1, lockedContinuityPredecessor.snapshotRelease,
+    lockedContinuityPredecessor.fixtureRelease, lockedContinuityPredecessor.memberRelease,
+    lockedContinuityPredecessor.decisionRelease].join("::");
+  storedPayload = lockedContinuityPredecessor;
+  const lockedContinuityBefore = JSON.stringify(lockedContinuityPredecessor);
+  const lockedContinuityRead = await readNflForwardMemberSnapshot({
+    client, season: 2026, week: 1, now: "2026-08-27T12:02:00.000Z",
+  });
+  assert.deepEqual(lockedContinuityRead, lockedContinuityPredecessor,
+    "r60/r68/r52/r55 must remain available under its exact prior key while the new release is not published");
+  assert.equal(JSON.stringify(lockedContinuityRead), lockedContinuityBefore,
+    "reading r60 must preserve every opaque legacy locked DTO field without normalization or new interpretation");
+  assert.equal(storedPayload, lockedContinuityPredecessor,
+    "a predecessor read cannot write or replace its immutable stored object");
+
   const relativeInnovationPredecessor = { ...snapshot,
     snapshotRelease: "nfl_forward_member_snapshot_2026_11_01_r59_relative_market_innovations",
     fixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations",
+    memberRelease: "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_01_r55_relative_market_innovations",
     fixture: { ...fixture,
       heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_01_r67_relative_market_innovations" },
   };
@@ -255,7 +281,7 @@ async function main() {
   storedPayload = relativeInnovationPredecessor;
   assert.deepEqual(await readNflForwardMemberSnapshot({
     client, season: 2026, week: 1, now: "2026-08-27T12:02:00.000Z",
-  }), relativeInnovationPredecessor, "r59 exact tuple remains readable before the r60 publication exists");
+  }), relativeInnovationPredecessor, "r59 exact tuple remains readable before the current publication exists");
 
   const independentAxesPredecessor = {
     ...snapshot,

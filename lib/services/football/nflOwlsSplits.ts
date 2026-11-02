@@ -5,6 +5,7 @@ import {
   type RawOwlsSplitsResponse,
 } from "@/lib/providers/owls/owlsSharpBookSplits";
 import type { NflPreviewGame } from "./balldontlieNflPreviewSlate";
+import type { NflEpisodeHistoryBook } from "./nflMoneylineEpisodeTransport";
 import {
   completeSharpApiNflSplitSet,
   nflProviderTeamMatches,
@@ -156,6 +157,99 @@ export type NflOwlsModelSplitQualification = {
   qualifiedMarkets: NflRegularSharpMarket[];
   reasons: Partial<Record<NflRegularSharpMarket, "missing_or_unverified_circa" | "stale_or_future" | "different_line">>;
 };
+
+export const NFL_OWLS_SOURCE_REACTION_RELEASE = "nfl_owls_source_reaction_2026_11_02_r1_own_contract" as const;
+export type NflSourceContractReactionFlow = {
+  market: NflRegularSharpMarket;
+  book: "circa" | "pinnacle";
+  sourceLine: number | null;
+  sourceEventId: string;
+  providerGameId: string;
+  observedAt: string;
+  pairedQuoteObservedAt: string;
+  direction: -1 | 1;
+  moneyPct: number;
+  ticketPct: number;
+  moneyTicketDifferencePp: number;
+  authority: "source_contract_reaction_context_only";
+};
+
+/** Preserve qualified pressure on the source's actual contract. This does not
+ * relax direct-target qualification or confer target probability authority.
+ * The original split clock must have a complete, fresh, same-event paired
+ * quote on that source line already available at or before that clock.
+ */
+export function qualifyNflOwlsSplitsForSourceReaction(args: {
+  splits: NflRegularSharpSplitSet | null;
+  providerGameId: string;
+  evaluatedAt: string;
+  gameStartsAt: string;
+  history: NflEpisodeHistoryBook[];
+  excludedFamiliesByMarket: Record<NflRegularSharpMarket, string[]>;
+}): {
+  release: typeof NFL_OWLS_SOURCE_REACTION_RELEASE;
+  flows: Partial<Record<NflRegularSharpMarket, NflSourceContractReactionFlow[]>>;
+  reasons: Partial<Record<NflRegularSharpMarket, string>>;
+} {
+  const result: ReturnType<typeof qualifyNflOwlsSplitsForSourceReaction> = {
+    release: NFL_OWLS_SOURCE_REACTION_RELEASE, flows: {}, reasons: {},
+  };
+  const evaluated = Date.parse(args.evaluatedAt);
+  const starts = Date.parse(args.gameStartsAt);
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    const row = args.splits?.[market];
+    const reject = (reason: string) => { result.reasons[market] = reason; };
+    const book = row?.sourceSportsbook?.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!row || row.provider !== "owls" || (book !== "circa" && book !== "pinnacle") ||
+      row.providerGameId !== args.providerGameId || !row.sourceEventId) { reject("source_identity_unverified"); continue; }
+    if (args.excludedFamiliesByMarket[market].some(value => value.toLowerCase().replace(/[^a-z0-9]/g, "") === book)) {
+      reject("evaluated_family_excluded"); continue;
+    }
+    const observed = Date.parse(row.providerFetchedAt ?? "");
+    if (![evaluated, starts, observed].every(Number.isFinite) || observed > evaluated || evaluated >= starts ||
+      evaluated - observed > 120 * 60_000) { reject("stale_future_or_post_start"); continue; }
+    const percentages = market === "total"
+      ? [row.overMoneyPct, row.underMoneyPct, row.overBetsPct, row.underBetsPct]
+      : [row.homeMoneyPct, row.awayMoneyPct, row.homeBetsPct, row.awayBetsPct];
+    if (!percentages.every(value => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100) ||
+      Math.abs(percentages[0]! + percentages[1]! - 100) > 1e-4 ||
+      Math.abs(percentages[2]! + percentages[3]! - 100) > 1e-4) { reject("incomplete_source_percentages"); continue; }
+    const sourceLine = market === "moneyline" ? null : row.sourceLine;
+    if (market !== "moneyline" && (typeof sourceLine !== "number" || !Number.isFinite(sourceLine) ||
+      (market === "total" && sourceLine <= 0))) { reject("source_contract_missing"); continue; }
+    const paired = args.history.filter(quote => {
+      if (quote.providerGameId !== args.providerGameId || quote.provider !== "owls" ||
+        quote.providerEventId !== row.sourceEventId ||
+        quote.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "") !== book) return false;
+      const stamp = Date.parse(quote.marketObservedAt?.[market] ?? quote.observedAt);
+      if (!Number.isFinite(stamp) || stamp > observed || observed - stamp > 120 * 60_000) return false;
+      const data = quote[market];
+      if (!data) return false;
+      const prices = market === "moneyline" ? [quote.moneyline!.homePrice, quote.moneyline!.awayPrice]
+        : market === "spread" ? [quote.spread!.homePrice, quote.spread!.awayPrice]
+          : [quote.total!.overPrice, quote.total!.underPrice];
+      if (!prices.every(price => Number.isFinite(price) && (price <= -100 || price >= 100))) return false;
+      return market === "moneyline" || (market === "spread"
+        ? Math.abs(quote.spread!.homeLine - sourceLine!) <= 1e-9 && quote.spread!.awayLine === -quote.spread!.homeLine
+        : Math.abs(quote.total!.line - sourceLine!) <= 1e-9);
+    }).sort((a, b) => Date.parse(b.marketObservedAt?.[market] ?? b.observedAt) - Date.parse(a.marketObservedAt?.[market] ?? a.observedAt));
+    if (!paired[0]) { reject("no_prior_complete_source_contract_pair"); continue; }
+    const pairClock = Date.parse(paired[0].marketObservedAt?.[market] ?? paired[0].observedAt);
+    if (new Set(paired.filter(quote => Date.parse(quote.marketObservedAt?.[market] ?? quote.observedAt) === pairClock)
+      .map(quote => JSON.stringify(quote[market]))).size > 1) { reject("conflicting_source_contract_pairs"); continue; }
+    const moneyPct = percentages[0]!;
+    const ticketPct = percentages[2]!;
+    const gap = moneyPct - ticketPct;
+    const pressure = Math.abs(gap) > 1e-9 ? Math.sign(gap) : Math.sign(moneyPct - 50);
+    if (!pressure) { reject("balanced_source_pressure"); continue; }
+    result.flows[market] = [{ market, book, sourceLine: sourceLine ?? null,
+      sourceEventId: row.sourceEventId, providerGameId: args.providerGameId,
+      observedAt: row.providerFetchedAt!, pairedQuoteObservedAt: paired[0].marketObservedAt?.[market] ?? paired[0].observedAt,
+      direction: pressure > 0 ? 1 : -1, moneyPct, ticketPct, moneyTicketDifferencePp: gap,
+      authority: "source_contract_reaction_context_only" }];
+  }
+  return result;
+}
 
 /**
  * Reuse the exact-game Owls capture, but never equate a split on another line

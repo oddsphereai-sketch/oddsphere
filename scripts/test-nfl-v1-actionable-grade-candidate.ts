@@ -1,3 +1,4 @@
+import { buildNflMarketQualification, nflPairedReferenceBooksAt } from "../lib/services/football/nflMarketQualification";
 import assert from "node:assert/strict";
 import type { NflPreviewBookOdds } from "../lib/services/football/balldontlieNflPreviewSlate";
 import { NFL_PAID_PROJECTION_SHADOW_RELEASE } from "../lib/services/football/balldontlieNflWeeklyProjectionShadow";
@@ -27,6 +28,8 @@ import {
 import { NFL_V1_PRODUCTION_MODEL_RELEASE } from "../lib/services/football/nflV1ProductionDecision";
 import {
   buildNflPaidTeamScoreBaseForecast,
+  buildNflIndependentScoreBaseForecast,
+  inferNflTargetExcludedMoneylineMean,
   buildNflMarketEvidenceOutcomeForecast,
   buildNflNoWeightMarketEvidenceOutcomeForecast,
   buildNflUnifiedMarketAdjustedForecast,
@@ -385,8 +388,8 @@ const weekly = buildNflV1ActionableGradeBundle({
   awayTeam,
   homeTeam,
   gameStartsAt,
-  current,
-  comparableCurrentBooks,
+  current: { ...current, providerGameId: "week-two-runtime-test" },
+  comparableCurrentBooks: comparableCurrentBooks.map(book => ({ ...book, providerGameId: "week-two-runtime-test" })),
   shadowMoneyline: {
     ...shadow(),
     providerGameId: "week-two-runtime-test",
@@ -398,7 +401,7 @@ assert.equal(weekly.outcomeConfidence.length, 3);
 assert.equal(weekly.evaluatedBets.every((decision) => decision.providerGameId === "week-two-runtime-test"), true);
 
 const flipBooks = comparableCurrentBooks.map((book) => ({
-  ...book,
+  ...book, providerGameId: "market-side-reselection-test",
   spread: book.spread ? { ...book.spread, awayLine: -0.5, homeLine: 0.5 } : null,
 }));
 const weeklyBase = getNflV1WeekOneOutcomeForecast({
@@ -1322,3 +1325,122 @@ function sharpSplitSet(args: {
   };
   return { moneyline: market, spread: market, total: market };
 }
+
+// Captured named prices qualify genuine exact-line references, never executable offers.
+const staleReferenceAt = new Date(Date.parse(evaluatedAt) - 120 * 60_000 - 1).toISOString();
+const futureReferenceAt = new Date(Date.parse(evaluatedAt) + 1).toISOString();
+const sourceForecast = buildNflIndependentScoreBaseForecast({ baseForecast: outcome,
+  independentScore: { expectedHomeMargin: 4, expectedTotal: 39, marketInputPolicy: "prohibited_from_independent_score" } });
+const sourceBooks: NflPreviewBookOdds[] = ["betmgm", "betrivers"].map(sportsbook => ({
+  providerGameId, sportsbook, observedAt: evaluatedAt,
+  moneyline: { homePrice: -110, awayPrice: -110 },
+  spread: { homeLine: 1, awayLine: -1, homePrice: -112, awayPrice: -105 },
+  total: { line: 44.5, overPrice: -110, underPrice: -110 },
+}));
+const pinnacleReference: NflPreviewBookOdds = { ...sourceBooks[0]!, sportsbook: "pinnacle", provider: "owls",
+  targetEligible: false, spread: { homeLine: 1, awayLine: -1, homePrice: -114, awayPrice: 103 },
+  marketObservedAt: { moneyline: evaluatedAt, spread: evaluatedAt, total: evaluatedAt } };
+const qualification = (forecast = sourceForecast, evidenceQualified = true) => buildNflMarketQualification({
+  market: "total", providerGameId, evaluatedAt, gameStartsAt, forecast, evidenceQualified,
+  independentInputPolicy: "market_inputs_prohibited", basis: "market_free_independent_law",
+  sourceMarketId: `${providerGameId}:total`, sourceReceipt: "exact-provider-release-and-source-read",
+});
+const sourceArgs = { providerGameId, awayTeam, homeTeam, gameStartsAt,
+  current: sourceBooks[0]!, comparableCurrentBooks: sourceBooks, shadowMoneyline: shadow(),
+  outcomeForecast: { ...sourceForecast, marketEvidence: undefined },
+};
+const bareAccounting = buildNflV1ActionableGradeBundle({ ...sourceArgs, qualifiedJointForecast: true });
+assert.equal(bareAccounting.evaluatedBets.find(b => b.market === "total")!.grade, "Watchlist",
+  "a blanket accounting flag cannot qualify a Total");
+const sourceBaseline = buildNflV1ActionableGradeBundle(sourceArgs);
+const referenced = buildNflV1ActionableGradeBundle({ ...sourceArgs, referenceBooks: [pinnacleReference],
+  marketQualification: { total: qualification() } });
+const baselineSp = sourceBaseline.evaluatedBets.find(b => b.market === "spread")!;
+const promotedSp = referenced.evaluatedBets.find(b => b.market === "spread")!;
+assert.equal(baselineSp.grade, "Watchlist");
+assert.equal(promotedSp.grade, "Best Angle", "fresh captured Pinnacle exact-line pair repairs source qualification");
+assert.deepEqual(promotedSp.evaluatedQuote, baselineSp.evaluatedQuote);
+assert.equal(promotedSp.modelProbability, baselineSp.modelProbability);
+assert.equal(promotedSp.pushProbability, baselineSp.pushProbability);
+assert.equal(promotedSp.expectedValue, baselineSp.expectedValue,
+  "reference support never changes the model law or manufactures execution EV");
+assert.equal(referenced.evaluatedBets.find(b => b.market === "total")!.grade, "Best Angle");
+assert.ok(referenced.evaluatedBets.every(b => b.evaluatedQuote.sportsbook !== "pinnacle"));
+assert.deepEqual(buildNflV1ActionableGradeBundle({ ...sourceArgs,
+  comparableCurrentBooks: [...sourceBooks, { ...pinnacleReference,
+    moneyline: { homePrice: 200, awayPrice: -240 }, spread: { homeLine: 1, awayLine: -1, homePrice: 200, awayPrice: -240 } }],
+}).evaluatedBets, sourceBaseline.evaluatedBets, "capture-only quotes cannot enter member execution");
+for (const badReference of [
+  { ...pinnacleReference, providerGameId: "wrong-game" },
+  { ...pinnacleReference, marketObservedAt: { ...pinnacleReference.marketObservedAt, spread: staleReferenceAt } },
+  { ...pinnacleReference, marketObservedAt: { ...pinnacleReference.marketObservedAt, spread: futureReferenceAt } },
+  { ...pinnacleReference, spread: { ...pinnacleReference.spread!, homeLine: 1.5, awayLine: -1.5 } },
+  { ...pinnacleReference, spread: { ...pinnacleReference.spread!, awayLine: 2 } },
+  { ...pinnacleReference, spread: { ...pinnacleReference.spread!, homePrice: 0 } },
+  { ...pinnacleReference, sportsbook: "BET-MGM" },
+]) {
+  const b = buildNflV1ActionableGradeBundle({ ...sourceArgs, referenceBooks: [badReference] })
+    .evaluatedBets.find(b => b.market === "spread")!;
+  assert.equal(b.grade, "Watchlist", "unqualified references cannot create actionable support");
+}
+const withDuplicates = buildNflV1ActionableGradeBundle({ ...sourceArgs, referenceBooks: [pinnacleReference,
+  pinnacleReference, { ...pinnacleReference, sportsbook: "PIN-NACLE" }] });
+assert.deepEqual(withDuplicates.evaluatedBets, buildNflV1ActionableGradeBundle({ ...sourceArgs,
+  referenceBooks: [pinnacleReference] }).evaluatedBets, "raw source duplicates cannot inflate evidence or fair-price votes");
+const changedLaw = buildNflUnifiedMarketAdjustedForecast({ baseForecast: sourceForecast,
+  expectedHomeMargin: 4, expectedTotal: 40, marketInputPolicy: "target_excluded_continuous_residual" });
+for (const invalidReceipt of [
+  qualification(sourceForecast, false),
+  qualification(changedLaw),
+  { ...qualification(), market: "spread" as const },
+  { ...qualification(), providerGameId: "wrong-game" },
+  { ...qualification(), evaluatedAt: staleReferenceAt },
+  { ...qualification(), sourceReceipt: "" },
+]) {
+  const b = buildNflV1ActionableGradeBundle({ ...sourceArgs, referenceBooks: [pinnacleReference],
+    marketQualification: { total: invalidReceipt } }).evaluatedBets.find(b => b.market === "total")!;
+  assert.equal(b.grade, "Watchlist", "a false or stale qualification cannot promote the final Total law");
+  assert.equal(b.modelProbability, referenced.evaluatedBets.find(b => b.market === "total")!.modelProbability);
+}
+assert.equal(qualification({ ...sourceForecast, homeWinProbability: .99 }).evidenceQualified, false,
+  "a receipt cannot qualify internally inconsistent model probabilities");
+const axisSource = nflPairedReferenceBooksAt({ books: [pinnacleReference,
+  { ...pinnacleReference, observedAt: futureReferenceAt, spread: null, total: null }], market: "spread", providerGameId,
+  evaluatedAt, gameStartsAt });
+assert.equal(axisSource.length, 1, "a newer partial observation cannot erase an intact fresh reference on another axis");
+console.log("NFL source-qualified grades: exact named comparator promotion, paired quality demotions, no execution leakage or probability/EV mutation passed");
+
+const conflictingReference = buildNflV1ActionableGradeBundle({ ...sourceArgs,
+  referenceBooks: [pinnacleReference, { ...pinnacleReference, spread: {
+    ...pinnacleReference.spread!, homePrice: -110, awayPrice: -110,
+  } }],
+}).evaluatedBets.find(b => b.market === "spread")!;
+assert.equal(conflictingReference.grade, "Watchlist",
+  "contradictory same-family same-clock quotes cannot be cherry-picked to manufacture qualification");
+
+// This is a predeclared common conviction tier, not a probability fit to prior outcomes.
+const commonTotalGate = { market: "total" as const, expectedValue: .10,
+  edgePercentagePoints: 8, cushion: 2, penalty: 0, totalDirectionAvailable: true };
+assert.equal(gradeNflV1SpreadTotalMarket({ ...commonTotalGate, probability: .575 }), "Lean",
+  "positive qualified Total value remains actionable below Best Angle conviction");
+assert.equal(gradeNflV1SpreadTotalMarket({ ...commonTotalGate, probability: .602 }), "Best Angle");
+assert.equal(gradeNflV1SpreadTotalMarket({ ...commonTotalGate, probability: .589999 }), "Lean");
+assert.equal(gradeNflV1SpreadTotalMarket({ ...commonTotalGate, probability: .59 }), "Best Angle");
+assert.notEqual(gradeNflV1SpreadTotalMarket({ ...commonTotalGate, probability: .602, expectedValue: -.01 }), "Best Angle");
+const mlConviction = { ...pricedMoneyline, grade: "Lean" as const, expectedValue: .10,
+  marketFairProbability: .50, evaluatedQuote: { ...pricedMoneyline.evaluatedQuote, price: -110 } };
+assert.equal(nflMoneylineBestAngleEligible({ ...mlConviction, modelProbability: .58 }), false);
+assert.equal(nflMoneylineBestAngleEligible({ ...mlConviction, modelProbability: .62 }), true);
+assert.equal(nflMoneylineBestAngleEligible({ ...mlConviction, modelProbability: .62, expectedValue: -.01 }), false);
+const mlAt = (p: number) => {
+  const margin = inferNflTargetExcludedMoneylineMean({ independentForecast: sourceForecast, homeWinFairProbability: p });
+  assert.notEqual(margin, null);
+  const forecast = buildNflUnifiedMarketAdjustedForecast({ baseForecast: sourceForecast,
+    expectedHomeMargin: margin!, expectedTotal: 39, marketInputPolicy: "target_excluded_continuous_residual" });
+  assert.ok(Math.abs(forecast.homeWinProbability - p) < 1e-6);
+  return buildNflV1ActionableGradeBundle({ ...sourceArgs, referenceBooks: [pinnacleReference],
+    outcomeForecast: forecast }).evaluatedBets.find(b => b.market === "moneyline")!;
+};
+assert.equal(mlAt(.58).grade, "Lean", "good modeled value below conviction remains Lean");
+assert.equal(mlAt(.62).grade, "Best Angle");
+console.log("NFL Best Angle conviction: common 59% modeled-confidence policy, actionable Leans and unchanged EV gates passed");

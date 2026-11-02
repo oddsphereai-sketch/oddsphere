@@ -15,7 +15,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_JOINT_MARKET_EPISODE_READ_CANDIDATE_RELEASE =
-  "nfl_joint_market_episode_read_candidate_2026_11_01_r3_independent_market_innovations" as const;
+  "nfl_joint_market_episode_read_candidate_2026_11_02_r4_coherent_source_law" as const;
 
 type Constraint = { boundary: number; target: number; market: "moneyline" | "spread" | "total" };
 
@@ -28,6 +28,8 @@ export type NflJointMarketEpisodeRead = {
   informationOverlap?: "not_attested";
   axisReasons?: { margin?: string; total?: string };
   constraints: Array<{ market: Constraint["market"]; targetProbability: number; achievedProbability: number }>;
+  coherence?: { applied: boolean; priorHomeMargin: number; finalHomeMargin: number;
+    homeWinProbability: number; policy: "same_probability_mean_direction_constraint" };
 };
 
 /** Produce a fully provenance-bound read for each book; do not invent cross-book episodes. */
@@ -297,6 +299,16 @@ export function readNflJointMarketEpisode(args: {
     totalConstraints = []; delete sources.total;
     totalProbabilities = base.totalDistribution.probabilities;
   }
+  const directionRead = marginConstraints.length ? reconcileNflMarginMeanDirection({
+    values: base.marginDistribution.values, probabilities: marginProbabilities, constraints: marginConstraints,
+  }) : null;
+  if (directionRead) {
+    if (!directionRead.probabilities) {
+      axisReasons.margin = "joint_score_direction_constraints_unidentifiable";
+      marginConstraints = []; delete sources.moneyline; delete sources.spread;
+      marginProbabilities = base.marginDistribution.probabilities;
+    } else marginProbabilities = directionRead.probabilities;
+  }
   if (!marginConstraints.length && !totalConstraints.length) {
     const error = [axisReasons.margin, axisReasons.total].find((reason) => reason && reason !== "no_economic_axis_change");
     return neutral(error ? "unidentified" : "neutral", error ??
@@ -325,10 +337,33 @@ export function readNflJointMarketEpisode(args: {
     status: changed ? "applied" : "neutral",
     reason: changed ? "one_reconciled_discrete_game_law" : "episodes_have_no_net_game_law_change",
     outcome, selectedSources: sources, constraints, axisReasons, ...overlap,
+    ...(directionRead?.probabilities ? { coherence: directionRead.receipt } : {}),
   };
 }
 
-function tiltToConstraints(values: number[], prior: number[], constraints: Constraint[]): number[] | null {
+/** Reconcile one law, rather than editing a displayed score or weakening the
+ * coherence validator. Preserve the inferred ML and exact-Spread probabilities
+ * while projecting the mean into the same winner half-space. The small interior
+ * tolerance is numerical solver precision, not a handicapping point adjustment.
+ */
+export function reconcileNflMarginMeanDirection(args: {
+  values: number[]; probabilities: number[]; constraints: Constraint[];
+}): { probabilities: number[] | null; receipt: NonNullable<NflJointMarketEpisodeRead["coherence"]> } {
+  const mean = (p: number[]) => args.values.reduce((sum, x, i) => sum + x * p[i]!, 0);
+  const home = conditionalProbability(args.values, args.probabilities, 0);
+  const sign = Math.sign(home - .5);
+  const before = mean(args.probabilities);
+  const receipt = { applied: false, priorHomeMargin: before, finalHomeMargin: before,
+    homeWinProbability: home, policy: "same_probability_mean_direction_constraint" as const };
+  if (!sign || Math.sign(before) === sign) return { probabilities: args.probabilities, receipt };
+  const constraints = args.constraints.some(c => c.market === "moneyline") ? args.constraints
+    : [...args.constraints, { boundary: 0, target: home, market: "moneyline" as const }];
+  const result = tiltToConstraints(args.values, args.probabilities, constraints, sign as -1 | 1);
+  return { probabilities: result, receipt: { ...receipt, applied: !!result,
+    finalHomeMargin: result ? mean(result) : before } };
+}
+
+function tiltToConstraints(values: number[], prior: number[], constraints: Constraint[], meanDirection?: -1 | 1): number[] | null {
   let probabilities = [...prior];
   if (constraints.length === 0) return probabilities;
   const logit = (value: number) => Math.log(value / (1 - value));
@@ -345,12 +380,38 @@ function tiltToConstraints(values: number[], prior: number[], constraints: Const
       if (!(total > 0) || !Number.isFinite(total)) return null;
       probabilities = updated.map((value) => value / total);
     }
+    if (meanDirection && values.reduce((sum, x, i) => sum + x * probabilities[i]!, 0) * meanDirection < 1e-7) {
+      const tilted = tiltToMean(values, probabilities, meanDirection * 1e-6);
+      if (!tilted) return null;
+      probabilities = tilted;
+    }
     const maximumError = Math.max(...constraints.map((constraint) => Math.abs(
       conditionalProbability(values, probabilities, constraint.boundary) - constraint.target,
     )));
-    if (maximumError < 1e-8) return probabilities;
+    if (maximumError < 1e-8 && (!meanDirection ||
+      values.reduce((sum, x, i) => sum + x * probabilities[i]!, 0) * meanDirection > 1e-9)) return probabilities;
   }
   return null;
+}
+
+function tiltToMean(values: number[], probabilities: number[], target: number): number[] | null {
+  const at = (lambda: number) => {
+    const logs = probabilities.map((p, i) => p > 0 ? Math.log(p) + lambda * values[i]! : -Infinity);
+    const peak = Math.max(...logs);
+    const weights = logs.map(x => Math.exp(x - peak));
+    const sum = weights.reduce((a, b) => a + b, 0);
+    return weights.map(x => x / sum);
+  };
+  const mean = (p: number[]) => values.reduce((sum, x, i) => sum + x * p[i]!, 0);
+  let lo = -1, hi = 1;
+  while (lo > -1024 && mean(at(lo)) > target) lo *= 2;
+  while (hi < 1024 && mean(at(hi)) < target) hi *= 2;
+  if (!(mean(at(lo)) <= target && mean(at(hi)) >= target)) return null;
+  for (let i = 0; i < 70; i++) {
+    const mid = (lo + hi) / 2;
+    if (mean(at(mid)) < target) lo = mid; else hi = mid;
+  }
+  return at((lo + hi) / 2);
 }
 
 function conditionalProbability(values: number[], probabilities: number[], boundary: number): number {

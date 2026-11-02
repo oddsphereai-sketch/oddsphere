@@ -1,3 +1,4 @@
+import { buildNflMarketQualification } from "@/lib/services/football/nflMarketQualification";
 import assert from "node:assert/strict";
 import type { NflPreviewBookOdds } from "@/lib/services/football/balldontlieNflPreviewSlate";
 import { readNflMarketInnovation } from "@/lib/services/football/nflMarketInnovationRuntime";
@@ -22,10 +23,16 @@ const shadowMoneyline = { health: { blockingReasons: [] }, decisionStage: "unloc
   evaluatedAt, evaluatedQuote: { sportsbook: books[0]!.sportsbook, line: null, price: -110, observedAt: currentAt },
   team: "JAX", modelProbability: base.homeWinProbability, otherBooksConsensusFairProbability: .5,
 } as unknown as Parameters<typeof buildNflV1ActionableGradeBundle>[0]["shadowMoneyline"];
-const grade = (qualifiedJointForecast: boolean) => buildNflV1ActionableGradeBundle({
+const grade = (qualified: boolean, forecast = base) => buildNflV1ActionableGradeBundle({
   providerGameId: raw.providerGameId, awayTeam: "CLE", homeTeam: "JAX", gameStartsAt,
   current: books[0]!, comparableCurrentBooks: books, shadowMoneyline,
-  outcomeForecast: { ...base, marketEvidence: undefined }, qualifiedJointForecast,
+  outcomeForecast: { ...forecast, marketEvidence: undefined },
+  marketQualification: qualified ? Object.fromEntries((["moneyline", "spread", "total"] as const).map(market => [market,
+    buildNflMarketQualification({ market, providerGameId: raw.providerGameId, evaluatedAt, gameStartsAt, forecast,
+      basis: forecast === base ? "market_free_independent_law" : "source_bound_joint_innovation",
+      independentInputPolicy: "market_inputs_prohibited", sourceMarketId: `${raw.providerGameId}:${market}`,
+      sourceReceipt: `posture-test-exact-source-and-final-law:${market}`, evidenceQualified: true }),
+  ])) : undefined,
 });
 const original = grade(true);
 assert.deepEqual(original.evaluatedBets.map(b => b.grade), ["Best Angle", "Best Angle", "Best Angle"]);
@@ -119,3 +126,75 @@ const persistedNewLock = applyNflMarketInnovationPosture({ production: newLock.p
 assert.equal(persistedNewLock.production, newLock.production,
   "an existing stored lock always takes precedence over a mistaken new-lock attestation");
 console.log("NFL market innovation posture: unresolved named opposition, paired Total promotion, exact tuple/lock preservation passed.");
+
+// Real source paths distinguish steady support from current buyback and resumed conviction.
+const midAt = "2026-11-01T13:00:00.000Z";
+const resumedAt = "2026-11-01T14:15:00.000Z";
+const steadyRead = read([
+  q("circa", openingAt, -110, -110, 45),
+  q("circa", midAt, -120, 100, 44),
+  q("circa", currentAt, -130, 110, 43),
+]);
+const steadyLawGrades = grade(true, steadyRead.outcome);
+assert.deepEqual(steadyLawGrades.evaluatedBets.map(b => b.grade), ["Best Angle", "Best Angle", "Best Angle"]);
+const steadyPosture = applyNflMarketInnovationPosture({ production: steadyLawGrades,
+  innovation: steadyRead.receipt, homeTeam: "JAX" });
+assert.strictEqual(steadyPosture.production, steadyLawGrades,
+  "steady same-book evidence already incorporated into the law preserves earned conviction");
+assert.equal(steadyRead.receipt.paths?.find(p => p.market === "total" && p.book === "circa")?.sourcePosture, "supports_net");
+const buybackHistory = [
+  q("circa", openingAt, -110, -110, 45),
+  q("circa", midAt, -120, 100, 43),
+  q("circa", currentAt, -130, 110, 44),
+];
+const buybackRead = read(buybackHistory);
+const buybackPath = buybackRead.receipt.paths?.find(p => p.market === "total" && p.book === "circa");
+assert.equal(buybackPath?.netDirection, -1);
+assert.equal(buybackPath?.latestEconomicDirection, 1);
+assert.equal(buybackPath?.hasUnresolvedAdverseLeg, true);
+assert.equal(buybackPath?.pathStatus, "partial_buyback");
+const buybackLawGrades = grade(true, buybackRead.outcome);
+const buybackPosture = applyNflMarketInnovationPosture({ production: buybackLawGrades,
+  innovation: buybackRead.receipt, homeTeam: "JAX" });
+assert.equal(buybackPosture.production.evaluatedBets.find(b => b.market === "total")!.grade, "Lean",
+  "fresh Over buyback tempers the Under endorsement while preserving the actionable value lane");
+assert.equal(buybackPosture.production.evaluatedBets.find(b => b.market === "moneyline")!.grade, "Best Angle");
+assert.deepEqual(buybackPosture.posture.boardImpact, { bestAngleToLean: 1, actionableBefore: 3, actionableAfter: 3 });
+for (const before of buybackLawGrades.evaluatedBets) {
+  const after = buybackPosture.production.evaluatedBets.find(b => b.market === before.market)!;
+  assert.deepEqual({ ...after, grade: before.grade }, before,
+    "buyback posture cannot double-apply the market to probabilities, scores, prices or evidence");
+}
+const resumedRead = read([...buybackHistory, q("circa", resumedAt, -135, 115, 42.5)]);
+const resumedPath = resumedRead.receipt.paths?.find(p => p.market === "total" && p.book === "circa");
+assert.equal(resumedPath?.latestEconomicDirection, -1);
+assert.equal(resumedPath?.hasUnresolvedAdverseLeg, false);
+assert.equal(resumedPath?.sourcePosture, "supports_net");
+const resumedLawGrades = grade(true, resumedRead.outcome);
+const resumedPosture = applyNflMarketInnovationPosture({ production: resumedLawGrades,
+  innovation: resumedRead.receipt, homeTeam: "JAX" });
+assert.equal(resumedPosture.production.evaluatedBets.find(b => b.market === "total")!.grade, "Best Angle",
+  "genuine renewed source support restores the strongest tier without a permanent historical-buyback cap");
+assert.strictEqual(resumedPosture.production, resumedLawGrades);
+const lockedBuyback = { ...buybackLawGrades, evaluatedBets: buybackLawGrades.evaluatedBets.map(b => ({
+  ...b, stage: "t60_locked" as const, lockedAt: evaluatedAt,
+})) };
+assert.strictEqual(applyNflMarketInnovationPosture({ production: lockedBuyback,
+  innovation: buybackRead.receipt, homeTeam: "JAX", existingLockedRecord: true }).production, lockedBuyback,
+  "a later current buyback never reinterprets stored locked grades");
+console.log("NFL current-path posture: steady support, partial buyback, resumed support and immutable locks passed");
+
+const heldBuybackRead = read([
+  q("circa", "2026-11-01T08:00:00.000Z", -110, -110, 45),
+  q("circa", "2026-11-01T09:00:00.000Z", -120, 100, 43),
+  q("circa", "2026-11-01T10:00:00.000Z", -130, 110, 44),
+  q("circa", currentAt, -130, 110, 44),
+]);
+const heldPath = heldBuybackRead.receipt.paths?.find(path => path.market === "total" && path.book === "circa");
+assert.equal(heldPath?.latestEconomicMoveAt, "2026-11-01T10:00:00.000Z");
+assert.equal(heldPath?.currentAt, currentAt);
+const heldBuybackProduction = grade(true, heldBuybackRead.outcome);
+assert.equal(applyNflMarketInnovationPosture({ production: heldBuybackProduction,
+  innovation: heldBuybackRead.receipt, homeTeam: "JAX" }).production.evaluatedBets.find(b => b.market === "total")!.grade,
+"Lean", "fresh quotes continuing to hold an unresolved retracement do not erase it merely because the last economic move is older than120m");
+console.log("NFL current held resistance: fresh source endpoint preserves an older unresolved economic leg passed");

@@ -48,7 +48,11 @@ import { isVerifiedEventOpening } from "../dailyEdge/marketCycleOpening";
 import { verifiedTrailMovementDirection } from "../dailyEdge/verifiedTrailMovement";
 
 export const NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE =
-  "nfl_weekly_member_fixture_2026_11_01_r68_locked_fixture_continuity" as const;
+  "nfl_weekly_member_fixture_2026_11_02_r69_source_qualified_market_read" as const;
+const NFL_RELATIVE_INNOVATION_PREDECESSOR_MEMBER_RELEASE =
+  "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations" as const;
+const NFL_RELATIVE_INNOVATION_PREDECESSOR_DECISION_RELEASE =
+  "nfl_v1_daily_edge_decision_2026_11_01_r55_relative_market_innovations" as const;
 
 const NFL_MOVEMENT_CONTRACT_PREDECESSOR_MEMBER_RELEASE =
   "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation" as const;
@@ -151,6 +155,7 @@ const NFL_EXPECTED_SCORE_TENTHS_COLLECTOR_RELEASES = new Set<string>([
   "nfl_forward_evidence_collector_2026_10_27_r25_research_raw_parser_sidecar",
   "nfl_forward_evidence_collector_2026_10_27_r26_source_evidence_release_binding",
   "nfl_forward_evidence_collector_2026_10_27_r27_research_failure_isolation",
+  "nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only",
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
 ]);
 
@@ -202,8 +207,26 @@ export async function readCurrentNflWeekOneHeldMemberFixture(args: {
 
 export function buildNflWeekOneHeldMemberFixture(
   rows: NflForwardStoredEvidence[],
+  options: { previousFixture?: NflWeekOneHeldMemberFixture | null } = {},
 ): NflWeekOneHeldMemberFixture {
-  const latest = latestCompleteRows(rows);
+  // A stored public lock is rendered first, including an existing historical
+  // operational exception. This is opaque preservation, never reconstruction.
+  const identityPayload = rows[0]?.payload;
+  if (options.previousFixture && identityPayload && options.previousFixture.week.week !== identityPayload.week) {
+    throw new Error("NFL previous locked fixture week identity does not match the evidence.");
+  }
+  const previousLocks = options.previousFixture?.snapshot.games.filter(game =>
+    game.lockState === "locked" && game.lockedAt !== null) ?? [];
+  for (const game of previousLocks) {
+    const evidence = rows.filter(row => row.providerGameId === String(game.external_id) &&
+      row.payload.season === identityPayload?.season && row.payload.week === identityPayload?.week);
+    if (game.id !== `nfl-${game.external_id}` || evidence.length === 0 ||
+        evidence.some(row => Date.parse(row.payload.game.scheduledStart) !== Date.parse(game.gameStartAt ?? ""))) {
+      throw new Error(`NFL previous locked fixture event identity does not match evidence for ${game.id}.`);
+    }
+  }
+  const previousById = new Map(previousLocks.map(game => [game.id, game]));
+  const latest = latestCompleteRows(rows, new Set(previousLocks.map(game => String(game.external_id))));
   const firstPayload = latest[0]!.payload;
   const capturedAt = latest.reduce(
     (value, row) => Date.parse(row.capturedAt) > Date.parse(value) ? row.capturedAt : value,
@@ -214,18 +237,26 @@ export function buildNflWeekOneHeldMemberFixture(
       ? [[`nfl-${row.providerGameId}`, row.payload.injuries] as const]
       : []),
   );
+  for (const game of previousLocks) {
+    const previousAvailability = options.previousFixture?.availability?.[game.id];
+    if (previousAvailability) availability[game.id] = previousAvailability;
+  }
   const movementRowsByGame = new Map(latest.map((row) => [
     row.providerGameId,
     movementRowsForGame(rows, row),
   ]));
   const games = latest
-    .map((row) => buildHeldGame(row, movementRowsByGame.get(row.providerGameId)!))
+    .map((row) => previousById.get(`nfl-${row.providerGameId}`) ?? buildHeldGame(row, movementRowsByGame.get(row.providerGameId)!));
+  for (const game of previousLocks) if (!games.some(current => current.id === game.id)) games.push(game);
+  games
     .sort((first, second) => Date.parse(first.gameStartAt ?? "") - Date.parse(second.gameStartAt ?? ""));
   const sourceChecksum = createHash("sha256")
     .update([...movementRowsByGame.values()].flat()
       .map((row) => `${row.providerGameId}:${row.capturedAt}:${row.payloadSha256}`)
       .sort()
       .join("|"))
+    .update(JSON.stringify(previousLocks))
+    .update(JSON.stringify(previousLocks.map(game => [game.id, availability[game.id] ?? null])))
     .digest("hex");
   const confirmedQuarterbacks = latest.reduce((count, row) => count +
     Number(row.payload.startersAndDepth.away.starterStatus === "confirmed") +
@@ -287,7 +318,7 @@ export function buildNflWeekOneHeldMemberFixture(
         : "Official NFL tracking begins separately for each game only after its valid immutable T-60 tuple; unlocked Week 1 decisions are not yet counted.",
     },
     coverage: {
-      games: latest.length,
+      games: games.length,
       currentOddsGames: latest.length,
       openingGames: latest.length,
       playbookSplitGames: latest.filter((row) => row.payload.market.playbookSplits !== null).length,
@@ -298,15 +329,19 @@ export function buildNflWeekOneHeldMemberFixture(
   };
 }
 
-function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> {
+function latestCompleteRows(rows: NflForwardStoredEvidence[], preservedLockedIds = new Set<string>()): Array<NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }> {
   if (rows.length === 0) throw new Error("NFL Week 1 forward evidence is empty.");
   const currentRows = rows.filter((row): row is NflForwardStoredEvidence & { payload: NflForwardEvidencePayload } =>
-    row.payload.schemaRelease === NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE);
+    row.payload.schemaRelease === NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE &&
+    !row.payload.captureAttempt && row.payload.decisions.publicationEnabled);
   const isCurrentAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
     row.payload.decisions.modelPromotionStatus === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
     row.payload.decisions.evaluatedBets.every((decision) =>
       decision.decisionRelease === NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE);
   const isPreviousAuthority = (row: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload }) =>
+    (row.payload.decisions.modelPromotionStatus === NFL_RELATIVE_INNOVATION_PREDECESSOR_MEMBER_RELEASE &&
+      row.payload.decisions.evaluatedBets.every((decision) =>
+        decision.decisionRelease === NFL_RELATIVE_INNOVATION_PREDECESSOR_DECISION_RELEASE)) ||
     (row.payload.decisions.modelPromotionStatus === NFL_MOVEMENT_CONTRACT_PREDECESSOR_MEMBER_RELEASE &&
       row.payload.decisions.evaluatedBets.every((decision) =>
         decision.decisionRelease === NFL_MOVEMENT_CONTRACT_PREDECESSOR_DECISION_RELEASE)) ||
@@ -405,7 +440,8 @@ function latestCompleteRows(rows: NflForwardStoredEvidence[]): Array<NflForwardS
   const values = [...latest.values()];
   if (values.length === 0) throw new Error("NFL Week 1 has no current-schema forward evidence.");
   const expected = Math.max(...values.map((row) => row.payload.slateGameCount));
-  if (values.length !== expected) {
+  const retainedMissing = [...preservedLockedIds].filter(id => !latest.has(id));
+  if (values.length + retainedMissing.length !== expected) {
     throw new Error(`NFL Week 1 held fixture coverage is ${values.length}/${expected} games.`);
   }
   const identity = `${values[0]!.payload.season}:${values[0]!.payload.week}`;

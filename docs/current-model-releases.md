@@ -6,6 +6,35 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-11-02
 
+## NFL source-qualified reader and grades — November 2 candidate
+
+Base `9876c3dd99539b1302c7617765d22fe0e8976fed`. Candidate runtime constants:
+
+- `nfl_forward_evidence_writer_2026_11_02_r104_source_qualified_market_read`
+- `nfl_forward_evidence_collector_2026_11_02_r30_source_qualified_attempts`
+- `nfl_v1_daily_edge_model_2026_11_02_r48_source_qualified_market_read`
+- `nfl_v1_daily_edge_calibration_2026_11_02_r47_source_qualified_market_read`
+- `nfl_v1_daily_edge_decision_2026_11_02_r56_source_qualified_market_read`
+- `nfl_v1_grade_policy_2026_11_02_r56_source_qualified_market_read`
+- `nfl_v1_member_release_2026_11_02_r53_source_qualified_market_read`
+- `nfl_full_game_evidence_runtime_2026_11_02_r14_source_qualified_market_read`
+- `nfl_full_game_evidence_arbiter_candidate_2026_11_02_r29_source_qualified_market_read`
+- `nfl_market_innovation_2026_11_02_r2_source_qualified_paths`
+- `nfl_market_innovation_posture_2026_11_02_r2_current_economic_conviction`
+- `nfl_joint_market_episode_read_candidate_2026_11_02_r4_coherent_source_law`
+- `nfl_weekly_member_fixture_2026_11_02_r69_source_qualified_market_read`
+- `nfl_forward_member_snapshot_2026_11_02_r61_source_qualified_market_read`
+
+Captured same-contract references qualify retail execution separately. Own-contract
+splits remain context, economic buybacks/reversals retain chronology, and per-market
+qualification binds the final law. The strongest grade uses the same modeled 59%
+minimum across markets; lower eligible edges can remain Lean. This is a tier-policy
+repair, not a demonstrated accuracy increase. The coherent-law and retry repair
+applies prospectively. All published locks, including the incomplete historical
+PHI record, retain exact precedence; r60/r68/r52/r55 is an exact reader predecessor.
+Sole `prediction_pipeline:nfl` lease, cron, budget, stakes and schema remain.
+Publication status and evidence: `docs/model-audits/2026-11-02-nfl-source-qualified-repair.md`.
+
 ## NFL relative market innovations — November 1 correction
 
 Publication continuity follow-up from production base

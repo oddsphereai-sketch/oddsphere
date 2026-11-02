@@ -24,6 +24,7 @@ import { fetchBalldontlieNflTeamDepthSnapshots } from "./balldontlieNflRoster";
 import {
   NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
   NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  hasNflStoredLockedDecision,
   determineNflForwardCollectionNeed,
   hashNflForwardEvidencePayload,
   normalizeNflForwardEvidenceForStorage,
@@ -47,7 +48,8 @@ import {
   unavailableNflSharpApiSplitSources,
   type NflRegularSharpSplitSet,
 } from "./sharpApiNflSplits";
-import { fetchNflOwlsSplits, qualifyNflOwlsSplitsForModel } from "./nflOwlsSplits";
+import { fetchNflOwlsSplits, qualifyNflOwlsSplitsForModel, qualifyNflOwlsSplitsForSourceReaction } from "./nflOwlsSplits";
+import { qualifyNflPublicSourceReaction } from "./nflPublicSourceReaction";
 import { captureBooksWithSharpBooks } from "./sharpApiFootballSharpOdds";
 import { readNflOwlsNamedPriceHistory } from "./nflOwlsNamedPriceHistory";
 import {
@@ -155,7 +157,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_01_r103_relative_market_innovations" as const;
+  "nfl_forward_evidence_writer_2026_11_02_r104_source_qualified_market_read" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -338,12 +340,20 @@ export async function runNflForwardEvidenceWriter(args: {
     apiKey: args.balldontlieApiKey,
     captureRawPriceManifest: marketBrainCaptureEnabled,
   });
-  const plans = planNflForwardEvidenceCaptures({
+  const plannedCaptures = planNflForwardEvidenceCaptures({
     games: slate.games,
     existing,
     capturedAt: args.now,
     unlockedCadenceMinutes: need.cadenceMinutes ?? 60,
   });
+  // A legacy failed attempt already stored in the final T-60 slot cannot be
+  // overwritten or evaded with a second authoritative lock. Future failures
+  // use non-final attempt rows below and therefore leave the final slot free.
+  const legacyFinalSlotHolds = plannedCaptures.filter(plan => plan.stage === "t60" &&
+    existing.some(row => row.providerGameId === plan.game.providerGameId && row.stage === "t60" &&
+      !hasNflStoredLockedDecision(row)));
+  const blockedFinalIds = new Set(legacyFinalSlotHolds.map(plan => plan.game.providerGameId));
+  const plans = plannedCaptures.filter(plan => !blockedFinalIds.has(plan.game.providerGameId));
   const marketBrainCanaryGames = new Set(marketBrainCaptureEnabled
     ? selectNflMarketBrainCanaryGames({
         games: uniquePlannedGames(plans.map((plan) => plan.game)),
@@ -1039,14 +1049,32 @@ export async function runNflForwardEvidenceWriter(args: {
       },
       existingLockedRecord,
     };
-    const candidate = useInnovation ? applyNflMarketInnovationRuntime({
-      ...candidateArgs, independentInputPolicy: "market_inputs_prohibited",
-      history: [
+    const episodeHistory = [
         ...(namedPriceResult.result?.historyByGame[plan.game.providerGameId] ?? []).flatMap(x => x.books),
         ...nflStoredMarketEpisodeHistory({ providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
           captures: historicalExisting.filter(row => row.providerGameId === plan.game.providerGameId)
             .map(row => row.payload.contextualEvidenceCapture) }),
-      ],
+      ];
+    const sourceFlows = [...historicalExisting.filter(row => row.providerGameId === plan.game.providerGameId &&
+      Date.parse(row.capturedAt) <= Date.parse(capturedAt) && Date.parse(capturedAt) - Date.parse(row.capturedAt) <= 120 * 60_000)
+      .map(row => ({ sharp: row.payload.market.sharpApiSplits, line: row.payload.market.playbookLine,
+        public: row.payload.market.playbookSplits })),
+      { sharp: displaySharpSplits, line: playbookLine, public: playbookSplits }];
+    const sourceReactionContext = Object.fromEntries((["moneyline", "spread", "total"] as const).map(market => {
+      const flows = sourceFlows.flatMap(source => {
+        const named = qualifyNflOwlsSplitsForSourceReaction({ splits: source.sharp,
+          providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
+          gameStartsAt: plan.game.scheduledStart, history: episodeHistory, excludedFamiliesByMarket });
+        const retail = qualifyNflPublicSourceReaction({ line: source.line, splits: source.public,
+          providerGameId: plan.game.providerGameId, evaluatedAt: capturedAt,
+          gameStartsAt: plan.game.scheduledStart, history: episodeHistory, excludedFamiliesByMarket });
+        return [...(named.flows[market] ?? []), ...(retail[market]?.flows ?? [])];
+      });
+      return [market, { books: [], flows: [...new Map(flows.map(flow => [JSON.stringify(flow), flow])).values()] }];
+    }));
+    const candidate = useInnovation ? applyNflMarketInnovationRuntime({
+      ...candidateArgs, independentInputPolicy: "market_inputs_prohibited",
+      history: episodeHistory, referenceBooks: namedCurrentBooks, sourceReactionContext,
     }) : { ...applyNflFullGameEvidenceRuntime(candidateArgs), innovation: undefined };
     return { ...candidate, marketImpliedMargin, marketImpliedTotal };
     };
@@ -1152,9 +1180,12 @@ export async function runNflForwardEvidenceWriter(args: {
       publicScoreDirectionTolerancePoints: NFL_PUBLIC_SCORE_DIRECTION_TOLERANCE_POINTS,
       decisionSideProbabilityConvention: "exclude_push",
     });
+    const failedT60Attempt = plan.stage === "t60" && production.evaluatedBets.length === 0;
+    const captureTiming = plan.stage === "t60" && t60LagMinutes !== null &&
+      t60LagMinutes > NFL_T60_MAX_CAPTURE_LAG_MINUTES ? "late_first_observation" as const : plan.captureTiming;
     const trackingEligibility = nflForwardT60TrackingEligibility({
       stage: plan.stage,
-      captureTiming: plan.captureTiming,
+      captureTiming,
       t60LagMinutes,
       capturedAt,
       providerGameId: plan.game.providerGameId,
@@ -1174,8 +1205,10 @@ export async function runNflForwardEvidenceWriter(args: {
       season: args.season,
       week: args.week,
       slateGameCount: slate.games.length,
-      stage: plan.stage,
-      captureTiming: plan.captureTiming,
+      stage: failedT60Attempt ? "unlocked" : plan.stage,
+      ...(failedT60Attempt ? { captureAttempt: { requestedStage: "t60" as const, status: "failed" as const,
+        reason: holds.join(",") || "incomplete_t60_evaluation", cutoffAt: plan.cutoffAt! } } : {}),
+      captureTiming,
       capturedAt,
       cutoffAt: plan.cutoffAt,
       t60LagMinutes,
@@ -1220,7 +1253,7 @@ export async function runNflForwardEvidenceWriter(args: {
         evaluatedBets: production.evaluatedBets,
         outcomeConfidence: production.outcomeConfidence,
         modelPromotionStatus: production.modelPromotionStatus,
-        publicationEnabled: production.publicationEnabled,
+        publicationEnabled: production.publicationEnabled && !(plan.stage === "t60" && production.evaluatedBets.length === 0),
         trackingEnabled: trackingEligibility.eligible,
       },
       coverage: {
@@ -1438,6 +1471,7 @@ export async function runNflForwardEvidenceWriter(args: {
     publishedHeldGames: payloads.filter((payload) => payload.decisions.evaluatedBets.length !== 3).length,
     apiCallsMaximum,
     healthHolds: [...new Set([
+      ...legacyFinalSlotHolds.map(plan => `game_${plan.game.providerGameId}_held_existing_immutable_failed_t60_slot`),
       ...payloads.flatMap((payload) => payload.coverage.healthHolds),
       ...payloadBuildHolds,
       namedPriceResult.error ? "nfl_named_price_history_unavailable" : null,
@@ -1649,11 +1683,7 @@ export function hasImmutableNflLockedRecord(
   rows: NflForwardStoredEvidence[],
   providerGameId: string,
 ): boolean {
-  return rows.some((row) => row.providerGameId === providerGameId && row.stage === "t60" &&
-    row.payload.stage === "t60" && row.payload.decisions.trackingEnabled === true &&
-    row.payload.decisions.evaluatedBets.length === 3 &&
-    row.payload.decisions.evaluatedBets.every((decision) =>
-      decision.stage === "t60_locked" && decision.lockedAt !== null));
+  return rows.some((row) => row.providerGameId === providerGameId && hasNflStoredLockedDecision(row));
 }
 
 /** Ensure a provider quote can never appear newer than the decision consuming it. */
@@ -1982,13 +2012,18 @@ async function refreshCompactMemberSnapshot(args: {
     };
   }
   try {
-    const candidateFixture = buildNflWeekOneHeldMemberFixture(rows);
     const previousSnapshot = await readNflForwardMemberSnapshot({
       client: args.client,
       season: args.season,
       week: args.week,
       now: args.now,
     }).catch(() => null);
+    if (!rows.some(row => row.payload.decisions.modelPromotionStatus === NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE &&
+      row.payload.decisions.publicationEnabled && row.payload.decisions.evaluatedBets.length === 3)) {
+      return { memberSnapshotAttempted: true, memberSnapshotUpdated: false, memberSnapshotKey: null,
+        memberSnapshotError: "NFL current release has no complete publishable tuple; prior snapshot retained." };
+    }
+    const candidateFixture = buildNflWeekOneHeldMemberFixture(rows, { previousFixture: previousSnapshot?.fixture });
     const invalidT60GameIds = new Set(rows
       .filter((row) => row.stage === "t60" && row.payload.decisions.evaluatedBets.length === 0)
       .map((row) => row.providerGameId));
