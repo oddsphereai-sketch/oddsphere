@@ -6,9 +6,10 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-11-02
 
-## NFL source-qualified reader and grades — November 2 candidate
+## NFL source-qualified reader and grades — November 2 release
 
-Base `9876c3dd99539b1302c7617765d22fe0e8976fed`. Candidate runtime constants:
+Starting base `9876c3dd99539b1302c7617765d22fe0e8976fed`; integrated production
+base `0a786b58701a365414735e6fad2c768a9dd57b73` (CBB PR917). Runtime constants:
 
 - `nfl_forward_evidence_writer_2026_11_02_r104_source_qualified_market_read`
 - `nfl_forward_evidence_collector_2026_11_02_r30_source_qualified_attempts`

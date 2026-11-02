@@ -138,5 +138,24 @@ Private evidence artifacts: `/private/tmp/nfl-20261102-grade-impact.json`,
 `/private/tmp/nfl-20261102-r104-current-no-write.json`,
 `/private/tmp/nfl-20261102-r104-prepublication.json`, and
 `/private/tmp/nfl-20261102-freeze-proof.json`.
-Publication and post-merge live proof remain pending; this document does not
-certify deployment or predictive accuracy.
+Final integrated production base:
+`0a786b58701a365414735e6fad2c768a9dd57b73` (CBB PR917). Both registry sections
+and shared reader changes are preserved. The CBB merge also repairs the prior
+NBA fixture type error. Focused NFL verification, `verify:model-change`, webpack
+build, standalone `tsc --noEmit --incremental false`, and clean committed
+integration safety pass on the integrated branch.
+
+The final no-write writer run completed at `2026-11-02T13:47:18.753Z` in31.524s,
+with three complete market tuples, zero contract findings, zero health holds,
+one Best Angle/one Watchlist/one No Play, and all13 historical cards unchanged
+within the14-game fixture. The candidate remains SEA ML No Play (modeled60.89%,
+negative executable EV), SEA Spread Watchlist (51.96%) and Under46.5 Best Angle
+(62.14%); current market facts determine eligibility, not a quota. Full raw proof:
+`/private/tmp/nfl-20261102-r104-final-no-write.json` and
+`/private/tmp/nfl-20261102-r104-final-payloads.json`.
+
+GitHub settings were read-only verified: main requires a PR, the
+`current-main-ancestor` check, up-to-date branches and no administrator bypass.
+Publication must use that protected PR and match the verified local tree.
+Deployment and post-merge live writer/reader proof are verified separately
+against the merge SHA. This audit does not claim improved predictive accuracy.
