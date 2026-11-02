@@ -13,7 +13,7 @@ import {
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
-import { canonicalCbbTeamName } from "../../cbb/dataset";
+import { cbbProviderInstitutionName as canonicalCbbTeamName } from "../../cbb/providerInstitutionIdentity";
 import { OwlsInsightClient, type OwlsSport } from "../../providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookSplits,
@@ -82,7 +82,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation";
+  "market_intelligence_v2_capture_2026_11_02_r19_cbb_verified_source_aliases";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
