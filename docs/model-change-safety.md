@@ -1,5 +1,24 @@
 # Model change safety protocol
 
+## CBB received-market R5 — private repair review only
+
+The owner explicitly requested external AI audits and coordination with
+“Assess sharp market reader,” including NFL/CFB behavior. That recheck confirms
+shared source/path/receipt standards but no approved dormant CBB static-level
+inference rule. Private R5 repairs native source ingestion, latest-state
+consistency, immutable receipt binding, pick-relative reaction/resumption and
+grade economics. It removes R4's rejected winner copy. Its proposed static
+exact-target-value Best rule is a distinct unqualified policy, not sharp-action
+confirmation or an extension of the earlier exact R4 owner exception.
+
+Do not publish it as a complete market-reader fix: the Cornell starting-level
+gap remains. No live shadow prediction/grade/storage is authorized. Keep PR938
+draft pending the actual inference decision, independent review, release-specific
+qualification or a concrete applicable owner decision, complete checks and
+fresh-main protected publication/live verification. Existing locks and tracking
+must remain exact. Evidence and limitations:
+`docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
+
 ## Owner-authorized CBB market-decision repair — November 2
 
 Subsequent owner requirement: external AI market-reader audit, followed by
