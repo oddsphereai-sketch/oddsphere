@@ -18,7 +18,6 @@ import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailabilit
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 import { CBB_ACTIVATION } from "@/lib/cbb/releases";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
-import { currentSlateDate } from "@/lib/dates/slateDate";
 
 // The canonical weekly snapshot retains every game's full reader evidence.
 // Keep the read bounded, but do not turn a healthy transfer into a false
@@ -210,9 +209,12 @@ export default async function CandidateDailyEdgePage({
     snapshot = (await import("@/lib/services/dailyEdge/weeklyReaderLifecycle"))
       .filterWeeklyReaderSnapshot(snapshot, "soccer");
   }
-  const deferredCbbGameIds = cbbPublicationEnabled
-    ? snapshot.games.filter((game) => game.id !== requestedGame).map((game) => game.id)
-    : [];
+  const cbbBoardProjection = cbbPublicationEnabled
+    ? (await import("@/lib/services/cbb/cbbMemberBoardProjection"))
+      .projectCbbSnapshotForInitialBoard({snapshot, fullReaderGameId: requestedGame ?? null})
+    : null;
+  if (cbbBoardProjection) snapshot = cbbBoardProjection.snapshot;
+  const deferredCbbGameIds = cbbBoardProjection?.deferredGameIds ?? [];
   const initialCfbReaderGameId = cfbFixture && requestedGame && snapshot.games.some((game) => game.id === requestedGame)
     ? requestedGame
     : null;

@@ -1,9 +1,11 @@
 import { cbbImpliedProbability, reviewCbbQuote } from "./marketEvidence";
 import { cbbExactMarketCenter } from "./marketReaderResearch";
+import { cbbThresholdProbabilities } from "./model";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
 /** Production provisional calibration; the member reader never regrades it. */
-export const CBB_PROVISIONAL_GRADE_RELEASE = "cbb_2026_10_30_r1_provisional_launch" as const;
+export const CBB_PROVISIONAL_GRADE_RELEASE = "cbb_2026_11_02_r2_exact_reference_probabilities" as const;
+export const CBB_LEGACY_PROVISIONAL_GRADE_RELEASE = "cbb_2026_10_30_r1_provisional_launch" as const;
 
 export type CbbProvisionalGrade = "Best Angle" | "Lean" | "Watchlist" | "No Play" | "Held";
 export type CbbGradeEvidence = {
@@ -49,7 +51,7 @@ export function gradeCbbProvisional(input: CbbGradeEvidence) {
     return { release: CBB_PROVISIONAL_GRADE_RELEASE, market: target.market,
       grade: "Held" as const, reason: "incomplete_forecast_or_executable_quote",
       selection: null, price: null, expectedValue: null, referenceState: "unavailable" as const,
-      professionalReferences: 0, stake: 0 };
+      professionalReferences: 0, professionalReferenceQuotes: [] as CbbQuote[], stake: 0 };
   }
   const review = reviewCbbQuote(forecast, target);
   const price = review.selection === "first" ? target.firstPrice : target.secondPrice;
@@ -68,14 +70,23 @@ export function gradeCbbProvisional(input: CbbGradeEvidence) {
   const sharpSide = sharp.map(row => {
     const fair = cbbImpliedProbability(row.firstPrice) /
       (cbbImpliedProbability(row.firstPrice) + cbbImpliedProbability(row.secondPrice));
-    const center = cbbExactMarketCenter(forecast, row, fair);
-    const threshold = target.market === "moneyline" ? 0 : target.market === "spread" ? -target.line! : target.line!;
-    const referenceFirst = center > threshold;
-    return referenceFirst === (review.selection === "first") ? 1 : -1;
+    // The exact 50% center is not the raw spread threshold after removing
+    // impossible tied finals. Compare conditional probability at this target.
+    let first = fair;
+    if (target.market !== "moneyline" && row.line !== target.line) {
+      const center = cbbExactMarketCenter(forecast, row, fair);
+      const inferred = target.market === "total" ? { ...forecast, total: center } : { ...forecast, margin: center };
+      const probability = cbbThresholdProbabilities(inferred, target.market, target.line);
+      first = probability.first / (probability.first + probability.second);
+    }
+    const selected = review.selection === "first" ? first : 1 - first;
+    return selected > 0.5 + 1e-7 ? 1 : selected < 0.5 - 1e-7 ? -1 : 0;
   });
+  const directional = sharpSide.filter(side => side !== 0);
   const referenceState = sharpSide.length === 0 ? "unavailable" as const :
-    sharpSide.every(side => side === 1) ? "agrees" as const :
-    sharpSide.every(side => side === -1) ? "opposes" as const : "mixed" as const;
+    directional.length === 0 ? "neutral" as const :
+    directional.every(side => side === 1) ? "agrees" as const :
+    directional.every(side => side === -1) ? "opposes" as const : "mixed" as const;
   const value = review.expectedValue;
   const priceEligible = price >= targetPriceFloor[target.market];
   const best = value >= 0.08 && priceEligible && referenceState === "agrees";
@@ -88,8 +99,9 @@ export function gradeCbbProvisional(input: CbbGradeEvidence) {
       lean && referenceState === "agrees" ? "positive_edge_with_professional_corroboration" :
       lean ? "model_only_positive_edge_professional_unavailable" :
       referenceState === "opposes" ? "professional_opposition" :
+      referenceState === "neutral" ? "professional_reference_neutral" :
       !priceEligible ? "price_too_steep_for_actionable" :
       value >= 0 ? "edge_below_actionable_reserve" : "non_positive_exact_price_value",
     selection: review.selection, price, expectedValue: value, referenceState,
-    professionalReferences: sharp.length, stake: 0 };
+    professionalReferences: sharp.length, professionalReferenceQuotes: structuredClone(sharp), stake: 0 };
 }

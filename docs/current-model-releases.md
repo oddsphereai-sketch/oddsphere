@@ -586,6 +586,41 @@ forward grading remain required. Exact locked payloads retain precedence.
   exact precedence. Public splits appear only if a provider actually returns
   a verified complete two-sided pair; no percentages are inferred from odds.
 
+## CBB November 2 exact professional reference interpretation
+
+- Grade policy `cbb_2026_11_02_r2_exact_reference_probabilities`, board
+  `cbb_candidate_2026_11_02_r5_exact_reference_probabilities` and sole publisher
+  `cbb_member_pipeline_2026_11_02_r8_exact_reference_probabilities` compare each
+  professional reference's selected-side conditional probability at the exact
+  target threshold. A raw score center is not the 50% threshold after removal
+  of impossible basketball ties. Equal fair prices are neutral; neutral books
+  cannot manufacture support or conflict. No EV threshold, source hierarchy,
+  uncertainty, score, target selection or provider budget changes.
+- Original 13:51:07.663Z source replay: 115 games /345 markets, unchanged
+  forecasts and quotes. Best49/Lean84 remain49/84, with8 actionable promotions
+  paired with8 demotions; Watch100->98, NoPlay105->107, Held7 unchanged.
+  These are captured-source shadow counts, not latest live-board counts.
+- Tracking writer `cbb_tracking_writer_2026_11_02_r3_locked_grade_release`
+  resolves the grade release from the frozen board. Known legacy r2/r3/r4
+  boards without a stamp retain r1; no locked row is relabeled or regraded.
+  Future boards stamp their exact grade policy. Existing stored DTOs retain
+  reader precedence. The score model remains independent r2: movement, splits
+  and Kalshi are not qualified projection inputs in this release.
+- Future board rows also retain the actual target-excluded professional quote
+  tuples used by grading, with original source/receipt timestamps, in the same
+  authoritative snapshot. Existing locks are not augmented or reconstructed.
+  This permits reproducible prospective qualification without provider re-pulls.
+- Reader comparison recognizes opposing signed spread thresholds and still
+  rejects different books or numbers. Unopened CBB chart evidence is deferred
+  through the existing exact-game detail endpoint, retaining every published
+  card decision and complete opened reader. No extra provider calls.
+- Exact lock-metadata scanning retains every identity/presence check and fetches
+  full payloads only for actual locks. The live 116-game/two-lock comparison
+  returns identical records with 98.93% less database transfer; unopened browser
+  payload falls from 5.48 MB to 0.86 MB. No stored record is changed.
+- Evidence, scope, same-input impact and rollback:
+  `docs/model-audits/2026-11-02-cbb-exact-reference-probabilities.md`.
+
 ## CBB November 2 durable evidence and member eligibility
 
 - Publisher `cbb_member_pipeline_2026_11_02_r7_durable_market_evidence` ingests
