@@ -14,6 +14,9 @@ import {
 } from "@/lib/services/nba/nbaPublishedLockMetadata";
 import { supabase } from "@/lib/db/supabase";
 
+export const CBB_SNAPSHOT_PUBLICATION_RELEASE =
+  "cbb_snapshot_publication_2026_11_02_r1_pipeline_only" as const;
+
 const DAILY_EDGE_SNAPSHOT_TTL_MS = Number(
   // The lightest regular publisher runs every 15 minutes. Keep a five-minute
   // scheduling buffer so a healthy board does not appear stale between runs.
@@ -169,6 +172,12 @@ export async function refreshDailyEdgeResponseSnapshot(input: {
     allowStale,
     copyPreview,
   });
+
+  // The CBB pipeline is the sole publisher of this canonical board. A generic
+  // read-and-copy must never replace its release or renew an old board's TTL.
+  if (input.sport === "cbb") {
+    return { ok: false, snapshotKey, error: `${CBB_SNAPSHOT_PUBLICATION_RELEASE}: CBB board publication belongs to cbb_prediction_pipeline` };
+  }
 
   try {
     const { GET } = await import("@/app/api/lab/daily-edge/route");

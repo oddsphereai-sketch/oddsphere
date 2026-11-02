@@ -69,7 +69,12 @@ export async function GET(request: Request): Promise<Response> {
         ...result.errors,
         ...(marketIntelligenceV2?.errors ?? []),
       ];
-      const responseSnapshot = result.errors.length === 0 && !result.skippedTableMissing
+      // CBB already publishes its own source-qualified board under the same
+      // sport lease. The reader overlays fresh captured splits independently.
+      // Copying that board through the generic publisher rereads/rewrites its
+      // complete history, replaces the pipeline release with v1 and advances
+      // freshness even when the authoritative board has not refreshed.
+      const responseSnapshot = sport !== "cbb" && result.errors.length === 0 && !result.skippedTableMissing
         ? await refreshDailyEdgeResponseSnapshot({
             sport,
             date: slate,
