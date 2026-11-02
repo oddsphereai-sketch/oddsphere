@@ -41,12 +41,12 @@ in `scripts/fixtures/cbb-exact-reference-probabilities-20261102.json`.
 | Held | 7 | 7 |
 
 Eight actionable promotions pair with eight demotions; total actionables remain
-133. There are18 grade changes and34 reference-state changes. These are captured
+133. There are 18 grade changes and 34 reference-state changes. These are captured
 source shadow counts, not the latest live impact. Arkansas State -3.5 (-112)
-promotes Watchlist->Best: Pinnacle implies50.2226% selected fair cover probability,
+promotes Watchlist->Best: Pinnacle implies 50.2226% selected fair cover probability,
 while the old raw-center comparison falsely opposes it. Old Dominion +1.5 (-112)
-demotes Best->Watchlist: its sole Circa reference is exactly50%, falsely corroborated
-by the old rule. UCLA +4.5 (-106) demotes Lean->Watchlist: Pinnacle49.3320% opposes,
+demotes Best->Watchlist: its sole Circa reference is exactly 50%, falsely corroborated
+by the old rule. UCLA +4.5 (-106) demotes Lean->Watchlist: Pinnacle 49.3320% opposes,
 while Circa is neutral. Tests must exercise all three, with inputs unchanged.
 
 ## Locked release ownership and efficiency
@@ -61,6 +61,16 @@ Unopened CBB cards defer chart/split arrays through the already-required exact
 game detail fetch. Published scores, probabilities, picks, prices and grades stay
 on the card; an opened/deep-linked reader retains its full stored payload. This
 reduces repeated browser transfer without adding a provider request or writer.
+
+The reader additionally scans exact member identity/lock metadata for every
+indexed game, then downloads complete payloads only for actual locks. Missing,
+duplicated, mismatched or corrupt identity/lock metadata still fails closed;
+full locked DTO validation and official-result identity checks remain mandatory.
+On the actual 116-game/two-lock 15:36 UTC board, the old and new reader outputs
+are deeply equal. Database transfer falls 6,221,962->66,430 bytes (98.93% less),
+with three->four bounded reads; the local read measures 1381->1009 ms. The browser
+board falls 5,477,828->858,960 JSON bytes, with all 116 full readers available on
+open. These are observed audit measurements, not a universal latency guarantee.
 
 Full model-change verification, focused model/grade/store/tracking/reader tests,
 TypeScript, lint, production build, fresh-main integration safety, protected PR

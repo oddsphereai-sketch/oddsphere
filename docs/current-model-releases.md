@@ -575,6 +575,10 @@ forward grading remain required. Exact locked payloads retain precedence.
   rejects different books or numbers. Unopened CBB chart evidence is deferred
   through the existing exact-game detail endpoint, retaining every published
   card decision and complete opened reader. No extra provider calls.
+- Exact lock-metadata scanning retains every identity/presence check and fetches
+  full payloads only for actual locks. The live 116-game/two-lock comparison
+  returns identical records with 98.93% less database transfer; unopened browser
+  payload falls from 5.48 MB to 0.86 MB. No stored record is changed.
 - Evidence, scope, same-input impact and rollback:
   `docs/model-audits/2026-11-02-cbb-exact-reference-probabilities.md`.
 
