@@ -15,6 +15,8 @@ import { refreshPredictionMarketDisplayFeed } from "@/lib/services/dailyEdge/pre
 import type { PredictionMarketSport } from "@/lib/providers/owls/owlsPredictionMarkets";
 import { contractKinds } from "@/lib/providers/owls/predictionMarketContracts";
 import { CBB_SHARP_SPLIT_MAPPING_RELEASE } from "@/lib/cbb/exactSplitIdentity";
+import { supabase } from "@/lib/db/supabase";
+import { readMarketCaptureActivity } from "@/lib/services/dailyEdge/marketCaptureActivity";
 
 export const maxDuration = 120;
 
@@ -26,6 +28,10 @@ export async function GET(request: Request): Promise<Response> {
     "sharp_book_splits_refresh",
     SPORTS,
     async ({ sport }) => {
+      const activity = await readMarketCaptureActivity({ client: supabase, sport });
+      if (activity.skip) {
+        return { records_updated: 0, api_calls_made: 0, details: { skipped: true, activity } };
+      }
       if (!process.env.OWLS_INSIGHT_API_KEY) {
         throw new Error("OWLS_INSIGHT_API_KEY is not configured");
       }
@@ -49,7 +55,7 @@ export async function GET(request: Request): Promise<Response> {
         partial: errors.length > 0,
         error_message: errors.length > 0 ? errors.join("; ") : null,
         api_calls_made: (sport==="soccer"||sport==="ucl"?0:1)+predictionRequests,
-        details: { provider: sport==="cbb"?"owls_and_kalshi_direct":"owls", cbbSplitMappingRelease:sport==="cbb"?CBB_SHARP_SPLIT_MAPPING_RELEASE:null, retainedRows, predictionMarketRows, predictionMarketError, namedSplitError, apiCallAccounting:predictionResult.status==="fulfilled"?"provider requests":"provider request ceiling on capture error",publicHistoryBatchCeiling:3,bookHistoryRequestCeiling:3,bookDiscoveryRequestCeiling:1,
+        details: { activity, provider: sport==="cbb"?"owls_and_kalshi_direct":"owls", cbbSplitMappingRelease:sport==="cbb"?CBB_SHARP_SPLIT_MAPPING_RELEASE:null, retainedRows, predictionMarketRows, predictionMarketError, namedSplitError, apiCallAccounting:predictionResult.status==="fulfilled"?"provider requests":"provider request ceiling on capture error",publicHistoryBatchCeiling:3,bookHistoryRequestCeiling:3,bookDiscoveryRequestCeiling:1,
           historyCoverage:predictionResult.status==="fulfilled"&&"historyCoverage"in predictionResult.value?predictionResult.value.historyCoverage:null },
       };
     },

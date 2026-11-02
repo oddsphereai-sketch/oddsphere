@@ -1,5 +1,19 @@
 # Current production model releases and qualified research candidates
 
+## Idle MLB/WNBA market capture — November 2 operational repair
+
+`daily_edge_market_capture_2026_11_02_r1_empty_slates` skips the shared named-book,
+Kalshi and public-splits capture paths only when a bounded canonical schedule
+read proves that MLB/WNBA have no games in the current ET slate through six
+days ahead. It makes no provider request or member/observation write for that
+empty window. One real canonical game resumes the unchanged capture sequence
+on the next existing tick; calendar months never exclude late postseason games.
+An unavailable schedule read retains the existing capture path. Other sports
+incur no new query. Provider/history ceilings, cadence, schedule ingestion,
+settlement, sport-scoped leases, every model release, forecast, grade and locked
+record are unchanged. Evidence and rollback:
+`docs/model-audits/2026-11-02-idle-market-capture.md`.
+
 This file is the human-readable production handoff registry. Runtime constants and stamped
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.

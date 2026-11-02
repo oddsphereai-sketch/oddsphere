@@ -298,7 +298,7 @@ const vercel = readFileSync("vercel.json", "utf8");
 check("split refresh republishes the coherent Daily Edge snapshot", splitCron.includes("refreshDailyEdgeResponseSnapshot"));
 check("split refresh uses the shared prediction-pipeline lease", splitCron.includes('leaseGroup: "prediction_pipeline"') && splitCron.includes("requireLease: true"));
 check("split refresh is sport-scoped rather than writing MLB and WNBA under one lease", splitCron.includes("cronHandlerPerSport") && splitCron.includes("async ({ sport })"));
-check("split refresh recovers source-aware MLB rows from event history", splitCron.includes("runScheduledMarketIntelligenceV2Collection") && splitCron.includes("includeSharpApiHistory: true"));
+check("split refresh captures source-aware current quotes without restoring cancelled SharpAPI history", splitCron.includes("runScheduledMarketIntelligenceV2Collection") && !splitCron.includes("includeSharpApiHistory: true"));
 check("split observations refresh every 15 minutes", (vercel.match(/"schedule": "\*\/15/g) ?? []).length === 3);
 
 if (fail > 0) {
