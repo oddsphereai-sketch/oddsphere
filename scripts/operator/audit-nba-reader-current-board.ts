@@ -1,6 +1,7 @@
 /** Read-only release and decision audit for the live NBA member pipeline. */
 
 import { buildNbaDailyEdgePipeline } from "../../lib/services/nba/buildNbaDailyEdgeAdapted";
+import { didNbaReaderFlip } from "../../lib/services/nba/nbaReaderDecisionAudit";
 
 const dates = process.argv.slice(2);
 const compact = dates.includes("--compact");
@@ -79,12 +80,9 @@ console.log(JSON.stringify(compact ? {
   dates: report.dates,
   marketMarriageReleases: [...new Set(games.map((game) => game.marketMarriageRelease))],
   effects: {
-    winnerFlips: games.filter((game) => (game.decision as { effects?: { moneyline?: string } } | null)
-      ?.effects?.moneyline === "flipped_by_validated_spread_score").length,
-    spreadFlips: games.filter((game) => (game.decision as { effects?: { spread?: string } } | null)
-      ?.effects?.spread === "flipped_by_validated_spread_read").length,
-    totalFlips: games.filter((game) => (game.decision as { effects?: { total?: string } } | null)
-      ?.effects?.total === "flipped_by_validated_total_read").length,
+    winnerFlips: games.filter((game) => didNbaReaderFlip(game.decision, "moneyline")).length,
+    spreadFlips: games.filter((game) => didNbaReaderFlip(game.decision, "spread")).length,
+    totalFlips: games.filter((game) => didNbaReaderFlip(game.decision, "total")).length,
   },
   reasons: Object.fromEntries(markets.map((market) => [market, Object.fromEntries(
     [...new Set(games.map((game) => game.reads?.[market]?.reason ?? "missing"))].sort().map((reason) => [

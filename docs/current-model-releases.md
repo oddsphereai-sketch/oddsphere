@@ -4,7 +4,7 @@ This file is the human-readable production handoff registry. Runtime constants a
 prediction snapshots remain the machine authority. Future model work must start here, verify the
 constants, and preserve the precedence and writer ownership below.
 
-Last reviewed: 2026-11-01
+Last reviewed: 2026-11-02
 
 ## NFL relative market innovations — November 1 correction
 
@@ -333,20 +333,35 @@ entry is not a deployment claim. Evidence, checks and rollback:
   `docs/model-audits/2026-10-31-all-market-data-health.md` and the paired JSON.
   Roll back this complete family together; never rewrite an immutable lock.
 
-## NBA chronology-fitted market consequence — October 31 candidate
+## NBA reader posture coherence — November 2 publication candidate
 
 Candidate model/marriage/grade are
-`nba_professional_unified_2026_10_31_r30_chronology_fitted_innovation` /
-`nba_market_marriage_2026_10_31_r32_unmatched_named_pressure_guard` /
-`nba_grade_policy_2026_10_31_r21_unmatched_named_pressure_guard`.
+`nba_professional_unified_2026_11_02_r31_reader_posture_coherence` /
+`nba_market_marriage_2026_11_02_r33_translated_static_posture` /
+`nba_grade_policy_2026_11_02_r22_causal_confirmation_symmetry`.
 The active decision head is
-`nba_market_consequence_2026_10_31_r5_chronology_fitted_innovation`;
-posture is `nba_named_book_posture_2026_10_31_r7_unmatched_named_pressure_guard`.
-These identifiers describe the publication candidate, not a claim that it is
-already production. They supersede the rejected r3 dynamic-scale reader. That
-reader was not published and must not be restored.
+`nba_market_consequence_2026_11_02_r6_off_contract_static_coordinate`;
+posture is `nba_named_book_posture_2026_11_02_r8_translated_static_confirmation`.
+They supersede production r30/r32/r21/r5/r7 and the rejected r3 dynamic-scale
+reader. Neither predecessor may be restored as a supposed improvement.
 
-The r5 head applies named-book chronology to a pristine independent forecast.
+R31 corrects three bounded coherence defects without changing the independent
+score artifact or causal score law. Operator audits count actual independent-to-
+final pick changes, so the current causal receipt cannot falsely report zero
+flips. Fresh complete sharp quotes at a different Spread or Total contract are
+translated to the evaluated contract through the released residual CDF and
+remain context-only. Clean causal support can advance an already qualified Lean
+to Best Angle only after its score consequence is applied and only when no
+opposition, conflict, buyback, held-risk, or unmatched named pressure remains.
+Static agreement, public pressure, and book counts cannot manufacture a
+promotion. Existing locks retain exact stored precedence. Publication evidence
+and rollback are in
+`docs/model-audits/2026-11-02-nba-reader-posture-repair-predeclaration.md` and
+`docs/model-audits/2026-11-02-nba-reader-posture-repair-result.md`. This registry
+entry does not itself certify merge or deployment; post-merge live proof is still
+required before these identifiers may be called active production.
+
+The r6 head preserves r5's named-book chronology law on a pristine independent forecast.
 For each margin or Total coordinate, movement from the opening anchor toward
 the independent coordinate is confirmation already expressed by the model and
 is not counted twice. Movement away from the model is corrective innovation;

@@ -1,5 +1,11 @@
 # Model change safety protocol
 
+## Owner-directed NBA reader posture repair — November 2
+
+The owner directed immediate correction of three confirmed NBA functional gaps followed by release-pure forward evaluation: the operator audit hiding current causal flips, off-contract sharp quotes disappearing from static posture instead of being translated through the released residual law, and asymmetric grading that could temper clean opposition but never recognize a clean causal confirmation. The bounded r31/r33/r22 consequence-r6/posture-r8 candidate changes no independent score artifact, score-consequence coefficient, provider call, writer, cron, stake, executable quote, or locked record. Static translation remains context-only. Lean-to-Best promotion requires an applied causal score consequence supporting the same final side and no opposition, conflict, buyback, held-risk, or unmatched named pressure; static agreement and source counts cannot promote.
+
+The external independent-model review found no score challenger that passed its own selection gates. This release therefore rejects blanket margin widening, a hand-set early-season Total offset, and fixed player-point adjustments. Same-input board impact, paired promotion/demotion reporting, positive-EV enforcement, focused/full verification, latest-main integration, protected PR publication, and post-merge live proof remain mandatory. Predeclaration and exact result: `docs/model-audits/2026-11-02-nba-reader-posture-repair-predeclaration.md` and `docs/model-audits/2026-11-02-nba-reader-posture-repair-result.md`.
+
 ## Owner-directed NFL flat-board correction — November 1
 
 The owner directed immediate functional repair of market interpretation and grading,

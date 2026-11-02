@@ -374,6 +374,14 @@ assert.equal(staticOpposition.margin, 10);
 assert.equal(staticOpposition.currentContexts[0]!.authority, "context_only");
 assert.equal(staticOpposition.currentContexts[0]!.favoredSide, "away");
 assert.equal(staticOpposition.actions.margin, "context_only");
+const offContractStatic = run(pair("spread", "circa", epoch, 5, .6), null,
+  { evaluatedAt: epoch }, 10);
+assert.equal(offContractStatic.margin, 10, "off-contract static context cannot invent score movement");
+assert.equal(offContractStatic.currentContexts[0]!.matchesEvaluatedContract, false);
+assert.ok(offContractStatic.currentContexts[0]!.fairAtEvaluatedContract! > .5,
+  "the released residual law transports a sharp quote to the evaluated contract");
+assert.equal(offContractStatic.currentContexts[0]!.favoredSide, "home",
+  "ordinary half-point contract differences retain truthful static posture");
 const cancelledLead = run([...openingBooks, ...pair("moneyline", "circa", half, 0, .6), ...pair("moneyline", "pinnacle", quarter, 0, .6),
   ...pair("moneyline", "circa", next, 0, .5)], episodeSeed.state, {}, 3);
 assert.equal(cancelledLead.margin, 3, "full buyback cannot resurrect a copied follower's old move");

@@ -28,9 +28,11 @@ import {
   classifySpreadConflict,
   classifyTotalConflict,
   gradeNbaMarket,
+  gradeNbaR21MarketForAudit,
   gradeNbaLegacyMarketForAudit,
   noVigPair,
   type GradeOutput,
+  type GradeInput,
   type MarketConflictBand,
   type NbaMoneylineReaderEvidence,
 } from "./nbaMarketReview";
@@ -238,6 +240,12 @@ export type NbaGameIntelligence = {
   top_grade: GradeOutput["grade"];
   /** Top market that earned the best grade ("ml" | "spread" | "total"). */
   top_market: "moneyline" | "spread" | "total" | null;
+  /** Read-only same-input release comparison; production callers omit it. */
+  grade_policy_audit?: Array<{
+    market: Exclude<GradeInput["market"], undefined>;
+    r21: GradeOutput;
+    r22: GradeOutput;
+  }>;
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -1046,6 +1054,8 @@ export function buildNbaGameIntelligence(opts: {
   enforceMoneylineEvidenceGuard?: boolean;
   /** Explicit offline policy comparison, never selected by the sole writer. */
   legacyGradePolicyAudit?: boolean;
+  /** Exact prior/current posture comparison on one frozen input. */
+  includeR21GradePolicyAudit?: boolean;
 }): NbaGameIntelligence {
   const consensus = buildNbaMarketConsensus(opts.lines
     .filter((line) => line.side !== null && (line.market_type === "moneyline" || line.market_type === "spread" || line.market_type === "total"))
@@ -1058,7 +1068,18 @@ export function buildNbaGameIntelligence(opts: {
     })));
   const enforcePositiveModelEv = opts.enforcePositiveModelEv ?? true;
   const enforceMoneylineEvidenceGuard = opts.enforceMoneylineEvidenceGuard ?? true;
-  const gradeMarket = opts.legacyGradePolicyAudit ? gradeNbaLegacyMarketForAudit : gradeNbaMarket;
+  const gradePolicyAudit: NonNullable<NbaGameIntelligence["grade_policy_audit"]> = [];
+  const gradeMarket: typeof gradeNbaMarket = opts.legacyGradePolicyAudit
+    ? gradeNbaLegacyMarketForAudit
+    : opts.includeR21GradePolicyAudit
+      ? (input) => {
+        if (input.market === undefined) throw new Error("NBA grade audit requires a market");
+        const r21 = gradeNbaR21MarketForAudit(input);
+        const r22 = gradeNbaMarket(input);
+        gradePolicyAudit.push({ market: input.market, r21, r22 });
+        return r22;
+      }
+      : gradeNbaMarket;
   const ml = buildMl(
     opts.snapshot,
     opts.prediction,
@@ -1099,5 +1120,6 @@ export function buildNbaGameIntelligence(opts: {
     sources,
     top_grade: topMarketIntel.grade,
     top_market: topMarketIntel.market,
+    ...(opts.includeR21GradePolicyAudit ? { grade_policy_audit: gradePolicyAudit } : {}),
   };
 }
