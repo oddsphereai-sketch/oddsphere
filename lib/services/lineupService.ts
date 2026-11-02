@@ -15,6 +15,7 @@ import type { Sport } from "../types/domain/Sport";
 import type { CronHandlerResult } from "../cron/runCron";
 import { loadGameIdMap, loadPlayerBdlIdMap, loadTeamIdMap } from "./_idMaps";
 import { refreshMlbOfficialLineups } from "./mlbOfficialLineupService";
+import { assertLegacyLineupSport } from "./lineupProviderScope";
 import {
   lineupTeamKey,
   selectCompleteProjectedLineupUnits,
@@ -56,6 +57,9 @@ export const lineupService = {
     date: string,
     options: LineupRefreshOptions = {},
   ): Promise<CronHandlerResult> {
+    // Reject before provider construction, database reads, or ID resolution.
+    // Other sports' numeric IDs must never reach the MLB provider endpoint.
+    assertLegacyLineupSport(sport);
     const deadlineReached = () =>
       options.deadlineAtMs !== undefined && Date.now() >= options.deadlineAtMs;
     const stats = getPlayerStatsProvider();

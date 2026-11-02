@@ -87,10 +87,10 @@ check(
 );
 
 check(
-  "MLB props delegate to the authoritative writer while non-MLB stays intact",
+  "MLB props delegate to the authoritative writer and non-MLB cannot enter this job",
   ROUTE.includes('writer: "mlb_player_props_refresh"') &&
-    ROUTE.includes('} else {') &&
-    ROUTE.includes("predictionService.generatePropPredictions(sport, date)"),
+    ROUTE.includes('sportsInSeasonToday().filter(supportsLegacyLineupRefresh)') &&
+    !ROUTE.includes("predictionService.generatePropPredictions"),
 );
 
 check(
@@ -101,9 +101,9 @@ check(
 );
 
 check(
-  "full props research refresh runs once daily outside the live writer cluster",
+  "full props research refresh retains its bounded four daily windows outside the live writer cluster",
   VERCEL.includes('"/api/cron/mlb-player-props-refresh?full=true"') &&
-    VERCEL.includes('"27 9 * * *"') &&
+    VERCEL.includes('"27 9,13,17,21 * * *"') &&
     !VERCEL.includes('"27 1,4,10,13,16,19,22 * * *"') &&
     !VERCEL.includes('"2 1,4,10,13,16,19,22 * * *"'),
 );
