@@ -36,6 +36,7 @@ export type NflMarketGradeConfirmation = {
   executionQualified: boolean;
   sourceQualified: boolean;
   executionAvailableAt?: string;
+  executionRequestedAt?: string;
   sourceObservedAt?: string;
   sourceEconomicMoveAt?: string;
   leanEligible: boolean;
@@ -141,12 +142,16 @@ export function assessNflMarketGradeConfirmation(args: {
   if (!execution) return { ...result, reason: "exact_executable_pair_unavailable" };
   const availableStamp = execution.availableAt ?? c.executionAvailableAt;
   const availableAt = Date.parse(availableStamp);
+  const requestedStamp = execution.requestedAt ?? availableStamp;
+  const requestedAt = Date.parse(requestedStamp);
   const moveAt = Date.parse(path.latestEconomicMoveAt ?? "");
   result.executionAvailableAt = availableStamp;
+  result.executionRequestedAt = requestedStamp;
   result.sourceObservedAt = path.currentAt!;
   result.sourceEconomicMoveAt = path.latestEconomicMoveAt ?? undefined;
-  if (!Number.isFinite(availableAt) || availableAt > at || !Number.isFinite(moveAt) ||
-      moveAt > Date.parse(path.currentAt!) || availableAt < moveAt || Date.parse(d.evaluatedQuote.observedAt) > availableAt) {
+  if (!Number.isFinite(availableAt) || availableAt > at || !Number.isFinite(requestedAt) || requestedAt > availableAt ||
+      !Number.isFinite(moveAt) || moveAt > Date.parse(path.currentAt!) || requestedAt < moveAt ||
+      Date.parse(d.evaluatedQuote.observedAt) > availableAt) {
     return { ...result, reason: "execution_not_reobserved_after_source" };
   }
   const refs = nflPairedReferenceBooksAt({ books: [...c.books, ...(c.referenceBooks ?? [])], market: d.market,

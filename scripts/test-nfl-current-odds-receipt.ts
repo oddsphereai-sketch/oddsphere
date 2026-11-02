@@ -6,6 +6,7 @@ import {
 } from "../lib/services/football/balldontlieNflPreviewSlate";
 
 const currentFinishedAt = "2026-11-02T14:00:00.000Z";
+const firstRequestStartedAt = "2026-11-02T13:58:30.000Z";
 const earlyPageFinishedAt = "2026-11-02T13:59:00.000Z";
 const delayedOpeningFinishedAt = "2026-11-02T14:10:00.000Z";
 const providerQuoteAt = "2026-11-02T13:55:17.123Z";
@@ -23,7 +24,7 @@ const quote = {
 };
 
 async function capture(openingFinishedAt: string, paginatedCurrent = false, captureRawPriceManifest = false) {
-  let virtualNow = "2026-11-02T13:59:00.000Z";
+  let virtualNow = firstRequestStartedAt;
   const requests: string[] = [];
   const clockReads: string[] = [];
   const fetchImpl = (async (input: string | URL | Request) => {
@@ -68,8 +69,8 @@ async function main() {
     assert.equal(delayed.slate.fetchedAt, delayedOpeningFinishedAt,
       "the aggregate slate receipt still truthfully records completion of the entire collection");
     assert.deepEqual(delayed.clockReads, paginated
-      ? [earlyPageFinishedAt, currentFinishedAt, delayedOpeningFinishedAt]
-      : [currentFinishedAt, delayedOpeningFinishedAt]);
+      ? [firstRequestStartedAt, earlyPageFinishedAt, earlyPageFinishedAt, currentFinishedAt, delayedOpeningFinishedAt]
+      : [firstRequestStartedAt, currentFinishedAt, delayedOpeningFinishedAt]);
     assert.equal(delayed.slate.providerRequests, paginated ? 4 : 3);
     assert.equal(immediate.slate.providerRequests, delayed.slate.providerRequests,
       "recording the receipt adds no provider fetch or synthetic reobservation");
@@ -84,15 +85,32 @@ async function main() {
       assert.notEqual(book.observedAt, delayed.slate.fetchedAt);
       assert.equal(book.availableAt, paginated && book.sportsbook === "FanDuel" ? earlyPageFinishedAt : currentFinishedAt,
         "each executable book retains its own exact page receipt, not the later page or opening-history completion");
+      assert.equal(book.requestedAt, paginated && book.sportsbook === "DraftKings" ? earlyPageFinishedAt : firstRequestStartedAt,
+        "each executable book retains when its own provider request began");
+      assert.ok(Date.parse(book.requestedAt!) <= Date.parse(book.availableAt!),
+        "request windows cannot end before they begin");
     }
     if (paginated) {
       assert.equal(delayed.slate.currentOddsByGame["1392336"]?.sportsbook, "FanDuel");
       assert.equal(delayed.slate.currentOddsByGame["1392336"]?.availableAt, earlyPageFinishedAt,
         "representative selection cannot refresh an early page's execution availability");
+      assert.equal(delayed.slate.currentOddsByGame["1392336"]?.requestedAt, firstRequestStartedAt,
+        "representative selection cannot relabel the earlier page's request start");
       assert.deepEqual(Object.fromEntries(delayed.slate.currentOddsComparableBooksByGame["1392336"]!
         .map((book) => [book.sportsbook, book.availableAt])),
       { FanDuel: earlyPageFinishedAt, DraftKings: currentFinishedAt },
       "both executable comparison books retain separate page receipts");
+      assert.deepEqual(Object.fromEntries(delayed.slate.currentOddsComparableBooksByGame["1392336"]!
+        .map((book) => [book.sportsbook, { requestedAt: book.requestedAt, availableAt: book.availableAt }])),
+      { FanDuel: { requestedAt: firstRequestStartedAt, availableAt: earlyPageFinishedAt },
+        DraftKings: { requestedAt: earlyPageFinishedAt, availableAt: currentFinishedAt } },
+      "later pages and opening history cannot overwrite an earlier quote's actual request window");
+      const secondPage = delayed.slate.currentOddsComparableBooksByGame["1392336"]!
+        .find((book) => book.sportsbook === "DraftKings")!;
+      const interveningMoveAt = Date.parse("2026-11-02T13:59:30.000Z");
+      assert.ok(Date.parse(secondPage.requestedAt!) < interveningMoveAt &&
+        Date.parse(secondPage.availableAt!) > interveningMoveAt,
+      "a response arriving after a move still truthfully records a request that began before it");
     }
     assert.equal(delayed.slate.openingOddsByGame["1392336"]?.observedAt, providerOpeningAt,
       "the original opening timestamp is not replaced by collection completion");
@@ -119,7 +137,7 @@ async function main() {
     "the market runtime must receive the current-only receipt rather than aggregate slate completion");
   assert.doesNotMatch(writer, /executionAvailableAt:\s*slate\.fetchedAt/,
     "later opening-history completion cannot authorize a nonexistent later execution observation");
-  console.log("NFL current odds receipt: per-page13:59/14:00, opening14:10, manifest clocks, request parity and writer binding passed");
+  console.log("NFL current odds receipt: exact page request/response windows, opening14:10, source clocks, request parity and writer binding passed");
 }
 
 void main().catch((error: unknown) => { console.error(error); process.exitCode = 1; });

@@ -53,6 +53,8 @@ export type NflPreviewBookOdds = {
   sportsbook: string;
   /** Receipt of the actual current response page containing this offer. */
   availableAt?: string;
+  /** Beginning of that page's current-price request, bounding observation latency. */
+  requestedAt?: string;
   observedAt: string;
   /** Price-feed provenance. Older immutable rows omit this and are BALLDONTLIE by contract. */
   provider?: "balldontlie" | "sharpapi" | "owls";
@@ -265,7 +267,7 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     throw new Error("BALLDONTLIE returned no complete verified NFL regular-season week.");
   }
   const gameIds = games.map((game) => game.providerGameId);
-  const currentPageReceipts = new Map<unknown, string>();
+  const currentPageReceipts = new Map<unknown, { requestedAt: string; receivedAt: string }>();
   let currentOddsFetchedAt = "";
   const currentRead = await readPages({
     path: "/odds",
@@ -275,9 +277,10 @@ export async function fetchBalldontlieNflRegularSlate(args: {
     fetchImpl,
     onRequest: () => { providerRequests += 1; },
     captureResponseDigests: args.captureRawPriceManifest === true,
-    onPageReceived: rows => {
-      currentOddsFetchedAt = args.clock?.() ?? new Date().toISOString();
-      for (const row of rows) currentPageReceipts.set(row, currentOddsFetchedAt);
+    pageClock: args.clock,
+    onPageReceived: (rows, requestedAt, receivedAt) => {
+      currentOddsFetchedAt = receivedAt;
+      for (const row of rows) currentPageReceipts.set(row, { requestedAt, receivedAt });
     },
   });
   if (currentRead.nextCursor !== null) throw new Error("BALLDONTLIE regular current odds exceeded the pagination safety budget.");
@@ -394,7 +397,8 @@ async function readPages(args: {
   onRequest: () => void;
   optional?: boolean;
   captureResponseDigests?: boolean;
-  onPageReceived?: (rows: unknown[]) => void;
+  onPageReceived?: (rows: unknown[], requestedAt: string, receivedAt: string) => void;
+  pageClock?: () => string;
 }): Promise<{ rows: unknown[]; nextCursor: string | null; pageResponseSha256s: string[] }> {
   const rows: unknown[] = [];
   const pageResponseSha256s: string[] = [];
@@ -410,6 +414,7 @@ async function readPages(args: {
     }
     if (cursor) url.searchParams.set("cursor", cursor);
     args.onRequest();
+    const requestedAt = args.onPageReceived ? args.pageClock?.() ?? new Date().toISOString() : "";
     const response = await args.fetchImpl(url, {
       headers: { Authorization: args.apiKey, accept: "application/json" },
       cache: "no-store",
@@ -428,7 +433,7 @@ async function readPages(args: {
     const body = await response.json() as BdlEnvelope;
     if (args.captureResponseDigests) pageResponseSha256s.push(rawPriceSha256(body));
     if (!Array.isArray(body.data)) throw new Error(`BALLDONTLIE ${args.path} returned a malformed payload.`);
-    args.onPageReceived?.(body.data);
+    if (args.onPageReceived) args.onPageReceived(body.data, requestedAt, args.pageClock?.() ?? new Date().toISOString());
     rows.push(...body.data);
     const next = body.meta?.next_cursor;
     cursor = typeof next === "string" || typeof next === "number" ? String(next) : null;
@@ -510,14 +515,14 @@ function groupBooksByGame(
   values: unknown[],
   requestedGameIds: ReadonlySet<string>,
   allowOpenedAt = false,
-  availableByValue?: ReadonlyMap<unknown, string>,
+  availableByValue?: ReadonlyMap<unknown, { requestedAt: string; receivedAt: string }>,
 ): Record<string, NflPreviewBookOdds[]> {
   const grouped = new Map<string, Map<string, NflPreviewBookOdds[]>>();
   for (const value of values) {
     const row = normalizeOdds(value, allowOpenedAt);
     if (!row || !requestedGameIds.has(row.providerGameId)) continue;
-    const availableAt = availableByValue?.get(value);
-    if (availableAt) row.availableAt = availableAt;
+    const receipt = availableByValue?.get(value);
+    if (receipt) { row.availableAt = receipt.receivedAt; row.requestedAt = receipt.requestedAt; }
     const vendor = row.sportsbook.toLowerCase();
     const byVendor = grouped.get(row.providerGameId) ?? new Map<string, NflPreviewBookOdds[]>();
     byVendor.set(vendor, [...(byVendor.get(vendor) ?? []), row]);

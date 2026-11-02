@@ -210,6 +210,22 @@ assert.equal(promote(f, { production: afterMoveProduction, innovation: heldAfter
   promotionContext: { ...f.promotionContext, books: afterMoveBooks, referenceBooks: afterMoveBooks } })
   .production.evaluatedBets.find(b => b.market === "spread")!.grade, "Best Angle",
 "a quote reobserved after the actual economic leg need not wait for another unchanged sharp-book refresh");
+const slowResponseBooks = afterMoveBooks.map(book => ({ ...book,
+  requestedAt: "2026-11-02T13:55:00.000Z" }));
+const slowResponseProduction = buildNflV1ActionableGradeBundle({ ...f.gradeArgs,
+  current: slowResponseBooks[0]!, comparableCurrentBooks: slowResponseBooks });
+assert.equal(promote(f, { production: slowResponseProduction,
+  promotionContext: { ...f.promotionContext, books: slowResponseBooks, referenceBooks: slowResponseBooks } })
+  .production.evaluatedBets.find(b => b.market === "spread")!.grade, "Lean",
+"a request begun before the sharp move cannot establish post-move reobservation merely by responding slowly afterward");
+const afterMoveRequestBooks = afterMoveBooks.map(book => ({ ...book,
+  requestedAt: "2026-11-02T14:05:00.000Z" }));
+const afterMoveRequestProduction = buildNflV1ActionableGradeBundle({ ...f.gradeArgs,
+  current: afterMoveRequestBooks[0]!, comparableCurrentBooks: afterMoveRequestBooks });
+assert.equal(promote(f, { production: afterMoveRequestProduction,
+  promotionContext: { ...f.promotionContext, books: afterMoveRequestBooks, referenceBooks: afterMoveRequestBooks } })
+  .production.evaluatedBets.find(b => b.market === "spread")!.grade, "Best Angle",
+"a successful actual request begun after the source move can supply the required execution reobservation");
 
 const badBooks = f.books.map(book => ({ ...book, spread: { ...book.spread!, homePrice: -200, awayPrice: 150 } }));
 const badProduction = buildNflV1ActionableGradeBundle({ ...f.gradeArgs, current: badBooks[0]!, comparableCurrentBooks: badBooks });

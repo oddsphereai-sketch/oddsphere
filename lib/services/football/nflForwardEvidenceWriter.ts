@@ -1688,14 +1688,16 @@ export function hasImmutableNflLockedRecord(
   return rows.some((row) => row.providerGameId === providerGameId && hasNflStoredLockedDecision(row));
 }
 
-/** Ensure a provider quote can never appear newer than the decision consuming it. */
+/** A provider quote and its real receipt cannot postdate the consuming decision. */
 export function nflEvidenceCapturedAt(writerNow: string, books: NflPreviewBookOdds[]): string {
   const writerTime = Date.parse(writerNow);
   if (!Number.isFinite(writerTime)) throw new Error("NFL writer capture time is invalid.");
   const latestQuoteTime = books.reduce((latest, book) => {
     const observedAt = Date.parse(book.observedAt);
     if (!Number.isFinite(observedAt)) throw new Error(`NFL quote time is invalid for ${book.sportsbook}.`);
-    return Math.max(latest, observedAt);
+    const availableAt = book.availableAt === undefined ? observedAt : Date.parse(book.availableAt);
+    if (!Number.isFinite(availableAt)) throw new Error(`NFL quote receipt time is invalid for ${book.sportsbook}.`);
+    return Math.max(latest, observedAt, availableAt);
   }, writerTime);
   return new Date(latestQuoteTime).toISOString();
 }
