@@ -446,9 +446,9 @@ entry is not a deployment claim. Evidence, checks and rollback:
   `docs/model-audits/2026-10-31-all-market-data-health.md` and the paired JSON.
   Roll back this complete family together; never rewrite an immutable lock.
 
-## NBA neutral tie and corroborated opposition — November 2 publication candidate
+## NBA neutral tie and corroborated opposition — active production November 2
 
-Candidate model/marriage/grade are
+Active model/marriage/grade are
 `nba_professional_unified_2026_11_02_r32_neutral_tie_opposition_grade` /
 `nba_market_marriage_2026_11_02_r34_neutral_tie_opposition_grade` /
 `nba_grade_policy_2026_11_02_r23_corroborated_opposition`.
@@ -469,8 +469,18 @@ request, second writer, or locked-row reinterpretation. Publication evidence
 and rollback are in
 `docs/model-audits/2026-11-02-nba-neutral-tie-corroborated-opposition-predeclaration.md`
 and `docs/model-audits/2026-11-02-nba-neutral-tie-corroborated-opposition-result.md`. This registry
-entry does not itself certify merge or deployment; post-merge live proof is still
-required before these identifiers may be called active production.
+PR #927 merged as production commit `67f84c4fdda8943b9540c284623908e74e885dbb`.
+Vercel reported that exact commit deployed successfully. The leased production
+writers then published 45 current-release rows across 15 games: 15 Moneylines,
+15 Spreads, and 15 Totals. Every row carried model r32, marriage r34, and
+consequence r6; the deployed grade runtime was r23. The live OKC-CLE Total at
+exactly 50% retained Under and remained Watchlist. The member snapshot and
+stored rows agreed on all 45 sides, grades, scores and markets; all markets had
+current prices, two-sided trails, public splits, and sharp-book splits, with no
+nonpositive-EV actionable. The slate had zero locked rows, so no locked payload
+was eligible for mutation during publication; lock precedence and writer
+immutability remain enforced by the passing repository gates. Exact production
+proof is recorded in the paired result document.
 
 The r6 head preserves r5's named-book chronology law on a pristine independent forecast.
 For each margin or Total coordinate, movement from the opening anchor toward
