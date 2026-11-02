@@ -49,11 +49,20 @@ async function main(){
     assert.equal(market.pick,dto.markets[key].pick);assert.equal(market.modelProb,dto.markets[key].modelProb);
     assert.deepEqual(market.verdict,dto.markets[key].verdict);assert.equal(market.priceAmerican,dto.markets[key].priceAmerican);
   }
-  for(const bad of [{...row,league:"nba"},{...row,fetched_at:"2026-11-02T15:01:00Z"},{...row,fetched_at:"2026-11-02T11:59:59Z"},
+  for(const bad of [{...row,league:"nba"},{...row,fetched_at:"2026-11-02T15:01:00Z"},
     {...row,event_id:"ncaab:Notre Dame@Villanova-20261103"},{...row,away_team:"Duke"},
     {...row,moneyline:{bets_pct:{away:null,home:null},handle_pct:{away:.2,home:.8}},spread:null,total:null}]){
     assert.equal(merge({...feed,rows:[bad]}).games[0].markets.moneyline.sportsbookSplits,null);
   }
+  const oldAt="2026-11-02T10:00:00.000Z",oldFeed={...feed,rows:[{...row,fetched_at:oldAt}]};
+  const retained=merge(oldFeed).games[0];
+  assert.equal(retained.markets.moneyline.sportsbookSplits?.sourceObservedAt,oldAt,"last actual exact-game source remains visible without a new capture");
+  assert.equal(retained.markets.moneyline.sportsbookSplits?.lastUpdated,oldAt,"the reader shows the original time, never now");
+  assert.equal(retained.markets.moneyline.modelProb,dto.markets.moneyline.modelProb);
+  assert.deepEqual(retained.markets.moneyline.verdict,dto.markets.moneyline.verdict);
+  const newerRetail={...row,sportsbook:"draftkings",fetched_at:observed};
+  assert.equal(merge({...feed,rows:[...oldFeed.rows,newerRetail]}).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"draftkings","fresh retail supersedes old Circa during an outage");
+  assert.equal(merge(oldFeed,{...response,games:[enriched.games[0]]}).games[0].markets.moneyline.sportsbookSplits?.sourceObservedAt,observed,"retained source cannot replace an existing fresh pair");
   const duplicate={...dto,id:"cbb-778",external_id:778};
   assert.equal(merge(feed,{...response,games:[dto,duplicate]}).games[0].markets.moneyline.sportsbookSplits,null,"full-board identity ambiguity is not narrowed away");
   let stored:CbbStoredMemberGame|null=null,writes=0;

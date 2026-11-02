@@ -85,7 +85,7 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   if(!freezing){
     for(const key of ["moneyline","first_inning","total"] as const){
       const market=memberGame.markets[key],section=args.capturedNamedSections?.[key]??existing?.memberGame.markets[key].sportsbookSplits;
-      if(cbbQualifiedNamedSplitSection(market.sportsbookSplits,section??null,evidenceAt)){
+      if(cbbQualifiedNamedSplitSection(market.sportsbookSplits,section??null,evidenceAt,{allowRetained:true})){
         market.sportsbookSplits=structuredClone(section!);
         market.sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section!.sourceObservedAt??section!.lastUpdated??""};
       }

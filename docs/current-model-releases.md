@@ -1,5 +1,20 @@
 # Current production model releases and qualified research candidates
 
+## CBB chart API and retained split display — November 2
+
+Current publisher is `cbb_member_pipeline_2026_11_02_r12_retained_named_split_display`
+and reader evidence is `cbb_reader_evidence_2026_11_02_r6_retained_named_source`.
+The chart API uses `prediction_market_published_reader_2026_11_02_r3_cbb_indexed_details`:
+a small published membership index plus the exact selected member detail fixes
+the117-game history array exceeding its former8 MB decoding ceiling. All
+stored quotes and locked detail precedence remain exact. An exact-game retained
+named-book pair remains visible with its original source time during an outage;
+fresh sources take priority. The independent three-hour split-input qualifier,
+score r3, board r6, grade r2, tracking r4, store schema r2, single leased writer,
+provider budget and cadence are unchanged. No retained display becomes a fresh
+model input or changes a grade. Existing locked records cannot acquire new
+source data. Evidence: `docs/model-audits/2026-11-02-cbb-byu-chart-split-continuity.md`.
+
 ## CBB November 2 verified historical venue prior
 
 Score `cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior` restores

@@ -19,6 +19,8 @@ import {PREDICTION_MARKET_PRELOCK_RELEASE,capturePredictionMarketPrelock,cfbLock
 import { fetchCbbKalshiMarkets } from "@/lib/providers/kalshi/cbbMarkets";
 import { marketDisplayGameIdentity } from "@/lib/cbb/marketDisplayIdentity";
 import { recoverCfbHistoricalChart } from "@/lib/providers/owls/cfbHistoricalChart";
+import { publishedMarketIdentities,verifiedPublishedMarketDetail,PUBLISHED_MARKET_READER_RELEASE } from "./predictionMarketPublishedIdentity";
+import { readCbbMemberGame } from "../cbb/cbbMemberGameStore";
 
 const prelockKey=(sport:PredictionMarketSport)=>`daily-edge::prediction-market-prelock::${sport}::${PREDICTION_MARKET_PRELOCK_RELEASE}`;
 async function prelockStored(sport:PredictionMarketSport):Promise<PrelockFeed|null>{
@@ -75,7 +77,7 @@ async function publishedContractGames(sport:PredictionMarketSport):Promise<Daily
     :await query.eq("snapshot_key",sport==="soccer"?"soccer::english_premier_league::current-week":sport==="ucl"?"soccer::uefa_champions_league::current-week":`${sport}::${sport==="cbb"?currentSlateDate("cbb"):currentDailyEdgeBoardDate(sport)}::current-only::live-copy`).maybeSingle();
   if(result.error)throw new Error(`Published ${sport} contract selection unavailable`);
   let payload=result.data?.payload;
-  if(payload?.encoding==="gzip-base64")payload=JSON.parse(gunzipSync(Buffer.from(payload.payload,"base64"),{maxOutputLength:8_000_000}).toString("utf8"));
+  if(payload?.encoding==="gzip-base64")payload=JSON.parse(gunzipSync(Buffer.from(payload.payload,"base64"),{maxOutputLength:sport==="cbb"?32_000_000:8_000_000}).toString("utf8"));
   const snapshot=payload?.fixture?.snapshot??payload?.snapshot??payload;
   if(!snapshot||!Array.isArray(snapshot.games))throw new Error(`Published ${sport} contract selection missing`);
   if(sport==="cbb"&&snapshot.games.length>500)throw new Error("CBB published market selection exceeds bounded capacity");
@@ -86,8 +88,23 @@ async function publishedContractGames(sport:PredictionMarketSport):Promise<Daily
 const publishedGamesCompressed=unstable_cache(async(sport:PredictionMarketSport)=>
   gzipSync(JSON.stringify(await publishedContractGames(sport))).toString("base64"),
   ["prediction_market_published_identity_r2_gzip"],{revalidate:30});
-export async function readPublishedPredictionMarketGames(sport:PredictionMarketSport):Promise<DailyEdgeGameDto[]>{
+async function readPublishedPredictionMarketGames(sport:PredictionMarketSport):Promise<DailyEdgeGameDto[]>{
   return JSON.parse(gunzipSync(Buffer.from(await publishedGamesCompressed(sport),"base64"),{maxOutputLength:8_000_000}).toString("utf8"));
+}
+
+const cbbPublishedIdentityIndex=unstable_cache(async()=>publishedMarketIdentities(await publishedContractGames("cbb")),
+  [PUBLISHED_MARKET_READER_RELEASE,"cbb-index"],{revalidate:30});
+const cbbPublishedDetail=unstable_cache(async(event:number)=>(await readCbbMemberGame(event))?.memberGame??null,
+  [PUBLISHED_MARKET_READER_RELEASE,"cbb-detail"],{revalidate:30});
+
+/** CBB's large history tape is read once per shared index refresh. Each chart
+ * reads only its selected detail; no all-board decompression or new provider. */
+export async function readPublishedPredictionMarketGame(sport:PredictionMarketSport,event:number):Promise<DailyEdgeGameDto|null>{
+  if(sport!=="cbb")return (await readPublishedPredictionMarketGames(sport)).find(game=>game.external_id===event)??null;
+  const identity=(await cbbPublishedIdentityIndex()).find(game=>game.external_id===event);
+  if(!identity)return null;
+  const detail=await cbbPublishedDetail(event);
+  return detail?verifiedPublishedMarketDetail(identity,detail):null;
 }
 
 /** Sole capture path: existing five-minute display-feed cron, same sport lease. */
