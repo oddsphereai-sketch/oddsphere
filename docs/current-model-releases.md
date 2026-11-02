@@ -768,6 +768,15 @@ forward grading remain required. Exact locked payloads retain precedence.
 
 ## CBB exact market-observation identity repair — October 30
 
+- November2 source-alias follow-up: active observation capture is
+  `market_intelligence_v2_capture_2026_11_02_r19_cbb_verified_source_aliases`.
+  The shared collector now uses the same verified institution aliases as the
+  released CBB direct source/reader path. Both participants, unique fixture,
+  original date/time and neutral-site side orientation remain mandatory.
+  No nickname/substring or ambiguous-school matching is added. Provider request
+  count, sport-scoped lease, collector cadence, model/grade/stake/price selection
+  and every locked record remain unchanged. Evidence and publication status:
+  `docs/model-audits/2026-11-02-cbb-source-split-alias-coverage.md`.
 - Observation capture release `market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation`
   resolves CBB Playbook and Owl's rows against both verified full team names and
   institution names, then the exact fixture time/date. A unique neutral-site
