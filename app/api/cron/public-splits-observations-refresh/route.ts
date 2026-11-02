@@ -23,6 +23,7 @@ import { addDaysToSlate, currentSlateDate } from "@/lib/dates/slateDate";
 import type { Sport } from "@/lib/types/domain/Sport";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
+import { readMarketCaptureActivity } from "@/lib/services/dailyEdge/marketCaptureActivity";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
 // This remains an observation-only collector. Capability gates continue to
@@ -37,6 +38,10 @@ export async function GET(request: Request): Promise<Response> {
     async ({ sport }) => {
       if (process.env[ENV] !== "true") {
         return { records_updated: 0, details: { disabled: true, reason: `${ENV}!=true` } };
+      }
+      const activity = await readMarketCaptureActivity({ client: supabase, sport });
+      if (activity.skip) {
+        return { records_updated: 0, api_calls_made: 0, details: { skipped: true, activity } };
       }
       const slate = currentSlateDate(sport);
       const result = await syncPublicSplitsObservations({
@@ -83,6 +88,7 @@ export async function GET(request: Request): Promise<Response> {
         partial: errors.length > 0,
         error_message: errors.length ? errors.slice(0, 5).join(" | ").slice(0, 1500) : null,
         details: {
+          activity,
           slate,
           sharpapi: result.sharpapiRows,
           playbook: result.playbookRows,
