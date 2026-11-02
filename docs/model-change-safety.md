@@ -1,5 +1,20 @@
 # Model change safety protocol
 
+## Owner-directed NFL spot-check input repair — November 2
+
+The owner requested substantive same-book market interpretation spot checks and
+repair of defects rather than accepting missing signals. The fresh source reports
+CHI@SEA moneyline ticket percentages43/58 alongside money86/14. The source feed
+accepts published rounding, but NFL's downstream strict100 check discarded that
+bound flow. Writer106 retains valid whole-percent99/101 pairs and their original
+values, rejects material/decimal inconsistencies and uncertain rounding direction,
+and preserves the existing economic consequence and grade policy. Focused/full
+functional checks, exact predecessor/lock tests, current same-input board impact,
+fresh-main protected PR and post-merge live proof remain mandatory. This is input
+qualification repair with forward outcome evaluation, not an outcome-fitted model
+or a second writer. Evidence:
+`docs/model-audits/2026-11-02-nfl-published-rounding-pressure.md`.
+
 ## Owner-directed historical NFL missed-lock recovery — November 2
 
 Daniel Mengel explicitly requested inclusion of the original Eagles–Commanders
@@ -15,6 +30,7 @@ settle through the usual services, and prove idempotence, lock protection and re
 precedence. Focused/full tests, fresh-main protected publication, exact production
 tree and live tracking/cron/reader checks remain mandatory. Scope and hashes:
 `docs/model-audits/2026-11-02-nfl-missed-lock-recovery.md`.
+
 ## Owner-directed NFL symmetric market grading — November 2
 
 The owner explicitly requires market context to promote qualified Watchlists to
