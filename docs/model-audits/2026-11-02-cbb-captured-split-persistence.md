@@ -26,6 +26,15 @@ cutoff. The stored DTO schema remains r2, allowing in-flight prior-deployment
 readers to validate new records during rollout. Publisher r9 versions this
 publication behavior; store and lock index use one compatibility list.
 
+At 16:19 UTC, a new read-only captured-source replay recovers 177->235 complete
+panels across 22 additional games, with all 348 decision tuples and both locked
+payloads unchanged. An actual improved game (10882489) also persists its exact
+qualified section through an in-memory invocation of the sole writer. There
+are zero provider requests or external writes in this proof. Full-board source
+qualification takes 3277 ms locally and is performed once per scheduled writer,
+not once per game or member request. Counts differ from the earlier 242-panel
+reader audit because eligibility follows the original source age at each cutoff.
+
 Prediction, probability, projection, selected quote, grade, source hierarchy,
 stake, provider budget, schedule and shared lease are unchanged. Paired
 promotions/demotions and actionable-count impact are 0/0/0. Validate a captured
