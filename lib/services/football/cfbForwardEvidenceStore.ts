@@ -144,6 +144,35 @@ export const CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES = [
  * returning the large forecast, context, quarterback, and decision payload on
  * every historical row.
  */
+const CFB_FORWARD_MARKET_HISTORY_SELECT = [
+  "id",
+  "evidence_release",
+  "provider_game_id",
+  "stage",
+  "captured_at",
+  "game_start_at",
+  "payload_sha256",
+  "payload_schema_release:payload->>schemaRelease",
+  "payload_provider_game_id:payload->game->>providerGameId",
+  "payload_stage:payload->>stage",
+  "payload_captured_at:payload->>capturedAt",
+  "current:payload->market->current",
+  "current_books:payload->market->currentBooks",
+  "display_books:payload->market->displayBooks",
+  "provider_opening:payload->market->providerOpening",
+  "operational_opening:payload->market->operationalOpening",
+  "playbook_splits:payload->market->playbookSplits",
+  "sharp_api_splits:payload->market->sharpApiSplits",
+  "request_budget:payload->requestBudget",
+  "context_moneyline_families:payload->contextualEvidenceCapture->markets->moneyline->families",
+  "context_spread_families:payload->contextualEvidenceCapture->markets->spread->families",
+  "context_total_families:payload->contextualEvidenceCapture->markets->total->families",
+  "context_moneyline_target_excluded_families:payload->contextualEvidenceCapture->markets->moneyline->targetExcludedFamilies",
+  "context_spread_target_excluded_families:payload->contextualEvidenceCapture->markets->spread->targetExcludedFamilies",
+  "context_total_target_excluded_families:payload->contextualEvidenceCapture->markets->total->targetExcludedFamilies",
+].join(",");
+const CFB_FORWARD_MARKET_HISTORY_VIEW = "cfb_forward_market_history_projection";
+
 export async function readCfbForwardMarketHistory(args: {
   client: SupabaseClient;
   season: number;
@@ -155,46 +184,29 @@ export async function readCfbForwardMarketHistory(args: {
   if (providerGameIds.length === 0) return [];
   const capturedAfter = args.capturedAfter === undefined ? null : new Date(args.capturedAfter).toISOString();
   const rows: StoredMarketHistoryRow[] = [];
+  let useLegacyProjection = false;
   for (let gameIndex = 0; gameIndex < providerGameIds.length; gameIndex += CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE) {
     const gameIds = providerGameIds.slice(gameIndex, gameIndex + CFB_FORWARD_MARKET_HISTORY_GAME_BATCH_SIZE);
     for (let from = 0; from < CFB_FORWARD_MARKET_HISTORY_MAX_ROWS; from += CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE) {
-      let query = args.client
-        .from("cfb_forward_evidence_snapshots")
-        .select([
-          "id",
-          "evidence_release",
-          "provider_game_id",
-          "stage",
-          "captured_at",
-          "game_start_at",
-          "payload_sha256",
-          "payload_schema_release:payload->>schemaRelease",
-          "payload_provider_game_id:payload->game->>providerGameId",
-          "payload_stage:payload->>stage",
-          "payload_captured_at:payload->>capturedAt",
-          "current:payload->market->current",
-          "current_books:payload->market->currentBooks",
-          "display_books:payload->market->displayBooks",
-          "provider_opening:payload->market->providerOpening",
-          "operational_opening:payload->market->operationalOpening",
-          "playbook_splits:payload->market->playbookSplits",
-          "sharp_api_splits:payload->market->sharpApiSplits",
-          "request_budget:payload->requestBudget",
-          "context_moneyline_families:payload->contextualEvidenceCapture->markets->moneyline->families",
-          "context_spread_families:payload->contextualEvidenceCapture->markets->spread->families",
-          "context_total_families:payload->contextualEvidenceCapture->markets->total->families",
-          "context_moneyline_target_excluded_families:payload->contextualEvidenceCapture->markets->moneyline->targetExcludedFamilies",
-          "context_spread_target_excluded_families:payload->contextualEvidenceCapture->markets->spread->targetExcludedFamilies",
-          "context_total_target_excluded_families:payload->contextualEvidenceCapture->markets->total->targetExcludedFamilies",
-        ].join(","))
-        .eq("season", args.season)
-        .in("evidence_release", [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES])
-        .in("provider_game_id", gameIds);
-      if (capturedAfter !== null) query = query.or(`stage.eq.opening,captured_at.gte.${capturedAfter}`);
-      const { data, error } = await query
-        .order("captured_at", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, from + CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE - 1);
+      const pageQuery = () => {
+        let query = args.client
+          .from(useLegacyProjection ? "cfb_forward_evidence_snapshots" : CFB_FORWARD_MARKET_HISTORY_VIEW)
+          .select(CFB_FORWARD_MARKET_HISTORY_SELECT)
+          .eq("season", args.season)
+          .in("evidence_release", [...CFB_FORWARD_MARKET_HISTORY_COMPATIBLE_RELEASES])
+          .in("provider_game_id", gameIds);
+        if (capturedAfter !== null) query = query.or(`stage.eq.opening,captured_at.gte.${capturedAfter}`);
+        return query.order("captured_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, from + CFB_FORWARD_MARKET_HISTORY_PAGE_SIZE - 1);
+      };
+      let { data, error } = await pageQuery();
+      if (!useLegacyProjection && error
+        && ["PGRST205", "42P01"].includes(error.code)
+        && error.message.includes(CFB_FORWARD_MARKET_HISTORY_VIEW)) {
+        useLegacyProjection = true;
+        ({ data, error } = await pageQuery());
+      }
       if (error) throw new Error(`CFB forward market history read failed: ${error.message}`);
       const page = (data ?? []) as unknown as StoredMarketHistoryRow[];
       if (rows.length + page.length > CFB_FORWARD_MARKET_HISTORY_MAX_ROWS) {
