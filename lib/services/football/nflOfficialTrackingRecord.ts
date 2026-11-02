@@ -2,7 +2,10 @@ import { computeSlateDate } from "@/lib/dates/slateDate";
 import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import {
   hashNflForwardEvidencePayload,
+  NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE,
+  hasNflStoredLockedDecision,
   type NflForwardEvidencePayload,
+  type NflForwardStoredEvidence,
 } from "./nflForwardEvidence";
 import {
   assertMarketScopedFootballDecisions,
@@ -23,6 +26,103 @@ export const NFL_OFFICIAL_TRACKING_RECORD_RELEASE =
   "nfl_official_tracking_record_2026_09_28_r16_market_marriage" as const;
 
 const NFL_TRACKED_MARKETS = ["moneyline", "spread", "total"] as const;
+
+export const NFL_PUBLISHED_PREGAME_RECOVERY_RELEASE =
+  "nfl_published_pregame_tracking_recovery_2026_11_02_r1" as const;
+
+export type NflPublishedPregameRecovery = {
+  sourceEvidenceId: string;
+  sourcePayloadSha256: string;
+  failedEvidenceId: string;
+  failedPayloadSha256: string;
+  ownerApproval: string;
+  recoveredAt: string;
+};
+
+/** Explicit owner recovery, never an automatic substitute for a T-60 lock. */
+export function selectNflPublishedPregameRecoverySource(args: {
+  rows: NflForwardStoredEvidence[];
+  recovery: NflPublishedPregameRecovery;
+}): NflForwardStoredEvidence & { payload: NflForwardEvidencePayload } {
+  const source = args.rows.find(row => row.id === args.recovery.sourceEvidenceId);
+  const failed = args.rows.find(row => row.id === args.recovery.failedEvidenceId);
+  if (!source || !failed || !args.recovery.ownerApproval.trim()) {
+    throw new Error("NFL pregame recovery requires exact source/failed evidence and owner approval.");
+  }
+  const start = Date.parse(source.gameStartAt);
+  const cutoff = start - 60 * 60_000;
+  const recovered = Date.parse(args.recovery.recoveredAt);
+  const sameGame = args.rows.filter(row => row.providerGameId === source.providerGameId);
+  if (!Number.isFinite(start) || !Number.isFinite(recovered) || recovered <= start ||
+      failed.providerGameId !== source.providerGameId || failed.payload.season !== source.payload.season ||
+      failed.payload.week !== source.payload.week || Date.parse(failed.gameStartAt) !== start ||
+      sameGame.some(hasNflStoredLockedDecision)) {
+    throw new Error("NFL pregame recovery cannot replace any existing locked decision or another game.");
+  }
+  for (const [row, expected] of [[source, args.recovery.sourcePayloadSha256],
+    [failed, args.recovery.failedPayloadSha256]] as const) {
+    if (row.payloadSha256 !== expected || hashNflForwardEvidencePayload(row.payload) !== expected ||
+        row.providerGameId !== row.payload.game.providerGameId ||
+        Date.parse(row.capturedAt) !== Date.parse(row.payload.capturedAt) ||
+        Date.parse(row.gameStartAt) !== Date.parse(row.payload.game.scheduledStart)) {
+      throw new Error("NFL pregame recovery evidence identity/checksum mismatch.");
+    }
+  }
+  const newest = sameGame.filter(row => Date.parse(row.capturedAt) <= cutoff)
+    .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt));
+  if (newest[0]?.id !== source.id || newest.some(row => row.id !== source.id &&
+      Date.parse(row.capturedAt) === Date.parse(source.capturedAt)) ||
+      source.stage !== "unlocked" || source.payload.stage !== "unlocked" ||
+      source.payload.schemaRelease !== NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE ||
+      !source.payload.decisions.publicationEnabled || source.payload.decisions.trackingEnabled ||
+      failed.stage !== "t60" || failed.payload.stage !== "t60" ||
+      failed.payload.decisions.evaluatedBets.length !== 0 || failed.payload.decisions.trackingEnabled ||
+      !failed.payload.coverage.healthHolds.includes("t60_capture_late")) {
+    throw new Error("NFL pregame recovery requires the latest pre-cutoff publication and an empty late final slot.");
+  }
+  const decisions = source.payload.decisions.evaluatedBets;
+  if (decisions.length !== 3 || new Set(decisions.map(d => d.market)).size !== 3 ||
+      !NFL_TRACKED_MARKETS.every(market => decisions.some(d => d.market === market)) ||
+      new Set(decisions.map(d => d.decisionRelease)).size !== 1 ||
+      new Set(decisions.map(d => d.calibrationRelease)).size !== 1 ||
+      decisions.some(d => d.stage !== "unlocked" || d.lockedAt !== null ||
+        d.providerGameId !== source.providerGameId || Date.parse(d.gameStartsAt) !== start ||
+        Date.parse(d.evaluatedAt) !== Date.parse(source.capturedAt) ||
+        !Number.isFinite(Date.parse(d.evaluatedQuote.observedAt)) ||
+        Date.parse(d.evaluatedQuote.observedAt) > Date.parse(source.capturedAt) ||
+        !Number.isFinite(d.modelProbability) || d.modelProbability <= 0 || d.modelProbability >= 1 ||
+        !Number.isFinite(d.evaluatedQuote.price) || Math.abs(d.evaluatedQuote.price) < 100 ||
+        !d.evaluatedQuote.sportsbook.trim() ||
+        (d.market !== "moneyline" && !Number.isFinite(d.evaluatedQuote.line)))) {
+    throw new Error("NFL pregame recovery requires three intact original pregame decision tuples.");
+  }
+  return source as NflForwardStoredEvidence & { payload: NflForwardEvidencePayload };
+}
+
+export function buildNflPublishedPregameRecoveryRecords(args: {
+  source: NflForwardStoredEvidence & { payload: NflForwardEvidencePayload };
+  gameId: number;
+  recovery: NflPublishedPregameRecovery;
+}): PredictionRecordRow[] {
+  // Serialize the original tuple. No current model, probability, grade or
+  // coherence rule is applied retrospectively to an already published pick.
+  return serializeTrackingRecords({ payload: args.source.payload, gameId: args.gameId }).map(record => ({
+    ...record,
+    prediction_source: "nfl_published_pregame_recovery",
+    locked_at: args.recovery.recoveredAt,
+    snapshot_json: {
+      ...record.snapshot_json,
+      published_pregame_recovery: {
+        ...args.recovery,
+        release: NFL_PUBLISHED_PREGAME_RECOVERY_RELEASE,
+        originalCapturedAt: args.source.capturedAt,
+        originalStage: args.source.stage,
+        originalLockedAt: null,
+        onTimeT60Lock: false,
+      },
+    },
+  }));
+}
 
 export function nflTrackingMarketsForPayload(payload: NflForwardEvidencePayload): NflRegularDecisionMarket[] {
   const markets = new Set<NflRegularDecisionMarket>(payload.decisions.evaluatedBets.map((decision) => decision.market));

@@ -6,6 +6,21 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-11-02
 
+## NFL owner-directed missed-lock accounting recovery — November 2
+
+`nfl_published_pregame_tracking_recovery_2026_11_02_r1` adds an explicit historical
+recovery option to the existing leased NFL tracking writer. It serializes the
+exact latest pre-cutoff PHI–WSH publication (original model47/calibration46/decision55)
+with the actual recovery freeze time and original null decision lock, records that
+it was not an on-time T-60 lock, and preserves all source/failed evidence unchanged.
+All three markets are recovered together, including the losing Eagles +6 Best Angle.
+No current model/grade identifier, normal cron behavior, future board, stake, schedule,
+lease or existing member snapshot changes. Existing locked decisions from any release
+block recovery; identical complete recovery is idempotent. Writer104's coherent-law
+and legal-window retry fixes remain authoritative prospectively. Incident, hashes,
+board impact and required live checks:
+`docs/model-audits/2026-11-02-nfl-missed-lock-recovery.md`.
+
 ## NFL source-qualified reader and grades — November 2 release
 
 Starting base `9876c3dd99539b1302c7617765d22fe0e8976fed`; integrated production

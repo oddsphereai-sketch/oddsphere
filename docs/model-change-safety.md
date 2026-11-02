@@ -1,5 +1,21 @@
 # Model change safety protocol
 
+## Owner-directed historical NFL missed-lock recovery — November 2
+
+Daniel Mengel explicitly requested inclusion of the original Eagles–Commanders
+prediction after reviewing the missed lock. The narrowly scoped
+`nfl_published_pregame_tracking_recovery_2026_11_02_r1` may append all three exact
+latest pre-cutoff published decisions for provider game1392335, preserving the
+original release, prices, probabilities, grades and immutable source evidence.
+The actual recovery freeze time and original null lock must be retained separately;
+this is not an on-time T-60 lock, a new prediction or retrospective recalibration.
+No existing locked prediction or incomplete final-slot payload is replaced.
+Use the existing NFL writer under `prediction_pipeline:nfl`, preserve final scores,
+settle through the usual services, and prove idempotence, lock protection and reader
+precedence. Focused/full tests, fresh-main protected publication, exact production
+tree and live tracking/cron/reader checks remain mandatory. Scope and hashes:
+`docs/model-audits/2026-11-02-nfl-missed-lock-recovery.md`.
+
 ## Owner-directed NFL source and qualification repair — November 2
 
 The owner directed repair of captured-reference qualification, off-target source
