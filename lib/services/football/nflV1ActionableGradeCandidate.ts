@@ -1,5 +1,6 @@
 import { nflPairedReferenceBooksAt, nflMarketSourceAt, nflSportsbookFamily, nflMarketQualificationMatches,
   type NflMarketQualificationReceipt } from "./nflMarketQualification";
+import type { NflMarketInnovationPostureReceipt } from "./nflMarketInnovationPosture";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 import {
   buildNflRegularEvaluatedBetDecision,
@@ -66,6 +67,8 @@ export const NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_EXPECTED_VALUE = 0.01 as const;
 export const NFL_V1_TOTAL_MOVEMENT_LEAN_MINIMUM_EDGE_PERCENTAGE_POINTS = 2.5 as const;
 
 export type NflV1ActionableGradeBundle = {
+  /** Ephemeral same-evidence guard. Never part of persisted evaluated tuples. */
+  marketConvictionEvaluation?: { evidenceKey: string; receipt: NflMarketInnovationPostureReceipt };
   evaluatedBets: NflRegularEvaluatedBetDecision[];
   outcomeConfidence: ReturnType<typeof buildNflV1ProductionDecisionBundle>["outcomeConfidence"];
   modelPromotionStatus: typeof NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE;

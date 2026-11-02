@@ -85,3 +85,13 @@ and member snapshot. Preserve valid locked rows on any later release.
 Open PR921 changes prospective grades and shares the writer, package scripts and
 registry. Integrate latest production main and preserve its changes before either
 publication; do not replace its forecast or historical-card continuity work.
+
+## Integrated base and completed local checks
+
+Integrated `ca49c0e505faf6acbe8f89088ac5004bacde374a` (NFL PR921). The prospective
+writer105/model49/calibration48/decision57/runtime15 family and its full new test
+coverage are retained; source qualification and legal-window retry fixes remain.
+Registry/safety additions from both tasks are preserved. The normal writer retains
+its original narrow tracking SELECT; full original-tuple checks are recovery-only.
+The zero-write incident rehearsal validates all source hashes and the exact provider
+10–27 final, with zero prediction, game, grade or evidence writes.

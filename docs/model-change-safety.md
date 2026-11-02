@@ -15,6 +15,19 @@ settle through the usual services, and prove idempotence, lock protection and re
 precedence. Focused/full tests, fresh-main protected publication, exact production
 tree and live tracking/cron/reader checks remain mandatory. Scope and hashes:
 `docs/model-audits/2026-11-02-nfl-missed-lock-recovery.md`.
+## Owner-directed NFL symmetric market grading — November 2
+
+The owner explicitly requires market context to promote qualified Watchlists to
+Lean and Leans to Best Angle as well as temper unresolved Best Angles. Candidate
+writer105/model49/cal48/decision57/member54 adds a bound exact-contract confirmation
+assessment after the existing coherent final forecast. It adds no second score
+or probability change, source-count bonus, extra writer, provider request, production
+shadow, No Play promotion or retrospective lock update. Existing Best Angle confidence,
+EV, price and execution gates remain; source confirmation can replace a redundant
+model-market disagreement requirement. Paired promotions/demotions, exact-source and
+lock tests, same-input board impact, focused/full checks, protected fresh-main PR and
+post-merge live proof remain mandatory. Policy and evidence:
+`docs/model-audits/2026-11-02-nfl-symmetric-market-grades.md`.
 
 ## Owner-directed NFL source and qualification repair — November 2
 

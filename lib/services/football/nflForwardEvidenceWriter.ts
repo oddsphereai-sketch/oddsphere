@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isDeepStrictEqual } from "node:util";
+import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import type { IWeatherProvider } from "@/lib/providers/interfaces/IWeatherProvider";
 import { isPublicallyTracked } from "@/lib/config/officialTrackingStart";
 import { computeSlateDate } from "@/lib/dates/slateDate";
@@ -161,7 +162,7 @@ import {
 } from "./balldontlieNflWeeklyProjectionShadow";
 
 export const NFL_FORWARD_WRITER_RELEASE =
-  "nfl_forward_evidence_writer_2026_11_02_r104_source_qualified_market_read" as const;
+  "nfl_forward_evidence_writer_2026_11_02_r105_market_conviction_grades" as const;
 
 export type NflForwardWriterResult = {
   writerRelease: typeof NFL_FORWARD_WRITER_RELEASE;
@@ -1080,6 +1081,7 @@ export async function runNflForwardEvidenceWriter(args: {
     const candidate = useInnovation ? applyNflMarketInnovationRuntime({
       ...candidateArgs, independentInputPolicy: "market_inputs_prohibited",
       history: episodeHistory, referenceBooks: namedCurrentBooks, sourceReactionContext,
+      executionAvailableAt: slate.currentOddsFetchedAt,
     }) : { ...applyNflFullGameEvidenceRuntime(candidateArgs), innovation: undefined };
     return { ...candidate, marketImpliedMargin, marketImpliedTotal };
     };
@@ -1691,14 +1693,16 @@ export function hasImmutableNflLockedRecord(
   return rows.some((row) => row.providerGameId === providerGameId && hasNflStoredLockedDecision(row));
 }
 
-/** Ensure a provider quote can never appear newer than the decision consuming it. */
+/** A provider quote and its real receipt cannot postdate the consuming decision. */
 export function nflEvidenceCapturedAt(writerNow: string, books: NflPreviewBookOdds[]): string {
   const writerTime = Date.parse(writerNow);
   if (!Number.isFinite(writerTime)) throw new Error("NFL writer capture time is invalid.");
   const latestQuoteTime = books.reduce((latest, book) => {
     const observedAt = Date.parse(book.observedAt);
     if (!Number.isFinite(observedAt)) throw new Error(`NFL quote time is invalid for ${book.sportsbook}.`);
-    return Math.max(latest, observedAt);
+    const availableAt = book.availableAt === undefined ? observedAt : Date.parse(book.availableAt);
+    if (!Number.isFinite(availableAt)) throw new Error(`NFL quote receipt time is invalid for ${book.sportsbook}.`);
+    return Math.max(latest, observedAt, availableAt);
   }, writerTime);
   return new Date(latestQuoteTime).toISOString();
 }
@@ -2173,16 +2177,19 @@ export async function writeOfficialTrackingFromPayloads(args: {
   const externalIds = payloads.map((payload) => nflProviderIntegerId(payload.game.providerGameId, "game"));
   let existingQuery = args.client
     .from("prediction_records")
-    .select("id,external_id,market,pick,line_value,odds_american,play_grade,model_probability,model_version,locked_at,snapshot_json")
+    .select(recovery
+      ? "id,external_id,market,pick,line_value,odds_american,play_grade,model_probability,model_version,locked_at,snapshot_json"
+      : "id,external_id,market,locked_at")
     .eq("sport", "nfl")
     .in("external_id", externalIds);
   if (!recovery) existingQuery = existingQuery.eq("model_version", decisionRelease);
-  const { data: existingRows, error: existingError } = await existingQuery;
+  const { data: existingData, error: existingError } = await existingQuery;
+  const existingRows = existingData as unknown as PredictionRecordRow[] | null;
   if (existingError) throw new Error(`NFL tracking record read failed: ${existingError.message}`);
   if (recovery && (existingRows ?? []).length > 0 &&
       ((existingRows ?? []).length !== 3 || new Set(existingRows?.map(row => row.market)).size !== 3 ||
       (existingRows ?? []).some(row => {
-        const receipt = row.snapshot_json?.published_pregame_recovery;
+        const receipt = row.snapshot_json?.published_pregame_recovery as NflPublishedPregameRecovery | undefined;
         const original = recoverySource?.payload.decisions.evaluatedBets.find(decision => decision.market === row.market);
         return !row.locked_at || receipt?.sourcePayloadSha256 !== recovery.receipt.sourcePayloadSha256 ||
           receipt?.failedPayloadSha256 !== recovery.receipt.failedPayloadSha256 || !original ||

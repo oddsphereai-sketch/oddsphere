@@ -14,6 +14,7 @@ import {
 import {
   buildNflWeekOneHeldMemberFixture,
   NFL_WEEK_ONE_HELD_MEMBER_FIXTURE_RELEASE,
+  type NflWeekOneHeldMemberFixture,
 } from "../lib/services/football/nflWeekOneHeldMemberFixture";
 import {
   getNflV1WeekOneOutcomeForecast,
@@ -145,6 +146,21 @@ for (const row of currentEquivalent) {
 }
 assert.deepEqual(r51Fixture.snapshot.games, buildNflWeekOneHeldMemberFixture(currentEquivalent).snapshot.games,
   "legacy admission must not reinterpret the same stored projection, decision, price or recommendation fields");
+const sourceQualifiedRows = structuredClone(r51Rows);
+for (const row of sourceQualifiedRows.slice(1)) {
+  row.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_11_02_r53_source_qualified_market_read";
+  row.payload.decisions.evaluatedBets.forEach((decision) => {
+    decision.decisionRelease = "nfl_v1_daily_edge_decision_2026_11_02_r56_source_qualified_market_read";
+  });
+}
+const sourceQualifiedRowsBefore = JSON.stringify(sourceQualifiedRows);
+assert.deepEqual(buildNflWeekOneHeldMemberFixture(sourceQualifiedRows).snapshot.games, r51Fixture.snapshot.games,
+  "r53/r56 locked fields retain exact rendering while future unlocked grades advance to r54/r57");
+assert.equal(JSON.stringify(sourceQualifiedRows), sourceQualifiedRowsBefore);
+const mixedSourceQualifiedRows = structuredClone(sourceQualifiedRows);
+mixedSourceQualifiedRows[1]!.payload.decisions.evaluatedBets[0]!.decisionRelease = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
+assert.throws(() => buildNflWeekOneHeldMemberFixture(mixedSourceQualifiedRows), /coverage is 15\/16 games/,
+  "old-member/new-decision mixtures do not qualify as immutable predecessor tuples");
 const oldLock = r51Rows[1]!;
 const oldPayload = oldLock.payload as NflForwardEvidencePayload;
 const lockedGame = r51Fixture.snapshot.games.find((game) => game.id === `nfl-${oldLock.providerGameId}`)!;
@@ -1072,4 +1088,40 @@ function comparableBooks(current: NflPreviewBookOdds): NflPreviewBookOdds[] {
     { ...structuredClone(current), sportsbook: "draftkings" },
     { ...structuredClone(current), sportsbook: "caesars" },
   ];
+}
+
+// Optional frozen-production proof: SELECT-only artifacts are supplied explicitly
+// by the operator; normal unit tests have no filesystem or provider dependency.
+const frozenRowsPath = process.argv.find((arg) => arg.startsWith("--frozen-rows="))?.slice("--frozen-rows=".length);
+const frozenPublicationPath = process.argv.find((arg) => arg.startsWith("--frozen-publication="))?.slice("--frozen-publication=".length);
+if (frozenRowsPath || frozenPublicationPath) {
+  assert.ok(frozenRowsPath && frozenPublicationPath, "both frozen artifact paths are required");
+  const frozenRows = JSON.parse(readFileSync(frozenRowsPath, "utf8")) as NflForwardStoredEvidence[];
+  const frozenPublication = JSON.parse(readFileSync(frozenPublicationPath, "utf8")) as {
+    snapshot: { fixture: NflWeekOneHeldMemberFixture };
+  };
+  const previousFixture = frozenPublication.snapshot.fixture!;
+  const history = frozenRows.filter((row) => row.stage === "t60");
+  assert.equal(history.length, 13, "the frozen current cohort contains 13 historical T-60 capture records");
+  const forward = frozenRows.filter((row) => row.providerGameId === "1392336" &&
+    row.payload.decisions.evaluatedBets.length === 3).at(-1)!;
+  assert.ok(forward, "frozen cohort must retain the one future game for the new release");
+  const current = structuredClone(forward);
+  current.payload.decisions.modelPromotionStatus = NFL_V1_ACTIONABLE_GRADE_MEMBER_RELEASE;
+  current.payload.decisions.evaluatedBets.forEach((decision) => {
+    decision.decisionRelease = NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE;
+  });
+  const historyBefore = JSON.stringify(history);
+  const publicBefore = JSON.stringify(previousFixture);
+  const rebuilt = buildNflWeekOneHeldMemberFixture([...history, forward, current], { previousFixture });
+  const historicalCards = previousFixture.snapshot.games.filter((game) => game.id !== `nfl-${forward.providerGameId}`);
+  assert.equal(historicalCards.length, 13);
+  for (const game of historicalCards) {
+    assert.deepEqual(rebuilt.snapshot.games.find((next) => next.id === game.id), game,
+      "every historical public card, including the open-held failed PHI slot, remains opaque and unchanged");
+  }
+  assert.equal(rebuilt.snapshot.games.length, 14);
+  assert.equal(JSON.stringify(history), historyBefore);
+  assert.equal(JSON.stringify(previousFixture), publicBefore);
+  console.log("NFL frozen production continuity: all 13 historical cards unchanged, 14-game board retained; zero writes");
 }
