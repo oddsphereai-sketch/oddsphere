@@ -5,15 +5,18 @@ import type { CbbGame } from "@/lib/cbb/types";
 import type { CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { adaptCbbProvisionalGame, cbbOfficialGameResult } from "./adaptCbbProvisionalToDailyEdge";
+import { mergeCbbReaderEvidence } from "./cbbReaderMarketEvidence";
+import { accumulateCbbPublishedQuotes, BOOK_DISPLAY_HISTORY_RELEASE, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
-export const CBB_MEMBER_GAME_STORE_RELEASE="cbb_member_game_store_2026_10_29_r1_single_leased_writer" as const;
-export type CbbStoredMemberGame={release:typeof CBB_MEMBER_GAME_STORE_RELEASE;snapshot:CbbProvisionalSnapshot;memberGame:DailyEdgeGameDto};
+export const CBB_MEMBER_GAME_STORE_RELEASE="cbb_member_game_store_2026_11_02_r2_preserved_market_evidence" as const;
+type StoreRelease=typeof CBB_MEMBER_GAME_STORE_RELEASE|"cbb_member_game_store_2026_10_29_r1_single_leased_writer";
+export type CbbStoredMemberGame={release:StoreRelease;snapshot:CbbProvisionalSnapshot;memberGame:DailyEdgeGameDto};
 const key=(id:number)=>`cbb::member-game::${id}`;
 const valid=(value:unknown,id:number):value is CbbStoredMemberGame=>{
   if(!value||typeof value!=="object")return false;
   const row=value as Partial<CbbStoredMemberGame>;
   const markets=row.snapshot?.board?.rows;
-  return row.release===CBB_MEMBER_GAME_STORE_RELEASE&&row.snapshot?.gameId===id&&row.memberGame?.external_id===id&&
+  return (row.release===CBB_MEMBER_GAME_STORE_RELEASE||row.release==="cbb_member_game_store_2026_10_29_r1_single_leased_writer")&&row.snapshot?.gameId===id&&row.memberGame?.external_id===id&&
     row.memberGame?.sport==="cbb"&&row.memberGame?.gameStartAt===row.snapshot.startsAt&&
     row.memberGame?.lockedAt===row.snapshot.lockedAt&&Array.isArray(markets)&&markets.length===3&&
     new Set(markets.map(market=>market.market)).size===3&&
@@ -57,7 +60,7 @@ export async function readCbbMemberGames(ids:number[],db?:typeof supabase):Promi
  * This function never calls a provider or regrades a locked public record. */
 export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisionalBoard|null;
   homeLogo:string|null;awayLogo:string|null;now:string;splitEvidence?:ReturnType<typeof cbbCurrentSplitEvidence>|null;
-  marketQuotes?:CbbQuote[]},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
+  marketQuotes?:CbbQuote[];bookHistory?:BookDisplayFeed|null},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
   const client=db??(await import("@/lib/db/supabase")).supabase;
   const existing=await readCbbMemberGame(args.game.id,client);
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
@@ -66,8 +69,21 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   }
   const next=advanceCbbProvisionalSnapshot({existing:existing?.snapshot??null,candidate:args.candidate,
     startsAt:args.game.date,now:args.now});
-  const memberGame=adaptCbbProvisionalGame({game:args.game,snapshot:next,
+  const freezing=existing!==null&&next.lockedAt!==null;
+  const evidenceAt=freezing?Date.parse(args.game.date)-60*60_000:Date.parse(args.now);
+  const empty:BookDisplayFeed={release:BOOK_DISPLAY_HISTORY_RELEASE,sport:"cbb",fetchedAt:args.now,eventsAt:args.now,events:[],rows:[]};
+  const history=accumulateCbbPublishedQuotes(args.bookHistory??empty,existing?[existing.memberGame]:[],null,evidenceAt);
+  // A future lock freezes the existing published decision and evidence. It
+  // must not rebuild the DTO with empty split/quote arguments at the cutoff.
+  const candidate=freezing?structuredClone(existing.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,
     homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence,marketQuotes:args.marketQuotes});
+  const memberGame=mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
+  if(freezing){
+    memberGame.lockedAt=next.lockedAt;memberGame.lockState="locked";
+    for(const market of Object.values(memberGame.markets)){
+      market.lockedLineAmerican=market.priceAmerican;market.lockedLineAt=next.lockedAt;
+    }
+  }
   const record:CbbStoredMemberGame={release:CBB_MEMBER_GAME_STORE_RELEASE,snapshot:next,memberGame};
   const now=Date.parse(args.now);
   if(!Number.isFinite(now))throw new Error("CBB writer clock invalid");

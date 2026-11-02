@@ -79,6 +79,25 @@ async function main(){
   const captureOnly=await seedCbbGames({slateDate:"2026-11-01",season:2026,apiKey:"test",dryRun:true,capturedGames:[game],
     client:{calls:0,gamesForDates:async()=>{throw new Error("duplicate provider request forbidden");}} as unknown as CbbBallDontLieClient});
   assert.equal(captureOnly.games,1);assert.equal(captureOnly.providerCalls,0,"intraday sync reuses the exact provider capture");
+  const oneD1Provider={calls:2,gamesForDates:async()=>[{...game,home_team:{...home,conference_id:null}}]} as unknown as CbbBallDontLieClient;
+  const oneD1=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],provider:oneD1Provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
+  assert.equal(oneD1.published,1,"one verified D1 participant plus actual model history and a graded quote remains eligible");
+  const beforeEmpty=JSON.stringify([...stored]);
+  await assert.rejects(refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],provider,owls:noOdds,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot}),/current-evaluation coverage absent/);
+  assert.equal(JSON.stringify([...stored]),beforeEmpty,"an empty source response cannot erase prior completed evaluations");
+  const neitherProvider={calls:2,gamesForDates:async()=>[{...game,home_team:{...home,conference_id:null},visitor_team:{...away,conference_id:null}}]} as unknown as CbbBallDontLieClient;
+  const neither=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],provider:neitherProvider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
+  assert.equal(neither.published,0,"neither-D1 fixtures cannot enter the member board");
+  const unknownGame={...game,id:10882515,home_team:{...home,id:332,full_name:"St. Thomas-Minnesota Tommies",college:"St. Thomas-Minnesota",abbreviation:"STMN"}};
+  const unknownProvider={calls:2,gamesForDates:async()=>[unknownGame]} as unknown as CbbBallDontLieClient;
+  const unknownOdds={success:true,data:[{id:"named-stthomas",sport:"ncaab",commence_time:start,home_team:unknownGame.home_team.college,away_team:away.college,bookmakers:[{key:"fanduel",last_update:asOf,markets:[{key:"h2h",outcomes:[{name:unknownGame.home_team.college,price:-110},{name:away.college,price:-110}]}]}]}]};
+  const unknownOwls={...owls,odds:async()=>({body:unknownOdds}),splits:async()=>({body:splits})} as unknown as OwlsInsightClient;
+  const unknownSchedule={...schedule,games:schedule.games.map(g=>({...g,externalId:unknownGame.id,id:`cbb-${unknownGame.id}`,homeTeam:"STMN",homeTeamDisplayName:unknownGame.home_team.full_name}))};
+  const unknownFetcher=(async()=>new Response(JSON.stringify({events:[{...event,competitions:[{neutralSite:true,timeValid:true,competitors:[{homeAway:"home",team:{id:"2900",displayName:"St. Thomas Tommies",location:"St. Thomas"}},{homeAway:"away",team:{displayName:away.full_name,location:away.college}}]}]}]}))) as typeof fetch;
+  const beforeUnknown=JSON.stringify([...stored]);
+  const unknown=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],provider:unknownProvider,owls:unknownOwls,db,fetcher:unknownFetcher,loadSchedule:async()=>unknownSchedule,saveSnapshot});
+  assert.equal(unknown.sourceGames,1);assert.equal(unknown.published,0);assert.deepEqual(unknown.unpublishedIncomplete,[unknownGame.id]);
+  assert.equal(JSON.stringify([...stored]),beforeUnknown,"a real quote cannot manufacture a completed model or overwrite a prior record");
   const atLock=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-11-01T13:30:00Z",bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
   assert.equal(atLock.locked,1);assert.equal(atLock.trackingInserted,3);

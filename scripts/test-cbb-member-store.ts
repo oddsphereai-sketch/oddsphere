@@ -23,11 +23,32 @@ const db={from:(table:string)=>{assert.equal(table,"lab_response_snapshots");ret
   upsert:async(row:{payload:unknown})=>{writes++;payload=structuredClone(row.payload);return {error:null};},
 };}} as unknown as Parameters<typeof writeCbbMemberGame>[1];
 async function main(){
-  const first=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:before},db);
+  const bookHistory={release:"owls_book_display_history_2026_10_29_r1",sport:"cbb",fetchedAt:before,eventsAt:before,events:[],rows:[{
+    event:777,start,away:"ND",home:"VILL",kind:"spread",side:"home",book:"fanduel",providerEventId:"published:777",checkedAt:before,opening:null,
+    quotes:[[Date.parse("2026-11-01T16:00:00Z"),-110,-8.5],[Date.parse(base.providerObservedAt),-105,-7.5]],observedQuotes:true,
+  }]} as NonNullable<Parameters<typeof writeCbbMemberGame>[0]["bookHistory"]>;
+  const splitEvidence={release:"cbb_split_evidence_2026_11_02_r2_verified_source_event_identity",eventId:"ncaab:ND@VILL-20261101",feedStatus:"ok",reason:"observed_no_prediction_authority",rows:[
+    {market:"moneyline",selection:"first",sourceBook:"circa",observedAt:base.providerObservedAt,ticketsPct:.2,moneyPct:.4,moneyMinusTicketsPoints:20},
+    {market:"moneyline",selection:"second",sourceBook:"circa",observedAt:base.providerObservedAt,ticketsPct:.8,moneyPct:.6,moneyMinusTicketsPoints:-20},
+  ]} as NonNullable<Parameters<typeof writeCbbMemberGame>[0]["splitEvidence"]>;
+  const first=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:before,bookHistory,splitEvidence},db);
+  assert.deepEqual(first.record.memberGame.markets.first_inning.lineTrail?.map(s=>s.line),[-8.5,-7.5],"the real collector tape is persisted with the evaluated tuple");
+  assert.deepEqual(first.record.memberGame.markets.moneyline.sportsbookSplits?.rows.map(r=>[r.betsPct,r.moneyPct]),[[20,40],[80,60]],"source fractions become member percentages exactly once");
   assert.equal(first.written,true);assert.equal(writes,1);assert.equal(first.record.memberGame.cbbHomeCollege,"Villanova");
   const frozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:"2026-11-01T18:00:00Z"},db);
   assert.equal(frozen.record.snapshot.lockedAt,"2026-11-01T18:00:00Z");assert.equal(writes,2);
+  assert.deepEqual(frozen.record.memberGame.markets.first_inning.lineTrail,first.record.memberGame.markets.first_inning.lineTrail,"future locks preserve the captured line history");
+  assert.deepEqual(frozen.record.memberGame.markets.moneyline.sportsbookSplits,first.record.memberGame.markets.moneyline.sportsbookSplits,"future locks preserve actual split evidence");
+  for(const key of ["moneyline","first_inning","total"] as const){
+    for(const field of ["pick","priceAmerican","modelProb","line","verdict"] as const)
+      assert.deepEqual(frozen.record.memberGame.markets[key][field],first.record.memberGame.markets[key][field],"freezing cannot reinterpret the published decision");
+  }
   const exact=JSON.stringify(payload);
+  const legacy=structuredClone(frozen.record);legacy.release="cbb_member_game_store_2026_10_29_r1_single_leased_writer";
+  payload=legacy;const legacyBytes=JSON.stringify(payload);
+  const legacyResult=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-01T18:10:00Z",bookHistory},db);
+  assert.equal(legacyResult.written,false);assert.equal(JSON.stringify(legacyResult.record),legacyBytes,"legacy locked fields and reader precedence remain byte-exact");
+  payload=structuredClone(frozen.record);
   const later=await writeCbbMemberGame({game,candidate:{...board,score:{...board.score,home:80,margin:12,total:148}},
     homeLogo:"https://example.com/new.png",awayLogo:null,now:"2026-11-01T18:30:00Z"},db);
   assert.equal(later.written,false);assert.equal(writes,2);assert.equal(JSON.stringify(payload),exact,"writer must not touch locked DTO");

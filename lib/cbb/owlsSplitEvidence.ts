@@ -1,10 +1,11 @@
-import { canonicalCbbTeamName } from "./dataset";
+import { cbbProviderInstitutionName as canonicalCbbTeamName } from "./providerInstitutionIdentity";
+import { computeSlateDate } from "../dates/slateDate";
 import type { CbbGame, CbbMarket } from "./types";
 import type { RawOwlsOddsResponse } from "../providers/owls/owlsSharpBookOdds";
 import { normalizeOwlsSharpBookSplits, selectAllInternalNamedBookSplits,
   type RawOwlsSplitsResponse } from "../providers/owls/owlsSharpBookSplits";
 
-export const CBB_SPLIT_EVIDENCE_RELEASE = "cbb_candidate_2026_10_29_r1_exact_event_split_evidence" as const;
+export const CBB_SPLIT_EVIDENCE_RELEASE = "cbb_split_evidence_2026_11_02_r2_verified_source_event_identity" as const;
 type CbbSplitSelection = "first" | "second";
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 const names = (team: CbbGame["home_team"]) => [team.full_name, team.college].filter(Boolean)
@@ -28,13 +29,19 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
   const normalized = normalizeOwlsSharpBookSplits(splits, "ncaab");
   // Owl's may repeat one event ID once per book. Distinct event IDs are ambiguous;
   // repeated rows for the same verified fixture are not.
-  if (ids.length !== 1) return { release: CBB_SPLIT_EVIDENCE_RELEASE,
+  if (ids.length === 0) return { release: CBB_SPLIT_EVIDENCE_RELEASE,
     eventId: null, feedStatus: normalized.feedStatus, rows: [],
     reason: ids.length === 0 ? "exact_odds_event_unavailable" : "ambiguous_odds_event" };
-  const providerEvent = (splits.data ?? []).filter(row => String(row.event_id ?? "") === ids[0]);
+  const dates = new Set([game.date.slice(0,10).replaceAll("-",""),computeSlateDate("cbb",game.date).replaceAll("-","")]);
+  const providerEvent = (splits.data ?? []).filter(row => {
+    const id=String(row.event_id??""),date=id.match(/-(\d{8})$/)?.[1];
+    const h=canonicalCbbTeamName(String(row.home_team??"")),a=canonicalCbbTeamName(String(row.away_team??""));
+    return ids.includes(id)||date&&dates.has(date)&&((home.includes(h)&&away.includes(a))||(home.includes(a)&&away.includes(h)));
+  });
   if (providerEvent.length !== 1) return { release: CBB_SPLIT_EVIDENCE_RELEASE,
     eventId: ids[0], feedStatus: normalized.feedStatus, rows: [],
     reason: providerEvent.length === 0 ? "event_split_unavailable" : "ambiguous_split_event" };
+  const splitEventId=String(providerEvent[0].event_id);
   const splitHome = canonicalCbbTeamName(String(providerEvent[0].home_team ?? ""));
   const splitAway = canonicalCbbTeamName(String(providerEvent[0].away_team ?? ""));
   const direct = home.includes(splitHome) && away.includes(splitAway);
@@ -42,7 +49,7 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
   if (!direct && !reversed) return { release: CBB_SPLIT_EVIDENCE_RELEASE,
     eventId: ids[0], feedStatus: normalized.feedStatus, rows: [], reason: "split_participant_mismatch" };
   const rows = MARKETS.flatMap(market => selectAllInternalNamedBookSplits(normalized.observations, {
-    providerEventId: ids[0], market, nowMs: cutoff, maxAgeMs: 60 * 60_000,
+    providerEventId: splitEventId, market, nowMs: cutoff, maxAgeMs: 3 * 60 * 60_000,
   }).filter(row => Date.parse(row.observedAt) <= receipt && Date.parse(row.observedAt) < start)
     .map(row => {
       const selection: CbbSplitSelection = market === "total" ? row.side === "over" ? "first" : "second" :
@@ -52,6 +59,6 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
         moneyMinusTicketsPoints: row.moneyPct === null || row.betsPct === null ? null :
           (row.moneyPct - row.betsPct) * 100 };
     }));
-  return { release: CBB_SPLIT_EVIDENCE_RELEASE, eventId: ids[0], feedStatus: normalized.feedStatus,
+  return { release: CBB_SPLIT_EVIDENCE_RELEASE, eventId: splitEventId, feedStatus: normalized.feedStatus,
     rows, reason: rows.length ? "observed_no_prediction_authority" : "no_fresh_coherent_split_pair" };
 }
