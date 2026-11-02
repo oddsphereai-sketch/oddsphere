@@ -4,7 +4,7 @@ import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";
 import { advanceCbbProvisionalSnapshot } from "../lib/cbb/provisionalLifecycle";
 import { adaptCbbProvisionalGame,cbbDailyEdgeResponse } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import { writeCbbMemberGame,type CbbStoredMemberGame } from "../lib/services/cbb/cbbMemberGameStore";
-import { mergeCbbCapturedNamedSplitEvidence,type CbbCapturedNamedSplitFeed } from "../lib/services/cbb/cbbReaderMarketEvidence";
+import { mergeCbbCapturedNamedSplitEvidence,mergeCbbReaderEvidence,cbbQualifiedPublicSplitSection,type CbbCapturedNamedSplitFeed,type CbbCapturedPublicSplitRow } from "../lib/services/cbb/cbbReaderMarketEvidence";
 import { applySharpApiCurrentSplitOverlay } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
 async function main(){
@@ -27,7 +27,18 @@ async function main(){
     moneyline:pair,spread:pair,total:{bets_pct:{over:.6,under:.4},handle_pct:{over:.8,under:.2}}};
   const feed:CbbCapturedNamedSplitFeed={source:"owls_current_splits",release:"owls_current_splits_2026_10_27_r1_complete_named_book",sport:"cbb",fetchedAt:at,rows:[row]};
   const merge=(value:CbbCapturedNamedSplitFeed,input=response)=>mergeCbbCapturedNamedSplitEvidence(input,value,applySharpApiCurrentSplitOverlay,Date.parse(at));
-  const enriched=merge(feed),sections=Object.fromEntries(Object.entries(enriched.games[0].markets).map(([key,m])=>[key,m.sportsbookSplits!]));
+  const publicRows:CbbCapturedPublicSplitRow[]=["moneyline","spread","total"].flatMap(market=>(market==="total"?["over","under"]:["home","away"]).map((side,index)=>({
+    canonical_event_id:"777",market_type:market,selection_key:`777:${market}:${side}`,bets_pct:index?.4:.6,money_pct:index?.3:.7,
+    provider:"playbook",source_book:"consensus",source_type:"multi_book_consensus",source_observed_at:null,fetched_at:observed})));
+  const publicBoard=mergeCbbReaderEvidence(response,null,publicRows,Date.parse(at));
+  const enriched=merge(feed,publicBoard),sections=Object.fromEntries(Object.entries(enriched.games[0].markets).map(([key,m])=>[key,m.sportsbookSplits!]));
+  const publicSections=Object.fromEntries(Object.entries(enriched.games[0].markets).map(([key,m])=>[key,m.publicSplits]));
+  assert.deepEqual(publicSections.moneyline.map(row=>[row.betsPct,row.moneyPct]),[[60,70],[40,30]]);
+  assert.ok(publicSections.moneyline.every(row=>row.observedAt===observed&&row.freshnessCheckedAt===observed));
+  assert.equal(cbbQualifiedPublicSplitSection(publicSections.moneyline,"moneyline",Date.parse(at)),true);
+  assert.equal(cbbQualifiedPublicSplitSection(publicSections.moneyline,"moneyline",Date.parse("2026-11-02T15:26:00Z")),false);
+  const futureRows=publicRows.map(row=>({...row,source_observed_at:"2026-11-02T15:01:00Z"}));
+  assert.equal(mergeCbbReaderEvidence(response,null,futureRows,Date.parse(at)).games[0].markets.moneyline.publicSplits.length,0,"source clock cannot be later than its receipt");
   const reversed=merge({...feed,rows:[{...row,home_team:"Notre Dame",away_team:"Villanova"}]}).games[0].markets.moneyline.sportsbookSplits!;
   assert.equal(reversed.rows.find(r=>r.side==="home")?.moneyPct,20,"neutral-site reversal preserves source-side orientation");
   assert.equal(JSON.stringify(response),sourceBytes,"qualification never mutates the original board");
@@ -48,13 +59,18 @@ async function main(){
   let stored:CbbStoredMemberGame|null=null,writes=0;
   const db={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:stored?{payload:stored}:null,error:null})})}),
     upsert:async(row:{payload:CbbStoredMemberGame})=>{stored=structuredClone(row.payload);writes++;return {error:null};}})} as unknown as Parameters<typeof writeCbbMemberGame>[1];
-  const saved=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:at,capturedNamedSections:sections},db);
+  const saved=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:at,capturedNamedSections:sections,capturedPublicSections:publicSections},db);
   assert.deepEqual(saved.record.memberGame.markets.moneyline.sportsbookSplits,sections.moneyline);
+  assert.deepEqual(saved.record.memberGame.markets.moneyline.publicSplits,publicSections.moneyline);
+  const carried=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-02T15:05:00Z"},db);
+  assert.deepEqual(carried.record.memberGame.markets.moneyline.publicSplits,publicSections.moneyline,"a still-fresh prior observation survives temporary capture omission");
+  assert.deepEqual(carried.record.memberGame.markets.moneyline.sportsbookSplits,sections.moneyline);
   const frozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:"2026-11-02T17:00:00Z",capturedNamedSections:{}},db);
   assert.deepEqual(frozen.record.memberGame.markets.moneyline.sportsbookSplits,sections.moneyline,"future lock freezes the last published qualified source");
+  assert.deepEqual(frozen.record.memberGame.markets.moneyline.publicSplits,publicSections.moneyline,"future lock retains the original published public consensus");
   const bytes=JSON.stringify(stored);
   await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-02T17:10:00Z",capturedNamedSections:sections},db);
-  assert.equal(writes,2);assert.equal(JSON.stringify(stored),bytes,"existing locked payload has exact precedence");
+  assert.equal(writes,3);assert.equal(JSON.stringify(stored),bytes,"existing locked payload has exact precedence");
   console.log("PASS captured CBB splits: shared reader/writer rules, original clocks, identity/age/axis guards, unchanged decisions and immutable future locks");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

@@ -630,6 +630,23 @@ forward grading remain required. Exact locked payloads retain precedence.
   exact precedence. Public splits appear only if a provider actually returns
   a verified complete two-sided pair; no percentages are inferred from odds.
 
+## CBB November 2 public consensus persistence
+
+- Sole publisher `cbb_member_pipeline_2026_11_02_r10_public_split_continuity`
+  now persists both separate split lanes before future locks. Public consensus
+  uses the reader's same exact-game Playbook observations, complete axes and
+  original clocks, with a bounded 30-minute receipt window and 12,000-row cap.
+  Named-book selection and its three-hour source window remain unchanged.
+- Reader evidence `cbb_reader_evidence_2026_11_02_r5_public_receipt_cutoff`
+  shares the same bounded capture read and rejects source clocks later than
+  receipt. Still-valid prior public/named observations can survive a temporary
+  source omission without being retimestamped. Existing locked records return
+  exact; future locks freeze their previously published values.
+- Store schema remains r2, grade policy r2, board r5 and the same authoritative
+  sport lease remain. No provider request, score, probability, quote, selection,
+  grade, stake or actionable-count change. Evidence and rollback:
+  `docs/model-audits/2026-11-02-cbb-public-split-persistence.md`.
+
 ## CBB November 2 captured split persistence
 
 - Publisher `cbb_member_pipeline_2026_11_02_r9_captured_split_continuity` and

@@ -20,12 +20,12 @@ import { loadCbbRollingSchedule } from "./cbbRollingSchedule";
 import { dailyEdgeSnapshotKey, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import { writeLockedCbbTracking } from "./cbbTrackingWriter";
 import { readCbbCapturedMarketHistory,readCbbCapturedNamedSplits } from "./cbbCapturedMarketHistory";
-import { mergeCbbCapturedNamedSplitEvidence,type CbbPreparedNamedSplitSections } from "./cbbReaderMarketEvidence";
+import { mergeCbbCapturedNamedSplitEvidence,mergeCbbReaderEvidence,readCbbCapturedPublicSplits,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
 import { applySharpApiCurrentSplitOverlay } from "@/lib/providers/real_api/sharpApiCurrentSplits";
 import { advanceCbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r9_captured_split_continuity" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r10_public_split_continuity" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -141,7 +141,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   // Reuse the reader's qualified captured-source rule before the sole write;
   // never make per-game provider/DB requests or append evidence to a lock.
   const preparedSections=new Map<number,CbbPreparedNamedSplitSections>();
-  if(capturedSplits){
+  const preparedPublic=new Map<number,CbbPreparedPublicSplitSections>();
+  const publicRows=await readCbbCapturedPublicSplits(db,publishableGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)+60*60_000).map(game=>game.id),Date.parse(asOf))
+    .catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured public splits unavailable");return [];});
+  if(capturedSplits||publicRows.length){
     const previews=publishableGames.flatMap(game=>{
       const previous=prior.get(game.id),identity=scheduled.get(game.id),candidate=boardCandidates.get(game.id);
       if(previous?.snapshot.lockedAt||Date.parse(asOf)>=Date.parse(game.date)-60*60_000||!candidate||!identity)
@@ -149,12 +152,13 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       const snapshot=advanceCbbProvisionalSnapshot({existing:previous?.snapshot??null,candidate,startsAt:game.date,now:asOf});
       return [adaptCbbProvisionalGame({game,snapshot,homeLogo:identity.homeTeamLogo,awayLogo:identity.awayTeamLogo,now:asOf})];
     });
-    const enriched=mergeCbbCapturedNamedSplitEvidence(cbbDailyEdgeResponse(args.anchorDate,previews,asOf),capturedSplits,
+    const enriched=mergeCbbCapturedNamedSplitEvidence(mergeCbbReaderEvidence(cbbDailyEdgeResponse(args.anchorDate,previews,asOf),null,publicRows,Date.parse(asOf)),capturedSplits,
       applySharpApiCurrentSplitOverlay,Date.parse(asOf));
     for(const game of enriched.games){
       const sections:CbbPreparedNamedSplitSections={};
       for(const key of ["moneyline","first_inning","total"] as const){const section=game.markets[key].sportsbookSplits;if(section)sections[key]=section;}
       preparedSections.set(game.external_id,sections);
+      preparedPublic.set(game.external_id,Object.fromEntries(Object.entries(game.markets).filter(([,market])=>market.publicSplits.length===2).map(([key,market])=>[key,market.publicSplits])));
     }
   }
   let written=0,locked=0,held=0,missingLogos=0,trackingInserted=0;
@@ -184,7 +188,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     }
     const result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
       awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
-      capturedNamedSections:preparedSections.get(game.id)},db);
+      capturedNamedSections:preparedSections.get(game.id),capturedPublicSections:preparedPublic.get(game.id)},db);
     if(result.written)written++;
     if(result.record.snapshot.lockedAt)locked++;
     trackingInserted+=await writeLockedCbbTracking(result.record,db);
