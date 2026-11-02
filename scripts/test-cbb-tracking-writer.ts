@@ -4,7 +4,9 @@ import { advanceCbbProvisionalSnapshot } from "../lib/cbb/provisionalLifecycle";
 import type { CbbForecast, CbbGame, CbbQuote } from "../lib/cbb/types";
 import { adaptCbbProvisionalGame } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import { CBB_MEMBER_GAME_STORE_RELEASE, type CbbStoredMemberGame } from "../lib/services/cbb/cbbMemberGameStore";
-import { writeLockedCbbTracking, cbbLockedGradeRelease } from "../lib/services/cbb/cbbTrackingWriter";
+import { writeLockedCbbTracking, cbbLockedGradeRelease, cbbLockedModelRelease } from "../lib/services/cbb/cbbTrackingWriter";
+import { CBB_SCORE_RESEARCH_RELEASE } from "../lib/cbb/scoreResearch";
+import { CBB_CURRENT_SCORE_RELEASE } from "../lib/cbb/currentScoreRuntime";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "../lib/cbb/provisionalGradePolicy";
 import { gradePrediction } from "../lib/services/predictionGrader";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
@@ -13,7 +15,7 @@ const start="2026-11-01T19:00:00Z",asOf="2026-11-01T17:00:00Z",lock="2026-11-01T
 const team=(id:number,name:string,abbr:string)=>({id,name,full_name:name,college:name,abbreviation:abbr,conference_id:1});
 const game:CbbGame={id:777,date:start,season:2026,status:"pre",period:0,home_score:0,away_score:0,
   home_team:team(1,"Villanova Wildcats","VILL"),visitor_team:team(2,"Notre Dame Fighting Irish","ND")};
-const forecast:CbbForecast={release:"test",gameId:777,asOf,homeId:1,awayId:2,homeScore:78,awayScore:68,margin:10,total:146,
+const forecast:CbbForecast={release:CBB_SCORE_RESEARCH_RELEASE,gameId:777,asOf,homeId:1,awayId:2,homeScore:78,awayScore:68,margin:10,total:146,
   possessions:69,homeWinProbability:.8,inputStatus:"complete",issues:[],uncertainty:{marginSd:11,totalSd:16,marginTotalCorrelation:0,
     marginCorrection:0,totalCorrection:0,fitThroughSeason:2025,games:3000}};
 const quote:CbbQuote={gameId:777,sportsbook:"fanduel",market:"moneyline",line:null,firstPrice:-300,secondPrice:250,
@@ -53,12 +55,21 @@ async function main(){
   const legacy=structuredClone(record);
   Object.assign(legacy.snapshot.board,{release:"cbb_candidate_2026_11_02_r4_supported_market_coverage"});
   Reflect.deleteProperty(legacy.snapshot.board,"gradeRelease");
+  Reflect.deleteProperty(legacy.snapshot.board,"modelRelease");
   const legacyBytes=JSON.stringify(legacy);
   rows.length=0;
   assert.equal(await writeLockedCbbTracking(legacy,db),3);
   assert.ok(rows.every(row=>row.calibration_version===CBB_LEGACY_PROVISIONAL_GRADE_RELEASE),"legacy locks retain their own grade release after the new policy deploys");
   assert.equal(await writeLockedCbbTracking(legacy,db),0,"old-release tracking remains idempotent");
   assert.equal(JSON.stringify(legacy),legacyBytes,"tracking cannot stamp or reinterpret a legacy member lock");
+  assert.ok(rows.every(row=>row.model_version===CBB_SCORE_RESEARCH_RELEASE),"legacy locks retain the exact model release");
+  const current=structuredClone(record);current.snapshot.board.modelRelease=CBB_CURRENT_SCORE_RELEASE;
+  rows.length=0;
+  assert.equal(await writeLockedCbbTracking(current,db),3);
+  assert.ok(rows.every(row=>row.model_version===CBB_CURRENT_SCORE_RELEASE));
+  assert.equal(await writeLockedCbbTracking(current,db),0);
+  assert.throws(()=>cbbLockedModelRelease({release:"unknown"}),/missing its model release/);
+  assert.throws(()=>cbbLockedModelRelease({release:"unknown",modelRelease:"unknown"}),/unknown/);
   assert.equal(cbbLockedGradeRelease(record.snapshot.board),CBB_PROVISIONAL_GRADE_RELEASE);
   assert.throws(()=>cbbLockedGradeRelease({release:"unknown"}),/missing its grade release/);
   assert.throws(()=>cbbLockedGradeRelease({release:"unknown",gradeRelease:"unknown"}),/unknown/);

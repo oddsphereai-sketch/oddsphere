@@ -1,0 +1,3703 @@
+{
+  "at": "2026-11-02T18:47:34.575Z",
+  "fitCalls": 0,
+  "productionWrites": 0,
+  "providerCallsDuringEvaluation": 0,
+  "headRelease": "cbb_candidate_2026_10_29_r17_total_only_opening_reader",
+  "headHash": "bd61b27ee8e37e6149f29b09bdca40514cfb2c8eed1ee6476ccb786ec78ac018",
+  "trainingInformationThrough": "2026-03-27T05:10:00.000Z",
+  "actualArtifactHistoricalAvailability": "HeadwascreatedOctober2026;trainedThroughisnotproofthatitexistedMarch2026.AllMarchAprilresultsareretrospective.",
+  "membership": {
+    "rule": "Everyoriginalnormalized2025gameafterheadtrainedThrough,nofilterbyoutcome",
+    "games": 21,
+    "ids": [
+      2798620,
+      2798618,
+      2798619,
+      2798617,
+      2798622,
+      2798621,
+      2798624,
+      2798623,
+      3204677,
+      3204678,
+      3204682,
+      3204679,
+      3204681,
+      3204680,
+      3204683,
+      3204684,
+      2798626,
+      2798625,
+      3204687,
+      3204688,
+      2798627
+    ]
+  },
+  "coverage": {
+    "rawOffers": 158,
+    "sourceGames": 23,
+    "priced": 21,
+    "excluded": [],
+    "trainingChronologyEligible": 11,
+    "applied": 5,
+    "fullOriginalReferenceCoverage": 5,
+    "fallbacks": {
+      "head_training_information_not_yet_available": 10,
+      "no_target_excluded_reference": 2,
+      "independent_fixture_orientation_unavailable": 4
+    }
+  },
+  "results": {
+    "allPriced": {
+      "baseline": {
+        "score": {
+          "games": 21,
+          "wins": 13,
+          "losses": 8,
+          "accuracy": 0.6190476190476191,
+          "alwaysHomeAccuracy": 0.6190476190476191,
+          "brier": 0.22240817814696467,
+          "logLoss": 0.6345077487599641,
+          "teamScoreMae": 8.561707635091333,
+          "marginMae": 10.0480429016996,
+          "totalMae": 12.954174610558436,
+          "calibrationGap": 0.1464255717611607,
+          "margin90Coverage": 0.9047619047619048,
+          "total90Coverage": 0.9047619047619048,
+          "incompleteInputs": 0,
+          "calibration": [
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.3400654610725005,
+              "frequency": 1
+            },
+            {
+              "n": 5,
+              "probability": 0.44428169801787865,
+              "frequency": 0.4
+            },
+            {
+              "n": 2,
+              "probability": 0.5416536609834592,
+              "frequency": 0
+            },
+            {
+              "n": 7,
+              "probability": 0.6419338282787811,
+              "frequency": 0.7142857142857143
+            },
+            {
+              "n": 6,
+              "probability": 0.7326960910079948,
+              "frequency": 0.8333333333333334
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            }
+          ]
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 13,
+            "losses": 8,
+            "pushes": 0,
+            "accuracy": 0.6190476190476191,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -1.8112027417847771,
+            "brier": 0.22240817814696467,
+            "logLoss": 0.6345077487599641
+          },
+          "spread": {
+            "wins": 8,
+            "losses": 13,
+            "pushes": 0,
+            "accuracy": 0.38095238095238093,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -5.807740809914723,
+            "brier": 0.2689205258740746,
+            "logLoss": 0.7311061444816034
+          },
+          "total": {
+            "wins": 9,
+            "losses": 12,
+            "pushes": 0,
+            "accuracy": 0.42857142857142855,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -3.747835497835498,
+            "brier": 0.2617885847352334,
+            "logLoss": 0.717785590873354
+          }
+        }
+      },
+      "candidate": {
+        "score": {
+          "games": 21,
+          "wins": 13,
+          "losses": 8,
+          "accuracy": 0.6190476190476191,
+          "alwaysHomeAccuracy": 0.6190476190476191,
+          "brier": 0.22240817814696467,
+          "logLoss": 0.6345077487599641,
+          "teamScoreMae": 8.680201762839184,
+          "marginMae": 10.0480429016996,
+          "totalMae": 13.334186398344869,
+          "calibrationGap": 0.1464255717611607,
+          "margin90Coverage": 0.9047619047619048,
+          "total90Coverage": 0.9047619047619048,
+          "incompleteInputs": 0,
+          "calibration": [
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.3400654610725005,
+              "frequency": 1
+            },
+            {
+              "n": 5,
+              "probability": 0.44428169801787865,
+              "frequency": 0.4
+            },
+            {
+              "n": 2,
+              "probability": 0.5416536609834592,
+              "frequency": 0
+            },
+            {
+              "n": 7,
+              "probability": 0.6419338282787811,
+              "frequency": 0.7142857142857143
+            },
+            {
+              "n": 6,
+              "probability": 0.7326960910079948,
+              "frequency": 0.8333333333333334
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            }
+          ]
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 13,
+            "losses": 8,
+            "pushes": 0,
+            "accuracy": 0.6190476190476191,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -1.8112027417847771,
+            "brier": 0.22240817814696467,
+            "logLoss": 0.6345077487599641
+          },
+          "spread": {
+            "wins": 8,
+            "losses": 13,
+            "pushes": 0,
+            "accuracy": 0.38095238095238093,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -5.807740809914723,
+            "brier": 0.2689205258740746,
+            "logLoss": 0.7311061444816034
+          },
+          "total": {
+            "wins": 7,
+            "losses": 14,
+            "pushes": 0,
+            "accuracy": 0.3333333333333333,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -7.566017316017316,
+            "brier": 0.27110924743953996,
+            "logLoss": 0.7365538282156366
+          }
+        }
+      },
+      "paired": {
+        "moneyline": {
+          "corrections": 0,
+          "harms": 0
+        },
+        "spread": {
+          "corrections": 0,
+          "harms": 0
+        },
+        "total": {
+          "corrections": 0,
+          "harms": 2
+        }
+      }
+    },
+    "trainingChronologyEligible": {
+      "baseline": {
+        "score": {
+          "games": 11,
+          "wins": 6,
+          "losses": 5,
+          "accuracy": 0.5454545454545454,
+          "alwaysHomeAccuracy": 0.6363636363636364,
+          "brier": 0.23812773881866134,
+          "logLoss": 0.6692290569116699,
+          "teamScoreMae": 9.202265092408092,
+          "marginMae": 11.380387232542521,
+          "totalMae": 13.233193778005933,
+          "calibrationGap": 0.28422660981850684,
+          "margin90Coverage": 0.8181818181818182,
+          "total90Coverage": 0.9090909090909091,
+          "incompleteInputs": 0,
+          "calibration": [
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.3400654610725005,
+              "frequency": 1
+            },
+            {
+              "n": 2,
+              "probability": 0.4320694015105154,
+              "frequency": 0.5
+            },
+            {
+              "n": 2,
+              "probability": 0.5416536609834592,
+              "frequency": 0
+            },
+            {
+              "n": 3,
+              "probability": 0.6498578765299835,
+              "frequency": 1
+            },
+            {
+              "n": 3,
+              "probability": 0.7323210932400461,
+              "frequency": 0.6666666666666666
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            }
+          ]
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 6,
+            "losses": 5,
+            "pushes": 0,
+            "accuracy": 0.5454545454545454,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -2.340519428733386,
+            "brier": 0.23812773881866134,
+            "logLoss": 0.6692290569116699
+          },
+          "spread": {
+            "wins": 4,
+            "losses": 7,
+            "pushes": 0,
+            "accuracy": 0.36363636363636365,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -3.2284867306606437,
+            "brier": 0.2787823406966974,
+            "logLoss": 0.7512594159096551
+          },
+          "total": {
+            "wins": 5,
+            "losses": 6,
+            "pushes": 0,
+            "accuracy": 0.45454545454545453,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -1.4274891774891776,
+            "brier": 0.25619945667702204,
+            "logLoss": 0.7064105540711507
+          }
+        }
+      },
+      "candidate": {
+        "score": {
+          "games": 11,
+          "wins": 6,
+          "losses": 5,
+          "accuracy": 0.5454545454545454,
+          "alwaysHomeAccuracy": 0.6363636363636364,
+          "brier": 0.23812773881866134,
+          "logLoss": 0.6692290569116699,
+          "teamScoreMae": 9.428481154472173,
+          "marginMae": 11.380387232542521,
+          "totalMae": 13.958670827416396,
+          "calibrationGap": 0.28422660981850684,
+          "margin90Coverage": 0.8181818181818182,
+          "total90Coverage": 0.9090909090909091,
+          "incompleteInputs": 0,
+          "calibration": [
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.3400654610725005,
+              "frequency": 1
+            },
+            {
+              "n": 2,
+              "probability": 0.4320694015105154,
+              "frequency": 0.5
+            },
+            {
+              "n": 2,
+              "probability": 0.5416536609834592,
+              "frequency": 0
+            },
+            {
+              "n": 3,
+              "probability": 0.6498578765299835,
+              "frequency": 1
+            },
+            {
+              "n": 3,
+              "probability": 0.7323210932400461,
+              "frequency": 0.6666666666666666
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            }
+          ]
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 6,
+            "losses": 5,
+            "pushes": 0,
+            "accuracy": 0.5454545454545454,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -2.340519428733386,
+            "brier": 0.23812773881866134,
+            "logLoss": 0.6692290569116699
+          },
+          "spread": {
+            "wins": 4,
+            "losses": 7,
+            "pushes": 0,
+            "accuracy": 0.36363636363636365,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -3.2284867306606437,
+            "brier": 0.2787823406966974,
+            "logLoss": 0.7512594159096551
+          },
+          "total": {
+            "wins": 3,
+            "losses": 8,
+            "pushes": 0,
+            "accuracy": 0.2727272727272727,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -5.245670995670995,
+            "brier": 0.2739934491125164,
+            "logLoss": 0.7422408253609631
+          }
+        }
+      },
+      "paired": {
+        "moneyline": {
+          "corrections": 0,
+          "harms": 0
+        },
+        "spread": {
+          "corrections": 0,
+          "harms": 0
+        },
+        "total": {
+          "corrections": 0,
+          "harms": 2
+        }
+      }
+    },
+    "applied": {
+      "baseline": {
+        "score": {
+          "games": 5,
+          "wins": 2,
+          "losses": 3,
+          "accuracy": 0.4,
+          "alwaysHomeAccuracy": 0.6,
+          "brier": 0.29312318292154954,
+          "logLoss": 0.7869983675852676,
+          "teamScoreMae": 8.440995241558468,
+          "marginMae": 13.796280663199486,
+          "totalMae": 9.155601596643674,
+          "calibrationGap": 0.3924405716601991,
+          "margin90Coverage": 0.6,
+          "total90Coverage": 1,
+          "incompleteInputs": 0,
+          "calibration": [
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.3400654610725005,
+              "frequency": 1
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.5539699436114439,
+              "frequency": 0
+            },
+            {
+              "n": 1,
+              "probability": 0.6944787170696964,
+              "frequency": 1
+            },
+            {
+              "n": 2,
+              "probability": 0.7213885464158742,
+              "frequency": 0.5
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            }
+          ]
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 2,
+            "losses": 3,
+            "pushes": 0,
+            "accuracy": 0.4,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -2.3697270471464025,
+            "brier": 0.29312318292154954,
+            "logLoss": 0.7869983675852676
+          },
+          "spread": {
+            "wins": 1,
+            "losses": 4,
+            "pushes": 0,
+            "accuracy": 0.2,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -3.107142857142857,
+            "brier": 0.2937956143625927,
+            "logLoss": 0.781543163222055
+          },
+          "total": {
+            "wins": 3,
+            "losses": 2,
+            "pushes": 0,
+            "accuracy": 0.6,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": 0.7110389610389611,
+            "brier": 0.2430081079522332,
+            "logLoss": 0.6790342312002775
+          }
+        }
+      },
+      "candidate": {
+        "score": {
+          "games": 5,
+          "wins": 2,
+          "losses": 3,
+          "accuracy": 0.4,
+          "alwaysHomeAccuracy": 0.6,
+          "brier": 0.29312318292154954,
+          "logLoss": 0.7869983675852676,
+          "teamScoreMae": 8.938670578099448,
+          "marginMae": 13.796280663199486,
+          "totalMae": 10.75165110534669,
+          "calibrationGap": 0.3924405716601991,
+          "margin90Coverage": 0.6,
+          "total90Coverage": 1,
+          "incompleteInputs": 0,
+          "calibration": [
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.3400654610725005,
+              "frequency": 1
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 1,
+              "probability": 0.5539699436114439,
+              "frequency": 0
+            },
+            {
+              "n": 1,
+              "probability": 0.6944787170696964,
+              "frequency": 1
+            },
+            {
+              "n": 2,
+              "probability": 0.7213885464158742,
+              "frequency": 0.5
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            },
+            {
+              "n": 0,
+              "probability": null,
+              "frequency": null
+            }
+          ]
+        },
+        "markets": {
+          "moneyline": {
+            "wins": 2,
+            "losses": 3,
+            "pushes": 0,
+            "accuracy": 0.4,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -2.3697270471464025,
+            "brier": 0.29312318292154954,
+            "logLoss": 0.7869983675852676
+          },
+          "spread": {
+            "wins": 1,
+            "losses": 4,
+            "pushes": 0,
+            "accuracy": 0.2,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -3.107142857142857,
+            "brier": 0.2937956143625927,
+            "logLoss": 0.781543163222055
+          },
+          "total": {
+            "wins": 1,
+            "losses": 4,
+            "pushes": 0,
+            "accuracy": 0.2,
+            "corrections": 0,
+            "harms": 0,
+            "hypotheticalOneRiskedUnits": -3.107142857142857,
+            "brier": 0.28215489131032073,
+            "logLoss": 0.7578608280378649
+          }
+        }
+      },
+      "paired": {
+        "moneyline": {
+          "corrections": 0,
+          "harms": 0
+        },
+        "spread": {
+          "corrections": 0,
+          "harms": 0
+        },
+        "total": {
+          "corrections": 0,
+          "harms": 2
+        }
+      }
+    }
+  },
+  "flips": [
+    {
+      "id": 2798623,
+      "market": "total",
+      "line": 134.5,
+      "old": "first",
+      "next": "second",
+      "oldResult": "win",
+      "newResult": "loss"
+    },
+    {
+      "id": 2798625,
+      "market": "total",
+      "line": 156.5,
+      "old": "first",
+      "next": "second",
+      "oldResult": "win",
+      "newResult": "loss"
+    }
+  ],
+  "gradeBoardImpact": {
+    "status": "Notqualifiedforlivecurrentquotegrading;phaseopeningandhistoricalretrievalclockremainexact.Noartificialcurrent/freshreceipt.",
+    "liveGradeChanges": 0
+  },
+  "limitations": [
+    "Smallalreadyopenedretrospectivecohort;headuntrainedmembershipisnotpristineholdout.",
+    "ArchivedBDLopeningpricesarenotcurrentOwlsprofessionalquotes/movement/splits.",
+    "OnlyfixtureIDhomeawaysemanticsavailable;noadditionalindependentnamedbooksidecertificationinthisboundedprobe.",
+    "R17changesTotalonlyandcannotfulfilmarket-informedmargin/winnerrequirement."
+  ],
+  "rowAudit": [
+    {
+      "asOf": "2026-03-23T00:31:03.416Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 2798620,
+      "date": "2026-03-27T23:10:00.000Z",
+      "baseTotal": 141.06444216047623,
+      "newTotal": 141.06444216047623,
+      "targets": [
+        {
+          "gameId": 2798620,
+          "sportsbook": "caesars",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -278,
+          "secondPrice": 222,
+          "providerObservedAt": "2026-03-23T00:31:03.416Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798620,
+          "sportsbook": "caesars",
+          "market": "spread",
+          "line": -6.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T00:31:03.416Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798620,
+          "sportsbook": "caesars",
+          "market": "total",
+          "line": 143.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T00:31:03.416Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betrivers",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betrivers",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betrivers",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-23T05:11:01.104Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 2798618,
+      "date": "2026-03-27T23:35:00.000Z",
+      "baseTotal": 168.9650261777834,
+      "newTotal": 168.9650261777834,
+      "targets": [
+        {
+          "gameId": 2798618,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -535,
+          "secondPrice": 400,
+          "providerObservedAt": "2026-03-23T05:11:01.104Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798618,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -10.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T05:11:01.104Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798618,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 176.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T05:11:01.104Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betrivers",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betrivers",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betrivers",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-23T04:11:01.086Z",
+      "sourceReceipt": "bdl-posttraining-opening-c9c0a6f29cf3851b.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 2798619,
+      "date": "2026-03-28T01:55:00.000Z",
+      "baseTotal": 137.49435521527508,
+      "newTotal": 137.49435521527508,
+      "targets": [
+        {
+          "gameId": 2798619,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -115,
+          "secondPrice": -105,
+          "providerObservedAt": "2026-03-23T04:11:01.086Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798619,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -1.5,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-03-23T04:11:01.086Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798619,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 137.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T04:11:01.086Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-23T01:11:01.133Z",
+      "sourceReceipt": "bdl-posttraining-opening-c9c0a6f29cf3851b.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 2798617,
+      "date": "2026-03-28T02:35:00.000Z",
+      "baseTotal": 136.7490618019228,
+      "newTotal": 136.7490618019228,
+      "targets": [
+        {
+          "gameId": 2798617,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -218,
+          "secondPrice": 180,
+          "providerObservedAt": "2026-03-23T01:11:01.133Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798617,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -4.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T01:11:01.133Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798617,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 137.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T01:11:01.133Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-27T05:27:01.218Z",
+      "sourceReceipt": "bdl-posttraining-opening-c9c0a6f29cf3851b.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "no_target_excluded_reference",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 2798622,
+      "date": "2026-03-28T22:09:00.000Z",
+      "baseTotal": 140.0213849751748,
+      "newTotal": 140.0213849751748,
+      "targets": [
+        {
+          "gameId": 2798622,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -290,
+          "secondPrice": 235,
+          "providerObservedAt": "2026-03-27T05:27:01.218Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798622,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -6.5,
+          "firstPrice": -115,
+          "secondPrice": -105,
+          "providerObservedAt": "2026-03-27T05:27:01.218Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798622,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 138.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-27T05:27:01.218Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-27T05:27:01.219Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "no_target_excluded_reference",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 2798621,
+      "date": "2026-03-29T00:59:00.000Z",
+      "baseTotal": 149.5353108554351,
+      "newTotal": 149.5353108554351,
+      "targets": [
+        {
+          "gameId": 2798621,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -270,
+          "secondPrice": 220,
+          "providerObservedAt": "2026-03-27T05:27:01.219Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798621,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -6.5,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-03-27T05:27:01.219Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798621,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 151.5,
+          "firstPrice": -115,
+          "secondPrice": -105,
+          "providerObservedAt": "2026-03-27T05:27:01.219Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-28T05:50:01.157Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": true,
+      "reason": "total_only_opening_price_context",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": true,
+      "availableReferenceMarkets": {
+        "moneyline": 3,
+        "spread": 3,
+        "total": 3
+      },
+      "referenceBooks": [
+        "betmgm",
+        "betrivers",
+        "fanduel"
+      ],
+      "id": 2798624,
+      "date": "2026-03-29T18:15:00.000Z",
+      "baseTotal": 146.03896747226966,
+      "newTotal": 144.97296271864192,
+      "targets": [
+        {
+          "gameId": 2798624,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -310,
+          "secondPrice": 250,
+          "providerObservedAt": "2026-03-28T05:50:01.157Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798624,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -7.5,
+          "firstPrice": -108,
+          "secondPrice": -112,
+          "providerObservedAt": "2026-03-28T05:50:01.157Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798624,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 146.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-28T05:50:01.157Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "betmgm",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -325,
+            "secondPrice": 260,
+            "providerObservedAt": "2026-03-28T05:19:02.651Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "betmgm",
+            "market": "spread",
+            "line": -7.5,
+            "firstPrice": -110,
+            "secondPrice": -110,
+            "providerObservedAt": "2026-03-28T05:19:02.651Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "betmgm",
+            "market": "total",
+            "line": 146.5,
+            "firstPrice": -115,
+            "secondPrice": -105,
+            "providerObservedAt": "2026-03-28T05:19:02.651Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "betrivers",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -335,
+            "secondPrice": 255,
+            "providerObservedAt": "2026-03-28T05:19:02.833Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "betrivers",
+            "market": "spread",
+            "line": -7.5,
+            "firstPrice": -114,
+            "secondPrice": -109,
+            "providerObservedAt": "2026-03-28T05:19:02.833Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "betrivers",
+            "market": "total",
+            "line": 145.5,
+            "firstPrice": -115,
+            "secondPrice": -108,
+            "providerObservedAt": "2026-03-28T05:19:02.833Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "fanduel",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -285,
+            "secondPrice": 230,
+            "providerObservedAt": "2026-03-28T05:49:15.812Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "fanduel",
+            "market": "spread",
+            "line": -7.5,
+            "firstPrice": -110,
+            "secondPrice": -110,
+            "providerObservedAt": "2026-03-28T05:49:15.812Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798624,
+            "sportsbook": "fanduel",
+            "market": "total",
+            "line": 145.5,
+            "firstPrice": -115,
+            "secondPrice": -105,
+            "providerObservedAt": "2026-03-28T05:49:15.812Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        }
+      ],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-28T05:50:01.158Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": true,
+      "reason": "total_only_opening_price_context",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": true,
+      "availableReferenceMarkets": {
+        "moneyline": 4,
+        "spread": 4,
+        "total": 4
+      },
+      "referenceBooks": [
+        "betmgm",
+        "betrivers",
+        "caesars",
+        "fanduel"
+      ],
+      "id": 2798623,
+      "date": "2026-03-29T21:05:00.000Z",
+      "baseTotal": 134.6310719932703,
+      "newTotal": 130.98285449089778,
+      "targets": [
+        {
+          "gameId": 2798623,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -205,
+          "secondPrice": 170,
+          "providerObservedAt": "2026-03-28T05:50:01.158Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798623,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -5.5,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-03-28T05:50:01.158Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798623,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 134.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-28T05:50:01.158Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "betmgm",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -200,
+            "secondPrice": 165,
+            "providerObservedAt": "2026-03-28T05:19:02.649Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "betmgm",
+            "market": "spread",
+            "line": -4.5,
+            "firstPrice": -115,
+            "secondPrice": -105,
+            "providerObservedAt": "2026-03-28T05:19:02.649Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "betmgm",
+            "market": "total",
+            "line": 133.5,
+            "firstPrice": -115,
+            "secondPrice": -105,
+            "providerObservedAt": "2026-03-28T05:19:02.649Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "betrivers",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -230,
+            "secondPrice": 180,
+            "providerObservedAt": "2026-03-28T05:19:02.831Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "betrivers",
+            "market": "spread",
+            "line": -5.5,
+            "firstPrice": -104,
+            "secondPrice": -120,
+            "providerObservedAt": "2026-03-28T05:19:02.831Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "betrivers",
+            "market": "total",
+            "line": 134.5,
+            "firstPrice": -109,
+            "secondPrice": -114,
+            "providerObservedAt": "2026-03-28T05:19:02.831Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "caesars",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -205,
+            "secondPrice": 170,
+            "providerObservedAt": "2026-03-28T05:19:03.200Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "caesars",
+            "market": "spread",
+            "line": -5,
+            "firstPrice": -110,
+            "secondPrice": -110,
+            "providerObservedAt": "2026-03-28T05:19:03.200Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "caesars",
+            "market": "total",
+            "line": 133.5,
+            "firstPrice": -110,
+            "secondPrice": -110,
+            "providerObservedAt": "2026-03-28T05:19:03.200Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "fanduel",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -210,
+            "secondPrice": 172,
+            "providerObservedAt": "2026-03-28T05:49:15.807Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "fanduel",
+            "market": "spread",
+            "line": -5.5,
+            "firstPrice": -104,
+            "secondPrice": -118,
+            "providerObservedAt": "2026-03-28T05:49:15.807Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798623,
+            "sportsbook": "fanduel",
+            "market": "total",
+            "line": 134.5,
+            "firstPrice": -106,
+            "secondPrice": -114,
+            "providerObservedAt": "2026-03-28T05:49:15.807Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        }
+      ],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-24T16:26:15.698Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204677,
+      "date": "2026-04-02T00:00:00.000Z",
+      "baseTotal": 154.01297909286092,
+      "newTotal": 154.01297909286092,
+      "targets": [
+        {
+          "gameId": 3204677,
+          "sportsbook": "fanduel",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": 188,
+          "secondPrice": -230,
+          "providerObservedAt": "2026-03-24T16:26:15.698Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204677,
+          "sportsbook": "fanduel",
+          "market": "spread",
+          "line": 5.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-24T16:26:15.698Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204677,
+          "sportsbook": "fanduel",
+          "market": "total",
+          "line": 162.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-24T16:26:15.698Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-24T16:26:15.700Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204678,
+      "date": "2026-04-02T03:15:00.000Z",
+      "baseTotal": 139.95293203919366,
+      "newTotal": 139.95293203919366,
+      "targets": [
+        {
+          "gameId": 3204678,
+          "sportsbook": "fanduel",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": 126,
+          "secondPrice": -152,
+          "providerObservedAt": "2026-03-24T16:26:15.700Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204678,
+          "sportsbook": "fanduel",
+          "market": "spread",
+          "line": 2.5,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-03-24T16:26:15.700Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204678,
+          "sportsbook": "fanduel",
+          "market": "total",
+          "line": 146.5,
+          "firstPrice": -115,
+          "secondPrice": -105,
+          "providerObservedAt": "2026-03-24T16:26:15.700Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-26T02:38:15.811Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204682,
+      "date": "2026-04-02T23:00:00.000Z",
+      "baseTotal": 156.18346448008253,
+      "newTotal": 156.18346448008253,
+      "targets": [
+        {
+          "gameId": 3204682,
+          "sportsbook": "fanduel",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -130,
+          "secondPrice": 108,
+          "providerObservedAt": "2026-03-26T02:38:15.811Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204682,
+          "sportsbook": "fanduel",
+          "market": "spread",
+          "line": -1.5,
+          "firstPrice": -120,
+          "secondPrice": -102,
+          "providerObservedAt": "2026-03-26T02:38:15.811Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204682,
+          "sportsbook": "fanduel",
+          "market": "total",
+          "line": 160.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-26T02:38:15.811Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-23T22:48:01.046Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204679,
+      "date": "2026-04-03T00:00:00.000Z",
+      "baseTotal": 130.57076036011313,
+      "newTotal": 130.57076036011313,
+      "targets": [
+        {
+          "gameId": 3204679,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T22:48:01.046Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204679,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": 1.5,
+          "firstPrice": -130,
+          "secondPrice": 110,
+          "providerObservedAt": "2026-03-23T22:48:01.046Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204679,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 133.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T22:48:01.046Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-26T14:16:15.902Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204681,
+      "date": "2026-04-03T01:47:00.000Z",
+      "baseTotal": 144.45205057932927,
+      "newTotal": 144.45205057932927,
+      "targets": [
+        {
+          "gameId": 3204681,
+          "sportsbook": "fanduel",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -275,
+          "secondPrice": 220,
+          "providerObservedAt": "2026-03-26T14:16:15.902Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204681,
+          "sportsbook": "fanduel",
+          "market": "spread",
+          "line": -6.5,
+          "firstPrice": -120,
+          "secondPrice": -102,
+          "providerObservedAt": "2026-03-26T14:16:15.902Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204681,
+          "sportsbook": "fanduel",
+          "market": "total",
+          "line": 149.5,
+          "firstPrice": -115,
+          "secondPrice": -105,
+          "providerObservedAt": "2026-03-26T14:16:15.902Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-23T22:42:00.969Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": false,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "head_training_information_not_yet_available",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204680,
+      "date": "2026-04-03T02:54:00.000Z",
+      "baseTotal": 147.27394865397042,
+      "newTotal": 147.27394865397042,
+      "targets": [
+        {
+          "gameId": 3204680,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -162,
+          "secondPrice": 136,
+          "providerObservedAt": "2026-03-23T22:42:00.969Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204680,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -2.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T22:42:00.969Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204680,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 148.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-23T22:42:00.969Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-04-02T17:20:01.351Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p1-5f0f54c0f547648f.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "independent_fixture_orientation_unavailable",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204683,
+      "date": "2026-04-04T17:30:00.000Z",
+      "baseTotal": 150.55690426086588,
+      "newTotal": 150.55690426086588,
+      "targets": [
+        {
+          "gameId": 3204683,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -102,
+          "secondPrice": -118,
+          "providerObservedAt": "2026-04-02T17:20:01.351Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204683,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": 1.5,
+          "firstPrice": -122,
+          "secondPrice": 102,
+          "providerObservedAt": "2026-04-02T17:20:01.351Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204683,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 157.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-04-02T17:20:01.351Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-04-03T18:14:01.106Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p1-5f0f54c0f547648f.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "independent_fixture_orientation_unavailable",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204684,
+      "date": "2026-04-04T20:14:00.000Z",
+      "baseTotal": 134.4752313615891,
+      "newTotal": 134.4752313615891,
+      "targets": [
+        {
+          "gameId": 3204684,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-04-03T18:14:01.106Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204684,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": 1.5,
+          "firstPrice": -130,
+          "secondPrice": 110,
+          "providerObservedAt": "2026-04-03T18:14:01.106Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204684,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 134.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-04-03T18:14:01.106Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-30T00:24:01.635Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": true,
+      "reason": "total_only_opening_price_context",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": true,
+      "availableReferenceMarkets": {
+        "moneyline": 3,
+        "spread": 3,
+        "total": 3
+      },
+      "referenceBooks": [
+        "betmgm",
+        "betrivers",
+        "fanduel"
+      ],
+      "id": 2798626,
+      "date": "2026-04-04T22:09:00.000Z",
+      "baseTotal": 136.68039817881137,
+      "newTotal": 137.26043685336128,
+      "targets": [
+        {
+          "gameId": 2798626,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": 114,
+          "secondPrice": -135,
+          "providerObservedAt": "2026-03-30T00:24:01.635Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798626,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": 2.5,
+          "firstPrice": -115,
+          "secondPrice": -105,
+          "providerObservedAt": "2026-03-30T00:24:01.635Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798626,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 139.5,
+          "firstPrice": -108,
+          "secondPrice": -112,
+          "providerObservedAt": "2026-03-30T00:24:01.635Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "betmgm",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": 110,
+            "secondPrice": -135,
+            "providerObservedAt": "2026-03-30T00:23:07.331Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "betmgm",
+            "market": "spread",
+            "line": 2.5,
+            "firstPrice": -118,
+            "secondPrice": -102,
+            "providerObservedAt": "2026-03-30T00:23:07.331Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "betmgm",
+            "market": "total",
+            "line": 139.5,
+            "firstPrice": -110,
+            "secondPrice": -110,
+            "providerObservedAt": "2026-03-30T00:23:07.331Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "betrivers",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": 110,
+            "secondPrice": -136,
+            "providerObservedAt": "2026-03-30T00:23:08.294Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "betrivers",
+            "market": "spread",
+            "line": 1.5,
+            "firstPrice": -105,
+            "secondPrice": -120,
+            "providerObservedAt": "2026-03-30T00:23:08.294Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "betrivers",
+            "market": "total",
+            "line": 139.5,
+            "firstPrice": -109,
+            "secondPrice": -114,
+            "providerObservedAt": "2026-03-30T00:23:08.294Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "fanduel",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": 114,
+            "secondPrice": -137,
+            "providerObservedAt": "2026-03-30T00:23:18.672Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "fanduel",
+            "market": "spread",
+            "line": 2.5,
+            "firstPrice": -120,
+            "secondPrice": -102,
+            "providerObservedAt": "2026-03-30T00:23:18.672Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798626,
+            "sportsbook": "fanduel",
+            "market": "total",
+            "line": 139.5,
+            "firstPrice": -110,
+            "secondPrice": -110,
+            "providerObservedAt": "2026-03-30T00:23:18.672Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        }
+      ],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-03-29T21:13:01.317Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p0-26072a4d84295969.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": true,
+      "reason": "total_only_opening_price_context",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": true,
+      "availableReferenceMarkets": {
+        "moneyline": 1,
+        "spread": 1,
+        "total": 1
+      },
+      "referenceBooks": [
+        "fanduel"
+      ],
+      "id": 2798625,
+      "date": "2026-04-05T01:19:00.000Z",
+      "baseTotal": 156.82392317524588,
+      "newTotal": 155.46647242531824,
+      "targets": [
+        {
+          "gameId": 2798625,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -115,
+          "secondPrice": -105,
+          "providerObservedAt": "2026-03-29T21:13:01.317Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798625,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -1.5,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-03-29T21:13:01.317Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798625,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 156.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-03-29T21:13:01.317Z",
+          "fetchedAt": "2026-11-02T18:37:22.210Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [
+        {
+          "quote": {
+            "gameId": 2798625,
+            "sportsbook": "fanduel",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -104,
+            "secondPrice": -115,
+            "providerObservedAt": "2026-03-29T21:12:16.534Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798625,
+            "sportsbook": "fanduel",
+            "market": "spread",
+            "line": 1.5,
+            "firstPrice": -122,
+            "secondPrice": 100,
+            "providerObservedAt": "2026-03-29T21:12:16.534Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798625,
+            "sportsbook": "fanduel",
+            "market": "total",
+            "line": 157.5,
+            "firstPrice": -110,
+            "secondPrice": -110,
+            "providerObservedAt": "2026-03-29T21:12:16.534Z",
+            "fetchedAt": "2026-11-02T18:37:22.210Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        }
+      ],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betrivers",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-04-05T02:54:01.261Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p1-5f0f54c0f547648f.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "independent_fixture_orientation_unavailable",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204687,
+      "date": "2026-04-05T21:30:00.000Z",
+      "baseTotal": 135.84480491804197,
+      "newTotal": 135.84480491804197,
+      "targets": [
+        {
+          "gameId": 3204687,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": 136,
+          "secondPrice": -162,
+          "providerObservedAt": "2026-04-05T02:54:01.261Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204687,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": 3.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-04-05T02:54:01.261Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204687,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 137.5,
+          "firstPrice": -108,
+          "secondPrice": -112,
+          "providerObservedAt": "2026-04-05T02:54:01.261Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-04-03T18:14:01.108Z",
+      "sourceReceipt": "bdl-posttraining-opening-c9c0a6f29cf3851b.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": false,
+      "reason": "independent_fixture_orientation_unavailable",
+      "sourceOrientationScope": "Unverifiedindependentfixture;baselinefallback",
+      "fullOriginalReferenceCoverage": false,
+      "availableReferenceMarkets": {
+        "moneyline": 0,
+        "spread": 0,
+        "total": 0
+      },
+      "referenceBooks": [],
+      "id": 3204688,
+      "date": "2026-04-06T00:00:00.000Z",
+      "baseTotal": 152.89263171526608,
+      "newTotal": 152.89263171526608,
+      "targets": [
+        {
+          "gameId": 3204688,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -225,
+          "secondPrice": 185,
+          "providerObservedAt": "2026-04-03T18:14:01.108Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204688,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -5.5,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-04-03T18:14:01.108Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 3204688,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 160.5,
+          "firstPrice": -108,
+          "secondPrice": -112,
+          "providerObservedAt": "2026-04-03T18:14:01.108Z",
+          "fetchedAt": "2026-11-02T18:34:26.106Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [],
+      "rejected": [
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "unverified_side_orientation"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "unverified_side_orientation"
+        }
+      ]
+    },
+    {
+      "asOf": "2026-04-05T04:35:01.047Z",
+      "sourceReceipt": "bdl-posttraining-remainder-p1-5f0f54c0f547648f.json",
+      "trainingChronologyEligible": true,
+      "actuallyExistedAtHistoricalCutoff": false,
+      "independentComplete": true,
+      "applied": true,
+      "reason": "total_only_opening_price_context",
+      "sourceOrientationScope": "IndependentlycorroboratedOwlfixturefromretainedprioraudit;notexactnamedbooksideproof",
+      "fullOriginalReferenceCoverage": true,
+      "availableReferenceMarkets": {
+        "moneyline": 1,
+        "spread": 1,
+        "total": 1
+      },
+      "referenceBooks": [
+        "betrivers"
+      ],
+      "id": 2798627,
+      "date": "2026-04-07T00:50:00.000Z",
+      "baseTotal": 145.59157244519284,
+      "newTotal": 146.9201083082301,
+      "targets": [
+        {
+          "gameId": 2798627,
+          "sportsbook": "draftkings",
+          "market": "moneyline",
+          "line": null,
+          "firstPrice": -325,
+          "secondPrice": 260,
+          "providerObservedAt": "2026-04-05T04:35:01.047Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798627,
+          "sportsbook": "draftkings",
+          "market": "spread",
+          "line": -7.5,
+          "firstPrice": -108,
+          "secondPrice": -112,
+          "providerObservedAt": "2026-04-05T04:35:01.047Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        },
+        {
+          "gameId": 2798627,
+          "sportsbook": "draftkings",
+          "market": "total",
+          "line": 144.5,
+          "firstPrice": -105,
+          "secondPrice": -115,
+          "providerObservedAt": "2026-04-05T04:35:01.047Z",
+          "fetchedAt": "2026-11-02T18:37:23.010Z",
+          "phase": "opening",
+          "provider": "balldontlie"
+        }
+      ],
+      "retained": [
+        {
+          "quote": {
+            "gameId": 2798627,
+            "sportsbook": "betrivers",
+            "market": "moneyline",
+            "line": null,
+            "firstPrice": -335,
+            "secondPrice": 245,
+            "providerObservedAt": "2026-04-05T04:34:02.924Z",
+            "fetchedAt": "2026-11-02T18:37:23.010Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798627,
+            "sportsbook": "betrivers",
+            "market": "spread",
+            "line": -7.5,
+            "firstPrice": -112,
+            "secondPrice": -112,
+            "providerObservedAt": "2026-04-05T04:34:02.924Z",
+            "fetchedAt": "2026-11-02T18:37:23.010Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        },
+        {
+          "quote": {
+            "gameId": 2798627,
+            "sportsbook": "betrivers",
+            "market": "total",
+            "line": 144.5,
+            "firstPrice": -110,
+            "secondPrice": -113,
+            "providerObservedAt": "2026-04-05T04:34:02.924Z",
+            "fetchedAt": "2026-11-02T18:37:23.010Z",
+            "phase": "opening",
+            "provider": "balldontlie"
+          },
+          "orientation": "fixture_corroborated",
+          "availability": "provider_archived_opening"
+        }
+      ],
+      "rejected": [
+        {
+          "book": "draftkings",
+          "market": "moneyline",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "spread",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "draftkings",
+          "market": "total",
+          "reason": "target_family_excluded"
+        },
+        {
+          "book": "fanduel",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "fanduel",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "caesars",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "moneyline",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "spread",
+          "reason": "future_or_invalid_quote"
+        },
+        {
+          "book": "betmgm",
+          "market": "total",
+          "reason": "future_or_invalid_quote"
+        }
+      ]
+    }
+  ]
+}

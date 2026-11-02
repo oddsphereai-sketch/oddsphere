@@ -1,0 +1,16 @@
+{
+  "originalDatasetSha256": "d2bde4460339e83a21e04864bc8168ec2236f25c21663288f8b2124ce4064e48",
+  "correctedDatasetSha256": "1b097a4cde620c583291ce56cd335be9fea968d908a8a565bda63cfa71ca4bbf",
+  "originalPriorCanonicalSha256": "e9da5485be05807cbc38ce64b3a557131949e33ae1691690ca48734f2a93b33d",
+  "recreatedPriorCanonicalSha256": "e9da5485be05807cbc38ce64b3a557131949e33ae1691690ca48734f2a93b33d",
+  "baselinePriorDeepExact": true,
+  "baselineForecastsReproduced": 1070,
+  "maxForecastDelta": 0,
+  "baselineForecastMismatches": 0,
+  "originalAndCandidateTargetHashesEqual": true,
+  "targetQuotesSha256": "3ca0af5a84f1e47dc47c081dcf540a479f77962d2b1a6d5e1f189b60ea20a70a",
+  "priorFactorSerialization": "Allnullasintheoriginalfrozenartifact;nextseasonruntimeparityproved.",
+  "venueRows": 123,
+  "correctedPriorTeams": 367,
+  "productionWrites": 0
+}

@@ -1,0 +1,198 @@
+{
+  "asOf": "2026-11-02T18:00:00.000Z",
+  "games": [
+    {
+      "id": 1,
+      "homeId": 92,
+      "awayId": 11,
+      "neutral": true,
+      "season": 2026,
+      "date": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "homeId": 108,
+      "awayId": 332,
+      "neutral": false,
+      "season": 2026,
+      "date": "2026-11-03T00:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "homeId": 11,
+      "awayId": 92,
+      "neutral": false,
+      "season": 2026,
+      "date": "2026-11-03T00:00:00.000Z"
+    }
+  ],
+  "rows": [
+    {
+      "game": {
+        "id": 1,
+        "homeId": 92,
+        "awayId": 11,
+        "neutral": true,
+        "season": 2026,
+        "date": "2026-11-03T00:00:00.000Z"
+      },
+      "forecast": {
+        "release": "cbb_candidate_2026_10_28_r2_score_precision",
+        "gameId": 1,
+        "asOf": "2026-11-02T18:00:00.000Z",
+        "homeId": 92,
+        "awayId": 11,
+        "homeScore": 78.51241425802735,
+        "awayScore": 68.27966496195822,
+        "margin": 10.232749296069132,
+        "total": 146.79207921998557,
+        "possessions": 65.93959902079055,
+        "uncertainty": {
+          "marginSd": 11.882808501656784,
+          "totalSd": 16.993742849108834,
+          "marginTotalCorrelation": 0.025514787619637786,
+          "marginCorrection": -0.13713535132332144,
+          "totalCorrection": 0.822132324525501,
+          "fitThroughSeason": 2024,
+          "games": 11383
+        },
+        "homeWinProbability": 0.812448951700106,
+        "inputStatus": "complete",
+        "issues": []
+      },
+      "features": [
+        1,
+        0.6691031687110154,
+        0.38615743184221574,
+        -0.6120801958418894,
+        0.1119247625947804,
+        0,
+        1.5,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "game": {
+        "id": 2,
+        "homeId": 108,
+        "awayId": 332,
+        "neutral": false,
+        "season": 2026,
+        "date": "2026-11-03T00:00:00.000Z"
+      },
+      "forecast": {
+        "release": "cbb_candidate_2026_10_28_r2_score_precision",
+        "gameId": 2,
+        "asOf": "2026-11-02T18:00:00.000Z",
+        "homeId": 108,
+        "awayId": 332,
+        "homeScore": 74.10692271312313,
+        "awayScore": 70.59309555172204,
+        "margin": 3.51382716140108,
+        "total": 144.70001826484517,
+        "possessions": 66.06575425235648,
+        "uncertainty": {
+          "marginSd": 11.882808501656784,
+          "totalSd": 16.993742849108834,
+          "marginTotalCorrelation": 0.025514787619637786,
+          "marginCorrection": -0.13713535132332144,
+          "totalCorrection": 0.822132324525501,
+          "fitThroughSeason": 2024,
+          "games": 11383
+        },
+        "homeWinProbability": 0.6200293358065649,
+        "inputStatus": "incomplete",
+        "issues": [
+          "missing_away_team_history"
+        ]
+      },
+      "features": [
+        1,
+        -0.005976611672535626,
+        0.1559948236507836,
+        -0.5868491495287032,
+        -0.000008929971771072272,
+        0,
+        1.5,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "game": {
+        "id": 3,
+        "homeId": 11,
+        "awayId": 92,
+        "neutral": false,
+        "season": 2026,
+        "date": "2026-11-03T00:00:00.000Z"
+      },
+      "forecast": {
+        "release": "cbb_candidate_2026_10_28_r2_score_precision",
+        "gameId": 3,
+        "asOf": "2026-11-02T18:00:00.000Z",
+        "homeId": 11,
+        "awayId": 92,
+        "homeScore": 74.01378682168209,
+        "awayScore": 73.62660516570944,
+        "margin": 0.3871816559726424,
+        "total": 147.64039198739152,
+        "possessions": 65.93959902079055,
+        "uncertainty": {
+          "marginSd": 11.882808501656784,
+          "totalSd": 16.993742849108834,
+          "marginTotalCorrelation": 0.025514787619637786,
+          "marginCorrection": -0.13713535132332144,
+          "totalCorrection": 0.822132324525501,
+          "fitThroughSeason": 2024,
+          "games": 11383
+        },
+        "homeWinProbability": 0.5134358123613184,
+        "inputStatus": "complete",
+        "issues": []
+      },
+      "features": [
+        1,
+        -0.4000339859225079,
+        0.38615743184221574,
+        -0.6120801958418894,
+        -0.04000679747326231,
+        0,
+        1.5,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "contractRelease": "cbb_offline_forward_evidence_contract_2026_11_02_r1",
+  "declaredAt": "2026-11-02T18:48:15.910Z",
+  "productionWrites": 0,
+  "liveShadow": false,
+  "automaticExecution": false,
+  "purpose": "Predeclared offline evidence/evaluation harness; no score model is activated.",
+  "cohort": {
+    "sport": "cbb",
+    "slateDateFunction": "computeSlateDate(cbb,originalGameStart)",
+    "firstSlateDate": "2026-11-03",
+    "lastSlateDateInclusive": "2026-11-16",
+    "decisionCaptureMustBeAfterDeclaration": true,
+    "membership": "Every published immutable game lock in this interval; retain operational exclusions and baseline fallbacks, no filtering by grade/outcome/edge."
+  },
+  "candidate": {
+    "qualified": null,
+    "r17": {
+      "artifactHash": "bd61b27ee8e37e6149f29b09bdca40514cfb2c8eed1ee6476ccb786ec78ac018",
+      "status": "Failed strict post-training diagnostic; not eligible for promotion or repeated tuning on these outcomes."
+    },
+    "requireBeforeEvaluation": [
+      "Exact artifact/code hash frozen before each eligible decision",
+      "Compatible independent model/input release and distribution hash",
+      "Predeclared target/reference/feature/source parity and calibration policy",
+      "Chronological untouched evaluation boundaries"
+    ],
+    "default": "No candidate or missing proof means exact independent baseline; no member or record changes."
+  },
+  "source": {
+    "target": "Exact stored paired quote and original cutoff; never substitute later prices",
+    "referenceExclusion": "Union of all evaluated target book families across all model dimensions, or a predeclared common-book+fallback policy",
+    "forwardClock": "providerObservedAt <= fetchedAt <= original decisionAsOf <= approved pregame cutoff",
+    "missingReference": "Exact baseline fallback, counted in full-cohort results",
+    "sourceParity": "Professional-only current quotes cannot silently replace the retail-opening approximate-center information used to fit r17",
+    "legacy": "Never invent missing reference tuples or mutate/reinterpret locks"
+  },
+  "reports": [
+    "Coverage/source/exclusion ledger",
+    "W/L/push and paired corrections/harms for all three markets",
+    "Brier/logloss/calibration by release, odds band and date cluster",
+    "Margin/Total/team-score MAE and coherence",
+    "Pinned exact-current-price grade promotions/demotions/net actionables/market mix",
+    "Source/phase parity and inference applied/fallback counts"
+  ],
+  "acceptance": "No automatic pass; all-market/source/timing/held-out and model-change requirements must be satisfied. Failed candidate outcomes cannot become new tuning data presented as holdout."
+}

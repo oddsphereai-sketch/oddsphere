@@ -96,8 +96,17 @@ async function main(){
   const unknownFetcher=(async()=>new Response(JSON.stringify({events:[{...event,competitions:[{neutralSite:true,timeValid:true,competitors:[{homeAway:"home",team:{id:"2900",displayName:"St. Thomas Tommies",location:"St. Thomas"}},{homeAway:"away",team:{displayName:away.full_name,location:away.college}}]}]}]}))) as typeof fetch;
   const beforeUnknown=JSON.stringify([...stored]);
   const unknown=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],provider:unknownProvider,owls:unknownOwls,db,fetcher:unknownFetcher,loadSchedule:async()=>unknownSchedule,saveSnapshot});
-  assert.equal(unknown.sourceGames,1);assert.equal(unknown.published,0);assert.deepEqual(unknown.unpublishedIncomplete,[unknownGame.id]);
-  assert.equal(JSON.stringify([...stored]),beforeUnknown,"a real quote cannot manufacture a completed model or overwrite a prior record");
+  assert.equal(unknown.sourceGames,1);assert.equal(unknown.published,1);assert.deepEqual(unknown.unpublishedIncomplete,[],"verified historical venue recovery supplies St Thomas's actual prior");
+  assert.notEqual(JSON.stringify([...stored]),beforeUnknown);
+  const recoveredRecord=stored.get(`cbb::member-game::${unknownGame.id}`) as {snapshot:{board:{modelRelease:string}}};
+  assert.equal(recoveredRecord.snapshot.board.modelRelease,"cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior");
+  const absentId=999999,unmodeledGame={...unknownGame,id:absentId,home_team:{...unknownGame.home_team,id:absentId}};
+  const beforeUnmodeled=JSON.stringify([...stored]);
+  const unmodeled=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],
+    provider:{calls:2,gamesForDates:async()=>[unmodeledGame]} as unknown as CbbBallDontLieClient,owls:unknownOwls,db,fetcher:unknownFetcher,
+    loadSchedule:async()=>({...unknownSchedule,games:unknownSchedule.games.map(g=>({...g,externalId:absentId,id:`cbb-${absentId}`}))}),saveSnapshot});
+  assert.equal(unmodeled.published,0);
+  assert.equal(JSON.stringify([...stored]),beforeUnmodeled,"a real quote cannot manufacture an absent team rating or overwrite an existing record");
   const atLock=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-11-01T13:30:00Z",bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
   assert.equal(atLock.locked,1);assert.equal(atLock.trackingInserted,3);
