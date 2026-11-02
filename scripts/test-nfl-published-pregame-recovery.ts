@@ -15,7 +15,7 @@ const decisions = (["moneyline", "spread", "total"] as const).map((market, index
   evaluatedAt: captured, gameStartsAt: start, decisionRelease: "original-decision",
   modelRelease: `original-${market}`, calibrationRelease: "original-calibration",
   side: ["WSH", "PHI", "Over 40.5"][index], grade: index === 1 ? "Best Angle" : "No Play",
-  modelProbability: [.5159, .6484, .5145][index], marketFairProbability: .5, expectedValue: .1,
+  modelProbability: [.5159043784756961, .6484845648434803, .5145820133512115][index], marketFairProbability: .5, expectedValue: .1,
   evaluatedQuote: { line: [null, 6, 40.5][index], price: [-260, -108, -105][index],
     sportsbook: "original-book", observedAt: captured },
 }));
