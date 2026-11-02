@@ -398,6 +398,19 @@ const TRACKING_RECORD_SELECT = [
   "supersedes_prediction_record_id:snapshot_json->supersedes_prediction_record_id",
   "calibration_version",
 ].join(",");
+// The view performs one JSON record decode and exposes the same alias names.
+// Retain the original selector verbatim for an older database during rollout.
+const TRACKING_PROJECTED_RECORD_SELECT = TRACKING_RECORD_SELECT
+  .split(",")
+  .map((column) => column.split(":")[0])
+  .join(",");
+const TRACKING_RECORD_PROJECTION_VIEW = "prediction_records_tracking_projection";
+
+function trackingProjectionViewMissing(error: { code?: string; message?: string } | null): boolean {
+  return error !== null
+    && (error.code === "PGRST205" || error.code === "42P01")
+    && (error.message ?? "").includes(TRACKING_RECORD_PROJECTION_VIEW);
+}
 const TRACKING_GRADE_SELECT = [
   "id",
   "prediction_record_id",
@@ -625,7 +638,7 @@ export function isTrackingPlayGradeCutEligible(record: PredictionRecordRow): boo
   return record.sport === "cfb" || record.no_bet !== true;
 }
 
-async function fetchAllPredictionRecords(
+export async function fetchAllPredictionRecords(
   supabase: SupabaseClient,
   opts: {
     sport?: TrackedSport;
@@ -635,17 +648,27 @@ async function fetchAllPredictionRecords(
   },
 ): Promise<{ rows: PredictionRecordRow[]; error: unknown | null }> {
   const out: PredictionRecordRow[] = [];
+  let useLegacyProjection = false;
   for (let fromRow = 0; ; fromRow += TRACKING_PAGE_SIZE) {
-    let query = supabase
-      .from("prediction_records")
-      .select(TRACKING_RECORD_SELECT)
-      .order("id", { ascending: true })
-      .range(fromRow, fromRow + TRACKING_PAGE_SIZE - 1);
-    if (opts.sport !== undefined) query = query.eq("sport", opts.sport);
-    if (opts.from !== undefined) query = query.gte("slate_date", opts.from);
-    if (opts.to !== undefined) query = query.lte("slate_date", opts.to);
-    if (opts.competition !== undefined) query = query.contains("snapshot_json", { competition: opts.competition });
-    const { data, error } = await query;
+    const pageQuery = () => {
+      let query = supabase
+        .from(useLegacyProjection ? "prediction_records" : TRACKING_RECORD_PROJECTION_VIEW)
+        .select(useLegacyProjection ? TRACKING_RECORD_SELECT : TRACKING_PROJECTED_RECORD_SELECT)
+        .order("id", { ascending: true })
+        .range(fromRow, fromRow + TRACKING_PAGE_SIZE - 1);
+      if (opts.sport !== undefined) query = query.eq("sport", opts.sport);
+      if (opts.from !== undefined) query = query.gte("slate_date", opts.from);
+      if (opts.to !== undefined) query = query.lte("slate_date", opts.to);
+      if (opts.competition !== undefined) query = query.contains("snapshot_json", { competition: opts.competition });
+      return query;
+    };
+    let { data, error } = await pageQuery();
+    if (!useLegacyProjection && trackingProjectionViewMissing(error)) {
+      // Retry this page against the unchanged legacy projection, then remain
+      // on it for this entire read. Never retry a timeout/permission failure.
+      useLegacyProjection = true;
+      ({ data, error } = await pageQuery());
+    }
     if (error) return { rows: out, error };
     const page = ((data ?? []) as unknown) as PredictionRecordRow[];
     out.push(...page);
