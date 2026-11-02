@@ -1,4 +1,4 @@
-import { readPredictionMarketDisplayFeed, readPredictionMarketContractFeed, readPublishedPredictionMarketGames,readPredictionMarketPrelockFeed,readPredictionMarketBookHistory } from "@/lib/services/dailyEdge/predictionMarketDisplayFeed";
+import { readPredictionMarketDisplayFeed, readPredictionMarketContractFeed, readPublishedPredictionMarketGame,readPredictionMarketPrelockFeed,readPredictionMarketBookHistory } from "@/lib/services/dailyEdge/predictionMarketDisplayFeed";
 import {readPredictionMarketPrelock} from "@/lib/providers/owls/predictionMarketPrelock";
 import {predictionMarketLockBoundary} from "@/app/lab/lib/predictionMarketDisplay";
 import {readPredictionMarketBook,readPublicTrackerBook} from "@/lib/services/dailyEdge/predictionMarketBookRead";
@@ -30,8 +30,8 @@ export async function GET(request: Request): Promise<Response> {
       label:kind==="btts"?`BTTS ${side==="yes"?"Yes":"No"}`:kind==="total"?`${side==="over"?"Over":"Under"} ${line}`:`${side==="away"?awayTeam:homeTeam} ${formatContractLine(line!)}`};
   }
   const event=Number(query.get("event")),requestedSide=query.get("side");
-  const published=Number.isSafeInteger(event)&&event>0?await readPublishedPredictionMarketGames(sport as PredictionMarketSport).catch(()=>[]):[];
-  const game=published.find(g=>g.external_id===event&&g.awayTeam===awayTeam&&g.homeTeam===homeTeam&&Date.parse(g.gameStartAt??"")===Date.parse(gameStartAt));
+  const published=Number.isSafeInteger(event)&&event>0?await readPublishedPredictionMarketGame(sport as PredictionMarketSport,event).catch(()=>null):null;
+  const game=published&&published.awayTeam===awayTeam&&published.homeTeam===homeTeam&&Date.parse(published.gameStartAt??"")===Date.parse(gameStartAt)?published:null;
   // A college abbreviation or caller-supplied name cannot establish identity.
   // The published institution pair is the only authority for a CBB join.
   if(sport==="cbb"&&!game)return Response.json({market:null,book:null,availability:"event_unavailable"},{headers:{"Cache-Control":"private, max-age=30"}});

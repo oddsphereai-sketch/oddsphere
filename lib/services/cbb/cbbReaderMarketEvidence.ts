@@ -1,7 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_02_r5_public_receipt_cutoff" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_02_r6_retained_named_source" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 export type CbbCapturedPublicSplitRow=SplitRow;
@@ -94,14 +94,18 @@ function preferNamedSection(existing:MarketEdgeDto["sportsbookSplits"],incoming:
     existing.rows.every(row=>row.betsPct!==null&&row.moneyPct!==null)&&
     Math.abs(existing.rows.reduce((sum,row)=>sum+(row.betsPct??0),0)-100)<=3&&
     Math.abs(existing.rows.reduce((sum,row)=>sum+(row.moneyPct??0),0)-100)<=3;
-  if(!complete||priority<0||!Number.isFinite(observed)||observed>now||now-observed>3*60*60_000)return true;
+  if(!complete||priority<0||!Number.isFinite(observed)||observed>now)return true;
+  const incomingAt=Date.parse(incoming.sourceObservedAt!),existingFresh=now-observed<=3*60*60_000,incomingFresh=now-incomingAt<=3*60*60_000;
+  if(existingFresh!==incomingFresh)return incomingFresh;
+  if(!existingFresh)return incomingAt>observed;
   const incomingPriority=namedBooks.indexOf(incoming.sourceBook as typeof namedBooks[number]);
   return incomingPriority<priority||incomingPriority===priority&&Date.parse(incoming.sourceObservedAt!)>observed;
 }
 
-export function cbbQualifiedNamedSplitSection(existing:MarketEdgeDto["sportsbookSplits"],section:MarketEdgeDto["sportsbookSplits"],now:number):section is NonNullable<MarketEdgeDto["sportsbookSplits"]>{
+export function cbbQualifiedNamedSplitSection(existing:MarketEdgeDto["sportsbookSplits"],section:MarketEdgeDto["sportsbookSplits"],now:number,
+  options:{allowRetained?:boolean}={}):section is NonNullable<MarketEdgeDto["sportsbookSplits"]>{
   const observed=Date.parse(section?.sourceObservedAt??section?.lastUpdated??"");
-  return !!section&&namedBooks.includes(section.sourceBook as typeof namedBooks[number])&&Number.isFinite(observed)&&observed<=now&&now-observed<=3*60*60_000&&section.rows.length===2&&new Set(section.rows.map(row=>row.side)).size===2&&
+  return !!section&&namedBooks.includes(section.sourceBook as typeof namedBooks[number])&&Number.isFinite(observed)&&observed<=now&&(options.allowRetained||now-observed<=3*60*60_000)&&section.rows.length===2&&new Set(section.rows.map(row=>row.side)).size===2&&
     !section.rows.some(row=>row.betsPct===null||row.moneyPct===null||!Number.isFinite(row.betsPct)||!Number.isFinite(row.moneyPct)||row.betsPct<0||row.betsPct>100||row.moneyPct<0||row.moneyPct>100)&&
     Math.abs(section.rows.reduce((sum,row)=>sum+row.betsPct!,0)-100)<=3&&Math.abs(section.rows.reduce((sum,row)=>sum+row.moneyPct!,0)-100)<=3&&
     preferNamedSection(existing,section,now);
@@ -147,8 +151,11 @@ export function mergeCbbCapturedNamedSplitEvidence(board:DailyEdgeResponse,named
     const game={...original,markets:{...original.markets}};
     for(const [key] of marketEntries){
       const section=candidate.markets[key].sportsbookSplits;
-      if(!cbbQualifiedNamedSplitSection(original.markets[key].sportsbookSplits,section,now))continue;
-      game.markets[key]={...original.markets[key],sportsbookSplits:section,
+      if(!cbbQualifiedNamedSplitSection(original.markets[key].sportsbookSplits,section,now,{allowRetained:true}))continue;
+      // Exact named-event receipts remain displayable during source outages.
+      // Never renew their source time or loosen the separate model-input gate.
+      const retained={...section,lastUpdated:section.sourceObservedAt!,rows:section.rows.map(row=>({...row,observedAt:section.sourceObservedAt!}))};
+      game.markets[key]={...original.markets[key],sportsbookSplits:retained,
         sharpBookAvailability:{status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section.sourceObservedAt??section.lastUpdated??""}};
     }
     changes.set(game.id,game);
