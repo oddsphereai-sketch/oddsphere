@@ -6,6 +6,41 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-11-02
 
+## NFL symmetric market-conviction grades — November 2 candidate
+
+Starting base `1196af6b0b1550d42f97a25c69f1f7376453090a`. Candidate authoritative
+runtime constants use `2026_11_02` and the `market_conviction_grades` suffix:
+writer105, model49, calibration48, decision57, grade policy57, member54,
+runtime15, innovation3, fixture70 and snapshot62. Posture advances to
+`nfl_market_innovation_posture_2026_11_02_r3_symmetric_market_conviction`.
+
+- `nfl_forward_evidence_writer_2026_11_02_r105_market_conviction_grades`
+- `nfl_v1_daily_edge_model_2026_11_02_r49_market_conviction_grades`
+- `nfl_v1_daily_edge_calibration_2026_11_02_r48_market_conviction_grades`
+- `nfl_v1_daily_edge_decision_2026_11_02_r57_market_conviction_grades`
+- `nfl_v1_grade_policy_2026_11_02_r57_market_conviction_grades`
+- `nfl_v1_member_release_2026_11_02_r54_market_conviction_grades`
+- `nfl_full_game_evidence_runtime_2026_11_02_r15_market_conviction_grades`
+- `nfl_market_innovation_2026_11_02_r3_market_conviction_grades`
+- `nfl_weekly_member_fixture_2026_11_02_r70_market_conviction_grades`
+- `nfl_forward_member_snapshot_2026_11_02_r62_market_conviction_grades`
+- `nfl_market_qualification_2026_11_02_r2_transport_stable_law`
+
+The direct step recognizes a qualified already-applied same-market consequence
+with Watchlist→Lean and Lean→Best Angle actions, while preserving price/forecast
+economics and opposing-context demotions. No second probability/score update,
+No Play promotion, provider/writer/lease/schedule change or historical rewrite.
+Collector31 (`nfl_forward_evidence_collector_2026_11_02_r31_exact_quote_availability`)
+and regular-slate source r5 (`balldontlie_nfl_regular_slate_2026_11_02_r5_current_quote_receipt`)
+retain each executable offer's actual current-response page availability before
+later pages/opening retrieval. Schema r6 and independent/transport heads remain unchanged.
+The exact preceding r61/r69/member53/decision56 reader tuple remains accepted.
+The final-law qualification fingerprint enumerates distribution fields in a
+fixed order, preserving validity across JSON/database object-key reordering while
+rejecting changed numeric laws. Older locked qualification receipts stay opaque.
+Policy, bounds, board impact and publication status:
+`docs/model-audits/2026-11-02-nfl-symmetric-market-grades.md`.
+
 ## NFL source-qualified reader and grades — November 2 release
 
 Starting base `9876c3dd99539b1302c7617765d22fe0e8976fed`; integrated production

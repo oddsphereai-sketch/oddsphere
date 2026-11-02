@@ -90,7 +90,7 @@ function sharpClient(counter: { calls: number }) {
 
 async function main(): Promise<void> {
   assert.equal(BALLDONTLIE_NFL_REGULAR_SLATE_RELEASE,
-    "balldontlie_nfl_regular_slate_2026_09_28_r4_opening_timestamp_capture");
+    "balldontlie_nfl_regular_slate_2026_11_02_r5_current_quote_receipt");
   assert.equal(FOOTBALL_SHARP_PRICE_CAPTURE_RELEASE,
     "football_sharp_price_capture_2026_10_12_r2_cfb_central_team_identity");
   assert.equal(NFL_SHARP_API_SPLITS_RELEASE,

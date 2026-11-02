@@ -14,7 +14,7 @@ import { readNflMarketPathAdjudication, type NflMarketPathAdjudication } from ".
 import { buildNflMarketQualification, type NflMarketQualificationReceipt } from "./nflMarketQualification";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 
-export const NFL_MARKET_INNOVATION_RELEASE = "nfl_market_innovation_2026_11_02_r2_source_qualified_paths" as const;
+export const NFL_MARKET_INNOVATION_RELEASE = "nfl_market_innovation_2026_11_02_r3_market_conviction_grades" as const;
 type Market = "moneyline" | "spread" | "total";
 type Book = "circa" | "pinnacle";
 type Episode = NflNamedMoneylineEpisode | NflPricedLineEpisode;
@@ -23,7 +23,7 @@ type Candidate = { book: Book; market: Market; episode: Episode; direction: -1 |
   path: NflMarketPathAdjudication };
 export type NflInnovationReactionContext = Partial<Record<Market, {
   flows: Array<{ observedAt: string; direction: -1 | 1; book?: string; sourceLine?: number | null;
-    sourceEventId?: string; authority?: string; moneyPct?: number; ticketPct?: number;
+    sourceEventId?: string; providerGameId?: string; authority?: string; moneyPct?: number; ticketPct?: number;
     pairedQuoteObservedAt?: string; reactionBaselineObservedAt?: string;
     contractAttestations?: Array<{ book: string; observedAt: string; reactionBaselineObservedAt?: string }> }>;
   books: Array<{ book: string; lastEconomicMoveAt: string | null; lastEconomicDirection: -1 | 1 | null }>;
@@ -227,6 +227,8 @@ export function applyNflMarketInnovationRuntime(args: Parameters<typeof applyNfl
   independentInputPolicy: "market_inputs_prohibited";
   referenceBooks?: NflPreviewBookOdds[];
   sourceReactionContext?: NflInnovationReactionContext;
+  /** Actual successful executable batch receipt; never inferred from evaluation time. */
+  executionAvailableAt?: string;
 }): ReturnType<typeof applyNflFullGameEvidenceRuntime> & { innovation: NflMarketInnovationReceipt } {
   const contract = deriveNflEvaluatedMarketContract({ baselineProduction: args.evaluatedProduction ?? args.baselineProduction,
     homeTeam: args.homeTeam });
@@ -317,7 +319,10 @@ export function applyNflMarketInnovationRuntime(args: Parameters<typeof applyNfl
     referenceBooks: args.referenceBooks, marketQualification: qualification });
   const posture = applyNflMarketInnovationPosture({ production: graded, innovation: read.receipt,
     homeTeam: args.homeTeam, existingLockedRecord: args.existingLockedRecord,
-    creatingNewLock: !args.existingLockedRecord && args.shadowMoneyline.decisionStage === "t60_locked" });
+    creatingNewLock: !args.existingLockedRecord && args.shadowMoneyline.decisionStage === "t60_locked",
+    promotionContext: { independentForecast: args.releasedForecast, finalForecast: outcome,
+      marketQualification: qualification, books: args.comparableCurrentBooks, referenceBooks: args.referenceBooks,
+      executionAvailableAt: args.executionAvailableAt ?? "" } });
   const innovation = args.existingLockedRecord ? { ...read.receipt, selectedSources: {}, episodes: [], constraints: [],
     finalHomeMargin: margin, finalTotal: total } : { ...read.receipt, qualification, posture: posture.posture };
   return { release: NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE, ledger, arbitration, outcome,
