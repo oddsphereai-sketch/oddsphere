@@ -82,7 +82,34 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_02_r20_cbb_complete_institution_names";
+  "market_intelligence_v2_capture_2026_11_02_r21_cbb_observed_full_name_aliases";
+
+// Exact source forms from the normal 2026-11-02 22:46Z Playbook capture,
+// checked against the canonical institution/full name on the same timed game.
+// Keep these capture-local: this is not a statistical/roster identity change.
+const CBB_CAPTURE_FULL_NAME_ALIASES = new Map([
+  ["Army Knights", "Army Black Knights"],
+  ["Central Connecticut St Blue Devils", "Central Connecticut Blue Devils"],
+  ["Arkansas-Little Rock Trojans", "Little Rock Trojans"],
+  ["Boston Univ. Terriers", "Boston University Terriers"],
+  ["LIU Sharks", "Long Island University Sharks"],
+  ["Mt. St. Mary's Mountaineers", "Mount St. Mary's Mountaineers"],
+  ["GW Revolutionaries", "George Washington Revolutionaries"],
+  ["UMKC Kangaroos", "Kansas City Roos"],
+  ["Loyola (Chi) Ramblers", "Loyola Chicago Ramblers"],
+  ["Tenn-Martin Skyhawks", "UT Martin Skyhawks"],
+  ["Gardner-Webb Bulldogs", "Gardner-Webb Runnin' Bulldogs"],
+  ["Grand Canyon Antelopes", "Grand Canyon Lopes"],
+  ["Long Beach St 49ers", "Long Beach State Beach"],
+  ["Fort Wayne Mastodons", "Purdue Fort Wayne Mastodons"],
+  ["Sam Houston St Bearkats", "Sam Houston Bearkats"],
+  ["CSU Fullerton Titans", "Cal State Fullerton Titans"],
+].map(([source, canonical]) => [canonicalCbbTeamName(source), canonicalCbbTeamName(canonical)]));
+
+function cbbCaptureSourceName(value: string): string {
+  const normalized = canonicalCbbTeamName(value);
+  return CBB_CAPTURE_FULL_NAME_ALIASES.get(normalized) ?? normalized;
+}
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
@@ -93,7 +120,7 @@ const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): Mark
  * then date/time, and reject any duplicate rather than guessing a fixture. */
 export function matchCbbSourceGame(games: readonly GameRef[], sourceAway: string, sourceHome: string,
   sourceStart: string | null): CbbSourceMatch | null {
-  const away = canonicalCbbTeamName(sourceAway), home = canonicalCbbTeamName(sourceHome);
+  const away = cbbCaptureSourceName(sourceAway), home = cbbCaptureSourceName(sourceHome);
   if (!away || !home || away === home || !sourceStart) return null;
   const named = (observed: string, game: GameRef, side: "home" | "away") => {
     const full = canonicalCbbTeamName((side === "home" ? game.homeName : game.awayName) ?? "");
