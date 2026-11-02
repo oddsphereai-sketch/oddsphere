@@ -9,7 +9,7 @@ import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_02_r4_available_quote_context" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_02_r5_source_split_percentages" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -111,7 +111,7 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
       sourceBook:preferred as "circa"|"draftkings"|"betmgm",sourceObservedAt:selected[0].observedAt,
       rows:selected.map(row=>({side:kind==="total"?(row.selection==="first"?"over":"under"):(row.selection==="first"?"home":"away"),
         label:kind==="total"?(row.selection==="first"?"Over":"Under"):(row.selection==="first"?game.home_team.abbreviation:game.visitor_team.abbreviation),
-        moneyPct:row.moneyPct,betsPct:row.ticketsPct,observedAt:row.observedAt})),signal:null,lastUpdated:selected[0].observedAt,
+        moneyPct:row.moneyPct===null?null:row.moneyPct*100,betsPct:row.ticketsPct===null?null:row.ticketsPct*100,observedAt:row.observedAt})),signal:null,lastUpdated:selected[0].observedAt,
     }:null;
     market.sharpBookAvailability={status:selected.length===2?"complete":args.splitEvidence?.feedStatus==="partial"?"provider_limited":"pending",
       message:selected.length===2?"Verified two-sided named-book split data is available.":"Verified two-sided named-book split data is not available for this game and market.",

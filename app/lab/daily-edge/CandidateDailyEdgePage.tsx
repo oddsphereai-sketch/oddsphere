@@ -17,6 +17,7 @@ import DailyEdgeLiveRefresh from "./DailyEdgeLiveRefresh";
 import { readMemberDataWithDeadline } from "@/lib/services/memberDataAvailability";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 import { CBB_ACTIVATION } from "@/lib/cbb/releases";
+import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 import { currentSlateDate } from "@/lib/dates/slateDate";
 
 // The canonical weekly snapshot retains every game's full reader evidence.
@@ -191,21 +192,14 @@ export default async function CandidateDailyEdgePage({
   if (snapshotUnavailable && snapshot.games.length === 0) {
     snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
   }
-  if (cbbPublicationEnabled && !snapshotUnavailable) {
-    const scheduleRead = await readMemberDataWithDeadline({
-      label: "cbb-seven-day-schedule",
-      fallback: null,
-      read: async () => (await import("@/lib/services/cbb/cbbRollingSchedule"))
-        .loadCbbRollingSchedule(currentSlateDate("cbb")),
-    });
-    if (scheduleRead.value) {
-      const {applyCbbScheduleCoverage,excludeAnalyzedCbbScheduleGames}=await import("@/lib/services/cbb/cbbRollingSchedule");
-      snapshot.cbbRollingSchedule = excludeAnalyzedCbbScheduleGames(
-        applyCbbScheduleCoverage(scheduleRead.value,snapshot.cbbScheduleCoverage),snapshot.games.map(game=>game.external_id));
-    } else if (scheduleRead.unavailable && snapshot.games.length === 0) {
-      snapshot = emptyPreviewSnapshot(sport, "temporarily_unavailable");
-    }
+  if (cbbPublicationEnabled) {
+    // The member board contains the sole writer's published, tracked games.
+    // Unmodeled fixtures remain ingestion inputs, not empty betting cards.
+    const {isOwnerApprovedCbbMemberExclusion}=await import("@/lib/cbb/memberBoardScope");
+    const games=snapshot.games.filter(game=>!isOwnerApprovedCbbMemberExclusion(game));
+    snapshot = { ...snapshot, games, memberPresentation:buildDailyEdgeMemberPresentation({games}), cbbRollingSchedule: undefined };
   }
+
   if (nflFixture) {
     snapshot = (await import("@/lib/services/dailyEdge/weeklyReaderLifecycle"))
       .filterWeeklyReaderSnapshot(snapshot, "nfl");

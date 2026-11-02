@@ -53,5 +53,5 @@ for(const game of [
   assert.equal(JSON.stringify(input),bytes);
   assert.equal(JSON.stringify(result),bytes);
 }
-assert.equal(CBB_READER_EVIDENCE_RELEASE,"cbb_reader_evidence_2026_10_31_r3_source_scoped_tracking");
+assert.equal(CBB_READER_EVIDENCE_RELEASE,"cbb_reader_evidence_2026_11_02_r4_instant_deduplication");
 console.log("CBB restored named-book display: source identity, percentages, chronology, priority, immutable locks and decision neutrality passed.");
