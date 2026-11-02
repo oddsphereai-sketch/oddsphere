@@ -30,8 +30,9 @@ combined Owls refresh, plus its stored-only reader, so the CBB source collector
 and sole writer can reuse it without a new Owls request or a member-read poll.
 No score, probability, pick, grade, stake or locked field is changed here.
 
-The saved current-page regression parses ten games where the old parser
-parsed zero. A bounded read-only run of the existing page collector recovered
+The full saved source page parses ten games where the old parser parsed zero;
+the committed single-game HTML fragment tests all three market groups and
+original side/axis values. A bounded read-only run of the existing page collector recovered
 50 games and 142 market panels, including Florida Gulf Coast–UCF and Kent
 State–Louisiana Tech, with original source-side money/ticket values retained.
 No production writer was invoked by these source checks. The actual source
