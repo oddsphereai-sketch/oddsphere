@@ -88,11 +88,11 @@ released identifiers, leased writer, data coverage, historical hashes and live r
 
 ## Results
 
-Integrated production base: `0211a1688a87a99c79b4a503b1b457346709ced8` (CBB PR919).
-The registry and all CBB follow-up changes remain intact. The initial combined
-focused NFL suite, full `verify:model-change`, webpack build and committed
-integration-safety check pass. Required focused checks are repeated after final
-request-window safeguards; standalone TypeScript is also required. Local hosted
+Integrated production base: `84e2f5a9b7e33f64693c9953146123b979f003f2` (CBB PR920).
+The registry and all CBB follow-up changes remain intact. The final focused NFL
+suite passes; full `verify:model-change` and webpack build also pass on this
+integrated base. Incoming CBB pipeline/store and lineup-routing checks pass.
+Committed integration safety and standalone TypeScript are required before publication. Local hosted
 PostgreSQL URL is unset; the PR's real PostgreSQL proof must pass before merge.
 
 The functional promotion suite uses real final-law construction and actual
@@ -116,7 +116,7 @@ includes actual receipts in no-write and production paths. Qualification r2 test
 also prove JSON object-key reordering preserves an identical law while changed
 numeric or market identity fails.
 
-The read-only current capture completed `2026-11-02T15:14:08.207Z` in42.231s,
+The read-only current capture completed `2026-11-02T15:22:50.011Z` in44.509s,
 with three complete current tuples, no contract findings, no data holds and the
 14-game fixture retaining all13 historical cards unchanged. Every current
 executable book carried its actual page receipt. On identical final PMFs and offer
