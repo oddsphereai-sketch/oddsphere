@@ -984,6 +984,20 @@ No prediction or locked member game was written by the failed refresh.
 
 ## CBB named-book split display identity — October 30
 
+- November 2 shared free-source parser repair: active durable source is
+  `draftkings_network_splits_2026_11_02_r4_current_table_markup`. The current
+  DraftKings table uses weekday-prefixed dates, one shared column header and
+  separately labeled market groups, with classless percentage cells. Parse
+  those actual groups while retaining legacy markup, exact side/axis values,
+  complete complementary pairs, event dates and existing fixture/lock guards.
+  The existing cached/durable source path retains R3/R2 last-known-good data;
+  its cache key includes R4 so an old cached empty result cannot mask recovery.
+  Expose source-only refresh and stored-only reads for the existing CBB leased
+  collector/sole writer, without a duplicate Owls call or prediction authority.
+  Source proof: one saved page changed from zero to ten parsed games; the same
+  bounded live source collection returned 50 games / 142 market panels.
+  CBB consumer publication is tracked separately. Evidence:
+  `docs/model-audits/2026-11-02-draftkings-current-table-ingestion.md`.
 - Display/capture release `cbb_sharp_split_mapping_2026_10_30_r1_exact_institution_neutral_orientation`
   resolves CBB named-book and DraftKings Network split rows with verified
   institution/full team names rather than mascot or abbreviation guesses. A
