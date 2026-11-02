@@ -195,6 +195,8 @@ export async function gradePredictionsForSlate(args: {
   apply: boolean;
   supabase: SupabaseClient;
   source: PredictionGradeRow["grade_source"];
+  /** Narrow an explicit recovery to its own immutable records. Normal slate jobs omit this. */
+  recordIds?: readonly number[];
   /** Exact soccer competition scope. Additive callers use this rather than
    * changing the legacy World Cup/EPL selection contract. */
   competition?: "english_premier_league" | "uefa_champions_league";
@@ -215,11 +217,18 @@ export async function gradePredictionsForSlate(args: {
   };
 
   // Load records
+  if (args.recordIds !== undefined) {
+    if (args.recordIds.length === 0) return result;
+    if (args.recordIds.length > 1000 || args.recordIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+      throw new Error("Scoped grading requires at most 1000 positive record IDs.");
+    }
+  }
   let recordsQuery = supabase
     .from("prediction_records")
     .select("*")
     .eq("sport", sport)
     .eq("slate_date", slateDate);
+  if (args.recordIds !== undefined) recordsQuery = recordsQuery.in("id", [...new Set(args.recordIds)]);
   // MLB and EPL public records are defined at the persisted lock boundary.
   // If a pregame sweep is missed, an unlocked mutable prediction must never
   // be settled into the official member record. EPL is also competition-
