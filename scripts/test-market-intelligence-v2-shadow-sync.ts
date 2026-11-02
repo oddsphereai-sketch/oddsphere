@@ -32,7 +32,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_02_r20_cbb_complete_institution_names",
+    "market_intelligence_v2_capture_2026_11_02_r22_cbb_before_member_refresh",
 );
 
 {
@@ -102,6 +102,35 @@ check(
     matchCbbSourceGame([stateFixture],"Weber St Beavers","Oregon St Wildcats",sourceStart)===null&&
     matchCbbSourceGame([stateFixture],"Kansas St Wildcats","Oregon St Beavers",sourceStart)===null&&
     matchCbbSourceGame([stateFixture],"Wildcats","Beavers",sourceStart)===null);
+  for (const [source, canonical, institution] of [
+    ["Army Knights","Army Black Knights","Army"],
+    ["Central Connecticut St Blue Devils","Central Connecticut Blue Devils","Central Connecticut"],
+    ["Arkansas-Little Rock Trojans","Little Rock Trojans","Little Rock"],
+    ["Boston Univ. Terriers","Boston University Terriers","Boston University"],
+    ["LIU Sharks","Long Island University Sharks","Long Island University"],
+    ["Mt. St. Mary's Mountaineers","Mount St. Mary's Mountaineers","Mount St. Mary's"],
+    ["GW Revolutionaries","George Washington Revolutionaries","George Washington"],
+    ["UMKC Kangaroos","Kansas City Roos","Kansas City"],
+    ["Loyola (Chi) Ramblers","Loyola Chicago Ramblers","Loyola Chicago"],
+    ["Tenn-Martin Skyhawks","UT Martin Skyhawks","UT Martin"],
+    ["Gardner-Webb Bulldogs","Gardner-Webb Runnin' Bulldogs","Gardner-Webb"],
+    ["Grand Canyon Antelopes","Grand Canyon Lopes","Grand Canyon"],
+    ["Long Beach St 49ers","Long Beach State Beach","Long Beach State"],
+    ["Fort Wayne Mastodons","Purdue Fort Wayne Mastodons","Purdue Fort Wayne"],
+    ["Sam Houston St Bearkats","Sam Houston Bearkats","Sam Houston"],
+    ["CSU Fullerton Titans","Cal State Fullerton Titans","Cal State Fullerton"],
+  ]) {
+    const fixture={...game,awayName:canonical,awayLocation:institution};
+    check(`CBB observed full-name alias retains exact fixture and orientation: ${source}`,
+      matchCbbSourceGame([fixture],source,"Villanova Wildcats",sourceStart)?.reversed===false&&
+      matchCbbSourceGame([fixture],"Villanova Wildcats",source,sourceStart)?.reversed===true);
+    check(`CBB observed alias never waives the other school, unique event or clock: ${source}`,
+      matchCbbSourceGame([fixture],source,"Kentucky Wildcats",sourceStart)===null&&
+      matchCbbSourceGame([fixture,{...fixture,id:2,externalId:999}],source,"Villanova Wildcats",sourceStart)===null&&
+      matchCbbSourceGame([fixture],source,"Villanova Wildcats","2026-11-02T14:30:00Z")===null);
+  }
+  check("CBB observed full-name aliases do not generalize mascot variants to other schools",
+    matchCbbSourceGame([stateFixture],"Weber St Knights","Oregon St Antelopes",sourceStart)===null);
   const price = buildOwlsSharpPriceObservations({
     sport: "cbb", fetchedAt: new Date("2026-10-30T12:00:00Z"), games: [game],
     rows: [{ sport: "ncaab", providerEventId: "ncaab:Villanova@Notre Dame-20261101",

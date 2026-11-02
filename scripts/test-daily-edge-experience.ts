@@ -1597,8 +1597,10 @@ check(
     candidateSource.includes("canonical.firstTrackedPrice === movement.open") &&
     candidateSource.includes("canonical.currentPrice === movement.current") &&
     candidateSource.includes('chip: "Split sources disagree"') &&
-    candidateSource.includes("Public consensus money leans") &&
-    candidateSource.includes("sharp-book split snapshot leans") &&
+    candidateSource.includes('splitSourceComparison("Money", consensusSignal.moneyLeader, sharpSignal.moneyLeader)') &&
+    candidateSource.includes('splitSourceComparison("Tickets", consensusSignal.ticketLeader, sharpSignal.ticketLeader)') &&
+    candidateSource.includes("splitSourcesConflict(consensus, sharp)") &&
+    candidateSource.includes("const sharpLeader = sharpSignal.direction") &&
     candidateSource.includes("no meaningful directional edge was verified"),
 );
 check(
@@ -1629,8 +1631,10 @@ check(
 check(
   "legacy consensus divergence is relabeled instead of being shown as sharp money",
   candidateSource.includes('if (/sharp money/i.test(rawChip))') &&
-    candidateSource.includes("Consensus money split leans against our side") &&
-    candidateSource.includes('rawDetail.replace(/sharp money/gi, "consensus money split")'),
+    candidateSource.includes("splitDirectionalMeasure(consensusSignal)") &&
+    candidateSource.includes('measure === "Money" ? "Consensus money split" : measure === "Tickets" ? "Consensus ticket split" : "Consensus split"') &&
+    candidateSource.includes('`${consensusLabel} leans against our side`') &&
+    candidateSource.includes('rawDetail.replace(/sharp money/gi, consensusLabel.toLowerCase())'),
 );
 check(
   "unverified movement fails closed instead of implying validated endpoints",

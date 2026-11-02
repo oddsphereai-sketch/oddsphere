@@ -104,3 +104,52 @@ request headers are logged. It does not claim recovery before observation.
 R20 starting base is `28d71522dd56928f8b34303e474ba7b8b2843153`; latest production
 `4df9ed2531a362a6d700f7d1a68bcb9fcd35c735` was integrated without overlapping
 implementation hunks. Its database efficiency changes are preserved in full.
+
+## R20 production proof and source-observed R21 variants
+
+PR941 merged as `f397cdb8360a3edf13ca6c5a06976e5f9fb62e0f`; its production
+tree equals the locally verified tree. The normal 22:46:42Z capture built 628
+Playbook side observations. The subsequent sole writer persisted 69 newly
+restored public market panels on the same 104 still-unlocked baseline games:
+209 panels before, 278 after, zero previously present panels lost. Earlier
+locked snapshots retain their original payloads. The source diagnostic log
+shows 140 source games, 472 canonical games in the loaded window and 33
+rejections; those outside the seven-day window are correctly left unmatched.
+
+The first 16 rejected in-window games expose exact full-name variants, including
+Boston Univ. Terriers / Boston University Terriers, UMKC Kangaroos / Kansas City
+Roos and Grand Canyon Antelopes / Grand Canyon Lopes. Each source spelling is
+checked against the canonical full school name and institution on the exact
+paired timed fixture. R21 adds only these 16 explicit capture-local aliases;
+it does not change the shared statistical/provider institution registry or
+generalize alternate mascots to other schools. Direct and neutral-site reversed
+orientation, wrong opponent, duplicate candidate and wrong date are tested for
+each alias. Both participants, unique event and original clock remain required.
+
+R21 starts from `f397cdb8360a3edf13ca6c5a06976e5f9fb62e0f` in
+`codex/cbb-verified-playbook-full-names-20261102`. Capture identifier advances to
+`market_intelligence_v2_capture_2026_11_02_r21_cbb_observed_full_name_aliases`.
+All score, probability, pick, grade, stake and lock policies remain unchanged;
+the same-input actionable board delta is zero. No additional provider requests,
+new refresh path, lease or writer. Existing collector and sole member writer
+remain authoritative. Actual further coverage recovery awaits their next normal
+production cycle after protected publication.
+
+## R22: capture before the sole member refresh
+
+Starting base: `3bedf2210188417591cd593eac45126edfc9c74e` (R21 production).
+The existing all-sport route iterates sequentially and placed CBB last. Its
+22:32:36Z CBB capture skipped because the 22:32:33Z member writer held the
+shared sport lease. At 23:03Z the normal 23:00 all-sport run had still not
+reached CBB, while the 23:02:33Z member writer was running. One slow unrelated
+sport can therefore consume the intended two-minute capture lead time.
+
+Process CBB first in that same existing route. The other six sports retain
+their relative order and all seven still run exactly once. No new provider
+request, manual polling path, schedule, writer, retry or lease exception is
+introduced. The model writer and immutable-lock rules are unchanged. Advance
+the sole shared capture identifier to R22; retain R21's full-name aliases.
+Require the full safety gate, affected source/CBB tests, build/TypeScript,
+latest-main integration and protected PR checks. After deployment, verify the
+normal CBB collector completes before the next member writer and inspect live
+public panels on the still-unlocked games. Do not rewrite earlier locks.
