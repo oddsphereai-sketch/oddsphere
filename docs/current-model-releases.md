@@ -693,7 +693,17 @@ forward grading remain required. Exact locked payloads retain precedence.
 
 ## CBB exact market-observation identity repair — October 30
 
-- November2 complete-name follow-up: active capture is
+- November 2 source-observed full-name repair: active observation capture is
+  `market_intelligence_v2_capture_2026_11_02_r21_cbb_observed_full_name_aliases`.
+  Sixteen exact source spellings from the normal 22:46Z Playbook capture map to
+  their verified canonical full school names. Aliases remain capture-local;
+  statistical identities, both-team/time/uniqueness/orientation requirements,
+  provider budget, shared lease, writer, decisions and locked records retain
+  their existing contracts. R21 supersedes the R19/R20 capture identifiers below.
+  R20 restored 69 public panels with zero lost panels on 104 common unlocked
+  games; additional R21 recovery requires normal production source/reader proof.
+  Evidence: `docs/model-audits/2026-11-02-cbb-source-split-alias-coverage.md`.
+- November 2 complete-name follow-up (superseded capture):
   `market_intelligence_v2_capture_2026_11_02_r20_cbb_complete_institution_names`.
   A verified institution alias may also precede that canonical school's exact
   mascot suffix. Both the institution and its own complete mascot must match;
@@ -701,7 +711,7 @@ forward grading remain required. Exact locked payloads retain precedence.
   fail. This extends r19 without changing other sports, forecast/grade authority,
   provider budget, cron, locks or source values. Evidence:
   `docs/model-audits/2026-11-02-cbb-source-split-alias-coverage.md`.
-- November2 source-alias follow-up: active observation capture is
+- November 2 source-alias follow-up (superseded capture):
   `market_intelligence_v2_capture_2026_11_02_r19_cbb_verified_source_aliases`.
   The shared collector now uses the same verified institution aliases as the
   released CBB direct source/reader path. Both participants, unique fixture,
