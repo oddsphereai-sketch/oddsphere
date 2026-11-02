@@ -22,7 +22,7 @@ import { writeLockedCbbTracking } from "./cbbTrackingWriter";
 import { readCbbCapturedMarketHistory } from "./cbbCapturedMarketHistory";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r7_durable_market_evidence" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r8_exact_reference_probabilities" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the

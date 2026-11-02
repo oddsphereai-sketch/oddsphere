@@ -1,0 +1,215 @@
+{
+  "asOf": "2026-11-02T13:51:07.663Z",
+  "sourceHashes": {
+    "/tmp/oddsphere-cbb-live-source-20261102.json": "08dbd176418f4c8ea5f305d4c9059c90b2137b54a5a83a23af774ca9419872ff",
+    "/tmp/oddsphere-source-identity-audit-20261102.json": "70d0bd724f149a3e8d466b3ae0251e4600ccb056e5e11d2858430f6ace9717d2",
+    "/tmp/oddsphere-cbb-official-events-20261102.json": "4645546cb32d92b7fce0a891f56d7171e30404088dc3b4886c737fcf02f30332",
+    "/tmp/oddsphere-live-market-audit-20261102.json": "d75d88672bf8002be4ea18706f7954e812ca25f6ed35036255e3fb48fe85a148",
+    "/private/tmp/oddsphere-cbb-reader-market-recovery-20261102/lib/cbb/artifacts/candidate-r2.json": "3a738b43773958c6ee43dce8d7659887172789547ca614c0ce0e57159c46bfe2"
+  },
+  "cases": [
+    {
+      "id": 10882471,
+      "match": "TOL@ARST",
+      "forecast": {
+        "release": "cbb_candidate_2026_10_28_r2_score_precision",
+        "gameId": 10882471,
+        "asOf": "2026-11-02T13:51:07.663Z",
+        "homeId": 334,
+        "awayId": 218,
+        "homeScore": 84.48301873984356,
+        "awayScore": 77.22448862217676,
+        "margin": 7.258530117666792,
+        "total": 161.70750736202032,
+        "possessions": 71.45581158029057,
+        "uncertainty": {
+          "marginSd": 11.882808501656784,
+          "totalSd": 16.993742849108834,
+          "marginTotalCorrelation": 0.025514787619637786,
+          "marginCorrection": -0.13713535132332144,
+          "totalCorrection": 0.822132324525501,
+          "fitThroughSeason": 2024,
+          "games": 11383
+        },
+        "homeWinProbability": 0.7357355099666313,
+        "inputStatus": "complete",
+        "issues": []
+      },
+      "target": {
+        "gameId": 10882471,
+        "sportsbook": "draftkings",
+        "market": "spread",
+        "line": -3.5,
+        "firstPrice": -112,
+        "secondPrice": -108,
+        "providerObservedAt": "2026-11-02T13:50:24.700Z",
+        "fetchedAt": "2026-11-02T13:51:07.663Z",
+        "phase": "current",
+        "provider": "owls",
+        "orientationVerified": true
+      },
+      "references": [
+        {
+          "gameId": 10882471,
+          "sportsbook": "pinnacle",
+          "market": "spread",
+          "line": -3.5,
+          "firstPrice": -109,
+          "secondPrice": -107,
+          "providerObservedAt": "2026-11-02T13:50:26.247Z",
+          "fetchedAt": "2026-11-02T13:51:07.663Z",
+          "phase": "current",
+          "provider": "owls",
+          "orientationVerified": true
+        },
+        {
+          "gameId": 10882471,
+          "sportsbook": "circa",
+          "market": "spread",
+          "line": -3.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-11-02T13:50:11.864Z",
+          "fetchedAt": "2026-11-02T13:51:07.663Z",
+          "phase": "current",
+          "provider": "owls",
+          "orientationVerified": true
+        }
+      ],
+      "oldGrade": "Watchlist",
+      "nextGrade": "Best Angle",
+      "nextState": "agrees"
+    },
+    {
+      "id": 10882533,
+      "match": "WMU@ODU",
+      "forecast": {
+        "release": "cbb_candidate_2026_10_28_r2_score_precision",
+        "gameId": 10882533,
+        "asOf": "2026-11-02T13:51:07.663Z",
+        "homeId": 341,
+        "awayId": 219,
+        "homeScore": 81.9807922832922,
+        "awayScore": 73.39176627382707,
+        "margin": 8.589026009465119,
+        "total": 155.37255855711928,
+        "possessions": 69.35221725955796,
+        "uncertainty": {
+          "marginSd": 11.882808501656784,
+          "totalSd": 16.993742849108834,
+          "marginTotalCorrelation": 0.025514787619637786,
+          "marginCorrection": -0.13713535132332144,
+          "totalCorrection": 0.822132324525501,
+          "fitThroughSeason": 2024,
+          "games": 11383
+        },
+        "homeWinProbability": 0.7719354294553099,
+        "inputStatus": "complete",
+        "issues": []
+      },
+      "target": {
+        "gameId": 10882533,
+        "sportsbook": "draftkings",
+        "market": "spread",
+        "line": 1.5,
+        "firstPrice": -112,
+        "secondPrice": -108,
+        "providerObservedAt": "2026-11-02T13:50:24.700Z",
+        "fetchedAt": "2026-11-02T13:51:07.663Z",
+        "phase": "current",
+        "provider": "owls",
+        "orientationVerified": true
+      },
+      "references": [
+        {
+          "gameId": 10882533,
+          "sportsbook": "circa",
+          "market": "spread",
+          "line": 1.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-11-02T13:50:11.864Z",
+          "fetchedAt": "2026-11-02T13:51:07.663Z",
+          "phase": "current",
+          "provider": "owls",
+          "orientationVerified": true
+        }
+      ],
+      "oldGrade": "Best Angle",
+      "nextGrade": "Watchlist",
+      "nextState": "neutral"
+    },
+    {
+      "id": 10882588,
+      "match": "ARIZ@UCLA",
+      "forecast": {
+        "release": "cbb_candidate_2026_10_28_r2_score_precision",
+        "gameId": 10882588,
+        "asOf": "2026-11-02T13:51:07.663Z",
+        "homeId": 127,
+        "awayId": 68,
+        "homeScore": 73.40624908098782,
+        "awayScore": 75.9567122156483,
+        "margin": -2.550463134660479,
+        "total": 149.36296129663612,
+        "possessions": 67.67895347173904,
+        "uncertainty": {
+          "marginSd": 11.882808501656784,
+          "totalSd": 16.993742849108834,
+          "marginTotalCorrelation": 0.025514787619637786,
+          "marginCorrection": -0.13713535132332144,
+          "totalCorrection": 0.822132324525501,
+          "fitThroughSeason": 2024,
+          "games": 11383
+        },
+        "homeWinProbability": 0.4122210490443448,
+        "inputStatus": "complete",
+        "issues": []
+      },
+      "target": {
+        "gameId": 10882588,
+        "sportsbook": "fanduel",
+        "market": "spread",
+        "line": 4.5,
+        "firstPrice": -106,
+        "secondPrice": -114,
+        "providerObservedAt": "2026-11-02T13:50:12.093Z",
+        "fetchedAt": "2026-11-02T13:51:07.663Z",
+        "phase": "current",
+        "provider": "owls",
+        "orientationVerified": true
+      },
+      "references": [
+        {
+          "gameId": 10882588,
+          "sportsbook": "pinnacle",
+          "market": "spread",
+          "line": 4.5,
+          "firstPrice": -105,
+          "secondPrice": -111,
+          "providerObservedAt": "2026-11-02T13:50:26.247Z",
+          "fetchedAt": "2026-11-02T13:51:07.663Z",
+          "phase": "current",
+          "provider": "owls",
+          "orientationVerified": true
+        },
+        {
+          "gameId": 10882588,
+          "sportsbook": "circa",
+          "market": "spread",
+          "line": 4.5,
+          "firstPrice": -110,
+          "secondPrice": -110,
+          "providerObservedAt": "2026-11-02T13:50:11.864Z",
+          "fetchedAt": "2026-11-02T13:51:07.663Z",
+          "phase": "current",
+          "provider": "owls",
+          "orientationVerified": true
+        }
+      ],
+      "oldGrade": "Lean",
+      "nextGrade": "Watchlist",
+      "nextState": "opposes"
+    }
+  ]
+}

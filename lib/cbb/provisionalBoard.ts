@@ -1,9 +1,9 @@
 import { cbbImpliedProbability, reviewCbbQuote } from "./marketEvidence";
-import { gradeCbbProvisional } from "./provisionalGradePolicy";
+import { gradeCbbProvisional, CBB_PROVISIONAL_GRADE_RELEASE } from "./provisionalGradePolicy";
 import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_02_r4_supported_market_coverage" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_02_r5_exact_reference_probabilities" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Preserve every existing complete-book choice. A missing Moneyline must not
@@ -57,7 +57,7 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       expectedValue: grade.expectedValue, professionalReferences: grade.professionalReferences,
       referenceState: grade.referenceState };
   });
-  return { release: CBB_PROVISIONAL_BOARD_RELEASE, gameId: forecast.gameId,
+  return { release: CBB_PROVISIONAL_BOARD_RELEASE, gradeRelease: CBB_PROVISIONAL_GRADE_RELEASE, gameId: forecast.gameId,
     asOf: forecast.asOf, targetBook:boardTargetBook, score: { home: forecast.homeScore, away: forecast.awayScore,
       margin: forecast.margin, total: forecast.total, homeWinProbability: forecast.homeWinProbability },
     marketContext: { predictionReader: "unqualified" as const,

@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { dailyEdgeOpposingQuotePairMatches as matches } from "../app/lab/lib/dailyEdgeOpposingQuotePair";
+const base = { selectedLine: 10.5, opposingLine: -10.5, selectedBook: "draftkings", opposingBook: "draftkings", opposingSide: "away" };
+assert.equal(matches(base), true, "TNST +10.5 / MUR -10.5 is a coherent opposing handicap");
+assert.equal(matches({...base, selectedLine: -8.5, opposingLine: 8.5, opposingSide: "home"}), true);
+assert.equal(matches({...base, selectedLine: 3.5, opposingLine: -3.5}), true);
+assert.equal(matches({...base, opposingLine: -9.5}), false, "different thresholds remain unmatched");
+assert.equal(matches({...base, opposingLine: 10.5}), false, "same-sign spreads cannot form a pair");
+assert.equal(matches({...base, opposingBook: "fanduel"}), false, "different books remain context only");
+assert.equal(matches({...base, opposingBook: null}), false);
+assert.equal(matches({...base, selectedLine: 165.5, opposingLine: 165.5, opposingSide: "under"}), true);
+assert.equal(matches({...base, selectedLine: 165.5, opposingLine: 164.5, opposingSide: "under"}), false);
+assert.equal(matches({...base, selectedLine: null, opposingLine: null}), true, "same-book moneyline pair has no point line");
+assert.equal(matches({...base, selectedLine: 0, opposingLine: 0}), true);
+console.log("PASS opposing spread signs, totals, moneylines, book isolation and unmatched thresholds");

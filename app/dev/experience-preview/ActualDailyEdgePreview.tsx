@@ -68,6 +68,7 @@ import {
   resolvePointLineMarketPulseMovement,
 } from "@/app/lab/lib/dailyEdgeMarketPulseMovement";
 import { resolveDailyEdgeCurrentOnlyMovement } from "@/app/lab/lib/dailyEdgeCurrentOnlyMovement";
+import { dailyEdgeOpposingQuotePairMatches } from "@/app/lab/lib/dailyEdgeOpposingQuotePair";
 import { publicMarketDisplayStops,publicMarketDisplayedPrice,publicMarketDisplayedSportsbook } from "@/app/lab/lib/publicMarketDisplayTrail";
 import { nflSelectedBetGrade } from "@/app/lab/lib/nflReaderPresentation";
 import { pickRelativeImpliedProbabilityDelta } from "@/app/lab/lib/lineMoveTone";
@@ -1581,11 +1582,13 @@ function CompactOddsMovement({ market, tone, lineClass, compact = false, illustr
   const selectedRow = rows.find((row) => row.selected) ?? null;
   const opposingRow = rows.find((row) => !row.selected) ?? null;
   const opposingUsesDifferentLine =
-    selectedRow?.movement.currentLine !== null &&
-    selectedRow?.movement.currentLine !== undefined &&
-    opposingRow?.movement.currentLine !== null &&
-    opposingRow?.movement.currentLine !== undefined &&
-    !sameTrackedLine(selectedRow.movement.currentLine, opposingRow.movement.currentLine);
+    selectedRow !== null && opposingRow !== null && !dailyEdgeOpposingQuotePairMatches({
+      selectedLine: selectedRow.movement.currentLine,
+      opposingLine: opposingRow.movement.currentLine,
+      selectedBook: selectedRow.movement.sportsbook,
+      opposingBook: opposingRow.movement.sportsbook,
+      opposingSide: market.opposingOddsTrail?.side ?? null,
+    });
   return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{compact ? "Exact price map" : "Odds movement"}</p>{context ? <p className="mt-0.5 text-[7px] font-semibold text-gray-600">{context}</p> : null}</div><span className={`text-[7px] font-black uppercase tracking-wider ${tone === "emerald" ? "text-emerald-300" : tone === "amber" ? "text-amber-300" : "text-gray-500"}`}>{tone === "emerald" ? "Supporting" : tone === "amber" ? "Resisting" : "Neutral"}</span></div><div className="mt-3 grid gap-2">{rows.map((row) => <div key={row.key}>{movementRow(row.label, row.movement, row.selected)}</div>)}</div>{opposingUsesDifferentLine ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">{illustrativeSample ? "The sample opposing outcome uses its own illustrative line and is context only—not a two-sided fair-price pair or grading input." : "The available opposing outcome is shown at its own verified book and line because no trusted matching pair was available. It is market context only—not a two-sided fair-price pair or a grading input."}</p> : null}{movementReferenceDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">{illustrativeSample ? "The illustrative movement trail and current sample quote use separate labeled sources; they are not mixed into one trail." : <>Movement uses the richest verified two-sided same-book history at {formatSportsbook(movement.sportsbook!)}. The current best quote remains {formatAmerican(currentPrice)} at {formatSportsbook(market.currentPriceSportsbook!)}; the books are never mixed into one trail.</>}</p> : null}{soccerBoard ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">All outcomes use the same Daily Edge movement timeline. The highlighted row is the graded side; the other rows are market context only.</p> : null}{evaluationDiffers ? <p className="mt-2 text-[7px] leading-relaxed text-gray-600">{illustrativeSample ? `Sample quote ${formatAmerican(currentPrice)}; sample recommendation evaluated at ${formatAmerican(evaluatedPrice)}.` : <>Current quote {formatAmerican(currentPrice)}{market.currentPriceSportsbook ? ` at ${formatSportsbook(market.currentPriceSportsbook)}` : ""}; recommendation evaluated at {formatAmerican(evaluatedPrice)}. Live movement does not silently re-grade the pick.</>}</p> : null}{market.oddspherePostedAmerican != null && !publishedIsVerified ? <p className="mt-1 text-[7px] leading-relaxed text-gray-600">{illustrativeSample ? "Published sample price omitted because it does not match the selected side." : "Published price omitted because its selected side was not explicitly verified."}</p> : null}</section>;
 }
 
