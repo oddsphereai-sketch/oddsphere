@@ -111,7 +111,7 @@ assert.equal(cbbCurrentSplitEvidence(cbbGame, { ...providerOdds, data: [...provi
   providerSplits, "2026-11-01T11:55:00.000Z", asOf).rows.length, 4);
 assert.equal(cbbCurrentSplitEvidence(cbbGame, { ...providerOdds, data: [...providerOdds.data,
   { ...providerOdds.data[0], id: "different-event" }] }, providerSplits,
-"2026-11-01T11:55:00.000Z", asOf).reason, "ambiguous_odds_event");
+"2026-11-01T11:55:00.000Z", asOf).rows.length, 4,"separate book-native odds IDs cannot veto one verified fixture");
 assert.deepEqual(splitEvidence.rows.find(row => row.market === "moneyline" && row.selection === "second"), {
   market: "moneyline", sourceBook: "circa", observedAt: "2026-11-01T11:50:00.000Z",
   selection: "second", ticketsPct: 0.2, moneyPct: 0.6, moneyMinusTicketsPoints: 40 });
@@ -123,7 +123,7 @@ assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
   data: [{ ...providerSplitGame, home_team: "Duke" }] }, "2026-11-01T11:55:00.000Z", asOf).reason,
 "split_participant_mismatch");
 assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
-  data: [{ ...providerSplitGame, splits: [{ ...providerSplitGame.splits[0], as_of: "2026-11-01T09:00:00.000Z" }] }] },
+  data: [{ ...providerSplitGame, splits: [{ ...providerSplitGame.splits[0], as_of: "2026-11-01T08:59:00.000Z" }] }] },
 "2026-11-01T11:55:00.000Z", asOf).rows.length, 0);
 const pathQuote: CbbQualifiedNamedQuote = { ...sharp, provider: "owls", orientationVerified: true };
 const paths = cbbObservedPricePaths([pathQuote,

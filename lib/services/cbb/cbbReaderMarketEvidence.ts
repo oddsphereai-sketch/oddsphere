@@ -1,7 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_10_31_r3_source_scoped_tracking" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_02_r4_instant_deduplication" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 const marketEntries=[['moneyline','moneyline'],['total','total'],['first_inning','spread']] as const;
@@ -27,7 +27,7 @@ function stops(entry:BookDisplayEntry,cutoff:number):OddsTrailStopDto[]{
     label:opening&&row[0]===opening[0]?"open":"move"}));
 }
 function mergeTrail(history:OddsTrailStopDto[],current:OddsTrailStopDto[]):OddsTrailStopDto[]{
-  return [...new Map([...history,...current].map(stop=>[`${stop.sportsbook}:${stop.observedAt}:${stop.line}`,stop])).values()]
+  return [...new Map([...history,...current].map(stop=>[`${stop.sportsbook}:${Date.parse(stop.observedAt??"")}:${stop.line}`,stop])).values()]
     .sort((a,b)=>Date.parse(a.observedAt??"")-Date.parse(b.observedAt??""));
 }
 function splitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{

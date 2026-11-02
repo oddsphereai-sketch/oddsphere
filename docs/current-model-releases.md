@@ -586,6 +586,34 @@ forward grading remain required. Exact locked payloads retain precedence.
   exact precedence. Public splits appear only if a provider actually returns
   a verified complete two-sided pair; no percentages are inferred from odds.
 
+## CBB November 2 durable evidence and member eligibility
+
+- Publisher `cbb_member_pipeline_2026_11_02_r7_durable_market_evidence` ingests
+  at-least-one-D1 fixtures. Future unlocked publication requires complete model
+  inputs and at least one actual evaluated price/probability row. A missing ML
+  cannot veto evaluated Spread/Total. Hard Rock absence is not an exclusion rule.
+  Entirely incomplete unlocked candidates stay internal and retryable.
+- Store `cbb_member_game_store_2026_11_02_r2_preserved_market_evidence` persists
+  the existing collector's same-book history and writer observations. Future
+  locks freeze the published DTO and evidence; existing r1/r2 locks return exact
+  before any adaptation. Same authoritative writer and sport lease remain.
+- Split evidence `cbb_split_evidence_2026_11_02_r2_verified_source_event_identity`
+  joins verified institutions/date across book-native and source event IDs.
+  Adapter `cbb_member_adapter_2026_11_02_r5_source_split_percentages` converts
+  normalized fractions to member percentages once. Reader evidence
+  `cbb_reader_evidence_2026_11_02_r4_instant_deduplication` deduplicates equivalent
+  ISO clocks by actual instant. Model math, exact-price grades and stakes remain.
+- The owner removed incomplete untracked fixtures from the member page; their
+  internal schedule remains available for ingestion. No pending-card/full-schedule
+  member flow is introduced. St. Thomas332's missing prior remains a recorded
+  recovery finding. The owner approved exclusion of the incomplete App State10882480 card under
+  `cbb_member_scope_2026_11_02_r1_owner_approved_incomplete_lock`. Only its exact
+  empty lock matches; its original payload stays unchanged. The member cohort
+  is116 complete games /348 priced markets on the reviewed inputs; zero
+  evaluated/actionable decisions are removed.
+- Independent same-slate review and zero-change evidence replay:
+  `docs/model-audits/2026-11-02-cbb-member-evidence-and-eligibility.md`.
+
 ## CBB November 2 verified coverage recovery
 
 - Sole publisher `cbb_member_pipeline_2026_11_02_r6_verified_coverage_recovery`;

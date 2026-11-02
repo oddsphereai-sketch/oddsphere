@@ -53,7 +53,8 @@ export async function GET(request: Request): Promise<Response> {
       graded.push({date:slateDate,settled:result.upsertedCount});
     }
     const conflicts=[...new Set([...seeded.flatMap(row=>row.preservedLockedConflicts),
-      ...board.problems.filter(p=>p.includes("locked_provider_conflict_preserved")).map(p=>Number(p.split(":")[0]))])];
+      ...board.problems.filter(p=>p.includes("locked_provider_conflict_preserved")).map(p=>Number(p.split(":")[0]))])]
+      .filter(id=>!board.ownerApprovedExclusions.includes(id));
     return {
       partial:conflicts.length>0||board.providerWarnings.length>0,
       error_message:[...(conflicts.length?[`CBB locked provider conflicts preserved (${conflicts.join(",")}); remaining board refreshed`]:[]),...board.providerWarnings].join("; ")||null,
