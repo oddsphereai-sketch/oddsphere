@@ -83,7 +83,7 @@ async function main() {
     assert.equal(response.runs.length,2);
     for(const run of response.runs){assert.equal(run.result.api_calls_made,0);assert.equal(run.result.records_updated,0);assert.equal(run.result.details.skipped,true);}
   }
-  assert.deepEqual(calls,[],"empty MLB/WNBA capture reaches no provider, historical backfill, observation write, or member/lock publisher");
+  assert.equal(calls.length,0,"empty MLB/WNBA capture reaches no provider, historical backfill, observation write, or member/lock publisher");
   rows=[{id:1}];sports=["mlb","wnba","nba","nhl","nfl","cfb","cbb","soccer","ucl"];
   const sharpResult=await (await sharp.GET(request)).json();
   for(const run of sharpResult.runs){assert.equal(run.result.records_updated,run.sport==="soccer"||run.sport==="ucl"?3:5);assert.equal(run.result.partial,false);}
