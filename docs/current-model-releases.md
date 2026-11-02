@@ -632,6 +632,25 @@ forward grading remain required. Exact locked payloads retain precedence.
   exact precedence. Public splits appear only if a provider actually returns
   a verified complete two-sided pair; no percentages are inferred from odds.
 
+## CBB November 2 captured split persistence
+
+- Publisher `cbb_member_pipeline_2026_11_02_r9_captured_split_continuity` and
+  existing r2 store schema persist
+  the same qualified durable named-book pairs already available to the reader.
+  One existing-feed DB read and one full-board identity pass precede the sole
+  member write; no provider request, per-game fetch or second writer is added.
+- Reader and writer share complete-pair, original source timestamp, three-hour
+  freshness, book priority, exact institution/date and ambiguity rules. Only
+  unlocked candidates may gain evidence. Future locks freeze the published
+  evidence; existing r1/r2 locks remain exact. One compatibility list owns
+  both store and lock-reader release validation.
+- The stored DTO schema stays r2, so in-flight prior-deployment readers remain
+  compatible during rollout. The changed publication behavior is versioned by r9.
+- Scores, probabilities, picks, prices, grades, stakes, provider budgets,
+  schedules and the sport-scoped lease are unchanged. Same-input promotions,
+  demotions and actionable impact are zero. Evidence and rollback:
+  `docs/model-audits/2026-11-02-cbb-captured-split-persistence.md`.
+
 ## CBB November 2 exact professional reference interpretation
 
 - Grade policy `cbb_2026_11_02_r2_exact_reference_probabilities`, board

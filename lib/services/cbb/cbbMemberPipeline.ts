@@ -13,16 +13,19 @@ import { OwlsInsightClient } from "@/lib/providers/owls/owlsInsightClient";
 import type { RawOwlsOddsResponse } from "@/lib/providers/owls/owlsSharpBookOdds";
 import type { RawOwlsSplitsResponse } from "@/lib/providers/owls/owlsSharpBookSplits";
 import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
-import { cbbDailyEdgeResponse } from "./adaptCbbProvisionalToDailyEdge";
+import { cbbDailyEdgeResponse,adaptCbbProvisionalGame } from "./adaptCbbProvisionalToDailyEdge";
 import { cbbMemberGameForReader, readCbbMemberGames, writeCbbMemberGame } from "./cbbMemberGameStore";
 import { fetchCbbDayEvents } from "./fetchCbbDayEvents";
 import { loadCbbRollingSchedule } from "./cbbRollingSchedule";
 import { dailyEdgeSnapshotKey, upsertLabResponseSnapshot } from "@/lib/services/labResponseSnapshots";
 import { writeLockedCbbTracking } from "./cbbTrackingWriter";
-import { readCbbCapturedMarketHistory } from "./cbbCapturedMarketHistory";
+import { readCbbCapturedMarketHistory,readCbbCapturedNamedSplits } from "./cbbCapturedMarketHistory";
+import { mergeCbbCapturedNamedSplitEvidence,type CbbPreparedNamedSplitSections } from "./cbbReaderMarketEvidence";
+import { applySharpApiCurrentSplitOverlay } from "@/lib/providers/real_api/sharpApiCurrentSplits";
+import { advanceCbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r8_exact_reference_probabilities" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r9_captured_split_continuity" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -72,9 +75,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const namedById=new Map<number,{quotes:CbbQuote[];rejected:Array<{reason:string;book:string|null}>}>(candidateGames.filter(game=>Date.parse(game.date)>Date.parse(asOf))
     .map(game=>[game.id,normalizeCbbOwlsCurrent(game,odds.body,asOf,asOf)] as const));
   const providerWarnings:string[]=[];
-  const bookHistory=await readCbbCapturedMarketHistory(db).catch(error=>{
-    providerWarnings.push(error instanceof Error?error.message:"CBB captured history unavailable");return null;
-  });
+  const [bookHistory,capturedSplits]=await Promise.all([
+    readCbbCapturedMarketHistory(db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured history unavailable");return null;}),
+    readCbbCapturedNamedSplits(db).catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured splits unavailable");return null;}),
+  ]);
   const needsFallback=candidateGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)&&
     !["moneyline","spread","total"].every(market=>namedById.get(game.id)?.quotes.some(q=>q.market===market)));
   if(needsFallback.length){
@@ -133,6 +137,26 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   if(previousReady&&!publishableGames.some(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)))
     throw new Error("CBB current-evaluation coverage absent; preserving the prior published board");
   if(unpublishedIncomplete.length)providerWarnings.push(`CBB incomplete evaluations remain internal (${unpublishedIncomplete.join(",")})`);
+  // Prepare actual candidate DTOs once, with the full board as identity context.
+  // Reuse the reader's qualified captured-source rule before the sole write;
+  // never make per-game provider/DB requests or append evidence to a lock.
+  const preparedSections=new Map<number,CbbPreparedNamedSplitSections>();
+  if(capturedSplits){
+    const previews=publishableGames.flatMap(game=>{
+      const previous=prior.get(game.id),identity=scheduled.get(game.id),candidate=boardCandidates.get(game.id);
+      if(previous?.snapshot.lockedAt||Date.parse(asOf)>=Date.parse(game.date)-60*60_000||!candidate||!identity)
+        return previous?[previous.memberGame]:[];
+      const snapshot=advanceCbbProvisionalSnapshot({existing:previous?.snapshot??null,candidate,startsAt:game.date,now:asOf});
+      return [adaptCbbProvisionalGame({game,snapshot,homeLogo:identity.homeTeamLogo,awayLogo:identity.awayTeamLogo,now:asOf})];
+    });
+    const enriched=mergeCbbCapturedNamedSplitEvidence(cbbDailyEdgeResponse(args.anchorDate,previews,asOf),capturedSplits,
+      applySharpApiCurrentSplitOverlay,Date.parse(asOf));
+    for(const game of enriched.games){
+      const sections:CbbPreparedNamedSplitSections={};
+      for(const key of ["moneyline","first_inning","total"] as const){const section=game.markets[key].sportsbookSplits;if(section)sections[key]=section;}
+      preparedSections.set(game.external_id,sections);
+    }
+  }
   let written=0,locked=0,held=0,missingLogos=0,trackingInserted=0;
   for(const game of publishableGames){
     const identity=scheduled.get(game.id);
@@ -159,7 +183,8 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       if(candidate.rows.some(row=>row.grade==="Held"))held++;
     }
     const result=await writeCbbMemberGame({game,candidate,homeLogo:identity.homeTeamLogo,
-      awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory},db);
+      awayLogo:identity.awayTeamLogo,now:asOf,splitEvidence,marketQuotes:namedById.get(game.id)?.quotes??[],bookHistory,
+      capturedNamedSections:preparedSections.get(game.id)},db);
     if(result.written)written++;
     if(result.record.snapshot.lockedAt)locked++;
     trackingInserted+=await writeLockedCbbTracking(result.record,db);
