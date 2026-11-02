@@ -60,6 +60,10 @@ import {
   displayedConsensusSection,
   splitLeanStrength,
   splitSectionSignal,
+  splitLeader,
+  splitSourceComparison,
+  splitSourcesConflict,
+  splitDirectionalMeasure,
 } from "@/app/lab/lib/marketPulsePresentation";
 import { firstInningSupportTone } from "@/app/lab/lib/firstInningPresentation";
 import { soccerForecastSemantics } from "@/app/lab/lib/soccerForecastSemantics";
@@ -1486,7 +1490,7 @@ function footballPublicPriceSignal(market: MarketEdgeDto, movement: CoherentMove
   const publicSupportsPick = sideMatchesPick(publicLeader, market.pick);
   const priceSupportsPick = movementDirection === "support";
   const agrees = publicSupportsPick === priceSupportsPick;
-  return { label: "Public vs price", value: agrees ? "Signals agree" : "Signals diverge", note: `Money → ${publicLeader} · retail context`, tone: agrees ? "emerald" : "amber" };
+  return { label: "Public vs price", value: agrees ? "Signals agree" : "Signals diverge", note: `${splitDirectionalMeasure(publicRead)} → ${publicLeader} · retail context`, tone: agrees ? "emerald" : "amber" };
 }
 
 function footballSharpSignal(market: MarketEdgeDto, sport: "nfl" | "cfb", illustrativeSample = false): FootballMarketSignal {
@@ -1874,9 +1878,10 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
   const splitConflict = splitSourcesConflict(consensus, sharp);
   const movementDirection = coherentMovementDirection(market, movement);
   const movementCopy = coherentMovementSummary(market, movement, movementDirection);
-  const splitCopy = splitConflict && consensusLeader && sharpLeader
-    ? `Public consensus money leans ${consensusLeader}, while the sharp-book split snapshot leans ${sharpLeader}.`
-    : null;
+  const splitCopy = splitConflict ? [
+    splitSourceComparison("Money", consensusSignal.moneyLeader, sharpSignal.moneyLeader),
+    splitSourceComparison("Tickets", consensusSignal.ticketLeader, sharpSignal.ticketLeader),
+  ].filter(Boolean).join(" · ") : null;
 
   if (splitConflict) {
     return {
@@ -1929,9 +1934,11 @@ function sourceCoherentMarketPulse(market: MarketEdgeDto, movement: CoherentMove
   const rawDetail = market.marketReadV2?.explanation ?? decision?.resolvedMarketRead.copy ?? market.marketInterpretation?.detail?.[0] ?? market.riskLine;
   if (/sharp money/i.test(rawChip)) {
     const consensusSupports = consensusLeader && market.pick ? sideMatchesPick(consensusLeader, market.pick) : null;
+    const measure = splitDirectionalMeasure(consensusSignal);
+    const consensusLabel = measure === "Money" ? "Consensus money split" : measure === "Tickets" ? "Consensus ticket split" : "Consensus split";
     return {
-      chip: consensusSupports === true ? "Consensus money split supports our side" : consensusSupports === false ? "Consensus money split leans against our side" : "Consensus split signal",
-      detail: [movementCopy, rawDetail.replace(/sharp money/gi, "consensus money split")].filter(Boolean).join(" "),
+      chip: consensusSupports === true ? `${consensusLabel} supports our side` : consensusSupports === false ? `${consensusLabel} leans against our side` : "Consensus split signal",
+      detail: [movementCopy, rawDetail.replace(/sharp money/gi, consensusLabel.toLowerCase())].filter(Boolean).join(" "),
       tone: consensusSupports === true ? "emerald" : consensusSupports === false ? "amber" : "gray",
     };
   }
@@ -2113,24 +2120,13 @@ function CrossSourceSplitRead({ consensus, sharp }: { consensus: MarketSplitDisp
   const publicTickets = splitLeader(consensus, "betsPct");
   const sharpTickets = splitLeader(sharp, "betsPct");
   if (!publicMoney && !sharpMoney && !publicTickets && !sharpTickets) return null;
-  const moneyRead = publicMoney && sharpMoney ? publicMoney.toLowerCase() === sharpMoney.toLowerCase() ? `Money agrees on ${publicMoney}` : `Money: Public ${publicMoney} · Sharp ${sharpMoney}` : `Money: ${publicMoney ? `Public ${publicMoney}` : `Sharp ${sharpMoney}`}`;
-  const ticketRead = publicTickets && sharpTickets ? publicTickets.toLowerCase() === sharpTickets.toLowerCase() ? `Tickets agree on ${publicTickets}` : `Tickets: Public ${publicTickets} · Sharp ${sharpTickets}` : `Tickets: ${publicTickets ? `Public ${publicTickets}` : `Sharp ${sharpTickets}`}`;
-  return <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/[0.07] bg-black/15 px-3 py-2"><span className="text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">Cross-source read</span><span className="text-[8px] font-bold text-gray-300">{moneyRead}</span><span className="hidden h-3 w-px bg-white/10 sm:block" /><span className="text-[8px] font-bold text-gray-400">{ticketRead}</span></div>;
-}
-
-function splitSourcesConflict(consensus: MarketSplitDisplaySection | null, sharp: MarketSplitDisplaySection | null): boolean {
-  const consensusLeader = splitSectionSignal(consensus).direction;
-  const sharpLeader = splitSectionSignal(sharp).direction;
-  return consensusLeader !== null && sharpLeader !== null && consensusLeader.toLowerCase() !== sharpLeader.toLowerCase();
+  const moneyRead = splitSourceComparison("Money", publicMoney, sharpMoney);
+  const ticketRead = splitSourceComparison("Tickets", publicTickets, sharpTickets);
+  return <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/[0.07] bg-black/15 px-3 py-2"><span className="text-[7px] font-black uppercase tracking-[0.14em] text-gray-500">Cross-source read</span>{moneyRead ? <span className="text-[8px] font-bold text-gray-300">{moneyRead}</span> : null}{moneyRead && ticketRead ? <span className="hidden h-3 w-px bg-white/10 sm:block" /> : null}{ticketRead ? <span className="text-[8px] font-bold text-gray-400">{ticketRead}</span> : null}</div>;
 }
 
 function splitSectionIsStale(section: MarketSplitDisplaySection | null): boolean {
   return marketSplitSectionIsStale(section);
-}
-
-function splitLeader(section: MarketSplitDisplaySection | null, valueKey: "moneyPct" | "betsPct"): string | null {
-  if (!section) return null;
-  return section.rows.filter((row) => row[valueKey] !== null).sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0))[0]?.label ?? null;
 }
 
 function RelevantTrend({ game, market, marketKey, sport, history, sample, setSample, illustrativeSample = false }: { game: DailyEdgeGameDto; market: MarketEdgeDto; marketKey: MarketKey; sport: Sport; history: PreviewHistoryByTeam; sample: 5 | 10; setSample: (sample: 5 | 10) => void; illustrativeSample?: boolean }) {

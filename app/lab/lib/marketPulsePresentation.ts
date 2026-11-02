@@ -66,6 +66,10 @@ export type SplitSectionSignal = {
   internallySplit: boolean;
 };
 
+export function splitDirectionalMeasure(signal:SplitSectionSignal):"Money"|"Tickets"|null {
+  return signal.direction===null?null:signal.moneyLeader!==null?"Money":"Tickets";
+}
+
 export function splitSectionSignal(section: MarketSplitDisplaySection | null): SplitSectionSignal {
   const moneyLeader = splitLeader(section, "moneyPct");
   const ticketLeader = splitLeader(section, "betsPct");
@@ -81,14 +85,31 @@ export function splitSectionSignal(section: MarketSplitDisplaySection | null): S
   };
 }
 
-function splitLeader(
+export function splitLeader(
   section: MarketSplitDisplaySection | null,
   valueKey: "moneyPct" | "betsPct",
 ): string | null {
   if (!section) return null;
-  return section.rows
-    .filter((row) => row[valueKey] !== null)
-    .sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0))[0]?.label ?? null;
+  const rows = section.rows.filter((row) => row[valueKey] !== null && Number.isFinite(row[valueKey]));
+  if (!rows.length) return null;
+  const maximum = Math.max(...rows.map((row) => row[valueKey]!));
+  const leaders = rows.filter((row) => row[valueKey] === maximum);
+  // Equal published values carry no directional lead. Provider row order must
+  // never turn a tie into money/ticket support for its first participant.
+  return leaders.length === 1 ? leaders[0].label : null;
+}
+
+export function splitSourceComparison(metric:"Money"|"Tickets",publicLeader:string|null,sharpLeader:string|null):string|null {
+  if (!publicLeader && !sharpLeader) return null;
+  if (publicLeader && sharpLeader) return publicLeader.toLowerCase() === sharpLeader.toLowerCase()
+    ? `${metric} agrees on ${publicLeader}` : `${metric}: Public ${publicLeader} · Sharp ${sharpLeader}`;
+  return `${metric}: ${publicLeader ? `Public ${publicLeader}` : `Sharp ${sharpLeader}`}`;
+}
+
+export function splitSourcesConflict(consensus:MarketSplitDisplaySection|null,sharp:MarketSplitDisplaySection|null):boolean {
+  const publicSignal=splitSectionSignal(consensus),sharpSignal=splitSectionSignal(sharp);
+  const disagrees=(a:string|null,b:string|null)=>a!==null&&b!==null&&a.toLowerCase()!==b.toLowerCase();
+  return disagrees(publicSignal.moneyLeader,sharpSignal.moneyLeader)||disagrees(publicSignal.ticketLeader,sharpSignal.ticketLeader);
 }
 
 function sideMatchesPick(label: string, pick: string): boolean {
