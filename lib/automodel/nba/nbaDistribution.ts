@@ -105,6 +105,23 @@ export type NbaDistributionInput = {
   };
 };
 
+/**
+ * Resolve a two-sided market without inventing a direction at an exact 50/50
+ * coordinate. The retained side must come from the already-authored forecast,
+ * never from a favorite label, quote, or arbitrary ordering of the outcomes.
+ */
+export function selectNbaSideFromProbability<T extends string>(args: {
+  probability: number | null;
+  above: T;
+  below: T;
+  tie: T | null;
+}): T | null {
+  if (args.probability === null) return null;
+  if (args.probability > 0.5) return args.above;
+  if (args.probability < 0.5) return args.below;
+  return args.tie;
+}
+
 function marginResidualCdf(
   residual: number,
   marginSd: number,

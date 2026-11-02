@@ -1,5 +1,21 @@
 # Model change safety protocol
 
+## Owner-directed NBA neutral-tie and corroborated-opposition repair — November 2
+
+The owner directed immediate repair of two defects independently identified in
+the NBA product: an exact 50/50 coordinate being labeled as a causal side flip,
+and corroborated Circa/Pinnacle opposition being unable to demote an existing
+Lean. Candidate r32/r34/r23 retains the independent side at an exact tie and
+moves a Lean to Watchlist only when named opposition is corroborated by a second
+opposing/conflicting source or explicit named-book disagreement. The paired
+clean causal Lean-to-Best rule remains active and is tested symmetrically.
+This adds no weight, blend, favorite rule, score coefficient, provider call,
+writer, cron, lease, stake, or locked-row reinterpretation. Same-input board
+impact, exact-price EV, focused/full checks, latest-main integration safety,
+protected PR publication, and post-merge live proof remain mandatory. Evidence
+and rollback: `docs/model-audits/2026-11-02-nba-neutral-tie-corroborated-opposition-predeclaration.md`
+and `docs/model-audits/2026-11-02-nba-neutral-tie-corroborated-opposition-result.md`.
+
 ## Owner-directed NFL spot-check input repair — November 2
 
 The owner requested substantive same-book market interpretation spot checks and
