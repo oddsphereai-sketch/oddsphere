@@ -428,7 +428,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_02_r104_source_qualified_market_read/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_02_r105_market_conviction_grades/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");
@@ -687,6 +687,10 @@ assert.equal(
   "2026-09-09T23:20:01.250Z",
   "the evidence timestamp must include a provider quote that lands just after cron invocation",
 );
+assert.equal(nflEvidenceCapturedAt("2026-09-09T23:20:00.000Z", [{
+  ...completePayload("2026-09-09T23:20:00.000Z", -150).market.current,
+  observedAt: "2026-09-09T23:19:00.000Z", availableAt: "2026-09-09T23:20:10.000Z",
+}]), "2026-09-09T23:20:10.000Z", "a real offer receipt cannot be newer than the no-write or production decision");
 const candidateRecoveryFixture = {
   snapshot: { games: [{ id: "nfl-1001", lockState: "open", status: { linesLocked: false } }] },
 } as unknown as Parameters<typeof preserveVerifiedNflLockedGames>[0]["candidate"];

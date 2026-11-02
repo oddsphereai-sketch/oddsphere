@@ -1,8 +1,11 @@
 import type { NflV1ActionableGradeBundle } from "./nflV1ActionableGradeCandidate";
+import { createHash } from "node:crypto";
 import type { NflMarketInnovationReceipt } from "./nflMarketInnovationRuntime";
+import { assessNflMarketGradeConfirmation, type NflMarketGradeConfirmation,
+  type NflMarketGradePromotionContext } from "./nflMarketGradeConfirmation";
 
 export const NFL_MARKET_INNOVATION_POSTURE_RELEASE =
-  "nfl_market_innovation_posture_2026_11_02_r2_current_economic_conviction" as const;
+  "nfl_market_innovation_posture_2026_11_02_r3_symmetric_market_conviction" as const;
 
 export type NflMarketInnovationPostureReceipt = {
   release: typeof NFL_MARKET_INNOVATION_POSTURE_RELEASE;
@@ -13,9 +16,11 @@ export type NflMarketInnovationPostureReceipt = {
     opposingSources: string[];
     previousGrade: string;
     finalGrade: string;
-    action: "retained" | "best_angle_to_lean" | "locked_unchanged";
+    action: "retained" | "best_angle_to_lean" | "watchlist_to_lean" | "lean_to_best_angle" | "locked_unchanged";
+    confirmation?: NflMarketGradeConfirmation;
   }>;
-  boardImpact: { bestAngleToLean: number; actionableBefore: number; actionableAfter: number };
+  boardImpact: { bestAngleToLean: number; actionableBefore: number; actionableAfter: number;
+    watchlistToLean?: number; leanToBestAngle?: number };
 };
 
 /**
@@ -31,9 +36,18 @@ export function applyNflMarketInnovationPosture(args: {
   existingLockedRecord?: boolean;
   /** Writer-only attestation: this T-60 tuple has not yet been stored. */
   creatingNewLock?: boolean;
+  promotionContext?: NflMarketGradePromotionContext;
 }): { production: NflV1ActionableGradeBundle; posture: NflMarketInnovationPostureReceipt } {
+  const { posture: _priorPosture, ...evidence } = args.innovation;
+  const evidenceKey = createHash("sha256").update(JSON.stringify({ release: NFL_MARKET_INNOVATION_POSTURE_RELEASE,
+    evidence, homeTeam: args.homeTeam, context: args.promotionContext,
+    locked: args.existingLockedRecord === true, newLock: args.creatingNewLock === true,
+    tuples: args.production.evaluatedBets.map(({ grade: _grade, ...tuple }) => tuple) })).digest("hex");
+  if (args.production.marketConvictionEvaluation?.evidenceKey === evidenceKey) {
+    return { production: args.production, posture: args.production.marketConvictionEvaluation.receipt };
+  }
   const evaluations: NflMarketInnovationPostureReceipt["evaluations"] = [];
-  let changes = 0;
+  let changes = 0, watchlistToLean = 0, leanToBestAngle = 0;
   const evaluatedBets = args.production.evaluatedBets.map((decision) => {
     const reason = args.innovation.reasons[decision.market];
     let unresolvedReason = reason === "opposed_named_economic_episodes" ||
@@ -70,18 +84,33 @@ export function applyNflMarketInnovationPosture(args: {
     }
     const locked = args.existingLockedRecord === true || (args.creatingNewLock !== true &&
       (decision.stage === "t60_locked" || decision.lockedAt !== null));
+    const confirmation = assessNflMarketGradeConfirmation({ decision, innovation: args.innovation,
+      homeTeam: args.homeTeam, context: locked ? undefined : args.promotionContext });
+    if (!locked && args.promotionContext && confirmation.heldResistanceSources.length) {
+      for (const source of confirmation.heldResistanceSources) if (!opposingSources.includes(source)) opposingSources.push(source);
+      unresolvedReason ??= "named_quote_held_against_picked_side_pressure";
+    }
     const demote = !locked && decision.grade === "Best Angle" && opposingSources.length > 0;
+    const promoteLean = !locked && !opposingSources.length && decision.grade === "Watchlist" && confirmation.leanEligible;
+    const promoteBest = !locked && !opposingSources.length && decision.grade === "Lean" && confirmation.bestAngleEligible;
     if (demote) changes++;
+    if (promoteLean) watchlistToLean++;
+    if (promoteBest) leanToBestAngle++;
+    const finalGrade = demote || promoteLean ? "Lean" : promoteBest ? "Best Angle" : decision.grade;
     evaluations.push({ market: decision.market, pickedDirection, unresolvedReason, opposingSources,
-      previousGrade: decision.grade, finalGrade: demote ? "Lean" : decision.grade,
-      action: locked ? "locked_unchanged" : demote ? "best_angle_to_lean" : "retained" });
+      previousGrade: decision.grade, finalGrade,
+      action: locked ? "locked_unchanged" : demote ? "best_angle_to_lean" : promoteLean ? "watchlist_to_lean"
+        : promoteBest ? "lean_to_best_angle" : "retained",
+      ...(!locked && args.promotionContext ? { confirmation } : {}) });
     // Preserve every numerical, execution and evidence field exactly. There is
     // no second probability/score update or reconstruction of a legacy tuple.
-    return demote ? { ...decision, grade: "Lean" } : decision;
+    return demote || promoteLean || promoteBest ? { ...decision, grade: finalGrade } : decision;
   });
   const actionable = (rows: typeof evaluatedBets) => rows.filter(row => row.grade === "Best Angle" || row.grade === "Lean").length;
-  return { production: changes ? { ...args.production, evaluatedBets } : args.production,
-    posture: { release: NFL_MARKET_INNOVATION_POSTURE_RELEASE, evaluations,
+  const posture = { release: NFL_MARKET_INNOVATION_POSTURE_RELEASE, evaluations,
       boardImpact: { bestAngleToLean: changes, actionableBefore: actionable(args.production.evaluatedBets),
-        actionableAfter: actionable(evaluatedBets) } } };
+        actionableAfter: actionable(evaluatedBets), ...(args.promotionContext ? { watchlistToLean, leanToBestAngle } : {}) } };
+  const production = changes || watchlistToLean || leanToBestAngle ? { ...args.production, evaluatedBets,
+    ...(args.promotionContext ? { marketConvictionEvaluation: { evidenceKey, receipt: posture } } : {}) } : args.production;
+  return { production, posture };
 }

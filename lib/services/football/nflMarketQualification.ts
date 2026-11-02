@@ -3,7 +3,7 @@ import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 import type { NflV1WeekOneOutcomeForecast } from "./nflV1WeekOneOutcome";
 
 type Market = "moneyline" | "spread" | "total";
-export const NFL_MARKET_QUALIFICATION_RELEASE = "nfl_market_qualification_2026_11_02_r1_source_bound_law" as const;
+export const NFL_MARKET_QUALIFICATION_RELEASE = "nfl_market_qualification_2026_11_02_r2_transport_stable_law" as const;
 export type NflMarketQualificationReceipt = {
   release: typeof NFL_MARKET_QUALIFICATION_RELEASE;
   market: Market;
@@ -69,7 +69,8 @@ function forecastHash(forecast: NflV1WeekOneOutcomeForecast): string {
     expectedAwayScore: forecast.expectedAwayScore, expectedHomeScore: forecast.expectedHomeScore,
     homeWinProbability: forecast.homeWinProbability, awayWinProbability: forecast.awayWinProbability,
     tieProbability: forecast.tieProbability,
-    margin: forecast.marginDistribution, total: forecast.totalDistribution })).digest("hex");
+    margin: { values: forecast.marginDistribution.values, probabilities: forecast.marginDistribution.probabilities },
+    total: { values: forecast.totalDistribution.values, probabilities: forecast.totalDistribution.probabilities } })).digest("hex");
 }
 function validLaw(f: NflV1WeekOneOutcomeForecast): boolean {
   const pmf = (d: typeof f.marginDistribution) => d.values.length > 0 && d.values.length === d.probabilities.length &&
