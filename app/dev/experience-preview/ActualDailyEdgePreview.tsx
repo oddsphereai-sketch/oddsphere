@@ -717,7 +717,7 @@ type ReaderSurfaceProps = {
 
 function memberTeamName(game: DailyEdgeGameDto, side: "away" | "home", sport: Sport): string {
   const abbreviation = side === "away" ? game.awayTeam : game.homeTeam;
-  if (sport !== "nfl" && sport !== "cfb" && !isUclGame(game)) return abbreviation;
+  if (sport !== "nfl" && sport !== "cfb" && sport !== "cbb" && !isUclGame(game)) return abbreviation;
   return (side === "away" ? game.awayTeamDisplayName : game.homeTeamDisplayName) ?? abbreviation;
 }
 
@@ -763,7 +763,7 @@ function memberTeamLogo(game: DailyEdgeGameDto, side: "away" | "home"): string |
 
 function CompactMatchupIdentity({ game, sport }: { game: DailyEdgeGameDto; sport: Sport }) {
   const ucl = isUclGame(game);
-  if (sport !== "cfb" && !ucl) {
+  if (sport !== "cfb" && sport !== "cbb" && !ucl) {
     return <div className="flex items-center gap-2"><TeamLogo src={memberTeamLogo(game, "away")} label={game.awayTeam} sport={sport} primaryColor={memberTeamColor(game, "away", sport)} /><strong className="text-sm text-white">{game.awayTeam}</strong><span className="text-[9px] text-gray-700">@</span><strong className="text-sm text-white">{game.homeTeam}</strong><TeamLogo src={memberTeamLogo(game, "home")} label={game.homeTeam} sport={sport} primaryColor={memberTeamColor(game, "home", sport)} /></div>;
   }
   const side = (role: "away" | "home") => {
@@ -879,9 +879,9 @@ function MobileReaderMatchup({ game, sport }: { game: DailyEdgeGameDto; sport: S
   return <div className="min-w-0" data-mobile-reader-matchup>
     <div className="flex min-w-0 items-center gap-2" aria-label={`${memberTeamName(game, "away", sport)} at ${memberTeamName(game, "home", sport)}`}>
       <TeamLogo src={memberTeamLogo(game, "away")} label={game.awayTeam} sport={sport} primaryColor={memberTeamColor(game, "away", sport)} compact />
-      <strong className="truncate text-sm font-black text-white" title={memberTeamName(game, "away", sport)}>{game.awayTeam}</strong>
+      <strong className={`min-w-0 flex-1 font-black text-white ${sport === "cbb" ? "line-clamp-2 break-words text-[10px] leading-3" : "truncate text-sm"}`} title={memberTeamName(game, "away", sport)}>{sport === "cbb" ? memberTeamName(game, "away", sport) : game.awayTeam}</strong>
       <span className="shrink-0 text-[10px] text-gray-500">@</span>
-      <strong className="truncate text-sm font-black text-white" title={memberTeamName(game, "home", sport)}>{game.homeTeam}</strong>
+      <strong className={`min-w-0 flex-1 font-black text-white ${sport === "cbb" ? "line-clamp-2 break-words text-[10px] leading-3" : "truncate text-sm"}`} title={memberTeamName(game, "home", sport)}>{sport === "cbb" ? memberTeamName(game, "home", sport) : game.homeTeam}</strong>
       <TeamLogo src={memberTeamLogo(game, "home")} label={game.homeTeam} sport={sport} primaryColor={memberTeamColor(game, "home", sport)} compact />
     </div>
     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px]">
@@ -1049,7 +1049,7 @@ function ReaderHeader({ game, market, sport, onCollapse, index, total }: { game:
       <div>
         <div className="flex items-center gap-2"><span className="h-4 w-1 rounded-full bg-violet-400" /><p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-300">Selected Edge</p><span className="hidden text-[10px] text-gray-600 sm:inline">One read first. Complete evidence when you ask for it.</span></div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {isUclGame(game) ? <CompactMatchupIdentity game={game} sport={sport} /> : <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}</h2>}
+          {isUclGame(game) || sport === "cbb" ? <CompactMatchupIdentity game={game} sport={sport} /> : <h2 className="text-lg font-black tracking-tight text-white sm:text-xl">{game.awayTeam} <span className="text-gray-600">{game.sport === "soccer" ? "vs" : "@"}</span> {game.homeTeam}</h2>}
           <VerdictBadge market={market} />
           <DailyEdgeGameStartTime game={game} className="text-[10px] text-gray-600" />
           <LockBadge lockState={game.lockState} lockedAt={game.lockedAt} scheduledLockAt={game.scheduledLockAt} className="font-black uppercase tracking-wider text-emerald-300" />
@@ -2685,6 +2685,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
   const [filter, setFilter] = useState<BoardFilter>("all");
   const [focus, setFocus] = useState<MarketKey | null>(null);
   const [cfbSearch, setCfbSearch] = useState("");
+  const [cbbSearch, setCbbSearch] = useState("");
   const [oddsMinInput, setOddsMinInput] = useState("");
   const [oddsMaxInput, setOddsMaxInput] = useState("");
   const userTimeZone = useUserTimeZone();
@@ -2723,13 +2724,14 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
     || americanOddsInRange(currentDisplayedPrice(market), oddsRange);
   const searchedGames = sport === "cfb" && cfbSearch.trim()
     ? games.filter((game) => cfbGameMatchesSearch(game, cfbSearch))
-    : games;
+    : sport === "cbb" && cbbSearch.trim()
+      ? games.filter((game) => cfbGameMatchesSearch(game, cbbSearch)) : games;
   const oddsFilteredGames = oddsFilterActive
     ? searchedGames.filter((game) => scopedMarketKeys.some((market) => marketMatchesOdds(game.markets[market])))
     : searchedGames;
   const analyzedCbbExternalIds = new Set(games.map((game) => game.external_id));
   const pendingCbbGames = sport === "cbb"
-    ? cbbScheduledGames.filter((game) => !analyzedCbbExternalIds.has(game.externalId))
+    ? cbbScheduledGames.filter((game) => !analyzedCbbExternalIds.has(game.externalId) && cfbGameMatchesSearch(game, cbbSearch))
     : [];
   const predictionCount = oddsFilterActive
     ? oddsFilteredGames.reduce((total, game) => total + scopedMarketKeys.filter((market) => marketMatchesOdds(game.markets[market])).length, 0)
@@ -2813,9 +2815,10 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
   return (
     <section>
       <div className="mb-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+        {sport === "cbb" ? <div className="mb-3 flex items-center gap-2"><label htmlFor="cbb-game-search" className="sr-only">Find a college basketball game</label><input id="cbb-game-search" type="search" value={cbbSearch} onChange={(event) => setCbbSearch(event.target.value)} placeholder="Find a school or abbreviation" className="min-w-0 flex-1 rounded-lg border border-white/[0.09] bg-black/25 px-3 py-2 text-[11px] font-semibold text-white outline-none placeholder:text-gray-700 focus:border-violet-400/55 focus:ring-2 focus:ring-violet-400/15" />{cbbSearch ? <button type="button" onClick={() => setCbbSearch("")} className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-2 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Clear</button> : null}<span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-gray-600">{searchedGames.length + pendingCbbGames.length} found</span></div> : null}
         {cfbScopeControl ? <div className="mb-3 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] px-3 py-2.5"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[8px] font-black uppercase tracking-[0.16em] text-violet-200">College football board</p><p className="mt-1 text-[8px] font-semibold text-gray-500">FBS-involved games are the member default. Every model-covered Division I forecast remains available.</p></div><div className="flex gap-1.5" role="group" aria-label="College football board scope"><button type="button" onClick={() => changeScope("fbs")} aria-pressed={cfbScopeControl.active === "fbs"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "fbs" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>FBS {cfbScopeControl.fbsCount}</button><button type="button" onClick={() => changeScope("division_i")} aria-pressed={cfbScopeControl.active === "division_i"} className={`rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${cfbScopeControl.active === "division_i" ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : "border-white/[0.06] text-gray-500"}`}>All Division I {cfbScopeControl.divisionICount}</button></div></div><div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-3"><label htmlFor="cfb-game-search" className="sr-only">Find a college football game</label><input id="cfb-game-search" type="search" value={cfbSearch} onChange={(event) => setCfbSearch(event.target.value)} placeholder="Find a school or abbreviation" className="min-w-0 flex-1 rounded-lg border border-white/[0.09] bg-black/25 px-3 py-2 text-[11px] font-semibold text-white outline-none placeholder:text-gray-700 focus:border-violet-400/55 focus:ring-2 focus:ring-violet-400/15" />{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="shrink-0 rounded-md border border-white/[0.08] px-2.5 py-2 text-[8px] font-black uppercase tracking-wider text-gray-400 hover:text-white">Clear</button> : null}<span className="shrink-0 text-[8px] font-black uppercase tracking-wider text-gray-600">{searchedGames.length} found</span></div></div> : null}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard ? "Weekly Slate" : sport === "cbb" ? "Daily Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{sport === "cbb" ? `${games.length} analyzed${pendingCbbGames.length ? ` · ${pendingCbbGames.length} awaiting analysis` : ""}` : `${orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} ${games.length === 1 ? "game" : "games"}${footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}`}</span></div>
+          <div className="flex items-baseline gap-2"><span className="h-3.5 w-1 rounded-full bg-violet-400/65" /><h2 className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{footballBoard ? "Weekly Slate" : sport === "cbb" ? "Daily Slate" : uclBoard ? "Match Schedule" : "Slate Board"}</h2><span className="text-[11px] text-gray-600">·</span><span className="text-[11px] text-gray-400">{sport === "cbb" ? `${searchedGames.length} analyzed${pendingCbbGames.length ? ` · ${pendingCbbGames.length} awaiting analysis` : ""}` : `${orderedGames.length === games.length ? games.length : `${orderedGames.length} of ${games.length}`} ${games.length === 1 ? "game" : "games"}${footballBoard ? ` · ${predictionCount} ${oddsFilterActive ? "matching markets" : "predictions"}` : ""}`}</span></div>
           <div className="flex gap-1.5 overflow-x-auto pb-1">{marketFilters.map((item) => <button key={item.key ?? "best"} type="button" onClick={() => setFocus(item.key)} aria-pressed={focus === item.key} className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wider ${focus === item.key ? "border-white/20 bg-white/[0.09] text-white" : "border-white/[0.06] text-gray-500"}`}>{item.label}</button>)}</div>
         </div>
         {footballBoard ? (
@@ -2841,7 +2844,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
         {uclBoard ? <p className="mt-3 border-t border-white/[0.05] pt-3 text-[8px] font-semibold text-gray-600">Matches are grouped by your local calendar date. Every card also shows its localized kickoff date and time.</p> : null}
         <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.05] pt-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-1.5 overflow-x-auto">{filters.map((item) => { const total = count(item.key); const active = filter === item.key; const disabled = item.key !== "all" && total === 0; return <button key={item.key} type="button" disabled={disabled} onClick={() => setFilter(item.key)} aria-pressed={active} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${active ? "border-violet-400/55 bg-violet-500/[0.18] text-white" : disabled ? "border-white/[0.04] text-gray-800" : "border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.16]"}`}>{item.label}<span className={active ? "text-violet-200" : "text-gray-600"}>{total}</span></button>; })}</div>{footballBoard ? <p className="max-w-xl text-[8px] font-semibold leading-relaxed text-gray-600">{countNote}</p> : null}</div>
       </div>
-      {boardEntries.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch ? <button type="button" onClick={() => setCfbSearch("")} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6" aria-busy={progressiveBasketballBoard && visibleDateGroupCount < groupedGames.length}>
+      {boardEntries.length === 0 ? <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-10 text-center"><p className="text-sm font-black text-white">No {footballBoard ? "football " : ""}games match these filters.</p><p className="mt-1 text-[9px] text-gray-600">Try another {sport === "cfb" || sport === "cbb" ? "school, abbreviation, " : ""}{footballBoard ? "odds range, " : ""}market, or Bet grade.</p>{cfbSearch || cbbSearch ? <button type="button" onClick={() => { setCfbSearch(""); setCbbSearch(""); }} className="mt-3 rounded-full border border-violet-400/30 px-3 py-1.5 text-[8px] font-black uppercase tracking-wider text-violet-200">Clear search</button> : null}</div> : <div className="space-y-6" aria-busy={progressiveBasketballBoard && visibleDateGroupCount < groupedGames.length}>
         {renderedGameGroups.map(([date, dayGames]) => {
           const rows = dayGames ?? [];
           return <section key={date || "slate"}>
@@ -2856,7 +2859,7 @@ function EdgeBoard({ games, sport, activeId, activeMarket, selectGame, prefetchG
   );
 }
 
-function cfbGameMatchesSearch(game: DailyEdgeGameDto, query: string): boolean {
+function cfbGameMatchesSearch(game: Pick<DailyEdgeGameDto, "awayTeam" | "homeTeam" | "awayTeamDisplayName" | "homeTeamDisplayName">, query: string): boolean {
   const needle = query.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!needle) return true;
   return [game.awayTeam, game.homeTeam, game.awayTeamDisplayName, game.homeTeamDisplayName]
@@ -3033,9 +3036,9 @@ type CbbScheduledGame = CbbRollingScheduleDto["games"][number];
 function CbbScheduledIdentity({ game }: { game: CbbScheduledGame }) {
   return <div className="flex min-w-0 items-center gap-2" aria-label={`${game.awayTeamDisplayName} at ${game.homeTeamDisplayName}`}>
     <TeamLogo src={game.awayTeamLogo} label={game.awayTeam} sport="cbb" primaryColor={teamPrimaryColor(game.awayTeam, "cbb")} />
-    <strong className="min-w-0 truncate text-sm text-white" title={game.awayTeamDisplayName}>{game.awayTeam}</strong>
+    <strong className="min-w-0 truncate text-sm text-white" title={game.awayTeamDisplayName}>{game.awayTeamDisplayName || game.awayTeam}</strong>
     <span className="text-[9px] text-gray-700">@</span>
-    <strong className="min-w-0 truncate text-sm text-white" title={game.homeTeamDisplayName}>{game.homeTeam}</strong>
+    <strong className="min-w-0 truncate text-sm text-white" title={game.homeTeamDisplayName}>{game.homeTeamDisplayName || game.homeTeam}</strong>
     <TeamLogo src={game.homeTeamLogo} label={game.homeTeam} sport="cbb" primaryColor={teamPrimaryColor(game.homeTeam, "cbb")} />
   </div>;
 }

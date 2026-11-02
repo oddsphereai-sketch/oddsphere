@@ -116,3 +116,10 @@ uses the same paired-institution/date uniqueness checks plus the verified
 St. Thomas external ID. Current-season training receipt r2 uses this same
 matcher; existing valid r1 receipts remain readable. No historical receipt or
 locked record is overwritten to fit a new meaning.
+
+The owner additionally requested CBB school search and full team names. The
+existing board now searches analyzed and scheduled games locally by both full
+names and abbreviations. Board, Quick Read, selected reader and mobile header
+show the stored full institution/team names; pick and locked payload values
+remain exact. Queens University (QUC)–Winthrop is present in both the stored
+board and the frozen repaired rehearsal with all three market prices/grades.
