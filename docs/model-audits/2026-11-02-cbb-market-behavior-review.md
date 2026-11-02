@@ -101,6 +101,24 @@ The replay input key is diagnostic and does not attest news consumption.
 
 ## Validation and publication gate
 
+Integrated fresh production base `a28b4489674a1b3678308afd2efdcdeff521d7cb`
+(PRs935–937). These changes concern existing tracking/refresh queries; no CBB
+candidate hunk overlaps. The existing exact tracking projection regression,
+full `npm run verify:model-change` including the new CBB command,17 focused
+CBB suites, webpack production build, standalone TypeScript and affected-file
+ESLint pass. The optional PostgreSQL Market Brain proof is skipped locally
+because its dedicated URL is unset; no database proof is inferred from that
+skip. Independent review's quarantine, false-movement, prior-history-cutoff and
+grade-reference findings are repaired and regression tested. No remaining
+material implementation finding was reported; predictive qualification remains
+unmet. Integration safety passed against the fresh base before PR preparation.
+Open-PR file/patch review:877/811/676 overlap only the shared release registry
+with older CFB/NFL additions;589/265 overlap `package.json` with older test
+commands. None changes the CBB files. The candidate preserves every command
+on current main and adds its own focused gate. Those older heads must integrate
+the new base and preserve this gate before any later merge; strict up-to-date
+protection remains enabled. No other chat's branch or uncommitted edit is changed.
+
 Focused checks cover exact source clocks, vig/line compensation, union target
 exclusion, arrivals, unchanged original anchors, statistical revision receipt,
 idempotence, quarantine at score AND grade, source conflicts, no-tie/push
