@@ -41,12 +41,12 @@ export function owlsDisplayProviderSide(event:RawOwlsOddsEvent,game:DailyEdgeGam
 
 /** The response must explicitly be the requested opening-mode event/book/side.
  * Never use another threshold's opener as the price opener of the selected line. */
-export function parseOwlsBookDisplayHistory(value:unknown,target:Omit<BookDisplayEntry,"checkedAt"|"opening"|"quotes">,now=Date.now()):BookDisplayEntry|null{
+export function parseOwlsBookDisplayHistory(value:unknown,target:Omit<BookDisplayEntry,"checkedAt"|"opening"|"quotes">,now=Date.now(),allowSteepMoneylines=false):BookDisplayEntry|null{
   const body=object(value),data=object(body?.data),range=object(data?.timeRange);
   if(body?.success!==true||data?.eventId!==target.providerEventId||data?.book!==target.book||data?.market!==marketKey(target.kind)||data?.side!==target.side||range?.mode!=="opening"||!Array.isArray(data?.history)||data.history.length>20_000)return null;
   const quote=(v:unknown):Quote|null=>{
     const r=object(v),at=Date.parse(String(r?.timestampUtc??"")),price=number(r?.price),line=target.kind==="moneyline"||target.kind==="btts"?null:number(r?.point??r?.pointValue);
-    return Number.isFinite(at)&&at<=now&&price!==null&&Math.abs(price)>=100&&Math.abs(price)<9900&&((target.kind==="moneyline"||target.kind==="btts")||line!==null)?[at,price,line]:null;
+    return Number.isFinite(at)&&at<=now&&price!==null&&Math.abs(price)>=100&&(Math.abs(price)<9900||allowSteepMoneylines&&target.kind==="moneyline")&&((target.kind==="moneyline"||target.kind==="btts")||line!==null)?[at,price,line]:null;
   };
   const quotes=data.history.flatMap(v=>{const p=quote(v);return p?[p]:[];}).sort((a,b)=>a[0]-b[0]);
   const opening=quote(data.openingLine);
@@ -96,7 +96,7 @@ export function accumulateCbbPublishedQuotes(feed:BookDisplayFeed,games:DailyEdg
       const target={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,kind,side,book,
         providerEventId:event?.eventId??`published:${game.external_id}`};
       const old=rows.get(identity(target));
-      const valid=points.filter(q=>Number.isFinite(q[0])&&q[0]<=ceiling&&q[0]<start&&Number.isFinite(q[1])&&Math.abs(q[1])>=100&&Math.abs(q[1])<9900&&
+      const valid=points.filter(q=>Number.isFinite(q[0])&&q[0]<=ceiling&&q[0]<start&&Number.isFinite(q[1])&&Math.abs(q[1])>=100&&
         (kind==="moneyline"?q[2]===null:q[2]!==null&&Number.isFinite(q[2])));
       if(!valid.length)return;
       // Existing exact observations win any timestamp tie, including a conflict.
@@ -188,7 +188,7 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
       const providerSide=providerSides.get(identity(target))??target.side;
       const result=await client.get<unknown>("/api/odds/history",{eventId:target.providerEventId,book:target.book,market:marketKey(target.kind),side:providerSide});
       remainingMonth=result.rateLimit.remainingMonth??remainingMonth;
-      const parsed=parseOwlsBookDisplayHistory(result.body,{...target,side:providerSide},now),old=rows.get(identity(target));
+      const parsed=parseOwlsBookDisplayHistory(result.body,{...target,side:providerSide},now,sport==="cbb"),old=rows.get(identity(target));
       if(parsed){rows.set(identity(target),{...parsed,side:target.side,opening:old?.opening??parsed.opening,quotes:boundBookQuotes([...(old?.quotes??[]),...parsed.quotes])});if(!old?.opening&&!parsed.opening)warnings.push(`book history: ${target.event}/${target.kind} opener unavailable`);}
       else warnings.push(`book history: ${target.event}/${target.kind} unavailable; retained`);
     }catch{warnings.push(`book history: ${target.event}/${target.kind} request failed; retained`);}

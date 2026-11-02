@@ -1,7 +1,7 @@
-import { canonicalCbbTeamName } from "./dataset";
+import { cbbProviderInstitutionName as canonicalCbbTeamName } from "./providerInstitutionIdentity";
 
 export const CBB_SHARP_SPLIT_MAPPING_RELEASE =
-  "cbb_sharp_split_mapping_2026_10_30_r1_exact_institution_neutral_orientation" as const;
+  "cbb_sharp_split_mapping_2026_11_02_r2_verified_institution_aliases" as const;
 
 export type CbbSplitTeamIdentity = {
   homeTeamDisplayName?: string | null;

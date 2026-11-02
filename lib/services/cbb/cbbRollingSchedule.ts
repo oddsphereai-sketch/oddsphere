@@ -23,6 +23,14 @@ export type CbbRollingSchedule = {
   games: CbbRollingScheduleGame[];
 };
 
+/** Membership comes from exact provider conference IDs captured by the sole
+ * writer. Keep D1/non-D1 opponents; exclude only games with neither side D1. */
+export function applyCbbScheduleCoverage(schedule:CbbRollingSchedule,coverage:{eligibleGameIds:number[];modelEligibleGameIds:number[]}|undefined):CbbRollingSchedule {
+  if(!coverage)return schedule;
+  const eligible=new Set(coverage.eligibleGameIds);
+  return {...schedule,games:schedule.games.filter(game=>eligible.has(game.externalId))};
+}
+
 /** A model-covered event must render as an analyzed card, never twice. */
 export function excludeAnalyzedCbbScheduleGames(
   schedule: CbbRollingSchedule,

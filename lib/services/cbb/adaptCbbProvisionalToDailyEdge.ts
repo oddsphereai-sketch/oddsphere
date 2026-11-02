@@ -9,7 +9,7 @@ import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_10_30_r3_two_sided_current_market" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_02_r4_available_quote_context" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -48,6 +48,12 @@ function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProba
     modelProb:probability,marketFairProb:fair,pinnacleEvPct:null,moneyPct:null,betsPct:null,publicSplits:[],
     priceAmerican:price,currentPriceAmerican:price,currentPriceSportsbook:row.targetBook,currentPriceObservedAt:row.quoteObservedAt,
     lineOpenAmerican:null,modelTotal:row.market==="total"?projectedTotal:null,marketTotal:row.market==="total"?row.line:null,
+    observedMarketQuote:row.observedQuote&&row.targetBook&&row.quoteObservedAt?{
+      sportsbook:row.targetBook,observedAt:row.quoteObservedAt,quotes:[
+        {label:row.market==="total"?"Over":game.home_team.abbreviation,american:row.observedQuote.firstPrice,line:row.observedQuote.line},
+        {label:row.market==="total"?"Under":game.visitor_team.abbreviation,american:row.observedQuote.secondPrice,
+          line:row.market==="spread"&&row.observedQuote.line!==null?-row.observedQuote.line:row.observedQuote.line},
+      ]}:undefined,
     line:selectedLine,
     keyStats:[],modelTrustPct:probability===null?null:probability*100,marketImpliedPct:priceImplied===null?null:priceImplied*100,
     modelMarketGapPct:probability===null||fair===null?null:(probability-fair)*100,recommendationConfidence:held?null:probability===null?null:probability*100,

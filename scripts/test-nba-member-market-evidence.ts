@@ -128,7 +128,7 @@ const flatObservedEvidence = buildNbaMemberGameEvidence({
     ...game,
     intelligence: {
       ...game.intelligence,
-      ml: intel("moneyline", "home", null, -184, "fanduel"),
+      ml: { ...game.intelligence.ml, current_price: { ...game.intelligence.ml.current_price!, sportsbook: "fanduel" } },
     },
   },
   priceRows: flatObservedRows,

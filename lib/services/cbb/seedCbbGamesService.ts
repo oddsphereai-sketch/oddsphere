@@ -1,13 +1,13 @@
 import type { supabase as SupabaseClient } from "../../db/supabase";
 import { CbbBallDontLieClient } from "../../cbb/ballDontLie";
-import { assertCbbFixtureRefreshSafe, cbbCanonicalGamePayload, cbbCanonicalStatus,
+import { assertCbbFixtureRefreshSafe, cbbFixtureIdentityWouldChange, cbbCanonicalGamePayload, cbbCanonicalStatus,
   cbbCanonicalTeamPayload, type CbbExistingFixture } from "../../cbb/canonicalFixture";
 import type { CbbGame, CbbTeam } from "../../cbb/types";
 import { cbbRollingSlateDates } from "../../cbb/rollingSlate";
 import { fetchCbbTeamIdentities } from "./fetchCbbTeamIdentities";
 import { addDaysToSlate, computeSlateDate } from "../../dates/slateDate";
 
-export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_11_01_r5_captured_intraday_sync" as const;
+export const CBB_FIXTURE_SEED_RELEASE = "cbb_fixture_seed_2026_11_02_r6_locked_conflict_isolation" as const;
 
 /** The same seven Eastern slate dates the member board will display. */
 export function cbbFixtureSeedDates(today: string): string[] {
@@ -75,7 +75,8 @@ export async function seedCbbGames(options: SeedOptions) {
   const identities = options.identityFetcher && games.length ?
     await options.identityFetcher({ games, slateDate: options.slateDate }) : null;
   const verifiedLogos = [...teams.values()].filter(team => identities?.get(team.id)?.logoUrl).length;
-  const result = { release: CBB_FIXTURE_SEED_RELEASE, slateDate: options.slateDate,
+  const preservedLockedConflicts:number[]=[];
+  const result = { preservedLockedConflicts, release: CBB_FIXTURE_SEED_RELEASE, slateDate: options.slateDate,
     season: options.season, providerCalls: client.calls, games: games.length,
     teams: teams.size, verifiedLogos, identitySource: identities ? "espn_catalog_and_exact_event" : "not_requested", written: false };
   if (options.dryRun || !games.length) return result;
@@ -157,10 +158,16 @@ export async function seedCbbGames(options: SeedOptions) {
     if (!homeDbId || !awayDbId) throw new Error("CBB seed lost an exact team ID");
     const payload = cbbCanonicalGamePayload(game, homeDbId, awayDbId);
     const previous = existingById.get(game.id);
+    if(previous&&lockedDbIds.has(previous.id)&&cbbFixtureIdentityWouldChange(previous,payload)){
+      // Keep the exact public fixture and lock. Report the source conflict,
+      // but do not let one changed provider row stop every other game.
+      preservedLockedConflicts.push(game.id);
+      return null;
+    }
     assertCbbFixtureRefreshSafe(previous, payload, previous ? lockedDbIds.has(previous.id) : false);
     return payload;
   });
-  for (const batch of chunks(payloads, 100)) {
+  for (const batch of chunks(payloads.filter((row):row is NonNullable<typeof row>=>row!==null), 100)) {
     const { error } = await supabase.from("games").upsert(batch, { onConflict: "sport,external_id" });
     if (error) throw new Error(`CBB game seed failed: ${error.message}`);
   }

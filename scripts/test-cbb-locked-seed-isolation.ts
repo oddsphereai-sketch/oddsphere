@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { seedCbbGames } from "../lib/services/cbb/seedCbbGamesService";
+import type { CbbGame } from "../lib/cbb/types";
+const home={id:2,conference_id:1,name:"Owls",college:"Temple",full_name:"Temple Owls",abbreviation:"TEM"};
+const away={id:3,conference_id:1,name:"Blue Devils",college:"Central Connecticut",full_name:"Central Connecticut Blue Devils",abbreviation:"CCSU"};
+const game={id:1,date:"2026-11-02T23:30:00Z",season:2026,status:"pre",status_state:"scheduled",period:0,home_score:0,away_score:0,home_team:away,visitor_team:home}as CbbGame;
+const fixture={id:100,external_id:1,status:"STATUS_SCHEDULED",game_date:game.date,home_team_id:20,away_team_id:30};
+const writes:unknown[]=[];
+const db={from:(table:string)=>({select:()=>{const q={eq:()=>q,in:()=>q,not:()=>q,then:(resolve:(value:unknown)=>unknown)=>resolve({error:null,data:table==="teams"?[{id:20,external_id:2,display_name:home.full_name},{id:30,external_id:3,display_name:away.full_name}]:table==="games"?[fixture]:table==="prediction_records"?[]:[{snapshot_key:"cbb::member-game::1",payload:{snapshot:{gameId:1,lockedAt:"2026-11-02T22:30:00Z"}}}]})};return q;},upsert:async(payload:unknown)=>{writes.push(payload);return{error:null};}})}as unknown as NonNullable<Parameters<typeof seedCbbGames>[0]["db"]>;
+async function main(){const before=JSON.stringify(fixture);const r=await seedCbbGames({slateDate:"2026-11-02",season:2026,apiKey:"fixture-only",dryRun:false,capturedGames:[game],db});assert.deepEqual(r.preservedLockedConflicts,[1]);assert.equal(writes.length,0);assert.equal(JSON.stringify(fixture),before);console.log("CBB seed: provider home/away conflict preserves the canonical locked fixture and reports it without aborting other seeds.");}void main();

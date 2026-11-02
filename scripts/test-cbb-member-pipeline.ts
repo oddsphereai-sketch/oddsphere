@@ -91,6 +91,14 @@ async function main(){
   assert.equal(JSON.stringify([...stored.values()]),frozen,"post-tip refresh preserves every locked writer field");
   assert.deepEqual((published as DailyEdgeResponse).games[0].projected,lockedMember.projected,"the original locked forecast retains reader precedence");
   assert.deepEqual((published as DailyEdgeResponse).games[0].markets,lockedMember.markets,"the original locked prices and grades retain reader precedence");
+  const flipped={...game,home_team:game.visitor_team,visitor_team:game.home_team};
+  const conflictingProvider={calls:2,gamesForDates:async(dates:string[])=>dates.includes("2026-11-01")?[flipped]:[]} as unknown as CbbBallDontLieClient;
+  const conflict=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-11-01T15:00:00Z",bdlKey:"test",owlsKey:"test",
+    trainingGames:[],provider:conflictingProvider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
+  assert.equal(conflict.published,1);assert.equal(conflict.written,0);
+  assert.ok(conflict.problems.some(p=>p.includes("locked_provider_conflict_preserved")));
+  assert.equal(JSON.stringify([...stored.values()]),frozen,"a provider reversal cannot rewrite the locked writer");
+  assert.deepEqual((published as DailyEdgeResponse).games[0],lockedMember,"the exact stored locked reader wins over new provider orientation");
   console.log("CBB member pipeline: exact fixture, pending-to-analyzed card, source price, coherent score, published snapshot and honest split absence passed.");
 }
 void main();

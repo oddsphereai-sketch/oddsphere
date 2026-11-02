@@ -1923,7 +1923,7 @@ check(
 check(
   "expanded football reader renders MASS for Massachusetts Minutemen while preserving the accessible full name",
   candidateDailyEdgeSource.includes('className="flex min-w-0 items-center gap-2"') &&
-    candidateDailyEdgeSource.includes('if (sport !== "nfl" && sport !== "cfb" && !isUclGame(game)) return abbreviation') &&
+    candidateDailyEdgeSource.includes('if (sport !== "nfl" && sport !== "cfb" && sport !== "cbb" && !isUclGame(game)) return abbreviation') &&
     candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" || isUclGame(game) ? team : fullName') &&
     candidateDailyEdgeSource.includes('aria-label={fullName} title={fullName}>{readerTeam}</p>') &&
     candidateDailyEdgeSource.includes('function CompactMatchupIdentity({ game, sport }') &&
@@ -1935,7 +1935,7 @@ check(
   candidateDailyEdgeSource.includes('function isUclGame(game: DailyEdgeGameDto)') &&
     candidateDailyEdgeSource.includes('const ucl = isUclGame(game)') &&
     candidateDailyEdgeSource.match(/<CompactMatchupIdentity game=\{game\} sport=\{sport\} \/>/g)?.length === 3 &&
-    candidateDailyEdgeSource.includes('isUclGame(game) ? <CompactMatchupIdentity game={game} sport={sport} />') &&
+    candidateDailyEdgeSource.includes('isUclGame(game) || sport === "cbb" ? <CompactMatchupIdentity game={game} sport={sport} />') &&
     candidateDailyEdgeSource.includes('const readerTeam = sport === "nfl" || sport === "cfb" || isUclGame(game) ? team : fullName') &&
     candidateDailyEdgeSource.includes('block break-words text-[9px] font-semibold leading-3 text-gray-400') &&
     candidateDailyEdgeSource.match(/isUclGame\(game\) \? <MatchupColorAccent game=\{game\} sport=\{sport\} \/> : null/g)?.length === 2 &&
