@@ -6,6 +6,7 @@ import { writeOfficialTrackingFromPayloads } from "../lib/services/football/nflF
 import { effectiveTrackingPlayGrade, isTrackingRecordEligible } from "../lib/services/trackingAggregateService";
 import { alternateLineOutcome, hasVerifiedAlternateLineSource } from "../lib/services/tracking/alternateLinePerformance";
 import { gradePrediction } from "../lib/services/predictionGrader";
+import { gradePredictionsForSlate } from "../lib/services/predictionGradingService";
 
 const start = "2026-11-02T01:20:00.000Z";
 const captured = "2026-11-01T23:06:36.644Z";
@@ -135,4 +136,38 @@ async function persistenceProof(): Promise<void> {
     "the ordinary writer still rejects an unlocked payload without an explicit owner recovery");
   assert.equal(JSON.stringify(rows), original);
 }
-void persistenceProof().then(() => console.log("NFL published pregame recovery: exact tuples, real clocks, reader precedence, append-only/idempotent writer and lock protection passed."));
+async function scopedGradingProof(): Promise<void> {
+  const targets = records.map((record, index) => ({ ...record, id: 101 + index }));
+  const foreign = { ...records[0]!, id: 999 };
+  const foreignGrade = { prediction_record_id: 999, result: "win", grade_source: "csv_import",
+    graded_at: "2026-11-02T03:00:00.000Z", grade_notes: "original provenance" };
+  const grades = new Map<number, Record<string, unknown>>([[999, foreignGrade]]);
+  const written: number[] = [];
+  const client = { from(table: string) {
+    let ids: number[] | undefined;
+    let write: Record<string, unknown> | undefined;
+    const q = { select() { return q; }, eq() { return q; }, not() { return q; },
+      in(_column: string, values: number[]) { ids = values; return q; },
+      upsert(value: Record<string, unknown>) { assert.equal(table, "prediction_grades"); write = value; return q; },
+      then(resolve: (r: unknown) => void) {
+        if (write) { const id = Number(write.prediction_record_id); written.push(id); grades.set(id, write); }
+        resolve({ error: null, data: write ? null : table === "prediction_records"
+          ? [...targets, foreign].filter(record => !ids || ids.includes(record.id))
+          : table === "games" ? [{ id: 42, status: "final", home_score: 27, away_score: 10,
+            first_inning_runs: null, game_date: start }] : [...grades.values()].filter(grade =>
+              !ids || ids.includes(Number(grade.prediction_record_id))) });
+      },
+    }; return q;
+  } } as unknown as SupabaseClient;
+  const args = { sport: "nfl" as const, slateDate: "2026-11-01", apply: true,
+    supabase: client, source: "auto_score_ingest" as const, recordIds: targets.map(record => record.id) };
+  const result = await gradePredictionsForSlate(args);
+  assert.equal(result.recordsLoaded, 3);
+  assert.deepEqual(written, [101, 102, 103]);
+  assert.deepEqual(targets.map(record => grades.get(record.id)?.result), ["win", "loss", "loss"]);
+  assert.deepEqual(grades.get(999), foreignGrade, "another settled record retains every original provenance field");
+  assert.equal((await gradePredictionsForSlate({ ...args, recordIds: [] })).recordsLoaded, 0);
+  await assert.rejects(gradePredictionsForSlate({ ...args, recordIds: [0] }), /positive record IDs/);
+  assert.equal(JSON.stringify(rows), original);
+}
+void persistenceProof().then(scopedGradingProof).then(() => console.log("NFL published pregame recovery: exact tuples, real clocks, reader precedence, append-only/idempotent writer, scoped grading provenance and lock protection passed."));
