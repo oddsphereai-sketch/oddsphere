@@ -22,7 +22,14 @@ Future locks freeze their existing published DTO, including both lanes.
 Existing locked payloads return before enrichment and are never reconstructed
 or augmented. The r2 stored schema stays compatible with older deployments.
 Grade r2, board r5, forecasts, uncertainty, prices, selected sides, grades,
-stakes and actionable counts remain unchanged; promotion/demotion impact0/0.
+stakes and actionable counts remain unchanged; promotion/demotion impact 0/0.
+
+At 16:42 UTC, a current-data read-only replay finds 908 existing source rows
+and restores public consensus on 228 previously empty market panels. All 348
+decision tuples and both locked payloads remain unchanged. A real improved
+game (10882488) persists the exact source section through an in-memory writer.
+The bounded bulk read takes 739 ms locally; the pure merge takes 163 ms. There
+are zero provider requests or external writes in this proof.
 
 Validate source/receipt/age/axis guards, original clocks, percentage units,
 temporary omission, both-lane future-lock freezing, existing lock precedence,
