@@ -85,9 +85,23 @@ export type CbbForecast = {
 };
 
 export type CbbMarket = "moneyline" | "spread" | "total";
+/** Canonical collectors recorded run-start as fetched_at. Keep that original
+ * value; DB insertion is only an explicit observation-availability bound. */
+export type CbbCanonicalReceipt = {
+  kind: "db_inserted_upper_bound";
+  availableBy: string;
+  providerEventId: string;
+  ingestionRunId: string;
+  observationIds: [number, number];
+  rawPayloadHashes: [string, string];
+};
 export type CbbQuote = {
   provider?: "owls" | "balldontlie" | "sharpapi";
   gameId: number; sportsbook: string; market: CbbMarket; line: number | null;
   firstPrice: number; secondPrice: number; providerObservedAt: string;
   fetchedAt: string; phase: "opening" | "current";
+  /** Actual request-start clock, when recorded. Response completion alone
+   * cannot prove a target was requested after another source became available. */
+  requestedAt?: string;
+  canonicalReceipt?: CbbCanonicalReceipt;
 };

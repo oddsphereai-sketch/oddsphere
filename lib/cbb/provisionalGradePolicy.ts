@@ -42,12 +42,17 @@ function family(book: string): string {
  * Every market is evaluated; an absent quote is Held, not a model No Play.
  * The reserves below are predeclared economic margins, not optimized win-rate claims.
  */
-export function gradeCbbProvisional(input: CbbGradeEvidence) {
+export function gradeCbbProvisional(input: CbbGradeEvidence, options: {
+  /** New readers may validate native receipt bounds; legacy R2 uses its exact
+   * original response-clock eligibility unless explicitly supplied. */
+  quoteValidator?: (quote:CbbQuote,forecast:CbbForecast,asOfMs:number)=>boolean;
+} = {}) {
+  const validate=options.quoteValidator??validQuote;
   const { target, forecast } = input;
   const asOfMs = Date.parse(input.asOf);
   if (!Number.isFinite(asOfMs) || forecast.asOf !== input.asOf ||
     target.gameId !== forecast.gameId) throw new Error("CBB provisional grade identity/cutoff mismatch");
-  if (forecast.inputStatus !== "complete" || !validQuote(target, forecast, asOfMs)) {
+  if (forecast.inputStatus !== "complete" || !validate(target, forecast, asOfMs)) {
     return { release: CBB_PROVISIONAL_GRADE_RELEASE, market: target.market,
       grade: "Held" as const, reason: "incomplete_forecast_or_executable_quote",
       selection: null, price: null, expectedValue: null, referenceState: "unavailable" as const,
@@ -56,7 +61,7 @@ export function gradeCbbProvisional(input: CbbGradeEvidence) {
   const review = reviewCbbQuote(forecast, target);
   const price = review.selection === "first" ? target.firstPrice : target.secondPrice;
   const eligible = input.references.filter(row => row.market === target.market &&
-    family(row.sportsbook) !== family(target.sportsbook) && validQuote(row, forecast, asOfMs));
+    family(row.sportsbook) !== family(target.sportsbook) && validate(row, forecast, asOfMs));
   const byFamily = new Map<string, CbbQuote[]>();
   for (const row of eligible) byFamily.set(family(row.sportsbook), [...(byFamily.get(family(row.sportsbook)) ?? []), row]);
   const distinct = new Map<string, CbbQuote>();

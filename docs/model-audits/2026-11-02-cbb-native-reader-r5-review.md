@@ -85,7 +85,40 @@ explicit receipt upper bound, leaves request start missing, and withholds causal
 confirmation. It cannot establish exact production-equivalent causal grades.
 It also does not invent independent-input parity for earlier legacy anchors:
 the native window alone bootstraps this diagnostic. Full tier/side/actionable
-counts must be regenerated after the final implementation checkpoint.
+counts were regenerated after the source/path/grade checkpoint:112 games,
+336 markets; old113 No Play/120 Watchlist/24 Lean/79 Best, private114 No Play/
+117 Watchlist/101 Lean/4 Best. Actionable103→105,2 promotions/0 demotions,
+3 selected-side changes and81 tier changes. In particular75 prior Best become
+lower tiers; the higher actionable count must not conceal that substantial
+change. All4 remaining Best use static `model_and_professional_value` support,
+not causal price/flow confirmation. Both causal confirmation counts are zero
+because historical target request starts were never stored. The two observed
+promotions are Vermont–Iona Total and Southern–SMU Total through changed exact
+model EV, not invented sharp-action receipts. These are diagnostic counts,
+not evidence of improved future performance or complete live causal parity.
+
+## Functional verification and bounded storage
+
+The13-script focused gate passes, including native parser→adapter→candidate→
+grade quarantine propagation, actual mocked writer ingestion, exact clocks,
+writer/reader/tracking lock precedence, latest native-versus-direct endpoint,
+and two refreshes where a failed native reread cannot regress an already known
+frontier. Incomplete history still blocks new clean confirmation/Best; a cached
+older HTTP state cannot replace the retained later native pair. Full
+`npm run verify:model-change`, standalone TypeScript, affected-file ESLint and
+webpack production build pass at the reviewed private implementation. The
+optional standalone PostgreSQL proof is skipped locally when its URL is unset.
+These checks do not constitute deployment or solve the inference gap below.
+
+R3 path encoding preserves exact clocks, runs, IDs and full raw hashes using
+lossless tuples/dictionaries and reversible hash/clock encoding. Tests use
+full SHA256 entropy and assert exact metadata round trip.32 states per stream
+at15-minute cadence retain7h45 nominal coverage; truncation is explicit and
+cannot bridge a dropped boundary. The production-shaped two-professional-price-
+book/Circa-flow case is59,682 bytes/game,7,161,840 bytes/120 games; synthetic
+all-nine-stream quote+flow worst case is118,919 bytes/game,14,270,280 bytes/120.
+Those are tape-only bounds, not whole-board size promises. No full raw canonical
+window or ephemeral expanded interval graph is persisted on the member DTO.
 
 ## Unfinished starting-level inference: Cornell example
 

@@ -8,7 +8,7 @@ import { CBB_CURRENT_SCORE_RELEASE } from "@/lib/cbb/currentScoreRuntime";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
 import type { CbbStoredMemberGame } from "./cbbMemberGameStore";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_02_r5_market_behavior_lineage" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_02_r6_received_market_lineage" as const;
 
 /** Never relabel an earlier public lock with the current score model. */
 export function cbbLockedModelRelease(board:{release:string;modelRelease?:string}):string{
@@ -90,7 +90,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       slate_date: fixture.slate_date, game_date: snapshot.startsAt,
       matchup: `${memberGame.awayTeamDisplayName} @ ${memberGame.homeTeamDisplayName}`,
       market: row.market, pick: side, side, line_value: line, odds_american: row.price,
-      odds_decimal: null, model_used: modelRelease===CBB_SCORE_RESEARCH_RELEASE?"cbb_independent_r2_provisional_market_reader":modelRelease===CBB_CURRENT_SCORE_RELEASE?"cbb_independent_r3_verified_venue_prior":"cbb_r4_observed_market_behavior",
+      odds_decimal: null, model_used: modelRelease===CBB_SCORE_RESEARCH_RELEASE?"cbb_independent_r2_provisional_market_reader":modelRelease===CBB_CURRENT_SCORE_RELEASE?"cbb_independent_r3_verified_venue_prior":"cbb_r5_received_market_response",
       model_version: modelRelease, calibration_version: gradeRelease,
       prediction_source: "cbb_daily_edge", confidence: row.probability,
       model_probability: row.probability, market_probability: cbbImpliedProbability(row.price),

@@ -6,6 +6,8 @@ import type { DailyEdgeResponse } from "../app/lab/lib/labTypes";
 import { buildCbbRollingSchedule, excludeAnalyzedCbbScheduleGames } from "../lib/services/cbb/cbbRollingSchedule";
 import { seedCbbGames } from "../lib/services/cbb/seedCbbGamesService";
 import { refreshCbbMemberBoard } from "../lib/services/cbb/cbbMemberPipeline";
+import {readCbbCanonicalReaderHistory} from "../lib/services/cbb/cbbCanonicalReaderHistory";
+import type {CbbCanonicalPriceRow} from "../lib/services/cbb/cbbCanonicalMarketEvidence";
 
 const asOf="2026-10-29T22:00:00Z",start="2026-11-01T14:30:00Z";
 const home={id:92,conference_id:1,name:"Wildcats",full_name:"Villanova Wildcats",college:"Villanova",abbreviation:"VILL"};
@@ -32,6 +34,8 @@ const fetcher=(async()=>new Response(JSON.stringify({events:[event]}),{status:20
 const stored=new Map<string,unknown>();
 const tracked:Array<Record<string,unknown>>=[];
 const db={from:(table:string)=>{
+  if(table==="market_price_observations_v2"||table==="market_split_observations_v2")return {select:()=>{
+    const q={eq:()=>q,in:()=>q,gte:()=>q,lte:()=>q,order:()=>q,limit:()=>q,abortSignal:()=>q,maybeSingle:async()=>({data:null,error:null})};return q;}};
   if(table==="games")return {select:()=>{const q={eq:()=>q,maybeSingle:async()=>({data:{id:1,external_id:game.id,game_date:"2026-11-01T14:30:00+00:00",slate_date:"2026-11-01"},error:null})};return q;}};
   if(table==="prediction_records")return {select:()=>{const q={eq:()=>q,then:(resolve:(value:unknown)=>unknown)=>resolve({data:tracked,error:null})};return q;},insert:async(row:Record<string,unknown>)=>{tracked.push(structuredClone(row));return {error:null};}};
   assert.equal(table,"lab_response_snapshots");return {
@@ -99,7 +103,7 @@ async function main(){
   assert.equal(unknown.sourceGames,1);assert.equal(unknown.published,1);assert.deepEqual(unknown.unpublishedIncomplete,[],"verified historical venue recovery supplies St Thomas's actual prior");
   assert.notEqual(JSON.stringify([...stored]),beforeUnknown);
   const recoveredRecord=stored.get(`cbb::member-game::${unknownGame.id}`) as {snapshot:{board:{modelRelease:string}}};
-  assert.equal(recoveredRecord.snapshot.board.modelRelease,"cbb_candidate_2026_11_02_r4_observed_market_behavior");
+  assert.equal(recoveredRecord.snapshot.board.modelRelease,"cbb_candidate_2026_11_02_r5_received_market_response");
   const absentId=999999,unmodeledGame={...unknownGame,id:absentId,home_team:{...unknownGame.home_team,id:absentId}};
   const beforeUnmodeled=JSON.stringify([...stored]);
   const unmodeled=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],
@@ -108,18 +112,18 @@ async function main(){
   assert.equal(unmodeled.published,0);
   assert.equal(JSON.stringify([...stored]),beforeUnmodeled,"a real quote cannot manufacture an absent team rating or overwrite an existing record");
   let priceCalls=0,splitCalls=0;
-  const referenceRefresh=async(now:string,line:number,ml:number,opposing:number)=>{
+  const referenceRefresh=async(now:string,line:number,ml:number,opposing:number,canonicalHistoryReader?:Parameters<typeof refreshCbbMemberBoard>[0]["canonicalHistoryReader"])=>{
     const prices=structuredClone(odds);
     prices.data[0].bookmakers.push({key:"pinnacle",last_update:now,markets:[quote("h2h",ml,opposing),quote("spreads",-110,-110,line),quote("totals",-110,-110,145.5)]});
     const source={odds:async()=>{priceCalls++;return {body:prices};},splits:async()=>{splitCalls++;return {body:splits};}} as unknown as OwlsInsightClient;
-    return refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now,bdlKey:"test",owlsKey:"test",trainingGames:[],provider,owls:source,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
+    return refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now,bdlKey:"test",owlsKey:"test",trainingGames:[],provider,owls:source,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot,canonicalHistoryReader});
   };
   const firstMarket=await referenceRefresh("2026-10-29T22:05:00Z",3.5,130,-150);
   const firstRead=stored.get(`cbb::member-game::${game.id}`) as import("../lib/services/cbb/cbbMemberGameStore").CbbStoredMemberGame;
   const firstReceipt=firstRead.snapshot.board.marketContext.verifiedMarketRead!;
-  assert.equal(firstMarket.owlsCalls,2);assert.equal(firstReceipt.winnerArbitration.status,"applied");
-  assert.ok(firstRead.snapshot.board.score.margin<0&&firstRead.memberGame.projected.home<firstRead.memberGame.projected.away);
-  assert.equal(firstRead.memberGame.markets.moneyline.pick,"ND ML","the sole pipeline publishes the market-conditioned winner and exact target side together");
+  assert.equal(firstMarket.owlsCalls,2);assert.equal(firstReceipt.winnerArbitration.status,"context_only");
+  assert.deepEqual(firstReceipt.finalScore,firstReceipt.independentScore,"a static starting-level disagreement does not invent a winner replacement");
+  assert.ok(Math.abs(firstRead.memberGame.projected.home-firstRead.memberGame.projected.away-firstRead.snapshot.board.score.margin)<1e-10);
   assert.equal(firstRead.memberGame.markets.first_inning.writerMovementDirection,undefined,"current opposition alone cannot become movement");
   await referenceRefresh("2026-10-29T22:10:00Z",4.5,150,-170);
   const secondRead=stored.get(`cbb::member-game::${game.id}`) as typeof firstRead;
@@ -129,6 +133,28 @@ async function main(){
   await referenceRefresh("2026-10-29T22:10:00Z",4.5,150,-170);
   assert.deepEqual((stored.get(`cbb::member-game::${game.id}`) as typeof firstRead).snapshot.board.score,secondScore,"refresh never recursively adds an adjustment to a prior market-conditioned law");
   assert.equal(priceCalls,3);assert.equal(splitCalls,3,"one slate-level price and split request per existing refresh; no per-game refresh");
+  // The actual writer consumes native ambiguity BEFORE score/grade creation,
+  // and carries it across later refreshes even when a clean current pair exists.
+  const nativePair=(id:number,sourceAt:string,line:number):CbbCanonicalPriceRow[]=>["home","away"].map((side,index)=>({
+    id:id+index,provider:"owls",provider_event_id:"ncaab:Notre Dame@Villanova-20261101",ingestion_run_id:"cbb:2026-10-29:2026-10-29T22:11:00Z",
+    canonical_event_id:String(game.id),canonical_market_id:`${game.id}:spread`,league:"cbb",sportsbook:"pinnacle",sharp_book:true,market_type:"spread",
+    selection_key:`${game.id}:spread:${side}`,american_price:-110,decimal_price:1+100/110,no_vig_probability:.5,line:side==="home"?line:-line,
+    provider_timestamp:sourceAt,fetched_at:"2026-10-29T22:11:00Z",inserted_at:"2026-10-29T22:11:01Z",minutes_to_start:1000,raw_payload_hash:String(id+index).padStart(64,"a"),
+  }));
+  const nativeRows=[...nativePair(100,"2026-10-29T22:02:00Z",3.5),...nativePair(200,"2026-10-29T22:04:00Z",4),
+    ...nativePair(300,"2026-10-29T22:04:00Z",4.5),...nativePair(400,"2026-10-29T22:08:00Z",4.5)];
+  let historyCalls=0;
+  const canonicalHistoryReader:NonNullable<Parameters<typeof refreshCbbMemberBoard>[0]["canonicalHistoryReader"]>=async args=>{
+    historyCalls++;assert.deepEqual(args.gameIds,[game.id]);
+    return {...await readCbbCanonicalReaderHistory({...args,gameIds:[]}),priceRows:nativeRows};
+  };
+  await referenceRefresh("2026-10-29T22:15:00Z",4.5,150,-170,canonicalHistoryReader);
+  const nativeRead=stored.get(`cbb::member-game::${game.id}`) as typeof firstRead;
+  const nativeReceipt=nativeRead.snapshot.board.marketContext.verifiedMarketRead!;
+  assert.ok(nativeReceipt.anchors.quarantinedKeys?.includes("pinnacle:spread"));
+  assert.equal(nativeReceipt.episodes.filter(e=>e.book==="pinnacle"&&e.market==="spread").length,0);
+  assert.equal(nativeRead.snapshot.board.rows.find(r=>r.market==="spread")!.professionalReferenceQuotes.some(q=>q.sportsbook==="pinnacle"),false);
+  assert.equal(historyCalls,1);assert.equal(priceCalls,4);assert.equal(splitCalls,4);
   const atLock=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-11-01T13:30:00Z",bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
   assert.equal(atLock.locked,1);assert.equal(atLock.trackingInserted,3);

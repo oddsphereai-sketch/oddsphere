@@ -3,6 +3,7 @@ import {normalCdf} from "../lib/cbb/model";
 import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
 import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {gradeCbbProvisional} from "../lib/cbb/provisionalGradePolicy";
+import {adaptCbbProvisionalGame} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import {buildCbbProvisionalBoard} from "../lib/cbb/provisionalBoard";
 import {writeCbbMemberGame,cbbMemberGameForReader,type CbbStoredMemberGame} from "../lib/services/cbb/cbbMemberGameStore";
 import {writeLockedCbbTracking} from "../lib/services/cbb/cbbTrackingWriter";
@@ -14,20 +15,24 @@ const team=(id:number,college:string,abbr:string)=>({id,college,name:college,ful
 const game:CbbGame={id:777,date:start,season:2026,status:"pre",period:0,home_team:team(1,"Cornell","COR"),visitor_team:team(2,"Pepperdine","PEPP"),home_score:0,away_score:0};
 const margin=14,total=166,sd=11,zero=normalCdf((.5-margin)/sd)-normalCdf((-.5-margin)/sd);
 const independent:CbbForecast={release:CBB_CURRENT_SCORE_RELEASE,gameId:777,asOf:at,homeId:1,awayId:2,homeScore:90,awayScore:76,margin,total,homeWinProbability:(1-normalCdf((.5-margin)/sd))/(1-zero),possessions:70,inputStatus:"complete",issues:[],uncertainty:{marginSd:sd,totalSd:16,marginTotalCorrelation:0,marginCorrection:0,totalCorrection:0,fitThroughSeason:2025,games:1000}};
-const base={gameId:777,sportsbook:"draftkings",provider:"owls" as const,phase:"current" as const,orientationVerified:true,providerObservedAt:"2026-11-02T15:20:00Z",fetchedAt:"2026-11-02T15:21:00Z"};
+const base={gameId:777,sportsbook:"draftkings",provider:"owls" as const,phase:"current" as const,orientationVerified:true,requestedAt:"2026-11-02T15:21:00Z",providerObservedAt:"2026-11-02T15:20:00Z",fetchedAt:"2026-11-02T15:21:00Z"};
 const targets:CbbQuote[]=[{...base,market:"moneyline",line:null,firstPrice:130,secondPrice:-150},{...base,market:"spread",line:2.5,firstPrice:-110,secondPrice:-110},{...base,market:"total",line:164.5,firstPrice:-110,secondPrice:-110}];
 const refs:CbbQuote[]=targets.map(q=>({...q,sportsbook:"pinnacle",line:q.market==="spread"?3:q.line}));
 const read=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets,currentQuotes:refs,anchors:null});
 const candidate=buildCbbProvisionalBoard(read.forecast,[...targets,...refs],{marketBehavior:read.receipt});
-assert.ok(candidate.score.margin<0);assert.equal(candidate.rows[0].selection,"second");
+assert.equal(candidate.score.margin,independent.margin);assert.equal(candidate.rows[0].selection,"first");
+assert.equal(read.receipt.winnerArbitration.status,"context_only");
 let stored:CbbStoredMemberGame|null=null,writes=0;
 const db={from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:stored?{payload:stored}:null,error:null})})}),upsert:async(row:{payload:CbbStoredMemberGame})=>{stored=structuredClone(row.payload);writes++;return {error:null};}})} as unknown as Parameters<typeof writeCbbMemberGame>[1];
 async function main(){
  const initial=await writeCbbMemberGame({game,candidate,homeLogo:null,awayLogo:null,now:at,marketQuotes:[...targets,...refs]},db);
- assert.equal(initial.record.memberGame.projected.home,candidate.score.home);assert.equal(initial.record.memberGame.markets.moneyline.pick,"PEPP ML");
+ assert.equal(initial.record.memberGame.projected.home,candidate.score.home);assert.equal(initial.record.memberGame.markets.moneyline.pick,"COR ML");
  assert.equal(initial.record.memberGame.markets.first_inning.writerMovementDirection,undefined,"current winner arbitration is not recorded market movement");
  assert.ok(!initial.record.memberGame.breakdown?.modelBreakdown?.startsWith("Independent projection"),"final market-conditioned forecast cannot masquerade as independent");
- assert.equal(initial.record.memberGame.markets.first_inning.line,-2.5,"market-conditioned side flip uses the opposing actual executable contract");
+ assert.equal(initial.record.memberGame.markets.first_inning.line,2.5,"static opposition cannot synthesize a side flip");
+ assert.equal(initial.record.memberGame.markets.first_inning.grade,"market_watch","static professional opposition remains distinct from model value");
+ assert.notEqual(initial.record.memberGame.markets.first_inning.sharpStatus,"confirm");
+ assert.notEqual(initial.record.memberGame.markets.first_inning.marketSignal,"market_confirmed");
  const frozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:lock},db);
  const bytes=JSON.stringify(stored);assert.equal(writes,2);
  const malformed={...candidate,score:{...candidate.score,home:Number.NaN}};
@@ -40,7 +45,7 @@ async function main(){
  assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),3);
  assert.ok(tracked.every(row=>row.model_version===CBB_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_MARKET_BEHAVIOR_GRADE_RELEASE));
  const trackingBytes=JSON.stringify(tracked);assert.equal(await writeLockedCbbTracking(frozen.record,trackingDb),0);assert.equal(JSON.stringify(tracked),trackingBytes);
- assert.equal(tracked.find(row=>row.market==="spread")?.line_value,-2.5);
+ assert.equal(tracked.find(row=>row.market==="spread")?.line_value,2.5);
  const corrupt=structuredClone(frozen.record);corrupt.snapshot.board.score.home+=1;
  await assert.rejects(writeLockedCbbTracking(corrupt,trackingDb),/receipt differs/);
  const odds={success:true,data:[{id:"named-exact",sport:"ncaab",home_team:"Cornell",away_team:"Pepperdine",commence_time:start,bookmakers:[]}]};
@@ -57,8 +62,17 @@ async function main(){
  const confirmingInput={forecast:confirmingRead.forecast,target,references:[current],asOf:at};
  assert.equal(gradeCbbProvisional(confirmingInput).grade,"Watchlist");
  assert.equal(gradeCbbMarketBehavior(confirmingInput,confirmingRead.receipt).grade,"Lean","actual supported Circa fixture/flow normalization reaches the paired promotion; no unavailable Pinnacle split source is required");
+ const qualifiedBoard=buildCbbProvisionalBoard(confirmingRead.forecast,[target,current],{marketBehavior:confirmingRead.receipt});
+ const qualifiedDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:qualifiedBoard},homeLogo:null,awayLogo:null,now:at,marketQuotes:[target,current]});
+ assert.equal(qualifiedDto.markets.first_inning.sharpStatus,"confirm");assert.equal(qualifiedDto.markets.first_inning.grade,"sharp_confirmed");
+ const priceOnlyRead=readCbbMarketBehavior({independent,independentInputKey:"frozen-source",startsAt:start,targets:[target],currentQuotes:[current],
+   anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:777,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"frozen-source",capturedAt:"2026-11-02T15:01:00Z",quotes:[anchor]}});
+ const priceBoard=buildCbbProvisionalBoard(priceOnlyRead.forecast,[target,current],{marketBehavior:priceOnlyRead.receipt});
+ const priceDto=adaptCbbProvisionalGame({game,snapshot:{...initial.record.snapshot,board:priceBoard},homeLogo:null,awayLogo:null,now:at,marketQuotes:[target,current]});
+ assert.equal(priceDto.markets.first_inning.verdict.key,"lean");assert.equal(priceDto.markets.first_inning.grade,"model_only");
+ assert.notEqual(priceDto.markets.first_inning.sharpStatus,"confirm","price-only promotion cannot imply identified sharp flow");
  const history=[{date:"2026-11-02T09:29:59Z"},{date:"2026-11-02T09:30:00Z"},{date:"2026-11-02T09:30:01Z"}] as Parameters<typeof cbbHistoryAtDecision>[0];
  assert.deepEqual(cbbHistoryAtDecision(history,at),history.slice(0,2),"old independent replay uses its own six-hour availability cutoff");
- console.log("PASS CBB market behavior lock path: coherent opposing quote/side, T-60 freezes last public law, reader precedence, exact model/grade tracking and independent source-flow join.");
+ console.log("PASS CBB market behavior lock path: static disagreement without invented side change, T-60 freezes last public law, reader precedence, exact model/grade tracking and independent source-flow join.");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
