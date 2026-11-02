@@ -1,7 +1,7 @@
 import { nbaResidualCdf, nbaResidualQuantile, type NbaPriceCoordinateLaw } from "./nbaPricedMarketMovement";
 import type { NbaReaderPriceRow, NbaReaderSplitRow } from "./nbaProfessionalMarketReader";
 
-export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_10_31_r5_chronology_fitted_innovation" as const;
+export const NBA_MARKET_CONSEQUENCE_RELEASE = "nba_market_consequence_2026_11_02_r6_off_contract_static_coordinate" as const;
 export const NBA_MARKET_CONSEQUENCE_COEFFICIENTS = {
   margin: 1.813,
   total: 1,
@@ -595,11 +595,17 @@ export function reconcileNbaMarketConsequence(args: {
     const evaluatedThreshold = market === "moneyline" ? 0 : market === "spread" ? args.spreadHome == null ? null : -args.spreadHome : args.totalLine ?? null;
     const threshold = current.threshold, matchesEvaluatedContract = evaluatedThreshold !== null && numericalZero(threshold - evaluatedThreshold);
     const fairAtBookContract = current.fair;
+    const marketLocation = location(current, law);
+    const fairAtEvaluatedContract = evaluatedThreshold === null
+      ? null
+      : nbaResidualCdf(axis(market), marketLocation - evaluatedThreshold, law);
     const independent = market === "total" ? args.independentTotal : args.independentMargin;
     return [{ book, market, provider: current.provider, captureAt: current.captureAt, sourceAt: current.sourceAt,
       conflicted: reasons.includes(`${book}:${market}:provider_economic_conflict`),
-      threshold, fairAtBookContract, independentProbability: nbaResidualCdf(axis(market), independent - threshold, law), matchesEvaluatedContract,
-      favoredSide: !matchesEvaluatedContract || numericalZero(fairAtBookContract - .5) ? null : market === "total" ? fairAtBookContract > .5 ? "over" : "under" : fairAtBookContract > .5 ? "home" : "away",
+      threshold, fairAtBookContract, fairAtEvaluatedContract,
+      independentProbability: nbaResidualCdf(axis(market), independent - threshold, law), matchesEvaluatedContract,
+      favoredSide: fairAtEvaluatedContract === null || numericalZero(fairAtEvaluatedContract - .5) ? null
+        : market === "total" ? fairAtEvaluatedContract > .5 ? "over" : "under" : fairAtEvaluatedContract > .5 ? "home" : "away",
       authority: "context_only" as const, scoreDelta: 0 }];
   }));
   const receipt = ({ selected, ...r }: ReturnType<typeof arbitrate>) => ({ ...r,

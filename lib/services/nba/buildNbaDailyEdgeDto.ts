@@ -280,6 +280,8 @@ export function buildNbaDailyEdgeGameDto(opts: {
   retainLegacyGradeEconomics?: boolean;
   /** Same-input audit hook for the superseded Moneyline Best Angle path. */
   retainLegacyMoneylineEvidenceGrade?: boolean;
+  /** Exact prior/current posture comparison on one frozen input. */
+  includeR21GradePolicyAudit?: boolean;
 }): NbaDailyEdgeGameDto {
   const intel = buildNbaGameIntelligence({
     snapshot: opts.snapshot,
@@ -290,6 +292,7 @@ export function buildNbaDailyEdgeGameDto(opts: {
     injuriesSource: opts.provenance.injuries_source,
     enforcePositiveModelEv: opts.retainLegacyGradeEconomics !== true,
     enforceMoneylineEvidenceGuard: opts.retainLegacyMoneylineEvidenceGrade !== true,
+    includeR21GradePolicyAudit: opts.includeR21GradePolicyAudit,
   });
 
   return {

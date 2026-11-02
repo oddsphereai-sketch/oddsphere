@@ -52,6 +52,25 @@ assert.equal(gradeNbaMarket(mlBase).grade, "best_angle");
 assert.equal(gradeNbaMarket({ ...mlBase, namedBookPosture: moneyline }).grade, "lean");
 assert.deepEqual(gradeNbaMarket({ ...mlBase, namedBookPosture: spread }), gradeNbaMarket(mlBase), "wrong-market context cannot apply");
 
+const leanInput: GradeInput = { ...base, confidence: 58, modelProbabilityOnPick: 0.58 };
+assert.equal(gradeNbaMarket(leanInput).grade, "lean");
+const causalSupport = {
+  ...spread,
+  opposingSources: [],
+  conflictingSources: [],
+  convictionRiskSources: [],
+  supportingSources: ["circa"],
+  scoreEffectApplied: true,
+  consequence: "correct",
+};
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: causalSupport }).grade, "best_angle",
+  "a clean causal score consequence supporting the final side can advance an earned Lean");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, scoreEffectApplied: false } }).grade, "lean");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, consequence: "context_only" } }).grade, "lean");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, supportingSources: [], staticSupportingSources: ["circa"] } }).grade, "lean",
+  "static level agreement alone cannot manufacture a strongest grade");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, convictionRiskSources: ["pinnacle:recent_buyback"] } }).grade, "lean");
+
 for (const mutate of [
   (r: typeof reader) => { r.evidenceStatus = "unavailable"; },
   (r: typeof reader) => { r.reads.spread.excludedSportsbooks = ["CIRCA"]; },

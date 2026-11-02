@@ -183,6 +183,8 @@ export async function buildNbaDailyEdgePipeline(
     retainLegacyGradeEconomics?: boolean;
     /** Read-only same-input audit hook for the superseded Moneyline Best Angle path. */
     retainLegacyMoneylineEvidenceGrade?: boolean;
+    /** Exact prior/current posture comparison on one frozen input. */
+    includeR21GradePolicyAudit?: boolean;
     /** Deterministic audit/test hook. Production resolves the active provider roster once per build. */
     rosterRegimeRosterOverride?: NbaLiveRosterSnapshot;
     /** Read-only same-input audit hook for the superseded score path without roster-regime correction. */
@@ -610,6 +612,7 @@ export async function buildNbaDailyEdgePipeline(
       spreadReaderStats: buildNbaSpreadReaderStats(featureRow),
       retainLegacyGradeEconomics: options.retainLegacyGradeEconomics,
       retainLegacyMoneylineEvidenceGrade: options.retainLegacyMoneylineEvidenceGrade,
+      includeR21GradePolicyAudit: options.includeR21GradePolicyAudit,
     });
     dto.grounding_audit = {
       release: NBA_MARKET_MARRIAGE_RELEASE,

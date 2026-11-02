@@ -357,12 +357,9 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input));
 }
 
-/** Frozen incumbent comparison only. No production writer selects this policy. */
-export function gradeNbaLegacyMarketForAudit(input: GradeInput): GradeOutput {
-  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, true));
-}
-
-function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): GradeOutput {
+/** Exact prior production posture policy for same-input release comparison. */
+export function gradeNbaR21MarketForAudit(input: GradeInput): GradeOutput {
+  const incumbent = gradeNbaMarketEconomics(input);
   const posture = input.namedBookPosture;
   if (incumbent.grade !== "best_angle" || posture?.market !== input.market || posture?.pickedSide !== input.pick ||
       (posture.opposingSources.length === 0 && posture.conflictingSources.length === 0 && !posture.convictionRiskSources?.length)) return incumbent;
@@ -374,6 +371,42 @@ function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): Grad
       posture.opposingSources.length ? "Named-book economic movement opposes this pick. Value remains playable, but the market disagreement keeps it below Best Angle."
         : "Held pressure, recent buyback or unresolved source disagreement tempers the strongest recommendation without inventing a different score."],
   };
+}
+
+/** Frozen incumbent comparison only. No production writer selects this policy. */
+export function gradeNbaLegacyMarketForAudit(input: GradeInput): GradeOutput {
+  return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input, true));
+}
+
+function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): GradeOutput {
+  const posture = input.namedBookPosture;
+  if (posture?.market !== input.market || posture?.pickedSide !== input.pick) return incumbent;
+  const opposed = posture.opposingSources.length > 0 || posture.conflictingSources.length > 0 ||
+    Boolean(posture.convictionRiskSources?.length);
+  if (incumbent.grade === "best_angle" && opposed) {
+    return {
+      ...incumbent,
+      grade: "lean",
+      bestAngleEligible: false,
+      rationale: [...incumbent.rationale,
+        posture.opposingSources.length ? "Named-book economic movement opposes this pick. Value remains playable, but the market disagreement keeps it below Best Angle."
+          : "Held pressure, recent buyback or unresolved source disagreement tempers the strongest recommendation without inventing a different score."],
+    };
+  }
+  // Promotion is deliberately restricted to a causal score consequence that
+  // supports the same final side. Static market level, a held quote, public
+  // pressure, or duplicated follower evidence cannot manufacture Best Angle.
+  if (incumbent.grade === "lean" && !opposed && posture.scoreEffectApplied === true &&
+      posture.consequence === "correct" && posture.supportingSources.length > 0) {
+    return {
+      ...incumbent,
+      grade: "best_angle",
+      bestAngleEligible: true,
+      rationale: [...incumbent.rationale,
+        "A causal named-book move supports the same final forecast after its score consequence is applied, with no opposing or unresolved sharp evidence."],
+    };
+  }
+  return incumbent;
 }
 
 function gradeNbaMarketEconomics(input: GradeInput, legacyAudit = false): GradeOutput {

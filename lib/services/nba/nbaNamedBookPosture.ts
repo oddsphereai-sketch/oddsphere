@@ -4,7 +4,7 @@ import { readNbaPricedMarketMovement, type NbaPriceCoordinateLaw } from "./nbaPr
 import type { reconcileNbaMarketConsequence } from "./nbaMarketConsequence";
 
 export const NBA_NAMED_BOOK_POSTURE_RELEASE =
-  "nba_named_book_posture_2026_10_31_r7_unmatched_named_pressure_guard" as const;
+  "nba_named_book_posture_2026_11_02_r8_translated_static_confirmation" as const;
 
 export type NbaNamedBookPosture = {
   release: typeof NBA_NAMED_BOOK_POSTURE_RELEASE;
