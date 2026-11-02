@@ -56,8 +56,11 @@ async function main(): Promise<void> {
       publishedPregameRecovery: { rows, receipt: recovery } });
     const scores = apply ? await ingestNflFinalScores({ supabase, slateDate: "2026-11-01", apply: true }) : null;
     if (scores?.errors.length) throw new Error(JSON.stringify(scores.errors));
+    const { data: gradeTargets, error: targetError } = await supabase.from("prediction_records")
+      .select("id").eq("sport", "nfl").eq("external_id", Number(gameId));
+    if (targetError || (apply && gradeTargets?.length !== 3)) throw new Error("Recovery grading requires its exact three record IDs.");
     const grading = apply ? await gradePredictionsForSlate({ sport: "nfl", slateDate: "2026-11-01",
-      apply: true, supabase, source: "manual_operator" }) : null;
+      apply: true, supabase, source: "auto_score_ingest", recordIds: gradeTargets!.map(row => row.id) }) : null;
     if (grading?.errors.length) throw new Error(JSON.stringify(grading.errors));
     const after = (await readNflForwardEvidence({ client: supabase, season: 2026, week: 8 }))
       .filter(row => row.providerGameId === gameId);
