@@ -5,7 +5,7 @@ import type { CbbGame } from "@/lib/cbb/types";
 import type { CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { adaptCbbProvisionalGame, cbbOfficialGameResult } from "./adaptCbbProvisionalToDailyEdge";
-import { mergeCbbReaderEvidence,cbbQualifiedNamedSplitSection,type CbbPreparedNamedSplitSections } from "./cbbReaderMarketEvidence";
+import { mergeCbbReaderEvidence,cbbQualifiedNamedSplitSection,cbbQualifiedPublicSplitSection,type CbbPreparedNamedSplitSections,type CbbPreparedPublicSplitSections } from "./cbbReaderMarketEvidence";
 import { accumulateCbbPublishedQuotes, BOOK_DISPLAY_HISTORY_RELEASE, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
 // Schema r2 remains compatible with in-flight readers; publisher r9 versions
@@ -63,7 +63,7 @@ export async function readCbbMemberGames(ids:number[],db?:typeof supabase):Promi
  * This function never calls a provider or regrades a locked public record. */
 export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisionalBoard|null;
   homeLogo:string|null;awayLogo:string|null;now:string;splitEvidence?:ReturnType<typeof cbbCurrentSplitEvidence>|null;
-  marketQuotes?:CbbQuote[];bookHistory?:BookDisplayFeed|null;capturedNamedSections?:CbbPreparedNamedSplitSections},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
+  marketQuotes?:CbbQuote[];bookHistory?:BookDisplayFeed|null;capturedNamedSections?:CbbPreparedNamedSplitSections;capturedPublicSections?:CbbPreparedPublicSplitSections},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
   const client=db??(await import("@/lib/db/supabase")).supabase;
   const existing=await readCbbMemberGame(args.game.id,client);
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
@@ -82,12 +82,15 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const candidate=freezing?structuredClone(existing.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,
     homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence,marketQuotes:args.marketQuotes});
   const memberGame=mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
-  if(!freezing&&args.capturedNamedSections){
+  if(!freezing){
     for(const key of ["moneyline","first_inning","total"] as const){
-      const market=memberGame.markets[key],section=args.capturedNamedSections[key];
-      if(!cbbQualifiedNamedSplitSection(market.sportsbookSplits,section??null,evidenceAt))continue;
-      market.sportsbookSplits=structuredClone(section!);
-      market.sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section!.sourceObservedAt??section!.lastUpdated??""};
+      const market=memberGame.markets[key],section=args.capturedNamedSections?.[key]??existing?.memberGame.markets[key].sportsbookSplits;
+      if(cbbQualifiedNamedSplitSection(market.sportsbookSplits,section??null,evidenceAt)){
+        market.sportsbookSplits=structuredClone(section!);
+        market.sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section!.sourceObservedAt??section!.lastUpdated??""};
+      }
+      const publicSection=args.capturedPublicSections?.[key]??existing?.memberGame.markets[key].publicSplits;
+      if(cbbQualifiedPublicSplitSection(publicSection,key,evidenceAt))market.publicSplits=structuredClone(publicSection!);
     }
   }
   if(freezing){
