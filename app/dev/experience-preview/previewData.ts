@@ -22,6 +22,11 @@ import type {
   PreviewPitcherFirstInningByGame,
 } from "./ActualDailyEdgePreview";
 import { pitcherFirstInningPoint } from "@/app/lab/lib/dailyEdgeFirstInningHistory";
+import {
+  decodePublishedMemberPayload,
+  encodePublishedMemberPayload,
+  type CachedPublishedMemberPayload,
+} from "@/lib/services/publishedMemberPayloadCache";
 
 export async function loadDailyEdgeSnapshot(
   sport: Sport,
@@ -67,15 +72,13 @@ export async function loadPublishedDailyEdgeSnapshot(
   date?: string,
 ): Promise<DailyEdgeResponse> {
   const requestedDate = publishedDailyEdgeDate(sport, date);
-  const payload = await readCachedPublishedDailyEdgePayload(
+  const cached = await readCachedPublishedDailyEdgePayload(
     sport,
     requestedDate,
     !date,
   );
 
-  if (!payload) {
-    throw new Error(`Published Daily Edge snapshot unavailable (${sport} ${requestedDate})`);
-  }
+  const payload = decodePublishedMemberPayload(cached);
   const storedPresentationRelease = payload.memberPresentation?.releaseId;
   if (storedPresentationRelease && storedPresentationRelease !== DAILY_EDGE_MEMBER_PRESENTATION_RELEASE_ID) {
     throw new Error(`Published Daily Edge snapshot contract is outdated (${sport} ${requestedDate})`);
@@ -92,7 +95,7 @@ const readCachedPublishedDailyEdgePayload = unstable_cache(
     sport: Sport,
     requestedDate: string,
     allowPreviousReadyBoard: boolean,
-  ): Promise<DailyEdgeResponse | null> => {
+  ): Promise<CachedPublishedMemberPayload> => {
     const snapshotKey = dailyEdgeSnapshotKey({
       sport,
       requestedDate,
@@ -115,7 +118,10 @@ const readCachedPublishedDailyEdgePayload = unstable_cache(
       }
     }
 
-    return selected?.payload ?? null;
+    // A transient database failure must reject revalidation, preserving the
+    // last verified cache entry instead of publishing and caching an empty board.
+    if (!selected) throw new Error(`Published Daily Edge snapshot unavailable (${sport} ${requestedDate})`);
+    return encodePublishedMemberPayload(selected.payload);
   },
   [DAILY_EDGE_PUBLISHED_MEMBER_CACHE_RELEASE],
   {

@@ -169,7 +169,9 @@ check(
   "published daily-sport payloads use the shared short-lived server data cache",
   candidatePageSource.includes("const readCachedPublishedDailyEdgePayload = unstable_cache(") &&
     candidatePageSource.includes("DAILY_EDGE_PUBLISHED_MEMBER_CACHE_RELEASE") &&
-    labResponseSnapshotsSource.includes("daily-edge-published-member-payload-v2-publication-invalidation") &&
+    labResponseSnapshotsSource.includes("daily-edge-published-member-payload-v3-lossless-cbb-history") &&
+    candidatePageSource.includes("encodePublishedMemberPayload(selected.payload)") &&
+    candidatePageSource.includes("decodePublishedMemberPayload(cached)") &&
     labResponseSnapshotWriterSource.includes("expirePublishedDailyEdgeMemberCache") &&
     labResponseSnapshotWriterSource.includes("revalidateTag(DAILY_EDGE_PUBLISHED_MEMBER_CACHE_TAG, { expire: 0 })") &&
     candidatePageSource.includes("revalidate: 15"),
