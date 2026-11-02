@@ -32,3 +32,11 @@ PR and exact production tree checks precede publication. After merge, repeat the
 operator to prove zero new prediction rows and then compare all36 original records
 and grades byte-for-byte against the pre-recovery JSON baseline. Refresh the existing
 member snapshot and verify all13 games /39 market rows and alternate-line denominators.
+
+Integrated next production base `024f3f3d174a73e079e53701335b3db5c3ad5631`
+(NFL PR924), retaining its r106 source-pressure rounding release and all original
+recovery hunks. Final verification is repeated on that integrated tree. Live member
+snapshot rebuilt at `2026-11-02T16:10:42.167Z`: ML11–2, Spread7–6, Total5–8 and
+both alternate-line panels have13settled/excluded0. All36 pre-existing prediction
+records and grade payloads match the pre-recovery baseline exactly after provenance
+restoration.
