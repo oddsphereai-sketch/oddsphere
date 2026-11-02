@@ -76,9 +76,10 @@ for (const record of records) {
     assert.equal(hasVerifiedAlternateLineSource({ ...record, line_value: record.line_value! + 1 }), false);
     assert.equal(hasVerifiedAlternateLineSource({ ...record, published_at: recovery.recoveredAt }), false);
     assert.equal(hasVerifiedAlternateLineSource({ ...record, snapshot_json: null }), false);
-    assert.equal(hasVerifiedAlternateLineSource({ ...projected, alternate_line_pregame_recovery: {
+    const wrongHashProjection = { ...projected, alternate_line_pregame_recovery: {
       ...(receipt as Record<string, unknown>), sourcePayloadSha256: "wrong-hash",
-    } }), false);
+    } };
+    assert.equal(hasVerifiedAlternateLineSource(wrongHashProjection), false);
     assert.equal(alternateLineOutcome(record, grade, 0), "loss");
     assert.equal(alternateLineOutcome(record, grade, 3), "loss");
     assert.equal(alternateLineOutcome(record, grade, 6), record.market === "spread" ? "loss" : "win");
