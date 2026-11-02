@@ -82,7 +82,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_02_r19_cbb_verified_source_aliases";
+  "market_intelligence_v2_capture_2026_11_02_r20_cbb_complete_institution_names";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
@@ -95,10 +95,18 @@ export function matchCbbSourceGame(games: readonly GameRef[], sourceAway: string
   sourceStart: string | null): CbbSourceMatch | null {
   const away = canonicalCbbTeamName(sourceAway), home = canonicalCbbTeamName(sourceHome);
   if (!away || !home || away === home || !sourceStart) return null;
-  const named = (observed: string, game: GameRef, side: "home" | "away") =>
-    [side === "home" ? game.homeName : game.awayName,
-      side === "home" ? game.homeLocation : game.awayLocation]
-      .some(value => value && canonicalCbbTeamName(value) === observed);
+  const named = (observed: string, game: GameRef, side: "home" | "away") => {
+    const full = canonicalCbbTeamName((side === "home" ? game.homeName : game.awayName) ?? "");
+    const institution = canonicalCbbTeamName((side === "home" ? game.homeLocation : game.awayLocation) ?? "");
+    if ((full && full === observed) || (institution && institution === observed)) return true;
+    // Some providers append the canonical mascot to an institution alias.
+    // Resolve only that exact school's own suffix; never match a mascot alone,
+    // an arbitrary prefix, or a different institution sharing the nickname.
+    if (!institution || !full.startsWith(institution)) return false;
+    const mascot = full.slice(institution.length);
+    return !!mascot && observed.length > mascot.length && observed.endsWith(mascot) &&
+      canonicalCbbTeamName(observed.slice(0, -mascot.length)) === institution;
+  };
   const at = Date.parse(sourceStart);
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(sourceStart) ? sourceStart : null;
   if (!Number.isFinite(at)) return null;

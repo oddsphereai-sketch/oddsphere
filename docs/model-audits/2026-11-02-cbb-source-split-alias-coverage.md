@@ -58,3 +58,39 @@ raw response is used as evidence.
 Private read-only baseline:
 `/private/tmp/cbb-split-coverage-20261102-audit.json`.
 Live source coverage and publication proof pending.
+
+## Deployed r19 result and complete-name follow-up
+
+PR939 merged `28d71522dd56928f8b34303e474ba7b8b2843153`; production deployment
+matched verified tree `efdd1b85c5fc9168a27f49920a8b4fb95459f9b3`. The natural
+4:46PMET CBB collector succeeded, but current public coverage remained221panels
+(238fresh scopes including historical/locked events). It did not establish that
+the missing panels were restored. All9 archived locked payloads and24 original
+tracking records remained byte-equivalent. No predictive change was made.
+
+Read-only comparison found210fresh legacy public side cells attached to35 of the
+38 wholly missing current games. That older matcher uses mascots and is not
+sufficient identity proof to republish those values. Canonical institution/full
+names, both teams and event times are present in the canonical game table.
+
+The r19 alias registry handles institution-only variants, but a full source
+name can append the actual mascot to the alias (for example OregonStBeavers).
+The complete-name follow-up r20 compares the exact mascot derived from the
+canonical full name against the source suffix, then resolves the remaining
+institution through the verified existing alias registry. It requires a
+nonempty institution, nonempty exact mascot and the same unique timed matchup;
+it does not strip arbitrary words or match an institution from a mascot alone.
+
+Additional tests cover real canonical full-name forms for Weber/OregonState,
+CentralConnecticut/Temple, Quinnipiac/MichiganState, Northeastern/BostonUniversity
+and MoreheadState/WesternKentucky, both orientations and duplicate/wrong-time
+rejection. Wrong mascots, different schools sharing a mascot and mascot-only
+forms remain rejected. No statistical team identity, source percentage, quote,
+price-selection, score, probability, grade policy, stake, lock or provider
+request change accompanies this capture-only follow-up.
+
+The owner approved one diagnostic run of the existing collector. It completed
+successfully4:51:36–4:52:56PMET, but the connection closed before its full returned
+diagnostics arrived. That cycle was not repeated. Provider-secret settings were
+not accessed. The follow-up relies on pure matching checks and subsequent normal
+scheduled source/reader proof; it does not claim recovery before observation.
