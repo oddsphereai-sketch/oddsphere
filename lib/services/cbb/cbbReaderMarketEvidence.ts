@@ -1,7 +1,8 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
+import type { DraftKingsNetworkSplitFeed } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_02_r6_retained_named_source" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 export type CbbCapturedPublicSplitRow=SplitRow;
@@ -49,6 +50,7 @@ function splitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|
 }
 
 const namedBooks=["circa","draftkings","betmgm"] as const;
+const namedDisplayPriority=(book:string|null|undefined)=>book==="draftkings_network"?1:namedBooks.indexOf(book as typeof namedBooks[number]);
 function namedSplitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
   const sides=kind==="total"?["over","under"]:["away","home"];
   for(const book of namedBooks){
@@ -89,7 +91,7 @@ function namedSection(game:DailyEdgeGameDto,pair:SplitRow[]):NonNullable<MarketE
 function preferNamedSection(existing:MarketEdgeDto["sportsbookSplits"],incoming:NonNullable<MarketEdgeDto["sportsbookSplits"]>,now:number):boolean{
   if(!existing)return true;
   const observed=Date.parse(existing.sourceObservedAt??existing.lastUpdated??"");
-  const priority=namedBooks.indexOf(existing.sourceBook as typeof namedBooks[number]);
+  const priority=namedDisplayPriority(existing.sourceBook);
   const complete=existing.rows.length===2&&new Set(existing.rows.map(row=>row.side)).size===2&&
     existing.rows.every(row=>row.betsPct!==null&&row.moneyPct!==null)&&
     Math.abs(existing.rows.reduce((sum,row)=>sum+(row.betsPct??0),0)-100)<=3&&
@@ -98,14 +100,14 @@ function preferNamedSection(existing:MarketEdgeDto["sportsbookSplits"],incoming:
   const incomingAt=Date.parse(incoming.sourceObservedAt!),existingFresh=now-observed<=3*60*60_000,incomingFresh=now-incomingAt<=3*60*60_000;
   if(existingFresh!==incomingFresh)return incomingFresh;
   if(!existingFresh)return incomingAt>observed;
-  const incomingPriority=namedBooks.indexOf(incoming.sourceBook as typeof namedBooks[number]);
+  const incomingPriority=namedDisplayPriority(incoming.sourceBook);
   return incomingPriority<priority||incomingPriority===priority&&Date.parse(incoming.sourceObservedAt!)>observed;
 }
 
 export function cbbQualifiedNamedSplitSection(existing:MarketEdgeDto["sportsbookSplits"],section:MarketEdgeDto["sportsbookSplits"],now:number,
   options:{allowRetained?:boolean}={}):section is NonNullable<MarketEdgeDto["sportsbookSplits"]>{
   const observed=Date.parse(section?.sourceObservedAt??section?.lastUpdated??"");
-  return !!section&&namedBooks.includes(section.sourceBook as typeof namedBooks[number])&&Number.isFinite(observed)&&observed<=now&&(options.allowRetained||now-observed<=3*60*60_000)&&section.rows.length===2&&new Set(section.rows.map(row=>row.side)).size===2&&
+  return !!section&&namedDisplayPriority(section.sourceBook)>=0&&Number.isFinite(observed)&&observed<=now&&(options.allowRetained||now-observed<=3*60*60_000)&&section.rows.length===2&&new Set(section.rows.map(row=>row.side)).size===2&&
     !section.rows.some(row=>row.betsPct===null||row.moneyPct===null||!Number.isFinite(row.betsPct)||!Number.isFinite(row.moneyPct)||row.betsPct<0||row.betsPct>100||row.moneyPct<0||row.moneyPct>100)&&
     Math.abs(section.rows.reduce((sum,row)=>sum+row.betsPct!,0)-100)<=3&&Math.abs(section.rows.reduce((sum,row)=>sum+row.moneyPct!,0)-100)<=3&&
     preferNamedSection(existing,section,now);
@@ -163,6 +165,36 @@ export function mergeCbbCapturedNamedSplitEvidence(board:DailyEdgeResponse,named
   return {...board,games:board.games.map(game=>changes.get(game.id)??game)};
 }
 
+/** Stored source only. Qualify against the complete fixture context, then copy
+ * only the display section; the forecast/decision tuple and locks never move. */
+export function mergeCbbDraftKingsSplitEvidence(board:DailyEdgeResponse,feed:DraftKingsNetworkSplitFeed|null,
+  applyFallback:typeof import("@/lib/providers/draftkings/draftKingsNetworkSplits").applyDraftKingsNetworkSplitFallback,
+  now=Date.now(),identityGames:readonly DailyEdgeGameDto[]=board.games):DailyEdgeResponse{
+  const receipt=Date.parse(feed?.fetchedAt??"");
+  if(board.sport!=="cbb"||!feed||feed.source!=="draftkings_network"||feed.sport!=="NCAA Basketball"||!Number.isFinite(receipt)||receipt>now)return board;
+  const safeFeed={...feed,games:feed.games.map(game=>({...game,markets:Object.fromEntries(Object.entries(game.markets).filter(([,market])=>{
+    const observed=Date.parse(market!.observedAt??feed.fetchedAt);return Number.isFinite(observed)&&observed<=receipt;
+  }))}))};
+  // Keep all fixtures for ambiguity checks without cloning chart history.
+  const candidates={...board,games:identityGames.map(game=>game.lockState==="locked"||game.lockedAt!==null?game:
+    {...game,markets:Object.fromEntries(Object.entries(game.markets).map(([key,market])=>[key,{...market,sportsbookSplits:null}])) as DailyEdgeGameDto["markets"]})};
+  applyFallback(candidates,safeFeed);
+  const incoming=new Map(candidates.games.map(game=>[game.id,game]));
+  return {...board,games:board.games.map(original=>{
+    if(original.lockState==="locked"||original.lockedAt!==null||Date.parse(original.gameStartAt??"")<=now)return original;
+    const candidate=incoming.get(original.id);if(!candidate)return original;
+    const markets={...original.markets};let changed=false;
+    for(const [key] of marketEntries){
+      const section=candidate.markets[key].sportsbookSplits;
+      if(!cbbQualifiedNamedSplitSection(original.markets[key].sportsbookSplits,section,now,{allowRetained:true}))continue;
+      markets[key]={...original.markets[key],sportsbookSplits:section,
+        sharpBookAvailability:{status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section.sourceObservedAt??""}};
+      changed=true;
+    }
+    return changed?{...original,markets}:original;
+  })};
+}
+
 /** Display-only unlocked overlay. The stored grade, pick, projection, price and
  * every locked payload retain precedence over these separately captured rows. */
 export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayFeed|null,splitRows:SplitRow[],now=Date.now()):DailyEdgeResponse{
@@ -214,13 +246,14 @@ export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse,opt
   const [{readPredictionMarketBookHistory},{supabase},{readStoredSharpApiCurrentSplits,applySharpApiCurrentSplitOverlay}]=await Promise.all([
     import("@/lib/services/dailyEdge/predictionMarketDisplayFeed"),import("@/lib/db/supabase"),import("@/lib/providers/real_api/sharpApiCurrentSplits")]);
   const ids=selected.games.filter(game=>game.lockedAt===null&&game.lockState!=="locked").map(game=>String(game.external_id));
-  const [feed,rows,namedFeed]=await Promise.all([readPredictionMarketBookHistory("cbb").catch(()=>null),readCbbCapturedPublicSplits(supabase,ids.map(Number)).catch(()=>[]),
-    readStoredSharpApiCurrentSplits("cbb").catch(()=>null)]);
+  const {readStoredDraftKingsNetworkSplits,applyDraftKingsNetworkSplitFallback}=await import("@/lib/providers/draftkings/draftKingsNetworkSplits");
+  const [feed,rows,namedFeed,draftKingsFeed]=await Promise.all([readPredictionMarketBookHistory("cbb").catch(()=>null),readCbbCapturedPublicSplits(supabase,ids.map(Number)).catch(()=>[]),
+    readStoredSharpApiCurrentSplits("cbb").catch(()=>null),readStoredDraftKingsNetworkSplits("cbb",supabase).catch(()=>null)]);
   // Named-book polling must not crowd public consensus out of a shared row cap.
   // The durable named-book display feed already has exact institution matching,
   // source timestamps and freshness checks; no provider request is made here.
-  const merged=mergeCbbCapturedNamedSplitEvidence(mergeCbbReaderEvidence(selected,feed,rows),namedFeed,
-    applySharpApiCurrentSplitOverlay,Date.now(),board.games);
+  const merged=mergeCbbDraftKingsSplitEvidence(mergeCbbCapturedNamedSplitEvidence(mergeCbbReaderEvidence(selected,feed,rows),namedFeed,
+    applySharpApiCurrentSplitOverlay,Date.now(),board.games),draftKingsFeed,applyDraftKingsNetworkSplitFallback,Date.now(),board.games);
   const details=new Map(merged.games.map(game=>[game.id,game]));
   return {...board,games:board.games.map(game=>details.get(game.id)??game)};
 }

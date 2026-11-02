@@ -109,6 +109,14 @@ const paginationTest = (async () => {
   });
   assert.equal(completeFeed?.games.length, 2, "both required seed pages are retained when the feed succeeds");
 
+  const pageClocks=await fetchDraftKingsNetworkSplits({sport:"cbb",timeoutMs:1_000,fetchImpl:async input=>{
+    const second=new URL(String(input)).searchParams.get("tb_page")==="2";
+    return new Response(second?pageTwoHtml:html,{status:200,headers:{date:second?"Thu, 17 Sep 2026 15:02:00 GMT":"Thu, 17 Sep 2026 15:01:00 GMT"}});
+  }});
+  assert.equal(pageClocks?.fetchedAt,"2026-09-17T15:02:00.000Z");
+  assert.equal(pageClocks?.games.find(game=>game.providerEventId==="123456")?.markets.moneyline?.observedAt,"2026-09-17T15:01:00.000Z",
+    "a later page response cannot renew an earlier page's source clock");
+
   await assert.rejects(
     fetchDraftKingsNetworkSplits({
       sport: "mlb",

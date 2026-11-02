@@ -43,3 +43,23 @@ build/TypeScript and latest-main protected PR checks. CBB scheduled-source and
 reader/sole-writer integration is owned by the coordinating CBB chat and must
 preserve all earlier source/display repairs and locked records. Production
 source and member-panel recovery must be verified after those changes deploy.
+
+The coordinating CBB owner explicitly handed this chat the bounded display
+integration and checkpointed its overlapping private model files. R13 of the
+existing sole publisher and R7 reader evidence both reuse stored DKN data.
+The CBB-first public collector refreshes only the existing cached/durable DKN
+source (at most twelve anonymous HTML pages; zero extra paid-provider calls).
+No reader or publisher makes that provider request. Capture advances to R23.
+The preserved score R3, board R6 and grade R2 policies do not consume DKN as
+new prediction evidence. Promotion/demotion and score policy deltas are zero.
+
+Shared qualification gives fresh Circa priority, treats native DraftKings and
+DraftKings Network as the same display tier, and lets a fresh DKN receipt
+replace an older retained source. It keeps full fixture context for duplicate
+and neutral-site checks and copies only named-display fields. Each page's own
+HTTP receipt time is retained on its markets; a later page or writer does not
+renew it. The sole writer's existing prepared-section hook persists those
+exact qualified panels so future T-60 locks freeze what the member saw.
+Tests prove wrong sport/date/opponent, duplicate identities, future page and
+market clocks are rejected, full forecast/decision values remain unchanged,
+and both writer and reader preserve existing locked payload precedence.

@@ -82,7 +82,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_02_r22_cbb_before_member_refresh";
+  "market_intelligence_v2_capture_2026_11_02_r23_cbb_draftkings_fallback";
 
 // Exact source forms from the normal 2026-11-02 22:46Z Playbook capture,
 // checked against the canonical institution/full name on the same timed game.

@@ -1,6 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cbbSplitOrientation, cbbSplitTeamMatches } from "@/lib/cbb/exactSplitIdentity";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
@@ -172,10 +173,10 @@ export async function fetchDraftKingsNetworkSplits(args: {
     if (/Betting splits are temporarily unavailable/i.test(html)) {
       throw new Error(`DraftKings Network splits page ${page} is in upstream maintenance`);
     }
-    return {
-      fetchedAt: responseDate ? new Date(responseDate).toISOString() : (args.now ?? new Date()).toISOString(),
-      games: parseDraftKingsNetworkSplitsHtml(html),
-    };
+    const fetchedAt=responseDate ? new Date(responseDate).toISOString() : (args.now ?? new Date()).toISOString();
+    return {fetchedAt,games:parseDraftKingsNetworkSplitsHtml(html).map(game=>({...game,
+      markets:Object.fromEntries(Object.entries(game.markets).map(([market,value])=>[market,{...value,observedAt:fetchedAt}])) as DraftKingsNetworkSplitGame["markets"],
+    }))};
   };
   const initial = await Promise.allSettled([fetchPage(1), fetchPage(2)]);
   const failedInitialPage = initial.find((result) => result.status === "rejected");
@@ -266,11 +267,16 @@ async function readDurableDraftKingsNetworkSplits(
 
 export async function readStoredDraftKingsNetworkSplits(
   sport: Sport,
+  client?: SupabaseClient,
 ): Promise<DraftKingsNetworkSplitFeed | null> {
-  const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
-  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport))
-    ?? await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport, DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE))
-    ?? await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport, DRAFTKINGS_NETWORK_LEGACY_DURABLE_RELEASE));
+  const read = client ? async (key:string) => {
+    const {data,error}=await client.from("lab_response_snapshots").select("payload").eq("snapshot_key",key).maybeSingle();
+    if(error)throw new Error(`Stored DraftKings splits read failed: ${error.message}`);
+    return data;
+  } : (await import("@/lib/services/labResponseSnapshots")).readLatestLabResponseSnapshot;
+  const stored = await read(durableSnapshotKey(sport))
+    ?? await read(durableSnapshotKey(sport, DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE))
+    ?? await read(durableSnapshotKey(sport, DRAFTKINGS_NETWORK_LEGACY_DURABLE_RELEASE));
   return validateDurableDraftKingsNetworkSplitFeed(stored?.payload, sport);
 }
 
