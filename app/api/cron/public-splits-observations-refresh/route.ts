@@ -28,7 +28,11 @@ import { readMarketCaptureActivity } from "@/lib/services/dailyEdge/marketCaptur
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
 // This remains an observation-only collector. Capability gates continue to
 // decide whether any sport may display or use the stored evidence.
-const SPORTS: Sport[] = ["mlb", "wnba", "nhl", "nba", "nfl", "cfb", "cbb"];
+// CBB's sole member writer starts at :02/:17/:32/:47. Capture it first,
+// before slower unrelated snapshot rebuilds can consume that lead time and
+// cause its sport-scoped lease to skip the source refresh. Every other sport
+// retains its relative order, provider calls, cadence and lease protection.
+const SPORTS: Sport[] = ["cbb", "mlb", "wnba", "nhl", "nba", "nfl", "cfb"];
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandlerPerSport(

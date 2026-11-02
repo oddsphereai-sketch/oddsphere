@@ -32,7 +32,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_02_r21_cbb_observed_full_name_aliases",
+    "market_intelligence_v2_capture_2026_11_02_r22_cbb_before_member_refresh",
 );
 
 {
