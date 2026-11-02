@@ -66,4 +66,24 @@ Private spot-check evidence:
 `/private/tmp/nfl-20261102-spotcheck-1546-market-review.json`,
 `/private/tmp/nfl-20261102-spotcheck-1546-eagles-conviction.json`,
 `/private/tmp/nfl-20261102-spotcheck-1546-live-proof.json`.
-Publication pending. No realized predictive improvement is claimed.
+Final no-write capture completed `2026-11-02T16:00:36.836Z` in60.136s, with
+3 evaluated markets, zero health holds/reader findings and13 exact historical
+cards. Current identical-law policy comparison is0 promotions,0 demotions and
+no new No Plays: SEA ML No Play60.95%(-170), SEA-3.5 Watchlist52.63%(+100),
+Under46.5 Best Angle62.35%(-110). This differs from10:39AM's Total Lean because
+the authentic15:45:26Z Pinnacle path has returned to a current Under direction,
+not because the rounding fix changed grade floors. The Under has explicit
+source/execution confirmation with valid post-move offer request/receipt windows.
+
+The read-only same-history/base comparison at16:02:25Z proves old qualification
+rejects the actual43/58 ticket pair and new qualification retains its exact raw
+86-money/43-ticket home pressure. Adding only that flow leaves the numeric
+forecast exactly unchanged: the Circa quote held, so no invented move is applied.
+Grade comparison on that same final law is unchanged. Evidence:
+`/private/tmp/nfl-20261102-r106-qa.json` and
+`/private/tmp/nfl-20261102-r106-flow-comparison.json`.
+
+Focused NFL production suite, full `verify:model-change`, standalone TypeScript,
+webpack build, diff checks and clean integration safety passed on the exact
+starting base. Hosted PostgreSQL proof remains a pre-merge requirement.
+Publication and post-merge live proof pending. No realized predictive improvement is claimed.
