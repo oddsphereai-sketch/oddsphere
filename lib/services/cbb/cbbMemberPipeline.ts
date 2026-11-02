@@ -71,7 +71,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     .map(game=>[game.id,normalizeCbbOwlsCurrent(game,odds.body,asOf,asOf)] as const));
   const providerWarnings:string[]=[];
   const needsFallback=candidateGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)&&
-    !namedById.get(game.id)?.quotes.some(q=>q.market==="moneyline"));
+    !["moneyline","spread","total"].every(market=>namedById.get(game.id)?.quotes.some(q=>q.market===market)));
   if(needsFallback.length){
     try{
       const quoteDates=[...new Set(needsFallback.map(game=>game.date.slice(0,10)))];
