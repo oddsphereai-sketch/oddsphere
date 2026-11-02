@@ -693,6 +693,14 @@ forward grading remain required. Exact locked payloads retain precedence.
 
 ## CBB exact market-observation identity repair — October 30
 
+- November2 complete-name follow-up: active capture is
+  `market_intelligence_v2_capture_2026_11_02_r20_cbb_complete_institution_names`.
+  A verified institution alias may also precede that canonical school's exact
+  mascot suffix. Both the institution and its own complete mascot must match;
+  mascot-only, wrong-school, wrong-mascot, ambiguous and wrong-time rows still
+  fail. This extends r19 without changing other sports, forecast/grade authority,
+  provider budget, cron, locks or source values. Evidence:
+  `docs/model-audits/2026-11-02-cbb-source-split-alias-coverage.md`.
 - November2 source-alias follow-up: active observation capture is
   `market_intelligence_v2_capture_2026_11_02_r19_cbb_verified_source_aliases`.
   The shared collector now uses the same verified institution aliases as the
