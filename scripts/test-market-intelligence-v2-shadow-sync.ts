@@ -32,7 +32,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_10_30_r18_cbb_exact_institution_orientation",
+    "market_intelligence_v2_capture_2026_11_02_r19_cbb_verified_source_aliases",
 );
 
 {
@@ -55,6 +55,32 @@ check(
     matchCbbSourceGame([game], "Villanova", "Notre Dame", "bad timestamp") === null);
   check("CBB duplicated candidate identity is rejected rather than guessed",
     matchCbbSourceGame([game, { ...game, id: 2, externalId: 999 }], "Villanova", "Notre Dame", sourceStart) === null);
+  for (const [awaySource,homeSource,awayInstitution,homeInstitution] of [
+    ["Weber St","Oregon St","Weber State","Oregon State"],
+    ["Montana St","Colorado St","Montana State","Colorado State"],
+    ["C Connecticut","Temple","Central Connecticut","Temple"],
+    ["Charlotte","Indiana St","Charlotte","Indiana State"],
+    ["Davidson","Washington St","Davidson","Washington State"],
+    ["Alcorn St","Ole Miss","Alcorn State","Ole Miss"],
+    ["Texas A&M-CC","Texas St","Texas A&M-Corpus Christi","Texas State"],
+    ["Quinnipiac","Michigan St","Quinnipiac","Michigan State"],
+    ["Northeastern","Boston U","Northeastern","Boston University"],
+    ["Lipscomb","SE Missouri","Lipscomb","Southeast Missouri State"],
+  ]) {
+    const fixture={...game,awayName:awayInstitution,homeName:homeInstitution,
+      awayLocation:awayInstitution,homeLocation:homeInstitution};
+    check(`CBB verified institution aliases retain ${awaySource}@${homeSource}`,
+      matchCbbSourceGame([fixture],awaySource,homeSource,sourceStart)?.reversed===false);
+    check(`CBB verified alias orientation remains explicit for ${homeSource}@${awaySource}`,
+      matchCbbSourceGame([fixture],homeSource,awaySource,sourceStart)?.reversed===true);
+    check(`CBB aliases do not waive duplicate identity or kickoff for ${awaySource}@${homeSource}`,
+      matchCbbSourceGame([fixture,{...fixture,id:2,externalId:999}],awaySource,homeSource,sourceStart)===null&&
+      matchCbbSourceGame([fixture],awaySource,homeSource,"2026-11-02T14:30:00Z")===null);
+  }
+  const ambiguous={...game,homeName:"Southern California Trojans",homeLocation:"Southern California",
+    awayName:"Miami Ohio RedHawks",awayLocation:"Miami Ohio"};
+  check("CBB institution aliases never guess USC or Miami's school",
+    matchCbbSourceGame([ambiguous],"Miami","USC",sourceStart)===null);
   const price = buildOwlsSharpPriceObservations({
     sport: "cbb", fetchedAt: new Date("2026-10-30T12:00:00Z"), games: [game],
     rows: [{ sport: "ncaab", providerEventId: "ncaab:Villanova@Notre Dame-20261101",
