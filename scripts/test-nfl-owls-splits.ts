@@ -105,3 +105,34 @@ assert.doesNotMatch(writerSource, /fetchSharpApiNflSharpOdds\(/,
   "the sole full-game writer must use the shared Owls price-history lane instead of SharpAPI odds");
 
 console.log("NFL Owls capture-only split adapter tests passed.");
+
+const conflictingClaim = structuredClone(response.data![0]!);
+conflictingClaim.event_id = "nfl:CAR@GB-20261101";
+conflictingClaim.splits = [{ book: "circa", title: "Circa", as_of: "2026-10-27T23:45:00.000Z", ...markets(80, 20) }];
+for (const events of [[response.data![0]!, conflictingClaim], [conflictingClaim, response.data![0]!]]) {
+  const ambiguous = mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z",
+    response: { ...response, data: events } });
+  assert.equal(ambiguous.matchedGames, 0);
+  assert.equal(ambiguous.splitsByGame[game.providerGameId], undefined,
+    "different provider event IDs cannot silently overwrite a canonical game's source percentages");
+  assert.ok(ambiguous.rejected.some(reason => reason.includes("ambiguous provider event claims")));
+}
+const orderClaims = (events: NonNullable<RawOwlsSplitsResponse["data"]>) => mapNflOwlsSplits({
+  games: [game], capturedAt: "2026-10-27T23:47:00.000Z", response: { ...response, data: events },
+}).rejected.filter(reason => reason.includes("ambiguous provider event claims"));
+assert.deepEqual(orderClaims([response.data![0]!, conflictingClaim]), orderClaims([conflictingClaim, response.data![0]!]),
+  "ambiguous canonical-game rejection must be independent of provider row order");
+const identicalAlias = { ...structuredClone(response.data![0]!), event_id: "nfl:CAR@GB-20261101" };
+assert.equal(mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z",
+  response: { ...response, data: [response.data![0]!, identicalAlias] } }).matchedGames, 0,
+"equal percentages alone cannot attest that two different original provider event IDs are one unambiguous identity");
+console.log("NFL Owl canonical identity: conflicting and un-attested duplicate event claims reject deterministically passed");
+
+const lowerPriorityOriginal = { ...structuredClone(response.data![0]!),
+  splits: [{ book: "betmgm", title: "BetMGM", as_of: "2026-10-27T23:45:00.000Z", ...markets(55, 45) }] };
+const reusedEventWrongTeams = { ...structuredClone(response.data![0]!),
+  away_team: "Houston Texans", home_team: "Tennessee Titans",
+  splits: [{ book: "circa", title: "Circa", as_of: "2026-10-27T23:45:00.000Z", ...markets(80, 20) }] };
+assert.equal(mapNflOwlsSplits({ games: [game], capturedAt: "2026-10-27T23:47:00.000Z",
+  response: { ...response, data: [lowerPriorityOriginal, reusedEventWrongTeams] } }).matchedGames, 0,
+"a reused provider event ID cannot substitute a priority-book row from different participants into the first canonical game");

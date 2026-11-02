@@ -1,5 +1,18 @@
 # Model change safety protocol
 
+## Owner-directed NFL source and qualification repair — November 2
+
+The owner directed repair of captured-reference qualification, off-target source
+split context, economic-path interpretation and future lock retries, followed by
+market-specific grade qualification and forward outcome evaluation. Candidate
+writer104/model48/cal47/decision56/member53 retains the single leased writer,
+provider budget, exact executable prices and all stored locks. A common 59%
+modeled-confidence minimum defines the strongest grade across ML/Spread/Total;
+it is not empirical probability calibration. Otherwise qualified edges remain
+eligible for Lean. Paired promotion/demotion and board-impact checks, focused/full
+verification, fresh-main protected PR publication and live proof remain mandatory.
+Predeclared policy and results: `docs/model-audits/2026-11-02-nfl-source-qualified-repair.md`.
+
 ## Owner-directed NBA reader posture repair — November 2
 
 The owner directed immediate correction of three confirmed NBA functional gaps followed by release-pure forward evaluation: the operator audit hiding current causal flips, off-contract sharp quotes disappearing from static posture instead of being translated through the released residual law, and asymmetric grading that could temper clean opposition but never recognize a clean causal confirmation. The bounded r31/r33/r22 consequence-r6/posture-r8 candidate changes no independent score artifact, score-consequence coefficient, provider call, writer, cron, stake, executable quote, or locked record. Static translation remains context-only. Lean-to-Best promotion requires an applied causal score consequence supporting the same final side and no opposition, conflict, buyback, held-risk, or unmatched named pressure; static agreement and source counts cannot promote.

@@ -18,6 +18,7 @@ import type { NflExactProviderIndependentScore } from "./nflExactProviderScoreRu
 import type { NflAvailabilityArbitrationShadow } from "./nflAvailabilityArbitrationShadow";
 import type { NflMarketBrainCaptureResult } from "./nflMarketBrainShadow";
 import type { FootballRawPriceResponseManifest } from "./footballRawPriceManifest";
+import { NFL_T60_MAX_CAPTURE_LAG_MINUTES } from "./nflRegularDecisionEvidence";
 
 export const NFL_FORWARD_EVIDENCE_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_09_01_r6_forecast_value_separation" as const;
@@ -28,7 +29,7 @@ export const NFL_FORWARD_EVIDENCE_PRIOR_SCHEMA_RELEASE =
 export const NFL_FORWARD_EVIDENCE_LEGACY_SCHEMA_RELEASE =
   "nfl_forward_evidence_snapshot_2026_08_22_r2_multibook" as const;
 export const NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE =
-  "nfl_forward_evidence_collector_2026_10_27_r29_owls_capture_only" as const;
+  "nfl_forward_evidence_collector_2026_11_02_r30_source_qualified_attempts" as const;
 
 export type NflForwardEvidenceStage = "opening" | "unlocked" | "t60";
 
@@ -111,6 +112,13 @@ export type NflForwardEvidencePayload = {
   week: number;
   slateGameCount: number;
   stage: NflForwardEvidenceStage;
+  /** Failed attempts remain immutable evidence, never a completed public lock. */
+  captureAttempt?: {
+    requestedStage: "t60";
+    status: "failed";
+    reason: string;
+    cutoffAt: string;
+  };
   captureTiming: "on_time" | "late_first_observation";
   capturedAt: string;
   cutoffAt: string | null;
@@ -232,8 +240,9 @@ export type NflForwardEvidencePayload = {
       | "nfl_v1_member_release_2026_11_01_r49_source_to_decision_contract"
       | "nfl_v1_member_release_2026_11_01_r50_independent_market_axes"
       | "nfl_v1_member_release_2026_11_01_r51_movement_contract_separation"
-      | "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations";
-    publicationEnabled: true;
+      | "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations"
+      | "nfl_v1_member_release_2026_11_02_r53_source_qualified_market_read";
+    publicationEnabled: boolean;
     /** True only after the authoritative regular/postseason T-60 boundary validates the complete tuple. */
     trackingEnabled: boolean;
   };
@@ -338,6 +347,16 @@ export type NflForwardCapturePlan = {
 const T60_MS = 60 * 60_000;
 export const NFL_OPENING_FOLLOW_UP_CADENCE_MINUTES = 15 as const;
 
+/**
+ * A failed T-60 attempt is evidence of an attempt, not an immutable public pick.
+ * Any stored locked decision is nevertheless authoritative, including a partial
+ * or older-release lock which must not be repaired by regenerating its fields.
+ */
+export function hasNflStoredLockedDecision(row: NflForwardStoredEvidence): boolean {
+  return (row.payload.decisions?.evaluatedBets ?? []).some((decision) =>
+    decision.stage === "t60_locked" || decision.lockedAt != null);
+}
+
 export function planNflForwardEvidenceCaptures(args: {
   games: NflPreviewGame[];
   existing: NflForwardStoredEvidence[];
@@ -351,9 +370,14 @@ export function planNflForwardEvidenceCaptures(args: {
     const startsAt = validTimestamp(game.scheduledStart, `game ${game.providerGameId} start`);
     if (now >= startsAt) continue;
     const cutoff = startsAt - T60_MS;
+    const lastLegalCapture = cutoff + NFL_T60_MAX_CAPTURE_LAG_MINUTES * 60_000;
+    // No new public tuple may be constructed after the existing legal window.
+    // A later run cannot turn a failed attempt into a retrospective prediction.
+    if (now > lastLegalCapture) continue;
     const existing = byGame.get(game.providerGameId) ?? [];
     const hasOpening = existing.some((row) => row.stage === "opening");
-    const hasT60 = existing.some((row) => row.stage === "t60");
+    const hasT60 = existing.some(hasNflStoredLockedDecision);
+    if (hasT60) continue;
     if (!hasOpening) {
       plans.push({
         game,
@@ -403,18 +427,24 @@ export function determineNflForwardCollectionNeed(args: {
   if (args.existing.length === 0) return { collect: true, reason: "opening_seed", cadenceMinutes: null };
   const byGame = groupByGame(args.existing);
   const expected = Math.max(...args.existing.map((row) => row.payload.slateGameCount));
-  const openings = args.existing.filter((row) => row.stage === "opening").length;
+  const openings = new Set(args.existing
+    .filter((row) => row.stage === "opening" || hasNflStoredLockedDecision(row) ||
+      now > validTimestamp(row.gameStartAt, "stored gameStartAt") - T60_MS +
+        NFL_T60_MAX_CAPTURE_LAG_MINUTES * 60_000)
+    .map((row) => row.providerGameId)).size;
   if (openings < expected) return { collect: true, reason: "opening_incomplete", cadenceMinutes: null };
   const upcomingOutsideT60: number[] = [];
   let publicReleaseRefreshDue = false;
   let contextCaptureReleaseRefreshDue = false;
   let collectorReleaseRefreshDue = false;
   for (const rows of byGame.values()) {
+    if (rows.some(hasNflStoredLockedDecision)) continue;
     const latestRow = [...rows].sort((first, second) => Date.parse(second.capturedAt) - Date.parse(first.capturedAt))[0]!;
     const startsAt = validTimestamp(latestRow.gameStartAt, "stored gameStartAt");
     if (startsAt <= now) continue;
     const cutoff = startsAt - T60_MS;
-    if (now >= cutoff && !rows.some((row) => row.stage === "t60")) {
+    const lastLegalCapture = cutoff + NFL_T60_MAX_CAPTURE_LAG_MINUTES * 60_000;
+    if (now >= cutoff && now <= lastLegalCapture && !rows.some(hasNflStoredLockedDecision)) {
       return { collect: true, reason: "t60_due", cadenceMinutes: 15 };
     }
     if (now < cutoff) {

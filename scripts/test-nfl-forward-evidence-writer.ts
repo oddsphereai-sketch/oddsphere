@@ -285,8 +285,8 @@ assert.equal(
       collectorRelease: NFL_FORWARD_EVIDENCE_COLLECTOR_RELEASE,
     },
   }).reason,
-  "cadence_not_due",
-  "sidecar-only prior lineage must not force an extra production provider cycle from collector r28",
+  "collector_release_refresh_due",
+  "the prior r29 collector must refresh for the prospective failed-lock and source-qualified r30 contract",
 );
 const staleCollectorReleaseFollowUp: NflForwardStoredEvidence = {
   ...currentContextCaptureFollowUp,
@@ -428,7 +428,7 @@ assert.match(writer, /currentBooks/);
 assert.match(writer, /comparableCurrentBooks/);
 assert.match(writer, /multibook_consensus_unavailable/);
 assert.doesNotMatch(writer, /readLegacyNflForwardEvidence|readPriorNflForwardEvidence|readPreviousNflForwardEvidence/, "the live writer must not scan superseded large JSON releases");
-assert.match(writer, /nfl_forward_evidence_writer_2026_11_01_r103_relative_market_innovations/);
+assert.match(writer, /nfl_forward_evidence_writer_2026_11_02_r104_source_qualified_market_read/);
 assert.match(writer, /buildNflMarketBrainShadow/);
 assert.match(writer, /readNflOwlsMarketBrainSplitEvidence/,
   "the NFL shadow must consume the canonical Owls evidence lane");

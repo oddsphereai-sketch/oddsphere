@@ -235,3 +235,40 @@ function shadow(args: {
     sourcePointModelRelease: NFL_R6_SOURCE_POINT_MODEL_RELEASE,
   };
 }
+
+// Non-executable references can qualify a price, but cannot become that price.
+const twoExecution = freshPromotionBooks.slice(0, 2);
+const referenceOnly = { ...freshPromotionBooks[2]!, sportsbook: "pinnacle", targetEligible: false,
+  marketObservedAt: { moneyline: evaluatedAt } };
+const noReference = selectNflPredictionOwnedMoneylineEvaluation({ ...quoteClock, books: twoExecution,
+  home: true, modelProbability: .65 });
+const withReference = selectNflPredictionOwnedMoneylineEvaluation({ ...quoteClock, books: twoExecution,
+  referenceBooks: [referenceOnly], home: true, modelProbability: .65 });
+assert.equal(noReference?.grade, "Watchlist");
+assert.equal(withReference?.grade, "Lean");
+assert.deepEqual(withReference?.quote, noReference?.quote);
+assert.equal(withReference?.modelProbability, noReference?.modelProbability);
+assert.equal(withReference?.expectedValue, noReference?.expectedValue);
+assert.equal(withReference?.otherBookCount, 2);
+assert.deepEqual(selectNflPredictionOwnedMoneylineEvaluation({ ...quoteClock, books: [...twoExecution,
+  { ...referenceOnly, moneyline: { homePrice: 300, awayPrice: -350 } }], home: true, modelProbability: .65 }), noReference,
+  "capture-only named quotes can never become a member execution target");
+for (const invalidReference of [
+  { ...referenceOnly, providerGameId: "other-game" },
+  { ...referenceOnly, marketObservedAt: { moneyline: staleTime } },
+  { ...referenceOnly, marketObservedAt: { moneyline: futureTime } },
+  { ...referenceOnly, sportsbook: "Fan_Duel" },
+  { ...referenceOnly, moneyline: { homePrice: 0, awayPrice: -110 } },
+  { ...referenceOnly, moneyline: { homePrice: -1000, awayPrice: -1000 } },
+]) assert.equal(selectNflPredictionOwnedMoneylineEvaluation({ ...quoteClock, books: twoExecution,
+  referenceBooks: [invalidReference], home: true, modelProbability: .65 })?.grade, "Watchlist",
+"stale, future, wrong-game, target-family or malformed references cannot authorize Lean");
+assert.deepEqual(selectNflPredictionOwnedMoneylineEvaluation({ ...quoteClock, books: twoExecution,
+  referenceBooks: [referenceOnly, referenceOnly, { ...referenceOnly, sportsbook: "PIN_NACLE" }],
+  home: true, modelProbability: .65 }), withReference, "physical-family duplicates cannot inflate reference evidence");
+assert.equal(nflExecutionBooksAt({ ...quoteClock, books: [referenceOnly] }).length, 0);
+const staleMlFreshTotal = nflExecutionBooksAt({ ...quoteClock, books: [{ ...current,
+  marketObservedAt: { moneyline: staleTime, spread: evaluatedAt, total: evaluatedAt } }] });
+assert.equal(staleMlFreshTotal[0]?.moneyline, null);
+assert.ok(staleMlFreshTotal[0]?.total, "original market clocks isolate a stale ML from fresh Total execution");
+console.log("NFL execution/reference separation: paired source-quality promotions/demotions, physical-family clocks and unchanged execution EV passed");

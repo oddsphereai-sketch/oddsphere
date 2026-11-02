@@ -1,3 +1,4 @@
+import { nflPairedReferenceBooksAt, nflMarketSourceAt, nflSportsbookFamily } from "./nflMarketQualification";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 import {
   buildNflRegularEvaluatedBetDecision,
@@ -13,15 +14,18 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_V1_PRODUCTION_MODEL_RELEASE =
-  "nfl_v1_daily_edge_model_2026_11_01_r47_relative_market_innovations" as const;
+  "nfl_v1_daily_edge_model_2026_11_02_r48_source_qualified_market_read" as const;
 export const NFL_V1_PRODUCTION_CALIBRATION_RELEASE =
-  "nfl_v1_daily_edge_calibration_2026_11_01_r46_relative_market_innovations" as const;
+  "nfl_v1_daily_edge_calibration_2026_11_02_r47_source_qualified_market_read" as const;
 export const NFL_V1_PRODUCTION_DECISION_RELEASE =
-  "nfl_v1_daily_edge_decision_2026_11_01_r55_relative_market_innovations" as const;
+  "nfl_v1_daily_edge_decision_2026_11_02_r56_source_qualified_market_read" as const;
 export const NFL_V1_GRADE_POLICY_RELEASE =
-  "nfl_v1_grade_policy_2026_11_01_r55_relative_market_innovations" as const;
+  "nfl_v1_grade_policy_2026_11_02_r56_source_qualified_market_read" as const;
 export const NFL_V1_MEMBER_RELEASE =
-  "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations" as const;
+  "nfl_v1_member_release_2026_11_02_r53_source_qualified_market_read" as const;
+
+/** Product tier semantics shared by ML, Spread and Total; not an empirically calibrated win-rate claim. */
+export const NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY = 0.59 as const;
 
 export const NFL_V1_WATCHLIST_MINIMUM_EXPECTED_VALUE = -0.01 as const;
 export const NFL_V1_WATCHLIST_MINIMUM_EDGE_PERCENTAGE_POINTS = -1.0 as const;
@@ -47,12 +51,14 @@ export function buildNflV1ProductionDecisionBundle(args: {
   gameStartsAt: string;
   current: NflPreviewBookOdds;
   comparableCurrentBooks: NflPreviewBookOdds[];
+  /** Comparator evidence only; capture-only sources never become executable offers. */
+  referenceBooks?: NflPreviewBookOdds[];
   shadowMoneyline: NflR6ShadowMoneylineDecision;
   outcomeForecast?: NflV1WeekOneOutcomeForecast;
 }): NflV1ProductionDecisionBundle {
   args = { ...args, comparableCurrentBooks: nflExecutionBooksAt({
     books: args.comparableCurrentBooks, evaluatedAt: args.shadowMoneyline.evaluatedAt,
-    gameStartsAt: args.gameStartsAt,
+    gameStartsAt: args.gameStartsAt, providerGameId: args.providerGameId,
   }) };
   const spread = args.current.spread;
   const total = args.current.total;
@@ -130,7 +136,7 @@ export function buildNflV1ProductionDecisionBundle(args: {
     home: homeWinner,
     modelProbability: homeWinner ? outcome.homeWinProbability : outcome.awayWinProbability,
     gameStartsAt: args.gameStartsAt,
-    evaluatedAt: args.shadowMoneyline.evaluatedAt,
+    evaluatedAt: args.shadowMoneyline.evaluatedAt, referenceBooks: args.referenceBooks, providerGameId: args.providerGameId,
   });
   if (!coherentMoneyline) return { evaluatedBets: [], outcomeConfidence,
     modelPromotionStatus: NFL_V1_MEMBER_RELEASE, publicationEnabled: true, trackingEnabled: false };
@@ -146,11 +152,13 @@ export function buildNflV1ProductionDecisionBundle(args: {
     calibrationRelease: NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   });
   const spreadEvaluation = selectSpreadTotalEvaluation({
-    market: "spread", forecast: outcome, books: args.comparableCurrentBooks,
+    market: "spread", forecast: outcome, books: args.comparableCurrentBooks, referenceBooks: args.referenceBooks,
+    evaluatedAt: args.shadowMoneyline.evaluatedAt,
     awayTeam: args.awayTeam, homeTeam: args.homeTeam, gameStartsAt: args.gameStartsAt,
   });
   const totalEvaluation = selectSpreadTotalEvaluation({
-    market: "total", forecast: outcome, books: args.comparableCurrentBooks,
+    market: "total", forecast: outcome, books: args.comparableCurrentBooks, referenceBooks: args.referenceBooks,
+    evaluatedAt: args.shadowMoneyline.evaluatedAt,
     awayTeam: args.awayTeam, homeTeam: args.homeTeam, gameStartsAt: args.gameStartsAt,
   });
   const spreadDecision = spreadEvaluation ? buildNflRegularEvaluatedBetDecision({
@@ -212,6 +220,8 @@ export type NflPredictionOwnedMoneylineEvaluation = {
 
 export function selectNflPredictionOwnedMoneylineEvaluation(args: {
   books: NflPreviewBookOdds[];
+  referenceBooks?: NflPreviewBookOdds[];
+  providerGameId?: string;
   home: boolean;
   modelProbability: number;
   gameStartsAt: string;
@@ -221,8 +231,10 @@ export function selectNflPredictionOwnedMoneylineEvaluation(args: {
   const selected = args.books.flatMap((target): Omit<NflPredictionOwnedMoneylineEvaluation, "grade">[] => {
     if (!target.moneyline || Date.parse(target.observedAt) >= Date.parse(args.gameStartsAt)) return [];
     const price = args.home ? target.moneyline.homePrice : target.moneyline.awayPrice;
-    const otherFairs = args.books
-      .filter((other) => other.sportsbook !== target.sportsbook && other.moneyline !== null)
+    const otherFairs = nflPairedReferenceBooksAt({ books: [...args.books, ...(args.referenceBooks ?? [])],
+      market: "moneyline", providerGameId: target.providerGameId, evaluatedAt: args.evaluatedAt,
+      gameStartsAt: args.gameStartsAt })
+      .filter((other) => nflSportsbookFamily(other.sportsbook) !== nflSportsbookFamily(target.sportsbook))
       .map((other) => twoSidedFair(
         args.home ? other.moneyline!.homePrice : other.moneyline!.awayPrice,
         args.home ? other.moneyline!.awayPrice : other.moneyline!.homePrice,
@@ -236,7 +248,7 @@ export function selectNflPredictionOwnedMoneylineEvaluation(args: {
       expectedValue,
       edgePercentagePoints: 100 * (args.modelProbability - looFairProbability),
       otherBookCount: otherFairs.length,
-      quote: { sportsbook: target.sportsbook, line: null, price, observedAt: target.observedAt },
+      quote: { sportsbook: target.sportsbook, line: null, price, observedAt: nflMarketSourceAt(target, "moneyline") },
     }];
   }).sort((first, second) =>
     second.expectedValue - first.expectedValue ||
@@ -246,26 +258,30 @@ export function selectNflPredictionOwnedMoneylineEvaluation(args: {
   return selected === null ? null : { ...selected, grade: moneylineGrade(selected) };
 }
 
-/** Shared source-clock contract for execution targets and leave-one-out price evidence. */
+/** Fresh executable offers; paired reference evidence has a separate admission path. */
 export function nflExecutionBooksAt(args: {
   books: NflPreviewBookOdds[];
   evaluatedAt: string;
   gameStartsAt: string;
+  providerGameId?: string;
 }): NflPreviewBookOdds[] {
-  const evaluated = Date.parse(args.evaluatedAt);
-  const kickoff = Date.parse(args.gameStartsAt);
-  if (!Number.isFinite(evaluated) || !Number.isFinite(kickoff)) return [];
-  const byFamily = new Map<string, NflPreviewBookOdds>();
-  for (const book of args.books) {
-    const sourceAt = Date.parse(book.observedAt);
-    if (!Number.isFinite(sourceAt) || sourceAt > evaluated || sourceAt >= kickoff ||
-        evaluated - sourceAt > 120 * 60_000) continue;
-    const family = book.sportsbook.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (!family) continue;
-    const prior = byFamily.get(family);
-    if (!prior || Date.parse(prior.observedAt) < sourceAt) byFamily.set(family, book);
+  const providerGameId = args.providerGameId ?? args.books[0]?.providerGameId;
+  if (!providerGameId) return [];
+  const result = new Map<string, NflPreviewBookOdds>();
+  for (const market of ["moneyline", "spread", "total"] as const) {
+    const rows = nflPairedReferenceBooksAt({ ...args, providerGameId, market, executionOnly: true });
+    for (const book of rows) {
+      const family = nflSportsbookFamily(book.sportsbook);
+      const row = result.get(family) ?? { ...book, moneyline: null, spread: null, total: null, marketObservedAt: {} };
+      if (market === "moneyline") row.moneyline = book.moneyline;
+      else if (market === "spread") row.spread = book.spread;
+      else row.total = book.total;
+      row.marketObservedAt = { ...row.marketObservedAt, [market]: nflMarketSourceAt(book, market) };
+      row.observedAt = Object.values(row.marketObservedAt).sort((a, b) => Date.parse(b!) - Date.parse(a!))[0]!;
+      result.set(family, row);
+    }
   }
-  return [...byFamily.values()];
+  return [...result.values()];
 }
 
 function moneylineGrade(evaluation: Omit<NflPredictionOwnedMoneylineEvaluation, "grade">): "Lean" | "Watchlist" | "No Play" {
@@ -284,6 +300,8 @@ function selectSpreadTotalEvaluation(args: {
   market: "spread" | "total";
   forecast: ReturnType<typeof getNflV1WeekOneOutcomeForecast>;
   books: NflPreviewBookOdds[];
+  referenceBooks?: NflPreviewBookOdds[];
+  evaluatedAt: string;
   awayTeam: string;
   homeTeam: string;
   gameStartsAt: string;
@@ -312,7 +330,10 @@ function selectSpreadTotalEvaluation(args: {
       ? first ? target.spread!.awayPrice : target.spread!.homePrice
       : first ? target.total!.underPrice : target.total!.overPrice;
     if (!boundedSpreadTotalPrice(selectedPrice) || !Number.isFinite(opposingPrice)) return [];
-    const otherFairs = args.books.filter((other) => other.sportsbook !== target.sportsbook).flatMap((other) => {
+    const otherFairs = nflPairedReferenceBooksAt({ books: [...args.books, ...(args.referenceBooks ?? [])],
+      market: args.market, providerGameId: target.providerGameId, evaluatedAt: args.evaluatedAt,
+      gameStartsAt: args.gameStartsAt }).filter((other) =>
+        nflSportsbookFamily(other.sportsbook) !== nflSportsbookFamily(target.sportsbook)).flatMap((other) => {
       if (args.market === "spread") {
         const otherBoard = other.spread;
         if (!otherBoard || otherBoard.homeLine !== line || otherBoard.awayLine !== -line) return [];
@@ -353,7 +374,7 @@ function selectSpreadTotalEvaluation(args: {
       probability, pushProbability, looFairProbability, expectedValue,
       edgePercentagePoints, cushion,
       quote: { sportsbook: target.sportsbook, line: args.market === "spread" ? (first ? line : -line) : line,
-        price: selectedPrice, observedAt: target.observedAt },
+        price: selectedPrice, observedAt: nflMarketSourceAt(target, args.market) },
       watchlist,
     }];
   });

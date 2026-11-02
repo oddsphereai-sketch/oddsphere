@@ -203,6 +203,140 @@ unlockedR51[1]!.stage = "unlocked";
 unlockedR51[1]!.payload.stage = "unlocked";
 assert.throws(() => buildNflWeekOneHeldMemberFixture(unlockedR51), /coverage is 15\/16 games/,
   "an unlocked r51 row cannot cross the r52 release boundary");
+
+// New failed captures are retained as non-public evidence, never replacement
+// cards. Even a newer source clock may not let one erase a complete public row.
+const failedAttempt = structuredClone(rows[0]!);
+failedAttempt.id = "newer-failed-t60-attempt";
+failedAttempt.stage = "unlocked";
+failedAttempt.capturedAt = "2026-08-23T13:50:56.934Z";
+failedAttempt.payload = {
+  ...failedAttempt.payload, stage: "unlocked", capturedAt: failedAttempt.capturedAt,
+  captureAttempt: { requestedStage: "t60", status: "failed", reason: "injury_report_unavailable",
+    cutoffAt: "2026-09-10T17:00:00.000Z" },
+  decisions: { ...failedAttempt.payload.decisions, evaluatedBets: [], publicationEnabled: false, trackingEnabled: false },
+} as NflForwardEvidencePayload;
+const failedAttemptBefore = JSON.stringify(failedAttempt);
+const failedAttemptFixture = buildNflWeekOneHeldMemberFixture([...rows, failedAttempt]);
+assert.deepEqual(failedAttemptFixture.snapshot.games, fixture.snapshot.games,
+  "newer failed T60 attempts cannot erase or replace any published card");
+assert.equal(JSON.stringify(failedAttempt), failedAttemptBefore,
+  "excluding a failed attempt from member cards cannot mutate its stored evidence");
+const mislabeledAttempt = structuredClone(failedAttempt);
+mislabeledAttempt.payload.decisions = structuredClone(rows[0]!.payload.decisions);
+(mislabeledAttempt.payload as NflForwardEvidencePayload).outcomeForecast.expectedHomeScore += 11;
+assert.deepEqual(buildNflWeekOneHeldMemberFixture([...rows, mislabeledAttempt]).snapshot.games,
+  fixture.snapshot.games,
+  "an explicit failed-attempt marker prevents publication even if another metadata field incorrectly claims approval");
+
+// Existing published locks are opaque public records even when the raw
+// historical capture is an incomplete operational exception.
+const opaquePrevious = structuredClone(r51Fixture);
+const opaqueGame = opaquePrevious.snapshot.games.find((game) => game.id === lockedGame.id)!;
+Object.assign(opaqueGame, { legacyOpaqueEvidence: { sentinel: "must-survive", release: "r60-public-record" } });
+Object.assign(opaqueGame.markets.moneyline, { modelProb: .50123456789, confidence: .50123456789,
+  verdict: { label: "No Play", legacyReason: "stored-operational-exception" },
+  legacyStakeUnits: .731234, legacySource: { exactSourceTime: "2026-08-22T12:59:19.123Z" } });
+const availabilityKey = opaqueGame.id;
+Object.assign(opaquePrevious.availability!, { [availabilityKey]: {
+  provider: "legacy-source", sentinel: "exact-stored-availability", reportUpdatedAt: "2026-08-22T12:30:00.000Z",
+} });
+const historicalFailure = structuredClone(r51Rows.find((row) => `nfl-${row.providerGameId}` === opaqueGame.id)!);
+historicalFailure.id = "historical-empty-t60-kept-unchanged";
+historicalFailure.payload.decisions.evaluatedBets = [];
+historicalFailure.payload.decisions.trackingEnabled = false;
+const opaqueRows = rows.map((row) => row.providerGameId === historicalFailure.providerGameId ? historicalFailure : row);
+const opaquePreviousBefore = JSON.stringify(opaquePrevious);
+const historicalFailureBefore = JSON.stringify(historicalFailure);
+const opaqueResult = buildNflWeekOneHeldMemberFixture(opaqueRows, { previousFixture: opaquePrevious });
+assert.equal(opaqueResult.snapshot.games.length, 16);
+assert.deepEqual(opaqueResult.snapshot.games.find((game) => game.id === opaqueGame.id), opaqueGame,
+  "the whole stored locked DTO takes precedence over current rendering semantics and incomplete raw captures");
+assert.deepEqual(opaqueResult.snapshot.games.find((game) => game.id === fixture.snapshot.games[0]!.id),
+  fixture.snapshot.games[0], "a prior unlocked DTO cannot override the current unlocked projection");
+assert.deepEqual(opaqueResult.availability?.[availabilityKey], opaquePrevious.availability?.[availabilityKey],
+  "opaque lock continuity retains the same stored availability rather than inferring it from an empty capture");
+assert.equal(JSON.stringify(opaquePrevious), opaquePreviousBefore);
+assert.equal(JSON.stringify(historicalFailure), historicalFailureBefore);
+const otherOpaqueEvidence = structuredClone(opaquePrevious);
+Object.assign(otherOpaqueEvidence.snapshot.games.find((game) => game.id === opaqueGame.id)!, {
+  legacyOpaqueEvidence: { sentinel: "different-stored-public-evidence", release: "r60-public-record" },
+});
+const otherOpaqueResult = buildNflWeekOneHeldMemberFixture(opaqueRows, { previousFixture: otherOpaqueEvidence });
+assert.notEqual(opaqueResult.provenance.sourceChecksum, otherOpaqueResult.provenance.sourceChecksum,
+  "a fixture checksum must bind retained opaque DTO evidence as well as available raw capture hashes");
+
+const wrongWeekPrevious = structuredClone(opaquePrevious);
+wrongWeekPrevious.week!.week = 2;
+assert.throws(() => buildNflWeekOneHeldMemberFixture(opaqueRows, { previousFixture: wrongWeekPrevious }), /week|identity/i,
+  "a prior fixture from another week cannot supply locks to the current slate");
+const wrongIdPrevious = structuredClone(opaquePrevious);
+wrongIdPrevious.snapshot.games.find((game) => game.id === opaqueGame.id)!.external_id = 99999999;
+assert.throws(() => buildNflWeekOneHeldMemberFixture(opaqueRows, { previousFixture: wrongIdPrevious }), /identity|external|provider/i,
+  "a matching display ID cannot conceal a different provider identity");
+const wrongStartPrevious = structuredClone(opaquePrevious);
+wrongStartPrevious.snapshot.games.find((game) => game.id === opaqueGame.id)!.gameStartAt = "2026-09-11T18:00:00.000Z";
+assert.throws(() => buildNflWeekOneHeldMemberFixture(opaqueRows, { previousFixture: wrongStartPrevious }), /identity|start|kickoff/i,
+  "a stored card from another scheduled event cannot fill this slate's coverage");
+assert.throws(() => buildNflWeekOneHeldMemberFixture(opaqueRows.filter((row) =>
+  row.providerGameId !== historicalFailure.providerGameId), { previousFixture: opaquePrevious }), /coverage|identity|raw|evidence/i,
+"a lock with no matching raw event evidence cannot manufacture complete slate membership");
+
+// A real historical operational exception may be published as open, with no
+// lockedAt and no completed decision. Preserve that exact past card only when
+// its failed final-slot evidence and elapsed kickoff are both attested.
+const historicalOpenRows = structuredClone(rows.slice(0, 2));
+historicalOpenRows.forEach((row) => { row.payload.slateGameCount = 2; });
+const historicalOpenPrevious = buildNflWeekOneHeldMemberFixture(historicalOpenRows);
+const historicalOpenGame = historicalOpenPrevious.snapshot.games.find((game) =>
+  game.id === `nfl-${historicalOpenRows[0]!.providerGameId}`)!;
+historicalOpenGame.lockState = "open";
+historicalOpenGame.lockedAt = null;
+Object.assign(historicalOpenGame, { legacyFailedFinalSlot: { noValidLock: true, preserveWithoutReconstruction: true } });
+for (const market of Object.values(historicalOpenGame.markets)) {
+  Object.assign(market, { pick: null, verdict: { label: "No Play", reason: "original failed-final-slot card" },
+    modelProb: null, currentPriceAmerican: null, legacyHeldEvidence: { sentinel: "no-retrospective-pick" } });
+}
+const pastFailure = historicalOpenRows[0]!;
+pastFailure.stage = "t60";
+pastFailure.payload.stage = "t60";
+pastFailure.capturedAt = new Date(Date.parse(pastFailure.gameStartAt) - 29 * 60_000).toISOString();
+pastFailure.payload.capturedAt = pastFailure.capturedAt;
+pastFailure.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_11_01_r52_relative_market_innovations";
+pastFailure.payload.decisions.evaluatedBets = [];
+pastFailure.payload.decisions.trackingEnabled = false;
+const afterHistoricalKickoff = new Date(Date.parse(pastFailure.gameStartAt) + 1000).toISOString();
+historicalOpenRows[1]!.capturedAt = afterHistoricalKickoff;
+historicalOpenRows[1]!.payload.capturedAt = afterHistoricalKickoff;
+const historicalOpenBefore = JSON.stringify(historicalOpenPrevious);
+const failedFinalBefore = JSON.stringify(pastFailure);
+const historicalOpenResult = buildNflWeekOneHeldMemberFixture(historicalOpenRows,
+  { previousFixture: historicalOpenPrevious });
+assert.deepEqual(historicalOpenResult.snapshot.games.find((game) => game.id === historicalOpenGame.id), historicalOpenGame,
+  "an elapsed, failed T60 slot retains its exact previously published open-held DTO without creating a lock or a pick");
+assert.equal(JSON.stringify(historicalOpenPrevious), historicalOpenBefore);
+assert.equal(JSON.stringify(pastFailure), failedFinalBefore);
+const notYetHistorical = structuredClone(historicalOpenRows);
+notYetHistorical[1]!.capturedAt = new Date(Date.parse(pastFailure.gameStartAt) - 1000).toISOString();
+notYetHistorical[1]!.payload.capturedAt = notYetHistorical[1]!.capturedAt;
+assert.throws(() => buildNflWeekOneHeldMemberFixture(notYetHistorical, { previousFixture: historicalOpenPrevious }),
+  /coverage|identity|complete|evaluated/i,
+  "a future open-held game cannot use historical preservation to bypass its incomplete current tuple");
+const unlockedAttemptOnly = structuredClone(historicalOpenRows);
+unlockedAttemptOnly[0]!.stage = "unlocked";
+unlockedAttemptOnly[0]!.payload = { ...unlockedAttemptOnly[0]!.payload, stage: "unlocked",
+  captureAttempt: { requestedStage: "t60", status: "failed", reason: "source_unavailable",
+    cutoffAt: new Date(Date.parse(pastFailure.gameStartAt) - 60 * 60_000).toISOString() },
+  decisions: { ...unlockedAttemptOnly[0]!.payload.decisions, publicationEnabled: false },
+} as NflForwardEvidencePayload;
+assert.throws(() => buildNflWeekOneHeldMemberFixture(unlockedAttemptOnly, { previousFixture: historicalOpenPrevious }),
+  /coverage|identity|complete|evaluated/i,
+  "a failed unlocked attempt alone cannot attest a historical final-slot DTO");
+const noHistoricalFailure = structuredClone(historicalOpenRows);
+noHistoricalFailure[0]!.payload.decisions.evaluatedBets = structuredClone(rows[0]!.payload.decisions.evaluatedBets);
+assert.throws(() => buildNflWeekOneHeldMemberFixture(noHistoricalFailure, { previousFixture: historicalOpenPrevious }),
+  /coverage|identity|complete|evaluated/i,
+  "a nonempty unaccepted historical row cannot be mislabeled an empty failed-final-slot exception");
 console.log("NFL r51 locked continuity: exact stored reader fields, release isolation and first-public-lock precedence passed");
 
 const currentCollectorSnapshot = buildNflWeekOneHeldMemberFixture(releaseTransitionRows).snapshot;

@@ -1,3 +1,5 @@
+import { nflPairedReferenceBooksAt, nflMarketSourceAt, nflSportsbookFamily, nflMarketQualificationMatches,
+  type NflMarketQualificationReceipt } from "./nflMarketQualification";
 import type { NflPreviewBookOdds } from "./balldontlieNflPreviewSlate";
 import {
   buildNflRegularEvaluatedBetDecision,
@@ -11,6 +13,7 @@ import {
   NFL_V1_PRODUCTION_CALIBRATION_RELEASE,
   NFL_V1_PRODUCTION_DECISION_RELEASE,
   NFL_V1_PRODUCTION_MODEL_RELEASE,
+  NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY,
   nflExecutionBooksAt,
 } from "./nflV1ProductionDecision";
 import {
@@ -37,9 +40,9 @@ export const NFL_V1_MARKET_EVIDENCE_TOTAL_MODEL_RELEASE =
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.02 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
 export const NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_AMERICAN_PRICE = -200 as const;
-export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_PROBABILITY = 0.59 as const;
+export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_PROBABILITY = NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY;
 export const NFL_V1_SPREAD_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.04 as const;
-export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_PROBABILITY = 0.535 as const;
+export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_PROBABILITY = NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY;
 export const NFL_V1_TOTAL_BEST_ANGLE_MINIMUM_EXPECTED_VALUE = 0.035 as const;
 export const NFL_V1_SPREAD_TOTAL_BEST_ANGLE_MINIMUM_EDGE_PERCENTAGE_POINTS = 4.0 as const;
 export const NFL_V1_SPREAD_LEAN_MINIMUM_PROBABILITY = 0.565 as const;
@@ -98,14 +101,16 @@ export function buildNflV1ActionableGradeBundle(args: {
   gameStartsAt: string;
   current: NflPreviewBookOdds;
   comparableCurrentBooks: NflPreviewBookOdds[];
+  referenceBooks?: NflPreviewBookOdds[];
+  marketQualification?: Partial<Record<"moneyline" | "spread" | "total", NflMarketQualificationReceipt>>;
   shadowMoneyline: NflR6ShadowMoneylineDecision;
   outcomeForecast?: NflV1WeekOneOutcomeForecast;
-  /** The current joint reader has qualified the complete final law, including an unchanged statistical Total. */
+  /** @deprecated Accounting alone does not qualify a market. Ignored; use marketQualification. */
   qualifiedJointForecast?: boolean;
 }): NflV1ActionableGradeBundle {
   args = { ...args, comparableCurrentBooks: nflExecutionBooksAt({
     books: args.comparableCurrentBooks, evaluatedAt: args.shadowMoneyline.evaluatedAt,
-    gameStartsAt: args.gameStartsAt,
+    gameStartsAt: args.gameStartsAt, providerGameId: args.providerGameId,
   }) };
   const currentBundle = buildNflV1ProductionDecisionBundle(args);
   const currentMoneyline = currentBundle.evaluatedBets.find((decision) => decision.market === "moneyline");
@@ -130,9 +135,15 @@ export function buildNflV1ActionableGradeBundle(args: {
     decisionRelease: NFL_V1_ACTIONABLE_GRADE_DECISION_RELEASE,
     lockedAt,
   };
-  const moneylineGrade = nflMoneylineBestAngleEligible(currentMoneyline)
+  const evaluatedMoneylineGrade = nflMoneylineBestAngleEligible(currentMoneyline)
     ? "Best Angle"
     : currentMoneyline.grade;
+  const moneylineEvidenceValid = args.marketQualification?.moneyline === undefined || nflMarketQualificationMatches({
+    receipt: args.marketQualification.moneyline, market: "moneyline", providerGameId: args.providerGameId,
+    evaluatedAt: args.shadowMoneyline.evaluatedAt, gameStartsAt: args.gameStartsAt, forecast: outcome,
+  });
+  const moneylineGrade = !moneylineEvidenceValid && (evaluatedMoneylineGrade === "Lean" || evaluatedMoneylineGrade === "Best Angle")
+    ? "Watchlist" : evaluatedMoneylineGrade;
   const moneyline = buildNflRegularEvaluatedBetDecision({
     ...currentMoneyline,
     ...common,
@@ -145,7 +156,8 @@ export function buildNflV1ActionableGradeBundle(args: {
     awayTeam: args.awayTeam,
     homeTeam: args.homeTeam,
     gameStartsAt: args.gameStartsAt,
-    qualifiedJointForecast: args.qualifiedJointForecast,
+    referenceBooks: args.referenceBooks, evaluatedAt: args.shadowMoneyline.evaluatedAt,
+    qualification: args.marketQualification?.spread,
   });
   const total = selectMarket({
     market: "total",
@@ -154,7 +166,8 @@ export function buildNflV1ActionableGradeBundle(args: {
     awayTeam: args.awayTeam,
     homeTeam: args.homeTeam,
     gameStartsAt: args.gameStartsAt,
-    qualifiedJointForecast: args.qualifiedJointForecast,
+    referenceBooks: args.referenceBooks, evaluatedAt: args.shadowMoneyline.evaluatedAt,
+    qualification: args.marketQualification?.total,
   });
   if (!spread || !total) return emptyBundle(currentBundle.outcomeConfidence);
   const evaluatedBets = [moneyline, spread, total].map((decision) => "decisionKind" in decision
@@ -205,6 +218,7 @@ export function nflMoneylineBestAngleEligible(current: Pick<
   "grade" | "expectedValue" | "modelProbability" | "marketFairProbability" | "evaluatedQuote"
 >): boolean {
   return current.grade === "Lean" &&
+    current.modelProbability >= NFL_V1_BEST_ANGLE_MINIMUM_MODELED_WIN_PROBABILITY &&
     current.evaluatedQuote.price >= NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_AMERICAN_PRICE &&
     current.expectedValue >= NFL_V1_MONEYLINE_BEST_ANGLE_MINIMUM_EXPECTED_VALUE &&
     100 * (current.modelProbability - current.marketFairProbability) >=
@@ -218,7 +232,9 @@ function selectMarket(args: {
   awayTeam: string;
   homeTeam: string;
   gameStartsAt: string;
-  qualifiedJointForecast?: boolean;
+  referenceBooks?: NflPreviewBookOdds[];
+  evaluatedAt: string;
+  qualification?: NflMarketQualificationReceipt;
 }): MarketEvaluation | null {
   const candidates = args.books.flatMap((target): MarketEvaluation[] => {
     const board = args.market === "spread" ? target.spread : target.total;
@@ -249,7 +265,10 @@ function selectMarket(args: {
         ? first ? target.spread!.awayPrice : target.spread!.homePrice
         : first ? target.total!.underPrice : target.total!.overPrice;
       if (!boundedPrice(selectedPrice) || !Number.isFinite(opposingPrice)) return null;
-      const otherFairs = args.books.filter((other) => other.sportsbook !== target.sportsbook).flatMap((other) => {
+      const otherFairs = nflPairedReferenceBooksAt({ books: [...args.books, ...(args.referenceBooks ?? [])],
+        market: args.market, providerGameId: target.providerGameId, evaluatedAt: args.evaluatedAt,
+        gameStartsAt: args.gameStartsAt }).filter((other) =>
+          nflSportsbookFamily(other.sportsbook) !== nflSportsbookFamily(target.sportsbook)).flatMap((other) => {
         if (args.market === "spread") {
           if (!other.spread || other.spread.homeLine !== line || other.spread.awayLine !== -line) return [];
           return [twoSidedFair(
@@ -278,7 +297,10 @@ function selectMarket(args: {
         cushion,
         penalty,
         totalDirectionAvailable: args.market === "total" &&
-          (args.qualifiedJointForecast === true || args.forecast.marketEvidence?.totalDirection?.status === "available"),
+          (args.qualification !== undefined ? nflMarketQualificationMatches({ receipt: args.qualification,
+            market: args.market, providerGameId: args.forecast.providerGameId, evaluatedAt: args.evaluatedAt,
+            gameStartsAt: args.gameStartsAt, forecast: args.forecast })
+            : args.forecast.marketEvidence?.totalDirection?.status === "available"),
       });
       // A stable target-excluded anchor already excludes the evaluated family
       // and proves at least three independent market families. It can replace
@@ -290,10 +312,16 @@ function selectMarket(args: {
       const targetExcludedReliability = args.forecast.targetExclusion?.status === "target_excluded_market" &&
         (targetExcludedFamilyCount ?? 0) >= 3;
       const exactPriceReliability = otherFairs.length >= 2 || targetExcludedReliability;
-      const grade = exactPriceReliability ||
+      const sourceQualifiedGrade = exactPriceReliability ||
         gradeRank(qualifiedGrade) < gradeRank("Lean")
         ? qualifiedGrade
         : "Watchlist";
+      const evidenceValid = args.qualification === undefined || nflMarketQualificationMatches({
+        receipt: args.qualification, market: args.market, providerGameId: args.forecast.providerGameId,
+        evaluatedAt: args.evaluatedAt, gameStartsAt: args.gameStartsAt, forecast: args.forecast,
+      });
+      const grade = !evidenceValid && (sourceQualifiedGrade === "Best Angle" || sourceQualifiedGrade === "Lean")
+        ? "Watchlist" : sourceQualifiedGrade;
       return {
         market: args.market,
         side: args.market === "spread"
@@ -309,7 +337,7 @@ function selectMarket(args: {
           sportsbook: target.sportsbook,
           line: args.market === "spread" ? first ? line : -line : line,
           price: selectedPrice,
-          observedAt: target.observedAt,
+          observedAt: nflMarketSourceAt(target, args.market),
         },
         grade,
         modelRelease: args.market === "spread"
