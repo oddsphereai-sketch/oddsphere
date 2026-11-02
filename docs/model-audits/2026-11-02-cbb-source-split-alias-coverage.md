@@ -92,5 +92,15 @@ request change accompanies this capture-only follow-up.
 The owner approved one diagnostic run of the existing collector. It completed
 successfully4:51:36–4:52:56PMET, but the connection closed before its full returned
 diagnostics arrived. That cycle was not repeated. Provider-secret settings were
-not accessed. The follow-up relies on pure matching checks and subsequent normal
-scheduled source/reader proof; it does not claim recovery before observation.
+access was subsequently approved explicitly, but Vercel stores the existing
+variable as write-only and would not reveal it. The editor was cancelled without
+saving. No key was retrieved and no direct provider request was made. The
+follow-up adds a bounded non-secret rejection sample (20 rows) to the existing
+collector's log, including source event names/start and capture release. This
+allows the normal scheduled run to explain missing joins without another poll
+or dependence on its long all-sport HTTP response. No provider payload, key or
+request headers are logged. It does not claim recovery before observation.
+
+R20 starting base is `28d71522dd56928f8b34303e474ba7b8b2843153`; latest production
+`4df9ed2531a362a6d700f7d1a68bcb9fcd35c735` was integrated without overlapping
+implementation hunks. Its database efficiency changes are preserved in full.

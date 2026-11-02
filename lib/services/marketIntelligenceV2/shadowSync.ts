@@ -756,7 +756,7 @@ async function collectPlaybookSplits(opts: {
         provider_event_id: row.gameId ?? null,
         market_type: null,
         selection_key: null,
-        reason: `unmatched Playbook game ${row.awayTeamName ?? "?"}@${row.homeTeamName ?? "?"}`,
+        reason: `unmatched Playbook game ${row.awayTeamName ?? "?"}@${row.homeTeamName ?? "?"}${opts.sport === "cbb" ? ` at ${playbookStartTime(row) ?? "missing start"}` : ""}`,
       });
       continue;
     }
@@ -1965,6 +1965,18 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
   };
   result.details.owls = { splits: owls.details ?? {}, prices: owlsPrices.details ?? {} };
   result.details.sharpapi = sharpapi.details ?? {};
+
+  // Keep bounded, non-secret identity diagnostics in the existing job log.
+  // Its full HTTP response can be lost after the all-sport collector finishes;
+  // missing source games must still be inspectable without another paid poll.
+  if (opts.apply && opts.sport === "cbb" && playbook.rejected.length > 0) {
+    console.warn("CBB Playbook capture rejections", JSON.stringify({
+      release: MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE,
+      ingestionRunId, gamesLoaded: games.length, sourceGames: playbook.fetchedRows,
+      observations: playbook.observations.length, rejected: playbook.rejected.length,
+      sample: playbook.rejected.slice(0, 20),
+    }));
+  }
 
   logger(
     `built split=${result.splitObservationsBuilt} price=${result.priceObservationsBuilt} rejected=${result.rejected.length}`,
