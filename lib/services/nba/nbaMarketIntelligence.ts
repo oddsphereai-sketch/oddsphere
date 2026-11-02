@@ -47,7 +47,7 @@ import {
   buildNbaMarketConsensus,
   type NbaMarketConsensus,
 } from "../../automodel/nba/nbaMarketConsensus";
-import { computeNbaMarketProbabilities } from "../../automodel/nba/nbaDistribution";
+import { computeNbaMarketProbabilities, selectNbaSideFromProbability } from "../../automodel/nba/nbaDistribution";
 import type { NbaNamedBookPosture } from "./nbaNamedBookPosture";
 
 // ─── Raw per-book line row (subset of `lines` table columns) ───────
@@ -709,9 +709,13 @@ function buildSpread(
 ): MarketIntelligence {
   const consensusLineHome = consensus.spreadHome;
   const consensusExact = exactLineProbability({ prediction, spreadHome: consensusLineHome, total: null });
-  const pickSide: "home" | "away" = consensusExact?.spreadHome === null || consensusExact?.spreadHome === undefined
-    ? prediction.predicted_spread_side
-    : consensusExact.spreadHome >= 0.5 ? "home" : "away";
+  const pickSide = selectNbaSideFromProbability({
+    probability: consensusExact?.spreadHome ?? null,
+    above: "home" as const,
+    below: "away" as const,
+    tie: prediction.predicted_spread_side,
+  })
+    ?? prediction.predicted_spread_side;
   const consensusPickLine = consensusLineHome === null
     ? null
     : pickSide === "home" ? consensusLineHome : -consensusLineHome;
@@ -894,9 +898,13 @@ function buildTotal(
 ): MarketIntelligence {
   const consensusLine = consensus.totalLine;
   const consensusExact = exactLineProbability({ prediction, spreadHome: null, total: consensusLine });
-  const pickSide: "over" | "under" = consensusExact?.totalOver === null || consensusExact?.totalOver === undefined
-    ? prediction.predicted_total_side
-    : consensusExact.totalOver >= 0.5 ? "over" : "under";
+  const pickSide = selectNbaSideFromProbability({
+    probability: consensusExact?.totalOver ?? null,
+    above: "over" as const,
+    below: "under" as const,
+    tie: prediction.predicted_total_side,
+  })
+    ?? prediction.predicted_total_side;
   const executableOffer = selectBestNbaExecutableOffer({
     lines,
     market: "total",

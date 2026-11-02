@@ -3,7 +3,7 @@ import type { NbaPortableModelArtifact } from "../lib/automodel/nba/nbaPortableS
 import { buildNbaProfessionalCandidate } from "../lib/services/nba/nbaProfessionalCandidate";
 import { buildNbaProfessionalMarketReader, type NbaReaderPriceRow } from "../lib/services/nba/nbaProfessionalMarketReader";
 import { resolveNbaNamedBookPosture } from "../lib/services/nba/nbaNamedBookPosture";
-import { gradeNbaMarket, type GradeInput } from "../lib/services/nba/nbaMarketReview";
+import { gradeNbaMarket, gradeNbaR22MarketForAudit, type GradeInput } from "../lib/services/nba/nbaMarketReview";
 
 const at = "2026-10-30T22:30:00Z";
 const pair = (market: "moneyline" | "spread" | "total", book: string, observed: string,
@@ -70,6 +70,38 @@ assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport
 assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, supportingSources: [], staticSupportingSources: ["circa"] } }).grade, "lean",
   "static level agreement alone cannot manufacture a strongest grade");
 assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...causalSupport, convictionRiskSources: ["pinnacle:recent_buyback"] } }).grade, "lean");
+const loneOpposition = { ...causalSupport, scoreEffectApplied: false, consequence: "context_only" as const,
+  supportingSources: [], opposingSources: ["circa"], convictionRiskSources: [] };
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: loneOpposition }).grade, "lean",
+  "one isolated opposing named book cannot flatten an earned Lean");
+const corroboratedOpposition = { ...loneOpposition, opposingSources: ["circa", "pinnacle"] };
+assert.equal(gradeNbaR22MarketForAudit({ ...leanInput, namedBookPosture: corroboratedOpposition }).grade, "lean",
+  "the frozen r22 comparison keeps an opposed Lean actionable");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: corroboratedOpposition }).grade, "watch",
+  "two opposing named books move a Lean to Watchlist");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...loneOpposition,
+  conflictingSources: ["pinnacle"] } }).grade, "watch",
+  "opposition corroborated by a different conflicting named book moves a Lean to Watchlist");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...loneOpposition,
+  convictionRiskSources: ["named_book_disagreement"] } }).grade, "watch",
+  "explicit named-book disagreement corroborates a Lean demotion");
+assert.equal(gradeNbaMarket({ ...leanInput, namedBookPosture: { ...loneOpposition, opposingSources: [],
+  convictionRiskSources: ["pinnacle:recent_buyback"] } }).grade, "lean",
+  "risk without an opposing named source cannot demote a Lean");
+for (const [market, sides] of [
+  ["moneyline", ["home", "away"]],
+  ["spread", ["home", "away"]],
+  ["total", ["over", "under"]],
+] as const) for (const pick of sides) for (const currentPriceAmerican of [-110, 110]) {
+  const mirroredInput: GradeInput = { ...leanInput, market, pick, currentPriceAmerican,
+    modelProbabilityOnPick: 0.58 };
+  const opposing = { ...corroboratedOpposition, market, pickedSide: pick };
+  const confirming = { ...causalSupport, market, pickedSide: pick };
+  assert.equal(gradeNbaMarket({ ...mirroredInput, namedBookPosture: opposing }).grade, "watch",
+    `${market}:${pick}:${currentPriceAmerican} corroborated opposition is side/price symmetric`);
+  assert.equal(gradeNbaMarket({ ...mirroredInput, namedBookPosture: confirming }).grade, "best_angle",
+    `${market}:${pick}:${currentPriceAmerican} clean causal promotion is side/price symmetric`);
+}
 
 for (const mutate of [
   (r: typeof reader) => { r.evidenceStatus = "unavailable"; },

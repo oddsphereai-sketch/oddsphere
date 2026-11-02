@@ -62,7 +62,7 @@ function run(rows: NbaReaderPriceRow[], splits: NbaReaderSplitRow[] = [], margin
   assert.ok(Math.abs(candidate.final.homeScore - candidate.final.awayScore - candidate.final.marginHome) < 1e-9);
   for (const [market, probability] of [["ml", candidate.probabilities.ml_home_win_prob], ["spread", candidate.probabilities.spread_home_cover_prob!],
     ["total", candidate.probabilities.total_over_prob!]] as const) {
-    const side = market === "total" ? probability >= .5 ? "over" : "under" : probability >= .5 ? "home" : "away";
+    const side = market === "ml" ? candidate.picks.moneyline : market === "spread" ? candidate.picks.spread : candidate.picks.total;
     assert.equal(intel[market].pick_side, side);
     assert.ok(Math.abs(intel[market].model_prob_on_pick! - Math.max(probability, 1 - probability)) < 1e-9);
     assert.notEqual(intel[market].grade, "held");

@@ -446,31 +446,29 @@ entry is not a deployment claim. Evidence, checks and rollback:
   `docs/model-audits/2026-10-31-all-market-data-health.md` and the paired JSON.
   Roll back this complete family together; never rewrite an immutable lock.
 
-## NBA reader posture coherence — November 2 publication candidate
+## NBA neutral tie and corroborated opposition — November 2 publication candidate
 
 Candidate model/marriage/grade are
-`nba_professional_unified_2026_11_02_r31_reader_posture_coherence` /
-`nba_market_marriage_2026_11_02_r33_translated_static_posture` /
-`nba_grade_policy_2026_11_02_r22_causal_confirmation_symmetry`.
+`nba_professional_unified_2026_11_02_r32_neutral_tie_opposition_grade` /
+`nba_market_marriage_2026_11_02_r34_neutral_tie_opposition_grade` /
+`nba_grade_policy_2026_11_02_r23_corroborated_opposition`.
 The active decision head is
 `nba_market_consequence_2026_11_02_r6_off_contract_static_coordinate`;
 posture is `nba_named_book_posture_2026_11_02_r8_translated_static_confirmation`.
-They supersede production r30/r32/r21/r5/r7 and the rejected r3 dynamic-scale
-reader. Neither predecessor may be restored as a supposed improvement.
+They supersede r31/r33/r22 while retaining consequence-r6 and posture-r8.
+Earlier r30/r32/r21/r5/r7 and the rejected r3 dynamic-scale reader remain
+ineligible as supposed improvements.
 
-R31 corrects three bounded coherence defects without changing the independent
-score artifact or causal score law. Operator audits count actual independent-to-
-final pick changes, so the current causal receipt cannot falsely report zero
-flips. Fresh complete sharp quotes at a different Spread or Total contract are
-translated to the evaluated contract through the released residual CDF and
-remain context-only. Clean causal support can advance an already qualified Lean
-to Best Angle only after its score consequence is applied and only when no
-opposition, conflict, buyback, held-risk, or unmatched named pressure remains.
-Static agreement, public pressure, and book counts cannot manufacture a
-promotion. Existing locks retain exact stored precedence. Publication evidence
+R32 retains the independent side when the final coordinate lands at exactly
+50%, preventing ordered outcome labels from manufacturing a causal flip. R23
+moves an existing Lean to Watchlist only when named opposition is corroborated
+across sources or by explicit named-book disagreement. Isolated/static/risk-only
+context cannot flatten a Lean. The paired clean causal Lean-to-Best rule remains
+unchanged. There is no weight, blend, favorite label, score nudge, provider
+request, second writer, or locked-row reinterpretation. Publication evidence
 and rollback are in
-`docs/model-audits/2026-11-02-nba-reader-posture-repair-predeclaration.md` and
-`docs/model-audits/2026-11-02-nba-reader-posture-repair-result.md`. This registry
+`docs/model-audits/2026-11-02-nba-neutral-tie-corroborated-opposition-predeclaration.md`
+and `docs/model-audits/2026-11-02-nba-neutral-tie-corroborated-opposition-result.md`. This registry
 entry does not itself certify merge or deployment; post-merge live proof is still
 required before these identifiers may be called active production.
 
