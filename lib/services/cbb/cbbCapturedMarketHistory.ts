@@ -12,7 +12,9 @@ export async function readCbbCapturedNamedSplits(db:typeof supabase):Promise<Cbb
   if(!payload)return null;
   if(payload.encoding==="gzip-base64")payload=JSON.parse(gunzipSync(Buffer.from(payload.payload,"base64"),{maxOutputLength:32_000_000}).toString());
   if(payload.release!==release||payload.source!=="owls_current_splits"||payload.sport!=="cbb"||
-    !Array.isArray(payload.rows)||!Number.isFinite(Date.parse(payload.fetchedAt)))throw new Error("CBB captured named split receipt is invalid");
+    !Array.isArray(payload.rows)||!payload.rows.every((row:unknown)=>row!==null&&typeof row==="object"&&!Array.isArray(row))||
+    !Number.isFinite(Date.parse(payload.fetchedAt)))throw new Error("CBB captured named split receipt is invalid");
+  if(payload.rows.length===0)return null;
   return payload as CbbCapturedNamedSplitFeed;
 }
 

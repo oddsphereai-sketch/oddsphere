@@ -28,6 +28,8 @@ async function main(){
   const feed:CbbCapturedNamedSplitFeed={source:"owls_current_splits",release:"owls_current_splits_2026_10_27_r1_complete_named_book",sport:"cbb",fetchedAt:at,rows:[row]};
   const merge=(value:CbbCapturedNamedSplitFeed,input=response)=>mergeCbbCapturedNamedSplitEvidence(input,value,applySharpApiCurrentSplitOverlay,Date.parse(at));
   const enriched=merge(feed),sections=Object.fromEntries(Object.entries(enriched.games[0].markets).map(([key,m])=>[key,m.sportsbookSplits!]));
+  const reversed=merge({...feed,rows:[{...row,home_team:"Notre Dame",away_team:"Villanova"}]}).games[0].markets.moneyline.sportsbookSplits!;
+  assert.equal(reversed.rows.find(r=>r.side==="home")?.moneyPct,20,"neutral-site reversal preserves source-side orientation");
   assert.equal(JSON.stringify(response),sourceBytes,"qualification never mutates the original board");
   for(const key of ["moneyline","total","first_inning"] as const){
     const market=enriched.games[0].markets[key];
