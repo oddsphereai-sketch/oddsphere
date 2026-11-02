@@ -3,6 +3,13 @@
 Starting base: `b1d24d4718fdaba8be22f6e7b86546e130234c0c` (PR922).
 Dedicated branch: `codex/nfl-rounded-source-pressure-20261102`.
 
+Integrated production base: `69e5499618ac46582f83e3312b200da7a228a67a`
+(owner-directed PHI tracking recovery PR923). Both registry/safety sections remain;
+every incoming writer hunk was reviewed. Its explicit operator-only original-tuple
+recovery, idempotence checks and insert-only historical game handling are retained.
+No recovery option is passed by the normal refresh or this source-input repair.
+Affected full/focused/build checks are repeated on the combined base before merge.
+
 ## Defect and bounded repair
 
 The November2 10:51AMET read-only source check received CHI@SEA Circa moneyline
