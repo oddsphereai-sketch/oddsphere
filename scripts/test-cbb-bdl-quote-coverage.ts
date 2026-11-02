@@ -1,0 +1,27 @@
+import assert from "node:assert/strict";
+import {mergeCbbCurrentProviderQuotes} from "../lib/cbb/currentProviderQuotes";
+import {buildCbbProvisionalBoard} from "../lib/cbb/provisionalBoard";
+import type {CbbGame,CbbOdds,CbbForecast} from "../lib/cbb/types";
+const at="2026-11-02T13:00:00Z",game={id:1,date:"2026-11-03T00:00:00Z"}as CbbGame;
+const row={id:1,game_id:1,vendor:"fanatics",updated_at:at,moneyline_home_odds:-100000,moneyline_away_odds:15000,
+  spread_home_value:-40.5,spread_away_value:40.5,spread_home_odds:-110,spread_away_odds:-110,total_value:150.5,total_over_odds:-110,total_under_odds:-110}as CbbOdds;
+const quotes=mergeCbbCurrentProviderQuotes([],[row],game,at);
+assert.equal(quotes.length,3);assert.equal(quotes[0].firstPrice,-100000);assert.equal(quotes[0].provider,"balldontlie");
+assert.equal(mergeCbbCurrentProviderQuotes([],[{...row,game_id:2}],game,at).length,0,"exact BDL game ID required");
+assert.equal(mergeCbbCurrentProviderQuotes([],[{...row,updated_at:"2026-11-01T13:00:00Z"}],game,at).length,0,"stale fallback cannot fill a fresh market");
+assert.equal(mergeCbbCurrentProviderQuotes([],[{...row,vendor:"kalshi"}],game,at).length,0);
+assert.equal(mergeCbbCurrentProviderQuotes([],[{...row,vendor:"untrusted"}],game,at).length,0);
+const primary=quotes.map(q=>({...q,provider:"owls" as const}));assert.deepEqual(mergeCbbCurrentProviderQuotes(primary,[{...row,moneyline_home_odds:-90000}],game,at),primary,"no same-book/market provider splice");
+assert.equal(mergeCbbCurrentProviderQuotes([],[row,{...row,id:2,moneyline_home_odds:-50000}],game,at).filter(q=>q.market==="moneyline").length,0,"conflicting receipt cannot authorize ML");
+const f={gameId:1,asOf:at,homeScore:90,awayScore:60,margin:30,total:150,homeWinProbability:.95,inputStatus:"incomplete",issues:["missing_home_team_history"],uncertainty:{marginSd:11,totalSd:16,marginTotalCorrelation:0}}as CbbForecast;
+const held=buildCbbProvisionalBoard(f,quotes);assert.equal(held.rows[0].grade,"Held");assert.equal(held.rows[0].price,null);assert.equal(held.rows[0].observedQuote?.firstPrice,-100000,"held analysis retains actual paired market data without fabricating an executable bet");
+const existing=quotes.filter(q=>q.market!=="moneyline").map(q=>({...q,sportsbook:"draftkings",provider:"owls" as const}));
+const filled=mergeCbbCurrentProviderQuotes(existing,[row],game,at);
+assert.equal(filled.length,3);assert.deepEqual(filled.slice(0,2),existing);
+assert.equal(filled.find(q=>q.market==="moneyline")!.sportsbook,"fanatics");
+assert.equal(filled.some(q=>q.sportsbook==="fanatics"&&q.market!=="moneyline"),false,"fallback cannot replace an already-covered primary market");
+const completeInput={...f,inputStatus:"complete" as const,issues:[]};
+const mixed=buildCbbProvisionalBoard(completeInput,filled);
+assert.equal(mixed.rows.find(r=>r.market==="spread")!.targetBook,"draftkings");
+assert.equal(mixed.rows.find(r=>r.market==="moneyline")!.targetBook,"fanatics","a missing ML can use its own coherent source without moving the primary Spread or Total");
+console.log("CBB BDL coverage: exact IDs, real steep moneylines, source/age/duplicate guards, primary quote precedence and held quote context passed.");

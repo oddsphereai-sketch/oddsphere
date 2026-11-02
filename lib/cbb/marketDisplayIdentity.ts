@@ -3,7 +3,7 @@ import type { RawOwlsOddsEvent } from "@/lib/providers/owls/owlsSharpBookOdds";
 import type { PredictionMarketGameIdentity, PredictionMarketSport } from "@/lib/providers/owls/owlsPredictionMarkets";
 import { cbbSplitOrientation } from "./exactSplitIdentity";
 
-export const CBB_MARKET_TRACKING_RELEASE = "cbb_market_tracking_2026_11_01_r2_exact_exchange_names_provider_date" as const;
+export const CBB_MARKET_TRACKING_RELEASE = "cbb_market_tracking_2026_11_02_r3_verified_institution_aliases" as const;
 
 /** An independent exact-institution odds event may resolve a one-minute
  * midnight discrepancy for an unlocked display. Never changes the fixture. */

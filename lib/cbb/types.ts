@@ -86,6 +86,7 @@ export type CbbForecast = {
 
 export type CbbMarket = "moneyline" | "spread" | "total";
 export type CbbQuote = {
+  provider?: "owls" | "balldontlie" | "sharpapi";
   gameId: number; sportsbook: string; market: CbbMarket; line: number | null;
   firstPrice: number; secondPrice: number; providerObservedAt: string;
   fetchedAt: string; phase: "opening" | "current";

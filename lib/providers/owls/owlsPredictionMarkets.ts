@@ -4,6 +4,7 @@ import { normalizeNhlTeamName } from "../nhl/_teamNameNormalizer";
 import { normalizeTeamAbbr } from "../playbook/playbookTeamNormalizer";
 import { cfbProviderTeamMatches } from "../../services/football/cfbProviderTeamIdentity";
 import { uclTeamAsset } from "../../services/ucl/uclTeamAssets";
+import { cbbProviderInstitutionName } from "../../cbb/providerInstitutionIdentity";
 import { canonicalCbbTeamName } from "../../cbb/dataset";
 import {kalshiRescheduleWindow,canMatchNextDayContract} from "./predictionMarketEventDate";
 
@@ -235,15 +236,7 @@ export function predictionMarketTeamMatches(row: Pick<PredictionMarketRow,"sideC
       miamifl:["Miami Hurricanes"],iowast:["Iowa State","Iowa State Cyclones"],
       ohiost:["Ohio State","Ohio State Buckeyes"],
     };
-    const currentAliases:Record<string,readonly string[]> = {
-      appalachianst:["App State Mountaineers","Appalachian State Mountaineers"],
-      sanjosest:["San Jose State Spartans"],
-      uscupstate:["South Carolina Upstate Spartans"],
-      ncst:["NC State Wolfpack"], pennst:["Penn State Nittany Lions"],
-      kentst:["Kent State Golden Flashes"], tennesseemartin:["UT Martin Skyhawks"],
-      seattle:["Seattle U Redhawks"],
-    };
-    if (currentCbbNames && name && currentAliases[observed]?.some(alias => canonicalCbbTeamName(alias) === canonicalCbbTeamName(name))) return true;
+    if (currentCbbNames && [name,college].some(expected=>expected&&cbbProviderInstitutionName(expected)===cbbProviderInstitutionName(row.team))) return true;
     return Boolean(observed) && ([name, college].some(expected => expected &&
       canonicalCbbTeamName(expected) === observed)||
       namedAliases[observed]?.some(alias=>name&&canonicalCbbTeamName(alias)===canonicalCbbTeamName(name))===true);

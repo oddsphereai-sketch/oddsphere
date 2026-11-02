@@ -1,17 +1,18 @@
 import type { supabase } from "@/lib/db/supabase";
 import { CbbBallDontLieClient } from "@/lib/cbb/ballDontLie";
-import { buildCbbTrainingGames, matchCbbVenue } from "@/lib/cbb/dataset";
+import { buildCbbTrainingGames } from "@/lib/cbb/dataset";
+import { matchCbbProviderVenue as matchCbbVenue } from "@/lib/cbb/providerVenueIdentity";
 import type { CbbTrainingGame } from "@/lib/cbb/types";
 import { addDaysToSlate, computeSlateDate } from "@/lib/dates/slateDate";
 import { fetchCbbDayEvents } from "./fetchCbbDayEvents";
 
-export const CBB_CURRENT_TRAINING_RELEASE="cbb_current_training_2026_10_29_r1_exact_final_venues" as const;
-type Receipt={release:typeof CBB_CURRENT_TRAINING_RELEASE;season:number;updatedAt:string;games:CbbTrainingGame[]};
+export const CBB_CURRENT_TRAINING_RELEASE="cbb_current_training_2026_11_02_r2_provider_venue_identity" as const;
+type Receipt={release:typeof CBB_CURRENT_TRAINING_RELEASE|"cbb_current_training_2026_10_29_r1_exact_final_venues";season:number;updatedAt:string;games:CbbTrainingGame[]};
 const key=(season:number)=>`cbb::current-season-training::${season}`;
 const isReceipt=(value:unknown,season:number):value is Receipt=>{
   if(!value||typeof value!=="object")return false;
   const row=value as Partial<Receipt>;
-  return row.release===CBB_CURRENT_TRAINING_RELEASE&&row.season===season&&Array.isArray(row.games)&&
+  return (row.release===CBB_CURRENT_TRAINING_RELEASE||row.release==="cbb_current_training_2026_10_29_r1_exact_final_venues")&&row.season===season&&Array.isArray(row.games)&&
     row.games.every(g=>g.season===season&&Number.isSafeInteger(g.id)&&g.neutral!==null);
 };
 export async function readCbbCurrentTraining(season:number,db?:typeof supabase):Promise<Receipt|null>{

@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import {matchCbbProviderVenue} from "../lib/cbb/providerVenueIdentity";
+import type{CbbGame}from"../lib/cbb/types";
+const g={id:1,date:"2026-11-03T00:00:00Z",home_team:{id:108,college:"Presbyterian",full_name:"Presbyterian Blue Hose"},visitor_team:{id:332,college:"St. Thomas-Minnesota",full_name:"St. Thomas-Minnesota Tommies"}}as CbbGame;
+const event={id:"401920842",date:g.date,competitions:[{neutralSite:false,timeValid:true,competitors:[{homeAway:"home",team:{id:"2506",location:"Presbyterian",displayName:"Presbyterian Blue Hose"}},{homeAway:"away",team:{id:"2900",location:"St. Thomas",displayName:"St. Thomas Tommies"}}]}]};
+assert.equal(matchCbbProviderVenue(g,[event],"2026-11-02T12:00:00Z")?.timeConfirmed,true);
+for(const id of["2901",undefined])assert.equal(matchCbbProviderVenue(g,[{...event,competitions:event.competitions.map(c=>({...c,competitors:c.competitors.map(t=>t.homeAway==="away"?{...t,team:{...t.team,id}}:t)}))}],"2026-11-02T12:00:00Z"),null,"short ambiguous school text needs the verified external ID");
+assert.equal(matchCbbProviderVenue(g,[event,event],"2026-11-02T12:00:00Z"),null);
+assert.equal(matchCbbProviderVenue(g,[{...event,date:"2026-11-04T00:00:00Z"}],"2026-11-02T12:00:00Z"),null);
+console.log("CBB official venue identity: verified institution IDs restore the actual model input; wrong IDs, dates and ambiguity fail.");
