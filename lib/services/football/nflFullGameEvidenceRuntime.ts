@@ -23,7 +23,7 @@ import {
 } from "./nflV1WeekOneOutcome";
 
 export const NFL_FULL_GAME_EVIDENCE_RUNTIME_RELEASE =
-  "nfl_full_game_evidence_runtime_2026_11_02_r15_market_conviction_grades" as const;
+  "nfl_full_game_evidence_runtime_2026_11_02_r16_published_rounding_pressure" as const;
 
 type Market = "moneyline" | "spread" | "total";
 

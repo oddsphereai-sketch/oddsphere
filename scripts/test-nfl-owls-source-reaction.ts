@@ -1,7 +1,7 @@
 import { readNflMarketInnovation } from "@/lib/services/football/nflMarketInnovationRuntime";
 import { getNflV1WeekOneOutcomeForecast } from "@/lib/services/football/nflV1WeekOneOutcome";
 import assert from "node:assert/strict";
-import { qualifyNflOwlsSplitsForModel, qualifyNflOwlsSplitsForSourceReaction } from "@/lib/services/football/nflOwlsSplits";
+import { nflPublishedSourcePressure, qualifyNflOwlsSplitsForModel, qualifyNflOwlsSplitsForSourceReaction } from "@/lib/services/football/nflOwlsSplits";
 import type { NflRegularSharpSplit, NflRegularSharpSplitSet } from "@/lib/services/football/sharpApiNflSplits";
 import type { NflEpisodeHistoryBook } from "@/lib/services/football/nflMoneylineEpisodeTransport";
 
@@ -33,6 +33,36 @@ assert.deepEqual(direct.qualifiedMarkets, ["moneyline"]);
 assert.equal(direct.splits!.total.overMoneyPct, null);
 const before = JSON.stringify(args);
 const source = qualifyNflOwlsSplitsForSourceReaction(args);
+const roundedInput = { ...splits, moneyline: { ...splits.moneyline,
+  homeMoneyPct: 86, awayMoneyPct: 14, homeBetsPct: 43, awayBetsPct: 58 } };
+const roundedBefore = JSON.stringify(roundedInput);
+const roundedFlow = qualifyNflOwlsSplitsForSourceReaction({ ...args, splits: roundedInput });
+assert.equal(roundedFlow.flows.moneyline?.[0]?.direction, 1,
+  "actual provider 43/58 ticket rounding must not discard the clear 86/14 money pressure");
+assert.equal(roundedFlow.flows.moneyline?.[0]?.ticketPct, 43,
+  "retain the published number instead of inventing complementary percentages");
+assert.equal(roundedFlow.flows.moneyline?.[0]?.observedAt, observedAt);
+assert.equal(JSON.stringify(roundedInput), roundedBefore);
+assert.equal(nflPublishedSourcePressure([14, 86, 58, 43])?.direction, -1);
+assert.equal(nflPublishedSourcePressure([86, 14, 43, 56])?.direction, 1,
+  "99-percent rounded totals are equally interpretable");
+for (const invalid of [[86, 14, 43, 59], [86, 14, 43, 55], [86, 14, 43.1, 57.9],
+  [86, null, 43, 58], [101, -1, 43, 58], [NaN, 14, 43, 58]]) {
+  assert.equal(nflPublishedSourcePressure(invalid), null,
+    "larger discrepancy, unsupported decimal rounding, missing and invalid percentages remain rejected");
+}
+const ambiguous = qualifyNflOwlsSplitsForSourceReaction({ ...args,
+  splits: { ...splits, moneyline: { ...splits.moneyline,
+    homeMoneyPct: 50, awayMoneyPct: 50, homeBetsPct: 51, awayBetsPct: 50 } } });
+assert.equal(ambiguous.flows.moneyline, undefined);
+assert.equal(ambiguous.reasons.moneyline, "ambiguous_rounded_source_pressure");
+assert.equal(nflPublishedSourcePressure([60, 40, 40, 60])?.direction, 1);
+assert.equal(nflPublishedSourcePressure([40, 60, 60, 40])?.direction, -1);
+assert.equal(nflPublishedSourcePressure([50, 50, 50, 50])?.direction, 0);
+assert.equal(qualifyNflOwlsSplitsForSourceReaction({ ...args, splits: roundedInput,
+  excludedFamiliesByMarket: { ...args.excludedFamiliesByMarket, moneyline: ["circa"] } }).flows.moneyline, undefined);
+assert.equal(qualifyNflOwlsSplitsForSourceReaction({ ...args, splits: roundedInput,
+  history: [{ ...paired, providerEventId: "wrong-event" }] }).flows.moneyline, undefined);
 assert.deepEqual(Object.keys(source.flows), ["moneyline", "spread", "total"],
   "the source's own complete contracts remain interpretable when target spread/total differ");
 for (const market of ["moneyline", "spread", "total"] as const) {

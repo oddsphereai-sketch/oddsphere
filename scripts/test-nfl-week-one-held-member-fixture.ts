@@ -154,6 +154,17 @@ for (const row of sourceQualifiedRows.slice(1)) {
   });
 }
 const sourceQualifiedRowsBefore = JSON.stringify(sourceQualifiedRows);
+const convictionRows = structuredClone(sourceQualifiedRows);
+for (const row of convictionRows.slice(1)) {
+  row.payload.decisions.modelPromotionStatus = "nfl_v1_member_release_2026_11_02_r54_market_conviction_grades";
+  row.payload.decisions.evaluatedBets.forEach(decision => {
+    decision.decisionRelease = "nfl_v1_daily_edge_decision_2026_11_02_r57_market_conviction_grades";
+  });
+}
+const convictionBefore = JSON.stringify(convictionRows);
+assert.deepEqual(buildNflWeekOneHeldMemberFixture(convictionRows).snapshot.games, r51Fixture.snapshot.games,
+  "r54/r57 locked fields retain exact precedence during rounded-pressure input repair");
+assert.equal(JSON.stringify(convictionRows), convictionBefore);
 assert.deepEqual(buildNflWeekOneHeldMemberFixture(sourceQualifiedRows).snapshot.games, r51Fixture.snapshot.games,
   "r53/r56 locked fields retain exact rendering while future unlocked grades advance to r54/r57");
 assert.equal(JSON.stringify(sourceQualifiedRows), sourceQualifiedRowsBefore);
