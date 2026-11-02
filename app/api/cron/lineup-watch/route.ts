@@ -15,7 +15,7 @@ import { sportsInSeasonToday } from "@/lib/cron/seasons";
 import { supabase } from "@/lib/db/supabase";
 import { linesService } from "@/lib/services/linesService";
 import { lineupService } from "@/lib/services/lineupService";
-import { predictionService } from "@/lib/services/predictionService";
+import { supportsLegacyLineupRefresh } from "@/lib/services/lineupProviderScope";
 import { generatePredictionsForSlate } from "@/lib/services/automodelService";
 import { createPredictionRecords } from "@/lib/services/predictionRecordService";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   return cronHandlerPerSport(
     request,
     "lineup_watch",
-    sportsInSeasonToday(),
+    sportsInSeasonToday().filter(supportsLegacyLineupRefresh),
     async ({ sport }) => {
       if (sport === "mlb") assertMlbChampionRuntime();
       let records = 0;
@@ -63,12 +63,10 @@ export async function GET(request: Request) {
       let responseSnapshot:
         | Awaited<ReturnType<typeof refreshDailyEdgeResponseSnapshot>>
         | null = null;
-      let propPredictions:
-        | { delegated: true; writer: "mlb_player_props_refresh" }
-        | { delegated: false; records_updated: number } = {
-          delegated: true,
-          writer: "mlb_player_props_refresh",
-        };
+      const propPredictions = {
+        delegated: true,
+        writer: "mlb_player_props_refresh",
+      };
 
       if (sport === "mlb") {
         gameLines = await linesService.refreshGameLinesV2(sport, date);
@@ -127,16 +125,6 @@ export async function GET(request: Request) {
             reason: "AUTOMODEL_DB_WRITES_ENABLED!=true; skipped MLB automodel rerun after lineup refresh",
           };
         }
-      } else {
-        // Preserve the legacy generator for sports that do not yet have the
-        // dedicated MLB props snapshot pipeline.
-        const propPreds = await predictionService.generatePropPredictions(sport, date);
-        records += propPreds.records_updated ?? 0;
-        apiCalls += propPreds.api_calls_made ?? 0;
-        propPredictions = {
-          delegated: false,
-          records_updated: propPreds.records_updated ?? 0,
-        };
       }
 
       return {
@@ -165,7 +153,7 @@ export async function GET(request: Request) {
           member_records: memberRecords,
           response_snapshot: responseSnapshot,
           // MLB's member props board has one authoritative refresh writer.
-          // Non-MLB sports retain their legacy generator above.
+          // Other sports refresh through their sport-owned writers.
           prop_predictions: propPredictions,
         },
       };

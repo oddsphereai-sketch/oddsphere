@@ -3,7 +3,7 @@ import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes
 import type { Sport } from "@/lib/types/domain/Sport";
 
 export const DAILY_EDGE_PUBLISHED_MEMBER_CACHE_RELEASE =
-  "daily-edge-published-member-payload-v2-publication-invalidation" as const;
+  "daily-edge-published-member-payload-v3-lossless-cbb-history" as const;
 export const DAILY_EDGE_PUBLISHED_MEMBER_CACHE_TAG =
   "daily-edge-published-member-payload" as const;
 
