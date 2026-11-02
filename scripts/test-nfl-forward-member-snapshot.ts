@@ -287,6 +287,24 @@ async function main() {
   assert.equal(JSON.stringify(storedPayload), sourceQualifiedBefore,
     "symmetric grade promotion cannot alter any prior locked projection, probability, pick, price, grade or evidence");
   const mixedSourceQualified = { ...sourceQualifiedPredecessor, decisionRelease: snapshot.decisionRelease };
+  const convictionPredecessor = { ...sourceQualifiedPredecessor,
+    snapshotRelease: "nfl_forward_member_snapshot_2026_11_02_r62_market_conviction_grades",
+    fixtureRelease: "nfl_weekly_member_fixture_2026_11_02_r70_market_conviction_grades",
+    memberRelease: "nfl_v1_member_release_2026_11_02_r54_market_conviction_grades",
+    decisionRelease: "nfl_v1_daily_edge_decision_2026_11_02_r57_market_conviction_grades",
+    fixture: { ...sourceQualifiedPredecessor.fixture,
+      heldMemberFixtureRelease: "nfl_weekly_member_fixture_2026_11_02_r70_market_conviction_grades" } };
+  storedKey = ["nfl", "daily-edge", 2026, 1, convictionPredecessor.snapshotRelease,
+    convictionPredecessor.fixtureRelease, convictionPredecessor.memberRelease, convictionPredecessor.decisionRelease].join("::");
+  storedPayload = convictionPredecessor;
+  const convictionBefore = JSON.stringify(convictionPredecessor);
+  assert.deepEqual(await readNflForwardMemberSnapshot({ client, season: 2026, week: 1,
+    now: "2026-08-27T12:02:00.000Z" }), convictionPredecessor,
+    "r62/r70/member54/decision57 remains exact until rounded-input publication replaces only unlocked rows");
+  assert.equal(JSON.stringify(storedPayload), convictionBefore);
+  storedKey = ["nfl", "daily-edge", 2026, 1, sourceQualifiedPredecessor.snapshotRelease,
+    sourceQualifiedPredecessor.fixtureRelease, sourceQualifiedPredecessor.memberRelease,
+    sourceQualifiedPredecessor.decisionRelease].join("::");
   storedPayload = mixedSourceQualified;
   assert.equal(await readNflForwardMemberSnapshot({ client, season: 2026, week: 1,
     now: "2026-08-27T12:02:00.000Z" }), null,

@@ -165,7 +165,31 @@ export type NflOwlsModelSplitQualification = {
   reasons: Partial<Record<NflRegularSharpMarket, "missing_or_unverified_circa" | "stale_or_future" | "different_line">>;
 };
 
-export const NFL_OWLS_SOURCE_REACTION_RELEASE = "nfl_owls_source_reaction_2026_11_02_r2_latest_preflow_economic_baseline" as const;
+export const NFL_OWLS_SOURCE_REACTION_RELEASE = "nfl_owls_source_reaction_2026_11_02_r3_published_rounding_pressure" as const;
+
+/** Preserve the provider's published percentages. Independently rounded whole
+ * percentages can sum to 99 or 101; that is not missing source data. Decimal
+ * inconsistencies and larger discrepancies remain invalid. A newly admitted
+ * rounded pair cannot manufacture a direction from a one-point uncertain gap. */
+export function nflPublishedSourcePressure(values: Array<number | null | undefined>): {
+  direction: -1 | 0 | 1; moneyPct: number; ticketPct: number; gap: number; rounded: boolean;
+} | null {
+  if (values.length !== 4 || !values.every(value => typeof value === "number" &&
+      Number.isFinite(value) && value >= 0 && value <= 100)) return null;
+  const numbers = values as number[];
+  let rounded = false;
+  for (const pair of [numbers.slice(0, 2), numbers.slice(2, 4)]) {
+    const discrepancy = Math.abs(pair[0]! + pair[1]! - 100);
+    if (discrepancy <= 1e-4) continue;
+    if (!pair.every(Number.isInteger) || discrepancy > 1) return null;
+    rounded = true;
+  }
+  const moneyPct = numbers[0]!, ticketPct = numbers[2]!, gap = moneyPct - ticketPct;
+  const pressure = rounded && Math.abs(gap) <= 1 && gap !== 0 ? 0
+    : Math.abs(gap) > 1e-9 ? Math.sign(gap) : Math.sign(moneyPct - 50);
+  return { direction: pressure > 0 ? 1 : pressure < 0 ? -1 : 0,
+    moneyPct, ticketPct, gap, rounded };
+}
 export type NflSourceContractReactionFlow = {
   market: NflRegularSharpMarket;
   book: "circa" | "pinnacle";
@@ -220,9 +244,8 @@ export function qualifyNflOwlsSplitsForSourceReaction(args: {
     const percentages = market === "total"
       ? [row.overMoneyPct, row.underMoneyPct, row.overBetsPct, row.underBetsPct]
       : [row.homeMoneyPct, row.awayMoneyPct, row.homeBetsPct, row.awayBetsPct];
-    if (!percentages.every(value => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100) ||
-      Math.abs(percentages[0]! + percentages[1]! - 100) > 1e-4 ||
-      Math.abs(percentages[2]! + percentages[3]! - 100) > 1e-4) { reject("incomplete_source_percentages"); continue; }
+    const publishedPressure = nflPublishedSourcePressure(percentages);
+    if (!publishedPressure) { reject("incomplete_source_percentages"); continue; }
     const sourceLine = market === "moneyline" ? null : row.sourceLine;
     if (market !== "moneyline" && (typeof sourceLine !== "number" || !Number.isFinite(sourceLine) ||
       (market === "total" && sourceLine <= 0))) { reject("source_contract_missing"); continue; }
@@ -253,11 +276,8 @@ export function qualifyNflOwlsSplitsForSourceReaction(args: {
       .map(quote => JSON.stringify(quote[market]))).size > 1) { reject("conflicting_source_contract_pairs"); continue; }
     if (new Set(priorPairs.filter(quote => Date.parse(quote.marketObservedAt?.[market] ?? quote.observedAt) === baselineClock)
       .map(quote => JSON.stringify(quote[market]))).size > 1) { reject("conflicting_source_economic_baselines"); continue; }
-    const moneyPct = percentages[0]!;
-    const ticketPct = percentages[2]!;
-    const gap = moneyPct - ticketPct;
-    const pressure = Math.abs(gap) > 1e-9 ? Math.sign(gap) : Math.sign(moneyPct - 50);
-    if (!pressure) { reject("balanced_source_pressure"); continue; }
+    const { moneyPct, ticketPct, gap, direction: pressure } = publishedPressure;
+    if (!pressure) { reject(publishedPressure.rounded ? "ambiguous_rounded_source_pressure" : "balanced_source_pressure"); continue; }
     result.flows[market] = [{ market, book, sourceLine: sourceLine ?? null,
       sourceEventId: row.sourceEventId, providerGameId: args.providerGameId,
       observedAt: row.providerFetchedAt!, pairedQuoteObservedAt: paired[0].marketObservedAt?.[market] ?? paired[0].observedAt,

@@ -6,6 +6,35 @@ constants, and preserve the precedence and writer ownership below.
 
 Last reviewed: 2026-11-02
 
+## NFL published split rounding — November 2 input repair
+
+Starting base `b1d24d4718fdaba8be22f6e7b86546e130234c0c` (CBB PR922).
+Writer106 / collector32 / model50 / calibration49 / decision58 / grade policy58 /
+member55 / runtime16 / fixture71 / snapshot63 use the `2026_11_02` suffix
+`published_rounding_pressure`. Named source reaction advances to
+`nfl_owls_source_reaction_2026_11_02_r3_published_rounding_pressure`.
+
+- `nfl_forward_evidence_writer_2026_11_02_r106_published_rounding_pressure`
+- `nfl_forward_evidence_collector_2026_11_02_r32_published_rounding_pressure`
+- `nfl_v1_daily_edge_model_2026_11_02_r50_published_rounding_pressure`
+- `nfl_v1_daily_edge_calibration_2026_11_02_r49_published_rounding_pressure`
+- `nfl_v1_daily_edge_decision_2026_11_02_r58_published_rounding_pressure`
+- `nfl_v1_grade_policy_2026_11_02_r58_published_rounding_pressure`
+- `nfl_v1_member_release_2026_11_02_r55_published_rounding_pressure`
+- `nfl_full_game_evidence_runtime_2026_11_02_r16_published_rounding_pressure`
+- `nfl_weekly_member_fixture_2026_11_02_r71_published_rounding_pressure`
+- `nfl_forward_member_snapshot_2026_11_02_r63_published_rounding_pressure`
+
+The existing innovation3, posture3, qualification2, independent heads, numeric
+transport and grade floors are unchanged. Published whole-number opposing
+percentages totaling99 or101 can qualify an unambiguous source pressure while
+retaining the exact raw percentages. Missing/malformed pairs, larger or unsupported
+decimal discrepancies, uncertain one-point gaps, source identity/clock failures
+and missing prior exact contracts still cannot qualify. No new provider request,
+writer, schedule, lease, stake or historical rewrite. Exact r62/r70/member54/decision57
+is an accepted opaque reader predecessor. Evidence and publication status:
+`docs/model-audits/2026-11-02-nfl-published-rounding-pressure.md`.
+
 ## NFL owner-directed missed-lock accounting recovery — November 2
 
 `nfl_published_pregame_tracking_recovery_2026_11_02_r1` adds an explicit historical
