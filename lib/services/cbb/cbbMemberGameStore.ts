@@ -5,18 +5,21 @@ import type { CbbGame } from "@/lib/cbb/types";
 import type { CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { adaptCbbProvisionalGame, cbbOfficialGameResult } from "./adaptCbbProvisionalToDailyEdge";
-import { mergeCbbReaderEvidence } from "./cbbReaderMarketEvidence";
+import { mergeCbbReaderEvidence,cbbQualifiedNamedSplitSection,type CbbPreparedNamedSplitSections } from "./cbbReaderMarketEvidence";
 import { accumulateCbbPublishedQuotes, BOOK_DISPLAY_HISTORY_RELEASE, type BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 
+// Schema r2 remains compatible with in-flight readers; publisher r9 versions
+// the display-evidence publication repair without changing model behavior.
 export const CBB_MEMBER_GAME_STORE_RELEASE="cbb_member_game_store_2026_11_02_r2_preserved_market_evidence" as const;
-type StoreRelease=typeof CBB_MEMBER_GAME_STORE_RELEASE|"cbb_member_game_store_2026_10_29_r1_single_leased_writer";
+export const CBB_COMPATIBLE_MEMBER_STORE_RELEASES=[CBB_MEMBER_GAME_STORE_RELEASE,"cbb_member_game_store_2026_10_29_r1_single_leased_writer"] as const;
+type StoreRelease=typeof CBB_COMPATIBLE_MEMBER_STORE_RELEASES[number];
 export type CbbStoredMemberGame={release:StoreRelease;snapshot:CbbProvisionalSnapshot;memberGame:DailyEdgeGameDto};
 const key=(id:number)=>`cbb::member-game::${id}`;
 const valid=(value:unknown,id:number):value is CbbStoredMemberGame=>{
   if(!value||typeof value!=="object")return false;
   const row=value as Partial<CbbStoredMemberGame>;
   const markets=row.snapshot?.board?.rows;
-  return (row.release===CBB_MEMBER_GAME_STORE_RELEASE||row.release==="cbb_member_game_store_2026_10_29_r1_single_leased_writer")&&row.snapshot?.gameId===id&&row.memberGame?.external_id===id&&
+  return CBB_COMPATIBLE_MEMBER_STORE_RELEASES.includes(row.release as StoreRelease)&&row.snapshot?.gameId===id&&row.memberGame?.external_id===id&&
     row.memberGame?.sport==="cbb"&&row.memberGame?.gameStartAt===row.snapshot.startsAt&&
     row.memberGame?.lockedAt===row.snapshot.lockedAt&&Array.isArray(markets)&&markets.length===3&&
     new Set(markets.map(market=>market.market)).size===3&&
@@ -60,7 +63,7 @@ export async function readCbbMemberGames(ids:number[],db?:typeof supabase):Promi
  * This function never calls a provider or regrades a locked public record. */
 export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisionalBoard|null;
   homeLogo:string|null;awayLogo:string|null;now:string;splitEvidence?:ReturnType<typeof cbbCurrentSplitEvidence>|null;
-  marketQuotes?:CbbQuote[];bookHistory?:BookDisplayFeed|null},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
+  marketQuotes?:CbbQuote[];bookHistory?:BookDisplayFeed|null;capturedNamedSections?:CbbPreparedNamedSplitSections},db?:typeof supabase):Promise<{record:CbbStoredMemberGame;written:boolean}>{
   const client=db??(await import("@/lib/db/supabase")).supabase;
   const existing=await readCbbMemberGame(args.game.id,client);
   if(existing&&existing.snapshot.lockedAt!==null)return {record:existing,written:false};
@@ -79,6 +82,14 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const candidate=freezing?structuredClone(existing.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,
     homeLogo:args.homeLogo,awayLogo:args.awayLogo,now:args.now,splitEvidence:args.splitEvidence,marketQuotes:args.marketQuotes});
   const memberGame=mergeCbbReaderEvidence({sport:"cbb",games:[candidate]} as Parameters<typeof mergeCbbReaderEvidence>[0],history,[],evidenceAt).games[0];
+  if(!freezing&&args.capturedNamedSections){
+    for(const key of ["moneyline","first_inning","total"] as const){
+      const market=memberGame.markets[key],section=args.capturedNamedSections[key];
+      if(!cbbQualifiedNamedSplitSection(market.sportsbookSplits,section??null,evidenceAt))continue;
+      market.sportsbookSplits=structuredClone(section!);
+      market.sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section!.sourceObservedAt??section!.lastUpdated??""};
+    }
+  }
   if(freezing){
     memberGame.lockedAt=next.lockedAt;memberGame.lockState="locked";
     for(const market of Object.values(memberGame.markets)){

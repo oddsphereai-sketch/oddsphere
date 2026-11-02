@@ -1,7 +1,7 @@
 import type { supabase } from "@/lib/db/supabase";
 import type { DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import { cbbOfficialGameResultFromScores } from "./adaptCbbProvisionalToDailyEdge";
-import { readCbbMemberGames } from "./cbbMemberGameStore";
+import { readCbbMemberGames,CBB_COMPATIBLE_MEMBER_STORE_RELEASES } from "./cbbMemberGameStore";
 
 type MemberLockIndex = {snapshot_key:string;storeRelease:string;gameId:string;startsAt:string;
   lockedAt:string|null;memberId:string;memberExternalId:string;memberStart:string;memberLock:string|null};
@@ -19,7 +19,7 @@ async function readLockIndex(board:DailyEdgeResponse,client:typeof supabase):Pro
       const row=raw as unknown as MemberLockIndex,id=Number(row.gameId);
       const game=board.games.find(game=>game.external_id===id);
       if(!game||rows.has(id)||row.snapshot_key!==`cbb::member-game::${id}`||
-        !["cbb_member_game_store_2026_10_29_r1_single_leased_writer","cbb_member_game_store_2026_11_02_r2_preserved_market_evidence"].includes(row.storeRelease)||
+        !CBB_COMPATIBLE_MEMBER_STORE_RELEASES.includes(row.storeRelease as typeof CBB_COMPATIBLE_MEMBER_STORE_RELEASES[number])||
         row.startsAt!==game.gameStartAt||row.memberStart!==row.startsAt||row.memberId!==game.id||
         Number(row.memberExternalId)!==id||row.memberLock!==row.lockedAt||
         row.lockedAt!==null&&(typeof row.lockedAt!=="string"||!Number.isFinite(Date.parse(row.lockedAt)))){

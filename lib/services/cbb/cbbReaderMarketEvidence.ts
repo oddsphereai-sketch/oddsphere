@@ -96,6 +96,38 @@ function preferNamedSection(existing:MarketEdgeDto["sportsbookSplits"],incoming:
   return incomingPriority<priority||incomingPriority===priority&&Date.parse(incoming.sourceObservedAt!)>observed;
 }
 
+export function cbbQualifiedNamedSplitSection(existing:MarketEdgeDto["sportsbookSplits"],section:MarketEdgeDto["sportsbookSplits"],now:number):section is NonNullable<MarketEdgeDto["sportsbookSplits"]>{
+  const observed=Date.parse(section?.sourceObservedAt??section?.lastUpdated??"");
+  return !!section&&namedBooks.includes(section.sourceBook as typeof namedBooks[number])&&Number.isFinite(observed)&&observed<=now&&now-observed<=3*60*60_000&&section.rows.length===2&&new Set(section.rows.map(row=>row.side)).size===2&&
+    !section.rows.some(row=>row.betsPct===null||row.moneyPct===null||!Number.isFinite(row.betsPct)||!Number.isFinite(row.moneyPct)||row.betsPct<0||row.betsPct>100||row.moneyPct<0||row.moneyPct>100)&&
+    Math.abs(section.rows.reduce((sum,row)=>sum+row.betsPct!,0)-100)<=3&&Math.abs(section.rows.reduce((sum,row)=>sum+row.moneyPct!,0)-100)<=3&&
+    preferNamedSection(existing,section,now);
+}
+
+export type CbbCapturedNamedSplitFeed=NonNullable<Parameters<typeof import("@/lib/providers/real_api/sharpApiCurrentSplits").applySharpApiCurrentSplitOverlay>[1]>;
+export type CbbPreparedNamedSplitSections=Partial<Record<keyof DailyEdgeGameDto["markets"],NonNullable<MarketEdgeDto["sportsbookSplits"]>>>;
+
+/** Shared by the existing reader and sole writer; source/age/identity rules are identical. */
+export function mergeCbbCapturedNamedSplitEvidence(board:DailyEdgeResponse,namedFeed:CbbCapturedNamedSplitFeed|null,
+  applyOverlay:typeof import("@/lib/providers/real_api/sharpApiCurrentSplits").applySharpApiCurrentSplitOverlay,
+  now=Date.now(),identityGames:readonly DailyEdgeGameDto[]=board.games):DailyEdgeResponse{
+  const candidates=structuredClone({...board,games:board.games.filter(game=>game.lockState!=="locked"&&game.lockedAt===null&&Date.parse(game.gameStartAt??"")>now)});
+  applyOverlay(candidates,namedFeed,now,{identityGames});
+  const changes=new Map<string,DailyEdgeGameDto>();
+  for(const candidate of candidates.games){
+    const original=board.games.find(row=>row.external_id===candidate.external_id)!;
+    const game={...original,markets:{...original.markets}};
+    for(const [key] of marketEntries){
+      const section=candidate.markets[key].sportsbookSplits;
+      if(!cbbQualifiedNamedSplitSection(original.markets[key].sportsbookSplits,section,now))continue;
+      game.markets[key]={...original.markets[key],sportsbookSplits:section,
+        sharpBookAvailability:{status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:section.sourceObservedAt??section.lastUpdated??""}};
+    }
+    changes.set(game.id,game);
+  }
+  return {...board,games:board.games.map(game=>changes.get(game.id)??game)};
+}
+
 /** Display-only unlocked overlay. The stored grade, pick, projection, price and
  * every locked payload retain precedence over these separately captured rows. */
 export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayFeed|null,splitRows:SplitRow[],now=Date.now()):DailyEdgeResponse{
@@ -166,21 +198,8 @@ export async function overlayCbbReaderMarketEvidence(board:DailyEdgeResponse,opt
   // Named-book polling must not crowd public consensus out of a shared row cap.
   // The durable named-book display feed already has exact institution matching,
   // source timestamps and freshness checks; no provider request is made here.
-  const merged=mergeCbbReaderEvidence(selected,feed,rows),now=Date.now();
-  const candidates=structuredClone({...merged,games:merged.games.filter(game=>game.lockState!=="locked"&&game.lockedAt===null&&Date.parse(game.gameStartAt??"")>now)});
-  applySharpApiCurrentSplitOverlay(candidates,namedFeed,now,{identityGames:board.games});
-  for(const candidate of candidates.games){
-    const game=merged.games.find(row=>row.external_id===candidate.external_id)!;
-    for(const [key] of marketEntries){
-      const section=candidate.markets[key].sportsbookSplits,observed=Date.parse(section?.sourceObservedAt??section?.lastUpdated??"");
-      if(!section||!Number.isFinite(observed)||observed>now||now-observed>3*60*60_000||section.rows.length!==2||new Set(section.rows.map(row=>row.side)).size!==2||
-        section.rows.some(row=>row.betsPct===null||row.moneyPct===null||!Number.isFinite(row.betsPct)||!Number.isFinite(row.moneyPct)||row.betsPct<0||row.betsPct>100||row.moneyPct<0||row.moneyPct>100)||
-        Math.abs(section.rows.reduce((sum,row)=>sum+row.betsPct!,0)-100)>3||Math.abs(section.rows.reduce((sum,row)=>sum+row.moneyPct!,0)-100)>3||
-        !preferNamedSection(game.markets[key].sportsbookSplits,section,now))continue;
-      game.markets[key].sportsbookSplits=section;
-      game.markets[key].sharpBookAvailability={status:"complete",message:"Verified two-sided named-book split data is available.",lastUpdated:new Date(observed).toISOString()};
-    }
-  }
+  const merged=mergeCbbCapturedNamedSplitEvidence(mergeCbbReaderEvidence(selected,feed,rows),namedFeed,
+    applySharpApiCurrentSplitOverlay,Date.now(),board.games);
   const details=new Map(merged.games.map(game=>[game.id,game]));
   return {...board,games:board.games.map(game=>details.get(game.id)??game)};
 }
