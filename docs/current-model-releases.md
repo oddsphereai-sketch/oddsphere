@@ -693,7 +693,15 @@ forward grading remain required. Exact locked payloads retain precedence.
 
 ## CBB exact market-observation identity repair — October 30
 
-- November 2 source-observed full-name repair: active observation capture is
+- November 2 capture scheduling repair: active observation capture is
+  `market_intelligence_v2_capture_2026_11_02_r22_cbb_before_member_refresh`.
+  The existing all-sport collector processes CBB first, before unrelated work
+  can push it into the sole CBB writer's :02/:17/:32/:47 slot. All other sports
+  retain their relative order; provider calls, cadence, leases, observation
+  semantics, model/grade policies and locked records remain unchanged. R22
+  retains all R21 exact source aliases and supersedes its capture identifier.
+  Evidence: `docs/model-audits/2026-11-02-cbb-source-split-alias-coverage.md`.
+- November 2 source-observed full-name repair (superseded capture):
   `market_intelligence_v2_capture_2026_11_02_r21_cbb_observed_full_name_aliases`.
   Sixteen exact source spellings from the normal 22:46Z Playbook capture map to
   their verified canonical full school names. Aliases remain capture-local;

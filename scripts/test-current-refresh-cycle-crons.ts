@@ -130,7 +130,10 @@ assert.match(source("app/api/cron/lineup-watch/route.ts"), /refreshDailyEdgeResp
 assert.match(source("app/api/cron/pregame-sweep/route.ts"), /refreshDailyEdgeResponseSnapshot/, "locks republish Daily Edge");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /refreshDailyEdgeResponseSnapshot/, "split changes republish Daily Edge");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /runScheduledMarketIntelligenceV2Collection/, "split refresh runs the provenance-qualified Owls observation collector");
-assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /\["mlb", "wnba", "nhl", "nba", "nfl", "cfb", "cbb"\]/, "every supported Daily Edge sport receives scheduled Owls capture");
+const captureOrder = source("app/api/cron/public-splits-observations-refresh/route.ts").match(/const SPORTS: Sport\[\] = (\[[^;]+\]);/)?.[1];
+assert.ok(captureOrder, "the existing collector has an explicit sport order");
+assert.deepEqual(JSON.parse(captureOrder), ["cbb", "mlb", "wnba", "nhl", "nba", "nfl", "cfb"],
+  "CBB captures before its member refresh; all seven sports still run once and the other six retain their relative order");
 assert.match(source("app/api/cron/public-splits-observations-refresh/route.ts"), /\["nba", "nfl", "cfb", "cbb"\]\.includes\(sport\)/, "weekly and rolling sports use the bounded seven-day capture window");
 assert.doesNotMatch(source("app/api/cron/public-splits-observations-refresh/route.ts"), /includeSharpApiHistory:\s*true/, "active split refresh does not restore SharpAPI history calls");
 assert.match(source("lib/services/marketIntelligenceV2/shadowSync.ts"), /path:\s*["']\/events["']/, "Sharp recovery discovers event IDs independently of the league split snapshot");
