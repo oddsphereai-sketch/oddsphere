@@ -106,3 +106,8 @@ therefore include thirteen games. Tests cover raw and bounded-projection reads,
 changed line/publication/hash rejection, actual 10–27 settlement, and the loss at
 0/+3/+6 for PHI+6 versus the Over40.5 win only at the favorable +6 adjustment.
 These remain clearly labeled hypothetical adjusted-line results, not stored wagers.
+
+Integrated next production base `b1d24d4718fdaba8be22f6e7b86546e130234c0c`
+(CBB PR922), preserving its registry, grade, board and reader changes. Repeated
+verification includes incoming CBB focused checks. Standalone TypeScript runs
+after build generation so generated `.next/types` files cannot race its input scan.
