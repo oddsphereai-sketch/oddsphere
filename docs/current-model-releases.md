@@ -1,8 +1,8 @@
 # Current production model releases and qualified research candidates
 
-## CBB observed-market behavior candidate — November 2 (not deployed)
+## CBB observed-market behavior release — November 2
 
-The isolated candidate branch proposes final score
+The owner-authorized production repair uses final score
 `cbb_candidate_2026_11_02_r4_observed_market_behavior`, board
 `cbb_candidate_2026_11_02_r7_observed_market_behavior`, grade
 `cbb_2026_11_02_r3_bound_market_behavior`, receipt
@@ -16,16 +16,20 @@ exact target decisions and future locks; no reader recomputation, extra polling,
 shadow storage or second prediction job is introduced. Existing locks keep
 their original model/grade/evidence without reconstruction or relabeling.
 
-This candidate adds same-book relative economic transport and explicit
+This release adds same-book relative economic transport and explicit
 same-book ML/Spread winner arbitration, plus bound price/handle grade effects.
 These are NEW predictive policies, including a disclosed sign-switch
 discontinuity; they have not passed chronological held-out qualification.
 Full same-board diagnostic:113 unlocked games/339 markets,103->98 actionable,
 0 promotions/5 demotions,10 side changes. A paired eligible promotion rule is
 functionally tested; no improved held-out value or calibration is claimed.
-No live activation or owner exception is recorded. Production champions remain
-the deployed r3 score/r6 board/r2 grade/r12 publisher/r4 tracking below until
-qualification or a separately documented, explicit scoped owner exception.
+After the tested339-market impact and missing held-out outcome qualification
+were disclosed, the owner explicitly directed this repair live on November2.
+The scoped authorization in `docs/model-change-safety.md` permits this release
+before that qualification; it does not assert validated predictive improvement.
+Activation still requires protected publication and live verification. The r3
+score/r6 board/r2 grade/r12 publisher/r4 tracking below describe the preceding
+release, not permission to restore superseded behavior over r4 locks.
 Predeclaration and evidence:
 `docs/model-audits/2026-11-02-cbb-market-behavior-predeclaration.md` and
 `docs/model-audits/2026-11-02-cbb-market-behavior-review.md`.

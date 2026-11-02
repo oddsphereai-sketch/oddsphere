@@ -1,9 +1,14 @@
 # CBB observed-market decision review — November 2, 2026
 
-Status: private candidate. No production prediction, grade, stake, lock, tracking
-record, provider budget or database write has changed. The owner requested a
-general board repair, not a Cornell-specific rule. No deployment exception has
-been granted. Starting base: `d3366f168fa04272918297214cc09c21876f514f`.
+Status: owner-authorized production repair, awaiting protected publication and
+live verification. After this review and its missing outcome qualification
+were disclosed, the owner replied affirmatively to the publication request and
+directed the product repair live. The scoped exception is recorded in
+`docs/model-change-safety.md`; no predictive improvement is claimed. At review
+time, no production prediction, grade, stake, lock, tracking record, provider
+budget or database write had changed. The owner requested a general board
+repair, not a Cornell-specific rule. Starting base:
+`d3366f168fa04272918297214cc09c21876f514f`.
 
 ## Confirmed production defect
 

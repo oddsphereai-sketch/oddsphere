@@ -1,5 +1,36 @@
 # Model change safety protocol
 
+## Owner-authorized CBB market-decision repair — November 2
+
+After reviewing PR938, the339-market impact (103->98 actionable,0 promotions,
+5 demotions,10 selected-side changes), the possibility of projected-winner
+changes, and the explicit absence of held-out outcome qualification, Daniel
+Mengel replied to the scoped publication request: “Um, yeah” and directed
+“please just fix it, get it up.” He requires the working product, without a
+new member-facing provisional label. This authorizes production publication of
+the reviewed CBB r4 score/r7 board/r3 grade/r13 publisher/r5 tracking repair
+before its new market policies pass the normal held-out value/calibration gate.
+It is a narrow owner exception for this exact release family, not a finding of
+predictive improvement or a reusable waiver for other policies or sports.
+
+The independent r3 law stays market-free. The sole leased writer applies the
+reviewed relative same-book economic transport and corroborated ML/Spread
+winner arbitration, with union-target exclusion, real source/receipt clocks,
+conflict/quarantine guards, exact-price grading and bound price/handle effects.
+The static winner policy's sign-switch discontinuity and unknown information
+overlap remain documented limitations. The tested confirming promotion has no
+eligible instance in the frozen replay; no promotion is fabricated to offset
+the5 observed demotions. No stake increase, new provider calls, independent
+writer, production shadow persistence, cadence change, locked-field mutation
+or retrospective release relabeling is authorized.
+
+All focused/full checks, fresh-main integration safety, required protected-PR
+checks, exact local/remote tree proof and post-merge production release, normal
+cron, coverage/coherence and immutable-lock verification remain mandatory.
+Evidence and forward rollback constraints:
+`docs/model-audits/2026-11-02-cbb-market-behavior-predeclaration.md` and
+`docs/model-audits/2026-11-02-cbb-market-behavior-review.md`.
+
 ## Owner-directed CBB historical venue repair — November 2
 
 The owner requested resolution of St. Thomas's missing genuine historical
