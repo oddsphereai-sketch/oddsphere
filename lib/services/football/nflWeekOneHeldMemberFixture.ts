@@ -215,8 +215,14 @@ export function buildNflWeekOneHeldMemberFixture(
   if (options.previousFixture && identityPayload && options.previousFixture.week.week !== identityPayload.week) {
     throw new Error("NFL previous locked fixture week identity does not match the evidence.");
   }
+  const latestEvidenceAt = Math.max(...rows.map(row => Date.parse(row.capturedAt)));
   const previousLocks = options.previousFixture?.snapshot.games.filter(game =>
-    game.lockState === "locked" && game.lockedAt !== null) ?? [];
+    game.lockState === "locked" && game.lockedAt !== null ||
+    // A previously published historical failed-final-slot card has no valid
+    // lock to reconstruct. Carry its exact held DTO, never invent a past pick.
+    Date.parse(game.gameStartAt ?? "") <= latestEvidenceAt && rows.some(row =>
+      row.providerGameId === String(game.external_id) && row.stage === "t60" &&
+      row.payload.decisions.evaluatedBets.length === 0)) ?? [];
   for (const game of previousLocks) {
     const evidence = rows.filter(row => row.providerGameId === String(game.external_id) &&
       row.payload.season === identityPayload?.season && row.payload.week === identityPayload?.week);
