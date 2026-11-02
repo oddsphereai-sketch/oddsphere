@@ -1,9 +1,10 @@
 import { cbbImpliedProbability, reviewCbbQuote } from "./marketEvidence";
 import { gradeCbbProvisional, CBB_PROVISIONAL_GRADE_RELEASE } from "./provisionalGradePolicy";
 import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
+import {gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,type CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_02_r6_verified_venue_prior" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_02_r7_observed_market_behavior" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Preserve every existing complete-book choice. A missing Moneyline must not
@@ -21,7 +22,7 @@ export function chooseCbbSupportedTargetBook(quotes:CbbQuote[]):string|null {
 }
 
 /** Pure single-game projection. The leased writer owns persistence and locks. */
-export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote[]) {
+export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote[],options:{marketBehavior?:CbbMarketBehaviorReceipt}={}) {
   if (![forecast.homeScore, forecast.awayScore, forecast.margin, forecast.total,
     forecast.homeWinProbability].every(Number.isFinite) ||
     forecast.homeScore <= 0 || forecast.awayScore <= 0 ||
@@ -41,8 +42,8 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       pushProbability: null, expectedValue: null,
       observedQuote:null,quoteProvider:null, professionalReferences: 0, professionalReferenceQuotes: [] as CbbQuote[], referenceState: "unavailable" as const };
     const review = reviewCbbQuote(forecast, target);
-    const grade = gradeCbbProvisional({ target, references: quotes.filter(quote => quote !== target),
-      forecast, asOf: forecast.asOf });
+    const evidence={target,references:quotes.filter(quote=>quote!==target),forecast,asOf:forecast.asOf};
+    const grade=options.marketBehavior?gradeCbbMarketBehavior(evidence,options.marketBehavior):gradeCbbProvisional(evidence);
     if (grade.selection !== null && grade.selection !== review.selection) {
       throw new Error("CBB grade and score side disagree");
     }
@@ -58,10 +59,11 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       professionalReferenceQuotes: grade.professionalReferenceQuotes,
       referenceState: grade.referenceState };
   });
-  return { release: CBB_PROVISIONAL_BOARD_RELEASE, modelRelease: forecast.release, gradeRelease: CBB_PROVISIONAL_GRADE_RELEASE, gameId: forecast.gameId,
+  return { release: CBB_PROVISIONAL_BOARD_RELEASE, modelRelease: forecast.release, gradeRelease: options.marketBehavior?CBB_MARKET_BEHAVIOR_GRADE_RELEASE:CBB_PROVISIONAL_GRADE_RELEASE, gameId: forecast.gameId,
     asOf: forecast.asOf, targetBook:boardTargetBook, score: { home: forecast.homeScore, away: forecast.awayScore,
       margin: forecast.margin, total: forecast.total, homeWinProbability: forecast.homeWinProbability },
-    marketContext: { predictionReader: "unqualified" as const,
+    marketContext: { predictionReader: options.marketBehavior?"observed_market_behavior" as const:"unqualified" as const,
+      verifiedMarketRead:options.marketBehavior??null,
       professionalPriceReferences: rows.reduce((count, row) => count + row.professionalReferences, 0),
       missing: ["qualified_movement_history", "qualified_splits", "observed_book_leadership"] },
     rows };

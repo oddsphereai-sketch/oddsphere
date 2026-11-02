@@ -114,7 +114,9 @@ assert.equal(cbbCurrentSplitEvidence(cbbGame, { ...providerOdds, data: [...provi
 "2026-11-01T11:55:00.000Z", asOf).rows.length, 4,"separate book-native odds IDs cannot veto one verified fixture");
 assert.deepEqual(splitEvidence.rows.find(row => row.market === "moneyline" && row.selection === "second"), {
   market: "moneyline", sourceBook: "circa", observedAt: "2026-11-01T11:50:00.000Z",
-  selection: "second", ticketsPct: 0.2, moneyPct: 0.6, moneyMinusTicketsPoints: 40 });
+  selection: "second",gameId:cbbGame.id,sourceLine:null,sourceEventId:"provider-7",
+  fetchedAt:"2026-11-01T11:55:00.000Z",orientationVerified:true,
+  ticketsPct: 0.2, moneyPct: 0.6, moneyMinusTicketsPoints: 40 });
 assert.equal(splitEvidence.rows.find(row => row.market === "spread" && row.selection === "second")?.moneyMinusTicketsPoints, null);
 assert.equal(cbbCurrentSplitEvidence(cbbGame, providerOdds, { ...providerSplits,
   data: [{ ...providerSplitGame, event_id: "other" }] }, "2026-11-01T11:55:00.000Z", asOf).reason,

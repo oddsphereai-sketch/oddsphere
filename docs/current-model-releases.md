@@ -1,5 +1,35 @@
 # Current production model releases and qualified research candidates
 
+## CBB observed-market behavior candidate — November 2 (not deployed)
+
+The isolated candidate branch proposes final score
+`cbb_candidate_2026_11_02_r4_observed_market_behavior`, board
+`cbb_candidate_2026_11_02_r7_observed_market_behavior`, grade
+`cbb_2026_11_02_r3_bound_market_behavior`, receipt
+`cbb_market_behavior_2026_11_02_r1_same_book_economics`, publisher
+`cbb_member_pipeline_2026_11_02_r13_observed_market_behavior`, tracking
+`cbb_tracking_writer_2026_11_02_r5_market_behavior_lineage`, adapter
+`cbb_member_adapter_2026_11_02_r6_observed_market_behavior` and source contracts
+`cbb_split_evidence_2026_11_02_r3_bound_source_contracts`. Independent score r3
+remains market-free. The same leased writer owns the final coherent forecast,
+exact target decisions and future locks; no reader recomputation, extra polling,
+shadow storage or second prediction job is introduced. Existing locks keep
+their original model/grade/evidence without reconstruction or relabeling.
+
+This candidate adds same-book relative economic transport and explicit
+same-book ML/Spread winner arbitration, plus bound price/handle grade effects.
+These are NEW predictive policies, including a disclosed sign-switch
+discontinuity; they have not passed chronological held-out qualification.
+Full same-board diagnostic:113 unlocked games/339 markets,103->98 actionable,
+0 promotions/5 demotions,10 side changes. A paired eligible promotion rule is
+functionally tested; no improved held-out value or calibration is claimed.
+No live activation or owner exception is recorded. Production champions remain
+the deployed r3 score/r6 board/r2 grade/r12 publisher/r4 tracking below until
+qualification or a separately documented, explicit scoped owner exception.
+Predeclaration and evidence:
+`docs/model-audits/2026-11-02-cbb-market-behavior-predeclaration.md` and
+`docs/model-audits/2026-11-02-cbb-market-behavior-review.md`.
+
 ## CBB chart API and retained split display — November 2
 
 Current publisher is `cbb_member_pipeline_2026_11_02_r12_retained_named_split_display`

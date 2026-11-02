@@ -99,7 +99,7 @@ async function main(){
   assert.equal(unknown.sourceGames,1);assert.equal(unknown.published,1);assert.deepEqual(unknown.unpublishedIncomplete,[],"verified historical venue recovery supplies St Thomas's actual prior");
   assert.notEqual(JSON.stringify([...stored]),beforeUnknown);
   const recoveredRecord=stored.get(`cbb::member-game::${unknownGame.id}`) as {snapshot:{board:{modelRelease:string}}};
-  assert.equal(recoveredRecord.snapshot.board.modelRelease,"cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior");
+  assert.equal(recoveredRecord.snapshot.board.modelRelease,"cbb_candidate_2026_11_02_r4_observed_market_behavior");
   const absentId=999999,unmodeledGame={...unknownGame,id:absentId,home_team:{...unknownGame.home_team,id:absentId}};
   const beforeUnmodeled=JSON.stringify([...stored]);
   const unmodeled=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],
@@ -107,6 +107,28 @@ async function main(){
     loadSchedule:async()=>({...unknownSchedule,games:unknownSchedule.games.map(g=>({...g,externalId:absentId,id:`cbb-${absentId}`}))}),saveSnapshot});
   assert.equal(unmodeled.published,0);
   assert.equal(JSON.stringify([...stored]),beforeUnmodeled,"a real quote cannot manufacture an absent team rating or overwrite an existing record");
+  let priceCalls=0,splitCalls=0;
+  const referenceRefresh=async(now:string,line:number,ml:number,opposing:number)=>{
+    const prices=structuredClone(odds);
+    prices.data[0].bookmakers.push({key:"pinnacle",last_update:now,markets:[quote("h2h",ml,opposing),quote("spreads",-110,-110,line),quote("totals",-110,-110,145.5)]});
+    const source={odds:async()=>{priceCalls++;return {body:prices};},splits:async()=>{splitCalls++;return {body:splits};}} as unknown as OwlsInsightClient;
+    return refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now,bdlKey:"test",owlsKey:"test",trainingGames:[],provider,owls:source,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
+  };
+  const firstMarket=await referenceRefresh("2026-10-29T22:05:00Z",3.5,130,-150);
+  const firstRead=stored.get(`cbb::member-game::${game.id}`) as import("../lib/services/cbb/cbbMemberGameStore").CbbStoredMemberGame;
+  const firstReceipt=firstRead.snapshot.board.marketContext.verifiedMarketRead!;
+  assert.equal(firstMarket.owlsCalls,2);assert.equal(firstReceipt.winnerArbitration.status,"applied");
+  assert.ok(firstRead.snapshot.board.score.margin<0&&firstRead.memberGame.projected.home<firstRead.memberGame.projected.away);
+  assert.equal(firstRead.memberGame.markets.moneyline.pick,"ND ML","the sole pipeline publishes the market-conditioned winner and exact target side together");
+  assert.equal(firstRead.memberGame.markets.first_inning.writerMovementDirection,undefined,"current opposition alone cannot become movement");
+  await referenceRefresh("2026-10-29T22:10:00Z",4.5,150,-170);
+  const secondRead=stored.get(`cbb::member-game::${game.id}`) as typeof firstRead;
+  assert.deepEqual(secondRead.snapshot.board.marketContext.verifiedMarketRead!.anchors,firstReceipt.anchors,"later refresh retains the original actual source anchors");
+  assert.ok(secondRead.snapshot.board.score.margin<firstRead.snapshot.board.score.margin);
+  const secondScore=structuredClone(secondRead.snapshot.board.score);
+  await referenceRefresh("2026-10-29T22:10:00Z",4.5,150,-170);
+  assert.deepEqual((stored.get(`cbb::member-game::${game.id}`) as typeof firstRead).snapshot.board.score,secondScore,"refresh never recursively adds an adjustment to a prior market-conditioned law");
+  assert.equal(priceCalls,3);assert.equal(splitCalls,3,"one slate-level price and split request per existing refresh; no per-game refresh");
   const atLock=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-11-01T13:30:00Z",bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
   assert.equal(atLock.locked,1);assert.equal(atLock.trackingInserted,3);

@@ -9,7 +9,7 @@ import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_02_r5_source_split_percentages" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_02_r6_observed_market_behavior" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -91,6 +91,15 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const cutoff=Date.parse(game.date)-60*60_000,locked=snapshot.lockedAt!==null;
   for(const [kind,market] of [["moneyline",ml],["spread",spread],["total",total]] as const){
     const boardRow=rows.get(kind)!;
+    const read=snapshot.board.marketContext.verifiedMarketRead;
+    if(read){
+      const axis=kind==="total"?read.total:read.margin,sign=boardRow.selection==="first"?1:-1;
+      if(axis.status==="applied"&&axis.reason==="observed_same_book_relative_economics"&&axis.sourceMarket===kind){
+        const pressure=axis.delta*sign;
+        market.writerMovementDirection=pressure>1e-7?"support":pressure< -1e-7?"resistance":"neutral";
+        market.readerMovementSource="writer_market_anchor";
+      }
+    }
     const quote=args.marketQuotes?.find(item=>item.gameId===game.id&&item.sportsbook===boardRow.targetBook&&item.market===kind&&
       item.providerObservedAt===boardRow.quoteObservedAt);
     if(quote&&boardRow.selection){
@@ -138,7 +147,9 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     status:{lineupConfirmed:null,linesLocked:[ml,total,spread].some(m=>m.priceAmerican!==null),sharpSignalPending:rows.get("moneyline")!.professionalReferences===0,
       marketDataLimited:[ml,total,spread].every(m=>m.priceAmerican===null)},result:cbbOfficialGameResult(game,snapshot),
     breakdown:{verdict:topVerdict,sharpRead:{key:"no_data",sentence:SHARP_READ_SENTENCES.no_data},
-      modelBreakdown:`Independent projection: ${snapshot.board.score.away.toFixed(1)}–${snapshot.board.score.home.toFixed(1)}. Exact sportsbook prices determine the provisional play grades; professional references are shown only where verified.`}};
+      modelBreakdown:snapshot.board.marketContext.verifiedMarketRead
+        ?`Projection: ${snapshot.board.score.away.toFixed(1)}–${snapshot.board.score.home.toFixed(1)}. The stored market decision and exact sportsbook prices determine the prediction and play grades.`
+        :`Independent projection: ${snapshot.board.score.away.toFixed(1)}–${snapshot.board.score.home.toFixed(1)}. Exact sportsbook prices determine the provisional play grades; professional references are shown only where verified.`}};
 }
 
 export function cbbDailyEdgeResponse(date:string,games:DailyEdgeGameDto[],asOf:string):DailyEdgeResponse{

@@ -3,6 +3,10 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { CbbBallDontLieClient } from "@/lib/cbb/ballDontLie";
 import { cbbCanonicalStatus } from "@/lib/cbb/canonicalFixture";
 import { matchCbbProviderVenue as matchCbbVenue } from "@/lib/cbb/providerVenueIdentity";
+import {readCbbMarketBehavior} from "@/lib/cbb/marketBehaviorCandidate";
+import {cbbIndependentInputKey,cbbOriginalMarketAnchors,cbbBehaviorFlows,cbbHistoryAtDecision} from "./cbbMarketBehaviorInputs";
+import {CBB_CURRENT_SCORE_RELEASE} from "@/lib/cbb/currentScoreRuntime";
+import type {CbbForecast} from "@/lib/cbb/types";
 import { forecastCbbCurrentBatch } from "@/lib/cbb/currentScoreRuntime";
 import { normalizeCbbOwlsCurrent } from "@/lib/cbb/owlsMarketEvidence";
 import { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
@@ -25,7 +29,7 @@ import { applySharpApiCurrentSplitOverlay } from "@/lib/providers/real_api/sharp
 import { advanceCbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r12_retained_named_split_display" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r13_observed_market_behavior" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -116,7 +120,33 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   }),asOf,args.trainingGames);
   const forecastById=new Map(forecasts.map(row=>[row.game.id,row.forecast]));
   const memberGames:DailyEdgeGameDto[]=[],problems:string[]=[],unpublishedIncomplete:number[]=[],ownerApprovedExclusions:number[]=[];
-  const boardCandidates=new Map(forecasts.map(row=>[row.game.id,buildCbbProvisionalBoard(row.forecast,namedById.get(row.game.id)?.quotes??[])]));
+  const splitEvidenceById=new Map(forecastGames.map(game=>[game.id,cbbCurrentSplitEvidence(game,odds.body,splits.body,asOf,asOf)]));
+  // Original r3 quote receipts may seed an anchor only when today's frozen
+  // independent runtime exactly reproduces that earlier published baseline.
+  // Batch by its real decision clock; no per-game/provider/DB refresh is added.
+  const earlierGroups=new Map<string,typeof forecasts>();
+  for(const row of forecasts){const previous=prior.get(row.game.id)?.snapshot;
+    if(previous&&!previous.lockedAt&&previous.board.modelRelease===CBB_CURRENT_SCORE_RELEASE){
+      const clock=previous.board.asOf;earlierGroups.set(clock,[...(earlierGroups.get(clock)??[]),row]);
+    }}
+  const earlierIndependent=new Map<number,CbbForecast>();
+  const earlierInputKeys=new Map<number,string>();
+  for(const [clock,rows] of earlierGroups){
+    const history=cbbHistoryAtDecision(args.trainingGames,clock);
+    try{for(const row of forecastCbbCurrentBatch(rows.map(row=>row.game),clock,history)){
+      earlierIndependent.set(row.game.id,row.forecast);
+      earlierInputKeys.set(row.game.id,cbbIndependentInputKey(row.game,history));
+    }}catch{/* An unreproducible independent baseline cannot attest a legacy anchor. */}
+  }
+  const boardCandidates=new Map(forecasts.map(row=>{
+    const quotes=namedById.get(row.game.id)?.quotes??[],baseline=buildCbbProvisionalBoard(row.forecast,quotes);
+    const targets=baseline.rows.flatMap(market=>{const target=quotes.find(q=>q.market===market.market&&q.sportsbook===market.targetBook&&q.providerObservedAt===market.quoteObservedAt&&q.line===market.line);return target?[target]:[];});
+    const key=cbbIndependentInputKey(row.game,args.trainingGames),previous=prior.get(row.game.id)?.snapshot??null;
+    const anchors=cbbOriginalMarketAnchors(previous,earlierInputKeys.get(row.game.id)??key,earlierIndependent.get(row.game.id)??null);
+    const read=readCbbMarketBehavior({independent:row.forecast,independentInputKey:key,startsAt:row.game.date,targets,currentQuotes:quotes,anchors,
+      flows:cbbBehaviorFlows(splitEvidenceById.get(row.game.id)!)});
+    return [row.game.id,buildCbbProvisionalBoard(read.forecast,quotes,{marketBehavior:read.receipt})] as const;
+  }));
   const publishableGames=sourceGames.filter(game=>{
     const previous=prior.get(game.id);
     if(previous&&isOwnerApprovedCbbMemberExclusion(previous.memberGame)){
@@ -182,7 +212,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     let candidate=null,splitEvidence=null;
     if(!afterCutoff&&!previous?.snapshot.lockedAt){
       candidate=boardCandidates.get(game.id)!;
-      splitEvidence=cbbCurrentSplitEvidence(game,odds.body,splits.body,asOf,asOf);
+      splitEvidence=splitEvidenceById.get(game.id)!;
       if(splitEvidence.rows.length===0)problems.push(`${game.id}:verified_splits_unavailable:${splitEvidence.reason}`);
       if(candidate.rows.some(row=>row.grade==="Held"))held++;
     }

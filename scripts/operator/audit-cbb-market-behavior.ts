@@ -1,0 +1,35 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import {createHash}from'node:crypto';
+import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE} from '../../lib/cbb/marketBehaviorCandidate';
+import {gradeCbbProvisional} from '../../lib/cbb/provisionalGradePolicy';
+import type {CbbForecast,CbbQuote,CbbGame} from '../../lib/cbb/types';
+import type {CbbProvisionalSnapshot} from '../../lib/cbb/provisionalLifecycle';
+type SourceRecord={snapshot:CbbProvisionalSnapshot;awayName:string;homeName:string};
+type Source={at:string;rows:SourceRecord[]};
+import artifact from '../../lib/cbb/artifacts/candidate-r3.json';
+import {reviewCbbQuote} from '../../lib/cbb/marketEvidence';
+const read=(p:string)=>JSON.parse(fs.readFileSync(p,'utf8'));
+const [currentFile,priorFile,fixtureFile,reportFile]=process.argv.slice(2);
+if(!currentFile||!priorFile||!fixtureFile||!reportFile)throw new Error('Usage: audit-cbb-market-behavior.ts CURRENT_JSON PRIOR_JSON FIXTURE_JSON REPORT_JSON (local files only; no network or database writes)');
+async function main(){
+ const source=read(currentFile) as Source,prior=read(priorFile) as Source,input=read(fixtureFile) as {games:CbbGame[]};
+ const active=source.rows.filter((r)=>r.snapshot.lockedAt===null&&Date.parse(r.snapshot.startsAt)>Date.parse(r.snapshot.board.asOf)+3600_000);
+ const counts=(rows:Array<{grade:string}>)=>rows.reduce<Record<string,number>>((a,r)=>(a[r.grade]=(a[r.grade]??0)+1,a),{});
+ const bundles=active.map(r=>{const b=r.snapshot.board,s=b.score,fixture=input.games.find((g)=>g.id===r.snapshot.gameId);assert.ok(fixture);assert.ok(b.modelRelease);
+  const base:CbbForecast={release:b.modelRelease,gameId:r.snapshot.gameId,asOf:b.asOf,homeId:fixture.home_team.id,awayId:fixture.visitor_team.id,homeScore:s.home,awayScore:s.away,margin:s.margin,total:s.total,homeWinProbability:s.homeWinProbability,uncertainty:artifact.uncertainty,possessions:0,inputStatus:'complete',issues:[]};
+  const targets:CbbQuote[]=b.rows.map((row)=>{assert.ok(row.observedQuote&&row.targetBook&&row.quoteObservedAt);return ({gameId:base.gameId,market:row.market,line:row.line,firstPrice:row.observedQuote.firstPrice,secondPrice:row.observedQuote.secondPrice,sportsbook:row.targetBook,provider:row.quoteProvider,providerObservedAt:row.quoteObservedAt,fetchedAt:b.asOf,phase:'current'});});
+  const quotes:CbbQuote[]=b.rows.flatMap((row)=>row.professionalReferenceQuotes??[]),old=prior.rows.find((p)=>p.snapshot.gameId===base.gameId&&p.snapshot.lockedAt===null),key=`r3-diagnostic-fixture-${base.gameId}`;
+  const anchors=old?{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:base.gameId,startsAt:r.snapshot.startsAt,independentRelease:base.release,independentInputKey:key,capturedAt:old.snapshot.board.asOf,quotes:old.snapshot.board.rows.flatMap((row)=>row.professionalReferenceQuotes??[])}:null;
+  const result=readCbbMarketBehavior({independent:base,independentInputKey:key,startsAt:r.snapshot.startsAt,targets,currentQuotes:quotes,anchors});
+  const markets=targets.map(target=>{const before=gradeCbbProvisional({forecast:base,target,references:quotes,asOf:b.asOf}),stored=b.rows.find((x)=>x.market===target.market),after=gradeCbbMarketBehavior({forecast:result.forecast,target,references:quotes,asOf:b.asOf},result.receipt);assert.ok(stored);assert.equal(before.grade,stored.grade);assert.equal(before.selection,stored.selection);assert.ok(Math.abs((before.expectedValue??0)-(stored.expectedValue??0))<1e-9);
+   const actionable=(x:string)=>x==='Best Angle'||x==='Lean';
+   return ({id:base.gameId,matchup:`${r.awayName} @ ${r.homeName}`,market:target.market,target,old:{grade:before.grade,selection:before.selection,ev:before.expectedValue,price:before.price,probability:reviewCbbQuote(base,target).probability},next:{grade:after.grade,selection:after.selection,ev:after.expectedValue,price:after.price,probability:after.selection===null?null:reviewCbbQuote(result.forecast,target).probability,pressure:after.marketPressure},promotion:!actionable(before.grade)&&actionable(after.grade),demotion:actionable(before.grade)&&!actionable(after.grade),sideChanged:before.selection!==after.selection});
+  });
+  const game={id:base.gameId,matchup:`${r.awayName} @ ${r.homeName}`,asOf:b.asOf,old:s,next:result.receipt.finalScore,winnerArbitration:result.receipt.winnerArbitration,margin:result.receipt.margin,total:result.receipt.total,episodes:result.receipt.episodes.map(e=>({book:e.book,market:e.market,delta:e.delta,anchor:e.anchor,current:e.current})),informationOverlap:result.receipt.informationOverlap};
+  return {game,markets};
+ });
+ const all=bundles.flatMap(x=>x.markets),games=bundles.map(x=>x.game);
+ const selected=games.map(g=>({g,key:createHash('sha256').update(`cbb-market-review-20261102:${g.id}`).digest('hex')})).sort((a,b)=>a.key.localeCompare(b.key)).slice(0,8).map(x=>x.g);
+ const report={at:new Date().toISOString(),declaration:'Fixed private candidate; no outcomes, refits or production writes',sourceCapturedAt:source.at,priorCapturedAt:prior.at,games:games.length,markets:all.length,oldCounts:counts(all.map(r=>r.old)),newCounts:counts(all.map(r=>r.next)),promotions:all.filter(r=>r.promotion).length,demotions:all.filter(r=>r.demotion).length,netActionables:all.filter(r=>r.promotion).length-all.filter(r=>r.demotion).length,sideChanges:all.filter(r=>r.sideChanged).length,winnerArbitrations:games.filter(g=>g.winnerArbitration.status==='applied').length,relativeMarginApplications:games.filter(g=>g.margin.reason==='observed_same_book_relative_economics').length,relativeTotalApplications:games.filter(g=>g.total.status==='applied').length,randomSeed:'cbb-market-review-20261102',randomSpotChecks:selected,cornell:games.find(g=>g.id===10882496),allGames:games,allMarkets:all,targetReceiptLimitation:'Target fetchedAt absent from stored board: decision asOf used only as diagnostic upperbound; original observed pair/prices retained. No live input receipt is invented.',outcomeQualification:'Unavailable; current games unplayed; opened21 historical rows lack movement pairs. Owner exception required for provisional publication under model-change-safety.',providerRequests:0,databaseWrites:0};
+ fs.writeFileSync(reportFile,JSON.stringify(report,null,2));console.log(JSON.stringify({...report,randomSpotChecks:selected.map(x=>({...x,episodes:undefined,winnerArbitration:{status:x.winnerArbitration.status,book:x.winnerArbitration.sourceBook}})),cornell:report.cornell&&{old:report.cornell.old,next:report.cornell.next,margin:report.cornell.margin,winnerArbitration:report.cornell.winnerArbitration.status},allGames:undefined,allMarkets:undefined},null,2));
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});
