@@ -4,7 +4,8 @@ import { advanceCbbProvisionalSnapshot } from "../lib/cbb/provisionalLifecycle";
 import type { CbbForecast, CbbGame, CbbQuote } from "../lib/cbb/types";
 import { adaptCbbProvisionalGame } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import { CBB_MEMBER_GAME_STORE_RELEASE, type CbbStoredMemberGame } from "../lib/services/cbb/cbbMemberGameStore";
-import { writeLockedCbbTracking } from "../lib/services/cbb/cbbTrackingWriter";
+import { writeLockedCbbTracking, cbbLockedGradeRelease } from "../lib/services/cbb/cbbTrackingWriter";
+import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "../lib/cbb/provisionalGradePolicy";
 import { gradePrediction } from "../lib/services/predictionGrader";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 
@@ -49,6 +50,18 @@ async function main(){
   rows[0].locked_at="2026-11-01T18:00:00+00:00";
   rows[0].odds_american=999;
   await assert.rejects(writeLockedCbbTracking(record,db),/conflicts with locked member/);
+  const legacy=structuredClone(record);
+  Object.assign(legacy.snapshot.board,{release:"cbb_candidate_2026_11_02_r4_supported_market_coverage"});
+  Reflect.deleteProperty(legacy.snapshot.board,"gradeRelease");
+  const legacyBytes=JSON.stringify(legacy);
+  rows.length=0;
+  assert.equal(await writeLockedCbbTracking(legacy,db),3);
+  assert.ok(rows.every(row=>row.calibration_version===CBB_LEGACY_PROVISIONAL_GRADE_RELEASE),"legacy locks retain their own grade release after the new policy deploys");
+  assert.equal(await writeLockedCbbTracking(legacy,db),0,"old-release tracking remains idempotent");
+  assert.equal(JSON.stringify(legacy),legacyBytes,"tracking cannot stamp or reinterpret a legacy member lock");
+  assert.equal(cbbLockedGradeRelease(record.snapshot.board),CBB_PROVISIONAL_GRADE_RELEASE);
+  assert.throws(()=>cbbLockedGradeRelease({release:"unknown"}),/missing its grade release/);
+  assert.throws(()=>cbbLockedGradeRelease({release:"unknown",gradeRelease:"unknown"}),/unknown/);
   console.log("CBB tracking writer: frozen three-market rows, selected-side spread, idempotence and immutable conflict passed.");
 }
 void main();

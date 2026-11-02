@@ -3,10 +3,19 @@ import type { PredictionRecordRow } from "@/lib/types/domain/Tracking";
 import { computeSlateDate } from "@/lib/dates/slateDate";
 import { cbbImpliedProbability } from "@/lib/cbb/marketEvidence";
 import { CBB_SCORE_RESEARCH_RELEASE } from "@/lib/cbb/scoreResearch";
-import { CBB_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
+import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "@/lib/cbb/provisionalGradePolicy";
 import type { CbbStoredMemberGame } from "./cbbMemberGameStore";
 
-export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_01_r2_canonical_timestamp_instants" as const;
+export const CBB_TRACKING_WRITER_RELEASE = "cbb_tracking_writer_2026_11_02_r3_locked_grade_release" as const;
+
+/** Resolve the release that actually owns the frozen public decision. */
+export function cbbLockedGradeRelease(board: { release: string; gradeRelease?: string }): string {
+  if (board.gradeRelease === CBB_PROVISIONAL_GRADE_RELEASE || board.gradeRelease === CBB_LEGACY_PROVISIONAL_GRADE_RELEASE) return board.gradeRelease;
+  if (board.gradeRelease !== undefined) throw new Error("CBB locked grade release is unknown");
+  if (["cbb_candidate_2026_10_29_r2_explicit_unqualified_reader", "cbb_candidate_2026_10_29_r3_exact_quote_reader_fields",
+    "cbb_candidate_2026_11_02_r4_supported_market_coverage"].includes(board.release)) return CBB_LEGACY_PROVISIONAL_GRADE_RELEASE;
+  throw new Error("CBB locked board is missing its grade release");
+}
 
 function sameInstant(left:string|null|undefined,right:string):boolean {
   const first=Date.parse(left??""),second=Date.parse(right);
@@ -19,6 +28,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
   const lock = record.snapshot.lockedAt;
   if (!lock) return 0;
   const { snapshot, memberGame } = record;
+  const gradeRelease = cbbLockedGradeRelease(snapshot.board);
   if (memberGame.lockedAt !== lock || memberGame.external_id !== snapshot.gameId ||
     memberGame.gameStartAt !== snapshot.startsAt) throw new Error("CBB tracking lock/reader mismatch");
   const client = db ?? (await import("@/lib/db/supabase")).supabase;
@@ -52,7 +62,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       if (prior.pick !== side || prior.side !== side || prior.line_value !== line ||
         prior.odds_american !== row.price || prior.play_grade !== grade || !sameInstant(prior.locked_at,lock) ||
         prior.model_version !== CBB_SCORE_RESEARCH_RELEASE ||
-        prior.calibration_version !== CBB_PROVISIONAL_GRADE_RELEASE) {
+        prior.calibration_version !== gradeRelease) {
         throw new Error(`CBB immutable tracking row conflicts with locked member market ${row.market}`);
       }
       continue;
@@ -63,7 +73,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       matchup: `${memberGame.awayTeamDisplayName} @ ${memberGame.homeTeamDisplayName}`,
       market: row.market, pick: side, side, line_value: line, odds_american: row.price,
       odds_decimal: null, model_used: "cbb_independent_r2_provisional_market_reader",
-      model_version: CBB_SCORE_RESEARCH_RELEASE, calibration_version: CBB_PROVISIONAL_GRADE_RELEASE,
+      model_version: CBB_SCORE_RESEARCH_RELEASE, calibration_version: gradeRelease,
       prediction_source: "cbb_daily_edge", confidence: row.probability,
       model_probability: row.probability, market_probability: cbbImpliedProbability(row.price),
       edge: row.probability - cbbImpliedProbability(row.price), expected_value: row.expectedValue,
@@ -75,7 +85,7 @@ export async function writeLockedCbbTracking(record: CbbStoredMemberGame, db?: t
       provisional: true, held: false, hold_reason: null, launch_day: false,
       manual_outcome_expected: false, locked_at: lock, published_at: snapshot.capturedAt,
       snapshot_json: { release: CBB_TRACKING_WRITER_RELEASE, memberStoreRelease: record.release,
-        boardRelease: snapshot.board.release, gradeRelease: CBB_PROVISIONAL_GRADE_RELEASE,
+        boardRelease: snapshot.board.release, gradeRelease,
         lockedMemberGameId: snapshot.gameId, selectedBook: row.targetBook,
         selectedLine: line, selectedPrice: row.price, selectedGrade: grade,
         projectedHome: snapshot.board.score.home, projectedAway: snapshot.board.score.away },

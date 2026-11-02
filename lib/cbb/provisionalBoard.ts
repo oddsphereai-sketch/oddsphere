@@ -1,9 +1,9 @@
 import { cbbImpliedProbability, reviewCbbQuote } from "./marketEvidence";
-import { gradeCbbProvisional } from "./provisionalGradePolicy";
+import { gradeCbbProvisional, CBB_PROVISIONAL_GRADE_RELEASE } from "./provisionalGradePolicy";
 import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_02_r4_supported_market_coverage" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_02_r5_exact_reference_probabilities" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Preserve every existing complete-book choice. A missing Moneyline must not
@@ -39,7 +39,7 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       reason: targetBook?"no_verified_target_quote_for_market":"no_complete_three_market_target_book", selection: null, line: null,
       price: null, probability: null, marketFairProbability: null, quoteObservedAt: null,
       pushProbability: null, expectedValue: null,
-      observedQuote:null,quoteProvider:null, professionalReferences: 0, referenceState: "unavailable" as const };
+      observedQuote:null,quoteProvider:null, professionalReferences: 0, professionalReferenceQuotes: [] as CbbQuote[], referenceState: "unavailable" as const };
     const review = reviewCbbQuote(forecast, target);
     const grade = gradeCbbProvisional({ target, references: quotes.filter(quote => quote !== target),
       forecast, asOf: forecast.asOf });
@@ -55,9 +55,10 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       probability: grade.selection === null ? null : review.probability,
       pushProbability: grade.selection === null ? null : review.pushProbability,
       expectedValue: grade.expectedValue, professionalReferences: grade.professionalReferences,
+      professionalReferenceQuotes: grade.professionalReferenceQuotes,
       referenceState: grade.referenceState };
   });
-  return { release: CBB_PROVISIONAL_BOARD_RELEASE, gameId: forecast.gameId,
+  return { release: CBB_PROVISIONAL_BOARD_RELEASE, gradeRelease: CBB_PROVISIONAL_GRADE_RELEASE, gameId: forecast.gameId,
     asOf: forecast.asOf, targetBook:boardTargetBook, score: { home: forecast.homeScore, away: forecast.awayScore,
       margin: forecast.margin, total: forecast.total, homeWinProbability: forecast.homeWinProbability },
     marketContext: { predictionReader: "unqualified" as const,

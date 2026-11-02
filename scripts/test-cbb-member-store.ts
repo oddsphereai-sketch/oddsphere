@@ -5,6 +5,7 @@ import { cbbMemberGameForReader, readCbbMemberGame, writeCbbMemberGame } from ".
 import { CBB_MEMBER_GAME_STORE_RELEASE } from "../lib/services/cbb/cbbMemberGameStore";
 import { cbbDailyEdgeResponse } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import { overlayCbbLockedMemberGames } from "../lib/services/cbb/cbbMemberReader";
+import { projectCbbSnapshotForInitialBoard } from "../lib/services/cbb/cbbMemberBoardProjection";
 
 const start="2026-11-01T19:00:00Z",before="2026-11-01T17:00:00Z";
 const team=(id:number,abbr:string,name:string,college:string)=>({id,abbreviation:abbr,full_name:name,college,name,conference_id:1});
@@ -44,6 +45,16 @@ async function main(){
       assert.deepEqual(frozen.record.memberGame.markets[key][field],first.record.memberGame.markets[key][field],"freezing cannot reinterpret the published decision");
   }
   const exact=JSON.stringify(payload);
+  const full=cbbDailyEdgeResponse("2026-11-01",[frozen.record.memberGame],before);
+  const compact=projectCbbSnapshotForInitialBoard({snapshot:full,fullReaderGameId:null});
+  assert.deepEqual(compact.deferredGameIds,["cbb-777"]);
+  for(const key of ["moneyline","first_inning","total"] as const){
+    for(const field of ["pick","priceAmerican","modelProb","line","verdict","marketPrediction"] as const)
+      assert.deepEqual(compact.snapshot.games[0].markets[key][field],full.games[0].markets[key][field],"board compaction retains exact locked decisions");
+  }
+  assert.equal(compact.snapshot.games[0].markets.first_inning.lineTrail?.length,0,"unopened charts are deferred");
+  assert.equal(projectCbbSnapshotForInitialBoard({snapshot:full,fullReaderGameId:"cbb-777"}).snapshot.games[0],full.games[0],"an opened legacy reader receives the complete original object");
+  assert.equal(JSON.stringify(payload),exact,"compaction cannot change the stored evidence");
   const legacy=structuredClone(frozen.record);legacy.release="cbb_member_game_store_2026_10_29_r1_single_leased_writer";
   payload=legacy;const legacyBytes=JSON.stringify(payload);
   const legacyResult=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-01T18:10:00Z",bookHistory},db);
@@ -56,8 +67,11 @@ async function main(){
   assert.equal(read.projected.home,78);assert.equal(read.result?.markets.first_inning.pickResult,"win");
   assert.equal(JSON.stringify(payload),exact,"settlement cannot mutate lock payload");
   let officialGameDate="2026-11-01T19:00:00+00:00";
+  const indexRow={snapshot_key:"cbb::member-game::777",storeRelease:frozen.record.release,gameId:"777",startsAt:start,
+    lockedAt:frozen.record.snapshot.lockedAt as string|null,memberId:"cbb-777",memberExternalId:"777",memberStart:start,memberLock:frozen.record.snapshot.lockedAt as string|null};
+  let missingIndex=false,fullReads=0;
   const overlayDb={from:(table:string)=>table==="lab_response_snapshots"?{
-    select:()=>({in:async()=>({data:[{snapshot_key:"cbb::member-game::777",payload:frozen.record}],error:null})})
+    select:(fields:string)=>({in:async()=>{if(fields.includes("storeRelease:"))return {data:missingIndex?[]:[indexRow],error:null};fullReads++;return {data:[{snapshot_key:"cbb::member-game::777",payload:frozen.record}],error:null};}})
   }:{select:()=>({eq:()=>({in:async()=>({data:[{external_id:777,status:"STATUS_FINAL",home_score:80,
     away_score:72,game_date:officialGameDate}],error:null})})})}} as unknown as Parameters<typeof overlayCbbLockedMemberGames>[1];
   const oldBoard=cbbDailyEdgeResponse("2026-11-01",[first.record.memberGame],before);
@@ -66,6 +80,14 @@ async function main(){
   assert.equal(lockedBoard.games[0].projected.home,78);
   assert.equal(lockedBoard.games[0].result?.markets.first_inning.pickResult,"win");
   assert.equal(oldBoard.games[0].lockedAt,null,"reader overlay must not mutate the stale board");
+  assert.equal(fullReads,1,"only locked records need full evidence reads");
+  const lock=indexRow.lockedAt;indexRow.lockedAt=null;indexRow.memberLock=null;
+  await overlayCbbLockedMemberGames(oldBoard,overlayDb);
+  assert.equal(fullReads,1,"unlocked metadata scan must not download reader histories");
+  indexRow.lockedAt=lock;indexRow.memberLock=lock;
+  missingIndex=true;
+  await assert.rejects(overlayCbbLockedMemberGames(oldBoard,overlayDb),/missing member game record/);
+  missingIndex=false;
   officialGameDate="2026-11-01T19:01:00+00:00";
   await assert.rejects(overlayCbbLockedMemberGames(oldBoard,overlayDb),/locked result identity missing/);
   officialGameDate="2026-11-01T19:00:00+00:00";
