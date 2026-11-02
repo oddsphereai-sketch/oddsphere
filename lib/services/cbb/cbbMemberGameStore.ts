@@ -72,7 +72,8 @@ export async function writeCbbMemberGame(args:{game:CbbGame;candidate:CbbProvisi
   const freezing=existing!==null&&next.lockedAt!==null;
   const evidenceAt=freezing?Date.parse(args.game.date)-60*60_000:Date.parse(args.now);
   const empty:BookDisplayFeed={release:BOOK_DISPLAY_HISTORY_RELEASE,sport:"cbb",fetchedAt:args.now,eventsAt:args.now,events:[],rows:[]};
-  const history=accumulateCbbPublishedQuotes(args.bookHistory??empty,existing?[existing.memberGame]:[],null,evidenceAt);
+  const captured=args.bookHistory?{...args.bookHistory,rows:args.bookHistory.rows.filter(row=>row.event===args.game.id)}:empty;
+  const history=accumulateCbbPublishedQuotes(captured,existing?[existing.memberGame]:[],null,evidenceAt);
   // A future lock freezes the existing published decision and evidence. It
   // must not rebuild the DTO with empty split/quote arguments at the cutoff.
   const candidate=freezing?structuredClone(existing.memberGame):adaptCbbProvisionalGame({game:args.game,snapshot:next,

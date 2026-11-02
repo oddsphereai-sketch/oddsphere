@@ -27,8 +27,8 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
     Math.abs(Date.parse(event.commence_time!) - start) <= 600_000);
   const ids = [...new Set(exact.map(event => String(event.id ?? event.eventId ?? "")).filter(Boolean))];
   const normalized = normalizeOwlsSharpBookSplits(splits, "ncaab");
-  // Owl's may repeat one event ID once per book. Distinct event IDs are ambiguous;
-  // repeated rows for the same verified fixture are not.
+  // Each book may use its own odds ID. The verified participant/time pair
+  // establishes the physical fixture; the split endpoint keeps its own ID.
   if (ids.length === 0) return { release: CBB_SPLIT_EVIDENCE_RELEASE,
     eventId: null, feedStatus: normalized.feedStatus, rows: [],
     reason: ids.length === 0 ? "exact_odds_event_unavailable" : "ambiguous_odds_event" };
