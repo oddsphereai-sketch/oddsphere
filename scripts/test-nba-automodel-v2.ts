@@ -20,7 +20,7 @@
  */
 
 import { runNbaAutoModelV2, __NBA_AUTOMODEL_V2_TEST__ } from "../lib/automodel/nba/nbaAutoModelV2";
-import { computeNbaMarketProbabilities, __NBA_DISTRIBUTION_TEST__ } from "../lib/automodel/nba/nbaDistribution";
+import { computeNbaMarketProbabilities, selectNbaSideFromProbability, __NBA_DISTRIBUTION_TEST__ } from "../lib/automodel/nba/nbaDistribution";
 import { V1_FF_BUDGET_PP100, V1_FF_WEIGHTS } from "../lib/automodel/nba/nbaFeatureWeights";
 import type {
   NbaFourFactors,
@@ -375,6 +375,20 @@ section("Test 12: calibrated margin mixture is symmetric and changes probabiliti
     "mixture recalibrates probability without changing the projected margin");
   assert(positive.total_over_prob === normal.total_over_prob,
     "margin-only calibration leaves Total probability unchanged");
+}
+
+section("Test 13: exact 50/50 probabilities retain the authored side");
+{
+  assert(selectNbaSideFromProbability({ probability: 0.500001, above: "over", below: "under", tie: "under" }) === "over",
+    "probability above 50% selects the positive side");
+  assert(selectNbaSideFromProbability({ probability: 0.499999, above: "over", below: "under", tie: "over" }) === "under",
+    "probability below 50% selects the negative side");
+  assert(selectNbaSideFromProbability({ probability: 0.5, above: "over", below: "under", tie: "under" }) === "under",
+    "exact 50/50 retains an authored Under instead of manufacturing Over");
+  assert(selectNbaSideFromProbability({ probability: 0.5, above: "home", below: "away", tie: "away" }) === "away",
+    "exact 50/50 is side-symmetric and retains an authored Away side");
+  assert(selectNbaSideFromProbability({ probability: null, above: "home", below: "away", tie: "home" }) === null,
+    "missing probability remains unavailable");
 }
 
 // ─── Final report ──────────────────────────────────────────────

@@ -357,6 +357,11 @@ export function gradeNbaMarket(input: GradeInput): GradeOutput {
   return applyNbaPostureToGrade(input, gradeNbaMarketEconomics(input));
 }
 
+/** Exact prior production posture policy for same-input r22/r23 comparison. */
+export function gradeNbaR22MarketForAudit(input: GradeInput): GradeOutput {
+  return applyNbaR22PostureToGrade(input, gradeNbaMarketEconomics(input));
+}
+
 /** Exact prior production posture policy for same-input release comparison. */
 export function gradeNbaR21MarketForAudit(input: GradeInput): GradeOutput {
   const incumbent = gradeNbaMarketEconomics(input);
@@ -393,9 +398,64 @@ function applyNbaPostureToGrade(input: GradeInput, incumbent: GradeOutput): Grad
           : "Held pressure, recent buyback or unresolved source disagreement tempers the strongest recommendation without inventing a different score."],
     };
   }
+  // A Lean remains actionable through isolated/static opposition or generic
+  // risk. It moves to Watch only when named-book opposition is corroborated
+  // by a second opposing source or explicit cross-book disagreement. This is
+  // a qualitative evidence rule, not a vote, weight, favorite label or score
+  // adjustment.
+  if (incumbent.grade === "lean" && hasCorroboratedNbaOpposition(posture)) {
+    return {
+      ...incumbent,
+      grade: "watch",
+      effectiveConfidence: Math.min(incumbent.effectiveConfidence, 52),
+      bestAngleEligible: false,
+      rationale: [...incumbent.rationale,
+        "Corroborated named-book opposition or disagreement conflicts with this Lean. The independent value remains visible, but the market evidence moves it to the Watchlist."],
+    };
+  }
   // Promotion is deliberately restricted to a causal score consequence that
   // supports the same final side. Static market level, a held quote, public
   // pressure, or duplicated follower evidence cannot manufacture Best Angle.
+  if (incumbent.grade === "lean" && !opposed && posture.scoreEffectApplied === true &&
+      posture.consequence === "correct" && posture.supportingSources.length > 0) {
+    return {
+      ...incumbent,
+      grade: "best_angle",
+      bestAngleEligible: true,
+      rationale: [...incumbent.rationale,
+        "A causal named-book move supports the same final forecast after its score consequence is applied, with no opposing or unresolved sharp evidence."],
+    };
+  }
+  return incumbent;
+}
+
+function hasCorroboratedNbaOpposition(posture: NbaNamedBookPosture): boolean {
+  if (posture.opposingSources.length === 0) return false;
+  if (new Set(posture.opposingSources).size >= 2) return true;
+  const distinctNamedEvidence = new Set([
+    ...posture.opposingSources,
+    ...posture.conflictingSources,
+  ]);
+  if (distinctNamedEvidence.size >= 2) return true;
+  return (posture.convictionRiskSources ?? []).some((risk) =>
+    risk === "named_book_disagreement" || risk.endsWith(":named_book_disagreement"));
+}
+
+function applyNbaR22PostureToGrade(input: GradeInput, incumbent: GradeOutput): GradeOutput {
+  const posture = input.namedBookPosture;
+  if (posture?.market !== input.market || posture?.pickedSide !== input.pick) return incumbent;
+  const opposed = posture.opposingSources.length > 0 || posture.conflictingSources.length > 0 ||
+    Boolean(posture.convictionRiskSources?.length);
+  if (incumbent.grade === "best_angle" && opposed) {
+    return {
+      ...incumbent,
+      grade: "lean",
+      bestAngleEligible: false,
+      rationale: [...incumbent.rationale,
+        posture.opposingSources.length ? "Named-book economic movement opposes this pick. Value remains playable, but the market disagreement keeps it below Best Angle."
+          : "Held pressure, recent buyback or unresolved source disagreement tempers the strongest recommendation without inventing a different score."],
+    };
+  }
   if (incumbent.grade === "lean" && !opposed && posture.scoreEffectApplied === true &&
       posture.consequence === "correct" && posture.supportingSources.length > 0) {
     return {

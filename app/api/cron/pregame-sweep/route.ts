@@ -309,9 +309,9 @@ async function applyLocks(
         .in("market", [...NBA_PREDICTION_RECORD_LOCK_MARKETS])
         .is("locked_at", null)
         .select("id, market");
-      if (nbaLockError || (lockedRows ?? []).length !== 3) {
+      if (nbaLockError || (lockedRows ?? []).length !== NBA_PREDICTION_RECORD_LOCK_MARKETS.length) {
         errors.push(
-          `game_id=${g.game_id}: NBA official-market lock failed: ${nbaLockError?.message ?? `updated ${(lockedRows ?? []).length}/3 rows`}`,
+          `game_id=${g.game_id}: NBA official-market lock failed: ${nbaLockError?.message ?? `updated ${(lockedRows ?? []).length}/${NBA_PREDICTION_RECORD_LOCK_MARKETS.length} rows`}`,
         );
         continue;
       }

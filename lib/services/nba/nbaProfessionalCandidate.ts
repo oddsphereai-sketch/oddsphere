@@ -1,5 +1,5 @@
 import { buildNbaMarketConsensus, type NbaBookLine } from "../../automodel/nba/nbaMarketConsensus";
-import { computeNbaMarketProbabilities } from "../../automodel/nba/nbaDistribution";
+import { computeNbaMarketProbabilities, selectNbaSideFromProbability } from "../../automodel/nba/nbaDistribution";
 import {
   scoreNbaPortableModel,
   type NbaPortableFeatureRow,
@@ -196,13 +196,24 @@ export function buildNbaProfessionalCandidate(args: {
       : independent.total - consensus.totalLine >= 0 ? "over" as const : "under" as const,
   };
   const picks = {
-    moneyline: final.marginHome >= 0 ? "home" as const : "away" as const,
-    spread: probabilities.spread_home_cover_prob === null
-      ? null
-      : probabilities.spread_home_cover_prob >= 0.5 ? "home" as const : "away" as const,
-    total: probabilities.total_over_prob === null
-      ? null
-      : probabilities.total_over_prob >= 0.5 ? "over" as const : "under" as const,
+    moneyline: selectNbaSideFromProbability({
+      probability: probabilities.ml_home_win_prob,
+      above: "home" as const,
+      below: "away" as const,
+      tie: independentPicks.moneyline,
+    })!,
+    spread: selectNbaSideFromProbability({
+      probability: probabilities.spread_home_cover_prob,
+      above: "home" as const,
+      below: "away" as const,
+      tie: independentPicks.spread,
+    }),
+    total: selectNbaSideFromProbability({
+      probability: probabilities.total_over_prob,
+      above: "over" as const,
+      below: "under" as const,
+      tie: independentPicks.total,
+    }),
   };
   return {
     modelRelease: args.artifact.release,
