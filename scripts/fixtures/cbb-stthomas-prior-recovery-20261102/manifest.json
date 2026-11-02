@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-11-02T18:29:56.437Z",
+  "status": "Auditpackageonly;productionrequiresnewinput/modelreleaseandnormalpublicationgates",
+  "sourceModelRelease": "cbb_candidate_2026_10_28_r2_score_precision",
+  "config": {
+    "id": "score_r1_p0.25_c0.8",
+    "ridge": 1,
+    "paceRidge": 0.25,
+    "priorCarry": 0.8,
+    "recencyDays": 90
+  },
+  "uncertaintySha256": "5f878e2fcd8569fd108b15c47e6402d83425481c52eaaa339d980407eda4d159",
+  "scoreCorrectionSha256": "ece8748dded37f32d025e271e1aeb21df7ffba5a300ced7e3d18f7421894eb83",
+  "originalNormalizedHistory": {
+    "games": 22777,
+    "sha256": "d2bde4460339e83a21e04864bc8168ec2236f25c21663288f8b2124ce4064e48",
+    "matchesOriginalPublishedHash": true
+  },
+  "correctedNormalizedHistory": {
+    "sha256": "1b097a4cde620c583291ce56cd335be9fea968d908a8a565bda63cfa71ca4bbf",
+    "changedFields": 123,
+    "onlyField": "neutral",
+    "onlyInstitution": 332
+  },
+  "correctedFrozenPrior": {
+    "sha256": "553acdc90ea2d03228420e2579fcfb438c9589d96ae48e317be076bf0d75476f",
+    "teams": 367,
+    "season": 2025,
+    "asOf": "2026-07-01T00:00:00.000Z",
+    "retrievalClock": "Historicalvenuesrecovered2026-11-02;neverbackdatefetchclocks"
+  },
+  "sourceRecovery": {
+    "BDLRequests": 232,
+    "BDLMinObservedRemaining": 423,
+    "BDLConcurrency": 2,
+    "ESPNDayReceipts": 166,
+    "sourceBodies": 5
+  },
+  "files": [
+    {
+      "file": "baseline-parity-proof.json",
+      "bytes": 848,
+      "sha256": "3218618d4b5903bfad4cf5228ac41f904349f8c5ff12db0c54fabd806effa177"
+    },
+    {
+      "file": "corrected-frozen-prior-2025.json",
+      "bytes": 51955,
+      "sha256": "553acdc90ea2d03228420e2579fcfb438c9589d96ae48e317be076bf0d75476f"
+    },
+    {
+      "file": "espn-venue-receipts.json.gz",
+      "bytes": 78883,
+      "sha256": "eefa61b7f6632039c08e4b7a8ca3b46b150a0cfa717fba5649a94fc275c70aab"
+    },
+    {
+      "file": "original-normalized-history.json.gz",
+      "bytes": 1741597,
+      "sha256": "afdacc82e3bdef9233631be6cfb2a6f1d6819498ee8d415de5ac6eec2d347497"
+    },
+    {
+      "file": "stthomas-venue-patch.json",
+      "bytes": 81528,
+      "sha256": "427377a5eb62afec53713f72fa0318e0d8bcfbb2e4bb98b2e846ce9f2c0e686a"
+    },
+    {
+      "file": "rebuild-and-verify.mjs",
+      "bytes": 3608,
+      "sha256": "2bc34658d9302f4dcd5690ee77672bb358e7fd4db9246f38d7f6cd24d0b290dd"
+    }
+  ],
+  "releasedFitterCode": {
+    "lib/cbb/model.ts": "c8bbe6d7499b8dd3d7a1decc6ee5d2a812d1d9f0511e4e35770df6521032a232",
+    "lib/cbb/scoreResearch.ts": "3d42e3b510b8e561dfb4d1aeb904963751b4ca28d8e22ce26d1156bf11eba663"
+  }
+}

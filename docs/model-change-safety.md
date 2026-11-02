@@ -1,5 +1,20 @@
 # Model change safety protocol
 
+## Owner-directed CBB historical venue repair — November 2
+
+The owner requested resolution of St. Thomas's missing genuine historical
+inputs. Candidate score r3/board r6/publisher r11 changes only 123 explicitly
+verified historical venue flags and the resulting opponent-adjusted prior,
+using the exact recovered original dataset, fitter and fixed coefficients.
+Tracking r4 retains each frozen board's own model release, including legacy
+r2 locks. Current same-input replay reports zero promotions/demotions and one
+restored three-market game. Exact source reconstruction, old-runtime parity,
+writer immutability and reader precedence, focused/full tests, protected
+fresh-main publication and post-deploy release/coverage/lock proof remain
+required. Evidence: `docs/model-audits/2026-11-02-cbb-stthomas-prior-repair.md`.
+The separate market-score challenger failed its additional diagnostic and
+receives no production authority.
+
 ## Owner-directed NBA neutral-tie and corroborated-opposition repair — November 2
 
 The owner directed immediate repair of two defects independently identified in

@@ -1,5 +1,30 @@
 # Current production model releases and qualified research candidates
 
+## CBB November 2 verified historical venue prior
+
+Score `cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior` restores
+St. Thomas332 from123 genuine historical venue flags, using the exact released
+fitter/configuration, uncertainty and correction coefficients. The recovered
+22777-game original dataset and frozen366-team prior reproduce exactly; the
+corrected artifact contains367 real teams. Archived r2 remains frozen and a
+single mathematical engine owns both reproductions. Production uses only
+currentScoreRuntime and the corrected artifact.
+
+Board r6 stamps the actual score release, publisher r11 retains the existing
+`prediction_pipeline:cbb` lease, and tracking r4 resolves each immutable board's
+own model and grade lineage. Old unstamped known boards remain r2; unknown
+lineage fails closed. Grade policy r2, store schema r2, reader evidence r5,
+book selection, cadence, provider budget and stakes remain unchanged. Existing
+locks and the original owner-excluded App record remain exact.
+
+Same-input18:42Z replay preserves all339 comparable market grades (0 actionable
+promotions/demotions) and adds the three priced St. Thomas–Presbyterian markets.
+Historical1070-game replay improves Spread/Total counts and aggregate score
+errors slightly, but loses two winners; later winner calibration also worsens
+slightly. This is a verified source-input correction, not universal accuracy
+or a qualified market-driven score adjustment. Evidence, reconstruction and
+rollback: `docs/model-audits/2026-11-02-cbb-stthomas-prior-repair.md`.
+
 ## CBB canonical snapshot ownership — November 2 operational repair
 
 `cbb_snapshot_publication_2026_11_02_r1_pipeline_only` prevents the generic

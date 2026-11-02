@@ -3,7 +3,7 @@ import type { DailyEdgeGameDto } from "@/app/lab/lib/labTypes";
 import { CbbBallDontLieClient } from "@/lib/cbb/ballDontLie";
 import { cbbCanonicalStatus } from "@/lib/cbb/canonicalFixture";
 import { matchCbbProviderVenue as matchCbbVenue } from "@/lib/cbb/providerVenueIdentity";
-import { forecastCbbCandidateR2Batch } from "@/lib/cbb/candidateR2Runtime";
+import { forecastCbbCurrentBatch } from "@/lib/cbb/currentScoreRuntime";
 import { normalizeCbbOwlsCurrent } from "@/lib/cbb/owlsMarketEvidence";
 import { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildCbbProvisionalBoard, chooseCbbSupportedTargetBook } from "@/lib/cbb/provisionalBoard";
@@ -25,7 +25,7 @@ import { applySharpApiCurrentSplitOverlay } from "@/lib/providers/real_api/sharp
 import { advanceCbbProvisionalSnapshot } from "@/lib/cbb/provisionalLifecycle";
 import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r10_public_split_continuity" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_02_r11_verified_venue_prior" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -108,7 +108,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     Date.parse(asOf)<Date.parse(game.date)-60*60_000);
   const contextDays=[...new Set(forecastGames.map(game=>computeSlateDate("cbb",game.date)))];
   const dayEvents=new Map(await Promise.all(contextDays.map(async date=>[date,await fetchCbbDayEvents(date,args.fetcher)] as const)));
-  const forecasts=forecastCbbCandidateR2Batch(forecastGames.map(game=>{
+  const forecasts=forecastCbbCurrentBatch(forecastGames.map(game=>{
     const evidence=dayEvents.get(computeSlateDate("cbb",game.date));
     const venue=evidence?matchCbbVenue(game,evidence.events,evidence.fetchedAt):null;
     return {id:game.id,date:game.date,season:game.season,homeId:game.home_team.id,
