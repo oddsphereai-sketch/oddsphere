@@ -24,8 +24,10 @@ size threshold beyond numerical solver tolerance:
   leg support the selected side, and that exact offered contract's probability
   improves from the independent forecast after the real market consequence.
 - A complete current executable pair, matching selected side/line/price/source
-  clock, positively reobserved in the current successful batch after the source
-  observation. A last price-change timestamp alone is not quote availability.
+  clock, positively reobserved after the source's actual latest economic move.
+  Each offer retains its own current response-page receipt, before later pages
+  and opening-history retrieval. A last price-change timestamp alone is not quote
+  availability; a later unchanged source quote does not reset the economic move.
 - Existing exact-comparator reliability and source-clock/target-exclusion rules.
   Missing data, stale evidence and wrong-event/line/law receipts cannot be waived.
 - Positive executable EV, positive comparator edge and positive score cushion.
@@ -55,16 +57,18 @@ with a market that supports its forecast. It does not establish empirical calibr
 Each direct pass can promote only one tier from the incoming current grade.
 Unresolved adverse buybacks and disagreements still temper Best Angle to Lean;
 new verified picked-side money pressure met by held quotes can do so too.
-Repeated production runs rebuild grades from the same base and do not ratchet
-promotions. Every other probability, score, side, quote, stake and source field
+Repeated production runs rebuild grades from the same base; an ephemeral
+same-evidence marker also prevents a standalone repeat from ratcheting promotions.
+The marker is never persisted in an evaluated tuple. Every other probability, score, side, quote, stake and source field
 is unchanged by the direct grading step.
 
 ## Safety and verification contract
 
 Writer105 / runtime15 / model49 / calibration48 / decision57 / policy57 / member54 /
 innovation3 / posture3 / fixture70 / snapshot62 use the `2026_11_02` market-conviction
-suffixes in exported constants. Collector30, schema r6, independent heads and
-market transport equations remain unchanged. Exact r61/fixture69/member53/decision56
+suffixes in exported constants. Collector31 records exact quote availability and
+regular-slate source r5 records page and current-batch receipt clocks. Schema r6,
+independent heads and market transport equations remain unchanged. Exact r61/fixture69/member53/decision56
 is an accepted reader predecessor. Preserve every existing lock and historical
 failed-slot card, the one `prediction_pipeline:nfl` writer/lease, provider budget,
 schedule and tracking ownership. No UI copy, layout, extra writer or production shadow.

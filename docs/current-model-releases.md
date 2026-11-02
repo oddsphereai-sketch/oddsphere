@@ -17,7 +17,10 @@ The direct step recognizes a qualified already-applied same-market consequence
 with Watchlist→Lean and Lean→Best Angle actions, while preserving price/forecast
 economics and opposing-context demotions. No second probability/score update,
 No Play promotion, provider/writer/lease/schedule change or historical rewrite.
-Collector30, schema r6 and independent/transport heads remain unchanged.
+Collector31 (`nfl_forward_evidence_collector_2026_11_02_r31_exact_quote_availability`)
+and regular-slate source r5 (`balldontlie_nfl_regular_slate_2026_11_02_r5_current_quote_receipt`)
+retain each executable offer's actual current-response page availability before
+later pages/opening retrieval. Schema r6 and independent/transport heads remain unchanged.
 The exact preceding r61/r69/member53/decision56 reader tuple remains accepted.
 Policy, bounds, board impact and publication status:
 `docs/model-audits/2026-11-02-nfl-symmetric-market-grades.md`.
