@@ -1,3 +1,4 @@
+import "./test-ucl-current-native-inputs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {

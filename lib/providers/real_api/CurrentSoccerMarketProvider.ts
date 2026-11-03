@@ -10,10 +10,10 @@ import {
   type OfficialSoccerMarket,
 } from "./_soccerMarketNormalizer";
 import { eplClubNamesMatch, uclClubNamesMatch } from "./soccerClubIdentity";
-import type { EplSharpFixtureMarket, EplSharpOddsRecord } from "./SharpApiEplMarketProvider";
+import type { EplSharpFixtureMarket, EplSharpOddsRecord, SoccerFixtureEventIdentity } from "./SharpApiEplMarketProvider";
 
 export const CURRENT_SOCCER_MARKET_PROVIDER_RELEASE =
-  "soccer_current_market_provider_2026_10_31_r2_complete_official_markets" as const;
+  "soccer_current_market_provider_2026_11_03_r3_ucl_attested_native_competition" as const;
 
 export const THE_ODDS_API_SOCCER_CREDIT_RESERVE = 1_000 as const;
 export const THE_ODDS_API_SOCCER_MAX_PAID_REQUESTS_PER_CYCLE = 20 as const;
@@ -189,8 +189,23 @@ function normalizeOwlsFixture(
   nowMs: number,
 ): { eventId: string | null; rows: EplSharpOddsRecord[] } {
   const config = COMPETITION[competition];
-  const matched = owlsEvents(response).filter((event) =>
-    config.owlsLeague(event.league ?? "") && fixtureMatches(event, fixture, config.teamsMatch));
+  const events = owlsEvents(response);
+  const sourceEventId = (event: RawOwlsOddsEvent) => text(event.eventId) ??
+    (event.id === null || event.id === undefined ? null : String(event.id));
+  // DraftKings omits league on the current soccer feed. A positively labeled
+  // same-native-event witness must first establish this exact UCL fixture.
+  // Teams alone cannot transfer competition authority, nor can an explicit
+  // wrong league be overridden. Other competitions retain their prior gate.
+  const witnesses = competition === "ucl" ? new Set(events.filter(event =>
+    config.owlsLeague(event.league ?? "") && (!event.sport || token(event.sport) === "soccer") &&
+    fixtureMatches(event, fixture, config.teamsMatch)).map(sourceEventId).filter((id): id is string => id !== null)) : new Set<string>();
+  const matched = events.filter(event => {
+    const nativeId = sourceEventId(event);
+    return fixtureMatches(event, fixture, config.teamsMatch) &&
+      (config.owlsLeague(event.league ?? "") || competition === "ucl" &&
+        !text(event.league) && token(event.sport) === "soccer" && nativeId !== null && witnesses.has(nativeId) &&
+        event.bookmakers?.every(book => token(book.key ?? book.title) === "draftkings"));
+  });
   const rows: EplSharpOddsRecord[] = [];
   for (const event of matched) {
     const eventId = text(event.eventId) ?? (event.id === null || event.id === undefined ? null : String(event.id));
@@ -199,7 +214,8 @@ function normalizeOwlsFixture(
     for (const bookmaker of event.bookmakers ?? []) {
       const sportsbook = token(bookmaker.key ?? bookmaker.title);
       const observedAt = iso(bookmaker.last_update);
-      if (!sportsbook || !observedAt || nowMs - Date.parse(observedAt) > PROVIDER_TIMESTAMP_MAX_AGE_MS) continue;
+      if (!sportsbook || !observedAt || nowMs - Date.parse(observedAt) > PROVIDER_TIMESTAMP_MAX_AGE_MS ||
+        competition === "ucl" && Date.parse(observedAt) > nowMs) continue;
       for (const rawMarket of bookmaker.markets ?? []) {
         const key = token(rawMarket.key);
         const market: OfficialSoccerMarket | null = key === "h2h" ? "match_result"
@@ -326,6 +342,20 @@ function normalizeTheOddsFixture(
     }
   }
   return rows;
+}
+
+/** One native owner per provider/book/market. Duplicate ownership is quarantined,
+ * not hidden by selecting whichever catalog row happened to arrive last. */
+export function soccerFixtureEventIdentities(rows: readonly EplSharpOddsRecord[]): SoccerFixtureEventIdentity[] {
+  const groups = new Map<string, SoccerFixtureEventIdentity[]>();
+  for (const row of rows) {
+    if (row.provider !== "owls" && row.provider !== "the_odds_api" || !row.provider_event_id || !row.sportsbook) continue;
+    const identity = {provider:row.provider,providerEventId:row.provider_event_id,sportsbook:token(row.sportsbook),market:row.market};
+    const key = `${identity.provider}|${identity.sportsbook}|${identity.market}`;
+    groups.set(key,[...(groups.get(key)??[]),identity]);
+  }
+  return [...groups.values()].flatMap(group => new Set(group.map(row=>row.providerEventId)).size===1?[group[0]]:[])
+    .sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
 
 function headerInteger(headers: Headers, name: string): number | null {
@@ -473,7 +503,11 @@ export class CurrentSoccerMarketProvider {
       }
     }
     const eventId = owls.eventId ?? text(theOddsEvent?.id);
-    return { eventId, odds: rows, splits: [], splitsState: "unavailable" };
+    return { eventId, odds: rows, splits: [], splitsState: "unavailable",
+      ...(this.options.competition === "ucl" ? {fixtureEventIdentities: soccerFixtureEventIdentities(rows.filter(row =>
+        row.provider === "owls" || row.provider === "the_odds_api" && theOddsEvent !== null &&
+        fixtureMatches(theOddsEvent, fixture, this.config.teamsMatch)))} : {}),
+    };
   }
 }
 

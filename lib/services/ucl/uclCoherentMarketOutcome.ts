@@ -1,3 +1,4 @@
+import type {SoccerFixtureEventIdentity} from "@/lib/providers/real_api/SharpApiEplMarketProvider";
 import type { EplCoherentMarketOutcome } from "@/lib/services/epl/eplCoherentMarketOutcome";
 import type { EplForwardBookVector } from "@/lib/services/epl/eplForwardEvidenceCapture";
 import type { BdlUclOdds } from "@/lib/providers/real_api/BallDontLieUclProvider";
@@ -12,7 +13,7 @@ import { impliedEplGoalsMarketDistribution } from "@/lib/services/epl/eplDerived
 import { logPoolUclResult, reconcileUclMeanPreserving } from "./uclEloConsensus";
 
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
-  "ucl_coherent_market_outcome_2026_10_28_r6_provider_attributed_price_vectors" as const;
+  "ucl_coherent_market_outcome_2026_11_03_r7_attested_native_book_identity" as const;
 
 type Side = "home" | "draw" | "away";
 type ResultVector = Record<Side, number>;
@@ -80,10 +81,19 @@ function binaryVector(
   return Object.fromEntries(sides.map((side) => [side, values[side]! / total])) as Record<BinarySide, number>;
 }
 
+function fixtureOwnsVector(vector:EplForwardBookVector,input:{providerEventId:string|null;fixtureEventIdentities?:SoccerFixtureEventIdentity[]}) {
+  if (!vector.providerEventId) return false;
+  if (input.fixtureEventIdentities !== undefined) return input.fixtureEventIdentities.some(row =>
+    row.provider===vector.provider && row.providerEventId===vector.providerEventId &&
+    row.sportsbook===vector.canonicalBook && row.market===vector.market);
+  return input.providerEventId!==null && vector.providerEventId===input.providerEventId;
+}
+
 function binaryConsensus(input: {
   vectors: EplForwardBookVector[];
   market: BinaryMarket;
   excludedBook: string | null;
+  fixtureEventIdentities?: SoccerFixtureEventIdentity[];
   providerEventId: string | null;
   decisionAt: number;
   kickoff: number;
@@ -104,7 +114,7 @@ function binaryConsensus(input: {
     else if (!vector.canonicalBook || vector.canonicalBook === input.excludedBook) reason = "evaluated_canonical_book_excluded";
     else if (EXCLUDED_MARKET_BOOKS.has(vector.canonicalBook)) reason = "prediction_market_excluded";
     else if (vector.sourceClass !== "named_originator" && vector.sourceClass !== "named_retail" && vector.sourceClass !== "named_other") reason = "source_not_named_book";
-    else if (!input.providerEventId || vector.providerEventId !== input.providerEventId) reason = "provider_event_identity_mismatch";
+    else if (!fixtureOwnsVector(vector,input)) reason = "provider_event_identity_mismatch";
     else if (vector.overround < 0.98 || vector.overround > 1.25) reason = "binary_hold_out_of_range";
     else if (input.market === "total" && vector.line !== 2.5) reason = "total_line_not_2_5";
     const probabilities = reason ? null : binaryVector(vector, input.market);
@@ -205,6 +215,7 @@ function binaryMovement(input: {
 function vectorIneligibleReason(input: {
   vector: EplForwardBookVector;
   excludedBook: string | null;
+  fixtureEventIdentities?: SoccerFixtureEventIdentity[];
   providerEventId: string | null;
   decisionAt: number;
   kickoff: number;
@@ -214,7 +225,7 @@ function vectorIneligibleReason(input: {
   if (!vector.canonicalBook || vector.canonicalBook === input.excludedBook) return "evaluated_canonical_book_excluded";
   if (EXCLUDED_MARKET_BOOKS.has(vector.canonicalBook)) return "prediction_market_excluded";
   if (vector.sourceClass !== "named_originator" && vector.sourceClass !== "named_retail" && vector.sourceClass !== "named_other") return "source_not_named_book";
-  if (!input.providerEventId || vector.providerEventId !== input.providerEventId) return "provider_event_identity_mismatch";
+  if (!fixtureOwnsVector(vector,input)) return "provider_event_identity_mismatch";
   if (vector.overround < 0.98 || vector.overround > 1.25) return "three_way_hold_out_of_range";
   if (!vectorResult(vector)) return "complete_three_way_probability_missing";
   const timestamps = vector.outcomes.map((outcome) => Date.parse(outcome.fetchedAt ?? ""));
@@ -262,6 +273,7 @@ export function deriveUclCoherentMarketOutcome(input: {
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;
   evaluatedBttsCanonicalBook: string | null;
+  fixtureEventIdentities?: SoccerFixtureEventIdentity[];
   providerEventId: string | null;
   decisionAt: string;
   kickoff: string;
@@ -275,7 +287,7 @@ export function deriveUclCoherentMarketOutcome(input: {
   const eligibleByBook = new Map<string, EplForwardBookVector>();
   if (Number.isFinite(decisionAt) && Number.isFinite(kickoff) && decisionAt < kickoff) {
     for (const vector of input.matchResultVectors ?? []) {
-      const reason = vectorIneligibleReason({ vector, excludedBook: input.evaluatedMatchResultCanonicalBook, providerEventId: input.providerEventId, decisionAt, kickoff });
+      const reason = vectorIneligibleReason({ vector, excludedBook: input.evaluatedMatchResultCanonicalBook, providerEventId: input.providerEventId, fixtureEventIdentities: input.fixtureEventIdentities, decisionAt, kickoff });
       if (reason) {
         inactiveVectors.push({ identity: vector.identity, reason });
         continue;
@@ -310,6 +322,7 @@ export function deriveUclCoherentMarketOutcome(input: {
     market: "total",
     excludedBook: input.evaluatedTotalCanonicalBook,
     providerEventId: input.providerEventId,
+    fixtureEventIdentities: input.fixtureEventIdentities,
     decisionAt,
     kickoff,
     inactiveVectors,
@@ -319,6 +332,7 @@ export function deriveUclCoherentMarketOutcome(input: {
     market: "btts",
     excludedBook: input.evaluatedBttsCanonicalBook,
     providerEventId: input.providerEventId,
+    fixtureEventIdentities: input.fixtureEventIdentities,
     decisionAt,
     kickoff,
     inactiveVectors,
