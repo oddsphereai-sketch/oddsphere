@@ -72,6 +72,17 @@ async function main(){
  const referenceBook=publicMarketRecordedReferenceBook(reference)!;
  assert.equal(referenceBook.sportsbook,"draftkings");assert.equal(referenceBook.points.at(-1)?.[0],dkLast);
  assert.equal(referenceBook.opening,undefined,"first retained quote is not a provider opener");
+ const otherLineFeed={...referenceFeed,rows:referenceFeed.rows.map(row=>row.book!=="draftkings"?row:{...row,
+  quotes:row.quotes.map(([at,price])=>[at,price,row.side==="away"?20.5:-20.5] as [number,number,number])})};
+ const otherLine=mergeCbbReaderEvidence(referenceBoard,otherLineFeed,[],referenceTime).games[0].markets.first_inning;
+ assert.equal(otherLine.currentPriceSportsbook,"fanduel");
+ assert.equal(otherLine.line,21.5,"the evaluated point line is untouched");
+ assert.deepEqual(otherLine.recordedReferenceTrail?.map(s=>s.line),[20.5,20.5],"a coherent second source retains its own point line");
+ const otherLineBook=publicMarketRecordedReferenceBook(otherLine)!;
+ assert.equal(otherLineBook.line,20.5,"the separate graph must label the source's actual contract");
+ assert.deepEqual(otherLineBook.points.map(p=>p[0]),[dkFirst,dkLast]);
+ assert.equal(otherLineBook.marketHistory?.at(-1)?.[2],20.5);
+ assert.equal(publicMarketRecordedReferenceBook({...otherLine,currentPriceObservedAt:iso(dkLast-1)}),null,"an older evaluated quote cannot borrow later reference receipts");
  assert.equal(publicMarketRecordedReferenceBook({...reference,recordedReferenceTrail:[...reference.recordedReferenceTrail!,{...stop(21.5,-110,fdCurrent)}]}),null,"books cannot be spliced");
  assert.equal(mergeCbbReaderEvidence(referenceBoard,{...referenceFeed,rows:referenceFeed.rows.filter(r=>r.side!=="home")},[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail,undefined,"unpaired reference is rejected");
  const twoCurrent=structuredClone(referenceGame);twoCurrent.markets.first_inning.lineTrail=[];

@@ -2,7 +2,7 @@ import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopD
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type { DraftKingsNetworkSplitFeed } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_03_r9_separate_recorded_reference" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_03_r10_separate_source_line_history" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
   provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
 export type CbbCapturedPublicSplitRow=SplitRow;
@@ -36,7 +36,7 @@ function mergeTrail(history:OddsTrailStopDto[],current:OddsTrailStopDto[]):OddsT
 /** A historical source may explain movement when the evaluated book has just
  * one receipt. It is never an executable/current quote or a sharp reference. */
 function recordedReference(feed:BookDisplayFeed|null,game:DailyEdgeGameDto,kind:string,side:string,
-  currentBook:string|null|undefined,currentLine:number|null,cutoff:number,now:number):OddsTrailStopDto[]|null{
+  currentBook:string|null|undefined,cutoff:number,now:number):OddsTrailStopDto[]|null{
   if(!feed||!Number.isFinite(cutoff))return null;
   const candidates: {entry:BookDisplayEntry;trail:OddsTrailStopDto[];latest:number}[]=[];
   for(const entry of feed.rows){
@@ -52,13 +52,13 @@ function recordedReference(feed:BookDisplayFeed|null,game:DailyEdgeGameDto,kind:
     if(new Set(times).size<2||times.some(time=>(entry.ambiguousTimes??[]).includes(time))||
       entry.ambiguousOpening&&trail.some(stop=>stop.source==="provider_opening"))continue;
     const terminal=trail.at(-1)!,latest=Date.parse(terminal.observedAt??"");
-    if(terminal.line!==currentLine||latest>now||now-latest>3*60*60_000||
+    if(latest>now||now-latest>3*60*60_000||
       trail.some(stop=>stop.line===null&&kind!=="moneyline"))continue;
     const opposite=matchingHistory(feed,game,kind,opposing(side),entry.book);
     if(!opposite||opposite.ambiguousHistory||(opposite.ambiguousTimes??[]).includes(latest)||
       new Set(opposite.quotes.filter(row=>row[0]===latest).map(row=>JSON.stringify([row[1],row[2]]))).size>1)continue;
     const sameEpoch=stops(opposite,cutoff).filter(stop=>Date.parse(stop.observedAt??"")===latest);
-    const otherLine=kind==="spread"&&currentLine!==null?-currentLine:currentLine;
+    const otherLine=kind==="spread"&&terminal.line!==null?-terminal.line:terminal.line;
     if(sameEpoch.length!==1||sameEpoch[0].line!==otherLine)continue;
     const implied=(american:number)=>american>0?100/(100+american):-american/(100-american);
     const hold=implied(terminal.american)+implied(sameEpoch[0].american);
@@ -275,7 +275,7 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
           Date.parse(game.gameStartAt??"")-now>60*60_000&&
           new Set([...(market.lineTrail??[]),...(market.oddsTrail??[])]
             .filter(stop=>stop.sportsbook===book).map(stop=>stop.observedAt)).size<2){
-          market.recordedReferenceTrail=recordedReference(feed,game,kind,side,book,market.line,cutoff,now)??undefined;
+          market.recordedReferenceTrail=recordedReference(feed,game,kind,side,book,cutoff,now)??undefined;
         }
       }
       markets[key]=market;
