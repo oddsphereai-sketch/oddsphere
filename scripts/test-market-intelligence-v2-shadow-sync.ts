@@ -32,7 +32,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_02_r23_cbb_draftkings_fallback",
+    "market_intelligence_v2_capture_2026_11_03_r24_cbb_verified_institution_aliases",
 );
 
 {
@@ -56,6 +56,9 @@ check(
   check("CBB duplicated candidate identity is rejected rather than guessed",
     matchCbbSourceGame([game, { ...game, id: 2, externalId: 999 }], "Villanova", "Notre Dame", sourceStart) === null);
   for (const [awaySource,homeSource,awayInstitution,homeInstitution] of [
+    ["IPFW","Duquesne","Purdue Fort Wayne","Duquesne"],
+    ["Purdue FW","Duquesne","Purdue Fort Wayne","Duquesne"],
+    ["S Dakota St","Kansas St","South Dakota State","Kansas State"],
     ["Weber St","Oregon St","Weber State","Oregon State"],
     ["Montana St","Colorado St","Montana State","Colorado State"],
     ["C Connecticut","Temple","Central Connecticut","Temple"],
