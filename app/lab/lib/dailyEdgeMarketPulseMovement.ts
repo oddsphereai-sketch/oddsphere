@@ -9,7 +9,8 @@ export type PointLineMarketPulseMovement = {
   currentLine: number;
   sportsbook: string;
   coherentTrail: true;
-  openingLabel: "Opening";
+  openingLabel: "Opening" | "First recorded";
+  verifiedDirection: "support" | "resistance";
 };
 
 export type FirstInningMarketPulseMovement = {
@@ -89,25 +90,43 @@ function sameTrackedLine(first: number | null, current: number | null): boolean 
   return Math.abs(first - current) < 0.001;
 }
 
+function selectedPointLineDirection(market: MarketEdgeDto, first: number, current: number): "support" | "resistance" | null {
+  const pick = market.pick?.trim() ?? "";
+  if (market.line === null || !sameTrackedLine(market.line, current) || sameTrackedLine(first, current)) return null;
+  if (/^over\b/i.test(pick)) return current > first ? "support" : "resistance";
+  if (/^under\b/i.test(pick)) return current < first ? "support" : "resistance";
+  const pickedSpread = pick.match(/(?:^|\s)([+-]\d+(?:\.\d+)?)(?:\s|$)/);
+  if (!pickedSpread || !sameTrackedLine(Number(pickedSpread[1]), current)) return null;
+  return current < first ? "support" : "resistance";
+}
+
+function unambiguousChronologicalLineTrail(stops: OddsTrailStopDto[]): boolean {
+  const byTime = new Map<number, string>();
+  for (const [index, stop] of stops.entries()) {
+    const at = Date.parse(stop.observedAt ?? "");
+    if (!Number.isFinite(at) || index > 0 && at < Date.parse(stops[index - 1]!.observedAt!)) return false;
+    const tuple = `${stop.line}:${stop.american}`;
+    if (byTime.has(at) && byTime.get(at) !== tuple) return false;
+    byTime.set(at, tuple);
+  }
+  return true;
+}
+
 /**
  * Resolve the dedicated same-book point-line trail used by Total/Spread
  * Market Pulse. The exact-price trail remains separate display context; it
  * must not erase a verified move in the selected number (+3.5 to +4.5).
  *
- * The canonical market read and visible endpoints must agree exactly.
- * Otherwise this fails closed and the reader falls back to price movement.
+ * A writer-time canonical direction must agree with the visible endpoints.
+ * Open CBB cards may have no professional canonical read even when a current
+ * same-book retail line trail is complete. In that case the visible selected
+ * side and exact current book/line/price establish direction for the pulse
+ * only; the retail trail never becomes professional model evidence.
  */
 export function resolvePointLineMarketPulseMovement(
   market: MarketEdgeDto,
 ): PointLineMarketPulseMovement | null {
   const canonical = market.marketReadV2?.movement;
-  if (
-    !canonical ||
-    (canonical.directionRelativeToPick !== "support" &&
-      canonical.directionRelativeToPick !== "resistance")
-  ) {
-    return null;
-  }
 
   const groups = new Map<string, OddsTrailStopDto[]>();
   for (const stop of market.lineTrail ?? []) {
@@ -128,6 +147,7 @@ export function resolvePointLineMarketPulseMovement(
     .filter(
       (group) =>
         group.length >= 2 &&
+        (canonical || group.at(-1)?.sportsbook === market.currentPriceSportsbook) &&
         (group.at(-1)?.label === "current" || group.at(-1)?.label === "locked"),
     )
     .sort((a, b) => b.length - a.length)[0];
@@ -138,12 +158,24 @@ export function resolvePointLineMarketPulseMovement(
   if (
     first.line === null ||
     terminal.line === null ||
-    sameTrackedLine(first.line, terminal.line) ||
-    !sameTrackedLine(canonical.firstTrackedLine, first.line) ||
-    !sameTrackedLine(canonical.currentLine, terminal.line) ||
-    canonical.firstTrackedPrice !== first.american ||
-    canonical.currentPrice !== terminal.american
+    sameTrackedLine(first.line, terminal.line)
   ) {
+    return null;
+  }
+  const derivedDirection = canonical?.directionRelativeToPick ?? selectedPointLineDirection(market, first.line, terminal.line);
+  if (derivedDirection !== "support" && derivedDirection !== "resistance") return null;
+  if (canonical) {
+    if ((canonical.directionRelativeToPick !== "support" && canonical.directionRelativeToPick !== "resistance") ||
+      !sameTrackedLine(canonical.firstTrackedLine, first.line) ||
+      !sameTrackedLine(canonical.currentLine, terminal.line) ||
+      canonical.firstTrackedPrice !== first.american ||
+      canonical.currentPrice !== terminal.american) return null;
+  } else if (market.lockedLineAt != null || terminal.label !== "current" ||
+    market.currentPriceSportsbook !== terminal.sportsbook ||
+    market.currentPriceAmerican !== terminal.american ||
+    !Number.isFinite(Date.parse(market.currentPriceObservedAt ?? "")) ||
+    Date.parse(terminal.observedAt ?? "") !== Date.parse(market.currentPriceObservedAt ?? "") ||
+    !unambiguousChronologicalLineTrail(coherent)) {
     return null;
   }
 
@@ -171,6 +203,7 @@ export function resolvePointLineMarketPulseMovement(
     currentLine: terminal.line,
     sportsbook: terminal.sportsbook!,
     coherentTrail: true,
-    openingLabel: "Opening",
+    openingLabel: !canonical && first.source !== "provider_opening" ? "First recorded" : "Opening",
+    verifiedDirection: derivedDirection,
   };
 }

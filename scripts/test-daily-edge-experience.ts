@@ -1496,8 +1496,9 @@ check(
     !candidateSource.includes("showSplits && !football ? <CompactPointLineMovement"),
 );
 check(
-  "Spread and Total line maps retain Opening, Prior, and Current when a real Prior repeats an endpoint",
-  candidateSource.includes('>{point("Opening", first)}') &&
+  "Spread and Total line maps distinguish provider opening from first recorded and retain Prior and Current",
+  candidateSource.includes('const firstLabel = coherent && market.lockedLineAt == null && sameBook[0]?.source !== "provider_opening" ? "First recorded" : "Opening";') &&
+  candidateSource.includes('>{point(firstLabel, first)}') &&
     candidateSource.includes('{point("Prior", previous)}') &&
     candidateSource.includes('{point("Current", current, true)}') &&
     !candidateSource.includes("previousAddsInformation"),
@@ -1543,6 +1544,86 @@ const wnbaSpreadPointLinePulse = resolvePointLineMarketPulseMovement({
     },
   ],
 } as unknown as DailyEdgeGameDto["markets"]["first_inning"]);
+const cbbRetailLinePulse = resolvePointLineMarketPulseMovement({
+  pick: "STET +19.5",
+  line: 19.5,
+  currentPriceSportsbook: "draftkings",
+  currentPriceAmerican: -115,
+  currentPriceObservedAt: "2026-11-03T14:47:00.000Z",
+  marketReadV2: null,
+  lineTrail: [
+    { american: -115, line: 16.5, observedAt: "2026-11-03T04:31:00.000Z", sportsbook: "draftkings", source: "provider_opening", label: "first" },
+    { american: -115, line: 17.5, observedAt: "2026-11-03T13:01:00.000Z", sportsbook: "draftkings", source: "line_history", label: "prior" },
+    { american: -115, line: 19.5, observedAt: "2026-11-03T14:47:00.000Z", sportsbook: "draftkings", source: "current_line", label: "current" },
+  ],
+} as unknown as DailyEdgeGameDto["markets"]["first_inning"]);
+const cbbCurrentFanduelLinePulse = resolvePointLineMarketPulseMovement({
+  pick: "STET +19.5", line: 19.5,
+  currentPriceSportsbook: "fanduel", currentPriceAmerican: -115,
+  currentPriceObservedAt: "2026-11-03T15:02:14.117Z", marketReadV2: null,
+  lineTrail: [
+    { american: -102, line: 15.5, observedAt: "2026-11-03T04:01:51.924Z", sportsbook: "fanduel", source: "line_history", label: "move" },
+    { american: -110, line: 18.5, observedAt: "2026-11-03T14:02:27.991Z", sportsbook: "fanduel", source: "line_history", label: "move" },
+    { american: -115, line: 19.5, observedAt: "2026-11-03T15:02:14.117Z", sportsbook: "fanduel", source: "current_line", label: "current" },
+  ],
+} as unknown as DailyEdgeGameDto["markets"]["first_inning"]);
+check(
+  "CBB pulse interprets a verified current retail point move without claiming professional authority",
+  cbbRetailLinePulse?.verifiedDirection === "resistance" &&
+    cbbRetailLinePulse.openLine === 16.5 &&
+    cbbRetailLinePulse.currentLine === 19.5 &&
+    cbbRetailLinePulse.sportsbook === "draftkings" &&
+    cbbRetailLinePulse.openingLabel === "Opening" &&
+    cbbCurrentFanduelLinePulse?.verifiedDirection === "resistance" &&
+    cbbCurrentFanduelLinePulse.openLine === 15.5 &&
+    cbbCurrentFanduelLinePulse.currentLine === 19.5 &&
+    cbbCurrentFanduelLinePulse.sportsbook === "fanduel" &&
+    cbbCurrentFanduelLinePulse.openingLabel === "First recorded" &&
+    candidateDailyEdgeSource.includes("if (movement.verifiedDirection) return movement.verifiedDirection;"),
+);
+check(
+  "an off-book retail trail cannot become a current market pulse",
+  resolvePointLineMarketPulseMovement({
+    pick: "STET +19.5", line: 19.5, currentPriceSportsbook: "fanduel", currentPriceAmerican: -115,
+    currentPriceObservedAt: "2026-11-03T14:47:00.000Z",
+    marketReadV2: null, lineTrail: [
+      { american: -115, line: 16.5, observedAt: "2026-11-03T04:31:00.000Z", sportsbook: "draftkings", source: "provider_opening", label: "first" },
+      { american: -115, line: 19.5, observedAt: "2026-11-03T14:47:00.000Z", sportsbook: "draftkings", source: "current_line", label: "current" },
+    ],
+  } as unknown as DailyEdgeGameDto["markets"]["first_inning"]) === null,
+);
+check(
+  "an older line endpoint cannot describe a newer current quote",
+  resolvePointLineMarketPulseMovement({
+    pick: "STET +19.5", line: 19.5, currentPriceSportsbook: "draftkings", currentPriceAmerican: -115,
+    currentPriceObservedAt: "2026-11-03T15:00:00.000Z", marketReadV2: null, lineTrail: [
+      { american: -115, line: 16.5, observedAt: "2026-11-03T04:31:00.000Z", sportsbook: "draftkings", source: "provider_opening", label: "first" },
+      { american: -115, line: 19.5, observedAt: "2026-11-03T14:47:00.000Z", sportsbook: "draftkings", source: "current_line", label: "current" },
+    ],
+  } as unknown as DailyEdgeGameDto["markets"]["first_inning"]) === null,
+);
+check(
+  "same-time conflicting line observations cannot reverse the inferred market direction",
+  resolvePointLineMarketPulseMovement({
+    pick: "STET +19.5", line: 19.5, currentPriceSportsbook: "fanduel", currentPriceAmerican: -115,
+    currentPriceObservedAt: "2026-11-03T15:02:14.117Z", marketReadV2: null, lineTrail: [
+      { american: -102, line: 20.5, observedAt: "2026-11-03T04:01:51.924Z", sportsbook: "fanduel", source: "line_history", label: "move" },
+      { american: -102, line: 15.5, observedAt: "2026-11-03T04:01:51.924Z", sportsbook: "fanduel", source: "line_history", label: "move" },
+      { american: -115, line: 19.5, observedAt: "2026-11-03T15:02:14.117Z", sportsbook: "fanduel", source: "current_line", label: "current" },
+    ],
+  } as unknown as DailyEdgeGameDto["markets"]["first_inning"]) === null,
+);
+check(
+  "a prior locked reader keeps its stored market interpretation precedence",
+  resolvePointLineMarketPulseMovement({
+    pick: "STET +19.5", line: 19.5, currentPriceSportsbook: "draftkings", currentPriceAmerican: -115,
+    currentPriceObservedAt: "2026-11-03T14:47:00.000Z",
+    lockedLineAt: "2026-11-03T18:00:00.000Z", marketReadV2: null, lineTrail: [
+      { american: -115, line: 16.5, observedAt: "2026-11-03T04:31:00.000Z", sportsbook: "draftkings", source: "provider_opening", label: "first" },
+      { american: -115, line: 19.5, observedAt: "2026-11-03T14:47:00.000Z", sportsbook: "draftkings", source: "current_line", label: "current" },
+    ],
+  } as unknown as DailyEdgeGameDto["markets"]["first_inning"]) === null,
+);
 check(
   "Total/Spread Market Pulse prefers a canonical same-book point-line move over a current-only price trail",
   wnbaSpreadPointLinePulse?.coherentTrail === true &&
