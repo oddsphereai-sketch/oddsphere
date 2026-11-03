@@ -32,7 +32,9 @@ accuracy is not used to choose the repair.
 2. Classify complete, same-book Moneyline movement plus trusted complete splits
    as `confirmation`, `resistance`, or `unresolved`. The price response owns the
    directional read: movement with pressure is confirmation; movement against
-   pressure is resistance. Circa/Pinnacle/Bookmaker are selected first and
+   pressure is resistance. Pressure may be a same-side money/ticket consensus
+   or a material money-over-ticket differential; the basis is stored with the
+   decision and never inferred from odds alone. Circa/Pinnacle/Bookmaker are selected first and
    retained as named-source evidence; a broad-book fallback remains usable only
    at a stricter materiality threshold. The complete same-book history must
    also show a stable path; buyback, reversal, or flat paths are unresolved and
@@ -82,7 +84,8 @@ Relative to the exact unlocked r23 board, there are zero pick changes, two
 grade promotions, two grade demotions, and an unchanged 20-actionable count.
 Candidate price-aware counts are 0 Best Angle / 20 Lean / 13 Watchlist / 0
 Pass. The current puck-line board contains four qualified stable reads (one
-confirmation and three resistance reads); two other apparent endpoint moves
+confirmation—whose pressure basis is the money/ticket differential—and three
+resistance reads); two other apparent endpoint moves
 are correctly rejected after the complete path exposes buyback. The qualified
 spread lane produces symmetric promotion/demotion behavior and never creates a
 second score. No fabricated action was added to today's board.

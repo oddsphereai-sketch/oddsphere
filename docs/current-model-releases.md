@@ -6751,7 +6751,9 @@ continuous model/market blend. Complete trusted Moneyline pressure plus an
 exact same-book probability response is interpreted as confirmation when the
 directions agree and resistance when they oppose; the response is applied as
 an innovation from the independent probability, while a fully corroborated
-opposite market level may still select the coherent opposite winner. Mixed,
+opposite market level may still select the coherent opposite winner. Pressure
+may be same-side money/ticket consensus or a material money-over-ticket
+differential, with the actual basis retained in the model receipt. Mixed,
 incomplete, low-confidence, flat, bought-back, or reversed evidence has no
 authority. The official
 puck-line split lane now reaches the model and can symmetrically promote or
