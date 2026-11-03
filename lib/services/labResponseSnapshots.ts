@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/db/supabase";
+import { isMissingRpcFunction } from "../db/missingRpcFunction";
 import type { DailyEdgeResponse, TrackingResponse } from "@/app/lab/lib/labTypes";
 import type { Sport } from "@/lib/types/domain/Sport";
 
@@ -123,24 +124,25 @@ export async function upsertLabResponseSnapshot(input: {
   const now = Date.now();
   const expiresAt = new Date(now + input.ttlMs).toISOString();
   const staleUntil = new Date(now + input.staleMs).toISOString();
-  const { error } = await supabase
-    .from("lab_response_snapshots")
-    .upsert(
-      {
-        snapshot_key: input.snapshotKey,
-        kind: input.kind,
-        sport: input.sport ?? null,
-        slate_date: input.slateDate ?? null,
-        payload: input.payload,
-        payload_version: input.payloadVersion ?? "v1",
-        source: input.source ?? "cron",
-        generated_at: new Date(now).toISOString(),
-        expires_at: expiresAt,
-        stale_until: staleUntil,
-        updated_at: new Date(now).toISOString(),
-      },
-      { onConflict: "snapshot_key" },
-    );
+  const row = {
+    snapshot_key: input.snapshotKey,
+    kind: input.kind,
+    sport: input.sport ?? null,
+    slate_date: input.slateDate ?? null,
+    payload: input.payload,
+    payload_version: input.payloadVersion ?? "v1",
+    source: input.source ?? "cron",
+    generated_at: new Date(now).toISOString(),
+    expires_at: expiresAt,
+    stale_until: staleUntil,
+    updated_at: new Date(now).toISOString(),
+  };
+  const functionName = "upsert_lab_response_snapshot";
+  let { error } = await supabase.rpc(functionName, row);
+  if (isMissingRpcFunction(error, functionName)) {
+    ({ error } = await supabase.from("lab_response_snapshots")
+      .upsert(row, { onConflict: "snapshot_key" }));
+  }
 
   if (error) {
     if (!TABLE_MISSING_RE.test(error.message)) {
