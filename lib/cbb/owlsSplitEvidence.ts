@@ -1,16 +1,13 @@
-import { cbbProviderInstitutionName as canonicalCbbTeamName } from "./providerInstitutionIdentity";
+import { cbbSplitOrientation } from "./exactSplitIdentity";
 import { computeSlateDate } from "../dates/slateDate";
 import type { CbbGame, CbbMarket } from "./types";
 import type { RawOwlsOddsResponse } from "../providers/owls/owlsSharpBookOdds";
 import { normalizeOwlsSharpBookSplits, selectAllInternalNamedBookSplits,
   type RawOwlsSplitsResponse } from "../providers/owls/owlsSharpBookSplits";
 
-export const CBB_SPLIT_EVIDENCE_RELEASE = "cbb_split_evidence_2026_11_02_r3_bound_source_contracts" as const;
+export const CBB_SPLIT_EVIDENCE_RELEASE = "cbb_split_evidence_2026_11_03_r4_shared_market_identity" as const;
 type CbbSplitSelection = "first" | "second";
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
-const names = (team: CbbGame["home_team"]) => [team.full_name, team.college].filter(Boolean)
-  .map(name => canonicalCbbTeamName(name!));
-
 /** Private evidence only: source split percentages do not yet move CBB predictions. */
 export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse,
   splits: RawOwlsSplitsResponse, fetchedAt: string, asOf: string) {
@@ -18,11 +15,10 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
   if (![cutoff, receipt, start].every(Number.isFinite) || receipt > cutoff || cutoff >= start) {
     throw new Error("CBB split evidence invalid pregame cutoff");
   }
-  const home = names(game.home_team), away = names(game.visitor_team);
+  const own={homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college};
   const events = Array.isArray(odds.data) ? odds.data : Object.values(odds.data ?? {}).flatMap(rows => rows ?? []);
   const exact = events.filter(event => event.sport === "ncaab" &&
-    ((home.includes(canonicalCbbTeamName(event.home_team ?? "")) && away.includes(canonicalCbbTeamName(event.away_team ?? ""))) ||
-      (home.includes(canonicalCbbTeamName(event.away_team ?? "")) && away.includes(canonicalCbbTeamName(event.home_team ?? "")))) &&
+    cbbSplitOrientation(event.away_team??"",event.home_team??"",own)!==null &&
     Number.isFinite(Date.parse(event.commence_time ?? "")) &&
     Math.abs(Date.parse(event.commence_time!) - start) <= 600_000);
   const ids = [...new Set(exact.map(event => String(event.id ?? event.eventId ?? "")).filter(Boolean))];
@@ -35,17 +31,14 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
   const dates = new Set([game.date.slice(0,10).replaceAll("-",""),computeSlateDate("cbb",game.date).replaceAll("-","")]);
   const providerEvent = (splits.data ?? []).filter(row => {
     const id=String(row.event_id??""),date=id.match(/-(\d{8})$/)?.[1];
-    const h=canonicalCbbTeamName(String(row.home_team??"")),a=canonicalCbbTeamName(String(row.away_team??""));
-    return ids.includes(id)||date&&dates.has(date)&&((home.includes(h)&&away.includes(a))||(home.includes(a)&&away.includes(h)));
+    return ids.includes(id)||date&&dates.has(date)&&cbbSplitOrientation(String(row.away_team??""),String(row.home_team??""),own)!==null;
   });
   if (providerEvent.length !== 1) return { release: CBB_SPLIT_EVIDENCE_RELEASE,
     eventId: ids[0], feedStatus: normalized.feedStatus, rows: [],
     reason: providerEvent.length === 0 ? "event_split_unavailable" : "ambiguous_split_event" };
   const splitEventId=String(providerEvent[0].event_id);
-  const splitHome = canonicalCbbTeamName(String(providerEvent[0].home_team ?? ""));
-  const splitAway = canonicalCbbTeamName(String(providerEvent[0].away_team ?? ""));
-  const direct = home.includes(splitHome) && away.includes(splitAway);
-  const reversed = home.includes(splitAway) && away.includes(splitHome);
+  const orientation=cbbSplitOrientation(String(providerEvent[0].away_team??""),String(providerEvent[0].home_team??""),own);
+  const direct=orientation==="direct",reversed=orientation==="reversed";
   if (!direct && !reversed) return { release: CBB_SPLIT_EVIDENCE_RELEASE,
     eventId: ids[0], feedStatus: normalized.feedStatus, rows: [], reason: "split_participant_mismatch" };
   const rows = MARKETS.flatMap(market => selectAllInternalNamedBookSplits(normalized.observations, {

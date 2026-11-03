@@ -21,9 +21,35 @@ publication and normal live proof remain mandatory. The full current-level
 numerical forecast repair is still unfinished. Evidence and rollback:
 `docs/model-audits/2026-11-03-cbb-market-evidence-correctness.md`.
 
+## CBB unified market identity — November 3
+
+Current institution identity is
+`cbb_provider_identity_2026_11_03_r4_complete_cached_source_aliases`, exact market
+matching `cbb_sharp_split_mapping_2026_11_03_r3_shared_market_identity`, direct split
+input `cbb_split_evidence_2026_11_03_r4_shared_market_identity`, canonical evidence
+`cbb_canonical_market_evidence_2026_11_03_r2_shared_exact_identity`, capture
+`market_intelligence_v2_capture_2026_11_03_r26_shared_cbb_market_identity`, CBB chart
+tracking `cbb_market_tracking_2026_11_03_r4_shared_market_identity` and sole publisher
+`cbb_member_pipeline_2026_11_03_r18_shared_market_identity`.
+At its source-only cutover, R18 preserved score/grade R5, board R9, tracking
+writer R6, adapter R7; the evidence-only successors above preserve its source integration, stored-schema compatibility, source clocks, price/grade
+rules, request ceilings, existing jobs/leases and every stored locked payload.
+
+The exact matcher is shared by current/history odds, source observations, direct
+and canonical splits and unlocked charts. It includes the already verified full
+school/mascot forms and adds only AR-Pine Bluff /CA Baptist /Cal Baptist from actual cached
+source receipts and normal collector rejection logs. Chart requests resolve each book's unique native event; two
+complementary provider catalogs cannot be mistaken for an ambiguous physical
+fixture, while duplicated ownership of the same book remains rejected. Locked
+reader payloads and legacy prediction-contract identity keep precedence. The
+existing collector emits bounded internal unmatched-source diagnostics, and its
+required source test exercises all 299 seven-day fixtures plus new date rollover.
+No independent collector, timer, paid request or production shadow is introduced.
+Evidence: `docs/model-audits/2026-11-03-cbb-complete-market-identity.md`.
+
 ## CBB remaining exact source-institution repair — November 3
 
-The current institution identity is
+The preceding institution identity was
 `cbb_provider_identity_2026_11_03_r3_remaining_verified_institution_aliases`, capture
 `market_intelligence_v2_capture_2026_11_03_r25_remaining_cbb_institution_aliases`,
 and sole publisher `cbb_member_pipeline_2026_11_03_r17_complete_verified_institution_inputs`.
@@ -63,7 +89,7 @@ This commit's authoritative runtime is score
 `cbb_2026_11_02_r5_resolved_price_not_double_penalized`, receipt
 `cbb_market_behavior_2026_11_02_r2_received_source_path`, publisher
 `cbb_member_pipeline_2026_11_03_r16_verified_institution_inputs` (preceding source-only
-successor of R15; current publisher R17 above), tracking
+successor of R15; current publisher R18 above), tracking
 `cbb_tracking_writer_2026_11_02_r6_received_market_lineage` and adapter
 `cbb_member_adapter_2026_11_02_r7_received_market_response` repair native
 history/availability/grade binding and remove the rejected static winner copy.
@@ -141,7 +167,7 @@ Predeclaration and evidence:
 ## CBB chart API and retained split display — November 2
 
 The November 2 source repair introduced publisher
-`cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback` (superseded by R17
+`cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback` (superseded by R18
 above); reader evidence remains `cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback`.
 Both reuse the same stored DraftKings Network R4 source as a display fallback;
 the existing CBB-first leased collector refreshes it with at most twelve free

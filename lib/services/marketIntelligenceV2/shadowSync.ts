@@ -13,7 +13,7 @@ import {
 import { normalizeMlbTeamName } from "../../providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "../../providers/nhl/_teamNameNormalizer";
 import { buildGameKey, type NormalizerSport } from "../../providers/playbook/playbookTeamNormalizer";
-import { cbbProviderInstitutionName as canonicalCbbTeamName } from "../../cbb/providerInstitutionIdentity";
+import { cbbSplitTeamMatches } from "../../cbb/exactSplitIdentity";
 import { OwlsInsightClient, type OwlsSport } from "../../providers/owls/owlsInsightClient";
 import {
   normalizeOwlsSharpBookSplits,
@@ -82,34 +82,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_03_r25_remaining_cbb_institution_aliases";
-
-// Exact source forms from the normal 2026-11-02 22:46Z Playbook capture,
-// checked against the canonical institution/full name on the same timed game.
-// Keep these capture-local: this is not a statistical/roster identity change.
-const CBB_CAPTURE_FULL_NAME_ALIASES = new Map([
-  ["Army Knights", "Army Black Knights"],
-  ["Central Connecticut St Blue Devils", "Central Connecticut Blue Devils"],
-  ["Arkansas-Little Rock Trojans", "Little Rock Trojans"],
-  ["Boston Univ. Terriers", "Boston University Terriers"],
-  ["LIU Sharks", "Long Island University Sharks"],
-  ["Mt. St. Mary's Mountaineers", "Mount St. Mary's Mountaineers"],
-  ["GW Revolutionaries", "George Washington Revolutionaries"],
-  ["UMKC Kangaroos", "Kansas City Roos"],
-  ["Loyola (Chi) Ramblers", "Loyola Chicago Ramblers"],
-  ["Tenn-Martin Skyhawks", "UT Martin Skyhawks"],
-  ["Gardner-Webb Bulldogs", "Gardner-Webb Runnin' Bulldogs"],
-  ["Grand Canyon Antelopes", "Grand Canyon Lopes"],
-  ["Long Beach St 49ers", "Long Beach State Beach"],
-  ["Fort Wayne Mastodons", "Purdue Fort Wayne Mastodons"],
-  ["Sam Houston St Bearkats", "Sam Houston Bearkats"],
-  ["CSU Fullerton Titans", "Cal State Fullerton Titans"],
-].map(([source, canonical]) => [canonicalCbbTeamName(source), canonicalCbbTeamName(canonical)]));
-
-function cbbCaptureSourceName(value: string): string {
-  const normalized = canonicalCbbTeamName(value);
-  return CBB_CAPTURE_FULL_NAME_ALIASES.get(normalized) ?? normalized;
-}
+  "market_intelligence_v2_capture_2026_11_03_r26_shared_cbb_market_identity";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
@@ -120,20 +93,11 @@ const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): Mark
  * then date/time, and reject any duplicate rather than guessing a fixture. */
 export function matchCbbSourceGame(games: readonly GameRef[], sourceAway: string, sourceHome: string,
   sourceStart: string | null): CbbSourceMatch | null {
-  const away = cbbCaptureSourceName(sourceAway), home = cbbCaptureSourceName(sourceHome);
-  if (!away || !home || away === home || !sourceStart) return null;
-  const named = (observed: string, game: GameRef, side: "home" | "away") => {
-    const full = canonicalCbbTeamName((side === "home" ? game.homeName : game.awayName) ?? "");
-    const institution = canonicalCbbTeamName((side === "home" ? game.homeLocation : game.awayLocation) ?? "");
-    if ((full && full === observed) || (institution && institution === observed)) return true;
-    // Some providers append the canonical mascot to an institution alias.
-    // Resolve only that exact school's own suffix; never match a mascot alone,
-    // an arbitrary prefix, or a different institution sharing the nickname.
-    if (!institution || !full.startsWith(institution)) return false;
-    const mascot = full.slice(institution.length);
-    return !!mascot && observed.length > mascot.length && observed.endsWith(mascot) &&
-      canonicalCbbTeamName(observed.slice(0, -mascot.length)) === institution;
-  };
+  if (!sourceAway || !sourceHome || !sourceStart) return null;
+  const named = (observed: string, game: GameRef, side: "home" | "away") => cbbSplitTeamMatches(observed, {
+    homeTeamDisplayName:game.homeName,awayTeamDisplayName:game.awayName,
+    cbbHomeCollege:game.homeLocation,cbbAwayCollege:game.awayLocation,
+  }, side);
   const at = Date.parse(sourceStart);
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(sourceStart) ? sourceStart : null;
   if (!Number.isFinite(at)) return null;
@@ -142,8 +106,8 @@ export function matchCbbSourceGame(games: readonly GameRef[], sourceAway: string
     if (!Number.isFinite(start) ||
       (Number.isFinite(at) && !dateOnly && Math.abs(start - at) > 2 * 60 * 60_000) ||
       (dateOnly && game.slateDate !== dateOnly && game.gameDate?.slice(0, 10) !== dateOnly)) return [];
-    const direct = named(away, game, "away") && named(home, game, "home");
-    const reversed = named(away, game, "home") && named(home, game, "away");
+    const direct = named(sourceAway, game, "away") && named(sourceHome, game, "home");
+    const reversed = named(sourceAway, game, "home") && named(sourceHome, game, "away");
     return direct !== reversed ? [{ game, reversed }] : [];
   });
   return matches.length === 1 ? matches[0] : null;
@@ -2005,6 +1969,13 @@ export async function syncMarketIntelligenceV2Shadow(opts: {
     }));
   }
 
+  if (opts.apply && opts.sport === "cbb") {
+    const unmatched=[...owls.rejected,...owlsPrices.rejected].filter(row=>row.reason.includes("unmatched or ambiguous"));
+    if(unmatched.length)console.warn("CBB Owls capture identity rejections",JSON.stringify({
+      release:MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE,ingestionRunId,
+      gamesLoaded:games.length,rejected:unmatched.length,sample:unmatched.slice(0,20),
+    }));
+  }
   logger(
     `built split=${result.splitObservationsBuilt} price=${result.priceObservationsBuilt} rejected=${result.rejected.length}`,
   );

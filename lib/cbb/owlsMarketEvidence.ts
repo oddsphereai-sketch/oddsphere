@@ -1,4 +1,4 @@
-import { cbbProviderInstitutionName as canonicalCbbTeamName } from "./providerInstitutionIdentity";
+import { cbbSplitTeamMatches,cbbSplitOrientation } from "./exactSplitIdentity";
 import { cbbImpliedProbability } from "./marketEvidence";
 import type { CbbGame, CbbMarket, CbbQuote } from "./types";
 import type { RawOwlsOddsResponse } from "../providers/owls/owlsSharpBookOdds";
@@ -7,7 +7,7 @@ export type CbbOwlsHistoryRow = { book: string; market: string; side: string; pr
 export type CbbQualifiedNamedQuote = CbbQuote & { provider: "owls"; orientationVerified: true };
 const books = new Set(["draftkings", "fanduel", "betmgm", "caesars", "pinnacle", "ps3838", "circa", "bet365", "bovada", "betrivers", "betr", "stations", "south_point", "westgate", "wynn", "hardrock", "betonline"]);
 const market = (key: string): CbbMarket | null => key === "h2h" ? "moneyline" : key === "spreads" ? "spread" : key === "totals" ? "total" : null;
-const names = (team: CbbGame["home_team"]) => [team.full_name, team.college].filter(Boolean).map(n => canonicalCbbTeamName(n!));
+const identity=(game:CbbGame)=>({homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college});
 const validPair = (a: number, b: number) => {
   if (![a, b].every(p => typeof p === "number" && Number.isFinite(p) && Math.abs(p) >= 100)) return false;
   const hold = cbbImpliedProbability(a) + cbbImpliedProbability(b);
@@ -17,11 +17,10 @@ export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResp
   if (![game.date, fetchedAt, asOf].every(t => Number.isFinite(Date.parse(t))) || Date.parse(asOf) >= Date.parse(game.date)) throw new Error("CBB current evidence requires valid pregame cutoff");
   if (response.success === false) return { quotes: [] as CbbQualifiedNamedQuote[], rejected: [{ reason: "provider_reported_failure", book: null as string | null }] };
   const quotes: CbbQualifiedNamedQuote[] = [], rejected: Array<{ reason: string; book: string | null }> = [];
-  const home = names(game.home_team), away = names(game.visitor_team);
+  const own=identity(game),home=(name:string)=>cbbSplitTeamMatches(name,own,"home"),away=(name:string)=>cbbSplitTeamMatches(name,own,"away");
   const events = Array.isArray(response.data) ? response.data : Object.values(response.data ?? {}).flatMap(v => v ?? []);
   for (const event of events) {
-    const h = canonicalCbbTeamName(event.home_team ?? ""), a = canonicalCbbTeamName(event.away_team ?? "");
-    if (event.sport !== "ncaab" || !((home.includes(h) && away.includes(a)) || (home.includes(a) && away.includes(h))) ||
+    if (event.sport !== "ncaab" || !cbbSplitOrientation(event.away_team??"",event.home_team??"",own) ||
       !Number.isFinite(Date.parse(event.commence_time ?? "")) || Math.abs(Date.parse(event.commence_time!) - Date.parse(game.date)) > 600000) {
       rejected.push({ reason: "event_identity_time_or_competition", book: null }); continue;
     }
@@ -37,7 +36,7 @@ export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResp
         }
         const outcomes = m.outcomes ?? [];
         const side = (n: string) => kind === "total" ? n.toLowerCase() === "over" ? "first" : n.toLowerCase() === "under" ? "second" : null :
-          home.includes(canonicalCbbTeamName(n)) ? "first" : away.includes(canonicalCbbTeamName(n)) ? "second" : null;
+          home(n) ? "first" : away(n) ? "second" : null;
         const first = outcomes.filter(o => side(o.name ?? "") === "first"), second = outcomes.filter(o => side(o.name ?? "") === "second");
         if (outcomes.length !== 2 || first.length !== 1 || second.length !== 1) { rejected.push({ reason: "ambiguous_or_incomplete_selection_pair", book: key }); continue; }
         const priceA = Number(first[0].price), priceB = Number(second[0].price);
@@ -59,8 +58,8 @@ export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResp
 }
 
 export function normalizeCbbOwlsHistory(game: CbbGame, source: { homeTeam: string; awayTeam: string }, rows: CbbOwlsHistoryRow[], fetchedAt: string, cutoff: string) {
-  const home = names(game.home_team), away = names(game.visitor_team), sh = canonicalCbbTeamName(source.homeTeam), sa = canonicalCbbTeamName(source.awayTeam);
-  const direct = home.includes(sh) && away.includes(sa), reversed = home.includes(sa) && away.includes(sh);
+  const orientation=cbbSplitOrientation(source.awayTeam,source.homeTeam,identity(game));
+  const direct=orientation==="direct",reversed=orientation==="reversed";
   if (!direct && !reversed) throw new Error("CBB history participant identity mismatch");
   if (![fetchedAt, cutoff, game.date].every(d => Number.isFinite(Date.parse(d))) || Date.parse(cutoff) >= Date.parse(game.date)) throw new Error("invalid CBB history cutoff");
   const groups = new Map<string, CbbOwlsHistoryRow[]>(), rejected: Record<string, number> = {};
