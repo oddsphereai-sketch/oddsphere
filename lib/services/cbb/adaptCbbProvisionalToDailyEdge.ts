@@ -8,9 +8,9 @@ import { cbbImpliedProbability } from "@/lib/cbb/marketEvidence";
 import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
-import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
+import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_03_r8_exact_market_decision_reasons" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_03_r11_source_episode_lineage" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
@@ -98,6 +98,8 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   // Legacy locked payloads retain their original reader semantics. The new
   // reason contract distinguishes path uncertainty from actual opposition.
   const preciseReason=snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE||
+    snapshot.board.gradeRelease===CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE||
+    snapshot.board.gradeRelease===CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE||
     snapshot.board.gradeRelease===CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE;
   const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason),
     spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason),
@@ -108,8 +110,10 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     const read=snapshot.board.marketContext.verifiedMarketRead;
     if(read){
       const axis=kind==="total"?read.total:read.margin,sign=boardRow.selection==="first"?1:-1;
-      if(axis.status==="applied"&&axis.reason==="observed_same_book_relative_economics"&&axis.sourceMarket===kind){
-        const pressure=axis.delta*sign;
+      if((axis.status==="applied"||axis.status==="confirming")&&
+        ["observed_same_book_relative_economics","observed_move_corrects_independent","observed_move_crosses_independent",
+          "observed_move_confirms_independent_without_score_shift"].includes(axis.reason)&&axis.sourceMarket===kind){
+        const pressure=(axis.sourceDirection??0)*sign;
         market.writerMovementDirection=pressure>1e-7?"support":pressure< -1e-7?"resistance":"neutral";
         market.readerMovementSource="writer_market_anchor";
       }

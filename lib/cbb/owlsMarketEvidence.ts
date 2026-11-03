@@ -5,6 +5,7 @@ import type { RawOwlsOddsResponse } from "../providers/owls/owlsSharpBookOdds";
 export type CbbOwlsHistoryRow = { book: string; market: string; side: string; price: number; point?: string | number | null;
   pointValue?: number | null; recordedAt: string; recordedAtUtc?: string | null; inPlay?: boolean };
 export type CbbQualifiedNamedQuote = CbbQuote & { provider: "owls"; orientationVerified: true };
+export type CbbCurrentOddsRejection={reason:string;book:string|null;market?:CbbMarket;sourceAt?:string};
 const books = new Set(["draftkings", "fanduel", "betmgm", "caesars", "pinnacle", "ps3838", "circa", "bet365", "bovada", "betrivers", "betr", "stations", "south_point", "westgate", "wynn", "hardrock", "betonline"]);
 const market = (key: string): CbbMarket | null => key === "h2h" ? "moneyline" : key === "spreads" ? "spread" : key === "totals" ? "total" : null;
 const identity=(game:CbbGame)=>({homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college});
@@ -13,10 +14,10 @@ const validPair = (a: number, b: number) => {
   const hold = cbbImpliedProbability(a) + cbbImpliedProbability(b);
   return hold >= 0.98 && hold <= 1.3;
 };
-export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResponse, fetchedAt: string, asOf: string) {
+export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResponse, fetchedAt: string, asOf: string):{quotes:CbbQualifiedNamedQuote[];rejected:CbbCurrentOddsRejection[]} {
   if (![game.date, fetchedAt, asOf].every(t => Number.isFinite(Date.parse(t))) || Date.parse(asOf) >= Date.parse(game.date)) throw new Error("CBB current evidence requires valid pregame cutoff");
   if (response.success === false) return { quotes: [] as CbbQualifiedNamedQuote[], rejected: [{ reason: "provider_reported_failure", book: null as string | null }] };
-  const quotes: CbbQualifiedNamedQuote[] = [], rejected: Array<{ reason: string; book: string | null }> = [];
+  const quotes: CbbQualifiedNamedQuote[] = [], rejected:CbbCurrentOddsRejection[] = [];
   const own=identity(game),home=(name:string)=>cbbSplitTeamMatches(name,own,"home"),away=(name:string)=>cbbSplitTeamMatches(name,own,"away");
   const events = Array.isArray(response.data) ? response.data : Object.values(response.data ?? {}).flatMap(v => v ?? []);
   for (const event of events) {
@@ -38,11 +39,11 @@ export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResp
         const side = (n: string) => kind === "total" ? n.toLowerCase() === "over" ? "first" : n.toLowerCase() === "under" ? "second" : null :
           home(n) ? "first" : away(n) ? "second" : null;
         const first = outcomes.filter(o => side(o.name ?? "") === "first"), second = outcomes.filter(o => side(o.name ?? "") === "second");
-        if (outcomes.length !== 2 || first.length !== 1 || second.length !== 1) { rejected.push({ reason: "ambiguous_or_incomplete_selection_pair", book: key }); continue; }
+        if (outcomes.length !== 2 || first.length !== 1 || second.length !== 1) { rejected.push({ reason: "ambiguous_or_incomplete_selection_pair", book: key,market:kind,sourceAt:update }); continue; }
         const priceA = Number(first[0].price), priceB = Number(second[0].price);
         const pointA = first[0].point == null ? null : Number(first[0].point), pointB = second[0].point == null ? null : Number(second[0].point);
         if (!validPair(priceA, priceB) || (kind !== "moneyline" && (pointA === null || pointB === null || !Number.isInteger(pointA * 2) ||
-          (kind === "spread" ? pointA !== -pointB : pointA !== pointB || pointA <= 0)))) { rejected.push({ reason: "incoherent_quote", book: key }); continue; }
+          (kind === "spread" ? pointA !== -pointB : pointA !== pointB || pointA <= 0)))) { rejected.push({ reason: "incoherent_quote", book: key,market:kind,sourceAt:update }); continue; }
         quotes.push({ gameId: game.id, sportsbook: key, market: kind, line: kind === "moneyline" ? null : pointA,
           firstPrice: priceA, secondPrice: priceB, providerObservedAt: update, fetchedAt, phase: "current", provider: "owls", orientationVerified: true });
       }
@@ -52,7 +53,7 @@ export function normalizeCbbOwlsCurrent(game: CbbGame, response: RawOwlsOddsResp
   for (const q of quotes) { const key = `${q.sportsbook}:${q.market}`; unique.set(key, [...(unique.get(key) ?? []), q]); }
   return { quotes: [...unique.values()].flatMap(group => {
     const values = new Set(group.map(q => JSON.stringify([q.line, q.firstPrice, q.secondPrice, q.providerObservedAt])));
-    if (values.size !== 1) { rejected.push({ reason: "conflicting_same_book_market", book: group[0].sportsbook }); return []; }
+    if (values.size !== 1) { rejected.push({ reason: "conflicting_same_book_market", book: group[0].sportsbook,market:group[0].market,sourceAt:group.map(q=>q.providerObservedAt).sort().at(-1) }); return []; }
     return [group[0]];
   }), rejected };
 }

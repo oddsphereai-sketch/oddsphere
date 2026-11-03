@@ -9,6 +9,7 @@ import { CBB_SCORE_RESEARCH_RELEASE } from "../lib/cbb/scoreResearch";
 import { CBB_CURRENT_SCORE_RELEASE } from "../lib/cbb/currentScoreRuntime";
 import { CBB_PROVISIONAL_GRADE_RELEASE, CBB_LEGACY_PROVISIONAL_GRADE_RELEASE } from "../lib/cbb/provisionalGradePolicy";
 import { gradePrediction } from "../lib/services/predictionGrader";
+import {CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import type { PredictionRecordRow } from "../lib/types/domain/Tracking";
 
 const start="2026-11-01T19:00:00Z",asOf="2026-11-01T17:00:00Z",lock="2026-11-01T18:00:00Z";
@@ -71,6 +72,8 @@ async function main(){
   assert.throws(()=>cbbLockedModelRelease({release:"unknown"}),/missing its model release/);
   assert.throws(()=>cbbLockedModelRelease({release:"unknown",modelRelease:"unknown"}),/unknown/);
   assert.equal(cbbLockedGradeRelease(record.snapshot.board),CBB_PROVISIONAL_GRADE_RELEASE);
+  assert.equal(cbbLockedGradeRelease({release:"prior",gradeRelease:CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE}),
+    CBB_INTERMEDIATE_MARKET_BEHAVIOR_GRADE_RELEASE,"an R8 lock keeps its actual grade lineage");
   assert.throws(()=>cbbLockedGradeRelease({release:"unknown"}),/missing its grade release/);
   assert.throws(()=>cbbLockedGradeRelease({release:"unknown",gradeRelease:"unknown"}),/unknown/);
   console.log("CBB tracking writer: frozen three-market rows, selected-side spread, idempotence and immutable conflict passed.");

@@ -53,8 +53,9 @@ function grade(result:ReturnType<typeof readCbbMarketBehavior>){
 }
 const cleanInputs=cbbCanonicalBehaviorInputs(read([...beforePrices,...afterPrices],[]));
 const clean=candidate(cleanInputs),cleanGrade=grade(clean);
-assert.notEqual(clean.forecast.margin,12,"clean observed economics would have numeric authority in this fixture");
-assert.equal(cleanGrade.grade,"Best Angle");assert.ok(cleanGrade.professionalReferences>0);
+assert.equal(clean.forecast.margin,12,"a source moving toward the independent score confirms it without double-moving its location");
+assert.equal(clean.receipt.margin.status,"confirming");
+assert.ok(cleanGrade.professionalReferences>0);
 for(const kind of ["price","split"] as const){
  const native=kind==="price"?read([...beforePrices,...middlePrices,{...middlePrices[0],id:203,american_price:-130},...afterPrices],[]):
   read([...beforePrices,...afterPrices],[...beforeSplits,...middleSplits,{...middleSplits[0],id:503,money_pct:.8},...afterSplits]);

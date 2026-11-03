@@ -4,7 +4,7 @@ import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
 import {gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,type CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_03_r10_explicit_market_evidence" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_03_r13_source_episode_decisions" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Preserve every existing complete-book choice. A missing Moneyline must not
@@ -65,7 +65,7 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       economicPathConfirmation:marketGrade?.economicPathConfirmation??false,
       actualActionConfirmation:marketGrade?.actualActionConfirmation??false,
       marketPressure:marketGrade?.marketPressure??"unavailable",pathResistance:marketGrade?.pathResistance??false,
-      gradeBasis:marketGrade?.gradeBasis??"legacy_provisional" };
+      gradeBasis:marketGrade?.gradeBasis??"legacy_provisional",splitRead:marketGrade?.splitRead??[] };
   });
   return { release: CBB_PROVISIONAL_BOARD_RELEASE, modelRelease: forecast.release, gradeRelease: options.marketBehavior?CBB_MARKET_BEHAVIOR_GRADE_RELEASE:CBB_PROVISIONAL_GRADE_RELEASE, gameId: forecast.gameId,
     asOf: forecast.asOf, targetBook:boardTargetBook, score: { home: forecast.homeScore, away: forecast.awayScore,
@@ -74,6 +74,11 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       verifiedMarketRead:options.marketBehavior??null,
       retainedLevelInput:null as unknown,
       professionalPriceReferences: rows.reduce((count, row) => count + row.professionalReferences, 0),
-      missing: ["qualified_movement_history", "qualified_splits", "observed_book_leadership"] },
+      missing: options.marketBehavior?[
+        ...(options.marketBehavior.pathPosture.some(source=>source.status==="observed")?[]:["qualified_movement_history"]),
+        ...(options.marketBehavior.splitContext.some(source=>source.sourceClass==="professional_adjacent_named_book")||
+          options.marketBehavior.pathPosture.some(source=>source.latestFlowMatched)?[]:["qualified_splits"]),
+        ...([options.marketBehavior.margin,options.marketBehavior.total].some(axis=>axis.authority?.reason==="observed_leader_with_followers")?[]:["observed_book_leadership"]),
+      ]:["qualified_movement_history", "qualified_splits", "observed_book_leadership"] },
     rows };
 }

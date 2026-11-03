@@ -2,9 +2,9 @@ import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto, OddsTrailStopD
 import type { BookDisplayEntry, BookDisplayFeed } from "@/lib/providers/owls/owlsBookDisplayHistory";
 import type { DraftKingsNetworkSplitFeed } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_03_r10_separate_source_line_history" as const;
+export const CBB_READER_EVIDENCE_RELEASE="cbb_reader_evidence_2026_11_03_r11_predecision_availability" as const;
 type SplitRow={canonical_event_id:string;market_type:string;selection_key:string;bets_pct:number|null;money_pct:number|null;
-  provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string};
+  provider:string;source_book:string;source_type:string;source_observed_at:string|null;fetched_at:string;inserted_at?:string};
 export type CbbCapturedPublicSplitRow=SplitRow;
 export type CbbPreparedPublicSplitSections=Partial<Record<keyof DailyEdgeGameDto["markets"],MarketEdgeDto["publicSplits"]>>;
 const marketEntries=[['moneyline','moneyline'],['total','total'],['first_inning','spread']] as const;
@@ -68,7 +68,7 @@ function recordedReference(feed:BookDisplayFeed|null,game:DailyEdgeGameDto,kind:
   candidates.sort((a,b)=>b.latest-a.latest||b.trail.length-a.trail.length||a.entry.book.localeCompare(b.entry.book));
   return candidates[0]?.trail??null;
 }
-function splitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
+export function cbbQualifiedPublicSplitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
   const sides=kind==="total"?["over","under"]:["away","home"];
   const eligible=rows.filter(row=>row.canonical_event_id===String(id)&&row.market_type===kind&&row.provider==="playbook"&&
     row.source_book==="consensus"&&row.source_type==="multi_book_consensus"&&
@@ -165,9 +165,9 @@ export async function readCbbCapturedPublicSplits(db:typeof import("@/lib/db/sup
   const rows:SplitRow[]=[],since=new Date(now-30*60_000).toISOString();
   for(let offset=0;offset<12_000;offset+=500){
     const result=await db.from("market_split_observations_v2")
-      .select("canonical_event_id,market_type,selection_key,bets_pct,money_pct,provider,source_book,source_type,source_observed_at,fetched_at")
+      .select("canonical_event_id,market_type,selection_key,bets_pct,money_pct,provider,source_book,source_type,source_observed_at,fetched_at,inserted_at")
       .eq("league","cbb").eq("provider","playbook").eq("source_book","consensus").eq("source_type","multi_book_consensus")
-      .in("canonical_event_id",ids.map(String)).gte("fetched_at",since).lte("fetched_at",new Date(now).toISOString())
+      .in("canonical_event_id",ids.map(String)).gte("fetched_at",since).lte("fetched_at",new Date(now).toISOString()).lte("inserted_at",new Date(now).toISOString())
       .order("fetched_at",{ascending:false}).order("id",{ascending:true}).range(offset,offset+499);
     if(result.error)throw new Error(`CBB public split read failed: ${result.error.message}`);
     rows.push(...result.data as SplitRow[]);
@@ -242,7 +242,7 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
     const markets={...game.markets};
     for(const [key,kind] of marketEntries){
       const market={...markets[key]},side=sideOf(game,kind,market);
-      const pair=splitPair(splitRows,game.external_id,kind,now);
+      const pair=cbbQualifiedPublicSplitPair(splitRows,game.external_id,kind,now);
       const named=namedSplitPair(splitRows,game.external_id,kind,now);
       if(named){
         const section=namedSection(game,named);

@@ -27,7 +27,10 @@ async function main(){
  assert.equal(result.complete,true);assert.equal(result.priceRows.length,1002);assert.equal(result.splitRows.length,1002);
  assert.equal(result.price.queries,3);assert.equal(result.split.queries,3);
  assert.ok(good.calls.every(c=>c.filters.some(f=>f[1]==="league"&&f[2]==="cbb")&&c.filters.some(f=>f[1]==="canonical_event_id")&&c.filters.some(f=>f[1]==="inserted_at"&&f[2]===at)),"all pages retain exact as-of and fixture scope");
- assert.ok(good.calls.filter(c=>c.table==="market_price_observations_v2").every(c=>c.filters.some(f=>f[0]==="in"&&f[1]==="sportsbook"&&JSON.stringify(f[2])===JSON.stringify(["circa","pinnacle","ps3838","bookmaker"]))),"retail journaling cannot crowd out or acquire professional inference authority");
+ const books=good.calls.filter(c=>c.table==="market_price_observations_v2").map(c=>c.filters.find(f=>f[0]==="in"&&f[1]==="sportsbook")?.[2]);
+ assert.ok(books.every(list=>JSON.stringify(list)===JSON.stringify(["circa","pinnacle","ps3838","bookmaker"])||JSON.stringify(list)===JSON.stringify(["draftkings","betmgm"])));
+ assert.ok(books.some(list=>JSON.stringify(list)===JSON.stringify(["draftkings","betmgm"])),"retail history is a separate bounded context family, never a professional expert");
+ assert.equal(result.retailPrice.complete,true);assert.equal(result.retailPriceRows.length,1002);
  const capped=await readCbbCanonicalReaderHistory({db:mock(data).db,gameIds:[777],asOf:at,maxRowsPerFamily:1000});
  assert.equal(capped.complete,false);assert.equal(capped.price.reason,"row_budget_exceeded");assert.equal(capped.priceRows.length,1000,"partial history remains explicitly partial");
  const exact=await readCbbCanonicalReaderHistory({db:mock(data.slice(0,1000)).db,gameIds:[777],asOf:at,maxRowsPerFamily:1000});

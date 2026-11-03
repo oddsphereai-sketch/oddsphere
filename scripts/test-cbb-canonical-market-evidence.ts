@@ -23,6 +23,9 @@ const read=(priceRows=prices,splitRows:CbbCanonicalSplitRow[]=splits,extra:Parti
  pairCbbCanonicalMarketEvidence({game,decisionAt,priceRows,splitRows,...extra});
 const before=JSON.stringify({prices,splits}),normal=read();
 assert.equal(normal.pricePairs.length,1);assert.equal(normal.splitPairs.length,1);assert.equal(normal.rejected.length,0);
+const retailPrices=read(prices.map(p=>({...p,sportsbook:"draftkings",sharp_book:false})),[]);
+assert.equal(retailPrices.pricePairs.length,0,"retail prices never acquire professional mean authority");
+assert.equal(retailPrices.retailPricePairs.length,1,"actual retail pairs remain available for own-source pressure context");
 const pair=normal.pricePairs[0];
 assert.equal(pair.first.ownLine,3,"integer HOME handicap is preserved exactly");assert.equal(pair.second.ownLine,-3);
 assert.equal(pair.first.priceAmerican,-110);assert.equal(pair.first.observationId,1);assert.equal(pair.second.observationId,2);

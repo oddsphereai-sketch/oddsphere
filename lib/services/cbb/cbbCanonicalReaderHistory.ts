@@ -1,7 +1,7 @@
 import type { supabase } from "@/lib/db/supabase";
 import type { CbbCanonicalPriceRow, CbbCanonicalSplitRow } from "./cbbCanonicalMarketEvidence";
 
-export const CBB_CANONICAL_READER_HISTORY_RELEASE = "cbb_canonical_reader_history_2026_11_02_r1_bounded_asof" as const;
+export const CBB_CANONICAL_READER_HISTORY_RELEASE = "cbb_canonical_reader_history_2026_11_03_r2_separate_retail_context" as const;
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 32_000;
 const MAX_BYTES = 24_000_000;
@@ -32,9 +32,11 @@ export async function readCbbCanonicalReaderHistory(args: {
     throw new Error("CBB canonical reader scope/budget invalid");
   }
   const now = args.nowMs ?? Date.now, started = now(), deadline = started + budget;
-  const load = async (kind: "price"|"split") => {
-    const table = kind === "price" ? "market_price_observations_v2" : "market_split_observations_v2";
-    const fields = kind === "price" ? PRICE_FIELDS : SPLIT_FIELDS;
+  const load = async (kind: "price"|"split"|"retail") => {
+    const priceFamily=kind!=="split",rowLimit=kind==="retail"?Math.min(maxRows,8000):maxRows;
+    const byteLimit=kind==="retail"?Math.min(maxBytes,6_000_000):maxBytes;
+    const table = priceFamily ? "market_price_observations_v2" : "market_split_observations_v2";
+    const fields = priceFamily ? PRICE_FIELDS : SPLIT_FIELDS;
     const receipt: CbbCanonicalHistoryFamilyReceipt = {complete:false,reason:"not_started",highWaterId:0,lastId:0,rows:0,bytes:0,queries:0};
     const rows: Row[] = [];
     if (!ids.length) return {rows,receipt:{...receipt,complete:true,reason:"empty_scope"}};
@@ -42,6 +44,7 @@ export async function readCbbCanonicalReaderHistory(args: {
       let q = args.db.from(table).select(select).eq("league","cbb").eq("provider","owls")
         .in("canonical_event_id",ids.map(String)).gte("fetched_at",since).lte("inserted_at",args.asOf);
       q = kind === "price" ? q.in("sportsbook",["circa","pinnacle","ps3838","bookmaker"])
+        : kind==="retail"?q.in("sportsbook",["draftkings","betmgm"]).gte("fetched_at",new Date(Math.max(floor,at-3*3600_000)).toISOString())
         : q.in("source_book",["circa","draftkings","betmgm"]);
       return q;
     };
@@ -57,9 +60,9 @@ export async function readCbbCanonicalReaderHistory(args: {
       if (!highId) return {rows,receipt:{...receipt,complete:true,reason:"no_observations_in_window"}};
       while (receipt.lastId < highId) {
         if (now() >= deadline) { receipt.reason = "deadline_exceeded"; break; }
-        if (rows.length >= maxRows) { receipt.reason = "row_budget_exceeded"; break; }
+        if (rows.length >= rowLimit) { receipt.reason = "row_budget_exceeded"; break; }
         receipt.queries++;
-        const size = Math.min(PAGE_SIZE,maxRows-rows.length);
+        const size = Math.min(PAGE_SIZE,rowLimit-rows.length);
         const page = await query(fields).gt("id",receipt.lastId).lte("id",highId).order("id",{ascending:true}).limit(size)
           .abortSignal(AbortSignal.timeout(Math.max(1,deadline-now())));
         if (page.error) throw page.error;
@@ -68,7 +71,7 @@ export async function readCbbCanonicalReaderHistory(args: {
           throw new Error("non-monotonic canonical observation IDs");
         }
         const bytes = Buffer.byteLength(JSON.stringify(data));
-        if (receipt.bytes + bytes > maxBytes) { receipt.reason = "byte_budget_exceeded"; break; }
+        if (receipt.bytes + bytes > byteLimit) { receipt.reason = "byte_budget_exceeded"; break; }
         rows.push(...data); receipt.rows = rows.length; receipt.bytes += bytes;
         if (data.length) receipt.lastId = Number(data.at(-1)!.id);
         if (data.length < size || receipt.lastId === highId) {
@@ -79,9 +82,13 @@ export async function readCbbCanonicalReaderHistory(args: {
     return {rows,receipt};
   };
   const [price,split] = await Promise.all([load("price"),load("split")]);
+  // Context reads cannot consume the professional family's deadline or row
+  // budget. Missing retail history never erases a valid professional episode.
+  const retail=await load("retail");
   return {release:CBB_CANONICAL_READER_HISTORY_RELEASE,asOf:args.asOf,since,
     sourceWindow:"six_hour_bootstrap_or_explicit_since" as const,
     priceRows:price.rows as CbbCanonicalPriceRow[],splitRows:split.rows as CbbCanonicalSplitRow[],
+    retailPriceRows:retail.receipt.complete?retail.rows as CbbCanonicalPriceRow[]:[],retailPrice:retail.receipt,
     price:price.receipt,split:split.receipt,complete:price.receipt.complete&&split.receipt.complete,
     elapsedMs:now()-started,providerRequests:0 as const,databaseWrites:0 as const};
 }
