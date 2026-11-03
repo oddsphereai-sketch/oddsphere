@@ -3,8 +3,9 @@ import type { buildCbbProvisionalBoard } from "./provisionalBoard";
 
 export const CBB_PROVISIONAL_LIFECYCLE_RELEASE = "cbb_candidate_2026_10_29_r1_locked_board_contract" as const;
 type CurrentBoard=ReturnType<typeof buildCbbProvisionalBoard>;
-export type CbbProvisionalBoard = Omit<CurrentBoard,"modelRelease"|"marketContext"> & {modelRelease?:string;
-  marketContext:Omit<CurrentBoard["marketContext"],"verifiedMarketRead">&{verifiedMarketRead?:CurrentBoard["marketContext"]["verifiedMarketRead"]}};
+export type CbbProvisionalBoard = Omit<CurrentBoard,"release"|"modelRelease"|"gradeRelease"|"marketContext"> & {release:string;modelRelease?:string;gradeRelease?:string;
+  marketContext:Omit<CurrentBoard["marketContext"],"verifiedMarketRead"|"retainedLevelInput">&{
+    verifiedMarketRead?:CurrentBoard["marketContext"]["verifiedMarketRead"];retainedLevelInput?:unknown}};
 export type CbbProvisionalSnapshot = {
   release: typeof CBB_PROVISIONAL_LIFECYCLE_RELEASE;
   gameId: number;

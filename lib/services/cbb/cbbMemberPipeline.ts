@@ -32,8 +32,9 @@ import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 import {readCbbCanonicalReaderHistory} from "./cbbCanonicalReaderHistory";
 import {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
 import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
+import {retainCbbLevelInput,cbbRetainedNormalizationQuarantine} from "@/lib/cbb/retainedLevelInput";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_03_r18_shared_market_identity" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_03_r19_explicit_market_evidence" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -164,6 +165,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       earlierInputKeys.set(row.game.id,cbbIndependentInputKey(row.game,history));
     }}catch{/* An unreproducible independent baseline cannot attest a legacy anchor. */}
   }
+  const retainedInputCounts={captured:0,preserved_valid:0,preserved_invalid:0,unavailable:0};
   const boardCandidates=new Map(forecasts.map(row=>{
     const quotes=namedById.get(row.game.id)?.quotes??[],baseline=buildCbbProvisionalBoard(row.forecast,quotes);
     const targets=baseline.rows.flatMap(market=>{const target=quotes.find(q=>q.market===market.market&&q.sportsbook===market.targetBook&&q.providerObservedAt===market.quoteObservedAt&&q.line===market.line);return target?[target]:[];});
@@ -176,7 +178,18 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       flows:cbbBehaviorFlows(splitEvidenceById.get(row.game.id)!),historyQuotes:native.historyQuotes,historyFlows:native.historyFlows,
       previousPath:storedRead?.pathTape,quarantinedSources:native.quarantinedSources,
       historyCompleteness:{price:canonicalHistory.price.complete,split:canonicalHistory.split.complete}});
-    return [row.game.id,buildCbbProvisionalBoard(read.forecast,quotes,{marketBehavior:read.receipt})] as const;
+    const board=buildCbbProvisionalBoard(read.forecast,quotes,{marketBehavior:read.receipt});
+    const checkpoint=retainCbbLevelInput({existing:previous?.board.marketContext.retainedLevelInput,
+      independent:row.forecast,independentInputKey:key,startsAt:row.game.date,asOf,
+      // Qualification must see pre-filter native/current frames as well as
+      // retained states: an invalid newest frame cannot revive an older price.
+      sourceQuotes:[...quotes,...native.historyQuotes,...read.receipt.currentProfessionalQuotes],targets,
+      quarantinedSources:[...cbbRetainedNormalizationQuarantine(namedById.get(row.game.id)?.rejected??[]),...native.quarantinedSources,...read.receipt.anchors.quarantinedKeys?.map(source=>{
+        const [book,market]=source.split(":");return {book,market:market as "moneyline"|"spread"|"total",reason:"retained_source_quarantine"};
+      })??[]],historyCompleteness:read.receipt.historyCompleteness});
+    board.marketContext.retainedLevelInput=checkpoint.checkpoint;
+    retainedInputCounts[checkpoint.disposition]++;
+    return [row.game.id,board] as const;
   }));
   const publishableGames=sourceGames.filter(game=>{
     const previous=prior.get(game.id);
@@ -271,5 +284,6 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     scheduleOnly:candidateGames.length-memberGames.length,missingIdentity,missingLogosOnSchedule,
     written,locked,held,missingLogos,trackingInserted,problems,unpublishedIncomplete,ownerApprovedExclusions,providerWarnings,
     canonicalHistory:{release:canonicalHistory.release,complete:canonicalHistory.complete,price:canonicalHistory.price,split:canonicalHistory.split,elapsedMs:canonicalHistory.elapsedMs},
+    retainedInputCounts,
     providerCalls:provider.calls,owlsCalls:2};
 }
