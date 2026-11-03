@@ -9,12 +9,13 @@ import { CBB_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
 import type { CbbForecast,CbbMarket,CbbQuote,CbbCanonicalReceipt } from "./types";
 
 export const CBB_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_02_r5_received_market_response" as const;
-export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_02_r5_resolved_price_not_double_penalized" as const;
-export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_02_r2_received_source_path" as const;
+export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r6_exact_decision_gate_reasons" as const;
+export const CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_02_r5_resolved_price_not_double_penalized" as const;
+export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_03_r3_direction_and_magnitude" as const;
 const priority=["circa","pinnacle","bookmaker"];
 export const cbbBookFamily=(book:string)=>["pinnacle","ps3838"].includes(book.toLowerCase())?"pinnacle":book.toLowerCase();
 type AttestedQuote=CbbQuote&{orientationVerified?:boolean};
-export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
+export type CbbMarketAnchors={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE|"cbb_market_behavior_2026_11_02_r2_received_source_path"|"cbb_market_behavior_2026_11_02_r1_same_book_economics";gameId:number;startsAt:string;
   independentRelease:string;independentInputKey:string;capturedAt:string;quotes:Array<CbbQuote&{anchorCapturedAt?:string}>;quarantinedKeys?:string[]};
 export type CbbBehaviorFlow={provider:"owls";gameId:number;sourceBook:string;market:CbbMarket;line:number|null;
   firstMoney:number;secondMoney:number;firstTickets:number;secondTickets:number;
@@ -32,7 +33,8 @@ export type CbbPathPosture={book:string;market:CbbMarket;status:CbbMarketPathStr
   flowMoneyPct:number|null;flowTicketPct:number|null;flowGap:number|null;
   pressureDirection:-1|0|1|null;pressureLine:number|null;pressureObservedAt:string|null;
   flowConcentrationDirection:-1|0|1;flowLine:number|null;flowObservedAt:string|null};
-type AxisRead={status:"applied"|"neutral"|"unavailable"|"conflicting";delta:number;
+type AxisRead={status:"applied"|"neutral"|"unavailable"|"conflicting"|"unresolved";delta:number;
+  sourceDirection:-1|0|1|null;directionalEvidence:"unavailable"|"flat"|"single_source"|"aligned"|"opposed";
   sourceBook:string|null;sourceMarket:CbbMarket|null;reason:string};
 export type CbbMarketBehaviorReceipt={release:typeof CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE;
   modelRelease:typeof CBB_MARKET_BEHAVIOR_MODEL_RELEASE;independentRelease:string;independentInputKey:string;
@@ -72,24 +74,26 @@ function mlMargin(base:CbbForecast,anchor:CbbQuote,current:CbbQuote):number{
   const shifted=1/(1+Math.exp(-(logit(base.homeWinProbability)+logit(fair(current))-logit(fair(anchor)))));
   return cbbExactMarketCenter(base,current,shifted)-base.margin;
 }
-const emptyAxis=(reason:string):AxisRead=>({status:"unavailable",delta:0,sourceBook:null,sourceMarket:null,reason});
+const emptyAxis=(reason:string):AxisRead=>({status:"unavailable",delta:0,sourceBook:null,sourceMarket:null,reason,sourceDirection:null,directionalEvidence:"unavailable"});
 /** The existing CBB single-book Spread owner is retained. No source-name
  * amplitude priority, averaging, or smaller-effect fallback resolves competition. */
 function chooseAxis(episodes:CbbBehaviorEpisode[],axis:"margin"|"total"):AxisRead{
   const candidates:CbbBehaviorEpisode[]=[];
   for(const book of [...new Set(episodes.map(e=>e.book))].sort()){
     const moving=episodes.filter(e=>e.book===book&&(axis==="total"?e.market==="total":e.market!=="total")&&e.direction!==0);
-    if(new Set(moving.map(e=>e.direction)).size>1)return {...emptyAxis("opposed_same_book_economics"),status:"conflicting"};
+    if(new Set(moving.map(e=>e.direction)).size>1)return {...emptyAxis("opposed_same_book_economics"),status:"conflicting",directionalEvidence:"opposed"};
     const owner=axis==="margin"?moving.find(e=>e.market==="spread")??moving.find(e=>e.market==="moneyline"):moving[0];
     if(owner)candidates.push(owner);
   }
+  if(new Set(candidates.map(e=>e.direction)).size>1)
+    return {...emptyAxis("opposed_cross_book_economics"),status:"conflicting",directionalEvidence:"opposed"};
   if(candidates.length>1&&candidates.some(e=>Math.abs(e.delta-candidates[0].delta)>1e-7))
-    return {...emptyAxis("unresolved_competing_source_effects"),status:"conflicting"};
+    return {...emptyAxis("unresolved_same_direction_magnitude"),status:"unresolved",sourceDirection:candidates[0].direction,directionalEvidence:"aligned"};
   const selected=candidates[0];
   if(selected)return {status:"applied",delta:selected.delta,sourceBook:selected.book,sourceMarket:selected.market,
-    reason:"observed_same_book_relative_economics"};
+    reason:"observed_same_book_relative_economics",sourceDirection:selected.direction,directionalEvidence:candidates.length>1?"aligned":"single_source"};
   return episodes.some(e=>axis==="total"?e.market==="total":e.market!=="total")
-    ?{...emptyAxis("no_net_economic_change"),status:"neutral"}:emptyAxis("no_qualified_paired_episode");
+    ?{...emptyAxis("no_net_economic_change"),status:"neutral",sourceDirection:0,directionalEvidence:"flat"}:emptyAxis("no_qualified_paired_episode");
 }
 /** Static prices describe the unresolved starting-level disagreement. There is
  * no established CBB absolute winner law and therefore no numeric arbitration. */
@@ -132,6 +136,11 @@ function compactPosture(stream:CbbMarketPathStreamRead,at:number):CbbPathPosture
 const forecastIdentity=(f:CbbForecast)=>({release:f.release,gameId:f.gameId,asOf:f.asOf,homeId:f.homeId,awayId:f.awayId,
   inputStatus:f.inputStatus,possessions:f.possessions,issues:structuredClone(f.issues)});
 const score=(f:CbbForecast)=>({home:f.homeScore,away:f.awayScore,margin:f.margin,total:f.total,homeWinProbability:f.homeWinProbability});
+/** JSONB preserves values but reorders object keys. Arrays remain ordered;
+ * receipt binding must reject changed evidence, not serialization order. */
+const semanticKey=(value:unknown):string=>JSON.stringify(value,(_key,item)=>
+  item&&typeof item==="object"&&!Array.isArray(item)
+    ?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
 /** Private candidate: promotion requires held-out qualification or a scoped
  * owner exception. No provider, storage, fitting, writer or live activation. */
 export function readCbbMarketBehavior(args:{independent:CbbForecast;independentInputKey:string;startsAt:string;
@@ -160,7 +169,7 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
       cbbBookFamily(q.sportsbook)===cbbBookFamily(stream.book)&&q.market===stream.market))??[];
   const current=latestQuotes([...retainedQuotes,...(args.historyQuotes??[]),...args.currentQuotes],base,at,excluded);
   const previous=args.anchors;
-  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
+  const reusable=previous&&[CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,"cbb_market_behavior_2026_11_02_r2_received_source_path","cbb_market_behavior_2026_11_02_r1_same_book_economics"].includes(previous.release)&&previous.gameId===base.gameId&&
     previous.startsAt===args.startsAt&&previous.independentRelease===base.release&&
     Number.isFinite(Date.parse(previous.capturedAt))&&Date.parse(previous.capturedAt)<=at;
   const originals=reusable?previous.quotes.filter(q=>validQuote(q,base,Date.parse(q.anchorCapturedAt??previous.capturedAt),new Set(),false)):[];
@@ -243,14 +252,14 @@ export function readCbbMarketBehavior(args:{independent:CbbForecast;independentI
   return {forecast,receipt};
 }
 export function assertCbbMarketBehaviorGradeReceipt(input:Parameters<typeof gradeCbbProvisional>[0],receipt:CbbMarketBehaviorReceipt){
-  if(JSON.stringify(forecastIdentity(input.forecast))!==JSON.stringify(receipt.forecastIdentity)||
-    JSON.stringify(input.forecast.uncertainty)!==JSON.stringify(receipt.frozenUncertainty)||
+  if(semanticKey(forecastIdentity(input.forecast))!==semanticKey(receipt.forecastIdentity)||
+    semanticKey(input.forecast.uncertainty)!==semanticKey(receipt.frozenUncertainty)||
     input.forecast.release!==receipt.modelRelease||input.forecast.gameId!==receipt.anchors.gameId||
     input.asOf!==receipt.evaluatedAt||input.forecast.asOf!==receipt.evaluatedAt||
     !receipt.excludedFamilies.includes(cbbBookFamily(input.target.sportsbook))||
-    !receipt.evaluatedTargets.some(q=>JSON.stringify([q.gameId,q.market,q.sportsbook,q.line,q.firstPrice,q.secondPrice,q.providerObservedAt,q.fetchedAt,q.phase,(q as CbbQuote&{requestedAt?:string}).requestedAt??null,q.provider??null,(q as AttestedQuote).orientationVerified??null,q.canonicalReceipt??null])===
-      JSON.stringify([input.target.gameId,input.target.market,input.target.sportsbook,input.target.line,input.target.firstPrice,input.target.secondPrice,input.target.providerObservedAt,input.target.fetchedAt,input.target.phase,(input.target as CbbQuote&{requestedAt?:string}).requestedAt??null,input.target.provider??null,(input.target as AttestedQuote).orientationVerified??null,input.target.canonicalReceipt??null]))||
-    JSON.stringify(score(input.forecast))!==JSON.stringify(receipt.finalScore))throw new Error("CBB grade/market score receipt mismatch");
+    !receipt.evaluatedTargets.some(q=>semanticKey([q.gameId,q.market,q.sportsbook,q.line,q.firstPrice,q.secondPrice,q.providerObservedAt,q.fetchedAt,q.phase,(q as CbbQuote&{requestedAt?:string}).requestedAt??null,q.provider??null,(q as AttestedQuote).orientationVerified??null,q.canonicalReceipt??null])===
+      semanticKey([input.target.gameId,input.target.market,input.target.sportsbook,input.target.line,input.target.firstPrice,input.target.secondPrice,input.target.providerObservedAt,input.target.fetchedAt,input.target.phase,(input.target as CbbQuote&{requestedAt?:string}).requestedAt??null,input.target.provider??null,(input.target as AttestedQuote).orientationVerified??null,input.target.canonicalReceipt??null]))||
+    semanticKey(score(input.forecast))!==semanticKey(receipt.finalScore))throw new Error("CBB grade/market score receipt mismatch");
 }
 export function gradeCbbMarketBehavior(input:Parameters<typeof gradeCbbProvisional>[0],receipt:CbbMarketBehaviorReceipt){
   return gradeCbbReceivedMarket(input,receipt);

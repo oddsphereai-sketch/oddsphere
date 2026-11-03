@@ -85,7 +85,7 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   const matchedFlowResistance=streams.some(s=>s.latestFlowMatched&&s.boundFlowDirection!==null&&s.boundFlowDirection!==0&&(
     (s.flowReactionDirection!==null&&s.flowReactionDirection*sign<0)||
     (s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)));
-  const pathConflict=axis.status==="conflicting"||streams.some(s=>s.status==="conflicting"||s.flowCurrentResolution==="contested"||s.sourceCurrentResolution==="contested");
+  const pathConflict=["conflicting","unresolved"].includes(axis.status)||streams.some(s=>s.status==="conflicting"||s.flowCurrentResolution==="contested"||s.sourceCurrentResolution==="contested");
   const historyIncomplete=!receipt.historyCompleteness.price;
   const pathResistance=historyIncomplete||freshAdverse||unmatchedCircaOpposition||matchedFlowResistance||opposition.length>0||pathConflict;
   const exactSupport=support.some(s=>s.pressureLine===input.target.line&&s.book===axis.sourceBook&&s.market===axis.sourceMarket);
@@ -109,7 +109,12 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   if(modelExpectedValue!==null){
     // A source's vig-negative implied EV is not a veto on independent value.
     grade=modelExpectedValue<0?"No Play":"Watchlist";
-    reason=modelExpectedValue<0?"non_positive_exact_price_value":"edge_below_actionable_reserve";
+    reason=modelExpectedValue<0?"non_positive_exact_price_value":
+      modelExpectedValue<.03?"edge_below_actionable_reserve":
+      !eligible?"price_too_steep_for_actionable":
+      base.referenceState==="opposes"?"professional_opposition":
+      base.referenceState==="neutral"?"professional_reference_neutral":
+      base.referenceState==="mixed"?"professional_reference_mixed":"edge_below_actionable_reserve";
     if(modelExpectedValue>=.03&&eligible&&(base.referenceState==="agrees"||base.referenceState==="unavailable"||economicCorroboration)){
       grade="Lean";reason="positive_model_value_without_qualified_action_confirmation";gradeBasis="model_value";
     }

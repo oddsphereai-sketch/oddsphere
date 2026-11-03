@@ -4,7 +4,7 @@ import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
 import {gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,type CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_02_r9_resolved_price_grade" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_03_r10_explicit_market_evidence" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Preserve every existing complete-book choice. A missing Moneyline must not
@@ -72,6 +72,7 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       margin: forecast.margin, total: forecast.total, homeWinProbability: forecast.homeWinProbability },
     marketContext: { predictionReader: options.marketBehavior?"observed_market_behavior" as const:"unqualified" as const,
       verifiedMarketRead:options.marketBehavior??null,
+      retainedLevelInput:null as unknown,
       professionalPriceReferences: rows.reduce((count, row) => count + row.professionalReferences, 0),
       missing: ["qualified_movement_history", "qualified_splits", "observed_book_leadership"] },
     rows };
