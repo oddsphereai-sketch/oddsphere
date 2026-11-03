@@ -46,6 +46,25 @@ assert.equal(confirmed.row.actualActionConfirmation,true,"verified native off-ta
 assert.equal(confirmed.row.grade,"Best Angle");
 const noFlow=run(7,0,3.5,3.5);
 assert.equal(noFlow.row.grade,"Lean","a price-only confirmation has a real Lean lane without invented action");
+const alignedTarget={...quote(1.5,"fanduel",true),fetchedAt:"2026-11-03T18:26:00Z",providerObservedAt:"2026-11-03T18:24:00Z"};
+const alignedRead=readCbbMarketBehavior({independent:independent(0),independentInputKey:"aligned",startsAt:start,targets:[alignedTarget],
+ currentQuotes:[quote(8.5,"circa",true),{...quote(12.5,"pinnacle",true),providerObservedAt:"2026-11-03T18:23:00Z",fetchedAt:"2026-11-03T18:24:00Z"}],
+ anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:1,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"aligned",capturedAt:"2026-11-03T18:01:00Z",quotes:[quote(0),quote(0,"pinnacle")]}});
+assert.equal(alignedRead.receipt.margin.authority?.reason,"latest_observed_repricing");
+assert.ok(alignedRead.forecast.margin>12,"unequal aligned signals now create the actual score consequence without leader evidence");
+assert.equal(buildCbbProvisionalBoard(alignedRead.forecast,[alignedTarget,...alignedRead.receipt.currentProfessionalQuotes],{marketBehavior:alignedRead.receipt}).rows.find(r=>r.market==="spread")!.grade,"Best Angle");
+const heldNative={...quote(31.5),providerObservedAt:"2026-11-03T18:05:00Z",fetchedAt:"2026-11-03T18:06:00Z"};
+const holdRead=readCbbMarketBehavior({independent:independent(20),independentInputKey:"hold",startsAt:start,targets:[alignedTarget],
+ currentQuotes:[quote(31.5,"circa",true),quote(32,"pinnacle",true)],historyQuotes:[heldNative],
+ splitContext:[{...context(.24),line:-31.5}],
+ anchors:{release:CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,gameId:1,startsAt:start,independentRelease:CBB_CURRENT_SCORE_RELEASE,independentInputKey:"hold",capturedAt:"2026-11-03T18:01:00Z",quotes:[quote(28.5),quote(28,"pinnacle")]}});
+assert.equal(holdRead.receipt.margin.authority?.reason,"qualified_contrarian_hold");
+assert.equal(holdRead.receipt.margin.sourceBook,"circa");assert.ok(holdRead.forecast.margin>22.9&&holdRead.forecast.margin<23.2,"held native stance transports its actual three-point episode once");
+const duplicateClockRead=readCbbMarketBehavior({independent:independent(20),independentInputKey:"hold",startsAt:start,targets:[alignedTarget],
+ currentQuotes:[quote(31.5,"circa",true),quote(32,"pinnacle",true)],historyQuotes:[heldNative,
+ {...quote(31.5,"circa",true),providerObservedAt:"2026-11-03T18:20:00+00:00",fetchedAt:"2026-11-03T18:21:30Z"}],
+ splitContext:[{...context(.24),line:-31.5}],anchors:holdRead.receipt.anchors});
+assert.equal(duplicateClockRead.receipt.margin.authority?.reason,"qualified_contrarian_hold","equal native instants retain the hold selector across original timestamp formats");
 const oppositeHeld=run(7,0,0,3.5,[context(.2)]);
 assert.equal(oppositeHeld.row.grade,"Lean","book holding against opposite money can promote a positive-value Watchlist");
 assert.equal(oppositeHeld.row.pathResistance,false);

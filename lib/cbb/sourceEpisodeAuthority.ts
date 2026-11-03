@@ -7,11 +7,15 @@ export type CbbSourceEpisode = {
   currentSourceAt:number; currentAvailableBy:number;
   currentDirection:-1|0|1; resolved:boolean;
   qualifiedReaction?:boolean;
+  qualifiedContrarianHold?:boolean;
+  qualifiedNetResistance?:boolean;
+  repricedSourceAt?:number|null;
 };
 export type CbbSourceAuthority = {
-  status:"selected"|"equivalent"|"unresolved";
+  status:"selected"|"equivalent"|"retained"|"unresolved";
   reason:"single_physical_source"|"equivalent_source_effects"|"observed_leader_with_followers"|
-    "later_episode_supersedes_old_observations"|"qualified_source_response"|"current_source_opposition"|"overlapping_source_windows";
+    "later_episode_supersedes_old_observations"|"qualified_source_response"|"qualified_contrarian_hold"|
+    "latest_observed_repricing"|"qualified_current_resistance"|"current_source_opposition"|"overlapping_source_windows";
   selectedId:string|null; authorIds:string[]; followerIds:string[]; opposingIds:string[];
 };
 const same=(a:number,b:number)=>Math.abs(a-b)<=1e-7;
@@ -21,7 +25,8 @@ export function selectCbbSourceEpisode(rows:readonly CbbSourceEpisode[]):CbbSour
     !row.id||![row.effect,row.beforeSourceAt,row.afterSourceAt,row.beforeEarliest,row.beforeAvailableBy,row.afterAvailableBy,
       row.currentSourceAt,row.currentAvailableBy].every(Number.isFinite)||
     row.beforeSourceAt>=row.afterSourceAt||row.afterSourceAt>row.currentSourceAt||
-    row.beforeEarliest>row.beforeAvailableBy||row.beforeAvailableBy>row.afterAvailableBy||row.afterAvailableBy>row.currentAvailableBy))
+    row.beforeEarliest>row.beforeAvailableBy||row.beforeAvailableBy>row.afterAvailableBy||row.afterAvailableBy>row.currentAvailableBy||
+    row.repricedSourceAt!=null&&(!Number.isFinite(row.repricedSourceAt)||row.repricedSourceAt>row.currentSourceAt)))
     throw new Error("CBB source authorship requires distinct ordered economic episodes");
   const result=(chosen:CbbSourceEpisode,reason:CbbSourceAuthority["reason"],followers:string[]=[],opponents:string[]=[]):CbbSourceAuthority=>
     ({status:"selected",reason,selectedId:chosen.id,authorIds:[chosen.id],followerIds:followers,opposingIds:opponents});
@@ -48,5 +53,25 @@ export function selectCbbSourceEpisode(rows:readonly CbbSourceEpisode[]):CbbSour
   if(leaders.length===1)return result(leaders[0],"observed_leader_with_followers",rows.filter(row=>row!==leaders[0]).map(row=>row.id));
   const reacting=rows.filter(row=>row.qualifiedReaction&&row.resolved&&row.currentDirection===row.observedDirection);
   if(reacting.length===1)return result(reacting[0],"qualified_source_response");
+  // A genuine later hold against money opposing this source's priced stance
+  // distinguishes conviction without adding invented hold points or requiring
+  // that the book was the first mover. This is not ordinary flat/missing data.
+  const holding=rows.filter(row=>row.qualifiedContrarianHold);
+  if(holding.length===1)return result(holding[0],"qualified_contrarian_hold");
+  // When aligned books reprice by different amounts, use the newest observed
+  // resolved ECONOMIC update. This is an explicit recency interpretation, not
+  // a claim of leadership. Refreshed unchanged quotes and insertion order do
+  // not supply repricedSourceAt. Exact simultaneous ambiguity stays explicit.
+  const repriced=rows.filter(row=>row.resolved&&row.currentDirection===row.observedDirection&&row.repricedSourceAt!=null);
+  const latest=Math.max(...repriced.map(row=>row.repricedSourceAt!));
+  const newest=repriced.filter(row=>row.repricedSourceAt===latest);
+  if(newest.length===1)return result(newest[0],"latest_observed_repricing");
+  // Old aligned net moves need not be transported when today's own-source
+  // money is met by a verified hold. With no resolved new repricing to select,
+  // retain the forecast explicitly because of current resistance, not because
+  // leadership was unavailable. There is no invented opposite point bonus.
+  const resisting=rows.filter(row=>row.qualifiedNetResistance);
+  if(resisting.length===1)return {status:"retained",reason:"qualified_current_resistance",selectedId:resisting[0].id,
+    authorIds:[],followerIds:[],opposingIds:[resisting[0].id]};
   return {status:"unresolved",reason:"overlapping_source_windows",selectedId:null,authorIds:[],followerIds:[],opposingIds:[]};
 }

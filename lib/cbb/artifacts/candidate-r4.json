@@ -1,0 +1,3058 @@
+{
+  "release": "cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior",
+  "config": {
+    "id": "score_r1_p0.25_c0.8",
+    "ridge": 1,
+    "paceRidge": 0.25,
+    "priorCarry": 0.8,
+    "recencyDays": 90
+  },
+  "uncertainty": {
+    "marginSd": 11.882808501656784,
+    "totalSd": 16.993742849108834,
+    "marginTotalCorrelation": 0.025514787619637786,
+    "marginCorrection": -0.13713535132332144,
+    "totalCorrection": 0.822132324525501,
+    "fitThroughSeason": 2024,
+    "games": 11383
+  },
+  "correction": {
+    "mode": "matchup",
+    "featureIndexes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18
+    ],
+    "fitThroughSeason": 2024,
+    "coefficientsMargin": [
+      0.4273359326723975,
+      -1.4951191621599236,
+      1.0322462839852344,
+      -0.4976525575889546,
+      0.6344159699435246,
+      0.11306484207541156,
+      1.7895034712786866,
+      -1.9997421027264197,
+      -1.5602840735325092,
+      1.34921689707434,
+      0.4938823472887999,
+      -0.40854947110115925,
+      0.8527035240625885,
+      -0.1334544237630267,
+      -0.15633400738283146,
+      0.32811057421499307,
+      0.5120999020773931,
+      -0.19903181128284256,
+      0.6562957325853743
+    ],
+    "coefficientsTotal": [
+      3.183377628616366,
+      0.8209254224681503,
+      -5.599919369186247,
+      3.102620637959079,
+      -0.6947292335463284,
+      0.3415830545785103,
+      0.7306486859427895,
+      -1.2232084873620626,
+      1.1231287039929845,
+      -0.2692248520322038,
+      0.09955393435202635,
+      -3.698196463122123,
+      -1.044967887725202,
+      0.053160057411188656,
+      -1.4446099382679594,
+      0.029589173488341475,
+      2.7430853373910655,
+      0.2958473521476319,
+      -1.6204433414723065
+    ]
+  },
+  "prior": {
+    "release": "cbb_candidate_2026_10_28_r2_score_precision",
+    "config": {
+      "id": "score_r1_p0.25_c0.8",
+      "ridge": 1,
+      "paceRidge": 0.25,
+      "priorCarry": 0.8,
+      "recencyDays": 90
+    },
+    "season": 2025,
+    "asOf": "2026-07-01T00:00:00.000Z",
+    "leagueEfficiency": 108.59888865910106,
+    "leagueTempo": 67.89316761699392,
+    "homeEfficiency": 4.460181482257584,
+    "teams": {
+      "1": {
+        "offense": -5.391732751204825,
+        "defense": -4.585421308476627,
+        "pace": -1.9120563996062836,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "2": {
+        "offense": 3.9866879313456303,
+        "defense": -4.395811675479885,
+        "pace": 2.2513025231415673,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "3": {
+        "offense": 6.992702484484437,
+        "defense": -10.378795458788472,
+        "pace": -6.804675991972454,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "4": {
+        "offense": 19.671254529770973,
+        "defense": -17.555751802484522,
+        "pace": -4.100128957458076,
+        "games": 38,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "5": {
+        "offense": 8.021743588144851,
+        "defense": -3.7919715269884295,
+        "pace": 4.790025715478784,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "6": {
+        "offense": -1.8323906801910577,
+        "defense": -1.03737549135195,
+        "pace": 6.482916889270471,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "7": {
+        "offense": 10.945632938111729,
+        "defense": -11.112177123632755,
+        "pace": 4.467745507328017,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "8": {
+        "offense": 9.23277696838714,
+        "defense": -6.6488276166231834,
+        "pace": 0.35937043447123046,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "9": {
+        "offense": 11.246956133783199,
+        "defense": -3.0744469855792507,
+        "pace": 2.4192394036611047,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "10": {
+        "offense": 10.428822421256536,
+        "defense": -8.305776018139559,
+        "pace": 2.013167512288056,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "11": {
+        "offense": 4.236954705921548,
+        "defense": 0.3294382656700579,
+        "pace": -1.8270806748779689,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "12": {
+        "offense": 3.6770843381578513,
+        "defense": -2.2163331160676725,
+        "pace": -6.693174398975716,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "13": {
+        "offense": 11.862389822040615,
+        "defense": -2.1363180678896665,
+        "pace": 1.811978702499746,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "14": {
+        "offense": 6.8914568683452995,
+        "defense": -3.5200829892546617,
+        "pace": -1.5983897650700092,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "15": {
+        "offense": 4.059552790188655,
+        "defense": -1.5484960296896337,
+        "pace": -0.037488131707290706,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "16": {
+        "offense": 11.47720095703091,
+        "defense": -10.350640908811107,
+        "pace": -3.92228887420709,
+        "games": 36,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "17": {
+        "offense": 6.556962560988192,
+        "defense": -3.705245984008261,
+        "pace": -1.1723226717474702,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "18": {
+        "offense": 7.413102968748907,
+        "defense": -2.1275428831346694,
+        "pace": 0.9866668447898431,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "19": {
+        "offense": 0.33093488799851795,
+        "defense": 1.1855903837697228,
+        "pace": 3.138715196818188,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "20": {
+        "offense": 6.111556056843727,
+        "defense": 16.520653148218976,
+        "pace": -4.534085036665802,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "21": {
+        "offense": 0.921008942797764,
+        "defense": 0.8742360982228595,
+        "pace": 0.8403925970320308,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "22": {
+        "offense": 0.5303368314429214,
+        "defense": 10.680049033036134,
+        "pace": 0.03309778106847576,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "23": {
+        "offense": -3.981912383118205,
+        "defense": 1.968467463709808,
+        "pace": -0.455780459685898,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "24": {
+        "offense": -4.945537104174172,
+        "defense": 4.653458332878687,
+        "pace": -6.2016061753216585,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "25": {
+        "offense": -1.416911532892746,
+        "defense": 0.6435280581656986,
+        "pace": 2.508252559899058,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "26": {
+        "offense": -8.171102425031206,
+        "defense": 8.399442629190451,
+        "pace": -4.578495830307609,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "27": {
+        "offense": -2.8210736402677377,
+        "defense": 13.419500476585041,
+        "pace": 6.645720376869112,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "28": {
+        "offense": 5.592314539806143,
+        "defense": 7.36181505520367,
+        "pace": 4.851474942430588,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "29": {
+        "offense": -3.6151831785242945,
+        "defense": 9.418072778530748,
+        "pace": -1.6151719166791776,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "30": {
+        "offense": -7.35603087486057,
+        "defense": 4.461298108606633,
+        "pace": 3.48701056571697,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "31": {
+        "offense": -8.61016543160447,
+        "defense": 10.799483216194517,
+        "pace": -3.463834585562373,
+        "games": 26,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "32": {
+        "offense": -9.458235584625877,
+        "defense": 7.672582515478561,
+        "pace": -3.8278157283139898,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "33": {
+        "offense": -14.082838069242312,
+        "defense": 0.39127445389222515,
+        "pace": -4.321349438145238,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "34": {
+        "offense": -11.629844023081969,
+        "defense": 3.966847085286078,
+        "pace": 0.3872924554055769,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "35": {
+        "offense": -11.834640488992905,
+        "defense": 6.292389695563767,
+        "pace": 0.620854468831693,
+        "games": 27,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "36": {
+        "offense": -3.8573797083100145,
+        "defense": 6.897708079555712,
+        "pace": -4.331086534686083,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "37": {
+        "offense": 2.176903336369417,
+        "defense": -0.4152157360412766,
+        "pace": -1.0238363051375368,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "38": {
+        "offense": -3.8030942889080164,
+        "defense": 6.511278949032077,
+        "pace": 2.8237760122993825,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "39": {
+        "offense": -2.886904672703957,
+        "defense": -0.2550600571693934,
+        "pace": -5.8696196337497915,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "40": {
+        "offense": 3.240137634536813,
+        "defense": 4.6795293608852315,
+        "pace": -7.199923022055294,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "41": {
+        "offense": -3.5181927641478996,
+        "defense": 2.00668367502422,
+        "pace": 1.7791227771534481,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "42": {
+        "offense": 0.47752899394494885,
+        "defense": -2.838957831182655,
+        "pace": 4.254300374682135,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "43": {
+        "offense": 0.07585544330206462,
+        "defense": -2.453915860319892,
+        "pace": 6.313900623462295,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "44": {
+        "offense": -3.3393564213528304,
+        "defense": -7.366379454590332,
+        "pace": -5.125379006190136,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "45": {
+        "offense": -0.6809496135002439,
+        "defense": 4.1142232412349395,
+        "pace": -3.1617728581369207,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "46": {
+        "offense": 7.848754958181609,
+        "defense": -8.613941271502876,
+        "pace": 6.468281953653802,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "47": {
+        "offense": 2.1130610683730104,
+        "defense": 0.971849492797236,
+        "pace": -4.298103183456034,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "48": {
+        "offense": -2.292396839054074,
+        "defense": 1.5918154608964286,
+        "pace": -0.15410648669335447,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "49": {
+        "offense": 9.252267530379594,
+        "defense": -3.3879347466916028,
+        "pace": 1.4146885008094838,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "50": {
+        "offense": 1.8221028329022109,
+        "defense": -2.8122268286604215,
+        "pace": 3.709381793176057,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "51": {
+        "offense": -6.697516706283517,
+        "defense": 9.091951848279257,
+        "pace": 2.841690709248731,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "52": {
+        "offense": 3.3391742607400854,
+        "defense": -8.216705818675083,
+        "pace": 0.5971535705118786,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "53": {
+        "offense": 0.19493745700960474,
+        "defense": -3.8342317522604024,
+        "pace": -6.41265841298793,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "54": {
+        "offense": 2.9918251263832376,
+        "defense": -8.76543570936918,
+        "pace": -2.536572603580011,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "55": {
+        "offense": 1.2494133300660988,
+        "defense": -1.862101558940616,
+        "pace": 0.26461586038612506,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "56": {
+        "offense": -3.6491302628804902,
+        "defense": -4.040125580125764,
+        "pace": -4.080264557340632,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "57": {
+        "offense": 2.2877688357256076,
+        "defense": -4.229146584767027,
+        "pace": -7.349403411648822,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "58": {
+        "offense": 6.135168045306496,
+        "defense": -1.663748020816464,
+        "pace": 2.3204376569847467,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "59": {
+        "offense": -4.574537092045339,
+        "defense": 1.803660861312764,
+        "pace": -1.2131262180248037,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "60": {
+        "offense": -4.85121701258893,
+        "defense": 1.621404276921887,
+        "pace": -2.7487368136198738,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "61": {
+        "offense": -4.222994591443097,
+        "defense": -4.824043892685331,
+        "pace": -1.7008081757546123,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "62": {
+        "offense": 1.287199892759227,
+        "defense": 1.9167885269504128,
+        "pace": -0.5605572787033734,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "63": {
+        "offense": -0.4626986443509152,
+        "defense": -7.765188468014585,
+        "pace": 1.1335931143915616,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "64": {
+        "offense": 11.223171593026377,
+        "defense": -6.468413122443112,
+        "pace": 6.120397495876136,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "65": {
+        "offense": 4.003000402851093,
+        "defense": 1.5609521942970743,
+        "pace": -0.19254566106652413,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "66": {
+        "offense": 9.273858116991063,
+        "defense": -7.470667052882527,
+        "pace": 1.1136264021761468,
+        "games": 36,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "67": {
+        "offense": 3.5791777589792213,
+        "defense": -4.779572733522081,
+        "pace": 3.7422705997204795,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "68": {
+        "offense": 17.8712644733655,
+        "defense": -17.633553066414326,
+        "pace": 4.803376620486598,
+        "games": 39,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "69": {
+        "offense": 14.987672387860407,
+        "defense": -5.079801637089383,
+        "pace": 4.024042724834371,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "70": {
+        "offense": 12.46635244803306,
+        "defense": -4.0912639992934015,
+        "pace": -0.46037327835066394,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "71": {
+        "offense": 3.2980237132093375,
+        "defense": -13.63674701441649,
+        "pace": -0.7814003870014586,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "72": {
+        "offense": 6.263912019206071,
+        "defense": -2.3986453757760966,
+        "pace": 3.224647444374162,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "73": {
+        "offense": 15.126780970809772,
+        "defense": -19.11207282197753,
+        "pace": -8.171722340916121,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "74": {
+        "offense": 14.068898799907908,
+        "defense": -17.223053547034088,
+        "pace": -0.2444673913677697,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "75": {
+        "offense": 6.655660020328279,
+        "defense": -14.39450096233811,
+        "pace": 1.4544953320551832,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "76": {
+        "offense": 2.35801509549651,
+        "defense": -2.8563942057495577,
+        "pace": 9.401261985323394,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "77": {
+        "offense": 7.612102868364358,
+        "defense": 0.47134579875212,
+        "pace": 9.047128638684375,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "78": {
+        "offense": 5.414152324176355,
+        "defense": -10.151341679203917,
+        "pace": 0.6162286071352592,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "79": {
+        "offense": 15.2788267116298,
+        "defense": -8.319556249625572,
+        "pace": -3.6267374691177494,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "80": {
+        "offense": 8.694938230931664,
+        "defense": -2.9429344760623475,
+        "pace": 4.516299704069423,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "81": {
+        "offense": 4.975198526456248,
+        "defense": 1.9039155226568414,
+        "pace": -2.8623055676122333,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "82": {
+        "offense": 2.970565198132179,
+        "defense": -11.392032752800203,
+        "pace": -8.380383238839347,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "83": {
+        "offense": 6.242305268046562,
+        "defense": -1.4336410940148125,
+        "pace": 2.3879546822932562,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "84": {
+        "offense": 5.884965856527773,
+        "defense": -3.7062892723305483,
+        "pace": 1.9708997926268625,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "85": {
+        "offense": -1.9255170352140463,
+        "defense": -7.85299387300994,
+        "pace": -1.65303028580506,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "86": {
+        "offense": 4.893537882170753,
+        "defense": -4.8126511107812,
+        "pace": -2.079224288903112,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "87": {
+        "offense": 3.5465703344410717,
+        "defense": -8.668364215119555,
+        "pace": 2.491004778263635,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "88": {
+        "offense": 9.986958310702137,
+        "defense": -0.5447704346884582,
+        "pace": 5.960180146711597,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "89": {
+        "offense": 1.2275398086277742,
+        "defense": -11.38928518245298,
+        "pace": -4.0904566792412655,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "90": {
+        "offense": 10.608441067684877,
+        "defense": -16.2613382356998,
+        "pace": 3.425333818940607,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "91": {
+        "offense": 13.53684438224247,
+        "defense": -15.55876260413233,
+        "pace": -6.205614248167339,
+        "games": 40,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "92": {
+        "offense": 9.635553317609066,
+        "defense": -7.224524953908474,
+        "pace": -3.050740504650589,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "93": {
+        "offense": 8.591114809476469,
+        "defense": 0.9358980818472146,
+        "pace": 6.259520886856604,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "94": {
+        "offense": 2.6317362398013002,
+        "defense": 4.46682626561578,
+        "pace": 0.49128151468716635,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "95": {
+        "offense": -1.5990194332935435,
+        "defense": 8.457405329875499,
+        "pace": -2.0022203188482095,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "96": {
+        "offense": -1.8573875269958926,
+        "defense": -1.2014710660893475,
+        "pace": 1.0181479407470768,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "97": {
+        "offense": -2.723360283632505,
+        "defense": 0.9703920303230663,
+        "pace": 3.631491281969849,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "98": {
+        "offense": 0.9339969339048894,
+        "defense": 0.04040463837181429,
+        "pace": -2.208384052185071,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "99": {
+        "offense": -4.994033688529198,
+        "defense": 10.950264533962436,
+        "pace": -6.512626959150349,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "100": {
+        "offense": 2.8756466087809387,
+        "defense": 1.9327169522619148,
+        "pace": 2.9398849944690038,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "101": {
+        "offense": -5.903377708072752,
+        "defense": -5.465322082082795,
+        "pace": 1.1772845493237893,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "102": {
+        "offense": -5.4596783783921685,
+        "defense": 6.113859843986092,
+        "pace": 6.249568006206029,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "103": {
+        "offense": 0.6446235839630109,
+        "defense": 5.633480576798964,
+        "pace": 1.2057580669327415,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "104": {
+        "offense": -3.1284527037006358,
+        "defense": 2.2607069286451567,
+        "pace": 7.380746629434191,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "105": {
+        "offense": -12.750070505923704,
+        "defense": 9.66600665160505,
+        "pace": 2.6444021774031192,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "106": {
+        "offense": 8.388340784007717,
+        "defense": -4.745996770615841,
+        "pace": 4.5004498781754565,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "107": {
+        "offense": -3.288584545546826,
+        "defense": 1.168115771770195,
+        "pace": 2.4582780446156955,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "108": {
+        "offense": -3.891660687996139,
+        "defense": 1.6441940423649288,
+        "pace": -4.5466079999349756,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "109": {
+        "offense": -0.7865232118611089,
+        "defense": 3.2153104690279517,
+        "pace": 3.8449807569641545,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "110": {
+        "offense": -9.323715525359216,
+        "defense": 2.100904574421597,
+        "pace": 1.6557208440232356,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "111": {
+        "offense": -2.726945965128665,
+        "defense": 1.842612915501848,
+        "pace": -4.033251995927755,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "112": {
+        "offense": 2.229057057075549,
+        "defense": 0.2149776485072529,
+        "pace": 6.908669010201639,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "113": {
+        "offense": 20.984253958151577,
+        "defense": -12.229908735483638,
+        "pace": -3.430280587722842,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "114": {
+        "offense": 9.960589173227296,
+        "defense": -5.473681397454805,
+        "pace": -2.5395809820289537,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "115": {
+        "offense": 14.810845921232088,
+        "defense": -6.714973254971045,
+        "pace": -8.903054595396144,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "116": {
+        "offense": 2.2239070797195364,
+        "defense": -3.186257409922146,
+        "pace": -2.486278723049028,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "117": {
+        "offense": 14.206078126039523,
+        "defense": -13.630598736829713,
+        "pace": -1.3705006880301807,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "118": {
+        "offense": 18.803831833914245,
+        "defense": -19.12132891830716,
+        "pace": 5.918203940030475,
+        "games": 40,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "119": {
+        "offense": 3.767903302741468,
+        "defense": -5.040529060285673,
+        "pace": -10.057559408433333,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "120": {
+        "offense": 8.773441575561005,
+        "defense": -15.39781866929683,
+        "pace": -2.0861041742221107,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "121": {
+        "offense": 6.961088460152123,
+        "defense": -5.300449700652236,
+        "pace": -5.039579663554039,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "122": {
+        "offense": 14.157403362846074,
+        "defense": -7.283625832594142,
+        "pace": -3.2132968145886975,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "123": {
+        "offense": 2.463462109086917,
+        "defense": -5.176422607623814,
+        "pace": -2.176974767424347,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "124": {
+        "offense": 3.866980013456941,
+        "defense": 2.7593952869983656,
+        "pace": 1.0619489520918313,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "125": {
+        "offense": 22.219792807939452,
+        "defense": -7.502654199695584,
+        "pace": -6.236582431122625,
+        "games": 39,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "126": {
+        "offense": 1.2589665142479471,
+        "defense": -2.8443659443410323,
+        "pace": 0.9916750208755071,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "127": {
+        "offense": 13.380339088907133,
+        "defense": -7.36464036718674,
+        "pace": -5.321321890007503,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "128": {
+        "offense": 2.636981005854497,
+        "defense": -4.989482199756781,
+        "pace": 6.022865475401601,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "129": {
+        "offense": 7.376937674505753,
+        "defense": -5.34159982515591,
+        "pace": -0.23553293940125503,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "130": {
+        "offense": 16.453815887582557,
+        "defense": -7.451048804325422,
+        "pace": 1.8182288904895085,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "131": {
+        "offense": 0.5509379680236485,
+        "defense": 4.864621072330361,
+        "pace": 12.973183857707783,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "132": {
+        "offense": -7.643592561938375,
+        "defense": 8.999866071534187,
+        "pace": 5.346713034879794,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "133": {
+        "offense": -3.0715719515809794,
+        "defense": 1.4208227541140397,
+        "pace": 9.31614463259763,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "134": {
+        "offense": -0.6813569238271288,
+        "defense": 0.5362733277516571,
+        "pace": 11.85462428774914,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "135": {
+        "offense": -2.1021006348374462,
+        "defense": -4.67597156931737,
+        "pace": 3.9224566919363255,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "136": {
+        "offense": -5.485256322036035,
+        "defense": 2.7953622078557028,
+        "pace": 2.457774155624439,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "137": {
+        "offense": -3.9658226405676196,
+        "defense": -1.3045465008708352,
+        "pace": 2.9776920460860383,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "138": {
+        "offense": -3.5176689910588466,
+        "defense": -9.058669627423313,
+        "pace": 2.4699396518032812,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "139": {
+        "offense": -5.382226468064122,
+        "defense": 3.419212319748302,
+        "pace": 2.8733652206831644,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "140": {
+        "offense": -3.0470118671500366,
+        "defense": -6.1993964591605595,
+        "pace": -0.8467843949039733,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "141": {
+        "offense": 2.5715106794716514,
+        "defense": 1.2826087444691865,
+        "pace": -4.711171276584001,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "142": {
+        "offense": 0.9167505874300509,
+        "defense": 2.9957543229275374,
+        "pace": 3.2191551262647575,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "143": {
+        "offense": -0.6140893861590553,
+        "defense": -1.1874752598370477,
+        "pace": 1.619129107620046,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "144": {
+        "offense": -5.547889769202367,
+        "defense": -3.0094894355920245,
+        "pace": -5.651509789096742,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "145": {
+        "offense": -1.704692994654359,
+        "defense": 6.090975688333672,
+        "pace": -1.6280795010274949,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "146": {
+        "offense": -6.701071249078755,
+        "defense": 2.422360164885597,
+        "pace": -2.9368707434251773,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "147": {
+        "offense": 3.5166491689013317,
+        "defense": -5.1632764045344794,
+        "pace": -6.202132055160884,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "148": {
+        "offense": -1.9833736322689681,
+        "defense": -1.8677901463147026,
+        "pace": -0.12190986398776904,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "149": {
+        "offense": -4.067418597873099,
+        "defense": 7.97953153728122,
+        "pace": 1.9013792032535068,
+        "games": 27,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "150": {
+        "offense": -1.6638849083881146,
+        "defense": 8.96753442629231,
+        "pace": 3.89252985162726,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "151": {
+        "offense": -3.8981479758226705,
+        "defense": 2.7299473456446677,
+        "pace": -1.5834136990226448,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "152": {
+        "offense": -2.1437450460630196,
+        "defense": -4.2085227806292105,
+        "pace": -7.298909424191219,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "153": {
+        "offense": 2.3744333822791024,
+        "defense": -2.6866311631584234,
+        "pace": -3.492588792064331,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "154": {
+        "offense": 1.3813649734268745,
+        "defense": 2.123149146242647,
+        "pace": 9.28365227189682,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "155": {
+        "offense": -3.074500044180938,
+        "defense": 6.804113583380826,
+        "pace": -6.068244201441085,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "156": {
+        "offense": -2.393732565031351,
+        "defense": -0.32903112344314267,
+        "pace": 6.642625872435941,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "157": {
+        "offense": -2.3196799991644674,
+        "defense": -1.2643768252075394,
+        "pace": -3.736218581950345,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "158": {
+        "offense": 1.8668744753925863,
+        "defense": -0.9278741445873412,
+        "pace": 5.9560396429470694,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "159": {
+        "offense": 7.227885329298828,
+        "defense": 3.1251758958003597,
+        "pace": -5.80072733345685,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "160": {
+        "offense": -3.221869060369897,
+        "defense": -3.670224035270577,
+        "pace": -5.7208825488623445,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "161": {
+        "offense": 1.1765027362716138,
+        "defense": -0.6888665190624054,
+        "pace": -1.9033130322409508,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "162": {
+        "offense": 0.6646667771850929,
+        "defense": 2.348489183639854,
+        "pace": -4.054814180226129,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "163": {
+        "offense": -0.8295220885785873,
+        "defense": -0.25473366689018623,
+        "pace": -1.556044824704746,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "164": {
+        "offense": 4.686168616349084,
+        "defense": 0.34690526349393197,
+        "pace": 4.34739142040236,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "165": {
+        "offense": -6.87007914617453,
+        "defense": 0.1341369605935015,
+        "pace": -2.0367622303178674,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "166": {
+        "offense": 0.25469898184974016,
+        "defense": -0.5665968927127304,
+        "pace": 5.5352463686574085,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "167": {
+        "offense": -0.4686915263721312,
+        "defense": 12.235946249475687,
+        "pace": 3.9161640596591867,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "168": {
+        "offense": -1.8276477880750355,
+        "defense": 2.0892486647393627,
+        "pace": 1.9567424956603328,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "169": {
+        "offense": 2.5460795814711887,
+        "defense": 6.853564249026766,
+        "pace": -7.001884727880751,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "170": {
+        "offense": -2.8509206607263344,
+        "defense": 9.99517948128805,
+        "pace": 8.416191202854009,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "171": {
+        "offense": -2.088096901299222,
+        "defense": 4.839315447385115,
+        "pace": 0.631534990285893,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "172": {
+        "offense": 1.0140604773604662,
+        "defense": 1.120133509704469,
+        "pace": 4.846326440999306,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "173": {
+        "offense": 4.19105248412293,
+        "defense": 5.246412510919268,
+        "pace": 3.2206912403118655,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "174": {
+        "offense": -3.5423557181927365,
+        "defense": 3.3152451432313317,
+        "pace": 1.2167148360893605,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "175": {
+        "offense": 2.1957747172669433,
+        "defense": -1.2999786369021764,
+        "pace": -4.767915292236277,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "176": {
+        "offense": 4.268735043954156,
+        "defense": 1.8689759523051164,
+        "pace": 0.8540279500283615,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "177": {
+        "offense": -2.994622129632726,
+        "defense": 0.28486251102307925,
+        "pace": 0.805305575208471,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "178": {
+        "offense": -9.235928926383057,
+        "defense": -0.3584560428801743,
+        "pace": -0.6287615930986038,
+        "games": 25,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "179": {
+        "offense": -0.9251332950369977,
+        "defense": 2.6747691660702917,
+        "pace": 0.21047713088454298,
+        "games": 26,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "180": {
+        "offense": 11.473184493766473,
+        "defense": 8.145895503843406,
+        "pace": 6.257481331487759,
+        "games": 26,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "181": {
+        "offense": -4.358339474653858,
+        "defense": 3.1690358501428117,
+        "pace": 4.083331796899134,
+        "games": 25,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "182": {
+        "offense": -2.7583002241599344,
+        "defense": -5.266272085648183,
+        "pace": -7.523717928499763,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "183": {
+        "offense": -0.8109827628363302,
+        "defense": -1.6437876060088326,
+        "pace": 2.6269792949811053,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "184": {
+        "offense": -2.789758946765906,
+        "defense": 2.7529733994895773,
+        "pace": -6.82615320100331,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "185": {
+        "offense": 9.049500481925902,
+        "defense": -1.9841827816659905,
+        "pace": -5.637006735273086,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "186": {
+        "offense": -12.030384812770425,
+        "defense": 5.593689243025118,
+        "pace": -4.869385253295872,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "187": {
+        "offense": -3.2574723469224316,
+        "defense": 2.3304498345422844,
+        "pace": -0.8728859279045277,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "188": {
+        "offense": -4.523829672448147,
+        "defense": 0.7540998822039148,
+        "pace": 1.4582812324379473,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "189": {
+        "offense": -4.011216496372773,
+        "defense": 9.597142576956573,
+        "pace": 1.0212436519515142,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "190": {
+        "offense": -7.643607975505084,
+        "defense": -6.157032291459449,
+        "pace": -2.7834221861373143,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "191": {
+        "offense": -1.9593643982248405,
+        "defense": -4.504837380323925,
+        "pace": -7.361249686818893,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "192": {
+        "offense": -7.817825359985074,
+        "defense": -2.1920829447070354,
+        "pace": 0.1432576261584106,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "193": {
+        "offense": -7.310945664931732,
+        "defense": 7.573200364661147,
+        "pace": -8.95312466606498,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "194": {
+        "offense": -3.961673657733307,
+        "defense": -1.439128358505085,
+        "pace": 5.275371184567149,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "195": {
+        "offense": -10.282439340204476,
+        "defense": 9.857425431071235,
+        "pace": -2.718516734531624,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "196": {
+        "offense": -1.076172898550763,
+        "defense": 7.286882829651548,
+        "pace": 2.7003422045100414,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "197": {
+        "offense": -5.27472873621253,
+        "defense": -0.5632020233678702,
+        "pace": -4.066729544545485,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "198": {
+        "offense": 0.20663727817069558,
+        "defense": -1.5054001832246706,
+        "pace": -4.481591225275025,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "199": {
+        "offense": -16.30343315926586,
+        "defense": 8.015218861766128,
+        "pace": 1.305158523008785,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "200": {
+        "offense": -18.59023279273974,
+        "defense": 4.6152273031910696,
+        "pace": -3.5575438658549436,
+        "games": 26,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "201": {
+        "offense": 0.1489619301665574,
+        "defense": -1.8316563062505344,
+        "pace": 3.5233406074185862,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "202": {
+        "offense": -13.819938359666407,
+        "defense": 5.264791779510988,
+        "pace": -6.473505858743971,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "203": {
+        "offense": -9.057177033066939,
+        "defense": 9.345571752643638,
+        "pace": 6.75993235249408,
+        "games": 27,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "204": {
+        "offense": -4.3644049867792285,
+        "defense": 6.472747957741889,
+        "pace": 1.9537558794085637,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "205": {
+        "offense": -6.623250284373547,
+        "defense": 10.504201119562369,
+        "pace": -3.2937724697767474,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "206": {
+        "offense": -11.748985584506876,
+        "defense": 6.046828930711839,
+        "pace": 3.2253827267164583,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "207": {
+        "offense": 8.236722591712576,
+        "defense": -2.6132111125037607,
+        "pace": 4.95333875266655,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "208": {
+        "offense": -8.993069963984484,
+        "defense": 0.6538411561723882,
+        "pace": -6.152181779035904,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "209": {
+        "offense": -3.2910191530688415,
+        "defense": -2.388113785424417,
+        "pace": 2.248053829799822,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "210": {
+        "offense": 0.1174241442772643,
+        "defense": 6.222658448283528,
+        "pace": -0.10541565691350284,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "211": {
+        "offense": -2.4908731278371956,
+        "defense": 5.0116079778624565,
+        "pace": -0.25818488296198694,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "212": {
+        "offense": -7.288158809603854,
+        "defense": 0.9454919932278489,
+        "pace": -0.6773460751254604,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "213": {
+        "offense": 0.41561202100790684,
+        "defense": 0.590429438950148,
+        "pace": 4.324281163590231,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "214": {
+        "offense": -0.6099064293487745,
+        "defense": 2.798901810876944,
+        "pace": 4.2843027624074494,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "215": {
+        "offense": 6.576569550319164,
+        "defense": -0.7325872329575195,
+        "pace": 3.8819970224245672,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "216": {
+        "offense": -14.39731051216805,
+        "defense": 6.130432134690055,
+        "pace": 0.9358561460422206,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "217": {
+        "offense": -0.4656418762924277,
+        "defense": 5.659975249084802,
+        "pace": 3.1628688311435775,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "218": {
+        "offense": 5.599376955381152,
+        "defense": 3.3741011459369092,
+        "pace": 0.6057777080594575,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "219": {
+        "offense": -2.7534286419565235,
+        "defense": 7.534943614437333,
+        "pace": 0.6915602375410116,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "220": {
+        "offense": 10.583074823582542,
+        "defense": 0.0015112657755050446,
+        "pace": 3.71893720104466,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "221": {
+        "offense": 3.6067279580417995,
+        "defense": -0.29048001294555337,
+        "pace": -1.173024605418355,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "222": {
+        "offense": 1.2356211017216343,
+        "defense": 2.102876453815255,
+        "pace": -1.760364516467818,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "223": {
+        "offense": -7.748063880800629,
+        "defense": 5.766303212974725,
+        "pace": -1.0751656908027478,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "224": {
+        "offense": 1.6544053946150508,
+        "defense": -5.732470036730939,
+        "pace": -1.784590376046614,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "225": {
+        "offense": -1.8637285418228267,
+        "defense": 0.2442338214452638,
+        "pace": 2.024674293827505,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "226": {
+        "offense": 4.491870318228203,
+        "defense": 2.8468415622525787,
+        "pace": 6.6547139659308945,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "227": {
+        "offense": 2.1105601975668153,
+        "defense": -8.947874560465776,
+        "pace": -8.719696097019852,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "228": {
+        "offense": -4.236514997742766,
+        "defense": -9.121981186673173,
+        "pace": 2.3406695184223576,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "229": {
+        "offense": 1.3157531066954364,
+        "defense": -4.287606754051918,
+        "pace": -0.8967828113568895,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "230": {
+        "offense": -0.89585195193151,
+        "defense": -1.0962550001200617,
+        "pace": -3.402277499793422,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "231": {
+        "offense": -14.129802509783032,
+        "defense": 8.174804739353114,
+        "pace": -1.2482844412852523,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "232": {
+        "offense": 9.174103140940055,
+        "defense": -4.023019312717715,
+        "pace": -3.4356961669153088,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "233": {
+        "offense": 7.561591288692055,
+        "defense": -1.153308505229396,
+        "pace": -6.460686867750421,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "234": {
+        "offense": -2.5641755828665276,
+        "defense": -2.979828959859814,
+        "pace": 2.046278040299916,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "235": {
+        "offense": 2.8669880973739743,
+        "defense": -9.962441166971933,
+        "pace": 2.340441703953307,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "236": {
+        "offense": 4.999951154683492,
+        "defense": -6.08030955237242,
+        "pace": -2.26410642770184,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "237": {
+        "offense": 8.515041463644959,
+        "defense": -8.62349768265573,
+        "pace": 5.5902952448174,
+        "games": 36,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "238": {
+        "offense": 2.4234294436829993,
+        "defense": -11.922124008521067,
+        "pace": 1.8568996758471803,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "239": {
+        "offense": 2.6053486008866984,
+        "defense": 8.697812844987386,
+        "pace": -3.330330537840927,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "240": {
+        "offense": 4.975903502529681,
+        "defense": -1.8465059437674012,
+        "pace": 2.940924543045899,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "241": {
+        "offense": 14.395318092948283,
+        "defense": -6.8602227752099045,
+        "pace": -0.22253780580762508,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "242": {
+        "offense": 4.146491097817474,
+        "defense": -0.7329476923518834,
+        "pace": -2.7405435576914448,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "243": {
+        "offense": -4.077576663284499,
+        "defense": 6.117881537312712,
+        "pace": -4.126666054242729,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "244": {
+        "offense": -9.28984258529747,
+        "defense": 8.729028162213833,
+        "pace": -3.7647233146276906,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "245": {
+        "offense": -7.952152574772409,
+        "defense": 6.858321510901807,
+        "pace": -6.073607916929758,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "246": {
+        "offense": -6.836598175673356,
+        "defense": 4.022760317888428,
+        "pace": 4.5165912525929155,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "247": {
+        "offense": -4.038390233270839,
+        "defense": -0.7634589351063985,
+        "pace": 0.14750371038048796,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "248": {
+        "offense": -6.140372594097554,
+        "defense": 2.528888138313925,
+        "pace": -3.932680414387379,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "249": {
+        "offense": -10.066907434601534,
+        "defense": 1.9021757357116262,
+        "pace": -6.0475737445216025,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "250": {
+        "offense": -7.481066247057228,
+        "defense": 11.088354522476173,
+        "pace": 4.150329441774617,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "251": {
+        "offense": -14.067938167848952,
+        "defense": -0.17906453460682964,
+        "pace": -2.100756021843252,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "252": {
+        "offense": -7.194837226261087,
+        "defense": 3.7374554006371152,
+        "pace": -5.385782869526861,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "253": {
+        "offense": -11.366703044596667,
+        "defense": 2.6283321199259824,
+        "pace": -3.009228236306903,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "254": {
+        "offense": -8.841016201196549,
+        "defense": -0.49216562860893787,
+        "pace": 9.048929482223704,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "255": {
+        "offense": -5.991608622985854,
+        "defense": 4.423713565744062,
+        "pace": -0.7147087014095864,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "256": {
+        "offense": -2.1352593670881252,
+        "defense": 6.687435367662391,
+        "pace": -4.56311134482504,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "257": {
+        "offense": -8.087296743853836,
+        "defense": -2.8388453543675163,
+        "pace": -4.828861877592184,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "258": {
+        "offense": -6.203286556750173,
+        "defense": -2.3853479771672887,
+        "pace": 2.399899012710273,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "259": {
+        "offense": -11.018491932301592,
+        "defense": 5.728033928038,
+        "pace": -0.7693538431178302,
+        "games": 27,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "260": {
+        "offense": 1.4275834156515315,
+        "defense": 0.6064059261043694,
+        "pace": 5.692286121017594,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "261": {
+        "offense": -5.78039434767639,
+        "defense": 6.226964291984186,
+        "pace": -1.0526751939022896,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "262": {
+        "offense": -8.535333423248497,
+        "defense": -3.6716141958615984,
+        "pace": -5.4928228486310395,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "263": {
+        "offense": -15.035363045551863,
+        "defense": 12.30458250328653,
+        "pace": -1.0145939803515496,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "264": {
+        "offense": -2.7729262537642545,
+        "defense": 2.912491884658859,
+        "pace": -2.8350884235189926,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "265": {
+        "offense": -8.749495467494285,
+        "defense": 8.28555872772917,
+        "pace": 0.13420047871536833,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "266": {
+        "offense": 2.384469219391273,
+        "defense": 7.894871407037943,
+        "pace": -7.7383013595375605,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "267": {
+        "offense": -9.593368038958621,
+        "defense": 5.058790020800701,
+        "pace": -0.4089432645615287,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "268": {
+        "offense": -0.7307472778047702,
+        "defense": 5.49129754541584,
+        "pace": -0.4044785212169306,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "269": {
+        "offense": -6.939033011475048,
+        "defense": 7.858111847063158,
+        "pace": -2.6475972833205894,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "270": {
+        "offense": -8.22880082031343,
+        "defense": 5.432750906750426,
+        "pace": -1.295498443771555,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "271": {
+        "offense": -6.347799771680779,
+        "defense": 2.6470339112476635,
+        "pace": -1.2702332646123453,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "272": {
+        "offense": -4.617511915047849,
+        "defense": 8.18465167812754,
+        "pace": 1.1345271494550198,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "273": {
+        "offense": 0.47906394077715414,
+        "defense": -3.2801609158377865,
+        "pace": -4.430978728196504,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "274": {
+        "offense": 19.424670156123224,
+        "defense": -7.338327754020574,
+        "pace": 10.45025123732534,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "275": {
+        "offense": 17.525765825177636,
+        "defense": -6.3597351980313785,
+        "pace": 8.037047498125837,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "276": {
+        "offense": 15.36062055303362,
+        "defense": -3.9508851289469553,
+        "pace": 0.24483045530925654,
+        "games": 38,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "277": {
+        "offense": 18.666213919759315,
+        "defense": -15.955415021127731,
+        "pace": 5.39776553118843,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "278": {
+        "offense": 13.260919920923518,
+        "defense": -4.282344893793865,
+        "pace": 6.496219119787179,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "279": {
+        "offense": 11.257506959168335,
+        "defense": -9.376377731387395,
+        "pace": 2.6338595557013846,
+        "games": 36,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "280": {
+        "offense": 7.893311563444561,
+        "defense": -1.5425481245558568,
+        "pace": -1.0787840124246146,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "281": {
+        "offense": 3.8416670035658553,
+        "defense": -2.334486000744445,
+        "pace": 4.784180426017297,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "282": {
+        "offense": 9.462331111518486,
+        "defense": -4.352580138713317,
+        "pace": -1.6574148796939938,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "283": {
+        "offense": 14.139667860262477,
+        "defense": -3.756062401963206,
+        "pace": -0.8211960006844339,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "284": {
+        "offense": 4.937375684932342,
+        "defense": -7.357088978761092,
+        "pace": -0.6099278011758988,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "285": {
+        "offense": 2.3291095685552996,
+        "defense": -2.867626685244959,
+        "pace": -1.9092959243170073,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "286": {
+        "offense": 11.878575490019793,
+        "defense": -14.482560994682311,
+        "pace": -4.097568176872185,
+        "games": 37,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "287": {
+        "offense": 9.317655127310493,
+        "defense": -7.460747459974383,
+        "pace": 3.927915997615383,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "288": {
+        "offense": 13.655906810639832,
+        "defense": -4.915096051263522,
+        "pace": -1.6136746579425336,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "289": {
+        "offense": 16.417999402142016,
+        "defense": -7.872816071033185,
+        "pace": 1.2262650430649777,
+        "games": 36,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "290": {
+        "offense": -6.048238823088407,
+        "defense": 8.555933036264094,
+        "pace": -2.495259180376538,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "291": {
+        "offense": -10.74793243679927,
+        "defense": 4.0425120153128535,
+        "pace": 3.9946241014523585,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "292": {
+        "offense": -13.48385779783582,
+        "defense": 7.665050520098627,
+        "pace": -0.7149424250039084,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "293": {
+        "offense": -6.194872637394825,
+        "defense": 9.655306361887224,
+        "pace": 3.038263580934887,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "294": {
+        "offense": -6.421492056689213,
+        "defense": 1.7594500847831789,
+        "pace": 4.330955031777278,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "295": {
+        "offense": -10.419884693956151,
+        "defense": 2.37000818640158,
+        "pace": 1.2288538688115012,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "296": {
+        "offense": -12.74404663623121,
+        "defense": -0.9288282892378161,
+        "pace": 0.29227181465635815,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "297": {
+        "offense": -9.257245906208317,
+        "defense": 9.783491336382212,
+        "pace": 3.7554246268386944,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "298": {
+        "offense": -19.81491344634562,
+        "defense": 14.55652478435742,
+        "pace": -0.4066347781246356,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "299": {
+        "offense": -8.569225724339818,
+        "defense": 3.7068137859263275,
+        "pace": 4.628474974386804,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "300": {
+        "offense": -4.783414414759972,
+        "defense": 5.21386846924139,
+        "pace": 3.9678605523308352,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "301": {
+        "offense": -8.0397027085747,
+        "defense": 4.5990172757852,
+        "pace": 2.7354185870804257,
+        "games": 27,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "302": {
+        "offense": 0.38112379544361447,
+        "defense": 7.302881162709433,
+        "pace": 0.10527379078764579,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "303": {
+        "offense": 1.3685258731458072,
+        "defense": -1.3233575219460492,
+        "pace": -2.8883311181884963,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "304": {
+        "offense": 1.5895695650710695,
+        "defense": -0.6397354254129929,
+        "pace": -2.9120390352041965,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "305": {
+        "offense": 2.222638936338041,
+        "defense": 2.734113806086696,
+        "pace": 2.9938028165889037,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "306": {
+        "offense": 2.411259949116815,
+        "defense": 1.8237638703035959,
+        "pace": 2.1982501986421696,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "307": {
+        "offense": -7.8384655621868395,
+        "defense": 10.017980807254911,
+        "pace": -5.589438693070353,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "308": {
+        "offense": 0.023049080807745887,
+        "defense": 7.902349952217302,
+        "pace": 0.23348830943566484,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "309": {
+        "offense": -9.604177028201018,
+        "defense": 13.364733826465082,
+        "pace": -0.6953889897174689,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "310": {
+        "offense": 1.3561593774129674,
+        "defense": 3.1654902762173,
+        "pace": 0.5354426333853364,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "311": {
+        "offense": 2.275130153677974,
+        "defense": 6.03854847008571,
+        "pace": -0.16234397438641748,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "312": {
+        "offense": -9.387527651866504,
+        "defense": 4.371229813283722,
+        "pace": 0.630488001050881,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "313": {
+        "offense": -7.743804174274172,
+        "defense": 4.333797728263783,
+        "pace": -5.076454650379385,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "314": {
+        "offense": -0.2553582748599885,
+        "defense": 9.594723821718437,
+        "pace": -4.240004599289853,
+        "games": 27,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "315": {
+        "offense": -6.447541501836466,
+        "defense": 0.4180255293252225,
+        "pace": -3.3113102176060165,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "316": {
+        "offense": 5.007371121967933,
+        "defense": -7.406521491927916,
+        "pace": -2.829630354430677,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "317": {
+        "offense": -2.1789585851854945,
+        "defense": 3.8155113822269375,
+        "pace": 4.650165969121821,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "318": {
+        "offense": -3.912472674810112,
+        "defense": 2.8265882972597614,
+        "pace": 1.3531894594661062,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "319": {
+        "offense": -8.308774356874473,
+        "defense": 2.2529002899875348,
+        "pace": -5.589627393311324,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "320": {
+        "offense": -8.58251574535218,
+        "defense": 2.610933662936765,
+        "pace": -3.2565303366679754,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "321": {
+        "offense": 2.326841848044852,
+        "defense": -2.61819425203033,
+        "pace": -2.3434481304186345,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "322": {
+        "offense": -3.948983410133436,
+        "defense": -2.5489262320433963,
+        "pace": -2.7443133355947795,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "323": {
+        "offense": 1.529989182942853,
+        "defense": -0.9941211510687707,
+        "pace": -1.2441670898119526,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "324": {
+        "offense": 4.004713861139939,
+        "defense": 10.251406538707599,
+        "pace": 1.058812908267064,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "325": {
+        "offense": -15.791775735754339,
+        "defense": 7.921975137417409,
+        "pace": 3.6823040121701736,
+        "games": 28,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "326": {
+        "offense": -1.867868173676291,
+        "defense": 6.550234615182362,
+        "pace": 0.5437754885009971,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "327": {
+        "offense": 3.333377599369423,
+        "defense": -2.5002998103838787,
+        "pace": -1.2192378425551513,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "328": {
+        "offense": -2.4965715347425568,
+        "defense": 3.6117508601408197,
+        "pace": -0.13659449139689797,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "329": {
+        "offense": -6.060307882759774,
+        "defense": 5.952671725815721,
+        "pace": 0.7560957960247093,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "330": {
+        "offense": -4.16467464212882,
+        "defense": 5.4904768498841365,
+        "pace": 5.718136570538972,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "331": {
+        "offense": 0.00824244904767411,
+        "defense": 2.661009775059771,
+        "pace": -1.0740142599587337,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "332": {
+        "offense": 4.639997045704332,
+        "defense": -1.6316503799822784,
+        "pace": 1.6056592248465187,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "333": {
+        "offense": -2.617151855270169,
+        "defense": -2.8113708489472913,
+        "pace": -7.580378893704441,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "334": {
+        "offense": 2.233154592087961,
+        "defense": -1.2887857407225891,
+        "pace": 8.30457536632915,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "335": {
+        "offense": -6.394432124926848,
+        "defense": 0.6799862466770016,
+        "pace": -1.9549508713820136,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "336": {
+        "offense": 1.6752710503835244,
+        "defense": 5.84615689688689,
+        "pace": 4.4927475050361085,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "337": {
+        "offense": -7.4719768200088685,
+        "defense": 3.7755794175552215,
+        "pace": 1.2951182115505204,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "338": {
+        "offense": 0.8931181703440584,
+        "defense": 2.0862655918348993,
+        "pace": -2.2741640771540075,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "339": {
+        "offense": -8.086698335823987,
+        "defense": 3.723925105967312,
+        "pace": -5.970751465036684,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "340": {
+        "offense": 3.707920156002114,
+        "defense": 5.262352688873483,
+        "pace": 4.005639536635637,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "341": {
+        "offense": -2.453048151071749,
+        "defense": 3.210102515892233,
+        "pace": 2.9418859086370253,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "342": {
+        "offense": -0.7423220492047967,
+        "defense": -0.325322450026796,
+        "pace": -5.350842818769301,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "343": {
+        "offense": -4.21930458384162,
+        "defense": -0.7583408958196262,
+        "pace": 5.32731542533743,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "344": {
+        "offense": -2.7562344583113414,
+        "defense": 1.7015855678570133,
+        "pace": -2.234017650005568,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "345": {
+        "offense": 1.2674432518445562,
+        "defense": -1.1823104237385154,
+        "pace": -5.2967565459754224,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "346": {
+        "offense": -7.551767683051515,
+        "defense": 12.710611052575468,
+        "pace": 4.529218758703687,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "347": {
+        "offense": -9.469929055112912,
+        "defense": -1.0753017050126397,
+        "pace": 2.6977986426316307,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "348": {
+        "offense": -1.8185759353613937,
+        "defense": -7.029114117736792,
+        "pace": -2.261373735957574,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "349": {
+        "offense": -3.785822114883445,
+        "defense": 5.475525905998354,
+        "pace": 5.352095830473442,
+        "games": 29,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "350": {
+        "offense": -7.26176392859044,
+        "defense": 1.100222035555734,
+        "pace": 2.18264302441099,
+        "games": 27,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "351": {
+        "offense": -6.460534609562128,
+        "defense": -4.539418683786665,
+        "pace": -4.2985823019949025,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "352": {
+        "offense": 0.6623905143115535,
+        "defense": 5.386803984091173,
+        "pace": -0.9667941913536439,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "353": {
+        "offense": 2.582416860791049,
+        "defense": -4.288549079001141,
+        "pace": 1.5294375049364781,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "354": {
+        "offense": 11.481793930358954,
+        "defense": -15.037894578412425,
+        "pace": 1.5050115704192044,
+        "games": 35,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "355": {
+        "offense": -3.020711564211986,
+        "defense": -1.399696907779991,
+        "pace": -0.7608335140740682,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "356": {
+        "offense": 0.9418749523383508,
+        "defense": 1.222373476930177,
+        "pace": -4.372743528379169,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "357": {
+        "offense": -0.4609133770033164,
+        "defense": -2.050880744998742,
+        "pace": -5.369054521031401,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "358": {
+        "offense": -4.26106519395191,
+        "defense": 6.040232388614863,
+        "pace": 4.0020632565300085,
+        "games": 30,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "359": {
+        "offense": -4.280538157331365,
+        "defense": 2.852599740957252,
+        "pace": 1.4436123562686098,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "360": {
+        "offense": 8.81201757503393,
+        "defense": -12.141945085414543,
+        "pace": -6.054914248692258,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "361": {
+        "offense": -3.007091548349826,
+        "defense": 5.145664438958602,
+        "pace": 1.6701090209844889,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "362": {
+        "offense": 3.278338708524852,
+        "defense": 0.28769755360322474,
+        "pace": -1.027571542873696,
+        "games": 32,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "363": {
+        "offense": 13.86802907082507,
+        "defense": -3.7664291267793018,
+        "pace": 3.177072375386078,
+        "games": 34,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "364": {
+        "offense": -6.709176066507255,
+        "defense": -10.951033673278511,
+        "pace": 0.6680893679948986,
+        "games": 33,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "365": {
+        "offense": 3.3711317629547635,
+        "defense": 2.4657746422745945,
+        "pace": 2.5729582242797764,
+        "games": 31,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "366": {
+        "offense": -7.896368094085142,
+        "defense": 5.7440386891518616,
+        "pace": -2.1334366797152717,
+        "games": 0,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "367": {
+        "offense": -4.440163985712175,
+        "defense": 1.0359431306484437,
+        "pace": -1.0058788808043972,
+        "games": 0,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "369": {
+        "offense": -3.9655561582576975,
+        "defense": 3.541699728023421,
+        "pace": 1.9019318677239037,
+        "games": 1,
+        "factors": null,
+        "opponentFactors": null
+      },
+      "372": {
+        "offense": -2.7783157570807173,
+        "defense": 1.3440385972235238,
+        "pace": 0.4433686114897931,
+        "games": 0,
+        "factors": null,
+        "opponentFactors": null
+      }
+    },
+    "trainingGames": 5720
+  },
+  "selectedThroughSeason": 2024,
+  "selectedHead": "matchup"
+}

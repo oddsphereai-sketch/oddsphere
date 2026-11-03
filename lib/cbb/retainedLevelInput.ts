@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CBB_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
+import { CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
 import { cbbEvidenceAvailableAt, cbbAvailabilityUpperBoundMs } from "./marketReceiptTime";
 import { normalCdf } from "./model";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
@@ -66,7 +66,7 @@ function byteSize(value: unknown): number | null {
   try { const json = JSON.stringify(value); return json === undefined ? null : Buffer.byteLength(json, "utf8"); } catch { return null; }
 }
 function validForecast(f: CbbForecast, asOf: string): boolean {
-  if (!f || f.release !== CBB_CURRENT_SCORE_RELEASE || f.inputStatus !== "complete" || !positiveId(f.gameId) ||
+  if (!f || ![CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_CURRENT_SCORE_RELEASE].includes(f.release as typeof CBB_CURRENT_SCORE_RELEASE) || f.inputStatus !== "complete" || !positiveId(f.gameId) ||
     !positiveId(f.homeId) || !positiveId(f.awayId) || f.homeId === f.awayId || clock(f.asOf) !== clock(asOf) ||
     !Array.isArray(f.issues) || !f.issues.every(issue => typeof issue === "string")) return false;
   if (![f.homeScore, f.awayScore, f.margin, f.total, f.possessions, f.homeWinProbability].every(finite) ||
