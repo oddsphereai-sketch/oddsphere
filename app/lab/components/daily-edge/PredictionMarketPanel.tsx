@@ -237,7 +237,7 @@ function FullBookLineHistory({book,kind}:{book:PredictionMarketBookTrail;kind:st
  const summary=quotes.filter((p,i)=>i===0||i===quotes.length-1||p[2]!==quotes[i-1][2]).map(p=>`${time(p[0],true)}: ${lineText(p[2])} at ${formatPredictionMarketOdds(p[1])}`).join("; ");
  return <div className="relative col-span-2 min-w-0 border-t border-white/[0.05] pt-2" data-book-line-history={book.sportsbook} data-book-history-window="full" data-book-history-start={first[0]} data-book-history-end={last[0]}>
   <div className="flex flex-wrap justify-between gap-x-2 text-[10px]"><span className="text-[#ac9bbd]">{bookTitle(book.sportsbook)} {kind==="total"?"total":"spread"} history</span><strong className="font-semibold text-[#d9d1e4]">{lineText(first[2])} → {lineText(last[2])}</strong></div>
-  <svg role="img" aria-labelledby={id} width="100%" height="42" viewBox="0 0 294 40" preserveAspectRatio="none"><title id={id}>{summary+". Full same-book line history; curves guide between recorded observations."}</title>
+  <svg role="img" aria-labelledby={id} width="100%" height="42" viewBox="0 0 294 40" preserveAspectRatio="none"><title id={id}>{summary+". Retained same-book line history; curves guide between recorded observations."}</title>
    <path data-full-line-history d={curve.line} fill="none" stroke="#b7a0f4" strokeWidth="1.7" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"/>
    <circle cx={x(last[0])} cy={y(last[2])} r="2.5" fill="#b7a0f4"/>
    {active?<circle cx={x(active[0])} cy={y(active[2])} r="3" fill="#e0d6fa"/>:null}
@@ -248,7 +248,7 @@ function FullBookLineHistory({book,kind}:{book:PredictionMarketBookTrail;kind:st
     onKeyDown={e=>{if(e.key==="Escape"){setAt(null);return;}if(!["Home","End","ArrowLeft","ArrowRight"].includes(e.key))return;e.preventDefault();setAt(e.key==="Home"?first[0]:e.key==="End"?last[0]:e.key==="ArrowLeft"?[...quotes].reverse().find(p=>p[0]<(at??last[0]))?.[0]??first[0]:quotes.find(p=>p[0]>(at??first[0]))?.[0]??last[0]);}}/>
   </svg>
   <div className="flex justify-between gap-2 text-[9px] text-[#9d92ae]"><span>{open?"Provider open":"First recorded"} · {time(first[0],true)}</span><span>Latest · {time(last[0])}</span></div>
-  <p className="mt-1 text-[9px] text-[#9d92ae]">{quotes.length===1?"One recorded quote":changes?changes+" line "+(changes===1?"change":"changes"):"No recorded line change"} · full available history</p>
+  <p className="mt-1 text-[9px] text-[#9d92ae]">{quotes.length===1?"One recorded quote":changes?changes+" recorded line "+(changes===1?"change":"changes"):"No recorded line change"} · retained history</p>
   {active?<p role="status" className="mt-1 text-[10px] text-[#d9d1e4]">{lineText(active[2])} at {formatPredictionMarketOdds(active[1])} · {time(active[0],true)}</p>:null}
  </div>;
 }

@@ -15,7 +15,10 @@ response or grade gate is introduced. Accurate grade reasons, JSONB semantic
 receipt binding and original R5 lock lineage are functional corrections.
 The sole leased writer may retain one immutable input-only checkpoint under
 `cbb_retained_level_input_2026_11_03_r1`, capped at16 KiB without extra I/O or
-forecast/grade authority. The frozen18-game/54-market comparison has0 score,
+forecast/grade authority. Display compaction uses
+`book_display_compaction_2026_11_03_r2_balanced_extrema` while keeping feed/schema
+r1; actual late line excursions survive the existing128-point cap, and unlocked
+Full movement headlines use the plotted sportsbook contract. The frozen18-game/54-market comparison has0 score,
 probability, side, price, EV, grade, promotion or demotion changes. Protected
 publication and normal live proof remain mandatory. The full current-level
 numerical forecast repair is still unfinished. Evidence and rollback:

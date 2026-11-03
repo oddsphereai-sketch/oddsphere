@@ -13,6 +13,8 @@ import type { PrelockFeed } from "./predictionMarketPrelock";
 import { CBB_MARKET_TRACKING_RELEASE } from "@/lib/cbb/marketDisplayIdentity";
 
 export const BOOK_DISPLAY_HISTORY_RELEASE="owls_book_display_history_2026_10_29_r1";
+/** Algorithm identity only: existing feed/schema and frozen payloads stay valid. */
+export const BOOK_DISPLAY_COMPACTION_RELEASE="book_display_compaction_2026_11_03_r2_balanced_extrema";
 type Quote=[number,number,number|null]; // original epoch, American price, point line
 export type BookDisplayEntry={event:number;start:string;away:string;home:string;kind:string;side:string;book:string;providerEventId:string;checkedAt:string;opening:Quote|null;quotes:Quote[];observedQuotes?:true};
 export type BookDisplayFeed={release:typeof BOOK_DISPLAY_HISTORY_RELEASE;sport:PredictionMarketSport;fetchedAt:string;eventsAt:string;events:RawOwlsOddsEvent[];rows:BookDisplayEntry[];budget?:{day:string;history:number;discovery:number};cbbTrackingRelease?:typeof CBB_MARKET_TRACKING_RELEASE};
@@ -63,14 +65,57 @@ export function parseOwlsBookDisplayHistory(value:unknown,target:Omit<BookDispla
   return {...target,checkedAt:new Date(now).toISOString(),opening,quotes:boundBookQuotes([...(opening?[opening]:[]),...quotes])};
 }
 function boundBookQuotes(quotes:Quote[]):Quote[]{
-  const ordered=[...new Map(quotes.map(q=>[q[0]+"|"+q[2],q])).values()].sort((a,b)=>a[0]-b[0]);
-  if(ordered.length<=128)return ordered;
-  const selected=new Set([0,ordered.length-1]);
-  // Preserve real price/point extrema and both sides of line transitions.
-  let min=0,max=0;for(let i=1;i<ordered.length;i++){if(ordered[i][1]<ordered[min][1])min=i;if(ordered[i][1]>ordered[max][1])max=i;}
-  selected.add(min);selected.add(max);
-  for(let i=1;i<ordered.length&&selected.size<64;i++)if(ordered[i][2]!==ordered[i-1][2]){selected.add(i-1);selected.add(i);}
-  for(let i=0;i<128&&selected.size<128;i++)selected.add(Math.round(i*(ordered.length-1)/127));
+  // Preserve the caller's existing same-time/line precedence. Ordering of
+  // distinct coherent observations is deterministic, including alternate lines.
+  const ordered=[...new Map(quotes.map(q=>[q[0]+"|"+q[2],q])).values()].sort((a,b)=>
+    a[0]-b[0]||(a[2]===b[2]?0:a[2]===null?-1:b[2]===null?1:a[2]-b[2]));
+  const cap=128;
+  if(ordered.length<=cap)return ordered;
+  const selected=new Set<number>([0,ordered.length-1]);
+  const prices=ordered.map(q=>q[1]),probabilities=prices.map(implied),lines=ordered.map(q=>q[2]);
+  const lineValues=lines.filter((line):line is number=>line!==null);
+  const priceMin=Math.min(...prices),priceMax=Math.max(...prices);
+  const lineMin=lineValues.length?Math.min(...lineValues):null,lineMax=lineValues.length?Math.max(...lineValues):null;
+  // Retain both ends of extreme plateaus AND their actual adjacent receipts:
+  // a late isolated peak and immediate buyback cannot become a slow return.
+  const bracket=(indices:number[])=>{
+    for(const index of [indices[0],indices.at(-1)!])for(const i of [index-1,index,index+1])
+      if(i>=0&&i<ordered.length)selected.add(i);
+  };
+  for(const value of new Set([priceMin,priceMax]))bracket(prices.flatMap((price,i)=>price===value?[i]:[]));
+  for(const value of new Set([lineMin,lineMax]))if(value!==null)bracket(lines.flatMap((line,i)=>line===value?[i]:[]));
+  const transitions=new Set(selected);
+  for(let i=1;i<ordered.length;i++)if(ordered[i][1]!==ordered[i-1][1]||ordered[i][2]!==ordered[i-1][2]){transitions.add(i-1);transitions.add(i);}
+  if(transitions.size<=cap)for(const index of transitions)selected.add(index);
+  const lineRange=lineMin!==null&&lineMax!==null?lineMax-lineMin:0;
+  const probabilityRange=Math.max(...probabilities)-Math.min(...probabilities);
+  // Split the largest still-unsampled TIME interval. Within it preserve the
+  // greatest line/probability excursion from its endpoint guide, choosing the
+  // temporal midpoint when flat. Repeating this balances coverage across the
+  // full tape rather than spending the remaining budget on early uniform bins.
+  // This is display sampling, not inferred quotes or exact event-count storage.
+  while(selected.size<cap){
+    const anchors=[...selected].sort((a,b)=>a-b);
+    let left=-1,right=-1,width=-1;
+    for(let j=1;j<anchors.length;j++){
+      const a=anchors[j-1],b=anchors[j];if(b-a<=1)continue;
+      const span=ordered[b][0]-ordered[a][0];
+      if(span>width||(span===width&&(left<0||b-a>right-left))){left=a;right=b;width=span;}
+    }
+    if(left<0)break;
+    let best=-1,bestError=-1,bestDistance=Infinity;
+    const first=ordered[left],last=ordered[right],midpoint=first[0]/2+last[0]/2;
+    for(let i=left+1;i<right;i++){
+      const t=width>0?(ordered[i][0]-first[0])/width:(i-left)/(right-left);
+      const priceError=probabilityRange>0?Math.abs(probabilities[i]-((1-t)*probabilities[left]+t*probabilities[right]))/probabilityRange:0;
+      const lineError=lineRange>0&&lines[i]!==null&&first[2]!==null&&last[2]!==null?
+        Math.abs(lines[i]!-((1-t)*first[2]+t*last[2]))/lineRange:0;
+      const error=Math.max(priceError,lineError),distance=width>0?Math.abs(ordered[i][0]-midpoint):Math.abs(i-(left+right)/2);
+      if(error>bestError||(error===bestError&&distance<bestDistance)){best=i;bestError=error;bestDistance=distance;}
+    }
+    if(best<0)break;
+    selected.add(best);
+  }
   return [...selected].sort((a,b)=>a-b).map(i=>ordered[i]);
 }
 export function bookDisplayTrail(entry:BookDisplayEntry,line:number|null,ceiling=Date.now()):PredictionMarketBookTrail|null{

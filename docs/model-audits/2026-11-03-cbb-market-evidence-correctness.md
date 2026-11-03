@@ -106,3 +106,26 @@ Hold or roll back future unlocked publication on changed same-input decisions,
 mixed releases, locked-field mutation, extra provider/write workload, size-bound
 failure or failed writer/reader precedence. Preserve every lock and release era.
 Do not describe this evidence-correctness release as the completed numerical fix.
+
+## Additional owner-reported chart defects
+
+The actual Duquesne reader showed one FanDuel −9.5/−118 quote, while its Kalshi
+contract was nearby −8.5. Source R18 repaired per-book native event ownership;
+it did not fabricate missing historical FanDuel quotes. The source owner is
+repairing forward retail journaling from already-fetched odds separately.
+Do not claim earlier book history has been restored without real receipts.
+
+The Full movement view plotted FanDuel −9.5 at54.1% but kept a Kalshi −8.5
+56.5% headline. The headline now names the actual plotted sportsbook contract
+and implied price in that unlocked view. Compare and frozen semantics remain.
+Independent long-history review also reproduced a late Total160 excursion
+vanishing from2000quotes at the128-point display cap. The corrected algorithm
+`book_display_compaction_2026_11_03_r2_balanced_extrema` preserves original first/
+latest, line and price extrema and adjacent actual return observations, then
+balances remaining temporal coverage. It never invents quotes or extends the
+128 cap. More than128 genuine turns cannot all be retained: the unlocked reader
+counts recorded retained changes, without claiming every original event.
+Feed/schema release r1 and existing stored/locked payloads remain accepted.
+Tests cover the actual lost-peak case, mirrored spread, late price extrema,
+short/constant streams, ordering/idempotence, exact event/book/side isolation,
+original values and unchanged existing feeds. No provider or writer increase.
