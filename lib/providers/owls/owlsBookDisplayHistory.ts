@@ -16,13 +16,21 @@ export const BOOK_DISPLAY_HISTORY_RELEASE="owls_book_display_history_2026_10_29_
 /** Algorithm identity only: existing feed/schema and frozen payloads stay valid. */
 export const BOOK_DISPLAY_COMPACTION_RELEASE="book_display_compaction_2026_11_03_r2_balanced_extrema";
 type Quote=[number,number,number|null]; // original epoch, American price, point line
-export type BookDisplayEntry={event:number;start:string;away:string;home:string;kind:string;side:string;book:string;providerEventId:string;checkedAt:string;opening:Quote|null;quotes:Quote[];observedQuotes?:true};
+export type BookDisplayEntry={event:number;start:string;away:string;home:string;kind:string;side:string;book:string;providerEventId:string;checkedAt:string;opening:Quote|null;quotes:Quote[];observedQuotes?:true;ambiguousOpening?:true;ambiguousTimes?:number[];ambiguousHistory?:true};
 export type BookDisplayFeed={release:typeof BOOK_DISPLAY_HISTORY_RELEASE;sport:PredictionMarketSport;fetchedAt:string;eventsAt:string;events:RawOwlsOddsEvent[];rows:BookDisplayEntry[];budget?:{day:string;history:number;discovery:number};cbbTrackingRelease?:typeof CBB_MARKET_TRACKING_RELEASE};
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:null;
 const number=(v:unknown):number|null=>v===null||v===undefined||v===""||typeof v==="boolean"||!Number.isFinite(Number(v))?null:Number(v);
 const implied=(a:number)=>a>0?100/(100+a):-a/(100-a);
 const marketKey=(kind:string)=>kind==="moneyline"?"h2h":kind==="spread"?"spreads":kind==="total"?"totals":"btts";
 const identity=(e:Pick<BookDisplayEntry,"event"|"start"|"kind"|"side"|"book">)=>[e.event,Date.parse(e.start),e.kind,e.side,e.book].join("|");
+const openingHasAlternates=(quotes:Quote[],opening:Quote|null)=>!!opening&&new Set([opening[2],...quotes.filter(q=>q[0]===opening[0]).map(q=>q[2])]).size>1;
+function ambiguityProvenance(quotes:Quote[],prior?:BookDisplayEntry):Pick<BookDisplayEntry,"ambiguousTimes"|"ambiguousHistory">{
+  if(prior?.ambiguousHistory)return {ambiguousHistory:true};
+  const lines=new Map<number,number|null>(),times=new Set<number>(prior?.ambiguousTimes??[]);
+  for(const [at,,line] of quotes){if(lines.has(at)&&lines.get(at)!==line)times.add(at);else lines.set(at,line);}
+  if(times.size>128)return {ambiguousHistory:true};
+  return times.size?{ambiguousTimes:[...times].sort((a,b)=>a-b)}:{};
+}
 
 function matchingOwlsDisplayEvents(events:RawOwlsOddsEvent[],game:DailyEdgeGameDto,sport:PredictionMarketSport):RawOwlsOddsEvent[]{
   const matchesTeam=(name:string,abbreviation:string,displayName:string|null|undefined,college?:string|null)=>sport==="nfl"?nflProviderTeamMatches(name,abbreviation,displayName??abbreviation):predictionMarketTeamMatches({sideCode:name,team:name},abbreviation,displayName,sport,college,sport==="cbb"&&game.lockState==="open"&&game.lockedAt===null);
@@ -60,16 +68,27 @@ export function parseOwlsBookDisplayHistory(value:unknown,target:Omit<BookDispla
   };
   const quotes=data.history.flatMap(v=>{const p=quote(v);return p?[p]:[];}).sort((a,b)=>a[0]-b[0]);
   const opening=quote(data.openingLine);
-  // A valid explicitly reported opener is retained separately even if the
-  // sampled plot later needs fewer points or a different point line.
-  return {...target,checkedAt:new Date(now).toISOString(),opening,quotes:boundBookQuotes([...(opening?[opening]:[]),...quotes])};
+  // A reported opening cannot identify the main line when the provider has
+  // multiple point thresholds at that same instant. Keep its raw provenance,
+  // but suppress it from the chart even if sampling omits that whole instant.
+  const ambiguousOpening=openingHasAlternates(quotes,opening);
+  const all=[...(opening?[opening]:[]),...quotes];
+  return {...target,checkedAt:new Date(now).toISOString(),opening,quotes:boundBookQuotes(all),...ambiguityProvenance(all),...(ambiguousOpening?{ambiguousOpening:true as const}:{})};
 }
 function boundBookQuotes(quotes:Quote[]):Quote[]{
   // Preserve the caller's existing same-time/line precedence. Ordering of
   // distinct coherent observations is deterministic, including alternate lines.
-  const ordered=[...new Map(quotes.map(q=>[q[0]+"|"+q[2],q])).values()].sort((a,b)=>
+  let ordered=[...new Map(quotes.map(q=>[q[0]+"|"+q[2],q])).values()].sort((a,b)=>
     a[0]-b[0]||(a[2]===b[2]?0:a[2]===null?-1:b[2]===null?1:a[2]-b[2]));
   const cap=128;
+  if(ordered.length<=cap)return ordered;
+  // Alternate thresholds at one source instant are ambiguous to the main-line
+  // reader. Sampling one member would erase that evidence and falsely assert
+  // a unique line. Omit the whole ambiguous instant before any compaction;
+  // short tapes retain all members for the reader's existing ambiguity guard.
+  const linesAt=new Map<number,Set<number|null>>();
+  for(const quote of ordered){const values=linesAt.get(quote[0])??new Set<number|null>();values.add(quote[2]);linesAt.set(quote[0],values);}
+  ordered=ordered.filter(quote=>linesAt.get(quote[0])!.size===1);
   if(ordered.length<=cap)return ordered;
   const selected=new Set<number>([0,ordered.length-1]);
   const prices=ordered.map(q=>q[1]),probabilities=prices.map(implied),lines=ordered.map(q=>q[2]);
@@ -125,11 +144,12 @@ export function bookDisplayTrail(entry:BookDisplayEntry,line:number|null,ceiling
 }
 export function bookDisplayContext(entry:BookDisplayEntry,ceiling=Date.now()):Pick<PredictionMarketBookTrail,"historyScope"|"opening"|"marketHistory">{
   return {historyScope:entry.observedQuotes?"observed_quotes":"provider_history",marketHistory:entry.quotes.filter(q=>q[0]<=ceiling),
-    ...(entry.opening&&entry.opening[0]<=ceiling?{opening:{point:[entry.opening[0],implied(entry.opening[1]),entry.opening[1]],line:entry.opening[2]}}:{})};
+    ...(entry.ambiguousHistory?{ambiguousLineHistory:true as const}:entry.ambiguousTimes?.length?{ambiguousLineTimes:entry.ambiguousTimes}:{}),
+    ...(entry.opening&&!entry.ambiguousOpening&&entry.opening[0]<=ceiling&&new Set(entry.quotes.filter(q=>q[0]===entry.opening![0]).map(q=>q[2])).size<=1?{opening:{point:[entry.opening[0],implied(entry.opening[1]),entry.opening[1]],line:entry.opening[2]}}:{})};
 }
 export function isBookDisplayFeed(value:unknown,sport:PredictionMarketSport):value is BookDisplayFeed{
   const v=object(value);return v?.release===BOOK_DISPLAY_HISTORY_RELEASE&&v.sport===sport&&Array.isArray(v.events)&&v.events.length<=500&&Array.isArray(v.rows)&&v.rows.length<=(sport==="cbb"?3000:450)&&typeof v.eventsAt==="string"&&v.rows.every(r=>{
-    const e=object(r);return e&&Number.isSafeInteger(e.event)&&typeof e.start==="string"&&typeof e.checkedAt==="string"&&typeof e.book==="string"&&Array.isArray(e.quotes)&&e.quotes.length<=128;
+    const e=object(r);return e&&Number.isSafeInteger(e.event)&&typeof e.start==="string"&&typeof e.checkedAt==="string"&&typeof e.book==="string"&&Array.isArray(e.quotes)&&e.quotes.length<=128&&(!e.ambiguousTimes||Array.isArray(e.ambiguousTimes)&&e.ambiguousTimes.length<=128&&e.ambiguousTimes.every(t=>Number.isFinite(t)));
   });
 }
 
@@ -153,8 +173,10 @@ export function accumulateCbbPublishedQuotes(feed:BookDisplayFeed,games:DailyEdg
         (kind==="moneyline"?q[2]===null:q[2]!==null&&Number.isFinite(q[2])));
       if(!valid.length)return;
       // Existing exact observations win any timestamp tie, including a conflict.
-      rows.set(identity(target),{...target,checkedAt:old?.checkedAt??"1970-01-01T00:00:00.000Z",opening:old?.opening??null,
-        quotes:boundBookQuotes([...valid,...(old?.quotes??[])]),...(old?.observedQuotes||!old?{observedQuotes:true as const}:{})});
+      const combined=[...valid,...(old?.quotes??[])],opening=old?.opening??null;
+      rows.set(identity(target),{...target,checkedAt:old?.checkedAt??"1970-01-01T00:00:00.000Z",opening,
+        quotes:boundBookQuotes(combined),...ambiguityProvenance(combined,old),...(old?.ambiguousOpening||openingHasAlternates(combined,opening)?{ambiguousOpening:true as const}:{}),
+        ...(old?.observedQuotes||!old?{observedQuotes:true as const}:{})});
     };
     for(const receipt of archive?.sport==="cbb"?archive.rows:[]){
       if(receipt.event!==game.external_id||Date.parse(receipt.start)!==start||receipt.away!==game.awayTeam||receipt.home!==game.homeTeam)continue;
@@ -246,7 +268,7 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
       const result=await client.get<unknown>("/api/odds/history",{eventId:target.providerEventId,book:target.book,market:marketKey(target.kind),side:providerSide});
       remainingMonth=result.rateLimit.remainingMonth??remainingMonth;
       const parsed=parseOwlsBookDisplayHistory(result.body,{...target,side:providerSide},now,sport==="cbb"),old=rows.get(identity(target));
-      if(parsed){rows.set(identity(target),{...parsed,side:target.side,opening:old?.opening??parsed.opening,quotes:boundBookQuotes([...(old?.quotes??[]),...parsed.quotes])});if(!old?.opening&&!parsed.opening)warnings.push(`book history: ${target.event}/${target.kind} opener unavailable`);}
+      if(parsed){const opening=old?.opening??parsed.opening,combined=[...(old?.quotes??[]),...parsed.quotes];rows.set(identity(target),{...parsed,side:target.side,opening,quotes:boundBookQuotes(combined),...ambiguityProvenance(combined,{...parsed,ambiguousTimes:[...(parsed.ambiguousTimes??[]),...(old?.ambiguousTimes??[])],...(old?.ambiguousHistory?{ambiguousHistory:true as const}:{})}),...(old?.ambiguousOpening||parsed.ambiguousOpening||openingHasAlternates(combined,opening)?{ambiguousOpening:true as const}:{})});if(!old?.opening&&!parsed.opening)warnings.push(`book history: ${target.event}/${target.kind} opener unavailable`);}
       else warnings.push(`book history: ${target.event}/${target.kind} unavailable; retained`);
     }catch{warnings.push(`book history: ${target.event}/${target.kind} request failed; retained`);}
   }

@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import {BOOK_DISPLAY_HISTORY_RELEASE,BOOK_DISPLAY_COMPACTION_RELEASE,parseOwlsBookDisplayHistory,bookDisplayTrail,isBookDisplayFeed,
   accumulateCbbPublishedQuotes,type BookDisplayEntry} from '../lib/providers/owls/owlsBookDisplayHistory';
 import {predictionMarketBookLineHistory} from '../app/lab/lib/predictionMarketDisplay';
+import {publicMarketDisplayHistory} from '../app/lab/lib/publicMarketDisplayTrail';
+import type {DailyEdgeGameDto} from '../app/lab/lib/labTypes';
+import {performance} from 'node:perf_hooks';
 const base=Date.parse('2026-11-02T00:00:00Z'),now=Date.parse('2026-11-03T13:14:46Z');
 type Q=[number,number,number|null];
 const target={event:10882593,start:'2026-11-04T00:00:00Z',away:'PFW',home:'DUQ',kind:'total',side:'under',book:'draftkings',providerEventId:'fixture'};
@@ -44,4 +47,61 @@ const retained=JSON.stringify(feed);assert.deepEqual(accumulateCbbPublishedQuote
 // Parser's exact native event/book/side contract is unchanged.
 const wrong=parseOwlsBookDisplayHistory({success:true,data:{eventId:'different',book:'draftkings',market:'totals',side:'under',timeRange:{mode:'opening'},history:[]}},target,now);
 assert.equal(wrong,null);
-console.log(`PASS book compaction: 2000→128, late extrema/returns, balanced quarters ${quarters}, original values only, mirror/order/idempotence, exact book contract and r1 schema preserved. More than128 turns remain a sampled history.`);
+// Sampling individual alternates must not erase the timestamp's ambiguity and
+// invent a uniquely identified main-line point. Check the actual downstream
+// reader as well as the retained raw groups: the separately retained opening
+// quote must not resurrect a dropped ambiguous opening timestamp.
+function noPartialAlternateGroup(points:Q[],result:BookDisplayEntry){
+ const groups=new Map<number,Set<number|null>>();
+ for(const [at,,line] of points){const group=groups.get(at)??new Set();group.add(line);groups.set(at,group);}
+ const actual=bookDisplayTrail(result,150);
+ assert.ok(actual,'fixture retains coherent exact-line observations');
+ const plotted=predictionMarketBookLineHistory(actual);
+ for(const [at,lines] of groups)if(lines.size>1){
+  const retainedLines=new Set(result.quotes.filter(q=>q[0]===at).map(q=>q[2]));
+  assert.ok(retainedLines.size===0||retainedLines.size===lines.size,`alternate timestamp ${at} must be retained whole or omitted, never sampled to one line`);
+  assert.equal(plotted.some(q=>q[0]===at),false,`ambiguous timestamp ${at} cannot become one main-line point through compaction or opening metadata`);
+ }
+}
+const alternates:Q[]=Array.from({length:2000},(_,i)=>[base+i*60000,i%2?-105:-115,150+(i%7)/2]);
+alternates.splice(1093,0,[alternates[1093][0],-110,151]);
+noPartialAlternateGroup(alternates,parse(alternates));
+const coherent:Q[]=Array.from({length:2000},(_,i)=>[base+i*60000,-110,150]);
+const hugeGroup=[...coherent];hugeGroup.splice(500,0,...Array.from({length:160},(_,i)=>[coherent[500][0],-110,100+i/2] as Q));
+const hugeEntry=parse(hugeGroup);noPartialAlternateGroup(hugeGroup,hugeEntry);assert.ok(hugeEntry.quotes.length<=128,'a >128 alternate group cannot expand the quote budget');
+const hugeOpen=[coherent[0],...Array.from({length:160},(_,i)=>[base,-110,100+i/2] as Q),...coherent.slice(1)];
+noPartialAlternateGroup(hugeOpen,parse(hugeOpen));
+const ambiguousOpen=[coherent[0],[coherent[0][0],-105,150.5] as Q,...coherent.slice(1)];
+const openEntry=parse(ambiguousOpen);noPartialAlternateGroup(ambiguousOpen,openEntry);
+const ambiguousEnd=[...coherent,[coherent.at(-1)![0],-105,150.5] as Q];
+noPartialAlternateGroup(ambiguousEnd,parse(ambiguousEnd));
+// A later board receipt must not resurrect an ambiguous native timestamp that
+// had to be omitted from the 128-point provider tape.
+const interiorAt=coherent[1000][0],interiorRaw=[...coherent];interiorRaw.splice(1000,0,[interiorAt,-105,151]);
+const interiorEntry=parse(interiorRaw),interiorFeed={...feed,rows:[interiorEntry]};
+assert.ok(interiorEntry.ambiguousTimes?.includes(interiorAt));
+const boardGame={sport:'cbb',external_id:target.event,gameStartAt:target.start,awayTeam:target.away,homeTeam:target.home,lockState:'open',lockedAt:null,
+  markets:{moneyline:{pick:null,oddsTrail:[]},total:{pick:'Under',line:150,oddsTrail:[{sportsbook:target.book,observedAt:new Date(interiorAt).toISOString(),american:-110,line:150}]},first_inning:{pick:null,oddsTrail:[]}}};
+const merged=accumulateCbbPublishedQuotes(interiorFeed,[boardGame as unknown as DailyEdgeGameDto],null,now).rows[0];
+assert.ok(merged.quotes.some(q=>q[0]===interiorAt),'later published quote exercises ambiguity-preserving merge');
+assert.equal(predictionMarketBookLineHistory(bookDisplayTrail(merged,150)!).some(q=>q[0]===interiorAt),false,'published receipt cannot resurrect dropped ambiguous native line');
+const storedBook={sportsbook:target.book,line:150,locked:false,points:[[interiorAt,.5238,-110],[coherent.at(-1)![0],.5238,-110]] as Array<[number,number,number]>,marketHistory:[[interiorAt,-110,150],[coherent.at(-1)![0],-110,150]] as Q[]};
+const publicMerged=publicMarketDisplayHistory(storedBook,bookDisplayTrail(merged,150)!);
+assert.ok(publicMerged?.ambiguousLineTimes?.includes(interiorAt));
+assert.equal(predictionMarketBookLineHistory(publicMerged!).some(q=>q[0]===interiorAt),false,'public tracker merge retains native ambiguity');
+const storedLock={...storedBook,locked:true};assert.strictEqual(publicMarketDisplayHistory(storedLock,bookDisplayTrail(merged,150)!),storedLock,'locked public tracker remains exactly stored');
+// The provider can report an openingLine that differs from the history's
+// sole quote at that instant. Include openingLine in the ambiguity test.
+const separateHistory=coherent.map(([time,price,line],i)=>({timestampUtc:new Date(time).toISOString(),price,point:i===0?150.5:line}));
+const separateOpening=parseOwlsBookDisplayHistory({success:true,data:{eventId:target.providerEventId,book:target.book,market:'totals',side:'under',timeRange:{mode:'opening'},history:separateHistory,openingLine:{timestampUtc:new Date(base).toISOString(),price:-110,point:150}}},target,now,true);
+assert.ok(separateOpening?.ambiguousOpening);
+assert.equal(predictionMarketBookLineHistory(bookDisplayTrail(separateOpening,150)??bookDisplayTrail(separateOpening,150.5)!).some(q=>q[0]===base),false,'separate contradictory openingLine never becomes a main-line graph point');
+const shortAlternates=ambiguousOpen.slice(0,100),shortEntry=parse(shortAlternates);
+assert.deepEqual(shortEntry.quotes,shortAlternates,'legacy short histories retain their existing complete timestamp groups');
+noPartialAlternateGroup(shortAlternates,shortEntry);
+const maximum:Q[]=Array.from({length:20000},(_,i)=>[base+i*60000,i%2?-105:-115,150+(i%7)/2]);
+const performanceStart=performance.now(),maximumEntry=parse(maximum,{},base+20001*60000),elapsed=performance.now()-performanceStart;
+assert.equal(maximumEntry.quotes.length,128);
+const tooMany=maximum.concat([maximum[0]]).map(([at,price,line])=>({timestampUtc:new Date(at).toISOString(),price,point:line}));
+assert.equal(parseOwlsBookDisplayHistory({success:true,data:{eventId:target.providerEventId,book:target.book,market:'totals',side:'under',timeRange:{mode:'opening'},history:tooMany}},target,base+20001*60000),null,'native >20k cap remains unchanged');
+console.log(`PASS book compaction: 2000→128, late extrema/returns, balanced quarters ${quarters}, actual values only, alternate timestamp integrity including opening/endpoints/>128 groups, 20k→128 in ${elapsed.toFixed(1)}ms, exact contract and r1 schema preserved. More than128 turns remain a sampled history.`);
