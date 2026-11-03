@@ -24,7 +24,8 @@ are in the isolated candidate branch only. Official ESPN schedules uniquely
 recover 123 historical New Orleans venue flags and the unchanged fitter restores
 its 33-game 2025 prior. Exact old R3 parity and the 18-game board replay pass,
 with zero existing selected-side or grade changes. The newly restored LSU game,
-however, would publish New Orleans +27.5 −110 as a 79.9% Lean while the
+however, would publish New Orleans +27.5 −110 as an 80.8% Lean after the actual
+predecision Pinnacle history is included, while the
 professional spread is around LSU −27.5. This unqualified ten-point starting-
 level gap is a publication stop. Production remains independent score R3,
 market score R5, grade R7, board R10, publisher R19, tracking R7 and adapter
