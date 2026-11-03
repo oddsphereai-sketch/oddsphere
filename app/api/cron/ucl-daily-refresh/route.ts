@@ -7,6 +7,7 @@ import { seedUclSlate, verifyUclRefreshAllMarketLocks, writeUclPredictionRecords
 import { UCL_COMPETITION } from "@/lib/services/ucl/uclCompetitionContext";
 import { evaluateUclPublicationCoverage, mergeVerifiedUclLocksIntoLastKnownGood, uclPriceCollapseIsRecovered } from "@/lib/services/ucl/uclPublicationReadiness";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
+import { captureStoredUclPublicSplits } from "@/lib/services/ucl/uclPublicSplitSource";
 import type { CurrentSoccerProviderTelemetry } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
 
 export const maxDuration = 300;
@@ -33,6 +34,7 @@ export async function GET(request: Request): Promise<Response> {
       captureProviderTelemetry: (telemetry) => { providerTelemetry = telemetry; },
       forceCurrentProviderRefresh: providerProbe,
     });
+    const publicSplitsCapture = await captureStoredUclPublicSplits(response, previousResponse);
     const coverage = evaluateUclPublicationCoverage(slate, response, previousResponse);
     // A transient price collapse blocks ordinary publication, but it must not
     // prevent a due T-60 game from freezing its prior priced DB tuple. All
@@ -73,6 +75,7 @@ export async function GET(request: Request): Promise<Response> {
         price_coverage: coverage,
         model_release: slate.modelRelease,
         calibration_release: slate.calibrationRelease,
+        public_splits_capture: publicSplitsCapture,
         provider_history: slate.providerHealth.uclHistory,
         current_market_provider: providerTelemetry,
         seed: seeded,
