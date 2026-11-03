@@ -271,8 +271,10 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
         }
         // Keep the evaluated book's single real quote as current. An older
         // second book is available only as a separate recorded reference.
-        if(Date.parse(game.gameStartAt??"")-now>60*60_000&&
-          new Set((market.lineTrail??market.oddsTrail??[]).filter(stop=>stop.sportsbook===book).map(stop=>stop.observedAt)).size<2){
+        if(book&&market.currentPriceAmerican!==null&&market.currentPriceAmerican!==undefined&&
+          Date.parse(game.gameStartAt??"")-now>60*60_000&&
+          new Set([...(market.lineTrail??[]),...(market.oddsTrail??[])]
+            .filter(stop=>stop.sportsbook===book).map(stop=>stop.observedAt)).size<2){
           market.recordedReferenceTrail=recordedReference(feed,game,kind,side,book,market.line,cutoff,now)??undefined;
         }
       }

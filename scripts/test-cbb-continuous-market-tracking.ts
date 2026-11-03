@@ -74,6 +74,11 @@ async function main(){
  assert.equal(referenceBook.opening,undefined,"first retained quote is not a provider opener");
  assert.equal(publicMarketRecordedReferenceBook({...reference,recordedReferenceTrail:[...reference.recordedReferenceTrail!,{...stop(21.5,-110,fdCurrent)}]}),null,"books cannot be spliced");
  assert.equal(mergeCbbReaderEvidence(referenceBoard,{...referenceFeed,rows:referenceFeed.rows.filter(r=>r.side!=="home")},[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail,undefined,"unpaired reference is rejected");
+ const twoCurrent=structuredClone(referenceGame);twoCurrent.markets.first_inning.lineTrail=[];
+ twoCurrent.markets.first_inning.oddsTrail=[stop(21.5,-115,fdCurrent-60_000),stop(21.5,-110,fdCurrent)];
+ assert.equal(mergeCbbReaderEvidence({sport:"cbb",games:[twoCurrent]} as DailyEdgeResponse,referenceFeed,[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail,undefined,"an existing current-book price trail does not need another book");
+ const noCurrent={...referenceGame,markets:{...referenceGame.markets,first_inning:{...referenceGame.markets.first_inning,currentPriceSportsbook:null}}};
+ assert.equal(mergeCbbReaderEvidence({sport:"cbb",games:[noCurrent]} as DailyEdgeResponse,referenceFeed,[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail,undefined,"no alternate book can become current without an evaluated source");
  assert.equal(mergeCbbReaderEvidence(referenceBoard,{...referenceFeed,rows:referenceFeed.rows.map(r=>r.book==="draftkings"&&r.side==="away"?{...r,ambiguousTimes:[dkLast]}:r)},[],referenceTime).games[0].markets.first_inning.recordedReferenceTrail?.[0]?.sportsbook,"betmgm","ambiguous latest source cannot displace a coherent older source");
  const lockedReference={...referenceGame,lockState:"locked" as const,lockedAt:iso(referenceTime-1000)};
  assert.deepEqual(mergeCbbReaderEvidence({sport:"cbb",games:[lockedReference]} as DailyEdgeResponse,referenceFeed,[],referenceTime).games[0],lockedReference,"locked reader payload remains exact");
