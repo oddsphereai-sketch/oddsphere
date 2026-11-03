@@ -2,6 +2,7 @@ import "./test-ucl-current-native-inputs";
 import "./test-ucl-native-goals-market-reader";
 import {testUclPublicSplitSource} from "./test-ucl-public-split-complete-path";
 import {testUclNativeRecoveryBuilder} from "./test-ucl-native-recovery-builder";
+import {testUclNativeLineHistoryDurability} from "./test-ucl-native-line-history-durability";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { BallDontLieUclProvider, BALLDONTLIE_UCL_API_BASE_URL, type BdlUclMatch, type UclHistoryFetchTelemetry } from "../lib/providers/real_api/BallDontLieUclProvider";
@@ -61,6 +62,7 @@ function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_
 }
 
 async function main() {
+await testUclNativeLineHistoryDurability();
 await testUclPublicSplitSource();
 await testUclNativeRecoveryBuilder();
 

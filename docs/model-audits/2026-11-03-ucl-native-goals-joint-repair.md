@@ -87,3 +87,11 @@ requiring a scoped activation decision for the new singleton/native inference
 policy. This candidate does not certify causal interpretation of every market
 movement; history is retained and audited separately from current reference
 constraints. No member copy, layout or risk-label workaround is introduced.
+
+A second review found native contracts could disappear during persisted history
+compaction despite being emitted by the writer callback. UCL now opts into
+contract-specific compaction, latest/flat verification, opening identity and
+opening-flag updates in the existing shared store. Persist/read tests exercise
+2.5 and3.5 at identical original clocks in both row orders, repeat-write
+idempotence and independent opening authority. EPL default compaction is
+unchanged. No parallel writer or provider call is added.

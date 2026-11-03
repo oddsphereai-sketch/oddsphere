@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import { supabase } from "@/lib/db/supabase";
 import { EPL_EXTERNAL_ID_OFFSET } from "./eplProductionPipeline";
@@ -16,17 +17,18 @@ function markets(game: DailyEdgeResponse["games"][number]): Array<{ name: Market
   ];
 }
 
-function identity(row: Pick<CurrentObservation, "gameId" | "market" | "side" | "sportsbook">): string {
-  return `${row.gameId}:${row.market}:${row.side}:${row.sportsbook ?? "unknown"}`;
+function identity(row: Pick<CurrentObservation, "gameId" | "market" | "side" | "sportsbook" | "line">, exactTotalContracts = false): string {
+  const contract = exactTotalContracts && row.market === "total" ? `:line:${row.line ?? "missing"}` : "";
+  return `${row.gameId}:${row.market}:${row.side}:${row.sportsbook ?? "unknown"}${contract}`;
 }
 
 function exactIdentity(row: CurrentObservation): string {
   return `${identity(row)}:${canonicalEplLineHistoryTimestamp(row.recordedAt)}:${row.american}:${row.line ?? "null"}:${row.sportsbook ?? "unknown"}`;
 }
 
-async function gameMaps(providerIds: number[], externalIdOffset = EPL_EXTERNAL_ID_OFFSET, label = "EPL") {
+async function gameMaps(providerIds: number[], externalIdOffset = EPL_EXTERNAL_ID_OFFSET, label = "EPL", client = supabase) {
   const externalIds = providerIds.map((id) => externalIdOffset + id);
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from("games")
     .select("id,external_id")
     .eq("sport", "soccer")
@@ -42,9 +44,28 @@ async function gameMaps(providerIds: number[], externalIdOffset = EPL_EXTERNAL_I
   return { gameIdByProvider, providerByGameId };
 }
 
-export async function readEplStoredPriceHistory(providerIds: number[], externalIdOffset = EPL_EXTERNAL_ID_OFFSET, label = "EPL"): Promise<EplStoredPriceObservation[]> {
+export type EplLineHistoryOptions = { exactTotalContracts?: boolean; client?: SupabaseClient };
+
+/** UCL native contracts occupy separate compaction trails. Existing EPL
+ * compaction and every stored quote remain unchanged unless explicitly opted in. */
+export function compactEplLineHistory(rows: EplStoredPriceObservation[], options: EplLineHistoryOptions = {}): EplStoredPriceObservation[] {
+  if (!options.exactTotalContracts) return compactEplStoredPriceHistory(rows);
+  const groups = new Map<string, EplStoredPriceObservation[]>();
+  for (const row of rows) {
+    const contract = row.market === "total" ? String(row.line ?? "missing") : "main";
+    const key = `${row.providerId}:${row.market}:${row.side}:${row.sportsbook ?? "unknown"}:${contract}`;
+    const group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
+  }
+  return [...groups.values()].flatMap(group => compactEplStoredPriceHistory(group))
+    .sort((a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt));
+}
+
+export async function readEplStoredPriceHistory(providerIds: number[], externalIdOffset = EPL_EXTERNAL_ID_OFFSET, label = "EPL", options: EplLineHistoryOptions = {}): Promise<EplStoredPriceObservation[]> {
   if (providerIds.length === 0) return [];
-  const { providerByGameId } = await gameMaps(providerIds, externalIdOffset, label);
+  const client = options.client ?? supabase;
+  const { providerByGameId } = await gameMaps(providerIds, externalIdOffset, label, client);
   const gameIds = [...providerByGameId.keys()];
   if (gameIds.length === 0) return [];
   // Match the established WNBA Daily Edge contract: immutable history is
@@ -52,7 +73,7 @@ export async function readEplStoredPriceHistory(providerIds: number[], externalI
   // a real opening capture as the week accumulates observations.
   const storedRows: Array<Record<string, unknown>> = [];
   for (let from = 0; ; from += HISTORY_PAGE_SIZE) {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("line_history")
       .select("game_id,market_type,sportsbook,side,line_value,odds_american,is_opener,recorded_at")
       .in("game_id", gameIds)
@@ -79,16 +100,17 @@ export async function readEplStoredPriceHistory(providerIds: number[], externalI
       isOpener: row.is_opener === true,
     }];
   });
-  return compactEplStoredPriceHistory(parsed);
+  return compactEplLineHistory(parsed, options);
 }
 
-export async function persistEplLineHistory(input: { response: DailyEdgeResponse; allBookPrices?: EplStoredPriceObservation[]; apply: boolean; externalIdOffset?: number; label?: string }) {
+export async function persistEplLineHistory(input: { response: DailyEdgeResponse; allBookPrices?: EplStoredPriceObservation[]; apply: boolean; externalIdOffset?: number; label?: string; exactTotalContracts?: boolean; client?: SupabaseClient }) {
   const providerIds = input.response.games.map((game) => Number(game.external_id)).filter(Number.isFinite);
   if (!input.apply || providerIds.length === 0) return { proposed: 0, written: 0, errors: [] as string[] };
   const externalIdOffset = input.externalIdOffset ?? EPL_EXTERNAL_ID_OFFSET;
   const label = input.label ?? "EPL";
-  const { gameIdByProvider } = await gameMaps(providerIds, externalIdOffset, label);
-  const existing = await readEplStoredPriceHistory(providerIds, externalIdOffset, label);
+  const client = input.client ?? supabase;
+  const { gameIdByProvider } = await gameMaps(providerIds, externalIdOffset, label, client);
+  const existing = await readEplStoredPriceHistory(providerIds, externalIdOffset, label, { exactTotalContracts: input.exactTotalContracts, client });
   const exactExisting = new Set<string>();
   const earliestBySide = new Map<string, number>();
   const latestByTrail = new Map<string, { american: number; line: number | null; recordedAt: number }>();
@@ -98,7 +120,7 @@ export async function persistEplLineHistory(input: { response: DailyEdgeResponse
     if (gameId === undefined) continue;
     const stored = { ...row, gameId };
     exactExisting.add(exactIdentity(stored));
-    const key = identity(stored);
+    const key = identity(stored, input.exactTotalContracts);
     earliestBySide.set(key, Math.min(earliestBySide.get(key) ?? Number.POSITIVE_INFINITY, Date.parse(row.recordedAt)));
     const recordedAt = Date.parse(row.recordedAt);
     const latest = latestByTrail.get(key);
@@ -112,7 +134,7 @@ export async function persistEplLineHistory(input: { response: DailyEdgeResponse
   const consider = (current: CurrentObservation) => {
     const exact = exactIdentity(current);
     if (exactExisting.has(exact)) return;
-    const key = identity(current);
+    const key = identity(current, input.exactTotalContracts);
     const observedMs = Date.parse(current.recordedAt);
     const latest = latestByTrail.get(key);
     const sameAsLatest = latest && observedMs >= latest.recordedAt && latest.american === current.american && latest.line === current.line;
@@ -165,18 +187,18 @@ export async function persistEplLineHistory(input: { response: DailyEdgeResponse
   // A first deployment can discover a trail stop earlier than the current-only
   // seed. Move the opener marker back without deleting immutable observations.
   const backfilledOpeners = new Map<string, CurrentObservation>();
-  for (const row of proposed.filter((item) => item.isOpener)) backfilledOpeners.set(identity(row), row);
+  for (const row of proposed.filter((item) => item.isOpener)) backfilledOpeners.set(identity(row, input.exactTotalContracts), row);
   for (const row of backfilledOpeners.values()) {
-    const { error } = await supabase
-      .from("line_history")
-      .update({ is_opener: false })
-      .eq("game_id", row.gameId)
-      .eq("market_type", row.market)
-      .eq("side", row.side)
+    let query = client.from("line_history").update({ is_opener: false })
+      .eq("game_id", row.gameId).eq("market_type", row.market).eq("side", row.side)
       .eq("sportsbook", row.sportsbook ?? "unknown");
+    if (input.exactTotalContracts && row.market === "total") {
+      query = row.line === null ? query.is("line_value", null) : query.eq("line_value", row.line);
+    }
+    const { error } = await query;
     if (error) return { proposed: proposed.length, written: 0, errors: [`repair EPL line-history opener: ${error.message}`] };
   }
-  const { error } = await supabase.from("line_history").insert(proposed.map((row) => ({
+  const { error } = await client.from("line_history").insert(proposed.map((row) => ({
     game_id: row.gameId,
     market_type: row.market,
     sportsbook: row.sportsbook ?? "unknown",
