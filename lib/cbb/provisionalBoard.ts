@@ -4,7 +4,7 @@ import { chooseCbbCompleteTargetBook } from "./totalOnlyMarketResearch";
 import {gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,type CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
-export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_03_r11_new_orleans_prior_input" as const;
+export const CBB_PROVISIONAL_BOARD_RELEASE = "cbb_candidate_2026_11_03_r12_independent_relative_split_context" as const;
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 
 /** Preserve every existing complete-book choice. A missing Moneyline must not
@@ -65,7 +65,7 @@ export function buildCbbProvisionalBoard(forecast: CbbForecast, quotes: CbbQuote
       economicPathConfirmation:marketGrade?.economicPathConfirmation??false,
       actualActionConfirmation:marketGrade?.actualActionConfirmation??false,
       marketPressure:marketGrade?.marketPressure??"unavailable",pathResistance:marketGrade?.pathResistance??false,
-      gradeBasis:marketGrade?.gradeBasis??"legacy_provisional" };
+      gradeBasis:marketGrade?.gradeBasis??"legacy_provisional",splitRead:marketGrade?.splitRead??[] };
   });
   return { release: CBB_PROVISIONAL_BOARD_RELEASE, modelRelease: forecast.release, gradeRelease: options.marketBehavior?CBB_MARKET_BEHAVIOR_GRADE_RELEASE:CBB_PROVISIONAL_GRADE_RELEASE, gameId: forecast.gameId,
     asOf: forecast.asOf, targetBook:boardTargetBook, score: { home: forecast.homeScore, away: forecast.awayScore,

@@ -5,6 +5,7 @@ import {gradeCbbProvisional,type CbbGradeEvidence,type CbbProvisionalGrade} from
 import {cbbBookFamily,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,assertCbbMarketBehaviorGradeReceipt,type CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import {cbbEvidenceAvailableAt} from "./marketReceiptTime";
 import type {CbbQuote} from "./types";
+import {readCbbDecisionSplits} from "./decisionSplitContext";
 
 export type CbbProfessionalTargetEconomics={quote:CbbQuote;probability:number;pushProbability:number;expectedValue:number};
 /** Each physical source is inverted independently through the declared CBB
@@ -47,7 +48,7 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     return {...held,release:CBB_MARKET_BEHAVIOR_GRADE_RELEASE,reason:"unavailable_executable_target_receipt",
       modelExpectedValue:null,professionalTargetEconomics:[] as CbbProfessionalTargetEconomics[],economicCorroboration:false,
       economicPathConfirmation:false,actualActionConfirmation:false,marketPressure:"unavailable" as const,pathResistance:false,
-      gradeBasis:"held_or_non_actionable"};
+      gradeBasis:"held_or_non_actionable",splitRead:[]};
   }
   const quarantined=new Set(receipt.anchors.quarantinedKeys??[]);
   const references=receipt.currentProfessionalQuotes.filter(q=>receiptAvailableAtDecision(q,at)&&!quarantined.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`)&&
@@ -56,10 +57,13 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   if(base.grade==="Held")return {...base,release:CBB_MARKET_BEHAVIOR_GRADE_RELEASE,
     modelExpectedValue:null,professionalTargetEconomics:[] as CbbProfessionalTargetEconomics[],economicCorroboration:false,
     economicPathConfirmation:false,actualActionConfirmation:false,marketPressure:"unavailable" as const,pathResistance:false,
-    gradeBasis:"held_or_non_actionable"};
+    gradeBasis:"held_or_non_actionable",splitRead:[]};
   const professionalTargetEconomics=cbbProfessionalTargetEconomics(input,base.professionalReferenceQuotes);
   const economicCorroboration=professionalTargetEconomics.some(q=>q.expectedValue>1e-7)&&professionalTargetEconomics.every(q=>q.expectedValue>=-1e-7);
+  const premiumProfessionalValue=professionalTargetEconomics.some(q=>q.expectedValue>=.08)&&
+    professionalTargetEconomics.every(q=>q.expectedValue>=-1e-7);
   const selected=reviewCbbQuote(input.forecast,input.target).selection,sign=selected==="first"?1:-1;
+  const splitRead=readCbbDecisionSplits(receipt.splitContext??[],input.target.market,input.target.line,selected as "first"|"second");
   const streams=receipt.pathPosture.filter(s=>s.market===input.target.market&&
     !receipt.excludedFamilies.includes(s.book)&&!quarantined.has(`${s.book}:${s.market}`));
   const relevantPressure=streams.filter(s=>s.status==="observed"&&s.pressureDirection!==null&&s.pressureDirection!==0);
@@ -93,9 +97,11 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   const validTargetRequest=Number.isFinite(targetRequested)&&targetRequested<=Date.parse(input.target.fetchedAt);
   const resolvedSource=streams.find(s=>s.book===axis.sourceBook&&s.market===axis.sourceMarket);
   const sourceAvailable=Date.parse(resolvedSource?.frontierAvailableBy??"");
-  const economicPathConfirmation=axis.status==="applied"&&axis.sourceMarket===input.target.market&&axis.delta*sign>1e-7&&
+  const sourceEpisode=receipt.episodes.find(e=>e.book===axis.sourceBook&&e.market===axis.sourceMarket);
+  const economicPathConfirmation=["applied","confirming"].includes(axis.status)&&axis.sourceMarket===input.target.market&&
+    !!sourceEpisode&&sourceEpisode.delta*sign>1e-7&&
     resolvedSource?.recentDirection===sign&&Number.isFinite(sourceAvailable)&&validTargetRequest&&sourceAvailable<=targetRequested&&!pathResistance;
-  const actualActionConfirmation=receipt.historyCompleteness.split&&economicPathConfirmation&&axis.status==="applied"&&axis.sourceMarket===input.target.market&&axis.delta*sign>1e-7&&
+  const actualActionConfirmation=receipt.historyCompleteness.split&&economicPathConfirmation&&axis.sourceMarket===input.target.market&&
     exactSupport&&!pathResistance;
   // Fully applied equal endpoint responses are already in this law. Two
   // physical sources can constrain Lean only while resistance is unresolved;
@@ -118,8 +124,8 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     if(modelExpectedValue>=.03&&eligible&&(base.referenceState==="agrees"||base.referenceState==="unavailable"||economicCorroboration)){
       grade="Lean";reason="positive_model_value_without_qualified_action_confirmation";gradeBasis="model_value";
     }
-    if(modelExpectedValue>=.08&&eligible&&economicCorroboration&&!pathResistance){
-      grade="Best Angle";reason="model_and_professional_exact_target_value";gradeBasis="model_and_professional_value";
+    if(modelExpectedValue>=.08&&eligible&&premiumProfessionalValue&&!pathResistance){
+      grade="Best Angle";reason="model_and_material_professional_exact_target_value";gradeBasis="model_and_professional_value";
     }
     if(modelExpectedValue>=.03&&eligible&&economicPathConfirmation&&grade==="Watchlist"&&base.referenceState==="neutral"){
       grade="Lean";reason="qualified_same_market_price_confirmation";gradeBasis="qualified_same_market_price";
@@ -132,5 +138,5 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     }
   }
   return {...base,release:CBB_MARKET_BEHAVIOR_GRADE_RELEASE,grade,reason,modelExpectedValue,
-    professionalTargetEconomics,economicCorroboration,economicPathConfirmation,actualActionConfirmation,marketPressure,pathResistance,gradeBasis};
+    professionalTargetEconomics,economicCorroboration,economicPathConfirmation,actualActionConfirmation,marketPressure,pathResistance,gradeBasis,splitRead};
 }

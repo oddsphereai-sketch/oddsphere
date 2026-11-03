@@ -50,7 +50,34 @@ locked payloads remain exact. This is a new numerical policy, not a proven
 accuracy gain or a complete causal movement-reader certification. Evidence:
 `docs/model-audits/2026-11-03-ucl-native-goals-joint-repair.md`.
 
-## CBB New Orleans venue-prior candidate — November 3, held offline
+## CBB integrated market-interpretation candidate — November 3, held offline
+
+The isolated candidate now proposes independent score R4, market score R7,
+grade R9, receipt R5, board R12, sole publisher R21, tracking R9 and adapter
+R10. R7 treats a verified same-book move toward the independent location as
+confirmation without adding score points, retains corrective movement and
+applies only the overshoot when a path crosses the independent location. One
+final margin/Total law still supplies scores and all market probabilities.
+R9 separates ordinary exact-target professional price value from the existing
+Best-level material-value reserve or verified same-market action. The existing
+batch public-split read now precedes grading; a typed receipt retains the
+qualified Owls, canonical, DraftKings network and Playbook source classes,
+their original clocks, own lines and missing axes. Retail and aggregate splits
+are classified as context, not fabricated professional flow or score points.
+Official New Orleans venue-prior recovery from R4 remains in this candidate.
+
+On the 19:32 UTC frozen18-game board, the bounded score/grade replay changes14
+score-axis responses and five grade decisions: two Best to Lean, one Watchlist
+to No Play and two Lean to No Play. Actionables move16 to14, with zero observed
+promotions, zero selected-side flips and no Best remaining. The replay does not
+include a full live pipeline or exact new split receipts. The opened105-game
+historical path cohort offers development evidence only; it does not qualify a
+new absolute-level law or the newly restored LSU–New Orleans prediction. No
+live publication is authorized. Production remains independent R3, market R5,
+grade R7, board R10, publisher R19, tracking R7 and adapter R8. See
+`docs/model-audits/2026-11-03-cbb-integrated-market-interpretation-candidate.md`.
+
+## CBB New Orleans venue-prior predecessor candidate — November 3, held offline
 
 Proposed independent score R4, market score R6, grade R8, board R11, publisher
 R20, tracking R8, adapter R9, current-season training R3 and venue identity R2

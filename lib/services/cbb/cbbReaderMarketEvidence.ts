@@ -68,7 +68,7 @@ function recordedReference(feed:BookDisplayFeed|null,game:DailyEdgeGameDto,kind:
   candidates.sort((a,b)=>b.latest-a.latest||b.trail.length-a.trail.length||a.entry.book.localeCompare(b.entry.book));
   return candidates[0]?.trail??null;
 }
-function splitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
+export function cbbQualifiedPublicSplitPair(rows:SplitRow[],id:number,kind:string,now:number):SplitRow[]|null{
   const sides=kind==="total"?["over","under"]:["away","home"];
   const eligible=rows.filter(row=>row.canonical_event_id===String(id)&&row.market_type===kind&&row.provider==="playbook"&&
     row.source_book==="consensus"&&row.source_type==="multi_book_consensus"&&
@@ -242,7 +242,7 @@ export function mergeCbbReaderEvidence(board:DailyEdgeResponse,feed:BookDisplayF
     const markets={...game.markets};
     for(const [key,kind] of marketEntries){
       const market={...markets[key]},side=sideOf(game,kind,market);
-      const pair=splitPair(splitRows,game.external_id,kind,now);
+      const pair=cbbQualifiedPublicSplitPair(splitRows,game.external_id,kind,now);
       const named=namedSplitPair(splitRows,game.external_id,kind,now);
       if(named){
         const section=namedSection(game,named);
