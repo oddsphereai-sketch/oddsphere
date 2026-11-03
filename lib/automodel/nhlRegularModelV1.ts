@@ -208,11 +208,13 @@ export type NhlModelOutput = {
     market_decision: "independent" | "confirmed" | "resistance" | "flipped";
     moneyline_market_read: "unavailable" | "confirmation" | "resistance" | "unresolved";
     moneyline_market_side: "home" | "away" | null;
+    moneyline_market_pressure_basis: "consensus" | "money_differential" | "consensus_and_money_differential" | null;
     moneyline_market_source_class: "named" | "broad" | null;
     moneyline_market_sportsbook: string | null;
     moneyline_market_path_state: "stable" | "buyback" | "reversal" | "flat" | "unavailable";
     puck_line_market_read: "unavailable" | "confirmation" | "resistance" | "unresolved";
     puck_line_market_side: "home" | "away" | null;
+    puck_line_market_pressure_basis: "consensus" | "money_differential" | "consensus_and_money_differential" | null;
     puck_line_market_source_class: "named" | "broad" | null;
     puck_line_market_sportsbook: string | null;
     puck_line_market_path_state: "stable" | "buyback" | "reversal" | "flat" | "unavailable";
@@ -475,6 +477,7 @@ type NhlCategoricalMarketRead = {
   state: "unavailable" | "confirmation" | "resistance" | "unresolved";
   side: "home" | "away" | null;
   probabilityMove: number;
+  pressureBasis: "consensus" | "money_differential" | "consensus_and_money_differential" | null;
 };
 
 /**
@@ -501,31 +504,42 @@ function categoricalMarketRead(args: {
     || args.homeBetsPct === undefined
     || args.homeMoneyPct === null
     || args.homeMoneyPct === undefined) {
-    return { state: "unavailable", side: null, probabilityMove: 0 };
+    return { state: "unavailable", side: null, probabilityMove: 0, pressureBasis: null };
   }
   if (args.pathState === "unavailable") {
-    return { state: "unavailable", side: null, probabilityMove: 0 };
+    return { state: "unavailable", side: null, probabilityMove: 0, pressureBasis: null };
   }
   if (args.pathState !== undefined && args.pathState !== "stable") {
-    return { state: "unresolved", side: null, probabilityMove: 0 };
+    return { state: "unresolved", side: null, probabilityMove: 0, pressureBasis: null };
   }
   const materialMove = args.sourceClass === "broad" ? 0.02 : 0.01;
   if (Math.abs(args.probabilityMove) < materialMove) {
-    return { state: "unresolved", side: null, probabilityMove: 0 };
+    return { state: "unresolved", side: null, probabilityMove: 0, pressureBasis: null };
   }
-  const pressureSide = args.homeBetsPct >= 55 && args.homeMoneyPct >= 55
+  const consensusSide = args.homeBetsPct >= 55 && args.homeMoneyPct >= 55
     ? "home" as const
     : args.homeBetsPct <= 45 && args.homeMoneyPct <= 45
       ? "away" as const
       : null;
+  const moneyDifferential = args.homeMoneyPct - args.homeBetsPct;
+  const differentialSide = Math.abs(moneyDifferential) >= 10
+    ? moneyDifferential > 0 ? "home" as const : "away" as const
+    : null;
+  const pressureSide = differentialSide ?? consensusSide;
   if (pressureSide === null) {
-    return { state: "unresolved", side: null, probabilityMove: 0 };
+    return { state: "unresolved", side: null, probabilityMove: 0, pressureBasis: null };
   }
+  const pressureBasis = differentialSide !== null && consensusSide !== null && differentialSide === consensusSide
+    ? "consensus_and_money_differential" as const
+    : differentialSide !== null
+      ? "money_differential" as const
+      : "consensus" as const;
   const priceSide = args.probabilityMove > 0 ? "home" as const : "away" as const;
   return {
     state: priceSide === pressureSide ? "confirmation" : "resistance",
     side: priceSide,
     probabilityMove: args.probabilityMove,
+    pressureBasis,
   };
 }
 
@@ -901,11 +915,13 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       market_target_home_probability: specializedRosterComparator?.layers.market_target_home_probability ?? marketTargetHomeProbability,
       moneyline_market_read: specializedRosterComparator?.layers.moneyline_market_read ?? moneylineRead.state,
       moneyline_market_side: specializedRosterComparator?.layers.moneyline_market_side ?? moneylineRead.side,
+      moneyline_market_pressure_basis: specializedRosterComparator?.layers.moneyline_market_pressure_basis ?? moneylineRead.pressureBasis,
       moneyline_market_source_class: snapshot.market.same_book_home_prob_move_source_class ?? null,
       moneyline_market_sportsbook: snapshot.market.same_book_home_prob_move_sportsbook ?? null,
       moneyline_market_path_state: snapshot.market.same_book_home_prob_move_path_state ?? "unavailable",
       puck_line_market_read: puckLineRead.state,
       puck_line_market_side: puckLineRead.side,
+      puck_line_market_pressure_basis: puckLineRead.pressureBasis,
       puck_line_market_source_class: snapshot.market.same_book_home_puck_prob_move_source_class ?? null,
       puck_line_market_sportsbook: snapshot.market.same_book_home_puck_prob_move_sportsbook ?? null,
       puck_line_market_path_state: snapshot.market.same_book_home_puck_prob_move_path_state ?? "unavailable",

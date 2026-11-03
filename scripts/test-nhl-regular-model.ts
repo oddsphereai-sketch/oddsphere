@@ -249,7 +249,7 @@ const base: NhlFeatureSnapshot = {
     market_away_puck_prob: 0.68,
     market_book_count: 8,
     ml_home_bets_pct: 48,
-    ml_home_money_pct: 62,
+    ml_home_money_pct: 52,
     total_over_bets_pct: 43,
     total_over_money_pct: 57,
     ml_split_source: "playbook",
@@ -541,13 +541,29 @@ const mixedMoneylineEvidence = nhlRegularModelV1({
     ...base.market,
     same_book_home_prob_move: -0.025,
     market_book_count: 5,
-    ml_home_bets_pct: 61,
-    ml_home_money_pct: 47,
+    ml_home_bets_pct: 52,
+    ml_home_money_pct: 48,
     ml_split_confidence: "high",
   },
 });
 assert.equal(mixedMoneylineEvidence.layers.moneyline_market_read, "unresolved", "mixed ticket and money direction has no numerical authority");
 assert.equal(mixedMoneylineEvidence.expected_goal_diff, result.expected_goal_diff);
+
+const moneyDifferentialConfirmation = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    same_book_home_prob_move: 0.025,
+    market_book_count: 5,
+    ml_home_bets_pct: 38,
+    ml_home_money_pct: 62,
+    ml_split_confidence: "high",
+  },
+});
+assert.equal(moneyDifferentialConfirmation.layers.moneyline_market_read, "confirmation", "a material money-over-ticket differential is interpreted even when raw majorities split");
+assert.equal(moneyDifferentialConfirmation.layers.moneyline_market_side, "home");
+assert.equal(moneyDifferentialConfirmation.layers.moneyline_market_pressure_basis, "money_differential");
+assert.ok(moneyDifferentialConfirmation.expected_goal_diff > result.expected_goal_diff);
 
 const basePuckPickHome = result.puck_line.pick.startsWith(base.home.abbreviation);
 const puckEvidenceMarket = {
@@ -951,11 +967,9 @@ const differentPublicSplits = nhlRegularModelV1({
     total_split_confidence: "high",
   },
 });
-assert.equal(
-  differentPublicSplits.expected_goal_diff,
-  result.expected_goal_diff,
-  "public-consensus splits remain visible evidence but cannot impersonate named sharp-book movement",
-);
+assert.equal(differentPublicSplits.layers.moneyline_market_read, "resistance", "named-book price response against a material money-ticket differential is interpreted as resistance");
+assert.equal(differentPublicSplits.layers.moneyline_market_side, "home");
+assert.ok(differentPublicSplits.expected_goal_diff > result.expected_goal_diff);
 assert.equal(
   differentPublicSplits.expected_total_goals,
   result.expected_total_goals,
