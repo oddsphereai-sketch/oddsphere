@@ -1,4 +1,4 @@
-import { cronHandler } from "@/lib/cron/runCron";
+import { cronHandler, isWithinCronMinimumInterval } from "@/lib/cron/runCron";
 import { buildUclSlate } from "@/lib/services/ucl/buildUclSlate";
 import { buildUclDailyEdgePreview, hydrateUclPriceHistory, hydrateUclStoredPriceHistory, type UclStoredPriceObservation } from "@/lib/services/ucl/buildUclDailyEdgePreview";
 import { persistUclLineHistory, readUclStoredPriceHistory } from "@/lib/services/ucl/uclLineHistoryStore";
@@ -8,15 +8,37 @@ import { UCL_COMPETITION } from "@/lib/services/ucl/uclCompetitionContext";
 import { evaluateUclPublicationCoverage, mergeVerifiedUclLocksIntoLastKnownGood, uclPriceCollapseIsRecovered } from "@/lib/services/ucl/uclPublicationReadiness";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
 import type { CurrentSoccerProviderTelemetry } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
+import { refreshLogger } from "@/lib/services/refreshLogger";
+import { parseUclPriceProbeIds, runUclBoundedPriceSourceProbe } from "@/lib/services/ucl/uclBoundedPriceSourceProbe";
 
 export const maxDuration = 300;
 
 export async function GET(request: Request): Promise<Response> {
-  const providerProbe = new URL(request.url).searchParams.get("provider_probe") === "1";
-  return cronHandler(request, "ucl_daily_refresh", async () => {
+  const query = new URL(request.url).searchParams;
+  const providerProbe = query.get("provider_probe") === "1";
+  const sourceProbe = query.has("price_source_probe");
+  return cronHandler(request, sourceProbe ? "ucl_price_source_probe" : "ucl_daily_refresh", async () => {
     const flags = resolveUclFeatureFlags();
     if (!flags.refresh) {
       return { records_updated: 0, details: { disabled: true, reason: "UCL refresh gate disabled" } };
+    }
+    if (sourceProbe) {
+      // Keep the normal15-minute guard and shared soccer lease. A separate
+      // diagnostic audit name cannot advance normal forecast refresh success.
+      const lastNormalRefresh = await refreshLogger.getLastHealthyCompleted("ucl_daily_refresh", "soccer");
+      if (isWithinCronMinimumInterval(lastNormalRefresh, 15)) {
+        return { records_updated: 0, api_calls_made: 0,
+          details: { diagnosticOnly: true, skipped: true, reason: "normal_refresh_minimum_interval" } };
+      }
+      const fixtureIds = parseUclPriceProbeIds(query.get("fixture_ids"));
+      if (query.getAll("price_source_probe").length !== 1 || query.get("price_source_probe") !== "1" ||
+        query.getAll("fixture_ids").length !== 1 || !fixtureIds) {
+        return { records_updated: 0, api_calls_made: 0,
+          details: { diagnosticOnly: true, skipped: true, reason: "invalid_explicit_probe_request" } };
+      }
+      const details = await runUclBoundedPriceSourceProbe({ snapshot: await readCurrentUclMemberSnapshot(), fixtureIds,
+        apiKey: process.env.THE_ODDS_API_KEY });
+      return { records_updated: 0, api_calls_made: details.catalogRequests + details.paidRequests, details };
     }
     const apply = !providerProbe && flags.writes;
     const now = new Date();
