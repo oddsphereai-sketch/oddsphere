@@ -330,10 +330,14 @@ export async function writeNhlPredictionRecords(
         marketEvidence: {
           mlHomeBetsPct: split?.moneyline?.bets_pct?.home == null ? null : split.moneyline.bets_pct.home * 100,
           mlHomeMoneyPct: split?.moneyline?.handle_pct?.home == null ? null : split.moneyline.handle_pct.home * 100,
+          spreadHomeBetsPct: split?.spread?.bets_pct?.home == null ? null : split.spread.bets_pct.home * 100,
+          spreadHomeMoneyPct: split?.spread?.handle_pct?.home == null ? null : split.spread.handle_pct.home * 100,
           totalOverBetsPct: split?.total?.bets_pct?.over == null ? null : split.total.bets_pct.over * 100,
           totalOverMoneyPct: split?.total?.handle_pct?.over == null ? null : split.total.handle_pct.over * 100,
           mlSplitSource: split?.internal_resolution?.moneyline?.source ?? null,
           mlSplitConfidence: split?.internal_resolution?.moneyline?.confidence ?? "none",
+          spreadSplitSource: split?.internal_resolution?.spread?.source ?? null,
+          spreadSplitConfidence: split?.internal_resolution?.spread?.confidence ?? "none",
           totalSplitSource: split?.internal_resolution?.total?.source ?? null,
           totalSplitConfidence: split?.internal_resolution?.total?.confidence ?? "none",
         },
@@ -603,7 +607,7 @@ export async function writeNhlPredictionRecords(
         };
 
         if (!opts.apply) {
-          log(`  [dry-run] ${matchup} ${m.market}/${pickSide}  pick=${m.modelMarket.pick}  prob=${m.modelMarket.probability.toFixed(3)}  verdict=${m.modelMarket.verdict}  score=${model.projected_away_goals.toFixed(2)}-${model.projected_home_goals.toFixed(2)}  price=${m.priceAmerican}  locked_at=${lockedAtIso ?? "null"}`);
+          log(`  [dry-run] ${matchup} ${m.market}/${pickSide}  pick=${m.modelMarket.pick}  prob=${m.modelMarket.probability.toFixed(3)}  verdict=${effectiveVerdict}  score=${model.projected_away_goals.toFixed(2)}-${model.projected_home_goals.toFixed(2)}  price=${m.priceAmerican}  ml_read=${model.layers.moneyline_market_read}:${model.layers.moneyline_market_side ?? "none"}  ml_source=${model.layers.moneyline_market_source_class ?? "none"}:${model.layers.moneyline_market_sportsbook ?? "none"}:${model.layers.moneyline_market_path_state}  puck_read=${model.layers.puck_line_market_read}:${model.layers.puck_line_market_side ?? "none"}  puck_source=${model.layers.puck_line_market_source_class ?? "none"}:${model.layers.puck_line_market_sportsbook ?? "none"}:${model.layers.puck_line_market_path_state}  locked_at=${lockedAtIso ?? "null"}`);
           recordsCreated += 1;
           continue;
         }

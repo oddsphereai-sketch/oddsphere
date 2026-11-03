@@ -59,10 +59,14 @@ export type BuildSnapshotOptions = {
   marketEvidence?: {
     mlHomeBetsPct?: number | null;
     mlHomeMoneyPct?: number | null;
+    spreadHomeBetsPct?: number | null;
+    spreadHomeMoneyPct?: number | null;
     totalOverBetsPct?: number | null;
     totalOverMoneyPct?: number | null;
     mlSplitSource?: "playbook" | "sharpapi" | null;
     mlSplitConfidence?: "high" | "medium" | "low" | "none";
+    spreadSplitSource?: "playbook" | "sharpapi" | null;
+    spreadSplitConfidence?: "high" | "medium" | "low" | "none";
     totalSplitSource?: "playbook" | "sharpapi" | null;
     totalSplitConfidence?: "high" | "medium" | "low" | "none";
   };
@@ -276,6 +280,77 @@ function completeMlByBook(lines: DbLineRow[]): Map<string, number> {
   return out;
 }
 
+function completeSpreadByBook(
+  lines: DbLineRow[],
+  selected: { home: number | null; away: number | null },
+): Map<string, number> {
+  if (selected.home === null || selected.away === null) return new Map();
+  const byBook = new Map<string, { home?: number; away?: number }>();
+  for (const line of lines) {
+    if (line.market_type !== "spread" || (line.side !== "home" && line.side !== "away")) continue;
+    const expectedLine = line.side === "home" ? selected.home : selected.away;
+    if (line.line_value === null || Math.abs(line.line_value - expectedLine) >= 0.01) continue;
+    const probability = line.implied_probability ?? americanToImplied(line.odds_american);
+    if (probability === null) continue;
+    const book = normalizedBook(line.sportsbook);
+    const pair = byBook.get(book) ?? {};
+    pair[line.side] = probability;
+    byBook.set(book, pair);
+  }
+  const out = new Map<string, number>();
+  for (const [book, pair] of byBook) {
+    if (pair.home === undefined || pair.away === undefined || pair.home + pair.away <= 0) continue;
+    out.set(book, pair.home / (pair.home + pair.away));
+  }
+  return out;
+}
+
+type NhlProbabilityPathState = "stable" | "buyback" | "reversal" | "flat" | "unavailable";
+
+function completeProbabilitySequence(args: {
+  historyLines: DbLineRow[];
+  book: string;
+  market: "moneyline" | "spread";
+  spreadPair?: { home: number | null; away: number | null };
+}): number[] {
+  const byObservation = new Map<string, DbLineRow[]>();
+  for (const row of args.historyLines) {
+    if (row.market_type !== args.market || normalizedBook(row.sportsbook) !== args.book) continue;
+    const observedAt = row.observed_at ?? "";
+    if (!Number.isFinite(Date.parse(observedAt))) continue;
+    byObservation.set(observedAt, [...(byObservation.get(observedAt) ?? []), row]);
+  }
+  return [...byObservation.entries()]
+    .sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]))
+    .flatMap(([, rows]) => {
+      const value = args.market === "moneyline"
+        ? completeMlByBook(rows).get(args.book)
+        : completeSpreadByBook(rows, args.spreadPair ?? { home: null, away: null }).get(args.book);
+      return value === undefined ? [] : [value];
+    });
+}
+
+function classifyProbabilityPath(opening: number, current: number, history: readonly number[]): NhlProbabilityPathState {
+  const net = current - opening;
+  if (Math.abs(net) < 0.005) return "flat";
+  const direction = Math.sign(net);
+  const sequence = [opening, ...history, current].filter((value, index, values) => (
+    index === 0 || Math.abs(value - values[index - 1]!) > 1e-9
+  ));
+  if (sequence.length < 2) return "unavailable";
+  const directed = sequence.map((value) => (value - opening) * direction);
+  const peak = Math.max(...directed);
+  const opposingExcursion = Math.min(...directed);
+  const retracement = peak - Math.abs(net);
+  const latestLeg = sequence.at(-1)! - sequence.at(-2)!;
+  if (opposingExcursion <= -0.01) return "reversal";
+  if (retracement >= Math.max(0.01, peak * 0.35)
+    || (Math.sign(latestLeg) === -direction && Math.abs(latestLeg) >= 0.005)) {
+    return "buyback";
+  }
+  return "stable";
+}
+
 function totalLineByBook(lines: DbLineRow[]): Map<string, number> {
   const values = new Map<string, number[]>();
   for (const line of lines) {
@@ -308,15 +383,63 @@ function preferredCommonBook(current: ReadonlyMap<string, number>, opening: Read
 export function selectSameBookNhlMovement(
   currentLines: DbLineRow[],
   openingLines: DbLineRow[],
-): { homeProbMove: number | null; totalMove: number | null } {
+  historyLines: DbLineRow[] = [],
+): {
+  homeProbMove: number | null;
+  homeProbMoveSportsbook: string | null;
+  homeProbMoveSourceClass: "named" | "broad" | null;
+  homeProbMovePathState: NhlProbabilityPathState;
+  homePuckProbMove: number | null;
+  homePuckProbMoveSportsbook: string | null;
+  homePuckProbMoveSourceClass: "named" | "broad" | null;
+  homePuckProbMovePathState: NhlProbabilityPathState;
+  totalMove: number | null;
+} {
   const currentMl = completeMlByBook(currentLines);
   const openingMl = completeMlByBook(openingLines);
   const mlBook = preferredCommonBook(currentMl, openingMl);
+  const currentPuckPair = selectMainNhlPuckLinePair(currentLines);
+  const openingPuckPair = selectMainNhlPuckLinePair(openingLines);
+  const samePuckContract = currentPuckPair.home !== null
+    && openingPuckPair.home !== null
+    && Math.abs(currentPuckPair.home - openingPuckPair.home) < 0.01
+    && Math.abs(currentPuckPair.away! - openingPuckPair.away!) < 0.01;
+  const currentPuck = samePuckContract ? completeSpreadByBook(currentLines, currentPuckPair) : new Map();
+  const openingPuck = samePuckContract ? completeSpreadByBook(openingLines, currentPuckPair) : new Map();
+  const puckBook = preferredCommonBook(currentPuck, openingPuck);
   const currentTotals = totalLineByBook(currentLines);
   const openingTotals = totalLineByBook(openingLines);
   const totalBook = preferredCommonBook(currentTotals, openingTotals);
+  const mlOpen = mlBook === null ? null : openingMl.get(mlBook)!;
+  const mlCurrent = mlBook === null ? null : currentMl.get(mlBook)!;
+  const puckOpen = puckBook === null ? null : openingPuck.get(puckBook)!;
+  const puckCurrent = puckBook === null ? null : currentPuck.get(puckBook)!;
   return {
-    homeProbMove: mlBook === null ? null : currentMl.get(mlBook)! - openingMl.get(mlBook)!,
+    homeProbMove: mlOpen === null || mlCurrent === null ? null : mlCurrent - mlOpen,
+    homeProbMoveSportsbook: mlBook,
+    homeProbMoveSourceClass: mlBook === null
+      ? null
+      : SHARP_BOOK_PRIORITY.some((book) => mlBook.includes(book)) ? "named" : "broad",
+    homeProbMovePathState: mlOpen === null || mlCurrent === null || mlBook === null
+      ? "unavailable"
+      : classifyProbabilityPath(mlOpen, mlCurrent, completeProbabilitySequence({
+        historyLines,
+        book: mlBook,
+        market: "moneyline",
+      })),
+    homePuckProbMove: puckOpen === null || puckCurrent === null ? null : puckCurrent - puckOpen,
+    homePuckProbMoveSportsbook: puckBook,
+    homePuckProbMoveSourceClass: puckBook === null
+      ? null
+      : SHARP_BOOK_PRIORITY.some((book) => puckBook.includes(book)) ? "named" : "broad",
+    homePuckProbMovePathState: puckOpen === null || puckCurrent === null || puckBook === null
+      ? "unavailable"
+      : classifyProbabilityPath(puckOpen, puckCurrent, completeProbabilitySequence({
+        historyLines,
+        book: puckBook,
+        market: "spread",
+        spreadPair: currentPuckPair,
+      })),
     totalMove: totalBook === null ? null : currentTotals.get(totalBook)! - openingTotals.get(totalBook)!,
   };
 }
@@ -552,7 +675,7 @@ export async function buildNhlFeatureSnapshot(
 
   const historyData = await loadCompleteNhlLineHistory({
     gameId: opts.gameId,
-    marketTypes: ["moneyline", "total"],
+    marketTypes: ["moneyline", "total", "spread"],
     context: `buildNhlFeatureSnapshot game_id=${opts.gameId}`,
   });
   const historyLines = canonicalizeNhlLineRows((historyData as Array<{
@@ -581,7 +704,7 @@ export async function buildNhlFeatureSnapshot(
   });
   const marketOpenHomeProb = pickMlImpliedProbHome(openingLines).prob;
   const marketOpenTotalLine = selectMainNhlTotalLine(openingLines);
-  const sameBookMovement = selectSameBookNhlMovement(lines, openingLines);
+  const sameBookMovement = selectSameBookNhlMovement(lines, openingLines, historyLines);
 
   // 6. Series context — fetch fresh from NHL API at prediction time.
   // Cheap (~1 HTTP call per snapshot); always up-to-date (NHL API
@@ -697,6 +820,13 @@ export async function buildNhlFeatureSnapshot(
       market_total_line: marketTotalLine,
       market_open_total_line: marketOpenTotalLine,
       same_book_home_prob_move: sameBookMovement.homeProbMove,
+      same_book_home_prob_move_sportsbook: sameBookMovement.homeProbMoveSportsbook,
+      same_book_home_prob_move_source_class: sameBookMovement.homeProbMoveSourceClass,
+      same_book_home_prob_move_path_state: sameBookMovement.homeProbMovePathState,
+      same_book_home_puck_prob_move: sameBookMovement.homePuckProbMove,
+      same_book_home_puck_prob_move_sportsbook: sameBookMovement.homePuckProbMoveSportsbook,
+      same_book_home_puck_prob_move_source_class: sameBookMovement.homePuckProbMoveSourceClass,
+      same_book_home_puck_prob_move_path_state: sameBookMovement.homePuckProbMovePathState,
       same_book_total_move: sameBookMovement.totalMove,
       market_home_puck_line: marketPuckLine.home,
       market_away_puck_line: marketPuckLine.away,
@@ -705,10 +835,14 @@ export async function buildNhlFeatureSnapshot(
       market_book_count: bookCount,
       ml_home_bets_pct: opts.marketEvidence?.mlHomeBetsPct ?? null,
       ml_home_money_pct: opts.marketEvidence?.mlHomeMoneyPct ?? null,
+      spread_home_bets_pct: opts.marketEvidence?.spreadHomeBetsPct ?? null,
+      spread_home_money_pct: opts.marketEvidence?.spreadHomeMoneyPct ?? null,
       total_over_bets_pct: opts.marketEvidence?.totalOverBetsPct ?? null,
       total_over_money_pct: opts.marketEvidence?.totalOverMoneyPct ?? null,
       ml_split_source: opts.marketEvidence?.mlSplitSource ?? null,
       ml_split_confidence: opts.marketEvidence?.mlSplitConfidence ?? "none",
+      spread_split_source: opts.marketEvidence?.spreadSplitSource ?? null,
+      spread_split_confidence: opts.marketEvidence?.spreadSplitConfidence ?? "none",
       total_split_source: opts.marketEvidence?.totalSplitSource ?? null,
       total_split_confidence: opts.marketEvidence?.totalSplitConfidence ?? "none",
       target_excluded_total_read: null,

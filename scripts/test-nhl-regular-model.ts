@@ -349,7 +349,8 @@ const opposedTotalSequence = nhlRegularModelV1({
     },
   },
 });
-assert.equal(opposedTotalSequence.layers.total_market_authority, 0.65, "stable opposing sequence reduces rather than vetoes endpoint authority");
+assert.equal(opposedTotalSequence.layers.total_market_authority, 0, "a stable named-book sequence opposing the endpoint fails closed instead of receiving a fractional weight");
+assert.ok(Math.abs(opposedTotalSequence.expected_total_goals - result.expected_total_goals) < 1e-12, "an opposed Total sequence preserves the independent Total");
 const retailOnlyTotal = nhlRegularModelV1({
   ...base,
   market: {
@@ -357,7 +358,8 @@ const retailOnlyTotal = nhlRegularModelV1({
     target_excluded_total_read: { ...targetExcludedRead, named_book_count: 0 },
   },
 });
-assert.equal(retailOnlyTotal.layers.total_market_authority, 0.8, "broad retail-only confirmation retains graduated authority");
+assert.equal(retailOnlyTotal.layers.total_market_authority, 0, "a retail-only board has no numerical Total authority");
+assert.ok(Math.abs(retailOnlyTotal.expected_total_goals - result.expected_total_goals) < 1e-12, "retail-only Total evidence preserves the independent Total");
 const strongRosterPrior = {
   gameScore: 1.9,
   ixg: 0.8,
@@ -474,6 +476,8 @@ const corroboratedFlip = nhlRegularModelV1({
 });
 assert.equal(corroboratedFlip.layers.roster_prior_active, true, "opening-week forecast consumes the current roster prior");
 assert.equal(corroboratedFlip.layers.market_decision, "flipped", "corroborated price, movement and splits can fully correct the independent side");
+assert.equal(corroboratedFlip.layers.moneyline_market_read, "confirmation");
+assert.equal(corroboratedFlip.layers.moneyline_market_side, "away");
 assert.equal(corroboratedFlip.moneyline.pick, "BOS ML");
 assert.ok(Math.abs(corroboratedFlip.projected_home_goals + corroboratedFlip.projected_away_goals - corroboratedFlip.expected_total_goals) < 1e-12);
 assert.ok(Math.abs(corroboratedFlip.projected_home_goals - corroboratedFlip.projected_away_goals - corroboratedFlip.expected_goal_diff) < 1e-12);
@@ -493,9 +497,89 @@ const uncorroboratedConflict = nhlRegularModelV1({
     ml_split_confidence: "high",
   },
 });
-assert.equal(uncorroboratedConflict.layers.market_decision, "independent", "a conflicting but unconfirmed market cannot drag or flip the score");
+assert.equal(uncorroboratedConflict.layers.market_decision, "resistance", "a same-book price response against heavy away pressure is retained as home resistance");
+assert.equal(uncorroboratedConflict.layers.moneyline_market_side, "home");
 assert.equal(uncorroboratedConflict.moneyline.pick, "FLA ML");
-assert.equal(uncorroboratedConflict.expected_goal_diff, uncorroboratedConflict.independent_goal_diff);
+assert.ok(uncorroboratedConflict.expected_goal_diff > uncorroboratedConflict.independent_goal_diff);
+
+const resistedHomePressure = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    market_home_prob: 0.57,
+    same_book_home_prob_move: -0.025,
+    market_book_count: 5,
+    ml_home_bets_pct: 64,
+    ml_home_money_pct: 69,
+    ml_split_confidence: "high",
+  },
+});
+assert.equal(resistedHomePressure.layers.moneyline_market_read, "resistance", "price weakening against heavy home pressure is classified as resistance");
+assert.equal(resistedHomePressure.layers.moneyline_market_side, "away", "resistance points with the price response, not the pressured favorite");
+assert.equal(resistedHomePressure.layers.market_decision, "resistance");
+assert.ok(resistedHomePressure.expected_goal_diff < result.expected_goal_diff, "qualified resistance moves the coherent score toward the away side");
+assert.ok(Math.abs(resistedHomePressure.layers.split_movement_goals) > 1e-6, "the score receipt records a real numerical consequence");
+
+const boughtBackHomePressure = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    same_book_home_prob_move: -0.025,
+    same_book_home_prob_move_path_state: "buyback",
+    market_book_count: 5,
+    ml_home_bets_pct: 64,
+    ml_home_money_pct: 69,
+    ml_split_confidence: "high",
+  },
+});
+assert.equal(boughtBackHomePressure.layers.moneyline_market_read, "unresolved", "buyback history vetoes an otherwise directional endpoint read");
+assert.equal(boughtBackHomePressure.expected_goal_diff, result.expected_goal_diff, "buyback evidence cannot alter the coherent score");
+
+const mixedMoneylineEvidence = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...base.market,
+    same_book_home_prob_move: -0.025,
+    market_book_count: 5,
+    ml_home_bets_pct: 61,
+    ml_home_money_pct: 47,
+    ml_split_confidence: "high",
+  },
+});
+assert.equal(mixedMoneylineEvidence.layers.moneyline_market_read, "unresolved", "mixed ticket and money direction has no numerical authority");
+assert.equal(mixedMoneylineEvidence.expected_goal_diff, result.expected_goal_diff);
+
+const basePuckPickHome = result.puck_line.pick.startsWith(base.home.abbreviation);
+const puckEvidenceMarket = {
+  ...base.market,
+  market_home_puck_prob: 0.5,
+  market_away_puck_prob: 0.5,
+  market_book_count: 5,
+  spread_split_confidence: "high" as const,
+};
+const puckConfirmation = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...puckEvidenceMarket,
+    same_book_home_puck_prob_move: basePuckPickHome ? 0.025 : -0.025,
+    spread_home_bets_pct: basePuckPickHome ? 64 : 36,
+    spread_home_money_pct: basePuckPickHome ? 67 : 33,
+  },
+});
+const puckOpposition = nhlRegularModelV1({
+  ...base,
+  market: {
+    ...puckEvidenceMarket,
+    same_book_home_puck_prob_move: basePuckPickHome ? -0.025 : 0.025,
+    spread_home_bets_pct: basePuckPickHome ? 36 : 64,
+    spread_home_money_pct: basePuckPickHome ? 33 : 67,
+  },
+});
+const verdictRank = (verdict: string) => ({ pass: 0, watchlist: 1, lean: 2, best_angle: 3 }[verdict] ?? -1);
+assert.equal(puckConfirmation.layers.puck_line_market_read, "confirmation");
+assert.equal(puckConfirmation.layers.puck_line_market_side, basePuckPickHome ? "home" : "away");
+assert.ok(verdictRank(puckConfirmation.puck_line.verdict) >= verdictRank(puckOpposition.puck_line.verdict), "matching puck-line evidence cannot grade below equally complete opposition");
+assert.ok(verdictRank(puckOpposition.puck_line.verdict) < verdictRank(puckConfirmation.puck_line.verdict), "qualified puck-line opposition produces a real one-tier grade consequence");
 
 const currentSeasonState = nhlRegularModelV1({
   ...base,
@@ -809,15 +893,35 @@ assert.deepEqual(selectMainNhlPuckLinePair([
   { market_type: "spread", sportsbook: "saba", side: "away", line_value: 1.5 },
   { market_type: "spread", sportsbook: "saba", side: "home", line_value: 0 },
 ]), { home: -1.5, away: 1.5 }, "multiple same-book rows cannot erase the actual quoted puck-line pair");
-assert.deepEqual(selectSameBookNhlMovement([
+const sameBookMovement = selectSameBookNhlMovement([
   { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: -140, implied_probability: null },
   { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: 120, implied_probability: null },
+  { market_type: "spread", sportsbook: "Circa", side: "home", line_value: -1.5, odds_american: 150, implied_probability: null },
+  { market_type: "spread", sportsbook: "Circa", side: "away", line_value: 1.5, odds_american: -170, implied_probability: null },
   { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6.5, odds_american: -110, implied_probability: null },
 ], [
   { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: -120, implied_probability: null },
   { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: 100, implied_probability: null },
+  { market_type: "spread", sportsbook: "Circa", side: "home", line_value: -1.5, odds_american: 170, implied_probability: null },
+  { market_type: "spread", sportsbook: "Circa", side: "away", line_value: 1.5, odds_american: -200, implied_probability: null },
   { market_type: "total", sportsbook: "Circa", side: "over", line_value: 6, odds_american: -110, implied_probability: null },
-]).totalMove, 0.5, "market reading uses a continuous same-book trail");
+]);
+assert.equal(sameBookMovement.totalMove, 0.5, "market reading retains the exact same-book Total trail");
+assert.ok((sameBookMovement.homePuckProbMove ?? 0) > 0, "the exact same puck-line contract retains its two-sided probability response");
+assert.equal(sameBookMovement.homeProbMovePathState, "stable");
+const boughtBackMovement = selectSameBookNhlMovement([
+  { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: null, implied_probability: 0.57 },
+  { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: null, implied_probability: 0.43 },
+], [
+  { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: null, implied_probability: 0.55 },
+  { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: null, implied_probability: 0.45 },
+], [
+  { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: null, implied_probability: 0.55, observed_at: "2026-11-03T12:00:00.000Z" },
+  { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: null, implied_probability: 0.45, observed_at: "2026-11-03T12:00:00.000Z" },
+  { market_type: "moneyline", sportsbook: "Circa", side: "home", line_value: null, odds_american: null, implied_probability: 0.62, observed_at: "2026-11-03T15:00:00.000Z" },
+  { market_type: "moneyline", sportsbook: "Circa", side: "away", line_value: null, odds_american: null, implied_probability: 0.38, observed_at: "2026-11-03T15:00:00.000Z" },
+]);
+assert.equal(boughtBackMovement.homeProbMovePathState, "buyback", "a large retracement cannot masquerade as a stable opening-to-current signal");
 const pickemQuotedLine = nhlRegularModelV1({
   ...base,
   home: { ...base.home, abbreviation: "TOR" },
@@ -874,8 +978,8 @@ const noMarket = nhlRegularModelV1({
     total_over_money_pct: null,
   },
 });
-assert.notEqual(result.expected_goal_diff, noMarket.expected_goal_diff, "no-vig price and same-book movement alter the bounded final margin");
-assert.notEqual(result.expected_total_goals, noMarket.expected_total_goals, "same-book Total movement alters the bounded final total");
+assert.equal(result.expected_goal_diff, noMarket.expected_goal_diff, "a market level and movement without a complete qualified read cannot alter the final margin");
+assert.equal(result.expected_total_goals, noMarket.expected_total_goals, "raw same-book Total movement has no fractional score weight");
 
 const coherentRows = ([
   ["moneyline", result.moneyline.pick],
