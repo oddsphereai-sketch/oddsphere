@@ -1,0 +1,25 @@
+import assert from "node:assert/strict";
+import {selectCbbSourceEpisode,type CbbSourceEpisode} from "../lib/cbb/sourceEpisodeAuthority";
+const episode=(id:string,effect:number,start=10,end=20):CbbSourceEpisode=>({id,effect,observedDirection:effect>=0?1:-1,
+ beforeSourceAt:start,afterSourceAt:end,beforeEarliest:start+1,beforeAvailableBy:start+1,afterAvailableBy:end+1,
+ currentSourceAt:end+2,currentAvailableBy:end+3,currentDirection:effect>=0?1:-1,resolved:true});
+const a=episode("pinnacle:spread",2,10,20),follower=episode("circa:spread",3,22,30);
+const read=selectCbbSourceEpisode([a,follower]);
+assert.equal(read.selectedId,a.id);assert.deepEqual(read.followerIds,[follower.id]);
+assert.equal(read.reason,"observed_leader_with_followers","unequal aligned sizes do not suppress identified leadership");
+assert.deepEqual(selectCbbSourceEpisode([follower,a]),read,"input order cannot choose the amplitude");
+assert.equal(selectCbbSourceEpisode([a,episode("circa:spread",3,15,25)]).status,"unresolved","overlapping polls do not identify a leader");
+assert.equal(selectCbbSourceEpisode([a,{...follower,beforeEarliest:15,beforeAvailableBy:25}]).status,"unresolved","an upper availability bound cannot prove receipt order inside overlapping collection windows");
+assert.equal(selectCbbSourceEpisode([{...a,resolved:false,currentDirection:-1},follower]).status,"unresolved","a current adverse leg cannot claim authorship of an older positive net move");
+assert.equal(selectCbbSourceEpisode([a,episode("circa:spread",-3,15,25)]).reason,"current_source_opposition");
+const later=episode("circa:spread",-3,25,30);
+assert.equal(selectCbbSourceEpisode([a,later]).selectedId,later.id,"genuine later opposition can replace an old observation");
+assert.equal(selectCbbSourceEpisode([{...a,currentSourceAt:29,currentAvailableBy:30},later]).status,"unresolved","a current contrary reaffirmation cannot be called lagging");
+assert.equal(selectCbbSourceEpisode([a,{...later,resolved:false}]).status,"unresolved","an unresolved buyback cannot supersede current evidence");
+const equal=selectCbbSourceEpisode([a,{...follower,effect:2}]);
+assert.equal(equal.status,"equivalent");assert.equal(equal.authorIds.length,2,"equivalent observations do not add two effects");
+assert.equal(selectCbbSourceEpisode([{...a,effect:0},{...follower,effect:0}]).status,"equivalent","different confirmation paths may agree on zero numeric shift");
+const mirror=selectCbbSourceEpisode([a,follower].map(row=>({...row,effect:-row.effect,observedDirection:-row.observedDirection as -1|1,currentDirection:-row.currentDirection as -1|1})));
+assert.equal(mirror.selectedId,read.selectedId,"reflection does not change source selection");
+assert.throws(()=>selectCbbSourceEpisode([a,a]),/distinct ordered/);
+console.log("PASS CBB observed episode authority: leadership, poll ambiguity, current opposition, supersession, equivalence and symmetry");

@@ -33,8 +33,9 @@ import {readCbbCanonicalReaderHistory} from "./cbbCanonicalReaderHistory";
 import {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
 import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
 import {retainCbbLevelInput,cbbRetainedNormalizationQuarantine} from "@/lib/cbb/retainedLevelInput";
+import {cbbDecisionSplitContext} from "@/lib/cbb/decisionSplitContext";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_03_r19_explicit_market_evidence" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_03_r22_source_episode_decisions" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the
@@ -84,7 +85,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     return canonical==="STATUS_SCHEDULED"||canonical==="STATUS_FINAL"||canonical==="STATUS_IN_PROGRESS";
   });
   const prior=await readCbbMemberGames(candidateGames.map(game=>game.id),db);
-  const namedById=new Map<number,{quotes:CbbQuote[];rejected:Array<{reason:string;book:string|null}>}>(candidateGames.filter(game=>Date.parse(game.date)>Date.parse(asOf))
+  const namedById=new Map<number,{quotes:CbbQuote[];rejected:ReturnType<typeof normalizeCbbOwlsCurrent>["rejected"]}>(candidateGames.filter(game=>Date.parse(game.date)>Date.parse(asOf))
     .map(game=>{
       const evidence=normalizeCbbOwlsCurrent(game,odds.body,oddsReceipt.fetchedAt,asOf);
       evidence.quotes=evidence.quotes.map(quote=>({...quote,requestedAt:oddsRequestedAt}));
@@ -136,9 +137,11 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const priceById=new Map<number,typeof canonicalHistory.priceRows>();
   const splitById=new Map<number,typeof canonicalHistory.splitRows>();
   if(canonicalHistory.price.complete)for(const item of canonicalHistory.priceRows){const id=Number(item.canonical_event_id);const rows=priceById.get(id)??[];rows.push(item);priceById.set(id,rows);}
+  for(const item of canonicalHistory.retailPriceRows??[]){const id=Number(item.canonical_event_id);const rows=priceById.get(id)??[];rows.push(item);priceById.set(id,rows);}
   if(canonicalHistory.split.complete)for(const item of canonicalHistory.splitRows){const id=Number(item.canonical_event_id);const rows=splitById.get(id)??[];rows.push(item);splitById.set(id,rows);}
-  const canonicalById=new Map(forecastGames.map(game=>[game.id,cbbCanonicalBehaviorInputs(pairCbbCanonicalMarketEvidence({game,decisionAt:asOf,
-    priceRows:priceById.get(game.id),splitRows:splitById.get(game.id)}))]));
+  const canonicalEvidenceById=new Map(forecastGames.map(game=>[game.id,pairCbbCanonicalMarketEvidence({game,decisionAt:asOf,
+    priceRows:priceById.get(game.id),splitRows:splitById.get(game.id)})]));
+  const canonicalById=new Map(forecastGames.map(game=>[game.id,cbbCanonicalBehaviorInputs(canonicalEvidenceById.get(game.id)!)]));
   const forecasts=forecastCbbCurrentBatch(forecastGames.map(game=>{
     const evidence=dayEvents.get(computeSlateDate("cbb",game.date));
     const venue=evidence?matchCbbVenue(game,evidence.events,evidence.fetchedAt):null;
@@ -148,6 +151,11 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   const forecastById=new Map(forecasts.map(row=>[row.game.id,row.forecast]));
   const memberGames:DailyEdgeGameDto[]=[],problems:string[]=[],unpublishedIncomplete:number[]=[],ownerApprovedExclusions:number[]=[];
   const splitEvidenceById=new Map(forecastGames.map(game=>[game.id,cbbCurrentSplitEvidence(game,odds.body,splits.body,splitsReceipt.fetchedAt,asOf)]));
+  const publicRows=await readCbbCapturedPublicSplits(db,forecastGames.map(game=>game.id),Date.parse(asOf))
+    .catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured public splits unavailable");return [];});
+  const decisionSplitsById=new Map(forecastGames.map(game=>[game.id,cbbDecisionSplitContext({game,allGames:candidateGames,asOf,
+    direct:splitEvidenceById.get(game.id)!,canonical:canonicalEvidenceById.get(game.id)!.splitPairs,
+    publicRows,draftKings:draftKingsFeed})]));
   // Original r3 quote receipts may seed an anchor only when today's frozen
   // independent runtime exactly reproduces that earlier published baseline.
   // Batch by its real decision clock; no per-game/provider/DB refresh is added.
@@ -176,6 +184,10 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       cbbOriginalMarketAnchors(previous,earlierInputKeys.get(row.game.id)??key,earlierIndependent.get(row.game.id)??null);
     const read=readCbbMarketBehavior({independent:row.forecast,independentInputKey:key,startsAt:row.game.date,targets,currentQuotes:quotes,anchors,
       flows:cbbBehaviorFlows(splitEvidenceById.get(row.game.id)!),historyQuotes:native.historyQuotes,historyFlows:native.historyFlows,
+      splitContext:decisionSplitsById.get(row.game.id),
+      contextQuotes:native.contextQuotes,
+      currentSourceProblems:(namedById.get(row.game.id)?.rejected??[]).flatMap(problem=>problem.book&&problem.market?
+        [{book:problem.book,market:problem.market,reason:problem.reason,sourceAt:problem.sourceAt}]:[]),
       previousPath:storedRead?.pathTape,quarantinedSources:native.quarantinedSources,
       historyCompleteness:{price:canonicalHistory.price.complete,split:canonicalHistory.split.complete}});
     const board=buildCbbProvisionalBoard(read.forecast,quotes,{marketBehavior:read.receipt});
@@ -216,8 +228,6 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
   // never make per-game provider/DB requests or append evidence to a lock.
   const preparedSections=new Map<number,CbbPreparedNamedSplitSections>();
   const preparedPublic=new Map<number,CbbPreparedPublicSplitSections>();
-  const publicRows=await readCbbCapturedPublicSplits(db,publishableGames.filter(game=>!prior.get(game.id)?.snapshot.lockedAt&&Date.parse(game.date)>Date.parse(asOf)+60*60_000).map(game=>game.id),Date.parse(asOf))
-    .catch(error=>{providerWarnings.push(error instanceof Error?error.message:"CBB captured public splits unavailable");return [];});
   if(capturedSplits||publicRows.length||draftKingsFeed){
     const previews=publishableGames.flatMap(game=>{
       const previous=prior.get(game.id),identity=scheduled.get(game.id),candidate=boardCandidates.get(game.id);

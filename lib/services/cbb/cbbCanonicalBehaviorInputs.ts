@@ -26,15 +26,16 @@ function receipt(pair:CbbCanonicalPricePair|CbbCanonicalSplitPair,decisionAt:str
  * with DB insertion times. No provider requests, database reads or new authority. */
 export function cbbCanonicalBehaviorInputs(evidence:ReturnType<typeof pairCbbCanonicalMarketEvidence>) {
   if(evidence.release!==CBB_CANONICAL_MARKET_EVIDENCE_RELEASE)throw new Error("CBB canonical behavior evidence release mismatch");
-  const historyQuotes:CbbCanonicalBehaviorQuote[]=[],historyFlows:CbbBehaviorFlow[]=[];
+  const historyQuotes:CbbCanonicalBehaviorQuote[]=[],contextQuotes:CbbCanonicalBehaviorQuote[]=[],historyFlows:CbbBehaviorFlow[]=[];
   const sourceQuarantines:CbbCanonicalQuarantinedSource[]=structuredClone(evidence.quarantinedSources);
   const quarantine=(pair:CbbCanonicalPricePair|CbbCanonicalSplitPair)=>sourceQuarantines.push({gameId:pair.gameId,book:pair.book,
     family:family(pair.book),market:pair.market,sourceAt:pair.sourceAt,kind:pair.kind,reason:"candidate_receipt_lineage_or_safe_ids_invalid",
     observationIds:[pair.first.observationId,pair.second.observationId]});
-  for(const pair of evidence.pricePairs){
+  for(const pair of [...evidence.pricePairs,...(evidence.retailPricePairs??[])]){
     const canonicalReceipt=receipt(pair,evidence.decisionAt);
     if(pair.gameId!==evidence.gameId||!canonicalReceipt){quarantine(pair);continue;}
-    historyQuotes.push({provider:"owls",gameId:pair.gameId,sportsbook:pair.book,market:pair.market,line:pair.first.ownLine,
+    const destination=["draftkings","betmgm"].includes(pair.book)?contextQuotes:historyQuotes;
+    destination.push({provider:"owls",gameId:pair.gameId,sportsbook:pair.book,market:pair.market,line:pair.first.ownLine,
       firstPrice:pair.first.priceAmerican,secondPrice:pair.second.priceAmerican,providerObservedAt:pair.sourceAt,
       fetchedAt:pair.recordedFetchedAt,phase:"current",orientationVerified:true,canonicalReceipt});
   }
@@ -57,5 +58,5 @@ export function cbbCanonicalBehaviorInputs(evidence:ReturnType<typeof pairCbbCan
     const mapped={book:q.family,market:q.market,sourceAt:q.sourceAt,reason:`canonical_${q.kind}:${q.reason}`};
     return [JSON.stringify(mapped),mapped];
   })).values()];
-  return {historyQuotes,historyFlows,quarantinedSources,splitContext,sourceQuarantines};
+  return {historyQuotes,contextQuotes,historyFlows,quarantinedSources,splitContext,sourceQuarantines};
 }

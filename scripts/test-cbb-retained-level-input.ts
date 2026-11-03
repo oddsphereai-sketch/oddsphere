@@ -124,7 +124,7 @@ assert.equal(checkpoint(retainCbbLevelInput(copied)).sourceQuotes.length, 2, "on
 const exactGame={id:123,date:startsAt,home_team:{id:4,college:"Georgia Tech",full_name:"Georgia Tech Yellow Jackets"},visitor_team:{id:5,college:"Hampton",full_name:"Hampton Pirates"}} as CbbGame;
 const malformedResponse={success:true,data:[{id:"native-event",sport:"ncaab",home_team:"Georgia Tech",away_team:"Hampton",commence_time:startsAt,bookmakers:[{key:"pinnacle",last_update:"2026-11-03T11:59:00Z",markets:[{key:"spreads",outcomes:[{name:"Georgia Tech",point:-4.25,price:-110},{name:"Hampton",point:4.25,price:-110}]}]}]}]};
 const normalized=normalizeCbbOwlsCurrent(exactGame,malformedResponse,"2026-11-03T11:59:05Z",asOf);
-assert.deepEqual(normalized.rejected,[{book:"pinnacle",reason:"incoherent_quote"}]);
+assert.deepEqual(normalized.rejected,[{book:"pinnacle",reason:"incoherent_quote",market:"spread",sourceAt:"2026-11-03T11:59:00Z"}]);
 const rejectedCurrent=args();rejectedCurrent.quarantinedSources=cbbRetainedNormalizationQuarantine(normalized.rejected);
 unavailable(rejectedCurrent,"joint_qualified_spread_total_unavailable");
 assert.deepEqual(cbbRetainedNormalizationQuarantine([{book:null,reason:"event_identity_time_or_competition"},{book:"pinnacle",reason:"invalid_future_or_stale_time"},{book:"foreign",reason:"unsupported_or_exchange_book"}]),[],"foreign/future/stale rows cannot poison qualified actual source identity");

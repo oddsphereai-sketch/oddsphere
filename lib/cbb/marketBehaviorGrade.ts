@@ -5,6 +5,7 @@ import {gradeCbbProvisional,type CbbGradeEvidence,type CbbProvisionalGrade} from
 import {cbbBookFamily,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,assertCbbMarketBehaviorGradeReceipt,type CbbMarketBehaviorReceipt} from "./marketBehaviorCandidate";
 import {cbbEvidenceAvailableAt} from "./marketReceiptTime";
 import type {CbbQuote} from "./types";
+import {readCbbDecisionSplits} from "./decisionSplitContext";
 
 export type CbbProfessionalTargetEconomics={quote:CbbQuote;probability:number;pushProbability:number;expectedValue:number};
 /** Each physical source is inverted independently through the declared CBB
@@ -47,20 +48,25 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     return {...held,release:CBB_MARKET_BEHAVIOR_GRADE_RELEASE,reason:"unavailable_executable_target_receipt",
       modelExpectedValue:null,professionalTargetEconomics:[] as CbbProfessionalTargetEconomics[],economicCorroboration:false,
       economicPathConfirmation:false,actualActionConfirmation:false,marketPressure:"unavailable" as const,pathResistance:false,
-      gradeBasis:"held_or_non_actionable"};
+      gradeBasis:"held_or_non_actionable",splitRead:[],contextualResistance:false,contrarianSupport:false};
   }
-  const quarantined=new Set(receipt.anchors.quarantinedKeys??[]);
+  const quarantined=new Set([...(receipt.anchors.quarantinedKeys??[]),...(receipt.withheldCurrentSources??[]).map(q=>`${cbbBookFamily(q.book)}:${q.market}`)]);
   const references=receipt.currentProfessionalQuotes.filter(q=>receiptAvailableAtDecision(q,at)&&!quarantined.has(`${cbbBookFamily(q.sportsbook)}:${q.market}`)&&
     !receipt.excludedFamilies.includes(cbbBookFamily(q.sportsbook))&&(q as CbbQuote&{orientationVerified?:boolean}).orientationVerified===true);
   const base=gradeCbbProvisional({...input,references},{quoteValidator:receivedQuoteValid});
   if(base.grade==="Held")return {...base,release:CBB_MARKET_BEHAVIOR_GRADE_RELEASE,
     modelExpectedValue:null,professionalTargetEconomics:[] as CbbProfessionalTargetEconomics[],economicCorroboration:false,
     economicPathConfirmation:false,actualActionConfirmation:false,marketPressure:"unavailable" as const,pathResistance:false,
-    gradeBasis:"held_or_non_actionable"};
+    gradeBasis:"held_or_non_actionable",splitRead:[],contextualResistance:false,contrarianSupport:false};
   const professionalTargetEconomics=cbbProfessionalTargetEconomics(input,base.professionalReferenceQuotes);
   const economicCorroboration=professionalTargetEconomics.some(q=>q.expectedValue>1e-7)&&professionalTargetEconomics.every(q=>q.expectedValue>=-1e-7);
+  const premiumProfessionalValue=professionalTargetEconomics.some(q=>q.expectedValue>=.08)&&
+    professionalTargetEconomics.every(q=>q.expectedValue>=-1e-7);
   const selected=reviewCbbQuote(input.forecast,input.target).selection,sign=selected==="first"?1:-1;
-  const streams=receipt.pathPosture.filter(s=>s.market===input.target.market&&
+  const splitRead=readCbbDecisionSplits(receipt.splitContext??[],input.target.market,input.target.line,selected as "first"|"second");
+  const sameAxis=(market:CbbQuote["market"])=>input.target.market==="total"?market==="total":market!=="total";
+  const pressure=(receipt.pressureDecisions??[]).filter(row=>sameAxis(row.market)&&row.reaction!=="unbound"&&row.moneyDirection!==null&&row.moneyDirection!==0);
+  const streams=receipt.pathPosture.filter(s=>sameAxis(s.market)&&
     !receipt.excludedFamilies.includes(s.book)&&!quarantined.has(`${s.book}:${s.market}`));
   const relevantPressure=streams.filter(s=>s.status==="observed"&&s.pressureDirection!==null&&s.pressureDirection!==0);
   const support=relevantPressure.filter(s=>s.pressureDirection!*sign>0),opposition=relevantPressure.filter(s=>s.pressureDirection!*sign<0);
@@ -73,8 +79,9 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   // this exemption. Native flow below remains separate information: its
   // concentration/pressure was never converted into numeric score points.
   const fullyAppliedPriceResponse=(s:typeof streams[number])=>receipt.historyCompleteness.price&&s.coverage==="retained_window"&&
-    axis.status==="applied"&&["ongoing","resumed"].includes(s.sourceCurrentResolution)&&
-    receipt.episodes.some(e=>e.book===s.book&&e.market===s.market&&Math.abs(e.delta-axis.delta)<=1e-7);
+    ["applied","confirming"].includes(axis.status)&&["ongoing","resumed","reversed"].includes(s.sourceCurrentResolution)&&
+    s.sourceUnresolvedDirection===s.recentDirection&&receipt.episodes.some(e=>e.book===s.book&&e.market===s.market&&
+      (axis.authority?.authorIds.includes(`${e.book}:${e.market}`)??(e.book===axis.sourceBook&&e.market===axis.sourceMarket)));
   const freshAdverse=adverseSources.some(s=>!fullyAppliedPriceResponse(s));
   // A named source's concentration is context even without matched response;
   // it cannot become invented score points or exact-target action confirmation.
@@ -85,24 +92,41 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
   const matchedFlowResistance=streams.some(s=>s.latestFlowMatched&&s.boundFlowDirection!==null&&s.boundFlowDirection!==0&&(
     (s.flowReactionDirection!==null&&s.flowReactionDirection*sign<0)||
     (s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)));
-  const pathConflict=["conflicting","unresolved"].includes(axis.status)||streams.some(s=>s.status==="conflicting"||s.flowCurrentResolution==="contested"||s.sourceCurrentResolution==="contested");
+  const pathConflict=axis.crossMarketDisagreement===true||["conflicting","unresolved"].includes(axis.status)||streams.some(s=>s.status==="conflicting"||s.flowCurrentResolution==="contested"||s.sourceCurrentResolution==="contested");
   const historyIncomplete=!receipt.historyCompleteness.price;
-  const pathResistance=historyIncomplete||freshAdverse||unmatchedCircaOpposition||matchedFlowResistance||opposition.length>0||pathConflict;
-  const exactSupport=support.some(s=>s.pressureLine===input.target.line&&s.book===axis.sourceBook&&s.market===axis.sourceMarket);
+  const professionalPressure=pressure.filter(row=>row.sourceClass==="professional_adjacent_named_book"&&!receipt.excludedFamilies.includes(row.book));
+  const nativeResistance=professionalPressure.some(row=>row.resolution==="contested"||row.moneyDirection===sign&&row.reactionDirection!==sign||
+    row.moneyDirection===-sign&&row.reactionDirection===-sign);
+  const contrarianSupport=professionalPressure.some(row=>row.moneyDirection===-sign&&row.resolution==="held");
+  const retailResistance=pressure.some(row=>row.sourceClass!=="professional_adjacent_named_book"&&
+    (row.resolution==="contested"||row.moneyDirection===sign&&row.reactionDirection!==sign||row.moneyDirection===-sign&&row.reactionDirection===-sign));
+  const laterProfessionalSupport=professionalPressure.some(row=>row.reactionDirection===sign&&row.latestDirection===sign&&["ongoing","resumed","reversed"].includes(row.resolution)&&
+    pressure.filter(other=>other.sourceClass!=="professional_adjacent_named_book"&&other.current).every(other=>
+      Date.parse(row.current!.providerObservedAt)>Date.parse(other.current!.providerObservedAt)));
+  const contextualResistance=retailResistance&&!laterProfessionalSupport;
+  const pathResistance=historyIncomplete||freshAdverse||unmatchedCircaOpposition||matchedFlowResistance||opposition.length>0||pathConflict||nativeResistance||contextualResistance;
+  // The flow's exact NATIVE contract is already qualified. The executable
+  // target is repriced through the same CBB law; it need not copy that line.
+  const authorIds=axis.authority?.authorIds??[`${axis.sourceBook}:${axis.sourceMarket}`];
   const targetRequested=Date.parse((input.target as CbbQuote&{requestedAt?:string}).requestedAt??"");
   const validTargetRequest=Number.isFinite(targetRequested)&&targetRequested<=Date.parse(input.target.fetchedAt);
-  const resolvedSource=streams.find(s=>s.book===axis.sourceBook&&s.market===axis.sourceMarket);
-  const sourceAvailable=Date.parse(resolvedSource?.frontierAvailableBy??"");
-  const economicPathConfirmation=axis.status==="applied"&&axis.sourceMarket===input.target.market&&axis.delta*sign>1e-7&&
-    resolvedSource?.recentDirection===sign&&Number.isFinite(sourceAvailable)&&validTargetRequest&&sourceAvailable<=targetRequested&&!pathResistance;
-  const actualActionConfirmation=receipt.historyCompleteness.split&&economicPathConfirmation&&axis.status==="applied"&&axis.sourceMarket===input.target.market&&axis.delta*sign>1e-7&&
-    exactSupport&&!pathResistance;
+  const priceConfirmations=streams.filter(source=>authorIds.includes(`${source.book}:${source.market}`)&&sameAxis(source.market)&&
+    receipt.episodes.some(e=>e.book===source.book&&e.market===source.market&&e.delta*sign>1e-7)&&source.recentDirection===sign&&
+    Number.isFinite(Date.parse(source.frontierAvailableBy??""))&&validTargetRequest&&Date.parse(source.frontierAvailableBy!)<=targetRequested);
+  const economicPathConfirmation=["applied","confirming"].includes(axis.status)&&priceConfirmations.length>0&&!pathResistance;
+  const ownSourceActions=professionalPressure.filter(row=>row.moneyDirection===sign&&row.reactionDirection===sign&&row.latestDirection===sign&&
+    ["ongoing","resumed","reversed"].includes(row.resolution)&&
+    row.current&&validTargetRequest&&Date.parse(row.availableBy)<=targetRequested&&cbbEvidenceAvailableAt(row.current)<=targetRequested);
+  const legacyActionSources=priceConfirmations.filter(source=>support.some(s=>s.book===source.book&&s.market===source.market));
+  const actualActionConfirmation=receipt.historyCompleteness.split&&!pathResistance&&["applied","confirming"].includes(axis.status)&&
+    (economicPathConfirmation&&legacyActionSources.length>0||ownSourceActions.length>0);
+  const actionAtTargetMarket=legacyActionSources.some(source=>source.market===input.target.market)||ownSourceActions.some(source=>source.market===input.target.market);
   // Fully applied equal endpoint responses are already in this law. Two
   // physical sources can constrain Lean only while resistance is unresolved;
   // counting transported moves again would impose a second model penalty.
   const unresolvedSources=streams.filter(s=>s.status==="observed"&&(
     (s.latestFlowMatched&&s.flowResponse==="held"&&s.boundFlowDirection!==null&&s.boundFlowDirection*sign>0)||
-    (s.recentDirection*sign<0&&(axis.status!=="applied"||s.sourceCurrentResolution==="contested"||s.sourceCurrentResolution==="cancelled"||s.flowCurrentResolution==="contested"||s.flowCurrentResolution==="cancelled"))));
+    (s.recentDirection*sign<0&&!fullyAppliedPriceResponse(s))));
   const corroboratedOpposition=new Set(unresolvedSources.map(s=>s.book)).size>=2;
   const modelExpectedValue=base.expectedValue,eligible=base.price!==null&&base.price>=(input.target.market==="moneyline"?-250:-500);
   let grade:CbbProvisionalGrade=base.grade,reason=base.reason,gradeBasis="held_or_non_actionable";
@@ -118,19 +142,28 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     if(modelExpectedValue>=.03&&eligible&&(base.referenceState==="agrees"||base.referenceState==="unavailable"||economicCorroboration)){
       grade="Lean";reason="positive_model_value_without_qualified_action_confirmation";gradeBasis="model_value";
     }
-    if(modelExpectedValue>=.08&&eligible&&economicCorroboration&&!pathResistance){
-      grade="Best Angle";reason="model_and_professional_exact_target_value";gradeBasis="model_and_professional_value";
+    if(modelExpectedValue>=.03&&eligible&&contrarianSupport&&!pathResistance&&grade==="Watchlist"){
+      grade="Lean";reason="opposite_source_money_met_by_held_quote";gradeBasis="qualified_contrarian_response";
+    }
+    if(modelExpectedValue>=.08&&eligible&&premiumProfessionalValue&&!pathResistance){
+      grade="Best Angle";reason="model_and_material_professional_exact_target_value";gradeBasis="model_and_professional_value";
     }
     if(modelExpectedValue>=.03&&eligible&&economicPathConfirmation&&grade==="Watchlist"&&base.referenceState==="neutral"){
       grade="Lean";reason="qualified_same_market_price_confirmation";gradeBasis="qualified_same_market_price";
     }
-    else if(modelExpectedValue>=.08&&eligible&&actualActionConfirmation&&grade==="Lean"){
-      grade="Best Angle";reason="verified_same_market_action_with_material_model_value";gradeBasis="verified_same_market_action";
+    if(modelExpectedValue>=.08&&eligible&&actualActionConfirmation&&grade==="Lean"){
+      grade="Best Angle";reason=actionAtTargetMarket?"verified_same_market_action_with_material_model_value":"verified_margin_axis_action_with_material_model_value";
+      gradeBasis=actionAtTargetMarket?"verified_same_market_action":"verified_translated_margin_action";
+    }
+    if(pathResistance&&grade==="Best Angle"){
+      grade="Lean";reason="unresolved_current_market_resistance";gradeBasis="qualified_source_resistance";
     }
     if(corroboratedOpposition&&(grade==="Lean"||grade==="Best Angle")){
       grade="Watchlist";reason="corroborated_unresolved_source_resistance";gradeBasis="qualified_source_resistance";
     }
   }
   return {...base,release:CBB_MARKET_BEHAVIOR_GRADE_RELEASE,grade,reason,modelExpectedValue,
-    professionalTargetEconomics,economicCorroboration,economicPathConfirmation,actualActionConfirmation,marketPressure,pathResistance,gradeBasis};
+    professionalTargetEconomics,economicCorroboration,economicPathConfirmation,actualActionConfirmation,
+    marketPressure:actualActionConfirmation&&marketPressure==="unavailable"?"supports" as const:marketPressure,pathResistance,gradeBasis,splitRead,
+    contextualResistance,contrarianSupport};
 }

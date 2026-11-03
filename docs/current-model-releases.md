@@ -1,5 +1,46 @@
 # Current production model releases and qualified research candidates
 
+## CBB source-episode decision release — November 3
+
+This repair keeps independent R3 and its score artifact. The sole CBB path uses
+market model `cbb_candidate_2026_11_03_r10_observed_episode_authority`, grade
+`cbb_2026_11_03_r12_contextual_episode_decisions`, receipt R6, path R4, board R13,
+publisher R22, tracking R10 and member adapter R11. Canonical history R2 reads
+retail pressure context in a separate bounded family; canonical evidence R3
+never promotes those quotes into professional numeric experts. Reader evidence
+R11 preserves source/DB availability before decision time.
+
+The NBA/NFL episode structure is adapted to the CBB residual law. Movements can
+confirm without moving a score, correct it, or cross it without a point cap.
+One physical source authors the consequence; followers do not add amplitude.
+Unequal aligned moves are resolved by demonstrated observation order or a
+unique qualified own-source response, not a source average or book-name rank.
+Ambiguous overlapping windows remain explicit. Spread owns the margin under
+the fixed residual law; moving ML with a verified flat Spread is shape/confidence
+context, while genuinely absent Spread permits the priced ML fallback.
+
+Professional, retail and aggregate splits reach decisions before publication.
+Only an actual later same-source price establishes pressure response. Opposite
+money met by hold can support a contrarian read; toward-pick money held or
+opposed is resistance. Raw public majorities cannot create a sharp label or
+score bonus. Native off-target contracts remain usable through exact CBB
+target repricing. Verified confirmation may promote with zero score delta.
+Current invalid responses withhold only their affected axis and can recover;
+contradictory original sources retain persistent quarantine.
+
+Scores and all market probabilities/EVs/grades use the one final law. Earlier
+locks retain exact stored payloads and release precedence. There is no new
+provider request, collector, writer, cadence, fitted combination coefficient,
+absolute-level replacement or stake change. The separate New Orleans prior
+candidate remains offline; its priced input hold is a preexisting limitation.
+Static independent/current-level disagreement remains explicit evidence.
+
+The owner directed functional deployment with forward outcome evaluation.
+Publication still requires the focused/full checks, independent review,
+fresh-main protected PR and actual live writer/lock/reader proof. See
+`docs/model-audits/2026-11-03-cbb-independent-market-reader-repair.md` for the
+exact frozen-input impact and remaining boundaries; this is not a win-rate claim.
+
 ## UCL public-split lock capture — November 3
 
 Member lifecycle R21 and public-source R4 capture cached public splits through

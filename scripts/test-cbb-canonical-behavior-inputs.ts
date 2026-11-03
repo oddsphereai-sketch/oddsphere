@@ -24,6 +24,8 @@ const prices=[price("home",1),price("away",2)],splits=[split("home",3),split("aw
 const read=(priceRows=prices,splitRows:CbbCanonicalSplitRow[]=splits,extra:Partial<Parameters<typeof pairCbbCanonicalMarketEvidence>[0]>={})=>
  pairCbbCanonicalMarketEvidence({game,decisionAt,priceRows,splitRows,...extra});
 const native=read(),bytes=JSON.stringify(native),adapted=cbbCanonicalBehaviorInputs(native);
+const retail=cbbCanonicalBehaviorInputs(read(prices.map(p=>({...p,sportsbook:"draftkings",sharp_book:false})),[]));
+assert.equal(retail.historyQuotes.length,0);assert.equal(retail.contextQuotes.length,1,"own-source retail history stays outside numerical professional transport");
 assert.equal(adapted.historyQuotes.length,1);assert.equal(adapted.historyFlows.length,1);
 const q=adapted.historyQuotes[0],f=adapted.historyFlows[0];
 assert.equal(q.fetchedAt,fetched,"recorded native run-start remains untouched");assert.equal(f.fetchedAt,fetched);

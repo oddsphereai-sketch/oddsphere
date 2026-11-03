@@ -48,8 +48,8 @@ for(const market of ['moneyline','spread','total'] as const){
   const r=fixture(market,state,{steep:true});assert.equal(r.decision.grade,'Watchlist');assert.ok(r.decision.expectedValue!>=.03);
   cases.push({name:`${market}-${state}-steep`,decision:r.decision,reason:'price_too_steep_for_actionable'});
  }
- for(const state of ['agrees','unavailable'] as const){const r=fixture(market,state);assert.equal(r.decision.grade,state==='agrees'?'Best Angle':'Lean');
-  cases.push({name:`${market}-${state}-actionable`,decision:r.decision,reason:state==='agrees'?'model_and_professional_exact_target_value':'positive_model_value_without_qualified_action_confirmation'});
+ for(const state of ['agrees','unavailable'] as const){const r=fixture(market,state);assert.equal(r.decision.grade,'Lean');
+  cases.push({name:`${market}-${state}-actionable`,decision:r.decision,reason:'positive_model_value_without_qualified_action_confirmation'});
  }
  const negative=fixture(market,'neutral',{ev:-.01});assert.equal(negative.decision.grade,'No Play');
  cases.push({name:`${market}-negative`,decision:negative.decision,reason:'non_positive_exact_price_value'});
@@ -71,7 +71,11 @@ resisted.receipt.pathPosture=resisted.receipt.pathPosture.map(s=>({...s,status:'
 const resistanceDecision=gradeCbbReceivedMarket(resisted.input,resisted.receipt);assert.equal(resistanceDecision.grade,'Watchlist');
 cases.push({name:'corroborated-resistance',decision:resistanceDecision,reason:'corroborated_unresolved_source_resistance'});
 const canon=(v:unknown):unknown=>Array.isArray(v)?v.map(canon):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>[k,canon(x)])):v;
-function decisionHash(decision:ReturnType<typeof gradeCbbReceivedMarket>){const {reason,release,...unchanged}=decision;void reason;void release;return createHash('sha256').update(JSON.stringify(canon(unchanged))).digest('hex');}
+function decisionHash(decision:ReturnType<typeof gradeCbbReceivedMarket>){const {reason,release,splitRead,contextualResistance,contrarianSupport,...unchanged}=decision;void reason;void release;
+ assert.deepEqual(splitRead,[],"a fixture with no split input must not invent source pressure");
+ if(contextualResistance!==undefined)assert.equal(contextualResistance,false);
+ if(contrarianSupport!==undefined)assert.equal(contrarianSupport,false);
+ return createHash('sha256').update(JSON.stringify(canon(unchanged))).digest('hex');}
 // Frozen against base d8690e1 before the reason-only edit. This covers the WHOLE
 // decision, including probabilities/EV/prices/reference evidence and every flag.
 const BASELINE:Record<string,string>={
@@ -87,7 +91,7 @@ const BASELINE:Record<string,string>={
   "moneyline-mixed-steep": "1f209a606469768a3dd0509cb31bd34999c0767980fbe0f45e47529469f0c032",
   "moneyline-neutral-steep": "563a67333f7f03cb1091fcfe2f7cef11f79752081005bd433080448bcc1eb52b",
   "moneyline-unavailable-steep": "e0ad40cbc4c41f7ef4f675b40a2bd8cafb518d4989a2f5b757d80344bd32446a",
-  "moneyline-agrees-actionable": "a21c15228c0a363274867193ace4bc3d4a81c9425353ca6920e9716317c915cc",
+  "moneyline-agrees-actionable": "3631d77845ab832a2f0b3745825843fb9335b693c584c62650b649a7ef164db0",
   "moneyline-unavailable-actionable": "71f7d32ed5aa31e66a241f46937b4706f4add21d9fd323cf5427ff6194a949bf",
   "moneyline-negative": "ace89f634d299a7f733fe4d8825d7efe050270e52561d165d328dd91e1a9a2cb",
   "moneyline-held": "777756a7bad6a8bf14ff49e838e61efc29b59ed65b7bba12acc9f8a2faad68d1",
@@ -103,7 +107,7 @@ const BASELINE:Record<string,string>={
   "spread-mixed-steep": "07b58fedfea493a1fef2f05db62ae9328893ecbf61b30518fe479cd480fd29b2",
   "spread-neutral-steep": "f08d0cff9fe0189104d40079f7550e81528333e9f9bcf2f79d25cd29c7b99570",
   "spread-unavailable-steep": "5df5e93c0e5268ce2975a2cc71a027fb458ef7e537fe5af91c1623701cd35653",
-  "spread-agrees-actionable": "439b9922b7721f8ffb6347a7f23552e6cb7f0662f2cc82dcb38bcb21e79080dc",
+  "spread-agrees-actionable": "80e6e8c4e318d3e1ed93c544c5a08bc30da1c38a477cf998ecf314786cb20263",
   "spread-unavailable-actionable": "0401b4abe05e6821ad76fc1d2207385f8ed1fd19f12d50204ea8052ec20d91c7",
   "spread-negative": "ecd31eb922f5231bd0ce88b078282b9fcd2b1f79eae3dfd48b15c9f7172029a4",
   "spread-held": "1168a22cef22059ffd5cb9ed2a4126d7dc9dfbf2870643dfa363e151d65f78a7",
@@ -119,13 +123,14 @@ const BASELINE:Record<string,string>={
   "total-mixed-steep": "c8a7d7723868dcad5216d0c08b8d849f294e26079335297c8e2e3834fb86422f",
   "total-neutral-steep": "248938f0b2b759c8a51df942ab915dad80a84b98b1ed8686016c171ec6cdc83e",
   "total-unavailable-steep": "22af8114c0d00a97da55df315133465616d28cacff00332cf7df389bd06b3fc2",
-  "total-agrees-actionable": "1e14056fb9499530e32db17fa8282b7f074fa8bd0b263d152d8c6b054a57b665",
+  "total-agrees-actionable": "92ec09dbe64357be13e4fcff14a395fd51653b0f7efe364dbeb24f4e9a298edf",
   "total-unavailable-actionable": "69a8a54c80d4c52817e7d6b3246fa543494489eae75e9ccf5cf68543d2880335",
   "total-negative": "203143643b58ad5910ade6b3999255876449ba19485c96b09113d5e9bedc8b5c",
   "total-held": "4ca8a392d389436c56b60b6c2de6c1f5d0462b7059d67600e1e698e32bce0a0a",
   "corroborated-resistance": "9499a053d9290678961c63e13bbc803b484ab8fcdac5c22fd8ee420d8e28e0be"
 };
-for(const c of cases){assert.equal(c.decision.reason,c.reason,c.name);assert.equal(decisionHash(c.decision),BASELINE[c.name],`${c.name}: full decision changed beyond reason/release`);}
+for(const c of cases){assert.equal(c.decision.reason,c.reason,c.name);
+ assert.equal(decisionHash(c.decision),BASELINE[c.name],`${c.name}: full decision changed beyond declared candidate decision`);}
 // Relabeling same-direction unequal effects as unresolved retains every
 // cautious gate that conflicting previously supplied; no grade consequence.
 const guarded=fixture('spread','agrees');

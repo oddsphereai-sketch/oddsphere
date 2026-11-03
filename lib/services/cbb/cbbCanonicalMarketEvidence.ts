@@ -5,7 +5,7 @@ import { computeSlateDate } from "../../dates/slateDate";
 import type { CbbGame, CbbMarket } from "../../cbb/types";
 import type { MarketPriceObservationV2, MarketSplitObservationV2 } from "../../types/domain/MarketIntelligenceV2";
 
-export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_03_r2_shared_exact_identity" as const;
+export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_03_r3_typed_retail_prices" as const;
 export type CbbCanonicalPriceRow = MarketPriceObservationV2 & { id: number | string; inserted_at: string };
 export type CbbCanonicalSplitRow = MarketSplitObservationV2 & { id: number | string; inserted_at: string };
 /** An opaque native event ID needs an independent named fixture/time join.
@@ -132,7 +132,8 @@ function common(row: CbbCanonicalPriceRow | CbbCanonicalSplitRow, game: CbbGame,
     return "source_or_recorded_capture_or_db_availability_clock_invalid";
   }
   const book = kind === "price" ? (row as CbbCanonicalPriceRow).sportsbook : (row as CbbCanonicalSplitRow).source_book;
-  if (kind === "price" && (!["circa", "pinnacle", "ps3838"].includes(book) || (row as CbbCanonicalPriceRow).sharp_book !== true)) {
+  if (kind === "price" && !(["circa", "pinnacle", "ps3838","bookmaker"].includes(book)&&(row as CbbCanonicalPriceRow).sharp_book===true||
+    ["draftkings","betmgm"].includes(book)&&(row as CbbCanonicalPriceRow).sharp_book===false)) {
     return "unsupported_professional_price_source";
   }
   if (kind === "split") {
@@ -180,7 +181,7 @@ export function pairCbbCanonicalMarketEvidence(args: {
   const decision = epoch(args.decisionAt), start = epoch(args.game.date);
   if (![decision, start].every(Number.isFinite) || decision >= start) throw new Error("CBB canonical evidence requires a pregame fixture/cutoff");
   const rejected: CbbCanonicalEvidenceRejection[] = [];
-  const pricePairs: CbbCanonicalPricePair[] = [], splitPairs: CbbCanonicalSplitPair[] = [];
+  const pricePairs: CbbCanonicalPricePair[] = [],retailPricePairs:CbbCanonicalPricePair[]=[], splitPairs: CbbCanonicalSplitPair[] = [];
   const quarantined = new Map<string,CbbCanonicalQuarantinedSource>();
   const markSource = (source:{gameId:number;book:string;market:CbbMarket;sourceAt:string},kind:"price"|"split",reason:string,ids:Array<number|string>) => {
     const key=JSON.stringify([kind,source.gameId,family(source.book),source.market,epoch(source.sourceAt),reason]);
@@ -236,7 +237,8 @@ export function pairCbbCanonicalMarketEvidence(args: {
         }
         const hold=cbbImpliedProbability(first.american_price)+cbbImpliedProbability(second.american_price);
         if(hold<.98||hold>1.3){rejected.push({kind,observationIds:ids,reason:"incoherent_two_sided_price_hold"});markCommon(group[0].c,kind,"incoherent_two_sided_price_hold",ids);continue;}
-        pricePairs.push({...base,kind:"price",first:{...side(a.c,first.line,first.american_price),priceAmerican:first.american_price,
+        const destination=["draftkings","betmgm"].includes(base.book)?retailPricePairs:pricePairs;
+        destination.push({...base,kind:"price",first:{...side(a.c,first.line,first.american_price),priceAmerican:first.american_price,
           decimalPrice:first.decimal_price,noVigProbability:first.no_vig_probability},second:{...side(b.c,second.line,second.american_price),
           priceAmerican:second.american_price,decimalPrice:second.decimal_price,noVigProbability:second.no_vig_probability}});
       } else {
@@ -267,8 +269,8 @@ export function pairCbbCanonicalMarketEvidence(args: {
       return group;
     });
   }
-  const qualifiedPrices=quarantine(pricePairs),qualifiedSplits=quarantine(splitPairs);
+  const qualifiedPrices=quarantine(pricePairs),qualifiedSplits=quarantine(splitPairs),qualifiedRetail=quarantine(retailPricePairs);
   return {release:CBB_CANONICAL_MARKET_EVIDENCE_RELEASE,gameId:args.game.id,decisionAt:args.decisionAt,
-    pricePairs:qualifiedPrices,splitPairs:qualifiedSplits,rejected,quarantinedSources:[...quarantined.values()],
+    pricePairs:qualifiedPrices,retailPricePairs:qualifiedRetail,splitPairs:qualifiedSplits,rejected,quarantinedSources:[...quarantined.values()],
     completeness:"not_asserted" as const,causalLeadership:"not_attested" as const};
 }

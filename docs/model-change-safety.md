@@ -1,5 +1,44 @@
 # Model change safety protocol
 
+## Owner-directed CBB source-episode functional repair — November 3
+
+The owner's standing instruction is to repair market interpretation and its
+actual score/grade consequences now, then evaluate future outcomes. The owner
+explicitly rejected making historical qualification a blocker for that product
+repair. On November3 the owner directly asked Assess sharp market reader to
+handle CBB independently, requested reuse of the working other-sport reader
+structure, explicitly included play-grade promotions when market reading creates
+an edge absent from the independent forecast, and required the CBB reader to be
+applied fully ASAP. The owner prohibited further coordination with the other
+CBB chat; this work has not sent that chat a handoff under the new instruction.
+
+After the implemented repair and the current-board consequences were explained,
+the owner explicitly instructed: "Okay please get it live asap, and then spot
+check several games to make sure its all working good." The owner specified
+actual market interpretation versus projections/predictions, followed by fixing
+any mismatches. This authorizes publication of this reviewed functional repair
+and the subsequent read-only live interpretation checks.
+
+This records that direction for the exact functional source-episode repair:
+independent R3 unchanged; market R10 /grade R12 /receipt R6 /path R4 /board R13
+/publisher R22 /tracking R10 /adapter R11, with canonical history R2, evidence R3
+and reader evidence R11. It is a scoped exception to requiring historical
+accuracy improvement before this functional release. It is not reuse of the
+older R5 exception, permission to activate a fitted absolute-level forecast,
+the separate New Orleans prior, any stake increase, a second writer, extra
+provider calls, historical relabeling or locked-record correction.
+
+Adapt NBA/NFL episode ownership and confirmation/correction structure through
+CBB's existing law; preserve current source disagreement, honest exact-price
+EV and class-aware pressure interpretation. Test both actual promotion and
+demotion paths; report the current board count without manufacturing balancing
+picks or a quota. New semantics apply only to unlocked rows and future locks.
+Independent source/decision review, full/focused functional checks, source and
+cost bounds, legacy writer/reader/lock precedence, one sport-scoped writer lease,
+fresh-main overlap safety, protected PR and exact-tree/live verification remain
+mandatory. Forward evaluation is release- and lock-time-specific. This entry
+does not assert improved accuracy or exhaustive coverage of future situations.
+
 ## Owner-directed UCL product-semantic correction — November 3
 
 After approving the UCL repair for live forward evaluation, Daniel Mengel
