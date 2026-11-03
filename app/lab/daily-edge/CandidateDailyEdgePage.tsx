@@ -237,6 +237,9 @@ export default async function CandidateDailyEdgePage({
     await populateDailyEdgeStoredSplitFallback(detailSnapshot, "cfb", {
       reconstructMissingLockedPreLock: true,
     });
+  } else if(uclRequested){
+    splitFallbackPromise=import("@/lib/services/ucl/uclPublicSplitSource")
+      .then(({populateStoredUclPublicSplits})=>populateStoredUclPublicSplits(snapshot));
   } else if (!cfbFixture && !publishedSnapshotOnly) {
     // Direct weekly and competition snapshots use only the durable rows
     // captured by their scheduled writers. Never contact providers while a

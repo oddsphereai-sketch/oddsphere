@@ -1,4 +1,5 @@
 import "./test-ucl-current-native-inputs";
+import {testUclPublicSplitSource} from "./test-ucl-public-split-complete-path";
 import {testUclNativeRecoveryBuilder} from "./test-ucl-native-recovery-builder";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -59,6 +60,7 @@ function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_
 }
 
 async function main() {
+await testUclPublicSplitSource();
 await testUclNativeRecoveryBuilder();
 
 // A transient missing UCL market may recover only from a complete, exact
