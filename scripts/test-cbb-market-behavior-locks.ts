@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import {normalCdf} from "../lib/cbb/model";
-import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
-import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
+import {CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
+import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE,CBB_OLDER_MARKET_BEHAVIOR_GRADE_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 import {gradeCbbProvisional} from "../lib/cbb/provisionalGradePolicy";
 import {adaptCbbProvisionalGame} from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import {buildCbbProvisionalBoard} from "../lib/cbb/provisionalBoard";
 import {writeCbbMemberGame,cbbMemberGameForReader,type CbbStoredMemberGame} from "../lib/services/cbb/cbbMemberGameStore";
-import {writeLockedCbbTracking,cbbLockedGradeRelease} from "../lib/services/cbb/cbbTrackingWriter";
+import {writeLockedCbbTracking,cbbLockedGradeRelease,cbbLockedModelRelease} from "../lib/services/cbb/cbbTrackingWriter";
 import {readCbbProvisionalSnapshot} from "../lib/cbb/provisionalLifecycle";
 import {cbbCurrentSplitEvidence} from "../lib/cbb/owlsSplitEvidence";
 import {cbbBehaviorFlows,cbbHistoryAtDecision} from "../lib/services/cbb/cbbMarketBehaviorInputs";
@@ -128,6 +128,36 @@ async function main(){
  assert.equal(await writeLockedCbbTracking(legacyR5,legacyTrackingDb),0);
  assert.equal(JSON.stringify(legacyTracked),legacyTrackingBytes,"existing R5 tracking fields and historical writer stamp stay exact under the R6 grade reader");
  assert.equal(JSON.stringify(legacyR5),legacyBytes,"tracking never normalizes legacy R2 receipts into the new receipt schema");
+ const priorPublic=structuredClone(frozen.record);
+ priorPublic.snapshot.board.release="cbb_candidate_2026_11_03_r10_explicit_market_evidence";
+ priorPublic.snapshot.board.modelRelease=CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE;
+ priorPublic.snapshot.board.gradeRelease=CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE;
+ const priorRead=priorPublic.snapshot.board.marketContext.verifiedMarketRead!;
+ Object.assign(priorRead,{release:"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude",modelRelease:CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE,
+  independentRelease:CBB_PREVIOUS_SCORE_RELEASE});
+ priorRead.anchors.release="cbb_market_behavior_2026_11_03_r3_direction_and_magnitude";
+ priorRead.anchors.independentRelease=CBB_PREVIOUS_SCORE_RELEASE;
+ const priorBytes=JSON.stringify(priorPublic),priorWrites=writes;
+ stored=priorPublic;
+ assert.equal(cbbLockedModelRelease(priorPublic.snapshot.board),CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE);
+ assert.equal(cbbLockedGradeRelease(priorPublic.snapshot.board),CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE);
+ const priorWrite=await writeCbbMemberGame({game,candidate:newR6,homeLogo:null,awayLogo:null,now:"2026-11-02T19:06:00Z"},db);
+ assert.equal(priorWrite.written,false);assert.equal(writes,priorWrites);
+ assert.equal(priorWrite.record,priorPublic);
+ assert.equal(readCbbProvisionalSnapshot({locked:priorPublic.snapshot,unlocked:initial.record.snapshot}),priorPublic.snapshot);
+ const priorRendered=cbbMemberGameForReader(priorPublic,{...game,status:"post",status_state:"final",home_score:80,away_score:85});
+ const {result:priorResult,...priorReaderFields}=priorRendered;
+ const {result:storedPriorResult,...storedPriorFields}=priorPublic.memberGame;
+ void priorResult;void storedPriorResult;
+ assert.deepEqual(priorReaderFields,storedPriorFields,"the latest public R7 lock takes precedence over the new R8 reader");
+ const priorTracked:Array<Record<string,unknown>>=[];
+ const priorTrackingDb={from:(table:string)=>table==="games"?{select:()=>{const q={eq:()=>q,maybeSingle:async()=>({data:{id:44,external_id:777,game_date:start,slate_date:"2026-11-02"},error:null})};return q;}}:{
+  select:()=>{const q={eq:()=>q,then:(resolve:(r:unknown)=>unknown)=>resolve({data:priorTracked,error:null})};return q;},
+  insert:async(row:Record<string,unknown>)=>{priorTracked.push(structuredClone(row));return {error:null};},
+ }} as unknown as Parameters<typeof writeLockedCbbTracking>[1];
+ assert.equal(await writeLockedCbbTracking(priorPublic,priorTrackingDb),3);
+ assert.ok(priorTracked.every(row=>row.model_version===CBB_PREVIOUS_MARKET_BEHAVIOR_MODEL_RELEASE&&row.calibration_version===CBB_PRIOR_MARKET_BEHAVIOR_GRADE_RELEASE));
+ assert.equal(JSON.stringify(priorPublic),priorBytes,"old R7 lock remains byte exact after writer, reader and tracking");
  const odds={success:true,data:[{id:"named-exact",sport:"ncaab",home_team:"Cornell",away_team:"Pepperdine",commence_time:start,bookmakers:[]}]};
  const splits={sport:"ncaab",meta:{status:"ok"},data:[{event_id:"ncaab:Pepperdine@Cornell-20261102",home_team:"Cornell",away_team:"Pepperdine",splits:[{book:"circa",as_of:"2026-11-02T15:10:00Z",spread:{home_line:3.5,away_line:-3.5,home_bets_pct:30,away_bets_pct:70,home_handle_pct:10,away_handle_pct:90}}]}]};
  const source=cbbCurrentSplitEvidence(game,odds,splits,at,at),flows=cbbBehaviorFlows(source);

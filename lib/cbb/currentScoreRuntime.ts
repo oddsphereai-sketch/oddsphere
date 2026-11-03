@@ -1,8 +1,9 @@
-import artifact from "./artifacts/candidate-r3.json";
+import artifact from "./artifacts/candidate-r4.json";
 import { forecastCbbScoreArtifactBatch, type CbbScoreArtifact, type CbbScoreFixture } from "./scoreArtifactRuntime";
 import type { CbbTrainingGame } from "./types";
 
-export const CBB_CURRENT_SCORE_RELEASE="cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior" as const;
+export const CBB_PREVIOUS_SCORE_RELEASE="cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior" as const;
+export const CBB_CURRENT_SCORE_RELEASE="cbb_candidate_2026_11_03_r4_verified_new_orleans_venue_prior" as const;
 
 /** Sole live score artifact. Only genuine historical venue inputs changed. */
 export function forecastCbbCurrentBatch(games:CbbScoreFixture[],asOf:string,history:CbbTrainingGame[]=[]){

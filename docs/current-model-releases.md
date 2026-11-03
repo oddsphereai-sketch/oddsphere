@@ -16,6 +16,21 @@ locked payloads remain exact. This is a new numerical policy, not a proven
 accuracy gain or a complete causal movement-reader certification. Evidence:
 `docs/model-audits/2026-11-03-ucl-native-goals-joint-repair.md`.
 
+## CBB New Orleans venue-prior candidate — November 3, held offline
+
+Proposed independent score R4, market score R6, grade R8, board R11, publisher
+R20, tracking R8, adapter R9, current-season training R3 and venue identity R2
+are in the isolated candidate branch only. Official ESPN schedules uniquely
+recover 123 historical New Orleans venue flags and the unchanged fitter restores
+its 33-game 2025 prior. Exact old R3 parity and the 18-game board replay pass,
+with zero existing selected-side or grade changes. The newly restored LSU game,
+however, would publish New Orleans +27.5 −110 as a 79.9% Lean while the
+professional spread is around LSU −27.5. This unqualified ten-point starting-
+level gap is a publication stop. Production remains independent score R3,
+market score R5, grade R7, board R10, publisher R19, tracking R7 and adapter
+R8. Source receipts and the no-merge disposition are in
+`docs/model-audits/2026-11-03-cbb-new-orleans-venue-prior-result.md`.
+
 ## UCL complete public-split source path — November 3
 
 Public-source identity is
@@ -235,13 +250,15 @@ forecasts through the unchanged R5 reader; outcomes must retain their actual rel
 Source evidence, scope and checks:
 `docs/model-audits/2026-11-03-cbb-professional-source-identity.md`.
 
-The unmerged CBB grade R7 candidate is
+The current production CBB grade R7 is
 `cbb_2026_11_03_r7_verified_action_or_professional_value_best`. It retains
 score R5 and upgrades Best only through favorable exact-target professional
 value or verified same-market action; price-only response retains Lean.
-It changes two of 54 current grades, zero actionability, scores, or odds, and
-has no publication authority until a specific owner decision or held-out
-qualification. Existing R5/R6 locks remain immutable. See
+It changed two of 54 reviewed current grades, zero actionability, scores, or
+odds, under the owner's specific approval, PR967 and production merge
+`8b5bddf65cffbc2d8aea4c8bed5614858d8e39f5`. Existing R5/R6 locks
+remain immutable. The subsequent 17:17 UTC refresh shows all 18 current rows
+stamped R7. See
 `docs/model-audits/2026-11-03-cbb-verified-action-best-predeclaration.md`.
 
 ## CBB received-market R5 — owner-approved production cutover

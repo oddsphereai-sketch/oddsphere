@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {readCbbMarketBehavior,gradeCbbMarketBehavior,CBB_MARKET_BEHAVIOR_MODEL_RELEASE,CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE,type CbbMarketAnchors,type CbbBehaviorFlow} from "../lib/cbb/marketBehaviorCandidate";
-import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
+import {CBB_CURRENT_SCORE_RELEASE,CBB_PREVIOUS_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
 import {normalCdf,cbbThresholdProbabilities} from "../lib/cbb/model";
 import {cbbExactMarketCenter} from "../lib/cbb/marketReaderResearch";
 import {gradeCbbReceivedMarket} from "../lib/cbb/marketBehaviorGrade";
@@ -34,6 +34,14 @@ assert.throws(()=>run(current,{independent:f}),/independent release/,"never recu
 assert.equal(JSON.stringify({current,original,targets}),input);
 const statsRevision=run(current,{independent:forecast(8),independentInputKey:"revised-input",anchors:result.receipt.anchors});
 assert.equal(statsRevision.receipt.inputRevisionSinceAnchor,"changed");assert.equal(statsRevision.receipt.anchors.capturedAt,anchorAt,"input hash is not proof of news consumption or permission to erase anchors");
+const priorReleaseAnchors={...anchors(),release:"cbb_market_behavior_2026_11_03_r3_direction_and_magnitude" as const,
+ independentRelease:CBB_PREVIOUS_SCORE_RELEASE,independentInputKey:"prior-score-input"};
+const scoreRevision=run(current,{independentInputKey:"revised-score-input",anchors:priorReleaseAnchors});
+assert.equal(scoreRevision.receipt.margin.status,"applied","a prior score release must not erase the genuine professional line movement");
+assert.equal(scoreRevision.receipt.anchors.capturedAt,anchorAt);
+assert.equal(scoreRevision.receipt.anchors.independentRelease,CBB_PREVIOUS_SCORE_RELEASE);
+assert.equal(scoreRevision.receipt.inputRevisionSinceAnchor,"changed");
+assert.deepEqual(scoreRevision.receipt.anchors.quotes,priorReleaseAnchors.quotes);
 const first=run([current[0]],{anchors:null});
 assert.equal(first.receipt.episodes.length,0);assert.deepEqual({...first.forecast,release:CBB_CURRENT_SCORE_RELEASE},forecast(),"first receipt has zero invented movement");
 const arriving=run(current,{anchors:first.receipt.anchors});

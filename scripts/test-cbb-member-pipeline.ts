@@ -9,6 +9,8 @@ import { refreshCbbMemberBoard } from "../lib/services/cbb/cbbMemberPipeline";
 import {readCbbCanonicalReaderHistory} from "../lib/services/cbb/cbbCanonicalReaderHistory";
 import type {CbbCanonicalPriceRow} from "../lib/services/cbb/cbbCanonicalMarketEvidence";
 import {CBB_RETAINED_LEVEL_INPUT_RELEASE,type CbbRetainedLevelInput} from "../lib/cbb/retainedLevelInput";
+import {CBB_CURRENT_SCORE_RELEASE} from "../lib/cbb/currentScoreRuntime";
+import {CBB_MARKET_BEHAVIOR_MODEL_RELEASE} from "../lib/cbb/marketBehaviorCandidate";
 
 const asOf="2026-10-29T22:00:00Z",start="2026-11-01T14:30:00Z";
 const home={id:92,conference_id:1,name:"Wildcats",full_name:"Villanova Wildcats",college:"Villanova",abbreviation:"VILL"};
@@ -104,7 +106,7 @@ async function main(){
   assert.equal(unknown.sourceGames,1);assert.equal(unknown.published,1);assert.deepEqual(unknown.unpublishedIncomplete,[],"verified historical venue recovery supplies St Thomas's actual prior");
   assert.notEqual(JSON.stringify([...stored]),beforeUnknown);
   const recoveredRecord=stored.get(`cbb::member-game::${unknownGame.id}`) as {snapshot:{board:{modelRelease:string}}};
-  assert.equal(recoveredRecord.snapshot.board.modelRelease,"cbb_candidate_2026_11_02_r5_received_market_response");
+  assert.equal(recoveredRecord.snapshot.board.modelRelease,CBB_MARKET_BEHAVIOR_MODEL_RELEASE);
   const absentId=999999,unmodeledGame={...unknownGame,id:absentId,home_team:{...unknownGame.home_team,id:absentId}};
   const beforeUnmodeled=JSON.stringify([...stored]);
   const unmodeled=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:asOf,bdlKey:"test",owlsKey:"test",trainingGames:[],
@@ -126,7 +128,7 @@ async function main(){
   assert.equal(firstMarket.retainedInputCounts.captured,1);
   assert.equal(firstInput.release,CBB_RETAINED_LEVEL_INPUT_RELEASE);
   assert.equal(firstInput.asOf,"2026-10-29T22:05:00Z");
-  assert.equal(firstInput.independent.release,"cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior");
+  assert.equal(firstInput.independent.release,CBB_CURRENT_SCORE_RELEASE);
   assert.equal(firstInput.independent.margin,firstReceipt.independentScore.margin);
   assert.ok(firstInput.sourceQuotes.every(q=>q.sportsbook==="pinnacle"));
   assert.equal(firstMarket.owlsCalls,2);assert.equal(firstReceipt.winnerArbitration.status,"context_only");

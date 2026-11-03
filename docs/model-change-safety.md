@@ -28,6 +28,20 @@ member forecast and stored lock hashes after deployment. The separate bounded
 price-source diagnostic retains its own explicitly approved request limits.
 Evidence: `docs/model-audits/2026-11-03-ucl-native-goals-joint-repair.md`.
 
+## CBB New Orleans prior candidate remains offline — November 3
+
+The official historical venue repair reconstructs all 123 New Orleans games
+and restores its absent frozen prior without changing score coefficients. Its
+same-input 18-game replay has zero grade/side changes after preserving the
+original professional market anchors across the score release. The additional
+LSU–New Orleans game would, however, introduce an unqualified New Orleans
++27.5 Lean with a 79.9% model cover probability against a professional LSU
+−27.5 spread and no qualified starting-level response. Do not merge the R4/R6/
+R8 candidate or publish that new grade. The source/input fix and the broader
+market-level score qualification must be reconciled before publication. Exact
+source, replay and stop evidence:
+`docs/model-audits/2026-11-03-cbb-new-orleans-venue-prior-result.md`.
+
 ## CBB verified-action Best candidate — November 3
 
 The proposed grade R7 keeps scores and exact prices unchanged but removes a

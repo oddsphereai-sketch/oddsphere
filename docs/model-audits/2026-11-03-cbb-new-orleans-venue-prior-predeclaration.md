@@ -1,0 +1,13 @@
+# CBB New Orleans venue input repair — predeclaration
+
+Base: `8b5bddf65cffbc2d8aea4c8bed5614858d8e39f5`. Isolated branch: `codex/cbb-new-orleans-venue-prior-20261103`.
+
+The November 3 LSU–New Orleans game 10882595 has complete current Pinnacle, FanDuel, DraftKings, BetMGM, and BDL odds, but the sole CBB writer excludes it because the independent score runtime reports `missing_away_team_history`. The frozen 2025 prior has no BDL team 317 although the recovered original normalized dataset contains 123 New Orleans games across 2022–25, all with unknown venue flags. ESPN identifies that school as team 2443, `LSU New Orleans Privateers`; its November 3, 2026 game and one November 26, 2025 historical game match the BDL opponent, start, side, and school exactly.
+
+Candidate scope: repair only the 123 New Orleans historical venue flags when official ESPN season schedules uniquely match the original game ID through BDL game identity, exact UTC start, scores, home/away assignment, both complete school names (with the verified `LSU New Orleans` alias), and explicit `neutralSite` boolean. Refit the unchanged sequential 2022–25 CBB score model and fixed correction/uncertainty. Add the same exact ESPN identity to the current venue matcher, with a regression that rejects a same-name wrong school. Do not infer flags for unmatched games or change prices, split inputs, grade policy, stakes, provider cadence, writer, lease, or locked payloads.
+
+Before publication: prove existing frozen prior parity from the original history and already verified St. Thomas patch; retain official source receipts and hashes; verify the 123 exact New Orleans matches and reconstructed new prior; replay historical outcomes and today's entire board with fixed quotes; report score/probability/grade/actionable changes, including the restored LSU game; test writer immutability and reader precedence; bump every affected release and the registry; pass focused and full model verification, clean fresh-main integration, protected PR checks, production release, cron, board and lock checks. Reject a candidate that loses an existing game, fabricates source identity, or unexpectedly flattens the board.
+
+The separate current-professional-level forecast gap remains a separate model question. This repair does not make the broader market reader qualified.
+
+Post-check outcome: the source input and existing-board replay pass, but the restored LSU game would introduce New Orleans +27.5 as a 79.9% `Lean` against a professional line near LSU −27.5. This meets the predeclared stop condition for an unexpectedly unqualified new actionable market. Keep this release offline. See `2026-11-03-cbb-new-orleans-venue-prior-result.md`.

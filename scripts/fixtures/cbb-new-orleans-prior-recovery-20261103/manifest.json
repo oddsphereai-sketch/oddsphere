@@ -1,0 +1,18 @@
+{
+  "base": "8b5bddf65cffbc2d8aea4c8bed5614858d8e39f5",
+  "source": {
+    "espnSchoolId": "2443",
+    "bdlSchoolId": 317,
+    "espnSchedulesSha256": "dad8abccb24e1e1b874ab1b56f5281875b22c0990fde2916721fbdda490898ad",
+    "bdlGamesSha256": "d3540067918da9b627c92b88212cd67ca911ddbf48dbce5547068700b614338f"
+  },
+  "originalHistorySha256": "d2bde4460339e83a21e04864bc8168ec2236f25c21663288f8b2124ce4064e48",
+  "priorR3Parity": true,
+  "newOrleansVerifiedGames": 123,
+  "neutral": {
+    "true": 10,
+    "false": 113
+  },
+  "priorR4Sha256": "d171aad515d10f92468bcd9fc6b65fe2fc5aac2161e416ed5d04e92e8adc78a6",
+  "artifactR4Sha256": "a9905ba13744c15663a1ebbb13fbe811f50f5c3a091f0ded6edbcaa5e849850a"
+}
