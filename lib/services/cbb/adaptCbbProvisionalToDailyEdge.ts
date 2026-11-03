@@ -9,12 +9,14 @@ import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
 
-export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_02_r5_source_split_percentages" as const;
+export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_02_r7_received_market_response" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
 type BoardRow=CbbProvisionalSnapshot["board"]["rows"][number];
 type SplitEvidence=ReturnType<typeof cbbCurrentSplitEvidence>;
 const verdict=(grade:GradeLabel):Verdict=>grade==="Best Angle"?"best_angle":grade==="Lean"?"lean":grade==="Watchlist"?"watchlist":"no_play";
-const gradeCode=(grade:GradeLabel,reference:BoardRow["referenceState"]):Grade|null=>grade==="Best Angle"?"best_signal":grade==="Lean"?reference==="agrees"?"sharp_confirmed":"model_only":grade==="Watchlist"?"market_watch":null;
+const gradeCode=(grade:GradeLabel,reference:BoardRow["referenceState"],action:boolean|undefined):Grade|null=>
+  action===undefined?(grade==="Best Angle"?"best_signal":grade==="Lean"?reference==="agrees"?"sharp_confirmed":"model_only":grade==="Watchlist"?"market_watch":null):
+  grade==="Best Angle"?action?"best_signal":"model_only":grade==="Lean"?action?"sharp_confirmed":"model_only":grade==="Watchlist"?"market_watch":null;
 const etTime=(date:string)=>new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"numeric",minute:"2-digit"}).format(new Date(date));
 const etMinutes=(date:string)=>{const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(date));
   return Number(parts.find(p=>p.type==="hour")?.value??0)*60+Number(parts.find(p=>p.type==="minute")?.value??0);};
@@ -27,22 +29,28 @@ const selectionLabel=(game:CbbGame,row:BoardRow):string|null=>{
   return line===null?null:`${code} ${line>0?"+":""}${line}`;
 };
 function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProbability:number):MarketEdgeDto{
-  const held=row.grade==="Held",label=selectionLabel(game,row),code=gradeCode(row.grade,row.referenceState);
+  const held=row.grade==="Held",label=selectionLabel(game,row),code=gradeCode(row.grade,row.referenceState,(row as {actualActionConfirmation?:boolean}).actualActionConfirmation);
   const selectedLine=row.market==="moneyline"?null:row.market==="spread"&&row.selection==="second"&&row.line!==null?-row.line:row.line;
   const v=verdict(row.grade),probability=row.probability,price=row.price;
   const priceImplied=price===null?null:cbbImpliedProbability(price);
   const fair=row.marketFairProbability;
-  const sharpStatus=row.referenceState==="agrees"?"confirm":row.referenceState==="opposes"?"caution":"mixed";
+  const behavior=row as {actualActionConfirmation?:boolean;pathResistance?:boolean};
+  const currentBehavior=behavior.actualActionConfirmation!==undefined;
+  const action=currentBehavior&&behavior.actualActionConfirmation===true;
+  const resistance=currentBehavior?(behavior.pathResistance===true||row.referenceState==="opposes"):row.referenceState==="opposes";
+  const sharpStatus=currentBehavior?(action?"confirm":resistance?"caution":"mixed"):
+    row.referenceState==="agrees"?"confirm":row.referenceState==="opposes"?"caution":"mixed";
   const directionalLabel=label??(row.market==="moneyline"?`${homeWinProbability>=.5?game.home_team.abbreviation:game.visitor_team.abbreviation} ML`:null);
   const directionalProbability=probability??(row.market==="moneyline"?Math.max(homeWinProbability,1-homeWinProbability):null);
-  return {pick:label,confidence:probability,grade:code,signalType:row.referenceState==="agrees"?"balanced":"model_only",
-    marketSignal:row.referenceState==="agrees"?"market_confirmed":row.referenceState==="opposes"?"market_resistance":"market_neutral",
+  return {pick:label,confidence:probability,grade:code,signalType:(currentBehavior?action:row.referenceState==="agrees")?"balanced":"model_only",
+    marketSignal:currentBehavior?(action?"market_confirmed":resistance?"market_resistance":"market_neutral"):
+      row.referenceState==="agrees"?"market_confirmed":row.referenceState==="opposes"?"market_resistance":"market_neutral",
     sharpStatus,held,verdict:{key:v,label:row.grade==="Held"?"No Play":row.grade},
     marketPrediction:{status:directionalLabel?"available":"market_data_unavailable",label:directionalLabel,line:row.line,probability:directionalProbability,
       source:label?"model_at_exact_book_line":directionalLabel?"model_outcome":null,sportsbook:row.targetBook,observedAt:row.quoteObservedAt,freshnessCheckedAt:null,
       reason:directionalLabel?null:"No complete executable quote for this market"},
     guidedGuide:label?`Model projects ${label}.`:"Model has not published an exact-line pick.",
-    guidedWatchOut:row.referenceState==="opposes"?"Professional books disagree with this side.":
+    guidedWatchOut:resistance?"Professional books disagree with this side.":
       row.referenceState==="unavailable"?"Professional reference is not yet available.":"Price and lineup context can change before lock.",
     whyLine:row.reason.replaceAll("_"," "),riskLine:"This is an early-season provisional grade; the quoted line may change.",
     modelProb:probability,marketFairProb:fair,pinnacleEvPct:null,moneyPct:null,betsPct:null,publicSplits:[],
@@ -91,6 +99,15 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   const cutoff=Date.parse(game.date)-60*60_000,locked=snapshot.lockedAt!==null;
   for(const [kind,market] of [["moneyline",ml],["spread",spread],["total",total]] as const){
     const boardRow=rows.get(kind)!;
+    const read=snapshot.board.marketContext.verifiedMarketRead;
+    if(read){
+      const axis=kind==="total"?read.total:read.margin,sign=boardRow.selection==="first"?1:-1;
+      if(axis.status==="applied"&&axis.reason==="observed_same_book_relative_economics"&&axis.sourceMarket===kind){
+        const pressure=axis.delta*sign;
+        market.writerMovementDirection=pressure>1e-7?"support":pressure< -1e-7?"resistance":"neutral";
+        market.readerMovementSource="writer_market_anchor";
+      }
+    }
     const quote=args.marketQuotes?.find(item=>item.gameId===game.id&&item.sportsbook===boardRow.targetBook&&item.market===kind&&
       item.providerObservedAt===boardRow.quoteObservedAt);
     if(quote&&boardRow.selection){
@@ -138,7 +155,9 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
     status:{lineupConfirmed:null,linesLocked:[ml,total,spread].some(m=>m.priceAmerican!==null),sharpSignalPending:rows.get("moneyline")!.professionalReferences===0,
       marketDataLimited:[ml,total,spread].every(m=>m.priceAmerican===null)},result:cbbOfficialGameResult(game,snapshot),
     breakdown:{verdict:topVerdict,sharpRead:{key:"no_data",sentence:SHARP_READ_SENTENCES.no_data},
-      modelBreakdown:`Independent projection: ${snapshot.board.score.away.toFixed(1)}–${snapshot.board.score.home.toFixed(1)}. Exact sportsbook prices determine the provisional play grades; professional references are shown only where verified.`}};
+      modelBreakdown:snapshot.board.marketContext.verifiedMarketRead
+        ?`Projection: ${snapshot.board.score.away.toFixed(1)}–${snapshot.board.score.home.toFixed(1)}. The stored market decision and exact sportsbook prices determine the prediction and play grades.`
+        :`Independent projection: ${snapshot.board.score.away.toFixed(1)}–${snapshot.board.score.home.toFixed(1)}. Exact sportsbook prices determine the provisional play grades; professional references are shown only where verified.`}};
 }
 
 export function cbbDailyEdgeResponse(date:string,games:DailyEdgeGameDto[],asOf:string):DailyEdgeResponse{

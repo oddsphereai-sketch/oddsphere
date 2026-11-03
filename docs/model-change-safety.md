@@ -1,5 +1,102 @@
 # Model change safety protocol
 
+## Owner-approved CBB received-market production repair — November 2
+
+Daniel Mengel approved the exact reviewed candidate in PR938 after being told
+that the31-game comparison changes seven forecasts, lowers20 Best Angles to
+Lean and retains25 actionable plays; improved accuracy is unproven and the
+Cornell starting-level discrepancy is unresolved. His scoped reply was:
+"Deploy this repair; continue the full fix". This supersedes the private-only
+publication hold below for score R5 /grade R5 /board R9 /publisher R15 /tracking
+R6 /adapter R7, as reviewed at52373146 and integrated with main346fab59 at
+cde40be9. It is a narrow exception to the held-out grade/value requirement,
+not predictive qualification or permission to transfer the offline level stack.
+
+The existing sole writer and prediction_pipeline:cbb lease own relative
+same-book price consequences and exact-target grade decisions. Static
+professional target EV is value corroboration, not observed sharp action.
+Positive model EV3% retains eligible Lean; EV8% plus the reviewed complete,
+nonopposing professional-value/path qualification can earn Best. True causal
+confirmation still requires actual target request timing. Fully applied
+resolved own-source price response is not counted twice; real native pressure,
+held response, conflict, buyback and incomplete/truncated history stay distinct.
+No stake increase, provider request/cadence increase, extra writer, production
+shadow, prior locked-record change or retrospective release relabeling is
+authorized. The independent prior remains R3. The separate full market-level
+forecast repair must continue offline until its own qualification/decision.
+
+Focused/full checks, current-main ancestry, overlap safety, protected PR and
+exact local/remote tree verification remain required. After deployment verify
+actual release, normal cron, coherent current coverage, reader snapshot and
+unchanged stored locks before declaring this bounded repair live. Evaluate
+future outcomes by exact release and lock time. Evidence and known limitations:
+`docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
+
+## CBB received-market R5 — private repair review only
+
+The owner explicitly requested external AI audits and coordination with
+“Assess sharp market reader,” including NFL/CFB behavior. That recheck confirms
+shared source/path/receipt standards but no approved dormant CBB static-level
+inference rule. Private R5 repairs native source ingestion, latest-state
+consistency, immutable receipt binding, pick-relative reaction/resumption and
+grade economics. It removes R4's rejected winner copy. Its proposed static
+exact-target-value Best rule is a distinct unqualified policy, not sharp-action
+confirmation or an extension of the earlier exact R4 owner exception.
+
+Do not publish it as a complete market-reader fix: the Cornell starting-level
+gap remains. No live shadow prediction/grade/storage is authorized. Keep PR938
+draft pending the actual inference decision, independent review, release-specific
+qualification or a concrete applicable owner decision, complete checks and
+fresh-main protected publication/live verification. Existing locks and tracking
+must remain exact. Evidence and limitations:
+`docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
+
+The private grade R5 /board R9 /publisher R15 follow-up fixes a reproduced
+Best-tier duplicate pure-price penalty and excludes neutral/rounded-uncertain
+flow from directional matched-flow resistance. It preserves genuine native
+opposition and unresolved/history guards. It does not solve the static score
+gap or extend the old owner exception; the same publication gates remain.
+
+## Owner-authorized CBB market-decision repair — November 2
+
+Subsequent owner requirement: external AI market-reader audit, followed by
+coordination with the existing “Assess sharp market reader” chat. That audit
+rejected the unmerged r4 method and found additional source/grade defects.
+This authorization is therefore NOT permission to deploy the failed r4
+candidate. No release or locked value has been changed. Keep source/path
+repairs isolated until reconciled with the existing reader contract; do not
+invent a new sign-copy, blend or half-space rule to satisfy a deadline.
+See `docs/model-audits/2026-11-02-cbb-external-market-reader-audit.md`.
+
+After reviewing PR938, the339-market impact (103->98 actionable,0 promotions,
+5 demotions,10 selected-side changes), the possibility of projected-winner
+changes, and the explicit absence of held-out outcome qualification, Daniel
+Mengel replied to the scoped publication request: “Um, yeah” and directed
+“please just fix it, get it up.” He requires the working product, without a
+new member-facing provisional label. This authorizes production publication of
+the reviewed CBB r4 score/r7 board/r3 grade/r13 publisher/r5 tracking repair
+before its new market policies pass the normal held-out value/calibration gate.
+It is a narrow owner exception for this exact release family, not a finding of
+predictive improvement or a reusable waiver for other policies or sports.
+
+The independent r3 law stays market-free. The sole leased writer applies the
+reviewed relative same-book economic transport and corroborated ML/Spread
+winner arbitration, with union-target exclusion, real source/receipt clocks,
+conflict/quarantine guards, exact-price grading and bound price/handle effects.
+The static winner policy's sign-switch discontinuity and unknown information
+overlap remain documented limitations. The tested confirming promotion has no
+eligible instance in the frozen replay; no promotion is fabricated to offset
+the5 observed demotions. No stake increase, new provider calls, independent
+writer, production shadow persistence, cadence change, locked-field mutation
+or retrospective release relabeling is authorized.
+
+All focused/full checks, fresh-main integration safety, required protected-PR
+checks, exact local/remote tree proof and post-merge production release, normal
+cron, coverage/coherence and immutable-lock verification remain mandatory.
+Evidence and forward rollback constraints:
+`docs/model-audits/2026-11-02-cbb-market-behavior-predeclaration.md` and
+`docs/model-audits/2026-11-02-cbb-market-behavior-review.md`.
+
 ## Owner-directed CBB historical venue repair — November 2
 
 The owner requested resolution of St. Thomas's missing genuine historical

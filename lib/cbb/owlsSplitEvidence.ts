@@ -5,7 +5,7 @@ import type { RawOwlsOddsResponse } from "../providers/owls/owlsSharpBookOdds";
 import { normalizeOwlsSharpBookSplits, selectAllInternalNamedBookSplits,
   type RawOwlsSplitsResponse } from "../providers/owls/owlsSharpBookSplits";
 
-export const CBB_SPLIT_EVIDENCE_RELEASE = "cbb_split_evidence_2026_11_02_r2_verified_source_event_identity" as const;
+export const CBB_SPLIT_EVIDENCE_RELEASE = "cbb_split_evidence_2026_11_02_r3_bound_source_contracts" as const;
 type CbbSplitSelection = "first" | "second";
 const MARKETS: CbbMarket[] = ["moneyline", "spread", "total"];
 const names = (team: CbbGame["home_team"]) => [team.full_name, team.college].filter(Boolean)
@@ -55,6 +55,8 @@ export function cbbCurrentSplitEvidence(game: CbbGame, odds: RawOwlsOddsResponse
       const selection: CbbSplitSelection = market === "total" ? row.side === "over" ? "first" : "second" :
         (row.side === "home") === direct ? "first" : "second";
       return { market, sourceBook: row.sourceBook, observedAt: row.observedAt, selection,
+        gameId:game.id,sourceLine:market==="moneyline"?null:market==="total"?row.line:selection==="first"?row.line:row.line===null?null:-row.line,
+        sourceEventId:splitEventId,fetchedAt,orientationVerified:true,
         ticketsPct: row.betsPct, moneyPct: row.moneyPct,
         moneyMinusTicketsPoints: row.moneyPct === null || row.betsPct === null ? null :
           (row.moneyPct - row.betsPct) * 100 };

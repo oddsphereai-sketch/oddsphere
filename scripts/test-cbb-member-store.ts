@@ -28,9 +28,9 @@ async function main(){
     event:777,start,away:"ND",home:"VILL",kind:"spread",side:"home",book:"fanduel",providerEventId:"published:777",checkedAt:before,opening:null,
     quotes:[[Date.parse("2026-11-01T16:00:00Z"),-110,-8.5],[Date.parse(base.providerObservedAt),-105,-7.5]],observedQuotes:true,
   }]} as NonNullable<Parameters<typeof writeCbbMemberGame>[0]["bookHistory"]>;
-  const splitEvidence={release:"cbb_split_evidence_2026_11_02_r2_verified_source_event_identity",eventId:"ncaab:ND@VILL-20261101",feedStatus:"ok",reason:"observed_no_prediction_authority",rows:[
-    {market:"moneyline",selection:"first",sourceBook:"circa",observedAt:base.providerObservedAt,ticketsPct:.2,moneyPct:.4,moneyMinusTicketsPoints:20},
-    {market:"moneyline",selection:"second",sourceBook:"circa",observedAt:base.providerObservedAt,ticketsPct:.8,moneyPct:.6,moneyMinusTicketsPoints:-20},
+  const splitEvidence={release:"cbb_split_evidence_2026_11_02_r3_bound_source_contracts",eventId:"ncaab:ND@VILL-20261101",feedStatus:"ok",reason:"observed_no_prediction_authority",rows:[
+    {market:"moneyline",selection:"first",sourceBook:"circa",observedAt:base.providerObservedAt,gameId:777,sourceLine:null,sourceEventId:"ncaab:ND@VILL-20261101",fetchedAt:before,orientationVerified:true,ticketsPct:.2,moneyPct:.4,moneyMinusTicketsPoints:20},
+    {market:"moneyline",selection:"second",sourceBook:"circa",observedAt:base.providerObservedAt,gameId:777,sourceLine:null,sourceEventId:"ncaab:ND@VILL-20261101",fetchedAt:before,orientationVerified:true,ticketsPct:.8,moneyPct:.6,moneyMinusTicketsPoints:-20},
   ]} as NonNullable<Parameters<typeof writeCbbMemberGame>[0]["splitEvidence"]>;
   const first=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:before,bookHistory,splitEvidence},db);
   assert.deepEqual(first.record.memberGame.markets.first_inning.lineTrail?.map(s=>s.line),[-8.5,-7.5],"the real collector tape is persisted with the evaluated tuple");

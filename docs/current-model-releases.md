@@ -1,5 +1,89 @@
 # Current production model releases and qualified research candidates
 
+## CBB received-market R5 — owner-approved production cutover
+
+The owner approved PR938's reviewed repair: "Deploy this repair; continue the
+full fix". Protected merge and live verification remain publication gates.
+This commit's authoritative runtime is score
+`cbb_candidate_2026_11_02_r5_received_market_response`, board
+`cbb_candidate_2026_11_02_r9_resolved_price_grade`, grade
+`cbb_2026_11_02_r5_resolved_price_not_double_penalized`, receipt
+`cbb_market_behavior_2026_11_02_r2_received_source_path`, publisher
+`cbb_member_pipeline_2026_11_02_r15_resolved_price_grade`, tracking
+`cbb_tracking_writer_2026_11_02_r6_received_market_lineage` and adapter
+`cbb_member_adapter_2026_11_02_r7_received_market_response` repair native
+history/availability/grade binding and remove the rejected static winner copy.
+Before this protected cutover the candidate wrote no production prediction,
+grade, snapshot or tracking row. Existing locked payloads remain exact and
+retain their original release; future unlocked decisions use this release.
+
+The owner-requested “Assess sharp market reader” recheck compared current NFL,
+CFB and NBA contracts. Share source/path/receipt correctness, not sport-specific
+coefficients or winner overrides. Qualified native/direct references must use
+one latest professional frontier; actual target requests stay separate. An
+adverse episode already fully transported into the law is not a second blanket
+grade penalty. Grade R5 fixes a remaining Best-tier duplicate price penalty:
+only a complete, resolved exact episode already transported into that axis is
+exempt. Actual native flow pressure/held response, buyback, unresolved effects
+and incomplete history remain separate concerns. Static source target EV is
+not observed sharp betting action.
+
+This remains an unfinished product: Cornell's large independent/market
+starting-level discrepancy survives relative transport. No dormant qualified
+CBB static-level head or verified input-invalidation receipt was found. Private
+research artifacts and CFB/NBA coefficients cannot supply that authority.
+The new explicit R5 owner decision permits this bounded repair before held-out
+qualification; it does not qualify the offline fitted head or authorize a
+static winner copy. Prior production was independent R3 /board R6 /grade R2
+/publisher R13 /tracking R4. Report future outcomes by actual locked release.
+Review, frozen replay limitations, memory budgets and remaining gates:
+`docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
+
+## CBB observed-market behavior r4 — external audit rejected; never deployed
+
+The owner's subsequent required outside-AI audit reproduced material method
+and source-path failures in PR938. Publication is held and the PR is draft.
+The r4 family below has NEVER been production: production remains independent
+r3 /board r6 /grade r2 /publisher r12 /tracking r4. The earlier go-live
+authorization does not make the failed method valid. The owner directed
+coordination with the existing “Assess sharp market reader” chat before any
+new inference policy. Do not activate this r4 sign-triggered market-copy rule,
+nor substitute a guessed blend, winner half-space or source-name amplitude.
+Concrete findings and handoff status:
+`docs/model-audits/2026-11-02-cbb-external-market-reader-audit.md`.
+
+The rejected, unmerged candidate proposed final score
+`cbb_candidate_2026_11_02_r4_observed_market_behavior`, board
+`cbb_candidate_2026_11_02_r7_observed_market_behavior`, grade
+`cbb_2026_11_02_r3_bound_market_behavior`, receipt
+`cbb_market_behavior_2026_11_02_r1_same_book_economics`, publisher
+`cbb_member_pipeline_2026_11_02_r13_observed_market_behavior`, tracking
+`cbb_tracking_writer_2026_11_02_r5_market_behavior_lineage`, adapter
+`cbb_member_adapter_2026_11_02_r6_observed_market_behavior` and source contracts
+`cbb_split_evidence_2026_11_02_r3_bound_source_contracts`. Independent score r3
+remains market-free. The same leased writer owns the final coherent forecast,
+exact target decisions and future locks; no reader recomputation, extra polling,
+shadow storage or second prediction job is introduced. Existing locks keep
+their original model/grade/evidence without reconstruction or relabeling.
+
+This release adds same-book relative economic transport and explicit
+same-book ML/Spread winner arbitration, plus bound price/handle grade effects.
+These are NEW predictive policies, including a disclosed sign-switch
+discontinuity; they have not passed chronological held-out qualification.
+Full same-board diagnostic:113 unlocked games/339 markets,103->98 actionable,
+0 promotions/5 demotions,10 side changes. A paired eligible promotion rule is
+functionally tested; no improved held-out value or calibration is claimed.
+After the tested339-market impact and missing held-out outcome qualification
+were disclosed, the owner explicitly directed this repair live on November2.
+The scoped authorization in `docs/model-change-safety.md` permits this release
+before that qualification; it does not assert validated predictive improvement.
+Activation still requires protected publication and live verification. The r3
+score/r6 board/r2 grade/r12 publisher/r4 tracking below describe the preceding
+release, not permission to restore superseded behavior over r4 locks.
+Predeclaration and evidence:
+`docs/model-audits/2026-11-02-cbb-market-behavior-predeclaration.md` and
+`docs/model-audits/2026-11-02-cbb-market-behavior-review.md`.
+
 ## CBB chart API and retained split display — November 2
 
 Current publisher is `cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback`
