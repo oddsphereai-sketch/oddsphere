@@ -44,11 +44,23 @@ async function gameMaps(providerIds: number[], externalIdOffset = EPL_EXTERNAL_I
   return { gameIdByProvider, providerByGameId };
 }
 
-export type EplLineHistoryOptions = { exactTotalContracts?: boolean; client?: SupabaseClient };
+export type EplLineHistoryOptions = { exactTotalContracts?: boolean; atomicMarketCaptures?: boolean; client?: SupabaseClient };
 
 /** UCL native contracts occupy separate compaction trails. Existing EPL
  * compaction and every stored quote remain unchanged unless explicitly opted in. */
 export function compactEplLineHistory(rows: EplStoredPriceObservation[], options: EplLineHistoryOptions = {}): EplStoredPriceObservation[] {
+  if (options.atomicMarketCaptures) {
+    // Preserve every real capture, including unchanged opposite sides and
+    // genuine partial/conflicting legacy observations. Only exact duplicates
+    // disappear; consumers must still require a complete same-clock family.
+    const unique = new Map<string, EplStoredPriceObservation>();
+    for (const row of rows) {
+      const key = JSON.stringify([row.providerId, row.market, row.side, row.sportsbook, row.line,
+        canonicalEplLineHistoryTimestamp(row.recordedAt), row.american, row.isOpener]);
+      if (!unique.has(key)) unique.set(key, row);
+    }
+    return [...unique.values()].sort((a, b) => Date.parse(a.recordedAt) - Date.parse(b.recordedAt));
+  }
   if (!options.exactTotalContracts) return compactEplStoredPriceHistory(rows);
   const groups = new Map<string, EplStoredPriceObservation[]>();
   for (const row of rows) {
@@ -103,14 +115,14 @@ export async function readEplStoredPriceHistory(providerIds: number[], externalI
   return compactEplLineHistory(parsed, options);
 }
 
-export async function persistEplLineHistory(input: { response: DailyEdgeResponse; allBookPrices?: EplStoredPriceObservation[]; apply: boolean; externalIdOffset?: number; label?: string; exactTotalContracts?: boolean; client?: SupabaseClient }) {
+export async function persistEplLineHistory(input: { response: DailyEdgeResponse; allBookPrices?: EplStoredPriceObservation[]; apply: boolean; externalIdOffset?: number; label?: string; exactTotalContracts?: boolean; atomicMarketCaptures?: boolean; client?: SupabaseClient }) {
   const providerIds = input.response.games.map((game) => Number(game.external_id)).filter(Number.isFinite);
   if (!input.apply || providerIds.length === 0) return { proposed: 0, written: 0, errors: [] as string[] };
   const externalIdOffset = input.externalIdOffset ?? EPL_EXTERNAL_ID_OFFSET;
   const label = input.label ?? "EPL";
   const client = input.client ?? supabase;
   const { gameIdByProvider } = await gameMaps(providerIds, externalIdOffset, label, client);
-  const existing = await readEplStoredPriceHistory(providerIds, externalIdOffset, label, { exactTotalContracts: input.exactTotalContracts, client });
+  const existing = await readEplStoredPriceHistory(providerIds, externalIdOffset, label, { exactTotalContracts: input.exactTotalContracts, atomicMarketCaptures: input.atomicMarketCaptures, client });
   const exactExisting = new Set<string>();
   const earliestBySide = new Map<string, number>();
   const latestByTrail = new Map<string, { american: number; line: number | null; recordedAt: number }>();
@@ -138,8 +150,11 @@ export async function persistEplLineHistory(input: { response: DailyEdgeResponse
     const observedMs = Date.parse(current.recordedAt);
     const latest = latestByTrail.get(key);
     const sameAsLatest = latest && observedMs >= latest.recordedAt && latest.american === current.american && latest.line === current.line;
-    if (sameAsLatest && (terminalQuoteCountByTrail.get(key) ?? 1) >= 2) return;
-    current.isOpener = observedMs < (earliestBySide.get(key) ?? Number.POSITIVE_INFINITY);
+    if (!input.atomicMarketCaptures && sameAsLatest && (terminalQuoteCountByTrail.get(key) ?? 1) >= 2) return;
+    // UCL current-source bundles already state whether this was a provider
+    // opener. An unchanged opposite/first-seen side must not be relabeled as
+    // an opener and thereby removed from the complete current capture.
+    if (!input.atomicMarketCaptures) current.isOpener = observedMs < (earliestBySide.get(key) ?? Number.POSITIVE_INFINITY);
     proposed.push(current);
     exactExisting.add(exact);
     earliestBySide.set(key, Math.min(earliestBySide.get(key) ?? Number.POSITIVE_INFINITY, observedMs));
@@ -148,6 +163,15 @@ export async function persistEplLineHistory(input: { response: DailyEdgeResponse
       terminalQuoteCountByTrail.set(key, sameAsLatest ? Math.min(2, (terminalQuoteCountByTrail.get(key) ?? 1) + 1) : 1);
     }
   };
+  const considerSourceBundles = () => {
+    for (const row of input.allBookPrices ?? []) {
+      const gameId = gameIdByProvider.get(row.providerId);
+      if (gameId !== undefined) consider({ ...row, gameId });
+    }
+  };
+  // Actual source captures precede display-derived trail copies. This keeps
+  // exact source flags/clocks authoritative when the same quote is in both.
+  if (input.atomicMarketCaptures) considerSourceBundles();
   for (const game of input.response.games) {
     const providerId = Number(game.external_id);
     const gameId = gameIdByProvider.get(providerId);
@@ -162,6 +186,8 @@ export async function persistEplLineHistory(input: { response: DailyEdgeResponse
             : [];
         for (const stop of stops) {
           if (!stop.observedAt) continue;
+          const providerOpening = "source" in stop && stop.source === "provider_opening";
+          if (input.atomicMarketCaptures && input.allBookPrices !== undefined && !providerOpening) continue;
           const current: CurrentObservation = {
             gameId,
             providerId,
@@ -171,18 +197,14 @@ export async function persistEplLineHistory(input: { response: DailyEdgeResponse
             american: stop.american,
             sportsbook: stop.sportsbook ?? value.currentPriceSportsbook ?? null,
             recordedAt: stop.observedAt,
-            isOpener: false,
+            isOpener: input.atomicMarketCaptures === true && providerOpening,
           };
           consider(current);
         }
       }
     }
   }
-  for (const row of input.allBookPrices ?? []) {
-    const gameId = gameIdByProvider.get(row.providerId);
-    if (gameId === undefined) continue;
-    consider({ ...row, gameId });
-  }
+  if (!input.atomicMarketCaptures) considerSourceBundles();
   if (proposed.length === 0) return { proposed: 0, written: 0, errors: [] as string[] };
   // A first deployment can discover a trail stop earlier than the current-only
   // seed. Move the opener marker back without deleting immutable observations.

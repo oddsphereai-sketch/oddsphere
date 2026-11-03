@@ -34,9 +34,9 @@ export async function testUclNativeRecoveryBuilder(){
    const g=board.games.find(g=>g.external_id===id)!;
    assert.equal(calls.get(id),id===4438978?2:1,'only actual incomplete fixtures take the normal bounded retry');
    assert.ok((g.soccerModelProvenance?.eligibleAlternativeBooks.length??0)>=2,'native identities must reach the final reader after recovery');
-   assert.equal(g.soccerModelProvenance?.source,'target_excluded_goals_arbitration');
-   assert.ok(Math.abs(g.soccerProjection!.expectedGoals.home+g.soccerProjection!.expectedGoals.away-2.7)>.01,
-    'native total source must reach the final numerical score law after recovery');
+   assert.equal(g.soccerModelProvenance?.source,'independent_club_pmf');
+   assert.ok(Math.abs(g.soccerProjection!.expectedGoals.home+g.soccerProjection!.expectedGoals.away-independent.expectedGoals.home-independent.expectedGoals.away)<1e-8,
+    'current native levels without a recorded path must not overwrite independent goals');
   }
   assert.equal(board.games.find(g=>g.external_id===4243843)!.markets.first_inning.priceAmerican,-180,'actual LASK DK BTTS price survives the complete builder');
   const nativeTotals=journal.filter(row=>row.market==='total');
@@ -74,7 +74,9 @@ export async function testUclNativeRecoveryBuilder(){
    if(isActionable(before.verdict?.key)&&!isActionable(next.verdict?.key))demoted++;
    if(before.pick!==next.pick)changedSides++;
   }}
-  console.log('Controlled native-goal input ablation (same current grade policy; not live or outcome qualification):',JSON.stringify({before:absentCounts,after:gradeCounts,promoted,demoted,netActionable:promoted-demoted,changedSides}));
+  assert.equal(promoted,0,'current levels alone cannot manufacture actionables through book-target replacement');
+  assert.equal(demoted,0,'current levels alone cannot flatten the independent board');
+  console.log('Controlled current-level input identity (no recorded path; not live or outcome qualification):',JSON.stringify({before:absentCounts,after:gradeCounts,promoted,demoted,netActionable:promoted-demoted,changedSides}));
   const lask=fixtures.get(4243843)!;
   fixtures.set(4243843,{...lask,odds:lask.odds.filter(row=>row.market!=='total')});calls.clear();
   const partialBoard=await buildUclDailyEdgePreview({...slate,matches:slate.matches.filter(m=>m.id===4243843)},{cacheNamespace:'test-ucl-native-recovery',cacheIdentity:'partial-lask-recovery',marketProvider:{loadFixture:async f=>{calls.set(f.providerId!,(calls.get(f.providerId!)??0)+1);return fixtures.get(f.providerId!)!;}}});

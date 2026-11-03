@@ -17,7 +17,7 @@ import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
-export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_03_r8_native_goals_joint" as const;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_03_r9_relative_market_paths" as const;
 
 export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions,
   "captureAllBookPrices"
@@ -91,7 +91,7 @@ function marketContext(market: MarketEdgeDto): MarketEdgeDto {
     reviewFlags: [...market.reviewFlags.filter((flag) => !flag.startsWith("epl_")), UCL_CALIBRATION_RELEASE, UCL_STORED_QUOTE_FALLBACK_RELEASE],
     soccerGradeContext: market.soccerGradeContext ? {
       ...market.soccerGradeContext,
-      calibration_label: "UCL-owned EPL v23 grade transfer · exact-price EV required",
+      calibration_label: "UCL forecast confidence · market-path support · price-aware grading",
     } : market.soccerGradeContext,
   };
 }
