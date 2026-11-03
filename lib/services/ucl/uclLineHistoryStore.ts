@@ -5,9 +5,9 @@ import { persistEplLineHistory, readEplStoredPriceHistory } from "@/lib/services
 import { UCL_EXTERNAL_ID_OFFSET } from "./uclCompetitionContext";
 
 export function readUclStoredPriceHistory(providerIds: number[], options: { client?: SupabaseClient } = {}): Promise<EplStoredPriceObservation[]> {
-  return readEplStoredPriceHistory(providerIds, UCL_EXTERNAL_ID_OFFSET, "UCL", { ...options, exactTotalContracts: true });
+  return readEplStoredPriceHistory(providerIds, UCL_EXTERNAL_ID_OFFSET, "UCL", { ...options, exactTotalContracts: true, atomicMarketCaptures: true });
 }
 
 export function persistUclLineHistory(input: { response: DailyEdgeResponse; allBookPrices?: EplStoredPriceObservation[]; apply: boolean; client?: SupabaseClient }) {
-  return persistEplLineHistory({ ...input, externalIdOffset: UCL_EXTERNAL_ID_OFFSET, label: "UCL", exactTotalContracts: true });
+  return persistEplLineHistory({ ...input, externalIdOffset: UCL_EXTERNAL_ID_OFFSET, label: "UCL", exactTotalContracts: true, atomicMarketCaptures: true });
 }

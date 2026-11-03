@@ -1011,8 +1011,8 @@ export type DailyEdgeGameDto = {
   soccerModelProvenance?: {
     coherentOutcomeRelease: string;
     projectedScoreRelease?: string;
-    source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration";
-    evaluatedQuoteRole: "economics_and_grade_only";
+    source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration" | "relative_same_book_market_paths";
+    evaluatedQuoteRole: "economics_and_grade_only" | "paired_path_evidence_and_execution_economics";
     targetExcludedBooks: string[];
     eligibleAlternativeBooks: string[];
     goalsReader?: {

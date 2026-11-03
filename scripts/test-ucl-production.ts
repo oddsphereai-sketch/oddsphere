@@ -1,8 +1,11 @@
 import "./test-ucl-current-native-inputs";
 import "./test-ucl-native-goals-market-reader";
+import "./test-ucl-relative-market-grades";
+import {testUclRelativeMarketReader} from "./test-ucl-relative-market-reader";
 import {testUclPublicSplitSource} from "./test-ucl-public-split-complete-path";
 import {testUclNativeRecoveryBuilder} from "./test-ucl-native-recovery-builder";
 import {testUclNativeLineHistoryDurability} from "./test-ucl-native-line-history-durability";
+import {testUclAtomicMarketHistory} from "./test-ucl-atomic-market-history";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { BallDontLieUclProvider, BALLDONTLIE_UCL_API_BASE_URL, type BdlUclMatch, type UclHistoryFetchTelemetry } from "../lib/providers/real_api/BallDontLieUclProvider";
@@ -35,7 +38,6 @@ import {
 } from "../lib/services/ucl/uclChronologicalManifest";
 import { UCL_TEAM_ASSETS, uclTeamAsset, uclTeamLogo } from "../lib/services/ucl/uclTeamAssets";
 import { buildEplPreviewCacheKey } from "../lib/services/epl/buildEplDailyEdgePreview";
-import type { EplForwardBookVector } from "../lib/services/epl/eplForwardEvidenceCapture";
 import { bivariatePoissonScoreDistribution } from "../lib/services/soccer/dixonColes";
 import { deriveSoccerMarketProbabilities } from "../lib/services/soccer/soccerMarketProbabilities";
 import { deriveUclEloConsensusJoint } from "../lib/services/ucl/uclEloConsensus";
@@ -62,7 +64,9 @@ function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_
 }
 
 async function main() {
+testUclRelativeMarketReader();
 await testUclNativeLineHistoryDurability();
+await testUclAtomicMarketHistory();
 await testUclPublicSplitSource();
 await testUclNativeRecoveryBuilder();
 
@@ -114,7 +118,7 @@ const recoveredFixture = applyUclStoredQuoteFallback({
 const recoveredTotal = recoveredFixture.odds.filter((row) => row.provider_endpoint === UCL_STORED_QUOTE_FALLBACK_ENDPOINT);
 assert.deepEqual(recoveredTotal.map((row) => [row.selection, row.odds_american]), [["over", -145], ["under", 125]], "stored continuity selects the intact complete16:20 capture; a16:30 partial quote cannot borrow its earlier opposite");
 assert.equal(recoveredTotal.every((row) => row.provider_event_id === null && row.persistable === false), true, "stored rows are availability-only and cannot masquerade as current provider evidence");
-assert.match(UCL_STORED_QUOTE_FALLBACK_RELEASE, /complete_same_book/);
+assert.equal(UCL_STORED_QUOTE_FALLBACK_RELEASE, "ucl_stored_quote_fallback_2026_11_03_r4_attested_stored_paths");
 const completeFixture: EplSharpFixtureMarket = {
   ...partialFixture,
   odds: [sharpRow({ selection: "over", odds_american: -105 }), sharpRow({ selection: "under", odds_american: -115 })],
@@ -301,204 +305,19 @@ assert.equal(openingArbitration.inactiveOpeningBooks.some((row) => row.book === 
 assert.equal(openingArbitration.finalSide, "away", "qualified target-excluded market evidence may correct the independent side rather than merely nudge it");
 assert.ok(Math.abs(openingArbitration.lambdaHome + openingArbitration.lambdaAway - 2.3) < 1e-9, "arbitration preserves the independent expected total");
 assert.ok(Math.abs(Object.values(openingArbitration.probabilities).reduce((sum, value) => sum + value, 0) - 1) < 1e-12);
-const matchResultVector = (book: string, home: number, draw: number, away: number): EplForwardBookVector => ({
-  identity: `sharpapi:/odds:evt:${book}:match_result:main:home+draw+away`,
-  sportsbook: book,
-  canonicalBook: book.toLowerCase(),
-  sourceClass: book.toLowerCase() === "pinnacle" ? "named_originator" : "named_retail",
-  provider: "sharpapi",
-  providerEndpoint: "/odds",
-  providerEventId: "evt",
-  market: "match_result",
-  line: null,
-  capturedAt: "2025-01-01T12:00:00Z",
-  fetchedAtMin: "2025-01-01T11:59:00Z",
-  fetchedAtMax: "2025-01-01T11:59:00Z",
-  vectorSkewMs: 0,
-  overround: 1.05,
-  probabilityTotal: 1,
-  outcomes: (["home", "draw", "away"] as const).map((side) => ({
-    side,
-    american: side === "away" ? -180 : 300,
-    decimal: 2,
-    rawImpliedProbability: { home, draw, away }[side] * 1.05,
-    noVigProbability: { home, draw, away }[side],
-    fetchedAt: "2025-01-01T11:59:00Z",
-    fetchedAtSource: "provider",
-  })),
+// Current book levels are context; only an observed price path may update
+// the independent law. Dedicated relative-reader scenarios above exercise
+// actual paired movements, cross-line settlement, reversal and unsafe inputs.
+const noPathPrior = bivariatePoissonScoreDistribution(1.2, 1.1, -0.1);
+const noPathOutcome = deriveUclCoherentMarketOutcome({
+  independentLambdaHome: 1.2, independentLambdaAway: 1.1, independentJoint: noPathPrior,
+  totalVectors: [], evaluatedMatchResultCanonicalBook: null, evaluatedTotalCanonicalBook: null,
+  evaluatedBttsCanonicalBook: null, providerEventId: null,
+  decisionAt: "2025-01-01T12:00:00Z", kickoff: "2025-01-02T20:00:00Z",
 });
-const binaryVector = (
-  book: string,
-  market: "total" | "btts",
-  positiveProbability: number,
-): EplForwardBookVector => {
-  const [positive, negative] = market === "total" ? ["over", "under"] : ["yes", "no"];
-  return {
-    identity: `sharpapi:/odds:evt:${book}:${market}:${market === "total" ? "2.5" : "main"}:${positive}+${negative}`,
-    sportsbook: book,
-    canonicalBook: book.toLowerCase(),
-    sourceClass: book.toLowerCase() === "pinnacle" ? "named_originator" : "named_retail",
-    provider: "sharpapi",
-    providerEndpoint: "/odds",
-    providerEventId: "evt",
-    market,
-    line: market === "total" ? 2.5 : null,
-    capturedAt: "2025-01-01T12:00:00Z",
-    fetchedAtMin: "2025-01-01T11:59:00Z",
-    fetchedAtMax: "2025-01-01T11:59:00Z",
-    vectorSkewMs: 0,
-    overround: 1.05,
-    probabilityTotal: 1,
-    outcomes: [
-      { side: positive, probability: positiveProbability },
-      { side: negative, probability: 1 - positiveProbability },
-    ].map(({ side, probability }) => ({
-      side,
-      american: probability >= 0.5 ? -Math.round(100 * probability / (1 - probability)) : Math.round(100 * (1 - probability) / probability),
-      decimal: 1 / probability,
-      rawImpliedProbability: probability * 1.05,
-      noVigProbability: probability,
-      fetchedAt: "2025-01-01T11:59:00Z",
-      fetchedAtSource: "provider" as const,
-    })),
-  };
-};
-const movementRows = (
-  market: "total" | "btts",
-  positiveAmerican: number,
-  negativeAmerican: number,
-): EplStoredPriceObservation[] => ["betmgm", "draftkings", "pinnacle"].flatMap((sportsbook) => ([
-  stored({ providerId: 92, market, line: market === "total" ? 2.5 : null, side: market === "total" ? "over" : "yes", american: positiveAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
-  stored({ providerId: 92, market, line: market === "total" ? 2.5 : null, side: market === "total" ? "under" : "no", american: negativeAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
-]));
-const coherentOpeningOutcome = deriveUclCoherentMarketOutcome({
-  matchId: 91,
-  independentLambdaHome: 1.2,
-  independentLambdaAway: 1.1,
-  matchResultVectors: [
-    matchResultVector("fanduel", 0.55, 0.25, 0.20),
-    matchResultVector("draftkings", 0.18, 0.24, 0.58),
-    matchResultVector("betmgm", 0.19, 0.23, 0.58),
-  ],
-  totalVectors: [],
-  evaluatedMatchResultCanonicalBook: "fanduel",
-  evaluatedTotalCanonicalBook: null,
-  evaluatedBttsCanonicalBook: null,
-  providerEventId: "evt",
-  decisionAt: "2025-01-01T12:00:00Z",
-  kickoff: "2025-01-02T20:00:00Z",
-});
-assert.equal(coherentOpeningOutcome.source, "target_excluded_late_match_result_log_pool");
-assert.equal((["home", "draw", "away"] as const).reduce((best, side) => coherentOpeningOutcome.markets.match_result[side] > coherentOpeningOutcome.markets.match_result[best] ? side : best, "home"), "away");
-assert.ok(Math.abs(coherentOpeningOutcome.expectedGoals.home + coherentOpeningOutcome.expectedGoals.away - 2.3) < 1e-4, "displayed PMF total stays within numerical truncation tolerance of the preserved independent total");
-assert.equal(coherentOpeningOutcome.audit.maximumMatchResultResidual < 1e-7, true);
-assert.deepEqual(coherentOpeningOutcome.audit.matchResultReader?.eligibleBooks, ["betmgm", "draftkings"]);
-assert.equal("bttsShadow" in coherentOpeningOutcome.audit, false, "new UCL outcomes must not persist a shadow candidate");
-const goalsVectors = {
-  matchResultVectors: [
-    matchResultVector("betmgm", 0.86, 0.095, 0.045),
-    matchResultVector("draftkings", 0.855, 0.10, 0.045),
-    matchResultVector("pinnacle", 0.865, 0.09, 0.045),
-  ],
-  totalVectors: [binaryVector("betmgm", "total", 0.755), binaryVector("draftkings", "total", 0.76), binaryVector("pinnacle", "total", 0.75)],
-  bttsVectors: [binaryVector("betmgm", "btts", 0.47), binaryVector("draftkings", "btts", 0.475), binaryVector("pinnacle", "btts", 0.465)],
-};
-const qualifiedGoalsCorrection = deriveUclCoherentMarketOutcome({
-  matchId: 92,
-  independentLambdaHome: 3.4,
-  independentLambdaAway: 1.4,
-  ...goalsVectors,
-  storedPriceHistory: movementRows("btts", 113, -113),
-  modelEvidenceQuality: "thin",
-  evaluatedMatchResultCanonicalBook: null,
-  evaluatedTotalCanonicalBook: null,
-  evaluatedBttsCanonicalBook: null,
-  providerEventId: "evt",
-  decisionAt: "2025-01-01T12:00:00Z",
-  kickoff: "2025-01-02T20:00:00Z",
-});
-assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, true, "an actual target-free BTTS pair constrains the joint law without a three-book or independent-confidence gate");
-assert.equal(qualifiedGoalsCorrection.source, "target_excluded_goals_arbitration");
-assert.deepEqual(qualifiedGoalsCorrection.audit.goalsReader?.bttsEligibleBooks, ["pinnacle", "draftkings", "betmgm"]);
-assert.equal(qualifiedGoalsCorrection.markets.btts.no > 0.5, true);
-assert.equal(qualifiedGoalsCorrection.audit.goalsReader?.totalCorrectionApplied, true);
-assert.ok(Math.abs(qualifiedGoalsCorrection.markets.total.over - .75) < 1e-7,
-  "native Total and BTTS targets apply jointly, without freezing the independent total");
-assert.ok(Math.abs(qualifiedGoalsCorrection.expectedGoals.home + qualifiedGoalsCorrection.expectedGoals.away - 4.8) > .01,
-  "the released score mean follows the new joint score law");
-const movementResistedGoalsCorrection = deriveUclCoherentMarketOutcome({
-  matchId: 92,
-  independentLambdaHome: 3.4,
-  independentLambdaAway: 1.4,
-  ...goalsVectors,
-  storedPriceHistory: movementRows("btts", 150, -150),
-  modelEvidenceQuality: "thin",
-  evaluatedMatchResultCanonicalBook: null,
-  evaluatedTotalCanonicalBook: null,
-  evaluatedBttsCanonicalBook: null,
-  providerEventId: "evt",
-  decisionAt: "2025-01-01T12:00:00Z",
-  kickoff: "2025-01-02T20:00:00Z",
-});
-assert.equal(movementResistedGoalsCorrection.audit.goalsReader?.bttsMovement.side, "yes");
-assert.equal(movementResistedGoalsCorrection.audit.goalsReader?.bttsCorrectionApplied, true, "movement is retained as separate path context, not an automatic veto on a fresh native price constraint");
-assert.equal(movementResistedGoalsCorrection.markets.btts.no > 0.5, true);
-const qualifiedTotalCorrection = deriveUclCoherentMarketOutcome({
-  matchId: 93,
-  independentLambdaHome: 1.3,
-  independentLambdaAway: 1.2,
-  matchResultVectors: goalsVectors.matchResultVectors,
-  totalVectors: [binaryVector("betmgm", "total", 0.62), binaryVector("draftkings", "total", 0.625), binaryVector("pinnacle", "total", 0.615)],
-  bttsVectors: [],
-  modelEvidenceQuality: "standard",
-  evaluatedMatchResultCanonicalBook: null,
-  evaluatedTotalCanonicalBook: null,
-  evaluatedBttsCanonicalBook: null,
-  providerEventId: "evt",
-  decisionAt: "2025-01-01T12:00:00Z",
-  kickoff: "2025-01-02T20:00:00Z",
-});
-assert.equal(qualifiedTotalCorrection.audit.goalsReader?.totalCorrectionApplied, true, "a weak Total may be corrected by stable target-excluded consensus");
-assert.equal(qualifiedTotalCorrection.markets.total.over > 0.5, true);
-assert.equal(qualifiedTotalCorrection.audit.goalsReader?.bttsCorrectionApplied, false);
-const totalMovementInput = {
-  matchId: 92, independentLambdaHome: 1.3, independentLambdaAway: 1.2,
-  matchResultVectors: goalsVectors.matchResultVectors,
-  totalVectors: [binaryVector("betmgm", "total", 0.62), binaryVector("draftkings", "total", 0.625), binaryVector("pinnacle", "total", 0.615)],
-  bttsVectors: [], evaluatedMatchResultCanonicalBook: null, evaluatedTotalCanonicalBook: null,
-  evaluatedBttsCanonicalBook: null, providerEventId: "evt", decisionAt: "2025-01-01T12:00:00Z", kickoff: "2025-01-02T20:00:00Z",
-};
-const opposingHistory = movementRows("total", -300, 300);
-const genuineResistance = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory: opposingHistory});
-assert.equal(genuineResistance.audit.goalsReader?.totalMovement.side, "under");
-assert.equal(genuineResistance.audit.goalsReader?.totalCorrectionApplied, true, "genuine earlier same-book movement remains visible while fresh settlement evidence updates the joint law");
-const falseHistoryCases = [
-  opposingHistory.map(row => ({...row, line: 3.5})),
-  opposingHistory.map(row => ({...row, line: 3.25})),
-  opposingHistory.map(row => ({...row, line: row.side === "over" ? 2.5 : 3.5})),
-  opposingHistory.map(row => ({...row, recordedAt: "2025-01-01T11:59:00Z"})),
-  opposingHistory.map(row => ({...row, recordedAt: "2025-01-01T11:59:30Z"})),
-  opposingHistory.map(row => ({...row, american: row.side === "over" ? 0 : row.american})),
-  opposingHistory.map(row => ({...row, american: -1000})),
-  [...opposingHistory, ...opposingHistory.filter(row => row.side === "over").map(row => ({...row, american: -250}))],
-];
-for(const storedPriceHistory of falseHistoryCases) {
-  const corrected = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory});
-  assert.equal(corrected.audit.goalsReader?.totalMovement.books, 0);
-  assert.equal(corrected.audit.goalsReader?.totalCorrectionApplied, true, "foreign line, nonchronological, invalid or conflicting history cannot veto a qualified correction");
-}
-const duplicateHistory = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory:[...opposingHistory,...opposingHistory]});
-assert.equal(duplicateHistory.audit.goalsReader?.totalMovement.side, "under", "identical copies are idempotent");
-const laterValidHistory = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory:[...falseHistoryCases[7]!,...opposingHistory.map(row=>({...row,recordedAt:"2025-01-01T11:00:00Z"}))]});
-assert.equal(laterValidHistory.audit.goalsReader?.totalMovement.side, "under", "a conflicting capture does not suppress a later genuine baseline");
-const underInput = {...totalMovementInput, independentLambdaHome:1.5,independentLambdaAway:1.5,
-  totalVectors:[binaryVector("betmgm","total",.45),binaryVector("draftkings","total",.455),binaryVector("pinnacle","total",.445)]};
-const falseUnderVeto = movementRows("total",300,-300).map(row=>({...row,line:3.5}));
-assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:falseUnderVeto}).audit.goalsReader?.totalCorrectionApplied,true,
-  "the same exact-contract repair also allows a qualified Under correction; no directional preference");
-assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:movementRows("total",300,-300)}).audit.goalsReader?.totalCorrectionApplied,true);
-console.log("PASS UCL movement exact contract, original-quote chronology, two-way pair quality, conflict quarantine and symmetric correction/resistance.");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r15_native_goals_joint");
+assert.deepEqual(noPathOutcome.joint, noPathPrior, "missing market paths preserve the exact independent law");
+assert.equal("bttsShadow" in noPathOutcome.audit, false, "UCL persists one authoritative forecast");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r18_attested_stored_paths");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -542,7 +361,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r8_native_goals_joint");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r10_attested_stored_paths");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
@@ -891,7 +710,8 @@ assert.match(uclPreviewSource, /finalizeFixtureMarket:[\s\S]*applyUclStoredQuote
 assert.match(sharedSoccerBuilder, /options\.fixtureLoadConcurrency === undefined[\s\S]*Math\.min\(3, slate\.matches\.length\)/, "shared soccer keeps its existing three-fixture default unless a competition overrides it");
 assert.match(sharedSoccerBuilder, /row\.persistable === false/, "stored availability rows cannot be re-recorded as fresh provider observations");
 assert.doesNotMatch(uclTransferredGradeSource, /deriveEplPreviewGrade|deriveEplMatchResultDecision|from ["'].*eplPreviewGrade/, "the transferred UCL grade authority is frozen and cannot drift with EPL runtime edits");
-assert.match(uclTransferredGradeSource, /positive exact forecast-side expected value/, "actionable transfers retain exact-price EV gating");
+assert.match(uclTransferredGradeSource, /withinPairedVigEnvelope/, "movement-confirmed Lean permits genuine paired-market margin while preserving price economics");
+assert.match(uclTransferredGradeSource, /ev > 0 && confirmed.originator/, "Best still requires positive exact-price value and genuine originator confirmation");
 assert.match(uclPreviewSource, /awayTeamLogo:\s*uclTeamLogo\(game\.awayTeam\)[\s\S]*awayTeamPrimaryColor:\s*awayAsset\?\.primaryColor/);
 assert.match(uclPreviewSource, /homeTeamLogo:\s*uclTeamLogo\(game\.homeTeam\)[\s\S]*homeTeamPrimaryColor:\s*homeAsset\?\.primaryColor/);
 assert.match(uclPreviewSource, /competitionLabel:\s*"Champions League"/, "the shared builder receives competition-specific copy without a UCL-only layout");

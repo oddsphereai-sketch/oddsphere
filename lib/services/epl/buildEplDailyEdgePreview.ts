@@ -14,6 +14,7 @@ import {
 } from "./eplForwardEvidenceCapture";
 import { deriveEplCoherentMarketOutcome } from "./eplCoherentMarketOutcome";
 import { reconcileEplProjectedGoalsWithResult, selectEplMatchResultSide } from "./eplShadowModel";
+import type { UclRelativeMarketReadReceipt } from "../ucl/uclRelativeMarketRead";
 
 const BOOK_PRIORITY = ["pinnacle", "circa", "draftkings", "fanduel", "betmgm", "caesars"];
 const MAX_FIXTURE_RECOVERY_LOADS = 4;
@@ -651,6 +652,9 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     kickoff: match.kickoff,
   });
   const coherentMatchResult = coherentOutcome.markets.match_result;
+  const relativeMarketReader = authorities.nativeGoalMarketContracts
+    ? (coherentOutcome.audit.goalsReader as { relativeMarketReader?: UclRelativeMarketReadReceipt } | undefined)?.relativeMarketReader
+    : undefined;
   const forecastPrediction = authorities.useCoherentMatchResultForecast
     ? {
         ...match.prediction,
@@ -688,6 +692,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     prices: mr ? { home: mr.prices.home!, draw: mr.prices.draw!, away: mr.prices.away! } : null,
     promotedProxy: match.prediction.homeStrengthSource === "promoted_proxy" || match.prediction.awayStrengthSource === "promoted_proxy",
     forecastSide,
+    ...(relativeMarketReader ? { marketRead: relativeMarketReader.markets.match_result } : {}),
     marketReader: {
       consensusLeader: coherentOutcome.audit.matchResultReader?.consensusLeader ?? null,
       evaluatedLeader: mr ? (["home", "draw", "away"] as const).reduce(
@@ -841,7 +846,8 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const totalModelProb = totalSide === "over" ? p.over25 : p.under25;
   const totalEdge = total ? (totalModelProb - total.probabilities[totalSide]!) * 100 : null;
   const meanDirection = publishedTotal >= (total?.line ?? 2.5) ? "over" : "under";
-  const totalGrade = authorities.derivePreviewGrade({ market: "total", modelProbability: totalModelProb, edgePp: totalEdge, priceAmerican: total?.prices[totalSide] ?? null, coherentMarket: total !== null, promotedProxy, meanProbabilityDisagree: meanDirection !== totalSide });
+  const totalGrade = authorities.derivePreviewGrade({ market: "total", modelProbability: totalModelProb, edgePp: totalEdge, priceAmerican: total?.prices[totalSide] ?? null, coherentMarket: total !== null, promotedProxy, meanProbabilityDisagree: meanDirection !== totalSide,
+    ...(relativeMarketReader ? { marketRead: relativeMarketReader.markets.total, forecastSide: totalSide } : {}) });
   const totalMarket = marketBase({
     pick: totalSide === "over" ? "Over" : "Under",
     modelProb: totalModelProb,
@@ -901,7 +907,8 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   });
   const bttsModelProb = bttsSide === "yes" ? p.bttsYes : p.bttsNo;
   const bttsEdge = btts ? (bttsModelProb - btts.probabilities[bttsSide]!) * 100 : null;
-  const bttsGrade = authorities.derivePreviewGrade({ market: "btts", modelProbability: bttsModelProb, edgePp: bttsEdge, priceAmerican: btts?.prices[bttsSide] ?? null, coherentMarket: btts !== null, promotedProxy });
+  const bttsGrade = authorities.derivePreviewGrade({ market: "btts", modelProbability: bttsModelProb, edgePp: bttsEdge, priceAmerican: btts?.prices[bttsSide] ?? null, coherentMarket: btts !== null, promotedProxy,
+    ...(relativeMarketReader ? { marketRead: relativeMarketReader.markets.btts, forecastSide: bttsSide } : {}) });
   const bttsMarket = marketBase({
     pick: bttsSide === "yes" ? "Yes" : "No",
     modelProb: bttsModelProb,

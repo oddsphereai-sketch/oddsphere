@@ -85,7 +85,13 @@ type UclLockedRecord = Pick<PredictionRecordRow,
 > & { id: number };
 
 function matchesImmutableTuple(actual: UclLockedRecord, expected: PredictionRecordRow): boolean {
-  return UCL_IMMUTABLE_TUPLE_FIELDS.every((field) => actual[field] === expected[field])
+  // Compare fresh writer expectations at the existing NUMERIC column precision.
+  // The stored capture remains byte-for-byte authoritative; this is verification,
+  // never permission to round or replace a locked value.
+  const numericTolerance = { model_probability: 0.0000005, market_probability: 0.0000005, edge: 0.0005, expected_value: 0.00005 };
+  return UCL_IMMUTABLE_TUPLE_FIELDS.every((field) => field in numericTolerance
+    ? numberEqual(actual[field] as number | null, expected[field] as number | null, numericTolerance[field as keyof typeof numericTolerance])
+    : actual[field] === expected[field])
     && canonicalJson(actual.snapshot_json) === canonicalJson(expected.snapshot_json);
 }
 
