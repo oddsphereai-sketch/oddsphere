@@ -118,7 +118,7 @@ const recoveredFixture = applyUclStoredQuoteFallback({
 const recoveredTotal = recoveredFixture.odds.filter((row) => row.provider_endpoint === UCL_STORED_QUOTE_FALLBACK_ENDPOINT);
 assert.deepEqual(recoveredTotal.map((row) => [row.selection, row.odds_american]), [["over", -145], ["under", 125]], "stored continuity selects the intact complete16:20 capture; a16:30 partial quote cannot borrow its earlier opposite");
 assert.equal(recoveredTotal.every((row) => row.provider_event_id === null && row.persistable === false), true, "stored rows are availability-only and cannot masquerade as current provider evidence");
-assert.match(UCL_STORED_QUOTE_FALLBACK_RELEASE, /complete_same_book/);
+assert.equal(UCL_STORED_QUOTE_FALLBACK_RELEASE, "ucl_stored_quote_fallback_2026_11_03_r4_attested_stored_paths");
 const completeFixture: EplSharpFixtureMarket = {
   ...partialFixture,
   odds: [sharpRow({ selection: "over", odds_american: -105 }), sharpRow({ selection: "under", odds_american: -115 })],
@@ -317,7 +317,7 @@ const noPathOutcome = deriveUclCoherentMarketOutcome({
 });
 assert.deepEqual(noPathOutcome.joint, noPathPrior, "missing market paths preserve the exact independent law");
 assert.equal("bttsShadow" in noPathOutcome.audit, false, "UCL persists one authoritative forecast");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r17_lock_storage_precision");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r18_attested_stored_paths");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -361,7 +361,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r9_relative_market_paths");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r10_attested_stored_paths");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },

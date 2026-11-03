@@ -3,7 +3,7 @@ import type { EplStoredPriceObservation } from "@/lib/services/epl/buildEplDaily
 import { soccerStoredPriceMaxAgeMs } from "@/lib/providers/real_api/CurrentSoccerMarketProvider";
 
 export const UCL_STORED_QUOTE_FALLBACK_RELEASE =
-  "ucl_stored_quote_fallback_2026_11_03_r3_intact_complete_same_book" as const;
+  "ucl_stored_quote_fallback_2026_11_03_r4_attested_stored_paths" as const;
 
 export const UCL_STORED_QUOTE_FALLBACK_ENDPOINT = "/oddsphere/ucl/stored-line-history" as const;
 
@@ -99,9 +99,9 @@ function storedRowsForMarket(input: {
 
 /** Restore an absent UCL market from its latest fresh complete same-book stored
  * tuples under the shared soccer freshness window. Current provider markets win. Stored rows
- * remain exact-price availability/economics evidence and are deliberately
- * ineligible for forecast arbitration because their original Sharp event ID
- * was not retained by the legacy line-history schema. */
+ * keep their stored-capture clocks and null native event IDs. The UCL relative
+ * reader separately attests the exact stored fixture/book/contract/side/clock
+ * family before using its observed movement; native identity is never invented. */
 export function applyUclStoredQuoteFallback(input: {
   fixture: EplSharpFixtureMarket;
   providerId: number;

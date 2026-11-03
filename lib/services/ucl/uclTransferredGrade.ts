@@ -2,7 +2,7 @@ import type { Grade } from "@/lib/types/domain/Grade";
 import type { UclRelativeMarketAxisReceipt } from "./uclRelativeMarketRead";
 
 export const UCL_PREVIEW_GRADE_RELEASE =
-  "ucl_grade_policy_2026_11_03_r21_relative_market_confidence" as const;
+  "ucl_grade_policy_2026_11_03_r22_attested_stored_paths" as const;
 
 export type UclPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type UclPreviewGrade = {

@@ -7,7 +7,7 @@ import {bivariatePoissonScoreDistribution,medianTotalFromDistribution,mostLikely
 import {deriveSoccerMarketProbabilities} from "@/lib/services/soccer/soccerMarketProbabilities";
 import {deriveUclRelativeMarketRead,type UclRelativeMarketReadReceipt} from "./uclRelativeMarketRead";
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
-  "ucl_coherent_market_outcome_2026_11_03_r11_relative_market_paths" as const;
+  "ucl_coherent_market_outcome_2026_11_03_r12_attested_stored_paths" as const;
 
 type Side="home"|"draw"|"away";
 const SIDES=["home","draw","away"] as const;

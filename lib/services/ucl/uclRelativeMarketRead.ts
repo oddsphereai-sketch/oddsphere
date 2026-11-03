@@ -11,7 +11,8 @@ export type UclRelativeMarket='match_result'|'total'|'btts';
 export type UclRelativeDirection='home'|'draw'|'away'|'over'|'under'|'yes'|'no'|'flat'|'mixed'|'unknown';
 export type UclRelativeCapture={observedAt:string;clockBasis:'stored_capture'|'provider_quote'|'oddsphere_capture';line:number|null;probabilities:Record<string,number>;nativeMean:number|null};
 export type UclRelativeMarketPath={
- identity:string;book:string;sourceClass:EplForwardBookVector['sourceClass'];provider:string;providerEventId:string;
+ identity:string;book:string;sourceClass:EplForwardBookVector['sourceClass'];provider:string;providerEventId:string|null;
+ identityBasis:'native_event'|'exact_stored_fixture_capture';
  independentOfExecutionBook:boolean;baseline:UclRelativeCapture|null;current:UclRelativeCapture;
  factor:number|Record<string,number>|null;direction:UclRelativeDirection;latestLegDirection:UclRelativeDirection;
  latestInformativeDirection:UclRelativeDirection;latestInformativeAt:string|null;latestInformativeStartAt:string|null;latestInformativeFactor:number|Record<string,number>|null;
@@ -123,7 +124,13 @@ function buildPath(input:UclRelativeMarketInput,market:UclRelativeMarket,vector:
  const completedClocks=new Set(history.captures.map(c=>Date.parse(c.observedAt)));
  const inWindow=(at:number)=>!!baseline&&at>=Date.parse(baseline.observedAt);
  const incomplete=history.incomplete.filter(at=>inWindow(at)&&!completedClocks.has(at)),conflicting=history.conflicts.filter(inWindow);
- const unknown=[...new Set([...incomplete,...conflicting])].sort((a,b)=>a-b);
+ // Newer incomplete stored observations cannot replace a complete pair or
+ // support a claim that the latest observed reaction is fully known.
+ const laterUnknown=vector.provider==='stored_quote'?(input.storedPriceHistory??[]).filter(row=>
+  row.providerId===input.matchId&&row.market===market&&book(row.sportsbook)===vector.canonicalBook&&row.line===vector.line
+  &&!row.isOpener&&Date.parse(row.recordedAt)>Date.parse(current.observedAt)&&Date.parse(row.recordedAt)<=Date.parse(input.decisionAt))
+  .map(row=>Date.parse(row.recordedAt)):[];
+ const unknown=[...new Set([...incomplete,...conflicting,...laterUnknown])].sort((a,b)=>a-b);
  const latestLegStart=full.length>=2?Date.parse(full[full.length-2]!.observedAt):null;
  let latestLegFullyObserved=latestLegStart!==null&&!unknown.some(at=>at>latestLegStart);
  const factor=baseline?factors(market,baseline,current):null,netDirection=direction(market,factor);
@@ -139,26 +146,49 @@ function buildPath(input:UclRelativeMarketInput,market:UclRelativeMarket,vector:
  const selected=new Set<number>([0,Math.max(0,full.length-2),full.length-1]);
  for(const side of market==='match_result'?SIDES.match_result:['yes']){const values=full.map(c=>metric(market,c,side));selected.add(values.indexOf(Math.min(...values)));selected.add(values.indexOf(Math.max(...values)));}
  const bounded=[...selected].sort((a,b)=>a-b).map(i=>full[i]!);
- return{identity:vector.identity,book:vector.canonicalBook,sourceClass:vector.sourceClass,provider:vector.provider,providerEventId:vector.providerEventId!,
+ return{identity:vector.identity,book:vector.canonicalBook,sourceClass:vector.sourceClass,provider:vector.provider,providerEventId:vector.providerEventId,
+  identityBasis:vector.provider==='stored_quote'?'exact_stored_fixture_capture':'native_event',
   independentOfExecutionBook:vector.canonicalBook!==excluded,baseline,current,factor,direction:netDirection,latestLegDirection:direction(market,latestFactor),latestInformativeDirection,latestInformativeAt,latestInformativeStartAt,latestInformativeFactor,
   retraced,roundTrip:!!baseline&&netDirection==='flat'&&everMoved,conflicted:!!baseline&&history.conflicts.some(at=>at>=Date.parse(baseline.observedAt)),
   baselineRule:baseline?(sameDay.length?'earliest_complete_same_et_day':'latest_complete_earlier_et_day'):'unavailable',
   captureCount:full.length,incompleteCaptureCount:incomplete.length,conflictingCaptureCount:conflicting.length,unknownCaptureClocks:unknown.length?[new Date(unknown[0]!).toISOString(),...(unknown.length>1?[new Date(unknown[unknown.length-1]!).toISOString()]:[])]:[],latestLegFullyObserved,captureHash:createHash('sha256').update(JSON.stringify(full)).digest('hex'),captures:bounded,
   reason:baseline?(netDirection==='flat'?'paired_path_net_unchanged':'paired_path_relative_innovation'):'no_complete_baseline_before_current_original_clock'};
 }
+function exactStoredCapture(input:UclRelativeMarketInput,market:UclRelativeMarket,vector:EplForwardBookVector):boolean{
+ if(vector.provider!=='stored_quote'||!['/line_history','/oddsphere/ucl/stored-line-history'].includes(vector.providerEndpoint)
+  ||vector.providerEventId!==null||!Number.isSafeInteger(input.matchId)||input.matchId!<=0
+  ||vector.outcomes.length!==SIDES[market].length||vector.outcomes.some(o=>o.fetchedAtSource!=='oddsphere_capture'))return false;
+ const times=vector.outcomes.map(o=>Date.parse(o.fetchedAt??''));
+ if(times.some(t=>!Number.isFinite(t))||new Set(times).size!==1)return false;
+ const rows=(input.storedPriceHistory??[]).filter(row=>row.providerId===input.matchId&&row.market===market
+  &&book(row.sportsbook)===vector.canonicalBook&&row.line===vector.line&&!row.isOpener&&Date.parse(row.recordedAt)===times[0]);
+ if(rows.some(row=>!SIDES[market].includes(row.side))||!probabilities(rows,market))return false;
+ if(!SIDES[market].every(side=>{
+  const quotes=vector.outcomes.filter(o=>o.side===side),stored=rows.filter(row=>row.side===side);
+  return quotes.length===1&&stored.length>0&&stored.every(row=>row.american===quotes[0]!.american);
+ }))return false;
+ const later=new Map<number,EplStoredPriceObservation[]>(),now=Date.parse(input.decisionAt);
+ for(const row of input.storedPriceHistory??[]){const at=Date.parse(row.recordedAt);
+  if(row.providerId!==input.matchId||row.market!==market||book(row.sportsbook)!==vector.canonicalBook||row.line!==vector.line
+   ||row.isOpener||!Number.isFinite(at)||at<=times[0]!||at>now)continue;
+  later.set(at,[...(later.get(at)??[]),row]);
+ }
+ return ![...later.values()].some(rows=>probabilities(rows,market)!==null);
+}
 function pathsFor(input:UclRelativeMarketInput,market:UclRelativeMarket):{paths:UclRelativeMarketPath[];inactive:Array<{identity:string;reason:string}>}{
  const vectors=market==='match_result'?input.matchResultVectors??[]:market==='total'?input.totalVectors:input.bttsVectors??[];
  const now=Date.parse(input.decisionAt),start=Date.parse(input.kickoff),inactive:Array<{identity:string;reason:string}>=[];
  const valid:Array<{vector:EplForwardBookVector;current:UclRelativeCapture;key:string;signature:string}>=[];
  for(const vector of vectors){let reason:string|null=null;const times=vector.outcomes.map(o=>Date.parse(o.fetchedAt??''));
+  const stored=vector.provider==='stored_quote',storedAttested=stored&&exactStoredCapture(input,market,vector);
   if(!Number.isFinite(now)||!Number.isFinite(start)||now>=start)reason='decision_not_before_kickoff';
   else if(vector.market!==market||!vector.canonicalBook||!['named_originator','named_retail','named_other'].includes(vector.sourceClass)||['kalshi','polymarket'].includes(vector.canonicalBook))reason='wrong_market_or_unnamed_book';
-  else if(!vector.providerEventId||(input.fixtureEventIdentities!==undefined?!input.fixtureEventIdentities.some(r=>r.provider===vector.provider&&r.providerEventId===vector.providerEventId&&r.market===market&&r.sportsbook===vector.canonicalBook):input.providerEventId===null||input.providerEventId!==vector.providerEventId))reason='provider_event_identity_mismatch';
+  else if(stored?!storedAttested:!vector.providerEventId||(input.fixtureEventIdentities!==undefined?!input.fixtureEventIdentities.some(r=>r.provider===vector.provider&&r.providerEventId===vector.providerEventId&&r.market===market&&r.sportsbook===vector.canonicalBook):input.providerEventId===null||input.providerEventId!==vector.providerEventId))reason=stored?'stored_capture_not_exact_fixture_pair':'provider_event_identity_mismatch';
   else if(times.length!==SIDES[market].length||times.some(t=>!Number.isFinite(t)||t>now||t>=start||now-t>soccerStoredPriceMaxAgeMs(input.kickoff,now))||Math.max(...times)-Math.min(...times)>60_000)reason='original_quote_stale_future_or_incomplete';
   else if(market==='total'?(vector.line===null||vector.line<0||!Number.isInteger(vector.line*4)):vector.line!==null)reason='invalid_exact_contract';
   const p=reason?null:probabilities(vector.outcomes,market);
   if(!reason&&!p)reason='incomplete_conflicting_or_implausible_price_pair';
-  const c=!reason&&p?capture(market,vector.line,new Date(Math.min(...times)).toISOString(),vector.outcomes.every(o=>o.fetchedAtSource==='provider')?'provider_quote':'oddsphere_capture',p):null;
+  const c=!reason&&p?capture(market,vector.line,new Date(Math.min(...times)).toISOString(),storedAttested?'stored_capture':vector.outcomes.every(o=>o.fetchedAtSource==='provider')?'provider_quote':'oddsphere_capture',p):null;
   if(!reason&&!c)reason='native_total_inverse_unavailable';
   if(reason||!c){inactive.push({identity:vector.identity,reason:reason??'invalid_current_capture'});continue;}
   valid.push({vector,current:c,key:JSON.stringify([vector.canonicalBook,vector.line,Math.min(...times),Math.max(...times)]),signature:JSON.stringify(SIDES[market].map(side=>vector.outcomes.find(o=>o.side===side)?.american))});
