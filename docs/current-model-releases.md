@@ -1,5 +1,17 @@
 # Current production model releases and qualified research candidates
 
+## CFB retained partial-news member reader — November 3
+
+Availability reader source release is
+`cfb_member_availability_2026_11_03_r1_retained_news_identity`, recorded in fixture
+provenance as availabilityEvidenceRelease. It applies R2 player identity to
+retained ESPN partial news only for explicitly open, unlocked member games.
+Malformed old source rows cannot republish while awaiting their next capture;
+valid reports retain clocks and raw/locked reports remain exact. This closes
+the post-deploy reader path left after writer R148. Numerical score/grade,
+fixture/snapshot contracts, model authority and job/request limits do not change.
+Evidence: `docs/model-audits/2026-11-03-cfb-retained-news-reader.md`.
+
 ## Daily Edge named split source authority — November 3
 
 Current post-decision source classification is

@@ -1,3 +1,4 @@
+import { cfbMemberAvailabilityReport, CFB_MEMBER_AVAILABILITY_RELEASE } from "./cfbMemberAvailability";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyEdgeGameDto, DailyEdgePredictionDto, MarketEdgeDto, OddsTrailStopDto } from "@/app/lab/lib/labTypes";
@@ -184,7 +185,7 @@ export type CfbMemberFixture = {
   history: PreviewHistoryByTeam;
   availability: Record<string, DailyEdgeGameAvailability>;
   week: { label: string };
-  provenance: { sourceChecksum: string; openingCoverageGames: number; splitCoverageGames: number; sharpSplitCoverageGames: number; quarterbackCoverageGames: number; currentOddsGames: number };
+  provenance: { availabilityEvidenceRelease?: typeof CFB_MEMBER_AVAILABILITY_RELEASE; sourceChecksum: string; openingCoverageGames: number; splitCoverageGames: number; sharpSplitCoverageGames: number; quarterbackCoverageGames: number; currentOddsGames: number };
   tracking: { trackingEligible: boolean; reason: string };
 };
 
@@ -225,6 +226,7 @@ export function buildCfbMemberFixture(
   const games = latest
     .map((row) => buildGame(row, movementRowsByGame.get(row.providerGameId)!, now))
     .sort((a, b) => Date.parse(a.gameStartAt ?? "") - Date.parse(b.gameStartAt ?? ""));
+  const gameByProviderId = new Map(games.map(game => [String(game.external_id), game]));
   const date = localDate(games[0]!.gameStartAt!);
   const sourceChecksum = createHash("sha256")
     .update([...movementRowsByGame.values()].flat()
@@ -239,11 +241,12 @@ export function buildCfbMemberFixture(
     snapshot: { as_of: capturedAt, sport: "cfb", date, requested_date: date, fallback_used: false, slateState: "today_draft_only", slate_status: "cfb_week_one_model_live", last_slate_update_at: capturedAt, games },
     history: {},
     availability: Object.fromEntries(latest.flatMap((row) => {
-      const report = row.payload.availability.report;
+      const report = cfbMemberAvailabilityReport(row.payload.availability.report ?? null, gameByProviderId.get(row.providerGameId));
       return report ? [[row.providerGameId, report] as const] : [];
     })),
     week: { label: selectedWindows.map(({ window }) => window.boardStartDate === "2026-08-25" ? "Opening Week" : `Week of ${shortDate(window.boardStartDate)}`).join(" + ") },
     provenance: {
+      availabilityEvidenceRelease: CFB_MEMBER_AVAILABILITY_RELEASE,
       sourceChecksum,
       openingCoverageGames: latest.filter((row) => row.payload.market.operationalOpening !== null).length,
       splitCoverageGames: latest.filter((row) => row.payload.market.playbookSplits !== null).length,

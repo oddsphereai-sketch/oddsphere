@@ -1636,6 +1636,26 @@ const unlockedRow: CfbForwardStoredEvidence = {
   payload: unlockedPayload,
   payloadSha256: hashCfbForwardEvidencePayload(unlockedPayload),
 };
+const staleNewsRow = structuredClone(unlockedRow);
+staleNewsRow.payload.availability.report = {
+ eventId:game.providerGameId,awayTeam:game.away.abbreviation,homeTeam:game.home.abbreviation,
+ source:"ESPN",sourceLabel:"ESPN public injury news",sourceUrl:"https://www.espn.com/college-football/",
+ reportDate:unlockedPayload.capturedAt,reportUpdatedAt:unlockedPayload.capturedAt,
+ teams:[{abbreviation:game.away.abbreviation,teamName:game.away.name,players:[{name:"close and who's",status:"Out",position:"S",detail:"Bubble Watch",reportedAt:unlockedPayload.capturedAt}]},
+ {abbreviation:game.home.abbreviation,teamName:game.home.name,players:[]}],
+};
+staleNewsRow.payloadSha256=hashCfbForwardEvidencePayload(staleNewsRow.payload);
+const staleNewsBefore=JSON.stringify(staleNewsRow);
+const qualifiedNewsFixture=buildCfbMemberFixtureAtTime([staleNewsRow],unlockedPayload.capturedAt);
+assert.equal(qualifiedNewsFixture.availability[game.providerGameId],undefined,"open member assembly rejects corrupt retained news even before its next source capture");
+assert.deepEqual(qualifiedNewsFixture.snapshot.games,buildCfbMemberFixtureAtTime([unlockedRow],unlockedPayload.capturedAt).snapshot.games,"availability qualification does not change scores/picks/grades");
+assert.equal(JSON.stringify(staleNewsRow),staleNewsBefore,"raw stored evidence stays unchanged");
+const lockedNewsRow=structuredClone(evidence);
+lockedNewsRow.payload.availability.report=structuredClone(staleNewsRow.payload.availability.report);
+lockedNewsRow.payloadSha256=hashCfbForwardEvidencePayload(lockedNewsRow.payload);
+assert.deepEqual(buildCfbMemberFixture([lockedNewsRow]).availability[game.providerGameId],lockedNewsRow.payload.availability.report,
+ "legacy locked injury evidence takes precedence over new news qualification");
+
 assert.deepEqual(
   retainCfbMemberLockedGamesForBoardDate({
     selected: [],
