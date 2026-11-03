@@ -124,8 +124,8 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     if(modelExpectedValue>=.03&&eligible&&economicPathConfirmation&&grade==="Watchlist"&&base.referenceState==="neutral"){
       grade="Lean";reason="qualified_same_market_price_confirmation";gradeBasis="qualified_same_market_price";
     }
-    else if(modelExpectedValue>=.08&&eligible&&economicPathConfirmation&&grade==="Lean"){
-      grade="Best Angle";reason="qualified_same_market_price_with_material_model_value";gradeBasis="qualified_same_market_price";
+    else if(modelExpectedValue>=.08&&eligible&&actualActionConfirmation&&grade==="Lean"){
+      grade="Best Angle";reason="verified_same_market_action_with_material_model_value";gradeBasis="verified_same_market_action";
     }
     if(corroboratedOpposition&&(grade==="Lean"||grade==="Best Angle")){
       grade="Watchlist";reason="corroborated_unresolved_source_resistance";gradeBasis="qualified_source_resistance";
