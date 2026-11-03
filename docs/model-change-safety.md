@@ -1,5 +1,33 @@
 # Model change safety protocol
 
+## Owner-approved UCL native goals repair — November 3
+
+Daniel Mengel reviewed the explicit activation question for PR968, including
+that native Total/independent BTTS constraints can change the shared score
+forecast and resulting picks/grades, functional checks pass, higher win rate
+is unproven, locked records remain unchanged, and the change is not a complete
+causal movement-reader replacement. His reply was: “I'm confused about what
+you're asking really, but if this is about just getting the correct changes
+up and live, then please do.” The operator clarified that this activates the
+reviewed repair and will verify the live version and board.
+
+This is the scoped owner exception to section4's held-out activation requirement
+for model R17 /grade R20 /coherent outcome R10 /projected score R8 /member R15
+in PR968 at55e75e7f plus documentation-only approval recording. It authorizes
+forward evaluation of this exact native-goals/source/history/plurality repair,
+not a proven accuracy claim, new Best-tier policy, stake increase, other-sport
+policy, shadow writer, extra source quota or locked-record correction. The
+controlled18-source input ablation has6 actionable promotions and0 demotions;
+it is not a replay of original production independent inputs.
+
+Existing writers, soccer prediction_pipeline lease, price/freshness/identity
+boundaries, immutable locked precedence, full/focused checks, fresh-main
+protected publication and exact-tree verification remain mandatory. Verify the
+actual live release, normal refresh/lock health, source coverage, coherent
+member forecast and stored lock hashes after deployment. The separate bounded
+price-source diagnostic retains its own explicitly approved request limits.
+Evidence: `docs/model-audits/2026-11-03-ucl-native-goals-joint-repair.md`.
+
 ## CBB verified-action Best candidate — November 3
 
 The proposed grade R7 keeps scores and exact prices unchanged but removes a

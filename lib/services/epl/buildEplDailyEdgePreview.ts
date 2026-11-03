@@ -76,6 +76,8 @@ export type EplPreviewBuildOptions = {
     deriveMatchResultDecision: typeof deriveEplMatchResultDecision;
     derivePreviewGrade: typeof deriveEplPreviewGrade;
     useCoherentMatchResultForecast?: boolean;
+    /** UCL only: retain exact native total contracts as forecast evidence. */
+    nativeGoalMarketContracts?: boolean;
     selectMatchResultSide?: (prediction: EplShadowSlateMatch["prediction"]) => {
       release: string;
       side: EplMatchResultSide;
@@ -458,6 +460,7 @@ function allBookPriceObservations(
   slate: EplShadowSlate,
   fixtureMarkets: EplSharpFixtureMarket[],
   capturedAt: string,
+  nativeGoalMarketContracts = false,
 ): EplStoredPriceObservation[] {
   const required: Record<EplStoredPriceObservation["market"], string[]> = {
     match_result: ["home", "draw", "away"],
@@ -473,8 +476,14 @@ function allBookPriceObservations(
     for (const row of fixture.odds) {
       if (row.persistable === false) continue;
       if (row.odds_american === null || !Number.isFinite(row.odds_american) || !row.sportsbook) continue;
-      if (row.market === "total" && row.line !== 2.5) continue;
-      const key = `${row.market}:${bookKey(row.sportsbook)}:${row.market === "total" ? row.line : "main"}`;
+      if (row.market === "total" && row.line !== 2.5 && !nativeGoalMarketContracts) continue;
+      const nativeTotal = nativeGoalMarketContracts && row.market === "total";
+      if (nativeTotal && (row.line === null || !Number.isFinite(row.line) || row.line < 0 || !Number.isInteger(row.line * 4)
+        || !Number.isFinite(Date.parse(row.fetched_at)) || Date.parse(row.fetched_at) > Date.parse(capturedAt)
+        || Date.parse(row.fetched_at) >= Date.parse(slate.matches[index]!.kickoff))) continue;
+      const key = nativeTotal
+        ? `${row.provider}:${row.provider_endpoint}:${row.provider_event_id}:${row.market}:${bookKey(row.sportsbook)}:${row.line}:${row.fetched_at}`
+        : `${row.market}:${bookKey(row.sportsbook)}:${row.market === "total" ? row.line : "main"}`;
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
     for (const rows of groups.values()) {
@@ -482,6 +491,8 @@ function allBookPriceObservations(
       if (!first) continue;
       const selections = new Set<string>(rows.map((row) => row.selection));
       if (!required[first.market].every((selection) => selections.has(selection))) continue;
+      if (nativeGoalMarketContracts && first.market === "total" && required.total.some(side =>
+        new Set(rows.filter(row => row.selection === side).map(row => `${row.odds_american}:${row.odds_decimal}`)).size !== 1)) continue;
       for (const row of rows) output.push({
         providerId,
         market: row.market,
@@ -489,7 +500,7 @@ function allBookPriceObservations(
         line: row.market === "total" ? row.line : null,
         american: row.odds_american!,
         sportsbook: row.sportsbook,
-        recordedAt: capturedAt,
+        recordedAt: nativeGoalMarketContracts && row.market === "total" ? row.fetched_at : capturedAt,
         isOpener: false,
       });
     }
@@ -610,8 +621,9 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
   const total = totalRead(sharp.odds);
   const btts = coherentRead(sharp.odds, "btts", ["yes", "no"]);
   const currentMatchResultVectors = eplCurrentBookVectors(sharp, "match_result", capturedAt);
-  const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt);
-  const currentBttsVectors = eplCurrentBookVectors(sharp, "btts", capturedAt);
+  const nativeGoalOptions = { nativeTotalLines: authorities.nativeGoalMarketContracts === true };
+  const currentTotalVectors = eplCurrentBookVectors(sharp, "total", capturedAt, nativeGoalOptions);
+  const currentBttsVectors = eplCurrentBookVectors(sharp, "btts", capturedAt, nativeGoalOptions);
   const promotedProxy = match.prediction.homeStrengthSource === "promoted_proxy" || match.prediction.awayStrengthSource === "promoted_proxy";
   const modelEvidenceQuality = promotedProxy
     || Math.min(match.evidence.home.statMatches, match.evidence.away.statMatches) < 3
@@ -1107,7 +1119,7 @@ export async function buildEplDailyEdgePreview(slate: EplShadowSlate, options: E
       options.storedPriceHistory ?? [],
     )),
   };
-  const allBookPrices = allBookPriceObservations(slate, markets, capturedAt);
+  const allBookPrices = allBookPriceObservations(slate, markets, capturedAt, options.authorities?.nativeGoalMarketContracts === true);
   options.captureAllBookPrices?.(allBookPrices);
   let forwardEvidence: EplForwardEvidenceCapture[] = [];
   if (!options.skipForwardEvidence) {

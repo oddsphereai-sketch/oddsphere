@@ -13,7 +13,7 @@ import { eplClubNamesMatch, uclClubNamesMatch } from "./soccerClubIdentity";
 import type { EplSharpFixtureMarket, EplSharpOddsRecord, SoccerFixtureEventIdentity } from "./SharpApiEplMarketProvider";
 
 export const CURRENT_SOCCER_MARKET_PROVIDER_RELEASE =
-  "soccer_current_market_provider_2026_11_03_r4_ucl_original_market_clock" as const;
+  "soccer_current_market_provider_2026_11_03_r5_ucl_intact_receipt_families" as const;
 
 export const THE_ODDS_API_SOCCER_CREDIT_RESERVE = 1_000 as const;
 export const THE_ODDS_API_SOCCER_MAX_PAID_REQUESTS_PER_CYCLE = 20 as const;
@@ -258,6 +258,75 @@ function completeMarket(rows: readonly EplSharpOddsRecord[], market: OfficialSoc
   return [...groups.values()].some((sides) => REQUIRED_SIDES[market].every((side) => sides.has(side)));
 }
 
+/** UCL execution prices must be one original provider/event/book/contract
+ * capture. A partial newer quote cannot borrow its opposite from storage or
+ * another native catalog. Ambiguous native book ownership stays quarantined.
+ */
+function intactUclQuoteFamilies(rows: readonly EplSharpOddsRecord[], kickoff: string, nowMs: number): EplSharpOddsRecord[] {
+  const startsAt = Date.parse(kickoff);
+  if (!Number.isFinite(nowMs) || !Number.isFinite(startsAt)) return [];
+  const fresh = rows.filter(row => {
+    const at = Date.parse(row.fetched_at);
+    const window = row.provider === "stored_quote" ? soccerStoredPriceMaxAgeMs(kickoff, nowMs) : PROVIDER_TIMESTAMP_MAX_AGE_MS;
+    return !!token(row.sportsbook) && Number.isFinite(at) && at <= nowMs && at < startsAt && nowMs - at <= window;
+  });
+  const owners = new Map<string, Set<string>>();
+  for (const row of fresh) {
+    if (row.provider === "stored_quote") continue;
+    const key = `${row.provider}:${token(row.sportsbook)}:${row.market}`;
+    const ids = owners.get(key) ?? new Set<string>();
+    ids.add(row.provider_event_id ?? "missing"); owners.set(key, ids);
+  }
+  const families = new Map<string, EplSharpOddsRecord[]>();
+  for (const row of fresh) {
+    if (row.provider !== "stored_quote" && (!row.provider_event_id ||
+      (owners.get(`${row.provider}:${token(row.sportsbook)}:${row.market}`)?.size ?? 0) !== 1)) continue;
+    const contract = `${token(row.sportsbook)}:${row.market}:${row.market === "total" ? row.line : "main"}`;
+    const key = JSON.stringify([contract, row.provider, row.provider_endpoint, row.provider_event_id, Date.parse(row.fetched_at)]);
+    families.set(key, [...(families.get(key) ?? []), row]);
+  }
+  const selected = new Map<string, EplSharpOddsRecord[]>();
+  const conflictedClocks = new Set<string>();
+  const nativeCaptureEconomics = new Map<string, Set<string>>();
+  for (const family of families.values()) {
+    const first = family[0]!;
+    const contract = `${token(first.sportsbook)}:${first.market}:${first.market === "total" ? first.line : "main"}`;
+    const sideRows = new Map<string, EplSharpOddsRecord>();
+    let conflict = false;
+    for (const row of family) {
+      const prior = sideRows.get(row.selection);
+      if (prior && (prior.odds_american !== row.odds_american || prior.line !== row.line)) conflict = true;
+      else sideRows.set(row.selection, row);
+    }
+    if (conflict) {
+      conflictedClocks.add(JSON.stringify([contract, first.provider, first.provider_event_id, Date.parse(first.fetched_at)]));
+      continue;
+    }
+    if (!REQUIRED_SIDES[first.market].every(side => sideRows.has(side))) continue;
+    const complete = REQUIRED_SIDES[first.market].map(side => sideRows.get(side)!);
+    if (first.provider !== "stored_quote") {
+      const capture = JSON.stringify([contract, Date.parse(first.fetched_at)]);
+      const economics = nativeCaptureEconomics.get(capture) ?? new Set<string>();
+      economics.add(JSON.stringify(complete.map(row => [row.selection, row.line, row.odds_american])));
+      nativeCaptureEconomics.set(capture, economics);
+    }
+    const previous = selected.get(contract);
+    const native = first.provider !== "stored_quote";
+    const previousNative = previous?.[0]?.provider !== "stored_quote";
+    if (!previous || native && !previousNative || native === previousNative &&
+      Date.parse(first.fetched_at) > Date.parse(previous[0]!.fetched_at)) selected.set(contract, complete);
+  }
+  return [...selected.entries()].flatMap(([contract, family]) => {
+    const first = family[0]!;
+    // Two native catalogs can attest the same physical book, but conflicting
+    // economics at one original clock have no defensible provider-order winner.
+    const nativeConflict = first.provider !== "stored_quote" &&
+      (nativeCaptureEconomics.get(JSON.stringify([contract, Date.parse(first.fetched_at)]))?.size ?? 0) > 1;
+    return nativeConflict || conflictedClocks.has(JSON.stringify([contract, first.provider, first.provider_event_id, Date.parse(first.fetched_at)]))
+      ? [] : family;
+  });
+}
+
 export function soccerStoredPriceMaxAgeMs(kickoff: string, nowMs: number): number {
   const untilKickoff = Date.parse(kickoff) - nowMs;
   if (untilKickoff <= 6 * 3_600_000) return 30 * 60_000;
@@ -271,9 +340,23 @@ function freshStoredRows(args: {
   market: OfficialSoccerMarket;
   kickoff: string;
   nowMs: number;
+  intactFamilies?: boolean;
 }): EplSharpOddsRecord[] {
   if (args.providerId === null) return [];
   const cadence = soccerStoredPriceMaxAgeMs(args.kickoff, args.nowMs);
+  if (args.intactFamilies) {
+    const rows = args.history.flatMap(row => {
+      const at = Date.parse(row.recordedAt);
+      if (row.providerId !== args.providerId || row.market !== args.market || !row.sportsbook || row.isOpener ||
+        !Number.isFinite(at) || at > args.nowMs || args.nowMs - at > cadence ||
+        args.market === "total" && row.line !== 2.5 || !REQUIRED_SIDES[args.market].includes(row.side as Selection)) return [];
+      const normalized = normalizedRow({ market: args.market, selection: row.side as Selection, line: row.line,
+        american: row.american, sportsbook: token(row.sportsbook), provider: "stored_quote", endpoint: "/line_history",
+        observedAt: new Date(at).toISOString(), eventId: null, observedAtSource: "oddsphere_capture", persistable: false });
+      return normalized ? [normalized] : [];
+    });
+    return intactUclQuoteFamilies(rows, args.kickoff, args.nowMs);
+  }
   const latestByGroupSide = new Map<string, StoredSoccerPriceObservation>();
   for (const row of args.history) {
     if (row.providerId !== args.providerId || row.market !== args.market || !row.sportsbook || row.isOpener) continue;
@@ -476,9 +559,12 @@ export class CurrentSoccerMarketProvider {
   }
 
   private async loadFixtureUncached(fixture: { home: string; away: string; kickoff: string; providerId?: number }): Promise<EplSharpFixtureMarket> {
-    const nowMs = this.nowMs();
-    const owls = normalizeOwlsFixture(await this.owlsOdds().catch(() => ({ success: false, data: [] })), this.options.competition, fixture, nowMs);
-    const rows = [...owls.rows];
+    const startedAt = this.nowMs();
+    const response = await this.owlsOdds().catch(() => ({ success: false, data: [] }));
+    const ucl = this.options.competition === "ucl";
+    let nowMs = ucl ? this.nowMs() : startedAt;
+    const owls = normalizeOwlsFixture(response, this.options.competition, fixture, nowMs);
+    let rows = ucl ? intactUclQuoteFamilies(owls.rows, fixture.kickoff, nowMs) : [...owls.rows];
     for (const market of ["match_result", "double_chance", "total", "btts"] as const) {
       if (completeMarket(rows, market)) continue;
       rows.push(...freshStoredRows({
@@ -487,8 +573,10 @@ export class CurrentSoccerMarketProvider {
         market,
         kickoff: fixture.kickoff,
         nowMs,
+        ...(ucl ? {intactFamilies: true} : {}),
       }));
     }
+    if (ucl) rows = intactUclQuoteFamilies(rows, fixture.kickoff, nowMs);
     const missing = (["match_result", "double_chance", "total", "btts"] as const)
       .filter((market) => !completeMarket(rows, market));
     let theOddsEvent: TheOddsEvent | null = null;
@@ -500,6 +588,10 @@ export class CurrentSoccerMarketProvider {
         const matches = candidates.filter((event) => fixtureMatches(event, fixture, this.config.teamsMatch));
         if (matches.length === 1 && matches[0]?.id) {
           theOddsEvent = await this.paidEventOdds(matches[0].id, missing);
+          if (ucl && theOddsEvent && (text(theOddsEvent.id) !== matches[0].id ||
+            !fixtureMatches(theOddsEvent, fixture, this.config.teamsMatch))) {
+            this.holds.add("event_odds_identity_mismatch"); theOddsEvent = null;
+          }
           if (theOddsEvent) rows.push(...normalizeTheOddsFixture(theOddsEvent, missing));
         } else if (matches.length > 1) {
           this.holds.add("ambiguous_event_identity");
@@ -508,6 +600,7 @@ export class CurrentSoccerMarketProvider {
         }
       }
     }
+    if (ucl) { nowMs = this.nowMs(); rows = intactUclQuoteFamilies(rows, fixture.kickoff, nowMs); }
     const eventId = owls.eventId ?? text(theOddsEvent?.id);
     return { eventId, odds: rows, splits: [], splitsState: "unavailable",
       ...(this.options.competition === "ucl" ? {fixtureEventIdentities: soccerFixtureEventIdentities(rows.filter(row =>
@@ -522,4 +615,5 @@ export const __TEST__ = {
   freshStoredRows,
   normalizeOwlsFixture,
   normalizeTheOddsFixture,
+  intactUclQuoteFamilies,
 };

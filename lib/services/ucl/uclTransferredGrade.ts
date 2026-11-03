@@ -1,7 +1,7 @@
 import type { Grade } from "@/lib/types/domain/Grade";
 
 export const UCL_PREVIEW_GRADE_RELEASE =
-  "ucl_grade_policy_2026_11_03_r19_recovery_native_identity" as const;
+  "ucl_grade_policy_2026_11_03_r20_native_goals_plurality" as const;
 
 export type UclPreviewMarket = "match_result" | "double_chance" | "total" | "btts";
 export type UclPreviewGrade = {
@@ -148,7 +148,10 @@ export function deriveUclMatchResultDecision(input: {
     };
   }
 
-  if (probability >= 0.50 && lateAgrees && evaluatedAgrees && price > -600) {
+  // Match Result is a three-outcome market: the leading outcome need not
+  // exceed 50%. Agreement can justify monitoring without claiming bet value.
+  const isForecastPlurality = forecastSide === maximum(input.model);
+  if (isForecastPlurality && lateAgrees && evaluatedAgrees && price > -600) {
     return {
       selectedSide: forecastSide,
       forecastSide,
@@ -159,7 +162,7 @@ export function deriveUclMatchResultDecision(input: {
         grade: "market_watch" as const,
         recommendationScore: 42,
         candidateTier: "watchlist" as const,
-        reasons: ["The forecast and both market directions agree, but the result does not clear the validated 60% to 70% Lean band."],
+        reasons: ["The leading three-way forecast and both market directions agree. Monitor the setup; an actionable Lean still requires its confidence band and positive exact-price expected value."],
       },
     };
   }
