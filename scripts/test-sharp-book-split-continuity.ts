@@ -1,3 +1,5 @@
+import {sportExpectsSharpBookContext} from "../lib/services/dailyEdge/dailyEdgeSportCapabilities";
+import {buildRecommendationDecision} from "../lib/services/recommendationDecision";
 import assert from "node:assert/strict";
 import type { DailyEdgeResponse, MarketEdgeDto } from "../app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "../lib/types/domain/RecommendationDecision";
@@ -262,3 +264,40 @@ assert.equal(
 assert.equal(lockedDisplayRetention.games[0]!.markets.moneyline.sportsbookSplits, null);
 
 console.log("Sharp-book complete and single-axis display continuity tests passed.");
+
+// A complete consumer pair is still useful context, but never professional evidence.
+for (const sport of ["nfl","cfb","nba","nhl","mlb","wnba","soccer"] as const)
+for (const sourceBook of ["circa", "draftkings", "draftkings_network", "betmgm", "consensus", null] as const) {
+ const board=response(), game=board.games[0]!;
+ board.sport=sport; game.sport=sport;
+ game.lockState="open"; game.lockedAt=null;
+ const decision=buildRecommendationDecision({sport,slateDate:board.date,gameId:game.id,awayTeam:"AWY",homeTeam:"HME",
+  markets:[{key:"moneyline",pick:"AWY",selectedSide:"away",modelProbability:0.67,marketImplied:0.56,edgePp:11,price:-130,playGrade:"Lean",
+   quickRead:"Original",riskNote:"Original risk",publicSplits:[{side:"away",label:"AWY",moneyPct:30,betsPct:35},{side:"home",label:"HME",moneyPct:70,betsPct:65}],
+   marketReadV2:null,marketReadV2Enabled:false}]});
+ game.recommendationDecision=structuredClone(decision);
+ const market=game.markets.moneyline;market.recommendationDecision=structuredClone(decision.markets.moneyline!);
+ const values=(d:typeof decision.markets.moneyline)=>[d?.pick,d?.playGrade,d?.modelProbability,d?.marketImplied,d?.edgePp,d?.price];
+ const before=values(market.recommendationDecision);
+ const rawSection=section("Sharp Book Splits","2026-09-20T20:09:00Z",[80,20],[60,40],sourceBook);
+ market.sportsbookSplits=structuredClone(rawSection);
+ assert.equal(alignMarketReadsToDisplayedSharpBookSplits(board),1);
+ assert.deepEqual(values(market.recommendationDecision),before,"source correction cannot silently regrade or change evaluated economics");
+ assert.deepEqual(market.sportsbookSplits,rawSection,"both retail sides and source timestamps stay visible");
+ assert.equal(game.recommendationDecision.sourceState.sharpBookSplitsAvailable,sourceBook==="circa");
+ assert.equal(market.sharpBookAvailability?.status,sourceBook==="circa"?"complete":"unavailable");
+ assert.equal(market.recommendationDecision.reasonCodes.includes("sharp_book_splits_available"),sourceBook==="circa");
+ if(sourceBook!=="circa") {
+  assert.ok(!/sharp(?:-| )book splits/i.test(market.recommendationDecision.quickRead));
+  assert.equal(game.recommendationDecision.sourceState.missingExpectedSources.includes("Sharp Book Splits"),sportExpectsSharpBookContext(sport));
+ }
+ const repeat=JSON.stringify(board);assert.equal(alignMarketReadsToDisplayedSharpBookSplits(board),1);
+ assert.equal(JSON.stringify(board),repeat,"repeated overlays do not accumulate invented source evidence");
+ for(const lockedFieldOnly of [false,true]) {
+  const locked=structuredClone(board);locked.games[0]!.lockState=lockedFieldOnly?"open":"locked";
+  locked.games[0]!.lockedAt="2026-09-20T20:00:00Z";
+  const exact=JSON.stringify(locked);assert.equal(alignMarketReadsToDisplayedSharpBookSplits(locked),0);
+  assert.equal(JSON.stringify(locked),exact,"legacy locked payloads retain exact reader precedence");
+ }
+}
+console.log("PASS explicit named-source authority: Circa professional; DraftKings/BetMGM retail; consensus public; unknown unclassified; both sides retained, zero regrading and exact locked bytes.");

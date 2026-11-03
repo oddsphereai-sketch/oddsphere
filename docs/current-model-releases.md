@@ -13,6 +13,19 @@ review candidate. Score R5 and independent R3 do not change. The frozen
 grade change is authorized yet. Prior R6 and R5 locked semantics remain exact.
 See `docs/model-audits/2026-11-03-cbb-path-best-value-gate.md`.
 
+## Daily Edge named split source authority — November 3
+
+Current post-decision source classification is
+`named_split_source_authority_2026_11_03_r1_explicit_book_class`.
+A complete DraftKings/Network or BetMGM retail pair, public consensus pair or
+unclassified legacy section cannot establish professional-book availability
+or the sharp-book evidence reason code. Genuine Circa context remains
+professional; both sides of other sources remain available under their own
+source roles. No writer score, probability, selected market, price, grade,
+stake, job/cadence or locked field changes. Existing continuity storage stays
+compatible and locked reader payloads keep exact precedence. Evidence:
+`docs/model-audits/2026-11-03-named-split-source-authority.md`.
+
 ## CFB injury-news proper player identity — November 3
 
 Public-news source release is
