@@ -8,6 +8,13 @@ export const CBB_RETAINED_LEVEL_INPUT_RELEASE = "cbb_retained_level_input_2026_1
 export const CBB_RETAINED_LEVEL_INPUT_MAX_BYTES = 16 * 1024;
 type AttestedQuote = CbbQuote & { orientationVerified?: boolean };
 export type CbbRetainedLevelQuarantine = { book: string; market: CbbMarket; sourceAt?: string; reason: string };
+/** These rejections occur only after exact fixture and current response-clock
+ * qualification. The normalizer did not retain an axis/time descriptor, so
+ * preserve family uncertainty rather than inventing a current contract. */
+export function cbbRetainedNormalizationQuarantine(rejected:Array<{book:string|null;reason:string}>):CbbRetainedLevelQuarantine[]{
+  return rejected.filter(row=>row.book&&["incoherent_quote","ambiguous_or_incomplete_selection_pair","conflicting_same_book_market"].includes(row.reason))
+    .flatMap(row=>(["moneyline","spread","total"] as const).map(market=>({book:row.book!,market,reason:`qualified_current_normalization_${row.reason}`})));
+}
 type Completeness = { price: boolean; split: boolean };
 type InputBody = {
   release: typeof CBB_RETAINED_LEVEL_INPUT_RELEASE;

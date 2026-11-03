@@ -32,7 +32,7 @@ import { isOwnerApprovedCbbMemberExclusion } from "@/lib/cbb/memberBoardScope";
 import {readCbbCanonicalReaderHistory} from "./cbbCanonicalReaderHistory";
 import {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
 import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
-import {retainCbbLevelInput} from "@/lib/cbb/retainedLevelInput";
+import {retainCbbLevelInput,cbbRetainedNormalizationQuarantine} from "@/lib/cbb/retainedLevelInput";
 
 export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_03_r19_explicit_market_evidence" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
@@ -184,7 +184,7 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
       // Qualification must see pre-filter native/current frames as well as
       // retained states: an invalid newest frame cannot revive an older price.
       sourceQuotes:[...quotes,...native.historyQuotes,...read.receipt.currentProfessionalQuotes],targets,
-      quarantinedSources:[...native.quarantinedSources,...read.receipt.anchors.quarantinedKeys?.map(source=>{
+      quarantinedSources:[...cbbRetainedNormalizationQuarantine(namedById.get(row.game.id)?.rejected??[]),...native.quarantinedSources,...read.receipt.anchors.quarantinedKeys?.map(source=>{
         const [book,market]=source.split(":");return {book,market:market as "moneyline"|"spread"|"total",reason:"retained_source_quarantine"};
       })??[]],historyCompleteness:read.receipt.historyCompleteness});
     board.marketContext.retainedLevelInput=checkpoint.checkpoint;

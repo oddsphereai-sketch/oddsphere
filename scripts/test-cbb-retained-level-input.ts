@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { CBB_CURRENT_SCORE_RELEASE } from "../lib/cbb/currentScoreRuntime";
 import {normalCdf} from "../lib/cbb/model";
-import { retainCbbLevelInput, CBB_RETAINED_LEVEL_INPUT_MAX_BYTES, type CbbRetainedLevelInput, type CbbRetainedLevelInputArgs } from "../lib/cbb/retainedLevelInput";
+import { retainCbbLevelInput,cbbRetainedNormalizationQuarantine, CBB_RETAINED_LEVEL_INPUT_MAX_BYTES, type CbbRetainedLevelInput, type CbbRetainedLevelInputArgs } from "../lib/cbb/retainedLevelInput";
+import {normalizeCbbOwlsCurrent} from "../lib/cbb/owlsMarketEvidence";
+import type {CbbGame} from "../lib/cbb/types";
 import type { CbbForecast, CbbMarket, CbbQuote } from "../lib/cbb/types";
 
 const asOf = "2026-11-03T12:00:00.000Z", startsAt = "2026-11-04T00:00:00.000Z";
@@ -119,6 +121,13 @@ const conflicting = args(); conflicting.sourceQuotes.push(quote("spread", "PS383
 const middleConflict=args();middleConflict.sourceQuotes.push(quote("spread","pinnacle",{line:-3.5,providerObservedAt:"2026-11-03T11:56:00Z"}),quote("spread","PS3838",{line:-5.5,providerObservedAt:"2026-11-03T11:56:00Z"}));unavailable(middleConflict);
 const copied = args(); copied.sourceQuotes.push(quote("spread", "PS3838"));
 assert.equal(checkpoint(retainCbbLevelInput(copied)).sourceQuotes.length, 2, "one pair per physical family and axis");
+const exactGame={id:123,date:startsAt,home_team:{id:4,college:"Georgia Tech",full_name:"Georgia Tech Yellow Jackets"},visitor_team:{id:5,college:"Hampton",full_name:"Hampton Pirates"}} as CbbGame;
+const malformedResponse={success:true,data:[{id:"native-event",sport:"ncaab",home_team:"Georgia Tech",away_team:"Hampton",commence_time:startsAt,bookmakers:[{key:"pinnacle",last_update:"2026-11-03T11:59:00Z",markets:[{key:"spreads",outcomes:[{name:"Georgia Tech",point:-4.25,price:-110},{name:"Hampton",point:4.25,price:-110}]}]}]}]};
+const normalized=normalizeCbbOwlsCurrent(exactGame,malformedResponse,"2026-11-03T11:59:05Z",asOf);
+assert.deepEqual(normalized.rejected,[{book:"pinnacle",reason:"incoherent_quote"}]);
+const rejectedCurrent=args();rejectedCurrent.quarantinedSources=cbbRetainedNormalizationQuarantine(normalized.rejected);
+unavailable(rejectedCurrent,"joint_qualified_spread_total_unavailable");
+assert.deepEqual(cbbRetainedNormalizationQuarantine([{book:null,reason:"event_identity_time_or_competition"},{book:"pinnacle",reason:"invalid_future_or_stale_time"},{book:"foreign",reason:"unsupported_or_exchange_book"}]),[],"foreign/future/stale rows cannot poison qualified actual source identity");
 
 const priorJson = JSON.stringify(saved), later = args(); later.existing = saved; later.independentInputKey = "later-input";
 later.asOf = "2026-11-03T13:00:00.000Z"; later.independent.asOf = later.asOf;
