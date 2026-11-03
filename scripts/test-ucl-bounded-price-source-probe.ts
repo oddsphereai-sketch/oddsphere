@@ -152,25 +152,25 @@ const mocks: Record<string, unknown> = {
       calls.push("bounded_probe"); return runUclBoundedPriceSourceProbe({ ...args, apiKey: key, now: () => now, fetchImpl: mocked().fetcher });
     } },
 };
-const module = { exports: {} as { GET: (request: Request) => Promise<Response> } };
-new Function("require", "exports", compiled)((name: string) => mocks[name] ?? guarded, module.exports);
+const routeModule = { exports: {} as { GET: (request: Request) => Promise<Response> } };
+new Function("require", "exports", compiled)((name: string) => mocks[name] ?? guarded, routeModule.exports);
 const request = (query = "fixture_ids=4243843,4438978") => new Request(`https://example.test/api/cron/ucl-price-source-probe?${query}`);
-const response = await module.exports.GET(request()); assert.equal(response.status, 200);
+const response = await routeModule.exports.GET(request()); assert.equal(response.status, 200);
 assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer", "snapshot_read", "bounded_probe"]);
 assert.equal(invocations[0]!.source, "ucl_price_source_probe");
 assert.deepEqual(invocations[0]!.options, { sport: "soccer", leaseGroup: "prediction_pipeline", requireLease: true,
   lockMinutes: 8, minIntervalMinutes: 15, leaseRetryMaxWaitMs: 45_000, leaseRetryIntervalMs: 2_000 });
 calls.length = 0; lastNormal = new Date(Date.now() - 5 * 60_000);
-const tooSoon = await (await module.exports.GET(request())).json();
+const tooSoon = await (await routeModule.exports.GET(request())).json();
 assert.equal(tooSoon.details.reason, "normal_refresh_minimum_interval"); assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer"]);
 calls.length = 0; lastNormal = null;
-await module.exports.GET(request("fixture_ids=1"));
+await routeModule.exports.GET(request("fixture_ids=1"));
 assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer"], "malformed probe never falls through to forecast writes");
 calls.length = 0; authorized = false;
-assert.equal((await module.exports.GET(request())).status, 401); assert.deepEqual(calls, []);
+assert.equal((await routeModule.exports.GET(request())).status, 401); assert.deepEqual(calls, []);
 authorized = true;
 calls.length = 0;
-await module.exports.GET(request(""));
+await routeModule.exports.GET(request(""));
 assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer"], "empty diagnostic route cannot dispatch a normal refresh");
 const normalRouteSource = readFileSync(new URL("../app/api/cron/ucl-daily-refresh/route.ts", import.meta.url), "utf8");
 assert.doesNotMatch(normalRouteSource, /price_source_probe/, "existing forecast route has no diagnostic dispatch or new query flag");
