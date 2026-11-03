@@ -1630,13 +1630,14 @@ function CompactPointLineMovement({ market }: { market: MarketEdgeDto }) {
         : current < first ? `${spreadSide} strengthened` : `${spreadSide} eased`;
   const formatPointLine = (value: number) => isSpread ? formatSigned(value) : formatNumber(value);
   const point = (label: string, value: number | null, currentPoint = false) => <div className="min-w-0"><p className="text-[6px] font-black uppercase tracking-wider text-gray-600">{label}</p><p className={`mt-0.5 font-mono text-sm font-black ${currentPoint ? "text-violet-200" : "text-gray-200"}`}>{value === null ? "—" : formatPointLine(value)}</p></div>;
+  const firstLabel = coherent && market.lockedLineAt == null && sameBook[0]?.source !== "provider_opening" ? "First recorded" : "Opening";
   const marketLabel = isTotal ? "Total" : `${spreadSide} spread`;
   const lineSource = terminal?.sportsbook?.trim().toLowerCase() === "consensus"
     ? "Consensus line history"
     : terminal?.sportsbook
       ? `${formatSportsbook(terminal.sportsbook)} · same-book line`
       : `Current ${isTotal ? "total" : "spread"} line`;
-  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{marketLabel} line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{lineSource}</p></div><span className={`text-[7px] font-black uppercase tracking-wider ${coherent ? "text-violet-300" : "text-gray-500"}`}>{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point("Opening", first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">A coherent same-book opener is unavailable. The current line is shown without a movement claim.</p>}</section>;
+  return <section className="mt-3 rounded-lg border border-white/[0.09] bg-black/25 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-[8px] font-black uppercase tracking-[0.15em] text-gray-300">{marketLabel} line movement</p><p className="mt-0.5 text-[7px] font-semibold text-gray-600">{lineSource}</p></div><span className={`text-[7px] font-black uppercase tracking-wider ${coherent ? "text-violet-300" : "text-gray-500"}`}>{direction}</span></div><div className="mt-3 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2">{point(firstLabel, first)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Prior", previous)}<div className="h-px bg-gradient-to-r from-gray-700 via-violet-500/50 to-violet-400/50" />{point("Current", current, true)}</div>{coherent ? null : <p className="mt-2 text-[7px] leading-relaxed text-gray-600">A coherent same-book opener is unavailable. The current line is shown without a movement claim.</p>}</section>;
 }
 
 function AvailabilityContext({ report, market }: { report: DailyEdgeGameAvailability; market: MarketEdgeDto }) {
@@ -1697,8 +1698,9 @@ type CoherentMovement = {
   currentLine: number | null;
   sportsbook: string | null;
   coherentTrail: boolean;
-  openingLabel: "Opening";
+  openingLabel: "Opening" | "First recorded";
   hasIntermediateObservation?: boolean;
+  verifiedDirection?: "support" | "resistance";
 };
 
 function resolveCoherentMovement(market: MarketEdgeDto): CoherentMovement {
@@ -1964,6 +1966,7 @@ function currentAwareGuidedGuide(market: MarketEdgeDto, fallback: string): strin
 
 function coherentMovementDirection(market: MarketEdgeDto, movement: CoherentMovement): "support" | "resistance" | "neutral" {
   if (!movement.coherentTrail || movement.open === null || movement.current === null) return "neutral";
+  if (movement.verifiedDirection) return movement.verifiedDirection;
   const canonical = market.marketReadV2?.movement;
   const canonicalDirection = canonical?.directionRelativeToPick;
   const isVerifiedFirstInningPriceBoard =
