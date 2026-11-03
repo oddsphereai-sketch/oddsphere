@@ -1,5 +1,37 @@
 # Model change safety protocol
 
+## Owner-approved CBB received-market production repair — November 2
+
+Daniel Mengel approved the exact reviewed candidate in PR938 after being told
+that the31-game comparison changes seven forecasts, lowers20 Best Angles to
+Lean and retains25 actionable plays; improved accuracy is unproven and the
+Cornell starting-level discrepancy is unresolved. His scoped reply was:
+"Deploy this repair; continue the full fix". This supersedes the private-only
+publication hold below for score R5 /grade R5 /board R9 /publisher R15 /tracking
+R6 /adapter R7, as reviewed at52373146 and integrated with main346fab59 at
+cde40be9. It is a narrow exception to the held-out grade/value requirement,
+not predictive qualification or permission to transfer the offline level stack.
+
+The existing sole writer and prediction_pipeline:cbb lease own relative
+same-book price consequences and exact-target grade decisions. Static
+professional target EV is value corroboration, not observed sharp action.
+Positive model EV3% retains eligible Lean; EV8% plus the reviewed complete,
+nonopposing professional-value/path qualification can earn Best. True causal
+confirmation still requires actual target request timing. Fully applied
+resolved own-source price response is not counted twice; real native pressure,
+held response, conflict, buyback and incomplete/truncated history stay distinct.
+No stake increase, provider request/cadence increase, extra writer, production
+shadow, prior locked-record change or retrospective release relabeling is
+authorized. The independent prior remains R3. The separate full market-level
+forecast repair must continue offline until its own qualification/decision.
+
+Focused/full checks, current-main ancestry, overlap safety, protected PR and
+exact local/remote tree verification remain required. After deployment verify
+actual release, normal cron, coherent current coverage, reader snapshot and
+unchanged stored locks before declaring this bounded repair live. Evaluate
+future outcomes by exact release and lock time. Evidence and known limitations:
+`docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
+
 ## CBB received-market R5 — private repair review only
 
 The owner explicitly requested external AI audits and coordination with

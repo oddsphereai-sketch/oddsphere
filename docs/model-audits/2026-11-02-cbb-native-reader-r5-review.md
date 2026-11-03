@@ -1,9 +1,12 @@
 # CBB native reader R5: private implementation and unresolved product gap
 
-This is a private, unmerged replacement for the externally rejected R4 in
-PR938. It is not a production release, full-reader approval, qualified outcome
-improvement, or permission to alter any existing locked record. The owner's
-R4 exception does not automatically authorize the new grade policy.
+This replaces the externally rejected R4 in PR938. After reviewing the bounded
+impact and remaining starting-level gap, the owner explicitly replied "Deploy
+this repair; continue the full fix". That authorizes the reviewed score R5 /
+grade R5 /board R9 /publisher R15 cutover under the scoped exception recorded
+in model-change-safety.md. It is not full-reader completion, qualified outcome
+improvement or permission to alter any existing locked record. Protected merge
+and live verification remain mandatory.
 
 ## Latest bounded comparison and independent grade correction review
 

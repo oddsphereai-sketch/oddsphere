@@ -1,8 +1,10 @@
 # Current production model releases and qualified research candidates
 
-## CBB received-market R5 — private draft, no production authority
+## CBB received-market R5 — owner-approved production cutover
 
-PR938 remains draft and unmerged. Private score
+The owner approved PR938's reviewed repair: "Deploy this repair; continue the
+full fix". Protected merge and live verification remain publication gates.
+This commit's authoritative runtime is score
 `cbb_candidate_2026_11_02_r5_received_market_response`, board
 `cbb_candidate_2026_11_02_r9_resolved_price_grade`, grade
 `cbb_2026_11_02_r5_resolved_price_not_double_penalized`, receipt
@@ -11,8 +13,9 @@ PR938 remains draft and unmerged. Private score
 `cbb_tracking_writer_2026_11_02_r6_received_market_lineage` and adapter
 `cbb_member_adapter_2026_11_02_r7_received_market_response` repair native
 history/availability/grade binding and remove the rejected static winner copy.
-No candidate has written a production prediction, grade, snapshot or tracking
-row. Existing locked payloads remain exact.
+Before this protected cutover the candidate wrote no production prediction,
+grade, snapshot or tracking row. Existing locked payloads remain exact and
+retain their original release; future unlocked decisions use this release.
 
 The owner-requested “Assess sharp market reader” recheck compared current NFL,
 CFB and NBA contracts. Share source/path/receipt correctness, not sport-specific
@@ -29,8 +32,10 @@ This remains an unfinished product: Cornell's large independent/market
 starting-level discrepancy survives relative transport. No dormant qualified
 CBB static-level head or verified input-invalidation receipt was found. Private
 research artifacts and CFB/NBA coefficients cannot supply that authority.
-The prior R4 owner exception does not qualify this new grade policy. Production
-remains independent R3 /board R6 /grade R2 /publisher R13 /tracking R4.
+The new explicit R5 owner decision permits this bounded repair before held-out
+qualification; it does not qualify the offline fitted head or authorize a
+static winner copy. Prior production was independent R3 /board R6 /grade R2
+/publisher R13 /tracking R4. Report future outcomes by actual locked release.
 Review, frozen replay limitations, memory budgets and remaining gates:
 `docs/model-audits/2026-11-02-cbb-native-reader-r5-review.md`.
 
