@@ -5,7 +5,7 @@ import { computeSlateDate } from "../../dates/slateDate";
 import type { CbbGame, CbbMarket } from "../../cbb/types";
 import type { MarketPriceObservationV2, MarketSplitObservationV2 } from "../../types/domain/MarketIntelligenceV2";
 
-export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_03_r3_typed_retail_prices" as const;
+export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_03_r4_retail_response_receipts" as const;
 export type CbbCanonicalPriceRow = MarketPriceObservationV2 & { id: number | string; inserted_at: string };
 export type CbbCanonicalSplitRow = MarketSplitObservationV2 & { id: number | string; inserted_at: string };
 /** An opaque native event ID needs an independent named fixture/time join.
@@ -42,7 +42,8 @@ type PairLineage = {
   providerEventId: string;
   ingestionRunId: string;
   sourceAt: string;
-  /** Original stored collector clock; not an attested response completion. */
+  /** Original stored clock: collector start for professional rows, response
+   * completion for the existing retail journal. Never substitute one for another. */
   recordedFetchedAt: string;
   sourceIdentity: SourceIdentity;
   availability: {
@@ -125,10 +126,16 @@ function common(row: CbbCanonicalPriceRow | CbbCanonicalSplitRow, game: CbbGame,
   if (!run || !runStartedAt || !Number.isFinite(epoch(runStartedAt))) return "native_ingestion_run_unverifiable";
   const observed = kind === "price" ? (row as CbbCanonicalPriceRow).provider_timestamp : (row as CbbCanonicalSplitRow).source_observed_at;
   const fetched = row.fetched_at, inserted = row.inserted_at;
+  const retailResponse = kind === "price" && ["draftkings","betmgm"].includes((row as CbbCanonicalPriceRow).sportsbook) &&
+    (row as CbbCanonicalPriceRow).sharp_book === false;
   // CBB's existing collector records its run-start clock in fetched_at.
   // The DB insertion upper bound, not that earlier clock, proves availability.
-  if (!observed || ![observed, fetched, inserted].every(t => Number.isFinite(epoch(t))) || epoch(runStartedAt) !== epoch(fetched) ||
-    epoch(fetched) > epoch(inserted) || epoch(observed) > epoch(inserted) || cbbAvailabilityUpperBoundMs(inserted) > decision || epoch(observed) >= epoch(game.date)) {
+  // The retail journal deliberately records its completed response in fetched_at.
+  // Preserve that actual clock and the separate run start; professional/split
+  // rows retain their existing exact run-start contract.
+  if (!observed || ![observed, fetched, inserted].every(t => Number.isFinite(epoch(t))) ||
+    (retailResponse ? epoch(runStartedAt) > epoch(fetched) : epoch(runStartedAt) !== epoch(fetched)) ||
+    epoch(fetched) > epoch(inserted) || epoch(observed) > epoch(inserted) || retailResponse && epoch(observed) > epoch(fetched) || cbbAvailabilityUpperBoundMs(inserted) > decision || epoch(observed) >= epoch(game.date)) {
     return "source_or_recorded_capture_or_db_availability_clock_invalid";
   }
   const book = kind === "price" ? (row as CbbCanonicalPriceRow).sportsbook : (row as CbbCanonicalSplitRow).source_book;

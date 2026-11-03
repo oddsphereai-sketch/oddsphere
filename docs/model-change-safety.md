@@ -1,5 +1,21 @@
 # Model change safety protocol
 
+## CBB live spot-check receipt correction — November 3
+
+The owner's explicit instruction to deploy the CBB repair, spot-check real games
+and "fix anything that needs fixing" covers this narrow follow-up discovered
+in actual production evidence. The retail journal intentionally stores response
+completion after ingestion-run start; the reader incorrectly required equality
+and rejected all such retail rows. Model R11 /grade R13 /receipt R7 /board R14
+/publisher R23 /tracking R11 /adapter R12 and canonical evidence R4 correct only
+that input contract and preserve released R10/R12/R6 records and anchors.
+Professional clocks, independent R3, score law, grade economics, provider calls,
+cadence, writer lease and stakes are unchanged. This is the same authorized
+functional repair and forward-evaluation scope, not an accuracy claim or a
+locked-record correction. Paired functional promotion/demotion coverage,
+whole-board impact, full/focused checks, fresh-main protected publication and
+actual live source/lock/member verification remain required.
+
 ## Owner-directed CBB source-episode functional repair — November 3
 
 The owner's standing instruction is to repair market interpretation and its

@@ -3,12 +3,21 @@
 ## CBB source-episode decision release — November 3
 
 This repair keeps independent R3 and its score artifact. The sole CBB path uses
-market model `cbb_candidate_2026_11_03_r10_observed_episode_authority`, grade
-`cbb_2026_11_03_r12_contextual_episode_decisions`, receipt R6, path R4, board R13,
-publisher R22, tracking R10 and member adapter R11. Canonical history R2 reads
-retail pressure context in a separate bounded family; canonical evidence R3
+market model `cbb_candidate_2026_11_03_r11_retail_response_receipts`, grade
+`cbb_2026_11_03_r13_retail_response_receipts`, receipt R7, path R4, board R14,
+publisher R23, tracking R11 and member adapter R12. Canonical history R2 reads
+retail pressure context in a separate bounded family; canonical evidence R4
 never promotes those quotes into professional numeric experts. Reader evidence
 R11 preserves source/DB availability before decision time.
+
+The production spot checks after PR976 found that the retail journal records
+response completion in fetched_at, separately from ingestion-run start. R11/R13
+preserve both clocks and accept that actual producer contract; professional and
+split rows retain their exact run-start check. Both native sides must still
+share a response, provider time cannot exceed response completion, and DB
+availability must precede decision time. Prior model R10 /grade R12 /receipt R6
+locks and original anchors retain their exact semantics. Evidence:
+`docs/model-audits/2026-11-03-cbb-retail-response-receipt-repair.md`.
 
 The NBA/NFL episode structure is adapted to the CBB residual law. Movements can
 confirm without moving a score, correct it, or cross it without a point cap.

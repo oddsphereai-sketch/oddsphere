@@ -18,8 +18,10 @@ function receipt(pair:CbbCanonicalPricePair|CbbCanonicalSplitPair,decisionAt:str
     providerEventId:pair.providerEventId,ingestionRunId:pair.ingestionRunId,observationIds:[first,second],
     rawPayloadHashes:[pair.first.rawPayloadHash,pair.second.rawPayloadHash]};
   const bounds=cbbEvidenceReceiptBounds({fetchedAt:pair.recordedFetchedAt,canonicalReceipt:canonical});
+  const retailResponse=pair.kind==="price"&&["draftkings","betmgm"].includes(pair.book);
   if(!Number.isFinite(bounds.available)||bounds.available>Date.parse(decisionAt)||Date.parse(pair.sourceAt)>bounds.available||
-    !Number.isFinite(Date.parse(pair.sourceAt))||Date.parse(pair.availability.runStartedAt)!==bounds.earliest)return null;
+    !Number.isFinite(Date.parse(pair.sourceAt))||!Number.isFinite(Date.parse(pair.availability.runStartedAt))||
+    (retailResponse?Date.parse(pair.availability.runStartedAt)>bounds.earliest:Date.parse(pair.availability.runStartedAt)!==bounds.earliest))return null;
   return canonical;
 }
 /** Translate already-qualified pairs without replacing recorded run-start clocks
