@@ -39,10 +39,10 @@ export async function testUclNativeLineHistoryDurability(){
   const second=[...pair(2.5,'2026-11-03T10:01:00Z'),...pair(3.5,'2026-11-03T10:01:00Z')];if(!reverse)second.reverse();
   assert.equal((await persistUclLineHistory({response,allBookPrices:second,apply:true,client})).written,4,'each contract receives its own flat-quote verification capture');
   assert.equal((await readUclStoredPriceHistory([providerId],{client})).length,8);
-  assert.equal((await persistUclLineHistory({response,allBookPrices:[...pair(2.5,'2026-11-03T10:02:00Z'),...pair(3.5,'2026-11-03T10:02:00Z')],apply:true,client})).written,0,'unchanged terminal polling remains bounded per contract');
+  assert.equal((await persistUclLineHistory({response,allBookPrices:[...pair(2.5,'2026-11-03T10:02:00Z'),...pair(3.5,'2026-11-03T10:02:00Z')],apply:true,client} )).written,4,'a new actual complete capture preserves both flat opposite sides for each contract');
   await persistUclLineHistory({response,allBookPrices:pair(2.5,'2026-11-03T09:00:00Z'),apply:true,client});
   assert.ok(updateFilters.every(filters=>filters.some(([key])=>key==='line_value')),'UCL opener repair is scoped to the exact total contract');
-  assert.ok(stored.filter(row=>row.line_value===3.5&&row.recorded_at==='2026-11-03T10:00:00Z').every(row=>row.is_opener===true),'earlier2.5 discovery never removes3.5 opening authority');
+  assert.ok(stored.filter(row=>row.line_value===3.5&&row.recorded_at==='2026-11-03T10:00:00Z').every(row=>row.is_opener===false),'earlier2.5 discovery never rewrites3.5 source flags');
  }
  console.log('PASS UCL native journal: persisted/read same-clock2.5+3.5 in both row orders, exact values/clocks, repeat-write idempotence, per-contract flat verification/opener scope; EPL default unchanged.');
 }

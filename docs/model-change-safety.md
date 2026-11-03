@@ -1,5 +1,26 @@
 # Model change safety protocol
 
+## Owner-directed UCL product-semantic correction — November 3
+
+After approving the UCL repair for live forward evaluation, Daniel Mengel
+identified the actual today-board flattening and explicitly rejected pulling
+forecasts towards books or treating point-estimate EV as the sole play-grade
+gate. He required market interpretation to improve prediction correctness,
+allowed movement confirmation near model60%/market60.5%, and required value
+and reasonable prices to remain meaningful, including no−300Best Angle.
+
+R18/R21 correct the preceding approved release to this explicit product
+contract: original-relative same-book path innovations, one reconciled score
+law, confidence-plus-market-support grading with honest EV, and durable
+complete source families. This continues the scoped owner-directed live
+forward-evaluation repair; it is not authorization for unrelated sports,
+extra provider quota, stakes, locked changes or an accuracy claim. The
+previous absolute R17 price-target policy is superseded, not a dormant
+alternate model. Focused/full functional safety, genuine promotion/demotion
+counts, fresh-main protected publication, independent review and actual live
+TODAY/TOMORROW board/locked-record verification remain mandatory.
+Evidence: `docs/model-audits/2026-11-03-ucl-relative-market-confidence-repair.md`.
+
 ## Owner-approved UCL native goals repair — November 3
 
 Daniel Mengel reviewed the explicit activation question for PR968, including

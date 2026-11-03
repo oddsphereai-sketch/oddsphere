@@ -31,7 +31,7 @@ type GateReason =
 
 export type EplCoherentMarketOutcome = {
   release: string;
-  source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration";
+  source: "independent_club_pmf" | "target_excluded_total_tilt" | "target_excluded_opening_match_result_log_pool" | "target_excluded_late_match_result_log_pool" | "target_excluded_goals_arbitration" | "relative_same_book_market_paths";
   joint: ScoreDistribution;
   markets: ReturnType<typeof deriveSoccerMarketProbabilities>;
   expectedGoals: { home: number; away: number };
@@ -55,8 +55,8 @@ export type EplCoherentMarketOutcome = {
       familyBasis: "named_originator_identity" | "provider_non_originator_conservative_family";
     }>;
     correlationState: "independent_exact_quote_signatures" | "correlated_or_indeterminate";
-    movementRole: "captured_for_audit_not_forecast_input" | "late_consensus_forecast_input";
-    evaluatedQuoteRole: "economics_and_grade_only";
+    movementRole: "captured_for_audit_not_forecast_input" | "late_consensus_forecast_input" | "relative_same_book_price_paths";
+    evaluatedQuoteRole: "economics_and_grade_only" | "paired_path_evidence_and_execution_economics";
     inactiveVectors: Array<{ identity: string; reason: string }>;
     targetOverProbability: number | null;
     totalProbabilityResidual: number;
