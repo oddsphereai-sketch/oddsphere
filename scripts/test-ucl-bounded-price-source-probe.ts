@@ -122,7 +122,9 @@ assert.ok(JSON.stringify(cadence.fixtures[1]).includes('"originalUpdatedAt":"202
 
 // Execute the real route module with mocked imports. The probe cannot reach
 // slate construction, Owl/history, inference, line history or snapshot writes.
-const routeSource = readFileSync(new URL("../app/api/cron/ucl-daily-refresh/route.ts", import.meta.url), "utf8");
+const routeSource = readFileSync(new URL("../app/api/cron/ucl-price-source-probe/route.ts", import.meta.url), "utf8");
+assert.doesNotMatch(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"), /ucl-price-source-probe/,
+  "the read-only diagnostic is never a scheduled job");
 const compiled = ts.transpileModule(routeSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 const calls: string[] = [];
 let lastNormal: Date | null = null, authorized = true;
@@ -152,7 +154,7 @@ const mocks: Record<string, unknown> = {
 };
 const module = { exports: {} as { GET: (request: Request) => Promise<Response> } };
 new Function("require", "exports", compiled)((name: string) => mocks[name] ?? guarded, module.exports);
-const request = (query = "price_source_probe=1&fixture_ids=4243843,4438978") => new Request(`https://example.test/api/cron/ucl-daily-refresh?${query}`);
+const request = (query = "fixture_ids=4243843,4438978") => new Request(`https://example.test/api/cron/ucl-price-source-probe?${query}`);
 const response = await module.exports.GET(request()); assert.equal(response.status, 200);
 assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer", "snapshot_read", "bounded_probe"]);
 assert.equal(invocations[0]!.source, "ucl_price_source_probe");
@@ -162,12 +164,20 @@ calls.length = 0; lastNormal = new Date(Date.now() - 5 * 60_000);
 const tooSoon = await (await module.exports.GET(request())).json();
 assert.equal(tooSoon.details.reason, "normal_refresh_minimum_interval"); assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer"]);
 calls.length = 0; lastNormal = null;
-await module.exports.GET(request("price_source_probe=0&fixture_ids=4243843"));
+await module.exports.GET(request("fixture_ids=1"));
 assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer"], "malformed probe never falls through to forecast writes");
 calls.length = 0; authorized = false;
 assert.equal((await module.exports.GET(request())).status, 401); assert.deepEqual(calls, []);
 authorized = true;
-await assert.rejects(() => module.exports.GET(request("")), /forbidden:buildUclSlate/);
+calls.length = 0;
+await module.exports.GET(request(""));
+assert.deepEqual(calls, ["normalClock:ucl_daily_refresh:soccer"], "empty diagnostic route cannot dispatch a normal refresh");
+const normalRouteSource = readFileSync(new URL("../app/api/cron/ucl-daily-refresh/route.ts", import.meta.url), "utf8");
+assert.doesNotMatch(normalRouteSource, /price_source_probe/, "existing forecast route has no diagnostic dispatch or new query flag");
+const normalCompiled = ts.transpileModule(normalRouteSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+const normalModule = { exports: {} as { GET: (request: Request) => Promise<Response> } };
+new Function("require", "exports", normalCompiled)((name: string) => mocks[name] ?? guarded, normalModule.exports);
+await assert.rejects(() => normalModule.exports.GET(new Request("https://example.test/api/cron/ucl-daily-refresh")), /forbidden:buildUclSlate/);
 assert.equal(invocations.at(-1)!.source, "ucl_daily_refresh", "default forecast audit/cadence namespace unchanged");
 assert.deepEqual(invocations.at(-1)!.options, invocations[0]!.options);
 console.log("PASS bounded UCL source probe: one catalog,≤2 requests/8 credits, exact unlocked identity/aliases, sanitized source-only output, no writes/provider retries, existing auth/lease and normal cadence preserved (mock network only).");
