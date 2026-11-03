@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {applyDraftKingsNetworkSplitFallback,UCL_PUBLIC_SPLIT_IDENTITY_RELEASE,type DraftKingsNetworkSplitFeed} from '../lib/providers/draftkings/draftKingsNetworkSplits';
-import {populateStoredUclPublicSplits,refreshScheduledUclPublicSplits} from '../lib/services/ucl/uclPublicSplitSource';
+import {populateStoredUclPublicSplits,refreshScheduledUclPublicSplits,captureStoredUclPublicSplits} from '../lib/services/ucl/uclPublicSplitSource';
 import type {DailyEdgeResponse,DailyEdgeGameDto} from '../app/lab/lib/labTypes';
 const source=JSON.parse(readFileSync(new URL('./fixtures/ucl-draftkings-public-feed-20261103.json',import.meta.url),'utf8')).payload as DraftKingsNetworkSplitFeed;
 const native=JSON.parse(readFileSync(new URL('./fixtures/ucl-current-native-inputs-20261103.json',import.meta.url),'utf8'));
@@ -33,6 +33,36 @@ export async function testUclPublicSplitSource(){
  const locked=structuredClone(board);for(const g of locked.games){g.lockState='locked';g.lockedAt=now.toISOString();}
  const inactive=await refreshScheduledUclPublicSplits({...deps,readMember:async()=>locked});assert.equal(inactive.skipped,true);assert.equal(requests,1);
  const member=structuredClone(board);const original=numerical(member);await populateStoredUclPublicSplits(member,async()=>source);assert.equal(numerical(member),original);
+ const prior:DailyEdgeResponse={...structuredClone(board),games:[structuredClone(board.games[0]!)]};
+ prior.games[0]!.soccerCompetitionContext={competition:'uefa_champions_league'} as DailyEdgeGameDto['soccerCompetitionContext'];
+ prior.games[0]!.scheduledLockAt='2026-11-03T16:45:00Z';prior.games[0]!.markets.moneyline.sportsbookSplits=null;
+ const preFeed=structuredClone(source);preFeed.fetchedAt='2026-11-03T16:40:00Z';for(const g of preFeed.games)g.markets.moneyline!.observedAt=preFeed.fetchedAt;
+ const preNumeric=numerical(prior);
+ await captureStoredUclPublicSplits(prior,null,{now:new Date(preFeed.fetchedAt),readFeed:async()=>preFeed});
+ const saved=structuredClone(prior.games[0]!.markets.moneyline.sportsbookSplits!);
+ assert.equal(saved.memberCapturedAt,new Date(preFeed.fetchedAt).toISOString());assert.equal(numerical(prior),preNumeric);
+ const due=()=>{const b=structuredClone(prior);b.games[0]!.lockState='locking';b.games[0]!.markets.moneyline.sportsbookSplits=null;return b;};
+ const postFeed=structuredClone(preFeed);postFeed.fetchedAt='2026-11-03T16:46:00Z';for(const g of postFeed.games){g.markets.moneyline!.observedAt=postFeed.fetchedAt;g.markets.moneyline!.sides[0]!.moneyPct=50;}
+ const locking=due(),priorBytes=JSON.stringify(prior);
+ const carried=await captureStoredUclPublicSplits(locking,prior,{now:new Date(postFeed.fetchedAt),readFeed:async()=>postFeed});
+ assert.equal(carried.carriedPrelockMarkets,1);assert.deepEqual(locking.games[0]!.markets.moneyline.sportsbookSplits,saved,'postcutoff source cannot replace the exact published prelock section');
+ assert.equal(JSON.stringify(prior),priorBytes,'carry cannot mutate prior published evidence');
+ for(const corrupt of ['postcapture','postquote','stale','wrongfixture','wrongteam','wrongfullname','wrongid','wrongcompetition','lockedprior'] as const){
+  const bad=structuredClone(prior),g=bad.games[0]!,s=g.markets.moneyline.sportsbookSplits!;
+  if(corrupt==='postcapture')s.memberCapturedAt=postFeed.fetchedAt;
+  if(corrupt==='postquote')s.sourceObservedAt=postFeed.fetchedAt;
+  if(corrupt==='stale')s.sourceObservedAt='2026-11-03T16:00:00Z';
+  if(corrupt==='wrongfixture')g.gameStartAt='2026-11-04T17:45:00Z';
+  if(corrupt==='wrongteam')g.homeTeam='OTHER';
+  if(corrupt==='wrongfullname')g.homeTeamDisplayName='Other club with the same abbreviation';
+  if(corrupt==='wrongid')g.id='wrong-game';
+  if(corrupt==='wrongcompetition')g.soccerCompetitionContext={competition:'english_premier_league'} as unknown as DailyEdgeGameDto['soccerCompetitionContext'];
+  if(corrupt==='lockedprior'){g.lockState='locked';g.lockedAt='2026-11-03T16:44:00Z';}
+  const candidate=due();await captureStoredUclPublicSplits(candidate,bad,{now:new Date(postFeed.fetchedAt),readFeed:async()=>postFeed});
+  assert.equal(candidate.games[0]!.markets.moneyline.sportsbookSplits,null,corrupt+' cannot fill a new lock');
+ }
+ const frozen=due();frozen.games[0]!.lockState='locked';frozen.games[0]!.lockedAt='2026-11-03T16:45:00Z';const frozenBytes=JSON.stringify(frozen);
+ await captureStoredUclPublicSplits(frozen,prior,{now:new Date(postFeed.fetchedAt),readFeed:async()=>postFeed});assert.equal(JSON.stringify(frozen),frozenBytes,'already locked empty evidence is immutable');
  const route=readFileSync('app/api/lab/daily-edge/route.ts','utf8');const ucl=route.slice(route.indexOf('if (sport === "ucl")'),route.indexOf('// Member reads must never rebuild',route.indexOf('if (sport === "ucl")')));
  assert.match(ucl,/populateStoredUclPublicSplits/);assert.doesNotMatch(ucl,/populateDailyEdgeDraftKingsFallback\(/,'UCL API consumes existing data only');
  console.log('PASS UCL public splits: actual18 home-first fixtures, exact aliases/opponents/date, unchanged numerical decisions, locked bytes, scheduled refresh/cadence and no paid-provider requests.');
