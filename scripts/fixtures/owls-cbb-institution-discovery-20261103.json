@@ -1,0 +1,297 @@
+{
+  "source": "stored Owls book-discovery receipt; book/market metadata only, no reconstructed prices",
+  "eventsAt": "2026-11-03T11:41:02.074Z",
+  "events": [
+    {
+      "eventId": "ncaab:S Dakota St@Kansas St-20261104",
+      "home_team": "Kansas St",
+      "away_team": "S Dakota St",
+      "commence_time": "2026-11-04T01:00:00Z",
+      "bookmakers": [
+        {
+          "key": "pinnacle",
+          "last_update": "2026-11-03T11:40:30.584Z",
+          "markets": [
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "fanduel",
+          "last_update": "2026-11-03T11:40:14.340Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "draftkings",
+          "last_update": "2026-11-03T11:40:22.535Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "novig",
+          "last_update": "2026-11-03T11:40:12.950Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "betmgm",
+          "last_update": "2026-11-03T11:40:33.450Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "betr",
+          "last_update": "2026-11-03T11:40:34.191Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "bovada",
+          "last_update": "2026-11-03T11:40:11.497Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "hardrock",
+          "last_update": "2026-11-03T11:40:25.170Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "totals"
+            },
+            {
+              "key": "spreads"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "eventId": "ncaab:IPFW@Duquesne-20261104",
+      "home_team": "Duquesne",
+      "away_team": "IPFW",
+      "commence_time": "2026-11-04T00:00:00Z",
+      "bookmakers": [
+        {
+          "key": "pinnacle",
+          "last_update": "2026-11-03T11:40:30.584Z",
+          "markets": [
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "betmgm",
+          "last_update": "2026-11-03T11:40:33.448Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "bovada",
+          "last_update": "2026-11-03T11:40:11.497Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "circa",
+          "last_update": "2026-11-03T11:40:26.389Z",
+          "markets": [
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "stations",
+          "last_update": "2026-11-03T11:40:26.389Z",
+          "markets": [
+            {
+              "key": "spreads"
+            }
+          ]
+        },
+        {
+          "key": "south_point",
+          "last_update": "2026-11-03T11:40:26.389Z",
+          "markets": [
+            {
+              "key": "spreads"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "eventId": "ncaab:Purdue FW@Duquesne-20261104",
+      "home_team": "Duquesne",
+      "away_team": "Purdue FW",
+      "commence_time": "2026-11-04T00:00:00.000Z",
+      "bookmakers": [
+        {
+          "key": "fanduel",
+          "last_update": "2026-11-03T11:40:14.340Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "draftkings",
+          "last_update": "2026-11-03T11:40:22.535Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "novig",
+          "last_update": "2026-11-03T11:40:12.950Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "betr",
+          "last_update": "2026-11-03T11:40:34.191Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        },
+        {
+          "key": "hardrock",
+          "last_update": "2026-11-03T11:40:02.186Z",
+          "markets": [
+            {
+              "key": "h2h"
+            },
+            {
+              "key": "spreads"
+            },
+            {
+              "key": "totals"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
