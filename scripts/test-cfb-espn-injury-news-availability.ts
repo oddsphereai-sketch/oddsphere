@@ -3,6 +3,7 @@ import {
   CFB_ESPN_INJURY_NEWS_MAX_REQUESTS,
   fetchCfbEspnInjuryNewsAvailability,
   parseCfbEspnInjuryNewsAvailability,
+  sanitizeCfbEspnInjuryNewsReport,
 } from "../lib/services/football/cfbEspnInjuryNewsAvailability";
 import { buildCfbGameAvailability } from "../lib/services/football/cfbGameAvailability";
 import { cfbAvailabilityReportForModel } from "../lib/services/football/cfbForwardEvidenceWriter";
@@ -133,6 +134,19 @@ async function main(): Promise<void> {
 });
   assert.deepEqual(ambiguous.reportsByGame, {}, "multi-team attribution without a unique headline team must fail closed");
 
+  const ordinaryProse = parseCfbEspnInjuryNewsAvailability({
+    games: [ohioStateGame], capturedAt: "2026-10-21T18:00:00Z",
+    json: { articles: [
+      article({ headline: "College Football Playoff Bubble Watch after Week 9",
+        description: "A conference-by-conference look at which teams are contending for the playoff, who's close and who's out.",
+        published: "2026-10-21T16:00:00Z", teams: [{description:"Indiana Hoosiers",abbreviation:"IU",shortDisplayName:"Indiana"}] }),
+      article({ headline: "Indiana turns to Wilson at QB, survives Minnesota in OT",
+        description: "Minnesota had possession to close out the game before Indiana rallied.",
+        published: "2026-10-21T16:00:00Z", teams: [{description:"Indiana Hoosiers",abbreviation:"IU",shortDisplayName:"Indiana"}] }),
+    ] },
+  });
+  assert.equal(ordinaryProse.acceptedPlayers, 0, "lowercase prose and possessive s must not masquerade as proper names or safety positions");
+
   const publicNews = accepted.reportsByGame[ohioStateGame.providerGameId]!;
   assert.equal(buildCfbGameAvailability({
   game: ohioStateGame,
@@ -140,6 +154,18 @@ async function main(): Promise<void> {
   playbookRows: [],
   publicNewsReport: publicNews,
   })?.source, "ESPN");
+  const corruptNews = { ...publicNews, teams: publicNews.teams.map((team, i) => ({...team, players: i ? [] : [
+    {name:"close and who's",status:"Out",position:"S",detail:"Not an injury article",reportedAt:publicNews.reportUpdatedAt},
+    {name:"possession to close",status:"Out",position:"S",detail:"Game recap",reportedAt:publicNews.reportUpdatedAt},
+  ]})) };
+  const rawBefore = JSON.stringify(corruptNews);
+  assert.equal(sanitizeCfbEspnInjuryNewsReport(corruptNews), null);
+  assert.equal(buildCfbGameAvailability({game:ohioStateGame,capturedAt:"2026-10-21T18:00:00Z",playbookRows:[],previous:corruptNews}),null,
+    "retained corrupt partial news cannot resurrect and is not medical clearance");
+  assert.equal(JSON.stringify(corruptNews),rawBefore,"stored/raw source evidence remains immutable");
+  assert.equal(sanitizeCfbEspnInjuryNewsReport(publicNews), publicNews,"genuine reports preserve identity and clocks");
+  const mixedNews={...corruptNews,teams:corruptNews.teams.map((team,i)=>({...team,players:i?[]:[...team.players,...publicNews.teams[0].players]}))};
+  assert.deepEqual(sanitizeCfbEspnInjuryNewsReport(mixedNews)?.teams[0].players,publicNews.teams[0].players,"preserve genuine players within a mixed retained report");
   const official = { ...publicNews, source: "Conference" as const, reportUpdatedAt: "2026-10-21T14:00:00.000Z" };
   assert.equal(buildCfbGameAvailability({
   game: ohioStateGame,

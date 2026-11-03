@@ -1,5 +1,19 @@
 # Current production model releases and qualified research candidates
 
+## CFB injury-news proper player identity — November 3
+
+Public-news source release is
+`cfb_espn_injury_news_availability_2026_11_03_r2_case_sensitive_player_identity`
+and the sole existing forward writer is
+`cfb_forward_evidence_writer_2026_11_03_r148_injury_news_player_identity`.
+Future captures and retained partial-news selection reject ordinary lowercase
+prose as player names and possessive s as position S. Genuine report players,
+source clocks, official-source precedence and exact stored locks are preserved.
+An empty invalid partial-news result is not medical clearance. This source has
+zero numerical model authority in the existing runtime; prediction/grade rules,
+model releases, request limits, cadence and leases remain unchanged.
+Evidence: `docs/model-audits/2026-11-03-cfb-injury-news-player-identity.md`.
+
 ## CBB market-evidence correctness — November 3
 
 The candidate evidence/reader family is receipt

@@ -2,6 +2,7 @@ import type { PlaybookInjuryTeamRow } from "@/lib/providers/playbook/types";
 import type { DailyEdgeGameAvailability, DailyEdgeTeamAvailability } from "@/lib/services/dailyEdge/gameAvailability";
 import type { NcaafGame } from "./balldontlieNcaafSlate";
 import type { CfbForwardStoredEvidence } from "./cfbForwardEvidence";
+import { sanitizeCfbEspnInjuryNewsReport } from "./cfbEspnInjuryNewsAvailability";
 import { matchCfbPlaybookTeam } from "./cfbPlaybookEvidence";
 
 /**
@@ -14,7 +15,7 @@ export function latestVerifiedCfbGameAvailabilityByGame(
 ): Map<string, DailyEdgeGameAvailability> {
   const latest = new Map<string, { report: DailyEdgeGameAvailability; reportAt: number; capturedAt: number }>();
   for (const row of rows) {
-    const report = row.payload.availability.report ?? null;
+    const report = sanitizeCfbEspnInjuryNewsReport(row.payload.availability.report ?? null);
     if (!report || report.eventId !== row.providerGameId || report.teams.length !== 2) continue;
     const reportAt = timestamp(report.reportUpdatedAt) ?? timestamp(report.reportDate) ?? timestamp(row.capturedAt);
     const capturedAt = timestamp(row.capturedAt);
@@ -36,20 +37,21 @@ export function buildCfbGameAvailability(args: {
   nationalReport?: DailyEdgeGameAvailability | null;
   previous?: DailyEdgeGameAvailability | null;
 }): DailyEdgeGameAvailability | null {
+  const previous = sanitizeCfbEspnInjuryNewsReport(args.previous ?? null);
   const fresh = buildPlaybookAvailability(args.game, args.playbookRows, args.capturedAt) ??
     validSourceReport(args.game, args.conferenceReport ?? null, "Conference") ??
-    validSourceReport(args.game, args.publicNewsReport ?? null, "ESPN") ??
+    validSourceReport(args.game, sanitizeCfbEspnInjuryNewsReport(args.publicNewsReport ?? null), "ESPN") ??
     validSourceReport(args.game, args.nationalReport ?? null, "SportsDataIO");
-  if (!fresh) return args.previous ?? null;
-  if (!args.previous) return fresh;
+  if (!fresh) return previous;
+  if (!previous) return fresh;
   const freshAuthority = sourceAuthority(fresh.source);
-  const previousAuthority = sourceAuthority(args.previous.source);
+  const previousAuthority = sourceAuthority(previous.source);
   if (freshAuthority !== previousAuthority) {
-    return freshAuthority > previousAuthority ? fresh : args.previous;
+    return freshAuthority > previousAuthority ? fresh : previous;
   }
   const freshAt = Date.parse(fresh.reportUpdatedAt ?? "");
-  const previousAt = Date.parse(args.previous.reportUpdatedAt ?? "");
-  return !Number.isFinite(previousAt) || (Number.isFinite(freshAt) && freshAt >= previousAt) ? fresh : args.previous;
+  const previousAt = Date.parse(previous.reportUpdatedAt ?? "");
+  return !Number.isFinite(previousAt) || (Number.isFinite(freshAt) && freshAt >= previousAt) ? fresh : previous;
 }
 
 function sourceAuthority(source: string): number {

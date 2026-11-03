@@ -6,7 +6,7 @@ import type { NcaafGame, NcaafTeam } from "./balldontlieNcaafSlate";
 import { cfbProviderTeamMatches } from "./cfbProviderTeamIdentity";
 
 export const CFB_ESPN_INJURY_NEWS_AVAILABILITY_RELEASE =
-  "cfb_espn_injury_news_availability_2026_10_21_r1_strict_public_status" as const;
+  "cfb_espn_injury_news_availability_2026_11_03_r2_case_sensitive_player_identity" as const;
 export const CFB_ESPN_INJURY_NEWS_MAX_REQUESTS = 1 as const;
 export const CFB_ESPN_INJURY_NEWS_TIMEOUT_MS = 8_000 as const;
 export const CFB_ESPN_INJURY_NEWS_MAX_RESPONSE_BYTES = 8_000_000 as const;
@@ -297,13 +297,16 @@ function containsLabel(value: string, label: string): boolean {
 
 function cleanPlayerName(value: string | null): string | null {
   const name = value?.replace(/\s+/g, " ").trim() ?? "";
-  if (!name || name.length > 80 || /\b(?:coach|team|staff|offense|defense)\b/i.test(name)) return null;
+  // Status phrases are case-insensitive, but proper player names are not.
+  // Otherwise ordinary prose such as "possession to close out" becomes a player.
+  if (!name || name.length > 80 || !new RegExp(`^${PLAYER_NAME}$`, "u").test(name) ||
+      /\b(?:coach|team|staff|offense|defense)\b/i.test(name)) return null;
   return name;
 }
 
 function normalizePosition(value: string | null): string | null {
   const position = value?.trim().toUpperCase() ?? "";
-  return position && new RegExp(`^(?:${POSITION})$`).test(position) ? position : null;
+  return value?.trim() === position && new RegExp(`^(?:${POSITION})$`).test(position) ? position : null;
 }
 
 function gameHasTeam(game: NcaafGame, team: NcaafTeam): boolean {
@@ -326,4 +329,13 @@ function normalize(value: string): string { return value.toLowerCase().replace(/
 function escapeRegex(value: string): string { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function emptyResult(): CfbEspnInjuryNewsAvailabilityResult {
   return { release: CFB_ESPN_INJURY_NEWS_AVAILABILITY_RELEASE, requests: 0, articlesRead: 0, acceptedPlayers: 0, reportsByGame: {} };
+}
+
+/** Requalify retained partial-news evidence for future captures. Raw evidence
+ * and locked member payloads remain untouched; zero valid news is not clearance. */
+export function sanitizeCfbEspnInjuryNewsReport(report: DailyEdgeGameAvailability | null): DailyEdgeGameAvailability | null {
+  if (!report || report.source !== "ESPN" || report.sourceLabel !== "ESPN public injury news") return report;
+  const teams = report.teams.map(team => ({ ...team, players: team.players.filter(player => cleanPlayerName(player.name) !== null) }));
+  if (!teams.some(team => team.players.length)) return null;
+  return teams.every((team, i) => team.players.length === report.teams[i].players.length) ? report : { ...report, teams };
 }
