@@ -38,6 +38,11 @@ function compact(value:number):string {return new Intl.NumberFormat("en-US",{not
 function bookTitle(value:string):string {
   return ({circa:"Circa",pinnacle:"Pinnacle",betmgm:"BetMGM",betrivers:"BetRivers",draftkings:"DraftKings",fanduel:"FanDuel"} as Record<string,string>)[value] ?? value.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
 }
+function labelAtBookLine(label:string,line:number|null|undefined):string {
+  if(line===null||line===undefined)return label;
+  return /^(Over|Under) /.test(label)?label.replace(/\d+(?:\.\d+)?$/,String(line)):
+    label.replace(/(?:[+−-]?\d+(?:\.\d+)?|PK)$/i,formatContractLine(line));
+}
 
 export default function PredictionMarketPanel({game,marketKey,variant,illustrativeSample=false}:{
   game:DailyEdgeGameDto;marketKey:keyof DailyEdgeGameDto["markets"];variant:"mobile"|"desktop";illustrativeSample?:boolean;
@@ -159,7 +164,7 @@ export default function PredictionMarketPanel({game,marketKey,variant,illustrati
       </div>:null}
       <PredictionMarketChart row={movementView?null:outcome} book={plottedBook} context={movementView?undefined:context} bookLabel={bookLabel} lockedAt={lockedAt} range={range} onRangeChange={setRange}/>
       {separateBookHistory?<RecordedSportsbookHistory book={book!} label={bookLabel} lockedAt={lockedAt}/>:null}
-      {!frozen&&recordedReference?<RecordedSportsbookHistory book={recordedReference} label={bookLabel} referenceFor={selectedMarket.currentPriceSportsbook??null}/>:null}
+      {!frozen&&recordedReference?<RecordedSportsbookHistory book={recordedReference} label={labelAtBookLine(selection?.label??selectedMarket.pick??bookLabel,recordedReference.line)} referenceFor={selectedMarket.currentPriceSportsbook??null}/>:null}
     </div>
     <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-white/[0.04] pt-2 text-[10px] text-[#b1a1bf] sm:mt-0 sm:block sm:space-y-2 sm:border-0 sm:pt-0">
       <p data-kalshi-start data-start-kind={kalshiOpening?.kind??"first_available"} data-start-at={kalshiStart[0]} className="min-w-0"><span className="font-semibold text-[#d9d1e4]">Kalshi {kalshiOpening?.kind==="opening_minute"?"opening minute":"first quoted"} · {(kalshiStart[1]*100).toFixed(1)}%</span><span className="block text-[#ac9bbd]">{time(kalshiStart[0],true)}</span><span className="block text-[#9d92ae]">{outcome.historyFrom?"History checked from market open":"Opening history pending"}{kalshiOpening?.kind==="first_available"?" · opening quote unavailable":""}</span></p>
@@ -190,7 +195,8 @@ export function RecordedSportsbookHistory({book,label,lockedAt,referenceFor}:{bo
 export function PredictionMarketUnavailable({variant,label,status,book,kind,lockedAt,quote,recordedReference,currentBook}:{variant:"mobile"|"desktop";label:string;status:string;book:PredictionMarketBookTrail|null;kind?:string|null;lockedAt?:number;quote?:{label:string;probability:number;at:number;method?:"exact"|"nearby"|"push_adjusted"};recordedReference?:PredictionMarketBookTrail|null;currentBook?:string|null}){
   const [range,setRange]=useState<"all"|"24h">("all");
   const message=status==="loading"?"Loading this market…":status==="selection_pending"?"Waiting for this selection’s sportsbook line before matching a Kalshi contract.":status==="unsupported"?"No matching Kalshi market supported for this selection.":status==="prelock_unavailable"?"No eligible pre-lock prediction-market quotes were recorded.":["refresh_failed","feed_unavailable","market_feed_unavailable"].includes(status)?"Prediction-market feed temporarily unavailable. Retrying automatically.":status==="history_building"?"Kalshi history is building. Showing sportsbook movement until both sources overlap.":status==="history_unavailable"?"Matching contract found; quote history is building.":"No matching Kalshi contract is currently available. Updates automatically when one arrives.";
-  const bookLabel=book?.line===null||book?.line===undefined?label:/^(Over|Under) /.test(label)?label.replace(/\d+(?:\.\d+)?$/,String(book.line)):label.replace(/(?:[+−-]?\d+(?:\.\d+)?|PK)$/i,formatContractLine(book.line));
+  const bookLabel=labelAtBookLine(label,book?.line);
+  const referenceLabel=labelAtBookLine(label,recordedReference?.line);
   const history=predictionMarketBookOnlyComparison(book,lockedAt),safeBook=book&&history.bookPoints.length?{...book,points:history.bookPoints}:null;
   const safeQuote=quote&&(lockedAt===undefined||quote.at<=lockedAt)?quote:null;
   if(safeBook){
@@ -208,7 +214,7 @@ export function PredictionMarketUnavailable({variant,label,status,book,kind,lock
         <BookLineHistory book={safeBook} kind={kind??(/^(Over|Under) /.test(label)?"total":"spread")} start={start} end={history.cutoff!} frozen={lockedAt!==undefined}/>
         <p>{lockedAt===undefined?"Sportsbook through ":"Pre-lock sportsbook through "}{time(last[0])}{safeBook.points.length===1?" · one quote recorded":""}</p>
       </div>
-      {lockedAt===undefined&&recordedReference?<div className="col-span-full"><RecordedSportsbookHistory book={recordedReference} label={label} referenceFor={currentBook}/></div>:null}
+      {lockedAt===undefined&&recordedReference?<div className="col-span-full"><RecordedSportsbookHistory book={recordedReference} label={referenceLabel} referenceFor={currentBook}/></div>:null}
     </section>;
   }
   return <section aria-label={`Prediction market · ${label}`} data-prediction-market={variant} data-prediction-market-availability={status} className={variant==="mobile"?"sm:hidden rounded-lg border border-white/[0.07] bg-[#0d0b13] p-3":"hidden sm:flex items-center gap-4 border-y border-white/[0.07] bg-[#0d0b13] px-5 py-3"}>

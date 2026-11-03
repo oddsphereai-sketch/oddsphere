@@ -33,6 +33,14 @@ assert.match(earlier,/Earlier DraftKings history through/);
 assert.match(earlier,/Current evaluated quote stays at FanDuel/);
 assert.match(earlier,/data-recorded-sportsbook-history="draftkings"/);
 assert.doesNotMatch(earlier,/data-recorded-sportsbook-history="fanduel"/);
+const differentLine = renderToStaticMarkup(<PredictionMarketUnavailable variant="mobile" label="UAPB +42.5" status="contract_unavailable"
+  book={{...book,sportsbook:"draftkings",line:42.5,marketHistory:[[at("21:14"),-105,42.5]]}}
+  recordedReference={{...book,sportsbook:"fanduel",line:41.5,points:[[at("20:00"),112/212,-112],[at("21:14"),104/204,-104]],marketHistory:[[at("20:00"),-112,41.5],[at("21:14"),-104,41.5]]}}
+  currentBook="draftkings" kind="spread"/>);
+assert.match(differentLine,/DraftKings UAPB \+42\.5 · same book/);
+assert.match(differentLine,/FanDuel · UAPB \+41\.5 · recorded prices/);
+assert.match(differentLine,/Current evaluated quote stays at DraftKings/);
+assert.doesNotMatch(differentLine,/FanDuel · UAPB \+42\.5|data-kalshi-line/);
 const noKalshi = renderToStaticMarkup(<PredictionMarketUnavailable variant="mobile" label="NAU +21.5" status="contract_unavailable"
   book={{...book,sportsbook:"fanduel",line:21.5}} recordedReference={{...book,sportsbook:"draftkings",line:21.5}}
   currentBook="fanduel" kind="spread"/>);
