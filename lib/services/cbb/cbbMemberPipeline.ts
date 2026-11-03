@@ -181,7 +181,9 @@ export async function refreshCbbMemberBoard(args:{anchorDate:string;season:numbe
     const board=buildCbbProvisionalBoard(read.forecast,quotes,{marketBehavior:read.receipt});
     const checkpoint=retainCbbLevelInput({existing:previous?.board.marketContext.retainedLevelInput,
       independent:row.forecast,independentInputKey:key,startsAt:row.game.date,asOf,
-      sourceQuotes:read.receipt.currentProfessionalQuotes,targets,
+      // Qualification must see pre-filter native/current frames as well as
+      // retained states: an invalid newest frame cannot revive an older price.
+      sourceQuotes:[...quotes,...native.historyQuotes,...read.receipt.currentProfessionalQuotes],targets,
       quarantinedSources:[...native.quarantinedSources,...read.receipt.anchors.quarantinedKeys?.map(source=>{
         const [book,market]=source.split(":");return {book,market:market as "moneyline"|"spread"|"total",reason:"retained_source_quarantine"};
       })??[]],historyCompleteness:read.receipt.historyCompleteness});

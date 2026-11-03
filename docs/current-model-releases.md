@@ -1,5 +1,26 @@
 # Current production model releases and qualified research candidates
 
+## CBB market-evidence correctness — November 3
+
+The candidate evidence/reader family is receipt
+`cbb_market_behavior_2026_11_03_r3_direction_and_magnitude`, grade
+`cbb_2026_11_03_r6_exact_decision_gate_reasons`, board
+`cbb_candidate_2026_11_03_r10_explicit_market_evidence`, publisher
+`cbb_member_pipeline_2026_11_03_r19_explicit_market_evidence`, tracking
+`cbb_tracking_writer_2026_11_03_r7_market_evidence_lineage` and adapter
+`cbb_member_adapter_2026_11_03_r8_exact_market_decision_reasons`.
+Score R5 and independent R3 remain unchanged. Aligned unequal source effects
+retain direction while combined magnitude remains unresolved; no new scalar
+response or grade gate is introduced. Accurate grade reasons, JSONB semantic
+receipt binding and original R5 lock lineage are functional corrections.
+The sole leased writer may retain one immutable input-only checkpoint under
+`cbb_retained_level_input_2026_11_03_r1`, capped at16 KiB without extra I/O or
+forecast/grade authority. The frozen18-game/54-market comparison has0 score,
+probability, side, price, EV, grade, promotion or demotion changes. Protected
+publication and normal live proof remain mandatory. The full current-level
+numerical forecast repair is still unfinished. Evidence and rollback:
+`docs/model-audits/2026-11-03-cbb-market-evidence-correctness.md`.
+
 ## CBB remaining exact source-institution repair — November 3
 
 The current institution identity is

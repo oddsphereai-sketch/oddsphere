@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { CBB_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
-import { cbbEvidenceAvailableAt } from "./marketReceiptTime";
+import { cbbEvidenceAvailableAt, cbbAvailabilityUpperBoundMs } from "./marketReceiptTime";
+import { normalCdf } from "./model";
 import type { CbbForecast, CbbMarket, CbbQuote } from "./types";
 
 export const CBB_RETAINED_LEVEL_INPUT_RELEASE = "cbb_retained_level_input_2026_11_03_r1" as const;
@@ -38,6 +39,8 @@ const family = (book: string) => {
 const professional = new Set(["circa", "pinnacle", "bookmaker"]);
 const finite = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 const clock = (x: unknown) => typeof x === "string" ? Date.parse(x) : NaN;
+const upperClock = (x: unknown) => typeof x === "string" ? cbbAvailabilityUpperBoundMs(x) : NaN;
+const availableAt = (q: AttestedQuote) => q.canonicalReceipt === undefined ? upperClock(q.fetchedAt) : cbbEvidenceAvailableAt(q);
 const positiveId = (x: number) => Number.isSafeInteger(x) && x > 0;
 const probability = (price: number) => price < 0 ? -price / (100 - price) : 100 / (100 + price);
 const tuple = (q: AttestedQuote) => JSON.stringify([q.line, q.firstPrice, q.secondPrice]);
@@ -63,19 +66,27 @@ function validForecast(f: CbbForecast, asOf: string): boolean {
     f.homeScore <= 0 || f.awayScore <= 0 || f.possessions <= 0 || f.homeWinProbability <= 0 || f.homeWinProbability >= 1 ||
     Math.abs(f.homeScore + f.awayScore - f.total) > 1e-8 || Math.abs(f.homeScore - f.awayScore - f.margin) > 1e-8) return false;
   const u = f.uncertainty;
-  return !!u && [u.marginSd, u.totalSd, u.marginTotalCorrelation, u.marginCorrection, u.totalCorrection].every(finite) &&
+  if (!u || ![u.marginSd, u.totalSd, u.marginTotalCorrelation, u.marginCorrection, u.totalCorrection].every(finite) ||
+    u.marginSd <= 0 || u.totalSd <= 0) return false;
+  const zero = normalCdf((.5-f.margin)/u.marginSd)-normalCdf((-.5-f.margin)/u.marginSd);
+  const home = (1-normalCdf((.5-f.margin)/u.marginSd))/(1-zero);
+  return Math.abs(home-f.homeWinProbability) <= 1e-8 &&
     u.marginSd > 0 && u.totalSd > 0 && Math.abs(u.marginTotalCorrelation) <= 1 &&
     Number.isSafeInteger(u.fitThroughSeason) && u.fitThroughSeason > 0 && Number.isSafeInteger(u.games) && u.games > 0;
 }
 /** Identity/receipt eligibility is separate from contract validity: an invalid
  * latest native price must not cause silent fallback to an older valid one. */
-function recognizable(q: AttestedQuote, gameId: number, at: number): boolean {
-  if (!q || q.gameId !== gameId || q.orientationVerified !== true || q.phase !== "current" ||
+function recognizable(q: AttestedQuote, gameId: number, at: number, target=false): boolean {
+  // BDL targets are joined by the provider's native canonical game ID and
+  // explicit home/away fields. Preserve their absent named-team attestation;
+  // never manufacture orientationVerified or relax professional-source proof.
+  const orientation=q?.orientationVerified===true || target && q?.provider==="balldontlie" && q.orientationVerified===undefined;
+  if (!q || q.gameId !== gameId || !orientation || q.phase !== "current" ||
     !["owls", "sharpapi", "balldontlie"].includes(q.provider ?? "") || typeof q.sportsbook !== "string" || !q.sportsbook.trim() ||
     !["moneyline", "spread", "total"].includes(q.market) || q.canonicalReceipt === null) return false;
-  const observed = clock(q.providerObservedAt), available = cbbEvidenceAvailableAt(q);
+  const observed = upperClock(q.providerObservedAt), available = availableAt(q);
   return Number.isFinite(observed) && Number.isFinite(available) && observed <= available && available <= at &&
-    at - observed <= 3600_000 && (q.requestedAt === undefined || Number.isFinite(clock(q.requestedAt)) && clock(q.requestedAt) <= clock(q.fetchedAt));
+    at - clock(q.providerObservedAt) <= 3600_000 && (q.requestedAt === undefined || Number.isFinite(clock(q.requestedAt)) && clock(q.requestedAt) <= clock(q.fetchedAt));
 }
 function validContract(q: AttestedQuote): boolean {
   if (![q.firstPrice, q.secondPrice].every(p => finite(p) && Math.abs(p) >= 100)) return false;
@@ -92,16 +103,16 @@ function buildBody(args: Omit<CbbRetainedLevelInputArgs, "existing">): { body: I
   if (!validForecast(f, args.asOf) || typeof args.independentInputKey !== "string" || !args.independentInputKey.trim())
     return { body: null, reason: "invalid_pristine_r3_input" };
   if (!Array.isArray(args.targets) || !args.targets.length || args.targets.some(q =>
-    !recognizable(q, f.gameId, at) || !validContract(q) || q.canonicalReceipt !== undefined)) return { body: null, reason: "invalid_current_targets" };
+    !recognizable(q, f.gameId, at,true) || !validContract(q) || q.canonicalReceipt !== undefined)) return { body: null, reason: "invalid_current_targets" };
   if (!Array.isArray(args.sourceQuotes) || args.historyCompleteness !== undefined && !complete(args.historyCompleteness))
     return { body: null, reason: "invalid_evidence_metadata" };
-  const quarantinedSources = args.quarantinedSources ?? [];
+  const quarantinedSources = [...args.quarantinedSources ?? []];
   if (!Array.isArray(quarantinedSources) || quarantinedSources.some(q => !q || typeof q.book !== "string" || !q.book.trim() ||
     !["moneyline", "spread", "total"].includes(q.market) || typeof q.reason !== "string" || !q.reason ||
     q.sourceAt !== undefined && (!Number.isFinite(clock(q.sourceAt)) || clock(q.sourceAt) > at))) return { body: null, reason: "invalid_quarantine_metadata" };
   const excludedTargetFamilies = [...new Set(args.targets.map(q => family(q.sportsbook)))].sort();
   // Known physical-family quarantine persists across contracts and both axes.
-  const excludedQuarantinedFamilies = [...new Set(quarantinedSources.map(q => family(q.book)))].sort();
+  let excludedQuarantinedFamilies = [...new Set(quarantinedSources.map(q => family(q.book)))].sort();
   const excluded = new Set([...excludedTargetFamilies, ...excludedQuarantinedFamilies]);
   const groups = new Map<string, AttestedQuote[]>();
   for (const q of args.sourceQuotes) {
@@ -114,11 +125,23 @@ function buildBody(args: Omit<CbbRetainedLevelInputArgs, "existing">): { body: I
     groups.set(key, [...(groups.get(key) ?? []), q]);
   }
   const sourceQuotes: AttestedQuote[] = [];
+  // A contradiction anywhere in the supplied actual history remains known;
+  // a later clean state cannot silently rehabilitate that physical source.
+  for (const [key, rows] of groups) {
+    const frames=new Map<number,Set<string>>();
+    for (const q of rows) {const at=clock(q.providerObservedAt), values=frames.get(at)??new Set<string>(); values.add(tuple(q)); frames.set(at,values);}
+    for (const [at, values] of frames) if (values.size>1) {
+      const [book,market]=key.split(":"); excluded.add(book);
+      quarantinedSources.push({book,market:market as CbbMarket,sourceAt:rows.find(q=>clock(q.providerObservedAt)===at)!.providerObservedAt,reason:"same_source_time_conflict_persistent_quarantine"});
+    }
+  }
+  excludedQuarantinedFamilies=[...new Set(quarantinedSources.map(q=>family(q.book)))].sort();
   for (const [, rows] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
+    if (excluded.has(family(rows[0].sportsbook))) continue;
     const latestAt = Math.max(...rows.map(q => clock(q.providerObservedAt))), latest = rows.filter(q => clock(q.providerObservedAt) === latestAt);
     if (latest.some(q => !validContract(q)) || new Set(latest.map(tuple)).size !== 1) continue;
     // Equivalent source receipts retain the actual latest available response.
-    sourceQuotes.push(latest.reduce((a, b) => cbbEvidenceAvailableAt(b) > cbbEvidenceAvailableAt(a) ? b : a));
+    sourceQuotes.push(latest.reduce((a, b) => availableAt(b) > availableAt(a) ? b : a));
   }
   if (!["spread", "total"].every(market => sourceQuotes.some(q => q.market === market))) return { body: null, reason: "joint_qualified_spread_total_unavailable" };
   return { reason: "first_qualified_as_of_input", body: {

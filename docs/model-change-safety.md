@@ -1,5 +1,23 @@
 # Model change safety protocol
 
+## CBB evidence correctness with unchanged decisions — November 3
+
+The owner explicitly requires independent market interpretation spot checks,
+not merely execution checks. The bounded R3 receipt /R6 grade-reason /R10 board
+/R19 publisher /R7 tracking /R8 adapter family repairs aligned-versus-opposed
+classification, misleading failed-gate reasons and JSONB semantic receipt
+binding. It changes no numerical coefficient, score, probability, selection,
+price, EV, grade gate or stake. The actual frozen18-game/54-market comparison
+has0 promotions and0 demotions. Existing R5 locked payloads retain exact stored
+precedence and original release. One immutable16 KiB-bounded actual input-only
+checkpoint may accompany the existing unlocked write; no extra provider/query,
+writer, prediction or shadow grade is authorized. This is provenance retention,
+not inference authority. Focused/full checks, fresh-main protected publication,
+exact tree and normal production/lock/reader proof remain mandatory. The full
+current-market-level numerical repair remains separate and unqualified; the
+R5 exception does not waive that policy's calibration/value requirements.
+Evidence: `docs/model-audits/2026-11-03-cbb-market-evidence-correctness.md`.
+
 ## Owner-approved CBB received-market production repair — November 2
 
 Daniel Mengel approved the exact reviewed candidate in PR938 after being told

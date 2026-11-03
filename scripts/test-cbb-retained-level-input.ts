@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { CBB_CURRENT_SCORE_RELEASE } from "../lib/cbb/currentScoreRuntime";
+import {normalCdf} from "../lib/cbb/model";
 import { retainCbbLevelInput, CBB_RETAINED_LEVEL_INPUT_MAX_BYTES, type CbbRetainedLevelInput, type CbbRetainedLevelInputArgs } from "../lib/cbb/retainedLevelInput";
 import type { CbbForecast, CbbMarket, CbbQuote } from "../lib/cbb/types";
 
@@ -8,7 +9,7 @@ const asOf = "2026-11-03T12:00:00.000Z", startsAt = "2026-11-04T00:00:00.000Z";
 const independent: CbbForecast = {
   release: CBB_CURRENT_SCORE_RELEASE, gameId: 123, asOf, homeId: 4, awayId: 5,
   homeScore: 78, awayScore: 72, margin: 6, total: 150, possessions: 70,
-  homeWinProbability: .7, inputStatus: "complete", issues: [],
+  homeWinProbability: (1-normalCdf((.5-6)/12))/(1-normalCdf((.5-6)/12)+normalCdf((-.5-6)/12)), inputStatus: "complete", issues: [],
   uncertainty: { marginSd: 12, totalSd: 17, marginTotalCorrelation: .1,
     marginCorrection: 0, totalCorrection: 0, fitThroughSeason: 2025, games: 1000 },
 };
@@ -47,6 +48,7 @@ for (const mutate of [
   (a: CbbRetainedLevelInputArgs) => { a.independent.homeId = a.independent.awayId; },
   (a: CbbRetainedLevelInputArgs) => { a.independent.asOf = "2026-11-03T11:59:00.000Z"; },
   (a: CbbRetainedLevelInputArgs) => { a.independent.homeScore++; },
+  (a: CbbRetainedLevelInputArgs) => { a.independent.homeWinProbability=.01; },
   (a: CbbRetainedLevelInputArgs) => { a.independent.uncertainty.totalSd = NaN; },
   (a: CbbRetainedLevelInputArgs) => { a.independent.uncertainty.marginTotalCorrelation = 2; },
   (a: CbbRetainedLevelInputArgs) => { a.independentInputKey = ""; },
@@ -57,6 +59,10 @@ const unknownSaved = checkpoint(retainCbbLevelInput(unknown));
 assert.equal(unknownSaved.historyCompleteness, null); assert.equal(unknownSaved.historyStatus, "unknown_not_recorded");
 const requestUnknown = args(); requestUnknown.targets.forEach(q => delete q.requestedAt);
 assert.ok(checkpoint(retainCbbLevelInput(requestUnknown)).targets.every(q => !Object.hasOwn(q, "requestedAt")), "missing request clocks are not fabricated");
+const nativeTargets=args(); nativeTargets.targets.forEach(q=>{q.provider="balldontlie";delete q.orientationVerified;delete q.requestedAt;});
+assert.ok(checkpoint(retainCbbLevelInput(nativeTargets)).targets.every(q=>!Object.hasOwn(q,"orientationVerified")),"native-ID BDL target identity does not invent named-selection orientation");
+nativeTargets.targets[0].orientationVerified=false;unavailable(nativeTargets,"invalid_current_targets");
+for(const provider of ["owls","sharpapi"] as const){const a=args();a.targets[0].provider=provider;delete a.targets[0].orientationVerified;unavailable(a,"invalid_current_targets");}
 const targetUnion = args(); targetUnion.targets.push(quote("moneyline", "PS3838"));
 unavailable(targetUnion, "joint_qualified_spread_total_unavailable");
 const quarantine = args(); quarantine.quarantinedSources = [{ book: "PS3838", market: "spread", sourceAt: asOf, reason: "known source family conflict" }];
@@ -76,8 +82,10 @@ for (const mutate of [
   (q: ReturnType<typeof quote>) => { q.firstPrice = -1000; q.secondPrice = -1000; },
   (q: ReturnType<typeof quote>) => { q.line = -4.25; },
   (q: ReturnType<typeof quote>) => { q.providerObservedAt = "2026-11-03T10:59:59.999Z"; },
+  (q: ReturnType<typeof quote>) => { q.providerObservedAt = "2026-11-03T10:59:59.999999Z"; },
   (q: ReturnType<typeof quote>) => { q.providerObservedAt = "2026-11-03T12:00:01.000Z"; },
   (q: ReturnType<typeof quote>) => { q.fetchedAt = "2026-11-03T12:00:01.000Z"; },
+  (q: ReturnType<typeof quote>) => { q.fetchedAt = "2026-11-03T12:00:00.000001Z"; },
   (q: ReturnType<typeof quote>) => { q.providerObservedAt = "invalid"; },
   (q: ReturnType<typeof quote>) => { q.requestedAt = "2026-11-03T11:59:06.000Z"; },
 ]) { const a = args(), q = quote("spread"); mutate(q); a.sourceQuotes[0] = q; unavailable(a); }
@@ -108,6 +116,7 @@ for (const line of [NaN, null, -4.25]) {
   unavailable(a, "joint_qualified_spread_total_unavailable");
 }
 const conflicting = args(); conflicting.sourceQuotes.push(quote("spread", "PS3838", { line: -5.5 })); unavailable(conflicting);
+const middleConflict=args();middleConflict.sourceQuotes.push(quote("spread","pinnacle",{line:-3.5,providerObservedAt:"2026-11-03T11:56:00Z"}),quote("spread","PS3838",{line:-5.5,providerObservedAt:"2026-11-03T11:56:00Z"}));unavailable(middleConflict);
 const copied = args(); copied.sourceQuotes.push(quote("spread", "PS3838"));
 assert.equal(checkpoint(retainCbbLevelInput(copied)).sourceQuotes.length, 2, "one pair per physical family and axis");
 

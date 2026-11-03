@@ -8,6 +8,7 @@ import { cbbImpliedProbability } from "@/lib/cbb/marketEvidence";
 import type { CbbGame, CbbMarket, CbbQuote } from "@/lib/cbb/types";
 import type { cbbCurrentSplitEvidence } from "@/lib/cbb/owlsSplitEvidence";
 import { buildDailyEdgeMemberPresentation } from "@/app/lab/lib/dailyEdgeResponseCoherence";
+import { CBB_MARKET_BEHAVIOR_GRADE_RELEASE } from "@/lib/cbb/marketBehaviorCandidate";
 
 export const CBB_MEMBER_ADAPTER_RELEASE="cbb_member_adapter_2026_11_03_r8_exact_market_decision_reasons" as const;
 type GradeLabel="Best Angle"|"Lean"|"Watchlist"|"No Play"|"Held";
@@ -28,7 +29,7 @@ const selectionLabel=(game:CbbGame,row:BoardRow):string|null=>{
   const line=row.selection==="first"?row.line:row.line===null?null:-row.line;
   return line===null?null:`${code} ${line>0?"+":""}${line}`;
 };
-function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProbability:number):MarketEdgeDto{
+function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProbability:number,preciseReason=false):MarketEdgeDto{
   const held=row.grade==="Held",label=selectionLabel(game,row),code=gradeCode(row.grade,row.referenceState,(row as {actualActionConfirmation?:boolean}).actualActionConfirmation);
   const selectedLine=row.market==="moneyline"?null:row.market==="spread"&&row.selection==="second"&&row.line!==null?-row.line:row.line;
   const v=verdict(row.grade),probability=row.probability,price=row.price;
@@ -50,7 +51,8 @@ function marketEdge(game:CbbGame,row:BoardRow,projectedTotal:number,homeWinProba
       source:label?"model_at_exact_book_line":directionalLabel?"model_outcome":null,sportsbook:row.targetBook,observedAt:row.quoteObservedAt,freshnessCheckedAt:null,
       reason:directionalLabel?null:"No complete executable quote for this market"},
     guidedGuide:label?`Model projects ${label}.`:"Model has not published an exact-line pick.",
-    guidedWatchOut:resistance?"Professional books disagree with this side.":
+    guidedWatchOut:resistance?preciseReason&&row.referenceState!=="opposes"?
+      "Market evidence is incomplete or unresolved for this price.":"Professional books disagree with this side.":
       row.referenceState==="unavailable"?"Professional reference is not yet available.":"Price and lineup context can change before lock.",
     whyLine:row.reason.replaceAll("_"," "),riskLine:"This is an early-season provisional grade; the quoted line may change.",
     modelProb:probability,marketFairProb:fair,pinnacleEvPct:null,moneyPct:null,betsPct:null,publicSplits:[],
@@ -93,9 +95,12 @@ export function adaptCbbProvisionalGame(args:{game:CbbGame;snapshot:CbbProvision
   if(snapshot.gameId!==game.id||snapshot.startsAt!==game.date||snapshot.board.gameId!==game.id)throw new Error("CBB member identity mismatch");
   const rows=new Map(snapshot.board.rows.map(row=>[row.market,row]));
   if(rows.size!==3||!rows.has("moneyline")||!rows.has("spread")||!rows.has("total"))throw new Error("CBB member three-market board incomplete");
-  const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability),
-    spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability),
-    total=marketEdge(game,rows.get("total")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability);
+  // Legacy locked payloads retain their original reader semantics. The new
+  // reason contract distinguishes path uncertainty from actual opposition.
+  const preciseReason=snapshot.board.gradeRelease===CBB_MARKET_BEHAVIOR_GRADE_RELEASE;
+  const ml=marketEdge(game,rows.get("moneyline")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason),
+    spread=marketEdge(game,rows.get("spread")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason),
+    total=marketEdge(game,rows.get("total")!,snapshot.board.score.total,snapshot.board.score.homeWinProbability,preciseReason);
   const cutoff=Date.parse(game.date)-60*60_000,locked=snapshot.lockedAt!==null;
   for(const [kind,market] of [["moneyline",ml],["spread",spread],["total",total]] as const){
     const boardRow=rows.get(kind)!;
