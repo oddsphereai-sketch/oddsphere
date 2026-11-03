@@ -24,8 +24,10 @@ import {
 import {
   normalizeOwlsSharpBookOdds,
   type NormalizedOwlsSharpPrice,
+  type NormalizedOwlsNamedPrice,
   type RawOwlsOddsResponse,
 } from "../../providers/owls/owlsSharpBookOdds";
+import { normalizeCbbRetailPriceJournal, CBB_RETAIL_PRICE_JOURNAL_RELEASE } from "../../cbb/retailPriceJournal";
 import { readMarketIntelligenceV2Config } from "../../config/marketIntelligenceV2";
 import { isPublicallyTracked } from "../../config/officialTrackingStart";
 import { isBlockedSportsbook } from "../../config/blockedSportsbooks";
@@ -82,7 +84,7 @@ const SHARP_HISTORY_RETRY_BUDGET_PER_CYCLE = 8;
 const SHARP_HISTORY_REQUEST_BUDGET_PER_CYCLE = 30;
 
 export const MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE =
-  "market_intelligence_v2_capture_2026_11_03_r26_shared_cbb_market_identity";
+  "market_intelligence_v2_capture_2026_11_03_r27_cbb_retail_price_journal";
 
 type CbbSourceMatch = { game: GameRef; reversed: boolean };
 const cbbSide = (side: MarketIntelligenceSelectionSide, reversed: boolean): MarketIntelligenceSelectionSide =>
@@ -940,8 +942,9 @@ export function nflOwlsIdentityCandidates(
 export function buildOwlsSharpPriceObservations(opts: {
   sport: Sport;
   games: readonly GameRef[];
-  rows: readonly NormalizedOwlsSharpPrice[];
+  rows: readonly NormalizedOwlsNamedPrice[];
   fetchedAt: Date;
+  retailFetchedAt?: Date;
   ingestionRunId?: string;
 }): {
   observations: MarketPriceObservationV2[];
@@ -957,6 +960,9 @@ export function buildOwlsSharpPriceObservations(opts: {
   const observations: MarketPriceObservationV2[] = [];
   const rejected: CanonicalObservationRejection[] = [];
   for (const row of opts.rows) {
+    const sharpBook = row.sportsbook === "circa" || row.sportsbook === "pinnacle";
+    // Retail storage is CBB-only and never grants professional inference authority.
+    if (!sharpBook && opts.sport !== "cbb") continue;
     const key = marketIntelligenceGameKey(opts.sport, row.awayTeam, row.homeTeam);
     const candidates = key ? gamesByKey.get(key) ?? [] : [];
     const cbbMatch = opts.sport === "cbb"
@@ -981,7 +987,7 @@ export function buildOwlsSharpPriceObservations(opts: {
       canonicalMarketId: externalMarketId(game, row.market),
       league: opts.sport,
       sportsbook: row.sportsbook,
-      sharpBook: true,
+      sharpBook,
       marketType: row.market,
       selectionKey: externalSelectionKey(game, row.market, cbbSide(row.side, cbbMatch?.reversed ?? false)),
       line: row.line,
@@ -989,8 +995,8 @@ export function buildOwlsSharpPriceObservations(opts: {
       decimalPrice: row.decimalPrice,
       noVigProbability: row.noVigProbability,
       providerTimestamp: row.observedAt,
-      fetchedAt: opts.fetchedAt.toISOString(),
-      minutesToStart: minutesToStart(game.gameDate, opts.fetchedAt),
+      fetchedAt: (!sharpBook ? opts.retailFetchedAt ?? opts.fetchedAt : opts.fetchedAt).toISOString(),
+      minutesToStart: minutesToStart(game.gameDate, !sharpBook ? opts.retailFetchedAt ?? opts.fetchedAt : opts.fetchedAt),
       ingestionRunId: opts.ingestionRunId ?? null,
       rawPayloadHash: stablePayloadHash(row),
     }));
@@ -1028,11 +1034,15 @@ async function collectOwlsPrices(opts: {
       errors: [`Owls price fetch failed: ${error instanceof Error ? error.message : String(error)}`],
     };
   }
-  const coverage = normalizeOwlsSharpBookOdds(response, owlsSport);
+  const retailFetchedAt = new Date();
+  const coverage = opts.sport === "cbb"
+    ? normalizeCbbRetailPriceJournal(response, retailFetchedAt)
+    : normalizeOwlsSharpBookOdds(response, owlsSport);
   const built = buildOwlsSharpPriceObservations({
     sport: opts.sport,
     games: opts.games,
     rows: coverage.prices,
+    ...(opts.sport === "cbb" ? {retailFetchedAt} : {}),
     fetchedAt: opts.prelockTimeoutMs === undefined ? opts.now : new Date(),
     ingestionRunId: opts.ingestionRunId,
   });
@@ -1054,6 +1064,8 @@ async function collectOwlsPrices(opts: {
       events_returned: coverage.eventsReturned,
       matched_book_events: coverage.matchedBookEvents,
       normalized_prices: coverage.prices.length,
+      ...(opts.sport === "cbb" ? { retail_journal_release: CBB_RETAIL_PRICE_JOURNAL_RELEASE,
+        retail_prices: coverage.prices.filter(row => !["circa", "pinnacle"].includes(row.sportsbook)).length } : {}),
     },
   };
 }

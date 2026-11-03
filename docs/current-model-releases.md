@@ -10,6 +10,22 @@ does not change score R5, grade R6, selection, evaluated quote, or tracking.
 Existing locked member payloads and their reader text retain exact precedence.
 The broader cross-sport split authority path remains under separate audit.
 
+## CBB forward retail price journal — November 3
+
+Current source capture is
+`market_intelligence_v2_capture_2026_11_03_r27_cbb_retail_price_journal`, with
+`cbb_retail_price_journal_2026_11_03_r1_existing_response`. The existing sole
+leased collector now retains complete pregame retail quote pairs from its
+already-requested Owls current response in the existing canonical observation
+upsert. Original per-market/provider clocks, native event lineage and exact
+institution/time matching remain mandatory. Retail is stored with
+`sharp_book=false`; the numerical reader's professional-book query and
+qualification allowlists are unchanged. This introduces no source requests,
+cadence, job, schema, model coefficient, grade/stake policy or locked migration.
+No missing historical opener is reconstructed. Professional capture outside
+and inside CBB remains unchanged. All R18 identity safeguards below remain.
+Evidence: `docs/model-audits/2026-11-03-cbb-retail-price-journal.md`.
+
 ## CBB market-evidence correctness — November 3
 
 The candidate evidence/reader family is receipt
@@ -41,7 +57,7 @@ Current institution identity is
 matching `cbb_sharp_split_mapping_2026_11_03_r3_shared_market_identity`, direct split
 input `cbb_split_evidence_2026_11_03_r4_shared_market_identity`, canonical evidence
 `cbb_canonical_market_evidence_2026_11_03_r2_shared_exact_identity`, capture
-`market_intelligence_v2_capture_2026_11_03_r26_shared_cbb_market_identity`, CBB chart
+`market_intelligence_v2_capture_2026_11_03_r26_shared_cbb_market_identity` (preceding capture; R27 above), CBB chart
 tracking `cbb_market_tracking_2026_11_03_r4_shared_market_identity` and sole publisher
 `cbb_member_pipeline_2026_11_03_r18_shared_market_identity`.
 At its source-only cutover, R18 preserved score/grade R5, board R9, tracking
