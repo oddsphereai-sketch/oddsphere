@@ -1,4 +1,5 @@
 import "./test-ucl-current-native-inputs";
+import {testUclNativeRecoveryBuilder} from "./test-ucl-native-recovery-builder";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { BallDontLieUclProvider, BALLDONTLIE_UCL_API_BASE_URL, type BdlUclMatch, type UclHistoryFetchTelemetry } from "../lib/providers/real_api/BallDontLieUclProvider";
@@ -58,6 +59,7 @@ function match(overrides: Partial<BdlUclMatch> & Pick<BdlUclMatch, "id" | "home_
 }
 
 async function main() {
+await testUclNativeRecoveryBuilder();
 
 // A transient missing UCL market may recover only from a complete, exact
 // same-book stored tuple. Fresh complete provider data always wins, and the
@@ -491,7 +493,7 @@ assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:fa
   "the same exact-contract repair also allows a qualified Under correction; no directional preference");
 assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:movementRows("total",300,-300)}).audit.goalsReader?.totalCorrectionApplied,false);
 console.log("PASS UCL movement exact contract, original-quote chronology, two-way pair quality, conflict quarantine and symmetric correction/resistance.");
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r13_exact_contract_movement");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r14_recovery_native_identity");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -535,7 +537,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r6_exact_contract_movement");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r7_recovery_native_identity");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },

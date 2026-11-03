@@ -500,15 +500,24 @@ function allBookPriceObservations(
 function mergeRecoveredFixture(primary: EplSharpFixtureMarket, recovery: EplSharpFixtureMarket): EplSharpFixtureMarket {
   const recoveredMarkets = completeSharpMarkets(recovery.odds);
   const markets = ["match_result", "double_chance", "total", "btts"] as const;
+  const hasNativeIdentities = primary.fixtureEventIdentities !== undefined || recovery.fixtureEventIdentities !== undefined;
+  const fixtureEventIdentities: NonNullable<EplSharpFixtureMarket["fixtureEventIdentities"]> = [];
   const odds = markets.flatMap((market) => {
-    const source = recoveredMarkets.has(market) ? recovery.odds : primary.odds;
-    return source.filter((row) => row.market === market);
+    const source = recoveredMarkets.has(market) ? recovery : primary;
+    const selected = source.odds.filter((row) => row.market === market);
+    // Identity authority follows the exact market rows chosen by recovery.
+    // Never discard an attestation or transfer it to a different source tuple.
+    fixtureEventIdentities.push(...(source.fixtureEventIdentities ?? []).filter(identity =>
+      identity.market === market && selected.some(row => row.provider === identity.provider &&
+        row.provider_event_id === identity.providerEventId && canonicalEplBook(row.sportsbook) === identity.sportsbook)));
+    return selected;
   });
   return {
     eventId: recovery.eventId ?? primary.eventId,
     odds,
     splits: recovery.splits.length ? recovery.splits : primary.splits,
     splitsState: recovery.splitsState === "present" ? "present" : primary.splitsState,
+    ...(hasNativeIdentities ? {fixtureEventIdentities} : {}),
   };
 }
 
