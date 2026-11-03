@@ -1,7 +1,11 @@
+import { sportExpectsSharpBookContext } from "../services/dailyEdge/dailyEdgeSportCapabilities";
+import { professionalSplitSource, namedSplitSourceLabel, NAMED_SPLIT_SOURCE_AUTHORITY_RELEASE } from "./namedSplitSourceAuthority";
 import type { DailyEdgeGameDto, DailyEdgeResponse, MarketEdgeDto } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
-import { applySharpBookSplitSectionToDecision } from "@/lib/services/recommendationDecision";
+import { applyNamedBookSplitSectionToDecision } from "@/lib/services/recommendationDecision";
+
+export const SHARP_BOOK_SPLIT_AUTHORITY_RELEASE = NAMED_SPLIT_SOURCE_AUTHORITY_RELEASE;
 
 const CONTINUITY_RELEASE = "sharp_book_split_continuity_2026_09_20_r1" as const;
 const CONTINUITY_TTL_MS = 5 * 60 * 1000;
@@ -159,14 +163,15 @@ export function alignMarketReadsToDisplayedSharpBookSplits(response: DailyEdgeRe
     first_inning: "firstInning",
   } as const;
   for (const game of response.games) {
-    if (game.lockState === "locked") continue;
+    if (game.lockState === "locked" || game.lockedAt != null) continue;
     for (const marketKey of MARKET_KEYS) {
       const market = game.markets[marketKey];
       const section = market?.sportsbookSplits ?? null;
       if (!market || !section || sectionQuality(section) !== 2) continue;
+      const professional = professionalSplitSource(section);
       const key = decisionKey[marketKey];
       if (market.recommendationDecision) {
-        market.recommendationDecision = applySharpBookSplitSectionToDecision({
+        market.recommendationDecision = applyNamedBookSplitSectionToDecision({
           sport: response.sport,
           marketKey: key,
           decision: market.recommendationDecision,
@@ -175,7 +180,7 @@ export function alignMarketReadsToDisplayedSharpBookSplits(response: DailyEdgeRe
       }
       const gameDecision = game.recommendationDecision?.markets[key];
       if (gameDecision) {
-        game.recommendationDecision!.markets[key] = applySharpBookSplitSectionToDecision({
+        game.recommendationDecision!.markets[key] = applyNamedBookSplitSectionToDecision({
           sport: response.sport,
           marketKey: key,
           decision: gameDecision,
@@ -183,20 +188,23 @@ export function alignMarketReadsToDisplayedSharpBookSplits(response: DailyEdgeRe
         });
       }
       market.sharpBookAvailability = {
-        status: "complete",
-        message: "Sharp-book splits are available for this market.",
-        lastUpdated: null,
+        status: professional ? "complete" : "unavailable",
+        message: professional ? "Sharp-book splits are available for this market."
+          : `${namedSplitSourceLabel(section)} are available as separate source context.`,
+        lastUpdated: section.sourceObservedAt ?? section.lastUpdated,
       };
       aligned += 1;
     }
     if (game.recommendationDecision) {
       const decisions = Object.values(game.recommendationDecision.markets).filter(Boolean);
-      const sharpAvailable = decisions.some((decision) => decision?.sharpBookSplits !== null);
+      const sharpAvailable = decisions.some((decision) => professionalSplitSource(decision?.sharpBookSplits));
       game.recommendationDecision.sourceState.sharpBookSplitsAvailable = sharpAvailable;
       game.recommendationDecision.sourceState.sourceConflict = decisions.some((decision) => decision?.sourceConflict === true);
       game.recommendationDecision.sourceState.missingExpectedSources = sharpAvailable
         ? game.recommendationDecision.sourceState.missingExpectedSources.filter((source) => source !== "Sharp Book Splits")
-        : game.recommendationDecision.sourceState.missingExpectedSources;
+        : sportExpectsSharpBookContext(response.sport)
+          ? [...new Set([...game.recommendationDecision.sourceState.missingExpectedSources, "Sharp Book Splits"])]
+          : game.recommendationDecision.sourceState.missingExpectedSources;
     }
   }
   return aligned;
