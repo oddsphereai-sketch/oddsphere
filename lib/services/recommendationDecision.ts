@@ -1,3 +1,4 @@
+import { professionalSplitSource, namedSplitSourceLabel, NAMED_SPLIT_SOURCE_AUTHORITY_RELEASE } from "../providers/namedSplitSourceAuthority";
 import { createHash } from "crypto";
 import type { MarketReadV2Dto } from "../types/domain/MarketIntelligenceV2";
 import type {
@@ -255,12 +256,14 @@ function selectedSideFromSplitSection(
  * reader without re-grading the recommendation. The writer-owned pick,
  * probability, evaluated price, grade, lock and tracking tuple remain exact.
  */
-export function applySharpBookSplitSectionToDecision(args: {
+export function applyNamedBookSplitSectionToDecision(args: {
   sport: string;
   marketKey: "moneyline" | "total" | "firstInning";
   decision: MarketDecision;
   section: MarketSplitDisplaySection;
 }): MarketDecision {
+  const professional = professionalSplitSource(args.section);
+  const sourceLabel = namedSplitSourceLabel(args.section);
   const selectedSide = selectedSideFromSplitSection(args.decision.pick, args.section);
   const market: MarketInput = {
     key: args.marketKey,
@@ -278,24 +281,32 @@ export function applySharpBookSplitSectionToDecision(args: {
     marketReadV2Enabled: false,
     lineMovementOverride: args.decision.lineMovement,
   };
-  const resolvedMarketRead = resolveMarketRead(
+  const read = resolveMarketRead(
     args.sport,
     market,
     args.decision.consensusSplits,
     args.section,
   );
+  const resolvedMarketRead = professional ? read : { ...read,
+    copy: read.copy.replace(/sharp(?:-| )book splits/gi, sourceLabel),
+  };
   const sourceConflict = resolvedMarketRead.status === "mixed";
   const reasonCodes = [
     ...args.decision.reasonCodes.filter((code) =>
       code !== "sharp_book_splits_available" &&
       code !== "sharp_book_splits_unavailable" &&
+      code !== "named_retail_splits_available" && code !== "public_named_splits_available" && code !== "unclassified_splits_context_only" &&
+      !code.startsWith("named_split_source_authority_") &&
+      code !== "post_decision_sharp_context_only" && code !== "post_decision_named_context_only" &&
       code !== "source_conflict" &&
       code !== "market_resistance" &&
       !code.startsWith("market_read_")
     ),
-    "sharp_book_splits_available",
+    professional ? "sharp_book_splits_available" : args.section.sourceBook === "consensus" ? "public_named_splits_available"
+      : args.section.sourceBook ? "named_retail_splits_available" : "unclassified_splits_context_only",
+    NAMED_SPLIT_SOURCE_AUTHORITY_RELEASE,
     `market_read_${resolvedMarketRead.status}`,
-    "post_decision_sharp_context_only",
+    professional ? "post_decision_sharp_context_only" : "post_decision_named_context_only",
     ...(sourceConflict ? ["source_conflict"] : []),
     ...(resolvedMarketRead.status === "resistance" || resolvedMarketRead.status === "consensus_resistance"
       ? ["market_resistance"]
@@ -303,9 +314,10 @@ export function applySharpBookSplitSectionToDecision(args: {
   ];
   const supportingEvidence = [
     ...args.decision.supportingEvidence.filter((line) =>
-      line !== args.decision.resolvedMarketRead.copy && !/sharp(?:-| )book/i.test(line)
+      line !== args.decision.resolvedMarketRead.copy && !/sharp(?:-| )book/i.test(line) &&
+      !/^(?:DraftKings|BetMGM|Consensus|Unclassified sportsbook) splits reviewed\.$/i.test(line)
     ),
-    "Sharp book splits reviewed.",
+    `${sourceLabel} reviewed.`,
     resolvedMarketRead.copy,
   ];
   const quickRead = resolvedMarketRead.status === "mixed"
@@ -327,6 +339,9 @@ export function applySharpBookSplitSectionToDecision(args: {
     reasonCodes,
   };
 }
+
+/** Compatibility API: source identity, not this legacy function name, controls authority. */
+export const applySharpBookSplitSectionToDecision = applyNamedBookSplitSectionToDecision;
 
 function hasProviderLeak(value: unknown): boolean {
   return JSON.stringify(value).match(/\b(playbook|sharpapi|owls)\b/i) !== null;
