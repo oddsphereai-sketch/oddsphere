@@ -45,3 +45,29 @@ no-active-game/no-extra-request behavior. Focused UCL/generic split tests,
 full model safety, TypeScript/lint, build, fresh-main protected publication and
 normal source-job/member proof are required. Check the existing216 locked
 records×40 fields again after deployment.
+
+## Lock-capture correction
+
+Starting base98c603928f6810c9c342c3d3c996b5c02aad6864. The owner correctly
+reported that today's nine locked games lost their moneyline panels while
+tomorrow's nine open panels remained. The source was present, but the initial
+repair attached it at reader time only. The numerical forecast writer had
+never saved sportsbookSplits into member_market_at_capture, and the immutable
+reader correctly refused a post-lock overlay. The original repair was therefore
+incomplete at the lock boundary.
+
+Member R19/public-source R2 now prepare the same cached source in both existing
+writer routes before storage. Open games gain real capture receipts. Due locks
+carry exact prior open-game sections only with identical fixture/team/kickoff,
+pre-T60 capture and source clocks, and the existing15-minute freshness window.
+Postcutoff source data never replaces the prelock section. The immutable writer
+and reader freeze/render that section exactly. Already locked empty payloads
+remain unchanged; restoring them requires explicit owner approval underAGENTS.
+The saved12:38UTCsource receipt is pregame evidence, not proof of the latest
+splits at T60 or of influence on the already locked forecasts.
+
+No forecast/probability/price/selection/grade/stake formula changes. No paid or
+free source collection, new writer, timer or lease is introduced. Tests cover
+prelock capture→existing writer→exact locked reader, stale/postcutoff/wrong-game
+rejection and byte-preserving previously locked precedence. Verify normal
+publication and all252existing locked hashes after deployment.

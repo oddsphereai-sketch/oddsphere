@@ -1,5 +1,15 @@
 # Current production model releases and qualified research candidates
 
+## UCL public-split lock capture — November 3
+
+Member lifecycle R19 and public-source R2 capture cached public splits through
+the existing normal forecast and lock writers. Open forecasts save the real
+source/capture clocks; due locks carry only exact previously published pre-T60
+sections with matching fixture identity and freshness. Read-time overlays alone
+are insufficient. Numerical model R19, grade R22 and all existing locked records
+remain unchanged. Previously empty locked sections are not reconstructed by
+this repair. No provider request, new writer, cron or grade policy is added.
+
 ## UCL exact stored-capture movement repair — November 3
 
 Model R19 /grade R22 /coherent R12 /score R10 /member R18 retain the R18
@@ -54,7 +64,7 @@ accuracy gain or a complete causal movement-reader certification. Evidence:
 
 Public-source identity is
 `ucl_public_split_identity_2026_11_03_r1_unordered_exact_clubs`; scheduled source
-release is `ucl_public_split_source_2026_11_03_r1_scheduled_durable_refresh`.
+release is `ucl_public_split_source_2026_11_03_r2_capture_before_lock`.
 The actual18-game DraftKings home-first feed matches exact unordered clubs/date,
 retains labeled money/ticket sides and original source clocks, and remains
 retail context. Locked/locking/missed payloads remain exact. The existing
@@ -4933,7 +4943,7 @@ The four-season chronological tournament selected the runtime configuration on 2
 - Competition context: `ucl_competition_context_2026_09_03_r2_qualifying_truthful`; settlement: `ucl_regulation_settlement_2026_10_15_r4_frozen_member_forecast_continuity`
 - Frozen history manifest: `ucl_history_manifest_2026_09_03_r1` (185/126/63, cutoff `2026-01-28T20:00:00.000Z`, match SHA-256 `00d3761b7d94851776ffb5b893bdaded8dec85657f769140a2aef0dacd306d36`; 754 team-stat rows, stat SHA-256 `3b817b9aa164ebc5141c26dddf9194611735d98708deef2b5b7f16df91314f88`)
 - Stored-quote availability authority: `ucl_stored_quote_fallback_2026_11_03_r4_attested_stored_paths`
-- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_03_r18_attested_stored_paths`
+- Member lifecycle: `ucl_member_snapshot_lifecycle_2026_11_03_r19_capture_public_splits`
 - Runtime constants: `lib/services/ucl/uclModel.ts`, `lib/services/ucl/uclCoherentMarketOutcome.ts`, `lib/services/ucl/uclPreviewGrade.ts`, and `lib/services/ucl/uclCompetitionContext.ts`. The UCL model, outcome and grade authorities are owned/versioned in UCL; the EPL module supplies only shared display/writer adapters.
 - Provider boundary: the dedicated Ball Don't Lie UCL v1 product owns fixtures, history, stats, availability, 1X2 fallback, and provider opening odds. The documented plural `seasons[]` and bounded `start_date`/`end_date` filters ignored their values in live tests, returning 2026 and 2011 rows respectively. Production does not retry those known-bad paths. Current fixtures and historical cohorts each use the empirically verified singular `season=` transport, paginate, deduplicate exact IDs, reject conflicting duplicates and every returned-season mismatch, and fail closed on an empty current season or any historical season without regulation-final rows. Cache reads and fresh reads must also match the frozen match and team-stat manifests exactly before training. Cached telemetry must prove the same ready singular-season strategy and exact 189/189 cohorts. Schema v6 persists only authenticated raw inputs and deterministically rebuilds joined xG training rows on read. The deviation remains explicit in provider-health telemetry. The read-only replay returned exactly 189 rows for 2024 and 189 for 2025; 754 team-stat rows joined after the complete cohort passed. Empty, mismatched, partial, or manifest-drifted history is a write/publication error: the cycle preserves the last-known-good member snapshot and cannot publish a default-prior replacement. `CurrentSoccerMarketProvider` owns the primary exact-book Match Result, Double Chance, Total, and BTTS board; soccer splits remain truthfully unavailable.
 - Model/grade boundary: R18 replaces R17's rejected absolute bookmaker goal constraints and static late1X2 blend with observed relative same-book price-path innovations applied to the ORIGINAL independent PMF. Exact whole/quarter Total settlement translates line/juice changes to a relative mean coordinate; BTTS odds and1X2 masses update relative to their own observed baselines. One joint reconciliation owns every final probability and score. Flat/held markets preserve original information; current levels alone do not overwrite the independent forecast. Incomplete paths remain unknown, not synthetic evidence. R21 keeps legacy confidence/value Leans and adds genuinely movement-confirmed, paired-vig-compatible confidence Leans, with honest EV. Best needs clean originator confirmation, positiveEV, stronger confidence and price−200 or better; Leans require−350 or better. No forced actionable count, stake increase, current-book endpoint copy or shadow writer is permitted. Existing locked payloads remain exact and source/history repairs remain active. This is owner-directed product correctness with forward evaluation, not proven win-rate improvement. Evidence: `docs/model-audits/2026-11-03-ucl-relative-market-confidence-repair.md`.

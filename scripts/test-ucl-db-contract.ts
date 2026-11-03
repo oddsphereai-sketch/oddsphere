@@ -85,10 +85,13 @@ const response = {
 } as never;
 
 const operations: Operation[] = [];
+const frozenPublicSplits = { label: "DraftKings Splits", sourceBook: "draftkings_network", sourceObservedAt: "2026-09-08T16:40:00Z", memberCapturedAt: "2026-09-08T16:41:00Z", captureRelease: "ucl_public_split_source_2026_11_03_r2_capture_before_lock", rows: [{side:"home",moneyPct:60,betsPct:55},{side:"away",moneyPct:40,betsPct:45}], signal:null,lastUpdated:null } as const;
+(response as DailyEdgeResponse).games[0]!.markets.moneyline.sportsbookSplits = structuredClone(frozenPublicSplits) as unknown as NonNullable<MarketEdgeDto["sportsbookSplits"]>;
 const write = await writeUclPredictionRecords({
   slate, response, apply: true, now: new Date("2026-09-08T16:45:00Z"), client: writerClient(operations),
 });
 assert.deepEqual(write.errors, []);
+assert.deepEqual((write.proposed.find(row=>row.market==='match_result')!.snapshot_json!.member_market_at_capture as MarketEdgeDto).sportsbookSplits,frozenPublicSplits,'the existing immutable writer freezes complete public split evidence');
 const priorLock = operations.find((operation) => operation.kind === "update");
 assert.deepEqual(Object.keys(priorLock?.payload ?? {}), ["locked_at"], "disappearing quote may only add the lock timestamp");
 assert.equal(priorLock?.filters.id, 77);
@@ -125,6 +128,7 @@ const verified = await verifyUclAllMarketLocks(lockInput, lockVerificationClient
 assert.deepEqual({ completeProviderIds: verified.completeProviderIds, incompleteProviderIds: verified.incompleteProviderIds }, { completeProviderIds: [34], incompleteProviderIds: [] }, "writer-returned prior tuple ID closes disappearing-price identity");
 assert.equal(verified.lockedResponse.games[0]?.markets.total.currentPriceAmerican, -115, "locked member card reconstructs the prior immutable DB tuple instead of the fresh held tuple");
 assert.equal(verified.lockedResponse.games[0]?.markets.total.held, false);
+assert.deepEqual(verified.lockedResponse.games[0]?.markets.moneyline.sportsbookSplits,frozenPublicSplits,'locked reader renders the exact captured public section');
 assert.deepEqual(verified.lockedResponse.games[0]?.soccerProjection, { expectedHomeGoals: 1.4, expectedAwayGoals: 1.1 }, "locked projected score/probability payload is reconstructed from the common DB capture");
 const incomplete = await verifyUclAllMarketLocks(lockInput, lockVerificationClient(four.slice(0, 3)));
 assert.deepEqual({ completeProviderIds: incomplete.completeProviderIds, incompleteProviderIds: incomplete.incompleteProviderIds }, { completeProviderIds: [], incompleteProviderIds: [34] });

@@ -35,6 +35,9 @@ export type MarketSplitDisplaySection = {
   sourceBook?: "circa" | "draftkings" | "betmgm" | "consensus" | "draftkings_network" | null;
   /** Internal source time for silent continuity/failover; never rendered. */
   sourceObservedAt?: string | null;
+  /** Existing forecast writer's actual pre-lock source-capture receipt. */
+  memberCapturedAt?: string | null;
+  captureRelease?: string | null;
   rows: SplitSideDisplay[];
   signal: string | null;
   lastUpdated: string | null;

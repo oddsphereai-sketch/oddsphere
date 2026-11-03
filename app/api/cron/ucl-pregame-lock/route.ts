@@ -8,6 +8,7 @@ import { readCurrentUclMemberSnapshot, writeCurrentUclMemberSnapshot } from "@/l
 import { findUclGamesEnteringLock, verifyUclAllMarketLocks, writeUclPredictionRecords } from "@/lib/services/ucl/uclProductionPipeline";
 import { evaluateUclPublicationCoverage } from "@/lib/services/ucl/uclPublicationReadiness";
 import { resolveUclFeatureFlags } from "@/lib/services/ucl/uclFeatureFlags";
+import { captureStoredUclPublicSplits } from "@/lib/services/ucl/uclPublicSplitSource";
 
 export const maxDuration = 300;
 
@@ -30,6 +31,7 @@ export async function GET(request: Request): Promise<Response> {
     hydrateUclPriceHistory(currentSnapshot);
     let allBookPrices: UclStoredPriceObservation[] = [];
     const response = await buildUclDailyEdgePreview(slate, { storedPriceHistory, captureAllBookPrices: (rows) => { allBookPrices = rows; } });
+    await captureStoredUclPublicSplits(response, currentSnapshot);
     const coverage = evaluateUclPublicationCoverage(slate, response);
     const lineHistory = coverage.errors.length === 0
       ? await persistUclLineHistory({ response, allBookPrices, apply })
