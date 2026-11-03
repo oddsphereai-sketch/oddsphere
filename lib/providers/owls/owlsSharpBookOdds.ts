@@ -16,6 +16,7 @@ type RawOwlsOddsOutcome = {
 
 type RawOwlsOddsMarket = {
   key?: string | null;
+  last_update?: string | null;
   outcomes?: RawOwlsOddsOutcome[] | null;
 };
 

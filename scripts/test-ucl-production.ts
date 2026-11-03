@@ -361,8 +361,8 @@ const movementRows = (
   positiveAmerican: number,
   negativeAmerican: number,
 ): EplStoredPriceObservation[] => ["betmgm", "draftkings", "pinnacle"].flatMap((sportsbook) => ([
-  stored({ providerId: 92, market, side: market === "total" ? "over" : "yes", american: positiveAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
-  stored({ providerId: 92, market, side: market === "total" ? "under" : "no", american: negativeAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
+  stored({ providerId: 92, market, line: market === "total" ? 2.5 : null, side: market === "total" ? "over" : "yes", american: positiveAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
+  stored({ providerId: 92, market, line: market === "total" ? 2.5 : null, side: market === "total" ? "under" : "no", american: negativeAmerican, sportsbook, recordedAt: "2025-01-01T10:00:00Z" }),
 ]));
 const coherentOpeningOutcome = deriveUclCoherentMarketOutcome({
   matchId: 91,
@@ -454,7 +454,44 @@ const qualifiedTotalCorrection = deriveUclCoherentMarketOutcome({
 assert.equal(qualifiedTotalCorrection.audit.goalsReader?.totalCorrectionApplied, true, "a weak Total may be corrected by stable target-excluded consensus");
 assert.equal(qualifiedTotalCorrection.markets.total.over > 0.5, true);
 assert.equal(qualifiedTotalCorrection.audit.goalsReader?.bttsCorrectionApplied, false);
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r12_attested_current_inputs");
+const totalMovementInput = {
+  matchId: 92, independentLambdaHome: 1.3, independentLambdaAway: 1.2,
+  matchResultVectors: goalsVectors.matchResultVectors,
+  totalVectors: [binaryVector("betmgm", "total", 0.62), binaryVector("draftkings", "total", 0.625), binaryVector("pinnacle", "total", 0.615)],
+  bttsVectors: [], evaluatedMatchResultCanonicalBook: null, evaluatedTotalCanonicalBook: null,
+  evaluatedBttsCanonicalBook: null, providerEventId: "evt", decisionAt: "2025-01-01T12:00:00Z", kickoff: "2025-01-02T20:00:00Z",
+};
+const opposingHistory = movementRows("total", -300, 300);
+const genuineResistance = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory: opposingHistory});
+assert.equal(genuineResistance.audit.goalsReader?.totalMovement.side, "under");
+assert.equal(genuineResistance.audit.goalsReader?.totalCorrectionApplied, false, "genuine earlier same-book exact-contract resistance retains its role");
+const falseHistoryCases = [
+  opposingHistory.map(row => ({...row, line: 3.5})),
+  opposingHistory.map(row => ({...row, line: 3.25})),
+  opposingHistory.map(row => ({...row, line: row.side === "over" ? 2.5 : 3.5})),
+  opposingHistory.map(row => ({...row, recordedAt: "2025-01-01T11:59:00Z"})),
+  opposingHistory.map(row => ({...row, recordedAt: "2025-01-01T11:59:30Z"})),
+  opposingHistory.map(row => ({...row, american: row.side === "over" ? 0 : row.american})),
+  opposingHistory.map(row => ({...row, american: -1000})),
+  [...opposingHistory, ...opposingHistory.filter(row => row.side === "over").map(row => ({...row, american: -250}))],
+];
+for(const storedPriceHistory of falseHistoryCases) {
+  const corrected = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory});
+  assert.equal(corrected.audit.goalsReader?.totalMovement.books, 0);
+  assert.equal(corrected.audit.goalsReader?.totalCorrectionApplied, true, "foreign line, nonchronological, invalid or conflicting history cannot veto a qualified correction");
+}
+const duplicateHistory = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory:[...opposingHistory,...opposingHistory]});
+assert.equal(duplicateHistory.audit.goalsReader?.totalMovement.side, "under", "identical copies are idempotent");
+const laterValidHistory = deriveUclCoherentMarketOutcome({...totalMovementInput, storedPriceHistory:[...falseHistoryCases[7]!,...opposingHistory.map(row=>({...row,recordedAt:"2025-01-01T11:00:00Z"}))]});
+assert.equal(laterValidHistory.audit.goalsReader?.totalMovement.side, "under", "a conflicting capture does not suppress a later genuine baseline");
+const underInput = {...totalMovementInput, independentLambdaHome:1.5,independentLambdaAway:1.5,
+  totalVectors:[binaryVector("betmgm","total",.45),binaryVector("draftkings","total",.455),binaryVector("pinnacle","total",.445)]};
+const falseUnderVeto = movementRows("total",300,-300).map(row=>({...row,line:3.5}));
+assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:falseUnderVeto}).audit.goalsReader?.totalCorrectionApplied,true,
+  "the same exact-contract repair also allows a qualified Under correction; no directional preference");
+assert.equal(deriveUclCoherentMarketOutcome({...underInput,storedPriceHistory:movementRows("total",300,-300)}).audit.goalsReader?.totalCorrectionApplied,false);
+console.log("PASS UCL movement exact contract, original-quote chronology, two-way pair quality, conflict quarantine and symmetric correction/resistance.");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r13_exact_contract_movement");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -498,7 +535,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r5_attested_current_inputs");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r6_exact_contract_movement");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },
