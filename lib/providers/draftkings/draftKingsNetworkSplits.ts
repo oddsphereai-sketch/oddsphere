@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cbbSplitOrientation, cbbSplitTeamMatches } from "@/lib/cbb/exactSplitIdentity";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
+import {uclClubNamesMatch} from "@/lib/providers/real_api/soccerClubIdentity";
 import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
 import {
   applySharpApiCurrentSplitOverlay,
@@ -27,6 +28,7 @@ import { unstable_cache } from "next/cache";
 
 const DRAFTKINGS_NETWORK_SPLITS_URL =
   "https://dknetwork.draftkings.com/draftkings-sportsbook-betting-splits/";
+export const UCL_PUBLIC_SPLIT_IDENTITY_RELEASE="ucl_public_split_identity_2026_11_03_r1_unordered_exact_clubs" as const;
 const DRAFTKINGS_NETWORK_REVALIDATE_SECONDS = 5 * 60;
 // The complete-feed cache keeps normal member reads fast. Give its cold fill
 // enough time for both provider pages to finish from the production region;
@@ -282,8 +284,8 @@ export async function readStoredDraftKingsNetworkSplits(
 
 /** Existing cached/durable source only; callers retain their normal job lease.
  * Unlike the combined fallback refresh this makes no extra Owls request. */
-export async function refreshDraftKingsNetworkSplitSource(sport: Sport): Promise<DraftKingsNetworkSplitFeed | null> {
-  return readCachedDraftKingsNetworkSplits(sport);
+export async function refreshDraftKingsNetworkSplitSource(sport: Sport, options:{awaitDurableRefresh?:boolean}={}): Promise<DraftKingsNetworkSplitFeed | null> {
+  return options.awaitDurableRefresh ? readDurableDraftKingsNetworkSplits(sport) : readCachedDraftKingsNetworkSplits(sport);
 }
 
 export async function refreshDailyEdgeSplitFallbackSources(sport: Sport): Promise<{
@@ -409,7 +411,16 @@ export function applyDraftKingsNetworkSplitFallback(
   let matchedGames = 0;
   let populatedMarkets = 0;
   const claimedProviderEvents = new Set<string>();
+  const ucl=feed.sport===SPORT_EVENT_GROUP.ucl;
+  if(ucl&&(!Number.isFinite(Date.parse(feed.fetchedAt))||Date.parse(feed.fetchedAt)>Date.now()))return{matchedGames:0,populatedMarkets:0};
+  const sameUclPair=(candidate:DraftKingsNetworkSplitGame,game:DailyEdgeGameDto)=>{
+    const home=game.homeTeamDisplayName,away=game.awayTeamDisplayName;
+    if(!home||!away)return false;
+    return uclClubNamesMatch(candidate.awayName,away)&&uclClubNamesMatch(candidate.homeName,home)
+      ||uclClubNamesMatch(candidate.awayName,home)&&uclClubNamesMatch(candidate.homeName,away);
+  };
   for (const game of response.games) {
+    if(ucl&&(game.lockState!=="open"||game.lockedAt))continue;
     if (response.sport === "cbb" && (game.lockState === "locked" || game.lockedAt)) continue;
     const lockedCutoffMs = game.lockState === "locked" && options.reconstructMissingLockedPreLock
       ? Date.parse(game.lockedAt ?? "")
@@ -418,6 +429,11 @@ export function applyDraftKingsNetworkSplitFallback(
     const matches = feed.games.filter((candidate) => {
       if (claimedProviderEvents.has(candidate.providerEventId) ||
         candidate.monthDay !== gameMonthDay(game, response.date)) return false;
+      if(ucl){
+        const start=Date.parse(game.gameStartAt??""),observed=Date.parse(feed.fetchedAt);
+        return Number.isFinite(start)&&Number.isFinite(observed)&&Math.abs(start-observed)<=8*86400000&&sameUclPair(candidate,game)
+          &&response.games.filter(other=>candidate.monthDay===gameMonthDay(other,response.date)&&sameUclPair(candidate,other)).length===1;
+      }
       if (response.sport === "cbb") {
         if (cbbSplitOrientation(candidate.awayName, candidate.homeName, game) === null) return false;
         // A month/day-only source cannot identify same-day doubleheaders.
@@ -432,8 +448,8 @@ export function applyDraftKingsNetworkSplitFallback(
     const match = matches[0]!;
     claimedProviderEvents.add(match.providerEventId);
     matchedGames += 1;
-    populatedMarkets += attachMarketFallback(game, "moneyline", match.markets.moneyline, feed.fetchedAt, lockedCutoffMs);
-    populatedMarkets += attachMarketFallback(game, "total", match.markets.total, feed.fetchedAt, lockedCutoffMs);
+    populatedMarkets += attachMarketFallback(game, "moneyline", match.markets.moneyline, feed.fetchedAt, lockedCutoffMs,ucl);
+    populatedMarkets += attachMarketFallback(game, "total", match.markets.total, feed.fetchedAt, lockedCutoffMs,ucl);
     if (response.sport !== "mlb" && response.sport !== "soccer" && response.sport !== "ucl") {
       populatedMarkets += attachMarketFallback(game, "first_inning", match.markets.spread, feed.fetchedAt, lockedCutoffMs);
     }
@@ -504,10 +520,12 @@ function attachMarketFallback(
   source: DraftKingsNetworkSplitMarket | undefined,
   fetchedAt: string,
   lockedCutoffMs: number | null = null,
+  ucl=false,
 ): 0 | 1 {
   const market = game.markets[slot];
   if (!market || !source) return 0;
-  const section = splitSection(game, source, source.observedAt ?? fetchedAt);
+  if(ucl&&(!Number.isFinite(Date.parse(source.observedAt??fetchedAt))||Date.parse(source.observedAt??fetchedAt)>Date.now()))return 0;
+  const section = splitSection(game, source, source.observedAt ?? fetchedAt,ucl);
   if (!section) return 0;
   const existing = market.sportsbookSplits;
   if (lockedCutoffMs !== null) {
@@ -536,6 +554,7 @@ function attachMarketFallback(
   // BetMGM row is replaced by this independently verified DraftKings pair.
   if (existing && !draftKingsShouldReplace(existing, section)) return 0;
   market.sportsbookSplits = section;
+  if(ucl)market.reviewFlags=[...new Set([...market.reviewFlags,UCL_PUBLIC_SPLIT_IDENTITY_RELEASE])];
   return 1;
 }
 
@@ -543,6 +562,7 @@ function splitSection(
   game: DailyEdgeGameDto,
   source: DraftKingsNetworkSplitMarket,
   fetchedAt: string,
+  ucl=false,
 ): MarketSplitDisplaySection | null {
   const rows = source.sides.flatMap((side) => {
     const cbbTeamLabel = side.label.replace(/\s+[+-]\d+(?:\.\d+)?\s*$/, "");
@@ -550,6 +570,9 @@ function splitSection(
     const cbbAway = game.sport === "cbb" && cbbSplitTeamMatches(cbbTeamLabel, game, "away");
     const canonicalSide = source.market === "total"
       ? /^over\b/i.test(side.label) ? "over" as const : /^under\b/i.test(side.label) ? "under" as const : null
+      : ucl
+        ? uclClubNamesMatch(side.label,game.homeTeamDisplayName??"")===uclClubNamesMatch(side.label,game.awayTeamDisplayName??"")
+          ? null : uclClubNamesMatch(side.label,game.homeTeamDisplayName??"")?"home" as const:"away" as const
       : game.sport === "cbb"
         ? cbbHome === cbbAway ? null : cbbHome ? "home" as const : "away" as const
       : providerTeamMatches(game.sport, side.label, game.homeTeam, game.homeTeamDisplayName)
@@ -573,7 +596,7 @@ function splitSection(
   });
   if (rows.length !== 2 || rows[0]!.side === rows[1]!.side) return null;
   return {
-    label: "Sharp Book Splits",
+    label: ucl?"DraftKings Splits":"Sharp Book Splits",
     sourceBook: "draftkings_network",
     sourceObservedAt: fetchedAt,
     rows,

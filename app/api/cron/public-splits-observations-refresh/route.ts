@@ -25,6 +25,7 @@ import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnap
 import { runScheduledMarketIntelligenceV2Collection } from "@/lib/services/marketIntelligenceV2/scheduledCollection";
 import { readMarketCaptureActivity } from "@/lib/services/dailyEdge/marketCaptureActivity";
 import { refreshDraftKingsNetworkSplitSource } from "@/lib/providers/draftkings/draftKingsNetworkSplits";
+import {refreshScheduledUclPublicSplits} from "@/lib/services/ucl/uclPublicSplitSource";
 
 const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
 // This remains an observation-only collector. Capability gates continue to
@@ -33,7 +34,7 @@ const ENV = "PUBLIC_SPLITS_OBSERVATIONS_ENABLED";
 // before slower unrelated snapshot rebuilds can consume that lead time and
 // cause its sport-scoped lease to skip the source refresh. Every other sport
 // retains its relative order, provider calls, cadence and lease protection.
-const SPORTS: Sport[] = ["cbb", "mlb", "wnba", "nhl", "nba", "nfl", "cfb"];
+const SPORTS: Sport[] = ["cbb", "mlb", "wnba", "nhl", "nba", "nfl", "cfb", "soccer"];
 
 export async function GET(request: Request): Promise<Response> {
   return cronHandlerPerSport(
@@ -43,6 +44,11 @@ export async function GET(request: Request): Promise<Response> {
     async ({ sport }) => {
       if (process.env[ENV] !== "true") {
         return { records_updated: 0, details: { disabled: true, reason: `${ENV}!=true` } };
+      }
+      if(sport==="soccer"){
+        const source=await refreshScheduledUclPublicSplits();
+        return{records_updated:source.refreshed?source.freshMoneylineGames:0,partial:!source.fresh,
+          error_message:source.fresh?null:source.reason,details:{ucl_public_splits:source}};
       }
       const activity = await readMarketCaptureActivity({ client: supabase, sport });
       if (activity.skip) {

@@ -6790,7 +6790,8 @@ export async function GET(request: Request) {
     const { readCurrentUclMemberSnapshot } = await import("@/lib/services/ucl/uclMemberSnapshotStore");
     const payload = await readCurrentUclMemberSnapshot();
     if (payload) {
-      await populateDailyEdgeDraftKingsFallback(payload, "ucl");
+      const {populateStoredUclPublicSplits}=await import("@/lib/services/ucl/uclPublicSplitSource");
+      await populateStoredUclPublicSplits(payload);
       return Response.json(payload, {
         headers: {
           "Cache-Control": "private, max-age=30, stale-while-revalidate=300",

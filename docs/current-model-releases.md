@@ -1,5 +1,19 @@
 # Current production model releases and qualified research candidates
 
+## UCL complete public-split source path — November 3
+
+Public-source identity is
+`ucl_public_split_identity_2026_11_03_r1_unordered_exact_clubs`; scheduled source
+release is `ucl_public_split_source_2026_11_03_r1_scheduled_durable_refresh`.
+The actual18-game DraftKings home-first feed matches exact unordered clubs/date,
+retains labeled money/ticket sides and original source clocks, and remains
+retail context. Locked/locking/missed payloads remain exact. The existing
+public-splits cron uses its soccer prediction lease to refresh only active UCL
+source data on a15-minute cadence through the existing bounded free collector;
+no paid-provider call, prediction writer or new cron is added. R16 model/R19
+grade formulas and all score/price/selection/grade fields stay unchanged.
+Evidence: `docs/model-audits/2026-11-03-ucl-public-split-complete-path.md`.
+
 ## UCL recovered fixture native identity continuity — November 3
 
 Current UCL runtime is model R16 /calibration R19 /coherent outcome R9 /
