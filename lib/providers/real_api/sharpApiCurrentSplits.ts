@@ -7,7 +7,7 @@ import { normalizeTeamAbbr } from "@/lib/providers/playbook/playbookTeamNormaliz
 import { cfbProviderTeamMatches } from "@/lib/services/football/cfbProviderTeamIdentity";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 
 const OWLS_CURRENT_SPLITS_RELEASE = "owls_current_splits_2026_10_27_r1_complete_named_book" as const;
 const CURRENT_SPLITS_RELEASE = "sharpapi_current_splits_2026_10_12_r2_cfb_central_team_identity" as const;
@@ -148,6 +148,17 @@ async function readDurableCurrentSplits(
           source: "owls_current_splits",
           payloadVersion: OWLS_CURRENT_SPLITS_RELEASE,
         });
+        if (options.forceProviderFetch) {
+          // The scheduled capture and the member snapshot publisher can run
+          // seconds apart. Expire the process-level durable-read cache now so
+          // newly captured games attach on that publication cycle rather than
+          // remaining invisible for another five minutes.
+          try {
+            revalidateTag("owls-current-splits", { expire: 0 });
+          } catch (error) {
+            if (process.env.VERCEL === "1" || process.env.NEXT_RUNTIME) throw error;
+          }
+        }
         return feed;
       }
     } catch (error) {

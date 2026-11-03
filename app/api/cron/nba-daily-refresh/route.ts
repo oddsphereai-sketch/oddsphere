@@ -58,6 +58,7 @@ import {
   refreshNbaTeamRatings,
 } from "@/lib/services/nba/refreshNbaTeamRatingsService";
 import { refreshNbaLines } from "@/lib/services/nba/refreshNbaLinesService";
+import { fetchNbaTheOddsApiCurrentBoard } from "@/lib/services/nba/nbaTheOddsApiCurrentOdds";
 import { refreshDailyEdgeResponseSnapshot } from "@/lib/services/labResponseSnapshotWriter";
 import {
   loadNbaRollingSchedule,
@@ -69,7 +70,7 @@ import { nbaPlayerPropsSlateDate } from "@/lib/services/nba/nbaPlayerPropsLifecy
 
 const NBA_CRON_ENV = "NBA_CRON_ENABLED";
 const NBA_PLAYER_PROPS_PRIVATE_WRITER_ENV = "NBA_PLAYER_PROPS_PRIVATE_WRITER_ENABLED";
-const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads";
+const NBA_DAILY_REFRESH_RELEASE = "nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity";
 
 /**
  * NBA-ratings season convention: Basketball Reference uses the END-year
@@ -327,6 +328,23 @@ export async function GET(request: Request): Promise<Response> {
         result: Awaited<ReturnType<typeof refreshNbaLines>>;
       }> = [];
       const lineFailures: Array<{ date: string; error: string }> = [];
+      const theOddsApiKey = process.env.THE_ODDS_API_KEY?.trim() || null;
+      let theOddsApiCurrentBoard: Awaited<ReturnType<typeof fetchNbaTheOddsApiCurrentBoard>> | undefined;
+      let theOddsApiCurrentPromise: Promise<Awaited<ReturnType<typeof fetchNbaTheOddsApiCurrentBoard>>> | undefined;
+      let theOddsApiCurrentError: string | null = null;
+      const getTheOddsApiCurrentBoard = lineDates.length > 0 && theOddsApiKey ? async () => {
+        // Lazy and shared: spend one league-board request only when a primary
+        // provider actually leaves a gap, never once per game or slate date.
+        theOddsApiCurrentPromise ??= fetchNbaTheOddsApiCurrentBoard({ apiKey: theOddsApiKey });
+        try {
+          theOddsApiCurrentBoard = await theOddsApiCurrentPromise;
+          return theOddsApiCurrentBoard;
+        } catch (error) {
+          theOddsApiCurrentError = error instanceof Error ? error.message : String(error);
+          partial = true;
+          throw error;
+        }
+      } : undefined;
       for (const lineDate of lineDates) {
         console.log(`[nba-daily-refresh] step=lines  slateDate=${lineDate}`);
         try {
@@ -336,6 +354,7 @@ export async function GET(request: Request): Promise<Response> {
               slateDate: lineDate,
               owlsApiKey,
               ballDontLieApiKey: balldontlieApiKey,
+              getTheOddsApiCurrentBoard,
               dryRun: false,
               logger: stepLog(`lines:${lineDate}`),
             }),
@@ -351,6 +370,18 @@ export async function GET(request: Request): Promise<Response> {
           }
         }
       }
+      stepDetails.the_odds_api_current = theOddsApiCurrentBoard ? {
+        release: theOddsApiCurrentBoard.release,
+        requests: theOddsApiCurrentBoard.requests,
+        creditsUsed: theOddsApiCurrentBoard.creditsUsed,
+        creditsRemaining: theOddsApiCurrentBoard.creditsRemaining,
+        eventsReturned: theOddsApiCurrentBoard.eventsReturned,
+        quotes: theOddsApiCurrentBoard.quotes.length,
+      } : {
+        requests: theOddsApiCurrentPromise ? 1 : 0,
+        configured: Boolean(theOddsApiKey),
+        error: theOddsApiCurrentError,
+      };
       const lineTotals = lineResults.reduce(
         (total, entry) => ({
           gamesInDb: total.gamesInDb + entry.result.gamesInDb,
@@ -364,6 +395,7 @@ export async function GET(request: Request): Promise<Response> {
           scopesReconciled: total.scopesReconciled + entry.result.scopesReconciled,
           incompleteBookGroupsDropped: total.incompleteBookGroupsDropped + entry.result.incompleteBookGroupsDropped,
           errorCount: total.errorCount + entry.result.errors.length,
+          warningCount: total.warningCount + entry.result.warnings.length,
         }),
         {
           gamesInDb: 0,
@@ -377,6 +409,7 @@ export async function GET(request: Request): Promise<Response> {
           scopesReconciled: 0,
           incompleteBookGroupsDropped: 0,
           errorCount: 0,
+          warningCount: 0,
         },
       );
       stepDetails.lines = {
@@ -394,6 +427,7 @@ export async function GET(request: Request): Promise<Response> {
           scopesReconciled: result.scopesReconciled,
           incompleteBookGroupsDropped: result.incompleteBookGroupsDropped,
           errorCount: result.errors.length,
+          warningCount: result.warnings.length,
         })),
         failures: lineFailures,
         ...lineTotals,

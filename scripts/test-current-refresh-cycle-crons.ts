@@ -188,7 +188,7 @@ assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /refreshDailyEdg
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /leaseGroup:\s*"prediction_pipeline"/, "NBA snapshot publication shares the sport prediction lease");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /requireLease:\s*true/, "NBA snapshot publication requires the shared lease");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /process\.env\[NHL_CRON_ENV\] !== "true"/, "NHL refresh remains fail-closed behind its runtime gate");
-assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads/, "NBA refresh exposes its current bounded-payload release");
+assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity/, "NBA refresh exposes its bounded consumer-gap continuity release");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /season:\s*season - 1[\s\S]*skipFetchWhenRegularSeasonComplete:\s*true/, "NBA full refresh recovers an incomplete prior-season ratings pack once");
 assert.match(source("app/api/cron/nba-daily-refresh/route.ts"), /futureWindowPartial:\s*partial && snapshotBlockers\.length === 0/, "future-window quote gaps remain visible without suppressing a complete current NBA slate");
 assert.match(source("app/api/cron/nhl-daily-refresh/route.ts"), /nhl_daily_refresh_schedule_2026_11_01_r15_stats_lease_recovery/, "NHL refresh exposes its stats lease-recovery release");

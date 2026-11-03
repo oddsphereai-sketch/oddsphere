@@ -19,7 +19,7 @@ const NBA_SHARP_READER_BOOKS: ReadonlySet<string> = new Set([
 ]);
 
 /** Real consumer books retained from BALLDONTLIE for retail market context. */
-const NBA_CONSUMER_RETAIL_BOOKS: ReadonlySet<string> = new Set([
+export const NBA_CONSUMER_RETAIL_BOOKS: ReadonlySet<string> = new Set([
   "ballybet",
   "bet365",
   "betmgm",

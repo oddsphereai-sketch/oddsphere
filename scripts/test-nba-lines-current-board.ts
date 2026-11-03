@@ -115,6 +115,23 @@ async function main(): Promise<void> {
   ]);
   assert.deepEqual(pairGate.rows.map((row) => row.sportsbook), ["complete", "complete"]);
   assert.equal(pairGate.incompleteGroups, 2);
+  const pair = (sportsbook: string) => [
+    { game_id: 1, market_type: "moneyline" as const, player_id: null, sportsbook, side: "home" as const, line_value: null, odds_american: -120, odds_decimal: 1.83, implied_probability: 0.545, ev_percent: null, fair_odds: null },
+    { game_id: 1, market_type: "moneyline" as const, player_id: null, sportsbook, side: "away" as const, line_value: null, odds_american: 110, odds_decimal: 2.1, implied_probability: 0.476, ev_percent: null, fair_odds: null },
+  ];
+  const consumerOnlyManaged = __NBA_LINES_TEST__.managedBooksForCompleteScope(pair("fanduel"));
+  assert.ok(consumerOnlyManaged?.includes("draftkings"));
+  assert.equal(consumerOnlyManaged?.includes("circa"), false, "consumer-only refresh must preserve all sharp rows");
+  assert.deepEqual(
+    __NBA_LINES_TEST__.managedBooksForCompleteScope(pair("circa")),
+    ["bookmaker", "circa", "pinnacle"],
+    "sharp-only refresh must preserve all consumer rows",
+  );
+  assert.equal(
+    __NBA_LINES_TEST__.managedBooksForCompleteScope([...pair("fanduel"), ...pair("circa")]),
+    null,
+    "a complete two-lane cycle may reconcile the full market scope",
+  );
 
   const consumerBoard = selectNbaConsumerExecutionBoard([
     { market_type: "spread", sportsbook: "circa", side: "home", line_value: 0, fetched_at: "2026-10-29T11:35:00Z" },
@@ -136,7 +153,10 @@ async function main(): Promise<void> {
   assert.match(refreshSource, /provider HTTP failure aborts|throw new Error\(message\)/);
   assert.match(refreshSource, /selectCompleteExecutableBookPairs/);
   assert.match(refreshSource, /BALLDONTLIE NBA retail odds key missing/);
-  assert.match(refreshSource, /complete consumer execution and sharp-reader pairs are both required/);
+  assert.doesNotMatch(refreshSource, /complete consumer execution and sharp-reader pairs are both required/);
+  assert.match(refreshSource, /Each provider lane may advance independently/);
+  assert.match(refreshSource, /NBA consumer execution prices unavailable/);
+  assert.match(refreshSource, /missingRetailScopeKeys/);
   assert.match(refreshSource, /const existingIds: number\[\] = \[\]/);
   assert.ok(
     refreshSource.indexOf('.from("lines").insert(proposed)') < refreshSource.indexOf('.from("lines").delete().in("id", ids)'),
