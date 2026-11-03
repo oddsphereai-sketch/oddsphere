@@ -1,8 +1,8 @@
 import type {DailyEdgeResponse} from "@/app/lab/lib/labTypes";
 import {readCurrentUclMemberSnapshot} from "./uclMemberSnapshotStore";
-import {applyDraftKingsNetworkSplitFallback,readStoredDraftKingsNetworkSplits,refreshDraftKingsNetworkSplitSource,type DraftKingsNetworkSplitFeed} from "@/lib/providers/draftkings/draftKingsNetworkSplits";
+import {applyDraftKingsNetworkSplitFallback,readStoredDraftKingsNetworkSplits,refreshDraftKingsNetworkSplitSource,DRAFTKINGS_NETWORK_SPLIT_DISPLAY_MAX_AGE_MS,type DraftKingsNetworkSplitFeed} from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-export const UCL_PUBLIC_SPLIT_SOURCE_RELEASE="ucl_public_split_source_2026_11_03_r2_capture_before_lock" as const;
+export const UCL_PUBLIC_SPLIT_SOURCE_RELEASE="ucl_public_split_source_2026_11_03_r3_capture_cadence_continuity" as const;
 export const UCL_PUBLIC_SPLIT_REFRESH_MS=15*60_000;
 
 /** Member consumption is read-only and never invokes the collector/continuity writer. */
@@ -39,8 +39,8 @@ export async function captureStoredUclPublicSplits(response:DailyEdgeResponse,pr
   for(const key of ['moneyline','total','first_inning'] as const){
    if(g.markets[key].sportsbookSplits?.rows.length)continue;
    const s=p.markets[key].sportsbookSplits,at=Date.parse(s?.sourceObservedAt??''),saved=Date.parse(s?.memberCapturedAt??'');
-   if(!s||s.captureRelease!==UCL_PUBLIC_SPLIT_SOURCE_RELEASE||s.rows.length!==2||!Number.isFinite(at)||!Number.isFinite(saved)
-    ||at>saved||saved>cutoff||at>cutoff||cutoff-at>UCL_PUBLIC_SPLIT_REFRESH_MS)continue;
+   if(!s||![UCL_PUBLIC_SPLIT_SOURCE_RELEASE,'ucl_public_split_source_2026_11_03_r2_capture_before_lock'].includes(s.captureRelease??'')||s.rows.length!==2||!Number.isFinite(at)||!Number.isFinite(saved)
+    ||at>saved||saved-at>UCL_PUBLIC_SPLIT_REFRESH_MS||saved>cutoff||at>cutoff||cutoff-at>DRAFTKINGS_NETWORK_SPLIT_DISPLAY_MAX_AGE_MS)continue;
    g.markets[key].sportsbookSplits=structuredClone(s);carried++;
   }
  }

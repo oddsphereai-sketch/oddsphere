@@ -71,3 +71,14 @@ free source collection, new writer, timer or lease is introduced. Tests cover
 prelock capture→existing writer→exact locked reader, stale/postcutoff/wrong-game
 rejection and byte-preserving previously locked precedence. Verify normal
 publication and all252existing locked hashes after deployment.
+
+Cadence follow-up base6d4dbcd3ccf42400daf29e8bf48d7bd8e8d7e71e:
+member R20/source R3 distinguish15-minute collector freshness from the existing
+three-hour display-validity window. A16:17forecast with a16:15source must
+remain visible when a17:45kickoff locks at16:45. It is still the exact original
+section, with no fresh timestamp or data substitution. Source must have been
+fresh at its actual prelock capture; carry uses the same shared display-validity
+constant as DraftKings rendering. Genuine R2 receipts remain compatible with
+R3 for future locks; existing stored locks remain unchanged. The regression
+covers :17→:45, cross-release R2 receipts and rejection beyond the existing
+three-hour window. No additional source calls or numerical decisions change.
