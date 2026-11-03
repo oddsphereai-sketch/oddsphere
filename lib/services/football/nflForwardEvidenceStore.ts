@@ -21,7 +21,9 @@ type StoredRow = {
   payload: unknown;
 };
 
-export const NFL_FORWARD_EVIDENCE_PAGE_SIZE = 250 as const;
+// Keep the exact chronology and every payload, but bound the JSON response
+// buffer per API request. All pages still contribute to the same 5k ceiling.
+export const NFL_FORWARD_EVIDENCE_PAGE_SIZE = 50 as const;
 export const NFL_FORWARD_EVIDENCE_MAX_ROWS_PER_RELEASE = 5_000 as const;
 
 export async function readNflForwardEvidence(args: {
