@@ -4,7 +4,8 @@ import { buildCbbProvisionalBoard } from "../lib/cbb/provisionalBoard";
 import { advanceCbbProvisionalSnapshot } from "../lib/cbb/provisionalLifecycle";
 import { adaptCbbProvisionalGame,cbbDailyEdgeResponse } from "../lib/services/cbb/adaptCbbProvisionalToDailyEdge";
 import { writeCbbMemberGame,type CbbStoredMemberGame } from "../lib/services/cbb/cbbMemberGameStore";
-import { mergeCbbCapturedNamedSplitEvidence,mergeCbbReaderEvidence,cbbQualifiedPublicSplitSection,type CbbCapturedNamedSplitFeed,type CbbCapturedPublicSplitRow } from "../lib/services/cbb/cbbReaderMarketEvidence";
+import { mergeCbbCapturedNamedSplitEvidence,mergeCbbDraftKingsSplitEvidence,mergeCbbReaderEvidence,cbbQualifiedPublicSplitSection,type CbbCapturedNamedSplitFeed,type CbbCapturedPublicSplitRow } from "../lib/services/cbb/cbbReaderMarketEvidence";
+import { applyDraftKingsNetworkSplitFallback,type DraftKingsNetworkSplitFeed } from "../lib/providers/draftkings/draftKingsNetworkSplits";
 import { applySharpApiCurrentSplitOverlay } from "../lib/providers/real_api/sharpApiCurrentSplits";
 
 async function main(){
@@ -80,6 +81,43 @@ async function main(){
   const bytes=JSON.stringify(stored);
   await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-02T17:10:00Z",capturedNamedSections:sections},db);
   assert.equal(writes,3);assert.equal(JSON.stringify(stored),bytes,"existing locked payload has exact precedence");
+  const dk:DraftKingsNetworkSplitFeed={source:"draftkings_network",sport:"NCAA Basketball",fetchedAt:observed,games:[{
+    providerEventId:"dk-777",awayName:"Villanova",homeName:"Notre Dame",monthDay:"11/2",markets:{
+      moneyline:{market:"moneyline",sides:[{label:"Villanova",moneyPct:80,betsPct:60},{label:"Notre Dame",moneyPct:20,betsPct:40}]},
+      spread:{market:"spread",sides:[{label:"Villanova -7.5",moneyPct:75,betsPct:55},{label:"Notre Dame +7.5",moneyPct:25,betsPct:45}]},
+      total:{market:"total",sides:[{label:"Over 146.5",moneyPct:70,betsPct:60},{label:"Under 146.5",moneyPct:30,betsPct:40}]},
+    }}]};
+  const mergeDk=(value:DraftKingsNetworkSplitFeed,input=response,identity=input.games)=>mergeCbbDraftKingsSplitEvidence(input,value,applyDraftKingsNetworkSplitFallback,Date.parse(at),identity);
+  const dkBoard=mergeDk(dk),dkSections=Object.fromEntries(Object.entries(dkBoard.games[0].markets).map(([key,m])=>[key,m.sportsbookSplits!]));
+  assert.deepEqual(dkSections.moneyline.rows.map(row=>[row.side,row.moneyPct,row.betsPct]),[["home",80,60],["away",20,40]],"reversed source order keeps each institution's original shares");
+  for(const key of ["moneyline","total","first_inning"] as const){
+    const {sportsbookSplits,sharpBookAvailability,...actual}=dkBoard.games[0].markets[key];
+    const {sportsbookSplits:priorSplit,sharpBookAvailability:priorAvailability,...expected}=dto.markets[key];
+    assert.deepEqual(actual,expected,"DKN display cannot change forecast, quote, grade, stake or decision evidence");
+    assert.equal(sportsbookSplits?.sourceBook,"draftkings_network");assert.equal(sportsbookSplits?.sourceObservedAt,observed);
+  }
+  assert.equal(JSON.stringify(response),sourceBytes,"source board remains unchanged");
+  for(const invalid of [
+    {...dk,sport:"NBA" as const},
+    {...dk,fetchedAt:"2026-11-02T15:01:00Z"},
+    {...dk,games:dk.games.map(g=>({...g,monthDay:"11/3"}))},
+    {...dk,games:dk.games.map(g=>({...g,awayName:"Kentucky"}))},
+  ])assert.equal(mergeDk(invalid as DraftKingsNetworkSplitFeed).games[0].markets.moneyline.sportsbookSplits,null);
+  assert.equal(mergeDk(dk,response,[dto,duplicate]).games[0].markets.moneyline.sportsbookSplits,null,"selected-game reads retain the full duplicate-fixture guard");
+  const futureMarket={...dk,games:dk.games.map(g=>({...g,markets:{moneyline:{...g.markets.moneyline!,observedAt:at}}}))};
+  assert.equal(mergeDk(futureMarket).games[0].markets.moneyline.sportsbookSplits,null,"a market cannot postdate its page receipt");
+  assert.equal(mergeDk(dk,enriched).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"circa","fresh native Circa keeps priority");
+  assert.equal(mergeDk(dk,{...response,games:[retained]}).games[0].markets.moneyline.sportsbookSplits?.sourceBook,"draftkings_network","fresh DKN replaces retained stale source without renewing it");
+  const lockedBoard={...response,games:[frozen.record.memberGame]};
+  assert.strictEqual(mergeDk(dk,lockedBoard).games[0],lockedBoard.games[0],"locked reader preserves exact payload object");
+  stored=null;writes=0;
+  const dkSaved=await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:at,capturedNamedSections:dkSections},db);
+  assert.deepEqual(dkSaved.record.memberGame.markets.moneyline.sportsbookSplits,dkSections.moneyline,"sole writer persists the source-qualified DKN display");
+  const dkFrozen=await writeCbbMemberGame({game,candidate:null,homeLogo:null,awayLogo:null,now:"2026-11-02T17:00:00Z",capturedNamedSections:sections},db);
+  assert.deepEqual(dkFrozen.record.memberGame.markets.moneyline.sportsbookSplits,dkSections.moneyline,"future lock freezes the same DKN values and source time");
+  const dkLockedBytes=JSON.stringify(stored);
+  await writeCbbMemberGame({game,candidate:board,homeLogo:null,awayLogo:null,now:"2026-11-02T17:10:00Z",capturedNamedSections:sections},db);
+  assert.equal(writes,2);assert.equal(JSON.stringify(stored),dkLockedBytes,"later native or DKN observations cannot rewrite a lock");
   console.log("PASS captured CBB splits: shared reader/writer rules, original clocks, identity/age/axis guards, unchanged decisions and immutable future locks");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

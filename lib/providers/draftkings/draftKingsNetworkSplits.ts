@@ -1,6 +1,7 @@
 import type { DailyEdgeGameDto, DailyEdgeResponse } from "@/app/lab/lib/labTypes";
 import type { MarketSplitDisplaySection } from "@/lib/types/domain/RecommendationDecision";
 import type { Sport } from "@/lib/types/domain/Sport";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cbbSplitOrientation, cbbSplitTeamMatches } from "@/lib/cbb/exactSplitIdentity";
 import { normalizeMlbTeamName } from "@/lib/providers/real_api/_teamNameNormalizer";
 import { normalizeNhlTeamName } from "@/lib/providers/nhl/_teamNameNormalizer";
@@ -34,8 +35,10 @@ const DRAFTKINGS_NETWORK_TIMEOUT_MS = 6_000;
 const DRAFTKINGS_NETWORK_PAGE_SIZE = 10;
 const DRAFTKINGS_NETWORK_CACHE_TAG = "draftkings-network-splits-complete";
 const DRAFTKINGS_NETWORK_DURABLE_RELEASE =
-  "draftkings_network_splits_2026_10_12_r3_cfb_central_team_identity" as const;
+  "draftkings_network_splits_2026_11_02_r4_current_table_markup" as const;
 const DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE =
+  "draftkings_network_splits_2026_10_12_r3_cfb_central_team_identity" as const;
+const DRAFTKINGS_NETWORK_LEGACY_DURABLE_RELEASE =
   "draftkings_network_splits_2026_09_20_r2_durable_last_known_good" as const;
 const DRAFTKINGS_NETWORK_DURABLE_TTL_MS = 5 * 60 * 1000;
 const DRAFTKINGS_NETWORK_DURABLE_STALE_MS = 10 * 24 * 60 * 60 * 1000;
@@ -170,10 +173,10 @@ export async function fetchDraftKingsNetworkSplits(args: {
     if (/Betting splits are temporarily unavailable/i.test(html)) {
       throw new Error(`DraftKings Network splits page ${page} is in upstream maintenance`);
     }
-    return {
-      fetchedAt: responseDate ? new Date(responseDate).toISOString() : (args.now ?? new Date()).toISOString(),
-      games: parseDraftKingsNetworkSplitsHtml(html),
-    };
+    const fetchedAt=responseDate ? new Date(responseDate).toISOString() : (args.now ?? new Date()).toISOString();
+    return {fetchedAt,games:parseDraftKingsNetworkSplitsHtml(html).map(game=>({...game,
+      markets:Object.fromEntries(Object.entries(game.markets).map(([market,value])=>[market,{...value,observedAt:fetchedAt}])) as DraftKingsNetworkSplitGame["markets"],
+    }))};
   };
   const initial = await Promise.allSettled([fetchPage(1), fetchPage(2)]);
   const failedInitialPage = initial.find((result) => result.status === "rejected");
@@ -212,7 +215,7 @@ export async function fetchDraftKingsNetworkSplits(args: {
 // deployments instead of replacing a complete slate with a one-page subset.
 const readCachedDraftKingsNetworkSplits = unstable_cache(
   async (sport: Sport) => readDurableDraftKingsNetworkSplits(sport),
-  ["draftkings-network-splits-complete-v2-durable-lkg"],
+  [DRAFTKINGS_NETWORK_DURABLE_RELEASE, "complete-durable-lkg"],
   {
     revalidate: DRAFTKINGS_NETWORK_REVALIDATE_SECONDS,
     tags: [DRAFTKINGS_NETWORK_CACHE_TAG],
@@ -221,7 +224,7 @@ const readCachedDraftKingsNetworkSplits = unstable_cache(
 
 function durableSnapshotKey(
   sport: Sport,
-  release: typeof DRAFTKINGS_NETWORK_DURABLE_RELEASE | typeof DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE = DRAFTKINGS_NETWORK_DURABLE_RELEASE,
+  release: typeof DRAFTKINGS_NETWORK_DURABLE_RELEASE | typeof DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE | typeof DRAFTKINGS_NETWORK_LEGACY_DURABLE_RELEASE = DRAFTKINGS_NETWORK_DURABLE_RELEASE,
 ): string {
   return `daily-edge::draftkings-network-splits::${sport}::${release}`;
 }
@@ -233,6 +236,8 @@ async function readDurableDraftKingsNetworkSplits(
   const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport));
   const previousStored = stored ?? await readLatestLabResponseSnapshot<Record<string, unknown>>(
     durableSnapshotKey(sport, DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE),
+  ) ?? await readLatestLabResponseSnapshot<Record<string, unknown>>(
+    durableSnapshotKey(sport, DRAFTKINGS_NETWORK_LEGACY_DURABLE_RELEASE),
   );
   const previous = validateDurableDraftKingsNetworkSplitFeed(previousStored?.payload, sport);
   try {
@@ -260,12 +265,25 @@ async function readDurableDraftKingsNetworkSplits(
   return previous;
 }
 
-async function readStoredDraftKingsNetworkSplits(
+export async function readStoredDraftKingsNetworkSplits(
   sport: Sport,
+  client?: SupabaseClient,
 ): Promise<DraftKingsNetworkSplitFeed | null> {
-  const { readLatestLabResponseSnapshot } = await import("@/lib/services/labResponseSnapshots");
-  const stored = await readLatestLabResponseSnapshot<Record<string, unknown>>(durableSnapshotKey(sport));
+  const read = client ? async (key:string) => {
+    const {data,error}=await client.from("lab_response_snapshots").select("payload").eq("snapshot_key",key).maybeSingle();
+    if(error)throw new Error(`Stored DraftKings splits read failed: ${error.message}`);
+    return data;
+  } : (await import("@/lib/services/labResponseSnapshots")).readLatestLabResponseSnapshot;
+  const stored = await read(durableSnapshotKey(sport))
+    ?? await read(durableSnapshotKey(sport, DRAFTKINGS_NETWORK_PREVIOUS_DURABLE_RELEASE))
+    ?? await read(durableSnapshotKey(sport, DRAFTKINGS_NETWORK_LEGACY_DURABLE_RELEASE));
   return validateDurableDraftKingsNetworkSplitFeed(stored?.payload, sport);
+}
+
+/** Existing cached/durable source only; callers retain their normal job lease.
+ * Unlike the combined fallback refresh this makes no extra Owls request. */
+export async function refreshDraftKingsNetworkSplitSource(sport: Sport): Promise<DraftKingsNetworkSplitFeed | null> {
+  return readCachedDraftKingsNetworkSplits(sport);
 }
 
 export async function refreshDailyEdgeSplitFallbackSources(sport: Sport): Promise<{
@@ -331,24 +349,26 @@ export function parseDraftKingsNetworkSplitsHtml(html: string): DraftKingsNetwor
     const start = starts[index]!.index ?? 0;
     const end = starts[index + 1]?.index ?? html.length;
     const block = html.slice(start, end);
-    const title = block.match(/<div\s+class="[^"]*\btb-se-title\b[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?:<div\s+class="tb-market-wrap|$)/i)?.[1]
+    const title = block.match(/<div\s+class="[^"]*\btb-se-title\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i)?.[1]
       ?? block.slice(0, Math.min(block.length, 2_500));
     const eventLink = title.match(/href="[^"]*\/event\/(\d+)[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
     const matchup = cleanHtmlText(eventLink?.[2] ?? "");
     const teams = matchup.match(/^(.+?)\s+(?:@|vs\.?|v\.)\s+(.+)$/i);
     const monthDay = cleanHtmlText(title.match(/<span[^>]*>([\s\S]*?)<\/span>/i)?.[1] ?? "")
-      .match(/^(\d{1,2}\/\d{1,2})\b/)?.[1] ?? "";
+      .match(/^(?:(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\s+)?(\d{1,2}\/\d{1,2})\b/i)?.[1] ?? "";
     if (!eventLink?.[1] || !teams?.[1] || !teams[2] || !monthDay) continue;
 
     const markets: DraftKingsNetworkSplitGame["markets"] = {};
-    const marketHeaders = Array.from(block.matchAll(/<div\s+class="tb-se-head(?:\s[^"]*)?"[^>]*>/gi));
-    for (let marketIndex = 0; marketIndex < marketHeaders.length; marketIndex += 1) {
-      const header = marketHeaders[marketIndex]!;
-      const marketStart = header.index ?? 0;
-      const marketEnd = marketHeaders[marketIndex + 1]?.index ?? block.length;
+    // Current pages share one column header across all markets; older pages
+    // repeated it per market. Each actual market still owns a tb-sm group.
+    const marketGroups = Array.from(block.matchAll(/<div\s+class="tb-sm(?:\s[^"]*)?"[^>]*>/gi));
+    for (let marketIndex = 0; marketIndex < marketGroups.length; marketIndex += 1) {
+      const marketStart = marketGroups[marketIndex]!.index ?? 0;
+      const marketEnd = marketGroups[marketIndex + 1]?.index ?? block.length;
       const marketBlock = block.slice(marketStart, marketEnd);
-      const firstSideIndex = marketBlock.search(/<div\s+class="tb-sm(?:\s[^"]*)?"[^>]*>/i);
-      const market = marketFromLabel(cleanHtmlText(firstSideIndex < 0 ? marketBlock : marketBlock.slice(0, firstSideIndex)));
+      const prefix = block.slice(marketGroups[marketIndex - 1]?.index ?? 0, marketStart);
+      const labels = Array.from(prefix.matchAll(/>\s*(Moneyline|Run Line|Spread|Total)\s*</gi));
+      const market = marketFromLabel(labels.at(-1)?.[1] ?? "");
       if (!market) continue;
       const sideStarts = Array.from(marketBlock.matchAll(/<div\s+class="tb-sodd(?:\s[^"]*)?"[^>]*>/gi));
       const sides: DraftKingsNetworkSplitSide[] = [];
@@ -357,11 +377,11 @@ export function parseDraftKingsNetworkSplitsHtml(html: string): DraftKingsNetwor
         const sideEnd = sideStarts[sideIndex + 1]?.index ?? marketBlock.length;
         const sideBlock = marketBlock.slice(sideStart, sideEnd);
         const label = cleanHtmlText(sideBlock.match(/<div\s+class="[^"]*\btb-slipline\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? "");
-        const percentages = Array.from(sideBlock.matchAll(/<div\s+class="flex-1"[^>]*>\s*(\d{1,3})%/gi))
+        const percentages = Array.from(sideBlock.matchAll(/<div\b[^>]*>\s*(\d{1,3})%/gi))
           .map((match) => Number(match[1]));
         const moneyPct = percentages[0];
         const betsPct = percentages[1];
-        if (!label || !validPercentage(moneyPct) || !validPercentage(betsPct)) continue;
+        if (!label || percentages.length !== 2 || !validPercentage(moneyPct) || !validPercentage(betsPct)) continue;
         sides.push({ label, moneyPct, betsPct });
       }
       if (sides.length === 2 && complementary(sides[0]!.moneyPct, sides[1]!.moneyPct) && complementary(sides[0]!.betsPct, sides[1]!.betsPct)) {
