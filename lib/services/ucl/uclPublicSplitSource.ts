@@ -2,7 +2,7 @@ import type {DailyEdgeResponse} from "@/app/lab/lib/labTypes";
 import {readCurrentUclMemberSnapshot} from "./uclMemberSnapshotStore";
 import {applyDraftKingsNetworkSplitFallback,readStoredDraftKingsNetworkSplits,refreshDraftKingsNetworkSplitSource,DRAFTKINGS_NETWORK_SPLIT_DISPLAY_MAX_AGE_MS,type DraftKingsNetworkSplitFeed} from "@/lib/providers/draftkings/draftKingsNetworkSplits";
 
-export const UCL_PUBLIC_SPLIT_SOURCE_RELEASE="ucl_public_split_source_2026_11_03_r3_capture_cadence_continuity" as const;
+export const UCL_PUBLIC_SPLIT_SOURCE_RELEASE="ucl_public_split_source_2026_11_03_r4_fresh_capture_continuity" as const;
 export const UCL_PUBLIC_SPLIT_REFRESH_MS=15*60_000;
 
 /** Member consumption is read-only and never invokes the collector/continuity writer. */

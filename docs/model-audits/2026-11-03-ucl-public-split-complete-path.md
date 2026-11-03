@@ -73,12 +73,21 @@ rejection and byte-preserving previously locked precedence. Verify normal
 publication and all252existing locked hashes after deployment.
 
 Cadence follow-up base6d4dbcd3ccf42400daf29e8bf48d7bd8e8d7e71e:
-member R20/source R3 distinguish15-minute collector freshness from the existing
+member R21/source R4 distinguish15-minute collector freshness from the existing
 three-hour display-validity window. A16:17forecast with a16:15source must
 remain visible when a17:45kickoff locks at16:45. It is still the exact original
 section, with no fresh timestamp or data substitution. Source must have been
 fresh at its actual prelock capture; carry uses the same shared display-validity
 constant as DraftKings rendering. Genuine R2 receipts remain compatible with
-R3 for future locks; existing stored locks remain unchanged. The regression
+R4 for future locks; existing stored locks remain unchanged. The regression
 covers :17→:45, cross-release R2 receipts and rejection beyond the existing
 three-hour window. No additional source calls or numerical decisions change.
+
+The stored source read at19:55UTC still had a19:31HTTP clock despite a19:46
+collector success. UCL now disables only the second HTTP revalidation cache
+inside its already cadence-guarded, eight-page free source collector. No extra
+collector, page, cycle or paid request is introduced. Existing durable cache
+and LKG, original response clocks, member read-only consumption, all other
+sports HTTP cache policy and source failure behavior remain unchanged. Mock
+request-option cases prove UCL no-store and unchanged CBB behavior. Verify a
+normal source job and forecast publication before declaring capture complete.

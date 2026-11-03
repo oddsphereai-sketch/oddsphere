@@ -162,7 +162,9 @@ export async function fetchDraftKingsNetworkSplits(args: {
       // One overall deadline covers both pagination waves, so a slow provider
       // can never stack multiple full timeouts onto the member board load.
       signal: AbortSignal.timeout(Math.max(1, remainingMs)),
-      next: { revalidate: DRAFTKINGS_NETWORK_REVALIDATE_SECONDS },
+      // UCL's existing durable collector already owns the15-minute cadence.
+      // A second HTTP cache can return the preceding capture at every refresh.
+      ...(args.sport === "ucl" ? { cache: "no-store" as const } : { next: { revalidate: DRAFTKINGS_NETWORK_REVALIDATE_SECONDS } }),
     } as RequestInit & { next: { revalidate: number } });
     if (!response.ok) throw new Error(`DraftKings Network splits page ${page} HTTP ${response.status}`);
     const responseDate = response.headers.get("date");

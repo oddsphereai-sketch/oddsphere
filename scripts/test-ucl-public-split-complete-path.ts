@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {applyDraftKingsNetworkSplitFallback,UCL_PUBLIC_SPLIT_IDENTITY_RELEASE,type DraftKingsNetworkSplitFeed} from '../lib/providers/draftkings/draftKingsNetworkSplits';
+import {applyDraftKingsNetworkSplitFallback,fetchDraftKingsNetworkSplits,UCL_PUBLIC_SPLIT_IDENTITY_RELEASE,type DraftKingsNetworkSplitFeed} from '../lib/providers/draftkings/draftKingsNetworkSplits';
 import {populateStoredUclPublicSplits,refreshScheduledUclPublicSplits,captureStoredUclPublicSplits} from '../lib/services/ucl/uclPublicSplitSource';
 import type {DailyEdgeResponse,DailyEdgeGameDto} from '../app/lab/lib/labTypes';
 const source=JSON.parse(readFileSync(new URL('./fixtures/ucl-draftkings-public-feed-20261103.json',import.meta.url),'utf8')).payload as DraftKingsNetworkSplitFeed;
@@ -22,6 +22,13 @@ const futureBoard=structuredClone(board);for(const game of futureBoard.games)gam
 assert.equal(applyDraftKingsNetworkSplitFallback(futureBoard,futureQuote).populatedMarkets,17,'future quote clocks are not observed evidence');
 
 export async function testUclPublicSplitSource(){
+ for(const sport of ['ucl','cbb'] as const){
+  const options:RequestInit[]=[];
+  await fetchDraftKingsNetworkSplits({sport,fetchImpl:async(_url,init)=>{options.push(init??{});return new Response('',{status:200,headers:{date:'Tue, 03 Nov 2026 16:00:00 GMT'}});}});
+  assert.equal(options.length,2,'same bounded source seed pages, no extra collection');
+  for(const init of options){if(sport==='ucl'){assert.equal(init.cache,'no-store');assert.equal('next'in init,false,'due UCL collector cannot reuse a stale HTTP cache capture');}
+   else{assert.equal(init.cache,undefined);assert.ok('next'in init,'other sports retain their existing HTTP cache policy');}}
+ }
  const now=new Date('2026-11-03T16:00:00Z');let requests=0;
  const fresh=structuredClone(source);fresh.fetchedAt=now.toISOString();for(const game of fresh.games)game.markets.moneyline!.observedAt=now.toISOString();
  const deps={now,readMember:async()=>board,readFeed:async()=>source,refreshFeed:async()=>{requests++;return fresh;}};
