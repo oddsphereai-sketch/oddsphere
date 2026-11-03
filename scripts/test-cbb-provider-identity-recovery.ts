@@ -34,12 +34,19 @@ assert.equal(visible.games.length,2);
 // Source metadata is an actual bounded stored receipt; numeric prices below
 // are synthetic contract checks, never an assertion about this game's market.
 const discovery=JSON.parse(readFileSync(new URL("./fixtures/owls-cbb-institution-discovery-20261103.json",import.meta.url),"utf8"));
-assert.equal(discovery.events.length,3);
+assert.equal(discovery.events.length,5);
+const sourceSchools:Record<string,{id:number;home:string;away:string;homeName:string;awayName:string}>={
+ "IPFW":{id:10882593,home:"Duquesne",away:"Purdue Fort Wayne",homeName:"Duquesne Dukes",awayName:"Purdue Fort Wayne Mastodons"},
+ "Purdue FW":{id:10882593,home:"Duquesne",away:"Purdue Fort Wayne",homeName:"Duquesne Dukes",awayName:"Purdue Fort Wayne Mastodons"},
+ "S Dakota St":{id:10882602,home:"Kansas State",away:"South Dakota State",homeName:"Kansas State Wildcats",awayName:"South Dakota State Jackrabbits"},
+ "N Arizona":{id:10882617,home:"UNLV",away:"Northern Arizona",homeName:"UNLV Rebels",awayName:"Northern Arizona Lumberjacks"},
+ "Fullerton":{id:10882600,home:"San Diego State",away:"Cal State Fullerton",homeName:"San Diego State Aztecs",awayName:"Cal State Fullerton Titans"},
+};
 for(const source of discovery.events){
- const pfw=source.home_team==="Duquesne";
- const ownGame={...game,id:pfw?10882593:10882602,date:source.commence_time,
-  home_team:{...game.home_team,college:pfw?"Duquesne":"Kansas State",full_name:pfw?"Duquesne Dukes":"Kansas State Wildcats"},
-  visitor_team:{...game.visitor_team,college:pfw?"Purdue Fort Wayne":"South Dakota State",full_name:pfw?"Purdue Fort Wayne Mastodons":"South Dakota State Jackrabbits"}};
+ const school=sourceSchools[source.away_team];assert.ok(school);
+ const ownGame={...game,id:school.id,date:source.commence_time,
+  home_team:{...game.home_team,college:school.home,full_name:school.homeName},
+  visitor_team:{...game.visitor_team,college:school.away,full_name:school.awayName}};
  assert.equal(name(source.away_team),name(ownGame.visitor_team.college));
  assert.equal(name(source.home_team),name(ownGame.home_team.college));
  const captured="2026-11-03T11:59:00Z",fetched="2026-11-03T12:00:00Z",decision="2026-11-03T12:01:00Z";
@@ -51,9 +58,9 @@ for(const source of discovery.events){
  assert.equal(current.length,3,`${source.away_team}: all own-market pairs normalize`);
  assert.equal(current.find(q=>q.market==="spread")?.line,-3.5);
  assert.deepEqual(normalizeCbbOwlsCurrent(ownGame,{success:true,data:[{...e,home_team:e.away_team,away_team:e.home_team}]},fetched,decision).quotes,current);
- for(const bad of [{...e,sport:"nba"},{...e,commence_time:"2026-11-05T00:00:00Z"},{...e,away_team:pfw?"Purdue":"South Dakota"}])
+ for(const bad of [{...e,sport:"nba"},{...e,commence_time:"2026-11-05T00:00:00Z"},{...e,away_team:"Wrong institution"}])
   assert.equal(normalizeCbbOwlsCurrent(ownGame,{success:true,data:[bad]},fetched,decision).quotes.length,0);
- const nativeId=`ncaab:${source.away_team}@${source.home_team}-20261103`;
+ const nativeId=source.eventId;
  const history=normalizeCbbOwlsHistory(ownGame,{homeTeam:source.home_team,awayTeam:source.away_team},[
   {book:"pinnacle",market:"spreads",side:"home",price:-110,pointValue:-3.5,recordedAt:captured,recordedAtUtc:captured},
   {book:"pinnacle",market:"spreads",side:"away",price:-110,pointValue:3.5,recordedAt:captured,recordedAtUtc:captured}],fetched,decision);
@@ -66,9 +73,12 @@ for(const source of discovery.events){
  const paired=pairCbbCanonicalMarketEvidence({game:ownGame,decisionAt:decision,priceRows:rows});
  assert.equal(paired.pricePairs.length,1,`${source.away_team}: native ID reaches the R5 reader`);
  assert.equal(paired.pricePairs[0].first.ownLine,-3.5);
- const changed=rows.map(row=>({...row,provider_event_id:nativeId.replace("20261103","20261105")}));
+ const changed=rows.map(row=>({...row,provider_event_id:nativeId.replace(/-\d{8}$/, "-20261105")}));
  assert.equal(pairCbbCanonicalMarketEvidence({game:ownGame,decisionAt:decision,priceRows:changed}).pricePairs.length,0);
 }
+assert.notEqual(name("N Arizona"),name("Arizona"));
+assert.notEqual(name("N Arizona"),name("Arizona State"));
+assert.notEqual(name("Fullerton"),name("Fullerton College"));
 assert.notEqual(name("IPFW"),name("Purdue"));
 assert.notEqual(name("S Dakota St"),name("South Dakota"));
 assert.notEqual(name("S Dakota St"),name("San Diego State"));
