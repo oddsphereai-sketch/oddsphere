@@ -33,7 +33,7 @@ import {readCbbCanonicalReaderHistory} from "./cbbCanonicalReaderHistory";
 import {pairCbbCanonicalMarketEvidence} from "./cbbCanonicalMarketEvidence";
 import {cbbCanonicalBehaviorInputs} from "./cbbCanonicalBehaviorInputs";
 
-export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_03_r17_complete_verified_institution_inputs" as const;
+export const CBB_MEMBER_PIPELINE_RELEASE="cbb_member_pipeline_2026_11_03_r18_shared_market_identity" as const;
 const dateWindow=(anchor:string)=>Array.from({length:7},(_,i)=>addDaysToSlate(anchor,i));
 
 /** The sole leased writer publishes the same exact locked/unlocked tuples the

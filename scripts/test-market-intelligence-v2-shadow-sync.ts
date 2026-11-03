@@ -1,3 +1,4 @@
+import "./test-cbb-market-identity-coverage";
 import {
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE,
   buildOwlsSharpPriceObservations,
@@ -32,7 +33,7 @@ const failures: string[] = [];
 check(
   "Market Intelligence V2 exposes the versioned NBA per-book forward capture release",
   MARKET_INTELLIGENCE_V2_SHADOW_CAPTURE_RELEASE ===
-    "market_intelligence_v2_capture_2026_11_03_r25_remaining_cbb_institution_aliases",
+    "market_intelligence_v2_capture_2026_11_03_r26_shared_cbb_market_identity",
 );
 
 {
