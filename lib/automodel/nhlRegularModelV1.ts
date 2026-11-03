@@ -3,11 +3,12 @@ import type { NhlCalibratedTeamState } from "./nhlRegularPriors2026";
 import type { NhlRosterPrior } from "./nhlRosterPrior2026";
 import { nhlFastScoringFeatures, type NhlFastTeamState } from "./nhlFastState2026";
 
-export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r23_owls_current_odds" as const;
-export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r23_owls_current_odds" as const;
-export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r23_owls_current_odds" as const;
+export const NHL_REGULAR_MODEL_RELEASE = "nhl_regular_2026_r24_categorical_market_consequence" as const;
+export const NHL_REGULAR_CALIBRATION_RELEASE = "nhl_regular_calibration_2026_r24_categorical_market_consequence" as const;
+export const NHL_REGULAR_DECISION_RELEASE = "nhl_regular_decision_2026_r24_categorical_market_consequence" as const;
 export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
   NHL_REGULAR_MODEL_RELEASE,
+  "nhl_regular_2026_r23_owls_current_odds",
   "nhl_regular_2026_r22_specialized_margin_total_handoff",
   "nhl_regular_2026_r20_verified_current_board",
   "nhl_regular_2026_r19_fresh_quote_authority",
@@ -24,6 +25,7 @@ export const NHL_REGULAR_TRANSITION_MODEL_RELEASES = [
 ] as const;
 export const NHL_REGULAR_TRANSITION_CALIBRATION_RELEASES = [
   NHL_REGULAR_CALIBRATION_RELEASE,
+  "nhl_regular_calibration_2026_r23_owls_current_odds",
   "nhl_regular_calibration_2026_r22_specialized_margin_total_handoff",
   "nhl_regular_calibration_2026_r20_verified_current_board",
   "nhl_regular_calibration_2026_r19_fresh_quote_authority",
@@ -128,6 +130,13 @@ export type NhlModelMarket = {
   market_total_line: number | null;
   market_open_total_line: number | null;
   same_book_home_prob_move: number | null;
+  same_book_home_prob_move_sportsbook?: string | null;
+  same_book_home_prob_move_source_class?: "named" | "broad" | null;
+  same_book_home_prob_move_path_state?: "stable" | "buyback" | "reversal" | "flat" | "unavailable";
+  same_book_home_puck_prob_move?: number | null;
+  same_book_home_puck_prob_move_sportsbook?: string | null;
+  same_book_home_puck_prob_move_source_class?: "named" | "broad" | null;
+  same_book_home_puck_prob_move_path_state?: "stable" | "buyback" | "reversal" | "flat" | "unavailable";
   same_book_total_move: number | null;
   market_home_puck_line: number | null;
   market_away_puck_line: number | null;
@@ -136,10 +145,14 @@ export type NhlModelMarket = {
   market_book_count: number;
   ml_home_bets_pct: number | null;
   ml_home_money_pct: number | null;
+  spread_home_bets_pct?: number | null;
+  spread_home_money_pct?: number | null;
   total_over_bets_pct: number | null;
   total_over_money_pct: number | null;
   ml_split_source: "playbook" | "sharpapi" | null;
   ml_split_confidence: "high" | "medium" | "low" | "none";
+  spread_split_source?: "playbook" | "sharpapi" | null;
+  spread_split_confidence?: "high" | "medium" | "low" | "none";
   total_split_source: "playbook" | "sharpapi" | null;
   total_split_confidence: "high" | "medium" | "low" | "none";
   target_excluded_total_read?: NhlTargetExcludedTotalRead | null;
@@ -192,7 +205,19 @@ export type NhlModelOutput = {
     special_teams_diff_raw: number;
     market_goal_diff: number;
     split_movement_goals: number;
-    market_decision: "independent" | "confirmed" | "flipped";
+    market_decision: "independent" | "confirmed" | "resistance" | "flipped";
+    moneyline_market_read: "unavailable" | "confirmation" | "resistance" | "unresolved";
+    moneyline_market_side: "home" | "away" | null;
+    moneyline_market_pressure_basis: "consensus" | "money_differential" | "consensus_and_money_differential" | null;
+    moneyline_market_source_class: "named" | "broad" | null;
+    moneyline_market_sportsbook: string | null;
+    moneyline_market_path_state: "stable" | "buyback" | "reversal" | "flat" | "unavailable";
+    puck_line_market_read: "unavailable" | "confirmation" | "resistance" | "unresolved";
+    puck_line_market_side: "home" | "away" | null;
+    puck_line_market_pressure_basis: "consensus" | "money_differential" | "consensus_and_money_differential" | null;
+    puck_line_market_source_class: "named" | "broad" | null;
+    puck_line_market_sportsbook: string | null;
+    puck_line_market_path_state: "stable" | "buyback" | "reversal" | "flat" | "unavailable";
     market_target_home_probability: number | null;
     total_market_authority: number;
     total_market_target_goals: number | null;
@@ -448,18 +473,93 @@ function totalForOverProbability(line: number, targetProbability: number): numbe
   return (low + high) / 2;
 }
 
-function marketSideCorroborated(market: NhlModelMarket, marketHome: boolean): boolean {
-  if (market.market_book_count < 2) return false;
-  if (market.ml_split_confidence !== "high" && market.ml_split_confidence !== "medium") return false;
-  if (market.ml_home_bets_pct === null || market.ml_home_money_pct === null) return false;
-  if (market.same_book_home_prob_move === null || Math.abs(market.same_book_home_prob_move) < 0.01) return false;
-  const moveAgrees = marketHome
-    ? market.same_book_home_prob_move > 0
-    : market.same_book_home_prob_move < 0;
-  const splitsAgree = marketHome
-    ? market.ml_home_bets_pct >= 55 && market.ml_home_money_pct >= 55
-    : market.ml_home_bets_pct <= 45 && market.ml_home_money_pct <= 45;
-  return moveAgrees && splitsAgree;
+type NhlCategoricalMarketRead = {
+  state: "unavailable" | "confirmation" | "resistance" | "unresolved";
+  side: "home" | "away" | null;
+  probabilityMove: number;
+  pressureBasis: "consensus" | "money_differential" | "consensus_and_money_differential" | null;
+};
+
+/**
+ * Interpret one exact-contract, same-book price response against complete split
+ * pressure. The price response owns the direction: agreement is confirmation;
+ * movement against the pressured side is resistance. This returns a categorical
+ * read plus the observed probability innovation. It never averages the model
+ * with the current market level and never defaults to the favorite.
+ */
+function categoricalMarketRead(args: {
+  bookCount: number;
+  probabilityMove: number | null | undefined;
+  homeBetsPct: number | null | undefined;
+  homeMoneyPct: number | null | undefined;
+  splitConfidence: "high" | "medium" | "low" | "none" | undefined;
+  sourceClass: "named" | "broad" | null | undefined;
+  pathState: "stable" | "buyback" | "reversal" | "flat" | "unavailable" | undefined;
+}): NhlCategoricalMarketRead {
+  if (args.bookCount < 2
+    || (args.splitConfidence !== "high" && args.splitConfidence !== "medium")
+    || args.probabilityMove === null
+    || args.probabilityMove === undefined
+    || args.homeBetsPct === null
+    || args.homeBetsPct === undefined
+    || args.homeMoneyPct === null
+    || args.homeMoneyPct === undefined) {
+    return { state: "unavailable", side: null, probabilityMove: 0, pressureBasis: null };
+  }
+  if (args.pathState === "unavailable") {
+    return { state: "unavailable", side: null, probabilityMove: 0, pressureBasis: null };
+  }
+  if (args.pathState !== undefined && args.pathState !== "stable") {
+    return { state: "unresolved", side: null, probabilityMove: 0, pressureBasis: null };
+  }
+  const materialMove = args.sourceClass === "broad" ? 0.02 : 0.01;
+  if (Math.abs(args.probabilityMove) < materialMove) {
+    return { state: "unresolved", side: null, probabilityMove: 0, pressureBasis: null };
+  }
+  const consensusSide = args.homeBetsPct >= 55 && args.homeMoneyPct >= 55
+    ? "home" as const
+    : args.homeBetsPct <= 45 && args.homeMoneyPct <= 45
+      ? "away" as const
+      : null;
+  const moneyDifferential = args.homeMoneyPct - args.homeBetsPct;
+  const differentialSide = Math.abs(moneyDifferential) >= 10
+    ? moneyDifferential > 0 ? "home" as const : "away" as const
+    : null;
+  const pressureSide = differentialSide ?? consensusSide;
+  if (pressureSide === null) {
+    return { state: "unresolved", side: null, probabilityMove: 0, pressureBasis: null };
+  }
+  const pressureBasis = differentialSide !== null && consensusSide !== null && differentialSide === consensusSide
+    ? "consensus_and_money_differential" as const
+    : differentialSide !== null
+      ? "money_differential" as const
+      : "consensus" as const;
+  const priceSide = args.probabilityMove > 0 ? "home" as const : "away" as const;
+  return {
+    state: priceSide === pressureSide ? "confirmation" : "resistance",
+    side: priceSide,
+    probabilityMove: args.probabilityMove,
+    pressureBasis,
+  };
+}
+
+function applyCategoricalVerdict(
+  verdict: NhlVerdictKey,
+  pickSide: "home" | "away",
+  read: NhlCategoricalMarketRead,
+  probability: number,
+  marketProbability: number | null,
+): NhlVerdictKey {
+  if (read.side === null || read.state === "unavailable" || read.state === "unresolved") return verdict;
+  if (read.side !== pickSide) {
+    if (verdict === "best_angle") return "lean";
+    if (verdict === "lean") return "watchlist";
+    return verdict;
+  }
+  const edge = marketProbability === null ? null : probability - marketProbability;
+  if (verdict === "watchlist" && probability >= 0.58 && edge !== null && edge >= 0.015) return "lean";
+  if (verdict === "lean" && probability >= 0.70 && edge !== null && edge >= 0.05) return "best_angle";
+  return verdict;
 }
 
 function moneylineVerdict(probability: number, marketProbability: number | null): NhlVerdictKey {
@@ -614,9 +714,6 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const marketGoalDiff = marketHome === null ? independentGoalDiff : logit(marketHome) / ML_SLOPE;
 
   const marketTotal = snapshot.market.market_total_line;
-  const totalMovement = snapshot.market.same_book_total_move !== null
-    ? clamp(snapshot.market.same_book_total_move * 0.35, -0.25, 0.25)
-    : 0;
   const opponentAdjustedIndependentTotal = hasOpponentAdjustedState
     && !fastStateDirectActive
     && !specializedMarginTotalHandoffActive
@@ -635,31 +732,51 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       8,
     )
     : activeIndependentTotal;
-  const incumbentExpectedTotal = clamp(opponentAdjustedIndependentTotal + totalMovement, 4.5, 8);
-  const activeExpectedTotal = clamp(activeIndependentTotal + totalMovement, 4.5, 8);
+  const incumbentExpectedTotal = clamp(opponentAdjustedIndependentTotal, 4.5, 8);
+  const activeExpectedTotal = clamp(activeIndependentTotal, 4.5, 8);
   const independentDistribution = jointDistribution(
     Math.max(0, (activeExpectedTotal + independentGoalDiff) / 2),
     Math.max(0, (activeExpectedTotal - independentGoalDiff) / 2),
   );
   const independentHome = independentDistribution.homeWin >= 0.5;
-  const marketSideHome = marketHome === null ? independentHome : marketHome >= 0.5;
-  const marketStrongEnough = marketHome !== null && (marketSideHome ? marketHome >= 0.54 : marketHome <= 0.46);
-  const marketCorroborated = marketHome !== null && marketSideCorroborated(snapshot.market, marketSideHome);
-  const marketConflict = marketHome !== null && independentHome !== marketSideHome;
-  const shouldFlip = marketStrongEnough && marketCorroborated && marketConflict;
-  const marketDecision: "independent" | "confirmed" | "flipped" = shouldFlip
-    ? "flipped"
-    : marketStrongEnough && marketCorroborated && !marketConflict
-      ? "confirmed"
-      : "independent";
-  const marketTargetHomeProbability = shouldFlip ? marketHome : null;
+  const moneylineRead = categoricalMarketRead({
+    bookCount: snapshot.market.market_book_count,
+    probabilityMove: snapshot.market.same_book_home_prob_move,
+    homeBetsPct: snapshot.market.ml_home_bets_pct,
+    homeMoneyPct: snapshot.market.ml_home_money_pct,
+    splitConfidence: snapshot.market.ml_split_confidence,
+    sourceClass: snapshot.market.same_book_home_prob_move_source_class,
+    pathState: snapshot.market.same_book_home_prob_move_path_state,
+  });
+  const marketLevelSide = marketHome === null ? null : marketHome >= 0.5 ? "home" as const : "away" as const;
+  const marketLevelStrong = marketHome !== null && (marketHome >= 0.54 || marketHome <= 0.46);
+  const corroboratedLevelCorrection = moneylineRead.state === "confirmation"
+    && moneylineRead.side !== null
+    && moneylineRead.side === marketLevelSide
+    && marketLevelStrong
+    && (moneylineRead.side === "home") !== independentHome;
+  const marketTargetHomeProbability = moneylineRead.side === null
+    ? null
+    : corroboratedLevelCorrection
+      ? marketHome
+      : clamp(independentDistribution.homeWin + moneylineRead.probabilityMove, 0.20, 0.80);
+  const marketTargetHome = marketTargetHomeProbability === null
+    ? independentHome
+    : marketTargetHomeProbability >= 0.5;
+  const marketDecision: "independent" | "confirmed" | "resistance" | "flipped" = marketTargetHomeProbability === null
+    ? "independent"
+    : marketTargetHome !== independentHome
+      ? "flipped"
+      : moneylineRead.state === "resistance"
+        ? "resistance"
+        : "confirmed";
   const coherentIndependentGoalDiff = hasOpponentAdjustedState
     ? goalDiffForHomeWin(incumbentExpectedTotal, independentDistribution.homeWin) ?? independentGoalDiff
     : independentGoalDiff;
-  const flippedGoalDiff = marketTargetHomeProbability === null
+  const marketReadGoalDiff = marketTargetHomeProbability === null
     ? null
     : goalDiffForHomeWin(incumbentExpectedTotal, marketTargetHomeProbability);
-  const incumbentGoalDiff = flippedGoalDiff ?? coherentIndependentGoalDiff;
+  const incumbentGoalDiff = marketReadGoalDiff ?? coherentIndependentGoalDiff;
   const incumbentDistribution = jointDistribution(
     Math.max(0, (incumbentExpectedTotal + incumbentGoalDiff) / 2),
     Math.max(0, (incumbentExpectedTotal - incumbentGoalDiff) / 2),
@@ -675,21 +792,19 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
   const totalDirection = marketTargetTotal === null || Math.abs(marketTargetTotal - incumbentExpectedTotal) < 0.03
     ? null
     : marketTargetTotal > incumbentExpectedTotal ? "over" as const : "under" as const;
-  let totalMarketAuthority = marketTargetTotal === null ? 0 : totalRead!.named_book_count > 0 ? 1 : 0.8;
-  if (
-    totalDirection !== null
+  const totalSequenceOpposes = totalDirection !== null
     && totalRead?.stable_sequence_direction !== null
-    && totalRead?.stable_sequence_direction !== totalDirection
-  ) {
-    totalMarketAuthority *= 0.65;
-  }
+    && totalRead?.stable_sequence_direction !== totalDirection;
+  const totalMarketAuthority = marketTargetTotal !== null
+    && totalRead!.named_book_count > 0
+    && !totalSequenceOpposes
+    ? 1
+    : 0;
   const expectedTotal = marketTargetTotal === null
     ? incumbentExpectedTotal
-    : clamp(
-      incumbentExpectedTotal + totalMarketAuthority * (marketTargetTotal - incumbentExpectedTotal),
-      4.5,
-      8,
-    );
+    : totalMarketAuthority === 1
+      ? clamp(marketTargetTotal, 4.5, 8)
+      : incumbentExpectedTotal;
   const specializedRosterHomeProbability = specializedRosterComparator === null
     ? null
     : specializedRosterComparator.moneyline.pick.startsWith(snapshot.home.abbreviation)
@@ -745,6 +860,31 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
     : snapshot.market.market_away_puck_prob;
   const pickLine = pickHomePuckline ? homeLine : awayLine;
   const pucklinePick = `${pickHomePuckline ? snapshot.home.abbreviation : snapshot.away.abbreviation} ${pickLine > 0 ? "+" : ""}${pickLine.toFixed(1)}`;
+  const puckLineRead = categoricalMarketRead({
+    bookCount: snapshot.market.market_book_count,
+    probabilityMove: snapshot.market.same_book_home_puck_prob_move,
+    homeBetsPct: snapshot.market.spread_home_bets_pct,
+    homeMoneyPct: snapshot.market.spread_home_money_pct,
+    splitConfidence: snapshot.market.spread_split_confidence,
+    sourceClass: snapshot.market.same_book_home_puck_prob_move_source_class,
+    pathState: snapshot.market.same_book_home_puck_prob_move_path_state,
+  });
+  const moneylineBaseVerdict = moneylineVerdict(mlProbability, mlMarketProbability);
+  const moneylineFinalVerdict = applyCategoricalVerdict(
+    moneylineBaseVerdict,
+    homePick ? "home" : "away",
+    moneylineRead,
+    mlProbability,
+    mlMarketProbability,
+  );
+  const puckLineBaseVerdict = pucklineVerdict(pucklineProbability, pucklineMarketProbability);
+  const puckLineFinalVerdict = applyCategoricalVerdict(
+    puckLineBaseVerdict,
+    pickHomePuckline ? "home" : "away",
+    puckLineRead,
+    pucklineProbability,
+    pucklineMarketProbability,
+  );
 
   return {
     model_version: NHL_REGULAR_MODEL_RELEASE,
@@ -770,9 +910,21 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       team_strength_diff_raw: specializedMarginTotalHandoffActive ? independentGoalDiff : scoreMargin,
       special_teams_diff_raw: (activeHomeFeatures[10]! + activeHomeFeatures[11]!) - (activeAwayFeatures[10]! + activeAwayFeatures[11]!),
       market_goal_diff: marketGoalDiff,
-      split_movement_goals: 0,
+      split_movement_goals: incumbentGoalDiff - coherentIndependentGoalDiff,
       market_decision: specializedRosterComparator?.layers.market_decision ?? marketDecision,
       market_target_home_probability: specializedRosterComparator?.layers.market_target_home_probability ?? marketTargetHomeProbability,
+      moneyline_market_read: specializedRosterComparator?.layers.moneyline_market_read ?? moneylineRead.state,
+      moneyline_market_side: specializedRosterComparator?.layers.moneyline_market_side ?? moneylineRead.side,
+      moneyline_market_pressure_basis: specializedRosterComparator?.layers.moneyline_market_pressure_basis ?? moneylineRead.pressureBasis,
+      moneyline_market_source_class: snapshot.market.same_book_home_prob_move_source_class ?? null,
+      moneyline_market_sportsbook: snapshot.market.same_book_home_prob_move_sportsbook ?? null,
+      moneyline_market_path_state: snapshot.market.same_book_home_prob_move_path_state ?? "unavailable",
+      puck_line_market_read: puckLineRead.state,
+      puck_line_market_side: puckLineRead.side,
+      puck_line_market_pressure_basis: puckLineRead.pressureBasis,
+      puck_line_market_source_class: snapshot.market.same_book_home_puck_prob_move_source_class ?? null,
+      puck_line_market_sportsbook: snapshot.market.same_book_home_puck_prob_move_sportsbook ?? null,
+      puck_line_market_path_state: snapshot.market.same_book_home_puck_prob_move_path_state ?? "unavailable",
       total_market_authority: totalMarketAuthority,
       total_market_target_goals: marketTargetTotal,
       total_market_target_over_probability: readMatchesLine ? totalRead.over_probability : null,
@@ -794,10 +946,13 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
       pick: mlPick,
       probability: mlProbability,
       confidence: mlProbability,
-      verdict: moneylineVerdict(mlProbability, mlMarketProbability),
+      verdict: moneylineFinalVerdict,
       model_market_gap_pct: mlGap,
       notes: [
         `Independent ${independentGoalDiff >= 0 ? "+" : ""}${independentGoalDiff.toFixed(2)} goals; final ${expectedGoalDiff >= 0 ? "+" : ""}${expectedGoalDiff.toFixed(2)}.`,
+        ...(moneylineRead.side === null
+          ? []
+          : [`${moneylineRead.state === "resistance" ? "Resistance" : "Confirmation"} read: same-book probability moved ${(moneylineRead.probabilityMove * 100).toFixed(1)} pp toward ${moneylineRead.side}.`]),
       ],
     },
     total: {
@@ -810,14 +965,14 @@ export function nhlRegularModelV1(snapshot: NhlFeatureSnapshot): NhlModelOutput 
         `Independent ${opponentAdjustedIndependentTotal.toFixed(2)}; final projection ${expectedTotal.toFixed(2)}${marketTotal === null ? "" : ` vs ${marketTotal.toFixed(1)}`}.`,
         ...(marketTargetTotal === null
           ? []
-          : [`Target-excluded ${totalRead!.complete_book_count}-book Total read (${totalRead!.named_book_count} named) reconciled at ${(totalMarketAuthority * 100).toFixed(0)}% authority.`]),
+          : [`Target-excluded ${totalRead!.complete_book_count}-book Total read (${totalRead!.named_book_count} named) ${totalMarketAuthority === 1 ? "selected" : "failed categorical authority"}.`]),
       ],
     },
     puck_line: {
       pick: pucklinePick,
       probability: pucklineProbability,
       confidence: pucklineProbability,
-      verdict: pucklineVerdict(pucklineProbability, pucklineMarketProbability),
+      verdict: puckLineFinalVerdict,
       model_market_gap_pct: pucklineMarketProbability === null ? null : pucklineProbability - pucklineMarketProbability,
       notes: [`${(pucklineProbability * 100).toFixed(1)}% cover probability at ${pickLine > 0 ? "+" : ""}${pickLine.toFixed(1)}.`],
       puck_line_value: pickLine,

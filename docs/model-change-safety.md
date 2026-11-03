@@ -39,6 +39,28 @@ fresh-main overlap safety, protected PR and exact-tree/live verification remain
 mandatory. Forward evaluation is release- and lock-time-specific. This entry
 does not assert improved accuracy or exhaustive coverage of future situations.
 
+## Owner-directed NHL market-reader functional consequence — November 3
+
+Daniel Mengel explicitly rejected another long retrospective experiment and
+required the NHL product to work as designed now: keep the independent model
+market-free, interpret complete market evidence like the other Daily Edge
+readers, and make qualified confirmation or resistance consequential to the
+unlocked coherent score, picks, and grades. He requires forward evaluation of
+the working product rather than a production shadow.
+
+Candidate r24 is the scoped functional correction to that contract. It removes
+fractional model/market weights, distinguishes confirmation from resistance,
+retains named-book versus broad-fallback provenance, passes official spread
+evidence into the grade path, and fails closed on incomplete or mixed evidence.
+The exact current 11-game / 33-market rehearsal has zero errors, zero pick
+changes, two promotions, two demotions, and an unchanged 20 actionables. This
+is permission for forward production evaluation after the documented focused,
+full, integration, protected-PR and live gates; it is not a future-accuracy
+claim, stake increase, extra provider call, second writer, locked-record edit,
+or authority to weaken another sport's rules. Existing locked r23 payloads
+retain exact stored precedence. Evidence:
+`docs/model-audits/2026-11-03-nhl-market-reader-functional-consequence.md`.
+
 ## Owner-directed UCL product-semantic correction — November 3
 
 After approving the UCL repair for live forward evaluation, Daniel Mengel

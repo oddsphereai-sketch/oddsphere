@@ -6735,15 +6735,44 @@ three-market pricing for both upcoming games. Predictions, prices, grades,
 locks, tracking, copy, labels, and layout are unchanged. Evidence and rollback:
 `docs/model-audits/2026-10-08-nhl-pregame-coverage-gate-r10.md`.
 
-## NHL regular-season champion (active from 2026-10-23)
+## NHL regular-season champion (active from 2026-11-03)
 
-- Model: `nhl_regular_2026_r23_owls_current_odds`
-- Calibration: `nhl_regular_calibration_2026_r23_owls_current_odds`
-- Decision: `nhl_regular_decision_2026_r23_owls_current_odds`
+- Model: `nhl_regular_2026_r24_categorical_market_consequence`
+- Calibration: `nhl_regular_calibration_2026_r24_categorical_market_consequence`
+- Decision: `nhl_regular_decision_2026_r24_categorical_market_consequence`
 - Reader: `nhl_daily_edge_reader_2026_10_27_r18_owls_same_book_movement`
 - Public tracking start: `2026-09-29`
 - Official markets: moneyline, total, spread (puck line)
 - Retired release: `nhl_v0_2026_finals`
+
+The November 3 r24 functional repair keeps the independent NHL model
+market-free and makes the qualified market reader consequential without a
+continuous model/market blend. Complete trusted Moneyline pressure plus an
+exact same-book probability response is interpreted as confirmation when the
+directions agree and resistance when they oppose; the response is applied as
+an innovation from the independent probability, while a fully corroborated
+opposite market level may still select the coherent opposite winner. Pressure
+may be same-side money/ticket consensus or a material money-over-ticket
+differential, with the actual basis retained in the model receipt. Mixed,
+incomplete, low-confidence, flat, bought-back, or reversed evidence has no
+authority. The official
+puck-line split lane now reaches the model and can symmetrically promote or
+demote a grade only alongside the same exact-contract response. Totals remove
+the old 35% movement adjustment and 65%/80% fractional authority: only a
+complete target-excluded board containing a named professional book and no
+opposing named sequence may select the Total candidate.
+
+The exact November 3 production-input rehearsal covers 11 games / 33 markets
+with zero errors, four confirmations, two resistance reads, five unresolved
+reads, zero pick changes, two promotions, two demotions, and an unchanged 20
+actionables (0 Best Angle / 20 Lean / 13 Watchlist). It contains away and home
+Moneyline winners plus Overs and Unders; no favorite default or hidden board
+flattening occurs. The puck-line path has five qualified stable reads (two
+confirmations and three resistance reads) and rejects two endpoint directions
+because their full Circa histories expose buyback. Locked
+r23 payloads remain exact and render before r24.
+This is functional product qualification, not a future-accuracy claim.
+Evidence and rollback: `docs/model-audits/2026-11-03-nhl-market-reader-functional-consequence.md`.
 
 The October 23 r22/r17 release makes one bounded opening-window architecture
 correction. Games zero through six retain the qualified fast-state head. At
