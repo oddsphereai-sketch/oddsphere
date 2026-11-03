@@ -9,8 +9,9 @@ import { CBB_CURRENT_SCORE_RELEASE } from "./currentScoreRuntime";
 import type { CbbForecast,CbbMarket,CbbQuote,CbbCanonicalReceipt } from "./types";
 
 export const CBB_MARKET_BEHAVIOR_MODEL_RELEASE="cbb_candidate_2026_11_02_r5_received_market_response" as const;
-export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r6_exact_decision_gate_reasons" as const;
-export const CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_02_r5_resolved_price_not_double_penalized" as const;
+export const CBB_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r7_best_requires_value_or_action" as const;
+export const CBB_PREVIOUS_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_03_r6_exact_decision_gate_reasons" as const;
+export const CBB_LEGACY_MARKET_BEHAVIOR_GRADE_RELEASE="cbb_2026_11_02_r5_resolved_price_not_double_penalized" as const;
 export const CBB_MARKET_BEHAVIOR_RECEIPT_RELEASE="cbb_market_behavior_2026_11_03_r3_direction_and_magnitude" as const;
 const priority=["circa","pinnacle","bookmaker"];
 export const cbbBookFamily=(book:string)=>["pinnacle","ps3838"].includes(book.toLowerCase())?"pinnacle":book.toLowerCase();

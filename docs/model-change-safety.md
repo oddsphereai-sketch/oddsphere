@@ -1,5 +1,21 @@
 # Model change safety protocol
 
+## CBB path-only Best qualification candidate — November 3, not authorized live
+
+A 9:32 AM ET 18-game/54-market exact replay of the proposed grade R7 / board
+R11 / publisher R20 / adapter R9 / tracking R8 gate changes only SDSU Spread
+Best to Lean, leaving 15 actionable plays and every score, probability, side,
+price, EV, push probability and stake unchanged. The actual Pinnacle one-cent
+path supports the R5 score adjustment but has negative professional target
+value and no verified native action; it does not alone certify Best. The
+paired exact-value and exact-action promotion paths remain tested. Frozen R6
+and R5 locks retain reader/writer precedence. This candidate is a functional
+tier correction, not a held-out accuracy claim. The full current-market-level
+numeric gap is separate. It must not alter live grades without a specific
+owner decision on this exact impact, plus fresh-main protected publication and
+normal live/lock proof. Evidence:
+`docs/model-audits/2026-11-03-cbb-path-best-value-gate.md`.
+
 ## CBB evidence correctness with unchanged decisions — November 3
 
 The owner explicitly requires independent market interpretation spot checks,

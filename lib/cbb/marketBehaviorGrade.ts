@@ -124,7 +124,12 @@ export function gradeCbbReceivedMarket(input:CbbGradeEvidence,receipt:CbbMarketB
     if(modelExpectedValue>=.03&&eligible&&economicPathConfirmation&&grade==="Watchlist"&&base.referenceState==="neutral"){
       grade="Lean";reason="qualified_same_market_price_confirmation";gradeBasis="qualified_same_market_price";
     }
-    else if(modelExpectedValue>=.08&&eligible&&economicPathConfirmation&&grade==="Lean"){
+    // A price-only direction can move the score and support a Lean, but it
+    // cannot alone certify Best when the offered target is worse than the
+    // professional fair price. Require either exact-target professional value
+    // or verified native action at the same contract before that tier change.
+    else if(modelExpectedValue>=.08&&eligible&&economicPathConfirmation&&grade==="Lean"&&
+      (economicCorroboration||actualActionConfirmation)){
       grade="Best Angle";reason="qualified_same_market_price_with_material_model_value";gradeBasis="qualified_same_market_price";
     }
     if(corroboratedOpposition&&(grade==="Lean"||grade==="Best Angle")){

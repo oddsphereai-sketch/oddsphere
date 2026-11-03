@@ -1,5 +1,18 @@
 # Current production model releases and qualified research candidates
 
+## CBB path-only Best qualification — pending production decision
+
+Proposed grade `cbb_2026_11_03_r7_best_requires_value_or_action`, board
+`cbb_candidate_2026_11_03_r11_best_value_or_action`, publisher
+`cbb_member_pipeline_2026_11_03_r20_best_value_or_action`, adapter
+`cbb_member_adapter_2026_11_03_r9_best_value_or_action` and tracking writer
+`cbb_tracking_writer_2026_11_03_r8_best_value_or_action_lineage` remain a
+review candidate. Score R5 and independent R3 do not change. The frozen
+9:32 AM ET 18-game/54-market replay moves SDSU Spread Best→Lean and keeps
+15 actionable; no numeric decision, quote, side or stake changes. No live
+grade change is authorized yet. Prior R6 and R5 locked semantics remain exact.
+See `docs/model-audits/2026-11-03-cbb-path-best-value-gate.md`.
+
 ## CFB injury-news proper player identity — November 3
 
 Public-news source release is
