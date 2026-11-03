@@ -604,7 +604,28 @@ entry is not a deployment claim. Evidence, checks and rollback:
   `docs/model-audits/2026-10-31-all-market-data-health.md` and the paired JSON.
   Roll back this complete family together; never rewrite an immutable lock.
 
-## NBA neutral tie and corroborated opposition — active production November 2
+## NBA consumer market-data continuity — candidate November 3
+
+Candidate model/marriage/grade are
+`nba_professional_unified_2026_11_03_r33_consumer_gap_continuity` /
+`nba_market_marriage_2026_11_03_r35_consumer_gap_continuity` /
+`nba_grade_policy_2026_11_03_r24_consumer_gap_continuity`; line refresh is
+`nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity`.
+The score law, categorical reader, consequence r6, posture r8 and grade rules
+are unchanged. The candidate repairs the input path that required a fresh
+Circa/Pinnacle pair before complete consumer prices could be persisted. A
+complete consumer lane may now advance independently without deleting retained
+sharp rows; a sharp-only cycle may likewise not erase consumer execution rows.
+BALLDONTLIE remains primary. One bounded eight-book, three-market The Odds API
+league request per NBA refresh cycle is reused across every rolling date only
+as consumer gap coverage. It is never a sharp split or sharp-reader source.
+The scheduled named-split capture immediately expires its durable-read cache so
+new Owl's Circa/DraftKings/BetMGM rows attach on the next member publication.
+No split, opener, price movement, or line is fabricated. Existing locked rows
+remain immutable. Predeclaration, impact, tests and rollback are in
+`docs/model-audits/2026-11-03-nba-market-data-continuity.md`.
+
+## NBA neutral tie and corroborated opposition — superseded input release November 2
 
 Active model/marriage/grade are
 `nba_professional_unified_2026_11_02_r32_neutral_tie_opposition_grade` /
@@ -5974,7 +5995,7 @@ The paired live-slate replay is recorded in
 - Market marriage: `nba_market_marriage_2026_10_29_r25_consumer_execution_authority`
 - Margin probability calibration: `nba_margin_distribution_2026_10_20_r2_heavy_tail_mixture`
 - Grade policy: `nba_grade_policy_2026_10_29_r15_consumer_execution_authority`
-- Line refresh: `nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads`
+- Line refresh: `nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity`
 - Team-rating refresh: `nba_team_ratings_refresh_2026_10_21_r2_active_registry_completeness`
 - Point-projection policy: `nba_unified_final_projection_2026_10_20_r4_minimum_coherent_crossing`
 - Internal market reader: `nba_professional_market_reader_2026_10_25_r7_exchange_source_exclusion`
@@ -6325,7 +6346,7 @@ Evidence and explicit limitations: `docs/model-audits/2026-10-06-nba-independent
 
 ## NBA/NHL operational refresh schedules
 
-- NBA refresh release: `nba_daily_refresh_schedule_2026_10_30_r21_low_copy_props_payloads`
+- NBA refresh release: `nba_daily_refresh_schedule_2026_11_03_r22_consumer_gap_continuity`
   - Allocation-only recovery for an observed out-of-memory kill: the private
     props history codec uses a single bounded inflate buffer, hashes existing
     UTF-8 bytes, and streams unchanged JSON through backpressured gzip. No

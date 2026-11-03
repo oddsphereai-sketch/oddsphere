@@ -652,6 +652,7 @@ export async function GET(request: Request) {
           slateDate: date,
           owlsApiKey,
           ballDontLieApiKey,
+          theOddsApiKey: process.env.THE_ODDS_API_KEY?.trim() || undefined,
           dryRun: false,
           externalIdsFilter: partition.entering_lock.map((game) => game.external_id),
         });
