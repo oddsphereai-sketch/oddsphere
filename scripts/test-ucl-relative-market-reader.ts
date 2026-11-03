@@ -4,6 +4,8 @@ import {deriveSoccerMarketProbabilities} from '../lib/services/soccer/soccerMark
 import {deriveUclRelativeMarketRead,inferUclNativeTotalMean,uclPoissonNativeTotalShare,type UclRelativeMarketInput} from '../lib/services/ucl/uclRelativeMarketRead';
 import type {EplForwardBookVector} from '../lib/services/epl/eplForwardEvidenceCapture';
 import type {EplStoredPriceObservation} from '../lib/services/epl/buildEplDailyEdgePreview';
+import {eplCurrentBookVectors} from '../lib/services/epl/eplForwardEvidenceCapture';
+import {applyUclStoredQuoteFallback} from '../lib/services/ucl/uclStoredQuoteFallback';
 
 export function testUclRelativeMarketReader(){
  const currentAt='2026-11-03T13:55:00Z',baselineAt='2026-11-03T10:00:00Z',decisionAt='2026-11-03T14:00:00Z';
@@ -35,6 +37,48 @@ export function testUclRelativeMarketReader(){
  assert.ok(Math.abs(held.receipt.finalProbabilities.btts.yes-prior.btts.yes)<1e-7,'observed flat BTTS holds its original marginal when total changes');
  assert.equal(held.receipt.markets.btts.status,'unchanged');assert.ok(held.receipt.includedConstraintMarkets.includes('btts'));assert.ok(!held.receipt.appliedMarkets.includes('btts'));
  const btts=vector('btts',[.5,.5]),bttsBase=vector('btts',[.6,.4]);
+ for(const market of ['match_result','total','btts'] as const){
+  const before=market==='match_result'?mrBase:market==='total'?vector('total',[.65,.35],2.5):bttsBase;
+  const after=market==='match_result'?mr:market==='total'?vector('total',[.55,.45],2.5):btts;
+  const storedHistory=[...history(before),...history(after,currentAt)];
+  const fallback=applyUclStoredQuoteFallback({fixture:{eventId:null,odds:[],splits:[],splitsState:'unavailable'},providerId:1,
+   history:storedHistory,kickoff:common.kickoff,now:new Date(decisionAt)});
+  const vectors=eplCurrentBookVectors(fallback,market,decisionAt,{nativeTotalLines:true});
+  assert.equal(vectors.length,1);
+  const args={...common,fixtureEventIdentities:[],matchResultVectors:market==='match_result'?vectors:[],
+   totalVectors:market==='total'?vectors:[],bttsVectors:market==='btts'?vectors:[],storedPriceHistory:storedHistory};
+  const accepted=deriveUclRelativeMarketRead(base,args),axis=accepted.receipt.markets[market];
+  assert.equal(axis.status,'applied',`${market}: actual fallback builder paired capture participates in relative reading`);
+  assert.equal(axis.selected?.identityBasis,'exact_stored_fixture_capture');assert.equal(axis.selected?.providerEventId,null);
+  assert.equal(axis.selected?.current.clockBasis,'stored_capture');assert.equal(axis.selected?.current.observedAt,currentAt.replace('Z','.000Z'));
+  assert.notStrictEqual(accepted.joint,base);
+  assert.equal(deriveUclRelativeMarketRead(base,{...args,storedPriceHistory:[...storedHistory,...storedHistory]}).receipt.markets[market].status,'applied','identical duplicate rows stay idempotent');
+  const invalid=[
+   storedHistory.map(r=>r.recordedAt===currentAt?{...r,providerId:2}:r),
+   storedHistory.map(r=>r.recordedAt===currentAt?{...r,sportsbook:'draftkings'}:r),
+   storedHistory.map(r=>r.recordedAt===currentAt?{...r,line:3.5}:r),
+   storedHistory.map(r=>r.recordedAt===currentAt?{...r,american:r.american+1}:r),
+   storedHistory.map(r=>r.recordedAt===currentAt?{...r,recordedAt:'2026-11-03T13:54:00Z'}:r),
+   storedHistory.map(r=>r.recordedAt===currentAt?{...r,isOpener:true}:r),
+   storedHistory.filter((r,i)=>i!==storedHistory.length-1),
+   [...storedHistory,{...storedHistory.at(-1)!,american:999}],
+   [...storedHistory,...history(after,'2026-11-03T13:57:00Z')],
+  ];
+  for(const rows of invalid)assert.equal(deriveUclRelativeMarketRead(base,{...args,storedPriceHistory:rows}).receipt.markets[market].status,'unavailable',`${market}: foreign/partial/conflicting/opener/mismatched/superseded capture cannot gain authority`);
+  const partialLater=deriveUclRelativeMarketRead(base,{...args,storedPriceHistory:[...storedHistory,...history(after,'2026-11-03T13:57:00Z').slice(0,1)]});
+  assert.equal(partialLater.receipt.markets[market].status,'applied');assert.equal(partialLater.receipt.markets[market].latestLegFullyObserved,false);
+  const wrongEndpoint=structuredClone(vectors);wrongEndpoint[0]!.providerEndpoint='/untrusted';
+  assert.equal(deriveUclRelativeMarketRead(base,{...args,matchResultVectors:market==='match_result'?wrongEndpoint:[],totalVectors:market==='total'?wrongEndpoint:[],bttsVectors:market==='btts'?wrongEndpoint:[]}).receipt.markets[market].status,'unavailable');
+  const future=structuredClone(vectors);future[0]!.outcomes.forEach(o=>{o.fetchedAt='2026-11-03T14:01:00Z';});
+  const futureArgs={...args,storedPriceHistory:[...history(before),...history(after,'2026-11-03T14:01:00Z')],matchResultVectors:market==='match_result'?future:[],totalVectors:market==='total'?future:[],bttsVectors:market==='btts'?future:[]};
+  assert.equal(deriveUclRelativeMarketRead(base,futureArgs).receipt.markets[market].status,'unavailable','even exact stored future captures are not current evidence');
+ }
+ const actualPrices=vector('btts',[.5,.5]);actualPrices.outcomes[0]!.american=-186;actualPrices.outcomes[1]!.american=158;
+ const actualHistory=[...history(bttsBase),...history(actualPrices,currentAt)];
+ const actualFallback=applyUclStoredQuoteFallback({fixture:{eventId:null,odds:[],splits:[],splitsState:'unavailable'},providerId:1,history:actualHistory,kickoff:common.kickoff,now:new Date(decisionAt)});
+ const actualRead=deriveUclRelativeMarketRead(base,{...common,fixtureEventIdentities:[],bttsVectors:eplCurrentBookVectors(actualFallback,'btts',decisionAt),storedPriceHistory:actualHistory});
+ assert.equal(actualRead.receipt.markets.btts.status,'applied','reported−186/+158 stored pair is read rather than lost for missing nativeID');
+ assert.equal(actualRead.receipt.markets.btts.direction,'yes');
  const combined=deriveUclRelativeMarketRead(base,{...common,matchResultVectors:[mr],totalVectors:[total],bttsVectors:[btts],storedPriceHistory:[...history(mrBase),...history(totalBase),...history(bttsBase)]});
  assert.deepEqual(new Set(combined.receipt.appliedMarkets),new Set(['match_result','total','btts']));
  assert.ok(Math.abs(combined.receipt.finalMeans.home+combined.receipt.finalMeans.away-relativeTotal.receipt.finalMeans.home-relativeTotal.receipt.finalMeans.away)<1e-7,'total target comes from original-only tilt, not a serial BTTS update');

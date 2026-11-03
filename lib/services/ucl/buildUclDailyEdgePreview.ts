@@ -17,7 +17,7 @@ import { applyUclStoredQuoteFallback, UCL_STORED_QUOTE_FALLBACK_RELEASE } from "
 
 export { hydrateEplPriceHistory as hydrateUclPriceHistory, hydrateEplStoredPriceHistory as hydrateUclStoredPriceHistory };
 export type UclStoredPriceObservation = EplStoredPriceObservation;
-export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_03_r9_relative_market_paths" as const;
+export const UCL_PROJECTED_SCORE_RELEASE = "ucl_projected_score_2026_11_03_r10_attested_stored_paths" as const;
 
 export type UclPreviewBuildOptions = Pick<EplPreviewBuildOptions,
   "captureAllBookPrices"

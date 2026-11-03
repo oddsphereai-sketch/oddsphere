@@ -109,3 +109,29 @@ only; model R18, calibration R21 and score R9 stay unchanged. Functional cases
 cover first-pass fresh inserts without writer IDs, outside-quantum rejection,
 exact capture/evidence precedence and nonmutation. The stored locked tuples
 must remain byte-for-byte unchanged through publication.
+
+## Stored-source movement follow-up
+
+Fresh base700c8f977918dccb563eb988853bbe982fe3a2fe. The19:09normal lock pass
+published R18/R21. TODAY had6Leans/19Watchlist/2NoPlay; TOMORROW had12Leans/
+13Watchlist/2NoPlay. Nine open games passed one-law probability/score/selection
+coherence. The224prior locks remained unchanged; all252then-existing locks
+also remained unchanged through the precision-only member R17 deployment.
+
+Live Liverpool/Fenerbahce4438971 BTTS had a complete−186/+158 Pinnacle stored
+pair and actual history, but relative interpretation rejected it solely for
+null provider_event_id. R19 identifies a separate exact_stored_fixture_capture
+basis, with null native ID and stored_capture clock. Only the two established
+internal stored endpoints can qualify; all current prices/clocks/sides must
+match one exact nonopener family for this canonical game/book/market/contract.
+A newer complete family supersedes the candidate; a newer partial observation
+keeps the latest reaction unknown for confirmation. Native identity rules are
+unchanged. No missing side, timestamp or native ID is reconstructed.
+
+The same original-relative solver and confidence/price policy are retained.
+Model/grade/coherent/score/member identifiers advance to R19/R22/R12/R10/R18;
+stored-source semantics advance to R4. Functional cases use the actual fallback
+builder and all three markets, including the observed−186/+158pair, exact
+duplicate idempotence and rejection of foreign/book/line/price/clock/opener/
+partial/conflict/future/superseded evidence. No historical tuning or provider
+requests are needed. Existing locked captures must keep their exact precedence.
