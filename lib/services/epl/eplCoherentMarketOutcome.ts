@@ -1,3 +1,4 @@
+import type {SoccerFixtureEventIdentity} from "@/lib/providers/real_api/SharpApiEplMarketProvider";
 import {
   bivariatePoissonScoreDistribution,
   medianTotalFromDistribution,
@@ -255,6 +256,7 @@ export function deriveEplCoherentMarketOutcome(input: {
   evaluatedMatchResultCanonicalBook: string | null;
   evaluatedTotalCanonicalBook: string | null;
   evaluatedBttsCanonicalBook: string | null;
+  fixtureEventIdentities?: SoccerFixtureEventIdentity[];
   providerEventId: string | null;
   decisionAt: string;
   kickoff: string;

@@ -1,3 +1,4 @@
+import "./test-ucl-current-native-inputs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { BallDontLieUclProvider, BALLDONTLIE_UCL_API_BASE_URL, type BdlUclMatch, type UclHistoryFetchTelemetry } from "../lib/providers/real_api/BallDontLieUclProvider";
@@ -453,7 +454,7 @@ const qualifiedTotalCorrection = deriveUclCoherentMarketOutcome({
 assert.equal(qualifiedTotalCorrection.audit.goalsReader?.totalCorrectionApplied, true, "a weak Total may be corrected by stable target-excluded consensus");
 assert.equal(qualifiedTotalCorrection.markets.total.over > 0.5, true);
 assert.equal(qualifiedTotalCorrection.audit.goalsReader?.bttsCorrectionApplied, false);
-assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_10_31_r11_partial_price_freshness");
+assert.equal(UCL_MEMBER_SNAPSHOT_LIFECYCLE_RELEASE, "ucl_member_snapshot_lifecycle_2026_11_03_r12_attested_current_inputs");
 assert.deepEqual(
   { train: UCL_CHRONOLOGICAL_MANIFEST.train, calibration: UCL_CHRONOLOGICAL_MANIFEST.calibration, holdout: UCL_CHRONOLOGICAL_MANIFEST.holdout, cutoff: UCL_CHRONOLOGICAL_MANIFEST.cutoff },
   { train: 185, calibration: 126, holdout: 63, cutoff: "2026-01-28T20:00:00.000Z" },
@@ -497,7 +498,7 @@ assert.equal(uclTeamsMatch("Sabah Masazir", "Sabah Baku FK"), true);
 assert.equal(uclTeamsMatch("FC Sabah Masazir", "Sabah"), true);
 assert.equal(uclTeamsMatch("Bodø/Glimt", "Bodo/Glimt"), true);
 assert.equal(UCL_SHARP_MARKET_IDENTITY_RELEASE, "ucl_sharp_market_identity_2026_10_22_r6_exact_diacritic_club_identity");
-assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_10_31_r4_complete_official_market_prices");
+assert.equal(UCL_PROJECTED_SCORE_RELEASE, "ucl_projected_score_2026_11_03_r5_attested_current_inputs");
 const romaExpectedGoalsCard = {
   lockState: "open",
   projected: { away: 1.1, home: 3.3 },

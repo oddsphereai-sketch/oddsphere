@@ -624,6 +624,7 @@ function gameDto(match: EplShadowSlateMatch, sharp: EplSharpFixtureMarket, captu
     evaluatedMatchResultCanonicalBook: canonicalEplBook(mr?.sportsbook ?? null),
     evaluatedTotalCanonicalBook,
     evaluatedBttsCanonicalBook: canonicalEplBook(btts?.sportsbook ?? null),
+    ...(sharp.fixtureEventIdentities ? {fixtureEventIdentities: sharp.fixtureEventIdentities} : {}),
     providerEventId: sharp.eventId,
     decisionAt: capturedAt,
     kickoff: match.kickoff,

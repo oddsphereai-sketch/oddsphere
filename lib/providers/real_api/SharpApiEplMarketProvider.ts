@@ -39,7 +39,15 @@ export type EplSharpOddsRecord = NormalizedSoccerOddsRecord & {
   persistable?: boolean;
 };
 
+export type SoccerFixtureEventIdentity = {
+  provider: string; providerEventId: string; sportsbook: string;
+  market: EplSharpOddsRecord["market"];
+};
+
 export type EplSharpFixtureMarket = {
+  /** UCL-only current-source attestations, produced after exact fixture joins.
+   * A compatibility eventId cannot represent complementary native catalogs. */
+  fixtureEventIdentities?: SoccerFixtureEventIdentity[];
   eventId: string | null;
   odds: EplSharpOddsRecord[];
   splits: EplSharpSplitsEvent[];
