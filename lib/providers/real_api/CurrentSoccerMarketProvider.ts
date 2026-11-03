@@ -13,7 +13,7 @@ import { eplClubNamesMatch, uclClubNamesMatch } from "./soccerClubIdentity";
 import type { EplSharpFixtureMarket, EplSharpOddsRecord, SoccerFixtureEventIdentity } from "./SharpApiEplMarketProvider";
 
 export const CURRENT_SOCCER_MARKET_PROVIDER_RELEASE =
-  "soccer_current_market_provider_2026_11_03_r3_ucl_attested_native_competition" as const;
+  "soccer_current_market_provider_2026_11_03_r4_ucl_original_market_clock" as const;
 
 export const THE_ODDS_API_SOCCER_CREDIT_RESERVE = 1_000 as const;
 export const THE_ODDS_API_SOCCER_MAX_PAID_REQUESTS_PER_CYCLE = 20 as const;
@@ -213,10 +213,16 @@ function normalizeOwlsFixture(
     const away = text(event.away_team) ?? fixture.away;
     for (const bookmaker of event.bookmakers ?? []) {
       const sportsbook = token(bookmaker.key ?? bookmaker.title);
-      const observedAt = iso(bookmaker.last_update);
-      if (!sportsbook || !observedAt || nowMs - Date.parse(observedAt) > PROVIDER_TIMESTAMP_MAX_AGE_MS ||
-        competition === "ucl" && Date.parse(observedAt) > nowMs) continue;
+      const bookObservedAt = iso(bookmaker.last_update);
+      if (!sportsbook || competition !== "ucl" &&
+        (!bookObservedAt || nowMs - Date.parse(bookObservedAt) > PROVIDER_TIMESTAMP_MAX_AGE_MS)) continue;
       for (const rawMarket of bookmaker.markets ?? []) {
+        // A book refresh cannot advance an explicitly older market quote.
+        // Keep EPL's existing path; UCL qualifies its original market clock.
+        const observedAt = competition === "ucl" && rawMarket.last_update != null
+          ? iso(rawMarket.last_update) : bookObservedAt;
+        if (!observedAt || competition === "ucl" &&
+          (Date.parse(observedAt) > nowMs || nowMs - Date.parse(observedAt) > PROVIDER_TIMESTAMP_MAX_AGE_MS)) continue;
         const key = token(rawMarket.key);
         const market: OfficialSoccerMarket | null = key === "h2h" ? "match_result"
           : key === "totals" ? "total"

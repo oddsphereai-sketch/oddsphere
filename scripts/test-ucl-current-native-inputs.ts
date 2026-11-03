@@ -28,8 +28,8 @@ for(const change of [
  (e:RawOwlsOddsEvent)=>{e.home_team="Manchester City";},
  (e:RawOwlsOddsEvent)=>{e.commence_time="2026-11-04T17:45:00Z";},
  (e:RawOwlsOddsEvent)=>{e.bookmakers![0].key="fanduel";},
- (e:RawOwlsOddsEvent)=>{e.bookmakers![0].last_update="2026-11-03T15:00:00Z";},
- (e:RawOwlsOddsEvent)=>{e.bookmakers![0].last_update="2026-11-02T15:00:00Z";},
+ (e:RawOwlsOddsEvent)=>{e.bookmakers![0].last_update="2026-11-03T15:00:00Z";for(const m of e.bookmakers![0].markets??[])m.last_update="2026-11-03T15:00:00Z";},
+ (e:RawOwlsOddsEvent)=>{e.bookmakers![0].last_update="2026-11-02T15:00:00Z";for(const m of e.bookmakers![0].markets??[])m.last_update="2026-11-02T15:00:00Z";},
 ]) {const bad=structuredClone(dk);change(bad);assert.equal(normalize({success:true,data:[witness,bad]}).rows.filter(r=>r.sportsbook==="draftkings").length,0);}
 const wrongCompetition={...witness,league:"UEFA - Europa League"};
 assert.equal(normalize({success:true,data:[wrongCompetition,dk]}).rows.length,0);
@@ -61,3 +61,30 @@ for(const id of [4243843,4438978]) {
  assert.ok(!collision.some(r=>r.provider==="owls"&&r.sportsbook==="pinnacle"&&r.market===named.market),"duplicate book/market ownership is quarantined");
 }
 console.log("PASS UCL complementary native catalogs: actual LASK/Como sources restored per provider/book/market, duplicate ownership quarantined and no guessed global event ID.");
+
+let preservedOriginalMarketClocks=0;
+for(const event of events) for(const book of event.bookmakers??[]) for(const market of book.markets??[]) {
+ if(!market.last_update||market.last_update===book.last_update)continue;
+ const source={success:true,data:[event,...events.filter(w=>w.eventId===event.eventId&&w.league)]};
+ const game=fixture.games.find(g=>g.kickoff===new Date(event.commence_time!).toISOString()&&
+   __TEST__.normalizeOwlsFixture(source,"ucl",g,at).rows.some(row=>row.sportsbook===book.key));
+ if(!game)continue;
+ const rows=__TEST__.normalizeOwlsFixture(source,"ucl",game,at).rows;
+ const family=market.key==="h2h"?"match_result":market.key==="totals"?"total":market.key==="btts"?"btts":market.key==="double_chance"?"double_chance":null;
+ if(family){const selected=rows.filter(row=>row.market===family&&row.sportsbook===book.key);assert.ok(selected.length>0);assert.ok(selected.every(row=>row.fetched_at===market.last_update),"actual earlier market timestamp cannot be advanced to refreshed book clock");preservedOriginalMarketClocks++;}
+}
+assert.equal(preservedOriginalMarketClocks,4,"all four actual DraftKings clock differences are exercised");
+for(const marketAt of ["invalid","2026-11-02T14:55:00Z","2026-11-03T15:00:00Z"]){
+ const bad=structuredClone(dk);bad.bookmakers![0].markets!.find(m=>m.key==="h2h")!.last_update=marketAt;
+ assert.equal(normalize({success:true,data:[witness,bad]}).rows.filter(row=>row.sportsbook==="draftkings"&&row.market==="match_result").length,0);
+}
+const absentMarketClock=structuredClone(dk);delete absentMarketClock.bookmakers![0].markets!.find(m=>m.key==="h2h")!.last_update;
+assert.ok(normalize({success:true,data:[witness,absentMarketClock]}).rows.filter(row=>row.sportsbook==="draftkings"&&row.market==="match_result").every(row=>row.fetched_at===dk.bookmakers![0].last_update));
+for(const bookAt of ["invalid","2026-11-02T14:55:00Z","2026-11-03T15:00:00Z"]){
+ const book=structuredClone(dk);book.bookmakers![0].last_update=bookAt;
+ assert.equal(normalize({success:true,data:[witness,book]}).rows.filter(row=>row.sportsbook==="draftkings"&&row.market==="match_result").length,3,
+  "fresh explicit market clock owns its quotes even when unrelated book clock is unusable");
+ const noMarketClock=structuredClone(book);delete noMarketClock.bookmakers![0].markets!.find(m=>m.key==="h2h")!.last_update;
+ assert.equal(normalize({success:true,data:[witness,noMarketClock]}).rows.filter(row=>row.sportsbook==="draftkings"&&row.market==="match_result").length,0);
+}
+console.log("PASS UCL original market clock: actual receipt timestamps preserved; explicit invalid/stale/future clocks rejected; absent clock retains book fallback.");

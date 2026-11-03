@@ -13,7 +13,7 @@ import { impliedEplGoalsMarketDistribution } from "@/lib/services/epl/eplDerived
 import { logPoolUclResult, reconcileUclMeanPreserving } from "./uclEloConsensus";
 
 export const UCL_COHERENT_MARKET_OUTCOME_RELEASE =
-  "ucl_coherent_market_outcome_2026_11_03_r7_attested_native_book_identity" as const;
+  "ucl_coherent_market_outcome_2026_11_03_r8_exact_contract_movement" as const;
 
 type Side = "home" | "draw" | "away";
 type ResultVector = Record<Side, number>;
@@ -24,6 +24,7 @@ type BinaryConsensus = {
   leader: BinarySide;
   eligibleBooks: string[];
   probabilitiesByBook: Record<string, Record<BinarySide, number>>;
+  originalQuoteAtByBook: Record<string, number>;
 };
 type StoredPriceObservation = {
   providerId: number;
@@ -160,6 +161,9 @@ function binaryConsensus(input: {
     leader,
     eligibleBooks: eligible.map(([book]) => book),
     probabilitiesByBook: Object.fromEntries(eligible.map(([book, value]) => [book, value.probabilities])),
+    originalQuoteAtByBook: Object.fromEntries(eligible.map(([book, value]) => [book,
+      Math.min(...value.vector.outcomes.map(outcome => Date.parse(outcome.fetchedAt ?? ""))),
+    ])),
   };
 }
 
@@ -188,21 +192,30 @@ function binaryMovement(input: {
   const deltas: number[] = [];
   for (const [book, current] of currentByBook) {
     const byCapture = new Map<string, Partial<Record<BinarySide, number>>>();
+    const conflictingCaptures = new Set<string>();
+    const currentOriginalAt = input.consensus.originalQuoteAtByBook[book];
     for (const row of input.history) {
       const recordedAt = Date.parse(row.recordedAt);
       if (row.providerId !== input.matchId || row.market !== input.market || canonicalBook(row.sportsbook) !== book
+        || row.line !== (input.market === "total" ? 2.5 : null)
         || row.side !== input.positiveSide && row.side !== input.negativeSide
-        || !Number.isFinite(recordedAt) || recordedAt > input.decisionAt || recordedAt >= input.kickoff) continue;
+        || !Number.isFinite(recordedAt) || recordedAt > input.decisionAt || recordedAt >= input.kickoff
+        || !Number.isFinite(currentOriginalAt) || recordedAt >= currentOriginalAt
+        || !Number.isFinite(row.american) || Math.abs(row.american) < 100) continue;
       const capture = byCapture.get(row.recordedAt) ?? {};
+      const previousPrice = capture[row.side as BinarySide];
+      if (previousPrice !== undefined && previousPrice !== row.american) conflictingCaptures.add(row.recordedAt);
       capture[row.side as BinarySide] = row.american;
       byCapture.set(row.recordedAt, capture);
     }
-    const opening = [...byCapture.entries()].sort(([left], [right]) => Date.parse(left) - Date.parse(right)).flatMap(([, prices]) => {
+    const opening = [...byCapture.entries()].sort(([left], [right]) => Date.parse(left) - Date.parse(right)).flatMap(([at, prices]) => {
+      if (conflictingCaptures.has(at)) return [];
       const positive = prices[input.positiveSide];
       const negative = prices[input.negativeSide];
       if (positive === undefined || negative === undefined) return [];
       const rawPositive = implied(positive);
       const rawNegative = implied(negative);
+      if (rawPositive + rawNegative < 0.98 || rawPositive + rawNegative > 1.25) return [];
       return [rawPositive / (rawPositive + rawNegative)];
     })[0];
     if (opening !== undefined) deltas.push(current - opening);
