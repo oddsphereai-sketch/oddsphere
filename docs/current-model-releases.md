@@ -1,5 +1,15 @@
 # Current production model releases and qualified research candidates
 
+## CBB split source authority — November 3
+
+Reader evidence `cbb_reader_evidence_2026_11_03_r8_named_retail_source`
+classifies the stored DraftKings Network fallback as a retail source on open
+CBB rows and future locks. The member split panel and cross-source comparison
+name that source instead of claiming professional sharp-book evidence. This
+does not change score R5, grade R6, selection, evaluated quote, or tracking.
+Existing locked member payloads and their reader text retain exact precedence.
+The broader cross-sport split authority path remains under separate audit.
+
 ## CBB market-evidence correctness — November 3
 
 The candidate evidence/reader family is receipt
@@ -171,7 +181,8 @@ Predeclaration and evidence:
 
 The November 2 source repair introduced publisher
 `cbb_member_pipeline_2026_11_02_r13_stored_draftkings_fallback` (superseded by R18
-above); reader evidence remains `cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback`.
+above); reader evidence was `cbb_reader_evidence_2026_11_02_r7_stored_draftkings_fallback`
+before the November 3 source-authority correction above.
 Both reuse the same stored DraftKings Network R4 source as a display fallback;
 the existing CBB-first leased collector refreshes it with at most twelve free
 HTML page requests and no extra paid-provider call. Neither member reads nor

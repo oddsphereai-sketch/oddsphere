@@ -99,11 +99,11 @@ export function splitLeader(
   return leaders.length === 1 ? leaders[0].label : null;
 }
 
-export function splitSourceComparison(metric:"Money"|"Tickets",publicLeader:string|null,sharpLeader:string|null):string|null {
+export function splitSourceComparison(metric:"Money"|"Tickets",publicLeader:string|null,sharpLeader:string|null,sourceName="Sharp"):string|null {
   if (!publicLeader && !sharpLeader) return null;
   if (publicLeader && sharpLeader) return publicLeader.toLowerCase() === sharpLeader.toLowerCase()
-    ? `${metric} agrees on ${publicLeader}` : `${metric}: Public ${publicLeader} · Sharp ${sharpLeader}`;
-  return `${metric}: ${publicLeader ? `Public ${publicLeader}` : `Sharp ${sharpLeader}`}`;
+    ? `${metric} agrees on ${publicLeader}` : `${metric}: Public ${publicLeader} · ${sourceName} ${sharpLeader}`;
+  return `${metric}: ${publicLeader ? `Public ${publicLeader}` : `${sourceName} ${sharpLeader}`}`;
 }
 
 export function splitSourcesConflict(consensus:MarketSplitDisplaySection|null,sharp:MarketSplitDisplaySection|null):boolean {
