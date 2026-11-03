@@ -26,3 +26,5 @@ Evidence artifacts (read-only; no production writes):
 - `/private/tmp/cbb-whole-level-replay-20261103.json`, SHA-256 `0ba11d09a9d281b8ae4fce19faae0b9df760580ef5783302399a6b5b9adc1438`.
 
 The provider checks used one bounded Owls current-odds response and one bounded BallDontLie current-odds response (five paginated calls) beyond normal production. They wrote no production state. The stored-market and member-board checks made database reads only.
+
+Isolated candidate verification on the integrated branch: TypeScript, the focused CBB market-behavior suite, the exact prior rebuild/verification, the verified-venue prior suite and `npm run verify:model-change` passed. The first sandboxed full-gate attempt was stopped by tsx local IPC permission; the required gate passed when run with that permission. Integration safety currently rejects publication because a separate UCL worktree has uncommitted overlap in the shared release registry and model-safety document. That overlap must be reconciled under `AGENTS.md`; no model PR or live change was published from this branch.
