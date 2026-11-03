@@ -33,7 +33,7 @@ export async function testUclPublicSplitSource(){
  const locked=structuredClone(board);for(const g of locked.games){g.lockState='locked';g.lockedAt=now.toISOString();}
  const inactive=await refreshScheduledUclPublicSplits({...deps,readMember:async()=>locked});assert.equal(inactive.skipped,true);assert.equal(requests,1);
  const member=structuredClone(board);const original=numerical(member);await populateStoredUclPublicSplits(member,async()=>source);assert.equal(numerical(member),original);
- const route=readFileSync('app/api/lab/daily-edge/route.ts','utf8');const ucl=route.slice(route.indexOf('if (sport === "ucl")'),route.indexOf('if (sport === "soccer")'));
+ const route=readFileSync('app/api/lab/daily-edge/route.ts','utf8');const ucl=route.slice(route.indexOf('if (sport === "ucl")'),route.indexOf('// Member reads must never rebuild',route.indexOf('if (sport === "ucl")')));
  assert.match(ucl,/populateStoredUclPublicSplits/);assert.doesNotMatch(ucl,/populateDailyEdgeDraftKingsFallback\(/,'UCL API consumes existing data only');
  console.log('PASS UCL public splits: actual18 home-first fixtures, exact aliases/opponents/date, unchanged numerical decisions, locked bytes, scheduled refresh/cadence and no paid-provider requests.');
 }
