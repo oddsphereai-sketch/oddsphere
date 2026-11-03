@@ -52,7 +52,7 @@ assert.equal(full[0][0],now-40*60*m);assert.deepEqual(full.map(p=>p[2]),[1.5,-1.
 assert.deepEqual(predictionMarketBookLineHistory(book,now-5*60*m).map(p=>p[2]),[1.5,-1.5],"explicit ceilings exclude all post-boundary data");
 const html=renderToStaticMarkup(<BookLineHistory book={book} kind="spread" start={now-20*m} end={now-15*m}/>);
 assert.match(html,/data-book-history-window="full"/);assert.match(html,new RegExp('data-book-history-start="'+(now-40*60*m)+'"'));
-assert.match(html,/\+1.5 → −1.5/);assert.match(html,/3 line changes/);assert.match(html,/Provider open/);assert.match(html,/same-book/);assert.doesNotMatch(html,/NaN|Infinity|strokeDasharray/);
+assert.match(html,/\+1.5 → −1.5/);assert.match(html,/3 recorded line changes/);assert.match(html,/Provider open/);assert.match(html,/same-book/);assert.doesNotMatch(html,/NaN|Infinity|strokeDasharray/);
 assert.equal((html.match(/data-full-line-history/g)??[]).length,1,"one continuous path belongs to only one book");
 const total=renderToStaticMarkup(<BookLineHistory book={{...book,line:238,opening:{line:239.5,point:[now-40*60*m,110/210,-110]},marketHistory:[[now-40*60*m,-110,239.5],[now-10*m,-110,238]]}} kind="total"/>);
 assert.match(total,/239.5 → 238/);assert.match(total,/total history/);

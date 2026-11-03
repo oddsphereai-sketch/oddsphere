@@ -2,19 +2,21 @@ import type { DailyEdgeGameDto, MarketEdgeDto } from "./labTypes";
 import type { PredictionMarketPoint, PredictionMarketRow } from "@/lib/providers/owls/owlsPredictionMarkets";
 
 /** Actual receipt timestamp, odds-implied percentage, original American price. */
-export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history"|"prelock_archive"|"observed_quotes";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>;sourceChange?:{from:string;at:number}};
+export type PredictionMarketBookTrail = {sportsbook:string;points:Array<[number,number,number]>;locked:boolean;line?:number|null;label?:string;historyScope?:"provider_history"|"prelock_archive"|"observed_quotes";opening?:{point:[number,number,number];line:number|null};marketHistory?:Array<[number,number,number|null]>;ambiguousLineTimes?:number[];ambiguousLineHistory?:true;sourceChange?:{from:string;at:number}};
 
 /** Full same-book point-line history is independent of the Kalshi overlap.
  * Conflicting thresholds at one timestamp may be alternates, not a main-line
  * move: omit that ambiguous instant rather than picking an arbitrary number. */
 export function predictionMarketBookLineHistory(book:PredictionMarketBookTrail,ceiling=Infinity):Array<[number,number,number]>{
  if(ceiling!==Infinity&&!Number.isFinite(ceiling))return [];
+ if(book.ambiguousLineHistory)return [];
+ const ambiguous=new Set(book.ambiguousLineTimes??[]);
  const quotes:Array<[number,number,number|null]>=[...(book.marketHistory??[])];
  if(book.opening)quotes.push([book.opening.point[0],book.opening.point[2],book.opening.line]);
  const latest=book.points.at(-1);if(latest&&book.line!==undefined)quotes.push([latest[0],latest[2],book.line]);
  const groups=new Map<number,Map<number,[number,number,number]>>();
  for(const [at,price,line] of quotes){
-  if(!Number.isFinite(at)||at>ceiling||!Number.isFinite(price)||Math.abs(price)<100||line===null||!Number.isFinite(line))continue;
+  if(!Number.isFinite(at)||at>ceiling||ambiguous.has(at)||!Number.isFinite(price)||Math.abs(price)<100||line===null||!Number.isFinite(line))continue;
   const group=groups.get(at)??new Map();group.set(line,[at,price,line]);groups.set(at,group);
  }
  return [...groups.values()].filter(g=>g.size===1).map(g=>[...g.values()][0]).sort((a,b)=>a[0]-b[0]);

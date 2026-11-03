@@ -8,6 +8,7 @@ import { seedCbbGames } from "../lib/services/cbb/seedCbbGamesService";
 import { refreshCbbMemberBoard } from "../lib/services/cbb/cbbMemberPipeline";
 import {readCbbCanonicalReaderHistory} from "../lib/services/cbb/cbbCanonicalReaderHistory";
 import type {CbbCanonicalPriceRow} from "../lib/services/cbb/cbbCanonicalMarketEvidence";
+import {CBB_RETAINED_LEVEL_INPUT_RELEASE,type CbbRetainedLevelInput} from "../lib/cbb/retainedLevelInput";
 
 const asOf="2026-10-29T22:00:00Z",start="2026-11-01T14:30:00Z";
 const home={id:92,conference_id:1,name:"Wildcats",full_name:"Villanova Wildcats",college:"Villanova",abbreviation:"VILL"};
@@ -121,12 +122,21 @@ async function main(){
   const firstMarket=await referenceRefresh("2026-10-29T22:05:00Z",3.5,130,-150);
   const firstRead=stored.get(`cbb::member-game::${game.id}`) as import("../lib/services/cbb/cbbMemberGameStore").CbbStoredMemberGame;
   const firstReceipt=firstRead.snapshot.board.marketContext.verifiedMarketRead!;
+  const firstInput=firstRead.snapshot.board.marketContext.retainedLevelInput as CbbRetainedLevelInput;
+  assert.equal(firstMarket.retainedInputCounts.captured,1);
+  assert.equal(firstInput.release,CBB_RETAINED_LEVEL_INPUT_RELEASE);
+  assert.equal(firstInput.asOf,"2026-10-29T22:05:00Z");
+  assert.equal(firstInput.independent.release,"cbb_candidate_2026_11_02_r3_verified_stthomas_venue_prior");
+  assert.equal(firstInput.independent.margin,firstReceipt.independentScore.margin);
+  assert.ok(firstInput.sourceQuotes.every(q=>q.sportsbook==="pinnacle"));
   assert.equal(firstMarket.owlsCalls,2);assert.equal(firstReceipt.winnerArbitration.status,"context_only");
   assert.deepEqual(firstReceipt.finalScore,firstReceipt.independentScore,"a static starting-level disagreement does not invent a winner replacement");
   assert.ok(Math.abs(firstRead.memberGame.projected.home-firstRead.memberGame.projected.away-firstRead.snapshot.board.score.margin)<1e-10);
   assert.equal(firstRead.memberGame.markets.first_inning.writerMovementDirection,undefined,"current opposition alone cannot become movement");
   await referenceRefresh("2026-10-29T22:10:00Z",4.5,150,-170);
   const secondRead=stored.get(`cbb::member-game::${game.id}`) as typeof firstRead;
+  assert.deepEqual(secondRead.snapshot.board.marketContext.retainedLevelInput,firstInput,
+    "later prices and forecasts cannot replace the first actual input checkpoint");
   assert.deepEqual(secondRead.snapshot.board.marketContext.verifiedMarketRead!.anchors,firstReceipt.anchors,"later refresh retains the original actual source anchors");
   assert.ok(secondRead.snapshot.board.score.margin<firstRead.snapshot.board.score.margin);
   const secondScore=structuredClone(secondRead.snapshot.board.score);
@@ -150,6 +160,8 @@ async function main(){
   };
   await referenceRefresh("2026-10-29T22:15:00Z",4.5,150,-170,canonicalHistoryReader);
   const nativeRead=stored.get(`cbb::member-game::${game.id}`) as typeof firstRead;
+  assert.deepEqual(nativeRead.snapshot.board.marketContext.retainedLevelInput,firstInput,
+    "a later source quarantine is not permission to rewrite the historical input");
   const nativeReceipt=nativeRead.snapshot.board.marketContext.verifiedMarketRead!;
   assert.ok(nativeReceipt.anchors.quarantinedKeys?.includes("pinnacle:spread"));
   assert.equal(nativeReceipt.episodes.filter(e=>e.book==="pinnacle"&&e.market==="spread").length,0);
@@ -158,6 +170,8 @@ async function main(){
   const atLock=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-11-01T13:30:00Z",bdlKey:"test",owlsKey:"test",
     trainingGames:[],provider,owls,db,fetcher,loadSchedule:async()=>schedule,saveSnapshot});
   assert.equal(atLock.locked,1);assert.equal(atLock.trackingInserted,3);
+  assert.equal(atLock.retainedInputCounts.captured,0,"T-60 lock must use the original stored candidate without capturing new inputs");
+  assert.deepEqual((stored.get(`cbb::member-game::${game.id}`) as typeof firstRead).snapshot.board.marketContext.retainedLevelInput,firstInput);
   const frozen=JSON.stringify([...stored.values()]);
   const lockedMember=structuredClone((published as DailyEdgeResponse).games[0]);
   const afterTip=await refreshCbbMemberBoard({anchorDate:"2026-10-29",season:2026,now:"2026-11-01T15:00:00Z",bdlKey:"test",owlsKey:"test",

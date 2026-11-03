@@ -56,6 +56,8 @@ const conflict=run([oppositeMl,current[1],current[2]]);
 assert.equal(conflict.receipt.margin.status,"conflicting");assert.equal(conflict.forecast.margin,forecast().margin);assert.ok(conflict.forecast.total>forecast().total,"one conflicted axis cannot erase another valid axis");
 const bookConflict=run([current[1],quote("spread",-2.5,-110,-110,"circa",true)],{anchors:anchors([...original,quote("spread",-3.5,-110,-110,"circa")])});
 assert.equal(bookConflict.receipt.margin.status,"conflicting");assert.equal(bookConflict.forecast.margin,forecast().margin);
+assert.equal(bookConflict.receipt.margin.directionalEvidence,"opposed");assert.equal(bookConflict.receipt.margin.sourceDirection,null);
+assert.equal(unchanged.receipt.margin.directionalEvidence,"flat");assert.equal(unchanged.receipt.margin.sourceDirection,0);
 const crossing=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{independent:forecast(-.2),anchors:anchors([quote("spread",3.5)])});
 assert.ok(crossing.forecast.margin>0&&crossing.forecast.homeWinProbability>.5,"qualified read can cross winner direction without an artificial cap");
 const unionExcluded=run(current,{targets:[...targets.slice(0,2),quote("total",150.5,-110,-110,"ps3838",true)]});
@@ -113,9 +115,36 @@ assert.deepEqual(preservedRefGrade.professionalReferenceQuotes,[goodRef],"unrela
 const justAbove=run(marketOpposition,{independent:forecast(.0001),anchors:null}),justBelow=run(marketOpposition,{independent:forecast(-.0001),anchors:null});
 assert.ok(Math.abs(justAbove.forecast.margin-justBelow.forecast.margin-.0002)<1e-10,"no sign-triggered market-copy discontinuity");
 const unequal=run([current[1],quote("spread",-5.5,-110,-110,"circa",true)],{anchors:anchors([...original,quote("spread",-3.5,-110,-110,"circa")])});
-assert.equal(unequal.receipt.margin.status,"conflicting","agreeing unequal simultaneous effects remain unresolved; no name-based amplitude priority");
+assert.equal(unequal.receipt.margin.status,"unresolved","agreeing unequal magnitudes retain their direction without inventing a scalar response");
+assert.equal(unequal.receipt.margin.directionalEvidence,"aligned");
+assert.equal(unequal.receipt.margin.sourceDirection,1);
 assert.equal(unequal.forecast.margin,forecast().margin);
 assert.equal(unequal.receipt.pathPosture.filter(s=>s.market==="spread"&&s.recentDirection===1).length,2,"all source posture survives numeric deferral");
+for(const market of ["spread","total"] as const)for(const sign of [1,-1] as const){
+ const line=market==="spread"?0:150.5,step=market==="spread"?-sign:sign;
+ const baseline=[quote(market,line,-110,-110,"pinnacle"),quote(market,line,-110,-110,"circa")];
+ const agreeing=run([quote(market,line+step,-110,-110,"pinnacle",true),quote(market,line+2*step,-110,-110,"circa",true)],{anchors:anchors(baseline)});
+ const axis=market==="spread"?agreeing.receipt.margin:agreeing.receipt.total;
+ assert.equal(axis.status,"unresolved");assert.equal(axis.directionalEvidence,"aligned");assert.equal(axis.sourceDirection,sign);
+ assert.equal(axis.delta,0,"directional agreement alone does not invent a scalar magnitude");
+ const opposed=run([quote(market,line+step,-110,-110,"pinnacle",true),quote(market,line-step,-110,-110,"circa",true)],{anchors:anchors(baseline)});
+ const adverse=market==="spread"?opposed.receipt.margin:opposed.receipt.total;
+ assert.equal(adverse.status,"conflicting");assert.equal(adverse.directionalEvidence,"opposed");assert.equal(adverse.sourceDirection,null);
+ const sole=run([quote(market,line+step,-110,-110,"pinnacle",true),quote(market,line,-110,-110,"circa",true)],{anchors:anchors(baseline)});
+ const moving=market==="spread"?sole.receipt.margin:sole.receipt.total;
+ assert.equal(moving.status,"applied");assert.equal(moving.directionalEvidence,"single_source");assert.equal(moving.sourceDirection,sign);
+}
+// A durable JSONB round trip reorders keys without changing evidence. Bind
+// identical values while continuing to reject actual score/target tampering.
+const jsonbOrder=(value:unknown):unknown=>Array.isArray(value)?value.map(jsonbOrder):value&&typeof value==="object"
+ ?Object.fromEntries(Object.keys(value).sort().reverse().map(key=>[key,jsonbOrder((value as Record<string,unknown>)[key])])):value;
+const durableReceipt=jsonbOrder(result.receipt) as typeof result.receipt;
+const durableForecast=jsonbOrder(result.forecast) as typeof result.forecast;
+const durableTarget=targets[1],expectedDurableGrade=gradeCbbMarketBehavior({forecast:result.forecast,target:durableTarget,references:[],asOf:at},result.receipt);
+assert.deepEqual(gradeCbbMarketBehavior({forecast:durableForecast,target:jsonbOrder(durableTarget) as typeof durableTarget,references:[],asOf:at},durableReceipt),expectedDurableGrade);
+const changedDurable=structuredClone(durableReceipt);changedDurable.finalScore.margin+=.01;
+assert.throws(()=>gradeCbbMarketBehavior({forecast:durableForecast,target:durableTarget,references:[],asOf:at},changedDurable),/receipt mismatch/);
+assert.throws(()=>gradeCbbMarketBehavior({forecast:durableForecast,target:{...durableTarget,firstPrice:112},references:[],asOf:at},durableReceipt),/receipt mismatch/);
 const noFlow=run([quote("spread",-3.5,-110,-110,"pinnacle",true)],{anchors:anchors([quote("spread",-3.5,120,-140)])});
 const pricePromoted=gradeCbbMarketBehavior({...supportInput,forecast:noFlow.forecast},noFlow.receipt);
 assert.equal(pricePromoted.grade,"Lean","qualified economic price path promotes without split availability");
@@ -315,7 +344,8 @@ for(const pickSign of [1,-1] as const){
  const before=pickSign===1?[-150,130]:[130,-150],after=pickSign===1?[-115,-105]:[-105,-115];
  const a=quote("spread",0,after[0],after[1],"pinnacle",true),b=quote("spread",0,-110,-110,"circa",true);
  const unresolved=run([a,b],{independent,targets:[target],anchors:anchors([quote("spread",0,before[0],before[1],"pinnacle"),quote("spread",0,before[0],before[1],"circa")])});
- assert.equal(unresolved.receipt.margin.status,"conflicting");
+ assert.equal(unresolved.receipt.margin.status,"unresolved");
+ assert.equal(unresolved.receipt.margin.directionalEvidence,"aligned");
  assert.equal(gradeCbbMarketBehavior({forecast:unresolved.forecast,target,references:[],asOf:at},unresolved.receipt).grade,"Watchlist","two physical unresolved adverse source paths can constrain Lean symmetrically");
  const equal=run([a,{...a,sportsbook:"circa"}],{independent,targets:[target],anchors:anchors([quote("spread",0,before[0],before[1],"pinnacle"),quote("spread",0,before[0],before[1],"circa")])});
  assert.equal(equal.receipt.margin.status,"applied");

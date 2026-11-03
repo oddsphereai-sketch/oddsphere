@@ -57,7 +57,11 @@ export function publicMarketDisplayHistory(stored:PredictionMarketBookTrail|null
  if(!stored||stored.locked||!history||history.sportsbook!==stored.sportsbook||history.line!==stored.line)return stored;
  const last=stored.points.at(-1)?.[0];if(last===undefined)return stored;
  const allowed=(at:number)=>Number.isFinite(at)&&at<=last;
+ const ambiguousTimes=[...new Set([...(stored.ambiguousLineTimes??[]),...(history.ambiguousLineTimes??[]).filter(allowed)])].sort((a,b)=>a-b);
+ const ambiguity=stored.ambiguousLineHistory||history.ambiguousLineHistory||ambiguousTimes.length>128?{ambiguousLineHistory:true as const}:
+  ambiguousTimes.length?{ambiguousLineTimes:ambiguousTimes}:{};
  return {...stored,
+  ...ambiguity,
   historyScope:history.historyScope??stored.historyScope,
   ...(stored.opening?{}:history.opening&&allowed(history.opening.point[0])?{opening:history.opening}:{}),
   points:[...new Map([...history.points.filter(p=>allowed(p[0])),...stored.points].map(p=>[p[0],p])).values()].sort((a,b)=>a[0]-b[0]),
