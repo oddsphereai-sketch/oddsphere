@@ -102,7 +102,9 @@ completed board/lock/cron/live verification would be needed before release.
 - No production writes, extra provider calls, second writer or schedule were
   made by the candidate/replay work.
 
-Full model-change verification, current-main integration safety, protected PR
-checks and live release proof remain pending. The candidate must remain held
-until its board count, New Orleans decision, release policy and complete
-predecision split behavior are specifically accepted and verified.
+The full `npm run verify:model-change` gate passed after integrating remote
+main `6d4dbcd3`; the clean-worktree integration-safety check also passed at
+local candidate `95350bf7`. Protected PR checks and live release proof remain
+pending. The candidate must remain held until its board count, New Orleans
+decision, release policy and complete predecision split behavior are
+specifically accepted and verified.
