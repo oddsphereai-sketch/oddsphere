@@ -22,11 +22,19 @@ const implied=(a:number)=>a>0?100/(100+a):-a/(100-a);
 const marketKey=(kind:string)=>kind==="moneyline"?"h2h":kind==="spread"?"spreads":kind==="total"?"totals":"btts";
 const identity=(e:Pick<BookDisplayEntry,"event"|"start"|"kind"|"side"|"book">)=>[e.event,Date.parse(e.start),e.kind,e.side,e.book].join("|");
 
-export function matchOwlsDisplayEvent(events:RawOwlsOddsEvent[],game:DailyEdgeGameDto,sport:PredictionMarketSport):RawOwlsOddsEvent|null{
-  const matchesTeam=(name:string,abbreviation:string,displayName:string|null|undefined,college?:string|null)=>sport==="nfl"?nflProviderTeamMatches(name,abbreviation,displayName??abbreviation):predictionMarketTeamMatches({sideCode:name,team:name},abbreviation,displayName,sport,college);
+function matchingOwlsDisplayEvents(events:RawOwlsOddsEvent[],game:DailyEdgeGameDto,sport:PredictionMarketSport):RawOwlsOddsEvent[]{
+  const matchesTeam=(name:string,abbreviation:string,displayName:string|null|undefined,college?:string|null)=>sport==="nfl"?nflProviderTeamMatches(name,abbreviation,displayName??abbreviation):predictionMarketTeamMatches({sideCode:name,team:name},abbreviation,displayName,sport,college,sport==="cbb"&&game.lockState==="open"&&game.lockedAt===null);
   const matches=events.filter(e=>typeof e.eventId==="string"&&Math.abs(Date.parse(e.commence_time??"")-Date.parse(game.gameStartAt??""))<=60*60_000&&
     (matchesTeam(e.away_team??"",game.awayTeam,game.awayTeamDisplayName,game.cbbAwayCollege)&&matchesTeam(e.home_team??"",game.homeTeam,game.homeTeamDisplayName,game.cbbHomeCollege)||
      sport==="cbb"&&matchesTeam(e.home_team??"",game.awayTeam,game.awayTeamDisplayName,game.cbbAwayCollege)&&matchesTeam(e.away_team??"",game.homeTeam,game.homeTeamDisplayName,game.cbbHomeCollege)));
+  return matches;
+}
+
+/** Resolve the exact native event per book; CBB feeds can split the same
+ * physical fixture into complementary bookmaker catalogs. Duplicate ownership
+ * of the requested book stays ambiguous, never pooled or guessed. */
+export function matchOwlsDisplayEvent(events:RawOwlsOddsEvent[],game:DailyEdgeGameDto,sport:PredictionMarketSport,book?:string,kind?:string):RawOwlsOddsEvent|null{
+  const matches=matchingOwlsDisplayEvents(events,game,sport).filter(event=>!book||event.bookmakers?.some(row=>row.key===book&&(!kind||row.markets?.some(m=>m.key===marketKey(kind)))));
   return matches.length===1?matches[0]:null;
 }
 
@@ -34,8 +42,8 @@ export function matchOwlsDisplayEvent(events:RawOwlsOddsEvent[],game:DailyEdgeGa
  * always follow the canonical board; only the provider request is reversed. */
 export function owlsDisplayProviderSide(event:RawOwlsOddsEvent,game:DailyEdgeGameDto,side:string,sport:PredictionMarketSport):string{
   if(sport!=="cbb"||side!=="home"&&side!=="away")return side;
-  const reversed=predictionMarketTeamMatches({sideCode:event.home_team??"",team:event.home_team??""},game.awayTeam,game.awayTeamDisplayName,sport,game.cbbAwayCollege)&&
-    predictionMarketTeamMatches({sideCode:event.away_team??"",team:event.away_team??""},game.homeTeam,game.homeTeamDisplayName,sport,game.cbbHomeCollege);
+  const reversed=predictionMarketTeamMatches({sideCode:event.home_team??"",team:event.home_team??""},game.awayTeam,game.awayTeamDisplayName,sport,game.cbbAwayCollege,game.lockState==="open"&&game.lockedAt===null)&&
+    predictionMarketTeamMatches({sideCode:event.away_team??"",team:event.away_team??""},game.homeTeam,game.homeTeamDisplayName,sport,game.cbbHomeCollege,game.lockState==="open"&&game.lockedAt===null);
   return reversed?(side==="home"?"away":"home"):side;
 }
 
@@ -94,7 +102,7 @@ export function accumulateCbbPublishedQuotes(feed:BookDisplayFeed,games:DailyEdg
       if(!["moneyline","spread","total"].includes(kind)||!(kind==="total"?["over","under"]:["away","home"]).includes(side)||
         !book||isBlockedSportsbook(book)||!Number.isFinite(ceiling)||ceiling>now)return;
       const target={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,kind,side,book,
-        providerEventId:event?.eventId??`published:${game.external_id}`};
+        providerEventId:matchOwlsDisplayEvent(feed.events,game,"cbb",book,kind)?.eventId??event?.eventId??`published:${game.external_id}`};
       const old=rows.get(identity(target));
       const valid=points.filter(q=>Number.isFinite(q[0])&&q[0]<=ceiling&&q[0]<start&&Number.isFinite(q[1])&&Math.abs(q[1])>=100&&
         (kind==="moneyline"?q[2]===null:q[2]!==null&&Number.isFinite(q[2])));
@@ -157,21 +165,25 @@ export async function captureOwlsBookDisplayHistory(previous:BookDisplayFeed|nul
   const providerSides=new Map<string,string>();
   const publicTargets=new Set<string>();
   for(const game of active){
-    const event=matchOwlsDisplayEvent(events,game,sport);if(!event?.eventId)continue;
+    const candidates=sport==="cbb"?matchingOwlsDisplayEvents(events,game,sport):[matchOwlsDisplayEvent(events,game,sport)].filter((event):event is RawOwlsOddsEvent=>event!==null);
+    if(!candidates.length)continue;
     for(const key of ["moneyline","total","first_inning"] as const){
       const selection=readerHistoryContractSelection(game,key),pick=game.markets[key].pick?.replace(/\s+ML$/i,"").trim().toUpperCase();
       const kind=key==="moneyline"?"moneyline":selection?.kind,side=selection?.side??(pick===game.awayTeam.toUpperCase()?"away":pick===game.homeTeam.toUpperCase()?"home":pick==="DRAW"?"draw":null);
       if(!kind||!side)continue;
       const rank=(book:string)=>book==="circa"?0:book==="pinnacle"?1:2+bookPriorityRank(book);
-      const books=(event.bookmakers??[]).filter(b=>b.key&&!isBlockedSportsbook(b.key)&&Number.isFinite(bookPriorityRank(b.key))&&b.markets?.some(m=>m.key===marketKey(kind))&&Number.isFinite(Date.parse(b.last_update??"")))
+      const books=candidates.flatMap(event=>event.bookmakers??[]).filter(b=>b.key&&!isBlockedSportsbook(b.key)&&Number.isFinite(bookPriorityRank(b.key))&&b.markets?.some(m=>m.key===marketKey(kind))&&Number.isFinite(Date.parse(b.last_update??"")))
         .sort((a,b)=>Number(now-Date.parse(a.last_update!)>600_000)-Number(now-Date.parse(b.last_update!)>600_000)||rank(a.key!)-rank(b.key!));
       const market=game.markets[key],reference=publicMarketDisplayBook(market)?.sportsbook?.trim().toLowerCase()??market.movementReferenceSportsbook?.trim().toLowerCase()??market.oddsTrail?.filter(s=>s.label==="current"&&s.sportsbook).sort((a,b)=>Date.parse(b.observedAt??"")-Date.parse(a.observedAt??""))[0]?.sportsbook?.trim().toLowerCase();
+      const uniqueBooks=books.filter((book,i)=>books.findIndex(row=>row.key===book.key)===i&&
+        matchOwlsDisplayEvent(events,game,sport,book.key!,kind)!==null);
       // The public reader may legitimately choose a fresher fallback. Retain
       // that exact published book's opening too, not only a sharp-book open
       // that cannot be spliced into its trace. Same existing daily/cycle cap.
-      const sourceBooks=sport==="cbb"?[books.find(b=>b.key===reference)?.key??books[0]?.key]:[...new Set([books.find(b=>b.key===reference)?.key,books[0]?.key])];
+      const sourceBooks=sport==="cbb"?[uniqueBooks.find(b=>b.key===reference)?.key??uniqueBooks[0]?.key]:[...new Set([uniqueBooks.find(b=>b.key===reference)?.key,uniqueBooks[0]?.key])];
       const sides=sport==="cbb"&&side!=="draw"?[side,kind==="total"?(side==="over"?"under":"over"):(side==="home"?"away":"home")]:[side];
       for(const book of sourceBooks)if(book)for(const capturedSide of sides){
+        const event=matchOwlsDisplayEvent(events,game,sport,book,kind);if(!event?.eventId)continue;
         const target={event:game.external_id,start:game.gameStartAt!,away:game.awayTeam,home:game.homeTeam,providerEventId:event.eventId,kind,side:capturedSide,book};
         targets.push(target);providerSides.set(identity(target),owlsDisplayProviderSide(event,game,capturedSide,sport));
         if(book===reference)publicTargets.add(identity(target));

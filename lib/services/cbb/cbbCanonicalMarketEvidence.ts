@@ -1,11 +1,11 @@
-import { cbbProviderInstitutionName } from "../../cbb/providerInstitutionIdentity";
+import { cbbSplitOrientation } from "../../cbb/exactSplitIdentity";
 import { cbbImpliedProbability } from "../../cbb/marketEvidence";
 import { cbbAvailabilityUpperBoundMs } from "../../cbb/marketReceiptTime";
 import { computeSlateDate } from "../../dates/slateDate";
 import type { CbbGame, CbbMarket } from "../../cbb/types";
 import type { MarketPriceObservationV2, MarketSplitObservationV2 } from "../../types/domain/MarketIntelligenceV2";
 
-export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_02_r1_native_pair_bounds" as const;
+export const CBB_CANONICAL_MARKET_EVIDENCE_RELEASE = "cbb_canonical_market_evidence_2026_11_03_r2_shared_exact_identity" as const;
 export type CbbCanonicalPriceRow = MarketPriceObservationV2 & { id: number | string; inserted_at: string };
 export type CbbCanonicalSplitRow = MarketSplitObservationV2 & { id: number | string; inserted_at: string };
 /** An opaque native event ID needs an independent named fixture/time join.
@@ -93,13 +93,8 @@ const validHash = (hash: string | null | undefined): hash is string => typeof ha
 const validPrice = (price: number | null): price is number => typeof price === "number" && Number.isSafeInteger(price) && Math.abs(price) >= 100;
 const ownSides = (market: CbbMarket) => market === "total" ? ["over", "under"] : ["home", "away"];
 function identity(game: CbbGame, eventId: string, attestations: CbbCanonicalEventAttestation[]): SourceIdentity | null {
-  const names = (team: CbbGame["home_team"]) => [team.full_name, team.college].filter((n): n is string => !!n).map(cbbProviderInstitutionName);
-  const home = names(game.home_team), away = names(game.visitor_team);
-  const orientation = (h: string, a: string): SourceIdentity["orientation"] | null => {
-    const direct = home.includes(cbbProviderInstitutionName(h)) && away.includes(cbbProviderInstitutionName(a));
-    const reversed = home.includes(cbbProviderInstitutionName(a)) && away.includes(cbbProviderInstitutionName(h));
-    return direct !== reversed ? direct ? "direct" : "reversed" : null;
-  };
+  const own={homeTeamDisplayName:game.home_team.full_name,awayTeamDisplayName:game.visitor_team.full_name,cbbHomeCollege:game.home_team.college,cbbAwayCollege:game.visitor_team.college};
+  const orientation=(h:string,a:string):SourceIdentity["orientation"]|null=>cbbSplitOrientation(a,h,own);
   const named = eventId.match(/^ncaab:(.+)@(.+)-(\d{8})$/i);
   if (named) {
     const dates = [game.date.slice(0, 10), computeSlateDate("cbb", game.date)].map(d => d.replaceAll("-", ""));
