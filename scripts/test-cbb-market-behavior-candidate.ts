@@ -202,7 +202,7 @@ const offTargetGrade=gradeCbbMarketBehavior({forecast:offTarget.forecast,target:
 assert.equal(offTargetGrade.pathResistance,true,"native80/80 opposite concentration matters even at another source threshold");assert.equal(offTargetGrade.actualActionConfirmation,false);
 const priceBest=run([quote("spread",-3.5,-115,-105,"pinnacle",true)],{anchors:anchors([quote("spread",-3.5,-110,-110)])});
 const priceBestGrade=gradeCbbMarketBehavior({forecast:priceBest.forecast,target:targets[1],references:[quote("spread",-3.5,-115,-105,"pinnacle",true)],asOf:at},priceBest.receipt);
-assert.equal(priceBestGrade.grade,"Best Angle","paired clean price-only Lean-to-Best path does not require flow");
+assert.equal(priceBestGrade.grade,"Lean","price movement alone cannot claim Best without professional value or verified source action");
 assert.equal(priceBestGrade.economicCorroboration,false);assert.equal(priceBestGrade.economicPathConfirmation,true);assert.equal(priceBestGrade.actualActionConfirmation,false);
 const twoOpposed=run([quote("spread",-3.5,-115,-105,"pinnacle",true),quote("spread",-3.5,-115,-105,"circa",true)],{
  independent:forecast(12),anchors:anchors([quote("spread",-3.5,-150,130),quote("spread",-3.5,-150,130,"circa")]),
@@ -330,6 +330,7 @@ for(const market of ["spread","total"] as const)for(const pickSign of [1,-1] as 
   return {read,grade:gradeCbbMarketBehavior({forecast:read.forecast,target,references:[source],asOf:at},read.receipt)};
  };
  const aligned=scenario(pickSign,pickSign);assert.equal(aligned.grade.pathResistance,false);assert.equal(aligned.grade.actualActionConfirmation,true);
+ assert.equal(aligned.grade.grade,"Best Angle","verified same-market action can still promote a valued Lean");
  const againstMoney=scenario(-pickSign,pickSign);assert.equal(againstMoney.read.receipt.pathPosture[0].flowResponse,"opposed");
  assert.equal(againstMoney.grade.pathResistance,false,"price resisting opposite-side money supports the final pick");assert.equal(againstMoney.grade.grade,"Best Angle");
  const withMoneyResisted=scenario(pickSign,-pickSign);assert.equal(withMoneyResisted.grade.pathResistance,true);

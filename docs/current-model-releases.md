@@ -219,6 +219,15 @@ forecasts through the unchanged R5 reader; outcomes must retain their actual rel
 Source evidence, scope and checks:
 `docs/model-audits/2026-11-03-cbb-professional-source-identity.md`.
 
+The unmerged CBB grade R7 candidate is
+`cbb_2026_11_03_r7_verified_action_or_professional_value_best`. It retains
+score R5 and upgrades Best only through favorable exact-target professional
+value or verified same-market action; price-only response retains Lean.
+It changes two of 54 current grades, zero actionability, scores, or odds, and
+has no publication authority until a specific owner decision or held-out
+qualification. Existing R5/R6 locks remain immutable. See
+`docs/model-audits/2026-11-03-cbb-verified-action-best-predeclaration.md`.
+
 ## CBB received-market R5 — owner-approved production cutover
 
 The owner approved PR938's reviewed repair: "Deploy this repair; continue the
