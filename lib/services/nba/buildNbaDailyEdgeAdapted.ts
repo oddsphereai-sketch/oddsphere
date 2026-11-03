@@ -76,6 +76,7 @@ import {
   type NbaPickSideOpenPrices,
 } from "./adaptNbaToDailyEdgeResponse";
 import { supabase } from "../../db/supabase";
+import { readMarketPriceHighWater } from "../marketPriceHighWater";
 import { loadCompleteCurrentGameLines } from "../currentGameLineReader";
 import {
   selectNbaConsumerExecutionBoard,
@@ -429,16 +430,9 @@ export async function buildNbaDailyEdgePipeline(
     };
     const rows: ReaderPriceDbRow[] = [];
     let lastPriceId = 0;
-    const priceHighWaterRead = await supabase
-      .from("market_price_observations_v2")
-      .select("id")
-      .eq("league", "nba")
-      .in("canonical_event_id", gameExternalIds.map(String))
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const priceHighWaterRead = await readMarketPriceHighWater(supabase, "nba", gameExternalIds.map(String));
     if (priceHighWaterRead.error) readerEvidenceErrors.push("price_observation_high_water_failed");
-    const priceHighWaterId = Number(priceHighWaterRead.data?.id ?? 0);
+    const priceHighWaterId = priceHighWaterRead.id;
     while (lastPriceId < priceHighWaterId) {
       const page = await supabase
         .from("market_price_observations_v2")
