@@ -1,4 +1,4 @@
-# UCL native goals joint repair — private candidate
+# UCL native goals joint repair — owner-approved release
 
 Starting production base: c17aca84b926246bacafaa1109094754cffe39e4.
 Scope: UCL source normalization, original capture families, native goals inference,
@@ -95,3 +95,14 @@ opening-flag updates in the existing shared store. Persist/read tests exercise
 2.5 and3.5 at identical original clocks in both row orders, repeat-write
 idempotence and independent opening authority. EPL default compaction is
 unchanged. No parallel writer or provider call is added.
+
+
+## Owner activation decision
+
+After the exact PR968 activation question and its scope/accuracy limitations,
+Daniel Mengel directed: “I'm confused about what you're asking really, but if
+this is about just getting the correct changes up and live, then please do.”
+This activates the reviewed55e75e7f numerical/source/history/plurality repair
+for unlocked and future games, with forward evaluation. The corresponding
+scoped exception is recorded in docs/model-change-safety.md. No new market
+policy or provider quota is inferred from that approval.
