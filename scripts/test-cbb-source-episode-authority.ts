@@ -35,4 +35,6 @@ assert.equal(selectCbbSourceEpisode([{...overlapping[0],effect:9,qualifiedContra
 assert.equal(selectCbbSourceEpisode([{...overlapping[0],effect:9},overlapping[1]]).selectedId,"circa:spread","larger magnitude alone does not override newer observed information");
 const resistance=selectCbbSourceEpisode([{...a,resolved:false,currentDirection:0,qualifiedNetResistance:true},{...follower,resolved:false,currentDirection:-1}]);
 assert.equal(resistance.status,"retained");assert.equal(resistance.reason,"qualified_current_resistance");assert.deepEqual(resistance.authorIds,[]);
+const multipleResistance=selectCbbSourceEpisode([{...a,resolved:false,currentDirection:0,qualifiedNetResistance:true},{...follower,resolved:false,currentDirection:0,qualifiedNetResistance:true}]);
+assert.equal(multipleResistance.status,"retained");assert.equal(multipleResistance.selectedId,null);assert.equal(multipleResistance.opposingIds.length,2,"more agreeing held reactions cannot reactivate a missing-unique-source gate");
 console.log("PASS CBB observed episode authority: leadership, poll ambiguity, current opposition, supersession, equivalence and symmetry");

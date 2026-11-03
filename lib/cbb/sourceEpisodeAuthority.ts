@@ -71,7 +71,7 @@ export function selectCbbSourceEpisode(rows:readonly CbbSourceEpisode[]):CbbSour
   // retain the forecast explicitly because of current resistance, not because
   // leadership was unavailable. There is no invented opposite point bonus.
   const resisting=rows.filter(row=>row.qualifiedNetResistance);
-  if(resisting.length===1)return {status:"retained",reason:"qualified_current_resistance",selectedId:resisting[0].id,
-    authorIds:[],followerIds:[],opposingIds:[resisting[0].id]};
+  if(resisting.length)return {status:"retained",reason:"qualified_current_resistance",selectedId:resisting.length===1?resisting[0].id:null,
+    authorIds:[],followerIds:[],opposingIds:resisting.map(row=>row.id).sort()};
   return {status:"unresolved",reason:"overlapping_source_windows",selectedId:null,authorIds:[],followerIds:[],opposingIds:[]};
 }

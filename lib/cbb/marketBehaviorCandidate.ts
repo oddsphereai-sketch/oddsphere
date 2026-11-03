@@ -150,9 +150,9 @@ function chooseAxis(episodes:CbbBehaviorEpisode[],axis:"margin"|"total",base:Cbb
       sourceDirection:opposed?null:candidates[0].direction,directionalEvidence:opposed?"opposed":"aligned",authority,crossMarketDisagreement};
   }
   if(authority?.status==="retained"){
-    const source=candidates.find(candidate=>`${candidate.book}:${candidate.market}`===authority.selectedId)!;
-    return {status:"neutral",delta:0,sourceBook:source.book,sourceMarket:source.market,reason:"current_native_pressure_resists_old_net_move",
-      sourceDirection:source.direction,directionalEvidence:"aligned",authority,crossMarketDisagreement};
+    const source=candidates.find(candidate=>`${candidate.book}:${candidate.market}`===authority.selectedId);
+    return {status:"neutral",delta:0,sourceBook:source?.book??null,sourceMarket:source?.market??null,reason:"current_native_pressure_resists_old_net_move",
+      sourceDirection:candidates[0].direction,directionalEvidence:"aligned",authority,crossMarketDisagreement};
   }
   const selected=candidates.find(candidate=>`${candidate.book}:${candidate.market}`===authority?.selectedId);
   if(selected){
